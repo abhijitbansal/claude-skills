@@ -35,7 +35,14 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 git fetch origin 2>/dev/null || warn "git fetch failed (offline?)"
+_orig_branch="$(git symbolic-ref --short HEAD 2>/dev/null || echo "")"
 git switch main 2>/dev/null || git switch master 2>/dev/null || true
+_new_branch="$(git symbolic-ref --short HEAD 2>/dev/null || echo "")"
+# If the branch switch moved us to a branch missing key files, return to origin
+if [[ "${_new_branch}" != "${_orig_branch}" && ! -d "${REPO}/tests/bats" ]]; then
+  warn "main branch missing tests/; reverting to ${_orig_branch}"
+  git switch "${_orig_branch}" 2>/dev/null || true
+fi
 git pull --ff-only 2>/dev/null || warn "git pull failed (no remote?)"
 
 # Step 3: branch
@@ -49,7 +56,33 @@ if [[ -n "${SKILL}" ]]; then
   dest="${REPO}/skills/${SKILL}"
   [[ -e "${dest}" ]] && { fail "skill ${SKILL} already exists"; exit 1; }
   mkdir -p "${dest}/scripts"
-  sed "s/<skill-name>/${SKILL}/g" "${REPO}/templates/skill.md.example" > "${dest}/SKILL.md"
+  template="${REPO}/templates/skill.md.example"
+  if [[ -f "${template}" ]]; then
+    sed "s/<skill-name>/${SKILL}/g" "${template}" > "${dest}/SKILL.md"
+  else
+    cat > "${dest}/SKILL.md" <<EOF
+---
+name: ${SKILL}
+description: <one-line trigger description; when should Claude pick this skill>
+---
+
+# <Skill Title>
+
+## When to use
+
+- <case 1>
+- <case 2>
+
+## Steps
+
+1. <first step>
+2. <second step>
+
+## Hard rules
+
+- <rule>
+EOF
+  fi
   info "scaffolded skills/${SKILL}/"
 else
   bash "${SCRIPT_DIR}/capture.sh"
@@ -59,10 +92,12 @@ fi
 info "running tests"
 # Guard against recursive invocation: when contribute.sh itself is being tested
 # inside bats, the bats step would re-enter contribute.sh and recurse infinitely.
-if command -v bats >/dev/null 2>&1 && [[ -z "${CLAUDE_SKILLS_CONTRIBUTE_NESTED:-}" ]]; then
+# BATS_TEST_FILENAME is exported to all subprocess envs by bats, so we check both.
+_skip_validate="${CLAUDE_SKILLS_CONTRIBUTE_NESTED:-}${BATS_TEST_FILENAME:-}"
+if command -v bats >/dev/null 2>&1 && [[ -z "${_skip_validate}" ]]; then
   CLAUDE_SKILLS_CONTRIBUTE_NESTED=1 bats "${REPO}/tests/bats" >/dev/null 2>&1 || { fail "bats failing — leaving branch ${branch} for you to fix"; exit 1; }
 fi
-if command -v pytest >/dev/null 2>&1 && [[ -z "${CLAUDE_SKILLS_CONTRIBUTE_NESTED:-}" ]]; then
+if command -v pytest >/dev/null 2>&1 && [[ -z "${_skip_validate}" ]]; then
   CLAUDE_SKILLS_CONTRIBUTE_NESTED=1 pytest "${REPO}/tests/pytest" -q >/dev/null 2>&1 || { fail "pytest failing — leaving branch ${branch}"; exit 1; }
 fi
 if command -v shellcheck >/dev/null 2>&1; then
