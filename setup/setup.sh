@@ -41,6 +41,9 @@ if [[ -n "${ONLY}" ]]; then
   [[ "${found}" -eq 1 ]] || { fail "unknown step: ${ONLY}"; exit 2; }
 fi
 
+FAILS=0
+WARNS=0
+
 run_step() {
   local name="$1"
   [[ -n "${ONLY}" && "${ONLY}" != "${name}" ]] && return 0
@@ -54,7 +57,15 @@ step_preflight() {
   python_check
   info "preflight ok"
 }
-step_claude()        { info "(claude install/update — to be implemented in T6)"; }
+step_claude() {
+  if ! command -v claude >/dev/null 2>&1; then
+    info "installing claude (official native installer)"
+    [[ "${DRY_RUN}" -eq 1 ]] || curl -fsSL https://claude.ai/install.sh | bash || { FAILS=$((FAILS+1)); fail "installer failed"; return; }
+    ensure_path
+  fi
+  info "claude version: $(claude --version 2>/dev/null || echo unknown)"
+  [[ "${DRY_RUN}" -eq 1 ]] || claude update 2>/dev/null || { WARNS=$((WARNS+1)); warn "claude update failed"; }
+}
 step_marketplaces() {
   local toml="${CLAUDE_SETUP_TOML:-${REPO_ROOT}/claude-setup.toml}"
   local entries
@@ -171,6 +182,13 @@ step_symlinks() {
   mkdir -p "${HOME}/.local/bin"
   safe_symlink "${REPO_ROOT}/setup/contribute.sh" "${HOME}/.local/bin/claude-skills-contribute"
 }
-step_summary()       { info "(summary — to be implemented in T12)"; }
+step_summary() {
+  bold "summary"
+  printf "  fails=%d warns=%d\n" "${FAILS}" "${WARNS}"
+  if (( FAILS > 0 )); then exit 1
+  elif (( WARNS > 0 )); then exit 2
+  else exit 0
+  fi
+}
 
 for s in "${ALL_STEPS[@]}"; do run_step "${s}"; done

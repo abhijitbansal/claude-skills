@@ -81,3 +81,10 @@ EOF
     run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only symlinks
   [ -L "${HOME}/.local/bin/claude-skills-contribute" ]
 }
+
+@test "setup.sh full run is idempotent on rerun" {
+  CLAUDE_SETUP_TOML="${CLAUDE_SKILLS_HOME}/claude-setup.toml" \
+    bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --dry-run
+  run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --dry-run
+  [ "$status" -eq 0 ]
+}
