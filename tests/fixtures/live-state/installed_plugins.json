@@ -1,0 +1,6 @@
+{
+  "plugins": {
+    "p1@alpha": [{ "scope": "user" }],
+    "p2@beta":  [{ "scope": "user" }]
+  }
+}

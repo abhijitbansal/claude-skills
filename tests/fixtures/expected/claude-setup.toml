@@ -1,0 +1,22 @@
+[meta]
+schema_version = 1
+
+[[marketplaces]]
+name = "alpha"
+repo = "owner/alpha"
+
+[[marketplaces]]
+name = "beta"
+repo = "owner/beta"
+
+[[plugins]]
+name = "p1"
+marketplace = "alpha"
+
+[[plugins]]
+name = "p2"
+marketplace = "beta"
+
+[[skills]]
+source = "vercel-labs/skills"
+name = "find-skills"
