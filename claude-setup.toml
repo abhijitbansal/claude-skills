@@ -1,0 +1,124 @@
+[meta]
+schema_version = 1
+
+# Marketplaces — re-added idempotently by setup.sh.
+[[marketplaces]]
+name = "claude-plugins-official"
+repo = "anthropics/claude-plugins-official"
+
+[[marketplaces]]
+name = "claude-code-skills"
+repo = "alirezarezvani/claude-skills"
+
+[[marketplaces]]
+name = "caveman"
+repo = "JuliusBrussee/caveman"
+
+[[marketplaces]]
+name = "visual-explainer-marketplace"
+repo = "nicobailon/visual-explainer"
+
+# User-scope plugin installs.
+[[plugins]]
+name = "claude-code-setup"
+marketplace = "claude-plugins-official"
+
+[[plugins]]
+name = "engineering-advanced-skills"
+marketplace = "claude-code-skills"
+
+[[plugins]]
+name = "engineering-skills"
+marketplace = "claude-code-skills"
+
+[[plugins]]
+name = "huggingface-skills"
+marketplace = "claude-plugins-official"
+
+[[plugins]]
+name = "linear"
+marketplace = "claude-plugins-official"
+
+[[plugins]]
+name = "llm-wiki"
+marketplace = "claude-code-skills"
+
+[[plugins]]
+name = "mcp-server-dev"
+marketplace = "claude-plugins-official"
+
+[[plugins]]
+name = "plugin-dev"
+marketplace = "claude-plugins-official"
+
+[[plugins]]
+name = "pyright-lsp"
+marketplace = "claude-plugins-official"
+
+[[plugins]]
+name = "qodo-skills"
+marketplace = "claude-plugins-official"
+
+[[plugins]]
+name = "security-guidance"
+marketplace = "claude-plugins-official"
+
+[[plugins]]
+name = "skill-creator"
+marketplace = "claude-plugins-official"
+
+[[plugins]]
+name = "superpowers"
+marketplace = "claude-plugins-official"
+
+[[plugins]]
+name = "frontend-design"
+marketplace = "claude-plugins-official"
+
+[[plugins]]
+name = "code-review"
+marketplace = "claude-plugins-official"
+
+[[plugins]]
+name = "claude-md-management"
+marketplace = "claude-plugins-official"
+
+[[plugins]]
+name = "caveman"
+marketplace = "caveman"
+
+[[plugins]]
+name = "visual-explainer"
+marketplace = "visual-explainer-marketplace"
+
+# npx-skills entries.
+[[skills]]
+source = "vercel-labs/skills"
+name = "find-skills"
+
+[[skills]]
+source = "remotion-dev/skills"
+name = "remotion-best-practices"
+
+[[skills]]
+source = "avdlee/swift-concurrency-agent-skill"
+name = "swift-concurrency"
+
+[[skills]]
+source = "avdlee/swiftui-agent-skill"
+name = "swiftui-expert-skill"
+
+[[skills]]
+source = "avdlee/xcode-build-optimization-agent-skill"
+name = "xcode-build-fixer"
+
+[[skills]]
+source = "zyuapp/agent-skills"
+name = "xcodegen-cli"
+
+[dotfiles]
+home_claude_md = "templates/home-CLAUDE.md"
+user_settings = "templates/user-settings.json"
+
+[custom_skills]
+symlink_targets = ["skills", "agents", "commands"]
