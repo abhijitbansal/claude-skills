@@ -72,7 +72,34 @@ step_marketplaces() {
       fi
     done
 }
-step_plugins()       { info "(plugins — to be implemented in T8)"; }
+step_plugins() {
+  local toml="${CLAUDE_SETUP_TOML:-${REPO_ROOT}/claude-setup.toml}"
+  local entries
+  entries="$(python3 "${SCRIPT_DIR}/parse_toml.py" "${toml}" plugins)"
+  local installed
+  installed="$(claude plugin list --scope user 2>/dev/null || true)"
+  python3 -c "
+import json, sys
+for e in json.loads(sys.argv[1]):
+    pin = e.get('pin')
+    print('\t'.join([e['name'], e['marketplace'], pin or '']))
+" "${entries}" \
+    | while IFS=$'\t' read -r name market pin; do
+      local spec="${name}@${market}"
+      if printf '%s\n' "${installed}" | grep -qw "${name}"; then
+        info "plugin ${name}: update"
+        [[ "${DRY_RUN}" -eq 1 ]] || claude plugin update "${spec}" || warn "update ${spec} failed"
+      else
+        if [[ -n "${pin}" ]]; then
+          info "plugin ${name}: install (pinned ${pin})"
+          [[ "${DRY_RUN}" -eq 1 ]] || claude plugin install "${spec}" --version "${pin}" --scope user || warn "install ${spec}@${pin} failed"
+        else
+          info "plugin ${name}: install"
+          [[ "${DRY_RUN}" -eq 1 ]] || claude plugin install "${spec}" --scope user || warn "install ${spec} failed"
+        fi
+      fi
+    done
+}
 step_skills()        { info "(npx skills — to be implemented in T9)"; }
 step_dotfiles()      { info "(dotfiles — to be implemented in T10)"; }
 step_symlinks()      { info "(symlinks — to be implemented in T11)"; }

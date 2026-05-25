@@ -28,3 +28,24 @@ teardown() { rm -rf "${TMP}"; }
   [ "$status" -eq 0 ]
   grep -q "claude plugin marketplace" "${MOCK_CALL_LOG}"
 }
+
+@test "setup.sh --only plugins installs every plugin in toml" {
+  CLAUDE_SETUP_TOML="${CLAUDE_SKILLS_HOME}/claude-setup.toml" \
+    run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only plugins
+  [ "$status" -eq 0 ]
+  grep -c "claude plugin install" "${MOCK_CALL_LOG}" >/dev/null
+}
+
+@test "setup.sh plugins step honors pin if present" {
+  cat >"${TMP}/pinned.toml" <<EOF
+[meta]
+schema_version = 1
+[[plugins]]
+name = "p"
+marketplace = "m"
+pin = "v1.2"
+EOF
+  CLAUDE_SETUP_TOML="${TMP}/pinned.toml" run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only plugins
+  [ "$status" -eq 0 ]
+  grep -q "v1.2" "${MOCK_CALL_LOG}"
+}
