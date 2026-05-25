@@ -1,0 +1,132 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch *)",
+      "Bash(git remote -v)",
+      "Bash(git stash list)",
+      "Bash(git blame *)",
+      "Bash(git rev-parse *)",
+      "Bash(ls *)",
+      "Bash(pwd)",
+      "Bash(file *)",
+      "Bash(wc *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(rg *)",
+      "Bash(grep *)",
+      "Bash(find . *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "Bash(gh issue view *)",
+      "Bash(gh issue list *)",
+      "Bash(gh repo view *)",
+      "Bash(gh api *)",
+      "Bash(xcrun xctrace list devices)",
+      "Bash(xcrun simctl list *)",
+      "WebSearch",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:code.claude.com)",
+      "WebFetch(domain:developer.apple.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(xcodebuild -scheme FloorPlanScanner -destination 'platform=iOS Simulator,id=927E2B69-BF25-4880-BDBE-001E00074836' -configuration Debug build)",
+      "Bash(xcodebuild -scheme FloorPlanScanner -destination 'platform=iOS Simulator,id=927E2B69-BF25-4880-BDBE-001E00074836' -configuration Debug -showBuildSettings)",
+      "Bash(xcrun simctl *)",
+      "Bash(/usr/libexec/PlistBuddy -c \"Print CFBundleIdentifier\" \"/Users/abhijitbansal/Library/Developer/Xcode/DerivedData/FloorPlanScanner-bzvqtrxxzdioxdekmouubozzitql/Build/Products/Debug-iphonesimulator/FloorPlanScanner.app/Info.plist\")",
+      "Bash(git merge *)",
+      "Bash(rm -f Paperix/WhatsNew.swift Paperix/WhatsNewGate.swift Paperix/WhatsNewHistoryView.swift Paperix/WhatsNewSheet.swift PaperixTests/WhatsNewTests.swift docs/superpowers/plans/2026-05-20-versioned-release-notes.md scripts/release-notes-collect.sh scripts/release-notes-fallback.sh scripts/release-notes-finalize.sh && git merge origin/main --no-edit 2>&1 | tail -30)"
+    ],
+    "defaultMode": "auto",
+    "additionalDirectories": [
+      "/Users/abhijitbansal/projects/doc-scan/Paperix"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/opt/homebrew/Cellar/node/24.7.0/bin/node\" \"/Users/abhijitbansal/.claude/hooks/caveman-activate.js\"",
+            "timeout": 5,
+            "statusMessage": "Loading caveman mode..."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/opt/homebrew/Cellar/node/24.7.0/bin/node\" \"/Users/abhijitbansal/.claude/hooks/caveman-mode-tracker.js\"",
+            "timeout": 5,
+            "statusMessage": "Tracking caveman mode..."
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"/Users/abhijitbansal/.claude/hooks/caveman-statusline.sh\""
+  },
+  "enabledPlugins": {
+    "security-guidance@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "engineering-skills@claude-code-skills": true,
+    "engineering-advanced-skills@claude-code-skills": true,
+    "superpowers@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": true,
+    "mcp-server-dev@claude-plugins-official": true,
+    "huggingface-skills@claude-plugins-official": true,
+    "qodo-skills@claude-plugins-official": true,
+    "linear@claude-plugins-official": true,
+    "llm-wiki@claude-code-skills": true,
+    "caveman@caveman": true,
+    "visual-explainer@visual-explainer-marketplace": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-code-skills": {
+      "source": {
+        "source": "github",
+        "repo": "alirezarezvani/claude-skills"
+      }
+    },
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman"
+      }
+    },
+    "visual-explainer-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "nicobailon/visual-explainer"
+      }
+    }
+  },
+  "alwaysThinkingEnabled": true,
+  "effortLevel": "max",
+  "advisorModel": "opus",
+  "awaySummaryEnabled": true,
+  "autoUpdatesChannel": "latest",
+  "tui": "fullscreen",
+  "showThinkingSummaries": true,
+  "editorMode": "normal",
+  "showTurnDuration": true,
+  "teammateMode": "auto",
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true
+}

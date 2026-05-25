@@ -1,0 +1,4 @@
+{
+  "alpha":  { "source": { "source": "github", "repo": "owner/alpha" } },
+  "beta":   { "source": { "source": "github", "repo": "owner/beta"  } }
+}

@@ -1,0 +1,16 @@
+# Per-app config consumed by templated skills (release, ios-build, app-preview).
+# Drop this in <app-repo>/.claude/app.yml and fill in the values.
+schema_version: 1
+
+app:
+  name: MyApp
+  bundle_id: com.example.myapp
+  scheme: MyApp
+  team_id: TEAMID123
+  url_scheme: myapp
+  build_script: build.sh                # optional, default build.sh
+  preview_root: ~/MyAppPreviews         # optional, default ~/<name>Previews
+
+linear:
+  team_key: MYA
+  agent_user_id:                        # optional, for /linear-pick assignment
