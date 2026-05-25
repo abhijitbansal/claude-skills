@@ -49,3 +49,10 @@ EOF
   [ "$status" -eq 0 ]
   grep -q "v1.2" "${MOCK_CALL_LOG}"
 }
+
+@test "setup.sh --only skills runs npx skills add per entry" {
+  CLAUDE_SETUP_TOML="${CLAUDE_SKILLS_HOME}/claude-setup.toml" \
+    run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only skills
+  [ "$status" -eq 0 ]
+  grep -q "npx -y skills add" "${MOCK_CALL_LOG}"
+}

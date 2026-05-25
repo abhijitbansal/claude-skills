@@ -100,7 +100,25 @@ for e in json.loads(sys.argv[1]):
       fi
     done
 }
-step_skills()        { info "(npx skills — to be implemented in T9)"; }
+step_skills() {
+  if ! command -v npx >/dev/null 2>&1; then
+    warn "npx not found; skipping npx skills"
+    return 0
+  fi
+  local toml="${CLAUDE_SETUP_TOML:-${REPO_ROOT}/claude-setup.toml}"
+  local entries
+  entries="$(python3 "${SCRIPT_DIR}/parse_toml.py" "${toml}" skills)"
+  python3 -c "
+import json, sys
+for e in json.loads(sys.argv[1]):
+    print(e['source'] + '@' + e['name'])
+" "${entries}" \
+    | while IFS= read -r spec; do
+      info "npx skill: ${spec}"
+      [[ "${DRY_RUN}" -eq 1 ]] || npx -y skills add "${spec}" -g -y || warn "skills add ${spec} failed"
+    done
+  [[ "${DRY_RUN}" -eq 1 ]] || npx -y skills update -g -y 2>/dev/null || true
+}
 step_dotfiles()      { info "(dotfiles — to be implemented in T10)"; }
 step_symlinks()      { info "(symlinks — to be implemented in T11)"; }
 step_summary()       { info "(summary — to be implemented in T12)"; }
