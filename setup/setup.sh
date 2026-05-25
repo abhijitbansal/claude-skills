@@ -146,7 +146,31 @@ step_dotfiles() {
   [[ -n "${home_md}" ]]       && install_one "${home_md}"       "${HOME}/CLAUDE.md"
   [[ -n "${user_settings}" ]] && install_one "${user_settings}" "${HOME}/.claude/settings.json"
 }
-step_symlinks()      { info "(symlinks — to be implemented in T11)"; }
+step_symlinks() {
+  local toml="${CLAUDE_SETUP_TOML:-${REPO_ROOT}/claude-setup.toml}"
+  local custom_json
+  custom_json="$(python3 "${SCRIPT_DIR}/parse_toml.py" "${toml}" custom_skills)"
+  local dirs
+  dirs="$(python3 -c "import json,sys; print('\n'.join(json.loads(sys.argv[1]).get('symlink_targets', [])))" "${custom_json}")"
+
+  while IFS= read -r dir; do
+    [[ -z "${dir}" ]] && continue
+    local src_root="${REPO_ROOT}/${dir}"
+    local dst_root="${HOME}/.claude/${dir}"
+    [[ -d "${src_root}" ]] || { warn "no ${src_root}; skipping"; continue; }
+    mkdir -p "${dst_root}"
+    for entry in "${src_root}"/*; do
+      [[ -e "${entry}" ]] || continue
+      local base
+      base="$(basename "${entry}")"
+      [[ "${base}" == "_lib" ]] && continue
+      safe_symlink "${entry}" "${dst_root}/${base}" || warn "symlink ${dst_root}/${base} failed"
+    done
+  done <<< "${dirs}"
+
+  mkdir -p "${HOME}/.local/bin"
+  safe_symlink "${REPO_ROOT}/setup/contribute.sh" "${HOME}/.local/bin/claude-skills-contribute"
+}
 step_summary()       { info "(summary — to be implemented in T12)"; }
 
 for s in "${ALL_STEPS[@]}"; do run_step "${s}"; done

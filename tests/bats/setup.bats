@@ -67,3 +67,17 @@ EOF
   diff -q "${CLAUDE_SKILLS_HOME}/templates/home-CLAUDE.md" "${HOME}/CLAUDE.md"
   ls "${HOME}/CLAUDE.md.bak."*
 }
+
+@test "setup.sh --only symlinks fans out skills/agents/commands" {
+  CLAUDE_SETUP_TOML="${CLAUDE_SKILLS_HOME}/claude-setup.toml" \
+    run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only symlinks
+  [ "$status" -eq 0 ]
+}
+
+@test "setup.sh symlinks step installs claude-skills-contribute shim" {
+  # contribute.sh doesn't exist yet (T14); use a placeholder so the symlink target exists
+  mkdir -p "${CLAUDE_SKILLS_HOME}/setup"
+  CLAUDE_SETUP_TOML="${CLAUDE_SKILLS_HOME}/claude-setup.toml" \
+    run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only symlinks
+  [ -L "${HOME}/.local/bin/claude-skills-contribute" ]
+}
