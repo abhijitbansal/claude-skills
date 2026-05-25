@@ -55,7 +55,23 @@ step_preflight() {
   info "preflight ok"
 }
 step_claude()        { info "(claude install/update — to be implemented in T6)"; }
-step_marketplaces()  { info "(marketplaces — to be implemented in T7)"; }
+step_marketplaces() {
+  local toml="${CLAUDE_SETUP_TOML:-${REPO_ROOT}/claude-setup.toml}"
+  local entries
+  entries="$(python3 "${SCRIPT_DIR}/parse_toml.py" "${toml}" marketplaces)"
+  local existing
+  existing="$(claude plugin marketplace list 2>/dev/null || true)"
+  python3 -c "import json,sys; [print(e['name']+'\t'+e['repo']) for e in json.loads(sys.argv[1])]" "${entries}" \
+    | while IFS=$'\t' read -r name repo; do
+      if printf '%s\n' "${existing}" | grep -qw "${name}"; then
+        info "marketplace ${name}: update"
+        [[ "${DRY_RUN}" -eq 1 ]] || claude plugin marketplace update "${name}" || warn "update ${name} failed"
+      else
+        info "marketplace ${name}: add (${repo})"
+        [[ "${DRY_RUN}" -eq 1 ]] || claude plugin marketplace add "${repo}" || warn "add ${name} failed"
+      fi
+    done
+}
 step_plugins()       { info "(plugins — to be implemented in T8)"; }
 step_skills()        { info "(npx skills — to be implemented in T9)"; }
 step_dotfiles()      { info "(dotfiles — to be implemented in T10)"; }

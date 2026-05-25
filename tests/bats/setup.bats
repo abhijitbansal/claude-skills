@@ -21,3 +21,10 @@ teardown() { rm -rf "${TMP}"; }
   run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only bogus
   [ "$status" -ne 0 ]
 }
+
+@test "setup.sh --only marketplaces adds + updates" {
+  cp "${CLAUDE_SKILLS_HOME}/claude-setup.toml" "${TMP}/copy.toml"
+  CLAUDE_SETUP_TOML="${TMP}/copy.toml" run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only marketplaces
+  [ "$status" -eq 0 ]
+  grep -q "claude plugin marketplace" "${MOCK_CALL_LOG}"
+}
