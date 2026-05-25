@@ -1,0 +1,20 @@
+---
+name: <skill-name>
+description: <one-line trigger description; when should Claude pick this skill>
+---
+
+# <Skill Title>
+
+## When to use
+
+- <case 1>
+- <case 2>
+
+## Steps
+
+1. <first step>
+2. <second step>
+
+## Hard rules
+
+- <rule>
