@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${CLAUDE_SKILLS_HOME:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 # shellcheck source=_lib.sh
+# shellcheck disable=SC1091
 source "${SCRIPT_DIR}/_lib.sh"
 
 TOML="${REPO_ROOT}/claude-setup.toml"

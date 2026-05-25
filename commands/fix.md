@@ -1,5 +1,5 @@
 ---
-description: Apply a UI fix to Paperix, then build + screenshot to prove it worked — closes the remote feedback loop
+description: Apply a UI fix to the iOS app (reads .claude/app.yml), then build + screenshot to prove it worked — closes the remote feedback loop
 argument-hint: <description of the bug or change>
 ---
 

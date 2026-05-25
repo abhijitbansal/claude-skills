@@ -6,10 +6,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 export CLAUDE_SKILLS_HOME="${CLAUDE_SKILLS_HOME:-${REPO_ROOT}}"
 
 # shellcheck source=_lib.sh
+# shellcheck disable=SC1091
 source "${SCRIPT_DIR}/_lib.sh"
 
 DRY_RUN=0
-VERBOSE=0
 ONLY=""
 SKIP=" "  # space-delimited; sentinels ensure whole-word matching
 
@@ -25,7 +25,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run)        DRY_RUN=1 ;;
-    --verbose)        VERBOSE=1 ;;
+    --verbose)        set -x ;;
     --only)           ONLY="$2"; shift ;;
     --skip-claude|--skip-marketplaces|--skip-plugins|--skip-skills|--skip-dotfiles|--skip-symlinks)
                       SKIP+="${1#--skip-} " ;;
@@ -44,6 +44,12 @@ fi
 FAILS=0
 WARNS=0
 
+# Override _lib.sh's warn/fail so step bodies' calls auto-increment the counters
+# that step_summary uses to pick an exit code. step_* functions never need to
+# bump these counters explicitly.
+warn() { printf "  ! %s\n" "$*" >&2; WARNS=$((WARNS+1)); }
+fail() { printf "  ✗ %s\n" "$*" >&2; FAILS=$((FAILS+1)); return 1; }
+
 run_step() {
   local name="$1"
   [[ -n "${ONLY}" && "${ONLY}" != "${name}" ]] && return 0
@@ -60,11 +66,11 @@ step_preflight() {
 step_claude() {
   if ! command -v claude >/dev/null 2>&1; then
     info "installing claude (official native installer)"
-    [[ "${DRY_RUN}" -eq 1 ]] || curl -fsSL https://claude.ai/install.sh | bash || { FAILS=$((FAILS+1)); fail "installer failed"; return; }
+    [[ "${DRY_RUN}" -eq 1 ]] || curl -fsSL https://claude.ai/install.sh | bash || { fail "installer failed"; return; }
     ensure_path
   fi
   info "claude version: $(claude --version 2>/dev/null || echo unknown)"
-  [[ "${DRY_RUN}" -eq 1 ]] || claude update 2>/dev/null || { WARNS=$((WARNS+1)); warn "claude update failed"; }
+  [[ "${DRY_RUN}" -eq 1 ]] || claude update 2>/dev/null || warn "claude update failed"
 }
 step_marketplaces() {
   local toml="${CLAUDE_SETUP_TOML:-${REPO_ROOT}/claude-setup.toml}"

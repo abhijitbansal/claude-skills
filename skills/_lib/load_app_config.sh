@@ -50,15 +50,16 @@ else:
 PY
 }
 
+# shellcheck disable=SC2317  # return/exit pair is intentional: works whether sourced or exec'd
 APP_YML="$(_find_app_yml)" || { echo "no .claude/app.yml found above $(pwd)" >&2; return 1 2>/dev/null || exit 1; }
 
-export APP_NAME="$(_yaml_get "${APP_YML}" app.name)"
-export APP_BUNDLE_ID="$(_yaml_get "${APP_YML}" app.bundle_id)"
-export APP_SCHEME="$(_yaml_get "${APP_YML}" app.scheme)"
-export APP_TEAM_ID="$(_yaml_get "${APP_YML}" app.team_id)"
-export APP_URL_SCHEME="$(_yaml_get "${APP_YML}" app.url_scheme)"
+APP_NAME="$(_yaml_get "${APP_YML}" app.name)";                     export APP_NAME
+APP_BUNDLE_ID="$(_yaml_get "${APP_YML}" app.bundle_id)";           export APP_BUNDLE_ID
+APP_SCHEME="$(_yaml_get "${APP_YML}" app.scheme)";                 export APP_SCHEME
+APP_TEAM_ID="$(_yaml_get "${APP_YML}" app.team_id)";               export APP_TEAM_ID
+APP_URL_SCHEME="$(_yaml_get "${APP_YML}" app.url_scheme)";         export APP_URL_SCHEME
 APP_BUILD_SCRIPT="$(_yaml_get "${APP_YML}" app.build_script 2>/dev/null || true)"
-export APP_BUILD_SCRIPT="${APP_BUILD_SCRIPT:-build.sh}"
+APP_BUILD_SCRIPT="${APP_BUILD_SCRIPT:-build.sh}";                  export APP_BUILD_SCRIPT
 APP_PREVIEW_ROOT="$(_yaml_get "${APP_YML}" app.preview_root 2>/dev/null || true)"
-export APP_PREVIEW_ROOT="${APP_PREVIEW_ROOT:-${HOME}/${APP_NAME}Previews}"
-export LINEAR_TEAM_KEY="$(_yaml_get "${APP_YML}" linear.team_key 2>/dev/null || true)"
+APP_PREVIEW_ROOT="${APP_PREVIEW_ROOT:-${HOME}/${APP_NAME}Previews}"; export APP_PREVIEW_ROOT
+LINEAR_TEAM_KEY="$(_yaml_get "${APP_YML}" linear.team_key 2>/dev/null || true)"; export LINEAR_TEAM_KEY
