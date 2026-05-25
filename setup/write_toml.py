@@ -1,19 +1,22 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script --quiet
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["tomlkit>=0.13,<1.0"]
+# ///
 """Rewrite one section of claude-setup.toml from JSON stdin, preserving comments.
 
-Usage: write_toml.py <toml-path> <section>
+Usage: uv run write_toml.py <toml-path> <section>
 Reads a JSON array (or object for dotfiles/custom_skills) from stdin.
+
+Inline PEP 723 deps — uv installs tomlkit in a managed cache on first run.
+No requirements.txt, no manual pip install needed.
 """
 
 import json
 import sys
 from pathlib import Path
 
-try:
-    import tomlkit
-except ImportError:  # pragma: no cover
-    sys.stderr.write("tomlkit not installed; run: pip3 install --user tomlkit\n")
-    sys.exit(2)
+import tomlkit
 
 ARRAY_SECTIONS = {"marketplaces", "plugins", "skills"}
 TABLE_SECTIONS = {"dotfiles", "custom_skills"}

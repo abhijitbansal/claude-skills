@@ -10,8 +10,10 @@ PARSER = Path(__file__).resolve().parents[2] / "setup" / "parse_toml.py"
 def write(initial: str, section: str, payload) -> str:
     p = Path("/tmp/write-toml-test.toml")
     p.write_text(initial)
+    # write_toml.py has a PEP 723 shebang invoking `uv run`. Exec directly so
+    # uv resolves tomlkit from its managed cache — no system pip install needed.
     subprocess.run(
-        ["python3", str(WRITER), str(p), section],
+        [str(WRITER), str(p), section],
         input=json.dumps(payload), text=True, check=True,
     )
     return p.read_text()

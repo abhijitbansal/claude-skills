@@ -15,7 +15,7 @@ bold "1/4  Dotfiles"
 
 write_section() {
   local section="$1" payload="$2"
-  printf '%s' "${payload}" | python3 "${SCRIPT_DIR}/write_toml.py" "${TOML}" "${section}"
+  printf '%s' "${payload}" | uv run --quiet "${SCRIPT_DIR}/write_toml.py" "${TOML}" "${section}"
 }
 
 bold "2/4  Marketplaces"

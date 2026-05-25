@@ -58,9 +58,33 @@ run_step() {
   "step_${name}"
 }
 
+_ensure_brew_pkg() {
+  # _ensure_brew_pkg <command-name> <brew-formula>
+  local cmd="$1" formula="$2"
+  command -v "${cmd}" >/dev/null 2>&1 && return 0
+  if ! command -v brew >/dev/null 2>&1; then
+    warn "${cmd} missing and Homebrew not installed; install Homebrew first"
+    return 1
+  fi
+  info "installing ${formula} via brew"
+  [[ "${DRY_RUN}" -eq 1 ]] || brew install "${formula}" >/dev/null || { warn "brew install ${formula} failed"; return 1; }
+}
+
+_ensure_uv() {
+  command -v uv >/dev/null 2>&1 && { info "uv: $(uv --version 2>&1)"; return 0; }
+  info "installing uv (Astral package manager)"
+  if [[ "${DRY_RUN}" -eq 1 ]]; then return 0; fi
+  curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1 || { warn "uv install failed"; return 1; }
+  # uv installer drops the binary in ~/.local/bin (already on PATH via ensure_path)
+  command -v uv >/dev/null 2>&1 || { warn "uv installed but not on PATH"; return 1; }
+}
+
 step_preflight() {
   ensure_path
   python_check
+  _ensure_brew_pkg bats        bats-core
+  _ensure_brew_pkg shellcheck  shellcheck
+  _ensure_uv
   info "preflight ok"
 }
 step_claude() {

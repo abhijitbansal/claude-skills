@@ -21,12 +21,15 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y bats shellcheck
 
+      - name: install uv
+        uses: astral-sh/setup-uv@v3
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: install python deps
-        run: pip install --user -r setup/requirements.txt
+      - name: install pytest
+        run: uv tool install pytest
 
       - name: shellcheck
         run: shellcheck setup/*.sh skills/_lib/*.sh
@@ -35,4 +38,4 @@ jobs:
         run: bats tests/bats/
 
       - name: pytest
-        run: python -m pytest tests/pytest/ -q
+        run: uv tool run pytest tests/pytest/ -q

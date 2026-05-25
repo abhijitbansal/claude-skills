@@ -98,8 +98,8 @@ _skip_validate="${CLAUDE_SKILLS_CONTRIBUTE_NESTED:-}${BATS_TEST_FILENAME:-}"
 if command -v bats >/dev/null 2>&1 && [[ -z "${_skip_validate}" ]]; then
   CLAUDE_SKILLS_CONTRIBUTE_NESTED=1 bats "${REPO}/tests/bats" >/dev/null 2>&1 || { fail "bats failing — leaving branch ${branch} for you to fix"; exit 1; }
 fi
-if command -v pytest >/dev/null 2>&1 && [[ -z "${_skip_validate}" ]]; then
-  CLAUDE_SKILLS_CONTRIBUTE_NESTED=1 pytest "${REPO}/tests/pytest" -q >/dev/null 2>&1 || { fail "pytest failing — leaving branch ${branch}"; exit 1; }
+if command -v uv >/dev/null 2>&1 && [[ -z "${_skip_validate}" ]]; then
+  CLAUDE_SKILLS_CONTRIBUTE_NESTED=1 uv tool run pytest "${REPO}/tests/pytest" -q >/dev/null 2>&1 || { fail "pytest failing — leaving branch ${branch}"; exit 1; }
 fi
 if command -v shellcheck >/dev/null 2>&1; then
   shellcheck "${REPO}"/setup/*.sh 2>/dev/null || true
