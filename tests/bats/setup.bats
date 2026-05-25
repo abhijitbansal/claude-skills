@@ -56,3 +56,14 @@ EOF
   [ "$status" -eq 0 ]
   grep -q "npx -y skills add" "${MOCK_CALL_LOG}"
 }
+
+@test "setup.sh --only dotfiles copies templates with backup" {
+  echo "old" > "${HOME}/CLAUDE.md"
+  mkdir -p "${HOME}/.claude"
+  echo "{\"old\":true}" > "${HOME}/.claude/settings.json"
+  CLAUDE_SETUP_TOML="${CLAUDE_SKILLS_HOME}/claude-setup.toml" \
+    run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only dotfiles
+  [ "$status" -eq 0 ]
+  diff -q "${CLAUDE_SKILLS_HOME}/templates/home-CLAUDE.md" "${HOME}/CLAUDE.md"
+  ls "${HOME}/CLAUDE.md.bak."*
+}

@@ -119,7 +119,33 @@ for e in json.loads(sys.argv[1]):
     done
   [[ "${DRY_RUN}" -eq 1 ]] || npx -y skills update -g -y 2>/dev/null || true
 }
-step_dotfiles()      { info "(dotfiles — to be implemented in T10)"; }
+step_dotfiles() {
+  local toml="${CLAUDE_SETUP_TOML:-${REPO_ROOT}/claude-setup.toml}"
+  local dotfiles_json
+  dotfiles_json="$(python3 "${SCRIPT_DIR}/parse_toml.py" "${toml}" dotfiles)"
+  local timestamp
+  timestamp="$(date +%Y%m%d-%H%M%S)"
+
+  install_one() {
+    local src_rel="$1" dst="$2"
+    local src="${REPO_ROOT}/${src_rel}"
+    [[ -f "${src}" ]] || { warn "missing template ${src}; skipping"; return 0; }
+    if [[ -f "${dst}" ]] && ! cmp -s "${src}" "${dst}"; then
+      cp "${dst}" "${dst}.bak.${timestamp}"
+      info "backed up ${dst}"
+    fi
+    [[ "${DRY_RUN}" -eq 1 ]] || cp "${src}" "${dst}"
+    info "installed ${dst}"
+  }
+
+  local home_md user_settings
+  home_md="$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('home_claude_md',''))" "${dotfiles_json}")"
+  user_settings="$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('user_settings',''))" "${dotfiles_json}")"
+
+  mkdir -p "${HOME}/.claude"
+  [[ -n "${home_md}" ]]       && install_one "${home_md}"       "${HOME}/CLAUDE.md"
+  [[ -n "${user_settings}" ]] && install_one "${user_settings}" "${HOME}/.claude/settings.json"
+}
 step_symlinks()      { info "(symlinks — to be implemented in T11)"; }
 step_summary()       { info "(summary — to be implemented in T12)"; }
 
