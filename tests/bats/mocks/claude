@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+echo "claude $*" >> "${MOCK_CALL_LOG:-/dev/null}"
+case "$1" in
+  --version) echo "claude 1.0.0-test" ;;
+  plugin)
+    case "$2" in
+      marketplace) case "$3" in list) ;; add|update) ;; esac ;;
+      list) ;;
+      install|update) ;;
+    esac
+    ;;
+  update) ;;
+esac
+exit 0

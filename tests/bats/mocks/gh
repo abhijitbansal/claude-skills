@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+echo "gh $*" >> "${MOCK_CALL_LOG:-/dev/null}"
+case "$1" in
+  auth) [[ "$2" == "status" ]] && exit 0 ;;
+  pr)   echo "https://example/pr/1" ;;
+esac
+exit 0
