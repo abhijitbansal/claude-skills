@@ -175,12 +175,20 @@ step_symlinks() {
       local base
       base="$(basename "${entry}")"
       [[ "${base}" == "_lib" ]] && continue
-      safe_symlink "${entry}" "${dst_root}/${base}" || warn "symlink ${dst_root}/${base} failed"
+      if [[ "${DRY_RUN}" -eq 1 ]]; then
+        info "would link ${dst_root}/${base} → ${entry}"
+      else
+        safe_symlink "${entry}" "${dst_root}/${base}" || warn "symlink ${dst_root}/${base} failed"
+      fi
     done
   done <<< "${dirs}"
 
   mkdir -p "${HOME}/.local/bin"
-  safe_symlink "${REPO_ROOT}/setup/contribute.sh" "${HOME}/.local/bin/claude-skills-contribute"
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    info "would link ${HOME}/.local/bin/claude-skills-contribute → ${REPO_ROOT}/setup/contribute.sh"
+  else
+    safe_symlink "${REPO_ROOT}/setup/contribute.sh" "${HOME}/.local/bin/claude-skills-contribute"
+  fi
 }
 step_summary() {
   bold "summary"
