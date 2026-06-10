@@ -32,7 +32,7 @@ jobs:
         run: uv tool install pytest
 
       - name: shellcheck
-        run: shellcheck setup/*.sh skills/_lib/*.sh
+        run: shellcheck setup/*.sh plugins/ios-dev/skills/_lib/*.sh
 
       - name: bats
         run: bats tests/bats/

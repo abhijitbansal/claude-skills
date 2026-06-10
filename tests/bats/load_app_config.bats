@@ -24,7 +24,7 @@ teardown() { rm -rf "${TMP}"; }
 
 @test "load_app_config exports keys from .claude/app.yml" {
   cd "${TMP}/proj"
-  source "${REPO_ROOT}/skills/_lib/load_app_config.sh"
+  source "${REPO_ROOT}/plugins/ios-dev/skills/_lib/load_app_config.sh"
   [ "${APP_NAME}" = "Paperix" ]
   [ "${APP_BUNDLE_ID}" = "com.abhijit.paperix" ]
   [ "${APP_SCHEME}" = "Paperix" ]
@@ -36,13 +36,13 @@ teardown() { rm -rf "${TMP}"; }
 @test "load_app_config walks up to find .claude/app.yml" {
   mkdir -p "${TMP}/proj/deep/nested"
   cd "${TMP}/proj/deep/nested"
-  source "${REPO_ROOT}/skills/_lib/load_app_config.sh"
+  source "${REPO_ROOT}/plugins/ios-dev/skills/_lib/load_app_config.sh"
   [ "${APP_NAME}" = "Paperix" ]
 }
 
 @test "load_app_config errors when no app.yml is found" {
   cd "${TMP}"
-  run bash -c "source '${REPO_ROOT}/skills/_lib/load_app_config.sh'"
+  run bash -c "source '${REPO_ROOT}/plugins/ios-dev/skills/_lib/load_app_config.sh'"
   [ "$status" -ne 0 ]
   [[ "$output" == *"app.yml"* ]]
 }
