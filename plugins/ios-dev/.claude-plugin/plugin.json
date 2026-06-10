@@ -1,0 +1,6 @@
+{
+  "name": "ios-dev",
+  "description": "iOS development loop: simulator build + preview + screenshot delivery, device builds, TestFlight/App Store release automation. Requires .claude/app.yml in the target app repo.",
+  "version": "1.0.0",
+  "author": { "name": "Abhijit Bansal", "url": "https://github.com/abhijitbansal" }
+}

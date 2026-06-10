@@ -1,0 +1,28 @@
+{
+  "name": "claude-skills",
+  "owner": {
+    "name": "Abhijit Bansal",
+    "url": "https://github.com/abhijitbansal"
+  },
+  "metadata": {
+    "description": "Abhijit's AI-agent skills: iOS dev loop, Linear PM, core workflow helpers",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "ios-dev",
+      "source": "./plugins/ios-dev",
+      "description": "iOS development loop: simulator build + preview + screenshot delivery, device builds, TestFlight/App Store release automation"
+    },
+    {
+      "name": "linear-pm",
+      "source": "./plugins/linear-pm",
+      "description": "Linear project management conventions and slash commands: issue templates, agent-ready workflow, autonomous issue pickup"
+    },
+    {
+      "name": "core-workflow",
+      "source": "./plugins/core-workflow",
+      "description": "General dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook"
+    }
+  ]
+}

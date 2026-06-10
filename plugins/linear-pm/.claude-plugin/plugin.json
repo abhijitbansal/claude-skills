@@ -1,0 +1,6 @@
+{
+  "name": "linear-pm",
+  "description": "Linear project management conventions and slash commands: issue templates, status taxonomy, agent-ready workflow, autonomous issue pickup via /linear-pick.",
+  "version": "1.0.0",
+  "author": { "name": "Abhijit Bansal", "url": "https://github.com/abhijitbansal" }
+}
