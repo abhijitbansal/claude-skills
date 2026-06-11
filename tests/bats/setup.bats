@@ -87,7 +87,7 @@ EOF
   run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only symlinks
   [ "$status" -eq 0 ]
   [ -L "${HOME}/.local/bin/wind" ]
-  [ "$(readlink "${HOME}/.local/bin/wind")" = "${CLAUDE_SKILLS_HOME}/tools/second-wind/wind.py" ]
+  [ "$(readlink "${HOME}/.local/bin/wind")" = "$(cd "${CLAUDE_SKILLS_HOME}" && pwd)/tools/second-wind/wind.py" ]
 }
 
 @test "setup.sh symlinks step removes stale links into this repo" {
