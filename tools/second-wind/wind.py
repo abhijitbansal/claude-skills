@@ -514,6 +514,13 @@ def cmd_watch(cfg, args):
         f"resume buffer {buffer_s}s")
 
     state = load_state()
+    try:
+        if state.get("reset_at") is not None:
+            state["reset_at"] = float(state["reset_at"])
+    except (TypeError, ValueError):
+        log("ignoring corrupt watcher state file", glyph="!", color="yellow")
+        state = {}
+        clear_state()
     # After resuming, the old limit message lingers in the pane scrollback;
     # skip re-detection on a session until the cooldown passes.
     cooldown_until = {}
