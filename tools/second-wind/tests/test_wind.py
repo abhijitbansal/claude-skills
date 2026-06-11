@@ -257,5 +257,49 @@ class ParseMultiNumbers(unittest.TestCase):
         self.assertEqual(wind.parse_multi_numbers("3,1,3", 3), [0, 2])
 
 
+class ScanRepos(unittest.TestCase):
+    def test_finds_git_dirs_one_level_deep(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "alpha", ".git"))
+            os.makedirs(os.path.join(tmp, "beta"))
+            os.makedirs(os.path.join(tmp, "gamma", ".git"))
+            found = wind.scan_repos([tmp])
+            self.assertEqual([n for n, _ in found], ["alpha", "gamma"])
+
+    def test_missing_root_ignored(self):
+        self.assertEqual(wind.scan_repos(["/nonexistent-xyz-123"]), [])
+
+    def test_multiple_roots_concatenate(self):
+        with tempfile.TemporaryDirectory() as t1, \
+                tempfile.TemporaryDirectory() as t2:
+            os.makedirs(os.path.join(t1, "one", ".git"))
+            os.makedirs(os.path.join(t2, "two", ".git"))
+            names = [n for n, _ in wind.scan_repos([t1, t2])]
+            self.assertEqual(names, ["one", "two"])
+
+
+class ConfigAssembly(unittest.TestCase):
+    def test_build_repo_entry_minimal(self):
+        self.assertEqual(wind.build_repo_entry("a", "/p", "", ""),
+                         {"name": "a", "path": "/p"})
+
+    def test_build_repo_entry_full(self):
+        e = wind.build_repo_entry("a", "/p", "--permission-mode plan",
+                                  "~/x.md")
+        self.assertEqual(e["claude_args"], "--permission-mode plan")
+        self.assertEqual(e["prompt_file"], "~/x.md")
+
+    def test_build_config_defaults_and_repos(self):
+        cfg = wind.build_config([{"name": "a", "path": "/p"}], "", "")
+        self.assertEqual(cfg["resume_message"], "continue")
+        self.assertEqual(cfg["ntfy_url"], "")
+        self.assertEqual(len(cfg["repos"]), 1)
+
+    def test_build_config_overrides(self):
+        cfg = wind.build_config([], "go on", "https://ntfy.sh/t")
+        self.assertEqual(cfg["resume_message"], "go on")
+        self.assertEqual(cfg["ntfy_url"], "https://ntfy.sh/t")
+
+
 if __name__ == "__main__":
     unittest.main()

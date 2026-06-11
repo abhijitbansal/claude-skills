@@ -334,6 +334,157 @@ def prompt_text(label, default="", input_fn=input):
     return raw or default
 
 
+# --------------------------------------------------------------- wizard ----
+
+PERMISSION_PRESETS = [
+    ("acceptEdits — edits files without asking (overnight default)",
+     "--permission-mode acceptEdits"),
+    ("plan — plans first, asks before acting", "--permission-mode plan"),
+    ("default — normal permission prompts", ""),
+    ("custom — type your own claude_args", None),
+]
+
+
+def scan_repos(roots):
+    """[(name, path)] for every <root>/<child>/.git, name-sorted per root."""
+    found = []
+    for root in roots:
+        root_full = os.path.expanduser(str(root).strip())
+        if not os.path.isdir(root_full):
+            continue
+        for child in sorted(os.listdir(root_full)):
+            path = os.path.join(root_full, child)
+            if os.path.isdir(os.path.join(path, ".git")):
+                found.append((child, path))
+    return found
+
+
+def build_repo_entry(name, path, claude_args, prompt_file):
+    entry = {"name": name, "path": path}
+    if prompt_file:
+        entry["prompt_file"] = prompt_file
+    if claude_args:
+        entry["claude_args"] = claude_args
+    return entry
+
+
+def build_config(repos, resume_message, ntfy_url):
+    cfg = dict(DEFAULT_CONFIG)
+    cfg["repos"] = repos
+    cfg["resume_message"] = resume_message or DEFAULT_CONFIG["resume_message"]
+    cfg["ntfy_url"] = ntfy_url or ""
+    return cfg
+
+
+def load_existing_config(target):
+    try:
+        with open(target) as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def wizard_target_path(args):
+    """Where the wizard writes. None = cancelled."""
+    if args.config:
+        return os.path.expanduser(args.config)
+    local = "./second-wind.json"
+    if os.path.isfile(local):
+        choice = select(
+            f"Found {local}",
+            ["Reconfigure it (existing values become defaults)",
+             f"Leave it — write {WIND_CONFIG} instead",
+             "Cancel"])
+        if choice == 0:
+            return local
+        if choice == 1:
+            return os.path.expanduser(WIND_CONFIG)
+        return None
+    return os.path.expanduser(WIND_CONFIG)
+
+
+def run_wizard(args):
+    banner()
+    target = wizard_target_path(args)
+    if target is None:
+        log("wizard cancelled", glyph="○", color="dim")
+        return
+    existing = load_existing_config(target)
+
+    roots = prompt_text("Directories to scan for git repos (comma-separated)",
+                        default="~/projects")
+    found = scan_repos(roots.split(","))
+    if not found:
+        log(f"no git repos found under {roots}", glyph="!", color="yellow")
+    existing_paths = {os.path.expanduser(r.get("path", ""))
+                      for r in existing.get("repos", [])}
+    labels = [f"{name}  {style(path, 'dim')}" for name, path in found]
+    preselected = [i for i, (_, path) in enumerate(found)
+                   if path in existing_paths]
+    picked = []
+    if found:
+        picked = multiselect(
+            "Select repos for wind to manage (space toggles, enter confirms)",
+            labels, preselected=preselected)
+        if picked is None:
+            log("wizard cancelled", glyph="○", color="dim")
+            return
+    chosen = [found[i] for i in picked]
+
+    extra = prompt_text("Other repo paths (comma-separated, empty to skip)",
+                        default="")
+    for raw in [p.strip() for p in extra.split(",") if p.strip()]:
+        full = os.path.expanduser(raw)
+        if os.path.isdir(full):
+            chosen.append((os.path.basename(full.rstrip("/")), full))
+        else:
+            log(f"skipping {raw}: not a directory", glyph="!", color="yellow")
+
+    if not chosen:
+        die("no repos selected — nothing to configure")
+
+    repos = []
+    for name, path in chosen:
+        print(f"\n{style(name, 'bold')} {style(path, 'dim')}")
+        pick = select("Permission preset",
+                      [label for label, _ in PERMISSION_PRESETS])
+        if pick is None:
+            log("wizard cancelled", glyph="○", color="dim")
+            return
+        claude_args = PERMISSION_PRESETS[pick][1]
+        if claude_args is None:
+            claude_args = prompt_text("claude_args", default="")
+        prompt_file = prompt_text(
+            "Prompt file sent on `wind up` (path, empty to skip)",
+            default="")
+        repos.append(build_repo_entry(name, path, claude_args, prompt_file))
+
+    resume_message = prompt_text(
+        "Resume message typed after the limit resets",
+        default=existing.get("resume_message",
+                             DEFAULT_CONFIG["resume_message"]))
+    ntfy = prompt_text("ntfy.sh topic URL for notifications (empty to skip)",
+                       default=existing.get("ntfy_url", ""))
+    while ntfy and not valid_notify_url(ntfy):
+        log("must start with http:// or https://", glyph="!", color="yellow")
+        ntfy = prompt_text("ntfy.sh topic URL (empty to skip)", default="")
+
+    cfg = build_config(repos, resume_message, ntfy)
+    os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
+    with open(target, "w") as f:
+        json.dump(cfg, f, indent=2)
+        f.write("\n")
+
+    print()
+    log(f"wrote {target}", glyph="✓", color="green")
+    for r in repos:
+        preset = r.get("claude_args", "") or "default permissions"
+        log(f"{r['name']}: {preset}", glyph="✓", color="green")
+    print(f"\n  Next: {style('wind up', 'bold')} then "
+          f"{style('wind watch', 'bold')} — live view: "
+          f"{style('wind dash', 'bold')}\n")
+
+
 # ---------------------------------------------------------------- config ---
 
 def find_config(explicit=None):
@@ -521,7 +672,7 @@ def notify(cfg, message):
 
 # ------------------------------------------------------------- commands ----
 
-def cmd_init(args):
+def write_starter_config(args):
     path = os.path.expanduser(args.config or CONFIG_PATHS[0])
     if os.path.exists(path) and not args.force:
         die(f"{path} already exists (use --force to overwrite)")
@@ -531,6 +682,17 @@ def cmd_init(args):
         json.dump(sample, f, indent=2)
         f.write("\n")
     print(f"Wrote starter config to {path} — edit 'repos' and run `wind up`.")
+
+
+def cmd_init(args):
+    if getattr(args, "defaults", False) or not (
+            sys.stdin.isatty() and sys.stdout.isatty()):
+        return write_starter_config(args)
+    try:
+        return run_wizard(args)
+    except KeyboardInterrupt:
+        print()
+        log("wizard cancelled", glyph="○", color="dim")
 
 
 def cmd_up(cfg, args):
@@ -760,6 +922,8 @@ def main(argv=None):
     p_init = sub.add_parser("init", help="write a starter config file")
     p_init.add_argument("--force", action="store_true",
                         help="overwrite existing config")
+    p_init.add_argument("--defaults", action="store_true",
+                        help="write the starter config without the wizard")
     sub.add_parser("up", help="start tmux sessions and launch Claude Code")
     sub.add_parser("status", help="show session states and next reset")
     p_watch = sub.add_parser("watch", help="watch panes and auto-resume")
