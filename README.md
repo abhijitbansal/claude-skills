@@ -49,7 +49,8 @@ wind up       # one tmux session per repo, Claude Code launched in each
 wind watch    # watcher: detects the 5-hour limit, resumes after reset
 ```
 
-Full reference: [tools/second-wind/README.md](tools/second-wind/README.md)
+Full reference: [tools/second-wind/README.md](tools/second-wind/README.md) ·
+[visual explainer](docs/second-wind/index.html)
 
 ### Other AI tools (Codex, Copilot CLI, Hermes, …)
 
