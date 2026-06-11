@@ -495,17 +495,16 @@
   <div class="wrap">
     <div class="sec-kicker">getting started</div>
     <h2>How to use</h2>
-    <p class="lede">Install the CLI into <code>~/.local/bin</code> — one curl, no clone required.</p>
+    <p class="lede">One command installs everything into <code>~/.wind</code> — no clone required.</p>
 
     <pre><code><span class="c"># install</span>
-mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/wind.py -o ~/.local/bin/wind
-chmod +x ~/.local/bin/wind</code></pre>
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh</code></pre>
 
     <div class="steps">
       <div class="step"><div class="n"></div><div class="body">
-        <strong><span class="cmd">wind init</span></strong> — writes <code>./second-wind.json</code>. Edit the
-        <code>repos</code> list: name, path, and an optional initial prompt file per repo.
+        <strong><span class="cmd">wind init</span></strong> — an interactive wizard scans for your git repos,
+        lets you pick which ones wind should manage, choose a permission preset per repo,
+        and writes the config for you. Use <code>--defaults</code> for the old non-interactive starter file.
       </div></div>
       <div class="step"><div class="n"></div><div class="body">
         <strong><span class="cmd">wind up</span></strong> — starts one tmux session per repo, launches Claude
@@ -525,6 +524,16 @@ chmod +x ~/.local/bin/wind</code></pre>
         <strong><span class="cmd">wind down</span></strong> — kills all wind sessions when you're finished.
       </div></div>
     </div>
+
+    <h3>Watch it live</h3>
+    <p class="lede">
+      <span class="cmd" style="font-family: var(--mono); color: var(--amber); background: rgba(245,184,92,0.07); border: 1px solid rgba(245,184,92,0.2); border-radius: 5px; padding: 0.08em 0.45em;">wind dash</span>
+      opens a live dashboard in your browser at <code>http://127.0.0.1:8787</code>.
+      One card per session: state pill, reset countdown, last 30 lines of the pane.
+      Actions: resume all sessions, send a message to any session, or kill a session.
+      Localhost-only; every action requires a per-run token so other sites can't reach it.
+      Use <code>--port</code> to change the port, <code>--no-browser</code> to skip auto-open.
+    </p>
   </div>
 </section>
 
@@ -621,7 +630,7 @@ chmod +x ~/.local/bin/wind</code></pre>
     </div>
 
     <h3>Config reference</h3>
-    <p class="lede"><code>wind</code> reads <code>./second-wind.json</code>, then <code>~/.config/second-wind/config.json</code>.</p>
+    <p class="lede"><code>wind</code> reads <code>./second-wind.json</code>, then <code>~/.wind/config.json</code>, then <code>~/.config/second-wind/config.json</code> (legacy).</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Key</th><th>Meaning</th></tr></thead>

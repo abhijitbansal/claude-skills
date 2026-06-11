@@ -19,24 +19,20 @@ how to use it, and how the watch loop works.
 
 ## Install
 
-Second Wind lives in the
-[claude-skills](https://github.com/abhijitbansal/claude-skills) repo — there
-is no separate repository to clone.
-
-One-liner (just the CLI):
+One command:
 
 ```sh
-mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/wind.py -o ~/.local/bin/wind
-chmod +x ~/.local/bin/wind
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh
 ```
 
-From a repo clone (stays current with `git pull`):
+This places everything in `~/.wind` (program, dashboard, config, state),
+writes a `wind` shim to `~/.wind/bin`, and offers to add that to your PATH —
+it never edits your shell profile without asking. From a clone:
+`sh tools/second-wind/install.sh`. Then:
 
 ```sh
-git clone https://github.com/abhijitbansal/claude-skills.git
-mkdir -p ~/.local/bin
-ln -s "$PWD/claude-skills/tools/second-wind/wind.py" ~/.local/bin/wind
+exec $SHELL
+wind init      # interactive wizard: scans for repos, writes config for you
 ```
 
 Optional — teach Claude Code itself to drive `wind`:
@@ -48,18 +44,26 @@ Optional — teach Claude Code itself to drive `wind`:
 
 Requirements: Python 3.9+, tmux, Claude Code CLI logged in.
 
-If `wind` is not found after install, add `export PATH="$HOME/.local/bin:$PATH"`
-to your shell profile and reload.
-
 ## Quick start
 
 ```sh
-wind init            # writes ./second-wind.json — edit the repos list
+wind init            # interactive wizard: scans dirs, lets you pick repos,
+                     # choose permission presets, and writes config for you
+                     # (use --defaults to get the old non-interactive starter file)
 wind up              # start a tmux session per repo, launch Claude Code,
                      # send each repo's initial prompt file
 wind watch           # run the watcher (keep this running; use caffeinate
                      # config on a Mac to prevent sleep)
 ```
+
+## Dashboard
+
+`wind dash` serves a live dashboard at `http://127.0.0.1:8787` — one card per
+session with state, reset countdown, and the last 30 lines of each pane, plus
+resume-all / send-message / kill actions. Localhost-only; every action
+requires a per-run token embedded in the page, so other websites can't POST
+into your sessions. `--port` to change port, `--no-browser` to skip
+auto-open.
 
 Then check in whenever you like:
 
@@ -78,7 +82,10 @@ tmux new -d -s wind-watcher 'wind watch'
 
 ## Config
 
-`wind` looks for `./second-wind.json`, then `~/.config/second-wind/config.json`.
+`wind` looks for `./second-wind.json`, then `~/.wind/config.json`, then
+`~/.config/second-wind/config.json` (legacy). State lives in
+`~/.wind/state.json` (legacy `~/.local/state/second-wind/state.json` is still
+read on upgrade and cleared at both locations).
 
 ```json
 {
@@ -174,5 +181,10 @@ Unit tests for the parser: `python3 -m unittest discover tests`.
   trust level as typing them by hand.
 - `ntfy_url` must start with `http://` or `https://`. Notifications carry
   only session counts and reset times — never repo content.
-- The watcher's state file (`~/.local/state/second-wind/state.json`) is
-  written with `0600` permissions.
+- The watcher's state file (`~/.wind/state.json`) is written with `0600`
+  permissions.
+- The dashboard binds `127.0.0.1` only and gates every action behind a
+  per-run CSRF token (generated with `secrets.token_hex(16)` at startup,
+  embedded in the served page, required on every POST via `X-Wind-Token`).
+  The handler also enforces a Host-header allowlist to block DNS-rebinding
+  attacks from other sites on the same machine.

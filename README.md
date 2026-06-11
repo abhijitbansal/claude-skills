@@ -37,16 +37,17 @@ agents, and hooks register automatically on install.
 
 ### Second Wind (standalone CLI)
 
-No plugin required. Single stdlib-only Python file; needs Python 3.9+, tmux, and the Claude Code CLI.
+No plugin required. Needs Python 3.9+, tmux, and the Claude Code CLI.
+Includes an interactive `wind init` wizard and a live `wind dash` web dashboard.
 
 ```bash
-mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/wind.py -o ~/.local/bin/wind
-chmod +x ~/.local/bin/wind
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh
 
-wind init     # write ./second-wind.json — edit the repos list
+exec $SHELL
+wind init     # interactive wizard: scans for repos, writes config
 wind up       # one tmux session per repo, Claude Code launched in each
 wind watch    # watcher: detects the 5-hour limit, resumes after reset
+wind dash     # live localhost dashboard: status, pane tails, actions
 ```
 
 Full reference: [tools/second-wind/README.md](tools/second-wind/README.md) ·

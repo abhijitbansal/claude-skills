@@ -16,27 +16,27 @@ time and resumes every paused session automatically.
 
 ## If `wind` is not on PATH
 
-Install it (single stdlib-only file):
+Install it with one command:
 
 ```bash
-mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/wind.py -o ~/.local/bin/wind
-head -1 ~/.local/bin/wind | grep -q python || { echo "download broken — inspect ~/.local/bin/wind"; exit 1; }
-chmod +x ~/.local/bin/wind
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh
+exec $SHELL
 ```
 
-(On seeded machines `setup.sh` already symlinks it from the repo clone.)
+This places everything in `~/.wind` and adds `~/.wind/bin` to PATH (with your
+consent). On seeded machines `setup.sh` already handles this.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `wind init` | write `./second-wind.json` starter config — edit the `repos` list |
+| `wind init` | interactive wizard: scan dirs, pick repos, set permission presets, write config (`--defaults` for non-interactive starter file) |
 | `wind up` | start a tmux session per repo, launch Claude Code, send each repo's initial prompt file |
 | `wind watch` | run the watcher loop (keep running; on macOS it self-caffeinates) |
 | `wind status` | per-session state + next reset time |
 | `wind resume` | manually nudge all sessions with the resume message |
 | `wind down` | kill all wind sessions |
+| `wind dash` | serve the live localhost dashboard (status, pane tails, resume/send/kill); `--port` to change port, `--no-browser` to skip auto-open |
 
 ## Typical setup
 
@@ -63,3 +63,4 @@ Full reference: `tools/second-wind/README.md` in the claude-skills repo.
 
 - Never run `wind watch` in the same tmux session as a managed repo — it must survive the sessions it manages.
 - `wind down` kills sessions without saving; confirm with the user before running it on their behalf.
+- `wind dash` kill button kills tmux sessions — apply the same confirmation rule as `wind down`: always confirm with the user before triggering a kill action on their behalf.
