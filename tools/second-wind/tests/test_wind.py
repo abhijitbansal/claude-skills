@@ -81,6 +81,11 @@ class DetectLimit(unittest.TestCase):
         reset = wind.detect_limit("RATE_LIMIT until 1780000000", pats, NOW)
         self.assertEqual(reset, datetime.datetime.fromtimestamp(1780000000))
 
+    def test_out_of_range_epoch_falls_back_to_one_hour(self):
+        text = "Claude AI usage limit reached|999999999999"
+        reset = wind.detect_limit(text, PATTERNS, NOW)
+        self.assertEqual(reset, NOW + datetime.timedelta(hours=1))
+
 
 class Classify(unittest.TestCase):
     def test_running(self):

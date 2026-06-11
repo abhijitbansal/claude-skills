@@ -268,7 +268,10 @@ def detect_limit(text, patterns, now=None):
             continue
         groups = m.groupdict()
         if groups.get("epoch"):
-            return datetime.datetime.fromtimestamp(int(groups["epoch"]))
+            try:
+                return datetime.datetime.fromtimestamp(int(groups["epoch"]))
+            except (ValueError, OverflowError, OSError):
+                pass  # absurd timestamp in pane output; use the fallback
         if groups.get("time"):
             parsed = parse_clock_time(groups["time"], now=now)
             if parsed:
