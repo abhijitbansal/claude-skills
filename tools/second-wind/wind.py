@@ -79,6 +79,62 @@ def die(msg, code=1):
     sys.exit(code)
 
 
+# -------------------------------------------------------------------- ui ----
+
+ANSI_RESET = "\033[0m"
+ANSI_CODES = {
+    "dim": "\033[2m",
+    "bold": "\033[1m",
+    "red": "\033[31m",
+    "green": "\033[32m",
+    "yellow": "\033[33m",
+    "magenta": "\033[35m",
+    "cyan": "\033[36m",
+}
+SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+SPINNER_TICK_SECONDS = 0.25
+VERSION = "1.1.0"
+
+
+def use_color(stream=None):
+    """Color only on a real terminal, honoring NO_COLOR and TERM=dumb."""
+    if os.environ.get("NO_COLOR"):
+        return False
+    if os.environ.get("TERM") == "dumb":
+        return False
+    stream = stream or sys.stdout
+    return hasattr(stream, "isatty") and stream.isatty()
+
+
+def style(text, *names, stream=None):
+    if not use_color(stream):
+        return text
+    prefix = "".join(ANSI_CODES[n] for n in names)
+    return f"{prefix}{text}{ANSI_RESET}"
+
+
+def human_delta(seconds):
+    """65 -> '1m', 8040 -> '2h 14m', 266400 -> '3d 2h'."""
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
+def banner():
+    print()
+    print(f"  {style('◢◤', 'cyan')} {style('second wind', 'bold')} "
+          f"{style('v' + VERSION + ' · usage-limit auto-resume', 'dim')}")
+    print()
+
+
 # ---------------------------------------------------------------- config ---
 
 def find_config(explicit=None):

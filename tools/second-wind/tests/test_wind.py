@@ -100,5 +100,45 @@ class Classify(unittest.TestCase):
         self.assertEqual(wind.classify("", PATTERNS), "starting")
 
 
+class HumanDelta(unittest.TestCase):
+    def test_seconds(self):
+        self.assertEqual(wind.human_delta(45), "45s")
+
+    def test_minutes(self):
+        self.assertEqual(wind.human_delta(150), "2m")
+
+    def test_hours_minutes(self):
+        self.assertEqual(wind.human_delta(2 * 3600 + 14 * 60), "2h 14m")
+
+    def test_days_hours(self):
+        self.assertEqual(wind.human_delta(3 * 86400 + 2 * 3600), "3d 2h")
+
+    def test_negative_clamps_to_zero(self):
+        self.assertEqual(wind.human_delta(-5), "0s")
+
+
+class _FakeTty:
+    def isatty(self):
+        return True
+
+
+class Style(unittest.TestCase):
+    def test_plain_when_not_a_tty(self):
+        # unit-test stdout is not a tty, so default stream gives plain text
+        self.assertEqual(wind.style("hi", "red"), "hi")
+
+    def test_colors_on_a_tty(self):
+        out = wind.style("hi", "red", stream=_FakeTty())
+        self.assertIn("\033[31m", out)
+        self.assertTrue(out.endswith("\033[0m"))
+
+    def test_no_color_env_wins_over_tty(self):
+        os.environ["NO_COLOR"] = "1"
+        try:
+            self.assertEqual(wind.style("hi", "red", stream=_FakeTty()), "hi")
+        finally:
+            del os.environ["NO_COLOR"]
+
+
 if __name__ == "__main__":
     unittest.main()
