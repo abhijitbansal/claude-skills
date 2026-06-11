@@ -25,7 +25,7 @@ say ""
 
 mkdir -p "$WIND_HOME/bin"
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" 2>/dev/null && pwd -P) || SCRIPT_DIR=""
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" 2>/dev/null && pwd -P) || SCRIPT_DIR=""
 if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/wind.py" ] && [ -f "$SCRIPT_DIR/dashboard.html" ]; then
   cp "$SCRIPT_DIR/wind.py" "$WIND_HOME/wind.py"
   cp "$SCRIPT_DIR/dashboard.html" "$WIND_HOME/dashboard.html"
