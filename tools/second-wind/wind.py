@@ -268,7 +268,7 @@ def session_exists(name):
 
 
 def capture_pane(name, lines):
-    result = tmux("capture-pane", "-p", "-t", name, "-S", f"-{lines}",
+    result = tmux("capture-pane", "-p", "-t", f"={name}", "-S", f"-{lines}",
                   check=False)
     return result.stdout if result.returncode == 0 else ""
 
@@ -281,9 +281,9 @@ def send_text(name, text):
     )
     if proc.returncode != 0:
         die(f"tmux load-buffer failed: {proc.stderr.strip()}")
-    tmux("paste-buffer", "-p", "-d", "-b", "wind", "-t", name)
+    tmux("paste-buffer", "-p", "-d", "-b", "wind", "-t", f"={name}")
     time.sleep(0.3)
-    tmux("send-keys", "-t", name, "Enter")
+    tmux("send-keys", "-t", f"={name}", "Enter")
 
 
 # ------------------------------------------------------- limit detection ---
@@ -390,7 +390,7 @@ def cmd_up(cfg, args):
         claude_args = repo.get("claude_args") or cfg["claude_args"]
         command = claude_cmd + (f" {claude_args}" if claude_args else "")
         tmux("new-session", "-d", "-s", name, "-c", path)
-        tmux("send-keys", "-t", name, command, "Enter")
+        tmux("send-keys", "-t", f"={name}", command, "Enter")
         log(f"{name}: launched `{command}` in {path}", glyph="→", color="cyan")
         started.append((repo, name))
 
@@ -452,11 +452,16 @@ def cmd_status(cfg, args):
         pad = " " * max(1, 22 - len(cell))
         print(f"{name:<{width}}{style(cell, color)}{pad}{when}")
     if state.get("reset_at"):
-        resume_ts = state["reset_at"] + cfg["resume_buffer_seconds"]
-        resume_at = datetime.datetime.fromtimestamp(resume_ts)
-        print(f"\n{style('◌', 'yellow')} watcher: limit detected, resuming "
-              f"all at {resume_at:%a %H:%M:%S} · in "
-              f"{human_delta(resume_ts - now)}")
+        try:
+            resume_ts = float(state["reset_at"]) + cfg["resume_buffer_seconds"]
+            resume_at = datetime.datetime.fromtimestamp(resume_ts)
+        except (TypeError, ValueError, OverflowError, OSError):
+            print(f"\n{style('!', 'yellow')} watcher state file is corrupt "
+                  f"({state_file()}) — delete it or run `wind resume`")
+        else:
+            print(f"\n{style('◌', 'yellow')} watcher: limit detected, resuming "
+                  f"all at {resume_at:%a %H:%M:%S} · in "
+                  f"{human_delta(resume_ts - now)}")
 
 
 def resume_sessions(cfg, names):
@@ -481,7 +486,7 @@ def cmd_down(cfg, args):
     for repo in cfg["repos"]:
         name = session_name(cfg, repo)
         if session_exists(name):
-            tmux("kill-session", "-t", name)
+            tmux("kill-session", "-t", f"={name}")
             log(f"{name}: killed", glyph="✗", color="red")
     clear_state()
 
