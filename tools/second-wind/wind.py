@@ -5,7 +5,7 @@ Runs Claude Code sessions for several repos in named tmux sessions, watches
 their panes for the (account-level) usage-limit message, parses the reset
 time, and resumes every paused session shortly after the limit resets.
 
-Single file, Python stdlib only. Requires: tmux, Claude Code CLI.
+Python stdlib only. Requires: tmux, Claude Code CLI.
 
 Commands:
   wind init     write a starter config file
@@ -13,6 +13,7 @@ Commands:
   wind status   show each session's state and the next reset time
   wind watch    run the watcher loop (detect limit -> wait -> resume all)
   wind resume   send the resume message to sessions now
+  wind dash     serve the live localhost web dashboard
   wind down     kill the tmux sessions
 """
 
@@ -100,7 +101,7 @@ ANSI_CODES = {
 }
 SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 SPINNER_TICK_SECONDS = 0.25
-VERSION = "1.1.0"
+VERSION = "2.0.0"
 
 
 def use_color(stream=None):
@@ -785,7 +786,7 @@ def make_dash_handler(cfg, token, template):
                 names = [session_name(cfg, r) for r in cfg["repos"]]
                 sent = resume_sessions(cfg, names)
                 clear_state()
-                self._send(200, json.dumps({"resumed": sent}))
+                self._send(200, json.dumps({"resumed": len(sent)}))
             elif self.path == "/api/send":
                 name = body.get("session")
                 text = (body.get("text") or "").strip()

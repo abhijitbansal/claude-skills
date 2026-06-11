@@ -4,8 +4,7 @@ Set-and-forget orchestrator for long Claude Code runs across multiple repos.
 When Claude's 5-hour usage limit pauses everything, Second Wind notices,
 waits for the reset, and resumes every session — including overnight.
 
-- **One file, no dependencies.** `wind.py` is single-file Python (stdlib
-  only). All it needs is `tmux` and the Claude Code CLI.
+- **No dependencies.** `wind.py` is plain Python (stdlib only) plus one HTML file for the dashboard. All it needs is `tmux` and the Claude Code CLI.
 - **One clock.** The 5-hour limit is account-level: all sessions pause and
   reset together. The watcher keeps a single reset clock and resumes
   everything in one sweep.
