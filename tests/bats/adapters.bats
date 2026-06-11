@@ -48,3 +48,29 @@ teardown() { rm -rf "${TMP}"; }
   [ "$status" -eq 0 ]
   [ -L "${COPILOT_SKILLS_DIR}/commit" ]
 }
+
+@test "agents-md mode writes managed block into target file" {
+  target="${TMP}/AGENTS.md"
+  echo "# My agents file" > "${target}"
+  run bash "${INSTALL}" agents-md "${target}"
+  [ "$status" -eq 0 ]
+  grep -q "BEGIN claude-skills" "${target}"
+  grep -q "END claude-skills" "${target}"
+  grep -q "second-wind" "${target}"
+  grep -q "# My agents file" "${target}"   # pre-existing content preserved
+}
+
+@test "agents-md mode is idempotent (block replaced, not duplicated)" {
+  target="${TMP}/AGENTS.md"
+  echo "# My agents file" > "${target}"
+  bash "${INSTALL}" agents-md "${target}"
+  bash "${INSTALL}" agents-md "${target}"
+  [ "$(grep -c 'BEGIN claude-skills' "${target}")" -eq 1 ]
+}
+
+@test "agents-md mode creates the target file when missing" {
+  target="${TMP}/sub/AGENTS.md"
+  run bash "${INSTALL}" agents-md "${target}"
+  [ "$status" -eq 0 ]
+  grep -q "BEGIN claude-skills" "${target}"
+}
