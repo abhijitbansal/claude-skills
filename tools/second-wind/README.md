@@ -35,6 +35,7 @@ From a repo clone (stays current with `git pull`):
 
 ```sh
 git clone https://github.com/abhijitbansal/claude-skills.git
+mkdir -p ~/.local/bin
 ln -s "$PWD/claude-skills/tools/second-wind/wind.py" ~/.local/bin/wind
 ```
 
@@ -46,6 +47,9 @@ Optional — teach Claude Code itself to drive `wind`:
 ```
 
 Requirements: Python 3.9+, tmux, Claude Code CLI logged in.
+
+If `wind` is not found after install, add `export PATH="$HOME/.local/bin:$PATH"`
+to your shell profile and reload.
 
 ## Quick start
 
