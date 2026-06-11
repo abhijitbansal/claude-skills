@@ -43,14 +43,16 @@ consent). On seeded machines `setup.sh` already handles this.
 Overnight run:
 
 ```bash
-wind init   # then edit second-wind.json: repos[].path, prompt_file, claude_args
+wind init   # interactive wizard picks repos and writes the config
 wind up
 tmux new -d -s wind-watcher 'wind watch'
 ```
 
 Attach to a live session: `tmux attach -t wind-<repo>` (detach: `Ctrl-b d`).
 
-## Config essentials (`second-wind.json`)
+## Config essentials
+
+The config may live at `./second-wind.json` or `~/.wind/config.json`.
 
 - `repos[]`: `name`, `path`, optional `prompt_file` (sent as first prompt), optional per-repo `claude_args` (e.g. `--permission-mode acceptEdits`).
 - `resume_message`: text typed into each paused session after reset (default `continue`).
