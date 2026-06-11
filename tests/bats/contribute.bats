@@ -12,8 +12,11 @@ setup() {
   git -C "${CLAUDE_SKILLS_HOME}" config user.email t@t
   git -C "${CLAUDE_SKILLS_HOME}" config user.name  Tester
   # contribute.sh switches to main; pin main to the cloned HEAD so tests
-  # exercise the current branch's layout, not a stale main.
-  git -C "${CLAUDE_SKILLS_HOME}" branch -f main HEAD
+  # exercise the current branch's layout, not a stale main. No-op when the
+  # clone already checked out main (can't force-update the current branch).
+  if [ "$(git -C "${CLAUDE_SKILLS_HOME}" symbolic-ref --short HEAD)" != "main" ]; then
+    git -C "${CLAUDE_SKILLS_HOME}" branch -f main HEAD
+  fi
   cd "${CLAUDE_SKILLS_HOME}"
 }
 
