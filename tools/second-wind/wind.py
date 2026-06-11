@@ -18,6 +18,7 @@ Commands:
 
 import argparse
 import datetime
+import hmac
 import json
 import os
 import re
@@ -676,6 +677,7 @@ PANE_TAIL_LINES = 30
 
 
 def strip_ansi(text):
+    text = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)", "", text)
     return re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", text)
 
 
@@ -736,7 +738,19 @@ def make_dash_handler(cfg, token, template):
             self.end_headers()
             self.wfile.write(data)
 
+        def _host_allowed(self):
+            """Reject DNS-rebinding: Host must be a localhost name."""
+            host = self.headers.get("Host") or ""
+            if host.startswith("["):                 # [::1]:8787 or [::1]
+                host = host.split("]", 1)[0] + "]"
+            elif ":" in host:
+                host = host.rsplit(":", 1)[0]
+            return host in ("127.0.0.1", "localhost", "[::1]")
+
         def do_GET(self):
+            if not self._host_allowed():
+                self._send(403, '{"error": "bad host"}')
+                return
             if self.path == "/":
                 self._send(200, template.replace("{{TOKEN}}", token),
                            "text/html; charset=utf-8")
@@ -746,7 +760,11 @@ def make_dash_handler(cfg, token, template):
                 self._send(404, '{"error": "not found"}')
 
         def do_POST(self):
-            if self.headers.get("X-Wind-Token") != token:
+            if not self._host_allowed():
+                self._send(403, '{"error": "bad host"}')
+                return
+            supplied = self.headers.get("X-Wind-Token") or ""
+            if not hmac.compare_digest(supplied, token):
                 self._send(401, '{"error": "bad token"}')
                 return
             length = int(self.headers.get("Content-Length") or 0)

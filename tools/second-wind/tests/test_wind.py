@@ -306,6 +306,9 @@ class StripAnsi(unittest.TestCase):
         self.assertEqual(wind.strip_ansi("\x1b[31mred\x1b[0m \x1b[2Kx"),
                          "red x")
 
+    def test_strips_osc_sequences(self):
+        self.assertEqual(wind.strip_ansi("\x1b]0;title\x07hi"), "hi")
+
 
 class DashApi(unittest.TestCase):
     def setUp(self):
@@ -343,12 +346,14 @@ class DashApi(unittest.TestCase):
          wind.resume_sessions, wind.clear_state,
          wind.load_state) = self._orig
 
-    def _req(self, method, path, body=None, token=None):
+    def _req(self, method, path, body=None, token=None, host=None):
         import http.client
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
         headers = {"Content-Type": "application/json"}
         if token:
             headers["X-Wind-Token"] = token
+        if host:
+            headers["Host"] = host
         conn.request(method, path,
                      json.dumps(body) if body is not None else None, headers)
         resp = conn.getresponse()
@@ -405,6 +410,20 @@ class DashApi(unittest.TestCase):
     def test_unknown_route_404(self):
         status, _ = self._req("GET", "/etc/passwd")
         self.assertEqual(status, 404)
+
+    def test_dns_rebinding_host_rejected(self):
+        status, _ = self._req("GET", "/", host="evil.example.com")
+        self.assertEqual(status, 403)
+
+    def test_rebinding_post_rejected_even_with_token(self):
+        status, _ = self._req("POST", "/api/kill", {"session": "wind-demo"},
+                              token="tok123", host="evil.example.com:8787")
+        self.assertEqual(status, 403)
+        self.assertEqual(self.calls, [])
+
+    def test_localhost_host_allowed(self):
+        status, _ = self._req("GET", "/api/status", host="localhost:8787")
+        self.assertEqual(status, 200)
 
 
 if __name__ == "__main__":
