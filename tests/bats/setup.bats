@@ -68,10 +68,27 @@ EOF
   ls "${HOME}/CLAUDE.md.bak."*
 }
 
-@test "setup.sh --only symlinks fans out skills/agents/commands" {
-  CLAUDE_SETUP_TOML="${CLAUDE_SKILLS_HOME}/claude-setup.toml" \
-    run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only symlinks
+@test "setup.sh --only symlinks installs contribute shim" {
+  run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only symlinks
   [ "$status" -eq 0 ]
+  [ -L "${HOME}/.local/bin/claude-skills-contribute" ]
+}
+
+@test "setup.sh --only local_plugins adds self marketplace and installs every marketplace plugin" {
+  run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only local_plugins
+  [ "$status" -eq 0 ]
+  grep -q "claude plugin marketplace" "${MOCK_CALL_LOG}"
+  grep -q "claude plugin install ios-dev@claude-skills" "${MOCK_CALL_LOG}"
+  grep -q "claude plugin install linear-pm@claude-skills" "${MOCK_CALL_LOG}"
+  grep -q "claude plugin install core-workflow@claude-skills" "${MOCK_CALL_LOG}"
+}
+
+@test "setup.sh symlinks step removes stale links into this repo" {
+  mkdir -p "${HOME}/.claude/skills"
+  ln -s "${CLAUDE_SKILLS_HOME}/skills/gone" "${HOME}/.claude/skills/gone"
+  run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only symlinks
+  [ "$status" -eq 0 ]
+  [ ! -L "${HOME}/.claude/skills/gone" ]
 }
 
 @test "setup.sh symlinks step installs claude-skills-contribute shim" {

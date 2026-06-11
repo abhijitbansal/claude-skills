@@ -119,6 +119,3 @@ name = "xcodegen-cli"
 [dotfiles]
 home_claude_md = "templates/home-CLAUDE.md"
 user_settings = "templates/user-settings.json"
-
-[custom_skills]
-symlink_targets = ["skills", "agents", "commands"]
