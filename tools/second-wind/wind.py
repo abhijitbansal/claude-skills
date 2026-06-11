@@ -69,9 +69,11 @@ DEFAULT_CONFIG = {
 }
 
 
-def log(msg):
-    ts = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"[{ts}] {msg}", flush=True)
+def log(msg, glyph=None, color="cyan"):
+    heartbeat_clear()
+    ts = style(datetime.datetime.now().strftime("%H:%M:%S"), "dim")
+    prefix = f"{style(glyph, color)} " if glyph else ""
+    print(f"[{ts}] {prefix}{msg}", flush=True)
 
 
 def die(msg, code=1):
@@ -133,6 +135,48 @@ def banner():
     print(f"  {style('◢◤', 'cyan')} {style('second wind', 'bold')} "
           f"{style('v' + VERSION + ' · usage-limit auto-resume', 'dim')}")
     print()
+
+
+STATE_GLYPHS = {
+    "running": ("●", "green"),
+    "waiting-for-reset": ("◌", "yellow"),
+    "idle": ("○", "dim"),
+    "starting": ("◍", "cyan"),
+    "not running": ("✗", "red"),
+}
+
+_heartbeat_visible = False
+
+
+def heartbeat(text):
+    """Transient one-line spinner, rewritten in place. TTY only."""
+    global _heartbeat_visible
+    if not sys.stdout.isatty():
+        return
+    frame = SPINNER_FRAMES[int(time.time() / SPINNER_TICK_SECONDS)
+                           % len(SPINNER_FRAMES)]
+    print(f"\r\033[2K  {style(frame, 'cyan')} {style(text, 'dim')}",
+          end="", flush=True)
+    _heartbeat_visible = True
+
+
+def heartbeat_clear():
+    global _heartbeat_visible
+    if _heartbeat_visible:
+        print("\r\033[2K", end="", flush=True)
+        _heartbeat_visible = False
+
+
+def watch_sleep(seconds, text):
+    """Sleep, animating the heartbeat when on a TTY; plain sleep when piped."""
+    if not sys.stdout.isatty():
+        time.sleep(seconds)
+        return
+    end = time.time() + seconds
+    while time.time() < end:
+        heartbeat(text)
+        time.sleep(SPINNER_TICK_SECONDS)
+    heartbeat_clear()
 
 
 # ---------------------------------------------------------------- config ---
@@ -332,12 +376,13 @@ def cmd_init(args):
 
 
 def cmd_up(cfg, args):
+    banner()
     started = []
     for repo in cfg["repos"]:
         name = session_name(cfg, repo)
         path = os.path.expanduser(repo["path"])
         if session_exists(name):
-            log(f"{name}: already running, skipping")
+            log(f"{name}: already running, skipping", glyph="○", color="dim")
             continue
         if not os.path.isdir(path):
             die(f"{name}: repo path does not exist: {path}")
@@ -346,7 +391,7 @@ def cmd_up(cfg, args):
         command = claude_cmd + (f" {claude_args}" if claude_args else "")
         tmux("new-session", "-d", "-s", name, "-c", path)
         tmux("send-keys", "-t", name, command, "Enter")
-        log(f"{name}: launched `{command}` in {path}")
+        log(f"{name}: launched `{command}` in {path}", glyph="→", color="cyan")
         started.append((repo, name))
 
     prompts = [(r, n) for r, n in started if r.get("prompt_file")]
@@ -362,23 +407,27 @@ def cmd_up(cfg, args):
                 if os.path.isfile(pf_rel):
                     pf = pf_rel
                 else:
-                    log(f"{name}: prompt file not found: {repo['prompt_file']}")
+                    log(f"{name}: prompt file not found: {repo['prompt_file']}",
+                        glyph="!", color="yellow")
                     continue
             with open(pf) as f:
                 prompt = f.read().strip()
             if prompt:
                 send_text(name, prompt)
-                log(f"{name}: sent initial prompt ({len(prompt)} chars)")
+                log(f"{name}: sent initial prompt ({len(prompt)} chars)",
+                    glyph="✓", color="green")
     if started:
         log(f"{len(started)} session(s) up. Attach: tmux attach -t "
-            f"{started[0][1]}  |  watch: wind watch")
+            f"{started[0][1]}  |  watch: wind watch",
+            glyph="✓", color="green")
     else:
-        log("nothing to start")
+        log("nothing to start", glyph="○", color="dim")
 
 
 def cmd_status(cfg, args):
     patterns = limit_patterns(cfg)
     state = load_state()
+    now = time.time()
     rows = []
     for repo in cfg["repos"]:
         name = session_name(cfg, repo)
@@ -388,16 +437,26 @@ def cmd_status(cfg, args):
         text = capture_pane(name, cfg["capture_lines"])
         st = classify(text, patterns)
         reset = detect_limit(text, patterns)
-        rows.append((name, st, reset.strftime("%a %H:%M") if reset else ""))
+        when = ""
+        if reset:
+            when = (f"{reset:%a %H:%M} · in "
+                    f"{human_delta(reset.timestamp() - now)}")
+        rows.append((name, st, when))
+
     width = max(len(r[0]) for r in rows) + 2
-    print(f"{'SESSION':<{width}}{'STATE':<20}{'RESETS'}")
-    for name, st, reset in rows:
-        print(f"{name:<{width}}{st:<20}{reset}")
+    print(style(f"{'SESSION':<{width}}{'STATE':<22}{'RESETS'}", "bold"))
+    print(style("─" * (width + 36), "dim"))
+    for name, st, when in rows:
+        glyph, color = STATE_GLYPHS.get(st, ("·", "dim"))
+        cell = f"{glyph} {st}"
+        pad = " " * max(1, 22 - len(cell))
+        print(f"{name:<{width}}{style(cell, color)}{pad}{when}")
     if state.get("reset_at"):
-        resume_at = datetime.datetime.fromtimestamp(
-            state["reset_at"] + cfg["resume_buffer_seconds"])
-        print(f"\nwatcher: limit detected, resuming all at "
-              f"{resume_at:%a %H:%M:%S}")
+        resume_ts = state["reset_at"] + cfg["resume_buffer_seconds"]
+        resume_at = datetime.datetime.fromtimestamp(resume_ts)
+        print(f"\n{style('◌', 'yellow')} watcher: limit detected, resuming "
+              f"all at {resume_at:%a %H:%M:%S} · in "
+              f"{human_delta(resume_ts - now)}")
 
 
 def resume_sessions(cfg, names):
@@ -407,7 +466,7 @@ def resume_sessions(cfg, names):
             continue
         send_text(name, cfg["resume_message"])
         sent.append(name)
-        log(f"{name}: sent resume message")
+        log(f"{name}: sent resume message", glyph="✓", color="green")
     return sent
 
 
@@ -423,7 +482,7 @@ def cmd_down(cfg, args):
         name = session_name(cfg, repo)
         if session_exists(name):
             tmux("kill-session", "-t", name)
-            log(f"{name}: killed")
+            log(f"{name}: killed", glyph="✗", color="red")
     clear_state()
 
 
@@ -439,6 +498,7 @@ def start_caffeinate():
 
 
 def cmd_watch(cfg, args):
+    banner()
     patterns = limit_patterns(cfg)
     poll = args.poll or cfg["poll_interval_seconds"]
     buffer_s = cfg["resume_buffer_seconds"]
@@ -475,7 +535,7 @@ def cmd_watch(cfg, args):
                 if not reset_at or ts > reset_at:
                     reset_at = ts
                 log(f"{name}: usage limit detected, resets "
-                    f"{reset:%a %H:%M}")
+                    f"{reset:%a %H:%M}", glyph="!", color="yellow")
 
             if paused and reset_at:
                 if state.get("paused") != sorted(paused) or \
@@ -490,7 +550,8 @@ def cmd_watch(cfg, args):
                                     f"{len(paused)} session(s) at "
                                     f"{when:%H:%M}.")
                 if time.time() >= reset_at + buffer_s:
-                    log("reset time reached, resuming paused sessions")
+                    log("reset time reached, resuming paused sessions",
+                        glyph="→", color="cyan")
                     sent = resume_sessions(cfg, sorted(paused))
                     notify(cfg, f"Resumed {len(sent)} session(s) after "
                                 f"limit reset.")
@@ -500,8 +561,16 @@ def cmd_watch(cfg, args):
                     state = {}
                     clear_state()
 
-            time.sleep(poll)
+            if paused and reset_at:
+                eta = reset_at + buffer_s - time.time()
+                hb = (f"limit hit · resuming {len(paused)} session(s) in "
+                      f"{human_delta(eta)}")
+            else:
+                hb = (f"watching {len(cfg['repos'])} session(s) · "
+                      f"poll {poll}s")
+            watch_sleep(poll, hb)
     except KeyboardInterrupt:
+        heartbeat_clear()
         log("watcher stopped")
     finally:
         if keeper:
