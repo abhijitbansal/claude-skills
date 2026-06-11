@@ -578,7 +578,9 @@ def session_exists(name):
 
 
 def capture_pane(name, lines):
-    result = tmux("capture-pane", "-p", "-t", f"={name}", "-S", f"-{lines}",
+    # "=name:" — exact-match session, default window/pane. Bare "=name" is
+    # rejected as a pane target by tmux 3.6 ("can't find pane").
+    result = tmux("capture-pane", "-p", "-t", f"={name}:", "-S", f"-{lines}",
                   check=False)
     return result.stdout if result.returncode == 0 else ""
 
@@ -591,9 +593,9 @@ def send_text(name, text):
     )
     if proc.returncode != 0:
         die(f"tmux load-buffer failed: {proc.stderr.strip()}")
-    tmux("paste-buffer", "-p", "-d", "-b", "wind", "-t", f"={name}")
+    tmux("paste-buffer", "-p", "-d", "-b", "wind", "-t", f"={name}:")
     time.sleep(0.3)
-    tmux("send-keys", "-t", f"={name}", "Enter")
+    tmux("send-keys", "-t", f"={name}:", "Enter")
 
 
 # ------------------------------------------------------- limit detection ---
@@ -799,6 +801,50 @@ def make_dash_handler(cfg, token, template):
     return DashHandler
 
 
+def find_dashboard_template():
+    candidates = [
+        os.path.expanduser(os.path.join(WIND_HOME, "dashboard.html")),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                     "dashboard.html"),
+    ]
+    for p in candidates:
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def cmd_dash(cfg, args):
+    import http.server
+    import secrets
+    import webbrowser
+
+    template_path = find_dashboard_template()
+    if not template_path:
+        die("dashboard.html not found (looked in ~/.wind and next to "
+            "wind.py) — re-run install.sh")
+    with open(template_path) as f:
+        template = f.read()
+    token = secrets.token_hex(16)
+    handler = make_dash_handler(cfg, token, template)
+    try:
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", args.port),
+                                                 handler)
+    except OSError as e:
+        die(f"cannot bind 127.0.0.1:{args.port}: {e}")
+    banner()
+    url = f"http://127.0.0.1:{server.server_address[1]}/"
+    log(f"dashboard at {url}", glyph="→", color="cyan")
+    log("Ctrl-C to stop", glyph="○", color="dim")
+    if not args.no_browser:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        log("dashboard stopped")
+    finally:
+        server.server_close()
+
+
 # ------------------------------------------------------------- commands ----
 
 def write_starter_config(args):
@@ -839,7 +885,7 @@ def cmd_up(cfg, args):
         claude_args = repo.get("claude_args") or cfg["claude_args"]
         command = claude_cmd + (f" {claude_args}" if claude_args else "")
         tmux("new-session", "-d", "-s", name, "-c", path)
-        tmux("send-keys", "-t", f"={name}", command, "Enter")
+        tmux("send-keys", "-t", f"={name}:", command, "Enter")
         log(f"{name}: launched `{command}` in {path}", glyph="→", color="cyan")
         started.append((repo, name))
 
@@ -1060,6 +1106,11 @@ def main(argv=None):
                          help="poll interval in seconds (overrides config)")
     sub.add_parser("resume", help="send the resume message to all sessions")
     sub.add_parser("down", help="kill all wind tmux sessions")
+    p_dash = sub.add_parser("dash", help="serve the live web dashboard")
+    p_dash.add_argument("--port", type=int, default=8787,
+                        help="port on 127.0.0.1 (default 8787)")
+    p_dash.add_argument("--no-browser", action="store_true",
+                        help="don't open the browser automatically")
 
     args = parser.parse_args(argv)
 
@@ -1073,6 +1124,7 @@ def main(argv=None):
         "watch": cmd_watch,
         "resume": cmd_resume,
         "down": cmd_down,
+        "dash": cmd_dash,
     }
     return handlers[args.command](cfg, args)
 
