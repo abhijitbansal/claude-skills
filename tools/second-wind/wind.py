@@ -192,9 +192,10 @@ def load_state():
 
 def save_state(state):
     path = state_file()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
     with open(path, "w") as f:
         json.dump(state, f, indent=2)
+    os.chmod(path, 0o600)
 
 
 def clear_state():
@@ -296,9 +297,16 @@ def classify(text, patterns):
 
 # -------------------------------------------------------------- notify -----
 
+def valid_notify_url(url):
+    return url.startswith(("http://", "https://"))
+
+
 def notify(cfg, message):
     url = cfg.get("ntfy_url")
     if not url:
+        return
+    if not valid_notify_url(url):
+        log("notify skipped: ntfy_url must start with http:// or https://")
         return
     try:
         req = urllib.request.Request(

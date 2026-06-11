@@ -145,5 +145,16 @@ class Style(unittest.TestCase):
             del os.environ["NO_COLOR"]
 
 
+class NotifyUrl(unittest.TestCase):
+    def test_accepts_http_and_https(self):
+        self.assertTrue(wind.valid_notify_url("https://ntfy.sh/my-topic"))
+        self.assertTrue(wind.valid_notify_url("http://host.local/topic"))
+
+    def test_rejects_other_schemes(self):
+        self.assertFalse(wind.valid_notify_url("file:///etc/passwd"))
+        self.assertFalse(wind.valid_notify_url("ftp://host/x"))
+        self.assertFalse(wind.valid_notify_url("ntfy.sh/topic"))
+
+
 if __name__ == "__main__":
     unittest.main()
