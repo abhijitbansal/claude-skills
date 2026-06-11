@@ -5,8 +5,10 @@ Run: python3 -m unittest discover tests
 
 import datetime
 import importlib.util
+import json
 import os
 import sys
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location(
@@ -154,6 +156,44 @@ class NotifyUrl(unittest.TestCase):
         self.assertFalse(wind.valid_notify_url("file:///etc/passwd"))
         self.assertFalse(wind.valid_notify_url("ftp://host/x"))
         self.assertFalse(wind.valid_notify_url("ntfy.sh/topic"))
+
+
+class ConfigPathOrder(unittest.TestCase):
+    def test_wind_home_config_wins_over_legacy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wind_cfg = os.path.join(tmp, "wind.json")
+            legacy_cfg = os.path.join(tmp, "legacy.json")
+            for p, marker in ((wind_cfg, "new"), (legacy_cfg, "old")):
+                with open(p, "w") as f:
+                    json.dump({"session_prefix": marker,
+                               "repos": [{"name": "x", "path": "/tmp"}]}, f)
+            orig = wind.CONFIG_PATHS
+            wind.CONFIG_PATHS = [os.path.join(tmp, "absent.json"),
+                                 wind_cfg, legacy_cfg]
+            try:
+                cfg = wind.load_config()
+                self.assertEqual(cfg["session_prefix"], "new")
+            finally:
+                wind.CONFIG_PATHS = orig
+
+
+class StatePaths(unittest.TestCase):
+    def test_legacy_state_read_when_new_missing_then_new_wins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            new = os.path.join(tmp, "state.json")
+            legacy = os.path.join(tmp, "legacy.json")
+            with open(legacy, "w") as f:
+                json.dump({"reset_at": 1}, f)
+            orig = (wind.STATE_PATH, wind.LEGACY_STATE_PATH)
+            wind.STATE_PATH, wind.LEGACY_STATE_PATH = new, legacy
+            try:
+                self.assertEqual(wind.load_state(), {"reset_at": 1})
+                wind.save_state({"reset_at": 2})
+                self.assertEqual(wind.load_state(), {"reset_at": 2})
+                wind.clear_state()
+                self.assertEqual(wind.load_state(), {})
+            finally:
+                wind.STATE_PATH, wind.LEGACY_STATE_PATH = orig
 
 
 if __name__ == "__main__":

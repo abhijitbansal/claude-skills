@@ -26,11 +26,15 @@ import sys
 import time
 import urllib.request
 
+WIND_HOME = "~/.wind"
+WIND_CONFIG = "~/.wind/config.json"
 CONFIG_PATHS = [
     "./second-wind.json",
-    "~/.config/second-wind/config.json",
+    WIND_CONFIG,
+    "~/.config/second-wind/config.json",   # legacy fallback
 ]
-STATE_PATH = "~/.local/state/second-wind/state.json"
+STATE_PATH = "~/.wind/state.json"
+LEGACY_STATE_PATH = "~/.local/state/second-wind/state.json"
 
 # Patterns are tried in order against recent pane output. A match marks the
 # session as limited; the named group ("epoch" or "time") gives the reset
@@ -227,11 +231,13 @@ def state_file():
 
 
 def load_state():
-    try:
-        with open(state_file()) as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return {}
+    for p in (STATE_PATH, LEGACY_STATE_PATH):
+        try:
+            with open(os.path.expanduser(p)) as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+    return {}
 
 
 def save_state(state):
@@ -243,10 +249,11 @@ def save_state(state):
 
 
 def clear_state():
-    try:
-        os.remove(state_file())
-    except OSError:
-        pass
+    for p in (STATE_PATH, LEGACY_STATE_PATH):
+        try:
+            os.remove(os.path.expanduser(p))
+        except OSError:
+            pass
 
 
 # ------------------------------------------------------------------ tmux ---
