@@ -19,8 +19,20 @@ teardown() { rm -rf "${TMP}"; }
 @test "contribute.sh scaffolds a new skill on --skill" {
   run bash "${CLAUDE_SKILLS_HOME}/setup/contribute.sh" --skill demo --message "demo skill" --no-pr
   [ "$status" -eq 0 ]
-  [ -f "${CLAUDE_SKILLS_HOME}/skills/demo/SKILL.md" ]
+  [ -f "${CLAUDE_SKILLS_HOME}/plugins/core-workflow/skills/demo/SKILL.md" ]
   git -C "${CLAUDE_SKILLS_HOME}" log --oneline | grep -q "demo"
+}
+
+@test "contribute.sh --plugin scaffolds into the named plugin" {
+  run bash "${CLAUDE_SKILLS_HOME}/setup/contribute.sh" --skill demo2 --plugin ios-dev --message "demo2 skill" --no-pr
+  [ "$status" -eq 0 ]
+  [ -f "${CLAUDE_SKILLS_HOME}/plugins/ios-dev/skills/demo2/SKILL.md" ]
+}
+
+@test "contribute.sh --plugin rejects unknown plugin" {
+  run bash "${CLAUDE_SKILLS_HOME}/setup/contribute.sh" --skill demo3 --plugin nope --no-pr
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no plugin nope"* ]]
 }
 
 @test "contribute.sh refuses on dirty tree" {
