@@ -241,6 +241,12 @@ step_symlinks() {
   else
     safe_symlink "${REPO_ROOT}/setup/contribute.sh" "${HOME}/.local/bin/claude-skills-contribute"
   fi
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    info "would link ${HOME}/.local/bin/wind → ${REPO_ROOT}/tools/second-wind/wind.py"
+  else
+    safe_symlink "${REPO_ROOT}/tools/second-wind/wind.py" "${HOME}/.local/bin/wind"
+  fi
 }
 step_summary() {
   bold "summary"

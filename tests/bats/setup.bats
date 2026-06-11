@@ -83,6 +83,13 @@ EOF
   grep -q "claude plugin install core-workflow@claude-skills" "${MOCK_CALL_LOG}"
 }
 
+@test "setup.sh symlinks step installs wind onto PATH" {
+  run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only symlinks
+  [ "$status" -eq 0 ]
+  [ -L "${HOME}/.local/bin/wind" ]
+  [ "$(readlink "${HOME}/.local/bin/wind")" = "${CLAUDE_SKILLS_HOME}/tools/second-wind/wind.py" ]
+}
+
 @test "setup.sh symlinks step removes stale links into this repo" {
   mkdir -p "${HOME}/.claude/skills"
   ln -s "${CLAUDE_SKILLS_HOME}/skills/gone" "${HOME}/.claude/skills/gone"
