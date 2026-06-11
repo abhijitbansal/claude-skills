@@ -188,3 +188,11 @@ Unit tests for the parser: `python3 -m unittest discover tests`.
   embedded in the served page, required on every POST via `X-Wind-Token`).
   The handler also enforces a Host-header allowlist to block DNS-rebinding
   attacks from other sites on the same machine.
+- `/api/status` is intentionally unauthenticated — it is reachable only from
+  localhost and cross-origin reads are blocked by the browser's same-origin
+  policy (no `Access-Control-Allow-Origin` header is set). The token gates
+  the write actions (`/api/send`, `/api/kill`, `/api/resume`).
+- `/api/send` types text directly into a session's tmux pane. For sessions
+  running with `--permission-mode acceptEdits`, sent text is an instruction
+  the agent can act on without a permission prompt. Treat the dashboard
+  token with the same care as a terminal session.

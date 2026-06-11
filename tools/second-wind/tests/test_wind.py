@@ -425,6 +425,27 @@ class DashApi(unittest.TestCase):
         status, _ = self._req("GET", "/api/status", host="localhost:8787")
         self.assertEqual(status, 200)
 
+    def test_negative_content_length_rejected(self):
+        import socket
+        s = socket.create_connection(("127.0.0.1", self.port), timeout=5)
+        s.sendall(
+            b"POST /api/resume HTTP/1.1\r\n"
+            b"Host: 127.0.0.1\r\n"
+            b"X-Wind-Token: tok123\r\n"
+            b"Content-Length: -1\r\n"
+            b"\r\n"
+        )
+        response = b""
+        while True:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+            if b"\r\n\r\n" in response:
+                break
+        s.close()
+        self.assertIn(b"400", response)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -769,7 +769,13 @@ def make_dash_handler(cfg, token, template):
             if not hmac.compare_digest(supplied, token):
                 self._send(401, '{"error": "bad token"}')
                 return
-            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = -1
+            if length < 0 or length > 65536:
+                self._send(400, '{"error": "bad content-length"}')
+                return
             try:
                 body = json.loads(self.rfile.read(length) or b"{}")
             except json.JSONDecodeError:

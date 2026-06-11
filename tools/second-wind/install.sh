@@ -31,8 +31,8 @@ if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/wind.py" ] && [ -f "$SCRIPT_DIR/das
   cp "$SCRIPT_DIR/dashboard.html" "$WIND_HOME/dashboard.html"
   say "  ✓ copied wind.py + dashboard.html from local clone"
 else
-  curl -fsSL "$RAW_BASE/wind.py" -o "$WIND_HOME/wind.py"
-  curl -fsSL "$RAW_BASE/dashboard.html" -o "$WIND_HOME/dashboard.html"
+  curl -fsSL -- "$RAW_BASE/wind.py" -o "$WIND_HOME/wind.py"
+  curl -fsSL -- "$RAW_BASE/dashboard.html" -o "$WIND_HOME/dashboard.html"
   say "  ✓ downloaded wind.py + dashboard.html"
 fi
 
