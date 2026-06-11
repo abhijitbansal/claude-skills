@@ -23,6 +23,11 @@
       "name": "core-workflow",
       "source": "./plugins/core-workflow",
       "description": "General dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook"
+    },
+    {
+      "name": "second-wind",
+      "source": "./plugins/second-wind",
+      "description": "Set-and-forget orchestrator for long Claude Code runs: when the 5-hour usage limit pauses sessions, wind notices, waits for the reset, and resumes every tmux session — including overnight"
     }
   ]
 }
