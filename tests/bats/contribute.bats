@@ -11,6 +11,9 @@ setup() {
   git clone --quiet "${REAL_REPO}" "${CLAUDE_SKILLS_HOME}"
   git -C "${CLAUDE_SKILLS_HOME}" config user.email t@t
   git -C "${CLAUDE_SKILLS_HOME}" config user.name  Tester
+  # contribute.sh switches to main; pin main to the cloned HEAD so tests
+  # exercise the current branch's layout, not a stale main.
+  git -C "${CLAUDE_SKILLS_HOME}" branch -f main HEAD
   cd "${CLAUDE_SKILLS_HOME}"
 }
 
