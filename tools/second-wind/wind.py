@@ -151,7 +151,7 @@ _heartbeat_visible = False
 def heartbeat(text):
     """Transient one-line spinner, rewritten in place. TTY only."""
     global _heartbeat_visible
-    if not sys.stdout.isatty():
+    if not use_color():
         return
     frame = SPINNER_FRAMES[int(time.time() / SPINNER_TICK_SECONDS)
                            % len(SPINNER_FRAMES)]
@@ -169,7 +169,7 @@ def heartbeat_clear():
 
 def watch_sleep(seconds, text):
     """Sleep, animating the heartbeat when on a TTY; plain sleep when piped."""
-    if not sys.stdout.isatty():
+    if not use_color():
         time.sleep(seconds)
         return
     end = time.time() + seconds
