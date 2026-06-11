@@ -13,12 +13,36 @@ waits for the reset, and resumes every session — including overnight.
   from any terminal (including the VS Code integrated terminal) with
   `tmux attach -t wind-<repo>`; sessions survive editor restarts.
 
+Prefer pictures? See the
+[visual explainer](../../docs/second-wind/index.html) — what Second Wind is,
+how to use it, and how the watch loop works.
+
 ## Install
 
+Second Wind lives in the
+[claude-skills](https://github.com/abhijitbansal/claude-skills) repo — there
+is no separate repository to clone.
+
+One-liner (just the CLI):
+
 ```sh
-git clone https://github.com/abhijitbansal/second-wind.git
-ln -s "$PWD/second-wind/wind.py" /usr/local/bin/wind   # or add an alias
-chmod +x second-wind/wind.py
+mkdir -p ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/wind.py -o ~/.local/bin/wind
+chmod +x ~/.local/bin/wind
+```
+
+From a repo clone (stays current with `git pull`):
+
+```sh
+git clone https://github.com/abhijitbansal/claude-skills.git
+ln -s "$PWD/claude-skills/tools/second-wind/wind.py" ~/.local/bin/wind
+```
+
+Optional — teach Claude Code itself to drive `wind`:
+
+```text
+/plugin marketplace add abhijitbansal/claude-skills
+/plugin install second-wind@claude-skills
 ```
 
 Requirements: Python 3.9+, tmux, Claude Code CLI logged in.
@@ -136,3 +160,15 @@ Unit tests for the parser: `python3 -m unittest discover tests`.
 - Permission mode is your call per repo via `claude_args` (e.g.
   `--permission-mode acceptEdits` vs a full allowlist). Second Wind does not
   default to `--dangerously-skip-permissions`.
+
+## Security model
+
+- `second-wind.json` is trusted input. `claude_cmd`, `claude_args`, and
+  `limit_patterns` are executed/compiled exactly as written — never point
+  `wind` at a config file you did not write yourself.
+- Prompt files are typed into Claude Code sessions verbatim, with the same
+  trust level as typing them by hand.
+- `ntfy_url` must start with `http://` or `https://`. Notifications carry
+  only session counts and reset times — never repo content.
+- The watcher's state file (`~/.local/state/second-wind/state.json`) is
+  written with `0600` permissions.
