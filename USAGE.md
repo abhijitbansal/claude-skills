@@ -226,3 +226,16 @@ Templated skills (`release`, `ios-build`, `app-preview`) source `skills/_lib/loa
 - **Mac mini validation** — clone fresh, run `setup.sh`, run a real `release` cycle. Original failure mode never reproduced; defensive measures in place.
 - **Phase 2: marketplace publication** — register the repo as a Claude marketplace + push skills to skills.sh so friends can `claude plugin marketplace add <yours>`. Out of scope for v1.
 - **Caveman skills under `~/.claude/skills/`** — symlinks to `~/.agents/skills/caveman*` exist but aren't in any lockfile. Provenance unknown — investigate before next capture.
+
+## Using these skills from other AI tools
+
+SKILL.md is tool-agnostic. To wire the skills into other agents:
+
+```bash
+adapters/install.sh codex      # symlink into ~/.codex/skills (CODEX_SKILLS_DIR to override)
+adapters/install.sh copilot    # symlink into ~/.copilot/skills (COPILOT_SKILLS_DIR to override)
+adapters/install.sh agents-md [path/to/AGENTS.md]   # managed skill-index block for AGENTS.md-aware tools (Hermes, etc.)
+adapters/install.sh all
+```
+
+Re-run after adding skills; the script is idempotent and prunes links it created for removed skills.
