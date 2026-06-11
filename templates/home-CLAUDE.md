@@ -1,3 +1,5 @@
+<!-- Personal seed file for Abhijit's machines. Public users: ignore templates/; install the plugins instead. -->
+
 # Global instructions for Claude
 
 These apply across every project unless a project-level instruction overrides them.

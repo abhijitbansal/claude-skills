@@ -10,6 +10,7 @@ REPO="${CLAUDE_SKILLS_HOME:-${HOME}/projects/claude-skills}"
 [[ -d "${REPO}/.git" ]] || { fail "no claude-skills repo at ${REPO}; clone first"; exit 1; }
 
 SKILL=""
+PLUGIN="core-workflow"
 MESSAGE=""
 NO_PR=0
 AUTO_MERGE=0
@@ -17,6 +18,7 @@ AUTO_MERGE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --skill)        SKILL="$2"; shift ;;
+    --plugin)       PLUGIN="$2"; shift ;;
     --message)      MESSAGE="$2"; shift ;;
     --no-pr)        NO_PR=1 ;;
     --auto-merge)   AUTO_MERGE=1 ;;
@@ -54,7 +56,8 @@ git switch -c "${branch}"
 
 # Step 4: mutate
 if [[ -n "${SKILL}" ]]; then
-  dest="${REPO}/skills/${SKILL}"
+  [[ -d "${REPO}/plugins/${PLUGIN}" ]] || { fail "no plugin ${PLUGIN} in ${REPO}/plugins"; exit 1; }
+  dest="${REPO}/plugins/${PLUGIN}/skills/${SKILL}"
   [[ -e "${dest}" ]] && { fail "skill ${SKILL} already exists"; exit 1; }
   mkdir -p "${dest}/scripts"
   template="${REPO}/templates/skill.md.example"
@@ -84,7 +87,7 @@ description: <one-line trigger description; when should Claude pick this skill>
 - <rule>
 EOF
   fi
-  info "scaffolded skills/${SKILL}/"
+  info "scaffolded plugins/${PLUGIN}/skills/${SKILL}/"
 else
   bash "${SCRIPT_DIR}/capture.sh"
 fi

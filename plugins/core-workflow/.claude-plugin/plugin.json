@@ -1,0 +1,6 @@
+{
+  "name": "core-workflow",
+  "description": "General dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook.",
+  "version": "1.0.0",
+  "author": { "name": "Abhijit Bansal", "url": "https://github.com/abhijitbansal" }
+}

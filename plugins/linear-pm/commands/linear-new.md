@@ -46,7 +46,7 @@ File a new Linear issue.
 6. **Print the result:**
    > Created `<key>: <title>` — `<url>`
 
-7. **Suggest session rename.** Follow the *Session-rename suggestion* protocol in the `linear-pm` skill (`.claude/skills/linear-pm/SKILL.md`): scan the conversation for prior team-prefixed keys already touched in this session, dedupe, append the new key, and emit a fenced `/rename <keys>` block as the final line.
+7. **Suggest session rename.** Follow the *Session-rename suggestion* protocol in the `linear-pm` skill: scan the conversation for prior team-prefixed keys already touched in this session, dedupe, append the new key, and emit a fenced `/rename <keys>` block as the final line.
 
 ## Side effects
 

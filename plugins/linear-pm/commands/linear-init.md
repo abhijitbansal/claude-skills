@@ -17,7 +17,7 @@ Interactive bootstrap for a new repo.
    - Pick existing project by name
    - Create a new project (call `mcp__claude_ai_Linear__save_project` with the new name)
 
-4. **Write `.claude/linear.yml`** by copying `.claude/skills/linear-pm/templates/linear.yml.template` and substituting:
+4. **Write `.claude/linear.yml`** by copying `${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/templates/linear.yml.template` and substituting:
    - `REPLACE_TEAM_KEY` → user's choice
    - `REPLACE_PROJECT_NAME` → user's choice
    Default `autonomy: review-only`. Default `poll.enabled: false`. Default `verify: []`.

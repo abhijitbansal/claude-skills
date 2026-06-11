@@ -13,13 +13,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: validate plugin manifests
+        run: |
+          python3 - <<'PY'
+          import json, os
+          mp = json.load(open(".claude-plugin/marketplace.json"))
+          assert mp["name"] and mp["owner"]["name"], "marketplace metadata"
+          names = set()
+          for p in mp["plugins"]:
+              assert p["name"] not in names, f"duplicate plugin {p['name']}"
+              names.add(p["name"])
+              pj = json.load(open(os.path.join(p["source"], ".claude-plugin", "plugin.json")))
+              assert pj["name"] == p["name"], f"name mismatch in {p['source']}"
+              skills = os.path.join(p["source"], "skills")
+              if os.path.isdir(skills):
+                  for s in os.listdir(skills):
+                      if s == "_lib": continue
+                      md = os.path.join(skills, s, "SKILL.md")
+                      assert os.path.isfile(md), f"missing {md}"
+          print(f"OK: {len(names)} plugins valid")
+          PY
+
       - name: install bats + shellcheck (macOS)
         if: runner.os == 'macOS'
-        run: brew install bats-core shellcheck
+        run: brew install bats-core shellcheck tmux
 
       - name: install bats + shellcheck (Ubuntu)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y bats shellcheck
+        run: sudo apt-get update && sudo apt-get install -y bats shellcheck tmux
 
       - name: install uv
         uses: astral-sh/setup-uv@v3
@@ -32,10 +53,13 @@ jobs:
         run: uv tool install pytest
 
       - name: shellcheck
-        run: shellcheck setup/*.sh skills/_lib/*.sh
+        run: shellcheck setup/*.sh plugins/ios-dev/skills/_lib/*.sh adapters/*.sh
 
       - name: bats
         run: bats tests/bats/
 
       - name: pytest
         run: uv tool run pytest tests/pytest/ -q
+
+      - name: pytest (second-wind)
+        run: uv tool run pytest tools/second-wind/tests/ -q

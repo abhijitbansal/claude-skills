@@ -13,7 +13,7 @@ DRY_RUN=0
 ONLY=""
 SKIP=" "  # space-delimited; sentinels ensure whole-word matching
 
-ALL_STEPS=(preflight claude marketplaces plugins skills dotfiles symlinks summary)
+ALL_STEPS=(preflight claude marketplaces plugins skills dotfiles local_plugins symlinks summary)
 
 usage() {
   cat <<EOF
@@ -27,7 +27,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run)        DRY_RUN=1 ;;
     --verbose)        set -x ;;
     --only)           ONLY="$2"; shift ;;
-    --skip-claude|--skip-marketplaces|--skip-plugins|--skip-skills|--skip-dotfiles|--skip-symlinks)
+    --skip-claude|--skip-marketplaces|--skip-plugins|--skip-skills|--skip-dotfiles|--skip-local_plugins|--skip-symlinks)
                       SKIP+="${1#--skip-} " ;;
     -h|--help)        usage; exit 0 ;;
     *)                usage; exit 2 ;;
@@ -187,37 +187,65 @@ step_dotfiles() {
   [[ -n "${home_md}" ]]       && install_one "${home_md}"       "${HOME}/CLAUDE.md"
   [[ -n "${user_settings}" ]] && install_one "${user_settings}" "${HOME}/.claude/settings.json"
 }
-step_symlinks() {
-  local toml="${CLAUDE_SETUP_TOML:-${REPO_ROOT}/claude-setup.toml}"
-  local custom_json
-  custom_json="$(python3 "${SCRIPT_DIR}/parse_toml.py" "${toml}" custom_skills)"
-  local dirs
-  dirs="$(python3 -c "import json,sys; print('\n'.join(json.loads(sys.argv[1]).get('symlink_targets', [])))" "${custom_json}")"
-
-  while IFS= read -r dir; do
-    [[ -z "${dir}" ]] && continue
-    local src_root="${REPO_ROOT}/${dir}"
-    local dst_root="${HOME}/.claude/${dir}"
-    [[ -d "${src_root}" ]] || { warn "no ${src_root}; skipping"; continue; }
-    mkdir -p "${dst_root}"
-    for entry in "${src_root}"/*; do
-      [[ -e "${entry}" ]] || continue
-      local base
-      base="$(basename "${entry}")"
-      [[ "${base}" == "_lib" ]] && continue
-      if [[ "${DRY_RUN}" -eq 1 ]]; then
-        info "would link ${dst_root}/${base} → ${entry}"
+step_local_plugins() {
+  local manifest="${REPO_ROOT}/.claude-plugin/marketplace.json"
+  [[ -f "${manifest}" ]] || { warn "no ${manifest}; skipping"; return 0; }
+  local existing
+  existing="$(claude plugin marketplace list 2>/dev/null || true)"
+  if printf '%s\n' "${existing}" | grep -qw "claude-skills"; then
+    info "self marketplace: update"
+    [[ "${DRY_RUN}" -eq 1 ]] || claude plugin marketplace update claude-skills || warn "marketplace update failed"
+  else
+    info "self marketplace: add (${REPO_ROOT})"
+    [[ "${DRY_RUN}" -eq 1 ]] || claude plugin marketplace add "${REPO_ROOT}" || warn "marketplace add failed"
+  fi
+  local installed
+  installed="$(claude plugin list --scope user 2>/dev/null || true)"
+  python3 -c "import json,sys; [print(p['name']) for p in json.load(open(sys.argv[1]))['plugins']]" "${manifest}" \
+    | while IFS= read -r name; do
+      if printf '%s\n' "${installed}" | grep -qw "${name}"; then
+        info "local plugin ${name}: update"
+        [[ "${DRY_RUN}" -eq 1 ]] || claude plugin update "${name}@claude-skills" || warn "update ${name} failed"
       else
-        safe_symlink "${entry}" "${dst_root}/${base}" || warn "symlink ${dst_root}/${base} failed"
+        info "local plugin ${name}: install"
+        [[ "${DRY_RUN}" -eq 1 ]] || claude plugin install "${name}@claude-skills" --scope user || warn "install ${name} failed"
       fi
     done
-  done <<< "${dirs}"
+}
+step_symlinks() {
+  # Clean up symlinks left behind by the pre-plugin layout: anything in
+  # ~/.claude/{skills,agents,commands} that points into this repo is stale
+  # now that plugins own those assets.
+  local dir base target entry
+  for dir in skills agents commands; do
+    local dst_root="${HOME}/.claude/${dir}"
+    [[ -d "${dst_root}" ]] || continue
+    for entry in "${dst_root}"/*; do
+      [[ -L "${entry}" ]] || continue
+      target="$(readlink "${entry}")"
+      if [[ "${target}" == "${REPO_ROOT}"/* ]]; then
+        base="$(basename "${entry}")"
+        if [[ "${DRY_RUN}" -eq 1 ]]; then
+          info "would remove stale link ${dst_root}/${base}"
+        else
+          rm "${entry}"
+          info "removed stale link ${dst_root}/${base}"
+        fi
+      fi
+    done
+  done
 
   mkdir -p "${HOME}/.local/bin"
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     info "would link ${HOME}/.local/bin/claude-skills-contribute → ${REPO_ROOT}/setup/contribute.sh"
   else
     safe_symlink "${REPO_ROOT}/setup/contribute.sh" "${HOME}/.local/bin/claude-skills-contribute"
+  fi
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    info "would link ${HOME}/.local/bin/wind → ${REPO_ROOT}/tools/second-wind/wind.py"
+  else
+    safe_symlink "${REPO_ROOT}/tools/second-wind/wind.py" "${HOME}/.local/bin/wind"
   fi
 }
 step_summary() {
