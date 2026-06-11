@@ -183,6 +183,157 @@ def watch_sleep(seconds, text):
     heartbeat_clear()
 
 
+# ----------------------------------------------------------- wizard ui -----
+
+KEY_UP, KEY_DOWN, KEY_ENTER, KEY_SPACE, KEY_QUIT = (
+    "up", "down", "enter", "space", "quit")
+
+
+def _read_key_raw():
+    """Read one keypress in raw mode; arrows mapped to KEY_UP/KEY_DOWN."""
+    import termios
+    import tty
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ch = sys.stdin.read(1)
+        if ch == "\x1b":
+            seq = sys.stdin.read(2)
+            if seq == "[A":
+                return KEY_UP
+            if seq == "[B":
+                return KEY_DOWN
+            return KEY_QUIT
+        if ch in ("\r", "\n"):
+            return KEY_ENTER
+        if ch == " ":
+            return KEY_SPACE
+        if ch in ("\x03", "q"):
+            return KEY_QUIT
+        return ch
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def supports_raw_mode():
+    if os.environ.get("TERM") == "dumb":
+        return False
+    try:
+        import termios  # noqa: F401
+    except ImportError:
+        return False
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _render_menu(title, options, idx, selected=None, first=True):
+    if not first:
+        sys.stdout.write(f"\x1b[{len(options) + 1}A")
+    print(f"\x1b[2K{style(title, 'bold')}")
+    for i, opt in enumerate(options):
+        cursor = style("❯", "cyan") if i == idx else " "
+        if selected is not None:
+            mark = (style("◉", "green") if i in selected
+                    else style("○", "dim"))
+            print(f"\x1b[2K  {cursor} {mark} {opt}")
+        else:
+            print(f"\x1b[2K  {cursor} {opt}")
+
+
+def menu_select(title, options, get_key=_read_key_raw, render=_render_menu):
+    """Arrow-key single-select. Returns index, or None on quit."""
+    idx, first = 0, True
+    while True:
+        render(title, options, idx, selected=None, first=first)
+        first = False
+        key = get_key()
+        if key == KEY_UP:
+            idx = (idx - 1) % len(options)
+        elif key == KEY_DOWN:
+            idx = (idx + 1) % len(options)
+        elif key == KEY_ENTER:
+            return idx
+        elif key == KEY_QUIT:
+            return None
+
+
+def menu_multiselect(title, options, preselected=None,
+                     get_key=_read_key_raw, render=_render_menu):
+    """Space-toggle multi-select. Returns sorted indices, or None on quit."""
+    idx, first = 0, True
+    chosen = frozenset(preselected or [])
+    while True:
+        render(title, options, idx, selected=chosen, first=first)
+        first = False
+        key = get_key()
+        if key == KEY_UP:
+            idx = (idx - 1) % len(options)
+        elif key == KEY_DOWN:
+            idx = (idx + 1) % len(options)
+        elif key == KEY_SPACE:
+            chosen = chosen ^ {idx}
+        elif key == KEY_ENTER:
+            return sorted(chosen)
+        elif key == KEY_QUIT:
+            return None
+
+
+def parse_multi_numbers(raw, count):
+    """'1,3' -> [0, 2]. '' -> []. Invalid -> None. Dedupes, sorts."""
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    idxs = set()
+    for p in parts:
+        if not p.isdigit() or not 1 <= int(p) <= count:
+            return None
+        idxs.add(int(p) - 1)
+    return sorted(idxs)
+
+
+def menu_select_numbered(title, options, input_fn=input):
+    print(style(title, "bold"))
+    for i, opt in enumerate(options, 1):
+        print(f"  {i}. {opt}")
+    while True:
+        raw = input_fn("> ").strip()
+        if raw.lower() in ("q", "quit"):
+            return None
+        if raw.isdigit() and 1 <= int(raw) <= len(options):
+            return int(raw) - 1
+        print("enter a number from the list (q to cancel)")
+
+
+def menu_multiselect_numbered(title, options, input_fn=input):
+    print(style(title, "bold"))
+    for i, opt in enumerate(options, 1):
+        print(f"  {i}. {opt}")
+    while True:
+        raw = input_fn("numbers, comma-separated (empty = none, q = cancel)> ")
+        if raw.strip().lower() in ("q", "quit"):
+            return None
+        idxs = parse_multi_numbers(raw, len(options))
+        if idxs is not None:
+            return idxs
+        print("invalid — e.g. 1,3")
+
+
+def select(title, options):
+    if supports_raw_mode():
+        return menu_select(title, options)
+    return menu_select_numbered(title, options)
+
+
+def multiselect(title, options, preselected=None):
+    if supports_raw_mode():
+        return menu_multiselect(title, options, preselected=preselected)
+    return menu_multiselect_numbered(title, options)
+
+
+def prompt_text(label, default="", input_fn=input):
+    suffix = f" {style('(' + default + ')', 'dim')}" if default else ""
+    raw = input_fn(f"{style('?', 'cyan')} {label}{suffix}: ").strip()
+    return raw or default
+
+
 # ---------------------------------------------------------------- config ---
 
 def find_config(explicit=None):

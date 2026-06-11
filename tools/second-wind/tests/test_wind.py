@@ -196,5 +196,66 @@ class StatePaths(unittest.TestCase):
                 wind.STATE_PATH, wind.LEGACY_STATE_PATH = orig
 
 
+class MenuLogic(unittest.TestCase):
+    def test_select_arrows_and_enter(self):
+        keys = iter([wind.KEY_DOWN, wind.KEY_DOWN, wind.KEY_ENTER])
+        idx = wind.menu_select("t", ["a", "b", "c"],
+                               get_key=lambda: next(keys),
+                               render=lambda *a, **k: None)
+        self.assertEqual(idx, 2)
+
+    def test_select_wraps_upward(self):
+        keys = iter([wind.KEY_UP, wind.KEY_ENTER])
+        idx = wind.menu_select("t", ["a", "b", "c"],
+                               get_key=lambda: next(keys),
+                               render=lambda *a, **k: None)
+        self.assertEqual(idx, 2)
+
+    def test_select_quit_returns_none(self):
+        keys = iter([wind.KEY_QUIT])
+        self.assertIsNone(wind.menu_select("t", ["a"],
+                                           get_key=lambda: next(keys),
+                                           render=lambda *a, **k: None))
+
+    def test_multiselect_toggle_and_confirm(self):
+        keys = iter([wind.KEY_SPACE, wind.KEY_DOWN, wind.KEY_SPACE,
+                     wind.KEY_ENTER])
+        out = wind.menu_multiselect("t", ["a", "b"],
+                                    get_key=lambda: next(keys),
+                                    render=lambda *a, **k: None)
+        self.assertEqual(out, [0, 1])
+
+    def test_multiselect_untoggle(self):
+        keys = iter([wind.KEY_SPACE, wind.KEY_SPACE, wind.KEY_ENTER])
+        out = wind.menu_multiselect("t", ["a", "b"],
+                                    get_key=lambda: next(keys),
+                                    render=lambda *a, **k: None)
+        self.assertEqual(out, [])
+
+    def test_multiselect_preselected(self):
+        keys = iter([wind.KEY_ENTER])
+        out = wind.menu_multiselect("t", ["a", "b"], preselected=[1],
+                                    get_key=lambda: next(keys),
+                                    render=lambda *a, **k: None)
+        self.assertEqual(out, [1])
+
+
+class ParseMultiNumbers(unittest.TestCase):
+    def test_valid(self):
+        self.assertEqual(wind.parse_multi_numbers("1,3", 3), [0, 2])
+
+    def test_empty_means_none_selected(self):
+        self.assertEqual(wind.parse_multi_numbers("", 3), [])
+
+    def test_out_of_range_invalid(self):
+        self.assertIsNone(wind.parse_multi_numbers("4", 3))
+
+    def test_garbage_invalid(self):
+        self.assertIsNone(wind.parse_multi_numbers("x", 3))
+
+    def test_dedupes_and_sorts(self):
+        self.assertEqual(wind.parse_multi_numbers("3,1,3", 3), [0, 2])
+
+
 if __name__ == "__main__":
     unittest.main()
