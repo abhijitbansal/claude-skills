@@ -170,7 +170,7 @@ Print:
 Then run Step 13.
 
 ### Step 13: Session-rename suggestion
-Whenever a /linear-pick run reaches a terminal state that has written to Linear about `$ISSUE_KEY` — i.e. Step 3 (needs-spec), Step 4 (review-only plan), any Step 9 block-and-exit (always writes `agent-blocked` + comment), or Step 12 clean exit — follow the *Session-rename suggestion* protocol in the `linear-pm` skill (`.claude/skills/linear-pm/SKILL.md`): scan the conversation for prior team-prefixed keys already touched in this session, dedupe, append `$ISSUE_KEY`, and emit a fenced `/rename <keys>` block as the final line.
+Whenever a /linear-pick run reaches a terminal state that has written to Linear about `$ISSUE_KEY` — i.e. Step 3 (needs-spec), Step 4 (review-only plan), any Step 9 block-and-exit (always writes `agent-blocked` + comment), or Step 12 clean exit — follow the *Session-rename suggestion* protocol in the `linear-pm` skill: scan the conversation for prior team-prefixed keys already touched in this session, dedupe, append `$ISSUE_KEY`, and emit a fenced `/rename <keys>` block as the final line.
 
 Skip when no Linear writes happened: Step 4 `autonomy: disabled`, and Step 5 branch-already-exists.
 

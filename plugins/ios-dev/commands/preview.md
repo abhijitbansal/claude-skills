@@ -14,10 +14,10 @@ Parse `$ARGUMENTS` like this:
 
 Then:
 
-1. Run `.claude/skills/app-preview/scripts/launch.sh` (with `--no-build` if requested). All three skill scripts live at `.claude/skills/app-preview/scripts/` relative to the repo root.
+1. Run `${CLAUDE_PLUGIN_ROOT}/skills/app-preview/scripts/launch.sh` (with `--no-build` if requested). All three skill scripts live at `${CLAUDE_PLUGIN_ROOT}/skills/app-preview/scripts/`. If `${CLAUDE_PLUGIN_ROOT}` is unset (project-local copy instead of plugin install), use `.claude/skills/app-preview/scripts/` relative to the repo root.
 2. (If applicable) Run the deep-link `openurl`
-3. Run `.claude/skills/app-preview/scripts/snap.sh <short-label>` where the label reflects the state (e.g. `cold-start`, `scan-deeplink`, `after-fix`). Capture the PNG path it prints on the last line.
-4. **Deliver to my phone via deliver.sh:** run `.claude/skills/app-preview/scripts/deliver.sh <png-path>`. This is the load-bearing step — Claude's chat response cannot embed images on the Remote Control mobile UI (verified Anthropic limitation). deliver.sh runs two channels: (a) iMessage text ping → push notification on my iPhone so I know a snap is ready, (b) copies the PNG into ~/Library/Mobile Documents/com~apple~CloudDocs/PaperixPreviews/ which syncs to my iPhone Files app within seconds. Do NOT try to attach the image directly to the iMessage — Apple silently rejects AppleScript-driven attachment sends to self; iCloud Drive is the bytes channel.
+3. Run `${CLAUDE_PLUGIN_ROOT}/skills/app-preview/scripts/snap.sh <short-label>` where the label reflects the state (e.g. `cold-start`, `scan-deeplink`, `after-fix`). Capture the PNG path it prints on the last line.
+4. **Deliver to my phone via deliver.sh:** run `${CLAUDE_PLUGIN_ROOT}/skills/app-preview/scripts/deliver.sh <png-path>`. This is the load-bearing step — Claude's chat response cannot embed images on the Remote Control mobile UI (verified Anthropic limitation). deliver.sh runs two channels: (a) iMessage text ping → push notification on my iPhone so I know a snap is ready, (b) copies the PNG into ~/Library/Mobile Documents/com~apple~CloudDocs/PaperixPreviews/ which syncs to my iPhone Files app within seconds. Do NOT try to attach the image directly to the iMessage — Apple silently rejects AppleScript-driven attachment sends to self; iCloud Drive is the bytes channel.
 5. ALSO Read the PNG path. This lets you describe what's on screen, and renders inline if I happen to be looking from the desktop VS Code extension.
 6. Reply with: which screen was captured, the breadcrumb deliver.sh printed (`Files → iCloud Drive → PaperixPreviews → <filename>`), and one sentence on what's visible. Do not describe the UI in detail — the picture is the artifact.
 
