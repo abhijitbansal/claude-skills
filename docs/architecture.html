@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>claude-skills — Repository Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f6f8; --surface:#ffffff; --surface2:#eef2f5;
+  --border:rgba(15,40,60,.12); --text:#16283a; --text-dim:#5b7184;
+  --teal:#0891b2; --teal-dim:rgba(8,145,178,.10);
+  --slate:#0369a1; --slate-dim:rgba(3,105,161,.10);
+  --amber:#b45309; --amber-dim:rgba(180,83,9,.10);
+  --green:#15803d; --green-dim:rgba(21,128,61,.10);
+  --grid:rgba(3,105,161,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0d1822; --surface:#13212e; --surface2:#0f1c28;
+    --border:rgba(160,200,230,.13); --text:#dbe7f0; --text-dim:#8aa3b5;
+    --teal:#22d3ee; --teal-dim:rgba(34,211,238,.10);
+    --slate:#60a5fa; --slate-dim:rgba(96,165,250,.10);
+    --amber:#fbbf24; --amber-dim:rgba(251,191,36,.10);
+    --green:#4ade80; --green-dim:rgba(74,222,128,.10);
+    --grid:rgba(96,165,250,.05);
+  }
+}
+*{box-sizing:border-box;min-width:0}
+body{
+  margin:0; font-family:'IBM Plex Sans',system-ui,sans-serif; color:var(--text);
+  background:var(--bg);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:28px 28px; line-height:1.55;
+}
+.wrap{max-width:1100px;margin:0 auto;padding:48px 24px 80px}
+.kicker{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--teal);margin:0 0 8px}
+h1{font-size:clamp(28px,4.5vw,42px);margin:0 0 10px;font-weight:700;letter-spacing:-.01em}
+.lead{font-size:17px;color:var(--text-dim);max-width:760px;margin:0 0 40px}
+.lead code{font-family:'IBM Plex Mono',monospace;font-size:.9em;background:var(--surface2);padding:1px 6px;border-radius:4px;border:1px solid var(--border)}
+.section-label{display:flex;align-items:center;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);margin:52px 0 18px}
+.section-label::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--teal)}
+.section-label.amber::before{background:var(--amber)}
+.section-label.green::before{background:var(--green)}
+.section-label.slate::before{background:var(--slate)}
+.diagram-shell{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px;box-shadow:0 6px 24px rgba(10,30,50,.07)}
+.mermaid-wrap{position:relative;overflow:hidden;border-radius:8px;background:var(--surface2)}
+.mermaid-viewport{overflow:hidden;cursor:grab;min-height:430px;display:flex;justify-content:center}
+.mermaid-viewport:active{cursor:grabbing}
+.mermaid-canvas{transform-origin:0 0;display:flex;justify-content:center;padding:18px}
+.zoom-controls{position:absolute;top:10px;right:10px;display:flex;gap:6px;z-index:5}
+.zoom-controls button{
+  width:32px;height:32px;border-radius:7px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);font-size:16px;cursor:pointer;
+  font-family:'IBM Plex Mono',monospace;line-height:1;
+}
+.zoom-controls button:hover{border-color:var(--teal);color:var(--teal)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:16px}
+.ve-card{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--teal);border-radius:10px;padding:20px 22px;animation:fadeUp .5s ease both}
+.ve-card:nth-child(2){animation-delay:.06s}.ve-card:nth-child(3){animation-delay:.12s}.ve-card:nth-child(4){animation-delay:.18s}
+.ve-card.amber{border-left-color:var(--amber)}
+.ve-card.green{border-left-color:var(--green)}
+.ve-card.slate{border-left-color:var(--slate)}
+.ve-card h3{margin:0 0 4px;font-size:17px}
+.ve-card h3 code{font-family:'IBM Plex Mono',monospace;font-size:.92em}
+.ve-card .sub{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-dim);margin:0 0 12px}
+.ve-card ul{margin:0;padding-left:18px;font-size:14.5px;color:var(--text-dim)}
+.ve-card li{margin:4px 0}
+.ve-card li strong{color:var(--text);font-weight:600}
+.flow{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px 24px;margin-bottom:14px}
+.flow h3{margin:0 0 4px;font-size:16px}
+.flow .who{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--teal);margin-bottom:12px}
+.steps{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
+.step{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 12px;font-family:'IBM Plex Mono',monospace;font-size:13px}
+.step.hot{background:var(--teal-dim);border-color:var(--teal);color:var(--teal);font-weight:600}
+.arrow{color:var(--text-dim);font-family:'IBM Plex Mono',monospace}
+.callout{background:var(--amber-dim);border:1px solid var(--amber);border-radius:10px;padding:14px 18px;font-size:14.5px;margin-top:22px}
+.callout strong{color:var(--amber)}
+footer{margin-top:56px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--text-dim)}
+footer a{color:var(--teal)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.ve-card{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">claude-skills / architecture</p>
+  <h1>One repo, every agent</h1>
+  <p class="lead">
+    <code>claude-skills</code> is a Claude Code <strong>plugin marketplace</strong>, a home for standalone
+    <strong>CLI tools</strong>, and a set of <strong>adapters</strong> that wire the same skills into Codex,
+    Copilot CLI, and any AGENTS.md-aware agent — plus private seed machinery that rebuilds a full dev
+    environment on a fresh machine.
+  </p>
+
+  <div class="section-label">System overview</div>
+  <div class="diagram-shell">
+    <div class="mermaid-wrap">
+      <div class="zoom-controls">
+        <button data-z="in" title="Zoom in">+</button>
+        <button data-z="out" title="Zoom out">−</button>
+        <button data-z="reset" title="Reset">⟳</button>
+        <button data-z="expand" title="Open full size">⛶</button>
+      </div>
+      <div class="mermaid-viewport"><div class="mermaid-canvas"><pre class="mermaid">
+flowchart TD
+  MP["marketplace.json<br/><small>.claude-plugin/</small>"]
+  IOS["ios-dev<br/><small>3 skills · 2 cmds · 1 hook</small>"]
+  LIN["linear-pm<br/><small>1 skill · 6 cmds</small>"]
+  CW["core-workflow<br/><small>2 skills · 2 cmds · 2 agents · 1 hook</small>"]
+  SW["second-wind<br/><small>skill wrapper</small>"]
+  WIND[("tools/second-wind<br/>wind.py")]
+  AD["adapters/install.sh"]
+  SEED["setup/<br/><small>setup.sh · capture.sh · contribute.sh</small>"]
+  CC(("Claude Code"))
+  OTHER(("Codex / Copilot /<br/>AGENTS.md agents"))
+
+  MP --> IOS & LIN & CW & SW
+  SW -.->|"wraps"| WIND
+  CC -->|"/plugin marketplace add"| MP
+  SEED -->|"local_plugins step"| CC
+  SEED -->|"wind → ~/.local/bin"| WIND
+  AD -->|"symlink skills"| OTHER
+  IOS & LIN & CW & SW -->|"skills/"| AD
+
+  classDef plugin fill:#0891b21a,stroke:#0891b2,stroke-width:2px
+  classDef infra fill:#b453091a,stroke:#b45309,stroke-width:2px
+  class IOS,LIN,CW,SW plugin
+  class SEED,AD infra
+      </pre></div></div>
+    </div>
+  </div>
+
+  <div class="section-label slate">The four plugins</div>
+  <div class="cards">
+    <div class="ve-card">
+      <h3><code>ios-dev</code></h3>
+      <p class="sub">build → screenshot → phone → ship</p>
+      <ul>
+        <li><strong>app-preview</strong> — build on simulator, screenshot, deliver to iPhone (iMessage ping + iCloud Drive)</li>
+        <li><strong>ios-build</strong> — sim/device builds with signing auto-detection</li>
+        <li><strong>release</strong> — archive → .ipa → validate → upload to App Store Connect</li>
+        <li><strong>/preview, /fix</strong> commands; Stop-hook build reminder</li>
+      </ul>
+    </div>
+    <div class="ve-card slate">
+      <h3><code>linear-pm</code></h3>
+      <p class="sub">issue conventions + autonomous pickup</p>
+      <ul>
+        <li><strong>linear-pm skill</strong> — label vocabulary, status taxonomy, branch/PR naming, <code>.claude/linear.yml</code> policy</li>
+        <li><strong>6 commands</strong> — init, new, pick (the autonomous loop), status, sync, block</li>
+      </ul>
+    </div>
+    <div class="ve-card green">
+      <h3><code>core-workflow</code></h3>
+      <p class="sub">everyday glue</p>
+      <ul>
+        <li><strong>commit</strong> — shellcheck-gated conventional commits</li>
+        <li><strong>contribute</strong> — push changes back to this repo from anywhere</li>
+        <li><strong>agents</strong> — image-parser (vision), web-researcher (docs lookup)</li>
+        <li><strong>hook</strong> — shellcheck on every .sh Edit/Write</li>
+      </ul>
+    </div>
+    <div class="ve-card amber">
+      <h3><code>second-wind</code></h3>
+      <p class="sub">outlast the 5-hour limit</p>
+      <ul>
+        <li><strong>wind CLI</strong> — one tmux session per repo, watches for the usage-limit pause, resumes everything after reset</li>
+        <li><strong>skill wrapper</strong> — teaches the agent <code>wind init/up/watch/status/resume/down</code> + self-install fallback</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section-label green">How installs flow</div>
+  <div class="flow">
+    <h3>Public user — Claude Code</h3>
+    <p class="who">anyone, two commands</p>
+    <div class="steps">
+      <span class="step hot">/plugin marketplace add abhijitbansal/claude-skills</span>
+      <span class="arrow">→</span>
+      <span class="step hot">/plugin install &lt;name&gt;@claude-skills</span>
+      <span class="arrow">→</span>
+      <span class="step">skills + commands + hooks live</span>
+    </div>
+  </div>
+  <div class="flow">
+    <h3>Public user — other agents</h3>
+    <p class="who">clone, then one script</p>
+    <div class="steps">
+      <span class="step">git clone</span>
+      <span class="arrow">→</span>
+      <span class="step hot">adapters/install.sh codex | copilot | agents-md</span>
+      <span class="arrow">→</span>
+      <span class="step">same SKILL.md files, symlinked or indexed</span>
+    </div>
+  </div>
+  <div class="flow">
+    <h3>Owner — fresh machine seed</h3>
+    <p class="who">setup.sh, eight idempotent steps</p>
+    <div class="steps">
+      <span class="step">preflight</span><span class="arrow">→</span>
+      <span class="step">claude</span><span class="arrow">→</span>
+      <span class="step">marketplaces</span><span class="arrow">→</span>
+      <span class="step">plugins</span><span class="arrow">→</span>
+      <span class="step">skills</span><span class="arrow">→</span>
+      <span class="step">dotfiles</span><span class="arrow">→</span>
+      <span class="step hot">local_plugins</span><span class="arrow">→</span>
+      <span class="step">symlinks</span>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>One source of truth.</strong> The owner's machines install the repo's own plugins through the
+    same marketplace mechanism the public uses (<code>local_plugins</code> step) — there is no second code path to drift.
+  </div>
+
+  <footer>
+    Markdown twin: <a href="architecture.md">docs/architecture.md</a> ·
+    Catalog: <a href="skills-catalog.html">skills-catalog.html</a> ·
+    Repo: <a href="https://github.com/abhijitbansal/claude-skills">github.com/abhijitbansal/claude-skills</a>
+  </footer>
+</div>
+
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+mermaid.initialize({
+  startOnLoad:true, theme:'base', fontFamily:"'IBM Plex Mono', monospace",
+  themeVariables:{
+    fontSize:'18px',
+    primaryColor: dark?'#13212e':'#ffffff',
+    primaryTextColor: dark?'#dbe7f0':'#16283a',
+    primaryBorderColor: dark?'#60a5fa':'#0369a1',
+    lineColor: dark?'#8aa3b5':'#5b7184',
+    clusterBkg:'transparent'
+  }
+});
+
+// zoom / pan / expand
+const vp=document.querySelector('.mermaid-viewport'),cv=document.querySelector('.mermaid-canvas');
+let z=1.35,x=0,y=0,drag=null,moved=false;
+const apply=()=>cv.style.transform=`translate(${x}px,${y}px) scale(${z})`;
+apply();
+document.querySelectorAll('.zoom-controls button').forEach(b=>b.onclick=()=>{
+  const m=b.dataset.z;
+  if(m==='in')z=Math.min(4,z*1.2);
+  else if(m==='out')z=Math.max(.4,z/1.2);
+  else if(m==='reset'){z=1.35;x=y=0;}
+  else if(m==='expand')return expand();
+  apply();
+});
+vp.addEventListener('wheel',e=>{if(!e.ctrlKey&&!e.metaKey)return;e.preventDefault();z=Math.min(4,Math.max(.4,z*(e.deltaY<0?1.1:0.9)));apply();},{passive:false});
+vp.addEventListener('pointerdown',e=>{drag={sx:e.clientX-x,sy:e.clientY-y};moved=false;vp.setPointerCapture(e.pointerId);});
+vp.addEventListener('pointermove',e=>{if(!drag)return;x=e.clientX-drag.sx;y=e.clientY-drag.sy;moved=true;apply();});
+vp.addEventListener('pointerup',()=>{if(!moved)expand();drag=null;});
+function expand(){
+  const svg=cv.querySelector('svg'); if(!svg)return;
+  const w=window.open('','_blank');
+  w.document.write('<title>diagram</title><body style="margin:0;display:grid;place-items:center;background:'+(dark?'#0d1822':'#f4f6f8')+'">'+svg.outerHTML+'</body>');
+  const s=w.document.querySelector('svg'); s.style.width='95vw'; s.style.height='auto';
+}
+</script>
+</body>
+</html>
