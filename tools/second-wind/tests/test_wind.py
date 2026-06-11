@@ -301,5 +301,111 @@ class ConfigAssembly(unittest.TestCase):
         self.assertEqual(cfg["ntfy_url"], "https://ntfy.sh/t")
 
 
+class StripAnsi(unittest.TestCase):
+    def test_strips_color_and_clears(self):
+        self.assertEqual(wind.strip_ansi("\x1b[31mred\x1b[0m \x1b[2Kx"),
+                         "red x")
+
+
+class DashApi(unittest.TestCase):
+    def setUp(self):
+        self.cfg = dict(wind.DEFAULT_CONFIG)
+        self.cfg["repos"] = [{"name": "demo", "path": "/tmp"}]
+        self.token = "tok123"
+        self.calls = []
+        self._orig = (wind.session_exists, wind.capture_pane, wind.send_text,
+                      wind.tmux, wind.resume_sessions, wind.clear_state,
+                      wind.load_state)
+        wind.session_exists = lambda name: True
+        wind.capture_pane = lambda name, lines: "hello\nesc to interrupt"
+        wind.send_text = (lambda name, text:
+                          self.calls.append(("send", name, text)))
+        wind.tmux = lambda *a, **k: self.calls.append(("tmux",) + a)
+        wind.resume_sessions = (lambda cfg, names:
+                                self.calls.append(("resume", tuple(names)))
+                                or list(names))
+        wind.clear_state = lambda: None
+        wind.load_state = lambda: {}
+        handler = wind.make_dash_handler(self.cfg, self.token,
+                                         "<html>{{TOKEN}}</html>")
+        import http.server
+        import threading
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0),
+                                                      handler)
+        threading.Thread(target=self.server.serve_forever,
+                         daemon=True).start()
+        self.port = self.server.server_address[1]
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        (wind.session_exists, wind.capture_pane, wind.send_text, wind.tmux,
+         wind.resume_sessions, wind.clear_state,
+         wind.load_state) = self._orig
+
+    def _req(self, method, path, body=None, token=None):
+        import http.client
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["X-Wind-Token"] = token
+        conn.request(method, path,
+                     json.dumps(body) if body is not None else None, headers)
+        resp = conn.getresponse()
+        data = resp.read().decode()
+        conn.close()
+        return resp.status, data
+
+    def test_index_embeds_token(self):
+        status, data = self._req("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIn("tok123", data)
+
+    def test_status_shape(self):
+        status, data = self._req("GET", "/api/status")
+        self.assertEqual(status, 200)
+        payload = json.loads(data)
+        sess = payload["sessions"][0]
+        self.assertEqual(sess["name"], "wind-demo")
+        self.assertEqual(sess["state"], "running")
+        self.assertIn("pane_tail", sess)
+        self.assertIn("watcher", payload)
+
+    def test_post_without_token_rejected(self):
+        status, _ = self._req("POST", "/api/send",
+                              {"session": "wind-demo", "text": "hi"})
+        self.assertEqual(status, 401)
+        self.assertEqual(self.calls, [])
+
+    def test_send_with_token_dispatches(self):
+        status, _ = self._req("POST", "/api/send",
+                              {"session": "wind-demo", "text": "hi"},
+                              token="tok123")
+        self.assertEqual(status, 200)
+        self.assertIn(("send", "wind-demo", "hi"), self.calls)
+
+    def test_send_unknown_session_rejected(self):
+        status, _ = self._req("POST", "/api/send",
+                              {"session": "evil", "text": "hi"},
+                              token="tok123")
+        self.assertEqual(status, 400)
+
+    def test_kill_known_session(self):
+        status, _ = self._req("POST", "/api/kill", {"session": "wind-demo"},
+                              token="tok123")
+        self.assertEqual(status, 200)
+        self.assertIn(("tmux", "kill-session", "-t", "=wind-demo"),
+                      self.calls)
+
+    def test_resume_all(self):
+        status, _ = self._req("POST", "/api/resume", {}, token="tok123")
+        self.assertEqual(status, 200)
+        self.assertIn(("resume", ("wind-demo",)), self.calls)
+
+    def test_unknown_route_404(self):
+        status, _ = self._req("GET", "/etc/passwd")
+        self.assertEqual(status, 404)
+
+
 if __name__ == "__main__":
     unittest.main()

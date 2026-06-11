@@ -670,6 +670,117 @@ def notify(cfg, message):
         log(f"notify failed: {e}")
 
 
+# ------------------------------------------------------------------ dash ---
+
+PANE_TAIL_LINES = 30
+
+
+def strip_ansi(text):
+    return re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", text)
+
+
+def valid_session(cfg, name):
+    return name in {session_name(cfg, r) for r in cfg["repos"]}
+
+
+def status_payload(cfg):
+    patterns = limit_patterns(cfg)
+    state = load_state()
+    now = time.time()
+    sessions = []
+    for repo in cfg["repos"]:
+        name = session_name(cfg, repo)
+        if not session_exists(name):
+            sessions.append({"name": name, "state": "not running",
+                             "reset_at": None, "reset_human": "",
+                             "pane_tail": ""})
+            continue
+        text = capture_pane(name, cfg["capture_lines"])
+        st = classify(text, patterns)
+        reset = detect_limit(text, patterns)
+        tail = "\n".join(
+            strip_ansi(text).rstrip().splitlines()[-PANE_TAIL_LINES:])
+        sessions.append({
+            "name": name,
+            "state": st,
+            "reset_at": reset.timestamp() if reset else None,
+            "reset_human": (f"{reset:%a %H:%M} · in "
+                            f"{human_delta(reset.timestamp() - now)}"
+                            if reset else ""),
+            "pane_tail": tail,
+        })
+    watcher = {}
+    if state.get("reset_at"):
+        try:
+            reset_at = float(state["reset_at"])
+            watcher = {"reset_at": reset_at,
+                       "resume_at": reset_at + cfg["resume_buffer_seconds"]}
+        except (TypeError, ValueError):
+            watcher = {}
+    return {"watcher": watcher, "sessions": sessions}
+
+
+def make_dash_handler(cfg, token, template):
+    import http.server
+
+    class DashHandler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            pass  # keep the wind terminal clean
+
+        def _send(self, code, body, ctype="application/json"):
+            data = body if isinstance(body, bytes) else body.encode()
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):
+            if self.path == "/":
+                self._send(200, template.replace("{{TOKEN}}", token),
+                           "text/html; charset=utf-8")
+            elif self.path == "/api/status":
+                self._send(200, json.dumps(status_payload(cfg)))
+            else:
+                self._send(404, '{"error": "not found"}')
+
+        def do_POST(self):
+            if self.headers.get("X-Wind-Token") != token:
+                self._send(401, '{"error": "bad token"}')
+                return
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except json.JSONDecodeError:
+                self._send(400, '{"error": "bad json"}')
+                return
+            if self.path == "/api/resume":
+                names = [session_name(cfg, r) for r in cfg["repos"]]
+                sent = resume_sessions(cfg, names)
+                clear_state()
+                self._send(200, json.dumps({"resumed": sent}))
+            elif self.path == "/api/send":
+                name = body.get("session")
+                text = (body.get("text") or "").strip()
+                if not valid_session(cfg, name) or not text:
+                    self._send(400, '{"error": "bad session or empty text"}')
+                    return
+                send_text(name, text)
+                self._send(200, '{"ok": true}')
+            elif self.path == "/api/kill":
+                name = body.get("session")
+                if not valid_session(cfg, name):
+                    self._send(400, '{"error": "bad session"}')
+                    return
+                tmux("kill-session", "-t", f"={name}")
+                self._send(200, '{"ok": true}')
+            else:
+                self._send(404, '{"error": "not found"}')
+
+    return DashHandler
+
+
 # ------------------------------------------------------------- commands ----
 
 def write_starter_config(args):
