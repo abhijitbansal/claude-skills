@@ -36,7 +36,7 @@ teardown() { rm -rf "${TMP}"; }
   grep -c "claude plugin install" "${MOCK_CALL_LOG}" >/dev/null
 }
 
-@test "setup.sh plugins step honors pin if present" {
+@test "setup.sh plugins step warns that version pins are unsupported and installs latest" {
   cat >"${TMP}/pinned.toml" <<EOF
 [meta]
 schema_version = 1
@@ -47,7 +47,11 @@ pin = "v1.2"
 EOF
   CLAUDE_SETUP_TOML="${TMP}/pinned.toml" run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only plugins
   [ "$status" -eq 0 ]
-  grep -q "v1.2" "${MOCK_CALL_LOG}"
+  # `claude plugin install` has no version flag — the pin must NOT reach the CLI.
+  ! grep -q "v1.2" "${MOCK_CALL_LOG}"
+  # The plugin still installs (at latest), and the unsupported pin is surfaced.
+  grep -q "claude plugin install p@m" "${MOCK_CALL_LOG}"
+  [[ "$output" == *"unsupported"* ]]
 }
 
 @test "setup.sh --only skills runs npx skills add per entry" {
