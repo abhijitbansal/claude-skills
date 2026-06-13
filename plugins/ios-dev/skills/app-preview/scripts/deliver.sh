@@ -48,7 +48,7 @@ source "$SCRIPT_DIR/branch-dir.sh"
 # .gitignore). ICLOUD_DIR is $HOME-relative so it works on any Mac with
 # iCloud Drive enabled.
 CONFIG="$SCRIPT_DIR/../.imessage-to"
-BRANCH_SLUG="$(paperix_branch_slug)"
+BRANCH_SLUG="$(app_branch_slug)"
 PREVIEW_FOLDER="$(basename "${APP_PREVIEW_ROOT}")"
 ICLOUD_ROOT="${HOME}/Library/Mobile Documents/com~apple~CloudDocs/${PREVIEW_FOLDER}"
 ICLOUD_DIR="$ICLOUD_ROOT/$BRANCH_SLUG"

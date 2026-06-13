@@ -68,6 +68,28 @@ adapters/install.sh all
 
 Idempotent — re-run after pulling updates; it prunes links for removed skills.
 
+### Cartoon (token-optimized CLI output)
+
+[`cartoon`](https://github.com/abhijitbansal/cartoon) is a companion project — a
+separate marketplace that wraps noisy CLI output (test runs, JSON CLIs) into a
+compact format for ~70% fewer input tokens. The full machine seed below installs
+it automatically; to add it on its own:
+
+```text
+# Claude Code
+/plugin marketplace add abhijitbansal/cartoon
+/plugin install cartoon@cartoon
+```
+
+```bash
+# Other agents
+npx skills add abhijitbansal/cartoon
+```
+
+The plugin's skill auto-installs the `cartoon` binary on first use, or install it
+yourself: `uv tool install cartoon` (or `pipx install cartoon` /
+`npm install -g cartoon-wrap` / `cargo install cartoon`).
+
 ## Setup (full machine seed)
 
 For a machine you own: clones the repo, installs Claude Code, marketplaces, plugins

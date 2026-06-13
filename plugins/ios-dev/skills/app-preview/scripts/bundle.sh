@@ -9,8 +9,8 @@
 # screenshot it, deliver it, and write a MANIFEST.md so the user can
 # scan the folder later and remember what the run was about.
 #
-# Screen IDs (Paperix-shaped examples — your app's vocabulary is shaped by
-# its handleDeepLink implementation):
+# Screen IDs (example vocabulary — your app's is shaped by its
+# handleDeepLink implementation):
 #   home              cold launch (ContentView)
 #   scan              ${APP_URL_SCHEME}://scan — triggers the scanner sheet over home
 #   doc:<rel-path>    ${APP_URL_SCHEME}://doc?path=<rel-path> — opens that document
@@ -75,7 +75,7 @@ if [[ ${#SCREENS[@]} -eq 0 ]]; then
   exit 1
 fi
 
-BRANCH_SLUG="$(paperix_branch_slug)"
+BRANCH_SLUG="$(app_branch_slug)"
 SNAP_DIR="/tmp/${APP_NAME_LC}-snaps/$BRANCH_SLUG"
 mkdir -p "$SNAP_DIR"
 MANIFEST="$SNAP_DIR/MANIFEST.md"

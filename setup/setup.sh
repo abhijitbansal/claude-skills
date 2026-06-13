@@ -104,7 +104,7 @@ step_marketplaces() {
   existing="$(claude plugin marketplace list 2>/dev/null || true)"
   python3 -c "import json,sys; [print(e['name']+'\t'+e['repo']) for e in json.loads(sys.argv[1])]" "${entries}" \
     | while IFS=$'\t' read -r name repo; do
-      if printf '%s\n' "${existing}" | grep -qw "${name}"; then
+      if printf '%s\n' "${existing}" | grep -qwF "${name}"; then
         info "marketplace ${name}: update"
         [[ "${DRY_RUN}" -eq 1 ]] || claude plugin marketplace update "${name}" || warn "update ${name} failed"
       else
@@ -118,7 +118,7 @@ step_plugins() {
   local entries
   entries="$(python3 "${SCRIPT_DIR}/parse_toml.py" "${toml}" plugins)"
   local installed
-  installed="$(claude plugin list --scope user 2>/dev/null || true)"
+  installed="$(claude plugin list 2>/dev/null || true)"
   python3 -c "
 import json, sys
 for e in json.loads(sys.argv[1]):
@@ -127,17 +127,17 @@ for e in json.loads(sys.argv[1]):
 " "${entries}" \
     | while IFS=$'\t' read -r name market pin; do
       local spec="${name}@${market}"
-      if printf '%s\n' "${installed}" | grep -qw "${name}"; then
+      if printf '%s\n' "${installed}" | grep -qwF "${name}"; then
         info "plugin ${name}: update"
         [[ "${DRY_RUN}" -eq 1 ]] || claude plugin update "${spec}" || warn "update ${spec} failed"
       else
         if [[ -n "${pin}" ]]; then
-          info "plugin ${name}: install (pinned ${pin})"
-          [[ "${DRY_RUN}" -eq 1 ]] || claude plugin install "${spec}" --version "${pin}" --scope user || warn "install ${spec}@${pin} failed"
-        else
-          info "plugin ${name}: install"
-          [[ "${DRY_RUN}" -eq 1 ]] || claude plugin install "${spec}" --scope user || warn "install ${spec} failed"
+          # `claude plugin install` has no version flag; pinning isn't
+          # supported. Surface it rather than silently install a different one.
+          warn "plugin ${name}: version pin '${pin}' unsupported by claude plugin install; installing latest"
         fi
+        info "plugin ${name}: install"
+        [[ "${DRY_RUN}" -eq 1 ]] || claude plugin install "${spec}" --scope user || warn "install ${spec} failed"
       fi
     done
 }
@@ -192,7 +192,7 @@ step_local_plugins() {
   [[ -f "${manifest}" ]] || { warn "no ${manifest}; skipping"; return 0; }
   local existing
   existing="$(claude plugin marketplace list 2>/dev/null || true)"
-  if printf '%s\n' "${existing}" | grep -qw "claude-skills"; then
+  if printf '%s\n' "${existing}" | grep -qwF "claude-skills"; then
     info "self marketplace: update"
     [[ "${DRY_RUN}" -eq 1 ]] || claude plugin marketplace update claude-skills || warn "marketplace update failed"
   else
@@ -200,10 +200,10 @@ step_local_plugins() {
     [[ "${DRY_RUN}" -eq 1 ]] || claude plugin marketplace add "${REPO_ROOT}" || warn "marketplace add failed"
   fi
   local installed
-  installed="$(claude plugin list --scope user 2>/dev/null || true)"
+  installed="$(claude plugin list 2>/dev/null || true)"
   python3 -c "import json,sys; [print(p['name']) for p in json.load(open(sys.argv[1]))['plugins']]" "${manifest}" \
     | while IFS= read -r name; do
-      if printf '%s\n' "${installed}" | grep -qw "${name}"; then
+      if printf '%s\n' "${installed}" | grep -qwF "${name}"; then
         info "local plugin ${name}: update"
         [[ "${DRY_RUN}" -eq 1 ]] || claude plugin update "${name}@claude-skills" || warn "update ${name} failed"
       else
@@ -257,4 +257,7 @@ step_summary() {
   fi
 }
 
-for s in "${ALL_STEPS[@]}"; do run_step "${s}"; done
+# `|| true` so a single step returning non-zero (e.g. a warn/fail under set -e)
+# can't abort the loop and skip step_summary or later steps. Per-step failures
+# are tracked via the FAILS/WARNS counters, which decide the final exit code.
+for s in "${ALL_STEPS[@]}"; do run_step "${s}" || true; done
