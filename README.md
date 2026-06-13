@@ -4,8 +4,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
-Abhijit's AI-agent skills, plugins, and tools — one repo, usable from **Claude Code**,
-**Codex**, **Copilot CLI**, and any **AGENTS.md-aware** agent.
+**Run AI coding agents longer, cheaper, and across every tool you use.**
+
+Skills, plugins, and tools for AI agents — one repo, usable from **Claude Code**,
+**Codex**, **Copilot CLI**, and any **AGENTS.md-aware** agent. Highlights: a remote
+**iOS build-and-screenshot loop** delivered to your phone, a **usage-limit
+auto-resume** orchestrator that keeps overnight runs alive (`second-wind`),
+**token-optimized CLI output** (`cartoon`), and Linear PM automation.
 
 | Plugin | What you get |
 | --- | --- |
