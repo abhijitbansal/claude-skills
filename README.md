@@ -98,15 +98,22 @@ yourself: `uv tool install cartoon` (or `pipx install cartoon` /
 ## Setup (full machine seed)
 
 For a machine you own: clones the repo, installs Claude Code, marketplaces, plugins
-(including this repo's own, via a local marketplace), npx skills, dotfiles, and PATH shims.
+(including this repo's own, via a local marketplace), npx skills, dotfiles, PATH shims,
+and the shared behavioral guidelines.
 
 ```bash
 git clone https://github.com/abhijitbansal/claude-skills ~/projects/claude-skills
 bash ~/projects/claude-skills/setup/setup.sh
 ```
 
-Useful flags: `--dry-run`, `--only <step>`, `--skip-<step>`.
-Steps: `preflight claude marketplaces plugins skills dotfiles local_plugins symlinks`.
+Useful flags: `--dry-run`, `--only <step>`, `--skip-<step>`, `--merge-claude-md <path>`.
+Steps: `preflight claude marketplaces plugins skills dotfiles guidelines local_plugins symlinks`.
+
+The `guidelines` step evaluates the `CLAUDE.md` on the machine (`~/CLAUDE.md`) and on the
+repo you run setup from, then additively merges in any missing behavioral-guideline section
+from this repo's [`CLAUDE.md`](CLAUDE.md) (adapted from Andrej Karpathy's). It never clobbers
+your own content — sections already present are skipped. Point it at any other file with
+`--merge-claude-md <path>`.
 
 Snapshot the machine's current state back into the repo:
 

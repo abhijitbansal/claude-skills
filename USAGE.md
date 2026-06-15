@@ -40,8 +40,9 @@ End state: marketplaces registered, user-scope plugins installed, npx-skills ins
 |---|---|
 | `--dry-run` | Print what would change. No mutations. |
 | `--verbose` | `set -x` — every shell command logged. |
-| `--only <step>` | Run just one step. Steps: `preflight claude marketplaces plugins skills dotfiles symlinks summary`. |
+| `--only <step>` | Run just one step. Steps: `preflight claude marketplaces plugins skills dotfiles guidelines local_plugins symlinks summary`. |
 | `--skip-<step>` | Skip a single step. Repeatable. |
+| `--merge-claude-md <path>` | In the `guidelines` step, also merge the behavioral guidelines into `<path>` (any machine or repo's `CLAUDE.md`). |
 
 ### Exit codes
 

@@ -3,6 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# Caller's working dir, captured before any work — used to locate the "current
+# repo" the guidelines step should also merge into.
+INVOKE_PWD="${PWD}"
 export CLAUDE_SKILLS_HOME="${CLAUDE_SKILLS_HOME:-${REPO_ROOT}}"
 
 # shellcheck source=_lib.sh
@@ -12,13 +15,15 @@ source "${SCRIPT_DIR}/_lib.sh"
 DRY_RUN=0
 ONLY=""
 SKIP=" "  # space-delimited; sentinels ensure whole-word matching
+MERGE_TARGET=""  # extra CLAUDE.md path for the guidelines step (--merge-claude-md)
 
-ALL_STEPS=(preflight claude marketplaces plugins skills dotfiles local_plugins symlinks summary)
+ALL_STEPS=(preflight claude marketplaces plugins skills dotfiles guidelines local_plugins symlinks summary)
 
 usage() {
   cat <<EOF
-Usage: setup.sh [--dry-run] [--verbose] [--only <step>] [--skip-<step>]
+Usage: setup.sh [--dry-run] [--verbose] [--only <step>] [--skip-<step>] [--merge-claude-md <path>]
 Steps: ${ALL_STEPS[*]}
+  --merge-claude-md <path>  also merge behavioral guidelines into <path> (guidelines step)
 EOF
 }
 
@@ -27,7 +32,8 @@ while [[ $# -gt 0 ]]; do
     --dry-run)        DRY_RUN=1 ;;
     --verbose)        set -x ;;
     --only)           ONLY="$2"; shift ;;
-    --skip-claude|--skip-marketplaces|--skip-plugins|--skip-skills|--skip-dotfiles|--skip-local_plugins|--skip-symlinks)
+    --merge-claude-md) MERGE_TARGET="$2"; shift ;;
+    --skip-claude|--skip-marketplaces|--skip-plugins|--skip-skills|--skip-dotfiles|--skip-guidelines|--skip-local_plugins|--skip-symlinks)
                       SKIP+="${1#--skip-} " ;;
     -h|--help)        usage; exit 0 ;;
     *)                usage; exit 2 ;;
@@ -186,6 +192,37 @@ step_dotfiles() {
   mkdir -p "${HOME}/.claude"
   [[ -n "${home_md}" ]]       && install_one "${home_md}"       "${HOME}/CLAUDE.md"
   [[ -n "${user_settings}" ]] && install_one "${user_settings}" "${HOME}/.claude/settings.json"
+}
+# _merge_into <source-claude-md> <target-claude-md>
+# Additively merge the source's guideline sections into target, honoring DRY_RUN.
+_merge_into() {
+  local src="$1" dst="$2" out
+  local -a cmd=(python3 "${SCRIPT_DIR}/merge_guidelines.py" "${src}" "${dst}")
+  [[ "${DRY_RUN}" -eq 1 ]] && cmd+=(--dry-run)
+  if out="$("${cmd[@]}" 2>&1)"; then
+    info "guidelines → ${dst}"
+    while IFS= read -r line; do [[ -n "${line}" ]] && info "  ${line}"; done <<<"${out}"
+  else
+    warn "guideline merge into ${dst} failed: ${out}"
+  fi
+}
+step_guidelines() {
+  # Canonical guidelines live in this repo's CLAUDE.md (between the markers).
+  local source="${REPO_ROOT}/CLAUDE.md"
+  [[ -f "${source}" ]] || { warn "no ${source}; skipping guideline merge"; return 0; }
+
+  # Always: the machine-global file.
+  _merge_into "${source}" "${HOME}/CLAUDE.md"
+
+  # The repo the user invoked setup from, if it's a git repo other than this one.
+  local cur_repo
+  cur_repo="$(git -C "${INVOKE_PWD}" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -n "${cur_repo}" && "${cur_repo}" != "${REPO_ROOT}" ]]; then
+    _merge_into "${source}" "${cur_repo}/CLAUDE.md"
+  fi
+
+  # An explicit extra target (--merge-claude-md), for "any repo or path".
+  [[ -n "${MERGE_TARGET}" ]] && _merge_into "${source}" "${MERGE_TARGET}"
 }
 step_local_plugins() {
   local manifest="${REPO_ROOT}/.claude-plugin/marketplace.json"
