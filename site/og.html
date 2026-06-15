@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- Source for og.png (1200×630 social card). Rendered to og.png; not served directly. -->
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;box-sizing:border-box}
+html,body{width:1200px;height:630px;overflow:hidden}
+body{
+  font-family:'Space Grotesk',sans-serif;color:#dce8f2;
+  background:#070d14;
+  background-image:
+    radial-gradient(820px 460px at 82% -12%, rgba(52,211,238,.20), transparent 60%),
+    radial-gradient(620px 420px at 6% 116%, rgba(232,185,74,.12), transparent 60%),
+    linear-gradient(rgba(52,211,238,.06) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(52,211,238,.06) 1px,transparent 1px);
+  background-size:auto,auto,34px 34px,34px 34px;
+  padding:74px 80px;display:flex;flex-direction:column;justify-content:space-between;
+  border:1px solid rgba(150,195,225,.12);
+}
+.top{display:flex;align-items:center;gap:16px}
+.mark{width:46px;height:46px;border-radius:12px;background:#0e8fb0;display:flex;align-items:center;justify-content:center}
+.mark span{width:18px;height:18px;border-radius:50%;background:#070d14;display:flex;align-items:center;justify-content:center}
+.mark span::after{content:"";width:8px;height:8px;border-radius:50%;background:#e8b94a}
+.brand{font-family:'JetBrains Mono';font-size:24px;font-weight:500;letter-spacing:.02em}
+.kick{margin-left:auto;font-family:'JetBrains Mono';font-size:16px;letter-spacing:.18em;text-transform:uppercase;
+  color:#34d3ee;border:1px solid rgba(52,211,238,.4);border-radius:100px;padding:9px 18px}
+h1{font-size:104px;font-weight:700;letter-spacing:-.02em;line-height:1}
+h1 .g{background:linear-gradient(100deg,#34d3ee,#e8b94a);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.lead{font-size:27px;color:#8ba3b8;max-width:920px;margin-top:24px;line-height:1.4}
+.lead b{color:#dce8f2;font-weight:600}
+.stats{display:flex;gap:14px;margin-top:6px}
+.s{background:rgba(14,24,34,.7);border:1px solid rgba(150,195,225,.16);border-radius:14px;padding:16px 22px;text-align:center}
+.s .n{font-size:40px;font-weight:700;line-height:1}
+.s:nth-child(1) .n{color:#34d3ee}.s:nth-child(2) .n{color:#e8b94a}.s:nth-child(3) .n{color:#a892f0}.s:nth-child(6) .n{color:#4ade80}
+.s .l{font-family:'JetBrains Mono';font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:#8ba3b8;margin-top:8px}
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="mark"><span></span></div>
+    <div class="brand">claude-skills</div>
+    <div class="kick">Claude Code · marketplace</div>
+  </div>
+  <div>
+    <h1>One repo.<br><span class="g">Every agent.</span></h1>
+    <div class="lead"><b>iOS build loop</b>, <b>Linear PM</b>, commit helpers, and <b>Second Wind</b> — long runs that survive the 5-hour limit. Claude Code, Codex, Copilot &amp; AGENTS.md.</div>
+  </div>
+  <div class="stats">
+    <div class="s"><div class="n">4</div><div class="l">Plugins</div></div>
+    <div class="s"><div class="n">13</div><div class="l">Skills</div></div>
+    <div class="s"><div class="n">11</div><div class="l">Commands</div></div>
+    <div class="s"><div class="n">2</div><div class="l">Agents</div></div>
+    <div class="s"><div class="n">2</div><div class="l">Hooks</div></div>
+    <div class="s"><div class="n">1</div><div class="l">CLI</div></div>
+  </div>
+</body>
+</html>

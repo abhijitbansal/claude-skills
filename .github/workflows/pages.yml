@@ -1,0 +1,48 @@
+name: pages
+
+# Deploys the public site (site/index.html) + companion docs to GitHub Pages.
+# DORMANT until the repo is public AND Pages is enabled (Settings ▸ Pages ▸ Source: GitHub Actions).
+# Triggers only on a published release, or manually — never on plain pushes.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; let an in-flight release deploy finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Flatten site/ + docs/ into one published root and rewrite the
+      # cross-links (which use ../docs and ../site for *local* viewing) so they
+      # resolve on the deployed flat site.
+      - name: Stage site
+        run: |
+          mkdir -p _site
+          cp site/index.html _site/index.html
+          cp site/og.png _site/og.png
+          cp docs/*.html _site/ 2>/dev/null || true
+          # local link forms -> flat deployed forms
+          sed -i 's#\.\./docs/##g' _site/index.html
+          sed -i 's#\.\./site/index.html#index.html#g' _site/*.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
