@@ -567,7 +567,8 @@ class WizardHarness(unittest.TestCase):
                     "go on",         # resume message
                     "",              # ntfy url (skip)
                 ],
-                selects=[2],         # permission preset: "default" (index 2)
+                # per repo: preset pick, then editor-offer (0 = skip)
+                selects=[2, 0],      # permission preset "default"; skip editor
                 multiselects=[[0]],  # pick repo #0 (alpha)
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha"))])
@@ -576,6 +577,11 @@ class WizardHarness(unittest.TestCase):
             self.assertEqual(cfg["repos"][0]["path"],
                              os.path.join(tmp, "alpha"))
             self.assertNotIn("claude_args", cfg["repos"][0])  # default preset
+            # The prompt step defaults to the convention path; an empty answer
+            # keeps that default, so prompt_file is wired to ~/.wind/prompts/.
+            self.assertEqual(cfg["repos"][0]["prompt_file"],
+                             os.path.expanduser(os.path.join(
+                                 wind.WIND_HOME, "prompts", "alpha.md")))
             self.assertEqual(cfg["resume_message"], "go on")
             self.assertEqual(cfg["ntfy_url"], "")
 
@@ -590,7 +596,8 @@ class WizardHarness(unittest.TestCase):
                     "continue",                   # resume message
                     "https://ntfy.sh/topic",      # ntfy url
                 ],
-                selects=[0],         # preset: acceptEdits (index 0)
+                # preset acceptEdits, then editor-offer (0 = skip)
+                selects=[0, 0],
                 multiselects=[[0]],  # pick repo #0
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha"))])
@@ -614,7 +621,7 @@ class WizardHarness(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     drive_wizard(
                         texts=["~/projects", "", "", "go on", ""],
-                        selects=[2],
+                        selects=[2, 0],
                         multiselects=[[0]],
                         target=target,
                         scan_result=[("alpha",
@@ -908,6 +915,242 @@ class CmdWatchDetach(unittest.TestCase):
                 wind.STATE_PATH = orig
             self.assertEqual(recorded.get("watcher_session"), "wind-watcher")
             self.assertEqual(recorded.get("watcher_config"), abs_cfg)
+
+
+class PromptPath(unittest.TestCase):
+    def test_convention_path_for_simple_name(self):
+        path = wind._prompt_path("api")
+        self.assertEqual(
+            path,
+            os.path.expanduser(os.path.join(wind.WIND_HOME, "prompts",
+                                            "api.md")))
+
+    def test_name_with_space_is_safe(self):
+        # A repo named "a b" yields a safe single-component filename.
+        path = wind._prompt_path("a b")
+        self.assertEqual(os.path.basename(path), "a b.md")
+        self.assertEqual(
+            os.path.dirname(path),
+            os.path.expanduser(os.path.join(wind.WIND_HOME, "prompts")))
+
+    def test_name_with_slash_is_rejected(self):
+        with self.assertRaises(ValueError):
+            wind._prompt_path("a/b")
+
+    def test_name_with_dotdot_is_rejected(self):
+        with self.assertRaises(ValueError):
+            wind._prompt_path("..")
+
+    def test_name_with_dotdot_segment_is_rejected(self):
+        with self.assertRaises(ValueError):
+            wind._prompt_path("../etc/passwd")
+
+    def test_empty_name_is_rejected(self):
+        with self.assertRaises(ValueError):
+            wind._prompt_path("")
+
+
+class FirstAvailable(unittest.TestCase):
+    def test_returns_first_found(self):
+        with mock.patch("shutil.which",
+                        side_effect=lambda n: "/usr/bin/" + n
+                        if n == "nano" else None):
+            self.assertEqual(wind._first_available("vi", "nano"), "nano")
+
+    def test_falls_back_to_first_when_none_found(self):
+        with mock.patch("shutil.which", return_value=None):
+            self.assertEqual(wind._first_available("vi", "nano"), "vi")
+
+
+class EditorCommand(unittest.TestCase):
+    def test_uses_explicit_editor_arg(self):
+        with mock.patch("shutil.which", return_value="/usr/bin/vim"):
+            cmd = wind._editor_command("vim", "/tmp/p.md")
+        self.assertEqual(cmd, ["vim", "/tmp/p.md"])
+
+    def test_splits_multiword_editor_env(self):
+        # EDITOR="code --wait" must split into a list, not ENOENT the string.
+        with mock.patch.dict(os.environ, {"EDITOR": "code --wait"}), \
+                mock.patch("shutil.which", return_value="/usr/bin/code"):
+            cmd = wind._editor_command(None, "/tmp/p.md")
+        self.assertEqual(cmd, ["code", "--wait", "/tmp/p.md"])
+
+    def test_falls_back_to_vi_then_nano(self):
+        # No --editor, no EDITOR; vi missing, nano present -> nano.
+        def which(name):
+            return "/usr/bin/nano" if name == "nano" else None
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch("shutil.which", side_effect=which):
+            cmd = wind._editor_command(None, "/tmp/p.md")
+        self.assertEqual(cmd, ["nano", "/tmp/p.md"])
+
+    def test_unknown_editor_binary_dies(self):
+        with mock.patch.dict(os.environ, {"EDITOR": "doesnotexist123"}), \
+                mock.patch("shutil.which", return_value=None):
+            with self.assertRaises(SystemExit):
+                wind._editor_command(None, "/tmp/p.md")
+
+
+class CmdPrompt(unittest.TestCase):
+    def _cfg(self, repos):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = repos
+        return cfg
+
+    def test_creates_file_seeds_template_and_wires_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg_path = os.path.join(tmp, "second-wind.json")
+            home = os.path.join(tmp, "home")
+            cfg = self._cfg([{"name": "foo", "path": "/tmp"}])
+            cfg["_path"] = cfg_path
+            wind.atomic_write_json(cfg_path, {k: v for k, v in cfg.items()
+                                              if k != "_path"}, mode=0o644)
+            opened = []
+            args = mock.Mock()
+            args.repo = "foo"
+            args.editor = None
+            expected = os.path.join(home, "prompts", "foo.md")
+            with mock.patch.object(wind, "WIND_HOME", home), \
+                    mock.patch.object(
+                        wind, "_open_editor",
+                        lambda path, ed: opened.append(path)):
+                wind.cmd_prompt(cfg, args)
+            # File created with a template comment.
+            self.assertTrue(os.path.isfile(expected))
+            with open(expected) as f:
+                seeded = f.read()
+            self.assertIn("foo", seeded)
+            self.assertTrue(seeded.lstrip().startswith("<!--")
+                            or seeded.lstrip().startswith("#"))
+            # Editor opened on the convention path.
+            self.assertEqual(opened, [expected])
+            # Config wired prompt_file to the convention path, atomically.
+            saved = wind.load_existing_config(cfg_path)
+            foo = next(r for r in saved["repos"] if r["name"] == "foo")
+            self.assertEqual(foo.get("prompt_file"), expected)
+
+    def test_unknown_repo_dies(self):
+        cfg = self._cfg([{"name": "foo", "path": "/tmp"}])
+        cfg["_path"] = "/tmp/x.json"
+        args = mock.Mock()
+        args.repo = "missing"
+        args.editor = None
+        with self.assertRaises(SystemExit):
+            wind.cmd_prompt(cfg, args)
+
+    def test_inline_prompt_repo_does_not_wire_prompt_file(self):
+        # A repo that already carries inline `prompt` keeps it; cmd_prompt does
+        # not overwrite it with a prompt_file wiring.
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg_path = os.path.join(tmp, "second-wind.json")
+            home = os.path.join(tmp, "home")
+            cfg = self._cfg([{"name": "web", "path": "/tmp",
+                              "prompt": "do the thing"}])
+            cfg["_path"] = cfg_path
+            wind.atomic_write_json(cfg_path, {"repos": cfg["repos"]},
+                                   mode=0o644)
+            args = mock.Mock()
+            args.repo = "web"
+            args.editor = None
+            with mock.patch.object(wind, "WIND_HOME", home), \
+                    mock.patch.object(wind, "_open_editor",
+                                      lambda path, ed: None):
+                wind.cmd_prompt(cfg, args)
+            saved = wind.load_existing_config(cfg_path)
+            web = next(r for r in saved["repos"] if r["name"] == "web")
+            self.assertNotIn("prompt_file", web)
+            self.assertEqual(web["prompt"], "do the thing")
+
+    def test_existing_prompt_file_is_not_reseeded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg_path = os.path.join(tmp, "second-wind.json")
+            pf = os.path.join(tmp, "api.md")
+            with open(pf, "w") as f:
+                f.write("my real prompt")
+            cfg = self._cfg([{"name": "api", "path": "/tmp",
+                              "prompt_file": pf}])
+            cfg["_path"] = cfg_path
+            wind.atomic_write_json(cfg_path, {"repos": cfg["repos"]},
+                                   mode=0o644)
+            args = mock.Mock()
+            args.repo = "api"
+            args.editor = None
+            with mock.patch.object(wind, "_open_editor",
+                                   lambda path, ed: None):
+                wind.cmd_prompt(cfg, args)
+            with open(pf) as f:
+                self.assertEqual(f.read(), "my real prompt")
+
+
+class CmdUpInlinePrompt(unittest.TestCase):
+    def _cfg(self, tmp, repos):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = repos
+        cfg["_path"] = os.path.join(tmp, "second-wind.json")
+        cfg["startup_delay_seconds"] = 0
+        return cfg
+
+    def test_inline_only_repo_is_sent_its_prompt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = self._cfg(tmp, [{"name": "web", "path": tmp,
+                                   "prompt": "continue the refactor"}])
+            rec = _TmuxRecorder(existing=[])
+            sent = []
+            args = mock.Mock()
+            args.no_watch = True
+            with mock.patch.object(wind, "tmux", rec), \
+                    mock.patch.object(wind, "send_text",
+                                      lambda n, t: sent.append((n, t))):
+                wind.cmd_up(cfg, args)
+            self.assertIn(("wind-web", "continue the refactor"), sent)
+
+    def test_inline_prompt_wins_over_prompt_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pf = os.path.join(tmp, "web.md")
+            with open(pf, "w") as f:
+                f.write("from file")
+            cfg = self._cfg(tmp, [{"name": "web", "path": tmp,
+                                   "prompt": "from inline",
+                                   "prompt_file": pf}])
+            rec = _TmuxRecorder(existing=[])
+            sent = []
+            args = mock.Mock()
+            args.no_watch = True
+            with mock.patch.object(wind, "tmux", rec), \
+                    mock.patch.object(wind, "send_text",
+                                      lambda n, t: sent.append((n, t))):
+                wind.cmd_up(cfg, args)
+            self.assertIn(("wind-web", "from inline"), sent)
+            self.assertNotIn(("wind-web", "from file"), sent)
+
+    def test_filter_does_not_drop_inline_only_repo(self):
+        # Regression: the old filter [(r,n) ... if r.get("prompt_file")]
+        # silently dropped inline-only repos. With an inline-only repo and a
+        # zero startup delay, send_text must still fire.
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = self._cfg(tmp, [{"name": "web", "path": tmp,
+                                   "prompt": "hello"}])
+            rec = _TmuxRecorder(existing=[])
+            sent = []
+            args = mock.Mock()
+            args.no_watch = True
+            with mock.patch.object(wind, "tmux", rec), \
+                    mock.patch.object(wind, "send_text",
+                                      lambda n, t: sent.append((n, t))):
+                wind.cmd_up(cfg, args)
+            self.assertEqual(len(sent), 1)
+
+
+class BuildRepoEntryPrompt(unittest.TestCase):
+    def test_inline_prompt_is_carried(self):
+        e = wind.build_repo_entry("a", "/p", "", "", prompt="go on")
+        self.assertEqual(e["prompt"], "go on")
+        self.assertNotIn("prompt_file", e)
+
+    def test_no_prompt_keys_when_empty(self):
+        e = wind.build_repo_entry("a", "/p", "", "")
+        self.assertNotIn("prompt", e)
+        self.assertNotIn("prompt_file", e)
 
 
 if __name__ == "__main__":

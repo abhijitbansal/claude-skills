@@ -10,6 +10,7 @@ Python stdlib only. Requires: tmux, Claude Code CLI.
 Commands:
   wind init     write a starter config file
   wind up       start a tmux session per repo and launch Claude Code
+  wind prompt   create/edit a repo's first-prompt file in $EDITOR
   wind status   show each session's state and the next reset time
   wind watch    run the watcher loop (detect limit -> wait -> resume all)
   wind resume   send the resume message to sessions now
@@ -24,6 +25,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -388,13 +390,83 @@ def scan_repos(roots):
     return found
 
 
-def build_repo_entry(name, path, claude_args, prompt_file):
+def build_repo_entry(name, path, claude_args, prompt_file, prompt=""):
     entry = {"name": name, "path": path}
-    if prompt_file:
+    if prompt:
+        entry["prompt"] = prompt
+    elif prompt_file:
         entry["prompt_file"] = prompt_file
     if claude_args:
         entry["claude_args"] = claude_args
     return entry
+
+
+# ----------------------------------------------------------- prompts -------
+
+PROMPTS_SUBDIR = "prompts"
+
+
+def _prompt_path(repo_name, cfg=None):
+    """Convention path ~/.wind/prompts/<repo>.md for a repo's first prompt.
+
+    The repo name becomes a single filename component; reject anything that
+    could traverse or inject (`/`, `..`, other path separators, empty).
+    """
+    name = (repo_name or "").strip()
+    if not name or name in (".", ".."):
+        raise ValueError(f"unsafe repo name for a prompt file: {repo_name!r}")
+    if "/" in name or os.sep in name or (os.altsep and os.altsep in name):
+        raise ValueError(f"unsafe repo name for a prompt file: {repo_name!r}")
+    filename = f"{name}.md"
+    if os.path.basename(filename) != filename:
+        raise ValueError(f"unsafe repo name for a prompt file: {repo_name!r}")
+    return os.path.expanduser(
+        os.path.join(WIND_HOME, PROMPTS_SUBDIR, filename))
+
+
+def _first_available(*names):
+    """First of `names` that resolves via shutil.which, else names[0]."""
+    for name in names:
+        if shutil.which(name):
+            return name
+    return names[0]
+
+
+def _editor_command(editor_arg, path):
+    """Build the editor argv list (NO shell). Validates the binary exists.
+
+    editor_arg (from --editor) wins; else $EDITOR; else vi -> nano fallback.
+    $EDITOR is shlex.split so values like "code --wait" / "emacsclient -nw"
+    work as a list instead of ENOENT-ing the whole string.
+    """
+    editor = editor_arg or os.environ.get("EDITOR") or _first_available(
+        "vi", "nano")
+    parts = shlex.split(editor)
+    if not parts:
+        die("no usable editor (set $EDITOR or pass --editor)")
+    if not shutil.which(parts[0]):
+        die(f"editor not found on PATH: {parts[0]} "
+            f"(set $EDITOR or pass --editor)")
+    return parts + [path]
+
+
+def _open_editor(path, editor_arg):
+    """Open `path` in the resolved editor; list-exec, never a shell."""
+    cmd = _editor_command(editor_arg, path)
+    subprocess.run(cmd, check=False)
+
+
+def _seed_prompt_file(path, repo_name):
+    """Create parent dir and seed `path` with a template if it is missing."""
+    if os.path.isfile(path):
+        return
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    template = (
+        f"# First prompt for `{repo_name}`, sent verbatim on `wind up`.\n"
+        f"# Replace this whole file with the prompt you want to send.\n")
+    with open(path, "w") as f:
+        f.write(template)
+    os.chmod(path, 0o600)
 
 
 def build_config(repos, resume_message, ntfy_url):
@@ -483,10 +555,21 @@ def run_wizard(args):
         claude_args = PERMISSION_PRESETS[pick][1]
         if claude_args is None:
             claude_args = prompt_text("claude_args", default="")
+        try:
+            convention = _prompt_path(name)
+        except ValueError:
+            convention = ""
         prompt_file = prompt_text(
-            "Prompt file sent on `wind up` (path, empty to skip)",
-            default="")
+            "Prompt file sent on `wind up` (empty to skip)",
+            default=convention)
         repos.append(build_repo_entry(name, path, claude_args, prompt_file))
+        if prompt_file:
+            open_pick = select(
+                f"Open {prompt_file} in your editor now?",
+                ["Skip — I'll write it later", "Open in editor now"])
+            if open_pick == 1:
+                _seed_prompt_file(os.path.expanduser(prompt_file), name)
+                _open_editor(os.path.expanduser(prompt_file), None)
 
     resume_message = prompt_text(
         "Resume message typed after the limit resets",
@@ -978,28 +1061,36 @@ def cmd_up(cfg, args):
         log(f"{name}: launched `{command}` in {path}", glyph="→", color="cyan")
         started.append((repo, name))
 
-    prompts = [(r, n) for r, n in started if r.get("prompt_file")]
+    prompts = [(r, n) for r, n in started
+               if r.get("prompt") or r.get("prompt_file")]
     if prompts:
         delay = cfg["startup_delay_seconds"]
         log(f"waiting {delay}s for Claude Code to start before sending prompts")
         time.sleep(delay)
         for repo, name in prompts:
-            pf = os.path.expanduser(repo["prompt_file"])
-            if not os.path.isfile(pf):
-                pf_rel = os.path.join(os.path.expanduser(repo["path"]),
-                                      repo["prompt_file"])
-                if os.path.isfile(pf_rel):
-                    pf = pf_rel
-                else:
-                    log(f"{name}: prompt file not found: {repo['prompt_file']}",
-                        glyph="!", color="yellow")
-                    continue
-            with open(pf) as f:
-                prompt = f.read().strip()
+            # Inline `prompt` wins over `prompt_file`.
+            if repo.get("prompt"):
+                prompt = repo["prompt"].strip()
+                source = "inline prompt"
+            else:
+                pf = os.path.expanduser(repo["prompt_file"])
+                if not os.path.isfile(pf):
+                    pf_rel = os.path.join(os.path.expanduser(repo["path"]),
+                                          repo["prompt_file"])
+                    if os.path.isfile(pf_rel):
+                        pf = pf_rel
+                    else:
+                        log(f"{name}: prompt file not found: "
+                            f"{repo['prompt_file']}",
+                            glyph="!", color="yellow")
+                        continue
+                with open(pf) as f:
+                    prompt = f.read().strip()
+                source = f"prompt_file {pf}"
             if prompt:
                 send_text(name, prompt)
-                log(f"{name}: sent initial prompt ({len(prompt)} chars)",
-                    glyph="✓", color="green")
+                log(f"{name}: sent initial prompt from {source} "
+                    f"({len(prompt)} chars)", glyph="✓", color="green")
     if getattr(args, "no_watch", False):
         log("watcher not started (--no-watch); run `wind watch` to enable "
             "auto-resume", glyph="○", color="dim")
@@ -1012,6 +1103,57 @@ def cmd_up(cfg, args):
             glyph="✓", color="green")
     else:
         log("nothing to start", glyph="○", color="dim")
+
+
+def _find_repo(cfg, name):
+    for repo in cfg["repos"]:
+        if repo.get("name") == name:
+            return repo
+    return None
+
+
+def cmd_prompt(cfg, args):
+    """Open (creating if needed) a repo's first-prompt file in $EDITOR.
+
+    If the repo has neither an inline `prompt` nor a `prompt_file`, derive the
+    convention path ~/.wind/prompts/<repo>.md, seed it with a template, open
+    it, and on a clean close wire `prompt_file` into the config (atomically).
+    A repo that already carries inline `prompt` or `prompt_file` is left as-is
+    in the config; we just open the existing/derived target.
+    """
+    repo = _find_repo(cfg, args.repo)
+    if repo is None:
+        names = ", ".join(r.get("name", "?") for r in cfg["repos"]) or "(none)"
+        die(f"no repo named {args.repo!r} in config; known repos: {names}")
+
+    has_inline = bool(repo.get("prompt"))
+    existing_file = repo.get("prompt_file")
+    wire_config = not has_inline and not existing_file
+
+    if has_inline:
+        # Inline one-liner repos have no file to edit; open the convention
+        # path so the user can switch to a file, but never clobber `prompt`.
+        path = _prompt_path(repo["name"], cfg)
+    elif existing_file:
+        path = os.path.expanduser(existing_file)
+    else:
+        path = _prompt_path(repo["name"], cfg)
+
+    _seed_prompt_file(path, repo["name"])
+    _open_editor(path, args.editor)
+
+    if wire_config:
+        repos = [dict(r) for r in cfg["repos"]]
+        for r in repos:
+            if r.get("name") == repo["name"]:
+                r["prompt_file"] = path
+        out = {k: v for k, v in cfg.items() if k != "_path"}
+        out["repos"] = repos
+        atomic_write_json(cfg["_path"], out, mode=0o644)
+        log(f"{repo['name']}: wired prompt_file -> {path}", glyph="✓",
+            color="green")
+    else:
+        log(f"{repo['name']}: edited {path}", glyph="✓", color="green")
 
 
 def cmd_status(cfg, args):
@@ -1229,6 +1371,11 @@ def main(argv=None):
                          help="poll interval in seconds (overrides config)")
     p_watch.add_argument("--detach", action="store_true",
                          help="run the watcher in a detached tmux session")
+    p_prompt = sub.add_parser(
+        "prompt", help="create/edit a repo's first-prompt file")
+    p_prompt.add_argument("repo", help="repo name from the config")
+    p_prompt.add_argument("--editor",
+                          help="editor command (overrides $EDITOR)")
     sub.add_parser("resume", help="send the resume message to all sessions")
     sub.add_parser("down", help="kill all wind tmux sessions")
     p_dash = sub.add_parser("dash", help="serve the live web dashboard")
@@ -1247,6 +1394,7 @@ def main(argv=None):
         "up": cmd_up,
         "status": cmd_status,
         "watch": cmd_watch,
+        "prompt": cmd_prompt,
         "resume": cmd_resume,
         "down": cmd_down,
         "dash": cmd_dash,
