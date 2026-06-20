@@ -1647,6 +1647,14 @@ class ResolveAgentPrecedence(unittest.TestCase):
         with self.assertRaises(SystemExit):
             wind.resolve_agent({"agent": "bogus"}, self._cfg())
 
+    def test_explicit_empty_agent_dies_not_silent_claude(self):
+        # An explicitly-set-but-empty agent is a config error, surfaced via the
+        # unknown-agent die() rather than silently falling back to claude.
+        with self.assertRaises(SystemExit):
+            wind.resolve_agent({"agent": ""}, self._cfg())
+        with self.assertRaises(SystemExit):
+            wind.resolve_agent({}, self._cfg(agent=""))
+
     def test_copilot_cmd_from_preset_not_top_level_claude_cmd(self):
         # DEFAULT_CONFIG always carries top-level claude_cmd:"claude"; a copilot
         # repo's cmd must still come from the preset, not that top-level key.

@@ -451,7 +451,12 @@ def resolve_agent(repo, cfg):
     `limit_patterns`: the resolved agent's preset patterns (user `limit_patterns`
     is appended to this resolved set by `limit_patterns()`).
     """
-    name = repo.get("agent") or cfg.get("agent") or "claude"
+    if "agent" in repo:
+        name = repo["agent"]
+    elif "agent" in cfg:
+        name = cfg["agent"]
+    else:
+        name = "claude"
     preset = AGENT_PRESETS.get(name)
     if preset is None:
         die(f"unknown agent {name!r}; choose one of: "
