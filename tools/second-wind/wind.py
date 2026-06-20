@@ -929,16 +929,22 @@ def _as_tmux_command(cmd):
     return (shlex.join(cmd),)
 
 
-def build_watcher_command(cfg):
+def build_watcher_command(cfg, poll=None):
     """argv that re-runs this wind with an ABSOLUTE config path + `watch`.
 
     cfg["_path"] is frequently the literal relative "./second-wind.json"
     (find_config returns it first and expanduser does not absolutize it). A
     detached tmux session does NOT inherit the parent cwd, so we resolve the
     config path against the *current* process cwd here, before spawning.
+
+    When `poll` is set, thread it through as `--poll N` so a detached watcher
+    honors `watch --poll N` rather than silently falling back to config.
     """
     cfg_path = os.path.abspath(cfg["_path"])
-    return [sys.executable, os.path.abspath(__file__), "-c", cfg_path, "watch"]
+    cmd = [sys.executable, os.path.abspath(__file__), "-c", cfg_path, "watch"]
+    if poll is not None:
+        cmd += ["--poll", str(poll)]
+    return cmd
 
 
 def find_foreign_watcher(cfg):
@@ -955,7 +961,7 @@ def find_foreign_watcher(cfg):
     return None
 
 
-def spawn_watcher(cfg):
+def spawn_watcher(cfg, poll=None):
     """Start the detached watcher tmux session if not already running."""
     name = watcher_session_name(cfg)
     if session_exists(name):
@@ -967,7 +973,7 @@ def spawn_watcher(cfg):
         log(f"another watcher session is running: {foreign} — "
             f"single watcher per machine; leaving it alone",
             glyph="!", color="yellow")
-    cmd = build_watcher_command(cfg)
+    cmd = build_watcher_command(cfg, poll=poll)
     tmux("new-session", "-d", "-s", name, *_as_tmux_command(cmd))
     log(f"{name}: watcher started (auto-resume active)", glyph="→",
         color="cyan")
@@ -1483,12 +1489,22 @@ def cmd_prompt(cfg, args):
         # resolution (resolve_agent/resolve_claude_args treat absent vs "").
         with open(cfg["_path"]) as f:
             raw = json.load(f)
+        matched = False
         for r in raw.get("repos", []):
             if r.get("name") == repo["name"]:
                 r["prompt_file"] = path
-        atomic_write_json(cfg["_path"], raw, mode=0o644)
-        log(f"{repo['name']}: wired prompt_file -> {path}", glyph="✓",
-            color="green")
+                matched = True
+        if matched:
+            atomic_write_json(cfg["_path"], raw, mode=0o644)
+            log(f"{repo['name']}: wired prompt_file -> {path}", glyph="✓",
+                color="green")
+        else:
+            # The merged cfg carried this repo from DEFAULT_CONFIG (or the name
+            # has no raw counterpart): the file was seeded/opened, but there is
+            # nothing on disk to wire. Don't rewrite the config or claim success.
+            log(f"{repo['name']} not found in {cfg['_path']}; prompt_file not "
+                f"persisted — add the repo to your config", glyph="!",
+                color="yellow")
     else:
         log(f"{repo['name']}: edited {path}", glyph="✓", color="green")
 
@@ -1611,7 +1627,7 @@ def cmd_watch(cfg, args):
     # parent pid and exit immediately, killing keep-awake. Re-exec-into-tmux
     # means caffeinate starts inside the surviving process.
     if getattr(args, "detach", False):
-        spawn_watcher(cfg)
+        spawn_watcher(cfg, poll=args.poll)
         return
 
     banner()

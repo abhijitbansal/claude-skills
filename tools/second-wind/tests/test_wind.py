@@ -7,6 +7,7 @@ import datetime
 import importlib.util
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -930,6 +931,27 @@ class BuildWatcherCommand(unittest.TestCase):
             self.assertTrue(os.path.samefile(cmd[3], abs_cfg))
             self.assertEqual(cmd[4], "watch")
 
+    def test_poll_is_threaded_through_after_watch(self):
+        # `watch --poll N --detach` must not drop --poll: the detached argv
+        # carries it so the watcher honors N instead of config fallback.
+        with tempfile.TemporaryDirectory() as tmp:
+            abs_cfg = os.path.join(tmp, "second-wind.json")
+            with open(abs_cfg, "w") as f:
+                json.dump({"repos": [{"name": "x", "path": "/tmp"}]}, f)
+            cmd = wind.build_watcher_command({"_path": abs_cfg}, poll=30)
+            self.assertEqual(cmd[4], "watch")
+            self.assertIn("--poll", cmd)
+            self.assertIn("30", cmd)
+            self.assertEqual(cmd[cmd.index("--poll") + 1], "30")
+
+    def test_no_poll_omits_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            abs_cfg = os.path.join(tmp, "second-wind.json")
+            with open(abs_cfg, "w") as f:
+                json.dump({"repos": [{"name": "x", "path": "/tmp"}]}, f)
+            cmd = wind.build_watcher_command({"_path": abs_cfg})
+            self.assertNotIn("--poll", cmd)
+
 
 class SpawnWatcher(unittest.TestCase):
     def _cfg(self, tmp):
@@ -1299,6 +1321,39 @@ class CmdPrompt(unittest.TestCase):
             web = next(r for r in saved["repos"] if r["name"] == "web")
             self.assertNotIn("prompt_file", web)
             self.assertEqual(web["prompt"], "do the thing")
+
+    def test_no_matching_raw_repo_warns_and_leaves_config_unchanged(self):
+        # The on-disk config has no "repos" key, so the merged cfg carries the
+        # repo from DEFAULT_CONFIG. cmd_prompt must NOT claim success or rewrite
+        # the file: it warns and leaves the config byte-identical.
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg_path = os.path.join(tmp, "second-wind.json")
+            home = os.path.join(tmp, "home")
+            # Raw config without "repos" — only an unrelated key.
+            wind.atomic_write_json(cfg_path, {"session_prefix": "wind"},
+                                   mode=0o644)
+            with open(cfg_path) as f:
+                before = f.read()
+            cfg = self._cfg([{"name": "ghost", "path": "/tmp"}])
+            cfg["_path"] = cfg_path
+            args = mock.Mock()
+            args.repo = "ghost"
+            args.editor = None
+            logs = []
+            with mock.patch.object(wind, "WIND_HOME", home), \
+                    mock.patch.object(wind, "_open_editor",
+                                      lambda path, ed: None), \
+                    mock.patch.object(wind, "log",
+                                      lambda msg, **k: logs.append(msg)):
+                wind.cmd_prompt(cfg, args)
+            with open(cfg_path) as f:
+                after = f.read()
+            self.assertEqual(before, after,
+                             "config must be unchanged when no raw repo matches")
+            self.assertTrue(any("not found" in m for m in logs),
+                            f"expected a not-found warning, got {logs}")
+            self.assertFalse(any("wired prompt_file" in m for m in logs),
+                             f"must not claim wiring success, got {logs}")
 
     def test_existing_prompt_file_is_not_reseeded(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1808,7 +1863,10 @@ class WatcherSkipsUnwatched(unittest.TestCase):
 
     def test_copilot_pane_with_limit_text_does_not_trigger_resume(self):
         # A copilot pane that literally contains a Claude-style limit message
-        # must NOT be detected (it is never scanned), so no resume fires.
+        # must NOT be detected (it is never scanned), so no resume fires. We
+        # force copilot's preset to a pattern that WOULD match the pane text so
+        # the only thing keeping it out of the watched set is watch==False —
+        # this test goes RED if the watch guard is removed.
         with tempfile.TemporaryDirectory() as tmp:
             statef = os.path.join(tmp, "state.json")
             orig = wind.STATE_PATH
@@ -1816,8 +1874,20 @@ class WatcherSkipsUnwatched(unittest.TestCase):
             cfg = self._cfg(tmp, [{"name": "docs", "path": "/tmp",
                                    "agent": "copilot"}])
             resumed = []
-            captured = ("You've hit your usage limit ... "
-                        "try again at 8pm")
+            saved = []
+            # Use an `epoch` group resolving to ~now so a scanned match would
+            # immediately pause AND (with buffer 0) resume — making the revert
+            # signal unambiguous. The copilot pane carries that timestamp.
+            cfg["resume_buffer_seconds"] = 0
+            epoch = str(int(wind.time.time()))
+            captured = (f"You've hit your usage limit ... reset {epoch}")
+            match_pat = r"reset (?P<epoch>\d{9,12})"
+            # Sanity: the injected pattern really matches the copilot pane.
+            self.assertIsNotNone(
+                wind.detect_limit(captured,
+                                  [re.compile(match_pat, re.IGNORECASE)]))
+            orig_pats = wind.AGENT_PRESETS["copilot"]["limit_patterns"]
+            wind.AGENT_PRESETS["copilot"]["limit_patterns"] = [match_pat]
             args = mock.Mock()
             args.detach = False
             args.poll = None
@@ -1834,7 +1904,7 @@ class WatcherSkipsUnwatched(unittest.TestCase):
                             wind, "resume_sessions",
                             lambda c, r: resumed.append(r) or []), \
                         mock.patch.object(wind, "save_state",
-                                          lambda s: None), \
+                                          lambda s: saved.append(s)), \
                         mock.patch.object(wind, "watch_sleep",
                                           stop_after_first):
                     # cmd_watch catches KeyboardInterrupt internally and
@@ -1842,20 +1912,40 @@ class WatcherSkipsUnwatched(unittest.TestCase):
                     wind.cmd_watch(cfg, args)
             finally:
                 wind.STATE_PATH = orig
+                wind.AGENT_PRESETS["copilot"]["limit_patterns"] = orig_pats
             self.assertEqual(resumed, [],
                              "copilot pane must never be scanned or resumed")
+            # And it is never recorded as paused: scanning is the only path to
+            # a paused entry, so this fails if the watch guard is dropped.
+            self.assertFalse(
+                any("wind-docs" in s.get("paused", []) for s in saved),
+                f"copilot must never be paused/scanned: {saved}")
 
     def test_status_payload_skips_limit_detection_for_copilot(self):
         # A copilot session whose pane carries a Claude limit message shows a
-        # plain state and NO reset_at (limit detection is skipped).
+        # plain state and NO reset_at (limit detection is skipped). We force
+        # copilot's preset to a pattern that WOULD match the pane text, proving
+        # the skip comes from watch==False, not from copilot's empty patterns —
+        # so this test goes RED if the watch guard is removed.
         cfg = dict(wind.DEFAULT_CONFIG)
         cfg["repos"] = [{"name": "docs", "path": "/tmp", "agent": "copilot"}]
         limit_text = "usage limit ... try again at 8pm\nesc to interrupt"
-        with mock.patch.object(wind, "session_exists", lambda n: True), \
-                mock.patch.object(wind, "capture_pane",
-                                  lambda n, l: limit_text), \
-                mock.patch.object(wind, "load_state", lambda: {}):
-            payload = wind.status_payload(cfg)
+        match_pat = r"try again at (?P<time>\d{1,2}pm)"
+        # Sanity: the pattern really matches, so an unwatched skip is the only
+        # reason reset_at can stay None.
+        self.assertIsNotNone(
+            wind.detect_limit(limit_text,
+                              [re.compile(match_pat, re.IGNORECASE)]))
+        orig = wind.AGENT_PRESETS["copilot"]["limit_patterns"]
+        wind.AGENT_PRESETS["copilot"]["limit_patterns"] = [match_pat]
+        try:
+            with mock.patch.object(wind, "session_exists", lambda n: True), \
+                    mock.patch.object(wind, "capture_pane",
+                                      lambda n, l: limit_text), \
+                    mock.patch.object(wind, "load_state", lambda: {}):
+                payload = wind.status_payload(cfg)
+        finally:
+            wind.AGENT_PRESETS["copilot"]["limit_patterns"] = orig
         sess = payload["sessions"][0]
         self.assertEqual(sess["name"], "wind-docs")
         self.assertIsNone(sess["reset_at"])

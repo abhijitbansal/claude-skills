@@ -972,17 +972,23 @@ function renderModalPill() {
 
 async function fetchModalPane() {
   if (!modalName) return;
+  // Capture the requested session so a modal switch/close mid-flight can't
+  // paint stale content or pill from session A into the modal now on B.
+  const requested = modalName;
   try {
     const res = await fetch(
-      "/api/pane?session=" + encodeURIComponent(modalName) +
+      "/api/pane?session=" + encodeURIComponent(requested) +
       "&lines=" + MODAL_LINES,
       { cache: "no-store", headers: { "X-Wind-Token": TOKEN } });
+    if (requested !== modalName) return;
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
+    if (requested !== modalName) return;
     // content is untrusted pane output — rendered via parseAnsi only.
     renderAnsiInto(els.modalPane, data.content || "");
     if (modalPinned) els.modalPane.scrollTop = els.modalPane.scrollHeight;
   } catch (err) {
+    if (requested !== modalName) return;
     showToast("pane load failed: " + err.message, "err");
   }
   renderModalPill();
@@ -1056,9 +1062,19 @@ els.modalResume.addEventListener("click", async () => {
 els.modalKill.addEventListener("click", async () => {
   if (!modalName) return;
   const name = modalName;
+  // Stop the modal poll before the confirm()/await so an in-flight pane fetch
+  // can't paint the just-killed session back into the modal.
+  clearInterval(modalTimer);
+  modalTimer = null;
   const ok = confirm("Kill " + name +
     "? The tmux session and anything unsaved in it dies.");
-  if (!ok) return;
+  if (!ok) {
+    // Cancelled: resume live polling so the modal keeps updating as before.
+    if (modalName && !modalTimer) {
+      modalTimer = setInterval(fetchModalPane, MODAL_POLL_MS);
+    }
+    return;
+  }
   els.modalKill.disabled = true;
   try {
     await apiPost("/api/kill", { session: name });
