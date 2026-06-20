@@ -1,0 +1,4 @@
+# Code owners — every change requires review from the owner.
+# Combined with branch protection (require_code_owner_reviews), any PR by
+# someone else must be approved by @abhijitbansal before it can merge.
+* @abhijitbansal
