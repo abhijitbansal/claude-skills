@@ -622,5 +622,293 @@ class WizardHarness(unittest.TestCase):
             self.assertFalse(os.path.exists(target))
 
 
+class _TmuxRecorder:
+    """Records tmux invocations and answers has-session from a name set."""
+
+    def __init__(self, existing=()):
+        self.calls = []
+        self.existing = set(existing)
+
+    def __call__(self, *args, check=True, capture=True):
+        self.calls.append(args)
+        result = mock.Mock()
+        result.returncode = 0
+        result.stdout = ""
+        result.stderr = ""
+        if args and args[0] == "has-session":
+            # args: ("has-session", "-t", "=name")
+            target = args[2][1:] if args[2].startswith("=") else args[2]
+            result.returncode = 0 if target in self.existing else 1
+        if args and args[0] == "list-sessions":
+            result.stdout = "\n".join(sorted(self.existing))
+        return result
+
+
+class WatcherSessionName(unittest.TestCase):
+    def test_derives_from_prefix(self):
+        self.assertEqual(
+            wind.watcher_session_name({"session_prefix": "wind"}),
+            "wind-watcher")
+
+    def test_honors_custom_prefix(self):
+        self.assertEqual(
+            wind.watcher_session_name({"session_prefix": "night"}),
+            "night-watcher")
+
+
+class BuildWatcherCommand(unittest.TestCase):
+    def test_uses_absolute_config_path_from_temp_cwd(self):
+        # Regression for the cwd bug: cfg["_path"] may be the literal
+        # relative "./second-wind.json"; the spawned watcher must carry an
+        # absolute, existing config path because a detached tmux session
+        # does not inherit the parent's cwd.
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg_rel = "./second-wind.json"
+            abs_cfg = os.path.join(tmp, "second-wind.json")
+            with open(abs_cfg, "w") as f:
+                json.dump({"session_prefix": "wind",
+                           "repos": [{"name": "x", "path": "/tmp"}]}, f)
+            cwd = os.getcwd()
+            os.chdir(tmp)
+            try:
+                cmd = wind.build_watcher_command({"_path": cfg_rel})
+            finally:
+                os.chdir(cwd)
+            # python executable + abs wind.py + -c + abs cfg + watch
+            self.assertEqual(cmd[0], sys.executable)
+            self.assertTrue(os.path.isabs(cmd[1]))
+            self.assertTrue(cmd[1].endswith("wind.py"))
+            self.assertEqual(cmd[2], "-c")
+            self.assertTrue(os.path.isabs(cmd[3]))
+            self.assertTrue(os.path.isfile(cmd[3]))
+            self.assertTrue(os.path.samefile(cmd[3], abs_cfg))
+            self.assertEqual(cmd[4], "watch")
+
+
+class SpawnWatcher(unittest.TestCase):
+    def _cfg(self, tmp):
+        abs_cfg = os.path.join(tmp, "second-wind.json")
+        with open(abs_cfg, "w") as f:
+            json.dump({"session_prefix": "wind",
+                       "repos": [{"name": "x", "path": "/tmp"}]}, f)
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "x", "path": "/tmp"}]
+        cfg["_path"] = abs_cfg
+        return cfg
+
+    def test_spawns_detached_session_with_abs_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = self._cfg(tmp)
+            rec = _TmuxRecorder(existing=[])
+            with mock.patch.object(wind, "tmux", rec):
+                wind.spawn_watcher(cfg)
+            new = [c for c in rec.calls if c and c[0] == "new-session"]
+            self.assertEqual(len(new), 1)
+            # the joined shell command must reference the abs config path
+            joined = " ".join(new[0])
+            self.assertIn(cfg["_path"], joined)
+            self.assertIn("watch", joined)
+
+    def test_does_not_spawn_when_watcher_already_running(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = self._cfg(tmp)
+            rec = _TmuxRecorder(existing=["wind-watcher"])
+            with mock.patch.object(wind, "tmux", rec):
+                wind.spawn_watcher(cfg)
+            new = [c for c in rec.calls if c and c[0] == "new-session"]
+            self.assertEqual(new, [])
+
+    def test_warns_on_foreign_watcher(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = self._cfg(tmp)
+            # a watcher under a different prefix is present
+            rec = _TmuxRecorder(existing=["other-watcher"])
+            logs = []
+            with mock.patch.object(wind, "tmux", rec), \
+                    mock.patch.object(wind, "log",
+                                      lambda msg, **k: logs.append(msg)):
+                wind.spawn_watcher(cfg)
+            self.assertTrue(any("other-watcher" in m for m in logs),
+                            f"expected a foreign-watcher warning, got {logs}")
+
+
+class CmdUpWatcherSpawn(unittest.TestCase):
+    def _cfg(self, tmp):
+        abs_cfg = os.path.join(tmp, "second-wind.json")
+        with open(abs_cfg, "w") as f:
+            json.dump({"repos": [{"name": "x", "path": tmp}]}, f)
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "x", "path": tmp}]
+        cfg["_path"] = abs_cfg
+        return cfg
+
+    def test_up_auto_spawns_watcher(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = self._cfg(tmp)
+            rec = _TmuxRecorder(existing=[])
+            args = mock.Mock()
+            args.no_watch = False
+            with mock.patch.object(wind, "tmux", rec):
+                wind.cmd_up(cfg, args)
+            new = [c for c in rec.calls if c and c[0] == "new-session"]
+            watcher_new = [c for c in new
+                           if "-s" in c and "wind-watcher" in c]
+            self.assertTrue(watcher_new,
+                            f"expected a watcher new-session, got {new}")
+            self.assertIn("watch", " ".join(watcher_new[0]))
+
+    def test_no_watch_skips_spawn(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = self._cfg(tmp)
+            rec = _TmuxRecorder(existing=[])
+            args = mock.Mock()
+            args.no_watch = True
+            logs = []
+            with mock.patch.object(wind, "tmux", rec), \
+                    mock.patch.object(wind, "log",
+                                      lambda msg, **k: logs.append(msg)):
+                wind.cmd_up(cfg, args)
+            new = [c for c in rec.calls if c and c[0] == "new-session"]
+            watcher_new = [c for c in new
+                           if "-s" in c and "wind-watcher" in c]
+            self.assertEqual(watcher_new, [])
+            self.assertTrue(any("watch" in m.lower() for m in logs))
+
+    def test_double_up_does_not_double_spawn(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = self._cfg(tmp)
+            # second run: both repo session and watcher already exist
+            rec = _TmuxRecorder(existing=["wind-x", "wind-watcher"])
+            args = mock.Mock()
+            args.no_watch = False
+            with mock.patch.object(wind, "tmux", rec):
+                wind.cmd_up(cfg, args)
+            new = [c for c in rec.calls if c and c[0] == "new-session"]
+            self.assertEqual(new, [])
+
+
+class CmdDownReapsWatcher(unittest.TestCase):
+    def test_down_kills_watcher_and_clears_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            statef = os.path.join(tmp, "state.json")
+            orig = wind.STATE_PATH
+            wind.STATE_PATH = statef
+            cfg = dict(wind.DEFAULT_CONFIG)
+            cfg["repos"] = [{"name": "x", "path": "/tmp"}]
+            rec = _TmuxRecorder(existing=["wind-x", "wind-watcher"])
+            try:
+                with mock.patch.object(wind, "tmux", rec):
+                    wind.cmd_down(cfg, mock.Mock())
+                kills = [c for c in rec.calls if c and c[0] == "kill-session"]
+                killed = {c[2] for c in kills}
+                self.assertIn("=wind-watcher", killed)
+                self.assertIn("=wind-x", killed)
+                self.assertEqual(wind.load_state(), {})
+            finally:
+                wind.STATE_PATH = orig
+
+    def test_down_reaps_renamed_watcher_from_state(self):
+        # The running watcher recorded a name that differs from the current
+        # derived name (e.g. a prefix change between runs). wind down must
+        # still reap the recorded identity.
+        with tempfile.TemporaryDirectory() as tmp:
+            statef = os.path.join(tmp, "state.json")
+            orig = wind.STATE_PATH
+            wind.STATE_PATH = statef
+            cfg = dict(wind.DEFAULT_CONFIG)
+            cfg["session_prefix"] = "wind"
+            cfg["repos"] = [{"name": "x", "path": "/tmp"}]
+            # state records a watcher named under an old prefix
+            wind.save_state({"watcher_session": "old-watcher",
+                             "watcher_config": cfg.get("_path", "")})
+            rec = _TmuxRecorder(existing=["old-watcher"])
+            try:
+                with mock.patch.object(wind, "tmux", rec):
+                    wind.cmd_down(cfg, mock.Mock())
+                kills = [c for c in rec.calls if c and c[0] == "kill-session"]
+                killed = {c[2] for c in kills}
+                self.assertIn("=old-watcher", killed)
+                self.assertEqual(wind.load_state(), {})
+            finally:
+                wind.STATE_PATH = orig
+
+
+class CmdWatchDetach(unittest.TestCase):
+    def test_detach_reexecs_into_tmux_not_fork(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            abs_cfg = os.path.join(tmp, "second-wind.json")
+            with open(abs_cfg, "w") as f:
+                json.dump({"repos": [{"name": "x", "path": "/tmp"}]}, f)
+            cfg = dict(wind.DEFAULT_CONFIG)
+            cfg["repos"] = [{"name": "x", "path": "/tmp"}]
+            cfg["_path"] = abs_cfg
+            rec = _TmuxRecorder(existing=[])
+            args = mock.Mock()
+            args.detach = True
+            args.poll = None
+            with mock.patch.object(wind, "tmux", rec), \
+                    mock.patch("os.fork",
+                               side_effect=AssertionError("must not fork")):
+                wind.cmd_watch(cfg, args)
+            new = [c for c in rec.calls if c and c[0] == "new-session"]
+            self.assertEqual(len(new), 1)
+            joined = " ".join(new[0])
+            self.assertIn("watch", joined)
+            self.assertIn(abs_cfg, joined)
+
+    def test_detach_does_not_double_spawn(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            abs_cfg = os.path.join(tmp, "second-wind.json")
+            with open(abs_cfg, "w") as f:
+                json.dump({"repos": [{"name": "x", "path": "/tmp"}]}, f)
+            cfg = dict(wind.DEFAULT_CONFIG)
+            cfg["repos"] = [{"name": "x", "path": "/tmp"}]
+            cfg["_path"] = abs_cfg
+            rec = _TmuxRecorder(existing=["wind-watcher"])
+            args = mock.Mock()
+            args.detach = True
+            args.poll = None
+            with mock.patch.object(wind, "tmux", rec):
+                wind.cmd_watch(cfg, args)
+            new = [c for c in rec.calls if c and c[0] == "new-session"]
+            self.assertEqual(new, [])
+
+    def test_foreground_watch_records_identity_in_state(self):
+        # A non-detached watch run records its session name + resolved config
+        # into state.json so wind down can reap it later. We stop the loop
+        # immediately via a KeyboardInterrupt from the first watch_sleep.
+        with tempfile.TemporaryDirectory() as tmp:
+            statef = os.path.join(tmp, "state.json")
+            abs_cfg = os.path.join(tmp, "second-wind.json")
+            with open(abs_cfg, "w") as f:
+                json.dump({"repos": [{"name": "x", "path": "/tmp"}]}, f)
+            orig = wind.STATE_PATH
+            wind.STATE_PATH = statef
+            cfg = dict(wind.DEFAULT_CONFIG)
+            cfg["session_prefix"] = "wind"
+            cfg["repos"] = [{"name": "x", "path": "/tmp"}]
+            cfg["_path"] = abs_cfg
+            cfg["caffeinate"] = False
+            recorded = {}
+
+            def capture_state(state):
+                recorded.update(state)
+                raise KeyboardInterrupt
+
+            args = mock.Mock()
+            args.detach = False
+            args.poll = None
+            try:
+                with mock.patch.object(wind, "save_state", capture_state), \
+                        mock.patch.object(wind, "session_exists",
+                                          lambda n: False):
+                    with self.assertRaises(KeyboardInterrupt):
+                        wind.cmd_watch(cfg, args)
+            finally:
+                wind.STATE_PATH = orig
+            self.assertEqual(recorded.get("watcher_session"), "wind-watcher")
+            self.assertEqual(recorded.get("watcher_config"), abs_cfg)
+
+
 if __name__ == "__main__":
     unittest.main()

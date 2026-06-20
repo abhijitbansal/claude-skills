@@ -50,10 +50,15 @@ wind init            # interactive wizard: scans dirs, lets you pick repos,
                      # choose permission presets, and writes config for you
                      # (use --defaults to get the old non-interactive starter file)
 wind up              # start a tmux session per repo, launch Claude Code,
-                     # send each repo's initial prompt file
-wind watch           # run the watcher (keep this running; use caffeinate
-                     # config on a Mac to prevent sleep)
+                     # send each repo's initial prompt file, and auto-spawn
+                     # the watcher in a detached tmux session
+wind dash            # live localhost view of every session
 ```
+
+`wind up` starts the watcher for you in a detached `<prefix>-watcher` tmux
+session (one watcher per machine; on a Mac it self-caffeinates to prevent
+sleep). Pass `--no-watch` to skip it and run `wind watch` yourself. `wind down`
+reaps the watcher along with the repo sessions.
 
 ## Dashboard
 
@@ -73,11 +78,9 @@ wind resume          # manually nudge all sessions with the resume message
 wind down            # kill all wind sessions
 ```
 
-For an overnight run, start the watcher in its own tmux session too:
-
-```sh
-tmux new -d -s wind-watcher 'wind watch'
-```
+The watcher already runs detached after `wind up`. To run it in the foreground
+(e.g. to watch its logs), use `wind watch`; to spawn the detached session
+yourself, use `wind watch --detach`.
 
 ## Config
 

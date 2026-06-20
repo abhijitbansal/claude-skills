@@ -23,6 +23,7 @@ import hmac
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -505,9 +506,9 @@ def run_wizard(args):
     for r in repos:
         preset = r.get("claude_args", "") or "default permissions"
         log(f"{r['name']}: {preset}", glyph="✓", color="green")
-    print(f"\n  Next: {style('wind up', 'bold')} then "
-          f"{style('wind watch', 'bold')} — live view: "
-          f"{style('wind dash', 'bold')}\n")
+    print(f"\n  Next: {style('wind up', 'bold')} "
+          f"(starts your sessions + the watcher) — then "
+          f"{style('wind dash', 'bold')} for the live view\n")
 
 
 # ---------------------------------------------------------------- config ---
@@ -549,6 +550,14 @@ def limit_patterns(cfg):
 
 def session_name(cfg, repo):
     return f"{cfg['session_prefix']}-{repo['name']}"
+
+
+WATCHER_SUFFIX = "watcher"
+
+
+def watcher_session_name(cfg):
+    """Derived name of the detached watcher tmux session, <prefix>-watcher."""
+    return f"{cfg['session_prefix']}-{WATCHER_SUFFIX}"
 
 
 # ----------------------------------------------------------------- state ---
@@ -618,6 +627,61 @@ def send_text(name, text):
     tmux("paste-buffer", "-p", "-d", "-b", "wind", "-t", f"={name}:")
     time.sleep(0.3)
     tmux("send-keys", "-t", f"={name}:", "Enter")
+
+
+def list_session_names():
+    """All tmux session names, or [] if there is no server / none exist."""
+    result = tmux("list-sessions", "-F", "#{session_name}", check=False)
+    if result.returncode != 0:
+        return []
+    return [ln for ln in (result.stdout or "").splitlines() if ln]
+
+
+# ----------------------------------------------------------- watcher -------
+
+def _as_tmux_command(cmd):
+    """Quote an argv list into the single shell-command tmux runs detached."""
+    return (shlex.join(cmd),)
+
+
+def build_watcher_command(cfg):
+    """argv that re-runs this wind with an ABSOLUTE config path + `watch`.
+
+    cfg["_path"] is frequently the literal relative "./second-wind.json"
+    (find_config returns it first and expanduser does not absolutize it). A
+    detached tmux session does NOT inherit the parent cwd, so we resolve the
+    config path against the *current* process cwd here, before spawning.
+    """
+    cfg_path = os.path.abspath(cfg["_path"])
+    return [sys.executable, os.path.abspath(__file__), "-c", cfg_path, "watch"]
+
+
+def find_foreign_watcher(cfg):
+    """A *-watcher session whose name isn't ours, or None."""
+    ours = watcher_session_name(cfg)
+    for name in list_session_names():
+        if name.endswith(f"-{WATCHER_SUFFIX}") and name != ours:
+            return name
+    return None
+
+
+def spawn_watcher(cfg):
+    """Start the detached watcher tmux session if not already running."""
+    name = watcher_session_name(cfg)
+    if session_exists(name):
+        log(f"{name}: watcher already running, skipping", glyph="○",
+            color="dim")
+        return False
+    foreign = find_foreign_watcher(cfg)
+    if foreign:
+        log(f"another watcher session is running: {foreign} — "
+            f"single watcher per machine; leaving it alone",
+            glyph="!", color="yellow")
+    cmd = build_watcher_command(cfg)
+    tmux("new-session", "-d", "-s", name, *_as_tmux_command(cmd))
+    log(f"{name}: watcher started (auto-resume active)", glyph="→",
+        color="cyan")
+    return True
 
 
 # ------------------------------------------------------- limit detection ---
@@ -936,9 +1000,15 @@ def cmd_up(cfg, args):
                 send_text(name, prompt)
                 log(f"{name}: sent initial prompt ({len(prompt)} chars)",
                     glyph="✓", color="green")
+    if getattr(args, "no_watch", False):
+        log("watcher not started (--no-watch); run `wind watch` to enable "
+            "auto-resume", glyph="○", color="dim")
+    else:
+        spawn_watcher(cfg)
+
     if started:
         log(f"{len(started)} session(s) up. Attach: tmux attach -t "
-            f"{started[0][1]}  |  watch: wind watch",
+            f"{started[0][1]}  |  live view: wind dash",
             glyph="✓", color="green")
     else:
         log("nothing to start", glyph="○", color="dim")
@@ -1008,6 +1078,13 @@ def cmd_down(cfg, args):
         if session_exists(name):
             tmux("kill-session", "-t", f"={name}")
             log(f"{name}: killed", glyph="✗", color="red")
+    # Reap the watcher: the recorded identity (which survives a prefix change
+    # between runs) plus the currently-derived name, deduped.
+    recorded = load_state().get("watcher_session")
+    for name in dict.fromkeys([recorded, watcher_session_name(cfg)]):
+        if name and session_exists(name):
+            tmux("kill-session", "-t", f"={name}")
+            log(f"{name}: watcher killed", glyph="✗", color="red")
     clear_state()
 
 
@@ -1023,6 +1100,14 @@ def start_caffeinate():
 
 
 def cmd_watch(cfg, args):
+    # --detach re-execs this watcher into a detached tmux session and returns.
+    # NOT os.fork(): caffeinate -w <pid> would otherwise target the pre-fork
+    # parent pid and exit immediately, killing keep-awake. Re-exec-into-tmux
+    # means caffeinate starts inside the surviving process.
+    if getattr(args, "detach", False):
+        spawn_watcher(cfg)
+        return
+
     banner()
     patterns = limit_patterns(cfg)
     poll = args.poll or cfg["poll_interval_seconds"]
@@ -1033,6 +1118,11 @@ def cmd_watch(cfg, args):
     log(f"watching {len(cfg['repos'])} session(s), poll every {poll}s, "
         f"resume buffer {buffer_s}s")
 
+    # Record this watcher's identity so `wind down` can reap the actually
+    # running watcher even if the derived name later differs (prefix change).
+    identity = {"watcher_session": watcher_session_name(cfg),
+                "watcher_config": os.path.abspath(cfg["_path"])}
+
     state = load_state()
     try:
         if state.get("reset_at") is not None:
@@ -1041,6 +1131,8 @@ def cmd_watch(cfg, args):
         log("ignoring corrupt watcher state file", glyph="!", color="yellow")
         state = {}
         clear_state()
+    state.update(identity)
+    save_state(state)
     # After resuming, the old limit message lingers in the pane scrollback;
     # skip re-detection on a session until the cooldown passes.
     cooldown_until = {}
@@ -1073,7 +1165,8 @@ def cmd_watch(cfg, args):
                 if state.get("paused") != sorted(paused) or \
                         state.get("reset_at") != reset_at:
                     first_detection = not state.get("reset_at")
-                    state = {"paused": sorted(paused), "reset_at": reset_at}
+                    state = {"paused": sorted(paused), "reset_at": reset_at,
+                             **identity}
                     save_state(state)
                     if first_detection:
                         when = datetime.datetime.fromtimestamp(
@@ -1090,8 +1183,10 @@ def cmd_watch(cfg, args):
                     until = time.time() + cfg["resume_cooldown_seconds"]
                     for name in paused:
                         cooldown_until[name] = until
-                    state = {}
-                    clear_state()
+                    # Drop limit state but keep recording our identity so a
+                    # later `wind down` can still reap this running watcher.
+                    state = dict(identity)
+                    save_state(state)
 
             if paused and reset_at:
                 eta = reset_at + buffer_s - time.time()
@@ -1124,11 +1219,16 @@ def main(argv=None):
                         help="overwrite existing config")
     p_init.add_argument("--defaults", action="store_true",
                         help="write the starter config without the wizard")
-    sub.add_parser("up", help="start tmux sessions and launch Claude Code")
+    p_up = sub.add_parser("up",
+                          help="start tmux sessions and launch Claude Code")
+    p_up.add_argument("--no-watch", action="store_true",
+                      help="don't auto-spawn the watcher session")
     sub.add_parser("status", help="show session states and next reset")
     p_watch = sub.add_parser("watch", help="watch panes and auto-resume")
     p_watch.add_argument("--poll", type=int,
                          help="poll interval in seconds (overrides config)")
+    p_watch.add_argument("--detach", action="store_true",
+                         help="run the watcher in a detached tmux session")
     sub.add_parser("resume", help="send the resume message to all sessions")
     sub.add_parser("down", help="kill all wind tmux sessions")
     p_dash = sub.add_parser("dash", help="serve the live web dashboard")

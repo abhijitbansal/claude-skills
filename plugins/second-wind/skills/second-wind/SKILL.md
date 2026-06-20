@@ -31,8 +31,8 @@ consent). On seeded machines `setup.sh` already handles this.
 | Command | What it does |
 | --- | --- |
 | `wind init` | interactive wizard: scan dirs, pick repos, set permission presets, write config (`--defaults` for non-interactive starter file) |
-| `wind up` | start a tmux session per repo, launch Claude Code, send each repo's initial prompt file |
-| `wind watch` | run the watcher loop (keep running; on macOS it self-caffeinates) |
+| `wind up` | start a tmux session per repo, launch Claude Code, send each repo's initial prompt file, and auto-spawn the watcher (`--no-watch` to skip) |
+| `wind watch` | run the watcher loop in the foreground (keep running; on macOS it self-caffeinates); `--detach` re-execs it into a detached `<prefix>-watcher` tmux session |
 | `wind status` | per-session state + next reset time |
 | `wind resume` | manually nudge all sessions with the resume message |
 | `wind down` | kill all wind sessions |
@@ -44,9 +44,13 @@ Overnight run:
 
 ```bash
 wind init   # interactive wizard picks repos and writes the config
-wind up
-tmux new -d -s wind-watcher 'wind watch'
+wind up     # starts a session per repo AND the detached watcher
+wind dash   # live localhost view of every session
 ```
+
+`wind up` auto-spawns the watcher in a detached `<prefix>-watcher` tmux session
+(one watcher per machine), so no separate `tmux new -d … 'wind watch'` is needed.
+Pass `--no-watch` to skip it; `wind down` reaps the watcher with the rest.
 
 Attach to a live session: `tmux attach -t wind-<repo>` (detach: `Ctrl-b d`).
 
@@ -63,6 +67,6 @@ Full reference: `tools/second-wind/README.md` in the claude-skills repo.
 
 ## Hard rules
 
-- Never run `wind watch` in the same tmux session as a managed repo — it must survive the sessions it manages.
+- `wind up` runs the watcher in its own detached `<prefix>-watcher` session; only one watcher per machine. If you run `wind watch` by hand, never run it in a managed repo's tmux session — it must survive the sessions it manages.
 - `wind down` kills sessions without saving; confirm with the user before running it on their behalf.
 - `wind dash` kill button kills tmux sessions — apply the same confirmation rule as `wind down`: always confirm with the user before triggering a kill action on their behalf.
