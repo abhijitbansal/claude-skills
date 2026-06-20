@@ -39,7 +39,7 @@ done
 # Default to the per-branch subfolder. When --dir is passed, honor it
 # verbatim so callers (tests, ad-hoc one-offs) can opt out.
 if [[ -z "$OUT_DIR" ]]; then
-  OUT_DIR="/tmp/${APP_NAME_LC}-snaps/$(paperix_branch_slug)"
+  OUT_DIR="/tmp/${APP_NAME_LC}-snaps/$(app_branch_slug)"
 fi
 
 mkdir -p "$OUT_DIR"

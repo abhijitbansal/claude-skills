@@ -40,8 +40,9 @@ End state: marketplaces registered, user-scope plugins installed, npx-skills ins
 |---|---|
 | `--dry-run` | Print what would change. No mutations. |
 | `--verbose` | `set -x` — every shell command logged. |
-| `--only <step>` | Run just one step. Steps: `preflight claude marketplaces plugins skills dotfiles symlinks summary`. |
+| `--only <step>` | Run just one step. Steps: `preflight claude marketplaces plugins skills dotfiles guidelines local_plugins symlinks summary`. |
 | `--skip-<step>` | Skip a single step. Repeatable. |
+| `--merge-claude-md <path>` | In the `guidelines` step, also merge the behavioral guidelines into `<path>` (any machine or repo's `CLAUDE.md`). |
 
 ### Exit codes
 
@@ -201,6 +202,22 @@ CI runs all three on `push` to `main` and on every PR — `.github/workflows/tes
 ```
 
 Templated skills (`release`, `ios-build`, `app-preview`) source `skills/_lib/load_app_config.sh` at invocation. That walks up from `$PWD` looking for `.claude/app.yml` and exports `APP_NAME`, `APP_BUNDLE_ID`, `APP_SCHEME`, `APP_TEAM_ID`, `APP_URL_SCHEME`, `APP_BUILD_SCRIPT`, `APP_PREVIEW_ROOT`, `LINEAR_TEAM_KEY`.
+
+## Tips & limitations
+
+**Tips**
+
+- Run `setup.sh --dry-run` first on any unfamiliar machine — it prints every action and mutates nothing. Add `--verbose` to trace each shell command.
+- Isolate a single step with `--only <step>` (e.g. `--only guidelines`) or exclude one with `--skip-<step>`. Every step is idempotent, so re-running the whole script is always safe.
+- Treat `claude-setup.toml` as the single source of truth — edit the arrays to diverge from the author's stack, then re-run `setup.sh` to reconcile the machine.
+- Use `--merge-claude-md <path>` to additively push the behavioral guidelines into any other repo's `CLAUDE.md` without rewriting the rest of that file.
+
+**Limitations**
+
+- **No version pinning for plugins.** `claude plugin install` has no version flag, so any pin in the TOML is surfaced as a warning and the latest is installed.
+- **The guidelines merge is additive only.** It appends `##` sections that are missing; it never edits or removes a section already present, so a drifted section must be reconciled by hand.
+- **Second Wind needs tmux + the Claude Code CLI** and is validated on macOS and Ubuntu only. It detects the usage limit by parsing pane text, so an upstream wording change could require a pattern update — see the limit-detection section of the [Second Wind guide](docs/second-wind/index.html).
+- **GitHub Pages is gated.** The public site deploys only when the repo is public, Pages source is set to GitHub Actions, and a release is published — see the [machine-setup runbook](docs/machine-setup.html).
 
 ## Troubleshooting
 

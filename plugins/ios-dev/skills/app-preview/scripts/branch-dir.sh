@@ -16,15 +16,15 @@
 # commit or a worktree still produces a stable, recognizable folder.
 #
 # Usage:
-#   source branch-dir.sh   # then call paperix_branch_slug
-#   paperix_branch_slug    # prints slug on stdout, e.g. 'agent--ABH-6-...'
+#   source branch-dir.sh   # then call app_branch_slug
+#   app_branch_slug    # prints slug on stdout, e.g. 'agent--ABH-6-...'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../../_lib/load_app_config.sh
 source "${SCRIPT_DIR}/../../_lib/load_app_config.sh"
 APP_NAME_LC="$(echo "${APP_NAME}" | tr '[:upper:]' '[:lower:]')"
 
-paperix_branch_slug() {
+app_branch_slug() {
   # `git rev-parse --abbrev-ref HEAD` returns the literal string 'HEAD' in
   # detached state; treat empty and 'HEAD' both as detached so the fallback
   # is consistent across git versions.
@@ -41,5 +41,5 @@ paperix_branch_slug() {
 
 # Allow invoking the file directly for quick inspection / debugging.
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
-  paperix_branch_slug
+  app_branch_slug
 fi

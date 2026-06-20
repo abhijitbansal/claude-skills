@@ -3,6 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# Caller's working dir, captured before any work — used to locate the "current
+# repo" the guidelines step should also merge into.
+INVOKE_PWD="${PWD}"
 export CLAUDE_SKILLS_HOME="${CLAUDE_SKILLS_HOME:-${REPO_ROOT}}"
 
 # shellcheck source=_lib.sh
@@ -12,13 +15,15 @@ source "${SCRIPT_DIR}/_lib.sh"
 DRY_RUN=0
 ONLY=""
 SKIP=" "  # space-delimited; sentinels ensure whole-word matching
+MERGE_TARGET=""  # extra CLAUDE.md path for the guidelines step (--merge-claude-md)
 
-ALL_STEPS=(preflight claude marketplaces plugins skills dotfiles local_plugins symlinks summary)
+ALL_STEPS=(preflight claude marketplaces plugins skills dotfiles guidelines local_plugins symlinks summary)
 
 usage() {
   cat <<EOF
-Usage: setup.sh [--dry-run] [--verbose] [--only <step>] [--skip-<step>]
+Usage: setup.sh [--dry-run] [--verbose] [--only <step>] [--skip-<step>] [--merge-claude-md <path>]
 Steps: ${ALL_STEPS[*]}
+  --merge-claude-md <path>  also merge behavioral guidelines into <path> (guidelines step)
 EOF
 }
 
@@ -27,7 +32,8 @@ while [[ $# -gt 0 ]]; do
     --dry-run)        DRY_RUN=1 ;;
     --verbose)        set -x ;;
     --only)           ONLY="$2"; shift ;;
-    --skip-claude|--skip-marketplaces|--skip-plugins|--skip-skills|--skip-dotfiles|--skip-local_plugins|--skip-symlinks)
+    --merge-claude-md) MERGE_TARGET="$2"; shift ;;
+    --skip-claude|--skip-marketplaces|--skip-plugins|--skip-skills|--skip-dotfiles|--skip-guidelines|--skip-local_plugins|--skip-symlinks)
                       SKIP+="${1#--skip-} " ;;
     -h|--help)        usage; exit 0 ;;
     *)                usage; exit 2 ;;
@@ -104,7 +110,7 @@ step_marketplaces() {
   existing="$(claude plugin marketplace list 2>/dev/null || true)"
   python3 -c "import json,sys; [print(e['name']+'\t'+e['repo']) for e in json.loads(sys.argv[1])]" "${entries}" \
     | while IFS=$'\t' read -r name repo; do
-      if printf '%s\n' "${existing}" | grep -qw "${name}"; then
+      if printf '%s\n' "${existing}" | grep -qwF "${name}"; then
         info "marketplace ${name}: update"
         [[ "${DRY_RUN}" -eq 1 ]] || claude plugin marketplace update "${name}" || warn "update ${name} failed"
       else
@@ -118,7 +124,7 @@ step_plugins() {
   local entries
   entries="$(python3 "${SCRIPT_DIR}/parse_toml.py" "${toml}" plugins)"
   local installed
-  installed="$(claude plugin list --scope user 2>/dev/null || true)"
+  installed="$(claude plugin list 2>/dev/null || true)"
   python3 -c "
 import json, sys
 for e in json.loads(sys.argv[1]):
@@ -127,17 +133,17 @@ for e in json.loads(sys.argv[1]):
 " "${entries}" \
     | while IFS=$'\t' read -r name market pin; do
       local spec="${name}@${market}"
-      if printf '%s\n' "${installed}" | grep -qw "${name}"; then
+      if printf '%s\n' "${installed}" | grep -qwF "${name}"; then
         info "plugin ${name}: update"
         [[ "${DRY_RUN}" -eq 1 ]] || claude plugin update "${spec}" || warn "update ${spec} failed"
       else
         if [[ -n "${pin}" ]]; then
-          info "plugin ${name}: install (pinned ${pin})"
-          [[ "${DRY_RUN}" -eq 1 ]] || claude plugin install "${spec}" --version "${pin}" --scope user || warn "install ${spec}@${pin} failed"
-        else
-          info "plugin ${name}: install"
-          [[ "${DRY_RUN}" -eq 1 ]] || claude plugin install "${spec}" --scope user || warn "install ${spec} failed"
+          # `claude plugin install` has no version flag; pinning isn't
+          # supported. Surface it rather than silently install a different one.
+          warn "plugin ${name}: version pin '${pin}' unsupported by claude plugin install; installing latest"
         fi
+        info "plugin ${name}: install"
+        [[ "${DRY_RUN}" -eq 1 ]] || claude plugin install "${spec}" --scope user || warn "install ${spec} failed"
       fi
     done
 }
@@ -187,12 +193,43 @@ step_dotfiles() {
   [[ -n "${home_md}" ]]       && install_one "${home_md}"       "${HOME}/CLAUDE.md"
   [[ -n "${user_settings}" ]] && install_one "${user_settings}" "${HOME}/.claude/settings.json"
 }
+# _merge_into <source-claude-md> <target-claude-md>
+# Additively merge the source's guideline sections into target, honoring DRY_RUN.
+_merge_into() {
+  local src="$1" dst="$2" out
+  local -a cmd=(python3 "${SCRIPT_DIR}/merge_guidelines.py" "${src}" "${dst}")
+  [[ "${DRY_RUN}" -eq 1 ]] && cmd+=(--dry-run)
+  if out="$("${cmd[@]}" 2>&1)"; then
+    info "guidelines → ${dst}"
+    while IFS= read -r line; do [[ -n "${line}" ]] && info "  ${line}"; done <<<"${out}"
+  else
+    warn "guideline merge into ${dst} failed: ${out}"
+  fi
+}
+step_guidelines() {
+  # Canonical guidelines live in this repo's CLAUDE.md (between the markers).
+  local source="${REPO_ROOT}/CLAUDE.md"
+  [[ -f "${source}" ]] || { warn "no ${source}; skipping guideline merge"; return 0; }
+
+  # Always: the machine-global file.
+  _merge_into "${source}" "${HOME}/CLAUDE.md"
+
+  # The repo the user invoked setup from, if it's a git repo other than this one.
+  local cur_repo
+  cur_repo="$(git -C "${INVOKE_PWD}" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -n "${cur_repo}" && "${cur_repo}" != "${REPO_ROOT}" ]]; then
+    _merge_into "${source}" "${cur_repo}/CLAUDE.md"
+  fi
+
+  # An explicit extra target (--merge-claude-md), for "any repo or path".
+  [[ -n "${MERGE_TARGET}" ]] && _merge_into "${source}" "${MERGE_TARGET}"
+}
 step_local_plugins() {
   local manifest="${REPO_ROOT}/.claude-plugin/marketplace.json"
   [[ -f "${manifest}" ]] || { warn "no ${manifest}; skipping"; return 0; }
   local existing
   existing="$(claude plugin marketplace list 2>/dev/null || true)"
-  if printf '%s\n' "${existing}" | grep -qw "claude-skills"; then
+  if printf '%s\n' "${existing}" | grep -qwF "claude-skills"; then
     info "self marketplace: update"
     [[ "${DRY_RUN}" -eq 1 ]] || claude plugin marketplace update claude-skills || warn "marketplace update failed"
   else
@@ -200,10 +237,10 @@ step_local_plugins() {
     [[ "${DRY_RUN}" -eq 1 ]] || claude plugin marketplace add "${REPO_ROOT}" || warn "marketplace add failed"
   fi
   local installed
-  installed="$(claude plugin list --scope user 2>/dev/null || true)"
+  installed="$(claude plugin list 2>/dev/null || true)"
   python3 -c "import json,sys; [print(p['name']) for p in json.load(open(sys.argv[1]))['plugins']]" "${manifest}" \
     | while IFS= read -r name; do
-      if printf '%s\n' "${installed}" | grep -qw "${name}"; then
+      if printf '%s\n' "${installed}" | grep -qwF "${name}"; then
         info "local plugin ${name}: update"
         [[ "${DRY_RUN}" -eq 1 ]] || claude plugin update "${name}@claude-skills" || warn "update ${name} failed"
       else
@@ -257,4 +294,7 @@ step_summary() {
   fi
 }
 
-for s in "${ALL_STEPS[@]}"; do run_step "${s}"; done
+# `|| true` so a single step returning non-zero (e.g. a warn/fail under set -e)
+# can't abort the loop and skip step_summary or later steps. Per-step failures
+# are tracked via the FAILS/WARNS counters, which decide the final exit code.
+for s in "${ALL_STEPS[@]}"; do run_step "${s}" || true; done

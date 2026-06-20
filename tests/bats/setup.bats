@@ -36,7 +36,7 @@ teardown() { rm -rf "${TMP}"; }
   grep -c "claude plugin install" "${MOCK_CALL_LOG}" >/dev/null
 }
 
-@test "setup.sh plugins step honors pin if present" {
+@test "setup.sh plugins step warns that version pins are unsupported and installs latest" {
   cat >"${TMP}/pinned.toml" <<EOF
 [meta]
 schema_version = 1
@@ -47,7 +47,11 @@ pin = "v1.2"
 EOF
   CLAUDE_SETUP_TOML="${TMP}/pinned.toml" run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only plugins
   [ "$status" -eq 0 ]
-  grep -q "v1.2" "${MOCK_CALL_LOG}"
+  # `claude plugin install` has no version flag — the pin must NOT reach the CLI.
+  ! grep -q "v1.2" "${MOCK_CALL_LOG}"
+  # The plugin still installs (at latest), and the unsupported pin is surfaced.
+  grep -q "claude plugin install p@m" "${MOCK_CALL_LOG}"
+  [[ "$output" == *"unsupported"* ]]
 }
 
 @test "setup.sh --only skills runs npx skills add per entry" {
@@ -104,6 +108,52 @@ EOF
   CLAUDE_SETUP_TOML="${CLAUDE_SKILLS_HOME}/claude-setup.toml" \
     run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only symlinks
   [ -L "${HOME}/.local/bin/claude-skills-contribute" ]
+}
+
+@test "setup.sh --only guidelines creates ~/CLAUDE.md from the repo guidelines when none exists" {
+  cd "${TMP}"  # non-repo cwd so the current-repo merge branch is a no-op
+  run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only guidelines
+  [ "$status" -eq 0 ]
+  [ -f "${HOME}/CLAUDE.md" ]
+  grep -q "Think before coding" "${HOME}/CLAUDE.md"
+  grep -q "Goal-driven execution" "${HOME}/CLAUDE.md"
+}
+
+@test "setup.sh guidelines step is additive: keeps existing content, skips sections already present" {
+  cd "${TMP}"
+  cat >"${HOME}/CLAUDE.md" <<'EOF'
+# My machine rules
+
+## Simplicity first
+my own note here
+
+## Keep secrets out of logs
+never log tokens
+EOF
+  run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only guidelines
+  [ "$status" -eq 0 ]
+  grep -q "my own note here" "${HOME}/CLAUDE.md"       # pre-existing content preserved
+  grep -q "never log tokens" "${HOME}/CLAUDE.md"
+  grep -q "Think before coding" "${HOME}/CLAUDE.md"    # missing section added
+  # the section already present is not duplicated
+  [ "$(grep -c "^## Simplicity first" "${HOME}/CLAUDE.md")" -eq 1 ]
+}
+
+@test "setup.sh guidelines step is idempotent" {
+  cd "${TMP}"
+  bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only guidelines
+  cp "${HOME}/CLAUDE.md" "${TMP}/after-first"
+  run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only guidelines
+  [ "$status" -eq 0 ]
+  diff -q "${TMP}/after-first" "${HOME}/CLAUDE.md"
+}
+
+@test "setup.sh --merge-claude-md merges guidelines into an explicit path" {
+  cd "${TMP}"
+  run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only guidelines --merge-claude-md "${TMP}/proj/CLAUDE.md"
+  [ "$status" -eq 0 ]
+  [ -f "${TMP}/proj/CLAUDE.md" ]
+  grep -q "Surgical changes" "${TMP}/proj/CLAUDE.md"
 }
 
 @test "setup.sh full run is idempotent on rerun" {

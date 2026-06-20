@@ -4,8 +4,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
-Abhijit's AI-agent skills, plugins, and tools — one repo, usable from **Claude Code**,
-**Codex**, **Copilot CLI**, and any **AGENTS.md-aware** agent.
+**Run AI coding agents longer, cheaper, and across every tool you use.**
+
+Skills, plugins, and tools for AI agents — one repo, usable from **Claude Code**,
+**Codex**, **Copilot CLI**, and any **AGENTS.md-aware** agent. Highlights: a remote
+**iOS build-and-screenshot loop** delivered to your phone, a **usage-limit
+auto-resume** orchestrator that keeps overnight runs alive (`second-wind`),
+**token-optimized CLI output** (`cartoon`), and Linear PM automation.
 
 | Plugin | What you get |
 | --- | --- |
@@ -68,18 +73,47 @@ adapters/install.sh all
 
 Idempotent — re-run after pulling updates; it prunes links for removed skills.
 
+### Cartoon (token-optimized CLI output)
+
+[`cartoon`](https://github.com/abhijitbansal/cartoon) is a companion project — a
+separate marketplace that wraps noisy CLI output (test runs, JSON CLIs) into a
+compact format for ~70% fewer input tokens. The full machine seed below installs
+it automatically; to add it on its own:
+
+```text
+# Claude Code
+/plugin marketplace add abhijitbansal/cartoon
+/plugin install cartoon@cartoon
+```
+
+```bash
+# Other agents
+npx skills add abhijitbansal/cartoon
+```
+
+The plugin's skill auto-installs the `cartoon` binary on first use, or install it
+yourself: `uv tool install cartoon` (or `pipx install cartoon` /
+`npm install -g cartoon-wrap` / `cargo install cartoon`).
+
 ## Setup (full machine seed)
 
 For a machine you own: clones the repo, installs Claude Code, marketplaces, plugins
-(including this repo's own, via a local marketplace), npx skills, dotfiles, and PATH shims.
+(including this repo's own, via a local marketplace), npx skills, dotfiles, PATH shims,
+and the shared behavioral guidelines.
 
 ```bash
 git clone https://github.com/abhijitbansal/claude-skills ~/projects/claude-skills
 bash ~/projects/claude-skills/setup/setup.sh
 ```
 
-Useful flags: `--dry-run`, `--only <step>`, `--skip-<step>`.
-Steps: `preflight claude marketplaces plugins skills dotfiles local_plugins symlinks`.
+Useful flags: `--dry-run`, `--only <step>`, `--skip-<step>`, `--merge-claude-md <path>`.
+Steps: `preflight claude marketplaces plugins skills dotfiles guidelines local_plugins symlinks`.
+
+The `guidelines` step evaluates the `CLAUDE.md` on the machine (`~/CLAUDE.md`) and on the
+repo you run setup from, then additively merges in any missing behavioral-guideline section
+from this repo's [`CLAUDE.md`](CLAUDE.md) (adapted from Andrej Karpathy's). It never clobbers
+your own content — sections already present are skipped. Point it at any other file with
+`--merge-claude-md <path>`.
 
 Snapshot the machine's current state back into the repo:
 

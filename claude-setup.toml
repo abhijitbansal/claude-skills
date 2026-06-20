@@ -18,6 +18,10 @@ repo = "JuliusBrussee/caveman"
 name = "visual-explainer-marketplace"
 repo = "nicobailon/visual-explainer"
 
+[[marketplaces]]
+name = "cartoon"
+repo = "abhijitbansal/cartoon"
+
 # User-scope plugin installs.
 [[plugins]]
 name = "claude-code-setup"
@@ -91,6 +95,10 @@ marketplace = "caveman"
 name = "visual-explainer"
 marketplace = "visual-explainer-marketplace"
 
+[[plugins]]
+name = "cartoon"
+marketplace = "cartoon"
+
 # npx-skills entries.
 [[skills]]
 source = "vercel-labs/skills"
@@ -115,6 +123,10 @@ name = "xcode-build-fixer"
 [[skills]]
 source = "zyuapp/agent-skills"
 name = "xcodegen-cli"
+
+[[skills]]
+source = "abhijitbansal/cartoon"
+name = "cartoon"
 
 [dotfiles]
 home_claude_md = "templates/home-CLAUDE.md"
