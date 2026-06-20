@@ -285,10 +285,24 @@ class ConfigAssembly(unittest.TestCase):
                          {"name": "a", "path": "/p"})
 
     def test_build_repo_entry_full(self):
+        # A per-repo claude_args is written only on an explicit override.
         e = wind.build_repo_entry("a", "/p", "--permission-mode plan",
-                                  "~/x.md")
+                                  "~/x.md", override=True)
         self.assertEqual(e["claude_args"], "--permission-mode plan")
         self.assertEqual(e["prompt_file"], "~/x.md")
+
+    def test_build_repo_entry_inherits_global_omits_args_key(self):
+        # Without override, no per-repo claude_args key is written even if a
+        # value is passed (inherit-global is the default branch).
+        e = wind.build_repo_entry("a", "/p", "--permission-mode plan",
+                                  "", override=False)
+        self.assertNotIn("claude_args", e)
+
+    def test_build_repo_entry_override_to_empty_writes_empty_key(self):
+        # Overriding to the "default" preset records claude_args:"" so key-
+        # presence resolution honors it as "no args" (not inherit-global).
+        e = wind.build_repo_entry("a", "/p", "", "", override=True)
+        self.assertEqual(e["claude_args"], "")
 
     def test_build_config_defaults_and_repos(self):
         cfg = wind.build_config([{"name": "a", "path": "/p"}], "", "")
@@ -300,6 +314,35 @@ class ConfigAssembly(unittest.TestCase):
         cfg = wind.build_config([], "go on", "https://ntfy.sh/t")
         self.assertEqual(cfg["resume_message"], "go on")
         self.assertEqual(cfg["ntfy_url"], "https://ntfy.sh/t")
+
+    def test_build_config_stores_global_claude_args(self):
+        cfg = wind.build_config([], "", "",
+                                claude_args="--permission-mode plan")
+        self.assertEqual(cfg["claude_args"], "--permission-mode plan")
+
+
+class ResolveClaudeArgs(unittest.TestCase):
+    """Phase 3: claude_args precedence by key-PRESENCE (C2)."""
+
+    def test_per_repo_key_present_wins(self):
+        args, source = wind.resolve_claude_args(
+            {"claude_args": "--repo"}, {"claude_args": "--global"})
+        self.assertEqual((args, source), ("--repo", "per-repo"))
+
+    def test_global_key_used_when_repo_key_absent(self):
+        args, source = wind.resolve_claude_args(
+            {}, {"claude_args": "--global"})
+        self.assertEqual((args, source), ("--global", "global"))
+
+    def test_explicit_empty_repo_args_honored_as_empty(self):
+        # Presence beats truthiness: "" does NOT fall through to global.
+        args, source = wind.resolve_claude_args(
+            {"claude_args": ""}, {"claude_args": "--global"})
+        self.assertEqual((args, source), ("", "per-repo"))
+
+    def test_default_when_neither_key_present(self):
+        args, source = wind.resolve_claude_args({}, {})
+        self.assertEqual((args, source), ("", "default"))
 
 
 class StripAnsi(unittest.TestCase):
@@ -549,7 +592,11 @@ def drive_wizard(texts, selects, multiselects=None, target=None,
             mock.patch.object(wind, "multiselect",
                               lambda *a, **k: next(multi_iter)), \
             mock.patch.object(wind, "scan_repos",
-                              lambda roots: list(scan_result)):
+                              lambda roots: list(scan_result)), \
+            mock.patch.object(wind, "_open_editor",
+                              lambda path, ed: None), \
+            mock.patch.object(wind, "_seed_prompt_file",
+                              lambda path, name: None):
         wind.run_wizard(args)
 
     return wind.load_existing_config(target)
@@ -567,8 +614,8 @@ class WizardHarness(unittest.TestCase):
                     "go on",         # resume message
                     "",              # ntfy url (skip)
                 ],
-                # per repo: preset pick, then editor-offer (0 = skip)
-                selects=[2, 0],      # permission preset "default"; skip editor
+                # global preset "default"; per repo: inherit global, skip editor
+                selects=[2, 0, 0],
                 multiselects=[[0]],  # pick repo #0 (alpha)
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha"))])
@@ -576,7 +623,9 @@ class WizardHarness(unittest.TestCase):
             self.assertEqual([r["name"] for r in cfg["repos"]], ["alpha"])
             self.assertEqual(cfg["repos"][0]["path"],
                              os.path.join(tmp, "alpha"))
-            self.assertNotIn("claude_args", cfg["repos"][0])  # default preset
+            # Repo inherits the global preset -> no per-repo claude_args key.
+            self.assertNotIn("claude_args", cfg["repos"][0])
+            self.assertEqual(cfg["claude_args"], "")  # global "default" preset
             # The prompt step defaults to the convention path; an empty answer
             # keeps that default, so prompt_file is wired to ~/.wind/prompts/.
             self.assertEqual(cfg["repos"][0]["prompt_file"],
@@ -596,8 +645,9 @@ class WizardHarness(unittest.TestCase):
                     "continue",                   # resume message
                     "https://ntfy.sh/topic",      # ntfy url
                 ],
-                # preset acceptEdits, then editor-offer (0 = skip)
-                selects=[0, 0],
+                # global preset "default"; per repo: override -> acceptEdits;
+                # editor-offer (0 = skip)
+                selects=[2, 1, 0, 0],
                 multiselects=[[0]],  # pick repo #0
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha"))])
@@ -621,12 +671,179 @@ class WizardHarness(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     drive_wizard(
                         texts=["~/projects", "", "", "go on", ""],
-                        selects=[2, 0],
+                        selects=[2, 0, 0],
                         multiselects=[[0]],
                         target=target,
                         scan_result=[("alpha",
                                       os.path.join(tmp, "alpha"))])
             self.assertFalse(os.path.exists(target))
+
+
+class WizardPermissionPresets(unittest.TestCase):
+    """Phase 3: global preset step + per-repo inherit/override branch."""
+
+    def test_global_preset_chosen_all_repos_inherit(self):
+        # Global preset acceptEdits; both repos inherit -> top-level
+        # claude_args set, NO per-repo claude_args keys written.
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            cfg = drive_wizard(
+                texts=[
+                    "~/projects",  # scan roots
+                    "",            # extra paths
+                    "",            # repo alpha prompt file (skip default)
+                    "",            # repo beta prompt file
+                    "continue",    # resume message
+                    "",            # ntfy
+                ],
+                # global preset acceptEdits (0);
+                # alpha: inherit (0), editor skip (0);
+                # beta:  inherit (0), editor skip (0)
+                selects=[0, 0, 0, 0, 0],
+                multiselects=[[0, 1]],
+                target=target,
+                scan_result=[("alpha", os.path.join(tmp, "alpha")),
+                             ("beta", os.path.join(tmp, "beta"))])
+
+            self.assertEqual(cfg["claude_args"],
+                             "--permission-mode acceptEdits")
+            for repo in cfg["repos"]:
+                self.assertNotIn("claude_args", repo)
+
+    def test_one_repo_overrides_only_that_repo_gets_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            cfg = drive_wizard(
+                texts=[
+                    "~/projects",  # scan roots
+                    "",            # extra paths
+                    "",            # alpha prompt file
+                    "",            # beta prompt file
+                    "continue",    # resume message
+                    "",            # ntfy
+                ],
+                # global preset default (2);
+                # alpha: override (1) -> plan preset (1), editor skip (0);
+                # beta:  inherit (0), editor skip (0)
+                selects=[2, 1, 1, 0, 0, 0],
+                multiselects=[[0, 1]],
+                target=target,
+                scan_result=[("alpha", os.path.join(tmp, "alpha")),
+                             ("beta", os.path.join(tmp, "beta"))])
+
+            self.assertEqual(cfg["claude_args"], "")  # global default
+            alpha = next(r for r in cfg["repos"] if r["name"] == "alpha")
+            beta = next(r for r in cfg["repos"] if r["name"] == "beta")
+            self.assertEqual(alpha["claude_args"], "--permission-mode plan")
+            self.assertNotIn("claude_args", beta)
+
+    def test_override_with_custom_args(self):
+        # Override -> custom preset -> typed claude_args is stored per repo.
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            cfg = drive_wizard(
+                texts=[
+                    "~/projects",      # scan roots
+                    "",                # extra paths
+                    "--dangerous",     # custom claude_args for the override
+                    "",                # prompt file
+                    "continue",        # resume message
+                    "",                # ntfy
+                ],
+                # global preset default (2);
+                # alpha: override (1) -> custom preset (3), editor skip (0)
+                selects=[2, 1, 3, 0],
+                multiselects=[[0]],
+                target=target,
+                scan_result=[("alpha", os.path.join(tmp, "alpha"))])
+
+            self.assertEqual(cfg["claude_args"], "")
+            self.assertEqual(cfg["repos"][0]["claude_args"], "--dangerous")
+
+    def test_global_custom_preset_stored_top_level(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            cfg = drive_wizard(
+                texts=[
+                    "~/projects",       # scan roots
+                    "",                 # extra paths
+                    "--global-custom",  # custom global claude_args
+                    "",                 # prompt file
+                    "continue",         # resume message
+                    "",                 # ntfy
+                ],
+                # global preset custom (3) -> typed args;
+                # alpha: inherit (0), editor skip (0)
+                selects=[3, 0, 0],
+                multiselects=[[0]],
+                target=target,
+                scan_result=[("alpha", os.path.join(tmp, "alpha"))])
+
+            self.assertEqual(cfg["claude_args"], "--global-custom")
+            self.assertNotIn("claude_args", cfg["repos"][0])
+
+
+class CmdUpArgsPrecedence(unittest.TestCase):
+    """Phase 3: cmd_up resolves claude_args by key-presence, logs the source."""
+
+    def _run(self, tmp, cfg):
+        cfg = dict(cfg)
+        cfg.setdefault("session_prefix", "wind")
+        cfg["_path"] = os.path.join(tmp, "second-wind.json")
+        cfg["startup_delay_seconds"] = 0
+        rec = _TmuxRecorder(existing=[])
+        logs = []
+        args = mock.Mock()
+        args.no_watch = True
+        with mock.patch.object(wind, "tmux", rec), \
+                mock.patch.object(wind, "log",
+                                  lambda msg, **k: logs.append(msg)):
+            wind.cmd_up(cfg, args)
+        send_keys = [c for c in rec.calls
+                     if c and c[0] == "send-keys" and "Enter" in c]
+        # First send-keys per session is the launch command.
+        launch = send_keys[0]
+        return launch, logs
+
+    def test_uses_per_repo_args_when_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = dict(wind.DEFAULT_CONFIG)
+            cfg["claude_args"] = "--global"
+            cfg["repos"] = [{"name": "x", "path": tmp,
+                             "claude_args": "--repo"}]
+            launch, logs = self._run(tmp, cfg)
+            self.assertIn("--repo", " ".join(launch))
+            self.assertNotIn("--global", " ".join(launch))
+
+    def test_falls_back_to_global_when_repo_key_absent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = dict(wind.DEFAULT_CONFIG)
+            cfg["claude_args"] = "--global"
+            cfg["repos"] = [{"name": "x", "path": tmp}]
+            launch, logs = self._run(tmp, cfg)
+            self.assertIn("--global", " ".join(launch))
+
+    def test_explicit_empty_repo_args_honored_as_empty(self):
+        # Per-repo claude_args:"" must NOT fall through to the global value;
+        # key-presence wins, so the launch command carries no args.
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = dict(wind.DEFAULT_CONFIG)
+            cfg["claude_args"] = "--global"
+            cfg["repos"] = [{"name": "x", "path": tmp, "claude_args": ""}]
+            launch, logs = self._run(tmp, cfg)
+            self.assertNotIn("--global", " ".join(launch))
+            # The command is just the bare claude binary (plus tmux framing).
+            self.assertNotIn("--", " ".join(launch).replace("send-keys", ""))
+
+    def test_logs_which_source_supplied_args(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = dict(wind.DEFAULT_CONFIG)
+            cfg["claude_args"] = "--global"
+            cfg["repos"] = [{"name": "x", "path": tmp,
+                             "claude_args": "--repo"}]
+            _, logs = self._run(tmp, cfg)
+            self.assertTrue(any("per-repo" in m for m in logs),
+                            f"expected an args-source log, got {logs}")
 
 
 class _TmuxRecorder:

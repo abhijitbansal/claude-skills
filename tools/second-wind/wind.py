@@ -376,6 +376,36 @@ PERMISSION_PRESETS = [
 ]
 
 
+def pick_permission_preset(title):
+    """Ask for a permission preset; returns claude_args, or None on quit.
+
+    The "custom" choice prompts for a free-form claude_args string. The
+    "default" choice resolves to "" (no args).
+    """
+    pick = select(title, [label for label, _ in PERMISSION_PRESETS])
+    if pick is None:
+        return None
+    claude_args = PERMISSION_PRESETS[pick][1]
+    if claude_args is None:
+        claude_args = prompt_text("claude_args", default="")
+    return claude_args
+
+
+def resolve_claude_args(repo, cfg):
+    """Resolve a repo's claude_args by key-PRESENCE, not truthiness.
+
+    Per-repo `claude_args` (if the key exists) wins over top-level
+    `claude_args` (if the key exists), which wins over "" (no args). An
+    explicit per-repo `claude_args: ""` is therefore honored as empty,
+    distinct from "unset → inherit global". Returns (args, source).
+    """
+    if "claude_args" in repo:
+        return repo["claude_args"], "per-repo"
+    if "claude_args" in cfg:
+        return cfg["claude_args"], "global"
+    return "", "default"
+
+
 def scan_repos(roots):
     """[(name, path)] for every <root>/<child>/.git, name-sorted per root."""
     found = []
@@ -390,13 +420,22 @@ def scan_repos(roots):
     return found
 
 
-def build_repo_entry(name, path, claude_args, prompt_file, prompt=""):
+def build_repo_entry(name, path, claude_args, prompt_file, prompt="",
+                     override=False):
+    """Assemble a repo config entry.
+
+    A per-repo `claude_args` key is written only when this repo explicitly
+    overrides the global preset (`override=True`) — including an override to
+    the empty "default" preset, which records `claude_args: ""` so key-
+    presence resolution honors it as "no args" rather than inheriting global.
+    When inheriting (`override=False`), no `claude_args` key is written.
+    """
     entry = {"name": name, "path": path}
     if prompt:
         entry["prompt"] = prompt
     elif prompt_file:
         entry["prompt_file"] = prompt_file
-    if claude_args:
+    if override:
         entry["claude_args"] = claude_args
     return entry
 
@@ -469,11 +508,12 @@ def _seed_prompt_file(path, repo_name):
     os.chmod(path, 0o600)
 
 
-def build_config(repos, resume_message, ntfy_url):
+def build_config(repos, resume_message, ntfy_url, claude_args=""):
     cfg = dict(DEFAULT_CONFIG)
     cfg["repos"] = repos
     cfg["resume_message"] = resume_message or DEFAULT_CONFIG["resume_message"]
     cfg["ntfy_url"] = ntfy_url or ""
+    cfg["claude_args"] = claude_args
     return cfg
 
 
@@ -544,17 +584,32 @@ def run_wizard(args):
     if not chosen:
         die("no repos selected — nothing to configure")
 
+    print(f"\n{style('Global permission preset', 'bold')} "
+          f"{style('(applies to every repo unless overridden)', 'dim')}")
+    global_args = pick_permission_preset("Permission preset for all repos")
+    if global_args is None:
+        log("wizard cancelled", glyph="○", color="dim")
+        return
+
     repos = []
     for name, path in chosen:
         print(f"\n{style(name, 'bold')} {style(path, 'dim')}")
-        pick = select("Permission preset",
-                      [label for label, _ in PERMISSION_PRESETS])
-        if pick is None:
+        override_pick = select(
+            "Permissions for this repo",
+            ["Use the global preset",
+             "Set a custom override for this repo"])
+        if override_pick is None:
             log("wizard cancelled", glyph="○", color="dim")
             return
-        claude_args = PERMISSION_PRESETS[pick][1]
-        if claude_args is None:
-            claude_args = prompt_text("claude_args", default="")
+        if override_pick == 1:
+            claude_args = pick_permission_preset("Override preset for this repo")
+            if claude_args is None:
+                log("wizard cancelled", glyph="○", color="dim")
+                return
+            override = True
+        else:
+            claude_args = ""
+            override = False
         try:
             convention = _prompt_path(name)
         except ValueError:
@@ -562,7 +617,8 @@ def run_wizard(args):
         prompt_file = prompt_text(
             "Prompt file sent on `wind up` (empty to skip)",
             default=convention)
-        repos.append(build_repo_entry(name, path, claude_args, prompt_file))
+        repos.append(build_repo_entry(name, path, claude_args, prompt_file,
+                                      override=override))
         if prompt_file:
             open_pick = select(
                 f"Open {prompt_file} in your editor now?",
@@ -581,14 +637,19 @@ def run_wizard(args):
         log("must start with http:// or https://", glyph="!", color="yellow")
         ntfy = prompt_text("ntfy.sh topic URL (empty to skip)", default="")
 
-    cfg = build_config(repos, resume_message, ntfy)
+    cfg = build_config(repos, resume_message, ntfy, claude_args=global_args)
     atomic_write_json(target, cfg, mode=0o644)
 
     print()
     log(f"wrote {target}", glyph="✓", color="green")
+    log(f"global: {global_args or 'default permissions'}", glyph="✓",
+        color="green")
     for r in repos:
-        preset = r.get("claude_args", "") or "default permissions"
-        log(f"{r['name']}: {preset}", glyph="✓", color="green")
+        if "claude_args" in r:
+            preset = r["claude_args"] or "default permissions"
+            log(f"{r['name']}: {preset} (override)", glyph="✓", color="green")
+        else:
+            log(f"{r['name']}: inherits global", glyph="✓", color="green")
     print(f"\n  Next: {style('wind up', 'bold')} "
           f"(starts your sessions + the watcher) — then "
           f"{style('wind dash', 'bold')} for the live view\n")
@@ -1054,11 +1115,14 @@ def cmd_up(cfg, args):
         if not os.path.isdir(path):
             die(f"{name}: repo path does not exist: {path}")
         claude_cmd = repo.get("claude_cmd") or cfg["claude_cmd"]
-        claude_args = repo.get("claude_args") or cfg["claude_args"]
+        # Key-PRESENCE precedence (C2): an explicit per-repo claude_args:""
+        # is honored as empty, not treated as unset → inherit global.
+        claude_args, args_source = resolve_claude_args(repo, cfg)
         command = claude_cmd + (f" {claude_args}" if claude_args else "")
         tmux("new-session", "-d", "-s", name, "-c", path)
         tmux("send-keys", "-t", f"={name}:", command, "Enter")
-        log(f"{name}: launched `{command}` in {path}", glyph="→", color="cyan")
+        log(f"{name}: launched `{command}` in {path} "
+            f"({args_source} args)", glyph="→", color="cyan")
         started.append((repo, name))
 
     prompts = [(r, n) for r, n in started
