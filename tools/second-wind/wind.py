@@ -1272,8 +1272,17 @@ def make_dash_handler(cfg, token, template):
                 self._send(400, '{"error": "bad json"}')
                 return
             if self.path == "/api/resume":
-                sent = resume_sessions(cfg, cfg["repos"])
-                clear_state()
+                name = body.get("session")
+                if name is not None:
+                    if not valid_session(cfg, name):
+                        self._send(400, '{"error": "bad session"}')
+                        return
+                    repos = [r for r in cfg["repos"]
+                             if session_name(cfg, r) == name]
+                    sent = resume_sessions(cfg, repos)
+                else:
+                    sent = resume_sessions(cfg, cfg["repos"])
+                    clear_state()
                 self._send(200, json.dumps({"resumed": len(sent)}))
             elif self.path == "/api/send":
                 name = body.get("session")

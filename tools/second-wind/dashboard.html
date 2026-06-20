@@ -1039,9 +1039,10 @@ els.modalInput.addEventListener("keydown", (ev) => {
 });
 
 els.modalResume.addEventListener("click", async () => {
+  if (!modalName) return;
   els.modalResume.disabled = true;
   try {
-    await apiPost("/api/resume", {});
+    await apiPost("/api/resume", { session: modalName });
     showToast("resume sent", "ok");
     refresh();
     fetchModalPane();

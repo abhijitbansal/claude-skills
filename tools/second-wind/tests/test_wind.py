@@ -373,7 +373,7 @@ class DashApi(unittest.TestCase):
             self.calls.append(("resume", tuple(
                 wind.session_name(cfg, r) for r in repos)))
             or [wind.session_name(cfg, r) for r in repos])
-        wind.clear_state = lambda: None
+        wind.clear_state = lambda: self.calls.append(("clear_state",))
         wind.load_state = lambda: {}
         handler = wind.make_dash_handler(self.cfg, self.token,
                                          "<html>{{TOKEN}}</html>")
@@ -452,6 +452,23 @@ class DashApi(unittest.TestCase):
         status, _ = self._req("POST", "/api/resume", {}, token="tok123")
         self.assertEqual(status, 200)
         self.assertIn(("resume", ("wind-demo",)), self.calls)
+        self.assertIn(("clear_state",), self.calls)
+
+    def test_resume_single_session_does_not_clear_state(self):
+        self.cfg["repos"].append({"name": "other", "path": "/tmp/other"})
+        status, data = self._req("POST", "/api/resume",
+                                 {"session": "wind-demo"}, token="tok123")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(data)["resumed"], 1)
+        self.assertIn(("resume", ("wind-demo",)), self.calls)
+        self.assertNotIn(("resume", ("wind-other",)), self.calls)
+        self.assertNotIn(("clear_state",), self.calls)
+
+    def test_resume_unknown_session_rejected(self):
+        status, _ = self._req("POST", "/api/resume", {"session": "bogus"},
+                              token="tok123")
+        self.assertEqual(status, 400)
+        self.assertEqual(self.calls, [])
 
     def test_unknown_route_404(self):
         status, _ = self._req("GET", "/etc/passwd")
