@@ -10,6 +10,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location(
     "wind",
@@ -445,6 +446,180 @@ class DashApi(unittest.TestCase):
                 break
         s.close()
         self.assertIn(b"400", response)
+
+
+class AtomicWriteJson(unittest.TestCase):
+    def test_writes_json_with_trailing_newline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "out.json")
+            wind.atomic_write_json(path, {"a": 1})
+            with open(path) as f:
+                raw = f.read()
+            self.assertEqual(json.loads(raw), {"a": 1})
+            self.assertTrue(raw.endswith("\n"))
+
+    def test_creates_parent_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "nested", "deep", "out.json")
+            wind.atomic_write_json(path, {"x": True})
+            self.assertEqual(wind.load_existing_config(path), {"x": True})
+
+    def test_honors_requested_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "out.json")
+            wind.atomic_write_json(path, {"a": 1}, mode=0o600)
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+
+    def test_default_mode_is_0600(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "out.json")
+            wind.atomic_write_json(path, {"a": 1})
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+
+    def test_interrupted_write_leaves_prior_config_intact(self):
+        # Arrange: an existing, valid config on disk.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "config.json")
+            wind.atomic_write_json(path, {"session_prefix": "wind",
+                                          "repos": [{"name": "x",
+                                                     "path": "/tmp"}]})
+            before = wind.load_existing_config(path)
+
+            # Act: a write that blows up after the temp file is created but
+            # before os.replace runs (simulating a crash mid-write).
+            real_replace = os.replace
+
+            def boom(src, dst):
+                raise RuntimeError("crash mid-write")
+
+            with mock.patch("os.replace", boom):
+                with self.assertRaises(RuntimeError):
+                    wind.atomic_write_json(path, {"session_prefix": "BROKEN"})
+
+            # Assert: the prior file is untouched and still valid JSON, and no
+            # stray temp files were left behind in the directory.
+            self.assertEqual(real_replace, os.replace)  # patch unwound
+            self.assertEqual(wind.load_existing_config(path), before)
+            leftovers = [n for n in os.listdir(tmp)
+                         if n.startswith(".wind-")]
+            self.assertEqual(leftovers, [])
+
+    def test_save_state_routes_through_atomic_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            new = os.path.join(tmp, "state.json")
+            orig = wind.STATE_PATH
+            wind.STATE_PATH = new
+            try:
+                wind.save_state({"reset_at": 7})
+                self.assertEqual(wind.load_state(), {"reset_at": 7})
+                self.assertEqual(os.stat(new).st_mode & 0o777, 0o600)
+            finally:
+                wind.STATE_PATH = orig
+
+
+def drive_wizard(texts, selects, multiselects=None, target=None,
+                 scan_result=()):
+    """Run run_wizard end to end with scripted answers.
+
+    texts:        strings returned in order by each prompt_text() call.
+    selects:      indices returned in order by each select() call (a
+                  menu_select pick); None entries simulate a quit.
+    multiselects: lists returned in order by each multiselect() call.
+    target:       the path run_wizard writes to (via args.config).
+    scan_result:  what the patched scan_repos returns.
+
+    Returns the parsed config dict written by the wizard (or {} if none).
+    """
+    texts_iter = iter(texts)
+    selects_iter = iter(selects)
+    multi_iter = iter(multiselects or [])
+    args = mock.Mock()
+    args.config = target
+
+    def fake_prompt_text(label, default="", input_fn=None):
+        try:
+            raw = next(texts_iter)
+        except StopIteration:
+            return default
+        return raw or default
+
+    with mock.patch.object(wind, "prompt_text", fake_prompt_text), \
+            mock.patch.object(wind, "select",
+                              lambda *a, **k: next(selects_iter)), \
+            mock.patch.object(wind, "multiselect",
+                              lambda *a, **k: next(multi_iter)), \
+            mock.patch.object(wind, "scan_repos",
+                              lambda roots: list(scan_result)):
+        wind.run_wizard(args)
+
+    return wind.load_existing_config(target)
+
+
+class WizardHarness(unittest.TestCase):
+    def test_scripted_run_writes_expected_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            cfg = drive_wizard(
+                texts=[
+                    "~/projects",    # scan roots
+                    "",              # extra repo paths (none)
+                    "",              # prompt file (skip)
+                    "go on",         # resume message
+                    "",              # ntfy url (skip)
+                ],
+                selects=[2],         # permission preset: "default" (index 2)
+                multiselects=[[0]],  # pick repo #0 (alpha)
+                target=target,
+                scan_result=[("alpha", os.path.join(tmp, "alpha"))])
+
+            self.assertEqual([r["name"] for r in cfg["repos"]], ["alpha"])
+            self.assertEqual(cfg["repos"][0]["path"],
+                             os.path.join(tmp, "alpha"))
+            self.assertNotIn("claude_args", cfg["repos"][0])  # default preset
+            self.assertEqual(cfg["resume_message"], "go on")
+            self.assertEqual(cfg["ntfy_url"], "")
+
+    def test_scripted_run_with_custom_permission_and_prompt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            cfg = drive_wizard(
+                texts=[
+                    "~/projects",                 # scan roots
+                    "",                           # extra paths
+                    "~/.wind/prompts/alpha.md",   # prompt file
+                    "continue",                   # resume message
+                    "https://ntfy.sh/topic",      # ntfy url
+                ],
+                selects=[0],         # preset: acceptEdits (index 0)
+                multiselects=[[0]],  # pick repo #0
+                target=target,
+                scan_result=[("alpha", os.path.join(tmp, "alpha"))])
+
+            repo = cfg["repos"][0]
+            self.assertEqual(repo["claude_args"],
+                             "--permission-mode acceptEdits")
+            self.assertEqual(repo["prompt_file"], "~/.wind/prompts/alpha.md")
+            self.assertEqual(cfg["ntfy_url"], "https://ntfy.sh/topic")
+
+    def test_wizard_write_is_atomic(self):
+        # Proves run_wizard routes through atomic_write_json: a crash at
+        # os.replace leaves no partial config and surfaces the error.
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+
+            def boom(src, dst):
+                raise RuntimeError("crash mid-write")
+
+            with mock.patch("os.replace", boom):
+                with self.assertRaises(RuntimeError):
+                    drive_wizard(
+                        texts=["~/projects", "", "", "go on", ""],
+                        selects=[2],
+                        multiselects=[[0]],
+                        target=target,
+                        scan_result=[("alpha",
+                                      os.path.join(tmp, "alpha"))])
+            self.assertFalse(os.path.exists(target))
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 
@@ -85,6 +86,31 @@ def log(msg, glyph=None, color="cyan"):
 def die(msg, code=1):
     print(f"wind: {msg}", file=sys.stderr)
     sys.exit(code)
+
+
+def atomic_write_json(path, obj, mode=0o600):
+    """Write JSON to a temp file in the same dir, fsync, os.replace.
+
+    os.replace is atomic on POSIX, so a crash mid-write or a concurrent
+    reader (watcher/dashboard) never sees a truncated config/state file.
+    """
+    d = os.path.dirname(path) or "."
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".wind-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(obj, f, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 # -------------------------------------------------------------------- ui ----
@@ -472,10 +498,7 @@ def run_wizard(args):
         ntfy = prompt_text("ntfy.sh topic URL (empty to skip)", default="")
 
     cfg = build_config(repos, resume_message, ntfy)
-    os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
-    with open(target, "w") as f:
-        json.dump(cfg, f, indent=2)
-        f.write("\n")
+    atomic_write_json(target, cfg, mode=0o644)
 
     print()
     log(f"wrote {target}", glyph="✓", color="green")
@@ -547,9 +570,7 @@ def load_state():
 def save_state(state):
     path = state_file()
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(state, f, indent=2)
-    os.chmod(path, 0o600)
+    atomic_write_json(path, state, mode=0o600)
 
 
 def clear_state():
@@ -858,11 +879,8 @@ def write_starter_config(args):
     path = os.path.expanduser(args.config or CONFIG_PATHS[0])
     if os.path.exists(path) and not args.force:
         die(f"{path} already exists (use --force to overwrite)")
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     sample = {k: v for k, v in DEFAULT_CONFIG.items()}
-    with open(path, "w") as f:
-        json.dump(sample, f, indent=2)
-        f.write("\n")
+    atomic_write_json(path, sample, mode=0o644)
     print(f"Wrote starter config to {path} — edit 'repos' and run `wind up`.")
 
 
