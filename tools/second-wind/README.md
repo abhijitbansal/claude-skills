@@ -47,10 +47,12 @@ Requirements: Python 3.9+, tmux, Claude Code CLI logged in.
 
 ```sh
 wind init            # interactive wizard: scans dirs, lets you pick repos,
-                     # choose permission presets, and writes config for you
+                     # choose a global permission preset + per-repo overrides,
+                     # pick an agent, and writes config for you
                      # (use --defaults to get the old non-interactive starter file)
-wind up              # start a tmux session per repo, launch Claude Code,
-                     # send each repo's initial prompt file, and auto-spawn
+wind prompt myrepo   # optional: author/edit a repo's first prompt in $EDITOR
+wind up              # start a tmux session per repo, launch the agent,
+                     # send each repo's initial prompt, and auto-spawn
                      # the watcher in a detached tmux session
 wind dash            # live localhost view of every session
 ```
@@ -60,14 +62,61 @@ session (one watcher per machine; on a Mac it self-caffeinates to prevent
 sleep). Pass `--no-watch` to skip it and run `wind watch` yourself. `wind down`
 reaps the watcher along with the repo sessions.
 
+## Authoring prompts
+
+`wind prompt <repo>` opens that repo's first-prompt file in your editor, sent
+verbatim into the session on the next `wind up`. By convention prompt files
+live at `~/.wind/prompts/<repo>.md`; if the repo has neither an inline `prompt`
+nor a `prompt_file`, `wind prompt` derives the convention path, seeds it with a
+template, opens it, and on a clean close wires `prompt_file` into your config
+(written atomically). For one-liners, give a repo an inline `prompt` string in
+the config instead — it wins over `prompt_file`.
+
+The editor is `--editor`, else `$EDITOR`, else `vi`/`nano`. `$EDITOR` is parsed
+with `shlex`, so `EDITOR="code --wait"` or `"emacsclient -nw"` work; `wind`
+never invokes a shell.
+
+## Permissions
+
+The wizard asks for a **global permission preset** (stored as top-level
+`claude_args`) that applies to every repo, then offers a per-repo override.
+A repo that inherits the global preset carries no `claude_args` key; only an
+explicit override writes one. Per-repo `claude_args` (when the key is present)
+wins over the global preset; an explicit `claude_args: ""` is honored as "no
+args", distinct from "unset → inherit global".
+
+## Agents (Claude + GitHub Copilot)
+
+The `agent` key selects a preset — `claude` (the default) or `copilot` —
+top-level with an optional per-repo override. A config with no `agent` key
+behaves byte-for-byte as before.
+
+- **claude** — watched: limit detection + auto-resume, exactly as today.
+- **copilot** — launched with the `copilot` CLI and **shown in the dashboard,
+  but the watcher skips it**. A Copilot session is never scanned for limits and
+  never auto-resumed; its cards show `running`/`idle`/`not running` but never a
+  reset countdown. You handle its rate limits yourself. Initial prompts (from
+  `wind up`) and dashboard sends still work, and a manual `wind resume` /
+  dashboard "resume all" nudges it with its own resume message.
+
+The launch binary is overridable per repo via `claude_cmd` if a GA Copilot
+build renames the command.
+
 ## Dashboard
 
 `wind dash` serves a live dashboard at `http://127.0.0.1:8787` — one card per
-session with state, reset countdown, and the last 30 lines of each pane, plus
-resume-all / send-message / kill actions. Localhost-only; every action
-requires a per-run token embedded in the page, so other websites can't POST
-into your sessions. `--port` to change port, `--no-browser` to skip
-auto-open.
+session with state, reset countdown, and the last 30 lines of each pane, in
+**full color**, plus resume-all / send-message / kill actions. Click a card to
+**expand it into a full-height modal**: a large colorized scrollback (up to
+1000 lines, fetched from the token-gated `/api/pane`) and a roomy send box for
+prompts and answers — easier to read and type on a small screen. Escape or the
+close button dismisses it. Localhost-only; every action — and the modal's
+scrollback fetch — requires a per-run token embedded in the page, so other
+websites can't reach your sessions. `--port` to change port, `--no-browser` to
+skip auto-open.
+
+Copilot sessions appear as cards too (state only, no reset countdown) and can
+be sent prompts, but are never auto-resumed by the watcher.
 
 Then check in whenever you like:
 
@@ -89,12 +138,13 @@ yourself, use `wind watch --detach`.
 `~/.wind/state.json` (legacy `~/.local/state/second-wind/state.json` is still
 read on upgrade and cleared at both locations).
 
-```json
+```jsonc
 {
   "session_prefix": "wind",
-  "claude_cmd": "claude",
-  "claude_args": "",
-  "resume_message": "continue",
+  "agent": "claude",                 // default agent: "claude" | "copilot"
+  "claude_cmd": "claude",            // launch binary (overridable per repo)
+  "claude_args": "",                 // global permission/args preset
+  "resume_message": "continue",      // claude resume nudge (copilot uses its preset)
   "resume_buffer_seconds": 120,
   "poll_interval_seconds": 30,
   "resume_cooldown_seconds": 600,
@@ -102,32 +152,50 @@ read on upgrade and cleared at both locations).
   "capture_lines": 120,
   "caffeinate": true,
   "ntfy_url": "",
-  "limit_patterns": [],
+  "limit_patterns": [],              // appended to the RESOLVED agent's patterns
   "repos": [
     {
-      "name": "myrepo",
-      "path": "~/code/myrepo",
-      "prompt_file": "~/prompts/myrepo.md",
-      "claude_args": "--permission-mode acceptEdits"
+      "name": "api",
+      "path": "~/code/api",
+      "agent": "claude",             // optional per-repo override
+      "claude_args": "--permission-mode acceptEdits",
+      "prompt_file": "~/.wind/prompts/api.md"   // first prompt sent on `wind up`
+    },
+    {
+      "name": "web",
+      "path": "~/code/web",
+      "prompt": "continue the refactor; run tests"   // inline first prompt (wins over prompt_file)
+    },
+    {
+      "name": "docs",
+      "path": "~/code/docs",
+      "agent": "copilot"             // launched + shown; NOT auto-resumed
     }
   ]
 }
 ```
 
+New keys vs earlier versions: `agent` (top-level + per-repo) and inline
+`prompt` (per-repo). All optional; absent → today's behavior.
+
 | Key | Meaning |
 | --- | --- |
-| `session_prefix` | tmux sessions are named `<prefix>-<repo name>` |
-| `claude_cmd` / `claude_args` | command used to launch Claude Code; both can be overridden per repo |
-| `resume_message` | text typed into each paused session after the limit resets |
+| `session_prefix` | tmux sessions are named `<prefix>-<repo name>`; the watcher runs in `<prefix>-watcher` |
+| `agent` | default agent — `claude` (watched + auto-resumed) or `copilot` (launched + shown, never auto-resumed); overridable per repo |
+| `claude_cmd` / `claude_args` | command + args used to launch the agent; both can be overridden per repo. `claude_args` is the **global permission preset** |
+| `resume_message` | text typed into each paused **claude** session after the limit resets (copilot uses its preset's own message) |
 | `resume_buffer_seconds` | extra wait after the parsed reset time before resuming |
 | `poll_interval_seconds` | how often the watcher captures panes |
 | `resume_cooldown_seconds` | after resuming a session, ignore limit messages still visible in its scrollback for this long |
-| `startup_delay_seconds` | wait after launching Claude Code before sending the initial prompt |
+| `startup_delay_seconds` | wait after launching the agent before sending the initial prompt |
 | `capture_lines` | how many trailing pane lines to scan |
 | `caffeinate` | on macOS, keep the machine awake while `wind watch` runs (`caffeinate -dims`) |
 | `ntfy_url` | optional; POST a notification here when the limit hits and when sessions resume (works with [ntfy.sh](https://ntfy.sh) topics) |
-| `limit_patterns` | extra regexes tried *before* the built-ins (see below) |
-| `repos[].prompt_file` | optional file whose contents are sent as the first prompt by `wind up` |
+| `limit_patterns` | extra regexes tried *before* the **resolved agent's** built-ins (see below); appended to the resolved set, not a fixed Claude append |
+| `repos[].agent` | optional per-repo override of the top-level `agent` |
+| `repos[].claude_args` | optional per-repo permission override; present → wins over the global preset (explicit `""` honored as "no args") |
+| `repos[].prompt_file` | optional file whose contents are sent as the first prompt by `wind up` (convention `~/.wind/prompts/<repo>.md`; author with `wind prompt`) |
+| `repos[].prompt` | optional inline first-prompt string for one-liners; wins over `prompt_file` |
 
 ## How limit detection works
 
@@ -149,6 +217,12 @@ When a limit is seen, the watcher records one account-level reset clock
 (the latest reset time seen across sessions), waits until
 `reset + resume_buffer_seconds`, then types `resume_message` into every
 paused session.
+
+Only repos whose resolved agent is **watched** (`claude`) are scanned and
+auto-resumed. `copilot` repos are skipped entirely — never matched against
+limit patterns, never auto-resumed — and `limit_patterns` you add are appended
+to the *resolved* agent's set, so they don't leak Claude's regexes onto an
+unwatched agent.
 
 ## Testing without burning usage
 
@@ -176,24 +250,40 @@ Unit tests for the parser: `python3 -m unittest discover tests`.
 
 ## Security model
 
-- `second-wind.json` is trusted input. `claude_cmd`, `claude_args`, and
-  `limit_patterns` are executed/compiled exactly as written — never point
-  `wind` at a config file you did not write yourself.
-- Prompt files are typed into Claude Code sessions verbatim, with the same
-  trust level as typing them by hand.
+- `second-wind.json` is trusted input. `claude_cmd`, `claude_args`,
+  `limit_patterns`, and prompt files are executed/compiled/typed exactly as
+  written — never point `wind` at a config file you did not write yourself.
+- Prompt files are typed into agent sessions verbatim, with the same trust
+  level as typing them by hand.
+- `wind prompt` never invokes a shell. `$EDITOR` is parsed with `shlex.split`
+  and exec'd as an argv list (no `shell=True`, no `os.system`), the first token
+  is validated with `shutil.which`, and the repo→filename mapping is validated
+  as a single path component (names containing `/`, `..`, or path separators
+  are rejected) so a repo name can't traverse or inject.
+- Config and state writes are **atomic**: each is written to a temp file in the
+  same directory, fsynced, then `os.replace`d into place. A crash mid-write — or
+  a concurrent watcher/dashboard read — never sees a truncated JSON file. State
+  keeps `0600`; config files keep `0644`.
 - `ntfy_url` must start with `http://` or `https://`. Notifications carry
   only session counts and reset times — never repo content.
-- The watcher's state file (`~/.wind/state.json`) is written with `0600`
-  permissions.
 - The dashboard binds `127.0.0.1` only and gates every action behind a
   per-run CSRF token (generated with `secrets.token_hex(16)` at startup,
-  embedded in the served page, required on every POST via `X-Wind-Token`).
-  The handler also enforces a Host-header allowlist to block DNS-rebinding
-  attacks from other sites on the same machine.
-- `/api/status` is intentionally unauthenticated — it is reachable only from
-  localhost and cross-origin reads are blocked by the browser's same-origin
-  policy (no `Access-Control-Allow-Origin` header is set). The token gates
-  the write actions (`/api/send`, `/api/kill`, `/api/resume`).
+  embedded in the served page, required via `X-Wind-Token`). The handler also
+  enforces a Host-header allowlist to block DNS-rebinding attacks from other
+  sites on the same machine.
+- `/api/status` is intentionally unauthenticated — it returns only a 30-line
+  pane tail, is reachable only from localhost, and cross-origin reads are
+  blocked by the browser's same-origin policy (no `Access-Control-Allow-Origin`
+  header is set). The token gates the write actions (`/api/send`, `/api/kill`,
+  `/api/resume`) **and** the modal's full-scrollback read, `/api/pane`.
+- `/api/pane` (the expand modal's source) requires `X-Wind-Token` — unlike the
+  tokenless tail, it returns up to 1000 lines of scrollback that can include
+  secrets, file contents, and prompts; a missing/bad token returns 401. It
+  validates the `session` name, clamps `lines`, and never echoes pane content
+  in an error body. The server emits only allowlisted SGR color/style codes
+  (truecolor and out-of-palette 256-color are stripped); the client
+  integer-parses each code, only ever sets known-literal CSS classes, and puts
+  pane text into the DOM via `textContent`/`createTextNode` — never `innerHTML`.
 - `/api/send` types text directly into a session's tmux pane. For sessions
   running with `--permission-mode acceptEdits`, sent text is an instruction
   the agent can act on without a permission prompt. Treat the dashboard
