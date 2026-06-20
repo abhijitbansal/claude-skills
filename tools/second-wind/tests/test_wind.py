@@ -368,9 +368,11 @@ class DashApi(unittest.TestCase):
         wind.send_text = (lambda name, text:
                           self.calls.append(("send", name, text)))
         wind.tmux = lambda *a, **k: self.calls.append(("tmux",) + a)
-        wind.resume_sessions = (lambda cfg, names:
-                                self.calls.append(("resume", tuple(names)))
-                                or list(names))
+        wind.resume_sessions = (
+            lambda cfg, repos:
+            self.calls.append(("resume", tuple(
+                wind.session_name(cfg, r) for r in repos)))
+            or [wind.session_name(cfg, r) for r in repos])
         wind.clear_state = lambda: None
         wind.load_state = lambda: {}
         handler = wind.make_dash_handler(self.cfg, self.token,
@@ -614,8 +616,9 @@ class WizardHarness(unittest.TestCase):
                     "go on",         # resume message
                     "",              # ntfy url (skip)
                 ],
-                # global preset "default"; per repo: inherit global, skip editor
-                selects=[2, 0, 0],
+                # global preset "default"; per repo: inherit global (0),
+                # agent claude (0), skip editor (0)
+                selects=[2, 0, 0, 0],
                 multiselects=[[0]],  # pick repo #0 (alpha)
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha"))])
@@ -645,9 +648,9 @@ class WizardHarness(unittest.TestCase):
                     "continue",                   # resume message
                     "https://ntfy.sh/topic",      # ntfy url
                 ],
-                # global preset "default"; per repo: override -> acceptEdits;
-                # editor-offer (0 = skip)
-                selects=[2, 1, 0, 0],
+                # global preset "default"; per repo: override -> acceptEdits (0);
+                # agent claude (0); editor-offer (0 = skip)
+                selects=[2, 1, 0, 0, 0],
                 multiselects=[[0]],  # pick repo #0
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha"))])
@@ -671,7 +674,7 @@ class WizardHarness(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     drive_wizard(
                         texts=["~/projects", "", "", "go on", ""],
-                        selects=[2, 0, 0],
+                        selects=[2, 0, 0, 0],
                         multiselects=[[0]],
                         target=target,
                         scan_result=[("alpha",
@@ -697,9 +700,9 @@ class WizardPermissionPresets(unittest.TestCase):
                     "",            # ntfy
                 ],
                 # global preset acceptEdits (0);
-                # alpha: inherit (0), editor skip (0);
-                # beta:  inherit (0), editor skip (0)
-                selects=[0, 0, 0, 0, 0],
+                # alpha: inherit (0), agent claude (0), editor skip (0);
+                # beta:  inherit (0), agent claude (0), editor skip (0)
+                selects=[0, 0, 0, 0, 0, 0, 0],
                 multiselects=[[0, 1]],
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha")),
@@ -723,9 +726,10 @@ class WizardPermissionPresets(unittest.TestCase):
                     "",            # ntfy
                 ],
                 # global preset default (2);
-                # alpha: override (1) -> plan preset (1), editor skip (0);
-                # beta:  inherit (0), editor skip (0)
-                selects=[2, 1, 1, 0, 0, 0],
+                # alpha: override (1) -> plan preset (1), agent claude (0),
+                #        editor skip (0);
+                # beta:  inherit (0), agent claude (0), editor skip (0)
+                selects=[2, 1, 1, 0, 0, 0, 0, 0],
                 multiselects=[[0, 1]],
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha")),
@@ -751,8 +755,9 @@ class WizardPermissionPresets(unittest.TestCase):
                     "",                # ntfy
                 ],
                 # global preset default (2);
-                # alpha: override (1) -> custom preset (3), editor skip (0)
-                selects=[2, 1, 3, 0],
+                # alpha: override (1) -> custom preset (3), agent claude (0),
+                #        editor skip (0)
+                selects=[2, 1, 3, 0, 0],
                 multiselects=[[0]],
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha"))])
@@ -773,8 +778,8 @@ class WizardPermissionPresets(unittest.TestCase):
                     "",                 # ntfy
                 ],
                 # global preset custom (3) -> typed args;
-                # alpha: inherit (0), editor skip (0)
-                selects=[3, 0, 0],
+                # alpha: inherit (0), agent claude (0), editor skip (0)
+                selects=[3, 0, 0, 0],
                 multiselects=[[0]],
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha"))])
@@ -1604,6 +1609,300 @@ class GetPaneExtended(unittest.TestCase):
         self.assertNotIn("38;2", out)
         self.assertIn("red", out)
         self.assertIn("true", out)
+
+
+class ResolveAgentPrecedence(unittest.TestCase):
+    """Phase 5 (C2): one assertion per cell of the key-presence precedence."""
+
+    def _cfg(self, **over):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg.update(over)
+        return cfg
+
+    def test_defaults_to_claude_when_no_agent_keys(self):
+        agent = wind.resolve_agent({}, self._cfg())
+        self.assertEqual(agent["name"], "claude")
+        self.assertEqual(agent["cmd"], "claude")
+        self.assertTrue(agent["watch"])
+        self.assertEqual(agent["resume_message"], "continue")
+        self.assertEqual(agent["limit_patterns"],
+                         wind.DEFAULT_LIMIT_PATTERNS)
+
+    def test_top_level_agent_selects_preset(self):
+        agent = wind.resolve_agent({}, self._cfg(agent="copilot"))
+        self.assertEqual(agent["name"], "copilot")
+        self.assertEqual(agent["cmd"], "copilot")
+        self.assertFalse(agent["watch"])
+        self.assertEqual(agent["resume_message"],
+                         "Please continue where you left off.")
+        self.assertEqual(agent["limit_patterns"], [])
+
+    def test_per_repo_agent_overrides_top_level(self):
+        cfg = self._cfg(agent="claude")
+        agent = wind.resolve_agent({"agent": "copilot"}, cfg)
+        self.assertEqual(agent["name"], "copilot")
+        self.assertEqual(agent["cmd"], "copilot")
+
+    def test_unknown_agent_dies(self):
+        with self.assertRaises(SystemExit):
+            wind.resolve_agent({"agent": "bogus"}, self._cfg())
+
+    def test_copilot_cmd_from_preset_not_top_level_claude_cmd(self):
+        # DEFAULT_CONFIG always carries top-level claude_cmd:"claude"; a copilot
+        # repo's cmd must still come from the preset, not that top-level key.
+        cfg = self._cfg()  # claude_cmd == "claude" present
+        agent = wind.resolve_agent({"agent": "copilot"}, cfg)
+        self.assertEqual(agent["cmd"], "copilot")
+
+    def test_per_repo_claude_cmd_overrides_preset(self):
+        cfg = self._cfg()
+        agent = wind.resolve_agent(
+            {"agent": "copilot", "claude_cmd": "copilot-beta"}, cfg)
+        self.assertEqual(agent["cmd"], "copilot-beta")
+
+    def test_per_repo_claude_args_wins_for_claude(self):
+        cfg = self._cfg(claude_args="--global")
+        agent = wind.resolve_agent({"claude_args": "--repo"}, cfg)
+        self.assertEqual(agent["args"], "--repo")
+
+    def test_top_level_claude_args_used_for_claude_when_repo_absent(self):
+        cfg = self._cfg(claude_args="--global")
+        agent = wind.resolve_agent({}, cfg)
+        self.assertEqual(agent["args"], "--global")
+
+    def test_explicit_empty_repo_args_honored_for_claude(self):
+        # Per-repo claude_args:"" must NOT fall through to the global value.
+        cfg = self._cfg(claude_args="--global")
+        agent = wind.resolve_agent({"claude_args": ""}, cfg)
+        self.assertEqual(agent["args"], "")
+
+    def test_copilot_args_from_preset_not_top_level(self):
+        # Top-level claude_args is for claude; copilot uses its preset args
+        # ("") unless the repo explicitly overrides.
+        cfg = self._cfg(claude_args="--global")
+        agent = wind.resolve_agent({"agent": "copilot"}, cfg)
+        self.assertEqual(agent["args"], "")
+
+    def test_copilot_repo_args_override_preset(self):
+        cfg = self._cfg()
+        agent = wind.resolve_agent(
+            {"agent": "copilot", "claude_args": "--yolo"}, cfg)
+        self.assertEqual(agent["args"], "--yolo")
+
+    def test_resume_message_from_top_level_for_claude(self):
+        cfg = self._cfg(resume_message="keep going")
+        agent = wind.resolve_agent({}, cfg)
+        self.assertEqual(agent["resume_message"], "keep going")
+
+    def test_copilot_resume_message_from_preset_when_no_top_level_key(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        del cfg["resume_message"]
+        agent = wind.resolve_agent({"agent": "copilot"}, cfg)
+        self.assertEqual(agent["resume_message"],
+                         "Please continue where you left off.")
+
+
+class LimitPatternsResolution(unittest.TestCase):
+    def test_no_agent_uses_claude_preset_patterns(self):
+        pats = wind.limit_patterns({"limit_patterns": []})
+        self.assertEqual(len(pats), len(wind.DEFAULT_LIMIT_PATTERNS))
+
+    def test_copilot_agent_has_no_patterns(self):
+        copilot = wind.AGENT_PRESETS["copilot"]
+        pats = wind.limit_patterns({"limit_patterns": []}, copilot)
+        self.assertEqual(pats, [])
+
+    def test_user_patterns_append_to_resolved_set(self):
+        copilot = wind.AGENT_PRESETS["copilot"]
+        pats = wind.limit_patterns(
+            {"limit_patterns": [r"FOO (?P<epoch>\d{9,12})"]}, copilot)
+        # User pattern is kept; no Claude defaults bolted on for copilot.
+        self.assertEqual(len(pats), 1)
+
+    def test_user_patterns_append_to_claude_set(self):
+        claude = wind.AGENT_PRESETS["claude"]
+        pats = wind.limit_patterns(
+            {"limit_patterns": [r"FOO (?P<epoch>\d{9,12})"]}, claude)
+        self.assertEqual(len(pats), len(wind.DEFAULT_LIMIT_PATTERNS) + 1)
+
+
+class BuildRepoEntryAgent(unittest.TestCase):
+    def test_copilot_agent_is_written(self):
+        e = wind.build_repo_entry("a", "/p", "", "", agent="copilot")
+        self.assertEqual(e["agent"], "copilot")
+
+    def test_default_claude_agent_is_omitted(self):
+        e = wind.build_repo_entry("a", "/p", "", "", agent="claude")
+        self.assertNotIn("agent", e)
+
+    def test_no_agent_arg_omits_key(self):
+        e = wind.build_repo_entry("a", "/p", "", "")
+        self.assertNotIn("agent", e)
+
+
+class CmdUpAgentLaunch(unittest.TestCase):
+    def _run(self, tmp, repos):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = repos
+        cfg["_path"] = os.path.join(tmp, "second-wind.json")
+        cfg["startup_delay_seconds"] = 0
+        rec = _TmuxRecorder(existing=[])
+        args = mock.Mock()
+        args.no_watch = True
+        with mock.patch.object(wind, "tmux", rec), \
+                mock.patch.object(wind, "send_text", lambda n, t: None):
+            wind.cmd_up(cfg, args)
+        return [c for c in rec.calls
+                if c and c[0] == "send-keys" and "Enter" in c]
+
+    def test_launches_copilot_for_copilot_repo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            launch = self._run(tmp, [{"name": "docs", "path": tmp,
+                                      "agent": "copilot"}])
+            joined = " ".join(launch[0])
+            self.assertIn("copilot", joined)
+            self.assertNotIn("claude", joined)
+
+    def test_launches_claude_for_claude_repo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            launch = self._run(tmp, [{"name": "api", "path": tmp}])
+            self.assertIn("claude", " ".join(launch[0]))
+
+
+class WatcherSkipsUnwatched(unittest.TestCase):
+    """Phase 5 (C3): unwatched (copilot) repos are never scanned/resumed."""
+
+    def _cfg(self, tmp, repos):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["session_prefix"] = "wind"
+        cfg["repos"] = repos
+        cfg["_path"] = os.path.join(tmp, "second-wind.json")
+        cfg["caffeinate"] = False
+        return cfg
+
+    def test_copilot_pane_with_limit_text_does_not_trigger_resume(self):
+        # A copilot pane that literally contains a Claude-style limit message
+        # must NOT be detected (it is never scanned), so no resume fires.
+        with tempfile.TemporaryDirectory() as tmp:
+            statef = os.path.join(tmp, "state.json")
+            orig = wind.STATE_PATH
+            wind.STATE_PATH = statef
+            cfg = self._cfg(tmp, [{"name": "docs", "path": "/tmp",
+                                   "agent": "copilot"}])
+            resumed = []
+            captured = ("You've hit your usage limit ... "
+                        "try again at 8pm")
+            args = mock.Mock()
+            args.detach = False
+            args.poll = None
+
+            def stop_after_first(seconds, text):
+                raise KeyboardInterrupt
+
+            try:
+                with mock.patch.object(wind, "session_exists",
+                                       lambda n: True), \
+                        mock.patch.object(wind, "capture_pane",
+                                          lambda n, l: captured), \
+                        mock.patch.object(
+                            wind, "resume_sessions",
+                            lambda c, r: resumed.append(r) or []), \
+                        mock.patch.object(wind, "save_state",
+                                          lambda s: None), \
+                        mock.patch.object(wind, "watch_sleep",
+                                          stop_after_first):
+                    # cmd_watch catches KeyboardInterrupt internally and
+                    # returns cleanly; we just need one loop iteration.
+                    wind.cmd_watch(cfg, args)
+            finally:
+                wind.STATE_PATH = orig
+            self.assertEqual(resumed, [],
+                             "copilot pane must never be scanned or resumed")
+
+    def test_status_payload_skips_limit_detection_for_copilot(self):
+        # A copilot session whose pane carries a Claude limit message shows a
+        # plain state and NO reset_at (limit detection is skipped).
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "docs", "path": "/tmp", "agent": "copilot"}]
+        limit_text = "usage limit ... try again at 8pm\nesc to interrupt"
+        with mock.patch.object(wind, "session_exists", lambda n: True), \
+                mock.patch.object(wind, "capture_pane",
+                                  lambda n, l: limit_text), \
+                mock.patch.object(wind, "load_state", lambda: {}):
+            payload = wind.status_payload(cfg)
+        sess = payload["sessions"][0]
+        self.assertEqual(sess["name"], "wind-docs")
+        self.assertIsNone(sess["reset_at"])
+        self.assertEqual(sess["reset_human"], "")
+        # It still shows a live state (the running marker is present).
+        self.assertEqual(sess["state"], "running")
+
+    def test_cmd_status_skips_limit_detection_for_copilot(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "docs", "path": "/tmp", "agent": "copilot"}]
+        limit_text = "usage limit ... try again at 8pm"
+        rows = []
+        with mock.patch.object(wind, "session_exists", lambda n: True), \
+                mock.patch.object(wind, "capture_pane",
+                                  lambda n, l: limit_text), \
+                mock.patch.object(wind, "load_state", lambda: {}), \
+                mock.patch.object(wind, "detect_limit",
+                                  lambda *a, **k: rows.append(a) or None):
+            args = mock.Mock()
+            wind.cmd_status(cfg, args)
+        # detect_limit was called with empty patterns for the copilot repo,
+        # so it can never match.
+        self.assertTrue(all(call[1] == [] for call in rows),
+                        f"copilot must be scanned with no patterns: {rows}")
+
+
+class ResumeSessionsResolvesMessage(unittest.TestCase):
+    def test_each_repo_gets_its_preset_resume_message(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "api", "path": "/tmp"},
+                        {"name": "docs", "path": "/tmp", "agent": "copilot"}]
+        sent = []
+        with mock.patch.object(wind, "session_exists", lambda n: True), \
+                mock.patch.object(wind, "send_text",
+                                  lambda n, t: sent.append((n, t))):
+            wind.resume_sessions(cfg, cfg["repos"])
+        self.assertIn(("wind-api", "continue"), sent)
+        self.assertIn(("wind-docs", "Please continue where you left off."),
+                      sent)
+
+
+class BackwardCompatNoAgent(unittest.TestCase):
+    """A config with no agent/prompt runs cmd_up/cmd_watch as before."""
+
+    def test_legacy_config_cmd_up_launches_claude(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = dict(wind.DEFAULT_CONFIG)
+            cfg["repos"] = [{"name": "x", "path": tmp}]
+            cfg["_path"] = os.path.join(tmp, "second-wind.json")
+            cfg["startup_delay_seconds"] = 0
+            rec = _TmuxRecorder(existing=[])
+            args = mock.Mock()
+            args.no_watch = True
+            with mock.patch.object(wind, "tmux", rec), \
+                    mock.patch.object(wind, "send_text", lambda n, t: None):
+                wind.cmd_up(cfg, args)
+            launch = [c for c in rec.calls
+                      if c and c[0] == "send-keys" and "Enter" in c][0]
+            self.assertIn("claude", " ".join(launch))
+
+    def test_legacy_state_still_loads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            statef = os.path.join(tmp, "state.json")
+            with open(statef, "w") as f:
+                json.dump({"paused": ["wind-x"], "reset_at": 123}, f)
+            orig = wind.STATE_PATH
+            wind.STATE_PATH = statef
+            try:
+                state = wind.load_state()
+            finally:
+                wind.STATE_PATH = orig
+            self.assertEqual(state["paused"], ["wind-x"])
+            self.assertEqual(state["reset_at"], 123)
 
 
 if __name__ == "__main__":

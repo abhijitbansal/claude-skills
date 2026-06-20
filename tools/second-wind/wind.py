@@ -55,6 +55,32 @@ DEFAULT_LIMIT_PATTERNS = [
     r"usage limit.{0,80}?(?:resets?|try again)(?:\s+at)?\s+(?P<time>\d{1,2}(?::\d{2})?\s*(?:am|pm))",
 ]
 
+# Agent presets. The preset's only *behavioral* job beyond launch convenience
+# is telling the watcher whether to manage a repo (watch). "claude" reproduces
+# today's exact defaults, so a config with no `agent` key behaves byte-for-byte
+# as before. Copilot is launch + display only: the watcher skips it, so it
+# ships NO rate-limit regexes (limit_patterns is empty).
+#
+# NOTE: the copilot launch command "copilot" must be verified against a live
+# copilot CLI before relying on it; it is overridable via per-repo/top-level
+# `claude_cmd` (or the preset) if a GA build renames it.
+AGENT_PRESETS = {
+    "claude": {
+        "cmd": "claude",
+        "args": "",
+        "resume_message": "continue",
+        "watch": True,                      # watcher manages limits + auto-resume
+        "limit_patterns": DEFAULT_LIMIT_PATTERNS,
+    },
+    "copilot": {
+        "cmd": "copilot",
+        "args": "",
+        "resume_message": "Please continue where you left off.",
+        "watch": False,                     # launch + display only; never auto-resumed
+        "limit_patterns": [],
+    },
+}
+
 DEFAULT_CONFIG = {
     "session_prefix": "wind",
     "claude_cmd": "claude",
@@ -406,6 +432,65 @@ def resolve_claude_args(repo, cfg):
     return "", "default"
 
 
+def resolve_agent(repo, cfg):
+    """Resolve a repo's agent preset + launch/resume/limit values (C2).
+
+    Returns {"name", "cmd", "args", "resume_message", "watch",
+    "limit_patterns"}. Resolution is by key-*presence*, not truthiness, so an
+    explicit `claude_args: ""` is honored as "no args" distinctly from "unset".
+
+    Precedence for `cmd`/`args`: per-repo explicit `claude_cmd`/`claude_args`
+    (if the key exists) > agent preset > top-level `claude_cmd`/`claude_args`.
+    Because DEFAULT_CONFIG always carries top-level `claude_cmd: "claude"` /
+    `claude_args: ""`, the preset is checked *before* top-level so a Copilot
+    repo's `cmd` comes from its preset (the user does not set top-level
+    `claude_cmd: copilot` for a mixed config). For `claude` the preset values
+    equal today's defaults, so behavior is unchanged.
+
+    `resume_message`: top-level explicit key (if present) > preset.
+    `limit_patterns`: the resolved agent's preset patterns (user `limit_patterns`
+    is appended to this resolved set by `limit_patterns()`).
+    """
+    name = repo.get("agent") or cfg.get("agent") or "claude"
+    preset = AGENT_PRESETS.get(name)
+    if preset is None:
+        die(f"unknown agent {name!r}; choose one of: "
+            f"{', '.join(sorted(AGENT_PRESETS))}")
+    if "claude_cmd" in repo:
+        cmd = repo["claude_cmd"]
+    elif "cmd" in preset and name != "claude":
+        cmd = preset["cmd"]
+    elif "claude_cmd" in cfg:
+        cmd = cfg["claude_cmd"]
+    else:
+        cmd = preset["cmd"]
+    if "claude_args" in repo:
+        args = repo["claude_args"]
+    elif name != "claude":
+        args = preset["args"]
+    elif "claude_args" in cfg:
+        args = cfg["claude_args"]
+    else:
+        args = preset["args"]
+    # resume_message: for non-claude agents the preset wins over the
+    # always-present top-level `resume_message` so a Copilot session gets its
+    # own nudge. For claude, top-level (if present) wins, matching today.
+    if name != "claude":
+        resume_message = preset["resume_message"]
+    elif "resume_message" in cfg:
+        resume_message = cfg["resume_message"]
+    else:
+        resume_message = preset["resume_message"]
+    return {
+        "name": name,
+        "cmd": cmd,
+        "args": args,
+        "resume_message": resume_message,
+        "watch": preset["watch"],
+        "limit_patterns": preset["limit_patterns"],
+    }
+
+
 def scan_repos(roots):
     """[(name, path)] for every <root>/<child>/.git, name-sorted per root."""
     found = []
@@ -421,7 +506,7 @@ def scan_repos(roots):
 
 
 def build_repo_entry(name, path, claude_args, prompt_file, prompt="",
-                     override=False):
+                     override=False, agent=None):
     """Assemble a repo config entry.
 
     A per-repo `claude_args` key is written only when this repo explicitly
@@ -429,8 +514,13 @@ def build_repo_entry(name, path, claude_args, prompt_file, prompt="",
     the empty "default" preset, which records `claude_args: ""` so key-
     presence resolution honors it as "no args" rather than inheriting global.
     When inheriting (`override=False`), no `claude_args` key is written.
+
+    `agent` is written only when set to a non-default override (e.g. "copilot")
+    so a config relying on the top-level default carries no per-repo `agent`.
     """
     entry = {"name": name, "path": path}
+    if agent and agent != "claude":
+        entry["agent"] = agent
     if prompt:
         entry["prompt"] = prompt
     elif prompt_file:
@@ -610,6 +700,18 @@ def run_wizard(args):
         else:
             claude_args = ""
             override = False
+        agent_pick = select(
+            "Agent for this repo",
+            ["claude — watched + auto-resumed on the usage limit",
+             "copilot — launched + shown, NOT auto-resumed"])
+        if agent_pick is None:
+            log("wizard cancelled", glyph="○", color="dim")
+            return
+        agent = "copilot" if agent_pick == 1 else "claude"
+        if agent == "copilot":
+            log("copilot is launched and shown in the dashboard but NOT "
+                "auto-resumed — handle its limits yourself", glyph="○",
+                color="dim")
         try:
             convention = _prompt_path(name)
         except ValueError:
@@ -618,7 +720,7 @@ def run_wizard(args):
             "Prompt file sent on `wind up` (empty to skip)",
             default=convention)
         repos.append(build_repo_entry(name, path, claude_args, prompt_file,
-                                      override=override))
+                                      override=override, agent=agent))
         if prompt_file:
             open_pick = select(
                 f"Open {prompt_file} in your editor now?",
@@ -687,8 +789,17 @@ def load_config(explicit=None):
     return cfg
 
 
-def limit_patterns(cfg):
-    pats = list(cfg.get("limit_patterns") or []) + DEFAULT_LIMIT_PATTERNS
+def limit_patterns(cfg, agent=None):
+    """Compile the limit-detection patterns for a resolved agent.
+
+    The resolved agent's preset patterns form the base set (claude's are the
+    former DEFAULT_LIMIT_PATTERNS; copilot ships none). The user's top-level
+    `limit_patterns` are appended to that *resolved* set, so they no longer
+    unconditionally bolt the Claude defaults onto an unwatched agent. With no
+    `agent` argument the claude preset is used, matching today's behavior.
+    """
+    base = (agent or AGENT_PRESETS["claude"]).get("limit_patterns") or []
+    pats = list(cfg.get("limit_patterns") or []) + list(base)
     return [re.compile(p, re.IGNORECASE) for p in pats]
 
 
@@ -1000,7 +1111,6 @@ def valid_session(cfg, name):
 
 
 def status_payload(cfg):
-    patterns = limit_patterns(cfg)
     state = load_state()
     now = time.time()
     sessions = []
@@ -1011,6 +1121,11 @@ def status_payload(cfg):
                              "reset_at": None, "reset_human": "",
                              "pane_tail": ""})
             continue
+        # Skip limit detection for unwatched agents (C3): empty patterns mean a
+        # Copilot pane never false-matches a Claude limit regex, so it shows
+        # running/idle/starting but never a reset countdown.
+        agent = resolve_agent(repo, cfg)
+        patterns = limit_patterns(cfg, agent) if agent["watch"] else []
         text = capture_pane(name, cfg["capture_lines"])
         st = classify(text, patterns)
         reset = detect_limit(text, patterns)
@@ -1122,8 +1237,7 @@ def make_dash_handler(cfg, token, template):
                 self._send(400, '{"error": "bad json"}')
                 return
             if self.path == "/api/resume":
-                names = [session_name(cfg, r) for r in cfg["repos"]]
-                sent = resume_sessions(cfg, names)
+                sent = resume_sessions(cfg, cfg["repos"])
                 clear_state()
                 self._send(200, json.dumps({"resumed": len(sent)}))
             elif self.path == "/api/send":
@@ -1224,15 +1338,17 @@ def cmd_up(cfg, args):
             continue
         if not os.path.isdir(path):
             die(f"{name}: repo path does not exist: {path}")
-        claude_cmd = repo.get("claude_cmd") or cfg["claude_cmd"]
-        # Key-PRESENCE precedence (C2): an explicit per-repo claude_args:""
-        # is honored as empty, not treated as unset → inherit global.
-        claude_args, args_source = resolve_claude_args(repo, cfg)
-        command = claude_cmd + (f" {claude_args}" if claude_args else "")
+        # Resolve cmd/args from the repo's agent preset (C2). Explicit per-repo
+        # `claude_cmd`/`claude_args` still override; an explicit "" is honored
+        # as empty (key-presence), not treated as unset → inherit.
+        agent = resolve_agent(repo, cfg)
+        _, args_source = resolve_claude_args(repo, cfg)
+        command = agent["cmd"] + (f" {agent['args']}" if agent["args"] else "")
         tmux("new-session", "-d", "-s", name, "-c", path)
         tmux("send-keys", "-t", f"={name}:", command, "Enter")
         log(f"{name}: launched `{command}` in {path} "
-            f"({args_source} args)", glyph="→", color="cyan")
+            f"(agent {agent['name']}, {args_source} args)",
+            glyph="→", color="cyan")
         started.append((repo, name))
 
     prompts = [(r, n) for r, n in started
@@ -1331,7 +1447,6 @@ def cmd_prompt(cfg, args):
 
 
 def cmd_status(cfg, args):
-    patterns = limit_patterns(cfg)
     state = load_state()
     now = time.time()
     rows = []
@@ -1340,6 +1455,9 @@ def cmd_status(cfg, args):
         if not session_exists(name):
             rows.append((name, "not running", ""))
             continue
+        # Skip limit detection for unwatched agents (C3); see status_payload.
+        agent = resolve_agent(repo, cfg)
+        patterns = limit_patterns(cfg, agent) if agent["watch"] else []
         text = capture_pane(name, cfg["capture_lines"])
         st = classify(text, patterns)
         reset = detect_limit(text, patterns)
@@ -1370,20 +1488,27 @@ def cmd_status(cfg, args):
                   f"{human_delta(resume_ts - now)}")
 
 
-def resume_sessions(cfg, names):
+def resume_sessions(cfg, repos):
+    """Send each repo its resolved agent's resume_message (C2).
+
+    Takes repo dicts (not bare session names) so a Copilot repo gets its own
+    nudge ("Please continue where you left off.") and a Claude repo gets
+    "continue". Returns the list of session names actually resumed.
+    """
     sent = []
-    for name in names:
+    for repo in repos:
+        name = session_name(cfg, repo)
         if not session_exists(name):
             continue
-        send_text(name, cfg["resume_message"])
+        agent = resolve_agent(repo, cfg)
+        send_text(name, agent["resume_message"])
         sent.append(name)
         log(f"{name}: sent resume message", glyph="✓", color="green")
     return sent
 
 
 def cmd_resume(cfg, args):
-    names = [session_name(cfg, r) for r in cfg["repos"]]
-    sent = resume_sessions(cfg, names)
+    sent = resume_sessions(cfg, cfg["repos"])
     clear_state()
     log(f"resumed {len(sent)} session(s)")
 
@@ -1425,13 +1550,21 @@ def cmd_watch(cfg, args):
         return
 
     banner()
-    patterns = limit_patterns(cfg)
     poll = args.poll or cfg["poll_interval_seconds"]
     buffer_s = cfg["resume_buffer_seconds"]
+    # Only repos whose resolved agent has watch==True are scanned/auto-resumed
+    # (C3). Copilot (watch==False) is never matched against limit patterns and
+    # never auto-resumed. Patterns are compiled per repo from its resolved
+    # agent's set, not a global append.
+    watched = []
+    for repo in cfg["repos"]:
+        agent = resolve_agent(repo, cfg)
+        if agent["watch"]:
+            watched.append((repo, limit_patterns(cfg, agent)))
     keeper = start_caffeinate() if cfg["caffeinate"] else None
     if keeper:
         log("caffeinate active (Mac will stay awake while watching)")
-    log(f"watching {len(cfg['repos'])} session(s), poll every {poll}s, "
+    log(f"watching {len(watched)} session(s), poll every {poll}s, "
         f"resume buffer {buffer_s}s")
 
     # Record this watcher's identity so `wind down` can reap the actually
@@ -1457,7 +1590,7 @@ def cmd_watch(cfg, args):
             paused = set(state.get("paused", []))
             reset_at = state.get("reset_at")
 
-            for repo in cfg["repos"]:
+            for repo, patterns in watched:
                 name = session_name(cfg, repo)
                 if not session_exists(name) or name in paused:
                     continue
@@ -1493,7 +1626,10 @@ def cmd_watch(cfg, args):
                 if time.time() >= reset_at + buffer_s:
                     log("reset time reached, resuming paused sessions",
                         glyph="→", color="cyan")
-                    sent = resume_sessions(cfg, sorted(paused))
+                    by_name = {session_name(cfg, r): r for r, _ in watched}
+                    paused_repos = [by_name[n] for n in sorted(paused)
+                                    if n in by_name]
+                    sent = resume_sessions(cfg, paused_repos)
                     notify(cfg, f"Resumed {len(sent)} session(s) after "
                                 f"limit reset.")
                     until = time.time() + cfg["resume_cooldown_seconds"]
@@ -1509,7 +1645,7 @@ def cmd_watch(cfg, args):
                 hb = (f"limit hit · resuming {len(paused)} session(s) in "
                       f"{human_delta(eta)}")
             else:
-                hb = (f"watching {len(cfg['repos'])} session(s) · "
+                hb = (f"watching {len(watched)} session(s) · "
                       f"poll {poll}s")
             watch_sleep(poll, hb)
     except KeyboardInterrupt:
