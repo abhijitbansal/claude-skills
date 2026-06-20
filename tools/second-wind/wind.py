@@ -905,12 +905,94 @@ def notify(cfg, message):
 
 # ------------------------------------------------------------------ dash ---
 
-PANE_TAIL_LINES = 30
+PANE_TAIL_LINES = 30      # lines of tail shown on each card (tokenless /api/status)
+MODAL_LINES = 500         # default scrollback the modal fetches from /api/pane
+MAX_PANE_LINES = 1000     # hard clamp for /api/pane requests
+
+# SGR codes we let through to the client (the client re-validates). Basic
+# attrs reset/bold/dim, the 16 fg/bg colors, and the 16 bright fg/bg colors.
+_SGR_SIMPLE_ALLOWED = (
+    {0, 1, 2}
+    | set(range(30, 38)) | set(range(40, 48))
+    | set(range(90, 98)) | set(range(100, 108))
+)
+
+# Match one escape sequence: OSC / DCS-APC-PM string terminators, a CSI
+# (7-bit ESC[ or 8-bit 0x9b), or an 8-bit OSC (0x9d). SGR vs other CSI is
+# decided after parsing, so we capture the CSI params + final byte.
+_ESC_SEQ_RE = re.compile(
+    r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"         # 7-bit OSC ... BEL|ST
+    r"|\x9d[^\x07\x1b]*(?:\x07|\x1b\\)"          # 8-bit OSC ... BEL|ST
+    r"|\x1b[P_^][^\x1b]*(?:\x1b\\)?"             # DCS|APC|PM ... ST
+    r"|\x9b[0-9;?]*[A-Za-z]"                     # 8-bit CSI (always dropped)
+    r"|\x1b\[([0-9;?]*)([A-Za-z])"              # 7-bit CSI params + final byte
+)
+
+
+def _keep_sgr(params):
+    """Return the SGR sequence for `params` if every code is allowlisted.
+
+    Truecolor (38;2/48;2), out-of-palette 256-color, and any non-allowlisted
+    code make the whole sequence unsafe → dropped (return ""). An empty param
+    list ("\\x1b[m") is treated as a reset and kept.
+    """
+    if params == "":
+        return "\x1b[m"
+    parts = params.split(";")
+    i = 0
+    while i < len(parts):
+        part = parts[i]
+        if not part.isdigit():
+            return ""
+        code = int(part)
+        if code in (38, 48):
+            # Extended color: 38;5;N (256) or 38;2;R;G;B (truecolor).
+            if i + 1 >= len(parts) or not parts[i + 1].isdigit():
+                return ""
+            mode = int(parts[i + 1])
+            if mode == 5:
+                if i + 2 >= len(parts) or not parts[i + 2].isdigit():
+                    return ""
+                idx = int(parts[i + 2])
+                if not (0 <= idx <= 255):
+                    return ""
+                i += 3
+                continue
+            # mode 2 (truecolor) or anything else → drop the whole sequence.
+            return ""
+        if code not in _SGR_SIMPLE_ALLOWED:
+            return ""
+        i += 1
+    return f"\x1b[{params}m"
+
+
+def _strip_escapes(text, preserve_sgr=False):
+    """Remove terminal escape sequences from captured pane text.
+
+    With preserve_sgr=False (card tail) every escape is removed. With
+    preserve_sgr=True (/api/pane) allowlisted SGR color/style sequences are
+    kept and everything else (OSC/DCS/APC/PM, cursor CSI, truecolor and
+    out-of-palette 256-color, 8-bit C1 forms) is removed.
+    """
+    def repl(m):
+        if not preserve_sgr:
+            return ""
+        final = m.group(2)
+        if final == "m":                 # an SGR sequence
+            return _keep_sgr(m.group(1) or "")
+        return ""                        # OSC/DCS/non-SGR CSI → drop
+
+    return _ESC_SEQ_RE.sub(repl, text)
 
 
 def strip_ansi(text):
-    text = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)", "", text)
-    return re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", text)
+    return _strip_escapes(text, preserve_sgr=False)
+
+
+def get_pane_extended(cfg, name, lines):
+    """Capture `lines` of scrollback for `name`, keeping allowlisted SGR."""
+    text = capture_pane(name, lines)
+    return _strip_escapes(text, preserve_sgr=True)
 
 
 def valid_session(cfg, name):
@@ -983,13 +1065,41 @@ def make_dash_handler(cfg, token, template):
             if not self._host_allowed():
                 self._send(403, '{"error": "bad host"}')
                 return
-            if self.path == "/":
+            from urllib.parse import urlsplit, parse_qs
+            parts = urlsplit(self.path)
+            if parts.path == "/":
                 self._send(200, template.replace("{{TOKEN}}", token),
                            "text/html; charset=utf-8")
-            elif self.path == "/api/status":
+            elif parts.path == "/api/status":
                 self._send(200, json.dumps(status_payload(cfg)))
+            elif parts.path == "/api/pane":
+                self._serve_pane(parse_qs(parts.query))
             else:
                 self._send(404, '{"error": "not found"}')
+
+        def _serve_pane(self, query):
+            # /api/pane returns up to MAX_PANE_LINES of scrollback (can hold
+            # secrets) so, unlike /api/status, it requires the CSRF token.
+            supplied = self.headers.get("X-Wind-Token") or ""
+            if not hmac.compare_digest(supplied, token):
+                self._send(401, '{"error": "bad token"}')
+                return
+            name = (query.get("session") or [""])[0]
+            if not valid_session(cfg, name):
+                self._send(400, '{"error": "bad session"}')
+                return
+            try:
+                lines = int((query.get("lines") or [MODAL_LINES])[0])
+            except (ValueError, TypeError):
+                lines = MODAL_LINES
+            lines = max(1, min(lines, MAX_PANE_LINES))
+            content = get_pane_extended(cfg, name, lines)
+            self._send(200, json.dumps({
+                "ok": True,
+                "session": name,
+                "content": content,
+                "lines_returned": len(content.splitlines()),
+            }))
 
         def do_POST(self):
             if not self._host_allowed():

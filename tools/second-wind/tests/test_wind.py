@@ -1370,5 +1370,241 @@ class BuildRepoEntryPrompt(unittest.TestCase):
         self.assertNotIn("prompt_file", e)
 
 
+ESC = "\x1b"
+
+
+class StripEscapesStripAll(unittest.TestCase):
+    """strip_ansi (preserve_sgr=False) removes every escape, as before."""
+
+    def test_removes_sgr_color(self):
+        self.assertEqual(wind.strip_ansi(f"{ESC}[31mred{ESC}[0m"), "red")
+
+    def test_removes_cursor_movement_csi(self):
+        self.assertEqual(wind.strip_ansi(f"a{ESC}[2Jb"), "ab")
+
+    def test_removes_osc_title_sequence(self):
+        self.assertEqual(
+            wind.strip_ansi(f"x{ESC}]0;window title\x07y"), "xy")
+
+    def test_keeps_plain_text(self):
+        self.assertEqual(wind.strip_ansi("hello world"), "hello world")
+
+
+class StripEscapesPreserveSgr(unittest.TestCase):
+    """The /api/pane path keeps only allowlisted SGR, drops everything else."""
+
+    def test_keeps_basic_red(self):
+        out = wind._strip_escapes(f"{ESC}[31mred{ESC}[0m", preserve_sgr=True)
+        self.assertEqual(out, f"{ESC}[31mred{ESC}[0m")
+
+    def test_keeps_bright_and_bg_and_256(self):
+        seq = f"{ESC}[1;38;5;200mhi{ESC}[0m"
+        out = wind._strip_escapes(seq, preserve_sgr=True)
+        self.assertEqual(out, seq)
+
+    def test_drops_truecolor_fg(self):
+        # 38;2;R;G;B is an SGR ending in m; it must still be dropped.
+        out = wind._strip_escapes(
+            f"{ESC}[38;2;255;0;0mred{ESC}[0m", preserve_sgr=True)
+        self.assertEqual(out, f"red{ESC}[0m")
+
+    def test_drops_truecolor_bg(self):
+        out = wind._strip_escapes(
+            f"{ESC}[48;2;1;2;3mx{ESC}[0m", preserve_sgr=True)
+        self.assertEqual(out, f"x{ESC}[0m")
+
+    def test_drops_out_of_palette_256(self):
+        out = wind._strip_escapes(
+            f"{ESC}[38;5;999mx{ESC}[0m", preserve_sgr=True)
+        self.assertEqual(out, f"x{ESC}[0m")
+
+    def test_drops_osc_even_when_preserving_sgr(self):
+        out = wind._strip_escapes(
+            f"a{ESC}]0;title\x07b", preserve_sgr=True)
+        self.assertEqual(out, "ab")
+
+    def test_drops_dcs_string(self):
+        out = wind._strip_escapes(
+            f"a{ESC}Psome dcs payload{ESC}\\b", preserve_sgr=True)
+        self.assertEqual(out, "ab")
+
+    def test_drops_cursor_movement_csi(self):
+        out = wind._strip_escapes(f"a{ESC}[2Jb", preserve_sgr=True)
+        self.assertEqual(out, "ab")
+
+    def test_drops_8bit_c1_csi_and_osc(self):
+        # 0x9b = CSI, 0x9d = OSC in 8-bit C1 form.
+        out = wind._strip_escapes(
+            "a\x9b31mb\x9d0;t\x07c", preserve_sgr=True)
+        self.assertEqual(out, "abc")
+
+    def test_drops_out_of_allowlist_simple_codes(self):
+        # 7 (reverse video) is not in the allowlist; the whole SGR is dropped
+        # if it carries no allowlisted code.
+        out = wind._strip_escapes(f"{ESC}[7mx", preserve_sgr=True)
+        self.assertEqual(out, "x")
+
+
+class _FakeHeaders:
+    def __init__(self, mapping):
+        self._m = mapping
+
+    def get(self, key, default=None):
+        return self._m.get(key, default)
+
+
+class _RecordingHandler:
+    """Minimal stand-in for the BaseHTTPRequestHandler subclass under test.
+
+    We bypass __init__ (which would talk to a socket) and capture the single
+    _send call each request path makes.
+    """
+
+    def __init__(self, handler_cls, path, headers):
+        self.path = path
+        self.headers = _FakeHeaders(headers)
+        self.sent = None
+        # Bind the real handler methods to this object.
+        self.do_GET = handler_cls.do_GET.__get__(self, handler_cls)
+        self._serve_pane = handler_cls._serve_pane.__get__(self, handler_cls)
+
+    def _send(self, code, body, ctype="application/json"):
+        self.sent = (code, body, ctype)
+
+    def _host_allowed(self):
+        return True
+
+
+class ApiPaneEndpoint(unittest.TestCase):
+    TOKEN = "secret-token"
+
+    def _handler_cls(self, cfg):
+        return wind.make_dash_handler(cfg, self.TOKEN, "<html>")
+
+    def _cfg(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "api", "path": "/tmp"}]
+        return cfg
+
+    def _get(self, cfg, path, headers):
+        handler_cls = self._handler_cls(cfg)
+        h = _RecordingHandler(handler_cls, path, headers)
+        h.do_GET()
+        return h.sent
+
+    def test_missing_token_returns_401(self):
+        cfg = self._cfg()
+        with mock.patch.object(wind, "capture_pane", lambda n, l: ""):
+            code, body, _ = self._get(
+                cfg, "/api/pane?session=wind-api&lines=100", {})
+        self.assertEqual(code, 401)
+        self.assertNotIn("api", body)  # no pane/session content leaked
+
+    def test_bad_token_returns_401(self):
+        cfg = self._cfg()
+        code, body, _ = self._get(
+            cfg, "/api/pane?session=wind-api",
+            {"X-Wind-Token": "wrong"})
+        self.assertEqual(code, 401)
+
+    def test_unknown_session_returns_400_no_content(self):
+        cfg = self._cfg()
+        code, body, _ = self._get(
+            cfg, "/api/pane?session=wind-nope",
+            {"X-Wind-Token": self.TOKEN})
+        self.assertEqual(code, 400)
+        self.assertNotIn("nope", body)
+
+    def test_missing_session_returns_400(self):
+        cfg = self._cfg()
+        code, body, _ = self._get(
+            cfg, "/api/pane?lines=50",
+            {"X-Wind-Token": self.TOKEN})
+        self.assertEqual(code, 400)
+
+    def test_valid_session_returns_content(self):
+        cfg = self._cfg()
+        captured = {}
+
+        def fake_capture(name, lines):
+            captured["name"] = name
+            captured["lines"] = lines
+            return f"{ESC}[31mred{ESC}[0m\nplain\n"
+
+        with mock.patch.object(wind, "session_exists", lambda n: True), \
+                mock.patch.object(wind, "capture_pane", fake_capture):
+            code, body, _ = self._get(
+                cfg, "/api/pane?session=wind-api&lines=120",
+                {"X-Wind-Token": self.TOKEN})
+        self.assertEqual(code, 200)
+        data = json.loads(body)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["session"], "wind-api")
+        self.assertIn(f"{ESC}[31m", data["content"])  # red preserved
+        self.assertEqual(captured["lines"], 120)
+
+    def test_lines_clamped_to_max(self):
+        cfg = self._cfg()
+        captured = {}
+
+        def fake_capture(name, lines):
+            captured["lines"] = lines
+            return ""
+
+        with mock.patch.object(wind, "session_exists", lambda n: True), \
+                mock.patch.object(wind, "capture_pane", fake_capture):
+            self._get(
+                cfg, "/api/pane?session=wind-api&lines=99999",
+                {"X-Wind-Token": self.TOKEN})
+        self.assertEqual(captured["lines"], wind.MAX_PANE_LINES)
+
+    def test_lines_defaults_to_modal_lines(self):
+        cfg = self._cfg()
+        captured = {}
+
+        def fake_capture(name, lines):
+            captured["lines"] = lines
+            return ""
+
+        with mock.patch.object(wind, "session_exists", lambda n: True), \
+                mock.patch.object(wind, "capture_pane", fake_capture):
+            self._get(
+                cfg, "/api/pane?session=wind-api",
+                {"X-Wind-Token": self.TOKEN})
+        self.assertEqual(captured["lines"], wind.MODAL_LINES)
+
+    def test_non_positive_lines_clamped_to_one(self):
+        cfg = self._cfg()
+        captured = {}
+
+        def fake_capture(name, lines):
+            captured["lines"] = lines
+            return ""
+
+        with mock.patch.object(wind, "session_exists", lambda n: True), \
+                mock.patch.object(wind, "capture_pane", fake_capture):
+            self._get(
+                cfg, "/api/pane?session=wind-api&lines=0",
+                {"X-Wind-Token": self.TOKEN})
+        self.assertEqual(captured["lines"], 1)
+
+
+class GetPaneExtended(unittest.TestCase):
+    def _cfg(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "api", "path": "/tmp"}]
+        return cfg
+
+    def test_strips_truecolor_keeps_red(self):
+        cfg = self._cfg()
+        raw = f"{ESC}[31mred{ESC}[38;2;1;2;3mtrue{ESC}[0m"
+        with mock.patch.object(wind, "capture_pane", lambda n, l: raw):
+            out = wind.get_pane_extended(cfg, "wind-api", 100)
+        self.assertIn(f"{ESC}[31m", out)
+        self.assertNotIn("38;2", out)
+        self.assertIn("red", out)
+        self.assertIn("true", out)
+
+
 if __name__ == "__main__":
     unittest.main()
