@@ -790,6 +790,25 @@ def load_config(explicit=None):
     for repo in cfg["repos"]:
         if "name" not in repo or "path" not in repo:
             die(f"{path}: every repo needs 'name' and 'path'")
+    # Validate agent names at load (the boundary) so a typo fails fast at
+    # startup instead of crashing a dashboard request thread via resolve_agent.
+    valid_agents = ", ".join(sorted(AGENT_PRESETS))
+    if "agent" in cfg and cfg["agent"] not in AGENT_PRESETS:
+        die(f"{path}: unknown agent {cfg['agent']!r}; "
+            f"choose one of: {valid_agents}")
+    for repo in cfg["repos"]:
+        if "agent" in repo and repo["agent"] not in AGENT_PRESETS:
+            die(f"{path}: repo {repo['name']!r} has unknown agent "
+                f"{repo['agent']!r}; choose one of: {valid_agents}")
+    # A repo whose derived session name collides with the reserved watcher
+    # session ('<prefix>-watcher') would make spawn_watcher mistake the repo
+    # for the watcher and `wind down` kill it as one. Reject at load.
+    reserved = watcher_session_name(cfg)
+    for repo in cfg["repos"]:
+        if session_name(cfg, repo) == reserved:
+            die(f"{path}: repo {repo['name']!r} collides with the reserved "
+                f"watcher session {reserved!r}; rename the repo or change "
+                f"'session_prefix'")
     cfg["_path"] = path
     return cfg
 
@@ -868,11 +887,17 @@ def session_exists(name):
     return tmux("has-session", "-t", f"={name}", check=False).returncode == 0
 
 
-def capture_pane(name, lines):
+def capture_pane(name, lines, escapes=False):
     # "=name:" — exact-match session, default window/pane. Bare "=name" is
     # rejected as a pane target by tmux 3.6 ("can't find pane").
-    result = tmux("capture-pane", "-p", "-t", f"={name}:", "-S", f"-{lines}",
-                  check=False)
+    # escapes=True adds tmux's -e flag so SGR color escapes are preserved in
+    # the output (only get_pane_extended wants this; limit-detection callers
+    # keep escapes=False so their regexes match plain text).
+    args = ["capture-pane"]
+    if escapes:
+        args.append("-e")
+    args += ["-p", "-t", f"={name}:", "-S", f"-{lines}"]
+    result = tmux(*args, check=False)
     return result.stdout if result.returncode == 0 else ""
 
 
@@ -917,10 +942,15 @@ def build_watcher_command(cfg):
 
 
 def find_foreign_watcher(cfg):
-    """A *-watcher session whose name isn't ours, or None."""
-    ours = watcher_session_name(cfg)
+    """A *-watcher session whose name isn't ours, or None.
+
+    Exclude this config's own repo sessions: a normal repo whose name ends in
+    '-watcher' (e.g. 'ci-watcher' → 'wind-ci-watcher') is not a foreign watcher.
+    """
+    own = {session_name(cfg, r) for r in cfg["repos"]}
+    own.add(watcher_session_name(cfg))
     for name in list_session_names():
-        if name.endswith(f"-{WATCHER_SUFFIX}") and name != ours:
+        if name.endswith(f"-{WATCHER_SUFFIX}") and name not in own:
             return name
     return None
 
@@ -1107,7 +1137,7 @@ def strip_ansi(text):
 
 def get_pane_extended(cfg, name, lines):
     """Capture `lines` of scrollback for `name`, keeping allowlisted SGR."""
-    text = capture_pane(name, lines)
+    text = capture_pane(name, lines, escapes=True)
     return _strip_escapes(text, preserve_sgr=True)
 
 
@@ -1438,13 +1468,16 @@ def cmd_prompt(cfg, args):
     _open_editor(path, args.editor)
 
     if wire_config:
-        repos = [dict(r) for r in cfg["repos"]]
-        for r in repos:
+        # Re-read the RAW config (not the DEFAULT_CONFIG-merged cfg) so we only
+        # add prompt_file and never persist default keys (e.g. claude_args:"")
+        # into a previously-minimal config — that would flip presence-based
+        # resolution (resolve_agent/resolve_claude_args treat absent vs "").
+        with open(cfg["_path"]) as f:
+            raw = json.load(f)
+        for r in raw.get("repos", []):
             if r.get("name") == repo["name"]:
                 r["prompt_file"] = path
-        out = {k: v for k, v in cfg.items() if k != "_path"}
-        out["repos"] = repos
-        atomic_write_json(cfg["_path"], out, mode=0o644)
+        atomic_write_json(cfg["_path"], raw, mode=0o644)
         log(f"{repo['name']}: wired prompt_file -> {path}", glyph="✓",
             color="green")
     else:
@@ -1509,6 +1542,24 @@ def resume_sessions(cfg, repos):
         send_text(name, agent["resume_message"])
         sent.append(name)
         log(f"{name}: sent resume message", glyph="✓", color="green")
+    return sent
+
+
+def resume_orphans(cfg, names):
+    """Nudge paused session names that are no longer watched repos (C5/C7).
+
+    These have no resolved repo (agent switched to an unwatched preset or the
+    repo was removed), so fall back to the global `resume_message` rather than
+    dropping them from resume and leaving them paused forever.
+    """
+    sent = []
+    for name in names:
+        if not session_exists(name):
+            continue
+        send_text(name, cfg["resume_message"])
+        sent.append(name)
+        log(f"{name}: sent resume message (global default)", glyph="✓",
+            color="green")
     return sent
 
 
@@ -1632,9 +1683,16 @@ def cmd_watch(cfg, args):
                     log("reset time reached, resuming paused sessions",
                         glyph="→", color="cyan")
                     by_name = {session_name(cfg, r): r for r, _ in watched}
+                    # Resume EVERY paused name. A name still watched resumes via
+                    # its resolved repo (preset resume_message); a paused name no
+                    # longer watched (agent switched/removed between runs) falls
+                    # back to the global resume_message so it is still nudged
+                    # rather than silently stranded paused forever.
                     paused_repos = [by_name[n] for n in sorted(paused)
                                     if n in by_name]
                     sent = resume_sessions(cfg, paused_repos)
+                    orphans = sorted(n for n in paused if n not in by_name)
+                    sent += resume_orphans(cfg, orphans)
                     notify(cfg, f"Resumed {len(sent)} session(s) after "
                                 f"limit reset.")
                     until = time.time() + cfg["resume_cooldown_seconds"]

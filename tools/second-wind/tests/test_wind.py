@@ -1531,7 +1531,7 @@ class ApiPaneEndpoint(unittest.TestCase):
         cfg = self._cfg()
         captured = {}
 
-        def fake_capture(name, lines):
+        def fake_capture(name, lines, escapes=False):
             captured["name"] = name
             captured["lines"] = lines
             return f"{ESC}[31mred{ESC}[0m\nplain\n"
@@ -1552,7 +1552,7 @@ class ApiPaneEndpoint(unittest.TestCase):
         cfg = self._cfg()
         captured = {}
 
-        def fake_capture(name, lines):
+        def fake_capture(name, lines, escapes=False):
             captured["lines"] = lines
             return ""
 
@@ -1567,7 +1567,7 @@ class ApiPaneEndpoint(unittest.TestCase):
         cfg = self._cfg()
         captured = {}
 
-        def fake_capture(name, lines):
+        def fake_capture(name, lines, escapes=False):
             captured["lines"] = lines
             return ""
 
@@ -1582,7 +1582,7 @@ class ApiPaneEndpoint(unittest.TestCase):
         cfg = self._cfg()
         captured = {}
 
-        def fake_capture(name, lines):
+        def fake_capture(name, lines, escapes=False):
             captured["lines"] = lines
             return ""
 
@@ -1603,7 +1603,8 @@ class GetPaneExtended(unittest.TestCase):
     def test_strips_truecolor_keeps_red(self):
         cfg = self._cfg()
         raw = f"{ESC}[31mred{ESC}[38;2;1;2;3mtrue{ESC}[0m"
-        with mock.patch.object(wind, "capture_pane", lambda n, l: raw):
+        with mock.patch.object(wind, "capture_pane",
+                               lambda n, l, escapes=False: raw):
             out = wind.get_pane_extended(cfg, "wind-api", 100)
         self.assertIn(f"{ESC}[31m", out)
         self.assertNotIn("38;2", out)
@@ -1911,6 +1912,229 @@ class BackwardCompatNoAgent(unittest.TestCase):
                 wind.STATE_PATH = orig
             self.assertEqual(state["paused"], ["wind-x"])
             self.assertEqual(state["reset_at"], 123)
+
+
+class CapturePaneEscapes(unittest.TestCase):
+    """#1: capture_pane(escapes=True) adds tmux's -e flag; default omits it."""
+
+    def test_default_omits_dash_e_flag(self):
+        seen = {}
+
+        def fake_tmux(*args, **kw):
+            seen["args"] = args
+            return mock.Mock(returncode=0, stdout="plain")
+
+        with mock.patch.object(wind, "tmux", fake_tmux):
+            wind.capture_pane("wind-api", 100)
+        self.assertNotIn("-e", seen["args"])
+
+    def test_escapes_true_puts_dash_e_in_argv(self):
+        seen = {}
+
+        def fake_tmux(*args, **kw):
+            seen["args"] = args
+            return mock.Mock(returncode=0, stdout="plain")
+
+        with mock.patch.object(wind, "tmux", fake_tmux):
+            wind.capture_pane("wind-api", 100, escapes=True)
+        self.assertIn("-e", seen["args"])
+        self.assertIn("capture-pane", seen["args"])
+
+    def test_get_pane_extended_captures_with_escapes_and_keeps_red(self):
+        # The whole color feature: get_pane_extended must request escapes so SGR
+        # bytes exist, then preserve_sgr keeps the red.
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "api", "path": "/tmp"}]
+        seen = {}
+
+        def fake_capture(name, lines, escapes=False):
+            seen["escapes"] = escapes
+            return f"{ESC}[31mred{ESC}[0m" if escapes else "red"
+
+        with mock.patch.object(wind, "capture_pane", fake_capture):
+            out = wind.get_pane_extended(cfg, "wind-api", 100)
+        self.assertTrue(seen["escapes"])
+        self.assertIn(f"{ESC}[31m", out)  # red SGR survives _strip_escapes
+        self.assertIn("red", out)
+
+
+class LoadConfigAgentValidation(unittest.TestCase):
+    """#14: unknown agent names die at load, not in a request thread."""
+
+    def _write(self, tmp, obj):
+        p = os.path.join(tmp, "wind.json")
+        with open(p, "w") as f:
+            json.dump(obj, f)
+        orig = wind.CONFIG_PATHS
+        wind.CONFIG_PATHS = [p]
+        self.addCleanup(lambda: setattr(wind, "CONFIG_PATHS", orig))
+        return p
+
+    def test_bad_top_level_agent_dies(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(tmp, {"agent": "bogus",
+                              "repos": [{"name": "x", "path": "/tmp"}]})
+            with self.assertRaises(SystemExit):
+                wind.load_config()
+
+    def test_bad_per_repo_agent_dies(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(tmp, {"repos": [{"name": "x", "path": "/tmp",
+                                         "agent": "bogus"}]})
+            with self.assertRaises(SystemExit):
+                wind.load_config()
+
+    def test_good_agents_load(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(tmp, {"agent": "claude",
+                              "repos": [{"name": "x", "path": "/tmp",
+                                         "agent": "copilot"}]})
+            cfg = wind.load_config()
+            self.assertEqual(cfg["agent"], "claude")
+
+
+class LoadConfigWatcherCollision(unittest.TestCase):
+    """#2/#15: a repo whose session collides with the watcher dies at load."""
+
+    def _write(self, tmp, obj):
+        p = os.path.join(tmp, "wind.json")
+        with open(p, "w") as f:
+            json.dump(obj, f)
+        orig = wind.CONFIG_PATHS
+        wind.CONFIG_PATHS = [p]
+        self.addCleanup(lambda: setattr(wind, "CONFIG_PATHS", orig))
+        return p
+
+    def test_repo_named_watcher_dies(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(tmp, {"repos": [{"name": "watcher", "path": "/tmp"}]})
+            with self.assertRaises(SystemExit):
+                wind.load_config()
+
+    def test_non_colliding_repo_loads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(tmp, {"repos": [{"name": "ci-watcher",
+                                         "path": "/tmp"}]})
+            cfg = wind.load_config()
+            self.assertEqual(cfg["repos"][0]["name"], "ci-watcher")
+
+
+class ForeignWatcherExcludesOwnRepos(unittest.TestCase):
+    """#3: a normal repo whose name ends in -watcher is not a foreign watcher."""
+
+    def test_own_ci_watcher_repo_not_flagged(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "ci-watcher", "path": "/tmp"}]
+        # The repo's own session 'wind-ci-watcher' is live; must NOT be foreign.
+        with mock.patch.object(wind, "list_session_names",
+                               lambda: ["wind-ci-watcher"]):
+            self.assertIsNone(wind.find_foreign_watcher(cfg))
+
+    def test_truly_foreign_watcher_still_flagged(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "x", "path": "/tmp"}]
+        with mock.patch.object(wind, "list_session_names",
+                               lambda: ["other-watcher"]):
+            self.assertEqual(wind.find_foreign_watcher(cfg), "other-watcher")
+
+
+class CmdPromptPreservesMinimalConfig(unittest.TestCase):
+    """#8: wiring prompt_file does not persist DEFAULT_CONFIG keys."""
+
+    def test_minimal_config_gains_only_prompt_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg_path = os.path.join(tmp, "second-wind.json")
+            home = os.path.join(tmp, "home")
+            # A minimal raw config: NO claude_args anywhere.
+            raw = {"repos": [{"name": "foo", "path": "/tmp"}]}
+            with open(cfg_path, "w") as f:
+                json.dump(raw, f)
+            # cfg as load_config would produce it (DEFAULT_CONFIG-merged).
+            cfg = dict(wind.DEFAULT_CONFIG)
+            cfg["repos"] = [{"name": "foo", "path": "/tmp"}]
+            cfg["_path"] = cfg_path
+            args = mock.Mock()
+            args.repo = "foo"
+            args.editor = None
+            with mock.patch.object(wind, "WIND_HOME", home), \
+                    mock.patch.object(wind, "_open_editor",
+                                      lambda path, ed: None):
+                wind.cmd_prompt(cfg, args)
+            with open(cfg_path) as f:
+                saved = json.load(f)
+            self.assertNotIn("claude_args", saved)  # default key not persisted
+            self.assertNotIn("resume_message", saved)
+            foo = next(r for r in saved["repos"] if r["name"] == "foo")
+            self.assertIn("prompt_file", foo)
+            self.assertNotIn("claude_args", foo)
+
+
+class ResumeOrphanedPausedSessions(unittest.TestCase):
+    """#5/#7: a paused session absent from watched is still resumed at reset."""
+
+    def test_orphan_paused_name_resumed_with_global_message(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "x", "path": "/tmp"}]
+        cfg["resume_message"] = "wake up"
+        sent = []
+        with mock.patch.object(wind, "session_exists", lambda n: True), \
+                mock.patch.object(wind, "send_text",
+                                  lambda n, t: sent.append((n, t))):
+            # 'wind-gone' is paused but no longer a watched repo.
+            resumed = wind.resume_orphans(cfg, ["wind-gone"])
+        self.assertEqual(resumed, ["wind-gone"])
+        self.assertEqual(sent, [("wind-gone", "wake up")])
+
+    def test_orphan_not_dropped_silently_when_session_missing(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["resume_message"] = "wake up"
+        with mock.patch.object(wind, "session_exists", lambda n: False), \
+                mock.patch.object(wind, "send_text",
+                                  lambda n, t: self.fail("should not send")):
+            resumed = wind.resume_orphans(cfg, ["wind-gone"])
+        self.assertEqual(resumed, [])
+
+    def test_cmd_watch_resumes_paused_session_no_longer_watched(self):
+        # Integration: state pauses 'wind-gone' (not in the current watched
+        # repos) with a reset_at in the past. At reset the watcher must still
+        # nudge it via the global resume_message, not strand it paused forever.
+        with tempfile.TemporaryDirectory() as tmp:
+            statef = os.path.join(tmp, "state.json")
+            with open(statef, "w") as f:
+                json.dump({"paused": ["wind-gone"], "reset_at": 1.0}, f)
+            orig = wind.STATE_PATH
+            wind.STATE_PATH = statef
+            cfg = dict(wind.DEFAULT_CONFIG)
+            cfg["session_prefix"] = "wind"
+            cfg["repos"] = [{"name": "x", "path": "/tmp"}]  # 'gone' not here
+            cfg["_path"] = os.path.join(tmp, "second-wind.json")
+            cfg["caffeinate"] = False
+            cfg["resume_message"] = "wake up"
+            cfg["resume_buffer_seconds"] = 0
+            sent = []
+            args = mock.Mock()
+            args.detach = False
+            args.poll = None
+
+            def stop_after_first(seconds, text):
+                raise KeyboardInterrupt
+
+            try:
+                with mock.patch.object(wind, "session_exists",
+                                       lambda n: True), \
+                        mock.patch.object(wind, "capture_pane",
+                                          lambda n, l: ""), \
+                        mock.patch.object(wind, "send_text",
+                                          lambda n, t: sent.append((n, t))), \
+                        mock.patch.object(wind, "notify",
+                                          lambda *a, **k: None), \
+                        mock.patch.object(wind, "watch_sleep",
+                                          stop_after_first):
+                    wind.cmd_watch(cfg, args)
+            finally:
+                wind.STATE_PATH = orig
+            self.assertIn(("wind-gone", "wake up"), sent,
+                          f"orphan paused session must be resumed: {sent}")
 
 
 if __name__ == "__main__":
