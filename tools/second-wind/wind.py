@@ -540,6 +540,24 @@ def build_repo_entry(name, path, claude_args, prompt_file, prompt="",
 PROMPTS_SUBDIR = "prompts"
 
 
+def _seed_lines(repo_name):
+    """The exact template lines seeded into a fresh prompt file.
+
+    Single source of truth for both _seed_prompt_file (which writes them) and
+    _is_seed_line / cmd_up (which filters them out) so the two can never drift.
+    """
+    return (
+        f"# First prompt for `{repo_name}`, sent verbatim on `wind up`.",
+        "# Replace this whole file with the prompt you want to send.",
+    )
+
+
+def _is_seed_line(line, repo_name):
+    """Return True if `line` is one of the two template lines seeded by
+    _seed_prompt_file, so cmd_up can detect an unedited prompt file."""
+    return line.rstrip() in _seed_lines(repo_name)
+
+
 def _prompt_path(repo_name, cfg=None):
     """Convention path ~/.wind/prompts/<repo>.md for a repo's first prompt.
 
@@ -575,7 +593,10 @@ def _editor_command(editor_arg, path):
     """
     editor = editor_arg or os.environ.get("EDITOR") or _first_available(
         "vi", "nano")
-    parts = shlex.split(editor)
+    try:
+        parts = shlex.split(editor)
+    except ValueError:
+        die("no usable editor (set $EDITOR or pass --editor)")
     if not parts:
         die("no usable editor (set $EDITOR or pass --editor)")
     if not shutil.which(parts[0]):
@@ -594,10 +615,8 @@ def _seed_prompt_file(path, repo_name):
     """Create parent dir and seed `path` with a template if it is missing."""
     if os.path.isfile(path):
         return
-    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
-    template = (
-        f"# First prompt for `{repo_name}`, sent verbatim on `wind up`.\n"
-        f"# Replace this whole file with the prompt you want to send.\n")
+    os.makedirs(os.path.dirname(path) or ".", mode=0o700, exist_ok=True)
+    template = "".join(f"{line}\n" for line in _seed_lines(repo_name))
     with open(path, "w") as f:
         f.write(template)
     os.chmod(path, 0o600)
@@ -723,7 +742,7 @@ def run_wizard(args):
             convention = ""
         prompt_file = prompt_text(
             "Prompt file sent on `wind up` (empty to skip)",
-            default=convention)
+            default="")
         repos.append(build_repo_entry(name, path, claude_args, prompt_file,
                                       override=override, agent=agent))
         if prompt_file:
@@ -1469,7 +1488,16 @@ def cmd_up(cfg, args):
                             glyph="!", color="yellow")
                         continue
                 with open(pf) as f:
-                    prompt = f.read().strip()
+                    raw_lines = f.readlines()
+                repo_name = repo.get("name", name)
+                filtered = [ln for ln in raw_lines
+                            if not _is_seed_line(ln, repo_name)]
+                prompt = "".join(filtered).strip()
+                if not prompt:
+                    log(f"{name}: prompt file appears to be the unedited seed "
+                        f"template — skipping send",
+                        glyph="!", color="yellow")
+                    continue
                 source = f"prompt_file {pf}"
             if prompt:
                 send_text(name, prompt)
@@ -1502,8 +1530,13 @@ def cmd_prompt(cfg, args):
     If the repo has neither an inline `prompt` nor a `prompt_file`, derive the
     convention path ~/.wind/prompts/<repo>.md, seed it with a template, open
     it, and on a clean close wire `prompt_file` into the config (atomically).
-    A repo that already carries inline `prompt` or `prompt_file` is left as-is
-    in the config; we just open the existing/derived target.
+
+    If the repo carries an inline `prompt`, open the convention path so the
+    user can write a file, then on a clean close wire `prompt_file` AND remove
+    the inline `prompt` key — so cmd_up uses the file on the next run (A3).
+
+    Relative `prompt_file` values are resolved against the repo's path to
+    match the runtime resolution in cmd_up (A4).
     """
     repo = _find_repo(cfg, args.repo)
     if repo is None:
@@ -1512,21 +1545,24 @@ def cmd_prompt(cfg, args):
 
     has_inline = bool(repo.get("prompt"))
     existing_file = repo.get("prompt_file")
-    wire_config = not has_inline and not existing_file
 
-    if has_inline:
-        # Inline one-liner repos have no file to edit; open the convention
-        # path so the user can switch to a file, but never clobber `prompt`.
-        path = _prompt_path(repo["name"], cfg)
-    elif existing_file:
-        path = os.path.expanduser(existing_file)
+    if existing_file:
+        # A4: resolve relative prompt_file paths against the repo path, not
+        # cwd, so the path we open matches what cmd_up resolves at runtime.
+        repo_path = os.path.expanduser(repo["path"])
+        if not os.path.isabs(existing_file) and not existing_file.startswith("~"):
+            path = os.path.join(repo_path, existing_file)
+        else:
+            path = os.path.expanduser(existing_file)
     else:
+        # No existing file: derive convention path (covers both fresh repos
+        # and inline-prompt repos that the user wants to migrate to a file).
         path = _prompt_path(repo["name"], cfg)
 
     _seed_prompt_file(path, repo["name"])
     _open_editor(path, args.editor)
 
-    if wire_config:
+    if not existing_file:
         # Re-read the RAW config (not the DEFAULT_CONFIG-merged cfg) so we only
         # add prompt_file and never persist default keys (e.g. claude_args:"")
         # into a previously-minimal config — that would flip presence-based
@@ -1537,6 +1573,8 @@ def cmd_prompt(cfg, args):
         for r in raw.get("repos", []):
             if r.get("name") == repo["name"]:
                 r["prompt_file"] = path
+                # A3: remove the inline prompt so cmd_up uses the file.
+                r.pop("prompt", None)
                 matched = True
         if matched:
             atomic_write_json(cfg["_path"], raw, mode=0o644)

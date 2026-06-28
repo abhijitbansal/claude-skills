@@ -648,11 +648,9 @@ class WizardHarness(unittest.TestCase):
             # Repo inherits the global preset -> no per-repo claude_args key.
             self.assertNotIn("claude_args", cfg["repos"][0])
             self.assertEqual(cfg["claude_args"], "")  # global "default" preset
-            # The prompt step defaults to the convention path; an empty answer
-            # keeps that default, so prompt_file is wired to ~/.wind/prompts/.
-            self.assertEqual(cfg["repos"][0]["prompt_file"],
-                             os.path.expanduser(os.path.join(
-                                 wind.WIND_HOME, "prompts", "alpha.md")))
+            # A6 (fixed): empty answer at the prompt-file step now truly skips;
+            # no prompt_file key is stored (old behavior pre-filled convention).
+            self.assertNotIn("prompt_file", cfg["repos"][0])
             self.assertEqual(cfg["resume_message"], "go on")
             self.assertEqual(cfg["ntfy_url"], "")
 
@@ -805,6 +803,32 @@ class WizardPermissionPresets(unittest.TestCase):
 
             self.assertEqual(cfg["claude_args"], "--global-custom")
             self.assertNotIn("claude_args", cfg["repos"][0])
+
+    def test_wizard_empty_skip_no_prompt_file(self):
+        # A6: the prompt-file step pre-fills the convention path as default,
+        # so pressing Enter (empty input) stores the convention path instead
+        # of skipping. Fix: default="" so Enter truly skips.
+        # We provide 4 selects; before the fix the 4th (editor-offer) is
+        # consumed; after the fix it is not consumed (prompt_file is empty).
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            cfg = drive_wizard(
+                texts=[
+                    "~/projects",  # scan roots
+                    "",            # extra paths
+                    "",            # prompt file — Enter should SKIP, not pre-fill
+                    "continue",    # resume message
+                    "",            # ntfy
+                ],
+                # global default (2); alpha: inherit (0), agent claude (0)
+                # 4th select = editor-offer (only consumed before the fix).
+                selects=[2, 0, 0, 0],
+                multiselects=[[0]],
+                target=target,
+                scan_result=[("alpha", os.path.join(tmp, "alpha"))])
+            self.assertNotIn(
+                "prompt_file", cfg["repos"][0],
+                "empty answer at prompt-file step must skip, not store convention path")
 
 
 class CmdUpArgsPrecedence(unittest.TestCase):
@@ -1252,6 +1276,27 @@ class EditorCommand(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 wind._editor_command(None, "/tmp/p.md")
 
+    def test_editor_command_unbalanced_quote(self):
+        # A2: shlex.split raises ValueError on unbalanced quotes; must die(),
+        # not propagate ValueError.
+        with mock.patch.dict(os.environ, {"EDITOR": 'code "--wait'}):
+            with self.assertRaises(SystemExit):
+                wind._editor_command(None, "/tmp/p.md")
+
+
+class SeedPromptFile(unittest.TestCase):
+    def test_seed_prompt_file_bare_filename(self):
+        # A1: os.path.dirname("PROMPT.md") == "" -> makedirs("") crashes.
+        # Fix: use dirname or "." so bare filenames work.
+        with tempfile.TemporaryDirectory() as tmp:
+            orig_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                wind._seed_prompt_file("PROMPT.md", "test-repo")
+                self.assertTrue(os.path.isfile("PROMPT.md"))
+            finally:
+                os.chdir(orig_cwd)
+
 
 class CmdPrompt(unittest.TestCase):
     def _cfg(self, repos):
@@ -1300,9 +1345,10 @@ class CmdPrompt(unittest.TestCase):
         with self.assertRaises(SystemExit):
             wind.cmd_prompt(cfg, args)
 
-    def test_inline_prompt_repo_does_not_wire_prompt_file(self):
-        # A repo that already carries inline `prompt` keeps it; cmd_prompt does
-        # not overwrite it with a prompt_file wiring.
+    def test_inline_prompt_repo_wires_prompt_file_and_removes_inline(self):
+        # A3 (fixed): cmd_prompt on a repo with inline `prompt` now wires
+        # prompt_file to the convention path and removes the inline `prompt`
+        # so cmd_up uses the file on the next run.
         with tempfile.TemporaryDirectory() as tmp:
             cfg_path = os.path.join(tmp, "second-wind.json")
             home = os.path.join(tmp, "home")
@@ -1320,8 +1366,10 @@ class CmdPrompt(unittest.TestCase):
                 wind.cmd_prompt(cfg, args)
             saved = wind.load_existing_config(cfg_path)
             web = next(r for r in saved["repos"] if r["name"] == "web")
-            self.assertNotIn("prompt_file", web)
-            self.assertEqual(web["prompt"], "do the thing")
+            self.assertIn("prompt_file", web,
+                          "cmd_prompt must wire prompt_file for inline-prompt repo")
+            self.assertNotIn("prompt", web,
+                             "cmd_prompt must remove inline prompt when wiring file")
 
     def test_no_matching_raw_repo_warns_and_leaves_config_unchanged(self):
         # The on-disk config has no "repos" key, so the merged cfg carries the
@@ -1375,6 +1423,58 @@ class CmdPrompt(unittest.TestCase):
                 wind.cmd_prompt(cfg, args)
             with open(pf) as f:
                 self.assertEqual(f.read(), "my real prompt")
+
+    def test_cmd_prompt_inline_wires_prompt_file(self):
+        # A3: repo with inline `prompt` currently never wires prompt_file.
+        # After the fix, cmd_prompt removes the inline prompt and wires
+        # prompt_file so cmd_up uses the file on the next run.
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg_path = os.path.join(tmp, "second-wind.json")
+            home = os.path.join(tmp, "home")
+            raw_repo = {"name": "r", "path": "/tmp/x", "prompt": "old inline"}
+            cfg = self._cfg([dict(raw_repo)])
+            cfg["_path"] = cfg_path
+            wind.atomic_write_json(cfg_path, {"repos": [raw_repo]}, mode=0o644)
+            args = mock.Mock()
+            args.repo = "r"
+            args.editor = None
+            with mock.patch.object(wind, "WIND_HOME", home), \
+                    mock.patch.object(wind, "_open_editor",
+                                      lambda path, ed: None):
+                wind.cmd_prompt(cfg, args)
+            with open(cfg_path) as f:
+                saved = json.load(f)
+            r = next(x for x in saved["repos"] if x["name"] == "r")
+            self.assertIn("prompt_file", r,
+                          "cmd_prompt must wire prompt_file for inline-prompt repo")
+            self.assertNotIn("prompt", r,
+                             "cmd_prompt must remove inline prompt when wiring file")
+
+    def test_cmd_prompt_relative_path_resolves_vs_repo(self):
+        # A4: a relative prompt_file like "PROMPT.md" must resolve against
+        # the repo's path, matching how cmd_up resolves it at runtime.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_dir = os.path.join(tmp, "myrepo")
+            os.makedirs(repo_dir)
+            cfg_path = os.path.join(tmp, "second-wind.json")
+            pf_abs = os.path.join(repo_dir, "PROMPT.md")
+            with open(pf_abs, "w") as f:
+                f.write("real content")
+            cfg = self._cfg([{"name": "myr", "path": repo_dir,
+                               "prompt_file": "PROMPT.md"}])
+            cfg["_path"] = cfg_path
+            wind.atomic_write_json(cfg_path, {"repos": cfg["repos"]}, mode=0o644)
+            opened = []
+            args = mock.Mock()
+            args.repo = "myr"
+            args.editor = None
+            with mock.patch.object(wind, "_open_editor",
+                                   lambda path, ed: opened.append(path)), \
+                    mock.patch.object(wind, "_seed_prompt_file",
+                                      lambda path, name: None):
+                wind.cmd_prompt(cfg, args)
+            self.assertEqual(opened, [pf_abs],
+                             "relative prompt_file must resolve vs repo path")
 
 
 class CmdUpInlinePrompt(unittest.TestCase):
@@ -1434,6 +1534,54 @@ class CmdUpInlinePrompt(unittest.TestCase):
                                       lambda n, t: sent.append((n, t))):
                 wind.cmd_up(cfg, args)
             self.assertEqual(len(sent), 1)
+
+    def test_cmd_up_skips_unedited_seed(self):
+        # A5: if the user never edited the seed template, cmd_up must warn
+        # and skip instead of sending the template lines verbatim.
+        with tempfile.TemporaryDirectory() as tmp:
+            pf = os.path.join(tmp, "myrepo.md")
+            wind._seed_prompt_file(pf, "myrepo")
+            cfg = self._cfg(tmp, [{"name": "myrepo", "path": tmp,
+                                   "prompt_file": pf}])
+            rec = _TmuxRecorder(existing=[])
+            sent = []
+            warnings = []
+            args = mock.Mock()
+            args.no_watch = True
+            with mock.patch.object(wind, "tmux", rec), \
+                    mock.patch.object(wind, "send_text",
+                                      lambda n, t: sent.append((n, t))), \
+                    mock.patch.object(wind, "log",
+                                      lambda msg, **k: warnings.append(msg)):
+                wind.cmd_up(cfg, args)
+            self.assertEqual(sent, [],
+                             "unedited seed file must not be sent")
+            self.assertTrue(
+                any("seed" in w.lower() or "unedited" in w.lower()
+                    or "skip" in w.lower() or "template" in w.lower()
+                    for w in warnings),
+                f"expected a warning about unedited seed, got: {warnings}")
+
+    def test_cmd_up_preserves_real_heading(self):
+        # A5: a real prompt file that starts with a heading (not a seed line)
+        # must be sent in full, including the heading.
+        with tempfile.TemporaryDirectory() as tmp:
+            pf = os.path.join(tmp, "myrepo.md")
+            with open(pf, "w") as f:
+                f.write("# My heading\nDo the thing")
+            cfg = self._cfg(tmp, [{"name": "myrepo", "path": tmp,
+                                   "prompt_file": pf}])
+            rec = _TmuxRecorder(existing=[])
+            sent = []
+            args = mock.Mock()
+            args.no_watch = True
+            with mock.patch.object(wind, "tmux", rec), \
+                    mock.patch.object(wind, "send_text",
+                                      lambda n, t: sent.append((n, t))):
+                wind.cmd_up(cfg, args)
+            self.assertEqual(len(sent), 1, "real prompt must be sent")
+            self.assertIn("# My heading", sent[0][1])
+            self.assertIn("Do the thing", sent[0][1])
 
 
 class BuildRepoEntryPrompt(unittest.TestCase):
