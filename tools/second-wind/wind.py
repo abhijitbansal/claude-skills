@@ -1323,6 +1323,50 @@ def find_dashboard_template():
     return None
 
 
+GUIDE_TEXT = """\
+Second Wind — set-and-forget Claude Code across repos.
+
+  1. wind init            Pick repos, a permission preset, and an agent.
+                          Writes your config (or --defaults for a starter file).
+  2. wind prompt <repo>   Optional: author each repo's first prompt in $EDITOR.
+  3. wind up              Launch a tmux session per repo, send the first prompt,
+                          and auto-spawn the watcher (it resumes you after the
+                          5-hour limit resets — overnight, untouched).
+  4. wind dash            Live localhost dashboard. Click a card to expand it;
+                          hit the attach button to copy `tmux attach -t <session>`
+                          and drop into the real terminal with full TUI autocomplete.
+
+Check in anytime:  wind status · wind resume · wind down
+Full visual guide:  docs/second-wind/index.html
+"""
+
+
+def find_guide_html():
+    """Locate the Second Wind visual guide for `wind guide --open`."""
+    candidates = [
+        os.path.expanduser(os.path.join(WIND_HOME, "guide.html")),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                     "..", "..", "docs", "second-wind", "index.html"),
+    ]
+    for p in candidates:
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def cmd_guide(args):
+    print(GUIDE_TEXT)
+    if getattr(args, "open", False):
+        path = find_guide_html()
+        if path:
+            import webbrowser
+            webbrowser.open("file://" + os.path.abspath(path))
+        else:
+            print("Visual guide not bundled locally — see "
+                  "https://abhijitbansal.github.io/claude-skills/second-wind/")
+    return 0
+
+
 def cmd_dash(cfg, args):
     import http.server
     import secrets
@@ -1781,11 +1825,17 @@ def main(argv=None):
                         help="port on 127.0.0.1 (default 8787)")
     p_dash.add_argument("--no-browser", action="store_true",
                         help="don't open the browser automatically")
+    p_guide = sub.add_parser("guide",
+                              help="print the setup walkthrough")
+    p_guide.add_argument("--open", action="store_true",
+                         help="also open the visual guide in a browser")
 
     args = parser.parse_args(argv)
 
     if args.command == "init":
         return cmd_init(args)
+    if args.command == "guide":
+        return cmd_guide(args)
 
     cfg = load_config(args.config)
     handlers = {

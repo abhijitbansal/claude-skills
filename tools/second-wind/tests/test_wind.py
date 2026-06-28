@@ -3,6 +3,7 @@
 Run: python3 -m unittest discover tests
 """
 
+import argparse
 import datetime
 import importlib.util
 import json
@@ -2271,6 +2272,29 @@ class DashboardAttachButton(unittest.TestCase):
                       "attach copy should use the clipboard API")
         self.assertIn("execCommand", self.html,
                       "attach copy needs an execCommand fallback")
+
+
+class WindGuide(unittest.TestCase):
+    """`wind guide` prints the canonical 4-step setup walkthrough."""
+
+    def _capture_guide(self, open_flag=False):
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = wind.cmd_guide(argparse.Namespace(open=open_flag))
+        return rc, buf.getvalue()
+
+    def test_guide_prints_four_steps_and_exits_zero(self):
+        rc, out = self._capture_guide()
+        self.assertEqual(rc, 0)
+        for kw in ("wind init", "wind prompt", "wind up", "wind dash"):
+            self.assertIn(kw, out, f"guide must name `{kw}`")
+
+    def test_guide_mentions_attach_and_visual_guide(self):
+        _, out = self._capture_guide()
+        self.assertIn("attach", out)
+        self.assertIn("docs/second-wind/index.html", out)
 
 
 if __name__ == "__main__":
