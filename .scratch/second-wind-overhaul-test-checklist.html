@@ -240,6 +240,22 @@
     </ul>
   </section>
 
+  <!-- 8 POST-REVIEW REGRESSIONS -->
+  <section class="group" data-group="Post-review regressions">
+    <h2><span class="gnum">8</span> Post-review regressions <span class="gref">(code-review hardening)</span><span class="gtally"></span></h2>
+    <ul class="checks">
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> Dashboard ANSI: a pane emitting bold then a separate color escape renders <b>bold AND colored together</b> in the card + modal (not plain color). Test: <pre class="cmd">printf '\033[1m\033[31mBOLD-RED\033[0m\n'</pre></span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> <code>wind init</code> wizard: at the "Prompt file sent on wind up (empty to skip)" step, pressing <b>Enter</b> (empty) truly skips — the repo gets NO prompt_file and no file is created (previously it silently recorded a path)</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> <code>wind prompt &lt;repo&gt;</code> on a repo that has an inline <code>prompt</code>: after editing+saving, <code>wind up</code> sends the <b>edited file</b> (not the stale inline prompt); the inline <code>prompt</code> key is dropped from config</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> <code>wind up</code> with an <b>unedited</b> seeded prompt file (closed editor without changing the <code>#</code> template) → sends NO initial prompt and logs a skip warning (does NOT send the <code>#</code> template text to the agent)</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> <code>wind prompt &lt;repo&gt;</code> with a bare-filename <code>prompt_file</code> (e.g. <code>PROMPT.md</code>, run from the repos' parent dir) → seeds + opens it without crashing</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> Two configs with different <code>session_prefix</code>: running <code>wind up</code> on the second while the first's watcher is alive → it <b>refuses</b> to spawn a second watcher with a clear message (does not clobber <code>~/.wind/state.json</code>)</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> Per-session resume from the dashboard modal → <code>wind status</code> no longer shows a phantom "resuming at HH:MM" countdown for that now-running session</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> A repo with <code>"claude_cmd": ""</code> → the session still launches <code>claude</code> (does not sit as a bare shell)</span></label></li>
+    </ul>
+    <p style="margin: 10px 18px 0 18px; font-size: 13.5px; color: var(--muted);">All eight are unit-covered; these confirm the real-terminal/dashboard surface.</p>
+  </section>
+
   <details class="deferred footer-note">
     <summary>Known deferred limitations — documented, <b>not</b> bugs to test</summary>
     <ul>

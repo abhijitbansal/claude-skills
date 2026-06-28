@@ -60,6 +60,18 @@ reaping the watcher, and backward-compat. The checks below need a **human eye**.
 - [ ] **NEW** `/second-wind` walks setup in Claude Code — slash command appears and steps through the four commands
 - [ ] **NEW** `docs/features.html` — search narrows results; each type chip filters; clicking a card expands its detail; back-link and landing "All features" link resolve
 
+## 8 · Post-review regressions (code-review hardening)
+- [ ] **REG** Dashboard ANSI: a pane emitting bold then a separate color escape renders bold AND colored together in the card + modal (not plain color). Test: `printf '\033[1m\033[31mBOLD-RED\033[0m\n'` into a session → BOLD-RED shows bold + red.
+- [ ] **REG** `wind init` wizard: at the "Prompt file sent on wind up (empty to skip)" step, pressing **Enter** (empty) truly skips — the repo gets NO prompt_file and no file is created (previously it silently recorded a path).
+- [ ] **REG** `wind prompt <repo>` on a repo that has an inline `prompt`: after editing+saving, `wind up` sends the **edited file** (not the stale inline prompt); the inline `prompt` key is dropped from config.
+- [ ] **REG** `wind up` with an **unedited** seeded prompt file (closed editor without changing the `#` template) → sends NO initial prompt and logs a skip warning (does NOT send the `#` template text to the agent).
+- [ ] **REG** `wind prompt <repo>` with a bare-filename `prompt_file` (e.g. `PROMPT.md`, run from the repos' parent dir) → seeds + opens it without crashing.
+- [ ] **REG** Two configs with different `session_prefix`: running `wind up` on the second while the first's watcher is alive → it **refuses** to spawn a second watcher with a clear message (does not clobber `~/.wind/state.json`).
+- [ ] **REG** Per-session resume from the dashboard modal → `wind status` no longer shows a phantom "resuming at HH:MM" countdown for that now-running session.
+- [ ] **REG** A repo with `"claude_cmd": ""` → the session still launches `claude` (does not sit as a bare shell).
+
+All eight are unit-covered; these confirm the real-terminal/dashboard surface.
+
 ## Known deferred limitations (documented, not bugs to test)
 - Manual resume during a pending auto-resume may yield one extra harmless `continue` at reset.
 - Two watchers/configs on one machine share one `~/.wind/state.json` (single-watcher-per-machine supported).
