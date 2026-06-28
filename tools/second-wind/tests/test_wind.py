@@ -2297,5 +2297,25 @@ class WindGuide(unittest.TestCase):
         self.assertIn("docs/second-wind/index.html", out)
 
 
+class DashboardHelp(unittest.TestCase):
+    """The dashboard has a help button + modal that explains itself."""
+
+    @classmethod
+    def setUpClass(cls):
+        path = os.path.join(os.path.dirname(__file__), "..", "dashboard.html")
+        with open(path) as f:
+            cls.html = f.read()
+
+    def test_help_button_and_overlay_present(self):
+        self.assertIn('id="help-btn"', self.html)
+        self.assertIn('id="help-overlay"', self.html)
+        self.assertIn('id="help-close"', self.html)
+
+    def test_help_mentions_key_surfaces(self):
+        for needle in ("wind guide", "attach", "watcher", "resume"):
+            self.assertIn(needle, self.html,
+                          f"help should mention `{needle}`")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -485,6 +485,57 @@
     .card-actions { padding: 10px 12px 14px; }
     #watcher { padding: 12px 14px; }
   }
+  .btn-help {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-dim);
+    font-size: 13px;
+    padding: 5px 10px;
+    margin-left: 12px;
+    cursor: pointer;
+  }
+  .btn-help:hover { color: var(--cyan); border-color: var(--cyan-dim); }
+  #help-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 7, 12, .72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5vh 5vw;
+    z-index: 60;
+  }
+  #help-overlay[hidden] { display: none; }
+  #help-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    max-width: 640px;
+    width: 100%;
+    max-height: 86vh;
+    overflow-y: auto;
+  }
+  #help-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  #help-head .help-title { font-weight: 600; flex: 1 1 auto; }
+  #help-body { padding: 8px 20px 20px; }
+  #help-body h3 { color: var(--cyan-soft); font-size: 14px; margin: 16px 0 6px; }
+  #help-body ul { margin: 0; padding-left: 18px; }
+  #help-body li, #help-body p { color: var(--text-dim); margin: 4px 0; }
+  #help-body code {
+    background: var(--bg-pre);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: .05em .35em;
+    font-family: var(--mono);
+    font-size: .85em;
+  }
 </style>
 </head>
 <body>
@@ -496,6 +547,8 @@
   <header>
     <h1 class="wordmark"><span class="glyphs">◢◤</span> second wind</h1>
     <span class="tagline">live session dashboard</span>
+    <button id="help-btn" type="button" class="btn-help"
+      title="Dashboard guide">? help</button>
   </header>
 
   <div id="watcher">
@@ -529,6 +582,37 @@
       <textarea id="modal-input" class="send-input" rows="3"
         placeholder="send text to this session…" aria-label="text to send"></textarea>
       <button id="modal-send" type="button">send</button>
+    </div>
+  </div>
+</div>
+
+<div id="help-overlay" hidden>
+  <div id="help-card" role="dialog" aria-modal="true" aria-label="dashboard help">
+    <div id="help-head">
+      <span class="help-title">Dashboard guide</span>
+      <button id="help-close" type="button" class="btn-close" aria-label="close">✕</button>
+    </div>
+    <div id="help-body">
+      <h3>Session states</h3>
+      <ul>
+        <li><b>running</b> — the agent is active.</li>
+        <li><b>idle</b> — launched, waiting for input.</li>
+        <li><b>paused</b> — hit the 5-hour limit; the watcher auto-resumes after reset.</li>
+        <li><b>reset countdown</b> — time until the watcher resumes.</li>
+      </ul>
+      <h3>Actions</h3>
+      <ul>
+        <li><b>↻ resume</b> — nudge this session (or all) with the resume message.</li>
+        <li><b>⧉ attach</b> — copy <code>tmux attach -t &lt;session&gt;</code>; paste in a terminal for the full TUI (slash autocomplete, history).</li>
+        <li><b>kill</b> — end the tmux session (confirms first).</li>
+        <li><b>send</b> — type text or answers straight into the pane.</li>
+      </ul>
+      <h3>The watcher</h3>
+      <p>Detects the usage limit, waits for the reset, and resumes every watched
+        (Claude) session in one sweep. Copilot sessions are shown but never
+        auto-resumed.</p>
+      <h3>First time?</h3>
+      <p>Run <code>wind guide</code> in your terminal for the full setup walkthrough.</p>
     </div>
   </div>
 </div>
@@ -570,6 +654,9 @@ const els = {
   modalAttach: document.getElementById("modal-attach"),
   modalKill: document.getElementById("modal-kill"),
   modalClose: document.getElementById("modal-close"),
+  helpBtn: document.getElementById("help-btn"),
+  helpOverlay: document.getElementById("help-overlay"),
+  helpClose: document.getElementById("help-close"),
 };
 
 // name -> { root, pill, resetLine, pane, input, sendBtn, killBtn, pinned }
@@ -1035,6 +1122,17 @@ els.modalOverlay.addEventListener("click", (ev) => {
 });
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape" && !els.modalOverlay.hidden) closeModal();
+});
+
+function openHelp() { els.helpOverlay.hidden = false; }
+function closeHelp() { els.helpOverlay.hidden = true; }
+els.helpBtn.addEventListener("click", openHelp);
+els.helpClose.addEventListener("click", closeHelp);
+els.helpOverlay.addEventListener("click", (ev) => {
+  if (ev.target === els.helpOverlay) closeHelp();
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && !els.helpOverlay.hidden) closeHelp();
 });
 
 const modalDoSend = async () => {
