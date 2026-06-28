@@ -417,20 +417,6 @@ def pick_permission_preset(title):
     return claude_args
 
 
-def resolve_claude_args(repo, cfg):
-    """Resolve a repo's claude_args by key-PRESENCE, not truthiness.
-
-    Per-repo `claude_args` (if the key exists) wins over top-level
-    `claude_args` (if the key exists), which wins over "" (no args). An
-    explicit per-repo `claude_args: ""` is therefore honored as empty,
-    distinct from "unset → inherit global". Returns (args, source).
-    """
-    if "claude_args" in repo:
-        return repo["claude_args"], "per-repo"
-    if "claude_args" in cfg:
-        return cfg["claude_args"], "global"
-    return "", "default"
-
 
 def resolve_agent(repo, cfg):
     """Resolve a repo's agent preset + launch/resume/limit values (C2).
@@ -461,7 +447,8 @@ def resolve_agent(repo, cfg):
     if preset is None:
         die(f"unknown agent {name!r}; choose one of: "
             f"{', '.join(sorted(AGENT_PRESETS))}")
-    if "claude_cmd" in repo:
+    # C1: an explicit empty claude_cmd must fall back (a cmd can never be empty).
+    if "claude_cmd" in repo and repo["claude_cmd"]:
         cmd = repo["claude_cmd"]
     elif "cmd" in preset and name != "claude":
         cmd = preset["cmd"]
@@ -469,14 +456,19 @@ def resolve_agent(repo, cfg):
         cmd = cfg["claude_cmd"]
     else:
         cmd = preset["cmd"]
+    # C2: track args_source alongside args so callers use one resolver, not two.
     if "claude_args" in repo:
         args = repo["claude_args"]
+        args_source = "per-repo"
     elif name != "claude":
         args = preset["args"]
+        args_source = "preset"
     elif "claude_args" in cfg:
         args = cfg["claude_args"]
+        args_source = "global"
     else:
         args = preset["args"]
+        args_source = "preset"
     # resume_message: for non-claude agents the preset wins over the
     # always-present top-level `resume_message` so a Copilot session gets its
     # own nudge. For claude, top-level (if present) wins, matching today.
@@ -490,9 +482,10 @@ def resolve_agent(repo, cfg):
         "name": name,
         "cmd": cmd,
         "args": args,
+        "args_source": args_source,          # C2: single source of truth for log
         "resume_message": resume_message,
         "watch": preset["watch"],
-        "limit_patterns": preset["limit_patterns"],
+        "limit_patterns": list(preset["limit_patterns"]),  # C3: copy, not alias
     }
 
 
@@ -1503,16 +1496,16 @@ def cmd_up(cfg, args):
             continue
         if not os.path.isdir(path):
             die(f"{name}: repo path does not exist: {path}")
-        # Resolve cmd/args from the repo's agent preset (C2). Explicit per-repo
-        # `claude_cmd`/`claude_args` still override; an explicit "" is honored
-        # as empty (key-presence), not treated as unset → inherit.
+        # Resolve cmd/args from the repo's agent preset. Explicit per-repo
+        # `claude_cmd`/`claude_args` still override; an explicit "" for args is
+        # honored as "no args" (key-presence), not treated as unset → inherit.
+        # args_source comes from resolve_agent so log and launch can't diverge.
         agent = resolve_agent(repo, cfg)
-        _, args_source = resolve_claude_args(repo, cfg)
         command = agent["cmd"] + (f" {agent['args']}" if agent["args"] else "")
         tmux("new-session", "-d", "-s", name, "-c", path)
         tmux("send-keys", "-t", f"={name}:", command, "Enter")
         log(f"{name}: launched `{command}` in {path} "
-            f"(agent {agent['name']}, {args_source} args)",
+            f"(agent {agent['name']}, {agent['args_source']} args)",
             glyph="→", color="cyan")
         started.append((repo, name))
 
@@ -1613,7 +1606,6 @@ def cmd_prompt(cfg, args):
         names = ", ".join(r.get("name", "?") for r in cfg["repos"]) or "(none)"
         die(f"no repo named {args.repo!r} in config; known repos: {names}")
 
-    has_inline = bool(repo.get("prompt"))
     existing_file = repo.get("prompt_file")
 
     if existing_file:

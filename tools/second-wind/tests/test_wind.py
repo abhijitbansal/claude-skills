@@ -372,30 +372,6 @@ class ConfigAssembly(unittest.TestCase):
         self.assertEqual(cfg["claude_args"], "--permission-mode plan")
 
 
-class ResolveClaudeArgs(unittest.TestCase):
-    """Phase 3: claude_args precedence by key-PRESENCE (C2)."""
-
-    def test_per_repo_key_present_wins(self):
-        args, source = wind.resolve_claude_args(
-            {"claude_args": "--repo"}, {"claude_args": "--global"})
-        self.assertEqual((args, source), ("--repo", "per-repo"))
-
-    def test_global_key_used_when_repo_key_absent(self):
-        args, source = wind.resolve_claude_args(
-            {}, {"claude_args": "--global"})
-        self.assertEqual((args, source), ("--global", "global"))
-
-    def test_explicit_empty_repo_args_honored_as_empty(self):
-        # Presence beats truthiness: "" does NOT fall through to global.
-        args, source = wind.resolve_claude_args(
-            {"claude_args": ""}, {"claude_args": "--global"})
-        self.assertEqual((args, source), ("", "per-repo"))
-
-    def test_default_when_neither_key_present(self):
-        args, source = wind.resolve_claude_args({}, {})
-        self.assertEqual((args, source), ("", "default"))
-
-
 class StripAnsi(unittest.TestCase):
     def test_strips_color_and_clears(self):
         self.assertEqual(wind.strip_ansi("\x1b[31mred\x1b[0m \x1b[2Kx"),
@@ -2230,6 +2206,53 @@ class ResolveAgentPrecedence(unittest.TestCase):
         agent = wind.resolve_agent({"agent": "copilot"}, cfg)
         self.assertEqual(agent["resume_message"],
                          "Please continue where you left off.")
+
+    # C1: empty claude_cmd must fall back to default, not become an empty cmd
+    def test_explicit_empty_claude_cmd_falls_back_to_default(self):
+        # Repo with claude_cmd:"" must resolve to the preset/global default, not "".
+        cfg = self._cfg()  # DEFAULT_CONFIG has top-level claude_cmd:"claude"
+        agent = wind.resolve_agent({"claude_cmd": ""}, cfg)
+        self.assertNotEqual(agent["cmd"], "")
+        self.assertEqual(agent["cmd"], "claude")
+
+    def test_explicit_empty_claude_cmd_for_copilot_falls_back_to_preset(self):
+        # Copilot repo with claude_cmd:"" must get "copilot" from the preset.
+        cfg = self._cfg()
+        agent = wind.resolve_agent({"agent": "copilot", "claude_cmd": ""}, cfg)
+        self.assertEqual(agent["cmd"], "copilot")
+
+    # C2: resolve_agent must return args_source so cmd_up can't disagree
+    def test_args_source_returned_per_repo(self):
+        cfg = self._cfg(claude_args="--global")
+        agent = wind.resolve_agent({"claude_args": "--repo"}, cfg)
+        self.assertEqual(agent["args_source"], "per-repo")
+
+    def test_args_source_returned_global(self):
+        cfg = self._cfg(claude_args="--global")
+        agent = wind.resolve_agent({}, cfg)
+        self.assertEqual(agent["args_source"], "global")
+
+    def test_copilot_args_source_is_preset_not_global(self):
+        # Copilot ignores global claude_args; source must say "preset" not "global".
+        cfg = self._cfg(claude_args="--some-global")
+        agent = wind.resolve_agent({"agent": "copilot"}, cfg)
+        self.assertEqual(agent["args"], "")
+        self.assertEqual(agent["args_source"], "preset")
+
+    def test_args_source_returned_preset_when_no_keys(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        del cfg["claude_args"]
+        agent = wind.resolve_agent({}, cfg)
+        self.assertEqual(agent["args_source"], "preset")
+
+    # C3: limit_patterns must be a copy, not the shared global list
+    def test_limit_patterns_is_copy_not_reference(self):
+        agent = wind.resolve_agent({}, self._cfg())
+        original_patterns = list(wind.DEFAULT_LIMIT_PATTERNS)
+        agent["limit_patterns"].append("EXTRA_SENTINEL")
+        self.assertEqual(wind.DEFAULT_LIMIT_PATTERNS, original_patterns)
+        self.assertEqual(wind.AGENT_PRESETS["claude"]["limit_patterns"],
+                         original_patterns)
 
 
 class LimitPatternsResolution(unittest.TestCase):
