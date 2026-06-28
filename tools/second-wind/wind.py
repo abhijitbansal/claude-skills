@@ -422,8 +422,12 @@ def resolve_agent(repo, cfg):
     """Resolve a repo's agent preset + launch/resume/limit values (C2).
 
     Returns {"name", "cmd", "args", "resume_message", "watch",
-    "limit_patterns"}. Resolution is by key-*presence*, not truthiness, so an
-    explicit `claude_args: ""` is honored as "no args" distinctly from "unset".
+    "limit_patterns"}. For `args` resolution is by key-*presence*, not
+    truthiness, so an explicit `claude_args: ""` is honored as "no args"
+    distinctly from "unset". `cmd` is the exception (C1): the key must exist
+    *and* be non-empty, because a command can never be empty — an explicit
+    `claude_cmd: ""` falls back to the preset/default rather than launching a
+    bare, command-less session.
 
     Precedence for `cmd`/`args`: per-repo explicit `claude_cmd`/`claude_args`
     (if the key exists) > agent preset > top-level `claude_cmd`/`claude_args`.

@@ -2212,7 +2212,6 @@ class ResolveAgentPrecedence(unittest.TestCase):
         # Repo with claude_cmd:"" must resolve to the preset/global default, not "".
         cfg = self._cfg()  # DEFAULT_CONFIG has top-level claude_cmd:"claude"
         agent = wind.resolve_agent({"claude_cmd": ""}, cfg)
-        self.assertNotEqual(agent["cmd"], "")
         self.assertEqual(agent["cmd"], "claude")
 
     def test_explicit_empty_claude_cmd_for_copilot_falls_back_to_preset(self):
