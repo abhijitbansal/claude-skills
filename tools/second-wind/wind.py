@@ -880,12 +880,32 @@ def save_state(state):
     atomic_write_json(path, state, mode=0o600)
 
 
-def clear_state():
+def _erase_state_files():
+    """Remove all state files unconditionally. Used only by cmd_down after
+    killing all sessions — anything still alive would be an orphan."""
     for p in (STATE_PATH, LEGACY_STATE_PATH):
         try:
             os.remove(os.path.expanduser(p))
         except OSError:
             pass
+
+
+def clear_state():
+    """Clear resume bookkeeping (paused, reset_at) while preserving watcher
+    identity keys (watcher_session, watcher_config).
+
+    Watcher identity must survive a clear_state() so cmd_down can still reap
+    a running watcher even after a prefix change or a manual resume.  When no
+    identity keys remain (nothing worth persisting) the state file is removed
+    entirely so load_state() returns {}.
+    """
+    state = load_state()
+    remaining = {k: v for k, v in state.items()
+                 if k not in ("paused", "reset_at")}
+    if remaining:
+        save_state(remaining)
+    else:
+        _erase_state_files()
 
 
 # ------------------------------------------------------------------ tmux ---
@@ -989,9 +1009,13 @@ def spawn_watcher(cfg, poll=None):
         return False
     foreign = find_foreign_watcher(cfg)
     if foreign:
+        # B5: refuse to clobber a foreign watcher. Re-running on the SAME
+        # config is already handled by session_exists() above, so this branch
+        # is only reached for a genuinely different watcher prefix/config.
         log(f"another watcher session is running: {foreign} — "
-            f"single watcher per machine; leaving it alone",
+            f"run `wind down` there first, or pass --no-watch",
             glyph="!", color="yellow")
+        return False
     cmd = build_watcher_command(cfg, poll=poll)
     tmux("new-session", "-d", "-s", name, *_as_tmux_command(cmd))
     log(f"{name}: watcher started (auto-resume active)", glyph="→",
@@ -1211,6 +1235,16 @@ def status_payload(cfg):
     return {"watcher": watcher, "sessions": sessions}
 
 
+def _paused_orphans(cfg, state):
+    """Paused session names in state that are no longer in cfg['repos'].
+
+    Used by the watcher reset path and the dashboard resume-all proxy so both
+    code paths share the same orphan-detection logic (B3 DRY requirement).
+    """
+    all_cfg_names = {session_name(cfg, r) for r in cfg["repos"]}
+    return sorted(n for n in state.get("paused", []) if n not in all_cfg_names)
+
+
 def make_dash_handler(cfg, token, template):
     import http.server
 
@@ -1305,8 +1339,26 @@ def make_dash_handler(cfg, token, template):
                     repos = [r for r in cfg["repos"]
                              if session_name(cfg, r) == name]
                     sent = resume_sessions(cfg, repos)
+                    # B2: remove this session from persisted paused/reset_at
+                    # without touching other sessions' entries.
+                    state = load_state()
+                    old_paused = sorted(state.get("paused", []))
+                    new_paused = sorted(n for n in old_paused if n != name)
+                    if new_paused != old_paused:
+                        if new_paused:
+                            save_state({**state, "paused": new_paused})
+                        else:
+                            # Last paused session cleared; drop bookkeeping keys
+                            # but keep watcher identity so cmd_down can reap.
+                            save_state({k: v for k, v in state.items()
+                                        if k not in ("paused", "reset_at")})
                 else:
-                    sent = resume_sessions(cfg, cfg["repos"])
+                    state = load_state()
+                    sent = list(resume_sessions(cfg, cfg["repos"]))
+                    # B3: also resume orphan paused sessions not in cfg['repos']
+                    orphans = _paused_orphans(cfg, state)
+                    if orphans:
+                        sent += resume_orphans(cfg, orphans)
                     clear_state()
                 self._send(200, json.dumps({"resumed": len(sent)}))
             elif self.path == "/api/send":
@@ -1503,6 +1555,24 @@ def cmd_up(cfg, args):
                 send_text(name, prompt)
                 log(f"{name}: sent initial prompt from {source} "
                     f"({len(prompt)} chars)", glyph="✓", color="green")
+    # B4: clear stale paused/reset_at for freshly-launched sessions so an
+    # inherited past reset_at can't fire a spurious first-poll resume +
+    # cooldown. Runs unconditionally (before the no-watch branch) so the
+    # watcher, when it starts, sees clean state for these sessions.
+    if started:
+        state = load_state()
+        started_names = {n for _, n in started}
+        old_paused = sorted(state.get("paused", []))
+        new_paused = sorted(n for n in old_paused if n not in started_names)
+        if new_paused != old_paused:
+            if new_paused:
+                save_state({**state, "paused": new_paused})
+            else:
+                # All paused sessions were just re-launched; drop bookkeeping
+                # keys but keep watcher identity so cmd_down can still reap it.
+                save_state({k: v for k, v in state.items()
+                            if k not in ("paused", "reset_at")})
+
     if getattr(args, "no_watch", False):
         log("watcher not started (--no-watch); run `wind watch` to enable "
             "auto-resume", glyph="○", color="dim")
@@ -1689,7 +1759,8 @@ def cmd_down(cfg, args):
         if name and session_exists(name):
             tmux("kill-session", "-t", f"={name}")
             log(f"{name}: watcher killed", glyph="✗", color="red")
-    clear_state()
+    # Full wipe AFTER killing the watcher: nothing is alive to need identity.
+    _erase_state_files()
 
 
 def start_caffeinate():
@@ -1798,8 +1869,8 @@ def cmd_watch(cfg, args):
                     paused_repos = [by_name[n] for n in sorted(paused)
                                     if n in by_name]
                     sent = resume_sessions(cfg, paused_repos)
-                    orphans = sorted(n for n in paused if n not in by_name)
-                    sent += resume_orphans(cfg, orphans)
+                    # B3 DRY: shared helper also used by dashboard resume-all.
+                    sent += resume_orphans(cfg, _paused_orphans(cfg, state))
                     notify(cfg, f"Resumed {len(sent)} session(s) after "
                                 f"limit reset.")
                     until = time.time() + cfg["resume_cooldown_seconds"]

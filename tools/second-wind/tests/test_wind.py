@@ -199,6 +199,55 @@ class StatePaths(unittest.TestCase):
                 wind.STATE_PATH, wind.LEGACY_STATE_PATH = orig
 
 
+class ClearStatePreservesIdentity(unittest.TestCase):
+    """B1: clear_state() must preserve watcher identity keys."""
+
+    def test_clears_paused_and_reset_at_but_keeps_watcher_identity(self):
+        # B1: clear_state() currently deletes the whole file, destroying
+        # watcher_session/watcher_config that cmd_down needs to reap a
+        # renamed watcher. Fix: clear only paused/reset_at.
+        with tempfile.TemporaryDirectory() as tmp:
+            statef = os.path.join(tmp, "state.json")
+            orig = (wind.STATE_PATH, wind.LEGACY_STATE_PATH)
+            wind.STATE_PATH = statef
+            wind.LEGACY_STATE_PATH = os.path.join(tmp, "legacy.json")
+            try:
+                wind.save_state({
+                    "paused": ["wind-x"],
+                    "reset_at": 1234567890.0,
+                    "watcher_session": "wind-watcher",
+                    "watcher_config": "/home/user/.wind/config.json",
+                })
+                wind.clear_state()
+                state = wind.load_state()
+                self.assertNotIn("paused", state,
+                                 "clear_state must remove paused")
+                self.assertNotIn("reset_at", state,
+                                 "clear_state must remove reset_at")
+                self.assertEqual(state.get("watcher_session"), "wind-watcher",
+                                 "clear_state must preserve watcher_session")
+                self.assertEqual(state.get("watcher_config"),
+                                 "/home/user/.wind/config.json",
+                                 "clear_state must preserve watcher_config")
+            finally:
+                wind.STATE_PATH, wind.LEGACY_STATE_PATH = orig
+
+    def test_clear_state_erases_file_when_only_bookkeeping_present(self):
+        # When state has only paused/reset_at (no identity), clear_state
+        # should leave no file (load_state returns {}).
+        with tempfile.TemporaryDirectory() as tmp:
+            statef = os.path.join(tmp, "state.json")
+            orig = (wind.STATE_PATH, wind.LEGACY_STATE_PATH)
+            wind.STATE_PATH = statef
+            wind.LEGACY_STATE_PATH = os.path.join(tmp, "legacy.json")
+            try:
+                wind.save_state({"paused": ["wind-x"], "reset_at": 1.0})
+                wind.clear_state()
+                self.assertEqual(wind.load_state(), {})
+            finally:
+                wind.STATE_PATH, wind.LEGACY_STATE_PATH = orig
+
+
 class MenuLogic(unittest.TestCase):
     def test_select_arrows_and_enter(self):
         keys = iter([wind.KEY_DOWN, wind.KEY_DOWN, wind.KEY_ENTER])
@@ -510,6 +559,167 @@ class DashApi(unittest.TestCase):
                 break
         s.close()
         self.assertIn(b"400", response)
+
+
+class DashApiPerSessionResumeUpdatesState(unittest.TestCase):
+    """B2: per-session /api/resume must remove that session from persisted paused."""
+
+    def setUp(self):
+        self.cfg = dict(wind.DEFAULT_CONFIG)
+        self.cfg["repos"] = [{"name": "s1", "path": "/tmp"},
+                             {"name": "s2", "path": "/tmp"}]
+        self.token = "tok-b2"
+        self.saved_states = []
+        self._orig = (wind.resume_sessions, wind.resume_orphans,
+                      wind.load_state, wind.save_state, wind.clear_state)
+
+        def fake_resume(cfg, repos):
+            return [wind.session_name(cfg, r) for r in repos]
+
+        wind.resume_sessions = fake_resume
+        wind.resume_orphans = lambda cfg, names: []
+        wind.clear_state = lambda: None
+
+        handler = wind.make_dash_handler(self.cfg, self.token,
+                                         "<html>{{TOKEN}}</html>")
+        import http.server
+        import threading
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0),
+                                                      handler)
+        threading.Thread(target=self.server.serve_forever,
+                         daemon=True).start()
+        self.port = self.server.server_address[1]
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        (wind.resume_sessions, wind.resume_orphans,
+         wind.load_state, wind.save_state, wind.clear_state) = self._orig
+
+    def _req(self, method, path, body=None, token=None):
+        import http.client
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["X-Wind-Token"] = token
+        conn.request(method, path,
+                     json.dumps(body) if body is not None else None, headers)
+        resp = conn.getresponse()
+        data = resp.read().decode()
+        conn.close()
+        return resp.status, data
+
+    def test_per_session_resume_removes_session_from_paused(self):
+        # B2: resuming s1 must remove it from persisted paused; s2 is preserved.
+        saved = []
+        wind.load_state = lambda: {
+            "paused": ["wind-s1", "wind-s2"],
+            "reset_at": 9999999.0,
+            "watcher_session": "wind-watcher",
+        }
+        wind.save_state = lambda s: saved.append(dict(s))
+
+        status, data = self._req("POST", "/api/resume",
+                                 {"session": "wind-s1"}, token="tok-b2")
+        self.assertEqual(status, 200)
+        self.assertTrue(saved, "per-session resume must call save_state")
+        last = saved[-1]
+        self.assertNotIn("wind-s1", last.get("paused", []),
+                         "resumed session must be removed from paused")
+        self.assertIn("wind-s2", last.get("paused", []),
+                      "other session must remain in paused")
+        self.assertIn("reset_at", last,
+                      "reset_at must stay while other sessions remain paused")
+
+    def test_per_session_resume_drops_reset_at_when_last_paused(self):
+        # B2: resuming the last paused session must drop reset_at from state.
+        saved = []
+        wind.load_state = lambda: {
+            "paused": ["wind-s1"],
+            "reset_at": 9999999.0,
+            "watcher_session": "wind-watcher",
+        }
+        wind.save_state = lambda s: saved.append(dict(s))
+
+        status, _ = self._req("POST", "/api/resume",
+                               {"session": "wind-s1"}, token="tok-b2")
+        self.assertEqual(status, 200)
+        self.assertTrue(saved, "must call save_state")
+        last = saved[-1]
+        self.assertNotIn("paused", last,
+                         "paused must be absent when empty")
+        self.assertNotIn("reset_at", last,
+                         "reset_at must be dropped when paused becomes empty")
+        self.assertEqual(last.get("watcher_session"), "wind-watcher",
+                         "watcher identity must be preserved")
+
+
+class DashApiResumeAllOrphans(unittest.TestCase):
+    """B3: dashboard resume-all must also call resume_orphans for paused sessions
+    not in cfg['repos']."""
+
+    def setUp(self):
+        self.cfg = dict(wind.DEFAULT_CONFIG)
+        self.cfg["repos"] = [{"name": "active", "path": "/tmp"}]
+        self.token = "tok-b3"
+        self.orphan_calls = []
+        self._orig = (wind.resume_sessions, wind.resume_orphans,
+                      wind.load_state, wind.save_state, wind.clear_state)
+        wind.resume_sessions = lambda cfg, repos: (
+            [wind.session_name(cfg, r) for r in repos])
+        wind.resume_orphans = (
+            lambda cfg, names: self.orphan_calls.append(list(names)) or [])
+        wind.clear_state = lambda: None
+        wind.save_state = lambda s: None
+        handler = wind.make_dash_handler(self.cfg, self.token,
+                                         "<html>{{TOKEN}}</html>")
+        import http.server
+        import threading
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0),
+                                                      handler)
+        threading.Thread(target=self.server.serve_forever,
+                         daemon=True).start()
+        self.port = self.server.server_address[1]
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        (wind.resume_sessions, wind.resume_orphans,
+         wind.load_state, wind.save_state, wind.clear_state) = self._orig
+
+    def _req(self, method, path, body=None):
+        import http.client
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        headers = {"Content-Type": "application/json",
+                   "X-Wind-Token": self.token}
+        conn.request(method, path,
+                     json.dumps(body) if body is not None else None, headers)
+        resp = conn.getresponse()
+        data = resp.read().decode()
+        conn.close()
+        return resp.status, data
+
+    def test_resume_all_calls_resume_orphans_for_paused_non_repo_sessions(self):
+        # B3: paused session 'wind-gone' is NOT in cfg['repos']; resume-all
+        # must still nudge it via resume_orphans.
+        wind.load_state = lambda: {
+            "paused": ["wind-gone"],
+            "reset_at": 1.0,
+        }
+        status, _ = self._req("POST", "/api/resume", {})
+        self.assertEqual(status, 200)
+        self.assertTrue(self.orphan_calls,
+                        "dashboard resume-all must call resume_orphans for orphan paused sessions")
+        self.assertIn("wind-gone", self.orphan_calls[0],
+                      "orphan 'wind-gone' must be in the resume_orphans call")
+
+    def test_resume_all_does_not_call_orphans_when_none_paused(self):
+        # When no orphan paused sessions exist, resume_orphans is not called.
+        wind.load_state = lambda: {}
+        status, _ = self._req("POST", "/api/resume", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(self.orphan_calls, [],
+                         "resume_orphans must not be called when no orphans")
 
 
 class AtomicWriteJson(unittest.TestCase):
@@ -1024,6 +1234,22 @@ class SpawnWatcher(unittest.TestCase):
             self.assertTrue(any("other-watcher" in m for m in logs),
                             f"expected a foreign-watcher warning, got {logs}")
 
+    def test_foreign_watcher_prevents_spawn(self):
+        # B5: when a foreign watcher session exists, spawn_watcher must NOT
+        # spawn a second one — it must log a warning and return without
+        # creating any new tmux session.
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = self._cfg(tmp)
+            rec = _TmuxRecorder(existing=["other-watcher"])
+            with mock.patch.object(wind, "tmux", rec), \
+                    mock.patch.object(wind, "log", lambda msg, **k: None):
+                result = wind.spawn_watcher(cfg)
+            new_sessions = [c for c in rec.calls if c and c[0] == "new-session"]
+            self.assertEqual(new_sessions, [],
+                             "foreign watcher must prevent spawning a second watcher")
+            self.assertIs(result, False,
+                          "spawn_watcher must return False when refusing a foreign")
+
 
 class CmdUpWatcherSpawn(unittest.TestCase):
     def _cfg(self, tmp):
@@ -1078,6 +1304,80 @@ class CmdUpWatcherSpawn(unittest.TestCase):
                 wind.cmd_up(cfg, args)
             new = [c for c in rec.calls if c and c[0] == "new-session"]
             self.assertEqual(new, [])
+
+
+class CmdUpClearsStaleState(unittest.TestCase):
+    """B4: cmd_up must clear stale paused/reset_at for freshly-launched sessions."""
+
+    def _cfg(self, tmp):
+        abs_cfg = os.path.join(tmp, "second-wind.json")
+        with open(abs_cfg, "w") as f:
+            json.dump({"repos": [{"name": "x", "path": tmp}]}, f)
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "x", "path": tmp}]
+        cfg["_path"] = abs_cfg
+        cfg["startup_delay_seconds"] = 0
+        return cfg
+
+    def test_up_clears_paused_entry_for_launched_session(self):
+        # B4: if wind-x is in state['paused'] before cmd_up launches it,
+        # the stale paused entry and reset_at must be removed before the
+        # watcher starts (otherwise the watcher fires a spurious first-poll
+        # resume + cooldown).
+        with tempfile.TemporaryDirectory() as tmp:
+            statef = os.path.join(tmp, "state.json")
+            orig = wind.STATE_PATH
+            wind.STATE_PATH = statef
+            cfg = self._cfg(tmp)
+            wind.save_state({
+                "paused": ["wind-x"],
+                "reset_at": 1.0,
+                "watcher_session": "wind-watcher",
+                "watcher_config": cfg["_path"],
+            })
+            rec = _TmuxRecorder(existing=[])
+            args = mock.Mock()
+            args.no_watch = True  # skip actual watcher spawn, test state only
+            try:
+                with mock.patch.object(wind, "tmux", rec):
+                    wind.cmd_up(cfg, args)
+                state = wind.load_state()
+                self.assertNotIn(
+                    "wind-x", state.get("paused", []),
+                    "cmd_up must remove launched session from stale paused state")
+                self.assertNotIn(
+                    "reset_at", state,
+                    "cmd_up must drop reset_at when no paused sessions remain")
+            finally:
+                wind.STATE_PATH = orig
+
+    def test_up_preserves_other_paused_sessions(self):
+        # B4: clearing stale state for a launched session must not disturb
+        # other paused sessions.
+        with tempfile.TemporaryDirectory() as tmp:
+            statef = os.path.join(tmp, "state.json")
+            orig = wind.STATE_PATH
+            wind.STATE_PATH = statef
+            cfg = self._cfg(tmp)
+            wind.save_state({
+                "paused": ["wind-x", "wind-other"],
+                "reset_at": 1.0,
+                "watcher_session": "wind-watcher",
+            })
+            rec = _TmuxRecorder(existing=[])
+            args = mock.Mock()
+            args.no_watch = True
+            try:
+                with mock.patch.object(wind, "tmux", rec):
+                    wind.cmd_up(cfg, args)
+                state = wind.load_state()
+                self.assertNotIn("wind-x", state.get("paused", []))
+                self.assertIn("wind-other", state.get("paused", []),
+                              "other paused sessions must be preserved")
+                self.assertIn("reset_at", state,
+                              "reset_at must stay when other sessions remain paused")
+            finally:
+                wind.STATE_PATH = orig
 
 
 class CmdDownReapsWatcher(unittest.TestCase):
