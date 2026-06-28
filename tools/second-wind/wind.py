@@ -1355,7 +1355,7 @@ def find_guide_html():
 
 
 def cmd_guide(args):
-    print(GUIDE_TEXT)
+    print(GUIDE_TEXT, end="")
     if getattr(args, "open", False):
         path = find_guide_html()
         if path:
@@ -1825,8 +1825,7 @@ def main(argv=None):
                         help="port on 127.0.0.1 (default 8787)")
     p_dash.add_argument("--no-browser", action="store_true",
                         help="don't open the browser automatically")
-    p_guide = sub.add_parser("guide",
-                              help="print the setup walkthrough")
+    p_guide = sub.add_parser("guide", help="print the setup walkthrough")
     p_guide.add_argument("--open", action="store_true",
                          help="also open the visual guide in a browser")
 

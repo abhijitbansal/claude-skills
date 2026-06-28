@@ -88,7 +88,7 @@ JetBrains Mono, same CSS variables) so it reads as part of the site.
 - `detail` — expandable: trigger / example / where it lives
 
 **Inventory to render** (counts match the landing stat band — 4 plugins, 13
-skills, 11 commands, 2 agents, 2 hooks, 1 CLI):
+skills, 12 commands, 2 agents, 2 hooks, 1 CLI):
 
 - **second-wind** (CLI + skill): the `wind` CLI tool; `second-wind` skill.
 - **core-workflow** (plugin): commands `contribute-skill`, `team`; skills

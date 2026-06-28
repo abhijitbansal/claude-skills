@@ -2,7 +2,7 @@
 
 Branch: `feat/second-wind-overhaul` · [PR #2](https://github.com/abhijitbansal/claude-skills/pull/2) · 12 commits ahead of `main`
 
-**Covers only the human-driven surface.** 194 unit tests already cover atomic writes,
+**Covers only the human-driven surface.** 198 unit tests already cover atomic writes,
 absolute watcher config-path, `$EDITOR` shlex-split + filename sanitization, inline-prompt
 filtering, args precedence, `/api/pane` token/validation/clamp, server SGR strip
 (truecolor/256/OSC/DCS dropped), client `parseAnsi` XSS cases, `resolve_agent` precedence,

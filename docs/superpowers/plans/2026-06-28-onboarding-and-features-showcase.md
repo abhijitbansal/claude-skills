@@ -14,7 +14,7 @@
 - **Python:** stdlib only in `wind.py` — no third-party imports (matches the tool's "no dependencies" promise).
 - **`wind guide` needs no config:** a brand-new user has no config; dispatch `guide` BEFORE `load_config` (like `init`).
 - **Canonical 4 step keywords** (must appear verbatim in both `wind guide` output and the slash command): `wind init`, `wind prompt`, `wind up`, `wind dash`.
-- **Inventory counts** (must match the landing stat band): 4 plugins · 13 skills · 11 commands · 2 agents · 2 hooks · 1 CLI.
+- **Inventory counts** (must match the landing stat band): 4 plugins · 13 skills · 12 commands · 2 agents · 2 hooks · 1 CLI.
 - **Tests:** `python3 -m pytest tests` (run from `tools/second-wind/`) stays green; `bats tests/bats` (run from repo root) stays green.
 - **No new security surface:** `features.html` is static with no user input echoed; the dashboard help modal is static content.
 
@@ -535,7 +535,7 @@ Expected: FAIL — `docs/features.html` does not exist; landing link missing.
 - [ ] **Step 3: Create `docs/features.html`**
 
 Create `docs/features.html` with this exact content. The `FEATURES` array IS
-the complete inventory (29 items) — do not abbreviate it.
+the complete inventory (30 items) — do not abbreviate it.
 
 ```html
 <!DOCTYPE html>
@@ -812,7 +812,7 @@ git commit -m "docs(second-wind): document wind guide + onboarding test rows"
 - **Spec coverage:** Goal 1 (setup command, both surfaces) → Tasks 1 + 2. Goal 2
   (in-dashboard help) → Task 3. Goal 3 (features.html) → Task 4. Deploy/link →
   Task 4 Step 4. Docs/test-guide sync → Task 5.
-- **Counts:** `FEATURES` array = 29 items = 13 skills + 11 commands + 2 agents +
+- **Counts:** `FEATURES` array = 30 items = 13 skills + 12 commands + 2 agents +
   2 hooks + 1 CLI; the 4 plugins appear as `plugin` badges. Matches the stat band.
 - **Drift guard:** Task 2's bats test pins the four keywords shared with Task 1's
   `GUIDE_TEXT`.

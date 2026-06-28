@@ -62,7 +62,7 @@
   </header>
   <p class="lead">Browse everything in the repo — plugins, skills, slash commands, agents, hooks, and the Second Wind CLI. Search or filter by type.</p>
   <div class="stat-row">
-    <span><b>4</b> plugins</span><span><b>13</b> skills</span><span><b>11</b> commands</span>
+    <span><b>4</b> plugins</span><span><b>13</b> skills</span><span><b>12</b> commands</span>
     <span><b>2</b> agents</span><span><b>2</b> hooks</span><span><b>1</b> CLI</span>
   </div>
   <div class="controls">
@@ -83,6 +83,7 @@
 const FEATURES = [
   { title: "wind", plugin: "second-wind", type: "CLI", summary: "Set-and-forget orchestrator: detects the 5-hour limit, waits for reset, resumes every tmux session.", detail: "tools/second-wind/wind.py — stdlib-only Python CLI. Run `wind guide` to get started." },
   { title: "second-wind", plugin: "second-wind", type: "Skill", summary: "Teaches Claude Code to drive the wind CLI.", detail: "Trigger: ask Claude to set up or run Second Wind." },
+  { title: "/second-wind", plugin: "second-wind", type: "Command", summary: "Guided Second Wind setup walkthrough inside Claude Code.", detail: "plugins/second-wind/commands/second-wind.md" },
   { title: "commit", plugin: "core-workflow", type: "Skill", summary: "Conventional-commit message from staged changes.", detail: "Trigger: \"write a commit\", \"/commit\"." },
   { title: "contribute", plugin: "core-workflow", type: "Skill", summary: "Contribute a skill back to the marketplace.", detail: "Packages a skill and opens a contribution branch." },
   { title: "/contribute-skill", plugin: "core-workflow", type: "Command", summary: "Package and submit a new skill.", detail: "plugins/core-workflow/commands/contribute-skill.md" },

@@ -1124,7 +1124,7 @@ document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape" && !els.modalOverlay.hidden) closeModal();
 });
 
-function openHelp() { els.helpOverlay.hidden = false; }
+function openHelp() { els.helpOverlay.hidden = false; els.helpClose.focus(); }
 function closeHelp() { els.helpOverlay.hidden = true; }
 els.helpBtn.addEventListener("click", openHelp);
 els.helpClose.addEventListener("click", closeHelp);

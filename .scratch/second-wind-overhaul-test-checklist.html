@@ -132,13 +132,13 @@
     <div class="meta">
       <span class="pill">branch <b>feat/second-wind-overhaul</b></span>
       <span class="pill"><a href="https://github.com/abhijitbansal/claude-skills/pull/2">PR&nbsp;#2 ↗</a></span>
-      <span class="pill"><b>194</b> unit tests green</span>
+      <span class="pill"><b>198</b> unit tests green</span>
       <span class="pill">12 commits ahead of <b>main</b></span>
     </div>
   </header>
 
   <div class="intro">
-    <b>What the 194 unit tests already cover</b> — don't re-test these by hand: atomic JSON writes,
+    <b>What the 198 unit tests already cover</b> — don't re-test these by hand: atomic JSON writes,
     absolute watcher config-path, <code>$EDITOR</code> shlex-split + filename sanitization, inline-prompt
     filtering, args precedence, <code>/api/pane</code> token/validation/clamp, server SGR stripping
     (truecolor/256/OSC/DCS dropped), client <code>parseAnsi</code> XSS cases, <code>resolve_agent</code> precedence,
@@ -263,7 +263,7 @@
 
 <script>
   // localStorage keyed per branch+PR so stale checklists don't collide
-  const STORAGE_KEY = "secondwind-overhaul-pr2-testchecklist-v2";
+  const STORAGE_KEY = "secondwind-overhaul-pr2-testchecklist-v3";
   const boxes = Array.from(document.querySelectorAll('ul.checks input[type=checkbox]'));
   boxes.forEach((b, i) => b.dataset.k = "c" + i);
 

@@ -23,6 +23,7 @@ ROOT="${BATS_TEST_DIRNAME}/../.."
   grep -q 'data-filter="Command"' "$f"
   grep -q 'data-filter="Agent"' "$f"
   grep -q 'data-filter="CLI"' "$f"
+  grep -q 'data-filter="Hook"' "$f"
 }
 
 @test "landing links to the features explorer" {
