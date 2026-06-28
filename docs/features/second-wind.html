@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Second Wind — claude-skills</title>
+<meta name="description" content="Run Claude overnight; auto-resume after 5-hour limit resets">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%2315803d'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='6.5'%20fill='%230a1420'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='3'%20fill='%23e8b94a'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#15803d">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="claude-skills">
+<meta property="og:title" content="Second Wind — claude-skills">
+<meta property="og:description" content="Run Claude overnight; auto-resume after 5-hour limit resets">
+<meta property="og:url" content="https://abhijitbansal.github.io/claude-skills/features/second-wind.html">
+<meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../site/assets/site.css">
+</head>
+<body class="accent-green">
+<a class="skip" href="#main">Skip to content</a>
+<nav class="site">
+  <div class="wrap">
+    <a class="brand" href="../../site/index.html"><span class="dot"></span>claude-skills</a>
+    <div class="nav-links">
+      <a href="../../site/index.html#features" aria-current="page">Features</a>
+      <a href="../catalog.html">Catalog</a>
+      <a href="../architecture.html">Architecture</a>
+      <a class="nav-cta" href="https://github.com/abhijitbansal/claude-skills">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head wrap narrow">
+  <div class="crumbs"><a href="../../site/index.html">Home</a><span class="sep">/</span><a href="../../site/index.html#features">Features</a><span class="sep">/</span>Second Wind</div>
+  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>CLI + plugin</span>
+  <h1>Second Wind</h1>
+  <p class="lead">Run Claude overnight; auto-resume after 5-hour limit resets.</p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="#install">Install →</a>
+    <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills/tree/main/tools/second-wind">View source ↗</a>
+  </div>
+  <div class="statband plain cols-4 reveal"><div class="stat"><div class="n" data-count="9">9</div><div class="l">wind subcommands</div></div><div class="stat"><div class="n" data-count="1">1</div><div class="l">slash command</div></div><div class="stat"><div class="n" data-count="0">0</div><div class="l">runtime deps</div></div><div class="stat"><div class="n" data-count="2">2</div><div class="l">OS tested</div></div></div>
+</header>
+
+<div class="wrap narrow">
+ <div class="doc">
+  <aside class="toc" aria-label="On this page">
+    <p class="lbl">On this page</p>
+    <a href="#overview">Overview</a>
+    <a href="#why">Problem &amp; why</a>
+    <a href="#install">Install</a>
+    <a href="#usability">Usability guide</a>
+    <a href="#how">How it works</a>
+    <a href="#inventory">What's inside</a>
+  </aside>
+  <main id="main" class="doc-main">
+
+    <section id="overview" class="doc-section">
+      <h2><span class="ix">01</span> Overview</h2>
+      <p>Second Wind is a single-file Python CLI orchestrator that runs Claude Code in one tmux session per repository. It watches the 5-hour account-level usage limit, parses the reset time from the pane output, waits for the reset clock to advance, and types the resume message into every paused session automatically. The watcher runs in its own detached tmux session so it survives terminal restarts, and a live localhost dashboard lets you monitor all sessions, expand them into modals to read full scrollback, send messages, or manually resume. No external dependencies — just Python 3.9+, tmux, and the Claude Code CLI.</p>
+      <div class="arch reveal" aria-hidden="true"><div class="arch-row" style="gap:6px"><div class="node"><div class="nt">wind up</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">watch panes</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">limit hit</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">wait for reset</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">resume all</div></div></div></div>
+    </section>
+
+    <section id="why" class="doc-section">
+      <h2><span class="ix">02</span> Problem &amp; why it's needed</h2>
+      <div class="prob reveal" style="margin:6px 0 16px">
+        <span class="pill">The friction</span>
+        <p style="color:var(--text-dim);font-size:15px;margin:12px 0 0">Running long Claude Code sessions unattended across multiple repos hits the 5-hour account-level usage limit at unpredictable times, pausing all sessions. Manually resuming every repo after waiting for the reset is tedious and requires babysitting the clock. No tool exists to watch for the limit message, parse the reset time, wait it out, and sweep a resume nudge across all paused sessions automatically.</p>
+      </div>
+      <div class="callout"><span class="ti">Why it matters</span>Engineers need to run Claude overnight across many repositories for intensive refactoring, implementation, or analysis. Second Wind removes the babysitting burden by detecting the limit, waiting for the reset, and resuming every session in one sweep — so you can set it and sleep.</div>
+    </section>
+
+    <section id="install" class="doc-section">
+      <h2><span class="ix">03</span> Install</h2>
+      <div class="steps">
+        <div class="gitem"><h4>One-liner (recommended)</h4><div class="code"><button class="copy" data-copy="curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh
+exec $SHELL">copy</button>curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh
+exec $SHELL</div><p style="margin-top:10px">Places wind in ~/.wind with a shim at ~/.wind/bin/wind, adds to PATH with your consent, then verify with wind --help</p></div>
+<div class="gitem"><h4>From clone</h4><div class="code"><button class="copy" data-copy="cd ~/projects/claude-skills
+bash tools/second-wind/install.sh
+exec $SHELL">copy</button>cd ~/projects/claude-skills
+bash tools/second-wind/install.sh
+exec $SHELL</div><p style="margin-top:10px">Installs from the local repo if already cloned</p></div>
+<div class="gitem"><h4>Claude Code plugin (optional)</h4><div class="code"><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills
+/plugin install second-wind@claude-skills">copy</button>/plugin marketplace add abhijitbansal/claude-skills
+/plugin install second-wind@claude-skills</div><p style="margin-top:10px">Teaches Claude Code to guide you through wind setup via the /second-wind command</p></div>
+      </div>
+    </section>
+
+    <section id="usability" class="doc-section">
+      <h2><span class="ix">04</span> Usability guide</h2>
+      <p style="margin-bottom:14px">Every capability, how to invoke it, and a concrete example.</p>
+      <div class="guide">
+        <div class="gitem reveal"><h4>wind init — create or edit your config</h4><p>An interactive wizard scans your git repos, lets you pick which ones wind should manage, choose a permission preset (global + per-repo overrides), select an agent (claude or copilot), and writes the config to ~/.wind/config.json. Pass --defaults to get a non-interactive starter file. The wizard also offers to open prompt files in your editor immediately after writing the config.</p><div class="code"><button class="copy" data-copy="wind init
+# or:
+wind init --defaults">copy</button>wind init
+# or:
+wind init --defaults</div></div>
+<div class="gitem reveal"><h4>wind prompt &lt;repo&gt; — author first prompts</h4><p>Creates or edits a prompt file in $EDITOR for a single repo. By convention the file lives at ~/.wind/prompts/&lt;repo&gt;.md. The prompt is sent verbatim to the repo's session on the next wind up. For one-liners, give a repo an inline prompt string in the config instead — it wins over prompt_file. The editor is read from --editor flag, $EDITOR env var, then defaults to vi or nano.</p><div class="code"><button class="copy" data-copy="wind prompt myrepo
+# or with custom editor:
+wind prompt myrepo --editor &#x27;code --wait&#x27;">copy</button>wind prompt myrepo
+# or with custom editor:
+wind prompt myrepo --editor 'code --wait'</div></div>
+<div class="gitem reveal"><h4>wind up — start sessions and the watcher</h4><p>Starts one tmux session per repo in parallel, launches the agent in each (claude or copilot per config), sends each repo's initial prompt, and auto-spawns the watcher in its own detached &lt;prefix&gt;-watcher tmux session. The watcher stays alive even if you close your terminal, and on macOS it self-caffeinates to keep the machine awake. Pass --no-watch to skip the watcher; run wind watch yourself in the foreground or wind watch --detach to spawn it by hand.</p><div class="code"><button class="copy" data-copy="wind up
+# or without auto-watcher:
+wind up --no-watch
+# then start watcher yourself:
+wind watch --detach">copy</button>wind up
+# or without auto-watcher:
+wind up --no-watch
+# then start watcher yourself:
+wind watch --detach</div></div>
+<div class="gitem reveal"><h4>wind status — check each session and reset time</h4><p>Prints per-session state (running, paused, limit detected, etc.) plus the next account-level reset time. Shows which repos are watched (claude) vs shown-only (copilot) and the countdown until the limit resets.</p><div class="code"><button class="copy" data-copy="wind status">copy</button>wind status</div></div>
+<div class="gitem reveal"><h4>wind resume — manually nudge all sessions</h4><p>Types the resume_message (default: 'continue') into every paused session immediately, without waiting for the limit to reset. Useful if you've checked in, read a session, and want to kick it forward by hand.</p><div class="code"><button class="copy" data-copy="wind resume">copy</button>wind resume</div></div>
+<div class="gitem reveal"><h4>wind watch — run the watcher in foreground</h4><p>Starts the watcher loop, polling every pane every 30 seconds for the limit message, keeping a single account-level reset clock, and sweeping the resume message across all paused sessions after the reset. Runs in the foreground (pass --detach to re-exec it into a detached &lt;prefix&gt;-watcher tmux session instead). On macOS it self-caffeinates by default (respects the caffeinate config key).</p><div class="code"><button class="copy" data-copy="wind watch
+# or detached:
+wind watch --detach">copy</button>wind watch
+# or detached:
+wind watch --detach</div></div>
+<div class="gitem reveal"><h4>wind dash — live localhost dashboard</h4><p>Serves a live dashboard at http://127.0.0.1:8787 (or a custom --port). Shows one card per session: state pill, reset countdown, and the last 30 lines of each pane in full color. Click a card to expand it into a full-height modal with up to 1000 lines of colorized scrollback and a roomy send box — easier to read on a small screen. The modal's attach button copies the tmux attach command to your clipboard. Actions: resume all, send a message to any session, or kill a session. Localhost-only; every action requires a per-run CSRF token, so other sites cannot reach your sessions. Pass --no-browser to skip auto-opening.</p><div class="code"><button class="copy" data-copy="wind dash
+# or on a custom port:
+wind dash --port 9000
+# or without auto-opening:
+wind dash --no-browser">copy</button>wind dash
+# or on a custom port:
+wind dash --port 9000
+# or without auto-opening:
+wind dash --no-browser</div></div>
+<div class="gitem reveal"><h4>tmux attach — jump into a live session</h4><p>Attach to a running repo's tmux session with full Claude Code TUI, autocomplete, history, and keybindings. Useful when the dashboard send box or a modal isn't enough. Detach with Ctrl-b d.</p><div class="code"><button class="copy" data-copy="tmux attach -t wind-myrepo
+# (Ctrl-b d to detach)">copy</button>tmux attach -t wind-myrepo
+# (Ctrl-b d to detach)</div></div>
+<div class="gitem reveal"><h4>wind down — kill all wind sessions</h4><p>Kills every wind tmux session (including the watcher) without saving pane contents. Always confirm with the user before running this on their behalf — it's destructive.</p><div class="code"><button class="copy" data-copy="wind down">copy</button>wind down</div></div>
+<div class="gitem reveal"><h4>Configuration essentials</h4><p>Wind reads ./second-wind.json, then ~/.wind/config.json, then ~/.config/second-wind/config.json (legacy). Config keys: session_prefix (default: wind; tmux session names are &lt;prefix&gt;-&lt;repo&gt;), agent (default: claude; presets are claude or copilot), claude_cmd and claude_args (launch command + args; overridable per repo), resume_message (text typed after limit reset; default: continue), resume_buffer_seconds (wait after reset before resume; default: 120), poll_interval_seconds (how often watcher captures panes; default: 30), resume_cooldown_seconds (ignore stale limit text in scrollback after resume; default: 600), startup_delay_seconds (wait before sending first prompt; default: 8), capture_lines (trailing pane lines to scan; default: 120), caffeinate (keep macOS awake during watch; default: true), ntfy_url (optional ntfy.sh topic for notifications), limit_patterns (extra regexes for limit detection). Per-repo: name, path, optional agent override, optional prompt_file or inline prompt string, optional claude_args override.</p><div class="code"><button class="copy" data-copy="# ~/.wind/config.json or ./second-wind.json
+{
+  &quot;session_prefix&quot;: &quot;wind&quot;,
+  &quot;agent&quot;: &quot;claude&quot;,
+  &quot;claude_cmd&quot;: &quot;claude&quot;,
+  &quot;claude_args&quot;: &quot;&quot;,
+  &quot;resume_message&quot;: &quot;continue&quot;,
+  &quot;ntfy_url&quot;: &quot;&quot;,
+  &quot;repos&quot;: [
+    {
+      &quot;name&quot;: &quot;api&quot;,
+      &quot;path&quot;: &quot;~/code/api&quot;,
+      &quot;agent&quot;: &quot;claude&quot;,
+      &quot;claude_args&quot;: &quot;--permission-mode acceptEdits&quot;,
+      &quot;prompt_file&quot;: &quot;~/.wind/prompts/api.md&quot;
+    },
+    {
+      &quot;name&quot;: &quot;web&quot;,
+      &quot;path&quot;: &quot;~/code/web&quot;,
+      &quot;prompt&quot;: &quot;continue the refactor and run tests&quot;
+    }
+  ]
+}">copy</button># ~/.wind/config.json or ./second-wind.json
+{
+  "session_prefix": "wind",
+  "agent": "claude",
+  "claude_cmd": "claude",
+  "claude_args": "",
+  "resume_message": "continue",
+  "ntfy_url": "",
+  "repos": [
+    {
+      "name": "api",
+      "path": "~/code/api",
+      "agent": "claude",
+      "claude_args": "--permission-mode acceptEdits",
+      "prompt_file": "~/.wind/prompts/api.md"
+    },
+    {
+      "name": "web",
+      "path": "~/code/web",
+      "prompt": "continue the refactor and run tests"
+    }
+  ]
+}</div></div>
+      </div>
+    </section>
+
+    <section id="how" class="doc-section">
+      <h2><span class="ix">05</span> How it works under the hood</h2>
+      <div class="guide">
+        <div class="gitem reveal"><h4>Account-level reset clock</h4><p>The 5-hour usage limit is account-wide: all sessions pause and reset together. Wind keeps a single reset clock (the latest reset time detected across all panes) instead of per-repo clocks. When any session detects the limit message, the watcher records the parsed reset time and schedules a resume sweep for after that time plus a configurable buffer (default: 120 seconds).</p></div>
+<div class="gitem reveal"><h4>Polling and pane capture</h4><p>The watcher polls every tmux pane every 30 seconds (configurable via poll_interval_seconds), capturing the trailing lines of each pane (120 by default, configurable via capture_lines). Each capture is scanned against a list of limit-detection regexes to find the reset time.</p></div>
+<div class="gitem reveal"><h4>Limit detection via regex</h4><p>Built-in patterns cover the formats Claude Code emits: Claude AI usage limit reached|&lt;epoch&gt; (headless/print mode), 5-hour limit reached ∙ resets 3am (interactive UI), usage limit...resets at 8pm or try again at 6:15pm (variants). Clock times like '3am' are interpreted as the next local occurrence. If a pattern matches but time parsing fails, the watcher falls back to a conservative 1-hour retry. Custom regexes added to limit_patterns in the config take precedence over built-ins, so you can adapt to format changes between Claude Code versions.</p></div>
+<div class="gitem reveal"><h4>The resume sweep</h4><p>When the reset time arrives plus the buffer, the watcher types resume_message into every paused session's tmux pane. After resume, a cooldown period (600 seconds by default, configurable via resume_cooldown_seconds) ignores any stale limit text still visible in the scrollback so the watcher doesn't trigger again on old messages.</p></div>
+<div class="gitem reveal"><h4>Watcher lifecycle and detachment</h4><p>wind up auto-spawns the watcher in a detached &lt;prefix&gt;-watcher tmux session (one per machine) unless you pass --no-watch. That session stays alive even if you close your terminal or restart your editor. On macOS, the watcher calls caffeinate -dims to keep the machine awake. wind down reaps the watcher along with all repo sessions. You can run wind watch in the foreground to watch logs, or wind watch --detach to spawn the session by hand.</p></div>
+<div class="gitem reveal"><h4>Agents: Claude vs. Copilot</h4><p>The agent key (top-level default, overridable per repo) selects a preset. claude is watched: the watcher scans its panes for limit messages and auto-resumes on reset. copilot is launched with the copilot CLI and shown in the dashboard, but the watcher skips it entirely — never scans its panes, never auto-resumes — so you handle Copilot's rate limits yourself. You can still send Copilot sessions initial prompts on wind up and send them messages via the dashboard; a manual wind resume nudges it with its preset message.</p></div>
+<div class="gitem reveal"><h4>Dashboard security and CSRF</h4><p>The dashboard binds 127.0.0.1 only. /api/status serves a 30-line pane tail without authentication (reachable only from localhost; cross-origin reads are blocked by browser SOP). /api/pane (the modal's full-scrollback endpoint) and every write action (/api/send, /api/kill, /api/resume) require a per-run CSRF token generated with secrets.token_hex(16) at startup and embedded in the served page, passed via X-Wind-Token header. The handler enforces a Host-header allowlist to block DNS-rebinding attacks. Pane text is stripped of unsafe ANSI codes and rendered via textContent/createTextNode, never innerHTML.</p></div>
+<div class="gitem reveal"><h4>Atomic config and state writes</h4><p>Config and state files are written atomically: written to a temp file in the same directory, fsynced, then os.replace'd into place. A crash mid-write or a concurrent watcher/dashboard read never sees a truncated JSON file. Config keeps 0644 mode; state keeps 0600.</p></div>
+<div class="gitem reveal"><h4>Prompt and editor handling</h4><p>wind prompt never invokes a shell. The $EDITOR env var is parsed with shlex.split and exec'd as an argv list (no shell=True, no os.system). The first token is validated with shutil.which, and the repo-to-filename mapping is validated as a single path component, so names with /, .., or path separators are rejected to prevent traversal or injection.</p></div>
+<div class="gitem reveal"><h4>Notifications (optional)</h4><p>If ntfy_url is set to an http:// or https:// URL (validated at config load), the watcher POSTs a notification when the limit hits and when sessions resume. Works with ntfy.sh topics. Notifications carry only session counts and reset times — never repo content or secrets.</p></div>
+      </div>
+    </section>
+
+    <section id="inventory" class="doc-section">
+      <h2><span class="ix">06</span> What's inside</h2>
+      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Commands</h4><div class="inv"><div class="row"><span class="nm">/second-wind</span><span class="dc">Guide the user through Second Wind setup (init → prompt → up → dash) and optionally run each step for them. Input: optional 'setup' to walk setup, or a question about wind. Confirms wind is installed first; if missing, points to install.sh.</span></div></div>
+<h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">CLI</h4><div class="inv"><div class="row"><span class="nm">wind init</span><span class="dc">Interactive wizard: scans dirs, lets user pick repos, choose global permission preset + per-repo overrides, pick agent (claude or copilot), write config. Pass --defaults for non-interactive starter file.</span></div><div class="row"><span class="nm">wind prompt &lt;repo&gt;</span><span class="dc">Create/edit a repo's first-prompt file in $EDITOR (convention ~/.wind/prompts/&lt;repo&gt;.md; wires prompt_file into config); pass --editor to override $EDITOR</span></div><div class="row"><span class="nm">wind up</span><span class="dc">Start a tmux session per repo, launch agent, send initial prompt, auto-spawn watcher in detached &lt;prefix&gt;-watcher session (pass --no-watch to skip)</span></div><div class="row"><span class="nm">wind watch</span><span class="dc">Run watcher loop in foreground (keep running; on macOS self-caffeinate); pass --detach to re-exec it into detached tmux session</span></div><div class="row"><span class="nm">wind status</span><span class="dc">Per-session state + next reset time</span></div><div class="row"><span class="nm">wind resume</span><span class="dc">Manually nudge all sessions with resume message</span></div><div class="row"><span class="nm">wind down</span><span class="dc">Kill all wind sessions (and watcher); confirm with user before running destructively</span></div><div class="row"><span class="nm">wind dash</span><span class="dc">Serve live localhost dashboard (status, full-color pane tails, click-to-expand modal, resume/send/kill); pass --port to change port, --no-browser to skip auto-open</span></div><div class="row"><span class="nm">wind guide</span><span class="dc">Print the setup walkthrough (start here)</span></div></div>
+    </section>
+
+    <section class="doc-section" style="border-bottom:none">
+      <h2 style="font-size:22px">Explore the other plugins</h2>
+      <div class="feat-grid"><a class="feat ro reveal" href="prompt-craft.html">
+          <div class="head"><h3>prompt-craft</h3><p class="desc">Sharpen rough prompts into specs, suggest follow-up commands</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat cy reveal" href="ios-dev.html">
+          <div class="head"><h3>ios-dev</h3><p class="desc">Build iOS apps, screenshot remotely, release to App Store</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat vi reveal" href="core-workflow.html">
+          <div class="head"><h3>core-workflow</h3><p class="desc">Opinionated dev workflow: commit + share + team up</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat go reveal" href="linear-pm.html">
+          <div class="head"><h3>linear-pm</h3><p class="desc">Linear issues → code, branches, PRs — autonomous end-to-end</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a></div>
+      <p style="margin-top:18px"><a href="../catalog.html">Browse the full skills &amp; tools catalog →</a></p>
+    </section>
+
+  </main>
+ </div>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div><b>claude-skills</b>A Claude Code plugin marketplace<br>by Abhijit Bansal.</div>
+      <div>
+        <b>Features</b>
+        <a href="second-wind.html">Second Wind</a>
+        <a href="prompt-craft.html">prompt-craft</a>
+        <a href="ios-dev.html">ios-dev</a>
+        <a href="core-workflow.html">core-workflow</a>
+        <a href="linear-pm.html">linear-pm</a>
+      </div>
+      <div>
+        <b>Explore</b>
+        <a href="../catalog.html">Skills &amp; tools catalog</a>
+        <a href="../architecture.html">Architecture</a>
+        <a href="../machine-setup.html">Machine-setup runbook</a>
+        <a href="../second-wind/index.html">Second Wind CLI guide</a>
+      </div>
+      <div>
+        <b>Project</b>
+        <a href="https://github.com/abhijitbansal/claude-skills">GitHub repository ↗</a>
+        <a href="https://github.com/abhijitbansal/claude-skills/blob/main/CONTRIBUTING.md">Contributing</a>
+        <a href="https://github.com/abhijitbansal/claude-skills/blob/main/SECURITY.md">Security policy</a>
+      </div>
+    </div>
+    <div class="foot-meta">
+      <span class="lic">MIT licensed</span>
+      <span>5 plugins · 18 skills · 12 commands · 2 agents · 5 hooks · 1 CLI</span>
+      <span>Tested on macOS &amp; Ubuntu</span>
+    </div>
+  </div>
+</footer>
+<script src="../../site/assets/site.js"></script>
+</body>
+</html>

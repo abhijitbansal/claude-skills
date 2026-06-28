@@ -1,8 +1,8 @@
 # Skills & Tools Catalog
 
-> Visual version: [skills-catalog.html](skills-catalog.html) (open in a browser)
+> Visual version: [searchable catalog](catalog.html) (open in a browser)
 
-Four plugins, one CLI, one adapter script. Install only what you need:
+Five plugins, one CLI, one adapter script. Install only what you need:
 
 ```
 /plugin marketplace add abhijitbansal/claude-skills
@@ -65,6 +65,21 @@ CLI install without the plugin:
 curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/wind.py -o ~/.local/bin/wind
 chmod +x ~/.local/bin/wind
 ```
+
+## prompt-craft (plugin)
+
+Sharpen the ask before the work, surface the right next step after it. Zero config; guardrail hooks off by default.
+
+| Name | Kind | What it does |
+| --- | --- | --- |
+| `improve-prompt` | skill | Rough ask → deterministic spec: restated goal, acceptance criteria, assumptions to confirm, recommended commands. High effort/model; stops before doing the work. |
+| `plan` | skill | Decompose a task → goals + per-step acceptance criteria → a TodoWrite plan. |
+| `debug` | skill (lens) | Reproduce → isolate → one hypothesis → failing test → fix. Auto-invokes on bug reports. |
+| `refactor` | skill (lens) | Behavior-preserving restructure, guarded by tests green before and after. |
+| `review` | skill (lens) | Diff/branch review: correctness + security first, then quality, by severity. |
+| `suggest_next` | hook | Stop hook — suggests follow-up commands from git state (dirty → `/commit`/`/review`; unpushed → `/pr`). Silent when nothing applies. |
+| `block_secrets` | hook | PreToolUse guardrail (opt-in via `PROMPT_CRAFT_BLOCK_SECRETS=1`) — blocks reads/edits of secret-looking files. |
+| `format_on_edit` | hook | PostToolUse hook (opt-in via `PROMPT_CRAFT_FORMAT_ON_EDIT=1`) — formats edited files with the installed formatter. |
 
 ## adapters (multi-tool)
 

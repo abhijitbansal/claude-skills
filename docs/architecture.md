@@ -4,7 +4,7 @@
 
 `claude-skills` is three things in one repo:
 
-1. A **Claude Code plugin marketplace** hosting four focused plugins.
+1. A **Claude Code plugin marketplace** hosting five focused plugins.
 2. A home for **standalone CLI tools** (currently Second Wind).
 3. **Adapters** that wire the same skills into Codex, Copilot CLI, and any AGENTS.md-aware agent.
 
@@ -15,26 +15,27 @@ Plus private **seed machinery** that rebuilds the owner's full dev environment o
 ```mermaid
 flowchart TD
   MP["marketplace.json (.claude-plugin/)"]
-  IOS["ios-dev — 3 skills · 2 cmds · 1 hook"]
+  IOS["ios-dev — 9 skills · 3 cmds · 1 hook"]
   LIN["linear-pm — 1 skill · 6 cmds"]
   CW["core-workflow — 2 skills · 2 cmds · 2 agents · 1 hook"]
   SW["second-wind — skill wrapper"]
+  PC["prompt-craft — 5 skills · 3 hooks"]
   WIND[("tools/second-wind/wind.py")]
   AD["adapters/install.sh"]
   SEED["setup/ — setup.sh · capture.sh · contribute.sh"]
   CC(("Claude Code"))
   OTHER(("Codex / Copilot / AGENTS.md agents"))
 
-  MP --> IOS & LIN & CW & SW
+  MP --> IOS & LIN & CW & SW & PC
   SW -.->|wraps| WIND
   CC -->|"/plugin marketplace add"| MP
   SEED -->|local_plugins step| CC
   SEED -->|"wind → ~/.local/bin"| WIND
   AD -->|symlink skills| OTHER
-  IOS & LIN & CW & SW -->|skills/| AD
+  IOS & LIN & CW & SW & PC -->|skills/| AD
 ```
 
-## The four plugins
+## The five plugins
 
 | Plugin | One-liner | Contents |
 | --- | --- | --- |
@@ -42,6 +43,7 @@ flowchart TD
 | `linear-pm` | issue conventions + autonomous pickup | linear-pm skill; `/linear-init`, `/linear-new`, `/linear-pick`, `/linear-status`, `/linear-sync`, `/linear-block` |
 | `core-workflow` | everyday glue | commit, contribute skills; `/team`, `/contribute-skill`; image-parser + web-researcher agents; shellcheck-on-edit hook |
 | `second-wind` | outlast the 5-hour usage limit | SKILL.md wrapper for the `wind` CLI (self-installs when missing) |
+| `prompt-craft` | rough ask → deterministic spec | `/improve-prompt`, `/plan`; debug/refactor/review lens skills; `suggest_next` Stop hook; opt-in `block_secrets` + `format_on_edit` hooks |
 
 Full per-item descriptions: [skills-catalog.md](skills-catalog.md).
 

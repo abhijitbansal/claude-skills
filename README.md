@@ -18,9 +18,16 @@ auto-resume** orchestrator that keeps overnight runs alive (`second-wind`),
 | `linear-pm` | Linear PM conventions + 6 `/linear-*` commands, including `/linear-pick` autonomous issue pickup |
 | `core-workflow` | commit flow, skill contribution, image-parser + web-researcher agents, shellcheck-on-edit hook |
 | `second-wind` | usage-limit-aware overnight orchestrator (`wind` CLI + skill wrapper) |
+| `prompt-craft` | rough ask → deterministic spec (`/improve-prompt`, `/plan`), debug/refactor/review lenses, git-aware Stop hook + opt-in secret/format guardrails |
+
+**Feature guides:** [Second Wind](docs/features/second-wind.html) ·
+[prompt-craft](docs/features/prompt-craft.html) ·
+[ios-dev](docs/features/ios-dev.html) ·
+[linear-pm](docs/features/linear-pm.html) ·
+[core-workflow](docs/features/core-workflow.html)
 
 **Docs:** [Architecture](docs/architecture.md) ([visual](docs/architecture.html)) ·
-[Skills & Tools Catalog](docs/skills-catalog.md) ([visual](docs/skills-catalog.html)) ·
+[Skills & Tools Catalog](docs/skills-catalog.md) ([visual](docs/catalog.html)) ·
 [Usage guide](USAGE.md)
 
 ## Installation
@@ -35,6 +42,7 @@ Inside any Claude Code session:
 /plugin install linear-pm@claude-skills
 /plugin install second-wind@claude-skills
 /plugin install core-workflow@claude-skills
+/plugin install prompt-craft@claude-skills
 ```
 
 Install only what you need — each plugin is self-contained. Skills, slash commands,
@@ -131,7 +139,7 @@ users can ignore them entirely; plugins never touch them.
 | Path | What |
 | --- | --- |
 | `.claude-plugin/` | marketplace manifest |
-| `plugins/` | the four plugins (skills, commands, agents, hooks) |
+| `plugins/` | the five plugins (skills, commands, agents, hooks) |
 | `tools/` | standalone CLIs (second-wind) |
 | `adapters/` | wire skills into non-Claude tools |
 | `setup/`, `templates/`, `claude-setup.toml` | personal machine seed |
