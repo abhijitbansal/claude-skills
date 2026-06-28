@@ -16,7 +16,7 @@
 <meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
 <meta property="og:image:width" content="2400">
 <meta property="og:image:height" content="1260">
-<meta property="og:image:alt" content="claude-skills — 4 plugins, 13 skills, 12 commands. One repo, every agent.">
+<meta property="og:image:alt" content="claude-skills — 5 plugins, 18 skills, 12 commands. One repo, every agent.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="claude-skills — one repo, every agent">
 <meta name="twitter:description" content="iOS loop, Linear PM, commit helpers, and Second Wind — long runs that survive the 5-hour limit. Claude Code, Codex, Copilot, AGENTS.md.">
@@ -153,11 +153,11 @@ h2.title{font-size:clamp(26px,3.6vw,40px);font-weight:600;margin:0 0 12px}
 .node.cli{border-color:var(--green);background:var(--green-dim)}.node.cli .nt{color:var(--green)}
 .node.seed{border-color:var(--gold);background:var(--gold-dim)}.node.seed .nt{color:var(--gold)}
 .node.ad{border-color:var(--violet);background:var(--violet-dim)}.node.ad .nt{color:var(--violet)}
-.plug-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:6px 0}
+.plug-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:6px 0}
 @media(max-width:680px){.plug-row{grid-template-columns:repeat(2,1fr)}}
 .pnode{background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--cyan);
   border-radius:10px;padding:12px;text-align:center}
-.pnode.v{border-top-color:var(--violet)}.pnode.g{border-top-color:var(--gold)}.pnode.e{border-top-color:var(--green)}
+.pnode.v{border-top-color:var(--violet)}.pnode.g{border-top-color:var(--gold)}.pnode.e{border-top-color:var(--green)}.pnode.r{border-top-color:var(--rose)}
 .pnode .pn{font-family:'Space Grotesk';font-weight:600;font-size:13.5px}
 .pnode .pc{font-family:'JetBrains Mono';font-size:10.5px;color:var(--text-dim);margin-top:3px}
 .arch-foot{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:8px}
@@ -168,7 +168,7 @@ h2.title{font-size:clamp(26px,3.6vw,40px);font-weight:600;margin:0 0 12px}
 .pcard{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:0;overflow:hidden;display:flex;flex-direction:column}
 .pcard .head{padding:18px 20px 14px;border-bottom:1px solid var(--border);position:relative}
 .pcard .head::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)}
-.pcard.cy{--accent:var(--cyan)}.pcard.vi{--accent:var(--violet)}.pcard.go{--accent:var(--gold)}.pcard.gr{--accent:var(--green)}
+.pcard.cy{--accent:var(--cyan)}.pcard.vi{--accent:var(--violet)}.pcard.go{--accent:var(--gold)}.pcard.gr{--accent:var(--green)}.pcard.ro{--accent:var(--rose)}
 .pcard h3{font-size:18px;margin:0;display:flex;align-items:center;gap:9px}
 .pcard h3 .tag{font-family:'JetBrains Mono';font-size:10.5px;color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,transparent);border-radius:5px;padding:2px 7px;font-weight:500}
 .pcard .desc{color:var(--text-dim);font-size:14px;margin:8px 0 0}
@@ -256,20 +256,21 @@ footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
     <span class="kicker"><span class="pulse"></span>Claude Code · plugin marketplace</span>
     <h1>One repo. <span class="grad">Every agent.</span></h1>
     <p class="lead"><b>claude-skills</b> packages real-world agent workflows — an iOS build-and-preview loop,
-      Linear project management, commit &amp; contribution helpers, and <b>Second Wind</b>, a set-and-forget
-      orchestrator that resumes long runs across the 5-hour usage limit. Install one plugin in Claude Code,
-      or wire the same skills into Codex, Copilot CLI, and any AGENTS.md agent.</p>
+      Linear project management, commit &amp; contribution helpers, <b>prompt-craft</b> for turning rough asks
+      into deterministic specs, and <b>Second Wind</b>, a set-and-forget orchestrator that resumes long runs
+      across the 5-hour usage limit. Install one plugin in Claude Code, or wire the same skills into Codex,
+      Copilot CLI, and any AGENTS.md agent.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install">Install in 30 seconds →</a>
       <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills">View source</a>
     </div>
 
     <div class="statband reveal" aria-label="Repository at a glance">
-      <div class="stat"><div class="n" data-count="4">4</div><div class="l">Plugins</div></div>
-      <div class="stat"><div class="n" data-count="13">13</div><div class="l">Skills</div></div>
+      <div class="stat"><div class="n" data-count="5">5</div><div class="l">Plugins</div></div>
+      <div class="stat"><div class="n" data-count="18">18</div><div class="l">Skills</div></div>
       <div class="stat"><div class="n" data-count="12">12</div><div class="l">Commands</div></div>
       <div class="stat"><div class="n" data-count="2">2</div><div class="l">Agents</div></div>
-      <div class="stat"><div class="n" data-count="2">2</div><div class="l">Hooks</div></div>
+      <div class="stat"><div class="n" data-count="5">5</div><div class="l">Hooks</div></div>
       <div class="stat"><div class="n" data-count="1">1</div><div class="l">CLI tool</div></div>
       <div class="stat"><div class="n" data-count="3">3</div><div class="l">Agent targets</div></div>
     </div>
@@ -278,7 +279,7 @@ footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
   <!-- PROBLEMS -->
   <section id="problems">
     <div class="eyebrow rose">What it solves</div>
-    <h2 class="title">Four real frictions, removed</h2>
+    <h2 class="title">Five real frictions, removed</h2>
     <p class="section-lead">Each plugin started as a daily annoyance worth automating away — not a demo.</p>
     <div class="prob-grid">
       <div class="prob reveal">
@@ -305,6 +306,12 @@ footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
         <div class="arrow">↓ becomes</div>
         <div class="s">A <b>capture → setup</b> round trip rebuilds a machine from one TOML, and <b>adapters</b> wire the same skills into Codex, Copilot, and AGENTS.md agents.</div>
       </div>
+      <div class="prob reveal">
+        <span class="pill">Friction</span>
+        <div class="p">A rough one-line ask sends the agent wandering — no acceptance criteria, no plan.</div>
+        <div class="arrow">↓ becomes</div>
+        <div class="s"><b>prompt-craft</b>: <code>/improve-prompt</code> turns the ask into a deterministic spec, <code>/plan</code> decomposes it, and debug/refactor/review lenses keep execution honest.</div>
+      </div>
     </div>
   </section>
 
@@ -312,7 +319,7 @@ footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
   <section id="architecture">
     <div class="eyebrow">How it fits together</div>
     <h2 class="title">A marketplace, a CLI, and adapters</h2>
-    <p class="section-lead">One <code>marketplace.json</code> feeds four plugins. Second Wind ships as a standalone CLI. Adapters port the skills everywhere else.</p>
+    <p class="section-lead">One <code>marketplace.json</code> feeds five plugins. Second Wind ships as a standalone CLI. Adapters port the skills everywhere else.</p>
     <div class="arch reveal">
       <div class="arch-row">
         <div class="node mk"><div class="nt">marketplace.json</div><div class="ns">.claude-plugin/</div></div>
@@ -325,6 +332,7 @@ footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
         <div class="pnode v"><div class="pn">core-workflow</div><div class="pc">2 sk · 2 cmd · 2 ag · 1 hook</div></div>
         <div class="pnode g"><div class="pn">linear-pm</div><div class="pc">1 sk · 6 cmd</div></div>
         <div class="pnode e"><div class="pn">second-wind</div><div class="pc">skill wrapper</div></div>
+        <div class="pnode r"><div class="pn">prompt-craft</div><div class="pc">5 sk · 3 hook</div></div>
       </div>
       <div class="arch-foot">
         <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
@@ -345,8 +353,8 @@ footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
 
   <!-- PLUGINS -->
   <section id="plugins">
-    <div class="eyebrow violet">The four plugins</div>
-    <h2 class="title">Install one, or all four</h2>
+    <div class="eyebrow violet">The five plugins</div>
+    <h2 class="title">Install one, or all five</h2>
     <p class="section-lead">Each is a self-contained Claude Code plugin: skills, slash commands, hooks, and agents.</p>
     <div class="plug-grid">
 
@@ -408,6 +416,22 @@ footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
             <li>Multi-repo tmux orchestration, stdlib-only Python</li>
             <li><code>init</code> · <code>up</code> · <code>status</code> · <code>watch</code> · <code>resume</code> · <code>down</code> · <code>dash</code></li>
             <li>Localhost dashboard with per-run CSRF token</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pcard ro reveal">
+        <div class="head">
+          <h3>prompt-craft <span class="tag">5 skills</span></h3>
+          <p class="desc">Turn rough prompts into deterministic specs and surface the right next step. Zero config; guardrails off by default.</p>
+        </div>
+        <div class="body">
+          <div class="assetline"><span class="chip"><b>5</b> skills</span><span class="chip"><b>3</b> hooks</span></div>
+          <ul>
+            <li>Skills: <code>/improve-prompt</code> (ask → spec) · <code>/plan</code> (decompose → TodoWrite)</li>
+            <li>Lenses: <code>debug</code> · <code>refactor</code> · <code>review</code> (correctness + security first)</li>
+            <li>Stop hook: <code>suggest_next</code> (git-aware follow-ups, silent when idle)</li>
+            <li>Opt-in guards: <code>block_secrets</code> · <code>format_on_edit</code></li>
           </ul>
         </div>
       </div>
@@ -524,7 +548,7 @@ bash adapters/install.sh all   <span class="c"># every target</span></div>
       </div>
       <div>
         <b>Explore</b>
-        <a href="#plugins">The four plugins</a>
+        <a href="#plugins">The five plugins</a>
         <a href="#install">Install</a>
         <a href="#docs">Guides &amp; docs</a>
         <a href="../docs/architecture.html">Architecture</a>

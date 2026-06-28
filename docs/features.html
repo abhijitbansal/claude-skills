@@ -62,8 +62,8 @@
   </header>
   <p class="lead">Browse everything in the repo — plugins, skills, slash commands, agents, hooks, and the Second Wind CLI. Search or filter by type.</p>
   <div class="stat-row">
-    <span><b>4</b> plugins</span><span><b>13</b> skills</span><span><b>12</b> commands</span>
-    <span><b>2</b> agents</span><span><b>2</b> hooks</span><span><b>1</b> CLI</span>
+    <span><b>5</b> plugins</span><span><b>18</b> skills</span><span><b>12</b> commands</span>
+    <span><b>2</b> agents</span><span><b>5</b> hooks</span><span><b>1</b> CLI</span>
   </div>
   <div class="controls">
     <input id="search" type="search" placeholder="Search features…" aria-label="search features">
@@ -111,6 +111,14 @@ const FEATURES = [
   { title: "/linear-pick", plugin: "linear-pm", type: "Command", summary: "Autonomously pick up the next agent-ready issue.", detail: "Drives the agent-ready workflow." },
   { title: "/linear-status", plugin: "linear-pm", type: "Command", summary: "Move an issue across the status taxonomy.", detail: "plugins/linear-pm/commands/linear-status.md" },
   { title: "/linear-sync", plugin: "linear-pm", type: "Command", summary: "Sync issue state.", detail: "plugins/linear-pm/commands/linear-sync.md" },
+  { title: "improve-prompt", plugin: "prompt-craft", type: "Skill", summary: "Rough ask → deterministic spec: restated goal, acceptance criteria, assumptions, recommended commands.", detail: "Invoke /prompt-craft:improve-prompt. High effort/model." },
+  { title: "plan", plugin: "prompt-craft", type: "Skill", summary: "Decompose a task into goals + per-step acceptance criteria, then a TodoWrite plan.", detail: "Invoke /prompt-craft:plan." },
+  { title: "debug", plugin: "prompt-craft", type: "Skill", summary: "Reproduce → isolate → one hypothesis → failing test → fix.", detail: "Lens; auto-invokes on bug reports." },
+  { title: "refactor", plugin: "prompt-craft", type: "Skill", summary: "Behavior-preserving restructure, guarded by tests green before and after.", detail: "Lens; invoke /prompt-craft:refactor." },
+  { title: "review", plugin: "prompt-craft", type: "Skill", summary: "Diff/branch review: correctness + security first, then quality, by severity.", detail: "Lens; invoke /prompt-craft:review." },
+  { title: "suggest_next", plugin: "prompt-craft", type: "Hook", summary: "After a turn, suggests follow-up commands from git state (dirty → /commit; unpushed → /pr).", detail: "Stop hook. Always on, silent when nothing applies." },
+  { title: "block_secrets", plugin: "prompt-craft", type: "Hook", summary: "Blocks Read/Edit/Write of secret-looking files (.env, *.pem, id_rsa…).", detail: "PreToolUse hook. Opt-in: PROMPT_CRAFT_BLOCK_SECRETS=1." },
+  { title: "format_on_edit", plugin: "prompt-craft", type: "Hook", summary: "Formats the edited file with whatever formatter is installed (black/prettier/gofmt/rustfmt/shfmt).", detail: "PostToolUse hook. Opt-in: PROMPT_CRAFT_FORMAT_ON_EDIT=1." },
 ];
 
 const PLUGIN_TYPES = new Set(["Skill", "Command", "Agent", "Hook", "CLI"]);

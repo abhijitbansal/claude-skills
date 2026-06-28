@@ -15,7 +15,7 @@ ROOT="${BATS_TEST_DIRNAME}/../.."
 @test "features.html lists every plugin and the filter chips" {
   local f="$ROOT/docs/features.html"
   [ -f "$f" ]
-  for name in second-wind core-workflow ios-dev linear-pm; do
+  for name in second-wind core-workflow ios-dev linear-pm prompt-craft; do
     grep -q "$name" "$f"
   done
   grep -q 'data-filter="Plugin"' "$f"

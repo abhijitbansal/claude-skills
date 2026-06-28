@@ -13,6 +13,7 @@
   --slate:#0369a1; --slate-dim:rgba(3,105,161,.10);
   --amber:#b45309; --amber-dim:rgba(180,83,9,.10);
   --green:#15803d; --green-dim:rgba(21,128,61,.10);
+  --rose:#be185d; --rose-dim:rgba(190,24,93,.10);
   --grid:rgba(3,105,161,.05);
 }
 @media (prefers-color-scheme: dark){
@@ -23,6 +24,7 @@
     --slate:#60a5fa; --slate-dim:rgba(96,165,250,.10);
     --amber:#fbbf24; --amber-dim:rgba(251,191,36,.10);
     --green:#4ade80; --green-dim:rgba(74,222,128,.10);
+    --rose:#f472b6; --rose-dim:rgba(244,114,182,.10);
     --grid:rgba(96,165,250,.05);
   }
 }
@@ -43,6 +45,7 @@ h1{font-size:clamp(28px,4.5vw,42px);margin:0 0 10px;font-weight:700;letter-spaci
 .section-label.amber::before{background:var(--amber)}
 .section-label.green::before{background:var(--green)}
 .section-label.slate::before{background:var(--slate)}
+.section-label.rose::before{background:var(--rose)}
 .diagram-shell{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px;box-shadow:0 6px 24px rgba(10,30,50,.07)}
 .mermaid-wrap{position:relative;overflow:hidden;border-radius:8px;background:var(--surface2)}
 .mermaid-viewport{overflow:hidden;cursor:grab;min-height:430px;display:flex;justify-content:center}
@@ -61,6 +64,7 @@ h1{font-size:clamp(28px,4.5vw,42px);margin:0 0 10px;font-weight:700;letter-spaci
 .ve-card.amber{border-left-color:var(--amber)}
 .ve-card.green{border-left-color:var(--green)}
 .ve-card.slate{border-left-color:var(--slate)}
+.ve-card.rose{border-left-color:var(--rose)}
 .ve-card h3{margin:0 0 4px;font-size:17px}
 .ve-card h3 code{font-family:'IBM Plex Mono',monospace;font-size:.92em}
 .ve-card .sub{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-dim);margin:0 0 12px}
@@ -105,33 +109,34 @@ footer a{color:var(--teal)}
       <div class="mermaid-viewport"><div class="mermaid-canvas"><pre class="mermaid">
 flowchart TD
   MP["marketplace.json<br/><small>.claude-plugin/</small>"]
-  IOS["ios-dev<br/><small>3 skills · 2 cmds · 1 hook</small>"]
+  IOS["ios-dev<br/><small>9 skills · 3 cmds · 1 hook</small>"]
   LIN["linear-pm<br/><small>1 skill · 6 cmds</small>"]
   CW["core-workflow<br/><small>2 skills · 2 cmds · 2 agents · 1 hook</small>"]
   SW["second-wind<br/><small>skill wrapper</small>"]
+  PC["prompt-craft<br/><small>5 skills · 3 hooks</small>"]
   WIND[("tools/second-wind<br/>wind.py")]
   AD["adapters/install.sh"]
   SEED["setup/<br/><small>setup.sh · capture.sh · contribute.sh</small>"]
   CC(("Claude Code"))
   OTHER(("Codex / Copilot /<br/>AGENTS.md agents"))
 
-  MP --> IOS & LIN & CW & SW
+  MP --> IOS & LIN & CW & SW & PC
   SW -.->|"wraps"| WIND
   CC -->|"/plugin marketplace add"| MP
   SEED -->|"local_plugins step"| CC
   SEED -->|"wind → ~/.local/bin"| WIND
   AD -->|"symlink skills"| OTHER
-  IOS & LIN & CW & SW -->|"skills/"| AD
+  IOS & LIN & CW & SW & PC -->|"skills/"| AD
 
   classDef plugin fill:#0891b21a,stroke:#0891b2,stroke-width:2px
   classDef infra fill:#b453091a,stroke:#b45309,stroke-width:2px
-  class IOS,LIN,CW,SW plugin
+  class IOS,LIN,CW,SW,PC plugin
   class SEED,AD infra
       </pre></div></div>
     </div>
   </div>
 
-  <div class="section-label slate">The four plugins</div>
+  <div class="section-label slate">The five plugins</div>
   <div class="cards">
     <div class="ve-card">
       <h3><code>ios-dev</code></h3>
@@ -167,6 +172,16 @@ flowchart TD
       <ul>
         <li><strong>wind CLI</strong> — one tmux session per repo, watches for the usage-limit pause, resumes everything after reset</li>
         <li><strong>skill wrapper</strong> — teaches the agent <code>wind init/up/watch/status/resume/down</code> + self-install fallback</li>
+      </ul>
+    </div>
+    <div class="ve-card rose">
+      <h3><code>prompt-craft</code></h3>
+      <p class="sub">rough ask → deterministic spec</p>
+      <ul>
+        <li><strong>/improve-prompt</strong> — restated goal, acceptance criteria, assumptions, recommended commands</li>
+        <li><strong>/plan</strong> — decompose into per-step acceptance criteria + a TodoWrite plan</li>
+        <li><strong>debug / refactor / review</strong> lenses — correctness + security first</li>
+        <li><strong>hooks</strong> — git-aware <code>suggest_next</code> (Stop) + opt-in <code>block_secrets</code> / <code>format_on_edit</code></li>
       </ul>
     </div>
   </div>

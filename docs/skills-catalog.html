@@ -61,7 +61,7 @@ footer a{color:var(--terra)}
 <div class="wrap">
   <p class="kicker">claude-skills / catalog</p>
   <h1>Every skill, command, agent &amp; tool — <em>what it actually does</em></h1>
-  <p class="lead">Four plugins, one CLI, one adapter script. Install only what you need.</p>
+  <p class="lead">Five plugins, one CLI, one adapter script. Install only what you need.</p>
   <div class="install"><code>/plugin marketplace add abhijitbansal/claude-skills</code></div>
 
   <h2>ios-dev <span class="tag">plugin</span></h2>
@@ -115,6 +115,22 @@ footer a{color:var(--terra)}
     <tbody>
       <tr><td><code>wind</code></td><td><span class="kind tool">CLI</span></td><td>Single-file, stdlib-only Python. One tmux session per repo (<code>wind up</code>), a watcher that scans panes for the limit message (<code>wind watch</code>), single account-level reset clock, optional ntfy.sh notifications and macOS caffeinate. <small>Lives at <code>tools/second-wind/wind.py</code>; 16-test suite.</small></td></tr>
       <tr><td><code>second-wind</code></td><td><span class="kind skill">skill</span></td><td>Teaches the agent the full command surface (<code>init/up/watch/status/resume/down</code>), config keys, and how to self-install <code>wind</code> when it's missing from PATH.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>prompt-craft <span class="tag">plugin</span></h2>
+  <p class="h2sub">Turn rough prompts into deterministic specs and surface the right next step. Zero config; guardrails off by default.</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Name</th><th>Kind</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>improve-prompt</code></td><td><span class="kind skill">skill</span></td><td>Rough ask → deterministic spec: restated goal, acceptance criteria, assumptions to confirm, recommended commands. High effort/model; stops before doing the work.</td></tr>
+      <tr><td><code>plan</code></td><td><span class="kind skill">skill</span></td><td>Decompose a task into goals + per-step acceptance criteria, then a TodoWrite plan.</td></tr>
+      <tr><td><code>debug</code></td><td><span class="kind skill">skill</span></td><td>Lens: reproduce → isolate → one hypothesis → failing test → fix. Auto-invokes on bug reports.</td></tr>
+      <tr><td><code>refactor</code></td><td><span class="kind skill">skill</span></td><td>Lens: behavior-preserving restructure, guarded by tests green before and after.</td></tr>
+      <tr><td><code>review</code></td><td><span class="kind skill">skill</span></td><td>Lens: diff/branch review — correctness + security first, then quality, by severity.</td></tr>
+      <tr><td><code>suggest_next</code></td><td><span class="kind hook">hook</span></td><td>Stop hook — suggests follow-up commands from git state (dirty → <code>/commit</code>; unpushed → <code>/pr</code>). Always on, silent when nothing applies.</td></tr>
+      <tr><td><code>block_secrets</code></td><td><span class="kind hook">hook</span></td><td>PreToolUse hook — blocks Read/Edit/Write of secret-looking files. <strong>Opt-in</strong>: <code>PROMPT_CRAFT_BLOCK_SECRETS=1</code>.</td></tr>
+      <tr><td><code>format_on_edit</code></td><td><span class="kind hook">hook</span></td><td>PostToolUse hook — formats the edited file with the installed formatter (black/prettier/gofmt/rustfmt/shfmt). <strong>Opt-in</strong>: <code>PROMPT_CRAFT_FORMAT_ON_EDIT=1</code>.</td></tr>
     </tbody>
   </table></div>
 
