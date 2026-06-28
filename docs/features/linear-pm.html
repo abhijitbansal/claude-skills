@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>linear-pm — claude-skills</title>
+<meta name="description" content="Linear issues → code, branches, PRs — autonomous end-to-end">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%23b07a18'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='6.5'%20fill='%230a1420'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='3'%20fill='%23e8b94a'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#b07a18">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="claude-skills">
+<meta property="og:title" content="linear-pm — claude-skills">
+<meta property="og:description" content="Linear issues → code, branches, PRs — autonomous end-to-end">
+<meta property="og:url" content="https://abhijitbansal.github.io/claude-skills/features/linear-pm.html">
+<meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../site/assets/site.css">
+</head>
+<body class="accent-gold">
+<a class="skip" href="#main">Skip to content</a>
+<nav class="site">
+  <div class="wrap">
+    <a class="brand" href="../../site/index.html"><span class="dot"></span>claude-skills</a>
+    <div class="nav-links">
+      <a href="../../site/index.html#features" aria-current="page">Features</a>
+      <a href="../catalog.html">Catalog</a>
+      <a href="../architecture.html">Architecture</a>
+      <a class="nav-cta" href="https://github.com/abhijitbansal/claude-skills">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head wrap narrow">
+  <div class="crumbs"><a href="../../site/index.html">Home</a><span class="sep">/</span><a href="../../site/index.html#features">Features</a><span class="sep">/</span>linear-pm</div>
+  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>plugin · 6 commands</span>
+  <h1>linear-pm</h1>
+  <p class="lead">Linear issues → code, branches, PRs — autonomous end-to-end.</p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="#install">Install →</a>
+    <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills/tree/main/plugins/linear-pm">View source ↗</a>
+  </div>
+  <div class="statband plain cols-4 reveal"><div class="stat"><div class="n" data-count="6">6</div><div class="l">commands</div></div><div class="stat"><div class="n" data-count="1">1</div><div class="l">skill</div></div><div class="stat"><div class="n" data-count="3">3</div><div class="l">autonomy modes</div></div><div class="stat"><div class="n" data-count="7">7</div><div class="l">labels</div></div></div>
+</header>
+
+<div class="wrap narrow">
+ <div class="doc">
+  <aside class="toc" aria-label="On this page">
+    <p class="lbl">On this page</p>
+    <a href="#overview">Overview</a>
+    <a href="#why">Problem &amp; why</a>
+    <a href="#install">Install</a>
+    <a href="#usability">Usability guide</a>
+    <a href="#how">How it works</a>
+    <a href="#inventory">What's inside</a>
+  </aside>
+  <main id="main" class="doc-main">
+
+    <section id="overview" class="doc-section">
+      <h2><span class="ix">01</span> Overview</h2>
+      <p>linear-pm is a Claude Code plugin that makes Linear the operational center for autonomous development. Six slash commands let you file issues with structured templates (Why/What/Acceptance criteria), have Claude pick them up and either propose a plan (review-only mode) or write code, run verifications, open PRs, and keep Linear status in sync. Built-in label taxonomy (agent-ready, agent-blocked, needs-spec) and three autonomy modes (disabled, review-only, allowed) let teams start conservative — reviewing proposed plans first — then graduate to full autonomous implementation as trust builds. Every action is logged as a Linear comment for visibility.</p>
+      <div class="arch reveal" aria-hidden="true"><div class="arch-row" style="gap:6px"><div class="node"><div class="nt">/linear-new</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">agent-ready</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">/linear-pick</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">branch + code</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">PR → Done</div></div></div></div>
+    </section>
+
+    <section id="why" class="doc-section">
+      <h2><span class="ix">02</span> Problem &amp; why it's needed</h2>
+      <div class="prob reveal" style="margin:6px 0 16px">
+        <span class="pill">The friction</span>
+        <p style="color:var(--text-dim);font-size:15px;margin:12px 0 0">Project teams split attention between Linear (issue tracking), GitHub (code), and conversations — status falls out of sync, branches aren't linked to issues, autonomous agents can't safely pick work. Without tight integration, Linear becomes a write-once tool and real truth lives in Slack.</p>
+      </div>
+      <div class="callout"><span class="ti">Why it matters</span>Teams want Linear to be the single source of truth for "what to build next." They need Claude to pick up agent-ready issues, implement them in isolated branches with safety gates, run verify commands, open PRs, and keep Linear synchronized — all automatically, with human control over autonomy level per repo.</div>
+    </section>
+
+    <section id="install" class="doc-section">
+      <h2><span class="ix">03</span> Install</h2>
+      <div class="steps">
+        <div class="gitem"><h4>Install via Claude Code plugin marketplace</h4><div class="code"><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills
+/plugin install linear-pm@claude-skills">copy</button>/plugin marketplace add abhijitbansal/claude-skills
+/plugin install linear-pm@claude-skills</div></div>
+<div class="gitem"><h4>Bootstrap this repo (one time)</h4><div class="code"><button class="copy" data-copy="./.claude/skills/linear-pm/scripts/bootstrap.sh">copy</button>./.claude/skills/linear-pm/scripts/bootstrap.sh</div><p style="margin-top:10px">Checks prerequisites (git, gh CLI, Linear MCP), validates .claude/linear.yml, and prints setup instructions. Idempotent — rerun anytime to diagnose drift.</p></div>
+<div class="gitem"><h4>Initialize Linear PM for the repo</h4><div class="code"><button class="copy" data-copy="/linear-init">copy</button>/linear-init</div><p style="margin-top:10px">Interactive setup: pick your Linear team and project, creates .claude/linear.yml, and ensures standard labels exist in Linear (agent-ready, agent-blocked, needs-spec, bug, feature, chore, docs).</p></div>
+      </div>
+    </section>
+
+    <section id="usability" class="doc-section">
+      <h2><span class="ix">04</span> Usability guide</h2>
+      <p style="margin-bottom:14px">Every capability, how to invoke it, and a concrete example.</p>
+      <div class="guide">
+        <div class="gitem reveal"><h4>/linear-init — Bootstrap (once per repo)</h4><p>Interactively configure linear-pm for the current repo. Prompts for Linear team and project, generates .claude/linear.yml with sensible defaults (autonomy: review-only, no verify commands), and creates the standard label vocabulary in Linear if missing. Safe to re-run — validates existing config and skips redundant label creation.</p><div class="code"><button class="copy" data-copy="/linear-init">copy</button>/linear-init</div></div>
+<div class="gitem reveal"><h4>/linear-new — File a new issue</h4><p>Create a Linear issue with the structured template (Why / What / Acceptance criteria / Notes). Can auto-fill context from your recent conversation (file paths, errors, stack traces) into the Notes section. Requires you to supply title, type (bug/feature/chore/docs), one-sentence motivation, concrete description, and at least one acceptance criterion (checkbox). Applies your configured default_labels in addition to the type label.</p><div class="code"><button class="copy" data-copy="/linear-new &quot;Add dark-mode toggle to settings&quot;
+
+Or without title (interactive):
+/linear-new">copy</button>/linear-new "Add dark-mode toggle to settings"
+
+Or without title (interactive):
+/linear-new</div></div>
+<div class="gitem reveal"><h4>/linear-pick — Autonomous issue pickup</h4><p>Pick up an agent-ready issue and either propose a plan (review-only mode) or write the code, run verify commands, and open a PR (allowed mode). Can pick the highest-priority agent-ready issue automatically, or jump to a specific issue by key. Refuses work if Acceptance criteria are missing (posts needs-spec label + comment, then stops). Validates the working tree is clean, creates a branch, posts a started comment, implements changes, runs verify commands, pushes, and opens a PR — all with Linear status sync and detailed logging.</p><div class="code"><button class="copy" data-copy="/linear-pick
+
+Or pick a specific issue:
+/linear-pick ABH-123">copy</button>/linear-pick
+
+Or pick a specific issue:
+/linear-pick ABH-123</div></div>
+<div class="gitem reveal"><h4>/linear-status — Check what's in flight</h4><p>Digest of your configured Linear project grouped by status: In Progress (with PR links if open), In Review (with PR links), Blocked (with last blocker comment), Ready queue (agent-ready issues by priority), and recently shipped (Done in last 7 days). Pure read-only — no writes to Linear or git. Helps you context-switch back quickly and spot blockers.</p><div class="code"><button class="copy" data-copy="/linear-status">copy</button>/linear-status</div></div>
+<div class="gitem reveal"><h4>/linear-sync — Backfill Linear state</h4><p>Reconcile current branch and open PR (if any) with their Linear issue. Parses the issue key from the branch name (e.g., agent/ABH-123-dark-mode or my-fix-ABH-123), posts a comment linking the branch or PR, moves status to In Progress (no PR) or In Review (PR open), and removes agent-ready label. Use when you started work manually outside /linear-pick and want Linear to catch up.</p><div class="code"><button class="copy" data-copy="git checkout -b my-feature-ABH-123
+# ... do work, push, open PR ...
+/linear-sync">copy</button>git checkout -b my-feature-ABH-123
+# ... do work, push, open PR ...
+/linear-sync</div></div>
+<div class="gitem reveal"><h4>/linear-block — Mark blocked with reason</h4><p>Manually flag an issue as blocked so /linear-pick won't touch it. Adds agent-blocked label and posts a Linear comment with the blocker reason. Can take explicit issue key + reason, or infer from recent context (e.g., you just ran /linear-pick and hit a wall). To unblock: remove agent-blocked in Linear, re-add agent-ready, then re-run /linear-pick.</p><div class="code"><button class="copy" data-copy="/linear-block ABH-123 &quot;Waiting for design clarification on button placement&quot;
+
+Or just reason (infers issue from context):
+/linear-block &quot;Need to fix flaky test before proceeding&quot;">copy</button>/linear-block ABH-123 "Waiting for design clarification on button placement"
+
+Or just reason (infers issue from context):
+/linear-block "Need to fix flaky test before proceeding"</div></div>
+<div class="gitem reveal"><h4>Workflow: File and review before autonomous code</h4><p>Most conservative flow. File an issue with /linear-new, mark it agent-ready in Linear UI (human gate), run /linear-pick in review-only mode (default). You get a 5–15 line plan as a Linear comment. Read it, refine if needed, then flip .claude/linear.yml to autonomy: allowed and re-run /linear-pick to execute.</p><div class="code"><button class="copy" data-copy="1. /linear-new &quot;Add export to CSV&quot;
+2. (mark agent-ready in Linear UI)
+3. /linear-pick
+   → plan posted as Linear comment
+4. (review plan, edit .claude/linear.yml to autonomy: allowed)
+5. /linear-pick
+   → branch created, code written, PR opened">copy</button>1. /linear-new "Add export to CSV"
+2. (mark agent-ready in Linear UI)
+3. /linear-pick
+   → plan posted as Linear comment
+4. (review plan, edit .claude/linear.yml to autonomy: allowed)
+5. /linear-pick
+   → branch created, code written, PR opened</div></div>
+<div class="gitem reveal"><h4>Workflow: Parallel work with git worktrees</h4><p>For two simultaneous /linear-pick sessions from the same checkout, use git worktrees to avoid branch collisions. Create a worktree for each issue, start a fresh Claude session in each, then run /linear-pick independently — one can be in review-only while another is allowed. When merged, clean up with git worktree remove.</p><div class="code"><button class="copy" data-copy="git worktree add ../doc-scan-ABH-123 -b agent/ABH-123-dark-mode
+cd ../doc-scan-ABH-123
+claude --remote-control &quot;ABH-123 dark mode&quot;
+/linear-pick ABH-123">copy</button>git worktree add ../doc-scan-ABH-123 -b agent/ABH-123-dark-mode
+cd ../doc-scan-ABH-123
+claude --remote-control "ABH-123 dark mode"
+/linear-pick ABH-123</div></div>
+      </div>
+    </section>
+
+    <section id="how" class="doc-section">
+      <h2><span class="ix">05</span> How it works under the hood</h2>
+      <div class="guide">
+        <div class="gitem reveal"><h4>Label Taxonomy — Gates Autonomous Work</h4><p>Every Linear issue gets a type label (bug, feature, chore, docs) and optional control labels. agent-ready signals to /linear-pick that an issue is approved for work; agent-blocked prevents pickup and shows why. needs-spec is applied by /linear-pick when an issue lacks Acceptance criteria (the spec contract). All labels are created once by /linear-init and applied per issue via commands — never auto-created at runtime.</p></div>
+<div class="gitem reveal"><h4>Status Workflow — Tracks Progress</h4><p>Uses Linear's built-in workflow (no custom states needed). Backlog/Todo → agent picks up → In Progress (branch created) → In Review (PR open) → Done (PR merged by human). /linear-pick moves status automatically; humans trigger Done by merging the PR in GitHub. /linear-status groups issues by status for quick scanning.</p></div>
+<div class="gitem reveal"><h4>Branch Naming — Links to Issues</h4><p>All branches follow the pattern agent/ISSUE-KEY-slug (e.g., agent/ABH-123-dark-mode). The prefix is configurable in .claude/linear.yml (default agent/). When /linear-sync is run on any branch containing the issue key anywhere, it parses the key out and links back to the issue. This decouples key parsing from strict naming — you can use abhi/ABH-123-fix or agent/ABH-123, both work.</p></div>
+<div class="gitem reveal"><h4>PR Conventions — Auto-Attachment</h4><p>PR title is derived from the template in .claude/linear.yml (default: {key}: {title} → ABH-123: dark-mode toggle). PR body includes Fixes ABH-123 on a separate line so GitHub's automation auto-closes the issue and links the PR when merged. One PR = one Linear issue; multi-issue PRs aren't supported.</p></div>
+<div class="gitem reveal"><h4>Autonomy Modes — Progressive Trust</h4><p>Three modes control what /linear-pick does. disabled: read-only, only /linear-new and /linear-sync work. review-only: writes to Linear (status, comments), generates plans, but never writes code or pushes. allowed: full loop — branches, commits, PR. Set per repo in .claude/linear.yml; defaults to review-only to err on the side of safety. Users flip it to allowed once they trust the workflow.</p></div>
+<div class="gitem reveal"><h4>Verify Commands — Safety Gate</h4><p>Before opening a PR, /linear-pick runs each shell command in the verify: [] list (e.g., ./build.sh, npm test). Non-zero exit = agent-blocked with the failing command + last ~30 lines of output as the reason. Also checks that diff size (added + deleted lines) doesn't exceed max_pr_lines (default 500); oversized diffs auto-block to encourage smaller, reviewable changes.</p></div>
+<div class="gitem reveal"><h4>Config File — Per-Repo Policy</h4><p>Every repo has .claude/linear.yml (gitignored: no, it's committed). Required keys: team (Linear team key, e.g., ABH), project (project name or ID). Optional: branch_prefix, pr_title_format, autonomy, verify, max_pr_lines, default_labels, poll settings. All values are validated at runtime; missing required keys cause clear errors suggesting /linear-init.</p></div>
+<div class="gitem reveal"><h4>Agent Comments — Transparent Logging</h4><p>Every action /linear-pick takes is logged to Linear as a comment prefixed with 🤖 emoji: Started — branch name, PR opened — URL, Blocked — reason, Needs spec — what's missing, Plan (review-only) — the proposed plan. Users can see the full history in Linear without querying Claude's session logs.</p></div>
+<div class="gitem reveal"><h4>Session Rename Suggestions — Contextual Session Titles</h4><p>After /linear-new or /linear-pick touch an issue, the commands emit a copy-pasteable /rename suggestion at the end, gathering all team-prefixed issue keys touched in the current session. Users can paste it to label their Claude Code session (e.g., /rename ABH-123, ABH-124) for easy identification in the session list. Optional but encouraged.</p></div>
+<div class="gitem reveal"><h4>Bootstrap &amp; Validation — Defensive Setup</h4><p>The bootstrap script checks eight prerequisites in one pass: git installed, inside a git repo, gh CLI installed, gh authenticated, .claude/linear.yml exists, required config keys present, helper scripts (load-config.sh, make-slug.sh, parse-issue-key.sh) present, and informs about Linear MCP (configured in Claude Code, not shell). Idempotent — rerun anytime to diagnose drift. Prints exact fix commands for each gap.</p></div>
+<div class="gitem reveal"><h4>Polling Agent (Optional) — Scheduled Pickup</h4><p>When poll.enabled: true in .claude/linear.yml, an external polling agent wakes on interval_minutes and runs /linear-pick automatically. Respects all autonomy settings. Useful for continuous delivery workflows where teams want background workers to pick up issues without manual triggers. Disabled by default.</p></div>
+      </div>
+    </section>
+
+    <section id="inventory" class="doc-section">
+      <h2><span class="ix">06</span> What's inside</h2>
+      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Skills</h4><div class="inv"><div class="row"><span class="nm">linear-pm</span><span class="dc">Encodes label vocabulary, status taxonomy, branch/PR naming, issue template, and per-repo policy (.claude/linear.yml). Auto-loads when invoking any /linear-* command or asking about Linear workflows. Documents conventions and red flags.</span></div></div>
+<h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Commands</h4><div class="inv"><div class="row"><span class="nm">/linear-init</span><span class="dc">Bootstrap this repo: interactively set up Linear team/project, generate .claude/linear.yml with defaults, create standard labels.</span></div><div class="row"><span class="nm">/linear-new</span><span class="dc">File a new Linear issue with Why/What/Acceptance criteria/Notes template. Can auto-fill context from conversation.</span></div><div class="row"><span class="nm">/linear-pick</span><span class="dc">Autonomous issue pickup: validate spec, propose plan (review-only) or write code, verify, open PR (allowed mode). Respects autonomy setting.</span></div><div class="row"><span class="nm">/linear-status</span><span class="dc">Read-only digest of project status: In Progress, In Review, Blocked, Ready queue, Recently shipped. No Linear or git writes.</span></div><div class="row"><span class="nm">/linear-sync</span><span class="dc">Backfill Linear state when work started manually: parses issue key from branch name, posts comment, moves status, removes agent-ready.</span></div><div class="row"><span class="nm">/linear-block</span><span class="dc">Manually mark issue blocked with reason. Adds agent-blocked label and posts comment. Prevents /linear-pick pickup.</span></div></div>
+<h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">CLI</h4><div class="inv"><div class="row"><span class="nm">bootstrap.sh</span><span class="dc">Validates prerequisites: git, gh CLI, auth, .claude/linear.yml, required config keys, helper scripts. Idempotent. Prints exact fix commands for each gap. Run: ./.claude/skills/linear-pm/scripts/bootstrap.sh</span></div><div class="row"><span class="nm">load-config.sh</span><span class="dc">Helper sourced by all /linear-* commands. Loads .claude/linear.yml, exports TEAM/PROJECT/BRANCH_PREFIX/AUTONOMY/VERIFY/etc. as env vars. Used internally by commands.</span></div><div class="row"><span class="nm">make-slug.sh</span><span class="dc">Converts issue title to kebab-case slug (~40 chars, [a-z0-9-]). Used by /linear-pick to generate branch names.</span></div><div class="row"><span class="nm">parse-issue-key.sh</span><span class="dc">Extracts Linear issue key (e.g., ABH-123) from branch name. Used by /linear-sync and /linear-block for key inference.</span></div></div>
+<h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Agents</h4><div class="inv"><div class="row"><span class="nm">polling agent</span><span class="dc">Optional external agent that wakes on interval_minutes and runs /linear-pick when poll.enabled: true in .claude/linear.yml. Respects autonomy and verify settings.</span></div></div>
+    </section>
+
+    <section class="doc-section" style="border-bottom:none">
+      <h2 style="font-size:22px">Explore the other plugins</h2>
+      <div class="feat-grid"><a class="feat gr reveal" href="second-wind.html">
+          <div class="head"><h3>Second Wind</h3><p class="desc">Run Claude overnight; auto-resume after 5-hour limit resets</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat ro reveal" href="prompt-craft.html">
+          <div class="head"><h3>prompt-craft</h3><p class="desc">Sharpen rough prompts into specs, suggest follow-up commands</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat cy reveal" href="ios-dev.html">
+          <div class="head"><h3>ios-dev</h3><p class="desc">Build iOS apps, screenshot remotely, release to App Store</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat vi reveal" href="core-workflow.html">
+          <div class="head"><h3>core-workflow</h3><p class="desc">Opinionated dev workflow: commit + share + team up</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a></div>
+      <p style="margin-top:18px"><a href="../catalog.html">Browse the full skills &amp; tools catalog →</a></p>
+    </section>
+
+  </main>
+ </div>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div><b>claude-skills</b>A Claude Code plugin marketplace<br>by Abhijit Bansal.</div>
+      <div>
+        <b>Features</b>
+        <a href="second-wind.html">Second Wind</a>
+        <a href="prompt-craft.html">prompt-craft</a>
+        <a href="ios-dev.html">ios-dev</a>
+        <a href="core-workflow.html">core-workflow</a>
+        <a href="linear-pm.html">linear-pm</a>
+      </div>
+      <div>
+        <b>Explore</b>
+        <a href="../catalog.html">Skills &amp; tools catalog</a>
+        <a href="../architecture.html">Architecture</a>
+        <a href="../machine-setup.html">Machine-setup runbook</a>
+        <a href="../second-wind/index.html">Second Wind CLI guide</a>
+      </div>
+      <div>
+        <b>Project</b>
+        <a href="https://github.com/abhijitbansal/claude-skills">GitHub repository ↗</a>
+        <a href="https://github.com/abhijitbansal/claude-skills/blob/main/CONTRIBUTING.md">Contributing</a>
+        <a href="https://github.com/abhijitbansal/claude-skills/blob/main/SECURITY.md">Security policy</a>
+      </div>
+    </div>
+    <div class="foot-meta">
+      <span class="lic">MIT licensed</span>
+      <span>5 plugins · 18 skills · 12 commands · 2 agents · 5 hooks · 1 CLI</span>
+      <span>Tested on macOS &amp; Ubuntu</span>
+    </div>
+  </div>
+</footer>
+<script src="../../site/assets/site.js"></script>
+</body>
+</html>

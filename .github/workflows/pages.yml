@@ -29,20 +29,26 @@ jobs:
 
       # Flatten site/ + docs/ into one published root and rewrite the
       # cross-links (which use ../docs and ../site for *local* viewing) so they
-      # resolve on the deployed flat site.
+      # resolve on the deployed flat site. Shared assets land at /assets/;
+      # feature pages keep a /features/ subdir; the Second Wind CLI guide keeps
+      # its /second-wind/ path (referenced by name in wind.py + tests).
       - name: Stage site
         run: |
-          mkdir -p _site _site/second-wind
+          mkdir -p _site _site/features _site/second-wind
           cp site/index.html _site/index.html
           cp site/og.png _site/og.png
+          cp -r site/assets _site/assets
           cp docs/*.html _site/ 2>/dev/null || true
-          # second-wind guide lives in a subdir; keep that path on deploy
+          cp docs/features/*.html _site/features/ 2>/dev/null || true
           cp docs/second-wind/index.html _site/second-wind/index.html 2>/dev/null || true
-          # local link forms -> flat deployed forms
-          #   ../docs/second-wind/index.html -> second-wind/index.html
-          #   ../docs/<file>.html            -> <file>.html
-          sed -i 's#\.\./docs/##g' _site/index.html
-          sed -i 's#\.\./site/index.html#index.html#g' _site/*.html
+          # local link forms -> flat deployed forms (applied to every page):
+          #   ../docs/<path>        -> <path>          (landing into docs/)
+          #   ../site/index.html    -> index.html      (any page back to landing)
+          #   ../site/assets/<f>    -> assets/<f>       (shared css/js; leading ../ preserved in subdirs)
+          find _site -name '*.html' -print0 | xargs -0 sed -i \
+            -e 's#\.\./docs/##g' \
+            -e 's#\.\./site/index.html#index.html#g' \
+            -e 's#\.\./site/assets/#assets/#g'
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

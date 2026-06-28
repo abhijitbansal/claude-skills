@@ -4,14 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>claude-skills — one repo, every agent</title>
-<meta name="description" content="A Claude Code plugin marketplace: iOS dev loop, Linear PM automation, core workflow helpers, and Second Wind — a set-and-forget orchestrator that resumes long runs across the 5-hour usage limit. Works in Codex, Copilot CLI, and any AGENTS.md agent too.">
+<meta name="description" content="A Claude Code plugin marketplace: Second Wind resumes long runs across the 5-hour limit, prompt-craft turns rough asks into specs, and an iOS build-and-preview loop ships apps from chat — plus Linear PM and core workflow helpers. Works in Codex, Copilot CLI, and any AGENTS.md agent too.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%230e8fb0'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='6.5'%20fill='%230a1420'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='3'%20fill='%23e8b94a'/%3E%3C/svg%3E">
 <meta name="theme-color" content="#0e8fb0">
 <!-- Open Graph / unfurl. Absolute URLs assume the default Pages URL; adjust if you set a custom domain. -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="claude-skills">
 <meta property="og:title" content="claude-skills — one repo, every agent">
-<meta property="og:description" content="A Claude Code plugin marketplace: an iOS build-and-preview loop, Linear PM, commit helpers, and Second Wind — a set-and-forget orchestrator that resumes long runs across the 5-hour usage limit. Works in Codex, Copilot CLI, and any AGENTS.md agent too.">
+<meta property="og:description" content="Second Wind resumes long runs across the 5-hour limit, prompt-craft turns rough asks into specs, and an iOS loop ships apps from chat — plus Linear PM and core workflow helpers. Claude Code, Codex, Copilot, AGENTS.md.">
 <meta property="og:url" content="https://abhijitbansal.github.io/claude-skills/">
 <meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
 <meta property="og:image:width" content="2400">
@@ -19,231 +19,25 @@
 <meta property="og:image:alt" content="claude-skills — 5 plugins, 18 skills, 12 commands. One repo, every agent.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="claude-skills — one repo, every agent">
-<meta name="twitter:description" content="iOS loop, Linear PM, commit helpers, and Second Wind — long runs that survive the 5-hour limit. Claude Code, Codex, Copilot, AGENTS.md.">
+<meta name="twitter:description" content="Second Wind, prompt-craft, an iOS loop, Linear PM, commit helpers. Long runs that survive the 5-hour limit. Claude Code, Codex, Copilot, AGENTS.md.">
 <meta name="twitter:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<style>
-:root{
-  --bg:#f5f7fa; --surface:#ffffff; --surface2:#eef2f7; --surface3:#e6ecf3;
-  --border:rgba(13,40,66,.12); --border-bright:rgba(13,40,66,.20);
-  --text:#0f2236; --text-dim:#51677e; --text-faint:#7a8da0;
-  --cyan:#0e8fb0; --cyan-dim:rgba(14,143,176,.10);
-  --gold:#b07a18; --gold-dim:rgba(176,122,24,.12);
-  --violet:#6d52c4; --violet-dim:rgba(109,82,196,.10);
-  --green:#15803d; --green-dim:rgba(21,128,61,.10);
-  --rose:#c03060; --rose-dim:rgba(192,48,96,.10);
-  --grid:rgba(14,143,176,.055); --glow:rgba(14,143,176,.16);
-}
-@media (prefers-color-scheme: dark){
-  :root{
-    --bg:#070d14; --surface:#0e1822; --surface2:#0b141d; --surface3:#13202c;
-    --border:rgba(150,195,225,.13); --border-bright:rgba(150,195,225,.24);
-    --text:#dce8f2; --text-dim:#8ba3b8; --text-faint:#5f7589;
-    --cyan:#34d3ee; --cyan-dim:rgba(52,211,238,.10);
-    --gold:#e8b94a; --gold-dim:rgba(232,185,74,.12);
-    --violet:#a892f0; --violet-dim:rgba(168,146,240,.12);
-    --green:#4ade80; --green-dim:rgba(74,222,128,.10);
-    --rose:#f0709a; --rose-dim:rgba(240,112,154,.12);
-    --grid:rgba(52,211,238,.05); --glow:rgba(52,211,238,.13);
-  }
-}
-*{box-sizing:border-box;min-width:0}
-html{scroll-behavior:smooth}
-body{
-  margin:0; color:var(--text); background:var(--bg);
-  font-family:'Inter',system-ui,sans-serif; line-height:1.6;
-  font-feature-settings:"cv05","ss01"; -webkit-font-smoothing:antialiased;
-  background-image:
-    radial-gradient(900px 500px at 75% -8%, var(--glow), transparent 60%),
-    linear-gradient(var(--grid) 1px,transparent 1px),
-    linear-gradient(90deg,var(--grid) 1px,transparent 1px);
-  background-size:auto, 30px 30px, 30px 30px;
-}
-.wrap{max-width:1140px;margin:0 auto;padding:0 24px}
-a{color:var(--cyan);text-decoration:none}
-a:hover{text-decoration:underline}
-code,.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
-h1,h2,h3{font-family:'Space Grotesk',sans-serif;letter-spacing:-.015em;line-height:1.12}
-
-/* ── nav ── */
-nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(10px);
-  background:color-mix(in srgb,var(--bg) 82%,transparent);
-  border-bottom:1px solid var(--border)}
-nav .wrap{display:flex;align-items:center;gap:20px;height:60px}
-.brand{display:flex;align-items:center;gap:10px;font-family:'Space Grotesk';font-weight:600;font-size:16px;color:var(--text)}
-.brand .dot{width:11px;height:11px;border-radius:3px;background:var(--cyan);box-shadow:0 0 0 4px var(--cyan-dim)}
-.brand:hover{text-decoration:none}
-.nav-links{margin-left:auto;display:flex;gap:22px;font-size:14px}
-.nav-links a{color:var(--text-dim)}
-.nav-links a:hover{color:var(--cyan);text-decoration:none}
-.nav-cta{font-family:'JetBrains Mono';font-size:12.5px;border:1px solid var(--border-bright);
-  border-radius:8px;padding:7px 13px;color:var(--text)!important}
-.nav-cta:hover{border-color:var(--cyan);color:var(--cyan)!important;text-decoration:none}
-@media(max-width:720px){.nav-links a:not(.nav-cta){display:none}}
-
-/* ── hero ── */
-.hero{padding:72px 0 30px;position:relative}
-.kicker{display:inline-flex;align-items:center;gap:8px;font-family:'JetBrains Mono';font-size:12px;
-  letter-spacing:.16em;text-transform:uppercase;color:var(--cyan);
-  border:1px solid var(--border);background:var(--surface);border-radius:100px;padding:5px 13px}
-.kicker .pulse{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 0 0 var(--cyan);animation:pulse 2.4s infinite}
-@keyframes pulse{0%{box-shadow:0 0 0 0 var(--glow)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
-.hero h1{font-size:clamp(38px,6.4vw,68px);font-weight:700;margin:22px 0 0;max-width:14ch}
-.hero h1 .grad{background:linear-gradient(100deg,var(--cyan),var(--gold));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.hero .lead{font-size:clamp(16px,2.1vw,20px);color:var(--text-dim);max-width:660px;margin:22px 0 0}
-.hero .lead b{color:var(--text);font-weight:600}
-.cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
-.btn{display:inline-flex;align-items:center;gap:9px;font-family:'Space Grotesk';font-weight:500;font-size:15px;
-  border-radius:10px;padding:12px 20px;border:1px solid transparent;cursor:pointer;transition:.15s}
-.btn:hover{text-decoration:none;transform:translateY(-1px)}
-.btn-primary{background:var(--cyan);color:#04141a}
-.btn-primary:hover{box-shadow:0 8px 24px var(--glow)}
-.btn-ghost{background:var(--surface);color:var(--text);border-color:var(--border-bright)}
-.btn-ghost:hover{border-color:var(--cyan);color:var(--cyan)}
-
-/* ── stat band ── */
-.statband{margin:54px 0 10px;display:grid;grid-template-columns:repeat(7,1fr);
-  background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;
-  box-shadow:0 10px 40px rgba(8,28,48,.06)}
-.stat{padding:22px 14px;text-align:center;border-right:1px solid var(--border);position:relative}
-.stat:last-child{border-right:none}
-.stat .n{font-family:'Space Grotesk';font-weight:700;font-size:clamp(26px,3.4vw,38px);color:var(--text);line-height:1}
-.stat .l{font-family:'JetBrains Mono';font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);margin-top:7px}
-.stat:nth-child(1) .n{color:var(--cyan)}.stat:nth-child(2) .n{color:var(--gold)}
-.stat:nth-child(3) .n{color:var(--violet)}.stat:nth-child(7) .n{color:var(--green)}
-@media(max-width:820px){.statband{grid-template-columns:repeat(3,1fr)}.stat:nth-child(3n){border-right:none}.stat{border-bottom:1px solid var(--border)}}
-@media(max-width:420px){.statband{grid-template-columns:repeat(2,1fr)}}
-
-/* ── section scaffolding ── */
-section{padding:60px 0}
-.eyebrow{display:flex;align-items:center;gap:10px;font-family:'JetBrains Mono';font-size:12.5px;
-  letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);margin:0 0 8px}
-.eyebrow::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--cyan)}
-.eyebrow.gold::before{background:var(--gold)}.eyebrow.violet::before{background:var(--violet)}
-.eyebrow.green::before{background:var(--green)}.eyebrow.rose::before{background:var(--rose)}
-h2.title{font-size:clamp(26px,3.6vw,40px);font-weight:600;margin:0 0 12px}
-.section-lead{color:var(--text-dim);max-width:640px;margin:0 0 34px;font-size:16.5px}
-
-/* ── problem cards ── */
-.prob-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:16px}
-.prob{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:22px;
-  position:relative;overflow:hidden}
-.prob .pill{font-family:'JetBrains Mono';font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;
-  color:var(--rose);background:var(--rose-dim);border-radius:5px;padding:3px 8px;display:inline-block}
-.prob .p{color:var(--text);font-weight:600;font-size:16px;margin:12px 0 0;font-family:'Space Grotesk'}
-.prob .arrow{color:var(--text-dim);font-family:'JetBrains Mono';margin:14px 0 6px;font-size:13px}
-.prob .s{color:var(--text-dim);font-size:14.5px}
-.prob .s b{color:var(--cyan);font-weight:600}
-.prob::after{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--rose),var(--cyan))}
-
-/* ── architecture diagram (CSS, self-contained) ── */
-.arch{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:30px 26px;
-  box-shadow:0 10px 40px rgba(8,28,48,.06)}
-.arch-row{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
-.arch-rail{display:flex;flex-direction:column;align-items:center;gap:6px;margin:8px 0;color:var(--text-faint)}
-.arch-rail svg{display:block}
-.node{background:var(--surface2);border:1px solid var(--border-bright);border-radius:11px;
-  padding:13px 16px;text-align:center;min-width:124px}
-.node .nt{font-family:'Space Grotesk';font-weight:600;font-size:14.5px;color:var(--text)}
-.node .ns{font-family:'JetBrains Mono';font-size:11px;color:var(--text-dim);margin-top:3px}
-.node.mk{border-color:var(--cyan);background:var(--cyan-dim)}
-.node.mk .nt{color:var(--cyan)}
-.node.cli{border-color:var(--green);background:var(--green-dim)}.node.cli .nt{color:var(--green)}
-.node.seed{border-color:var(--gold);background:var(--gold-dim)}.node.seed .nt{color:var(--gold)}
-.node.ad{border-color:var(--violet);background:var(--violet-dim)}.node.ad .nt{color:var(--violet)}
-.plug-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:6px 0}
-@media(max-width:680px){.plug-row{grid-template-columns:repeat(2,1fr)}}
-.pnode{background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--cyan);
-  border-radius:10px;padding:12px;text-align:center}
-.pnode.v{border-top-color:var(--violet)}.pnode.g{border-top-color:var(--gold)}.pnode.e{border-top-color:var(--green)}.pnode.r{border-top-color:var(--rose)}
-.pnode .pn{font-family:'Space Grotesk';font-weight:600;font-size:13.5px}
-.pnode .pc{font-family:'JetBrains Mono';font-size:10.5px;color:var(--text-dim);margin-top:3px}
-.arch-foot{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:8px}
-.arch-note{font-family:'JetBrains Mono';font-size:11.5px;color:var(--text-dim)}
-
-/* ── plugin cards ── */
-.plug-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px}
-.pcard{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:0;overflow:hidden;display:flex;flex-direction:column}
-.pcard .head{padding:18px 20px 14px;border-bottom:1px solid var(--border);position:relative}
-.pcard .head::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)}
-.pcard.cy{--accent:var(--cyan)}.pcard.vi{--accent:var(--violet)}.pcard.go{--accent:var(--gold)}.pcard.gr{--accent:var(--green)}.pcard.ro{--accent:var(--rose)}
-.pcard h3{font-size:18px;margin:0;display:flex;align-items:center;gap:9px}
-.pcard h3 .tag{font-family:'JetBrains Mono';font-size:10.5px;color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,transparent);border-radius:5px;padding:2px 7px;font-weight:500}
-.pcard .desc{color:var(--text-dim);font-size:14px;margin:8px 0 0}
-.pcard .body{padding:16px 20px 20px;font-size:13.5px;flex:1}
-.assetline{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:13px}
-.chip{font-family:'JetBrains Mono';font-size:11px;color:var(--text-dim);background:var(--surface2);
-  border:1px solid var(--border);border-radius:6px;padding:3px 8px}
-.chip b{color:var(--accent);font-weight:600}
-.pcard ul{margin:0;padding-left:17px;color:var(--text-dim)}
-.pcard li{margin:3px 0}.pcard li code{font-size:12px;color:var(--text)}
-
-/* ── install ── */
-.install-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
-.istep{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:20px}
-.istep .num{font-family:'JetBrains Mono';font-size:12px;color:var(--cyan);font-weight:700}
-.istep h3{font-size:16.5px;margin:6px 0 4px}
-.istep p{color:var(--text-dim);font-size:14px;margin:0 0 14px}
-.code{position:relative;background:var(--surface2);border:1px solid var(--border);border-radius:9px;
-  padding:13px 15px;font-family:'JetBrains Mono';font-size:12.5px;color:var(--text);overflow-x:auto;white-space:pre;line-height:1.7}
-.code .c{color:var(--text-dim)}
-.code .k{color:var(--cyan)}
-.copy{position:absolute;top:8px;right:8px;font-family:'JetBrains Mono';font-size:10.5px;
-  background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text-dim);cursor:pointer}
-.copy:hover{border-color:var(--cyan);color:var(--cyan)}
-.copy.ok{color:var(--green);border-color:var(--green)}
-
-/* ── second wind spotlight ── */
-.sw{background:linear-gradient(160deg,var(--surface),var(--surface2));border:1px solid var(--border);
-  border-radius:16px;padding:30px 26px;box-shadow:0 10px 40px rgba(8,28,48,.06)}
-.sw-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
-.sw-head h3{font-size:22px;margin:0}
-.sw-head .by{font-family:'JetBrains Mono';font-size:12px;color:var(--green)}
-.timeline{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin:26px 0 8px}
-.tl{position:relative;padding:0 10px;text-align:center}
-.tl .dot{width:15px;height:15px;border-radius:50%;background:var(--surface);border:2px solid var(--green);margin:0 auto 12px;position:relative;z-index:2}
-.tl.hot .dot{background:var(--green);box-shadow:0 0 0 5px var(--green-dim)}
-.tl::before{content:"";position:absolute;top:7px;left:-50%;width:100%;height:2px;background:var(--border-bright);z-index:1}
-.tl:first-child::before{display:none}
-.tl .tt{font-family:'Space Grotesk';font-weight:600;font-size:13.5px}
-.tl .td{font-family:'JetBrains Mono';font-size:10.5px;color:var(--text-dim);margin-top:4px}
-@media(max-width:680px){.timeline{grid-template-columns:1fr;gap:0}.tl{text-align:left;padding:0 0 18px 28px}.tl .dot{position:absolute;left:0;margin:0}.tl::before{top:0;left:7px;width:2px;height:100%}.tl:first-child::before{display:block}}
-.sw-cmds{display:flex;flex-wrap:wrap;gap:7px;margin-top:22px}
-.sw-cmds code{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px;color:var(--text)}
-.sw-cmds code b{color:var(--green)}
-
-/* ── footer ── */
-footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
-.foot-grid{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;font-size:13.5px;color:var(--text-dim)}
-.foot-grid b{font-family:'Space Grotesk';color:var(--text);display:block;margin-bottom:8px;font-size:14px}
-.foot-grid a{display:block;color:var(--text-dim);margin:4px 0}
-.foot-grid a:hover{color:var(--cyan)}
-.foot-meta{font-family:'JetBrains Mono';font-size:11.5px;color:var(--text-faint);margin-top:30px;display:flex;gap:16px;flex-wrap:wrap}
-.foot-meta .lic{color:var(--gold)}
-
-.reveal{opacity:0;transform:translateY(14px)}
-.reveal.in{opacity:1;transform:none;transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.2,1)}
-@media (prefers-reduced-motion: reduce){
-  html{scroll-behavior:auto}
-  .reveal{opacity:1!important;transform:none!important;transition:none}
-  .pulse,.kicker .pulse{animation:none}
-}
-</style>
+<link rel="stylesheet" href="assets/site.css">
 </head>
-<body>
+<body class="accent-cyan">
+<a class="skip" href="#features">Skip to content</a>
 
-<nav>
+<nav class="site">
   <div class="wrap">
     <a class="brand" href="#top"><span class="dot"></span>claude-skills</a>
     <div class="nav-links">
+      <a href="#features">Features</a>
       <a href="#problems">Why</a>
-      <a href="#plugins">Plugins</a>
       <a href="#install">Install</a>
-      <a href="#second-wind">Second Wind</a>
-      <a href="#docs">Docs</a>
-      <a href="../docs/features.html">All features</a>
+      <a href="../docs/catalog.html">Catalog</a>
+      <a href="../docs/architecture.html">Architecture</a>
       <a class="nav-cta" href="https://github.com/abhijitbansal/claude-skills">GitHub ↗</a>
     </div>
   </div>
@@ -255,14 +49,14 @@ footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
   <header class="hero">
     <span class="kicker"><span class="pulse"></span>Claude Code · plugin marketplace</span>
     <h1>One repo. <span class="grad">Every agent.</span></h1>
-    <p class="lead"><b>claude-skills</b> packages real-world agent workflows — an iOS build-and-preview loop,
-      Linear project management, commit &amp; contribution helpers, <b>prompt-craft</b> for turning rough asks
-      into deterministic specs, and <b>Second Wind</b>, a set-and-forget orchestrator that resumes long runs
-      across the 5-hour usage limit. Install one plugin in Claude Code, or wire the same skills into Codex,
+    <p class="lead"><b>claude-skills</b> packages real-world agent workflows into installable plugins —
+      <b>Second Wind</b> keeps long runs alive across the 5-hour limit, <b>prompt-craft</b> turns rough asks
+      into deterministic specs, and an <b>iOS loop</b> builds, previews, and ships apps from chat. Plus Linear
+      project management and commit helpers. Install one in Claude Code, or port the skills into Codex,
       Copilot CLI, and any AGENTS.md agent.</p>
     <div class="cta-row">
-      <a class="btn btn-primary" href="#install">Install in 30 seconds →</a>
-      <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills">View source</a>
+      <a class="btn btn-primary" href="#features">Explore the features →</a>
+      <a class="btn btn-ghost" href="#install">Install in 30 seconds</a>
     </div>
 
     <div class="statband reveal" aria-label="Repository at a glance">
@@ -276,17 +70,123 @@ footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
     </div>
   </header>
 
+  <!-- FEATURES: quick show, links to detail -->
+  <section id="features">
+    <div class="eyebrow violet">The features</div>
+    <h2 class="title">Five plugins. Each its own deep-dive.</h2>
+    <p class="section-lead">A quick look at every plugin — open any card for the full guide: what it solves,
+      how to install, a complete usability walkthrough, and how it works under the hood.</p>
+
+    <div class="feat-grid">
+
+      <a class="feat gr reveal" href="../docs/features/second-wind.html">
+        <div class="head">
+          <h3>second-wind <span class="tag">CLI</span><span class="star">★ top pick</span></h3>
+          <p class="desc">Set-and-forget orchestrator. Detects the 5-hour limit, waits for reset, resumes every session — overnight, untouched.</p>
+        </div>
+        <div class="body">
+          <div class="assetline"><span class="chip"><b>9</b> wind subcommands</span><span class="chip"><b>0</b> deps</span></div>
+          <ul>
+            <li>Multi-repo tmux orchestration, stdlib-only Python</li>
+            <li>Live localhost dashboard with per-run CSRF token</li>
+            <li><code>init</code> · <code>up</code> · <code>watch</code> · <code>resume</code> · <code>dash</code></li>
+          </ul>
+        </div>
+        <div class="more"><span>Open the guide</span><span class="ar">→</span></div>
+      </a>
+
+      <a class="feat ro reveal" href="../docs/features/prompt-craft.html">
+        <div class="head">
+          <h3>prompt-craft <span class="tag">5 skills</span><span class="star">★ top pick</span></h3>
+          <p class="desc">Turn rough prompts into deterministic specs and surface the right next step. Zero config; guardrails off by default.</p>
+        </div>
+        <div class="body">
+          <div class="assetline"><span class="chip"><b>5</b> skills</span><span class="chip"><b>3</b> hooks</span></div>
+          <ul>
+            <li><code>/improve-prompt</code> (ask → spec) · <code>/plan</code> (decompose)</li>
+            <li>Lenses: <code>debug</code> · <code>refactor</code> · <code>review</code></li>
+            <li>Stop hook suggests git-aware follow-ups</li>
+          </ul>
+        </div>
+        <div class="more"><span>Open the guide</span><span class="ar">→</span></div>
+      </a>
+
+      <a class="feat cy reveal" href="../docs/features/ios-dev.html">
+        <div class="head">
+          <h3>ios-dev <span class="tag">9 skills</span><span class="star">★ top pick</span></h3>
+          <p class="desc">Build, preview, and ship iOS apps from chat — sim screenshots delivered to your phone, device builds, App Store release.</p>
+        </div>
+        <div class="body">
+          <div class="assetline"><span class="chip"><b>9</b> skills</span><span class="chip"><b>3</b> commands</span><span class="chip"><b>1</b> hook</span></div>
+          <ul>
+            <li><code>/preview</code> &amp; <code>/fix</code> → screenshot to your iPhone</li>
+            <li><code>release</code>: archive, validate, TestFlight/App Store</li>
+            <li>Swift 6, app icons, biometric lock, demo GIFs</li>
+          </ul>
+        </div>
+        <div class="more"><span>Open the guide</span><span class="ar">→</span></div>
+      </a>
+
+      <a class="feat go reveal" href="../docs/features/linear-pm.html">
+        <div class="head">
+          <h3>linear-pm <span class="tag">6 commands</span></h3>
+          <p class="desc">Make Linear the operational center: file issues, pick up agent-ready work, open PRs, keep status in sync.</p>
+        </div>
+        <div class="body">
+          <div class="assetline"><span class="chip"><b>1</b> skill</span><span class="chip"><b>6</b> commands</span></div>
+          <ul>
+            <li><code>/linear-pick</code> implements agent-ready issues end to end</li>
+            <li>Three autonomy modes — disabled → review → allowed</li>
+            <li>Label taxonomy gates what agents may touch</li>
+          </ul>
+        </div>
+        <div class="more"><span>Open the guide</span><span class="ar">→</span></div>
+      </a>
+
+      <a class="feat vi reveal" href="../docs/features/core-workflow.html">
+        <div class="head">
+          <h3>core-workflow <span class="tag">2 agents</span></h3>
+          <p class="desc">The invisible workflow layer: conventional commits, skill contribution, team orchestration, and two worker agents.</p>
+        </div>
+        <div class="body">
+          <div class="assetline"><span class="chip"><b>2</b> skills</span><span class="chip"><b>2</b> commands</span><span class="chip"><b>2</b> agents</span></div>
+          <ul>
+            <li>Skills: <code>commit</code> · <code>contribute</code></li>
+            <li>Agents: <code>image-parser</code> · <code>web-researcher</code></li>
+            <li><code>shellcheck-on-edit</code> lints shell on save</li>
+          </ul>
+        </div>
+        <div class="more"><span>Open the guide</span><span class="ar">→</span></div>
+      </a>
+
+      <a class="feat cy reveal" href="../docs/catalog.html" style="--accent-c:var(--cyan);justify-content:center">
+        <div class="head" style="border-bottom:none">
+          <h3>Browse everything <span class="tag">catalog</span></h3>
+          <p class="desc">Search and filter all 18 skills, 12 commands, agents, hooks, and the CLI in one place.</p>
+        </div>
+        <div class="more"><span>Open the catalog</span><span class="ar">→</span></div>
+      </a>
+
+    </div>
+  </section>
+
   <!-- PROBLEMS -->
   <section id="problems">
     <div class="eyebrow rose">What it solves</div>
     <h2 class="title">Five real frictions, removed</h2>
     <p class="section-lead">Each plugin started as a daily annoyance worth automating away — not a demo.</p>
-    <div class="prob-grid">
+    <div class="grid cols-3">
       <div class="prob reveal">
         <span class="pill">Friction</span>
         <div class="p">Hit the 5-hour limit mid-run — work stalls until you babysit it.</div>
         <div class="arrow">↓ becomes</div>
         <div class="s"><b>Second Wind</b> watches your tmux sessions, notices the pause, waits for the reset, and resumes every repo — overnight, untouched.</div>
+      </div>
+      <div class="prob reveal">
+        <span class="pill">Friction</span>
+        <div class="p">A rough one-line ask sends the agent wandering — no acceptance criteria, no plan.</div>
+        <div class="arrow">↓ becomes</div>
+        <div class="s"><b>prompt-craft</b>: <code>/improve-prompt</code> turns the ask into a deterministic spec, <code>/plan</code> decomposes it, and debug/refactor/review lenses keep execution honest.</div>
       </div>
       <div class="prob reveal">
         <span class="pill">Friction</span>
@@ -302,15 +202,15 @@ footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
       </div>
       <div class="prob reveal">
         <span class="pill">Friction</span>
-        <div class="p">Your skills and config don't follow you across machines or tools.</div>
+        <div class="p">Commit hygiene and skill sharing keep pulling you out of flow.</div>
         <div class="arrow">↓ becomes</div>
-        <div class="s">A <b>capture → setup</b> round trip rebuilds a machine from one TOML, and <b>adapters</b> wire the same skills into Codex, Copilot, and AGENTS.md agents.</div>
+        <div class="s"><b>core-workflow</b>: conventional commits with shellcheck, one-command skill contribution, and image/research worker agents.</div>
       </div>
       <div class="prob reveal">
         <span class="pill">Friction</span>
-        <div class="p">A rough one-line ask sends the agent wandering — no acceptance criteria, no plan.</div>
+        <div class="p">Your skills and config don't follow you across machines or tools.</div>
         <div class="arrow">↓ becomes</div>
-        <div class="s"><b>prompt-craft</b>: <code>/improve-prompt</code> turns the ask into a deterministic spec, <code>/plan</code> decomposes it, and debug/refactor/review lenses keep execution honest.</div>
+        <div class="s">A <b>capture → setup</b> round trip rebuilds a machine from one TOML, and <b>adapters</b> wire the same skills into Codex, Copilot, and AGENTS.md agents.</div>
       </div>
     </div>
   </section>
@@ -328,11 +228,11 @@ footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
         <svg width="22" height="30" viewBox="0 0 22 30"><path d="M11 0 V30 M11 30 l-5 -6 M11 30 l5 -6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
       </div>
       <div class="plug-row">
-        <div class="pnode"><div class="pn">ios-dev</div><div class="pc">9 sk · 3 cmd · 1 hook</div></div>
-        <div class="pnode v"><div class="pn">core-workflow</div><div class="pc">2 sk · 2 cmd · 2 ag · 1 hook</div></div>
-        <div class="pnode g"><div class="pn">linear-pm</div><div class="pc">1 sk · 6 cmd</div></div>
-        <div class="pnode e"><div class="pn">second-wind</div><div class="pc">skill wrapper</div></div>
-        <div class="pnode r"><div class="pn">prompt-craft</div><div class="pc">5 sk · 3 hook</div></div>
+        <a class="pnode" href="../docs/features/ios-dev.html"><div class="pn">ios-dev</div><div class="pc">9 sk · 3 cmd · 1 hook</div></a>
+        <a class="pnode v" href="../docs/features/core-workflow.html"><div class="pn">core-workflow</div><div class="pc">2 sk · 2 cmd · 2 ag · 1 hook</div></a>
+        <a class="pnode g" href="../docs/features/linear-pm.html"><div class="pn">linear-pm</div><div class="pc">1 sk · 6 cmd</div></a>
+        <a class="pnode e" href="../docs/features/second-wind.html"><div class="pn">second-wind</div><div class="pc">skill + CLI</div></a>
+        <a class="pnode r" href="../docs/features/prompt-craft.html"><div class="pn">prompt-craft</div><div class="pc">5 sk · 3 hook</div></a>
       </div>
       <div class="arch-foot">
         <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
@@ -349,94 +249,7 @@ footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
         </div>
       </div>
     </div>
-  </section>
-
-  <!-- PLUGINS -->
-  <section id="plugins">
-    <div class="eyebrow violet">The five plugins</div>
-    <h2 class="title">Install one, or all five</h2>
-    <p class="section-lead">Each is a self-contained Claude Code plugin: skills, slash commands, hooks, and agents.</p>
-    <div class="plug-grid">
-
-      <div class="pcard cy reveal">
-        <div class="head">
-          <h3>ios-dev <span class="tag">9 skills</span></h3>
-          <p class="desc">Simulator build + preview + screenshot delivery, device builds, TestFlight/App Store release automation.</p>
-        </div>
-        <div class="body">
-          <div class="assetline"><span class="chip"><b>9</b> skills</span><span class="chip"><b>3</b> commands</span><span class="chip"><b>1</b> hook</span></div>
-          <ul>
-            <li><code>ios-build</code> · <code>app-preview</code> (sim shots → your phone) · <code>release</code></li>
-            <li><code>demo-recording</code> · <code>alternate-app-icons</code> · <code>biometric-applock</code></li>
-            <li><code>swift6-mainactor-migration</code> · <code>xcode-cloud-validate</code> · <code>xcodegen-test-targets</code></li>
-            <li>Commands: <code>/preview</code> <code>/fix</code> <code>/ios-init</code> · Stop hook: build reminder</li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="pcard vi reveal">
-        <div class="head">
-          <h3>core-workflow <span class="tag">2 agents</span></h3>
-          <p class="desc">General dev helpers: commit flow, skill contribution, team orchestration — plus two worker agents.</p>
-        </div>
-        <div class="body">
-          <div class="assetline"><span class="chip"><b>2</b> skills</span><span class="chip"><b>2</b> commands</span><span class="chip"><b>2</b> agents</span><span class="chip"><b>1</b> hook</span></div>
-          <ul>
-            <li>Skills: <code>commit</code> (conventional commits) · <code>contribute</code></li>
-            <li>Commands: <code>/team</code> · <code>/contribute-skill</code></li>
-            <li>Agents: <code>image-parser</code> (vision) · <code>web-researcher</code></li>
-            <li>PostToolUse hook: <code>shellcheck-on-edit</code></li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="pcard go reveal">
-        <div class="head">
-          <h3>linear-pm <span class="tag">6 commands</span></h3>
-          <p class="desc">Linear conventions and an agent-ready workflow: issue templates, label taxonomy, autonomous pickup.</p>
-        </div>
-        <div class="body">
-          <div class="assetline"><span class="chip"><b>1</b> skill</span><span class="chip"><b>6</b> commands</span></div>
-          <ul>
-            <li><code>/linear-init</code> · <code>/linear-new</code> · <code>/linear-pick</code></li>
-            <li><code>/linear-status</code> · <code>/linear-sync</code> · <code>/linear-block</code></li>
-            <li>Labels: <code>agent-ready</code>, <code>agent-blocked</code>, <code>needs-spec</code>…</li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="pcard gr reveal">
-        <div class="head">
-          <h3>second-wind <span class="tag">CLI</span></h3>
-          <p class="desc">Set-and-forget orchestrator for long runs. Detects the usage-limit pause, waits for reset, resumes every session.</p>
-        </div>
-        <div class="body">
-          <div class="assetline"><span class="chip"><b>1</b> skill wrapper</span><span class="chip"><b>1</b> CLI · 7 subcommands</span></div>
-          <ul>
-            <li>Multi-repo tmux orchestration, stdlib-only Python</li>
-            <li><code>init</code> · <code>up</code> · <code>status</code> · <code>watch</code> · <code>resume</code> · <code>down</code> · <code>dash</code></li>
-            <li>Localhost dashboard with per-run CSRF token</li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="pcard ro reveal">
-        <div class="head">
-          <h3>prompt-craft <span class="tag">5 skills</span></h3>
-          <p class="desc">Turn rough prompts into deterministic specs and surface the right next step. Zero config; guardrails off by default.</p>
-        </div>
-        <div class="body">
-          <div class="assetline"><span class="chip"><b>5</b> skills</span><span class="chip"><b>3</b> hooks</span></div>
-          <ul>
-            <li>Skills: <code>/improve-prompt</code> (ask → spec) · <code>/plan</code> (decompose → TodoWrite)</li>
-            <li>Lenses: <code>debug</code> · <code>refactor</code> · <code>review</code> (correctness + security first)</li>
-            <li>Stop hook: <code>suggest_next</code> (git-aware follow-ups, silent when idle)</li>
-            <li>Opt-in guards: <code>block_secrets</code> · <code>format_on_edit</code></li>
-          </ul>
-        </div>
-      </div>
-
-    </div>
+    <p class="arch-note" style="margin-top:18px">Full detail: the <a href="../docs/architecture.html">architecture overview</a>.</p>
   </section>
 
   <!-- INSTALL -->
@@ -451,9 +264,9 @@ footer{border-top:1px solid var(--border);padding:40px 0 60px;margin-top:30px}
         <h3>Add the marketplace</h3>
         <p>From inside Claude Code, register this repo and install any plugin.</p>
         <div class="code"><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills
-/plugin install ios-dev@claude-skills">copy</button><span class="c"># in the Claude Code prompt</span>
+/plugin install prompt-craft@claude-skills"><span></span>copy</button><span class="c"># in the Claude Code prompt</span>
 <span class="k">/plugin</span> marketplace add abhijitbansal/claude-skills
-<span class="k">/plugin</span> install ios-dev@claude-skills</div>
+<span class="k">/plugin</span> install prompt-craft@claude-skills</div>
       </div>
 
       <div class="istep reveal">
@@ -478,17 +291,17 @@ bash adapters/install.sh all   <span class="c"># every target</span></div>
 
     </div>
     <p class="arch-note" style="margin-top:18px">Seeding a whole machine instead? Run <code>setup/setup.sh</code> — see the
-      <a href="../docs/machine-setup.html">machine-setup guide</a> (in <code>docs/</code>).</p>
+      <a href="../docs/machine-setup.html">machine-setup runbook</a>.</p>
   </section>
 
-  <!-- SECOND WIND -->
+  <!-- SECOND WIND SPOTLIGHT -->
   <section id="second-wind">
     <div class="eyebrow green">Spotlight</div>
     <h2 class="title">Second Wind, in one loop</h2>
-    <div class="sw reveal">
-      <div class="sw-head">
-        <h3>The 5-hour limit stops being your problem</h3>
-        <span class="by">tools/second-wind/wind.py</span>
+    <div class="card pad-lg reveal">
+      <div class="sw-head" style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+        <h3 style="font-size:22px;margin:0">The 5-hour limit stops being your problem</h3>
+        <span style="font-family:var(--font-mono);font-size:12px;color:var(--green)">tools/second-wind/wind.py</span>
       </div>
       <p style="color:var(--text-dim);font-size:15px;margin:0;max-width:680px">Start your sessions, then walk away.
         Wind polls each tmux pane, recognises the usage-limit message, and schedules a resume the moment the window reopens.</p>
@@ -499,8 +312,15 @@ bash adapters/install.sh all   <span class="c"># every target</span></div>
         <div class="tl"><div class="dot"></div><div class="tt">wait</div><div class="td">until reset + buffer</div></div>
         <div class="tl"><div class="dot"></div><div class="tt">resume</div><div class="td">nudge every session</div></div>
       </div>
-      <div class="sw-cmds">
-        <code><b>wind</b> init</code><code><b>wind</b> up</code><code><b>wind</b> status</code><code><b>wind</b> watch</code><code><b>wind</b> resume</code><code><b>wind</b> down</code><code><b>wind</b> dash</code>
+      <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:22px">
+        <code style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px"><b style="color:var(--green)">wind</b> init</code>
+        <code style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px"><b style="color:var(--green)">wind</b> up</code>
+        <code style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px"><b style="color:var(--green)">wind</b> watch</code>
+        <code style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px"><b style="color:var(--green)">wind</b> dash</code>
+      </div>
+      <div class="cta-row" style="margin-top:24px">
+        <a class="btn btn-ghost btn-sm" href="../docs/features/second-wind.html">Feature guide →</a>
+        <a class="btn btn-ghost btn-sm" href="../docs/second-wind/index.html">Full CLI reference →</a>
       </div>
     </div>
   </section>
@@ -508,38 +328,39 @@ bash adapters/install.sh all   <span class="c"># every target</span></div>
   <!-- DOCS -->
   <section id="docs">
     <div class="eyebrow">Guides &amp; docs</div>
-    <h2 class="title">Read the guides</h2>
-    <p class="section-lead">Deeper than this page: a machine-setup runbook, the full Second Wind CLI reference, and a how-to-use operator's manual — separate from this page, with tips &amp; limitations.</p>
+    <h2 class="title">Go deeper</h2>
+    <p class="section-lead">Per-feature guides cover usability and internals. These cross-cutting docs cover the rest.</p>
     <div class="install-grid">
+
+      <div class="istep reveal">
+        <div class="num">CATALOG</div>
+        <h3>Every skill &amp; tool</h3>
+        <p>One searchable, filterable index of all 18 skills, 12 commands, both agents, every hook, and the CLI — grouped by type.</p>
+        <a class="btn btn-ghost" href="../docs/catalog.html">Open the catalog →</a>
+      </div>
 
       <div class="istep reveal">
         <div class="num">RUNBOOK</div>
         <h3>Copy a machine, setup→setup</h3>
-        <p>Rebuild a full Claude Code environment on a new machine from one TOML manifest — <code>capture.sh</code> snapshots, <code>setup.sh</code> restores, <code>contribute.sh</code> round-trips changes back. Every step, every flag, troubleshooting.</p>
+        <p>Rebuild a full Claude Code environment on a new machine from one TOML manifest — <code>capture.sh</code> snapshots, <code>setup.sh</code> restores, <code>contribute.sh</code> round-trips changes back.</p>
         <a class="btn btn-ghost" href="../docs/machine-setup.html">Machine-setup runbook →</a>
       </div>
 
       <div class="istep reveal">
         <div class="num">CLI REFERENCE</div>
         <h3>Second Wind, end to end</h3>
-        <p>The full <code>wind</code> guide: every command, the live dashboard, how limit detection parses the reset time, the config schema and security model — plus the notes &amp; caveats before you leave it running overnight.</p>
+        <p>The full <code>wind</code> guide: every command, the live dashboard, how limit detection parses the reset time, the config schema and security model.</p>
         <a class="btn btn-ghost" href="../docs/second-wind/index.html">Second Wind CLI guide →</a>
       </div>
 
-      <div class="istep reveal">
-        <div class="num">HOW-TO</div>
-        <h3>Operator's manual</h3>
-        <p>Separate from this page: onboard a new app repo, the common operations, every <code>setup.sh</code> flag, and a dedicated <b>tips &amp; limitations</b> section for the sharp edges.</p>
-        <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills/blob/main/USAGE.md">Usage &amp; how-to guide →</a>
-      </div>
-
     </div>
-    <p class="arch-note" style="margin-top:18px">Also: the <a href="../docs/architecture.html">architecture overview</a> and the <a href="../docs/skills-catalog.html">skills &amp; tools catalog</a>.</p>
+    <p class="arch-note" style="margin-top:18px">Also: the <a href="../docs/architecture.html">architecture overview</a> and the project
+      <a href="https://github.com/abhijitbansal/claude-skills/blob/main/USAGE.md">usage &amp; how-to guide</a>.</p>
   </section>
 
 </div>
 
-<footer>
+<footer class="site">
   <div class="wrap">
     <div class="foot-grid">
       <div>
@@ -547,15 +368,19 @@ bash adapters/install.sh all   <span class="c"># every target</span></div>
         A Claude Code plugin marketplace<br>by Abhijit Bansal.
       </div>
       <div>
+        <b>Features</b>
+        <a href="../docs/features/second-wind.html">Second Wind</a>
+        <a href="../docs/features/prompt-craft.html">prompt-craft</a>
+        <a href="../docs/features/ios-dev.html">ios-dev</a>
+        <a href="../docs/features/linear-pm.html">linear-pm</a>
+        <a href="../docs/features/core-workflow.html">core-workflow</a>
+      </div>
+      <div>
         <b>Explore</b>
-        <a href="#plugins">The five plugins</a>
-        <a href="#install">Install</a>
-        <a href="#docs">Guides &amp; docs</a>
+        <a href="../docs/catalog.html">Skills &amp; tools catalog</a>
         <a href="../docs/architecture.html">Architecture</a>
-        <a href="../docs/skills-catalog.html">Skills &amp; tools catalog</a>
         <a href="../docs/machine-setup.html">Machine-setup runbook</a>
         <a href="../docs/second-wind/index.html">Second Wind CLI guide</a>
-        <a href="https://github.com/abhijitbansal/claude-skills/blob/main/USAGE.md">Usage &amp; how-to guide</a>
       </div>
       <div>
         <b>Project</b>
@@ -566,63 +391,12 @@ bash adapters/install.sh all   <span class="c"># every target</span></div>
     </div>
     <div class="foot-meta">
       <span class="lic">MIT licensed</span>
-      <span>4 plugins · 13 skills · 12 commands · 2 agents · 2 hooks · 1 CLI</span>
+      <span>5 plugins · 18 skills · 12 commands · 2 agents · 5 hooks · 1 CLI</span>
       <span>Tested on macOS &amp; Ubuntu · 49 bats cases + pytest</span>
     </div>
   </div>
 </footer>
 
-<script>
-(function(){
-  "use strict";
-  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  // Reveal on scroll
-  var revealEls = Array.prototype.slice.call(document.querySelectorAll('.reveal'));
-  if (reduce || !('IntersectionObserver' in window)) {
-    revealEls.forEach(function(el){ el.classList.add('in'); });
-  } else {
-    var io = new IntersectionObserver(function(entries){
-      entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
-    }, {threshold:0.12});
-    revealEls.forEach(function(el){ io.observe(el); });
-  }
-
-  // Count-up (skips animation under reduced-motion)
-  var counters = Array.prototype.slice.call(document.querySelectorAll('[data-count]'));
-  function run(el){
-    var target = parseInt(el.getAttribute('data-count'),10) || 0;
-    if (reduce){ el.textContent = target; return; }
-    var start = null, dur = 900;
-    function tick(ts){
-      if(!start) start = ts;
-      var p = Math.min((ts-start)/dur, 1);
-      el.textContent = Math.round(target * (1 - Math.pow(1-p,3)));
-      if(p<1) requestAnimationFrame(tick); else el.textContent = target;
-    }
-    requestAnimationFrame(tick);
-  }
-  if (reduce || !('IntersectionObserver' in window)) {
-    counters.forEach(function(el){ el.textContent = el.getAttribute('data-count'); });
-  } else {
-    var cio = new IntersectionObserver(function(entries){
-      entries.forEach(function(e){ if(e.isIntersecting){ run(e.target); cio.unobserve(e.target); } });
-    }, {threshold:0.5});
-    counters.forEach(function(el){ cio.observe(el); });
-  }
-
-  // Copy buttons
-  document.querySelectorAll('.copy').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var text = btn.getAttribute('data-copy') || '';
-      var done = function(){ var o=btn.textContent; btn.textContent='copied'; btn.classList.add('ok');
-        setTimeout(function(){ btn.textContent=o; btn.classList.remove('ok'); },1400); };
-      if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, done); }
-      else { var t=document.createElement('textarea'); t.value=text; document.body.appendChild(t); t.select();
-        try{document.execCommand('copy');}catch(e){} document.body.removeChild(t); done(); }
-    });
-  });
-})();
-</script>
+<script src="assets/site.js"></script>
 </body>
 </html>

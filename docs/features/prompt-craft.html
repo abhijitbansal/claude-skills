@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>prompt-craft — claude-skills</title>
+<meta name="description" content="Sharpen rough prompts into specs, suggest follow-up commands">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%23c03060'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='6.5'%20fill='%230a1420'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='3'%20fill='%23e8b94a'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#c03060">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="claude-skills">
+<meta property="og:title" content="prompt-craft — claude-skills">
+<meta property="og:description" content="Sharpen rough prompts into specs, suggest follow-up commands">
+<meta property="og:url" content="https://abhijitbansal.github.io/claude-skills/features/prompt-craft.html">
+<meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../site/assets/site.css">
+</head>
+<body class="accent-rose">
+<a class="skip" href="#main">Skip to content</a>
+<nav class="site">
+  <div class="wrap">
+    <a class="brand" href="../../site/index.html"><span class="dot"></span>claude-skills</a>
+    <div class="nav-links">
+      <a href="../../site/index.html#features" aria-current="page">Features</a>
+      <a href="../catalog.html">Catalog</a>
+      <a href="../architecture.html">Architecture</a>
+      <a class="nav-cta" href="https://github.com/abhijitbansal/claude-skills">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head wrap narrow">
+  <div class="crumbs"><a href="../../site/index.html">Home</a><span class="sep">/</span><a href="../../site/index.html#features">Features</a><span class="sep">/</span>prompt-craft</div>
+  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>plugin · 5 skills</span>
+  <h1>prompt-craft</h1>
+  <p class="lead">Sharpen rough prompts into specs, suggest follow-up commands.</p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="#install">Install →</a>
+    <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills/tree/main/plugins/prompt-craft">View source ↗</a>
+  </div>
+  <div class="statband plain cols-4 reveal"><div class="stat"><div class="n" data-count="5">5</div><div class="l">skills</div></div><div class="stat"><div class="n" data-count="3">3</div><div class="l">lifecycle hooks</div></div><div class="stat"><div class="n" data-count="0">0</div><div class="l">required config</div></div><div class="stat"><div class="n" data-count="2">2</div><div class="l">opt-in guards</div></div></div>
+</header>
+
+<div class="wrap narrow">
+ <div class="doc">
+  <aside class="toc" aria-label="On this page">
+    <p class="lbl">On this page</p>
+    <a href="#overview">Overview</a>
+    <a href="#why">Problem &amp; why</a>
+    <a href="#install">Install</a>
+    <a href="#usability">Usability guide</a>
+    <a href="#how">How it works</a>
+    <a href="#inventory">What's inside</a>
+  </aside>
+  <main id="main" class="doc-main">
+
+    <section id="overview" class="doc-section">
+      <h2><span class="ix">01</span> Overview</h2>
+      <p>A Claude Code plugin with five skills, three lifecycle hooks, and zero required configuration. The plugin turns rough prompts into deterministic specs (/improve-prompt, /plan), provides three focused lenses for debugging, refactoring, and reviewing code (auto-invoked by semantic match), and includes a Stop hook that suggests follow-up commands based on git state. Two additional guardrail hooks (block_secrets, format_on_edit) are opt-in via environment variables; everything else runs immediately after install.</p>
+      <div class="arch reveal" aria-hidden="true"><div class="arch-row" style="gap:6px"><div class="node"><div class="nt">rough ask</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">/improve-prompt</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">spec + criteria</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">/plan</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">tracked execution</div></div></div></div>
+    </section>
+
+    <section id="why" class="doc-section">
+      <h2><span class="ix">02</span> Problem &amp; why it's needed</h2>
+      <div class="prob reveal" style="margin:6px 0 16px">
+        <span class="pill">The friction</span>
+        <p style="color:var(--text-dim);font-size:15px;margin:12px 0 0">Vague prompts (like "fix the thing" or "add auth") route to improvisation, causing scope creep, work starting before "done" is defined, and hidden assumptions discovered mid-implementation. Without a crisp spec, the same ask runs differently twice and produces no artifact a human can correct up front.</p>
+      </div>
+      <div class="callout"><span class="ti">Why it matters</span>prompt-craft forces determinism into the earliest moment — before a single line of code is written. It also observes git state and suggests concrete follow-up commands (commit, review, PR) after work finishes, surfacing the right next step without blocking or requiring setup.</div>
+    </section>
+
+    <section id="install" class="doc-section">
+      <h2><span class="ix">03</span> Install</h2>
+      <div class="steps">
+        <div class="gitem"><h4>Add the plugin marketplace, then install prompt-craft</h4><div class="code"><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills
+/plugin install prompt-craft@claude-skills">copy</button>/plugin marketplace add abhijitbansal/claude-skills
+/plugin install prompt-craft@claude-skills</div></div>
+<div class="gitem"><h4>Optional: enable guardrails in shell profile or .claude/settings.json</h4><div class="code"><button class="copy" data-copy="export PROMPT_CRAFT_BLOCK_SECRETS=1    # block reads/edits of .env, *.pem, id_rsa, credentials
+export PROMPT_CRAFT_FORMAT_ON_EDIT=1   # auto-format edited files with black/prettier/gofmt/rustfmt/shfmt">copy</button>export PROMPT_CRAFT_BLOCK_SECRETS=1    # block reads/edits of .env, *.pem, id_rsa, credentials
+export PROMPT_CRAFT_FORMAT_ON_EDIT=1   # auto-format edited files with black/prettier/gofmt/rustfmt/shfmt</div><p style="margin-top:10px">Guardrails are off by default. The follow-up suggester (suggest_next.sh) is always on and always silent when nothing applies.</p></div>
+      </div>
+    </section>
+
+    <section id="usability" class="doc-section">
+      <h2><span class="ix">04</span> Usability guide</h2>
+      <p style="margin-bottom:14px">Every capability, how to invoke it, and a concrete example.</p>
+      <div class="guide">
+        <div class="gitem reveal"><h4>/prompt-craft:improve-prompt — turn a rough ask into a deterministic spec</h4><p>Call this when a user gives a vague, one-line, or fuzzy request like "fix the thing", "improve this", "add auth", or "make it better" with no detail. The skill spends a higher-effort pass to produce a spec no one can misread: restated goal, explicit acceptance criteria (testable conditions), surfaced assumptions to confirm, out-of-scope boundaries, and recommended slash commands. It stops before doing any work — the human resolves assumptions first.</p><div class="code"><button class="copy" data-copy="/prompt-craft:improve-prompt add authentication to the API
+→ Restated goal
+→ Acceptance criteria (checklist)
+→ Assumptions to confirm (load-bearing ones marked)
+→ Out of scope
+→ Recommended commands (e.g., /prompt-craft:plan to decompose)">copy</button>/prompt-craft:improve-prompt add authentication to the API
+→ Restated goal
+→ Acceptance criteria (checklist)
+→ Assumptions to confirm (load-bearing ones marked)
+→ Out of scope
+→ Recommended commands (e.g., /prompt-craft:plan to decompose)</div></div>
+<div class="gitem reveal"><h4>/prompt-craft:plan — decompose a task into a tracked, verifiable plan</h4><p>Use when the user says "plan this", "break this down", "what's the plan", or gives a multi-step feature or refactor that touches more than one file. The skill produces a plan with an explicit goal, acceptance criteria, per-step decomposition (each step has a one-line verify check), and a TodoWrite list for tracking. The plan is confirmed before execution starts.</p><div class="code"><button class="copy" data-copy="/prompt-craft:plan migrate the settings screen to the new design system
+→ Goal (one sentence)
+→ Acceptance criteria (observable conditions)
+→ Steps (ordered by dependency, each with a verify check)
+→ Risks/unknowns flagged
+→ TodoWrite plan emitted">copy</button>/prompt-craft:plan migrate the settings screen to the new design system
+→ Goal (one sentence)
+→ Acceptance criteria (observable conditions)
+→ Steps (ordered by dependency, each with a verify check)
+→ Risks/unknowns flagged
+→ TodoWrite plan emitted</div></div>
+<div class="gitem reveal"><h4>/prompt-craft:debug — reproduce, isolate, fix</h4><p>The debug lens auto-invokes when you report unexpected behavior, a stack trace, a flaky test, or ask "why is this broken". It enforces a disciplined flow: reproduce first (ideally in a failing test), isolate to the smallest code path, form one hypothesis at a time (predict, check), write the failing test (RED), fix to GREEN, confirm the original repro passes. Guessing at fixes without reproducing is the failure mode it prevents.</p><div class="code"><button class="copy" data-copy="&quot;why is this test flaky?&quot;
+→ [debug lens auto-invokes]
+→ Reproduce with deterministic steps
+→ Isolate the minimal code path
+→ Form hypothesis + predict
+→ Write failing test (RED)
+→ Fix to GREEN
+→ Confirm original repro + no regressions">copy</button>"why is this test flaky?"
+→ [debug lens auto-invokes]
+→ Reproduce with deterministic steps
+→ Isolate the minimal code path
+→ Form hypothesis + predict
+→ Write failing test (RED)
+→ Fix to GREEN
+→ Confirm original repro + no regressions</div></div>
+<div class="gitem reveal"><h4>/prompt-craft:refactor — restructure, no behavior change</h4><p>The refactor lens auto-invokes when you ask to "clean this up", "extract this", "simplify", "reduce duplication", or "make this readable" on existing working code. It guards the invariant (behavior unchanged) with tests: run the suite GREEN before touching anything, refactor in small reversible steps, re-run after each step, stop at the goal. No bundled feature changes; no opportunistic rewrites of adjacent code.</p><div class="code"><button class="copy" data-copy="&quot;clean up this function, no behavior change&quot;
+→ [refactor lens auto-invokes]
+→ Ensure tests cover the target (add characterization tests if needed)
+→ Run suite GREEN (baseline)
+→ Extract/rename/dedupe in small steps
+→ Re-run suite GREEN after each step
+→ Stop at the goal">copy</button>"clean up this function, no behavior change"
+→ [refactor lens auto-invokes]
+→ Ensure tests cover the target (add characterization tests if needed)
+→ Run suite GREEN (baseline)
+→ Extract/rename/dedupe in small steps
+→ Re-run suite GREEN after each step
+→ Stop at the goal</div></div>
+<div class="gitem reveal"><h4>/prompt-craft:review — find bugs, security issues, and quality problems</h4><p>The review lens auto-invokes when you say "review this", "check this PR", "look this over before I commit", or "is this safe". It scans a diff or branch for correctness bugs and security issues first (logic, unhandled errors, injection, secrets, auth), then quality (duplication, dead code, naming, oversized functions, missing tests). Every finding is one line: where, what's wrong, how to fix. Results are ranked by severity (CRITICAL/HIGH/MEDIUM/LOW).</p><div class="code"><button class="copy" data-copy="&quot;look this over before I push&quot;
+→ [review lens auto-invokes]
+→ Pass 1: correctness &amp; security (logic bugs, errors, injection, secrets, auth)
+→ Pass 2: quality (duplication, dead code, naming, test coverage)
+→ Report by severity with concrete fix per finding">copy</button>"look this over before I push"
+→ [review lens auto-invokes]
+→ Pass 1: correctness &amp; security (logic bugs, errors, injection, secrets, auth)
+→ Pass 2: quality (duplication, dead code, naming, test coverage)
+→ Report by severity with concrete fix per finding</div></div>
+      </div>
+    </section>
+
+    <section id="how" class="doc-section">
+      <h2><span class="ix">05</span> How it works under the hood</h2>
+      <div class="guide">
+        <div class="gitem reveal"><h4>Stop hook: suggest_next.sh — git-aware follow-ups, always on and always silent when idle</h4><p>After Claude finishes a turn (Stop lifecycle event), suggest_next.sh reads the working directory's git state and emits 1–3 follow-up commands via additionalContext. If there are uncommitted changes, it suggests /prompt-craft:review (check the diff) and /commit (save the work). If the tree is clean but there are unpushed commits, it suggests /pr (open a pull request) with a count of unpushed commits. It exits silently (exit 0) outside a git repo or when there is nothing to suggest — it never blocks, never produces noise.</p></div>
+<div class="gitem reveal"><h4>PreToolUse hook: block_secrets.sh — opt-in guardrail blocking secret-looking files</h4><p>When armed via PROMPT_CRAFT_BLOCK_SECRETS=1, block_secrets.sh intercepts Read, Edit, and Write tools before they touch files. It parses tool_input.file_path and checks the basename against a conservative secret-pattern list: .env, .env.*, *.pem, *.key, id_rsa, id_dsa, id_ecdsa, id_ed25519, credentials, .npmrc, .pypirc. If matched, it exits 2 (blocking the tool) and sends an error message to Claude explaining the guardrail and how to disable it. Otherwise exits 0, allowing the tool. Off by default to respect the zero-config principle.</p></div>
+<div class="gitem reveal"><h4>PostToolUse hook: format_on_edit.sh — auto-format edited files, opt-in and always non-blocking</h4><p>When armed via PROMPT_CRAFT_FORMAT_ON_EDIT=1, format_on_edit.sh runs after Edit or Write tools complete. It extracts tool_input.file_path and dispatches to the appropriate formatter based on file extension: black for .py, prettier for .ts/.tsx/.js/.jsx/.json/.css/.md, gofmt for .go, rustfmt for .rs, shfmt for .sh. Each formatter is checked for installation (command -v) before running; if not found or if the formatter fails, the hook silently continues (exit 0, no blocking). This ensures the edit itself always succeeds even if formatting is unavailable.</p></div>
+<div class="gitem reveal"><h4>The /improve-prompt pipeline — high-effort reasoning at the spec stage</h4><p>The skill is tagged with effort: high in its frontmatter, which buys a deeper reasoning pass (via Claude's native effort system) exactly where it pays off: converting ambiguity into a checkable contract. The pipeline: rough prompt → restate intent (not phrasing) → derive testable acceptance criteria → surface assumptions to confirm → emit spec + recommended commands → halt. By stopping after the spec, the human can resolve load-bearing assumptions before a single line of code is written, preventing scope creep and guessing.</p></div>
+<div class="gitem reveal"><h4>Zero-config model: skills work immediately, guardrails are deliberate opt-in</h4><p>The five skills are active after install with no setup. The Stop hook (suggest_next.sh) is always active and silent unless there is something to suggest. The two guardrail hooks (block_secrets, format_on_edit) are gated by environment variables (PROMPT_CRAFT_BLOCK_SECRETS, PROMPT_CRAFT_FORMAT_ON_EDIT) that default to 0, keeping them off until explicitly enabled. This respects YAGNI — the plugin ships the high-value half (specs, lenses, follow-ups) and leaves guardrails as an opt-in surface layer for users who need them.</p></div>
+<div class="gitem reveal"><h4>Hook I/O contracts: stdin JSON, exit codes, and output signals</h4><p>All three hooks receive a JSON event on stdin and signal via exit code. suggest_next.sh reads cwd (the working directory) and emits additionalContext (a string) on success; it exits 0 always (non-blocking). block_secrets.sh reads tool_input.file_path, exits 0 to allow or exit 2 to block (with stderr fed to Claude). format_on_edit.sh reads tool_input.file_path, always exits 0 (never fails). All three parse stdin defensively via /usr/bin/python3 (matching existing plugin patterns), are bash-3.2 compatible, and pass shellcheck.</p></div>
+      </div>
+    </section>
+
+    <section id="inventory" class="doc-section">
+      <h2><span class="ix">06</span> What's inside</h2>
+      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Skills</h4><div class="inv"><div class="row"><span class="nm">/prompt-craft:improve-prompt</span><span class="dc">Turn a rough ask into a deterministic spec: restated goal, acceptance criteria, assumptions to confirm, out-of-scope, recommended commands. Effort: high; stops before work starts.</span></div><div class="row"><span class="nm">/prompt-craft:plan</span><span class="dc">Decompose a task into an explicit plan with goals, per-step acceptance criteria, and a TodoWrite checklist. Verify check per step guaranteed.</span></div><div class="row"><span class="nm">/prompt-craft:debug</span><span class="dc">Apply disciplined debugging: reproduce, isolate, form one hypothesis, write failing test (RED), fix (GREEN). Auto-invokes on bug reports.</span></div><div class="row"><span class="nm">/prompt-craft:refactor</span><span class="dc">Restructure code without changing behavior, guarded by tests green before and after. Auto-invokes on refactoring requests.</span></div><div class="row"><span class="nm">/prompt-craft:review</span><span class="dc">Review a diff or branch for correctness, security, and quality; rank findings by severity with concrete fixes. Auto-invokes on review requests.</span></div></div>
+<h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Hooks</h4><div class="inv"><div class="row"><span class="nm">suggest_next.sh (Stop hook)</span><span class="dc">After a turn, reads git state and suggests follow-ups (/commit, /review for dirty tree; /pr for unpushed commits). Always on, always silent when nothing applies; never blocks.</span></div><div class="row"><span class="nm">block_secrets.sh (PreToolUse hook, opt-in)</span><span class="dc">When PROMPT_CRAFT_BLOCK_SECRETS=1, blocks Read/Edit/Write of secret-looking files (.env, *.pem, id_rsa, credentials, etc.). Exit 2 blocks the tool; error fed to Claude.</span></div><div class="row"><span class="nm">format_on_edit.sh (PostToolUse hook, opt-in)</span><span class="dc">When PROMPT_CRAFT_FORMAT_ON_EDIT=1, auto-formats edited files with installed formatters (black, prettier, gofmt, rustfmt, shfmt per extension). Always non-blocking (exit 0).</span></div></div>
+    </section>
+
+    <section class="doc-section" style="border-bottom:none">
+      <h2 style="font-size:22px">Explore the other plugins</h2>
+      <div class="feat-grid"><a class="feat gr reveal" href="second-wind.html">
+          <div class="head"><h3>Second Wind</h3><p class="desc">Run Claude overnight; auto-resume after 5-hour limit resets</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat cy reveal" href="ios-dev.html">
+          <div class="head"><h3>ios-dev</h3><p class="desc">Build iOS apps, screenshot remotely, release to App Store</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat vi reveal" href="core-workflow.html">
+          <div class="head"><h3>core-workflow</h3><p class="desc">Opinionated dev workflow: commit + share + team up</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat go reveal" href="linear-pm.html">
+          <div class="head"><h3>linear-pm</h3><p class="desc">Linear issues → code, branches, PRs — autonomous end-to-end</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a></div>
+      <p style="margin-top:18px"><a href="../catalog.html">Browse the full skills &amp; tools catalog →</a></p>
+    </section>
+
+  </main>
+ </div>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div><b>claude-skills</b>A Claude Code plugin marketplace<br>by Abhijit Bansal.</div>
+      <div>
+        <b>Features</b>
+        <a href="second-wind.html">Second Wind</a>
+        <a href="prompt-craft.html">prompt-craft</a>
+        <a href="ios-dev.html">ios-dev</a>
+        <a href="core-workflow.html">core-workflow</a>
+        <a href="linear-pm.html">linear-pm</a>
+      </div>
+      <div>
+        <b>Explore</b>
+        <a href="../catalog.html">Skills &amp; tools catalog</a>
+        <a href="../architecture.html">Architecture</a>
+        <a href="../machine-setup.html">Machine-setup runbook</a>
+        <a href="../second-wind/index.html">Second Wind CLI guide</a>
+      </div>
+      <div>
+        <b>Project</b>
+        <a href="https://github.com/abhijitbansal/claude-skills">GitHub repository ↗</a>
+        <a href="https://github.com/abhijitbansal/claude-skills/blob/main/CONTRIBUTING.md">Contributing</a>
+        <a href="https://github.com/abhijitbansal/claude-skills/blob/main/SECURITY.md">Security policy</a>
+      </div>
+    </div>
+    <div class="foot-meta">
+      <span class="lic">MIT licensed</span>
+      <span>5 plugins · 18 skills · 12 commands · 2 agents · 5 hooks · 1 CLI</span>
+      <span>Tested on macOS &amp; Ubuntu</span>
+    </div>
+  </div>
+</footer>
+<script src="../../site/assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>core-workflow — claude-skills</title>
+<meta name="description" content="Opinionated dev workflow: commit + share + team up">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%236d52c4'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='6.5'%20fill='%230a1420'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='3'%20fill='%23e8b94a'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#6d52c4">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="claude-skills">
+<meta property="og:title" content="core-workflow — claude-skills">
+<meta property="og:description" content="Opinionated dev workflow: commit + share + team up">
+<meta property="og:url" content="https://abhijitbansal.github.io/claude-skills/features/core-workflow.html">
+<meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../site/assets/site.css">
+</head>
+<body class="accent-violet">
+<a class="skip" href="#main">Skip to content</a>
+<nav class="site">
+  <div class="wrap">
+    <a class="brand" href="../../site/index.html"><span class="dot"></span>claude-skills</a>
+    <div class="nav-links">
+      <a href="../../site/index.html#features" aria-current="page">Features</a>
+      <a href="../catalog.html">Catalog</a>
+      <a href="../architecture.html">Architecture</a>
+      <a class="nav-cta" href="https://github.com/abhijitbansal/claude-skills">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head wrap narrow">
+  <div class="crumbs"><a href="../../site/index.html">Home</a><span class="sep">/</span><a href="../../site/index.html#features">Features</a><span class="sep">/</span>core-workflow</div>
+  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>plugin · agents</span>
+  <h1>core-workflow</h1>
+  <p class="lead">Opinionated dev workflow: commit + share + team up.</p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="#install">Install →</a>
+    <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills/tree/main/plugins/core-workflow">View source ↗</a>
+  </div>
+  <div class="statband plain cols-4 reveal"><div class="stat"><div class="n" data-count="2">2</div><div class="l">skills</div></div><div class="stat"><div class="n" data-count="2">2</div><div class="l">commands</div></div><div class="stat"><div class="n" data-count="2">2</div><div class="l">agents</div></div><div class="stat"><div class="n" data-count="1">1</div><div class="l">hook</div></div></div>
+</header>
+
+<div class="wrap narrow">
+ <div class="doc">
+  <aside class="toc" aria-label="On this page">
+    <p class="lbl">On this page</p>
+    <a href="#overview">Overview</a>
+    <a href="#why">Problem &amp; why</a>
+    <a href="#install">Install</a>
+    <a href="#usability">Usability guide</a>
+    <a href="#how">How it works</a>
+    <a href="#inventory">What's inside</a>
+  </aside>
+  <main id="main" class="doc-main">
+
+    <section id="overview" class="doc-section">
+      <h2><span class="ix">01</span> Overview</h2>
+      <p>core-workflow is a Claude Code plugin that bundles six integrated components for faster dev cycles: automated git commits with conventional messages and shellcheck linting; skill contribution and PR orchestration back to the claude-skills repository; agent-team evaluation for parallel workstreams; image-analysis subagent for screenshot comparisons and OCR; web-research subagent for API/framework lookups; and a PostToolUse hook that automatically lints shell scripts after every edit. Designed for iterative shell + Swift workflows and multi-agent coordination.</p>
+      <div class="arch reveal" aria-hidden="true"><div class="arch-row" style="gap:6px"><div class="node"><div class="nt">edit</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">shellcheck</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">/commit</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">/contribute → PR</div></div></div></div>
+    </section>
+
+    <section id="why" class="doc-section">
+      <h2><span class="ix">02</span> Problem &amp; why it's needed</h2>
+      <div class="prob reveal" style="margin:6px 0 16px">
+        <span class="pill">The friction</span>
+        <p style="color:var(--text-dim);font-size:15px;margin:12px 0 0">Context switching between coding and workflow tasks (git commits, skill contributions, team coordination, code review) fragments developer attention and slows iteration cycles. Manual commit message crafting, branch creation, PR orchestration, and image/doc lookups are friction points that interrupt flow.</p>
+      </div>
+      <div class="callout"><span class="ti">Why it matters</span>Development is fastest when workflow mechanics are invisible. core-workflow integrates commit automation, skill sharing, team-based parallel execution, and specialized research agents into one coherent plugin, so you stay in the editor and in command mode rather than switching tools or tabs.</div>
+    </section>
+
+    <section id="install" class="doc-section">
+      <h2><span class="ix">03</span> Install</h2>
+      <div class="steps">
+        <div class="gitem"><h4>Via Claude Code /plugin marketplace</h4><div class="code"><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills
+/plugin install core-workflow@claude-skills">copy</button>/plugin marketplace add abhijitbansal/claude-skills
+/plugin install core-workflow@claude-skills</div></div>
+      </div>
+    </section>
+
+    <section id="usability" class="doc-section">
+      <h2><span class="ix">04</span> Usability guide</h2>
+      <p style="margin-bottom:14px">Every capability, how to invoke it, and a concrete example.</p>
+      <div class="guide">
+        <div class="gitem reveal"><h4>commit skill — Stage, lint, and create a conventional commit</h4><p>Automatically stages relevant files, runs shellcheck on changed .sh files, generates a conventional commit message in imperative mood with a Co-Authored-By trailer, and confirms the commit. Designed to make snapshotting working state cheap so debug rounds don't accumulate uncommitted regressions.</p>
+<p>Invoke when the user says 'commit', 'save this', 'snapshot this state', or 'checkpoint' without specifying the commit message themselves. Skip if the user asked for push, PR open, or anything beyond local commit.</p><div class="code"><button class="copy" data-copy="User: &#x27;Commit this&#x27;
+
+Claude runs in parallel:
+- git status (no -uall)
+- git diff (staged + unstaged)
+- git log --oneline -10
+
+Then sequentially:
+- Lint changed .sh files with shellcheck (surface errors, ask if user wants to proceed)
+- Stage files by name (never git add -A or .)
+- Generate title (≤72 chars, imperative, lowercase, no period)
+- Commit via heredoc with Co-Authored-By trailer
+- Confirm via git status">copy</button>User: 'Commit this'
+
+Claude runs in parallel:
+- git status (no -uall)
+- git diff (staged + unstaged)
+- git log --oneline -10
+
+Then sequentially:
+- Lint changed .sh files with shellcheck (surface errors, ask if user wants to proceed)
+- Stage files by name (never git add -A or .)
+- Generate title (≤72 chars, imperative, lowercase, no period)
+- Commit via heredoc with Co-Authored-By trailer
+- Confirm via git status</div></div>
+<div class="gitem reveal"><h4>contribute skill — Push changes back to claude-skills repo</h4><p>Drives the claude-skills-contribute script from any repo or machine. Captures state of a locally developed or modified skill, agent, hook, command, or plugin manifest, creates a feature branch, validates, commits with conventional message, and opens a PR for review.</p>
+<p>Use when the user says 'contribute this back', 'add this to claude-skills', 'share this skill', or invokes the /contribute-skill command.</p><div class="code"><button class="copy" data-copy="User: &#x27;Contribute this skill back to claude-skills&#x27;
+
+Claude:
+1. Confirms intent (capture live state, or scaffold new skill?)
+2. Runs: claude-skills-contribute --skill &lt;name&gt; --message &quot;&lt;msg&gt;&quot;
+   OR: claude-skills-contribute --message &quot;&lt;msg&gt;&quot; (for live state)
+3. Surfaces PR URL printed by gh
+4. If --no-pr used, tells user the branch name for later push">copy</button>User: 'Contribute this skill back to claude-skills'
+
+Claude:
+1. Confirms intent (capture live state, or scaffold new skill?)
+2. Runs: claude-skills-contribute --skill &lt;name&gt; --message "&lt;msg&gt;"
+   OR: claude-skills-contribute --message "&lt;msg&gt;" (for live state)
+3. Surfaces PR URL printed by gh
+4. If --no-pr used, tells user the branch name for later push</div></div>
+<div class="gitem reveal"><h4>/team command — Evaluate if task fits agent-team mode</h4><p>Evaluates whether the current (or specified) task warrants spawning a Claude Code agent team. Applies a four-criterion heuristic: ≥3 independent workstreams with non-overlapping file ownership; read-heavy work or disjoint write surfaces; &gt;60% context window fill or competing hypotheses; and scope not capped to a quick fix.</p>
+<p>Returns either a team proposal (with role and directory ownership per teammate) or a pushback with better-fit alternative. Never spawns without explicit user confirmation.</p><div class="code"><button class="copy" data-copy="User: &#x27;/team refactor the auth module and add logging&#x27;
+
+Claude:
+Evaluates heuristic:
+- Criterion 1: Auth refactor (src/auth/) and logging (src/logging/) are independent
+- Criterion 2: Both are write-heavy to disjoint directories
+- Criterion 3: Would fill &gt;60% of context; competing approaches exist
+- Criterion 4: Scope is broad, not a quick fix
+
+Outputs proposal:
+&quot;Team proposed. Teammates: 1. auth-lead — refactor. Owns src/auth/. 2. logging-lead — logging. Owns src/logging/.&quot;
+
+Waits for user confirmation before spawning.">copy</button>User: '/team refactor the auth module and add logging'
+
+Claude:
+Evaluates heuristic:
+- Criterion 1: Auth refactor (src/auth/) and logging (src/logging/) are independent
+- Criterion 2: Both are write-heavy to disjoint directories
+- Criterion 3: Would fill &gt;60% of context; competing approaches exist
+- Criterion 4: Scope is broad, not a quick fix
+
+Outputs proposal:
+"Team proposed. Teammates: 1. auth-lead — refactor. Owns src/auth/. 2. logging-lead — logging. Owns src/logging/."
+
+Waits for user confirmation before spawning.</div></div>
+<div class="gitem reveal"><h4>/contribute-skill command — CLI wrapper for contribute skill</h4><p>Slash-command entry point to the contribute skill. Accepts optional flags: --skill &lt;name&gt; to scaffold a new skill; --message "&lt;text&gt;" for commit message and PR title; --no-pr to skip PR and push only; --auto-merge to squash-merge once CI passes (use sparingly).</p>
+<p>Directly invokes the contribute skill with the given arguments.</p><div class="code"><button class="copy" data-copy="User: &#x27;/contribute-skill --skill my-new-agent --message &quot;Add custom research agent&quot;&#x27;
+
+Claude runs: contribute skill with --skill my-new-agent --message &quot;...&quot;
+Result: Feature branch created, new skill scaffolded and committed, PR opened.">copy</button>User: '/contribute-skill --skill my-new-agent --message "Add custom research agent"'
+
+Claude runs: contribute skill with --skill my-new-agent --message "..."
+Result: Feature branch created, new skill scaffolded and committed, PR opened.</div></div>
+<div class="gitem reveal"><h4>image-parser agent — Analyze screenshots and images</h4><p>Specialized subagent for image and screenshot analysis. Answers questions like 'what does this screenshot show', 'OCR the text', 'compare these two simulator screenshots', 'is the title cut off', 'extract the data table from this PNG'. Runs on Sonnet for cost efficiency.</p>
+<p>Reads image files with the Read tool (content rendered visually), answers the specific question first, references UI elements concretely, flags uncertainty, and avoids fabrication. Common Paperix use case: check sheet titles, button labels, list item rendering, dark-mode contrast, PAS capsule presence.</p><div class="code"><button class="copy" data-copy="User: &#x27;Compare these two simulator screenshots and tell me what changed&#x27;
+
+Claude dispatches to image-parser agent with two image paths.
+
+image-parser:
+1. Reads both images via Read tool
+2. Leads with the diff: &quot;Button color changed from blue to gray; sheet title now bold&quot;
+3. Structures as side-by-side bullets: &quot;- Before: title in regular weight\n- After: title bold&quot;
+4. Flags blurry text or occlusions if any">copy</button>User: 'Compare these two simulator screenshots and tell me what changed'
+
+Claude dispatches to image-parser agent with two image paths.
+
+image-parser:
+1. Reads both images via Read tool
+2. Leads with the diff: "Button color changed from blue to gray; sheet title now bold"
+3. Structures as side-by-side bullets: "- Before: title in regular weight\n- After: title bold"
+4. Flags blurry text or occlusions if any</div></div>
+<div class="gitem reveal"><h4>web-researcher agent — API/framework lookups and doc research</h4><p>Specialized subagent for web research and library documentation. Answers 'API behavior', 'framework changes', 'SDK syntax', 'version migration', 'what's the current way to do X in React/Django/etc'. Prefers Context7 for library docs, falls back to WebSearch and WebFetch.</p>
+<p>Reads actual pages (doesn't trust snippets), stops early once confident, synthesizes with source URLs, and avoids speculation. Runs on Sonnet for cost.</p><div class="code"><button class="copy" data-copy="User: &#x27;What&#x27;s the current way to handle async/await in FastAPI?&#x27;
+
+Claude dispatches to web-researcher agent.
+
+web-researcher:
+1. Resolves library ID via Context7 (FastAPI)
+2. Queries docs for async/await patterns
+3. Returns: &quot;FastAPI uses standard Python async/await. Declare route handlers async and FastAPI runs them in thread pool. Example: async def get_data(): return data&quot;
+4. Lists sources: https://fastapi.tiangolo.com/async/
+5. Flags version-specificity if relevant">copy</button>User: 'What's the current way to handle async/await in FastAPI?'
+
+Claude dispatches to web-researcher agent.
+
+web-researcher:
+1. Resolves library ID via Context7 (FastAPI)
+2. Queries docs for async/await patterns
+3. Returns: "FastAPI uses standard Python async/await. Declare route handlers async and FastAPI runs them in thread pool. Example: async def get_data(): return data"
+4. Lists sources: https://fastapi.tiangolo.com/async/
+5. Flags version-specificity if relevant</div></div>
+<div class="gitem reveal"><h4>shellcheck-on-edit hook — Auto-lint shell scripts after edits</h4><p>PostToolUse hook that triggers automatically after any Edit or Write operation on a .sh file. Runs shellcheck and surfaces findings as non-blocking informational output. Complements the commit skill by catching shell script issues before they're committed.</p>
+<p>Matches file paths ending in .sh; skips if shellcheck is not installed or file does not exist; always exits cleanly (non-blocking).</p><div class="code"><button class="copy" data-copy="User edits setup/install.sh via Edit tool.
+
+Hook fires (PostToolUse):
+1. Extracts file path from tool_input
+2. Checks: is it *.sh? Does it exist? Is shellcheck available?
+3. Runs: shellcheck setup/install.sh
+4. Outputs: &quot;shellcheck findings for setup/install.sh:\nSC2086: Double quote to prevent globbing and word splitting.&quot;
+5. Exits 0 (non-blocking; Claude can see the findings and decide whether to fix now or defer)">copy</button>User edits setup/install.sh via Edit tool.
+
+Hook fires (PostToolUse):
+1. Extracts file path from tool_input
+2. Checks: is it *.sh? Does it exist? Is shellcheck available?
+3. Runs: shellcheck setup/install.sh
+4. Outputs: "shellcheck findings for setup/install.sh:\nSC2086: Double quote to prevent globbing and word splitting."
+5. Exits 0 (non-blocking; Claude can see the findings and decide whether to fix now or defer)</div></div>
+      </div>
+    </section>
+
+    <section id="how" class="doc-section">
+      <h2><span class="ix">05</span> How it works under the hood</h2>
+      <div class="guide">
+        <div class="gitem reveal"><h4>Commit automation and validation</h4><p>The commit skill runs three read-only commands in parallel to gather context: git status (untracked and modified files), git diff (staged and unstaged changes), and git log --oneline -10 (recent commit style). Then sequentially, it lints changed .sh files using shellcheck, stages files by name (never using git add -A or . to avoid accidentally staging .env or build artifacts), generates a conventional commit message (title ≤72 chars, imperative mood, lowercase, optional body focused on why, Co-Authored-By trailer), commits via heredoc to preserve formatting, and confirms via git status. If shellcheck finds errors, it surfaces them and asks the user whether to proceed, enforcing awareness of known issues without blocking the commit.</p></div>
+<div class="gitem reveal"><h4>Skill contribution workflow</h4><p>The contribute skill wraps claude-skills-contribute, a script that operates on $CLAUDE_SKILLS_HOME (the claude-skills repo clone, not the user's current working directory). When invoked, it confirms the user's intent (capture live state vs. scaffold new skill), runs the contribute script with optional --skill &lt;name&gt; and --message arguments, captures the PR URL printed by gh, or returns the branch name if --no-pr was used. The script handles branch creation, validation, committing, and PR opening; Claude surfaces the result and, on offline work, tells the user the branch name for later manual push. Never runs with --auto-merge unless explicitly requested.</p></div>
+<div class="gitem reveal"><h4>Agent-team evaluation heuristic</h4><p>The /team command applies a four-criterion filter to determine if parallel multi-agent execution is justified. Criterion 1: ≥3 independent workstreams with non-overlapping file ownership (by directory, target, or review lens, not by feature within the same module). Criterion 2: Each workstream is read-heavy (research, investigation) or owns a disjoint write surface. Criterion 3: Serial execution would fill &gt;60% of context window OR task involves competing hypotheses. Criterion 4: User has not capped scope to a quick fix. If all four hold, the command outputs a proposal block with role, directory ownership per teammate, and estimated cost (~3–4× single-session); on user confirmation, teammates spawn in parallel via Agent tool calls. If any criterion fails, it outputs a pushback block with the failing criterion and a better-fit alternative (single session, Explore subagent, plan mode, etc.).</p></div>
+<div class="gitem reveal"><h4>PostToolUse hook pipeline for shellcheck</h4><p>When Edit or Write is invoked, the Claude Code harness fires the PostToolUse hook. shellcheck-on-edit.sh receives the hook payload as JSON stdin, extracts the file_path from tool_input, checks if it matches *.sh, verifies the file exists, and confirms shellcheck is installed. If all checks pass, it runs shellcheck on the file and captures output; if shellcheck finds issues, output is printed to Claude as informational (non-blocking). Hook always exits 0 so it never fails the underlying edit operation; Claude sees the findings and decides whether to fix immediately or defer.</p></div>
+<div class="gitem reveal"><h4>Image-parser and web-researcher subagent delegation</h4><p>When Claude encounters an image-analysis question or a web-research task during development, it dispatches to a specialized subagent (image-parser or web-researcher, respectively) instead of answering from context. These agents receive the Read tool for file/image ingestion, run on Sonnet (lower cost than Opus), and return a focused answer: image-parser leads with yes/no or a side-by-side diff and flags blurry/occluded content; web-researcher prefers Context7 for library docs and WebSearch/WebFetch for other research, synthesizes with source URLs, and stops once confident. Both agents are read-only (no code edits) and avoid speculation beyond what sources say. Dispatcher then integrates the subagent's answer into the main conversation.</p></div>
+      </div>
+    </section>
+
+    <section id="inventory" class="doc-section">
+      <h2><span class="ix">06</span> What's inside</h2>
+      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Skills</h4><div class="inv"><div class="row"><span class="nm">commit</span><span class="dc">Stage current changes, lint shell scripts with shellcheck, and create a single git commit with a conventional message. Use when the user says 'commit', 'save this', 'snapshot this state', or 'checkpoint' without specifying a message.</span></div><div class="row"><span class="nm">contribute</span><span class="dc">Contribute a change or new skill back to claude-skills repo. Branches, validates, commits, and opens a PR. Wraps claude-skills-contribute script. Use when the user says 'contribute this back', 'add this to claude-skills', or 'share this skill'.</span></div></div>
+<h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Commands</h4><div class="inv"><div class="row"><span class="nm">/team</span><span class="dc">Evaluate whether the current or specified task warrants a Claude Code agent team. Applies four-criterion heuristic and proposes composition (or pushes back) pending explicit confirmation.</span></div><div class="row"><span class="nm">/contribute-skill</span><span class="dc">Slash-command entry point to the contribute skill. Accepts --skill &lt;name&gt;, --message "&lt;text&gt;", --no-pr, --auto-merge flags.</span></div></div>
+<h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Hooks</h4><div class="inv"><div class="row"><span class="nm">shellcheck-on-edit</span><span class="dc">PostToolUse hook triggered after Edit or Write on .sh files. Runs shellcheck and surfaces findings as non-blocking informational output.</span></div></div>
+<h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Agents</h4><div class="inv"><div class="row"><span class="nm">image-parser</span><span class="dc">Vision-capable Sonnet subagent for screenshot and image analysis. Answers 'what does this show', 'OCR the text', 'compare these two images', 'extract the data table'. Read-only; flags uncertainty; concrete and locatable.</span></div><div class="row"><span class="nm">web-researcher</span><span class="dc">Sonnet subagent for web research and library documentation lookups. Answers API behavior, framework changes, SDK syntax, version migration questions. Prefers Context7 for library docs, falls back to WebSearch/WebFetch. Synthesizes with source URLs.</span></div></div>
+    </section>
+
+    <section class="doc-section" style="border-bottom:none">
+      <h2 style="font-size:22px">Explore the other plugins</h2>
+      <div class="feat-grid"><a class="feat gr reveal" href="second-wind.html">
+          <div class="head"><h3>Second Wind</h3><p class="desc">Run Claude overnight; auto-resume after 5-hour limit resets</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat ro reveal" href="prompt-craft.html">
+          <div class="head"><h3>prompt-craft</h3><p class="desc">Sharpen rough prompts into specs, suggest follow-up commands</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat cy reveal" href="ios-dev.html">
+          <div class="head"><h3>ios-dev</h3><p class="desc">Build iOS apps, screenshot remotely, release to App Store</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat go reveal" href="linear-pm.html">
+          <div class="head"><h3>linear-pm</h3><p class="desc">Linear issues → code, branches, PRs — autonomous end-to-end</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a></div>
+      <p style="margin-top:18px"><a href="../catalog.html">Browse the full skills &amp; tools catalog →</a></p>
+    </section>
+
+  </main>
+ </div>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div><b>claude-skills</b>A Claude Code plugin marketplace<br>by Abhijit Bansal.</div>
+      <div>
+        <b>Features</b>
+        <a href="second-wind.html">Second Wind</a>
+        <a href="prompt-craft.html">prompt-craft</a>
+        <a href="ios-dev.html">ios-dev</a>
+        <a href="core-workflow.html">core-workflow</a>
+        <a href="linear-pm.html">linear-pm</a>
+      </div>
+      <div>
+        <b>Explore</b>
+        <a href="../catalog.html">Skills &amp; tools catalog</a>
+        <a href="../architecture.html">Architecture</a>
+        <a href="../machine-setup.html">Machine-setup runbook</a>
+        <a href="../second-wind/index.html">Second Wind CLI guide</a>
+      </div>
+      <div>
+        <b>Project</b>
+        <a href="https://github.com/abhijitbansal/claude-skills">GitHub repository ↗</a>
+        <a href="https://github.com/abhijitbansal/claude-skills/blob/main/CONTRIBUTING.md">Contributing</a>
+        <a href="https://github.com/abhijitbansal/claude-skills/blob/main/SECURITY.md">Security policy</a>
+      </div>
+    </div>
+    <div class="foot-meta">
+      <span class="lic">MIT licensed</span>
+      <span>5 plugins · 18 skills · 12 commands · 2 agents · 5 hooks · 1 CLI</span>
+      <span>Tested on macOS &amp; Ubuntu</span>
+    </div>
+  </div>
+</footer>
+<script src="../../site/assets/site.js"></script>
+</body>
+</html>

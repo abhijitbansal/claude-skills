@@ -20,8 +20,14 @@ auto-resume** orchestrator that keeps overnight runs alive (`second-wind`),
 | `second-wind` | usage-limit-aware overnight orchestrator (`wind` CLI + skill wrapper) |
 | `prompt-craft` | rough ask → deterministic spec (`/improve-prompt`, `/plan`), debug/refactor/review lenses, git-aware Stop hook + opt-in secret/format guardrails |
 
+**Feature guides:** [Second Wind](docs/features/second-wind.html) ·
+[prompt-craft](docs/features/prompt-craft.html) ·
+[ios-dev](docs/features/ios-dev.html) ·
+[linear-pm](docs/features/linear-pm.html) ·
+[core-workflow](docs/features/core-workflow.html)
+
 **Docs:** [Architecture](docs/architecture.md) ([visual](docs/architecture.html)) ·
-[Skills & Tools Catalog](docs/skills-catalog.md) ([visual](docs/skills-catalog.html)) ·
+[Skills & Tools Catalog](docs/skills-catalog.md) ([visual](docs/catalog.html)) ·
 [Usage guide](USAGE.md)
 
 ## Installation

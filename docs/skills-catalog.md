@@ -1,6 +1,6 @@
 # Skills & Tools Catalog
 
-> Visual version: [skills-catalog.html](skills-catalog.html) (open in a browser)
+> Visual version: [searchable catalog](catalog.html) (open in a browser)
 
 Five plugins, one CLI, one adapter script. Install only what you need:
 
