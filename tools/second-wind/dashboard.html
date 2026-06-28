@@ -424,6 +424,17 @@
     cursor: pointer;
   }
   .btn-close:hover { color: var(--red); border-color: var(--red); }
+  .btn-attach {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-dim);
+    font-size: 13px;
+    padding: 5px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-attach:hover { color: var(--cyan); border-color: var(--cyan-dim); }
   @media (max-width: 640px) {
     #modal-overlay { padding: 2.5vh 2.5vw; }
     #modal { width: 95vw; height: 95vh; max-height: 95vh; }
@@ -508,6 +519,8 @@
       <span id="modal-pill" class="pill"></span>
       <span class="modal-spacer"></span>
       <button id="modal-resume" type="button" class="btn-resume">↻ resume</button>
+      <button id="modal-attach" type="button" class="btn-attach"
+        title="Copy: tmux attach -t <session> — paste in a terminal for the full TUI (slash autocomplete, history)">⧉ attach</button>
       <button id="modal-kill" type="button" class="btn-kill">kill</button>
       <button id="modal-close" type="button" class="btn-close" aria-label="close">✕</button>
     </div>
@@ -554,6 +567,7 @@ const els = {
   modalInput: document.getElementById("modal-input"),
   modalSend: document.getElementById("modal-send"),
   modalResume: document.getElementById("modal-resume"),
+  modalAttach: document.getElementById("modal-attach"),
   modalKill: document.getElementById("modal-kill"),
   modalClose: document.getElementById("modal-close"),
 };
@@ -1058,6 +1072,45 @@ els.modalResume.addEventListener("click", async () => {
     els.modalResume.disabled = false;
   }
 });
+
+// Build the shell command that attaches to this session's tmux pane.
+function attachCommand(name) { return "tmux attach -t " + name; }
+
+// execCommand fallback for non-secure contexts / older browsers where the
+// async Clipboard API is unavailable. Returns true on success.
+function legacyCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.left = "-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+  document.body.removeChild(ta);
+  return ok;
+}
+
+async function copyAttachCommand() {
+  if (!modalName) return;
+  const cmd = attachCommand(modalName);
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(cmd);
+    ok = true;
+  } catch (err) {
+    ok = legacyCopy(cmd);
+  }
+  if (ok) {
+    els.modalAttach.textContent = "copied ✓";
+    setTimeout(() => { els.modalAttach.textContent = "⧉ attach"; }, 1500);
+    showToast("copied: " + cmd, "ok");
+  } else {
+    showToast("copy failed — run: " + cmd, "err");
+  }
+}
+els.modalAttach.addEventListener("click", copyAttachCommand);
 
 els.modalKill.addEventListener("click", async () => {
   if (!modalName) return;

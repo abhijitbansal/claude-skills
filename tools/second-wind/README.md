@@ -110,7 +110,10 @@ session with state, reset countdown, and the last 30 lines of each pane, in
 **expand it into a full-height modal**: a large colorized scrollback (up to
 1000 lines, fetched from the token-gated `/api/pane`) and a roomy send box for
 prompts and answers — easier to read and type on a small screen. Escape or the
-close button dismisses it. Localhost-only; every action — and the modal's
+close button dismisses it. The modal's **⧉ attach** button copies
+`tmux attach -t <session>` to your clipboard — paste it into any terminal to
+drop into the real session with the full Claude Code TUI (slash-command
+autocomplete, history) that the dashboard send box can't offer. Localhost-only; every action — and the modal's
 scrollback fetch — requires a per-run token embedded in the page, so other
 websites can't reach your sessions. `--port` to change port, `--no-browser` to
 skip auto-open.

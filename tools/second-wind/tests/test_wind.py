@@ -2244,5 +2244,34 @@ class ResumeOrphanedPausedSessions(unittest.TestCase):
                           f"orphan paused session must be resumed: {sent}")
 
 
+class DashboardAttachButton(unittest.TestCase):
+    """The dashboard modal exposes a 'copy attach command' button so a user
+    can jump into the real tmux session for full TUI autocomplete."""
+
+    @classmethod
+    def setUpClass(cls):
+        path = os.path.join(os.path.dirname(__file__), "..", "dashboard.html")
+        with open(path) as f:
+            cls.html = f.read()
+
+    def test_modal_has_attach_button(self):
+        self.assertIn('id="modal-attach"', self.html,
+                      "modal header must carry the attach-command button")
+
+    def test_attach_command_helper_present(self):
+        # the pure helper builds `tmux attach -t <session>`
+        self.assertRegex(
+            self.html,
+            r"function attachCommand\([^)]*\)\s*\{\s*return\s*"
+            r"['\"]tmux attach -t ['\"]",
+            "attachCommand(name) must return 'tmux attach -t ' + name")
+
+    def test_attach_uses_clipboard_with_execcommand_fallback(self):
+        self.assertIn("navigator.clipboard", self.html,
+                      "attach copy should use the clipboard API")
+        self.assertIn("execCommand", self.html,
+                      "attach copy needs an execCommand fallback")
+
+
 if __name__ == "__main__":
     unittest.main()
