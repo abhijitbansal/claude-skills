@@ -2715,6 +2715,64 @@ class ResumeOrphanedPausedSessions(unittest.TestCase):
             self.assertIn(("wind-gone", "wake up"), sent,
                           f"orphan paused session must be resumed: {sent}")
 
+    def test_cmd_watch_resumes_paused_session_in_cfg_but_not_watched(self):
+        # B3-regression: a session is paused for a repo that IS in cfg['repos']
+        # but whose resolved agent has watch=False (e.g. copilot), so it is NOT
+        # in the watched set / by_name dict.  The watcher reset path must still
+        # nudge it via resume_orphans (global resume_message) rather than
+        # silently stranding it paused forever.
+        #
+        # This test FAILS against _paused_orphans(cfg, state) using all-cfg-names
+        # as baseline (the regression), and PASSES after parametrizing the
+        # baseline to set(by_name) at the watcher call site.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            statef = os.path.join(tmp, "state.json")
+            # "wind-unwatched" is paused; its repo IS in cfg but watch=False
+            with open(statef, "w") as f:
+                json.dump({"paused": ["wind-unwatched"], "reset_at": 1.0}, f)
+            orig = wind.STATE_PATH
+            wind.STATE_PATH = statef
+            try:
+                cfg = dict(wind.DEFAULT_CONFIG)
+                cfg["session_prefix"] = "wind"
+                # repo "unwatched" is in cfg["repos"] but uses copilot agent
+                # (watch=False), so it will never appear in the watched/by_name set.
+                cfg["repos"] = [{"name": "unwatched", "path": "/tmp",
+                                  "agent": "copilot"}]
+                cfg["_path"] = os.path.join(tmp, "second-wind.json")
+                cfg["caffeinate"] = False
+                cfg["resume_message"] = "wake up"
+                cfg["resume_buffer_seconds"] = 0
+                sent = []
+
+                args = mock.Mock()
+                args.detach = False
+                args.poll = None
+
+                def stop_after_first(seconds, text):
+                    raise KeyboardInterrupt
+
+                try:
+                    with mock.patch.object(wind, "session_exists",
+                                           lambda n: True), \
+                            mock.patch.object(wind, "capture_pane",
+                                              lambda n, l: ""), \
+                            mock.patch.object(wind, "send_text",
+                                              lambda n, t: sent.append((n, t))), \
+                            mock.patch.object(wind, "notify",
+                                              lambda *a, **k: None), \
+                            mock.patch.object(wind, "watch_sleep",
+                                              stop_after_first):
+                        wind.cmd_watch(cfg, args)
+                except KeyboardInterrupt:
+                    pass
+            finally:
+                wind.STATE_PATH = orig
+            self.assertIn(("wind-unwatched", "wake up"), sent,
+                          f"session in cfg but not watched must be nudged, not "
+                          f"stranded paused forever: {sent}")
+
 
 class DashboardAttachButton(unittest.TestCase):
     """The dashboard modal exposes a 'copy attach command' button so a user

@@ -1228,14 +1228,18 @@ def status_payload(cfg):
     return {"watcher": watcher, "sessions": sessions}
 
 
-def _paused_orphans(cfg, state):
-    """Paused session names in state that are no longer in cfg['repos'].
+def _paused_orphans(state, resumed_names):
+    """Paused session names in state that are NOT in resumed_names.
 
-    Used by the watcher reset path and the dashboard resume-all proxy so both
-    code paths share the same orphan-detection logic (B3 DRY requirement).
+    The two callers need different baselines:
+    - Watcher reset path: pass set(by_name) — the watched names — so sessions
+      paused for repos that are still in cfg but no longer watched (e.g. agent
+      switched to watch=False) are nudged as orphans rather than silently
+      stranded paused forever.
+    - Dashboard resume-all: pass all cfg session names, since it already
+      resumes every cfg repo and only truly-gone sessions need orphan nudging.
     """
-    all_cfg_names = {session_name(cfg, r) for r in cfg["repos"]}
-    return sorted(n for n in state.get("paused", []) if n not in all_cfg_names)
+    return sorted(n for n in state.get("paused", []) if n not in resumed_names)
 
 
 def make_dash_handler(cfg, token, template):
@@ -1349,7 +1353,8 @@ def make_dash_handler(cfg, token, template):
                     state = load_state()
                     sent = list(resume_sessions(cfg, cfg["repos"]))
                     # B3: also resume orphan paused sessions not in cfg['repos']
-                    orphans = _paused_orphans(cfg, state)
+                    all_cfg_names = {session_name(cfg, r) for r in cfg["repos"]}
+                    orphans = _paused_orphans(state, all_cfg_names)
                     if orphans:
                         sent += resume_orphans(cfg, orphans)
                     clear_state()
@@ -1861,8 +1866,9 @@ def cmd_watch(cfg, args):
                     paused_repos = [by_name[n] for n in sorted(paused)
                                     if n in by_name]
                     sent = resume_sessions(cfg, paused_repos)
-                    # B3 DRY: shared helper also used by dashboard resume-all.
-                    sent += resume_orphans(cfg, _paused_orphans(cfg, state))
+                    # B3 DRY: shared helper; baseline = watched names so sessions
+                    # in cfg but no longer watched are still nudged, not stranded.
+                    sent += resume_orphans(cfg, _paused_orphans(state, set(by_name)))
                     notify(cfg, f"Resumed {len(sent)} session(s) after "
                                 f"limit reset.")
                     until = time.time() + cfg["resume_cooldown_seconds"]
