@@ -2846,5 +2846,33 @@ class DashboardHelp(unittest.TestCase):
                           f"help should mention `{needle}`")
 
 
+class DashboardAnsiMerge(unittest.TestCase):
+    """parseAnsi must MERGE SGR attributes into the active set instead of
+    wholesale-replacing them, so ESC[1m then ESC[31m yields bold+red."""
+
+    @classmethod
+    def setUpClass(cls):
+        path = os.path.join(os.path.dirname(__file__), "..", "dashboard.html")
+        with open(path) as f:
+            cls.html = f.read()
+
+    def test_sgr_wholesale_replace_is_gone(self):
+        # The old `active = sgrToClasses(params)` must not appear — it
+        # discarded previously-set attributes on each new SGR escape.
+        self.assertNotIn(
+            "active = sgrToClasses(params)",
+            self.html,
+            "parseAnsi must not wholesale-replace active style on every SGR escape",
+        )
+
+    def test_sgr_merge_construct_present(self):
+        # The fix iterates new classes and merges them into active one-by-one.
+        self.assertIn(
+            "for (const cls of newClasses)",
+            self.html,
+            "parseAnsi must merge new classes into active set one-by-one",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

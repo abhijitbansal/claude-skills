@@ -738,7 +738,18 @@ function parseAnsi(text) {
         } else {
           // integer-parse; a non-numeric sub-code yields NaN and is ignored.
           const params = raw.split(";").map((p) => parseInt(p, 10));
-          active = sgrToClasses(params);
+          // Merge new classes into active: fg replaces fg, bg replaces bg,
+          // independent attrs (bold, dim) accumulate.  All class strings come
+          // exclusively from the fixed sgrToClasses allowlist.
+          const newClasses = sgrToClasses(params);
+          for (const cls of newClasses) {
+            if (cls.startsWith("ansi-fg")) {
+              active = active.filter(c => !c.startsWith("ansi-fg"));
+            } else if (cls.startsWith("ansi-bg")) {
+              active = active.filter(c => !c.startsWith("ansi-bg"));
+            }
+            if (!active.includes(cls)) active.push(cls);
+          }
         }
         i += m[0].length;
         continue;
