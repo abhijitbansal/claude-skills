@@ -50,10 +50,12 @@ curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/to
 
 exec $SHELL
 wind init     # interactive wizard: scans for repos, writes config
-wind up       # one tmux session per repo, Claude Code launched in each
-wind watch    # watcher: detects the 5-hour limit, resumes after reset
+wind up       # one tmux session per repo + the detached auto-resume watcher
 wind dash     # live localhost dashboard: status, pane tails, actions
 ```
+
+`wind up` auto-spawns the watcher (detects the 5-hour limit, resumes after
+reset) in its own detached tmux session — `--no-watch` skips it.
 
 Full reference: [tools/second-wind/README.md](tools/second-wind/README.md) ·
 [visual explainer](docs/second-wind/index.html)

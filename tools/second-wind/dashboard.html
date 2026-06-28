@@ -326,6 +326,123 @@
     box-shadow: 0 0 0 2px rgba(34, 211, 238, .12);
   }
 
+  /* ---------- ANSI colors (set only via known-literal classes) ---------- */
+  .btn-expand {
+    margin-left: 8px;
+    flex: 0 0 auto;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .btn-expand:hover { color: var(--cyan); border-color: var(--cyan-dim); }
+
+  .ansi-bold { font-weight: 700; }
+  .ansi-dim { opacity: .7; }
+  .ansi-fg-0 { color: #3b4252; } .ansi-fg-8  { color: #6b7585; }
+  .ansi-fg-1 { color: #f87171; } .ansi-fg-9  { color: #fca5a5; }
+  .ansi-fg-2 { color: #34d399; } .ansi-fg-10 { color: #6ee7b7; }
+  .ansi-fg-3 { color: #f59e0b; } .ansi-fg-11 { color: #fcd34d; }
+  .ansi-fg-4 { color: #60a5fa; } .ansi-fg-12 { color: #93c5fd; }
+  .ansi-fg-5 { color: #c084fc; } .ansi-fg-13 { color: #d8b4fe; }
+  .ansi-fg-6 { color: #22d3ee; } .ansi-fg-14 { color: #67e8f9; }
+  .ansi-fg-7 { color: #d7dee9; } .ansi-fg-15 { color: #ffffff; }
+  .ansi-bg-0 { background: #3b4252; } .ansi-bg-8  { background: #6b7585; }
+  .ansi-bg-1 { background: #7f1d1d; } .ansi-bg-9  { background: #b91c1c; }
+  .ansi-bg-2 { background: #14532d; } .ansi-bg-10 { background: #15803d; }
+  .ansi-bg-3 { background: #78350f; } .ansi-bg-11 { background: #b45309; }
+  .ansi-bg-4 { background: #1e3a8a; } .ansi-bg-12 { background: #1d4ed8; }
+  .ansi-bg-5 { background: #581c87; } .ansi-bg-13 { background: #7e22ce; }
+  .ansi-bg-6 { background: #155e75; } .ansi-bg-14 { background: #0e7490; }
+  .ansi-bg-7 { background: #d7dee9; color: #0a0e14; } .ansi-bg-15 { background: #ffffff; color: #0a0e14; }
+
+  /* ---------- expand modal ---------- */
+  #modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3vh 3vw;
+    background: rgba(4, 7, 11, .72);
+    backdrop-filter: blur(3px);
+  }
+  #modal-overlay[hidden] { display: none; }
+  #modal {
+    display: flex;
+    flex-direction: column;
+    width: min(1100px, 94vw);
+    height: 90vh;
+    max-height: 90vh;
+    background: linear-gradient(165deg, var(--bg-card), var(--bg-raised) 80%);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .6);
+    overflow: hidden;
+  }
+  #modal-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  #modal-head .modal-spacer { flex: 1 1 auto; }
+  #modal-pane {
+    flex: 1 1 auto;
+    margin: 0;
+    overflow: auto;
+    padding: 16px 18px;
+    background: var(--bg-pre);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--text);
+  }
+  #modal-actions {
+    display: flex;
+    gap: 10px;
+    padding: 14px 18px;
+    border-top: 1px solid var(--border-soft);
+  }
+  #modal-input { flex: 1 1 auto; resize: vertical; }
+  .btn-close {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-dim);
+    font-size: 14px;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  .btn-close:hover { color: var(--red); border-color: var(--red); }
+  .btn-attach {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-dim);
+    font-size: 13px;
+    padding: 5px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-attach:hover { color: var(--cyan); border-color: var(--cyan-dim); }
+  @media (max-width: 640px) {
+    #modal-overlay { padding: 2.5vh 2.5vw; }
+    #modal { width: 95vw; height: 95vh; max-height: 95vh; }
+    #modal-head { flex-wrap: wrap; padding: 12px 14px; }
+    #modal-pane { padding: 12px 14px; }
+    #modal-actions { padding: 12px 14px; flex-wrap: wrap; }
+  }
+
   /* ---------- toast ---------- */
   #toast {
     position: fixed;
@@ -368,6 +485,57 @@
     .card-actions { padding: 10px 12px 14px; }
     #watcher { padding: 12px 14px; }
   }
+  .btn-help {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-dim);
+    font-size: 13px;
+    padding: 5px 10px;
+    margin-left: 12px;
+    cursor: pointer;
+  }
+  .btn-help:hover { color: var(--cyan); border-color: var(--cyan-dim); }
+  #help-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 7, 12, .72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5vh 5vw;
+    z-index: 60;
+  }
+  #help-overlay[hidden] { display: none; }
+  #help-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    max-width: 640px;
+    width: 100%;
+    max-height: 86vh;
+    overflow-y: auto;
+  }
+  #help-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  #help-head .help-title { font-weight: 600; flex: 1 1 auto; }
+  #help-body { padding: 8px 20px 20px; }
+  #help-body h3 { color: var(--cyan-soft); font-size: 14px; margin: 16px 0 6px; }
+  #help-body ul { margin: 0; padding-left: 18px; }
+  #help-body li, #help-body p { color: var(--text-dim); margin: 4px 0; }
+  #help-body code {
+    background: var(--bg-pre);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: .05em .35em;
+    font-family: var(--mono);
+    font-size: .85em;
+  }
 </style>
 </head>
 <body>
@@ -379,6 +547,8 @@
   <header>
     <h1 class="wordmark"><span class="glyphs">◢◤</span> second wind</h1>
     <span class="tagline">live session dashboard</span>
+    <button id="help-btn" type="button" class="btn-help"
+      title="Dashboard guide">? help</button>
   </header>
 
   <div id="watcher">
@@ -395,6 +565,58 @@
 
 <div id="toast" role="status"></div>
 
+<div id="modal-overlay" hidden>
+  <div id="modal" role="dialog" aria-modal="true" aria-label="session detail">
+    <div id="modal-head">
+      <span id="modal-title" class="sess-name"></span>
+      <span id="modal-pill" class="pill"></span>
+      <span class="modal-spacer"></span>
+      <button id="modal-resume" type="button" class="btn-resume">↻ resume</button>
+      <button id="modal-attach" type="button" class="btn-attach"
+        title="Copy: tmux attach -t <session> — paste in a terminal for the full TUI (slash autocomplete, history)">⧉ attach</button>
+      <button id="modal-kill" type="button" class="btn-kill">kill</button>
+      <button id="modal-close" type="button" class="btn-close" aria-label="close">✕</button>
+    </div>
+    <pre id="modal-pane" class="pane"></pre>
+    <div id="modal-actions">
+      <textarea id="modal-input" class="send-input" rows="3"
+        placeholder="send text to this session…" aria-label="text to send"></textarea>
+      <button id="modal-send" type="button">send</button>
+    </div>
+  </div>
+</div>
+
+<div id="help-overlay" hidden>
+  <div id="help-card" role="dialog" aria-modal="true" aria-label="dashboard help">
+    <div id="help-head">
+      <span class="help-title">Dashboard guide</span>
+      <button id="help-close" type="button" class="btn-close" aria-label="close">✕</button>
+    </div>
+    <div id="help-body">
+      <h3>Session states</h3>
+      <ul>
+        <li><b>running</b> — the agent is active.</li>
+        <li><b>idle</b> — launched, waiting for input.</li>
+        <li><b>paused</b> — hit the 5-hour limit; the watcher auto-resumes after reset.</li>
+        <li><b>reset countdown</b> — time until the watcher resumes.</li>
+      </ul>
+      <h3>Actions</h3>
+      <ul>
+        <li><b>↻ resume</b> — nudge this session (or all) with the resume message.</li>
+        <li><b>⧉ attach</b> — copy <code>tmux attach -t &lt;session&gt;</code>; paste in a terminal for the full TUI (slash autocomplete, history).</li>
+        <li><b>kill</b> — end the tmux session (confirms first).</li>
+        <li><b>send</b> — type text or answers straight into the pane.</li>
+      </ul>
+      <h3>The watcher</h3>
+      <p>Detects the usage limit, waits for the reset, and resumes every watched
+        (Claude) session in one sweep. Copilot sessions are shown but never
+        auto-resumed.</p>
+      <h3>First time?</h3>
+      <p>Run <code>wind guide</code> in your terminal for the full setup walkthrough.</p>
+    </div>
+  </div>
+</div>
+
 <script>
 "use strict";
 
@@ -402,6 +624,8 @@ const TOKEN = "{{TOKEN}}";
 const POLL_MS = 3000;
 const TICK_MS = 1000;
 const PIN_SLACK_PX = 8;
+const MODAL_LINES = 500;     // default scrollback the modal requests
+const MODAL_POLL_MS = 3000;  // modal's own refresh cadence (independent snapshot)
 
 const STATE_GLYPHS = {
   "running": "●",
@@ -419,12 +643,185 @@ const els = {
   grid: document.getElementById("grid"),
   empty: document.getElementById("empty"),
   toast: document.getElementById("toast"),
+  modalOverlay: document.getElementById("modal-overlay"),
+  modal: document.getElementById("modal"),
+  modalTitle: document.getElementById("modal-title"),
+  modalPill: document.getElementById("modal-pill"),
+  modalPane: document.getElementById("modal-pane"),
+  modalInput: document.getElementById("modal-input"),
+  modalSend: document.getElementById("modal-send"),
+  modalResume: document.getElementById("modal-resume"),
+  modalAttach: document.getElementById("modal-attach"),
+  modalKill: document.getElementById("modal-kill"),
+  modalClose: document.getElementById("modal-close"),
+  helpBtn: document.getElementById("help-btn"),
+  helpOverlay: document.getElementById("help-overlay"),
+  helpClose: document.getElementById("help-close"),
 };
 
 // name -> { root, pill, resetLine, pane, input, sendBtn, killBtn, pinned }
 const cards = new Map();
 let latest = { watcher: {}, sessions: [] };
 let toastTimer = null;
+
+// ---- ANSI SGR rendering (enforce, don't assert) ----------------------------
+// Server already drops everything but allowlisted SGR, but the client never
+// trusts that: it integer-parses every sub-code, maps ONLY known codes to a
+// fixed literal class string via classList.add, and emits text exclusively
+// through createTextNode. Pane content never touches innerHTML. Unknown codes
+// are ignored (rendered as literal text with no attribute), so ESC[38;5;999m
+// or ESC[<garbage>m can never inject a class, style, or CSS-var name.
+const ANSI_FG = {
+  30: "ansi-fg-0", 31: "ansi-fg-1", 32: "ansi-fg-2", 33: "ansi-fg-3",
+  34: "ansi-fg-4", 35: "ansi-fg-5", 36: "ansi-fg-6", 37: "ansi-fg-7",
+  90: "ansi-fg-8", 91: "ansi-fg-9", 92: "ansi-fg-10", 93: "ansi-fg-11",
+  94: "ansi-fg-12", 95: "ansi-fg-13", 96: "ansi-fg-14", 97: "ansi-fg-15",
+};
+const ANSI_BG = {
+  40: "ansi-bg-0", 41: "ansi-bg-1", 42: "ansi-bg-2", 43: "ansi-bg-3",
+  44: "ansi-bg-4", 45: "ansi-bg-5", 46: "ansi-bg-6", 47: "ansi-bg-7",
+  100: "ansi-bg-8", 101: "ansi-bg-9", 102: "ansi-bg-10", 103: "ansi-bg-11",
+  104: "ansi-bg-12", 105: "ansi-bg-13", 106: "ansi-bg-14", 107: "ansi-bg-15",
+};
+
+function sgrToClasses(params) {
+  // params: array of integer-parsed sub-codes. Returns a list of literal,
+  // known-safe class strings (never derived/concatenated from the token).
+  const classes = [];
+  let i = 0;
+  while (i < params.length) {
+    const code = params[i];
+    if (code === 1) { classes.push("ansi-bold"); i += 1; continue; }
+    if (code === 2) { classes.push("ansi-dim"); i += 1; continue; }
+    if (code === 38 || code === 48) {
+      // Extended color: only 5;N (256-color) is recognized; N is range-checked
+      // and mapped to a fixed palette class. Truecolor (2;R;G;B) and anything
+      // else is ignored entirely.
+      if (params[i + 1] === 5 && Number.isInteger(params[i + 2]) &&
+          params[i + 2] >= 0 && params[i + 2] <= 255) {
+        const slot = code === 38 ? "ansi-fg256-" : "ansi-bg256-";
+        classes.push(slot + params[i + 2]);
+        i += 3;
+        continue;
+      }
+      // Unknown/unsupported extended form: stop parsing this SGR safely.
+      break;
+    }
+    if (ANSI_FG[code]) { classes.push(ANSI_FG[code]); i += 1; continue; }
+    if (ANSI_BG[code]) { classes.push(ANSI_BG[code]); i += 1; continue; }
+    // code 0 (reset) and any unrecognized code carry no class.
+    i += 1;
+  }
+  return classes;
+}
+
+function parseAnsi(text) {
+  // Tokenize into runs. Returns [{text, classes}] where classes is a list of
+  // known-literal strings. Non-SGR escapes are stripped; incomplete sequences
+  // at the boundary render literally.
+  const out = [];
+  let active = [];      // current class list
+  let buf = "";
+  const flush = () => {
+    if (buf) { out.push({ text: buf, classes: active.slice() }); buf = ""; }
+  };
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === "\x1b" && text[i + 1] === "[") {
+      const m = /^\x1b\[([0-9;]*)m/.exec(text.slice(i));
+      if (m) {
+        flush();
+        const raw = m[1];
+        if (raw === "" || raw === "0") {
+          active = [];                    // reset
+        } else {
+          // integer-parse; a non-numeric sub-code yields NaN and is ignored.
+          const params = raw.split(";").map((p) => parseInt(p, 10));
+          // Merge new classes into active: fg replaces fg, bg replaces bg,
+          // independent attrs (bold, dim) accumulate.  All class strings come
+          // exclusively from the fixed sgrToClasses allowlist.
+          const newClasses = sgrToClasses(params);
+          for (const cls of newClasses) {
+            if (cls.startsWith("ansi-fg")) {
+              active = active.filter(c => !c.startsWith("ansi-fg"));
+            } else if (cls.startsWith("ansi-bg")) {
+              active = active.filter(c => !c.startsWith("ansi-bg"));
+            }
+            if (!active.includes(cls)) active = [...active, cls];
+          }
+        }
+        i += m[0].length;
+        continue;
+      }
+      // Non-SGR CSI / incomplete: drop the ESC[ and keep scanning literally.
+      const csi = /^\x1b\[[0-9;?]*[A-Za-z]/.exec(text.slice(i));
+      if (csi) { i += csi[0].length; continue; }
+      // Lone ESC[ at boundary: skip the ESC, render the rest literally.
+      i += 1;
+      continue;
+    }
+    if (ch === "\x1b") { i += 1; continue; }  // stray ESC
+    buf += ch;
+    i += 1;
+  }
+  flush();
+  return out;
+}
+
+function renderAnsiInto(pre, text) {
+  // Replace pre's children with ANSI-rendered runs. Text reaches the DOM only
+  // via createTextNode; classes only via classList.add(<literal>).
+  while (pre.firstChild) pre.removeChild(pre.firstChild);
+  const runs = parseAnsi(text || "");
+  for (const run of runs) {
+    if (run.classes.length === 0) {
+      pre.appendChild(document.createTextNode(run.text));
+    } else {
+      const span = document.createElement("span");
+      for (const cls of run.classes) span.classList.add(cls);
+      span.appendChild(document.createTextNode(run.text));
+      pre.appendChild(span);
+    }
+  }
+}
+
+function ansi256ToHex(n) {
+  // Standard xterm 256-color cube. n is already range-checked [0,255].
+  if (n < 16) {
+    const base = [
+      "#000000", "#cc0000", "#4e9a06", "#c4a000",
+      "#3465a4", "#75507b", "#06989a", "#d3d7cf",
+      "#555753", "#ef2929", "#8ae234", "#fce94f",
+      "#729fcf", "#ad7fa8", "#34e2e2", "#eeeeec",
+    ];
+    return base[n];
+  }
+  if (n < 232) {
+    const i = n - 16;
+    const r = Math.floor(i / 36), g = Math.floor((i % 36) / 6), b = i % 6;
+    const c = (v) => (v === 0 ? 0 : 55 + v * 40);
+    const hx = (v) => c(v).toString(16).padStart(2, "0");
+    return "#" + hx(r) + hx(g) + hx(b);
+  }
+  const v = 8 + (n - 232) * 10;
+  const hx = v.toString(16).padStart(2, "0");
+  return "#" + hx + hx + hx;
+}
+
+(function injectAnsi256Palette() {
+  // Emit one fixed stylesheet of .ansi-fg256-N / .ansi-bg256-N rules so the
+  // renderer only ever calls classList.add on these known-literal names.
+  let css = "";
+  for (let n = 0; n <= 255; n++) {
+    const hex = ansi256ToHex(n);
+    css += ".ansi-fg256-" + n + "{color:" + hex + ";}";
+    css += ".ansi-bg256-" + n + "{background:" + hex + ";}";
+  }
+  const style = document.createElement("style");
+  style.appendChild(document.createTextNode(css));
+  document.head.appendChild(style);
+})();
 
 function showToast(msg, kind) {
   els.toast.textContent = msg;
@@ -479,8 +876,16 @@ function buildCard(name) {
   title.textContent = name;
   const pill = document.createElement("span");
   pill.className = "pill";
+  const expandBtn = document.createElement("button");
+  expandBtn.type = "button";
+  expandBtn.className = "btn-expand";
+  expandBtn.textContent = "⤢";
+  expandBtn.title = "expand " + name;
+  expandBtn.setAttribute("aria-label", "expand " + name);
+  expandBtn.addEventListener("click", () => openModal(name));
   head.appendChild(title);
   head.appendChild(pill);
+  head.appendChild(expandBtn);
 
   const resetLine = document.createElement("div");
   resetLine.className = "reset-line";
@@ -495,8 +900,8 @@ function buildCard(name) {
   pane.className = "pane";
 
   const card = {
-    root, pill, resetLine, resetText, pane,
-    pinned: true, resetAt: null,
+    name, root, pill, resetLine, resetText, pane,
+    pinned: true, resetAt: null, paneText: null,
   };
   pane.addEventListener("scroll", () => {
     card.pinned = pane.scrollTop + pane.clientHeight >=
@@ -570,9 +975,11 @@ function updateCard(card, sess) {
   card.pill.dataset.state = sess.state;
   card.resetAt = (typeof sess.reset_at === "number") ? sess.reset_at : null;
 
-  // pane_tail is untrusted LLM output — textContent only, never innerHTML.
-  if (card.pane.textContent !== sess.pane_tail) {
-    card.pane.textContent = sess.pane_tail || "";
+  // pane_tail is untrusted LLM output — rendered via parseAnsi (createTextNode
+  // + literal classes only), never innerHTML.
+  if (card.paneText !== sess.pane_tail) {
+    card.paneText = sess.pane_tail || "";
+    renderAnsiInto(card.pane, card.paneText);
     if (card.pinned) card.pane.scrollTop = card.pane.scrollHeight;
   }
   renderCardCountdown(card, sess.reset_human || "");
@@ -652,6 +1059,196 @@ function tick() {
     renderCardCountdown(card, card.lastResetHuman || "");
   }
 }
+
+// ---- expand modal ----------------------------------------------------------
+let modalName = null;
+let modalTimer = null;
+let modalPinned = true;
+
+els.modalPane.addEventListener("scroll", () => {
+  modalPinned = els.modalPane.scrollTop + els.modalPane.clientHeight >=
+                els.modalPane.scrollHeight - PIN_SLACK_PX;
+});
+
+function modalSessionState() {
+  const sess = (latest.sessions || []).find((s) => s.name === modalName);
+  return sess ? sess.state : "";
+}
+
+function renderModalPill() {
+  const state = modalSessionState();
+  const glyph = STATE_GLYPHS[state] || "○";
+  els.modalPill.textContent = state ? (glyph + " " + state) : "";
+  els.modalPill.dataset.state = state || "";
+}
+
+async function fetchModalPane() {
+  if (!modalName) return;
+  // Capture the requested session so a modal switch/close mid-flight can't
+  // paint stale content or pill from session A into the modal now on B.
+  const requested = modalName;
+  try {
+    const res = await fetch(
+      "/api/pane?session=" + encodeURIComponent(requested) +
+      "&lines=" + MODAL_LINES,
+      { cache: "no-store", headers: { "X-Wind-Token": TOKEN } });
+    if (requested !== modalName) return;
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    if (requested !== modalName) return;
+    // content is untrusted pane output — rendered via parseAnsi only.
+    renderAnsiInto(els.modalPane, data.content || "");
+    if (modalPinned) els.modalPane.scrollTop = els.modalPane.scrollHeight;
+  } catch (err) {
+    if (requested !== modalName) return;
+    showToast("pane load failed: " + err.message, "err");
+  }
+  renderModalPill();
+}
+
+function openModal(name) {
+  modalName = name;
+  modalPinned = true;
+  els.modalTitle.textContent = name;
+  els.modalInput.value = "";
+  els.modalPane.textContent = "";
+  renderModalPill();
+  els.modalOverlay.hidden = false;
+  fetchModalPane();
+  clearInterval(modalTimer);
+  modalTimer = setInterval(fetchModalPane, MODAL_POLL_MS);
+  els.modalInput.focus();
+}
+
+function closeModal() {
+  modalName = null;
+  clearInterval(modalTimer);
+  modalTimer = null;
+  els.modalOverlay.hidden = true;
+}
+
+els.modalClose.addEventListener("click", closeModal);
+els.modalOverlay.addEventListener("click", (ev) => {
+  if (ev.target === els.modalOverlay) closeModal();
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && !els.modalOverlay.hidden) closeModal();
+});
+
+function openHelp() { els.helpOverlay.hidden = false; els.helpClose.focus(); }
+function closeHelp() { els.helpOverlay.hidden = true; }
+els.helpBtn.addEventListener("click", openHelp);
+els.helpClose.addEventListener("click", closeHelp);
+els.helpOverlay.addEventListener("click", (ev) => {
+  if (ev.target === els.helpOverlay) closeHelp();
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && !els.helpOverlay.hidden) closeHelp();
+});
+
+const modalDoSend = async () => {
+  const text = els.modalInput.value.trim();
+  if (!text || !modalName) return;
+  els.modalSend.disabled = true;
+  try {
+    await apiPost("/api/send", { session: modalName, text });
+    els.modalInput.value = "";
+    showToast("sent to " + modalName, "ok");
+    fetchModalPane();
+  } catch (err) {
+    showToast("send failed: " + err.message, "err");
+  } finally {
+    els.modalSend.disabled = false;
+  }
+};
+els.modalSend.addEventListener("click", modalDoSend);
+els.modalInput.addEventListener("keydown", (ev) => {
+  // Enter sends; Shift+Enter inserts a newline.
+  if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); modalDoSend(); }
+});
+
+els.modalResume.addEventListener("click", async () => {
+  if (!modalName) return;
+  els.modalResume.disabled = true;
+  try {
+    await apiPost("/api/resume", { session: modalName });
+    showToast("resume sent", "ok");
+    refresh();
+    fetchModalPane();
+  } catch (err) {
+    showToast("resume failed: " + err.message, "err");
+  } finally {
+    els.modalResume.disabled = false;
+  }
+});
+
+// Build the shell command that attaches to this session's tmux pane.
+function attachCommand(name) { return "tmux attach -t " + name; }
+
+// execCommand fallback for non-secure contexts / older browsers where the
+// async Clipboard API is unavailable. Returns true on success.
+function legacyCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.left = "-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+  document.body.removeChild(ta);
+  return ok;
+}
+
+async function copyAttachCommand() {
+  if (!modalName) return;
+  const cmd = attachCommand(modalName);
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(cmd);
+    ok = true;
+  } catch (err) {
+    ok = legacyCopy(cmd);
+  }
+  if (ok) {
+    els.modalAttach.textContent = "copied ✓";
+    setTimeout(() => { els.modalAttach.textContent = "⧉ attach"; }, 1500);
+    showToast("copied: " + cmd, "ok");
+  } else {
+    showToast("copy failed — run: " + cmd, "err");
+  }
+}
+els.modalAttach.addEventListener("click", copyAttachCommand);
+
+els.modalKill.addEventListener("click", async () => {
+  if (!modalName) return;
+  const name = modalName;
+  // Stop the modal poll before the confirm()/await so an in-flight pane fetch
+  // can't paint the just-killed session back into the modal.
+  clearInterval(modalTimer);
+  modalTimer = null;
+  const ok = confirm("Kill " + name +
+    "? The tmux session and anything unsaved in it dies.");
+  if (!ok) {
+    // Cancelled: resume live polling so the modal keeps updating as before.
+    if (modalName && !modalTimer) {
+      modalTimer = setInterval(fetchModalPane, MODAL_POLL_MS);
+    }
+    return;
+  }
+  els.modalKill.disabled = true;
+  try {
+    await apiPost("/api/kill", { session: name });
+    showToast("killed " + name, "ok");
+    closeModal();
+    refresh();
+  } catch (err) {
+    showToast("kill failed: " + err.message, "err");
+  } finally {
+    els.modalKill.disabled = false;
+  }
+});
 
 els.resumeAll.addEventListener("click", async () => {
   els.resumeAll.disabled = true;
