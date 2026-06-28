@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Second Wind overhaul — manual test guide (PR #2)</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2230; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --accent2: #2ea043;
+    --reg: #d29922; --gate: #f85149; --done: #2ea043;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  code, kbd {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .86em; background: #010409; border: 1px solid var(--border);
+    border-radius: 5px; padding: .08em .4em;
+  }
+  kbd { box-shadow: inset 0 -1px 0 var(--border); }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 18px 80px; }
+
+  header.hero { padding: 30px 0 18px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  .hero h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -.4px; }
+  .hero .sub { color: var(--muted); font-size: 14px; }
+  .hero .meta { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 999px;
+    padding: 4px 11px; color: var(--muted);
+  }
+  .pill b { color: var(--text); font-weight: 600; }
+
+  .intro {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; margin: 18px 0; font-size: 14px; color: var(--muted);
+  }
+  .intro b { color: var(--text); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; }
+  .tag {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 5px; vertical-align: middle;
+  }
+  .tag.reg { background: rgba(210,153,34,.15); color: var(--reg); border: 1px solid rgba(210,153,34,.4); }
+  .tag.gate { background: rgba(248,81,73,.13); color: var(--gate); border: 1px solid rgba(248,81,73,.4); }
+
+  .progress-bar {
+    position: sticky; top: 0; z-index: 20; background: rgba(13,17,23,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--border);
+    padding: 12px 0; margin: 0 0 20px;
+  }
+  .progress-inner { max-width: 880px; margin: 0 auto; padding: 0 18px; display: flex; align-items: center; gap: 14px; }
+  .track { flex: 1; height: 9px; background: var(--panel2); border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
+  .fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .25s ease; }
+  .count { font-variant-numeric: tabular-nums; font-size: 13.5px; color: var(--muted); white-space: nowrap; }
+  .count b { color: var(--text); }
+  .reset-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 7px; padding: 5px 11px; font-size: 12.5px; cursor: pointer;
+  }
+  .reset-btn:hover { border-color: var(--gate); color: var(--gate); }
+
+  section.group {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    margin: 14px 0; overflow: hidden;
+  }
+  .group > h2 {
+    margin: 0; padding: 14px 18px; font-size: 16px; display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--border); background: var(--panel2);
+  }
+  .group > h2 .gnum {
+    font-variant-numeric: tabular-nums; font-size: 12px; color: #fff; background: var(--accent);
+    border-radius: 6px; min-width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700;
+  }
+  .group > h2 .gref { color: var(--muted); font-size: 12.5px; font-weight: 400; }
+  .group > h2 .gtally { margin-left: auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .group > h2 .gtally.complete { color: var(--done); }
+  ul.checks { list-style: none; margin: 0; padding: 6px 0; }
+  ul.checks li { padding: 0; }
+  ul.checks li label {
+    display: flex; gap: 12px; align-items: flex-start; padding: 9px 18px; cursor: pointer;
+  }
+  ul.checks li label:hover { background: rgba(255,255,255,.02); }
+  ul.checks li input[type=checkbox] {
+    appearance: none; -webkit-appearance: none; flex: 0 0 auto; margin-top: 2px;
+    width: 18px; height: 18px; border: 1.5px solid var(--border); border-radius: 5px;
+    background: #010409; cursor: pointer; position: relative;
+  }
+  ul.checks li input[type=checkbox]:checked { background: var(--accent2); border-color: var(--accent2); }
+  ul.checks li input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5px; top: 1.5px; width: 5px; height: 10px;
+    border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+  ul.checks li .txt { flex: 1; }
+  ul.checks li input:checked ~ .txt { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(139,148,158,.5); }
+  ul.checks li input:checked ~ .txt code { opacity: .65; }
+  pre.cmd {
+    margin: 7px 0 0; background: #010409; border: 1px solid var(--border); border-radius: 7px;
+    padding: 9px 11px; overflow-x: auto; font-size: 12.5px; color: #c9d1d9;
+  }
+
+  .footer-note {
+    background: linear-gradient(180deg, var(--panel), var(--panel2));
+    border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-top: 22px;
+  }
+  .footer-note h3 { margin: 0 0 8px; font-size: 15px; }
+  .footer-note ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); font-size: 13.5px; }
+  .deferred { font-size: 13px; color: var(--muted); }
+  .deferred summary { cursor: pointer; color: var(--text); font-size: 14px; padding: 4px 0; }
+</style>
+</head>
+<body>
+
+<div class="progress-bar">
+  <div class="progress-inner">
+    <div class="track"><div class="fill" id="fill"></div></div>
+    <div class="count"><b id="doneN">0</b> / <span id="totalN">0</span> done</div>
+    <button class="reset-btn" id="resetBtn">Reset</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <h1>Second Wind overhaul — manual test guide</h1>
+    <div class="sub">The set-and-forget orchestrator for long Claude Code runs across repos. This guide covers <b>only the human-driven surface</b> for PR&nbsp;#2.</div>
+    <div class="meta">
+      <span class="pill">branch <b>feat/second-wind-overhaul</b></span>
+      <span class="pill"><a href="https://github.com/abhijitbansal/claude-skills/pull/2">PR&nbsp;#2 ↗</a></span>
+      <span class="pill"><b>194</b> unit tests green</span>
+      <span class="pill">12 commits ahead of <b>main</b></span>
+    </div>
+  </header>
+
+  <div class="intro">
+    <b>What the 194 unit tests already cover</b> — don't re-test these by hand: atomic JSON writes,
+    absolute watcher config-path, <code>$EDITOR</code> shlex-split + filename sanitization, inline-prompt
+    filtering, args precedence, <code>/api/pane</code> token/validation/clamp, server SGR stripping
+    (truecolor/256/OSC/DCS dropped), client <code>parseAnsi</code> XSS cases, <code>resolve_agent</code> precedence,
+    watcher-skips-Copilot, per-repo resume message, reserved-session collision, <code>wind down</code>
+    reaping the watcher, and backward-compat. The checks below need a <b>human eye</b> — color rendering,
+    modal timing/races, multi-session isolation, real CLI launches.
+    <div class="legend">
+      <span><span class="tag reg">REG</span> regression — a flaw caught in this branch's review cycle</span>
+      <span><span class="tag gate">GATE</span> blocks merge if it fails</span>
+    </div>
+  </div>
+
+  <!-- 0 SETUP -->
+  <section class="group" data-group="Setup">
+    <h2><span class="gnum">0</span> Setup <span class="gref">no real usage burned</span><span class="gtally"></span></h2>
+    <ul class="checks">
+      <li><label><input type="checkbox"><span class="txt">Refresh the installed dashboard so <code>~/.wind/dashboard.html</code> matches this branch<pre class="cmd">sh tools/second-wind/install.sh</pre></span></label></li>
+      <li><label><input type="checkbox"><span class="txt">Point a scratch config's <code>claude_cmd</code> at the fake CLI, then <code>wind up</code> — it echoes input and fakes a limit on lines starting with <code>work</code><pre class="cmd">"claude_cmd": "python3 tools/second-wind/tests/fake_claude.py"</pre></span></label></li>
+    </ul>
+  </section>
+
+  <!-- 1 WATCHER ONE-COMMAND -->
+  <section class="group" data-group="Watcher one-command">
+    <h2><span class="gnum">1</span> Watcher one-command <span class="gref">#4</span><span class="gtally"></span></h2>
+    <ul class="checks">
+      <li><label><input type="checkbox"><span class="txt"><code>wind up</code> auto-starts the watcher — <code>tmux ls</code> shows a <code>wind-watcher</code> session</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><code>wind up --no-watch</code> skips it (logged); no <code>wind-watcher</code> session appears</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><code>wind down</code> kills the repo sessions <b>and</b> <code>wind-watcher</code></span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> <code>wind watch --poll 5 --detach</code> honors the poll interval in the <i>detached</i> watcher (the flag used to be dropped from the threaded argv) — confirm captures land ~every 5s in the <code>wind watch</code> logs</span></label></li>
+    </ul>
+  </section>
+
+  <!-- 2 PROMPT FILES -->
+  <section class="group" data-group="Prompt files">
+    <h2><span class="gnum">2</span> Prompt files <span class="gref">#2 #3 #5 #8</span><span class="gtally"></span></h2>
+    <ul class="checks">
+      <li><label><input type="checkbox"><span class="txt"><code>wind prompt &lt;repo&gt;</code> creates <code>~/.wind/prompts/&lt;repo&gt;.md</code>, opens the editor, and wires <code>prompt_file</code> into config on a clean save</span></label></li>
+      <li><label><input type="checkbox"><span class="txt">A multi-word editor launches correctly (shlex-split, no shell)<pre class="cmd">EDITOR="code --wait" wind prompt &lt;repo&gt;</pre></span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> <code>wind prompt &lt;repo-NOT-in-config&gt;</code> <b>warns and leaves the on-disk config unchanged</b> — no spurious "success", no <code>DEFAULT_CONFIG</code> keys written into a minimal config</span></label></li>
+    </ul>
+  </section>
+
+  <!-- 3 DASHBOARD MODAL + COLOR -->
+  <section class="group" data-group="Dashboard modal">
+    <h2><span class="gnum">3</span> Dashboard modal &amp; full color <span class="gref">#6</span><span class="gtally"></span></h2>
+    <ul class="checks">
+      <li><label><input type="checkbox"><span class="txt">Click a card → full-height modal (large scrollback + send box + resume/kill/close)</span></label></li>
+      <li><label><input type="checkbox"><span class="txt">Dismiss via the close button <b>and</b> <kbd>Esc</kbd></span></label></li>
+      <li><label><input type="checkbox"><span class="txt">Readable on a narrow window — fills the viewport, nothing clipped</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> ANSI colors render in <b>full color</b> in both the modal and the cards (not raw escape codes, not stripped grey) — the <code>escapes=False/True</code> tmux-capture fix</span></label></li>
+      <li><label><input type="checkbox"><span class="txt">Send a prompt/answer from the modal → it reaches the session (e.g. answer a permission prompt with <code>1</code>)</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag" style="background:rgba(34,211,238,.13);color:#22d3ee;border:1px solid rgba(34,211,238,.4)">NEW</span> Click <code>⧉ attach</code> in the modal header → clipboard holds <code>tmux attach -t wind-&lt;repo&gt;</code>, button flips to <code>copied ✓</code> for ~1.5s. Paste in a terminal → full Claude TUI with slash autocomplete + history</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> Modal resume nudges <b>only the focused session</b>; other paused sessions keep their countdown. Top-of-page "resume all" still resumes everything (the empty-body resume used to force-resume every repo and wipe limit state)</span></label></li>
+      <li><label><input type="checkbox"><span class="txt">Kill from the modal works and confirms first</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> Switch or kill a session mid-load → the modal <b>never paints the stale session's late output</b> (requested session captured before the fetch, re-checked after; kill stops the poll timer before confirm)</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> Crafted pane output renders <b>inert</b> — literal text, no alert, no injected element, no console errors<pre class="cmd">printf '\033[31m&lt;img src=x onerror=alert(1)&gt;\033[0m done\n'</pre></span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> Tokenless scrollback read is rejected — HTTP <b>401</b>, no pane content in the body<pre class="cmd">curl 'http://127.0.0.1:8787/api/pane?session=wind-&lt;repo&gt;&amp;lines=50'</pre></span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag" style="background:rgba(34,211,238,.13);color:#22d3ee;border:1px solid rgba(34,211,238,.4)">NEW</span> <code>? help</code> opens the in-dashboard help modal; <kbd>Esc</kbd> closes it; ✕ button closes it; clicking the backdrop closes it</span></label></li>
+    </ul>
+  </section>
+
+  <!-- 4 PERMISSIONS & AGENT VALIDATION -->
+  <section class="group" data-group="Permissions & validation">
+    <h2><span class="gnum">4</span> Permissions &amp; agent validation <span class="gref">#14 #15</span><span class="gtally"></span></h2>
+    <ul class="checks">
+      <li><label><input type="checkbox"><span class="txt">Wizard global preset applies to every repo; a per-repo <code>claude_args</code> override wins; explicit <code>"claude_args": ""</code> is honored as "no args" (distinct from unset → inherit)</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> A bad <code>agent</code> name (top-level or per-repo) <b>dies at config load</b>, not on a dashboard request — the error surfaces immediately on <code>wind up</code>/<code>wind status</code></span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> A repo whose derived session collides with the reserved <code>&lt;prefix&gt;-watcher</code> (e.g. a repo named <code>watcher</code>) is <b>rejected at load</b>. A repo like <code>ci-watcher</code> is <b>not</b> falsely flagged as a foreign watcher</span></label></li>
+    </ul>
+  </section>
+
+  <!-- 5 COPILOT -->
+  <section class="group" data-group="Copilot">
+    <h2><span class="gnum">5</span> Copilot — launch &amp; display only <span class="gref">#7</span><span class="gtally"></span></h2>
+    <ul class="checks">
+      <li><label><input type="checkbox"><span class="txt"><span class="tag gate">GATE</span> A repo with <code>"agent": "copilot"</code> launches the <code>copilot</code> CLI on <code>wind up</code></span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag gate">GATE</span> The running Copilot session accepts a typed prompt from the dashboard send box (confirms the launch command + pane-send assumption)</span></label></li>
+      <li><label><input type="checkbox"><span class="txt">The watcher ignores the Copilot session — its card never shows a reset countdown and it is never auto-resumed</span></label></li>
+    </ul>
+  </section>
+
+  <!-- 6 WATCHER RESUME CORRECTNESS -->
+  <section class="group" data-group="Watcher resume">
+    <h2><span class="gnum">6</span> Watcher resume correctness <span class="gref">#5 #7</span><span class="gtally"></span></h2>
+    <ul class="checks">
+      <li><label><input type="checkbox"><span class="txt">Trigger a fake limit (send <code>work…</code> to the fake CLI). At reset, the watcher types the resume message into <b>every</b> paused session in one sweep</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag reg">REG</span> A paused session no longer in the watched set still gets resumed — orphaned paused names fall back to the global <code>resume_message</code> rather than being stranded paused forever</span></label></li>
+    </ul>
+  </section>
+
+  <!-- 7 ONBOARDING -->
+  <section class="group" data-group="Onboarding">
+    <h2><span class="gnum">7</span> Onboarding<span class="gtally"></span></h2>
+    <ul class="checks">
+      <li><label><input type="checkbox"><span class="txt"><span class="tag" style="background:rgba(34,211,238,.13);color:#22d3ee;border:1px solid rgba(34,211,238,.4)">NEW</span> <code>wind guide</code> prints all 4 steps — verify <code>wind init</code>, <code>wind prompt</code>, <code>wind up</code>, and <code>wind dash</code> all appear in the output</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag" style="background:rgba(34,211,238,.13);color:#22d3ee;border:1px solid rgba(34,211,238,.4)">NEW</span> <code>wind guide --open</code> opens the visual guide in a browser</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag" style="background:rgba(34,211,238,.13);color:#22d3ee;border:1px solid rgba(34,211,238,.4)">NEW</span> <code>/second-wind</code> walks setup in Claude Code — slash command appears in autocomplete and steps through the four commands</span></label></li>
+      <li><label><input type="checkbox"><span class="txt"><span class="tag" style="background:rgba(34,211,238,.13);color:#22d3ee;border:1px solid rgba(34,211,238,.4)">NEW</span> <code>docs/features.html</code> — search narrows results; each type chip filters; clicking a card expands its detail; back-link and landing "All features" link resolve</span></label></li>
+    </ul>
+  </section>
+
+  <details class="deferred footer-note">
+    <summary>Known deferred limitations — documented, <b>not</b> bugs to test</summary>
+    <ul>
+      <li>A manual resume during a pending auto-resume may yield one extra harmless <code>continue</code> at reset.</li>
+      <li>Two watchers/configs on one machine share one <code>~/.wind/state.json</code> (single-watcher-per-machine is the supported mode).</li>
+      <li>A stale limit message lingering past the resume cooldown could re-pause a session (rare; agent idle &gt;10&nbsp;min).</li>
+    </ul>
+  </details>
+
+  <div class="footer-note">
+    <h3>If something fails</h3>
+    <ul>
+      <li>Note the exact card/command, expected vs actual, and any devtools console error.</li>
+      <li>Restart <code>wind dash</code> after refreshing <code>~/.wind/dashboard.html</code> via <code>install.sh</code>.</li>
+      <li>A <span class="tag gate">GATE</span> failure <b>blocks merge</b>.</li>
+      <li>A <span class="tag reg">REG</span> failure on an XSS/token check means a <b>security guarantee is broken</b> — stop and report before merging.</li>
+    </ul>
+  </div>
+
+</div>
+
+<script>
+  // localStorage keyed per branch+PR so stale checklists don't collide
+  const STORAGE_KEY = "secondwind-overhaul-pr2-testchecklist-v2";
+  const boxes = Array.from(document.querySelectorAll('ul.checks input[type=checkbox]'));
+  boxes.forEach((b, i) => b.dataset.k = "c" + i);
+
+  function load() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch (e) {}
+    boxes.forEach(b => { b.checked = !!saved[b.dataset.k]; });
+  }
+  function save() {
+    const state = {};
+    boxes.forEach(b => { if (b.checked) state[b.dataset.k] = 1; });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+  function refresh() {
+    const done = boxes.filter(b => b.checked).length;
+    const total = boxes.length;
+    document.getElementById('doneN').textContent = done;
+    document.getElementById('totalN').textContent = total;
+    document.getElementById('fill').style.width = total ? (done / total * 100) + "%" : "0%";
+    document.querySelectorAll('section.group').forEach(sec => {
+      const secBoxes = Array.from(sec.querySelectorAll('input[type=checkbox]'));
+      const d = secBoxes.filter(b => b.checked).length;
+      const tally = sec.querySelector('.gtally');
+      if (tally) {
+        tally.textContent = d + "/" + secBoxes.length;
+        tally.classList.toggle('complete', d === secBoxes.length && secBoxes.length > 0);
+      }
+    });
+  }
+  boxes.forEach(b => b.addEventListener('change', () => { save(); refresh(); }));
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if (!confirm("Clear all checks for PR #2's test guide?")) return;
+    localStorage.removeItem(STORAGE_KEY);
+    boxes.forEach(b => b.checked = false);
+    refresh();
+  });
+  load();
+  refresh();
+</script>
+</body>
+</html>

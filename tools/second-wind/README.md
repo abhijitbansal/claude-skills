@@ -46,6 +46,7 @@ Requirements: Python 3.9+, tmux, Claude Code CLI logged in.
 ## Quick start
 
 ```sh
+wind guide           # print the setup walkthrough (start here)
 wind init            # interactive wizard: scans dirs, lets you pick repos,
                      # choose a global permission preset + per-repo overrides,
                      # pick an agent, and writes config for you
