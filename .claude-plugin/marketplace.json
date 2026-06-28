@@ -28,6 +28,11 @@
       "name": "second-wind",
       "source": "./plugins/second-wind",
       "description": "Set-and-forget orchestrator for long Claude Code runs: when the 5-hour usage limit pauses sessions, wind notices, waits for the reset, and resumes every tmux session — including overnight"
+    },
+    {
+      "name": "prompt-craft",
+      "source": "./plugins/prompt-craft",
+      "description": "Turn rough prompts into deterministic specs and surface the right next step: /improve-prompt, /plan, debug/refactor/review lenses, a follow-up-suggesting Stop hook, and opt-in secret/format guardrails"
     }
   ]
 }
