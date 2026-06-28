@@ -748,7 +748,7 @@ function parseAnsi(text) {
             } else if (cls.startsWith("ansi-bg")) {
               active = active.filter(c => !c.startsWith("ansi-bg"));
             }
-            if (!active.includes(cls)) active.push(cls);
+            if (!active.includes(cls)) active = [...active, cls];
           }
         }
         i += m[0].length;
