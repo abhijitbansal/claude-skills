@@ -1,4 +1,5 @@
 """Global-scope scan: the corrected marketplace/plugin/version cache glob."""
+import json
 import sys
 from pathlib import Path
 
@@ -65,3 +66,51 @@ def test_user_level_skills_and_commands_scanned(tmp_path):
     uc.write_text("---\nname: deploy\ndescription: Ship it.\n---\n")
     cmds = br.scan_global(home, {"enabledPlugins": {}}, {"builtins": [], "prefer_over": {}})
     assert any(c["name"] == "/deploy" and c["source"] == "user" for c in cmds)
+
+
+def test_builtins_regression_both_global_and_builtin_survive(tmp_path):
+    """A unique builtin (absent from repo and global) must coexist with a global plugin entry.
+
+    Asserts BOTH /ecc:plan (from the global plugin cache) AND /unique-builtin (from the
+    overlay builtins list) appear in the final registry, verifying that dedup order
+    (scan_repo + scan_global + _builtin_entries with first-wins setdefault) preserves
+    both when they have distinct names.
+    """
+    home = tmp_path / "home"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    # Real cached plugin skill — will be returned by scan_global
+    _cache_skill(home, "alpha", "ecc", "1.0.0", "plan", "Decompose work.")
+
+    # settings.json enabling the plugin so scan_global actually finds it
+    settings_file = home / ".claude" / "settings.json"
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(json.dumps({"enabledPlugins": {"ecc@alpha": []}}))
+
+    # Overlay declaring a builtin whose name does NOT collide with the plugin skill
+    overlay = tmp_path / "overlay.toml"
+    overlay.write_text('[builtins]\nnames = ["/unique-builtin"]\n')
+
+    reg = br.build_registry(repo, home, None, overlay_path=overlay)
+    names = {c["name"] for c in reg["commands"]}
+    assert "/ecc:plan" in names, "global plugin entry must survive dedup"
+    assert "/unique-builtin" in names, "overlay builtin must survive dedup"
+
+
+def test_malformed_settings_does_not_raise(tmp_path):
+    """Top-level JSON array in settings.json must not raise and must return zero global entries."""
+    home = tmp_path / "home"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (home / ".claude").mkdir(parents=True)
+
+    # Top-level array — without isinstance guard, json.loads returns a list and
+    # subsequent settings.get(...) raises AttributeError.
+    (home / ".claude" / "settings.json").write_text("[1, 2, 3]")
+
+    overlay = tmp_path / "overlay.toml"
+    overlay.write_text("")
+
+    reg = br.build_registry(repo, home, None, overlay_path=overlay)
+    assert reg["commands"] == []

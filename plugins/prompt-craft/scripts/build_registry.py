@@ -120,7 +120,9 @@ def _plugin_version_dir(plugin_dir: Path):
 def _enabled_plugin_dirs(home, settings) -> list:
     cache = Path(home) / ".claude" / "plugins" / "cache"
     out = []
-    for key in (settings.get("enabledPlugins") or {}):
+    ep = settings.get("enabledPlugins")
+    keys = ep if isinstance(ep, (dict, list)) else []
+    for key in keys:
         if "@" not in key:
             continue
         plugin, _, marketplace = key.partition("@")
@@ -204,7 +206,8 @@ def current_signature(repo_root, home, settings) -> dict:
 
 def _load_settings(home) -> dict:
     try:
-        return json.loads((Path(home) / ".claude" / "settings.json").read_text())
+        data = json.loads((Path(home) / ".claude" / "settings.json").read_text())
+        return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
 
