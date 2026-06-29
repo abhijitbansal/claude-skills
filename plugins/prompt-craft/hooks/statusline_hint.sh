@@ -15,9 +15,10 @@ BASE=""
 if [ -f "$SIDECAR" ]; then
   BASE_CMD="$(cat "$SIDECAR")"
   # SC2254: variable in case pattern is intentional (matching any path containing the name).
+  # Also catch tilde-form of the shim basename (*statusline.sh*) which $SHIM (expanded) wouldn't match.
   # shellcheck disable=SC2254
   case "$BASE_CMD" in
-    *statusline_hint.sh*|*"$SHIM"*)
+    *statusline_hint.sh*|*statusline.sh*|*"$SHIM"*)
       BASE=""
       ;;
     *)

@@ -14,7 +14,15 @@ done
 if [ -z "$HINT_SCRIPT" ]; then
   BASE_FILE="${HOME}/.claude/prompt-craft/base-statusline"
   if [ -f "$BASE_FILE" ]; then
-    printf '%s' "$INPUT" | bash -c "$(cat "$BASE_FILE")" 2>/dev/null || true
+    BASE_CMD="$(cat "$BASE_FILE")"
+    # Guard: skip if sidecar references our own scripts (would recurse).
+    case "$BASE_CMD" in
+      *statusline_hint.sh*|*statusline.sh*)
+        ;;
+      *)
+        printf '%s' "$INPUT" | bash -c "$BASE_CMD" 2>/dev/null || true
+        ;;
+    esac
   fi
   exit 0
 fi

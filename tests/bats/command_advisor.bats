@@ -169,6 +169,16 @@ _seed_registry() {
   [[ "$output" == *$'\033[0m' ]]
 }
 
+@test "statusline_hint: ANSI cap keeps visible width at or under 140" {
+  _seed_registry
+  long="$(printf 'X%.0s' {1..200})"
+  printf "echo \$'\\033[31m%s\\033[0m'" "$long" > "${HOME}/.claude/prompt-craft/base-statusline"
+  run bash -c "printf '%s' '{\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/statusline_hint.sh'"
+  [ "$status" -eq 0 ]
+  visible_len="$(printf '%s' "$output" | /usr/bin/python3 -c 'import sys,re; print(len(re.sub(r"\x1b\[[0-9;]*m","",sys.stdin.read().rstrip("\n"))))')"
+  [ "$visible_len" -le 140 ]
+}
+
 @test "statusline_hint: never exits non-zero on a broken base command" {
   _seed_registry
   printf 'this-command-does-not-exist-xyz' > "${HOME}/.claude/prompt-craft/base-statusline"
