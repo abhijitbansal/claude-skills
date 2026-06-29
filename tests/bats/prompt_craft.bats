@@ -23,12 +23,15 @@ _init_repo() {
 
 # ---- suggest_next.sh (Stop hook) ----
 
-@test "suggest_next: dirty working tree suggests /commit" {
+@test "suggest_next: dirty working tree suggests /commit via top-level systemMessage" {
   _init_repo "${TMP}/repo"
   echo change >> "${TMP}/repo/seed.txt"   # uncommitted change
   run bash -c "printf '%s' '{\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/suggest_next.sh'"
   [ "$status" -eq 0 ]
   [[ "$output" == *"/commit"* ]]
+  [[ "$output" == *'"systemMessage"'* ]]
+  [[ "$output" != *"additionalContext"* ]]
+  [[ "$output" != *"hookSpecificOutput"* ]]
 }
 
 @test "suggest_next: clean repo with no unpushed commits is silent" {
