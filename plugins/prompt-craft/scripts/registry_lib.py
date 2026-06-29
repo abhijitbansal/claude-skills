@@ -27,7 +27,7 @@ def tokenize(text: str) -> set:
 
 def parse_frontmatter(path) -> dict:
     """Parse a leading `---` frontmatter block into a flat {key: value} dict."""
-    text = Path(path).read_text()
+    text = Path(path).read_text(encoding="utf-8")
     if not text.startswith("---"):
         return {}
     end = text.find("\n---", 3)
