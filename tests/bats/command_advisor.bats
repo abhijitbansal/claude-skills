@@ -133,3 +133,45 @@ _seed_registry() {
     echo "$output" | /usr/bin/python3 -c "import json,sys; d=json.load(sys.stdin); assert 'systemMessage' in d; assert 'additionalContext' not in json.dumps(d)"
   fi
 }
+
+# ---- statusline_hint.sh ----
+
+@test "statusline_hint: chains to base and appends the hint segment" {
+  _seed_registry
+  printf 'echo BASELINE' > "${HOME}/.claude/prompt-craft/base-statusline"
+  run bash -c "printf '%s' '{\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/statusline_hint.sh'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"BASELINE"* ]]
+}
+
+@test "statusline_hint: base missing -> hint-only, never fails" {
+  _seed_registry
+  rm -f "${HOME}/.claude/prompt-craft/base-statusline"
+  run bash -c "printf '%s' '{\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/statusline_hint.sh'"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"BASELINE"* ]]
+}
+
+@test "statusline_hint: self-referencing base -> hint-only (no recursion)" {
+  _seed_registry
+  printf 'bash %s/statusline_hint.sh' "${HOOKS}" > "${HOME}/.claude/prompt-craft/base-statusline"
+  run timeout 10 bash -c "printf '%s' '{\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/statusline_hint.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "statusline_hint: ANSI base truncated leaves no dangling escape" {
+  _seed_registry
+  long="$(printf 'X%.0s' {1..200})"
+  printf "echo \$'\\033[31m%s\\033[0m'" "$long" > "${HOME}/.claude/prompt-craft/base-statusline"
+  run bash -c "printf '%s' '{\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/statusline_hint.sh'"
+  [ "$status" -eq 0 ]
+  # ends with a reset; total visible width capped at 140
+  [[ "$output" == *$'\033[0m' ]]
+}
+
+@test "statusline_hint: never exits non-zero on a broken base command" {
+  _seed_registry
+  printf 'this-command-does-not-exist-xyz' > "${HOME}/.claude/prompt-craft/base-statusline"
+  run bash -c "printf '%s' '{\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/statusline_hint.sh'"
+  [ "$status" -eq 0 ]
+}

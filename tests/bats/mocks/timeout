@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Test mock: shim for systems (macOS) that lack GNU coreutils timeout.
+# Self-ref guard in statusline_hint.sh prevents actual recursion,
+# so we can safely run the command without enforcing a wall-clock limit.
+shift   # drop the SECONDS argument
+exec "$@"
