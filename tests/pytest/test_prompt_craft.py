@@ -67,3 +67,8 @@ def test_plan_and_review_disable_model_invocation():
     for skill in ("plan", "review"):
         fm = _frontmatter(PLUGIN / "skills" / skill / "SKILL.md")
         assert fm.get("disable-model-invocation") == "true", f"{skill}: must defer to canonical"
+
+
+def test_improve_prompt_block5_calls_advisor():
+    text = (PLUGIN / "skills" / "improve-prompt" / "SKILL.md").read_text()
+    assert "advisor.py" in text and "--mode" in text and "prompt" in text
