@@ -1,6 +1,7 @@
 ---
 name: review
 description: Apply a code-review lens to a diff, branch, or file — find correctness bugs, security issues, and quality problems, ranked by severity, with a concrete fix for each. Use when the user says "review this", "review my diff", "check this PR", "look this over before I commit", or "is this safe". Skip when the user wants the code written, not reviewed.
+disable-model-invocation: true
 ---
 
 # Review lens

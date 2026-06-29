@@ -61,3 +61,9 @@ def test_hooks_json_valid_and_references_existing_scripts():
     for script in EXPECTED_HOOK_SCRIPTS:
         assert script in referenced, f"{script} not wired in hooks.json"
         assert (PLUGIN / "hooks" / script).exists(), f"{script} missing"
+
+
+def test_plan_and_review_disable_model_invocation():
+    for skill in ("plan", "review"):
+        fm = _frontmatter(PLUGIN / "skills" / skill / "SKILL.md")
+        assert fm.get("disable-model-invocation") == "true", f"{skill}: must defer to canonical"

@@ -1,6 +1,7 @@
 ---
 name: plan
 description: Decompose a non-trivial task into an explicit, tracked plan with goals and per-step acceptance criteria before writing code. Use when the user says "plan this", "break this down", "what's the plan", or asks for a multi-step feature/refactor that touches more than one file. Pairs with plan mode. Skip for single-edit changes that need no decomposition.
+disable-model-invocation: true
 ---
 
 # Plan the work
