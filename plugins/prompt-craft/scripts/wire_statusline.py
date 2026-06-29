@@ -15,7 +15,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from registry_lib import atomic_write_json  # noqa: E402
 
-SHIM_REL = ".claude/prompt-craft/statusline.sh"
 SHIM_TEMPLATE = Path(__file__).resolve().parent.parent / "hooks" / "statusline_shim.sh"
 
 
