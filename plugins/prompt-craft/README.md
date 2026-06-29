@@ -14,7 +14,7 @@ Zero config — install it and the skills are available; the guardrail hooks are
 | `/prompt-craft:refactor` | skill (lens) | Behavior-preserving restructure, guarded by tests green before and after. |
 | `/prompt-craft:review` | skill (lens) | Diff/branch review: correctness + security first, then quality, by severity. |
 | `/prompt-craft:refresh` | skill | Re-scan skills and rebuild `~/.claude/prompt-craft/registry.json` + `profile.json` on demand. |
-| `suggest_next.sh` | Stop hook | After a turn, suggests follow-up commands from git state (dirty → `/commit`/`/review`; unpushed → `/pr`). Routed through the advisor. Silent when nothing applies. |
+| `suggest_next.sh` | Stop hook | After a turn, suggests follow-up commands from git state (dirty → `/commit`/`/code-review`; unpushed → `/pr`). Routed through the advisor. Silent when nothing applies. |
 | `prompt_hint.sh` | UserPromptSubmit hook | Before each prompt, surfaces the most relevant command suggestion as a user-only `systemMessage` banner. Never feeds the model. |
 | `registry_freshness.sh` | SessionStart hook | On session start, rebuilds the registry when stale (repo change, scan-signature change, or Claude version change). |
 | `statusline_hint.sh` | statusLine command | Provides a statusline segment (`💡 next: /x`) appended to your existing statusline. Chains to the recorded base command; capped at 140 chars. |
@@ -38,7 +38,7 @@ model context.
    `~/.claude/`.
 
 2. **History profile** (`~/.claude/prompt-craft/profile.json`) — learned from
-   `~/.claude/projects/*/transcript*.jsonl`. Only the leading command token of
+   `~/.claude/history.jsonl`. Only the leading command token of
    each `/slash-command` turn is recorded (never prompt text). Cap of 5000
    entries. Opt out by setting:
 
@@ -73,7 +73,9 @@ new skills or plugins.
 
 ### Wiring the statusline
 
-The statusline segment requires one-time wiring:
+The statusline segment requires one-time wiring. The convenient entry point is
+the `/prompt-craft:refresh` skill, which runs the same wiring commands below.
+For direct use:
 
 ```sh
 python3 plugins/prompt-craft/scripts/wire_statusline.py --wire
