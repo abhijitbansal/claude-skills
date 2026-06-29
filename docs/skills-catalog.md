@@ -77,9 +77,13 @@ Sharpen the ask before the work, surface the right next step after it. Zero conf
 | `debug` | skill (lens) | Reproduce → isolate → one hypothesis → failing test → fix. Auto-invokes on bug reports. |
 | `refactor` | skill (lens) | Behavior-preserving restructure, guarded by tests green before and after. |
 | `review` | skill (lens) | Diff/branch review: correctness + security first, then quality, by severity. |
-| `suggest_next` | hook | Stop hook — suggests follow-up commands from git state (dirty → `/commit`/`/review`; unpushed → `/pr`). Silent when nothing applies. |
-| `block_secrets` | hook | PreToolUse guardrail (opt-in via `PROMPT_CRAFT_BLOCK_SECRETS=1`) — blocks reads/edits of secret-looking files. |
-| `format_on_edit` | hook | PostToolUse hook (opt-in via `PROMPT_CRAFT_FORMAT_ON_EDIT=1`) — formats edited files with the installed formatter. |
+| `refresh` | skill | Rebuild `~/.claude/prompt-craft/registry.json` + `profile.json` on demand via `/prompt-craft:refresh`. |
+| `suggest_next` | hook (Stop) | After each turn, routes through the advisor to suggest follow-up commands from git state. Silent on no match. |
+| `prompt_hint` | hook (UserPromptSubmit) | Before each prompt, surfaces the top advisor recommendation as a user-only `systemMessage`. Never feeds the model. |
+| `registry_freshness` | hook (SessionStart) | On session start, rebuilds the registry when stale (repo change, signature change, or Claude version change). |
+| `statusline_hint` | hook (statusLine) | Live `💡 next: /x` statusline segment; chains to your existing statusline command. Wire with `wire_statusline.py --wire`. |
+| `block_secrets` | hook (PreToolUse, opt-in) | Blocks reads/edits of secret-looking files. Enable via `PROMPT_CRAFT_BLOCK_SECRETS=1`. |
+| `format_on_edit` | hook (PostToolUse, opt-in) | Formats edited files with the installed formatter. Enable via `PROMPT_CRAFT_FORMAT_ON_EDIT=1`. |
 
 ## adapters (multi-tool)
 
