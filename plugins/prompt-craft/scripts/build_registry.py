@@ -7,7 +7,6 @@ import argparse
 import ast
 import json
 import os
-import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -149,9 +148,9 @@ def _load_settings(home) -> dict:
         return {}
 
 
-def build_registry(repo_root, home, claude_version) -> dict:
+def build_registry(repo_root, home, claude_version, *, overlay_path=None) -> dict:
     repo_root, home = Path(repo_root), Path(home)
-    overlay = load_overlay(OVERLAY_PATH)
+    overlay = load_overlay(overlay_path if overlay_path is not None else OVERLAY_PATH)
     settings = _load_settings(home)
     commands = scan_repo(repo_root, overlay) + scan_global(home, settings, overlay) + _builtin_entries(overlay)
     deduped = {}

@@ -57,7 +57,7 @@ def test_malformed_skill_is_skipped_not_fatal(tmp_path, capsys):
     bad.parent.mkdir(parents=True, exist_ok=True)
     bad.write_text("no frontmatter at all")
     names = {c["name"] for c in br.scan_repo(tmp_path, _overlay())}
-    assert "/ecc:review" in names  # good entry survives; bad one skipped (falls back to dir name, empty desc)
+    assert "/ecc:review" in names  # bad entry appears as '/ecc:broken' (dir-name fallback); good entry unchanged
 
 
 def test_load_overlay_parses_builtins_and_prefer_over(tmp_path):
@@ -94,3 +94,27 @@ def test_stale_entry_dropped_on_rebuild(tmp_path):
     shutil.rmtree(skill.parent)  # delete the skill, then rebuild
     reg = br.build_registry(tmp_path, home, None)
     assert not any(c["name"] == "/ecc:review" for c in reg["commands"])
+
+
+def test_build_registry_overlay_path_kwarg_injects_controlled_overlay(tmp_path):
+    """overlay_path kwarg must override OVERLAY_PATH; injected builtins/prefer_over must appear."""
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    _mk_skill(tmp_path, "prompt-craft", "plan", "Decompose a task.")
+
+    overlay_file = tmp_path / "test-overlay.toml"
+    overlay_file.write_text(
+        '[builtins]\nnames = ["/injected-builtin"]\n\n'
+        '[prefer_over]\n"/prompt-craft:plan" = ["/injected-builtin"]\n'
+    )
+
+    reg = br.build_registry(tmp_path, home, None, overlay_path=overlay_file)
+    names = {c["name"] for c in reg["commands"]}
+
+    # Injected builtin must be present
+    assert "/injected-builtin" in names
+    # prefer_over from injected overlay must be merged
+    plan = next(c for c in reg["commands"] if c["name"] == "/prompt-craft:plan")
+    assert plan["prefer_over"] == ["/injected-builtin"]
+    # Real overlay's builtins (/goal, /model, etc.) must NOT appear
+    assert not any(n.startswith("/goal") for n in names)
