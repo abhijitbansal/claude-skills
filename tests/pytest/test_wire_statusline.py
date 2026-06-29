@@ -52,12 +52,24 @@ def test_wire_aborts_on_unparseable_settings(tmp_path):
 
 
 def test_wire_refuses_self_referencing_base(tmp_path):
-    shim = "bash \"" + str(Path("~/.claude/prompt-craft/statusline.sh").expanduser()) + "\""
-    home = _home(tmp_path, json.dumps({"statusLine": {"type": "command", "command": shim}}))
+    # Use the SAME home for both the shim-command construction and the wire() call.
+    # The old test used Path("~/.claude/...").expanduser() (the real user's home)
+    # while passing tmp_path/home to wire() — a cross-home setup that only worked
+    # because the old substring check matched any path ending in "statusline.sh".
+    # With the precise _shim_path(home) check we must use a consistent home so
+    # the guard actually fires.  We also use a variant command (adds --debug) so
+    # the idempotency check does NOT short-circuit — this specifically exercises
+    # _is_self_reference.
+    home = tmp_path / "home"
+    shim_path = ws._shim_path(home)
+    shim_variant = 'bash "%s" --debug' % shim_path
+    sp = home / ".claude" / "settings.json"
+    sp.parent.mkdir(parents=True, exist_ok=True)
+    sp.write_text(json.dumps({"statusLine": {"type": "command", "command": shim_variant}}))
     ws.wire(home, str(PLUGIN))
-    # the self-referencing prior command must NOT be recorded as the base
+    # The self-referencing command must NOT be recorded in the sidecar.
     sidecar = home / ".claude" / "prompt-craft" / "base-statusline"
-    assert not sidecar.exists() or "statusline.sh" not in sidecar.read_text()
+    assert not sidecar.exists() or str(shim_path) not in sidecar.read_text()
 
 
 def test_unwire_restores_base_and_removes_shim(tmp_path):
@@ -102,3 +114,41 @@ def test_wire_preserves_unrelated_settings_keys(tmp_path):
     assert settings["theme"] == "dark"
     assert settings["model"] == "sonnet"
     assert "statusline.sh" in settings["statusLine"]["command"]
+
+
+def test_wire_unwire_preserves_user_statusline_with_statusline_in_name(tmp_path):
+    """Data-loss guard: a user whose original command contains 'statusline.sh' as
+    a substring (e.g. mystatusline.sh) must NOT be falsely treated as our shim.
+    The original must survive wire→unwire without loss.
+    """
+    # This path looks similar to our shim name but is NOT our shim.
+    user_cmd = 'bash "%s/bin/mystatusline.sh"' % str(tmp_path)
+    home = _home(tmp_path, json.dumps({"statusLine": {"type": "command", "command": user_cmd}}))
+    ws.wire(home, str(PLUGIN))
+    # Sidecar must record the original user command.
+    sidecar = home / ".claude" / "prompt-craft" / "base-statusline"
+    assert sidecar.exists(), "sidecar must be written for a non-shim original"
+    assert sidecar.read_text().strip() == user_cmd
+    # unwire must restore it exactly.
+    ws.unwire(home)
+    settings = json.loads((home / ".claude" / "settings.json").read_text())
+    assert settings["statusLine"]["command"] == user_cmd
+
+
+def test_wire_dry_run_exits_clean_and_writes_nothing(tmp_path):
+    """--wire --dry-run must exit 0, write nothing, and print a backup-path line."""
+    import io
+    from contextlib import redirect_stdout
+    home = _home(tmp_path, json.dumps({"statusLine": {"type": "command", "command": "echo BASE"}}))
+    settings_before = (home / ".claude" / "settings.json").read_text()
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = ws.main(["--wire", "--dry-run", "--home", str(home),
+                      "--plugin-root", str(PLUGIN)])
+    assert rc == 0
+    # settings.json must be unchanged.
+    assert (home / ".claude" / "settings.json").read_text() == settings_before
+    # Output must include a backup-path line.
+    out = buf.getvalue()
+    assert "Backup path:" in out
+    assert "DRY RUN" in out

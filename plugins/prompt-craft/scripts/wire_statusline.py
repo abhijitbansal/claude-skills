@@ -62,10 +62,13 @@ def _load_settings(home):
 
 def _is_self_reference(command, home):
     # type: (str, object) -> bool
-    """Return True if command references our shim or hint scripts (would recurse)."""
-    # Match what statusline_shim.sh's bash guard does:
-    #   case "$BASE_CMD" in *statusline_hint.sh*|*statusline.sh*) ...
-    return "statusline_hint.sh" in command or "statusline.sh" in command
+    """Return True if command references OUR specific shim (would cause recursion).
+
+    Uses the full absolute shim path to avoid false positives on user commands
+    whose path happens to contain "statusline.sh" as a substring (e.g.
+    bash "~/bin/mystatusline.sh" must NOT be flagged as self-referential).
+    """
+    return str(_shim_path(home)) in command
 
 
 def wire(home, plugin_root, dry_run=False):
@@ -157,8 +160,8 @@ def unwire(home):
     return {"restored": base}
 
 
-def main():
-    # type: () -> int
+def main(argv=None):
+    # type: (object) -> int
     ap = argparse.ArgumentParser(
         description="Wire/unwire prompt-craft statusline shim into ~/.claude/settings.json"
     )
@@ -171,7 +174,7 @@ def main():
     ap.add_argument("--plugin-root",
                     default=str(Path(__file__).resolve().parent.parent),
                     help="Override plugin root directory (for testing)")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     if args.wire:
         try:
@@ -182,11 +185,16 @@ def main():
         print("before: %s" % (r["before"] or "(none)"))
         print("after:  %s" % r["after"])
         print("wired:  %s" % r["wired"])
-        if not r["wired"] and not args.dry_run:
+        if r["wired"]:
+            ptr = _backup_pointer(args.home)
+            if ptr.exists():
+                print("backup: %s" % ptr.read_text().strip())
+        elif not args.dry_run:
             print("(already wired — no-op)")
         if args.dry_run:
-            backup_note = ("Backup path: %s" % _backup_pointer(args.home).parent
-                           / ("settings.json.bak.<ts>"))
+            backup_note = "Backup path: %s" % (
+                _backup_pointer(args.home).parent / "settings.json.bak.<ts>"
+            )
             print("DRY RUN — no files written. %s" % backup_note)
     else:
         try:
