@@ -88,3 +88,9 @@ def test_discovery_fills_thin_slots_with_unused_canonical():
 
 def test_degrades_to_empty_when_no_registry_and_no_git():
     assert advisor.recommend({"prompt": "anything", "git_state": {}}, None, None) == []
+
+
+def test_recommend_prompt_empty_when_no_relevance_match():
+    commands = [_cmd("/ecc:review", "review code changes for quality")]
+    out = advisor._recommend_prompt("xyzzy frobnicate nothing", commands, None, 5)
+    assert out == []  # zero relevance -> no discovery padding (guard: 0 < len(recs) < k)

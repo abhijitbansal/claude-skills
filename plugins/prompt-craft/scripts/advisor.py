@@ -143,6 +143,8 @@ def main() -> int:
         context = json.loads(sys.stdin.read())
     except (ValueError, OSError):
         return 0
+    if not isinstance(context, dict):
+        return 0
     base = Path(args.home) / ".claude" / "prompt-craft"
     registry = load_json(base / "registry.json")
     profile = load_json(base / "profile.json")

@@ -67,3 +67,15 @@ def test_bad_stdin_exits_zero_empty(tmp_path):
     r = subprocess.run(["python3", str(ADVISOR), "--mode", "prompt", "--home", str(tmp_path)],
                        input="not json", capture_output=True, text=True)
     assert r.returncode == 0 and r.stdout.strip() == ""
+
+
+def test_empty_stdin_exits_zero_empty(tmp_path):
+    r = subprocess.run(["python3", str(ADVISOR), "--mode", "prompt", "--home", str(tmp_path)],
+                       input="", capture_output=True, text=True)
+    assert r.returncode == 0 and r.stdout.strip() == ""
+
+
+def test_non_dict_json_exits_zero_empty(tmp_path):
+    r = subprocess.run(["python3", str(ADVISOR), "--mode", "prompt", "--home", str(tmp_path)],
+                       input="42", capture_output=True, text=True)
+    assert r.returncode == 0 and r.stdout.strip() == ""
