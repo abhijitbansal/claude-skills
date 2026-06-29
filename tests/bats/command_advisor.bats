@@ -75,3 +75,42 @@ _repo() {
   run bash -c "printf '%s' '{\"cwd\":\"/tmp\"}' | CLAUDE_PLUGIN_ROOT='${FAKE_ROOT}' bash '${FAKE_ROOT}/hooks/registry_freshness.sh'"
   [ "$status" -eq 0 ]
 }
+
+# ---- prompt_hint.sh (UserPromptSubmit) ----
+
+_seed_registry() {
+  mkdir -p "${TMP}/repo/plugins/ecc/skills/review"
+  printf -- '---\nname: review\ndescription: Review a diff for bugs and security.\n---\n' \
+    > "${TMP}/repo/plugins/ecc/skills/review/SKILL.md"
+  python3 "${PLUGIN}/scripts/build_registry.py" --home "${HOME}" --repo-root "${TMP}/repo" >/dev/null 2>&1
+}
+
+@test "prompt_hint: confident match emits TOP-LEVEL systemMessage, no additionalContext" {
+  _seed_registry
+  run bash -c "printf '%s' '{\"prompt\":\"review this diff for security\",\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/prompt_hint.sh'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"systemMessage"'* ]]
+  [[ "$output" == *"/ecc:review"* ]]
+  [[ "$output" != *"additionalContext"* ]]
+  [[ "$output" != *"hookSpecificOutput"* ]]
+  # systemMessage is a TOP-LEVEL key
+  printf '%s' "$output" | /usr/bin/python3 -c 'import sys,json; d=json.load(sys.stdin); assert "systemMessage" in d and "additionalContext" not in json.dumps(d)'
+}
+
+@test "prompt_hint: no match is silent (exit 0, no output)" {
+  _seed_registry
+  run bash -c "printf '%s' '{\"prompt\":\"xyzzy nothing matches here\",\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/prompt_hint.sh'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "prompt_hint: data in a description is printed literally, never executed" {
+  mkdir -p "${TMP}/repo/plugins/ecc/skills/danger"
+  printf -- '---\nname: danger\ndescription: review $(touch %s/PWNED) `id` %%s diff\n---\n' "${TMP}" \
+    > "${TMP}/repo/plugins/ecc/skills/danger/SKILL.md"
+  python3 "${PLUGIN}/scripts/build_registry.py" --home "${HOME}" --repo-root "${TMP}/repo" >/dev/null 2>&1
+  run bash -c "printf '%s' '{\"prompt\":\"review the diff\",\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/prompt_hint.sh'"
+  [ "$status" -eq 0 ]
+  [ ! -f "${TMP}/PWNED" ]            # command substitution never ran
+  [[ "$output" != *"uid="* ]]        # backtick `id` never ran
+}
