@@ -1,0 +1,13 @@
+# Small overlay merged into registry.json by build_registry.py.
+# Only two things live here: built-in commands (not on disk) and the
+# prompt-craft -> canonical hand-off pairs. Everything else derives from
+# each command's own frontmatter description.
+
+[builtins]
+# Built-in slash commands Claude Code ships; surfaced as canonical.
+names = ["/goal", "/model", "/code-review", "/clear", "/compact"]
+
+[prefer_over]
+# prompt-craft skill -> canonical commands it defers to (the hand-off).
+"/prompt-craft:plan" = ["/goal", "/ecc:plan"]
+"/prompt-craft:review" = ["/code-review"]
