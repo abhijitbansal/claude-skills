@@ -30,7 +30,7 @@ json.dump({"prompt": prompt, "git_state": {"dirty": dirty, "unpushed": unpushed}
 ' 2>/dev/null)"
 [ -n "$CTX" ] || exit 0
 
-OUT="$(printf '%s' "$CTX" | python3 "${SCRIPTS}/advisor.py" --mode prompt 2>/dev/null || true)"
+OUT="$(printf '%s' "$CTX" | /usr/bin/python3 "${SCRIPTS}/advisor.py" --mode prompt 2>/dev/null || true)"
 [ -n "$OUT" ] || exit 0
 
 # Wrap as TOP-LEVEL systemMessage. The banner is DATA: json.dumps escapes it.

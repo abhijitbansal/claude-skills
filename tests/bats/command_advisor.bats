@@ -114,3 +114,22 @@ _seed_registry() {
   [ ! -f "${TMP}/PWNED" ]            # command substitution never ran
   [[ "$output" != *"uid="* ]]        # backtick `id` never ran
 }
+
+@test "prompt_hint: malformed stdin is silent (exit 0, no output)" {
+  run bash -c "printf '%s' '{not json' | bash '${HOOKS}/prompt_hint.sh'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "prompt_hint: real dirty git repo is handled safely (exit 0)" {
+  local repo="${TMP}/gitrepo"
+  mkdir -p "$repo"
+  git init -q "$repo"
+  echo dirty > "$repo/file.txt"
+  _seed_registry
+  run bash -c "printf '%s' '{\"prompt\":\"review my code\",\"cwd\":\"${repo}\"}' | bash '${HOOKS}/prompt_hint.sh'"
+  [ "$status" -eq 0 ]
+  if [ -n "$output" ]; then
+    echo "$output" | /usr/bin/python3 -c "import json,sys; d=json.load(sys.stdin); assert 'systemMessage' in d; assert 'additionalContext' not in json.dumps(d)"
+  fi
+}
