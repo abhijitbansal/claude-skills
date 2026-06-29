@@ -7,6 +7,7 @@ import argparse
 import ast
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -104,9 +105,62 @@ def scan_repo(repo_root, overlay: dict) -> list:
     return out
 
 
+def _version_key(name: str) -> tuple:
+    return tuple(int(x) for x in re.findall(r"\d+", name)) or (0,)
+
+
+def _plugin_version_dir(plugin_dir: Path):
+    versions = [d for d in plugin_dir.glob("*/")
+                if d.is_dir() and not d.name.startswith("temp_git_")]
+    if not versions:
+        return None
+    return max(versions, key=lambda d: (_version_key(d.name), d.stat().st_mtime))
+
+
+def _enabled_plugin_dirs(home, settings) -> list:
+    cache = Path(home) / ".claude" / "plugins" / "cache"
+    out = []
+    for key in (settings.get("enabledPlugins") or {}):
+        if "@" not in key:
+            continue
+        plugin, _, marketplace = key.partition("@")
+        plugin_dir = cache / marketplace / plugin
+        vdir = _plugin_version_dir(plugin_dir)
+        if vdir is not None:
+            out.append((plugin, vdir))
+    return out
+
+
+def _scan_dir_for(source, scope, root: Path, prefer) -> list:
+    out = []
+    for skill in (root / "skills").glob("*/SKILL.md"):
+        fm = _safe_fm(skill)
+        name = "/" + source + ":" + (fm.get("name") or skill.parent.name)
+        out.append(_entry(name, "skill", source, scope, fm.get("description", ""), prefer.get(name, [])))
+    for kind, pat in (("command", "commands/*.md"), ("agent", "agents/*.md")):
+        for f in root.glob(pat):
+            fm = _safe_fm(f)
+            name = "/" + source + ":" + (fm.get("name") or f.stem)
+            out.append(_entry(name, kind, source, scope, fm.get("description", ""), prefer.get(name, [])))
+    return out
+
+
 def scan_global(home, settings: dict, overlay: dict) -> list:
-    # Global scope lands in Task 3. Builtins are merged in build_registry().
-    return []
+    home = Path(home)
+    prefer = overlay.get("prefer_over", {})
+    out = []
+    uroot = home / ".claude"
+    for skill in (uroot / "skills").glob("*/SKILL.md"):
+        fm = _safe_fm(skill)
+        name = "/" + (fm.get("name") or skill.parent.name)
+        out.append(_entry(name, "skill", "user", "global", fm.get("description", ""), prefer.get(name, [])))
+    for f in (uroot / "commands").glob("*.md"):
+        fm = _safe_fm(f)
+        name = "/" + (fm.get("name") or f.stem)
+        out.append(_entry(name, "command", "user", "global", fm.get("description", ""), prefer.get(name, [])))
+    for plugin, vdir in _enabled_plugin_dirs(home, settings):
+        out.extend(_scan_dir_for(plugin, "global", vdir, prefer))
+    return out
 
 
 def _builtin_entries(overlay: dict) -> list:
@@ -124,7 +178,14 @@ def _repo_files(repo_root) -> list:
 
 
 def _global_files(home, settings) -> list:
-    return []  # mirrors scan_global; filled in Task 3
+    home = Path(home)
+    files = list((home / ".claude" / "skills").glob("*/SKILL.md"))
+    files += list((home / ".claude" / "commands").glob("*.md"))
+    for _plugin, vdir in _enabled_plugin_dirs(home, settings):
+        files += list((vdir / "skills").glob("*/SKILL.md"))
+        files += list(vdir.glob("commands/*.md"))
+        files += list(vdir.glob("agents/*.md"))
+    return files
 
 
 def _sig(files) -> dict:
