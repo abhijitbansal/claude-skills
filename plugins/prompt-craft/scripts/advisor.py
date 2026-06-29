@@ -93,7 +93,7 @@ def _recommend_prompt(prompt, commands, profile, k) -> list:
     )
     recs = [_rec(t, rel, _why(t["name"], tok, df, frequency(profile, t["name"])))
             for (rel, tok, df, t) in ordered]
-    if len(recs) < k:
+    if 0 < len(recs) < k:
         chosen = {r["name"] for r in recs}
         used = set((profile or {}).get("by_command", {}))
         never = [c for c in commands
@@ -121,3 +121,43 @@ def recommend(context: dict, registry, profile, k: int = TOP_K) -> list:
     if prompt:
         return _recommend_prompt(prompt, commands, profile, k)
     return _recommend_context((context or {}).get("git_state"), commands, profile, k)
+
+
+import argparse  # noqa: E402
+
+
+def _banner(recs: list) -> str:
+    if not recs:
+        return ""
+    lines = ["💡 Recommended commands:"]
+    lines += [f"  {r['why']}" for r in recs]
+    return "\n".join(lines)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--mode", choices=("prompt", "statusline", "stop"), required=True)
+    ap.add_argument("--home", default=os.path.expanduser("~"))
+    args = ap.parse_args()
+    try:
+        context = json.loads(sys.stdin.read())
+    except (ValueError, OSError):
+        return 0
+    base = Path(args.home) / ".claude" / "prompt-craft"
+    registry = load_json(base / "registry.json")
+    profile = load_json(base / "profile.json")
+    recs = recommend(context, registry, profile)
+    if not recs:
+        return 0
+    if args.mode == "statusline":
+        sys.stdout.write("next: " + recs[0]["name"])
+    else:
+        sys.stdout.write(_banner(recs))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except Exception:
+        sys.exit(0)
