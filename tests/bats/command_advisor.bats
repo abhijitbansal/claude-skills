@@ -67,3 +67,11 @@ _repo() {
   [ "$status" -eq 0 ]
   [ "$before" = "$after" ]
 }
+
+@test "registry_freshness: build_registry absent exits 0" {
+  FAKE_ROOT="${TMP}/fake_root"
+  mkdir -p "${FAKE_ROOT}/hooks"
+  cp "${HOOKS}/registry_freshness.sh" "${FAKE_ROOT}/hooks/"
+  run bash -c "printf '%s' '{\"cwd\":\"/tmp\"}' | CLAUDE_PLUGIN_ROOT='${FAKE_ROOT}' bash '${FAKE_ROOT}/hooks/registry_freshness.sh'"
+  [ "$status" -eq 0 ]
+}
