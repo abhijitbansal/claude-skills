@@ -68,7 +68,7 @@ chmod +x ~/.local/bin/wind
 
 ## prompt-craft (plugin)
 
-Sharpen the ask before the work, surface the right next step after it. Zero config; guardrail hooks off by default.
+Sharpen the ask before the work, surface the right next step after it. Zero config; guardrail hooks off by default. A command advisor — ranking next commands by keyword relevance, your command-history frequency, and git-state context — powers the prompt hint, Stop-hook follow-ups, and statusline segment (all user-only; never fed to the model).
 
 | Name | Kind | What it does |
 | --- | --- | --- |
@@ -77,7 +77,7 @@ Sharpen the ask before the work, surface the right next step after it. Zero conf
 | `debug` | skill (lens) | Reproduce → isolate → one hypothesis → failing test → fix. Auto-invokes on bug reports. |
 | `refactor` | skill (lens) | Behavior-preserving restructure, guarded by tests green before and after. |
 | `review` | skill (lens) | Diff/branch review: correctness + security first, then quality, by severity. |
-| `refresh` | skill | Rebuild `~/.claude/prompt-craft/registry.json` + `profile.json` on demand via `/prompt-craft:refresh`. |
+| `refresh` | skill | Rebuild `~/.claude/prompt-craft/registry.json` + `profile.json` on demand via `/prompt-craft:refresh`. Also wires the statusline. |
 | `suggest_next` | hook (Stop) | After each turn, routes through the advisor to suggest follow-up commands from git state. Silent on no match. |
 | `prompt_hint` | hook (UserPromptSubmit) | Before each prompt, surfaces the top advisor recommendation as a user-only `systemMessage`. Never feeds the model. |
 | `registry_freshness` | hook (SessionStart) | On session start, rebuilds the registry when stale (repo change, signature change, or Claude version change). |

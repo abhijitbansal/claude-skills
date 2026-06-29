@@ -16,7 +16,10 @@ except Exception:
 [[ -n "$FILE" && -f "$FILE" ]] || exit 0
 
 # Run a formatter only if it's installed; never fail the tool call.
-run_fmt() { command -v "$1" >/dev/null 2>&1 && "$@" >/dev/null 2>&1 || true; }
+run_fmt() {
+  command -v "$1" >/dev/null 2>&1 || return 0
+  "$@" >/dev/null 2>&1 || true
+}
 
 case "$FILE" in
   *.py)                                run_fmt black "$FILE" ;;
