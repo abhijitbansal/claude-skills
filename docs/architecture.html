@@ -99,7 +99,7 @@ flowchart TD
   LIN["linear-pm<br/><small>1 skill · 6 cmds</small>"]
   CW["core-workflow<br/><small>2 skills · 2 cmds · 2 agents · 1 hook</small>"]
   SW["second-wind<br/><small>skill wrapper</small>"]
-  PC["prompt-craft<br/><small>5 skills · 3 hooks</small>"]
+  PC["prompt-craft<br/><small>6 skills · 6 hooks</small>"]
   WIND[("tools/second-wind<br/>wind.py")]
   AD["adapters/install.sh"]
   SEED["setup/<br/><small>setup.sh · capture.sh · contribute.sh</small>"]
@@ -169,7 +169,9 @@ flowchart TD
           <li><strong>/improve-prompt</strong> — restated goal, acceptance criteria, assumptions, recommended commands</li>
           <li><strong>/plan</strong> — decompose into per-step acceptance criteria + a TodoWrite plan</li>
           <li><strong>debug / refactor / review</strong> lenses — correctness + security first</li>
-          <li><strong>hooks</strong> — git-aware <code>suggest_next</code> (Stop) + opt-in <code>block_secrets</code> / <code>format_on_edit</code></li>
+          <li><strong>/refresh</strong> — re-scan skills and rebuild the command-advisor registry + history profile on demand; also wires the statusline</li>
+          <li><strong>command advisor</strong> — ranks the most relevant next command by combining keyword relevance, your command-history frequency, and git-state context (at most 3 recommendations). It powers the pre-prompt banner, the Stop-hook follow-ups, and the statusline segment. Every surface is user-only — advisor output never enters the model context.</li>
+          <li><strong>hooks</strong> — <code>suggest_next</code> (Stop, now routed through the command advisor), <code>prompt_hint</code> (UserPromptSubmit), <code>registry_freshness</code> (SessionStart), <code>statusline_hint</code> (statusLine) + opt-in <code>block_secrets</code> / <code>format_on_edit</code></li>
         </ul>
       </div>
     </div>
@@ -249,7 +251,7 @@ flowchart TD
     </div>
     <div class="foot-meta">
       <span class="lic">MIT licensed</span>
-      <span>5 plugins · 18 skills · 12 commands · 2 agents · 5 hooks · 1 CLI</span>
+      <span>5 plugins · 19 skills · 12 commands · 2 agents · 8 hooks · 1 CLI</span>
       <span>Tested on macOS &amp; Ubuntu</span>
     </div>
   </div>

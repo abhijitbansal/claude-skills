@@ -19,7 +19,7 @@ flowchart TD
   LIN["linear-pm — 1 skill · 6 cmds"]
   CW["core-workflow — 2 skills · 2 cmds · 2 agents · 1 hook"]
   SW["second-wind — skill wrapper"]
-  PC["prompt-craft — 5 skills · 3 hooks"]
+  PC["prompt-craft — 6 skills · 6 hooks"]
   WIND[("tools/second-wind/wind.py")]
   AD["adapters/install.sh"]
   SEED["setup/ — setup.sh · capture.sh · contribute.sh"]
@@ -43,7 +43,7 @@ flowchart TD
 | `linear-pm` | issue conventions + autonomous pickup | linear-pm skill; `/linear-init`, `/linear-new`, `/linear-pick`, `/linear-status`, `/linear-sync`, `/linear-block` |
 | `core-workflow` | everyday glue | commit, contribute skills; `/team`, `/contribute-skill`; image-parser + web-researcher agents; shellcheck-on-edit hook |
 | `second-wind` | outlast the 5-hour usage limit | SKILL.md wrapper for the `wind` CLI (self-installs when missing) |
-| `prompt-craft` | rough ask → deterministic spec | `/improve-prompt`, `/plan`; debug/refactor/review lens skills; `suggest_next` Stop hook; opt-in `block_secrets` + `format_on_edit` hooks |
+| `prompt-craft` | rough ask → deterministic spec | `/improve-prompt`, `/plan`; debug/refactor/review lens skills; `/refresh`; a command advisor (relevance + history + git state) powering user-only `suggest_next` (Stop), `prompt_hint` (UserPromptSubmit) + `statusline_hint`; `registry_freshness` (SessionStart); opt-in `block_secrets` + `format_on_edit` hooks |
 
 Full per-item descriptions: [skills-catalog.md](skills-catalog.md).
 
