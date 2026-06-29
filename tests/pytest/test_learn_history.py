@@ -61,6 +61,15 @@ def test_missing_history_yields_empty_profile(tmp_path):
     assert prof["by_command"] == {}
 
 
+def test_malformed_line_is_skipped(tmp_path):
+    home = tmp_path / "home"
+    h = home / ".claude" / "history.jsonl"
+    h.parent.mkdir(parents=True, exist_ok=True)
+    h.write_text('not-json\n{"display": "/commit", "timestamp": "t"}\n')
+    prof = lh.learn(home, env={})
+    assert prof["by_command"]["/commit"]["count"] == 1  # malformed line skipped, valid line counted
+
+
 def test_profile_written_with_perms(tmp_path):
     home = tmp_path / "home"
     _history(home, [{"display": "/commit", "pastedContents": {}, "timestamp": "t"}])

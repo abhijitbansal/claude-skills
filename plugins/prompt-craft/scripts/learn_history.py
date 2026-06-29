@@ -41,8 +41,8 @@ def learn(home, env=None) -> dict:
     try:
         with open(history, "r", encoding="utf-8", errors="ignore") as fh:
             lines = deque(fh, maxlen=HISTORY_MAX_ENTRIES)
-    except OSError:
-        print(f"learn_history: no history at {history}", file=sys.stderr)
+    except OSError as e:
+        print(f"learn_history: cannot read {history}: {e}", file=sys.stderr)
         atomic_write_json(_profile_path(home), profile)
         return profile
     by_command = profile["by_command"]
