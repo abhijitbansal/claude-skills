@@ -11,7 +11,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN = REPO_ROOT / "plugins" / "prompt-craft"
 
-EXPECTED_SKILLS = {"improve-prompt", "plan", "debug", "refactor", "review"}
+EXPECTED_SKILLS = {"improve-prompt", "plan", "debug", "refactor", "review", "refresh"}
 EXPECTED_HOOK_SCRIPTS = {"suggest_next.sh", "block_secrets.sh", "format_on_edit.sh"}
 
 
