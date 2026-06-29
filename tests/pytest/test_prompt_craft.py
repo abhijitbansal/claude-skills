@@ -11,7 +11,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN = REPO_ROOT / "plugins" / "prompt-craft"
 
-EXPECTED_SKILLS = {"improve-prompt", "plan", "debug", "refactor", "review"}
+EXPECTED_SKILLS = {"improve-prompt", "plan", "debug", "refactor", "review", "refresh"}
 EXPECTED_HOOK_SCRIPTS = {"suggest_next.sh", "block_secrets.sh", "format_on_edit.sh"}
 
 
@@ -61,3 +61,14 @@ def test_hooks_json_valid_and_references_existing_scripts():
     for script in EXPECTED_HOOK_SCRIPTS:
         assert script in referenced, f"{script} not wired in hooks.json"
         assert (PLUGIN / "hooks" / script).exists(), f"{script} missing"
+
+
+def test_plan_and_review_disable_model_invocation():
+    for skill in ("plan", "review"):
+        fm = _frontmatter(PLUGIN / "skills" / skill / "SKILL.md")
+        assert fm.get("disable-model-invocation") == "true", f"{skill}: must defer to canonical"
+
+
+def test_improve_prompt_block5_calls_advisor():
+    text = (PLUGIN / "skills" / "improve-prompt" / "SKILL.md").read_text()
+    assert "advisor.py" in text and "--mode" in text and "prompt" in text

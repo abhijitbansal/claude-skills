@@ -21,9 +21,15 @@ same way twice — *deterministic at the start* instead of guessed at the end.
 3. **Assumptions to confirm** — every gap you had to fill to write the criteria.
    Mark the load-bearing ones. The user resolves these *before* implementation.
 4. **Out of scope** — what you are deliberately NOT doing, to stop scope creep.
-5. **Recommended commands** — 1–3 slash commands that fit the work, drawn from
-   what's installed (e.g. `/plan` to decompose, `/prompt-craft:review` to check a
-   diff). Say why each fits. If nothing fits, say so — don't invent commands.
+5. **Recommended commands** — 1–3 slash commands that fit the work, ranked
+   canonical-first and personalized to your usage. Build a context JSON from the
+   restated goal and call the advisor:
+   ```sh
+   printf '%s' '{"prompt":"<restated goal>","git_state":{"dirty":false,"unpushed":0},"cwd":"'"$PWD"'"}' \
+     | /usr/bin/python3 "${CLAUDE_PLUGIN_ROOT}/scripts/advisor.py" --mode prompt
+   ```
+   Render the returned recommendations here, each with its `why`. If the advisor
+   returns nothing, say so — don't invent commands.
 
 ## Rules
 

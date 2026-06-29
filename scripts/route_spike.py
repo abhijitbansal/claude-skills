@@ -20,6 +20,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "plugins" / "prompt-craft" / "scripts"))
+from registry_lib import parse_frontmatter as _frontmatter  # noqa: E402
+
 DEFAULT_THRESHOLD = 1  # min overlapping meaningful tokens to count as a match
 
 STOPWORDS = {
@@ -37,20 +40,6 @@ def tokenize(text: str) -> set:
     toks = re.split(r"[^a-z0-9]+", text.lower())
     return {t for t in toks if len(t) >= 3 and t not in STOPWORDS}
 
-
-def _frontmatter(path: Path) -> dict:
-    text = path.read_text()
-    if not text.startswith("---"):
-        return {}
-    end = text.find("\n---", 3)
-    if end == -1:
-        return {}
-    out = {}
-    for line in text[3:end].splitlines():
-        if ":" in line and not line.lstrip().startswith("#"):
-            key, _, value = line.partition(":")
-            out[key.strip()] = value.strip()
-    return out
 
 
 def load_catalog(repo_root) -> list:
