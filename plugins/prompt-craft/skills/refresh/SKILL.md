@@ -25,8 +25,24 @@ installed plugins, then summarizes what changed. Nothing is written into the rep
    last build. Naming: prompt-craft's own commands are `/prompt-craft:<name>`; bare
    forms (`/commit`, `/pr`, `/goal`, `/ecc:plan`, `/code-review`) are external/canonical.
 
-## Statusline wiring (optional)
+## Statusline wiring (optional, reversible)
 
-To add a persistent next-command hint segment to your statusline, see the
-`--wire-statusline` / `--unwire-statusline` flags (added in Task 12). The edit to
-`~/.claude/settings.json` is atomic, backed up, confirmed, and reversible.
+Adds a persistent next-command hint segment by pointing `~/.claude/settings.json`
+`statusLine.command` at a stable shim (`~/.claude/prompt-craft/statusline.sh`).
+The edit is atomic, backed up (`0600`), and reversible.
+
+1. **Preview** the change (no write):
+   ```sh
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/wire_statusline.py" --wire --dry-run
+   ```
+2. **Confirm with the user** (show before/after). Only on explicit confirmation:
+   ```sh
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/wire_statusline.py" --wire
+   ```
+3. **Undo** anytime:
+   ```sh
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/wire_statusline.py" --unwire
+   ```
+
+Manual recovery: if anything looks wrong, restore the timestamped backup:
+`cp ~/.claude/settings.json.bak.<ts> ~/.claude/settings.json`.

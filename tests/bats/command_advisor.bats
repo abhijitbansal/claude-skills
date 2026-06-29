@@ -185,3 +185,24 @@ _seed_registry() {
   run bash -c "printf '%s' '{\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/statusline_hint.sh'"
   [ "$status" -eq 0 ]
 }
+
+# ---- wire/unwire statusline ----
+
+@test "wire_statusline: wires, records base, backs up; unwire restores" {
+  printf '%s' '{"statusLine":{"type":"command","command":"echo BASE"}}' > "${HOME}/.claude/settings.json"
+  run python3 "${PLUGIN}/scripts/wire_statusline.py" --wire --home "${HOME}" --plugin-root "${PLUGIN}"
+  [ "$status" -eq 0 ]
+  grep -q "statusline.sh" "${HOME}/.claude/settings.json"
+  [ -f "${HOME}/.claude/prompt-craft/statusline.sh" ]
+  ls "${HOME}/.claude"/settings.json.bak.* >/dev/null 2>&1
+  run python3 "${PLUGIN}/scripts/wire_statusline.py" --unwire --home "${HOME}"
+  [ "$status" -eq 0 ]
+  grep -q "echo BASE" "${HOME}/.claude/settings.json"
+}
+
+@test "wire_statusline: aborts on unparseable settings (no write)" {
+  printf '%s' '{not valid' > "${HOME}/.claude/settings.json"
+  run python3 "${PLUGIN}/scripts/wire_statusline.py" --wire --home "${HOME}" --plugin-root "${PLUGIN}"
+  [ "$status" -ne 0 ]
+  grep -q "not valid" "${HOME}/.claude/settings.json"
+}
