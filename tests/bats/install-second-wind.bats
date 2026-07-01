@@ -42,3 +42,32 @@ teardown() { rm -rf "$TMP"; }
   [ "$status" -eq 0 ]
   [ "$(cat "$WIND_HOME/config.json")" = '{"repos": []}' ]
 }
+
+# --- download branch (fresh machine via the curl one-liner) -----------------
+# Exercised hermetically with a file:// RAW_BASE. Copying install.sh alone into
+# a temp dir removes the wind.py sibling, so the script takes the download path.
+
+@test "download branch fetches wind.py + dashboard.html to dest" {
+  local base="$PWD/tools/second-wind"
+  cp "$base/install.sh" "$TMP/install.sh"
+  run env WIND_HOME="$WIND_HOME" WIND_RAW_BASE="file://$base" \
+    sh "$TMP/install.sh" --no-modify-path
+  [ "$status" -eq 0 ]
+  [ -s "$WIND_HOME/wind.py" ]
+  [ -s "$WIND_HOME/dashboard.html" ]
+  [[ "$output" == *"downloaded"* ]]
+  # regression: -o DEST must precede `--`, else curl treats it as a URL
+  [[ "$output" != *"No host part"* ]]
+  [[ "$output" != *"Could not resolve host: -o"* ]]
+  run "$WIND_HOME/bin/wind" --help
+  [ "$status" -eq 0 ]
+}
+
+@test "download branch prints clone fallback and fails on unreachable base" {
+  cp "$PWD/tools/second-wind/install.sh" "$TMP/install.sh"
+  run env WIND_HOME="$WIND_HOME" WIND_RAW_BASE="file://$TMP/nope" \
+    sh "$TMP/install.sh" --no-modify-path
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"git clone"* ]]
+  [[ "$output" == *"Install from a clone"* ]]
+}

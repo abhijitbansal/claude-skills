@@ -19,6 +19,36 @@ done
 
 say() { printf '%s\n' "$*"; }
 
+# fetch URL -> dest, using curl or wget. Returns non-zero on any failure.
+# NB: -o/-O DEST must come BEFORE `--`; after `--` curl/wget treat every
+# remaining arg as a URL ("No host part in the URL" on the dest path).
+fetch() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL -o "$2" -- "$1"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$2" -- "$1"
+  else
+    say "  ✗ need curl or wget to download second wind"; return 1
+  fi
+}
+
+# Print the clone-based fallback and exit. Used when raw downloads fail —
+# raw.githubusercontent.com is commonly rate-limited or blocked behind a
+# VPN/proxy, which surfaces as HTTP 403 on the piped installer.
+fallback_and_exit() {
+  say ""
+  say "  ✗ could not download from:"
+  say "      $1"
+  say ""
+  say "  raw.githubusercontent.com may be rate-limited or blocked on this"
+  say "  network (common behind a VPN/proxy). Install from a clone instead:"
+  say ""
+  say "      git clone https://github.com/abhijitbansal/claude-skills"
+  say "      sh claude-skills/tools/second-wind/install.sh"
+  say ""
+  exit 1
+}
+
 say ""
 say "  ◢◤ second wind installer"
 say ""
@@ -31,8 +61,11 @@ if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/wind.py" ] && [ -f "$SCRIPT_DIR/das
   cp "$SCRIPT_DIR/dashboard.html" "$WIND_HOME/dashboard.html"
   say "  ✓ copied wind.py + dashboard.html from local clone"
 else
-  curl -fsSL -- "$RAW_BASE/wind.py" -o "$WIND_HOME/wind.py"
-  curl -fsSL -- "$RAW_BASE/dashboard.html" -o "$WIND_HOME/dashboard.html"
+  [ -n "$RAW_BASE" ] || { say "  ✗ WIND_RAW_BASE is empty — cannot download"; exit 1; }
+  for f in wind.py dashboard.html; do
+    fetch "$RAW_BASE/$f" "$WIND_HOME/$f" || fallback_and_exit "$RAW_BASE/$f"
+    [ -s "$WIND_HOME/$f" ] || fallback_and_exit "$RAW_BASE/$f"
+  done
   say "  ✓ downloaded wind.py + dashboard.html"
 fi
 
