@@ -67,3 +67,20 @@ HTML
   [ "$status" -eq 1 ]
   [[ "$output" == *"favicon.ico"* ]]
 }
+
+@test "rendered site skeleton passes verify" {
+  SKEL="${BATS_TEST_DIRNAME}/../../plugins/ios-dev/skills/site-pages-deploy-kit/templates/site-skeleton"
+  OUT="${TMP}/skel"
+  mkdir -p "${OUT}"
+  cp -R "${SKEL}/." "${OUT}/"
+  for f in "${OUT}"/*.html; do
+    sed -i.bak -e 's/{{APP_NAME}}/Demo/g' -e 's/{{SITE_DOMAIN}}/demo.app/g' "${f}"
+    rm -f "${f}.bak"
+  done
+  make_png "${OUT}/og-card.png" 1200 630
+  make_png "${OUT}/apple-touch-icon.png" 180 180
+  : > "${OUT}/favicon.ico"
+  run bash "${VERIFY}" "${OUT}"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"FAIL"* ]]
+}
