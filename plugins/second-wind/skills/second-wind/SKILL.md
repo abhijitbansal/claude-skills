@@ -26,6 +26,15 @@ exec $SHELL
 This places everything in `~/.wind` and adds `~/.wind/bin` to PATH (with your
 consent). On seeded machines `setup.sh` already handles this.
 
+If `raw.githubusercontent.com` is rate-limited or blocked (a `403` behind some
+VPNs/proxies), install from a clone instead — the installer prints this same
+fallback on a failed download:
+
+```bash
+git clone https://github.com/abhijitbansal/claude-skills
+sh claude-skills/tools/second-wind/install.sh
+```
+
 ## Commands
 
 | Command | What it does |

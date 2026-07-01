@@ -27,7 +27,18 @@ curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/to
 This places everything in `~/.wind` (program, dashboard, config, state),
 writes a `wind` shim to `~/.wind/bin`, and offers to add that to your PATH —
 it never edits your shell profile without asking. From a clone:
-`sh tools/second-wind/install.sh`. Then:
+`sh tools/second-wind/install.sh`.
+
+If `raw.githubusercontent.com` is rate-limited or blocked (a `403` behind some
+VPNs/proxies), install from a clone instead — the installer prints this same
+fallback on a failed download:
+
+```sh
+git clone https://github.com/abhijitbansal/claude-skills
+sh claude-skills/tools/second-wind/install.sh
+```
+
+Then:
 
 ```sh
 exec $SHELL
