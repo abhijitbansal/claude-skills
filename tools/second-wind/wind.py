@@ -157,7 +157,7 @@ ANSI_CODES = {
 }
 SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 SPINNER_TICK_SECONDS = 0.25
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 
 def use_color(stream=None):
