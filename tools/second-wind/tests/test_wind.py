@@ -2902,6 +2902,30 @@ class FullAutoPreset(unittest.TestCase):
                              "--permission-mode bypassPermissions")
 
 
+class LaunchRepo(unittest.TestCase):
+    def test_launch_repo_creates_session_and_sends_command(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "alpha", "path": "/tmp/alpha"}]
+        cfg["claude_args"] = "--permission-mode bypassPermissions"
+        calls = []
+        with mock.patch.object(wind, "tmux",
+                               lambda *a, **k: calls.append(a)), \
+                mock.patch.object(wind, "session_exists", lambda n: False), \
+                mock.patch("os.path.isdir", lambda p: True):
+            name = wind.launch_repo(cfg, cfg["repos"][0])
+        self.assertEqual(name, "wind-alpha")
+        new = [a for a in calls if a[0] == "new-session"][0]
+        self.assertIn("-c", new)
+        send = [a for a in calls if a[0] == "send-keys"][0]
+        self.assertEqual(send[3], "claude --permission-mode bypassPermissions")
+
+    def test_launch_repo_skips_running_session(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "alpha", "path": "/tmp/alpha"}]
+        with mock.patch.object(wind, "session_exists", lambda n: True):
+            self.assertIsNone(wind.launch_repo(cfg, cfg["repos"][0]))
+
+
 class ScanRootsPersisted(unittest.TestCase):
     def test_default_config_has_scan_roots(self):
         self.assertEqual(wind.DEFAULT_CONFIG["scan_roots"], [])
