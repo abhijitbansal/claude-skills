@@ -1932,6 +1932,69 @@ def cmd_watch(cfg, args):
             keeper.terminate()
 
 
+def add_repo_to_config(cfg, path):
+    """Append a {name, path} repo to the RAW config file atomically.
+
+    Security: writes ONLY name+path (the entry inherits the top-level global
+    preset); never accepts claude_args/agent/prompt from callers, so no new
+    verbatim-execution surface opens. Raises ValueError on a non-git path, a
+    duplicate name/path, or a reserved watcher-name collision. Returns the new
+    entry dict.
+    """
+    full = os.path.expanduser(str(path).strip())
+    if not os.path.isdir(os.path.join(full, ".git")):
+        raise ValueError(f"not a git repo: {full}")
+    name = os.path.basename(full.rstrip("/"))
+    if not name or "/" in name or name in (".", ".."):
+        raise ValueError(f"cannot derive a safe repo name from {full!r}")
+    with open(cfg["_path"]) as f:
+        raw = json.load(f)
+    existing = raw.get("repos", [])
+    for r in existing:
+        if r.get("name") == name:
+            raise ValueError(f"a repo named {name!r} is already configured")
+        if os.path.expanduser(r.get("path", "")) == full:
+            raise ValueError(
+                f"{full} is already configured as {r.get('name')!r}")
+    reserved = watcher_session_name(cfg)
+    if session_name(cfg, {"name": name, "path": full}) == reserved:
+        raise ValueError(
+            f"{name!r} collides with the reserved watcher session "
+            f"{reserved!r}; rename the directory or change 'session_prefix'")
+    entry = build_repo_entry(name, full, "", "", override=False)
+    raw["repos"] = existing + [entry]
+    atomic_write_json(cfg["_path"], raw, mode=0o644)
+    return entry
+
+
+def _refresh_watcher(cfg):
+    """Restart the watcher so it re-reads config and watches new repos.
+
+    cmd_watch derives its watched set ONCE at startup, so a repo added after
+    the watcher launched is otherwise never auto-resumed. State is persisted
+    (state.json), so a kill + respawn is safe.
+    """
+    name = watcher_session_name(cfg)
+    if session_exists(name):
+        tmux("kill-session", "-t", f"={name}", check=False)
+    spawn_watcher(cfg)
+
+
+def cmd_add(cfg, args):
+    try:
+        entry = add_repo_to_config(cfg, args.path)
+    except ValueError as e:
+        die(str(e))
+    log(f"added {entry['name']} -> {entry['path']}", glyph="✓", color="green")
+    # Re-load so cfg carries the new entry for launch + watcher config.
+    cfg = load_config(cfg["_path"])
+    repo = next(r for r in cfg["repos"] if r["name"] == entry["name"])
+    launch_repo(cfg, repo)
+    _refresh_watcher(cfg)
+    log(f"{entry['name']}: launched and watcher refreshed", glyph="✓",
+        color="green")
+
+
 # ---------------------------------------------------------------- main -----
 
 def main(argv=None):
@@ -1962,6 +2025,9 @@ def main(argv=None):
     p_prompt.add_argument("repo", help="repo name from the config")
     p_prompt.add_argument("--editor",
                           help="editor command (overrides $EDITOR)")
+    p_add = sub.add_parser(
+        "add", help="add a git repo to the config and launch it")
+    p_add.add_argument("path", help="path to a git repo directory")
     sub.add_parser("resume", help="send the resume message to all sessions")
     sub.add_parser("down", help="kill all wind tmux sessions")
     p_dash = sub.add_parser("dash", help="serve the live web dashboard")
@@ -1986,6 +2052,7 @@ def main(argv=None):
         "status": cmd_status,
         "watch": cmd_watch,
         "prompt": cmd_prompt,
+        "add": cmd_add,
         "resume": cmd_resume,
         "down": cmd_down,
         "dash": cmd_dash,

@@ -2902,6 +2902,76 @@ class FullAutoPreset(unittest.TestCase):
                              "--permission-mode bypassPermissions")
 
 
+class AddRepo(unittest.TestCase):
+    def _cfg_with(self, tmp, repos, extra=None):
+        path = os.path.join(tmp, "second-wind.json")
+        data = {"session_prefix": "wind", "claude_args": "",
+                "repos": repos, "scan_roots": [tmp]}
+        if extra:
+            data.update(extra)
+        wind.atomic_write_json(path, data, mode=0o644)
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg.update(data)
+        cfg["_path"] = path
+        return cfg, path
+
+    def _git(self, tmp, name):
+        d = os.path.join(tmp, name)
+        os.makedirs(os.path.join(d, ".git"))
+        return d
+
+    def test_add_appends_minimal_entry_and_persists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg, path = self._cfg_with(
+                tmp, [{"name": "alpha", "path": self._git(tmp, "alpha")}])
+            newdir = self._git(tmp, "beta")
+            entry = wind.add_repo_to_config(cfg, newdir)
+            self.assertEqual(entry, {"name": "beta", "path": newdir})
+            with open(path) as f:
+                saved = json.load(f)
+            self.assertIn("beta", [r["name"] for r in saved["repos"]])
+            self.assertEqual(set(saved["repos"][-1].keys()), {"name", "path"})
+
+    def test_add_rejects_non_git_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg, _ = self._cfg_with(tmp, [{"name": "alpha", "path": tmp}])
+            plain = os.path.join(tmp, "plain")
+            os.makedirs(plain)
+            with self.assertRaises(ValueError):
+                wind.add_repo_to_config(cfg, plain)
+
+    def test_add_rejects_duplicate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a = self._git(tmp, "alpha")
+            cfg, _ = self._cfg_with(tmp, [{"name": "alpha", "path": a}])
+            with self.assertRaises(ValueError):
+                wind.add_repo_to_config(cfg, a)
+
+    def test_add_rejects_watcher_name_collision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg, _ = self._cfg_with(
+                tmp, [{"name": "alpha", "path": self._git(tmp, "alpha")}])
+            watcher = self._git(tmp, "watcher")   # -> wind-watcher reserved
+            with self.assertRaises(ValueError):
+                wind.add_repo_to_config(cfg, watcher)
+
+    def test_cmd_add_launches_and_refreshes_watcher(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg, _ = self._cfg_with(
+                tmp, [{"name": "alpha", "path": self._git(tmp, "alpha")}])
+            beta = self._git(tmp, "beta")
+            launched, refreshed = [], []
+            # load_config is NOT mocked: cmd_add reloads the just-written file
+            # (alpha + beta) so the beta entry is found for launch.
+            with mock.patch.object(wind, "launch_repo",
+                                   lambda c, r: launched.append(r["name"])), \
+                    mock.patch.object(wind, "_refresh_watcher",
+                                      lambda c: refreshed.append(True)):
+                wind.cmd_add(cfg, mock.Mock(path=beta))
+            self.assertEqual(launched, ["beta"])
+            self.assertTrue(refreshed)
+
+
 class LaunchRepo(unittest.TestCase):
     def test_launch_repo_creates_session_and_sends_command(self):
         cfg = dict(wind.DEFAULT_CONFIG)
