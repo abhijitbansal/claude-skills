@@ -18,12 +18,14 @@
 set -euo pipefail
 
 FORCE=false
+MIGRATE=false
 ROOT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --force) FORCE=true; shift ;;
-    --dir)   ROOT="$2"; shift 2 ;;
+    --force)   FORCE=true; shift ;;
+    --migrate) MIGRATE=true; shift ;;
+    --dir)     ROOT="$2"; shift 2 ;;
     -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
     *) echo "[ios-init] Unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -36,6 +38,75 @@ fi
 [[ -d "$ROOT" ]] || { echo "[ios-init] Not a directory: $ROOT" >&2; exit 1; }
 
 OUT="$ROOT/.claude/app.yml"
+
+# Default bodies for the v2 sections, shared by the fresh template and
+# --migrate (which appends only the sections a v1 file lacks).
+section_targets() {
+  cat <<'YAML'
+
+targets:
+  extensions: []                        # widget/share/action targets
+  app_group:                            # group.<bundle_id> if any
+YAML
+}
+section_release() {
+  cat <<'YAML'
+
+release:
+  encryption_exempt: true               # ITSAppUsesNonExemptEncryption
+  export_method: app-store-connect
+  fonts_expected: 0                     # 0 = skip bundled-font check
+  required_capabilities: []             # UIRequiredDeviceCapabilities allow-list
+  usage_strings: []                     # plist usage keys asserted at release
+  whatsnew_file:                        # e.g. Sources/WhatsNew.json
+  asc_app_id:                           # numeric App Store Connect app id
+  hooks_dir: scripts/release-hooks
+YAML
+}
+section_site() {
+  cat <<'YAML'
+
+site:
+  repo:                                 # e.g. user/app-site (split-repo Pages)
+  dir: site
+  domain:
+  deploy: subtree-ssh
+YAML
+}
+section_ci() {
+  cat <<'YAML'
+
+ci:
+  provider: xcode-cloud
+  post_clone: ci_scripts/ci_post_clone.sh
+YAML
+}
+
+if [[ "$MIGRATE" == true ]]; then
+  if [[ ! -f "$OUT" ]]; then
+    echo "[ios-init] no $OUT to migrate; run /ios-init without --migrate to scaffold one" >&2
+    exit 1
+  fi
+  if grep -q '^schema_version: 2' "$OUT"; then
+    echo "[ios-init] already v2: $OUT"
+    exit 0
+  fi
+  _MIG_TMP="$(mktemp)"
+  if grep -q '^schema_version:' "$OUT"; then
+    sed 's/^schema_version:.*/schema_version: 2/' "$OUT" > "$_MIG_TMP"
+  else
+    { echo "schema_version: 2"; cat "$OUT"; } > "$_MIG_TMP"
+  fi
+  for section in targets release site ci; do
+    if ! grep -q "^${section}:" "$_MIG_TMP"; then
+      "section_${section}" >> "$_MIG_TMP"
+    fi
+  done
+  mv "$_MIG_TMP" "$OUT"
+  echo "[ios-init] migrated: $OUT -> schema_version 2"
+  exit 0
+fi
+
 if [[ -f "$OUT" && "$FORCE" != true ]]; then
   echo "[ios-init] $OUT already exists. Re-run with --force to overwrite." >&2
   exit 3
@@ -51,7 +122,7 @@ import json, os, re, subprocess, glob
 
 root = os.environ["ROOT"]
 out = {"name": "", "bundle_id": "", "scheme": "", "team_id": "",
-       "url_scheme": "", "source": "none"}
+       "url_scheme": "", "source": "none", "extensions": "", "min_os": ""}
 
 def load_yaml(path):
     try:
@@ -72,10 +143,14 @@ if os.path.isfile(pj):
         targets = data.get("targets") or {}
         # Prefer an application target; else first target.
         app_target = None
+        exts = []
         for tname, tdef in targets.items():
-            ttype = (tdef or {}).get("type", "")
-            if "application" in str(ttype):
-                app_target = (tname, tdef); break
+            ttype = str((tdef or {}).get("type", ""))
+            if "application" in ttype and app_target is None:
+                app_target = (tname, tdef)
+            if "app-extension" in ttype or "widget" in ttype:
+                exts.append(tname)
+        out["extensions"] = ", ".join(exts)
         if app_target is None and targets:
             first = next(iter(targets.items()))
             app_target = first
@@ -85,6 +160,11 @@ if os.path.isfile(pj):
             base = settings.get("base", settings) or {}
             out["bundle_id"] = str(base.get("PRODUCT_BUNDLE_IDENTIFIER", "") or "")
             out["team_id"] = str(base.get("DEVELOPMENT_TEAM", "") or "")
+        dep = (data.get("options") or {}).get("deploymentTarget") or {}
+        if isinstance(dep, dict):
+            out["min_os"] = str(dep.get("iOS", "") or "")
+        elif dep:
+            out["min_os"] = str(dep)
     else:
         # Regex fallback for environments without PyYAML.
         txt = open(pj).read()
@@ -97,6 +177,18 @@ if os.path.isfile(pj):
         if m: out["bundle_id"] = m.group(1).strip().strip('"').strip("'")
         m = re.search(r'DEVELOPMENT_TEAM:\s*(.+)$', txt, re.M)
         if m: out["team_id"] = m.group(1).strip().strip('"').strip("'")
+        # extension targets: names whose block declares an app-extension type
+        exts = []
+        tsec = re.search(r'^targets:\s*\n(.*?)(?=^\S|\Z)', txt, re.M | re.S)
+        if tsec:
+            blocks = re.split(r'^  ([A-Za-z0-9_.\-]+):\s*$', tsec.group(1), flags=re.M)
+            # blocks = [prefix, name1, body1, name2, body2, …]
+            for i in range(1, len(blocks) - 1, 2):
+                if re.search(r'type:.*(app-extension|widget)', blocks[i + 1]):
+                    exts.append(blocks[i])
+        out["extensions"] = ", ".join(exts)
+        m = re.search(r'deploymentTarget:\s*\n\s+iOS:\s*(.+)$', txt, re.M)
+        if m: out["min_os"] = m.group(1).strip().strip('"').strip("'")
 
 # Fall back to xcodebuild for the scheme when project.yml didn't yield one.
 if not out["scheme"]:
@@ -146,6 +238,8 @@ SCHEME="$(get scheme)"
 TEAM_ID="$(get team_id)"
 URL_SCHEME="$(get url_scheme)"
 SOURCE="$(get source)"
+EXTENSIONS="$(get extensions)"
+MIN_OS="$(get min_os)"
 
 # Placeholders for anything we couldn't detect, so the file is obviously
 # incomplete rather than silently wrong.
@@ -158,9 +252,10 @@ TEAM_ID="$(todo "$TEAM_ID")"
 
 mkdir -p "$ROOT/.claude"
 cat > "$OUT" <<YAML
-# Per-app config consumed by ios-dev skills (release, ios-build, app-preview).
-# Generated by /ios-init from: ${SOURCE}. Replace any TODO with the real value.
-schema_version: 1
+# Per-app config consumed by ios-dev skills (release, ios-build, app-preview,
+# ios-scaffold, site). Generated by /ios-init from: ${SOURCE}.
+# Replace any TODO with the real value.
+schema_version: 2
 
 app:
   name: ${NAME}
@@ -170,11 +265,24 @@ app:
   url_scheme: ${URL_SCHEME}
   build_script: build.sh                # optional, default build.sh
   preview_root: ~/${NAME}Previews       # optional, default ~/<name>Previews
+  platforms: [ios]                      # ios | macos
+  min_os: "${MIN_OS}"                   # single source of the deployment target
+
+targets:
+  extensions: [${EXTENSIONS}]           # widget/share/action targets
+  app_group:                            # group.<bundle_id> if any
+YAML
+{
+  section_release
+  section_site
+  section_ci
+  cat <<'YAML'
 
 linear:
   team_key:                             # optional, for /linear-* commands
   agent_user_id:                        # optional, for /linear-pick assignment
 YAML
+} >> "$OUT"
 
 echo "==> wrote $OUT (detected via: ${SOURCE})"
 echo "    name=${NAME} bundle_id=${BUNDLE_ID} scheme=${SCHEME} team_id=${TEAM_ID} url_scheme=${URL_SCHEME}"

@@ -131,6 +131,33 @@ YML
   [ "${TARGETS_EXTENSIONS}" = "DemoWidget DemoShare" ]
 }
 
+@test "values with trailing comments parse clean (scaffold template style)" {
+  mkdir -p "${TMP}/capp/.claude"
+  cat > "${TMP}/capp/.claude/app.yml" <<'YML'
+schema_version: 2
+app:
+  name: Demo
+  bundle_id: com.example.demo
+  scheme: Demo
+  team_id: ABCDE12345
+  url_scheme: demo
+  platforms: [ios]                      # ios | macos
+  min_os: "26.0"                        # single source
+targets:
+  extensions: [DemoWidget]              # widget/share/action targets
+release:
+  encryption_exempt: true               # ITSAppUsesNonExemptEncryption
+  fonts_expected: 0                     # 0 = skip bundled-font check
+YML
+  cd "${TMP}/capp"
+  source "${REPO_ROOT}/plugins/ios-dev/skills/_lib/load_app_config.sh"
+  [ "${APP_PLATFORMS}" = "ios" ]
+  [ "${APP_MIN_OS}" = "26.0" ]
+  [ "${TARGETS_EXTENSIONS}" = "DemoWidget" ]
+  [ "${RELEASE_ENCRYPTION_EXEMPT}" = "true" ]
+  [ "${RELEASE_FONTS_EXPECTED}" = "0" ]
+}
+
 @test "APP_CONFIG_HELPERS_ONLY=1 sources helpers without discovery" {
   cd "${TMP}"           # no app.yml anywhere above
   APP_CONFIG_HELPERS_ONLY=1 source "${REPO_ROOT}/plugins/ios-dev/skills/_lib/load_app_config.sh"

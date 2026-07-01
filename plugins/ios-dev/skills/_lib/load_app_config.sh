@@ -38,7 +38,9 @@ except ImportError:
                 continue
             m = re.match(r"\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+?)\s*$", line)
             if m and section == top and m.group(1) == leaf:
-                print(m.group(2).strip().strip('"').strip("'"))
+                val = re.sub(r"(^|\s+)#.*$", "", m.group(2)).strip()
+                if not val: sys.exit(1)
+                print(val.strip('"').strip("'"))
                 sys.exit(0)
     sys.exit(1)
 else:
@@ -68,7 +70,9 @@ with open(sys.argv[1]) as f:
     for line in f:
         m = re.match(rf"{re.escape(key)}\s*:\s*(.+?)\s*$", line)
         if m:
-            print(m.group(1).strip().strip('"').strip("'")); sys.exit(0)
+            val = re.sub(r"(^|\s+)#.*$", "", m.group(1)).strip()
+            if not val: sys.exit(1)
+            print(val.strip('"').strip("'")); sys.exit(0)
 sys.exit(1)
 PY
 }
@@ -106,16 +110,19 @@ with open(file) as f:
             if in_list and items: emit(items)
             in_list = False
             if m.group(1) == leaf:
-                rest = m.group(2).strip()
+                rest = re.sub(r"(^|\s+)#.*$", "", m.group(2)).strip()
                 if rest.startswith("["):
-                    emit([x.strip().strip('"').strip("'") for x in rest.strip("[]").split(",")])
+                    inner = re.match(r"\[(.*?)\]", rest)
+                    body = inner.group(1) if inner else rest.strip("[]")
+                    emit([x.strip().strip('"').strip("'") for x in body.split(",")])
                 if rest == "":
                     in_list = True; continue
                 emit([rest.strip('"').strip("'")])
         elif in_list:
             lm = re.match(r"\s+-\s*(.+?)\s*$", line)
             if lm:
-                items.append(lm.group(1).strip('"').strip("'"))
+                item = re.sub(r"(^|\s+)#.*$", "", lm.group(1)).strip()
+                items.append(item.strip('"').strip("'"))
             else:
                 if items: emit(items)
                 in_list = False
