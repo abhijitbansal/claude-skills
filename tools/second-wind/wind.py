@@ -510,6 +510,21 @@ def scan_repos(roots):
     return found
 
 
+def _scan_candidates(cfg):
+    """Scanned repos under cfg['scan_roots'] not already configured.
+
+    Returns [{"name", "path"}]. Used by the dashboard's /api/scan (list) and
+    /api/add (allowlist): the dashboard may only add a path that appears here,
+    so it can never write an arbitrary filesystem path over HTTP.
+    """
+    configured = {os.path.expanduser(r.get("path", "")) for r in cfg["repos"]}
+    out = []
+    for name, path in scan_repos(cfg.get("scan_roots", [])):
+        if os.path.expanduser(path) not in configured:
+            out.append({"name": name, "path": path})
+    return out
+
+
 def build_repo_entry(name, path, claude_args, prompt_file, prompt="",
                      override=False, agent=None):
     """Assemble a repo config entry.
@@ -1306,6 +1321,10 @@ def make_dash_handler(cfg, token, template):
                 self._send(200, json.dumps(status_payload(cfg)))
             elif parts.path == "/api/pane":
                 self._serve_pane(parse_qs(parts.query))
+            elif parts.path == "/api/scan":
+                # Read-only candidate list (paths under scan_roots), like
+                # /api/status: tokenless behind the bind + Host allowlist.
+                self._send(200, json.dumps({"candidates": _scan_candidates(cfg)}))
             else:
                 self._send(404, '{"error": "not found"}')
 
@@ -1400,6 +1419,26 @@ def make_dash_handler(cfg, token, template):
                     return
                 tmux("kill-session", "-t", f"={name}")
                 self._send(200, '{"ok": true}')
+            elif self.path == "/api/add":
+                req_path = body.get("path")
+                if not isinstance(req_path, str) or not req_path:
+                    self._send(400, '{"error": "missing path"}')
+                    return
+                full = os.path.expanduser(req_path)
+                # Restrict to candidates under a persisted scan_root — the
+                # dashboard can never add an arbitrary filesystem path.
+                if full not in {c["path"] for c in _scan_candidates(cfg)}:
+                    self._send(400, '{"error": "path not a scanned candidate"}')
+                    return
+                try:
+                    entry = add_repo_to_config(cfg, full)
+                except ValueError as e:
+                    self._send(400, json.dumps({"error": str(e)}))
+                    return
+                cfg["repos"].append(entry)     # live snapshot -> /api/status
+                launch_repo(cfg, entry)
+                _refresh_watcher(cfg)
+                self._send(200, json.dumps({"ok": True, "repo": entry}))
             else:
                 self._send(404, '{"error": "not found"}')
 

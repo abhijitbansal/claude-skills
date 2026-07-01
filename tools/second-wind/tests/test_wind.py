@@ -2902,6 +2902,104 @@ class FullAutoPreset(unittest.TestCase):
                              "--permission-mode bypassPermissions")
 
 
+class DashAddScan(unittest.TestCase):
+    def setUp(self):
+        import http.server
+        import threading
+        self.tmp = tempfile.mkdtemp()
+        self.alpha = os.path.join(self.tmp, "alpha")
+        self.beta = os.path.join(self.tmp, "beta")
+        for d in (self.alpha, self.beta):
+            os.makedirs(os.path.join(d, ".git"))
+        self.cfg_path = os.path.join(self.tmp, "second-wind.json")
+        data = {"session_prefix": "wind", "claude_args": "",
+                "scan_roots": [self.tmp],
+                "repos": [{"name": "alpha", "path": self.alpha}]}
+        wind.atomic_write_json(self.cfg_path, data, mode=0o644)
+        self.cfg = dict(wind.DEFAULT_CONFIG)
+        self.cfg.update(data)
+        self.cfg["_path"] = self.cfg_path
+        self.token = "tok123"
+        self.launched = []
+        self._orig = (wind.launch_repo, wind._refresh_watcher)
+        wind.launch_repo = lambda c, r: self.launched.append(r["name"])
+        wind._refresh_watcher = lambda c: None
+        handler = wind.make_dash_handler(self.cfg, self.token, "<html>")
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=self.server.serve_forever,
+                         daemon=True).start()
+        self.port = self.server.server_address[1]
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        wind.launch_repo, wind._refresh_watcher = self._orig
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _req(self, method, path, body=None, token=None):
+        import http.client
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["X-Wind-Token"] = token
+        conn.request(method, path,
+                     json.dumps(body) if body is not None else None, headers)
+        resp = conn.getresponse()
+        data = resp.read().decode()
+        conn.close()
+        return resp.status, data
+
+    def test_scan_lists_candidates_minus_configured(self):
+        status, data = self._req("GET", "/api/scan")
+        self.assertEqual(status, 200)
+        cands = json.loads(data)["candidates"]
+        names = [c["name"] for c in cands]
+        self.assertIn("beta", names)
+        self.assertNotIn("alpha", names)   # already configured
+        for c in cands:
+            self.assertTrue(c["path"].startswith(self.tmp))
+
+    def test_add_without_token_rejected(self):
+        status, _ = self._req("POST", "/api/add", {"path": self.beta})
+        self.assertEqual(status, 401)
+        self.assertEqual(self.launched, [])
+
+    def test_add_candidate_appends_launches_and_updates_snapshot(self):
+        status, data = self._req("POST", "/api/add", {"path": self.beta},
+                                 token=self.token)
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(data)["ok"])
+        # config file updated
+        with open(self.cfg_path) as f:
+            saved = json.load(f)
+        self.assertIn("beta", [r["name"] for r in saved["repos"]])
+        self.assertEqual(set(saved["repos"][-1].keys()), {"name", "path"})
+        # in-memory snapshot updated + launch fired
+        self.assertIn("beta", [r["name"] for r in self.cfg["repos"]])
+        self.assertEqual(self.launched, ["beta"])
+
+    def test_add_rejects_path_outside_scan_roots(self):
+        outside = os.path.join(tempfile.mkdtemp(), "evil")
+        os.makedirs(os.path.join(outside, ".git"))
+        status, _ = self._req("POST", "/api/add", {"path": outside},
+                              token=self.token)
+        self.assertEqual(status, 400)
+        self.assertEqual(self.launched, [])
+
+    def test_add_ignores_injected_claude_args(self):
+        status, _ = self._req("POST", "/api/add",
+                              {"path": self.beta,
+                               "claude_args": "--dangerously-skip-permissions",
+                               "agent": "copilot"},
+                              token=self.token)
+        self.assertEqual(status, 200)
+        with open(self.cfg_path) as f:
+            saved = json.load(f)
+        entry = saved["repos"][-1]
+        self.assertEqual(set(entry.keys()), {"name", "path"})
+
+
 class AddRepo(unittest.TestCase):
     def _cfg_with(self, tmp, repos, extra=None):
         path = os.path.join(tmp, "second-wind.json")
