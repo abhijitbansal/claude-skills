@@ -109,18 +109,20 @@ fi
 if [[ -n "${TARGETS_APP_GROUP}" ]]; then
   ENT_DIR="${PREFLIGHT_ENTITLEMENTS_DIR:-build/gen}"
   parity_ok=1
+  parity_checked=0
   for target in "${APP_NAME}" ${TARGETS_EXTENSIONS}; do
     f="${ENT_DIR}/${target}.entitlements.groups"
     if [[ -f "${f}" ]]; then
+      parity_checked=1
       if ! grep -qx "${TARGETS_APP_GROUP}" "${f}"; then
         fail entitlement-parity "${target}: app group != ${TARGETS_APP_GROUP}"
         parity_ok=0
       fi
     else
-      warn entitlement-parity "${target}: no extracted entitlements at ${f}"
+      warn entitlement-parity "${target}: no extracted entitlements at ${f} (unverified)"
     fi
   done
-  [[ ${parity_ok} -eq 1 ]] && pass entitlement-parity
+  [[ ${parity_ok} -eq 1 && ${parity_checked} -eq 1 ]] && pass entitlement-parity
 else
   pass entitlement-parity
 fi
