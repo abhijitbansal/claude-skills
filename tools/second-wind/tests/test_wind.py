@@ -2902,5 +2902,32 @@ class FullAutoPreset(unittest.TestCase):
                              "--permission-mode bypassPermissions")
 
 
+class SettingsInheritance(unittest.TestCase):
+    def _run_cmd_up(self, cfg):
+        calls = []
+        with mock.patch.object(wind, "tmux",
+                               lambda *a, **k: calls.append((a, k))), \
+                mock.patch.object(wind, "session_exists", lambda n: False), \
+                mock.patch.object(wind, "spawn_watcher", lambda c, **k: True), \
+                mock.patch("os.path.isdir", lambda p: True), \
+                mock.patch("time.sleep", lambda s: None):
+            args = mock.Mock(no_watch=True)
+            wind.cmd_up(cfg, args)
+        return calls
+
+    def test_launch_injects_no_settings_flag_and_no_env(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "alpha", "path": "/tmp/alpha"}]
+        cfg["claude_args"] = ""            # isolate: no wind-injected flags
+        cfg["_path"] = "/tmp/second-wind.json"
+        calls = self._run_cmd_up(cfg)
+        send = [a for (a, k) in calls if a and a[0] == "send-keys"]
+        self.assertTrue(send, "expected a send-keys launch call")
+        command = send[0][3]
+        self.assertEqual(command, "claude")
+        self.assertNotIn("--settings", command)
+        self.assertTrue(all("env" not in k for (a, k) in calls))
+
+
 if __name__ == "__main__":
     unittest.main()
