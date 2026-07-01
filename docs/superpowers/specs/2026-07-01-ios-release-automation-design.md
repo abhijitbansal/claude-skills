@@ -216,7 +216,7 @@ Floorprint model, templatized in `site-pages-deploy-kit`:
 | Risk | Mitigation |
 |---|---|
 | Fastlane toolchain drift (Ruby) | Pin via per-app `Gemfile.lock`; `bundle exec` everywhere; keep raw-xcodebuild path documented as fallback |
-| app.yml v2 schema churn | Validator versioned (`schema: 2`); `--migrate` path; all new fields optional |
+| app.yml v2 schema churn | Validator versioned (`schema_version: 2`); `--migrate` path; all new fields optional |
 | Release pre-flight false positives (runtime-trap grep) | Gates warn (block only on hard compliance failures); per-app suppress list in app.yml |
 | 13 skills = triggering noise | Symptom-first descriptions; skill-reviewer pass on each; catalog cross-links instead of duplicates |
 | Site migration breaks live pages | Migrate one site at a time; `/site verify` before DNS/Pages cutover; old repo kept until verified |
