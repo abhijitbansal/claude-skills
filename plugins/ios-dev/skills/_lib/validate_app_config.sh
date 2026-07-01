@@ -40,6 +40,25 @@ for key in name bundle_id scheme team_id; do
   fi
 done
 
+# format checks — these values are rendered into shell/Ruby templates by
+# ios-scaffold, so shell metacharacters are rejected outright (injection guard)
+name_v="$(get app.name)"
+if [[ -n "${name_v}" && ! "${name_v}" =~ ^[A-Za-z0-9\ ._-]+$ ]]; then
+  err "app.name contains unsafe characters (allowed: letters, digits, space, . _ -)"
+fi
+bundle_v="$(get app.bundle_id)"
+if [[ -n "${bundle_v}" && ! "${bundle_v}" =~ ^[A-Za-z0-9.-]+$ ]]; then
+  err "app.bundle_id malformed (allowed: letters, digits, . -)"
+fi
+team_v="$(get app.team_id)"
+if [[ -n "${team_v}" && "${team_v}" != TODO* && ! "${team_v}" =~ ^[A-Z0-9]{10}$ ]]; then
+  err "app.team_id must be a 10-char Apple Team ID (got '${team_v}')"
+fi
+scheme_v="$(get app.scheme)"
+if [[ -n "${scheme_v}" && ! "${scheme_v}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  err "app.scheme contains unsafe characters"
+fi
+
 # typed fields
 fonts="$(get release.fonts_expected)"
 if [[ -n "${fonts}" && ! "${fonts}" =~ ^[0-9]+$ ]]; then

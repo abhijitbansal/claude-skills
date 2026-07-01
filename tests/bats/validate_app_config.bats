@@ -96,3 +96,19 @@ YML
   run bash "${VALIDATE}" "${TMP}/nope.yml"
   [ "$status" -eq 2 ]
 }
+
+@test "shell-metacharacters in app.name are an ERROR (template injection guard)" {
+  good_yml "${TMP}/app.yml"
+  sed -i.bak 's/name: Demo/name: "Demo\"; rm -rf ~"/' "${TMP}/app.yml"
+  run bash "${VALIDATE}" "${TMP}/app.yml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ERROR: app.name"* ]]
+}
+
+@test "malformed bundle_id is an ERROR" {
+  good_yml "${TMP}/app.yml"
+  sed -i.bak 's/bundle_id: com.example.demo/bundle_id: com.example.demo$(evil)/' "${TMP}/app.yml"
+  run bash "${VALIDATE}" "${TMP}/app.yml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ERROR: app.bundle_id"* ]]
+}

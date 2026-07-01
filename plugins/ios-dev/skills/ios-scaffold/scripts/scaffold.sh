@@ -13,6 +13,20 @@ CHECK=0
 [[ "${1:-}" == "--check" ]] && CHECK=1
 work=0
 
+# Injection guard: these values are sed-substituted into shell/Ruby/YAML
+# templates — refuse anything with quoting/expansion metacharacters.
+for pair in "app.name=${APP_NAME}" "app.bundle_id=${APP_BUNDLE_ID}" \
+            "app.scheme=${APP_SCHEME}" "app.team_id=${APP_TEAM_ID}" \
+            "release.asc_app_id=${RELEASE_ASC_APP_ID}" "site.domain=${SITE_DOMAIN}"; do
+  key="${pair%%=*}"; val="${pair#*=}"
+  # shellcheck disable=SC1003
+  case "${val}" in
+    *'`'*|*'$'*|*'"'*|*"'"*|*';'*|*'|'*|*'&'*|*'<'*|*'>'*|*'\'*|*$'\n'*)
+      echo "unsafe value in ${key} — fix .claude/app.yml before scaffolding" >&2
+      exit 1 ;;
+  esac
+done
+
 render() {  # $1 template file -> stdout with tokens substituted
   sed -e "s|{{APP_NAME}}|${APP_NAME}|g" \
       -e "s|{{APP_BUNDLE_ID}}|${APP_BUNDLE_ID}|g" \

@@ -82,3 +82,12 @@ teardown() { rm -rf "${TMP}"; }
   [ -f CLAUDE.md ]
   grep -q 'AGENTS.md' CLAUDE.md
 }
+
+@test "scaffold refuses to render values with shell metacharacters" {
+  cd "${TMP}/app"
+  sed -i.bak 's/name: Demo/name: Demo`evil`/' .claude/app.yml && rm -f .claude/app.yml.bak
+  run bash "${SCAFFOLD}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"unsafe"* ]]
+  [ ! -f fastlane/Fastfile ]
+}
