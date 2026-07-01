@@ -2873,5 +2873,34 @@ class DashboardAnsiMerge(unittest.TestCase):
         )
 
 
+class FullAutoPreset(unittest.TestCase):
+    def test_bypass_preset_appended_at_index_4(self):
+        label, args = wind.PERMISSION_PRESETS[4]
+        self.assertIn("bypass", label.lower())
+        self.assertEqual(args, "--permission-mode bypassPermissions")
+
+    def test_existing_preset_indices_unchanged(self):
+        self.assertEqual(wind.PERMISSION_PRESETS[0][1],
+                         "--permission-mode acceptEdits")
+        self.assertEqual(wind.PERMISSION_PRESETS[1][1],
+                         "--permission-mode plan")
+        self.assertEqual(wind.PERMISSION_PRESETS[2][1], "")
+        self.assertIsNone(wind.PERMISSION_PRESETS[3][1])  # custom
+
+    def test_shipped_default_is_full_auto(self):
+        self.assertEqual(wind.DEFAULT_CONFIG["claude_args"],
+                         "--permission-mode bypassPermissions")
+
+    def test_starter_config_carries_full_auto(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            args = mock.Mock(config=target, force=True, defaults=True)
+            wind.write_starter_config(args)
+            with open(target) as f:
+                cfg = json.load(f)
+            self.assertEqual(cfg["claude_args"],
+                             "--permission-mode bypassPermissions")
+
+
 if __name__ == "__main__":
     unittest.main()

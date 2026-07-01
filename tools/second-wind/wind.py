@@ -84,7 +84,7 @@ AGENT_PRESETS = {
 DEFAULT_CONFIG = {
     "session_prefix": "wind",
     "claude_cmd": "claude",
-    "claude_args": "",
+    "claude_args": "--permission-mode bypassPermissions",
     "resume_message": "continue",
     "resume_buffer_seconds": 120,
     "poll_interval_seconds": 30,
@@ -399,6 +399,8 @@ PERMISSION_PRESETS = [
     ("plan — plans first, asks before acting", "--permission-mode plan"),
     ("default — normal permission prompts", ""),
     ("custom — type your own claude_args", None),
+    ("auto — accepts everything, no prompts (full bypass)",
+     "--permission-mode bypassPermissions"),
 ]
 
 
