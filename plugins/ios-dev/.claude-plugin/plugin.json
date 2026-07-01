@@ -1,6 +1,9 @@
 {
   "name": "ios-dev",
-  "description": "iOS development loop: simulator build + preview + screenshot delivery, device builds, TestFlight/App Store release automation. Requires .claude/app.yml in the target app repo.",
-  "version": "1.0.0",
-  "author": { "name": "Abhijit Bansal", "url": "https://github.com/abhijitbansal" }
+  "description": "iOS app lifecycle: simulator build + preview, TestFlight/App Store release (Fastlane + gated pre-flight), repo scaffolding, Xcode Cloud contract, marketing-site kit, and a mined knowledge-skill catalog (MainActor traps, SwiftData+CloudKit rules, widget bridges, Vision/OCR grounding). Requires .claude/app.yml (schema v2) in the target app repo \u2014 run /ios-init.",
+  "version": "2.0.0",
+  "author": {
+    "name": "Abhijit Bansal",
+    "url": "https://github.com/abhijitbansal"
+  }
 }
