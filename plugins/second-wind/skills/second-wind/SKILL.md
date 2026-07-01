@@ -30,14 +30,15 @@ consent). On seeded machines `setup.sh` already handles this.
 
 | Command | What it does |
 | --- | --- |
-| `wind init` | interactive wizard: scan dirs, pick repos, set a global permission preset + per-repo overrides, pick an agent, write config (`--defaults` for non-interactive starter file) |
+| `wind init` | interactive wizard: scan dirs (roots persisted as `scan_roots`), pick repos, set a global permission preset, then either configure each repo or **apply the global preset + defaults to all** in one choice; write config (`--defaults` for non-interactive starter file) |
 | `wind prompt <repo>` | create/edit a repo's first-prompt file in `$EDITOR` (convention `~/.wind/prompts/<repo>.md`; wires `prompt_file` into the config); `--editor` to override `$EDITOR` |
+| `wind add <path>` | add a git repo to the config (`{name, path}` only, inherits the global preset), launch its session, and refresh the watcher — no re-`init` |
 | `wind up` | start a tmux session per repo, launch the agent, send each repo's initial prompt, and auto-spawn the watcher (`--no-watch` to skip) |
 | `wind watch` | run the watcher loop in the foreground (keep running; on macOS it self-caffeinates); `--detach` re-execs it into a detached `<prefix>-watcher` tmux session |
 | `wind status` | per-session state + next reset time |
 | `wind resume` | manually nudge all sessions with the resume message |
 | `wind down` | kill all wind sessions (and the watcher) |
-| `wind dash` | serve the live localhost dashboard (status, full-color pane tails, click-to-expand modal, resume/send/kill); `--port` to change port, `--no-browser` to skip auto-open |
+| `wind dash` | serve the live localhost dashboard (status, full-color pane tails, click-to-expand modal, resume/send/kill, **＋ add repo** from scanned candidates); `--port` to change port, `--no-browser` to skip auto-open |
 
 ## Typical setup
 
@@ -61,7 +62,8 @@ The config may live at `./second-wind.json` or `~/.wind/config.json`.
 
 - `agent`: top-level default agent (`claude` | `copilot`), overridable per repo. Absent → `claude` → today's behavior.
 - `repos[]`: `name`, `path`, optional `agent` override, optional `prompt_file` (sent as first prompt; convention `~/.wind/prompts/<repo>.md`) or inline `prompt` string (wins over `prompt_file`), optional per-repo `claude_args` override.
-- `claude_args`: top-level **global permission preset** (e.g. `--permission-mode acceptEdits`); a repo inherits it unless it sets its own `claude_args`.
+- `claude_args`: top-level **global permission preset**; a repo inherits it unless it sets its own `claude_args`. The `auto` preset (`--permission-mode bypassPermissions`, accepts everything) is the **shipped default** for a new starter config — same risk class as `--dangerously-skip-permissions`; pick `acceptEdits`/`plan`/`default` to reduce autonomy.
+- `scan_roots`: directories the wizard scanned, persisted so `wind add` and the dashboard's Add-repo can offer more repos without re-`init`.
 - `resume_message`: text typed into each paused **claude** session after reset (default `continue`); copilot uses its own preset message.
 - `ntfy_url`: optional ntfy.sh topic URL — notifies when the limit hits and when sessions resume.
 - `limit_patterns`: extra regexes appended to the resolved agent's built-ins if Claude Code's limit message format changes.
@@ -81,6 +83,6 @@ and a manual `wind resume` nudges it with its own message. A config with no
 
 - `wind up` runs the watcher in its own detached `<prefix>-watcher` session; only one watcher per machine. If you run `wind watch` by hand, never run it in a managed repo's tmux session — it must survive the sessions it manages.
 - `copilot` repos are launched and shown but **never auto-resumed**; don't tell the user the watcher will handle a Copilot session's limits — it won't.
-- The config is trusted input (`claude_cmd`/`claude_args`/`limit_patterns`/prompt files run/compile/type verbatim) — never point `wind` at a config the user didn't write.
+- The config is trusted input (`claude_cmd`/`claude_args`/`limit_patterns`/prompt files run/compile/type verbatim) — never point `wind` at a config the user didn't write. `wind add` and the dashboard's `/api/add` deliberately write **`{name, path}` only** (inheriting the global preset); they never accept `claude_args`/`agent`/`prompt` from the caller, and `/api/add` only accepts paths already under `scan_roots`.
 - `wind down` kills sessions without saving; confirm with the user before running it on their behalf.
 - `wind dash` kill button kills tmux sessions — apply the same confirmation rule as `wind down`: always confirm with the user before triggering a kill action on their behalf.
