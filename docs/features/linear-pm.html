@@ -77,11 +77,9 @@
     <section id="install" class="doc-section">
       <h2><span class="ix">03</span> Install</h2>
       <div class="steps">
-        <div class="gitem"><h4>Install via Claude Code plugin marketplace</h4><div class="code"><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills
-/plugin install linear-pm@claude-skills">copy</button>/plugin marketplace add abhijitbansal/claude-skills
-/plugin install linear-pm@claude-skills</div></div>
-<div class="gitem"><h4>Bootstrap this repo (one time)</h4><div class="code"><button class="copy" data-copy="./.claude/skills/linear-pm/scripts/bootstrap.sh">copy</button>./.claude/skills/linear-pm/scripts/bootstrap.sh</div><p style="margin-top:10px">Checks prerequisites (git, gh CLI, Linear MCP), validates .claude/linear.yml, and prints setup instructions. Idempotent — rerun anytime to diagnose drift.</p></div>
-<div class="gitem"><h4>Initialize Linear PM for the repo</h4><div class="code"><button class="copy" data-copy="/linear-init">copy</button>/linear-init</div><p style="margin-top:10px">Interactive setup: pick your Linear team and project, creates .claude/linear.yml, and ensures standard labels exist in Linear (agent-ready, agent-blocked, needs-spec, bug, feature, chore, docs).</p></div>
+        <div class="gitem"><h4>Install via Claude Code plugin marketplace</h4><div class="code cmds"><div class="cl"><code class="ct">/plugin marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct">/plugin install linear-pm@claude-skills</code><button class="copy" data-copy="/plugin install linear-pm@claude-skills">copy</button></div></div></div>
+<div class="gitem"><h4>Bootstrap this repo (one time)</h4><div class="code cmds"><div class="cl"><code class="ct">./.claude/skills/linear-pm/scripts/bootstrap.sh</code><button class="copy" data-copy="./.claude/skills/linear-pm/scripts/bootstrap.sh">copy</button></div></div><p style="margin-top:10px">Checks prerequisites (git, gh CLI, Linear MCP), validates .claude/linear.yml, and prints setup instructions. Idempotent — rerun anytime to diagnose drift.</p></div>
+<div class="gitem"><h4>Initialize Linear PM for the repo</h4><div class="code cmds"><div class="cl"><code class="ct">/linear-init</code><button class="copy" data-copy="/linear-init">copy</button></div></div><p style="margin-top:10px">Interactive setup: pick your Linear team and project, creates .claude/linear.yml, and ensures standard labels exist in Linear (agent-ready, agent-blocked, needs-spec, bug, feature, chore, docs).</p></div>
       </div>
     </section>
 
@@ -89,54 +87,44 @@
       <h2><span class="ix">04</span> Usability guide</h2>
       <p style="margin-bottom:14px">Every capability, how to invoke it, and a concrete example.</p>
       <div class="guide">
-        <div class="gitem reveal"><h4>/linear-init — Bootstrap (once per repo)</h4><p>Interactively configure linear-pm for the current repo. Prompts for Linear team and project, generates .claude/linear.yml with sensible defaults (autonomy: review-only, no verify commands), and creates the standard label vocabulary in Linear if missing. Safe to re-run — validates existing config and skips redundant label creation.</p><div class="code"><button class="copy" data-copy="/linear-init">copy</button>/linear-init</div></div>
+        <div class="gitem reveal"><h4>/linear-init — Bootstrap (once per repo)</h4><p>Interactively configure linear-pm for the current repo. Prompts for Linear team and project, generates .claude/linear.yml with sensible defaults (autonomy: review-only, no verify commands), and creates the standard label vocabulary in Linear if missing. Safe to re-run — validates existing config and skips redundant label creation.</p><div class="code cmds"><div class="cl"><code class="ct">/linear-init</code><button class="copy" data-copy="/linear-init">copy</button></div></div></div>
 <div class="gitem reveal"><h4>/linear-new — File a new issue</h4><p>Create a Linear issue with the structured template (Why / What / Acceptance criteria / Notes). Can auto-fill context from your recent conversation (file paths, errors, stack traces) into the Notes section. Requires you to supply title, type (bug/feature/chore/docs), one-sentence motivation, concrete description, and at least one acceptance criterion (checkbox). Applies your configured default_labels in addition to the type label.</p><div class="code"><button class="copy" data-copy="/linear-new &quot;Add dark-mode toggle to settings&quot;
 
 Or without title (interactive):
-/linear-new">copy</button>/linear-new "Add dark-mode toggle to settings"
+/linear-new">copy</button><span class="code-body">/linear-new "Add dark-mode toggle to settings"
 
 Or without title (interactive):
-/linear-new</div></div>
+/linear-new</span></div></div>
 <div class="gitem reveal"><h4>/linear-pick — Autonomous issue pickup</h4><p>Pick up an agent-ready issue and either propose a plan (review-only mode) or write the code, run verify commands, and open a PR (allowed mode). Can pick the highest-priority agent-ready issue automatically, or jump to a specific issue by key. Refuses work if Acceptance criteria are missing (posts needs-spec label + comment, then stops). Validates the working tree is clean, creates a branch, posts a started comment, implements changes, runs verify commands, pushes, and opens a PR — all with Linear status sync and detailed logging.</p><div class="code"><button class="copy" data-copy="/linear-pick
 
 Or pick a specific issue:
-/linear-pick ABH-123">copy</button>/linear-pick
+/linear-pick ABH-123">copy</button><span class="code-body">/linear-pick
 
 Or pick a specific issue:
-/linear-pick ABH-123</div></div>
-<div class="gitem reveal"><h4>/linear-status — Check what's in flight</h4><p>Digest of your configured Linear project grouped by status: In Progress (with PR links if open), In Review (with PR links), Blocked (with last blocker comment), Ready queue (agent-ready issues by priority), and recently shipped (Done in last 7 days). Pure read-only — no writes to Linear or git. Helps you context-switch back quickly and spot blockers.</p><div class="code"><button class="copy" data-copy="/linear-status">copy</button>/linear-status</div></div>
-<div class="gitem reveal"><h4>/linear-sync — Backfill Linear state</h4><p>Reconcile current branch and open PR (if any) with their Linear issue. Parses the issue key from the branch name (e.g., agent/ABH-123-dark-mode or my-fix-ABH-123), posts a comment linking the branch or PR, moves status to In Progress (no PR) or In Review (PR open), and removes agent-ready label. Use when you started work manually outside /linear-pick and want Linear to catch up.</p><div class="code"><button class="copy" data-copy="git checkout -b my-feature-ABH-123
-# ... do work, push, open PR ...
-/linear-sync">copy</button>git checkout -b my-feature-ABH-123
-# ... do work, push, open PR ...
-/linear-sync</div></div>
+/linear-pick ABH-123</span></div></div>
+<div class="gitem reveal"><h4>/linear-status — Check what's in flight</h4><p>Digest of your configured Linear project grouped by status: In Progress (with PR links if open), In Review (with PR links), Blocked (with last blocker comment), Ready queue (agent-ready issues by priority), and recently shipped (Done in last 7 days). Pure read-only — no writes to Linear or git. Helps you context-switch back quickly and spot blockers.</p><div class="code cmds"><div class="cl"><code class="ct">/linear-status</code><button class="copy" data-copy="/linear-status">copy</button></div></div></div>
+<div class="gitem reveal"><h4>/linear-sync — Backfill Linear state</h4><p>Reconcile current branch and open PR (if any) with their Linear issue. Parses the issue key from the branch name (e.g., agent/ABH-123-dark-mode or my-fix-ABH-123), posts a comment linking the branch or PR, moves status to In Progress (no PR) or In Review (PR open), and removes agent-ready label. Use when you started work manually outside /linear-pick and want Linear to catch up.</p><div class="code cmds"><div class="cl"><code class="ct">git checkout -b my-feature-ABH-123</code><button class="copy" data-copy="git checkout -b my-feature-ABH-123">copy</button></div><div class="cl"><span class="note"># ... do work, push, open PR ...</span></div><div class="cl"><code class="ct">/linear-sync</code><button class="copy" data-copy="/linear-sync">copy</button></div></div></div>
 <div class="gitem reveal"><h4>/linear-block — Mark blocked with reason</h4><p>Manually flag an issue as blocked so /linear-pick won't touch it. Adds agent-blocked label and posts a Linear comment with the blocker reason. Can take explicit issue key + reason, or infer from recent context (e.g., you just ran /linear-pick and hit a wall). To unblock: remove agent-blocked in Linear, re-add agent-ready, then re-run /linear-pick.</p><div class="code"><button class="copy" data-copy="/linear-block ABH-123 &quot;Waiting for design clarification on button placement&quot;
 
 Or just reason (infers issue from context):
-/linear-block &quot;Need to fix flaky test before proceeding&quot;">copy</button>/linear-block ABH-123 "Waiting for design clarification on button placement"
+/linear-block &quot;Need to fix flaky test before proceeding&quot;">copy</button><span class="code-body">/linear-block ABH-123 "Waiting for design clarification on button placement"
 
 Or just reason (infers issue from context):
-/linear-block "Need to fix flaky test before proceeding"</div></div>
+/linear-block "Need to fix flaky test before proceeding"</span></div></div>
 <div class="gitem reveal"><h4>Workflow: File and review before autonomous code</h4><p>Most conservative flow. File an issue with /linear-new, mark it agent-ready in Linear UI (human gate), run /linear-pick in review-only mode (default). You get a 5–15 line plan as a Linear comment. Read it, refine if needed, then flip .claude/linear.yml to autonomy: allowed and re-run /linear-pick to execute.</p><div class="code"><button class="copy" data-copy="1. /linear-new &quot;Add export to CSV&quot;
 2. (mark agent-ready in Linear UI)
 3. /linear-pick
    → plan posted as Linear comment
 4. (review plan, edit .claude/linear.yml to autonomy: allowed)
 5. /linear-pick
-   → branch created, code written, PR opened">copy</button>1. /linear-new "Add export to CSV"
+   → branch created, code written, PR opened">copy</button><span class="code-body">1. /linear-new "Add export to CSV"
 2. (mark agent-ready in Linear UI)
 3. /linear-pick
    → plan posted as Linear comment
 4. (review plan, edit .claude/linear.yml to autonomy: allowed)
 5. /linear-pick
-   → branch created, code written, PR opened</div></div>
-<div class="gitem reveal"><h4>Workflow: Parallel work with git worktrees</h4><p>For two simultaneous /linear-pick sessions from the same checkout, use git worktrees to avoid branch collisions. Create a worktree for each issue, start a fresh Claude session in each, then run /linear-pick independently — one can be in review-only while another is allowed. When merged, clean up with git worktree remove.</p><div class="code"><button class="copy" data-copy="git worktree add ../doc-scan-ABH-123 -b agent/ABH-123-dark-mode
-cd ../doc-scan-ABH-123
-claude --remote-control &quot;ABH-123 dark mode&quot;
-/linear-pick ABH-123">copy</button>git worktree add ../doc-scan-ABH-123 -b agent/ABH-123-dark-mode
-cd ../doc-scan-ABH-123
-claude --remote-control "ABH-123 dark mode"
-/linear-pick ABH-123</div></div>
+   → branch created, code written, PR opened</span></div></div>
+<div class="gitem reveal"><h4>Workflow: Parallel work with git worktrees</h4><p>For two simultaneous /linear-pick sessions from the same checkout, use git worktrees to avoid branch collisions. Create a worktree for each issue, start a fresh Claude session in each, then run /linear-pick independently — one can be in review-only while another is allowed. When merged, clean up with git worktree remove.</p><div class="code cmds"><div class="cl"><code class="ct">git worktree add ../doc-scan-ABH-123 -b agent/ABH-123-dark-mode</code><button class="copy" data-copy="git worktree add ../doc-scan-ABH-123 -b agent/ABH-123-dark-mode">copy</button></div><div class="cl"><code class="ct">cd ../doc-scan-ABH-123</code><button class="copy" data-copy="cd ../doc-scan-ABH-123">copy</button></div><div class="cl"><code class="ct">claude --remote-control "ABH-123 dark mode"</code><button class="copy" data-copy="claude --remote-control &quot;ABH-123 dark mode&quot;">copy</button></div><div class="cl"><code class="ct">/linear-pick ABH-123</code><button class="copy" data-copy="/linear-pick ABH-123">copy</button></div></div></div>
       </div>
     </section>
 

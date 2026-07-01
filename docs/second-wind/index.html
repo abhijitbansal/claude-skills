@@ -99,8 +99,7 @@
       <p class="eyebrow">getting started</p>
       <h2><span class="ix">01</span> How to use</h2>
       <p>One command installs everything into <code>~/.wind</code> — no clone required.</p>
-      <div class="code" style="margin:14px 0 6px"><button class="copy" data-copy="curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh">copy</button><span class="c"># install</span>
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh</div>
+      <div class="code cmds" style="margin:14px 0 6px"><div class="cl"><span class="note"><span class="c"># install</span></span></div><div class="cl"><code class="ct">curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh</code><button class="copy" data-copy="curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh">copy</button></div></div>
 
       <div class="steps">
         <div class="gitem reveal"><p><strong><code>wind init</code></strong> — an interactive wizard scans for your git repos (the scanned roots are saved as <code>scan_roots</code> so you can add more later), lets you pick which ones wind should manage, and choose a global permission preset. Then it offers one choice: configure each repo individually, or <strong>apply the global preset + defaults to every selected repo</strong> with no per-repo click-through. The presets include <code>auto</code> (<code>--permission-mode bypassPermissions</code>) — accept everything, no prompts — which as of v2.1 is the <strong>shipped default for a fresh config</strong> (same risk class as <code>--dangerously-skip-permissions</code>; pick <code>acceptEdits</code>/<code>plan</code>/<code>default</code> to reduce autonomy). Use <code>--defaults</code> for the old non-interactive starter file.</p></div>

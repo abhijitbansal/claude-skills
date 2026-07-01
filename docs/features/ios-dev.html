@@ -77,10 +77,8 @@
     <section id="install" class="doc-section">
       <h2><span class="ix">03</span> Install</h2>
       <div class="steps">
-        <div class="gitem"><h4>Via Claude Code marketplace</h4><div class="code"><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills
-/plugin install ios-dev@claude-skills">copy</button>/plugin marketplace add abhijitbansal/claude-skills
-/plugin install ios-dev@claude-skills</div></div>
-<div class="gitem"><h4>Scaffold app config in your iOS repo</h4><div class="code"><button class="copy" data-copy="/ios-init">copy</button>/ios-init</div><p style="margin-top:10px">Generates .claude/app.yml (auto-detects scheme, bundle_id from project.yml or xcodebuild; you fill in team_id and url_scheme)</p></div>
+        <div class="gitem"><h4>Via Claude Code marketplace</h4><div class="code cmds"><div class="cl"><code class="ct">/plugin marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct">/plugin install ios-dev@claude-skills</code><button class="copy" data-copy="/plugin install ios-dev@claude-skills">copy</button></div></div></div>
+<div class="gitem"><h4>Scaffold app config in your iOS repo</h4><div class="code cmds"><div class="cl"><code class="ct">/ios-init</code><button class="copy" data-copy="/ios-init">copy</button></div></div><p style="margin-top:10px">Generates .claude/app.yml (auto-detects scheme, bundle_id from project.yml or xcodebuild; you fill in team_id and url_scheme)</p></div>
       </div>
     </section>
 
@@ -88,77 +86,57 @@
       <h2><span class="ix">04</span> Usability guide</h2>
       <p style="margin-bottom:14px">Every capability, how to invoke it, and a concrete example.</p>
       <div class="guide">
-        <div class="gitem reveal"><h4>ios-build: Compile for simulator or device</h4><p>Wrap xcodebuild with device detection, provisioning-profile team ID resolution, and devicectl install. Use when you want to build without taking a screenshot.</p><div class="code"><button class="copy" data-copy="./build.sh                           # simulator (iPhone 17 Pro default)
-./build.sh -s &quot;iPhone 16 Pro&quot;          # specific simulator
-./build.sh -d                          # real device (connected iPhone)
-./build.sh -d --debug                  # inspect without building">copy</button>./build.sh                           # simulator (iPhone 17 Pro default)
-./build.sh -s "iPhone 16 Pro"          # specific simulator
-./build.sh -d                          # real device (connected iPhone)
-./build.sh -d --debug                  # inspect without building</div></div>
-<div class="gitem reveal"><h4>/preview command: Build and screenshot on-demand</h4><p>Build the app for the booted simulator, launch it (optionally deep-linking to a specific screen), capture a screenshot, and automatically deliver it to your iPhone via iMessage ping + iCloud Drive. This is the load-bearing command for remote development—you see the result of a change within seconds.</p><div class="code"><button class="copy" data-copy="/preview                             # cold-start home screen
-/preview scan                         # deep-link to scan route (if handleDeepLink implements it)
-/preview doc?path=path/to/doc.pdf     # deep-link with query parameter
-/preview --no-build                   # skip rebuild, use last build (fast)">copy</button>/preview                             # cold-start home screen
-/preview scan                         # deep-link to scan route (if handleDeepLink implements it)
-/preview doc?path=path/to/doc.pdf     # deep-link with query parameter
-/preview --no-build                   # skip rebuild, use last build (fast)</div></div>
-<div class="gitem reveal"><h4>/fix command: Apply a UI change and prove it worked</h4><p>The remote-first workflow: describe what to fix, Claude edits the SwiftUI source, rebuilds, screenshots, and delivers the result to your phone in one command. You stay in chat—no walking to the machine, no manual screenshot steps.</p><div class="code"><button class="copy" data-copy="/fix the home row padding looks too loose, tighten it by 4pt">copy</button>/fix the home row padding looks too loose, tighten it by 4pt</div></div>
-<div class="gitem reveal"><h4>/ios-init command: Scaffold .claude/app.yml</h4><p>One-time setup that detects your app's scheme, bundle ID, and team ID from project.yml or xcodebuild, then prompts you for anything it couldn't find (typically team_id and url_scheme). After this, all other commands work without configuration.</p><div class="code"><button class="copy" data-copy="/ios-init                            # auto-detect and write .claude/app.yml
-/ios-init --force                      # overwrite an existing config">copy</button>/ios-init                            # auto-detect and write .claude/app.yml
-/ios-init --force                      # overwrite an existing config</div></div>
+        <div class="gitem reveal"><h4>ios-build: Compile for simulator or device</h4><p>Wrap xcodebuild with device detection, provisioning-profile team ID resolution, and devicectl install. Use when you want to build without taking a screenshot.</p><div class="code cmds"><div class="cl"><code class="ct">./build.sh                           # simulator (iPhone 17 Pro default)</code><button class="copy" data-copy="./build.sh                           # simulator (iPhone 17 Pro default)">copy</button></div><div class="cl"><code class="ct">./build.sh -s "iPhone 16 Pro"          # specific simulator</code><button class="copy" data-copy="./build.sh -s &quot;iPhone 16 Pro&quot;          # specific simulator">copy</button></div><div class="cl"><code class="ct">./build.sh -d                          # real device (connected iPhone)</code><button class="copy" data-copy="./build.sh -d                          # real device (connected iPhone)">copy</button></div><div class="cl"><code class="ct">./build.sh -d --debug                  # inspect without building</code><button class="copy" data-copy="./build.sh -d --debug                  # inspect without building">copy</button></div></div></div>
+<div class="gitem reveal"><h4>/preview command: Build and screenshot on-demand</h4><p>Build the app for the booted simulator, launch it (optionally deep-linking to a specific screen), capture a screenshot, and automatically deliver it to your iPhone via iMessage ping + iCloud Drive. This is the load-bearing command for remote development—you see the result of a change within seconds.</p><div class="code cmds"><div class="cl"><code class="ct">/preview                             # cold-start home screen</code><button class="copy" data-copy="/preview                             # cold-start home screen">copy</button></div><div class="cl"><code class="ct">/preview scan                         # deep-link to scan route (if handleDeepLink implements it)</code><button class="copy" data-copy="/preview scan                         # deep-link to scan route (if handleDeepLink implements it)">copy</button></div><div class="cl"><code class="ct">/preview doc?path=path/to/doc.pdf     # deep-link with query parameter</code><button class="copy" data-copy="/preview doc?path=path/to/doc.pdf     # deep-link with query parameter">copy</button></div><div class="cl"><code class="ct">/preview --no-build                   # skip rebuild, use last build (fast)</code><button class="copy" data-copy="/preview --no-build                   # skip rebuild, use last build (fast)">copy</button></div></div></div>
+<div class="gitem reveal"><h4>/fix command: Apply a UI change and prove it worked</h4><p>The remote-first workflow: describe what to fix, Claude edits the SwiftUI source, rebuilds, screenshots, and delivers the result to your phone in one command. You stay in chat—no walking to the machine, no manual screenshot steps.</p><div class="code cmds"><div class="cl"><code class="ct">/fix the home row padding looks too loose, tighten it by 4pt</code><button class="copy" data-copy="/fix the home row padding looks too loose, tighten it by 4pt">copy</button></div></div></div>
+<div class="gitem reveal"><h4>/ios-init command: Scaffold .claude/app.yml</h4><p>One-time setup that detects your app's scheme, bundle ID, and team ID from project.yml or xcodebuild, then prompts you for anything it couldn't find (typically team_id and url_scheme). After this, all other commands work without configuration.</p><div class="code cmds"><div class="cl"><code class="ct">/ios-init                            # auto-detect and write .claude/app.yml</code><button class="copy" data-copy="/ios-init                            # auto-detect and write .claude/app.yml">copy</button></div><div class="cl"><code class="ct">/ios-init --force                      # overwrite an existing config</code><button class="copy" data-copy="/ios-init --force                      # overwrite an existing config">copy</button></div></div></div>
 <div class="gitem reveal"><h4>app-preview skill: Multi-screen capture from a description</h4><p>When you say a UI concern spans multiple screens (e.g., 'the home-row spacing looks off on the doc screen too'), this skill builds once and captures all affected screens with deep-links, organizes them by git branch in your phone's Files app, and appends them to a per-branch MANIFEST.md so you can flip between branches and see which screenshots belong where.</p><div class="code"><button class="copy" data-copy="scripts/bundle.sh \
   --description &quot;home-row spacing looks off on the doc screen&quot; \
   --screen home \
-  --screen doc:Receipts/2026-receipt.pdf">copy</button>scripts/bundle.sh \
+  --screen doc:Receipts/2026-receipt.pdf">copy</button><span class="code-body">scripts/bundle.sh \
   --description "home-row spacing looks off on the doc screen" \
   --screen home \
-  --screen doc:Receipts/2026-receipt.pdf</div></div>
-<div class="gitem reveal"><h4>release skill: Automated TestFlight and App Store release</h4><p>Handle version bumps, archiving, IPA export, App Store validation, and upload via CLI. Two modes: testflight (everyday) bumps build number; appstore (milestone) bumps marketing version, asks for changelog, validates widget entitlements, and prints a web-UI checklist for the rest. Refuses to run on dirty trees and asks for explicit confirmation before the irreversible upload step.</p><div class="code"><button class="copy" data-copy="release testflight                   # bump build, archive, validate, upload to TestFlight
-release appstore                     # bump version, changelog, archive, validate, upload, tag
-release testflight --skip-tests       # skip simulator sanity build
-release appstore --force              # bypass pre-flight checks">copy</button>release testflight                   # bump build, archive, validate, upload to TestFlight
-release appstore                     # bump version, changelog, archive, validate, upload, tag
-release testflight --skip-tests       # skip simulator sanity build
-release appstore --force              # bypass pre-flight checks</div></div>
+  --screen doc:Receipts/2026-receipt.pdf</span></div></div>
+<div class="gitem reveal"><h4>release skill: Automated TestFlight and App Store release</h4><p>Handle version bumps, archiving, IPA export, App Store validation, and upload via CLI. Two modes: testflight (everyday) bumps build number; appstore (milestone) bumps marketing version, asks for changelog, validates widget entitlements, and prints a web-UI checklist for the rest. Refuses to run on dirty trees and asks for explicit confirmation before the irreversible upload step.</p><div class="code cmds"><div class="cl"><code class="ct">release testflight                   # bump build, archive, validate, upload to TestFlight</code><button class="copy" data-copy="release testflight                   # bump build, archive, validate, upload to TestFlight">copy</button></div><div class="cl"><code class="ct">release appstore                     # bump version, changelog, archive, validate, upload, tag</code><button class="copy" data-copy="release appstore                     # bump version, changelog, archive, validate, upload, tag">copy</button></div><div class="cl"><code class="ct">release testflight --skip-tests       # skip simulator sanity build</code><button class="copy" data-copy="release testflight --skip-tests       # skip simulator sanity build">copy</button></div><div class="cl"><code class="ct">release appstore --force              # bypass pre-flight checks</code><button class="copy" data-copy="release appstore --force              # bypass pre-flight checks">copy</button></div></div></div>
 <div class="gitem reveal"><h4>demo-recording skill: Repeatable video/GIF from XCUITests</h4><p>Record deterministic demo videos without hand-driving the simulator. Write a paced XCUITest class (Thread.sleep + lenient guards) gated by DEMO_RECORDING=1 env var, then this skill builds once, records via simctl recordVideo, and converts to GIF with ffmpeg (with CoreText caption fallback if ffmpeg lacks libfreetype).</p><div class="code"><button class="copy" data-copy="# In your XCUITest:
 try XCTSkipUnless(ProcessInfo.processInfo.environment[&quot;DEMO_RECORDING&quot;] == &quot;1&quot;)
-# Then skill converts *.mov → *.gif and trims launch dead-time">copy</button># In your XCUITest:
+# Then skill converts *.mov → *.gif and trims launch dead-time">copy</button><span class="code-body"># In your XCUITest:
 try XCTSkipUnless(ProcessInfo.processInfo.environment["DEMO_RECORDING"] == "1")
-# Then skill converts *.mov → *.gif and trims launch dead-time</div></div>
+# Then skill converts *.mov → *.gif and trims launch dead-time</span></div></div>
 <div class="gitem reveal"><h4>alternate-app-icons skill: User-selectable app icons for XcodeGen</h4><p>Add alternate app icons to an XcodeGen project without hand-editing Info.plist. Handles the ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES build setting, the opaque-RGB App Store requirement (alpha → blank tile), separate downscaled imagesets for picker UI, and setAlternateIconName() switching.</p><div class="code"><button class="copy" data-copy="# Add to project.yml settings:
 ASSTCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIconClassic
 
 # In code:
-try await UIApplication.shared.setAlternateIconName(&quot;AppIconClassic&quot;)">copy</button># Add to project.yml settings:
+try await UIApplication.shared.setAlternateIconName(&quot;AppIconClassic&quot;)">copy</button><span class="code-body"># Add to project.yml settings:
 ASSTCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIconClassic
 
 # In code:
-try await UIApplication.shared.setAlternateIconName("AppIconClassic")</div></div>
+try await UIApplication.shared.setAlternateIconName("AppIconClassic")</span></div></div>
 <div class="gitem reveal"><h4>biometric-applock skill: Face ID lock with four bypass-pitfall fixes</h4><p>Implement a robust SwiftUI biometric app lock. This skill teaches the four real bypass windows in naive @MainActor + .overlay patterns (app-switcher snapshot leak, presentation layer z-order, toggle bypass, background vs. inactive scenePhase). Covers LAContext evaluation, @fullScreenCover wiring, and external entry-point gating (App Intents, deep links, notification handlers).</p><div class="code"><button class="copy" data-copy="ContentView()
     .fullScreenCover(isPresented: Binding(get: { appLock.isLocked }, set: { _ in })) {
         AppLockOverlayView().interactiveDismissDisabled()
     }
-    .onAppear { appLock.bootstrap() }">copy</button>ContentView()
+    .onAppear { appLock.bootstrap() }">copy</button><span class="code-body">ContentView()
     .fullScreenCover(isPresented: Binding(get: { appLock.isLocked }, set: { _ in })) {
         AppLockOverlayView().interactiveDismissDisabled()
     }
-    .onAppear { appLock.bootstrap() }</div></div>
+    .onAppear { appLock.bootstrap() }</span></div></div>
 <div class="gitem reveal"><h4>swift6-mainactor-migration skill: Fix MainActor isolation warnings</h4><p>When your project sets SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor (Xcode 15.1+), pure-compute types (exporters, builders, parsers) emit 'cannot be called from outside of the actor' warnings. This skill teaches the honest fix: mark those types <code>nonisolated</code> at the type declaration, then cascade through flagged callees. Forbids @unchecked Sendable and @preconcurrency band-aids.</p><div class="code"><button class="copy" data-copy="# Before:
 struct PDFExporter { … }  // implicitly @MainActor, but runs off-main
 
 # After:
-nonisolated struct PDFExporter { … }  // honest about its isolation">copy</button># Before:
+nonisolated struct PDFExporter { … }  // honest about its isolation">copy</button><span class="code-body"># Before:
 struct PDFExporter { … }  // implicitly @MainActor, but runs off-main
 
 # After:
-nonisolated struct PDFExporter { … }  // honest about its isolation</div></div>
+nonisolated struct PDFExporter { … }  // honest about its isolation</span></div></div>
 <div class="gitem reveal"><h4>xcode-cloud-validate skill: Debug opaque Xcode Cloud archive failures</h4><p>When Xcode Cloud's 'Prepare Build for App Store Connect' fails with no detailed error, the real ITMS rejection code is buried. This skill shows how to reproduce it locally: download the ARCHIVE_EXPORT .ipa artifact, then run <code>xcrun altool --validate-app</code> to surface the exact ITMS error (e.g., ITMS-90098 for invalid UIRequiredDeviceCapabilities).</p><div class="code"><button class="copy" data-copy="# After downloading ARCHIVE_EXPORT artifact:
 xcrun altool --validate-app \
   -f App.ipa -t ios \
-  --apiKey KEY_ID --apiIssuer ISSUER_ID">copy</button># After downloading ARCHIVE_EXPORT artifact:
+  --apiKey KEY_ID --apiIssuer ISSUER_ID">copy</button><span class="code-body"># After downloading ARCHIVE_EXPORT artifact:
 xcrun altool --validate-app \
   -f App.ipa -t ios \
-  --apiKey KEY_ID --apiIssuer ISSUER_ID</div></div>
+  --apiKey KEY_ID --apiIssuer ISSUER_ID</span></div></div>
 <div class="gitem reveal"><h4>xcodegen-test-targets skill: Add tests to XcodeGen projects</h4><p>XcodeGen ships no test-target template. This skill scaffolds Swift Testing unit tests and XCUITest targets with the exact TEST_HOST / BUNDLE_LOADER shape, wires them into the scheme's test action (tests silently don't run if omitted), and warns about regenerate-before-testing gotchas.</p><div class="code"><button class="copy" data-copy="# In project.yml:
 targets:
   AppTests:
@@ -169,7 +147,7 @@ targets:
     settings:
       base:
         TEST_HOST: &quot;$(BUILT_PRODUCTS_DIR)/App.app/App&quot;
-        BUNDLE_LOADER: &quot;$(TEST_HOST)&quot;">copy</button># In project.yml:
+        BUNDLE_LOADER: &quot;$(TEST_HOST)&quot;">copy</button><span class="code-body"># In project.yml:
 targets:
   AppTests:
     type: bundle.unit-test
@@ -179,7 +157,7 @@ targets:
     settings:
       base:
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/App.app/App"
-        BUNDLE_LOADER: "$(TEST_HOST)"</div></div>
+        BUNDLE_LOADER: "$(TEST_HOST)"</span></div></div>
       </div>
     </section>
 

@@ -77,9 +77,7 @@
     <section id="install" class="doc-section">
       <h2><span class="ix">03</span> Install</h2>
       <div class="steps">
-        <div class="gitem"><h4>Via Claude Code /plugin marketplace</h4><div class="code"><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills
-/plugin install core-workflow@claude-skills">copy</button>/plugin marketplace add abhijitbansal/claude-skills
-/plugin install core-workflow@claude-skills</div></div>
+        <div class="gitem"><h4>Via Claude Code /plugin marketplace</h4><div class="code cmds"><div class="cl"><code class="ct">/plugin marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct">/plugin install core-workflow@claude-skills</code><button class="copy" data-copy="/plugin install core-workflow@claude-skills">copy</button></div></div></div>
       </div>
     </section>
 
@@ -100,7 +98,7 @@ Then sequentially:
 - Stage files by name (never git add -A or .)
 - Generate title (≤72 chars, imperative, lowercase, no period)
 - Commit via heredoc with Co-Authored-By trailer
-- Confirm via git status">copy</button>User: 'Commit this'
+- Confirm via git status">copy</button><span class="code-body">User: 'Commit this'
 
 Claude runs in parallel:
 - git status (no -uall)
@@ -112,7 +110,7 @@ Then sequentially:
 - Stage files by name (never git add -A or .)
 - Generate title (≤72 chars, imperative, lowercase, no period)
 - Commit via heredoc with Co-Authored-By trailer
-- Confirm via git status</div></div>
+- Confirm via git status</span></div></div>
 <div class="gitem reveal"><h4>contribute skill — Push changes back to claude-skills repo</h4><p>Drives the claude-skills-contribute script from any repo or machine. Captures state of a locally developed or modified skill, agent, hook, command, or plugin manifest, creates a feature branch, validates, commits with conventional message, and opens a PR for review.</p>
 <p>Use when the user says 'contribute this back', 'add this to claude-skills', 'share this skill', or invokes the /contribute-skill command.</p><div class="code"><button class="copy" data-copy="User: &#x27;Contribute this skill back to claude-skills&#x27;
 
@@ -121,14 +119,14 @@ Claude:
 2. Runs: claude-skills-contribute --skill &lt;name&gt; --message &quot;&lt;msg&gt;&quot;
    OR: claude-skills-contribute --message &quot;&lt;msg&gt;&quot; (for live state)
 3. Surfaces PR URL printed by gh
-4. If --no-pr used, tells user the branch name for later push">copy</button>User: 'Contribute this skill back to claude-skills'
+4. If --no-pr used, tells user the branch name for later push">copy</button><span class="code-body">User: 'Contribute this skill back to claude-skills'
 
 Claude:
 1. Confirms intent (capture live state, or scaffold new skill?)
 2. Runs: claude-skills-contribute --skill &lt;name&gt; --message "&lt;msg&gt;"
    OR: claude-skills-contribute --message "&lt;msg&gt;" (for live state)
 3. Surfaces PR URL printed by gh
-4. If --no-pr used, tells user the branch name for later push</div></div>
+4. If --no-pr used, tells user the branch name for later push</span></div></div>
 <div class="gitem reveal"><h4>/team command — Evaluate if task fits agent-team mode</h4><p>Evaluates whether the current (or specified) task warrants spawning a Claude Code agent team. Applies a four-criterion heuristic: ≥3 independent workstreams with non-overlapping file ownership; read-heavy work or disjoint write surfaces; &gt;60% context window fill or competing hypotheses; and scope not capped to a quick fix.</p>
 <p>Returns either a team proposal (with role and directory ownership per teammate) or a pushback with better-fit alternative. Never spawns without explicit user confirmation.</p><div class="code"><button class="copy" data-copy="User: &#x27;/team refactor the auth module and add logging&#x27;
 
@@ -142,7 +140,7 @@ Evaluates heuristic:
 Outputs proposal:
 &quot;Team proposed. Teammates: 1. auth-lead — refactor. Owns src/auth/. 2. logging-lead — logging. Owns src/logging/.&quot;
 
-Waits for user confirmation before spawning.">copy</button>User: '/team refactor the auth module and add logging'
+Waits for user confirmation before spawning.">copy</button><span class="code-body">User: '/team refactor the auth module and add logging'
 
 Claude:
 Evaluates heuristic:
@@ -154,15 +152,15 @@ Evaluates heuristic:
 Outputs proposal:
 "Team proposed. Teammates: 1. auth-lead — refactor. Owns src/auth/. 2. logging-lead — logging. Owns src/logging/."
 
-Waits for user confirmation before spawning.</div></div>
+Waits for user confirmation before spawning.</span></div></div>
 <div class="gitem reveal"><h4>/contribute-skill command — CLI wrapper for contribute skill</h4><p>Slash-command entry point to the contribute skill. Accepts optional flags: --skill &lt;name&gt; to scaffold a new skill; --message "&lt;text&gt;" for commit message and PR title; --no-pr to skip PR and push only; --auto-merge to squash-merge once CI passes (use sparingly).</p>
 <p>Directly invokes the contribute skill with the given arguments.</p><div class="code"><button class="copy" data-copy="User: &#x27;/contribute-skill --skill my-new-agent --message &quot;Add custom research agent&quot;&#x27;
 
 Claude runs: contribute skill with --skill my-new-agent --message &quot;...&quot;
-Result: Feature branch created, new skill scaffolded and committed, PR opened.">copy</button>User: '/contribute-skill --skill my-new-agent --message "Add custom research agent"'
+Result: Feature branch created, new skill scaffolded and committed, PR opened.">copy</button><span class="code-body">User: '/contribute-skill --skill my-new-agent --message "Add custom research agent"'
 
 Claude runs: contribute skill with --skill my-new-agent --message "..."
-Result: Feature branch created, new skill scaffolded and committed, PR opened.</div></div>
+Result: Feature branch created, new skill scaffolded and committed, PR opened.</span></div></div>
 <div class="gitem reveal"><h4>image-parser agent — Analyze screenshots and images</h4><p>Specialized subagent for image and screenshot analysis. Answers questions like 'what does this screenshot show', 'OCR the text', 'compare these two simulator screenshots', 'is the title cut off', 'extract the data table from this PNG'. Runs on Sonnet for cost efficiency.</p>
 <p>Reads image files with the Read tool (content rendered visually), answers the specific question first, references UI elements concretely, flags uncertainty, and avoids fabrication. Common Paperix use case: check sheet titles, button labels, list item rendering, dark-mode contrast, PAS capsule presence.</p><div class="code"><button class="copy" data-copy="User: &#x27;Compare these two simulator screenshots and tell me what changed&#x27;
 
@@ -172,7 +170,7 @@ image-parser:
 1. Reads both images via Read tool
 2. Leads with the diff: &quot;Button color changed from blue to gray; sheet title now bold&quot;
 3. Structures as side-by-side bullets: &quot;- Before: title in regular weight\n- After: title bold&quot;
-4. Flags blurry text or occlusions if any">copy</button>User: 'Compare these two simulator screenshots and tell me what changed'
+4. Flags blurry text or occlusions if any">copy</button><span class="code-body">User: 'Compare these two simulator screenshots and tell me what changed'
 
 Claude dispatches to image-parser agent with two image paths.
 
@@ -180,7 +178,7 @@ image-parser:
 1. Reads both images via Read tool
 2. Leads with the diff: "Button color changed from blue to gray; sheet title now bold"
 3. Structures as side-by-side bullets: "- Before: title in regular weight\n- After: title bold"
-4. Flags blurry text or occlusions if any</div></div>
+4. Flags blurry text or occlusions if any</span></div></div>
 <div class="gitem reveal"><h4>web-researcher agent — API/framework lookups and doc research</h4><p>Specialized subagent for web research and library documentation. Answers 'API behavior', 'framework changes', 'SDK syntax', 'version migration', 'what's the current way to do X in React/Django/etc'. Prefers Context7 for library docs, falls back to WebSearch and WebFetch.</p>
 <p>Reads actual pages (doesn't trust snippets), stops early once confident, synthesizes with source URLs, and avoids speculation. Runs on Sonnet for cost.</p><div class="code"><button class="copy" data-copy="User: &#x27;What&#x27;s the current way to handle async/await in FastAPI?&#x27;
 
@@ -191,7 +189,7 @@ web-researcher:
 2. Queries docs for async/await patterns
 3. Returns: &quot;FastAPI uses standard Python async/await. Declare route handlers async and FastAPI runs them in thread pool. Example: async def get_data(): return data&quot;
 4. Lists sources: https://fastapi.tiangolo.com/async/
-5. Flags version-specificity if relevant">copy</button>User: 'What's the current way to handle async/await in FastAPI?'
+5. Flags version-specificity if relevant">copy</button><span class="code-body">User: 'What's the current way to handle async/await in FastAPI?'
 
 Claude dispatches to web-researcher agent.
 
@@ -200,7 +198,7 @@ web-researcher:
 2. Queries docs for async/await patterns
 3. Returns: "FastAPI uses standard Python async/await. Declare route handlers async and FastAPI runs them in thread pool. Example: async def get_data(): return data"
 4. Lists sources: https://fastapi.tiangolo.com/async/
-5. Flags version-specificity if relevant</div></div>
+5. Flags version-specificity if relevant</span></div></div>
 <div class="gitem reveal"><h4>shellcheck-on-edit hook — Auto-lint shell scripts after edits</h4><p>PostToolUse hook that triggers automatically after any Edit or Write operation on a .sh file. Runs shellcheck and surfaces findings as non-blocking informational output. Complements the commit skill by catching shell script issues before they're committed.</p>
 <p>Matches file paths ending in .sh; skips if shellcheck is not installed or file does not exist; always exits cleanly (non-blocking).</p><div class="code"><button class="copy" data-copy="User edits setup/install.sh via Edit tool.
 
@@ -209,14 +207,14 @@ Hook fires (PostToolUse):
 2. Checks: is it *.sh? Does it exist? Is shellcheck available?
 3. Runs: shellcheck setup/install.sh
 4. Outputs: &quot;shellcheck findings for setup/install.sh:\nSC2086: Double quote to prevent globbing and word splitting.&quot;
-5. Exits 0 (non-blocking; Claude can see the findings and decide whether to fix now or defer)">copy</button>User edits setup/install.sh via Edit tool.
+5. Exits 0 (non-blocking; Claude can see the findings and decide whether to fix now or defer)">copy</button><span class="code-body">User edits setup/install.sh via Edit tool.
 
 Hook fires (PostToolUse):
 1. Extracts file path from tool_input
 2. Checks: is it *.sh? Does it exist? Is shellcheck available?
 3. Runs: shellcheck setup/install.sh
 4. Outputs: "shellcheck findings for setup/install.sh:\nSC2086: Double quote to prevent globbing and word splitting."
-5. Exits 0 (non-blocking; Claude can see the findings and decide whether to fix now or defer)</div></div>
+5. Exits 0 (non-blocking; Claude can see the findings and decide whether to fix now or defer)</span></div></div>
       </div>
     </section>
 
