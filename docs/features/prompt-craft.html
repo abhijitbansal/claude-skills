@@ -78,14 +78,10 @@
     <section id="install" class="doc-section">
       <h2><span class="ix">03</span> Install</h2>
       <div class="steps">
-        <div class="gitem"><h4>Add the plugin marketplace, then install prompt-craft</h4><div class="code"><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills
-/plugin install prompt-craft@claude-skills">copy</button>/plugin marketplace add abhijitbansal/claude-skills
-/plugin install prompt-craft@claude-skills</div></div>
-<div class="gitem"><h4>Optional: enable guardrails in shell profile or .claude/settings.json</h4><div class="code"><button class="copy" data-copy="export PROMPT_CRAFT_BLOCK_SECRETS=1    # block reads/edits of .env, *.pem, id_rsa, credentials
-export PROMPT_CRAFT_FORMAT_ON_EDIT=1   # auto-format edited files with black/prettier/gofmt/rustfmt/shfmt">copy</button>export PROMPT_CRAFT_BLOCK_SECRETS=1    # block reads/edits of .env, *.pem, id_rsa, credentials
-export PROMPT_CRAFT_FORMAT_ON_EDIT=1   # auto-format edited files with black/prettier/gofmt/rustfmt/shfmt</div><p style="margin-top:10px">Guardrails are off by default. The advisor-driven follow-up surfaces (suggest_next.sh, prompt_hint.sh) are always on and stay silent when nothing applies — and everything they emit is shown to you only, never fed to the model.</p></div>
-<div class="gitem"><h4>Optional: wire the live statusline segment</h4><div class="code"><button class="copy" data-copy="python3 plugins/prompt-craft/scripts/wire_statusline.py --wire">copy</button>python3 plugins/prompt-craft/scripts/wire_statusline.py --wire</div><p style="margin-top:10px">Adds a live "💡 next: /x" segment to your statusline (also run by /prompt-craft:refresh). It atomically updates ~/.claude/settings.json, backs up to settings.json.bak.&lt;ts&gt;, and chains your existing statusLine command. Remove with --unwire.</p></div>
-<div class="gitem"><h4>Optional: opt out of advisor command-history learning</h4><div class="code"><button class="copy" data-copy="export CLAUDE_CODE_SKIP_PROMPT_HISTORY=1   # advisor stops recording leading /command tokens">copy</button>export CLAUDE_CODE_SKIP_PROMPT_HISTORY=1   # advisor stops recording leading /command tokens</div></div>
+        <div class="gitem"><h4>Add the plugin marketplace, then install prompt-craft</h4><div class="code cmds"><div class="cl"><code class="ct">/plugin marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct">/plugin install prompt-craft@claude-skills</code><button class="copy" data-copy="/plugin install prompt-craft@claude-skills">copy</button></div></div></div>
+<div class="gitem"><h4>Optional: enable guardrails in shell profile or .claude/settings.json</h4><div class="code cmds"><div class="cl"><code class="ct">export PROMPT_CRAFT_BLOCK_SECRETS=1    # block reads/edits of .env, *.pem, id_rsa, credentials</code><button class="copy" data-copy="export PROMPT_CRAFT_BLOCK_SECRETS=1    # block reads/edits of .env, *.pem, id_rsa, credentials">copy</button></div><div class="cl"><code class="ct">export PROMPT_CRAFT_FORMAT_ON_EDIT=1   # auto-format edited files with black/prettier/gofmt/rustfmt/shfmt</code><button class="copy" data-copy="export PROMPT_CRAFT_FORMAT_ON_EDIT=1   # auto-format edited files with black/prettier/gofmt/rustfmt/shfmt">copy</button></div></div><p style="margin-top:10px">Guardrails are off by default. The advisor-driven follow-up surfaces (suggest_next.sh, prompt_hint.sh) are always on and stay silent when nothing applies — and everything they emit is shown to you only, never fed to the model.</p></div>
+<div class="gitem"><h4>Optional: wire the live statusline segment</h4><div class="code cmds"><div class="cl"><code class="ct">python3 plugins/prompt-craft/scripts/wire_statusline.py --wire</code><button class="copy" data-copy="python3 plugins/prompt-craft/scripts/wire_statusline.py --wire">copy</button></div></div><p style="margin-top:10px">Adds a live "💡 next: /x" segment to your statusline (also run by /prompt-craft:refresh). It atomically updates ~/.claude/settings.json, backs up to settings.json.bak.&lt;ts&gt;, and chains your existing statusLine command. Remove with --unwire.</p></div>
+<div class="gitem"><h4>Optional: opt out of advisor command-history learning</h4><div class="code cmds"><div class="cl"><code class="ct">export CLAUDE_CODE_SKIP_PROMPT_HISTORY=1   # advisor stops recording leading /command tokens</code><button class="copy" data-copy="export CLAUDE_CODE_SKIP_PROMPT_HISTORY=1   # advisor stops recording leading /command tokens">copy</button></div></div></div>
       </div>
     </section>
 
@@ -98,23 +94,23 @@ export PROMPT_CRAFT_FORMAT_ON_EDIT=1   # auto-format edited files with black/pre
 → Acceptance criteria (checklist)
 → Assumptions to confirm (load-bearing ones marked)
 → Out of scope
-→ Recommended commands (e.g., /prompt-craft:plan to decompose)">copy</button>/prompt-craft:improve-prompt add authentication to the API
+→ Recommended commands (e.g., /prompt-craft:plan to decompose)">copy</button><span class="code-body">/prompt-craft:improve-prompt add authentication to the API
 → Restated goal
 → Acceptance criteria (checklist)
 → Assumptions to confirm (load-bearing ones marked)
 → Out of scope
-→ Recommended commands (e.g., /prompt-craft:plan to decompose)</div></div>
+→ Recommended commands (e.g., /prompt-craft:plan to decompose)</span></div></div>
 <div class="gitem reveal"><h4>/prompt-craft:plan — decompose a task into a tracked, verifiable plan</h4><p>Use when the user says "plan this", "break this down", "what's the plan", or gives a multi-step feature or refactor that touches more than one file. The skill produces a plan with an explicit goal, acceptance criteria, per-step decomposition (each step has a one-line verify check), and a TodoWrite list for tracking. The plan is confirmed before execution starts.</p><div class="code"><button class="copy" data-copy="/prompt-craft:plan migrate the settings screen to the new design system
 → Goal (one sentence)
 → Acceptance criteria (observable conditions)
 → Steps (ordered by dependency, each with a verify check)
 → Risks/unknowns flagged
-→ TodoWrite plan emitted">copy</button>/prompt-craft:plan migrate the settings screen to the new design system
+→ TodoWrite plan emitted">copy</button><span class="code-body">/prompt-craft:plan migrate the settings screen to the new design system
 → Goal (one sentence)
 → Acceptance criteria (observable conditions)
 → Steps (ordered by dependency, each with a verify check)
 → Risks/unknowns flagged
-→ TodoWrite plan emitted</div></div>
+→ TodoWrite plan emitted</span></div></div>
 <div class="gitem reveal"><h4>/prompt-craft:debug — reproduce, isolate, fix</h4><p>The debug lens auto-invokes when you report unexpected behavior, a stack trace, a flaky test, or ask "why is this broken". It enforces a disciplined flow: reproduce first (ideally in a failing test), isolate to the smallest code path, form one hypothesis at a time (predict, check), write the failing test (RED), fix to GREEN, confirm the original repro passes. Guessing at fixes without reproducing is the failure mode it prevents.</p><div class="code"><button class="copy" data-copy="&quot;why is this test flaky?&quot;
 → [debug lens auto-invokes]
 → Reproduce with deterministic steps
@@ -122,45 +118,45 @@ export PROMPT_CRAFT_FORMAT_ON_EDIT=1   # auto-format edited files with black/pre
 → Form hypothesis + predict
 → Write failing test (RED)
 → Fix to GREEN
-→ Confirm original repro + no regressions">copy</button>"why is this test flaky?"
+→ Confirm original repro + no regressions">copy</button><span class="code-body">"why is this test flaky?"
 → [debug lens auto-invokes]
 → Reproduce with deterministic steps
 → Isolate the minimal code path
 → Form hypothesis + predict
 → Write failing test (RED)
 → Fix to GREEN
-→ Confirm original repro + no regressions</div></div>
+→ Confirm original repro + no regressions</span></div></div>
 <div class="gitem reveal"><h4>/prompt-craft:refactor — restructure, no behavior change</h4><p>The refactor lens auto-invokes when you ask to "clean this up", "extract this", "simplify", "reduce duplication", or "make this readable" on existing working code. It guards the invariant (behavior unchanged) with tests: run the suite GREEN before touching anything, refactor in small reversible steps, re-run after each step, stop at the goal. No bundled feature changes; no opportunistic rewrites of adjacent code.</p><div class="code"><button class="copy" data-copy="&quot;clean up this function, no behavior change&quot;
 → [refactor lens auto-invokes]
 → Ensure tests cover the target (add characterization tests if needed)
 → Run suite GREEN (baseline)
 → Extract/rename/dedupe in small steps
 → Re-run suite GREEN after each step
-→ Stop at the goal">copy</button>"clean up this function, no behavior change"
+→ Stop at the goal">copy</button><span class="code-body">"clean up this function, no behavior change"
 → [refactor lens auto-invokes]
 → Ensure tests cover the target (add characterization tests if needed)
 → Run suite GREEN (baseline)
 → Extract/rename/dedupe in small steps
 → Re-run suite GREEN after each step
-→ Stop at the goal</div></div>
+→ Stop at the goal</span></div></div>
 <div class="gitem reveal"><h4>/prompt-craft:review — find bugs, security issues, and quality problems</h4><p>The review lens auto-invokes when you say "review this", "check this PR", "look this over before I commit", or "is this safe". It scans a diff or branch for correctness bugs and security issues first (logic, unhandled errors, injection, secrets, auth), then quality (duplication, dead code, naming, oversized functions, missing tests). Every finding is one line: where, what's wrong, how to fix. Results are ranked by severity (CRITICAL/HIGH/MEDIUM/LOW).</p><div class="code"><button class="copy" data-copy="&quot;look this over before I push&quot;
 → [review lens auto-invokes]
 → Pass 1: correctness &amp; security (logic bugs, errors, injection, secrets, auth)
 → Pass 2: quality (duplication, dead code, naming, test coverage)
-→ Report by severity with concrete fix per finding">copy</button>"look this over before I push"
+→ Report by severity with concrete fix per finding">copy</button><span class="code-body">"look this over before I push"
 → [review lens auto-invokes]
 → Pass 1: correctness &amp; security (logic bugs, errors, injection, secrets, auth)
 → Pass 2: quality (duplication, dead code, naming, test coverage)
-→ Report by severity with concrete fix per finding</div></div>
+→ Report by severity with concrete fix per finding</span></div></div>
 <div class="gitem reveal"><h4>/prompt-craft:refresh — rebuild the advisor registry &amp; history profile on demand</h4><p>Re-scan skills and rebuild the command-advisor registry + history profile on demand; also wires the statusline. Run it after installing new skills or plugins so the advisor knows about them immediately — it rebuilds ~/.claude/prompt-craft/registry.json and profile.json and wires the statusline segment in one step.</p><div class="code"><button class="copy" data-copy="/prompt-craft:refresh
 → Re-scan repo + global skill dirs
 → Rebuild registry.json (+ registry-notes.toml overlay)
 → Rebuild history profile.json from history.jsonl
-→ Wire the statusline segment">copy</button>/prompt-craft:refresh
+→ Wire the statusline segment">copy</button><span class="code-body">/prompt-craft:refresh
 → Re-scan repo + global skill dirs
 → Rebuild registry.json (+ registry-notes.toml overlay)
 → Rebuild history profile.json from history.jsonl
-→ Wire the statusline segment</div></div>
+→ Wire the statusline segment</span></div></div>
       </div>
     </section>
 
