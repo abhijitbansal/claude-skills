@@ -704,8 +704,23 @@ def run_wizard(args):
         log("wizard cancelled", glyph="○", color="dim")
         return
 
+    mode = select(
+        "Per-repo setup",
+        ["Configure each repo individually",
+         "Apply the global preset + defaults to all selected repos"])
+    if mode is None:
+        log("wizard cancelled", glyph="○", color="dim")
+        return
+
     repos = []
-    for name, path in chosen:
+    if mode == 1:
+        # Accept-all: every repo inherits the global preset (no per-repo
+        # claude_args key), agent=claude, no prompt file — one choice, zero
+        # per-repo clicks.
+        repos = [build_repo_entry(name, path, "", "", override=False,
+                                  agent="claude")
+                 for name, path in chosen]
+    for name, path in ([] if mode == 1 else chosen):
         print(f"\n{style(name, 'bold')} {style(path, 'dim')}")
         override_pick = select(
             "Permissions for this repo",
