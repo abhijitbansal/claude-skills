@@ -12,6 +12,20 @@ export PYTHONUSERBASE="${PYTHONUSERBASE:-$(python3 -c 'import site; print(site.g
 export MOCK_CALL_LOG="${BATS_TMPDIR}/mock-calls.log"
 : > "${MOCK_CALL_LOG}"
 
+make_png() {  # $1 path, $2 width, $3 height — minimal valid PNG
+  python3 - "$1" "$2" "$3" <<'PY'
+import struct, zlib, sys
+p, w, h = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+def chunk(t, d):
+    c = t + d
+    return struct.pack(">I", len(d)) + c + struct.pack(">I", zlib.crc32(c))
+ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
+raw = b"".join(b"\x00" + b"\x00\x00\x00" * w for _ in range(h))
+png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+open(p, "wb").write(png)
+PY
+}
+
 make_fixture_app() {
   # $1 = dir. Creates a git-initialized fake iOS app repo with v2 app.yml,
   # project.yml, a "generated" Info.plist and extracted-entitlements stubs.
