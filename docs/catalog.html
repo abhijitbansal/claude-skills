@@ -35,7 +35,7 @@
 
 <header class="page-head wrap narrow">
   <div class="crumbs"><a href="../site/index.html">Home</a><span class="sep">/</span>Catalog</div>
-  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>47 assets · 5 plugins</span>
+  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>68 assets · 5 plugins</span>
   <h1>Skills &amp; tools <span class="grad">catalog</span></h1>
   <p class="lead">Every skill, command, agent, hook, and CLI tool in the repo — searchable and filterable.
      Each links back to the plugin it ships in.</p>
@@ -46,7 +46,7 @@
     <input id="search" type="search" placeholder="Search skills, commands, hooks…" aria-label="Search the catalog" autocomplete="off">
     <div class="filters"><button class="fchip active" data-filter="all">All</button><button class="fchip" data-filter="Plugin">Plugins</button><button class="fchip" data-filter="Skill">Skills</button><button class="fchip" data-filter="Command">Commands</button><button class="fchip" data-filter="CLI">CLI</button><button class="fchip" data-filter="Agent">Agents</button><button class="fchip" data-filter="Hook">Hooks</button></div>
   </div>
-  <p class="cat-count">47 results</p>
+  <p class="cat-count">68 results</p>
   <div class="cat-group">
       <h3>Plugins <span class="badge">5</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Plugin" data-search="core-workflow general dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook core-workflow plugin">
@@ -65,13 +65,19 @@
         <div class="top"><span class="nm">second-wind</span><span class="ty t-plugin">Plugin</span></div>
         <div class="dc">Set-and-forget orchestrator for long Claude Code runs across multiple repos. Detects 5-hour usage limit, waits for reset, resumes every tmux session</div>
         <div class="pl">in <a href="features/second-wind.html">second-wind</a></div></div></div></div><div class="cat-group">
-      <h3>Skills <span class="badge">19</span></h3>
+      <h3>Skills <span class="badge">35</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Skill" data-search="commit stage current changes, lint shell scripts with shellcheck, and create a git commit with conventional message core-workflow skill">
         <div class="top"><span class="nm">commit</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Stage current changes, lint shell scripts with shellcheck, and create a git commit with conventional message</div>
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Skill" data-search="contribute contribute a change or new skill back to claude-skills seeding repo: branches, validates, commits, opens a pr core-workflow skill">
         <div class="top"><span class="nm">contribute</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Contribute a change or new skill back to claude-skills seeding repo: branches, validates, commits, opens a PR</div>
+        <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Skill" data-search="learn-lesson capture a session lesson (symptom, root cause, fix, evidence) into the skills catalog: dedupes against existing skills first, drafts a symptom-first skill.md, hands off to contribute for the pr core-workflow skill">
+        <div class="top"><span class="nm">learn-lesson</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Capture a session lesson (symptom → root cause → fix → evidence) into the skills catalog: dedupes against existing skills first (extend beats duplicate), drafts a symptom-first SKILL.md, hands off to contribute for the PR</div>
+        <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Skill" data-search="branch-explainer generate a self-contained html visual explainer for the current branch: what's implemented, architecture diagram, key files, test evidence, next steps core-workflow skill">
+        <div class="top"><span class="nm">branch-explainer</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Generate a self-contained HTML explainer for the current branch/PR: what's implemented, an architecture diagram, key files, test evidence, next steps — scoped to one branch rather than the whole repo</div>
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Skill" data-search="alternate-app-icons adding user-selectable alternate app icons to xcodegen ios app, keeping a new icon as default ios-dev skill">
         <div class="top"><span class="nm">alternate-app-icons</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Adding user-selectable alternate app icons to XcodeGen iOS app, keeping a new icon as default</div>
@@ -87,9 +93,9 @@
         <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="ios-build build ios app for simulator or connected iphone via build.sh, encoding project&#x27;s signing/profile-detection rules ios-dev skill">
         <div class="top"><span class="nm">ios-build</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Build iOS app for simulator or connected iPhone via build.sh, encoding project's signing/profile-detection rules</div>
-        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="release drive ios app from code-complete to binary uploaded to app store connect: archive, export, validate, upload, tag commit ios-dev skill">
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="release gated pre-flight (compliance strings, entitlement parity, mainactor runtime-trap audit) + fastlane gym/pilot/deliver with xcodebuild/altool fallback: archive, validate, upload, tag, site deploy ios-dev skill">
         <div class="top"><span class="nm">release</span><span class="ty t-skill">Skill</span></div>
-        <div class="dc">Drive iOS app from code-complete to binary uploaded to App Store Connect: archive, export, validate, upload, tag commit</div>
+        <div class="dc">Gated pre-flight (compliance strings, entitlement parity, MainActor runtime-trap audit) + Fastlane gym/pilot/deliver with xcodebuild/altool fallback: archive, validate, upload, tag, site deploy</div>
         <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="swift6-mainactor-migration resolving main actor-isolation warnings in projects using swift_default_actor_isolation = mainactor ios-dev skill">
         <div class="top"><span class="nm">swift6-mainactor-migration</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Resolving main actor-isolation warnings in projects using SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor</div>
@@ -99,6 +105,48 @@
         <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="xcodegen-test-targets adding swift testing unit tests and xcuitest targets to xcodegen (project.yml) ios app ios-dev skill">
         <div class="top"><span class="nm">xcodegen-test-targets</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Adding Swift Testing unit tests and XCUITest targets to XcodeGen (project.yml) iOS app</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="ios-scaffold idempotent repo standardizer: marketing copy home, fastlane files, ci_post_clone.sh, release-hooks dir, architecture checklist, agents.md skeleton. creates what&#x27;s missing, reports drift, never overwrites ios-dev skill">
+        <div class="top"><span class="nm">ios-scaffold</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Idempotent repo standardizer: marketing copy home, Fastlane files, ci_post_clone.sh, release-hooks dir, architecture checklist, AGENTS.md skeleton. Creates what's missing, reports drift, never overwrites</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="site-pages-deploy-kit the site standard (floorprint model): site/ source in the app repo, split-repo public github pages, subtree force-push over an ssh deploy key, og/csp/favicon lint, skeleton + runbook ios-dev skill">
+        <div class="top"><span class="nm">site-pages-deploy-kit</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">The site standard (floorprint model): site/ source in the app repo → split-repo public GitHub Pages, subtree force-push over an SSH deploy key, og/CSP/favicon lint, skeleton + runbook</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="xcode-cloud-post-clone-contract the four-rule ci_scripts/ci_post_clone.sh contract (materialize gitignored .xcodeproj, mirror local generation, pin package.resolved, brew-only) plus the pr-check/tag-release workflow recipe ios-dev skill">
+        <div class="top"><span class="nm">xcode-cloud-post-clone-contract</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">The four-rule ci_scripts/ci_post_clone.sh contract (materialize gitignored .xcodeproj, mirror local generation, pin Package.resolved, brew-only) plus the PR-check/tag-release workflow recipe</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="site-og-favicon-verify fixes teams/imessage/slack unfurl showing no image or wrong size, favicon missing, fonts blocked by csp: absolute og:image + true dimensions, self-hosted fonts + strict csp, complete favicon set ios-dev skill">
+        <div class="top"><span class="nm">site-og-favicon-verify</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Fixes Teams/iMessage/Slack unfurl showing no image or wrong size, favicon missing, fonts blocked by CSP: absolute og:image + true dimensions, self-hosted fonts + strict CSP, complete favicon set</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="mainactor-launch-watchdog-audit diagnoses launch watchdog 0x8badf00d sigkill + boot-loop crashes from heavy work implicitly running on mainactor at launch; off-main idioms + idempotent-retry rule ios-dev skill">
+        <div class="top"><span class="nm">mainactor-launch-watchdog-audit</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Diagnoses launch watchdog 0x8BADF00D SIGKILL + boot-loop crashes from heavy work implicitly running on MainActor at launch; off-main idioms + idempotent-retry rule</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="mainactor-runtime-isolation-trap diagnoses brk 1 crashes on swiftui&#x27;s asyncrenderer thread from @mainactor closures captured by uikit (dynamic color/image providers) and invoked off-main; includes re-entrancy guard patterns ios-dev skill">
+        <div class="top"><span class="nm">mainactor-runtime-isolation-trap</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Diagnoses brk 1 crashes on SwiftUI's AsyncRenderer thread from @MainActor closures captured by UIKit (dynamic color/image providers) and invoked off-main; includes re-entrancy guard patterns</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="swiftdata-cloudkit-model-rules cloudkit-safe swiftdata: explicit cloudkitdatabase config, throwing container factory with fallback, single-side @relationship inverse, avoiding nsmanagedobject-reserved names, centralized schema ios-dev skill">
+        <div class="top"><span class="nm">swiftdata-cloudkit-model-rules</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">CloudKit-safe SwiftData: explicit cloudKitDatabase config, throwing container factory with fallback, single-side @Relationship inverse, avoiding NSManagedObject-reserved names, centralized schema</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="widget-appgroup-snapshot-bridge app→widget snapshot bridge over an app group: one codable dto, atomic writes, backfill-on-launch, and the transient-empty-clobber + app-lock double-redaction invariants that shipped as bugs before ios-dev skill">
+        <div class="top"><span class="nm">widget-appgroup-snapshot-bridge</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">App→widget snapshot bridge over an App Group: one Codable DTO, atomic writes, backfill-on-launch, and the transient-empty-clobber + App-Lock double-redaction invariants that shipped as bugs before</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="file-handoff-inbox-backstop app-group share/action-extension handoff inbox with a per-batch attempt-cap + quarantine so one poison shared file can&#x27;t boot-loop the host app ios-dev skill">
+        <div class="top"><span class="nm">file-handoff-inbox-backstop</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">App-Group share/action-extension handoff inbox with a per-batch attempt-cap + quarantine so one poison shared file can't boot-loop the host app</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="deep-link-resolver-applock-pathtraversal one pure resolver for all deep-link urls; drops (not defers) links while app-lock is engaged; validates against path traversal ios-dev skill">
+        <div class="top"><span class="nm">deep-link-resolver-applock-pathtraversal</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">One pure resolver for all deep-link URLs; drops (not defers) links while App-Lock is engaged; validates against path traversal</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="vision-layout-ocr-grounding grounds on-device ai on vision-layout text instead of pdfdocument.string (which collapses multi-column layouts and causes confabulation); versioned sidecar; verify on the cold path ios-dev skill">
+        <div class="top"><span class="nm">vision-layout-ocr-grounding</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Grounds on-device AI on Vision-layout text instead of PDFDocument.string (which collapses multi-column layouts and causes confabulation); versioned sidecar; verify on the cold path</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="ondevice-generable-anti-hallucination apple @generable patterns: flat schemas only (nested hangs generation on ios 26), verbatim-quote pinning, clipping grounding text to the model&#x27;s context window ios-dev skill">
+        <div class="top"><span class="nm">ondevice-generable-anti-hallucination</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Apple @Generable patterns: flat schemas only (nested hangs generation on iOS 26), verbatim-quote pinning, clipping grounding text to the model's context window</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="scan-crash-recovery-store recovers long roomplan/arkit captures: persist the processed result before the hang-prone build step; harden against partial/corrupt recovery files; crash marker ios-dev skill">
+        <div class="top"><span class="nm">scan-crash-recovery-store</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Recovers long RoomPlan/ARKit captures: persist the processed result before the hang-prone build step; harden against partial/corrupt recovery files; crash marker</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="scan-capture-quality-gates soft variance-of-laplacian sharpness gate (not a hard reject) plus scan auto-naming discipline to stop ocr prose becoming an item name ios-dev skill">
+        <div class="top"><span class="nm">scan-capture-quality-gates</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Soft variance-of-Laplacian sharpness gate (not a hard reject) plus scan auto-naming discipline to stop OCR prose becoming an item name</div>
         <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="linear-pm linear project management conventions and slash commands: label vocabulary, status taxonomy, branch/pr naming, issue template, .claude/linear.yml policy linear-pm skill">
         <div class="top"><span class="nm">linear-pm</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Linear project management conventions and slash commands: label vocabulary, status taxonomy, branch/PR naming, issue template, .claude/linear.yml policy</div>
@@ -124,13 +172,19 @@
         <div class="top"><span class="nm">second-wind</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Orchestrate long unattended Claude Code runs across multiple repos with wind CLI, resume sessions after 5-hour usage limit</div>
         <div class="pl">in <a href="features/second-wind.html">second-wind</a></div></div></div></div><div class="cat-group">
-      <h3>Commands <span class="badge">12</span></h3>
+      <h3>Commands <span class="badge">17</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Command" data-search="contribute-skill contribute a change or new skill back to claude-skills (creates branch + pr) core-workflow command">
         <div class="top"><span class="nm">contribute-skill</span><span class="ty t-command">Command</span></div>
         <div class="dc">Contribute a change or new skill back to claude-skills (creates branch + PR)</div>
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Command" data-search="team evaluate whether current task warrants a claude code agent team; propose composition or push back core-workflow command">
         <div class="top"><span class="nm">team</span><span class="ty t-command">Command</span></div>
         <div class="dc">Evaluate whether current task warrants a Claude Code agent team; propose composition or push back</div>
+        <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Command" data-search="learn invoke lesson capture from any repo; reports the dedupe verdict (extended vs created) and the pr url core-workflow command">
+        <div class="top"><span class="nm">learn</span><span class="ty t-command">Command</span></div>
+        <div class="dc">Invoke lesson capture from any repo; reports the dedupe verdict (extended vs created) and the PR URL</div>
+        <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Command" data-search="explain-branch generate a self-contained html visual explainer for the current branch, diffed against a base branch; writes to .scratch and delivers it core-workflow command">
+        <div class="top"><span class="nm">explain-branch</span><span class="ty t-command">Command</span></div>
+        <div class="dc">Generate a self-contained HTML visual explainer for the current branch, diffed against a base branch (default main); writes to .scratch/branch-explainer/ and delivers it</div>
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Command" data-search="fix apply ui fix to ios app (reads .claude/app.yml), then build + screenshot to prove it worked ios-dev command">
         <div class="top"><span class="nm">fix</span><span class="ty t-command">Command</span></div>
         <div class="dc">Apply UI fix to iOS app (reads .claude/app.yml), then build + screenshot to prove it worked</div>
@@ -140,6 +194,15 @@
         <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Command" data-search="preview build ios app (reads .claude/app.yml; --no-build skips), launch on booted simulator, optionally deep-link, screenshot, embed inline ios-dev command">
         <div class="top"><span class="nm">preview</span><span class="ty t-command">Command</span></div>
         <div class="dc">Build iOS app (reads .claude/app.yml; --no-build skips), launch on booted simulator, optionally deep-link, screenshot, embed inline</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Command" data-search="ios-scaffold run the repo standardizer and walk drift items one by one ios-dev command">
+        <div class="top"><span class="nm">ios-scaffold</span><span class="ty t-command">Command</span></div>
+        <div class="dc">Run the repo standardizer and walk drift items one by one</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Command" data-search="release testflight or appstore (--dry-run supported): gated fastlane release pipeline, stops at every failing gate ios-dev command">
+        <div class="top"><span class="nm">release</span><span class="ty t-command">Command</span></div>
+        <div class="dc">testflight or appstore (--dry-run supported): gated Fastlane release pipeline, stops at every failing gate</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Command" data-search="site create/deploy/verify the marketing site per the standard ios-dev command">
+        <div class="top"><span class="nm">site</span><span class="ty t-command">Command</span></div>
+        <div class="dc">create/deploy/verify the marketing site per the standard</div>
         <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Command" data-search="linear-block add agent-blocked label to linear issue and post comment with given reason linear-pm command">
         <div class="top"><span class="nm">linear-block</span><span class="ty t-command">Command</span></div>
         <div class="dc">Add agent-blocked label to Linear issue and post comment with given reason</div>
@@ -224,7 +287,7 @@
       <a href="https://github.com/abhijitbansal/claude-skills/blob/main/SECURITY.md">Security policy</a></div>
   </div>
   <div class="foot-meta"><span class="lic">MIT licensed</span>
-    <span>5 plugins · 19 skills · 12 commands · 2 agents · 8 hooks · 1 CLI</span>
+    <span>5 plugins · 35 skills · 17 commands · 2 agents · 8 hooks · 1 CLI</span>
     <span>Tested on macOS &amp; Ubuntu</span></div>
 </div></footer>
 <script src="../site/assets/site.js"></script>
