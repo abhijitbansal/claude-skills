@@ -496,7 +496,8 @@
     cursor: pointer;
   }
   .btn-help:hover { color: var(--cyan); border-color: var(--cyan-dim); }
-  #help-overlay {
+  #help-overlay,
+  #add-overlay {
     position: fixed;
     inset: 0;
     background: rgba(4, 7, 12, .72);
@@ -506,8 +507,20 @@
     padding: 5vh 5vw;
     z-index: 60;
   }
-  #help-overlay[hidden] { display: none; }
-  #help-card {
+  #help-overlay[hidden], #add-overlay[hidden] { display: none; }
+  #add-list { padding: 8px 20px 20px; display: flex; flex-direction: column; gap: 8px; }
+  #add-list .add-cand {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    width: 100%; text-align: left; cursor: pointer;
+    background: var(--bg-pre); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px; color: var(--text);
+    font-family: var(--mono); font-size: 13px;
+  }
+  #add-list .add-cand:hover { border-color: var(--cyan-soft); }
+  #add-list .add-cand .cand-path { color: var(--text-dim); font-size: 11px; }
+  #add-list .add-empty { color: var(--text-dim); }
+  #help-card,
+  #add-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 14px;
@@ -516,14 +529,16 @@
     max-height: 86vh;
     overflow-y: auto;
   }
-  #help-head {
+  #help-head,
+  #add-head {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 14px 18px;
     border-bottom: 1px solid var(--border-soft);
   }
-  #help-head .help-title { font-weight: 600; flex: 1 1 auto; }
+  #help-head .help-title,
+  #add-head .help-title { font-weight: 600; flex: 1 1 auto; }
   #help-body { padding: 8px 20px 20px; }
   #help-body h3 { color: var(--cyan-soft); font-size: 14px; margin: 16px 0 6px; }
   #help-body ul { margin: 0; padding-left: 18px; }
@@ -553,6 +568,7 @@
 
   <div id="watcher">
     <div id="watcher-text"><span class="dot">●</span><span id="watcher-msg">watcher idle / no limit detected</span></div>
+    <button id="add-btn" class="btn-resume" type="button">＋ add repo</button>
     <button id="resume-all" class="btn-resume" type="button">↻ resume all</button>
   </div>
 
@@ -617,6 +633,16 @@
   </div>
 </div>
 
+<div id="add-overlay" hidden>
+  <div id="add-card" role="dialog" aria-modal="true" aria-label="add repo">
+    <div id="add-head">
+      <span class="help-title">Add a scanned repo</span>
+      <button id="add-close" type="button" class="btn-close" aria-label="close">✕</button>
+    </div>
+    <div id="add-list"></div>
+  </div>
+</div>
+
 <script>
 "use strict";
 
@@ -657,6 +683,10 @@ const els = {
   helpBtn: document.getElementById("help-btn"),
   helpOverlay: document.getElementById("help-overlay"),
   helpClose: document.getElementById("help-close"),
+  addBtn: document.getElementById("add-btn"),
+  addOverlay: document.getElementById("add-overlay"),
+  addClose: document.getElementById("add-close"),
+  addList: document.getElementById("add-list"),
 };
 
 // name -> { root, pill, resetLine, pane, input, sendBtn, killBtn, pinned }
@@ -1144,6 +1174,71 @@ els.helpOverlay.addEventListener("click", (ev) => {
 });
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape" && !els.helpOverlay.hidden) closeHelp();
+});
+
+// --- Add repo: list scanned candidates, add + launch on click ---
+async function openAdd() {
+  els.addOverlay.hidden = false;
+  els.addList.textContent = "";
+  const loading = document.createElement("div");
+  loading.className = "add-empty";
+  loading.textContent = "scanning…";
+  els.addList.appendChild(loading);
+  try {
+    const res = await fetch("/api/scan", { headers: { "X-Wind-Token": TOKEN } });
+    const data = await res.json();
+    renderCandidates(data.candidates || []);
+  } catch (err) {
+    els.addList.textContent = "";
+    const e = document.createElement("div");
+    e.className = "add-empty";
+    e.textContent = "scan failed: " + err.message;
+    els.addList.appendChild(e);
+  }
+}
+function closeAdd() { els.addOverlay.hidden = true; }
+function renderCandidates(cands) {
+  els.addList.textContent = "";
+  if (!cands.length) {
+    const e = document.createElement("div");
+    e.className = "add-empty";
+    e.textContent = "no scanned repos left to add (all configured, or empty scan_roots)";
+    els.addList.appendChild(e);
+    return;
+  }
+  for (const c of cands) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "add-cand";
+    const nm = document.createElement("span");
+    nm.textContent = c.name;
+    const pt = document.createElement("span");
+    pt.className = "cand-path";
+    pt.textContent = c.path;
+    btn.appendChild(nm);
+    btn.appendChild(pt);
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await apiPost("/api/add", { path: c.path });
+        showToast("added " + c.name, "ok");
+        closeAdd();
+        refresh();
+      } catch (err) {
+        showToast("add failed: " + err.message, "err");
+        btn.disabled = false;
+      }
+    });
+    els.addList.appendChild(btn);
+  }
+}
+els.addBtn.addEventListener("click", openAdd);
+els.addClose.addEventListener("click", closeAdd);
+els.addOverlay.addEventListener("click", (ev) => {
+  if (ev.target === els.addOverlay) closeAdd();
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && !els.addOverlay.hidden) closeAdd();
 });
 
 const modalDoSend = async () => {

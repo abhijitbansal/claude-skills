@@ -2845,6 +2845,25 @@ class DashboardHelp(unittest.TestCase):
                           f"help should mention `{needle}`")
 
 
+class DashboardAddRepo(unittest.TestCase):
+    """The dashboard has an add-repo control wired to /api/scan + /api/add."""
+
+    @classmethod
+    def setUpClass(cls):
+        path = os.path.join(os.path.dirname(__file__), "..", "dashboard.html")
+        with open(path) as f:
+            cls.html = f.read()
+
+    def test_add_button_and_overlay_present(self):
+        self.assertIn('id="add-btn"', self.html)
+        self.assertIn('id="add-overlay"', self.html)
+        self.assertIn('id="add-list"', self.html)
+
+    def test_add_flow_calls_scan_and_add(self):
+        self.assertIn("/api/scan", self.html)
+        self.assertIn('apiPost("/api/add"', self.html)
+
+
 class DashboardAnsiMerge(unittest.TestCase):
     """parseAnsi must MERGE SGR attributes into the active set instead of
     wholesale-replacing them, so ESC[1m then ESC[31m yields bold+red."""
