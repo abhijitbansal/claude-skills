@@ -86,6 +86,20 @@ explicit override writes one. Per-repo `claude_args` (when the key is present)
 wins over the global preset; an explicit `claude_args: ""` is honored as "no
 args", distinct from "unset → inherit global".
 
+## Settings & hooks inheritance
+
+`wind up` launches the same `claude` binary in the same `$HOME` via
+`tmux new-session` + `send-keys`, with no `--settings`, `CLAUDE_CONFIG_DIR`, or
+`HOME` override and no env stripping. So your `~/.claude/settings.json` defaults
+(e.g. effort, remote control) and your SessionStart hooks fire exactly as they do
+in a normal terminal. `--permission-mode` governs only tool-permission prompting
+and does not suppress settings or hooks.
+
+Caveat: settings tuned via **shell environment variables** (not `settings.json`)
+can be stale, because a long-running tmux server freezes its environment and
+`wind` does not run `tmux update-environment`. Put durable defaults in
+`settings.json` rather than shell exports for the most reliable behavior.
+
 ## Agents (Claude + GitHub Copilot)
 
 The `agent` key selects a preset — `claude` (the default) or `copilot` —
