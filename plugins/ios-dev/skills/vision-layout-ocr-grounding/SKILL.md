@@ -1,6 +1,15 @@
 ---
 name: vision-layout-ocr-grounding
-description: On-device AI (Analyze / Ask / summarize) confabulates values from a scanned document — the scan clearly shows "Patient ID: 110331" next to "Patient Name:", but the model answers with an invented value, and the bug appears ONLY after kill+relaunch (fresh scans answer correctly). Root cause is grounding the model on PDFDocument.string, whose linear reading order collapses multi-column layouts into one jumbled line and drops right-column values. Use when feeding document text to an on-device LLM / Apple Intelligence, when AI answers are wrong only on the cold path, or when extracted text scrambles multi-column scans.
+description: >-
+  On-device AI (Analyze / Ask / summarize) confabulates values from a scanned
+  document — the scan clearly shows "Patient ID: 110331" next to
+  "Patient Name:", but the model answers with an invented value, and the bug
+  appears ONLY after kill+relaunch (fresh scans answer correctly). Root cause
+  is grounding the model on PDFDocument.string, whose linear reading order
+  collapses multi-column layouts into one jumbled line and drops right-column
+  values. Use when feeding document text to an on-device LLM / Apple
+  Intelligence, when AI answers are wrong only on the cold path, or when
+  extracted text scrambles multi-column scans.
 ---
 
 # Ground AI on Vision-Layout Text, Never `PDFDocument.string`
@@ -54,21 +63,48 @@ nonisolated enum VisionLayoutFormatter {
     }
 
     static func formatPage(_ items: [LineItem]) -> String {
-        // 1. Sort by Y-center descending (Vision origin is bottom-left).
-        // 2. Y-band rows: same row when |ΔyCenter| <= max(
-        //      rowToleranceFactor * medianLineHeight, minRowTolerance).
-        // 3. Within a row sort by minX; split into segments where the X-gap
-        //    >= columnGapFraction of page width; join within a segment by " ".
-        // 4. A shared vertical gutter with >= minColumnRowsPerSide rows on
-        //    EACH side is a real column block: emit each column top-to-bottom.
-        //    Otherwise read segments ACROSS the row joined by "\t" — this
-        //    protects receipts/key-value pairs from being scrambled.
-        // 5. A single segment spanning >= fullWidthFraction of the page width
-        //    is a heading/footer: it terminates the column block above it.
-        // (Full implementation: doc-scan AI/VisionLayoutFormatter.swift.)
+        guard !items.isEmpty else { return "" }
+        // Rows: sort by Y-center descending (Vision origin is bottom-left);
+        // same row while |ΔyCenter| <= max(rowToleranceFactor × median line
+        // height, minRowTolerance).
+        let sorted = items.sorted { $0.bbox.midY > $1.bbox.midY }
+        let heights = sorted.map(\.bbox.height).sorted()
+        let tolerance = max(rowToleranceFactor * heights[heights.count / 2],
+                            minRowTolerance)
+        let rows = sorted.dropFirst().reduce(into: [[sorted[0]]]) { bands, item in
+            if abs(bands[bands.count - 1][0].bbox.midY - item.bbox.midY) <= tolerance {
+                bands[bands.count - 1].append(item)
+            } else {
+                bands.append([item])
+            }
+        }
+        // Columns: within a row sort by minX; split into segments where the
+        // X-gap >= columnGapFraction of page width; join segment text by " ",
+        // segments by "\t" — reading ACROSS the row is what protects
+        // receipts/key-value pairs from being scrambled.
+        let lines: [String] = rows.map { row in
+            let cells = row.sorted { $0.bbox.minX < $1.bbox.minX }
+            let segments = cells.dropFirst().reduce(into: [[cells[0]]]) { segs, cell in
+                if let tail = segs[segs.count - 1].last,
+                   cell.bbox.minX - tail.bbox.maxX >= columnGapFraction {
+                    segs.append([cell])
+                } else {
+                    segs[segs.count - 1].append(cell)
+                }
+            }
+            return segments.map { $0.map(\.text).joined(separator: " ") }
+                .joined(separator: "\t")
+        }
+        return lines.filter { !$0.isEmpty }.joined(separator: "\n")
     }
 }
 ```
+
+The full implementation (see Evidence) adds two refinements: a shared vertical
+gutter with >= `minColumnRowsPerSide` rows on EACH side is a real column block
+— emit each column top-to-bottom instead of tab-joining across; and a single
+segment spanning >= `fullWidthFraction` of the page width is a heading/footer
+that terminates the column block above it.
 
 `LineItem` exists because tests can't construct `VNRecognizedTextObservation`;
 test the row/column geometry directly on `LineItem` arrays.
@@ -82,9 +118,11 @@ Every AI feature must get its grounding text from a single loader — never call
 @MainActor
 enum DocumentTextLoader {
     static let cacheSuffix = "aitext.v2.txt" // bump when formatter contract changes
-    static let maxModelInputChars = 4000     // multi-script tokenizes 2–3x heavier
 
     /// Always returns something — the fallback chain ends in searchableText.
+    /// clipForModel is the clip-on-read pattern from
+    /// `ondevice-generable-anti-hallucination` Fix #4 (~4000-char cap +
+    /// truncation marker; the cache file keeps the full text).
     static func aiInputText(
         for document: Document, contentHash: String, store: DocumentStore
     ) async -> String {
@@ -98,12 +136,6 @@ enum DocumentTextLoader {
         writeCache(formatted, for: document, hash: contentHash) // atomic write
         return clipForModel(formatted)
     }
-
-    static func clipForModel(_ text: String) -> String {
-        guard text.count > maxModelInputChars else { return text }
-        return text.prefix(maxModelInputChars)
-            + "\n\n[… document truncated to fit the on-device model's context window]"
-    }
 }
 ```
 
@@ -112,8 +144,8 @@ Invariants that matter:
 - **Versioned suffix** (`.aitext.v2.txt`): bump when the formatter contract
   changes so stale caches can't poison downstream features. Key by content
   hash so edits/re-OCR make old entries unreachable.
-- **Clip on read, not on write** — the sidecar keeps the full text for
-  forensics, and changing the clip constant needs no cache bump.
+- **Clip on read, not on write** — pattern, constant, and rationale live in
+  `ondevice-generable-anti-hallucination` (Fix #4).
 - Rasterize pages at **native size** for OCR — downsampled thumbnails hurt
   small-text recognition.
 
@@ -129,7 +161,8 @@ Add this as an explicit manual-test step; a warm-path check proves nothing.
   text, restore copy` (e32db4a); `fix(ocr): column-aware reading order for
   multi-column scans` (4edae2e); `fix(import,ocr): edge-detect shared photos
   + layout-preserve Extract Text` (eba5e12). The `Patient ID: 110331`
-  confabulation was the originating user repro.
+  confabulation was the originating user repro. Full formatter:
+  `AI/VisionLayoutFormatter.swift` in the originating doc-scan repo.
 - **cubby:** OCR reading-order fixes; raw OCR prose leaking into user-visible
   surfaces (auto-naming) required the same "one grounded entry point" cure.
 
@@ -137,9 +170,14 @@ Add this as an explicit manual-test step; a warm-path check proves nothing.
 
 - `swift6-mainactor-migration` — why the formatter must be `nonisolated`
   pure compute under default-MainActor isolation.
-- `nonisolated-struct-codable-mainactor` — keeping the formatter's value
-  types usable off-main.
-- `vision-barcode-cidetector-fallback` — sibling Vision-pipeline fallback
-  pattern (primary detector + deterministic fallback chain).
-- `avfoundation-capture-delivery-watchdog` — upstream capture-side failure
-  detection for the same scan pipelines.
+- `ondevice-generable-anti-hallucination` — downstream consumer; owns the
+  clip-on-read `clipForModel` pattern this loader applies.
+- `nonisolated-struct-codable-mainactor` (local learned micro-skill, not
+  shipped with this plugin) — keeping the formatter's value types usable
+  off-main.
+- `vision-barcode-cidetector-fallback` (local learned micro-skill, not
+  shipped with this plugin) — sibling Vision-pipeline fallback pattern
+  (primary detector + deterministic fallback chain).
+- `avfoundation-capture-delivery-watchdog` (local learned micro-skill, not
+  shipped with this plugin) — upstream capture-side failure detection for
+  the same scan pipelines.

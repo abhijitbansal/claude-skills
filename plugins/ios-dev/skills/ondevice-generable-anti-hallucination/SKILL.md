@@ -1,6 +1,16 @@
 ---
 name: ondevice-generable-anti-hallucination
-description: Fixing on-device FoundationModels (Apple Intelligence / SystemLanguageModel) generation that hangs indefinitely — spinner spins forever, respond(generating:) never returns — when a @Generable schema nests another @Generable type in an array (iOS 26), and output that hallucinates — bracketed placeholders like "[Insert Number Here]", dummy values ("John Doe", "12345"), concatenated fields ("Card Reference: Credit Card Amount: 25.0"), or an empty SOURCES/citations section — or degrades on long multi-script documents that blow the ~4K-token context window. Use when designing @Generable schemas, grounding prompts, or citation rendering for the on-device model.
+description: >-
+  Fixing on-device FoundationModels (Apple Intelligence / SystemLanguageModel)
+  generation that hangs indefinitely — spinner spins forever,
+  respond(generating:) never returns — when a @Generable schema nests another
+  @Generable type in an array (iOS 26), and output that hallucinates —
+  bracketed placeholders like "[Insert Number Here]", dummy values
+  ("John Doe", "12345"), concatenated fields
+  ("Card Reference: Credit Card Amount: 25.0"), or an empty SOURCES/citations
+  section — or degrades on long multi-script documents that blow the
+  ~4K-token context window. Use when designing @Generable schemas, grounding
+  prompts, or citation rendering for the on-device model.
 ---
 
 # On-Device @Generable: Flat Schemas, Verbatim Pinning, Context Clipping
@@ -93,7 +103,7 @@ struct AskAnswer {
 // model indices → regex-scan prose for [n] → top-3 hits as "sources considered".
 nonisolated static func resolveCitations(indices: [Int], hits: [ScoredChunk],
                                          answer: String) -> [Citation] {
-    var out = indices.compactMap { n in (1...hits.count).contains(n) ? citation(hits[n - 1]) : nil }
+    var out = indices.compactMap { n in hits.indices.contains(n - 1) ? citation(hits[n - 1]) : nil }
     if out.isEmpty { out = parseCitations(in: answer, hits: hits) }
     if out.isEmpty { out = hits.prefix(3).map(citation) }
     return out
@@ -134,6 +144,7 @@ multi-script medical bill.
 
 - `vision-layout-ocr-grounding` — where the grounding text comes from; garbage
   layout in ⇒ confabulation out, no matter how good the schema is.
-- `nonisolated-struct-codable-mainactor` — the parsed DTOs (`KeyFact`) and
-  parse/filter helpers must be `nonisolated` in MainActor-default builds.
+- `nonisolated-struct-codable-mainactor` (local learned micro-skill, not
+  shipped with this plugin) — the parsed DTOs (`KeyFact`) and parse/filter
+  helpers must be `nonisolated` in MainActor-default builds.
 - `swift6-mainactor-migration` — running the AI pipeline off-main correctly.

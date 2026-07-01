@@ -63,8 +63,8 @@ final class Item {
     // Every stored property optional OR defaulted — CloudKit rejects
     // non-optional, non-defaulted attributes at container init.
     var name: String = ""
-    var createdAt: Date = .now
-    var notes: String?
+    var createdAt: Date = Date.now   // NOT `.now` — @Model requires the
+    var notes: String?               // fully qualified `Date.now`
 
     // Never NSManagedObject-reserved names: `isDeleted` silently breaks
     // sync — use `isTrashed`.
@@ -74,6 +74,8 @@ final class Item {
     // the container at init.
     @Relationship(deleteRule: .cascade, inverse: \Photo.item)
     var photos: [Photo]? = []
+
+    init() {}    // @Model suppresses the synthesized init — one is required
 }
 
 @Model
@@ -81,6 +83,8 @@ final class Photo {
     var item: Item?                      // no @Relationship(inverse:) here
     @Attribute(.externalStorage)
     var imageData: Data?                 // travels as CKAsset (rule 3)
+
+    init() {}
 }
 ```
 
@@ -88,9 +92,11 @@ final class Photo {
 
 ```swift
 // If blobs also live as file sidecars, reconcile bidirectionally and
-// idempotently — and only when sync is ON.
+// idempotently — and only when sync is ON. (Sketch: `reconcile(_:)` is
+// your app's per-photo reconcile step.)
 func reconcileAssets(context: ModelContext, mode: CloudSyncMode) async throws {
     guard mode != .off else { return }              // gate on sync-ON
+    let batchSize = 32
     let photos = try context.fetch(FetchDescriptor<Photo>())
     for (index, photo) in photos.enumerated() {
         try reconcile(photo)                        // safe to re-run
@@ -103,8 +109,9 @@ func reconcileAssets(context: ModelContext, mode: CloudSyncMode) async throws {
 }
 ```
 
-Coalesce re-entrant passes with a run guard (cubby's `PhotoSyncRunGuard`) —
-`@MainActor` serializes threads, not logical passes across `await`.
+Coalesce re-entrant passes with a run guard — see
+`mainactor-runtime-isolation-trap` for why `@MainActor` doesn't prevent
+overlapping passes, and for the full `PhotoSyncRunGuard` implementation.
 
 ### 4. Centralize the schema in one `nonisolated` type
 
@@ -138,5 +145,7 @@ model list inline at a call site.
 
 - `swiftdata-inmemory-test-harness` — in-memory test containers; they must use
   `cloudKitDatabase: .none` and resolve the same centralized schema (rule 4).
+- `mainactor-runtime-isolation-trap` — run-guard pattern
+  (`PhotoSyncRunGuard`) for coalescing re-entrant async passes (rule 3).
 - `swift6-mainactor-migration` — why the schema type (and other pure-compute
   types) must be `nonisolated` under `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`.
