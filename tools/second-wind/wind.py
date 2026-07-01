@@ -1516,29 +1516,40 @@ def cmd_init(args):
         log("wizard cancelled", glyph="○", color="dim")
 
 
+def launch_repo(cfg, repo):
+    """Create the repo's tmux session and launch its agent.
+
+    Returns the session name, or None if it is already running. die()s on a
+    missing repo path (same guard as cmd_up). Resolves cmd/args from the repo's
+    agent preset — explicit per-repo `claude_cmd`/`claude_args` override, and an
+    explicit "" for args is honored as "no args" (key-presence), not treated as
+    unset → inherit. args_source comes from resolve_agent so log and launch
+    can't diverge. Shared by cmd_up and cmd_add.
+    """
+    name = session_name(cfg, repo)
+    path = os.path.expanduser(repo["path"])
+    if session_exists(name):
+        log(f"{name}: already running, skipping", glyph="○", color="dim")
+        return None
+    if not os.path.isdir(path):
+        die(f"{name}: repo path does not exist: {path}")
+    agent = resolve_agent(repo, cfg)
+    command = agent["cmd"] + (f" {agent['args']}" if agent["args"] else "")
+    tmux("new-session", "-d", "-s", name, "-c", path)
+    tmux("send-keys", "-t", f"={name}:", command, "Enter")
+    log(f"{name}: launched `{command}` in {path} "
+        f"(agent {agent['name']}, {agent['args_source']} args)",
+        glyph="→", color="cyan")
+    return name
+
+
 def cmd_up(cfg, args):
     banner()
     started = []
     for repo in cfg["repos"]:
-        name = session_name(cfg, repo)
-        path = os.path.expanduser(repo["path"])
-        if session_exists(name):
-            log(f"{name}: already running, skipping", glyph="○", color="dim")
-            continue
-        if not os.path.isdir(path):
-            die(f"{name}: repo path does not exist: {path}")
-        # Resolve cmd/args from the repo's agent preset. Explicit per-repo
-        # `claude_cmd`/`claude_args` still override; an explicit "" for args is
-        # honored as "no args" (key-presence), not treated as unset → inherit.
-        # args_source comes from resolve_agent so log and launch can't diverge.
-        agent = resolve_agent(repo, cfg)
-        command = agent["cmd"] + (f" {agent['args']}" if agent["args"] else "")
-        tmux("new-session", "-d", "-s", name, "-c", path)
-        tmux("send-keys", "-t", f"={name}:", command, "Enter")
-        log(f"{name}: launched `{command}` in {path} "
-            f"(agent {agent['name']}, {agent['args_source']} args)",
-            glyph="→", color="cyan")
-        started.append((repo, name))
+        name = launch_repo(cfg, repo)
+        if name is not None:
+            started.append((repo, name))
 
     prompts = [(r, n) for r, n in started
                if r.get("prompt") or r.get("prompt_file")]
