@@ -851,9 +851,9 @@ class WizardHarness(unittest.TestCase):
                     "continue",                   # resume message
                     "https://ntfy.sh/topic",      # ntfy url
                 ],
-                # global preset "default"; per repo: override -> acceptEdits (0);
-                # agent claude (0); editor-offer (0 = skip)
-                selects=[2, 1, 0, 0, 0],
+                # global preset "default"; configure-individually (0); per repo:
+                # override -> acceptEdits (0); agent claude (0); editor skip (0)
+                selects=[2, 0, 1, 0, 0, 0],
                 multiselects=[[0]],  # pick repo #0
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha"))])
@@ -928,11 +928,11 @@ class WizardPermissionPresets(unittest.TestCase):
                     "continue",    # resume message
                     "",            # ntfy
                 ],
-                # global preset default (2);
+                # global preset default (2); configure-individually (0);
                 # alpha: override (1) -> plan preset (1), agent claude (0),
                 #        editor skip (0);
                 # beta:  inherit (0), agent claude (0), editor skip (0)
-                selects=[2, 1, 1, 0, 0, 0, 0, 0],
+                selects=[2, 0, 1, 1, 0, 0, 0, 0, 0],
                 multiselects=[[0, 1]],
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha")),
@@ -957,10 +957,10 @@ class WizardPermissionPresets(unittest.TestCase):
                     "continue",        # resume message
                     "",                # ntfy
                 ],
-                # global preset default (2);
+                # global preset default (2); configure-individually (0);
                 # alpha: override (1) -> custom preset (3), agent claude (0),
                 #        editor skip (0)
-                selects=[2, 1, 3, 0, 0],
+                selects=[2, 0, 1, 3, 0, 0],
                 multiselects=[[0]],
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha"))])
@@ -2900,6 +2900,31 @@ class FullAutoPreset(unittest.TestCase):
                 cfg = json.load(f)
             self.assertEqual(cfg["claude_args"],
                              "--permission-mode bypassPermissions")
+
+
+class WizardAcceptAll(unittest.TestCase):
+    def test_accept_all_writes_minimal_entries_inheriting_global(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            cfg = drive_wizard(
+                texts=[
+                    "~/projects",   # scan roots
+                    "",             # extra paths
+                    "continue",     # resume message
+                    "",             # ntfy
+                ],
+                # global preset acceptEdits (0); accept-all (1) -> no per-repo
+                selects=[0, 1],
+                multiselects=[[0, 1]],
+                target=target,
+                scan_result=[("alpha", os.path.join(tmp, "alpha")),
+                             ("beta", os.path.join(tmp, "beta"))])
+            self.assertEqual([r["name"] for r in cfg["repos"]],
+                             ["alpha", "beta"])
+            for repo in cfg["repos"]:
+                self.assertEqual(set(repo.keys()), {"name", "path"})
+            self.assertEqual(cfg["claude_args"],
+                             "--permission-mode acceptEdits")
 
 
 class SettingsInheritance(unittest.TestCase):
