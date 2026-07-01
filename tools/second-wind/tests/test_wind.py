@@ -2906,9 +2906,10 @@ class FullAutoPreset(unittest.TestCase):
         self.assertEqual(wind.PERMISSION_PRESETS[2][1], "")
         self.assertIsNone(wind.PERMISSION_PRESETS[3][1])  # custom
 
-    def test_shipped_default_is_full_auto(self):
-        self.assertEqual(wind.DEFAULT_CONFIG["claude_args"],
-                         "--permission-mode bypassPermissions")
+    def test_merge_fallback_stays_empty_for_backcompat(self):
+        # The full-auto default must NOT live in DEFAULT_CONFIG's merge value,
+        # or an existing config that omits claude_args would silently escalate.
+        self.assertEqual(wind.DEFAULT_CONFIG["claude_args"], "")
 
     def test_starter_config_carries_full_auto(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2919,6 +2920,19 @@ class FullAutoPreset(unittest.TestCase):
                 cfg = json.load(f)
             self.assertEqual(cfg["claude_args"],
                              "--permission-mode bypassPermissions")
+
+    def test_existing_minimal_config_not_escalated_on_upgrade(self):
+        # Regression: a hand-written config listing repos but omitting a
+        # top-level claude_args must still resolve to NO args (normal prompts)
+        # after the full-auto default landed — never silent full-bypass.
+        with tempfile.TemporaryDirectory() as tmp:
+            p = os.path.join(tmp, "second-wind.json")
+            wind.atomic_write_json(
+                p, {"session_prefix": "wind",
+                    "repos": [{"name": "foo", "path": tmp}]}, mode=0o644)
+            cfg = wind.load_config(p)
+            agent = wind.resolve_agent(cfg["repos"][0], cfg)
+            self.assertEqual(agent["args"], "")
 
 
 class DashAddScan(unittest.TestCase):
@@ -3071,6 +3085,36 @@ class AddRepo(unittest.TestCase):
             watcher = self._git(tmp, "watcher")   # -> wind-watcher reserved
             with self.assertRaises(ValueError):
                 wind.add_repo_to_config(cfg, watcher)
+
+    def test_concurrent_adds_all_persist_under_lock(self):
+        # Two+ concurrent add_repo_to_config calls (as ThreadingHTTPServer would
+        # serve) must not lose an append — the lock serializes the read-write.
+        import threading
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg, path = self._cfg_with(
+                tmp, [{"name": "alpha", "path": self._git(tmp, "alpha")}])
+            names = ["beta", "gamma", "delta", "epsilon"]
+            dirs = [self._git(tmp, n) for n in names]
+            barrier = threading.Barrier(len(dirs))
+            errors = []
+
+            def add(d):
+                barrier.wait()   # maximize contention on the RMW
+                try:
+                    wind.add_repo_to_config(cfg, d)
+                except Exception as e:   # noqa: BLE001 - test aggregation
+                    errors.append(e)
+
+            threads = [threading.Thread(target=add, args=(d,)) for d in dirs]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            self.assertEqual(errors, [])
+            with open(path) as f:
+                saved = json.load(f)
+            saved_names = {r["name"] for r in saved["repos"]}
+            self.assertEqual(saved_names, {"alpha", *names})
 
     def test_cmd_add_launches_and_refreshes_watcher(self):
         with tempfile.TemporaryDirectory() as tmp:

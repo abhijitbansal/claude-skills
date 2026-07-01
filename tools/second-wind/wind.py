@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 
@@ -81,10 +82,17 @@ AGENT_PRESETS = {
     },
 }
 
+# The full-auto preset: accepts every tool call without prompting. It is the
+# shipped default for a NEW starter config (write_starter_config) and a wizard
+# preset, but is deliberately NOT baked into DEFAULT_CONFIG's merge value — an
+# existing hand-written config that omits `claude_args` must keep resolving to
+# normal prompts, never silently escalate to full bypass on upgrade.
+FULL_AUTO_ARGS = "--permission-mode bypassPermissions"
+
 DEFAULT_CONFIG = {
     "session_prefix": "wind",
     "claude_cmd": "claude",
-    "claude_args": "--permission-mode bypassPermissions",
+    "claude_args": "",
     "resume_message": "continue",
     "resume_buffer_seconds": 120,
     "poll_interval_seconds": 30,
@@ -400,8 +408,7 @@ PERMISSION_PRESETS = [
     ("plan — plans first, asks before acting", "--permission-mode plan"),
     ("default — normal permission prompts", ""),
     ("custom — type your own claude_args", None),
-    ("auto — accepts everything, no prompts (full bypass)",
-     "--permission-mode bypassPermissions"),
+    ("auto — accepts everything, no prompts (full bypass)", FULL_AUTO_ARGS),
 ]
 
 
@@ -1540,6 +1547,10 @@ def write_starter_config(args):
     if os.path.exists(path) and not args.force:
         die(f"{path} already exists (use --force to overwrite)")
     sample = {k: v for k, v in DEFAULT_CONFIG.items()}
+    # Full-auto is the shipped default for a fresh config (you opt in by running
+    # `wind init`). It lives here, NOT in DEFAULT_CONFIG's merge value, so an
+    # upgrade never silently escalates an existing config that omits claude_args.
+    sample["claude_args"] = FULL_AUTO_ARGS
     atomic_write_json(path, sample, mode=0o644)
     print(f"Wrote starter config to {path} — edit 'repos' and run `wind up`.")
 
@@ -1971,6 +1982,12 @@ def cmd_watch(cfg, args):
             keeper.terminate()
 
 
+# Serializes the read-modify-write in add_repo_to_config. `wind dash` uses a
+# ThreadingHTTPServer, so two concurrent /api/add requests would otherwise read
+# the same repos list and the second write would clobber the first's append.
+_CONFIG_WRITE_LOCK = threading.Lock()
+
+
 def add_repo_to_config(cfg, path):
     """Append a {name, path} repo to the RAW config file atomically.
 
@@ -1978,7 +1995,8 @@ def add_repo_to_config(cfg, path):
     preset); never accepts claude_args/agent/prompt from callers, so no new
     verbatim-execution surface opens. Raises ValueError on a non-git path, a
     duplicate name/path, or a reserved watcher-name collision. Returns the new
-    entry dict.
+    entry dict. The dup-check and write run under a lock so concurrent dashboard
+    adds can't lose an append or both pass the duplicate guard.
     """
     full = os.path.expanduser(str(path).strip())
     if not os.path.isdir(os.path.join(full, ".git")):
@@ -1986,23 +2004,24 @@ def add_repo_to_config(cfg, path):
     name = os.path.basename(full.rstrip("/"))
     if not name or "/" in name or name in (".", ".."):
         raise ValueError(f"cannot derive a safe repo name from {full!r}")
-    with open(cfg["_path"]) as f:
-        raw = json.load(f)
-    existing = raw.get("repos", [])
-    for r in existing:
-        if r.get("name") == name:
-            raise ValueError(f"a repo named {name!r} is already configured")
-        if os.path.expanduser(r.get("path", "")) == full:
-            raise ValueError(
-                f"{full} is already configured as {r.get('name')!r}")
     reserved = watcher_session_name(cfg)
     if session_name(cfg, {"name": name, "path": full}) == reserved:
         raise ValueError(
             f"{name!r} collides with the reserved watcher session "
             f"{reserved!r}; rename the directory or change 'session_prefix'")
     entry = build_repo_entry(name, full, "", "", override=False)
-    raw["repos"] = existing + [entry]
-    atomic_write_json(cfg["_path"], raw, mode=0o644)
+    with _CONFIG_WRITE_LOCK:
+        with open(cfg["_path"]) as f:
+            raw = json.load(f)
+        existing = raw.get("repos", [])
+        for r in existing:
+            if r.get("name") == name:
+                raise ValueError(f"a repo named {name!r} is already configured")
+            if os.path.expanduser(r.get("path", "")) == full:
+                raise ValueError(
+                    f"{full} is already configured as {r.get('name')!r}")
+        raw["repos"] = existing + [entry]
+        atomic_write_json(cfg["_path"], raw, mode=0o644)
     return entry
 
 
