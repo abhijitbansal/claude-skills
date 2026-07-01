@@ -66,6 +66,8 @@ The everyday glue, useful in any repo.
 | `contribute` | skill | Send improvements back to this repo from any working directory: branches, validates with the test suite, opens a PR. |
 | `learn-lesson` | skill | Capture a session lesson (symptom → root cause → fix → evidence) into the skills catalog: dedupes against existing skills, extends or creates, hands off to `contribute` for the PR. |
 | `/learn` | command | Invoke lesson capture from any repo — reports the dedupe verdict and PR URL. |
+| `branch-explainer` | skill | Generate a self-contained HTML explainer for the current branch/PR: what's implemented, an architecture diagram, key files, test evidence, next steps — scoped to one branch rather than the whole repo. |
+| `/explain-branch` | command | Invoke the branch explainer, diffing against a given base (default `main`); writes to `.scratch/branch-explainer/` and delivers it. |
 | `/team` | command | Multi-agent team orchestration helper. |
 | `/contribute-skill` | command | Scaffold a new skill into a plugin and open the PR (`--plugin` picks the destination). |
 | `image-parser` | agent | Vision subagent: OCR, screenshot comparison, "is the title cut off?" checks. |
