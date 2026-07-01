@@ -94,6 +94,7 @@ DEFAULT_CONFIG = {
     "caffeinate": True,
     "ntfy_url": "",
     "limit_patterns": [],
+    "scan_roots": [],
     "repos": [
         {
             "name": "example-repo",
@@ -621,12 +622,14 @@ def _seed_prompt_file(path, repo_name):
     os.chmod(path, 0o600)
 
 
-def build_config(repos, resume_message, ntfy_url, claude_args=""):
+def build_config(repos, resume_message, ntfy_url, claude_args="",
+                 scan_roots=None):
     cfg = dict(DEFAULT_CONFIG)
     cfg["repos"] = repos
     cfg["resume_message"] = resume_message or DEFAULT_CONFIG["resume_message"]
     cfg["ntfy_url"] = ntfy_url or ""
     cfg["claude_args"] = claude_args
+    cfg["scan_roots"] = scan_roots or []
     return cfg
 
 
@@ -667,7 +670,8 @@ def run_wizard(args):
 
     roots = prompt_text("Directories to scan for git repos (comma-separated)",
                         default="~/projects")
-    found = scan_repos(roots.split(","))
+    root_list = [r.strip() for r in roots.split(",") if r.strip()]
+    found = scan_repos(root_list)
     if not found:
         log(f"no git repos found under {roots}", glyph="!", color="yellow")
     existing_paths = {os.path.expanduser(r.get("path", ""))
@@ -777,7 +781,8 @@ def run_wizard(args):
         log("must start with http:// or https://", glyph="!", color="yellow")
         ntfy = prompt_text("ntfy.sh topic URL (empty to skip)", default="")
 
-    cfg = build_config(repos, resume_message, ntfy, claude_args=global_args)
+    cfg = build_config(repos, resume_message, ntfy, claude_args=global_args,
+                       scan_roots=root_list)
     atomic_write_json(target, cfg, mode=0o644)
 
     print()

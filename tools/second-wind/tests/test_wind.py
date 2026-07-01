@@ -2902,6 +2902,22 @@ class FullAutoPreset(unittest.TestCase):
                              "--permission-mode bypassPermissions")
 
 
+class ScanRootsPersisted(unittest.TestCase):
+    def test_default_config_has_scan_roots(self):
+        self.assertEqual(wind.DEFAULT_CONFIG["scan_roots"], [])
+
+    def test_wizard_persists_scan_roots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            cfg = drive_wizard(
+                texts=["~/projects, ~/work", "", "continue", ""],
+                selects=[0, 1],                 # global preset, accept-all
+                multiselects=[[0]],
+                target=target,
+                scan_result=[("alpha", os.path.join(tmp, "alpha"))])
+            self.assertEqual(cfg["scan_roots"], ["~/projects", "~/work"])
+
+
 class WizardAcceptAll(unittest.TestCase):
     def test_accept_all_writes_minimal_entries_inheriting_global(self):
         with tempfile.TemporaryDirectory() as tmp:
