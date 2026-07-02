@@ -14,18 +14,21 @@ CHECK=0
 work=0
 
 # Injection guard: these values are sed-substituted into shell/Ruby/YAML
-# templates — refuse anything with quoting/expansion metacharacters.
-for pair in "app.name=${APP_NAME}" "app.bundle_id=${APP_BUNDLE_ID}" \
-            "app.scheme=${APP_SCHEME}" "app.team_id=${APP_TEAM_ID}" \
-            "release.asc_app_id=${RELEASE_ASC_APP_ID}" "site.domain=${SITE_DOMAIN}"; do
-  key="${pair%%=*}"; val="${pair#*=}"
-  # shellcheck disable=SC1003
-  case "${val}" in
-    *'`'*|*'$'*|*'"'*|*"'"*|*';'*|*'|'*|*'&'*|*'<'*|*'>'*|*'\'*|*$'\n'*)
-      echo "unsafe value in ${key} — fix .claude/app.yml before scaffolding" >&2
-      exit 1 ;;
-  esac
-done
+# templates — allow only the same safe-character allowlists
+# validate_app_config.sh enforces, so a passing validate implies scaffolding
+# will succeed too (a denylist here would drift from that allowlist).
+assert_safe() {  # $1 = key, $2 = value, $3 = allowlist regex
+  [[ "$2" =~ $3 ]] || {
+    echo "unsafe value in $1 — fix .claude/app.yml before scaffolding" >&2
+    exit 1
+  }
+}
+assert_safe "app.name"           "${APP_NAME}"          '^[A-Za-z0-9 ._-]*$'
+assert_safe "app.bundle_id"      "${APP_BUNDLE_ID}"     '^[A-Za-z0-9.-]*$'
+assert_safe "app.scheme"         "${APP_SCHEME}"        '^[A-Za-z0-9._-]*$'
+assert_safe "app.team_id"        "${APP_TEAM_ID}"       '^[A-Za-z0-9]*$'
+assert_safe "release.asc_app_id" "${RELEASE_ASC_APP_ID}" '^[0-9]*$'
+assert_safe "site.domain"        "${SITE_DOMAIN}"       '^[A-Za-z0-9.-]*$'
 
 render() {  # $1 template file -> stdout with tokens substituted
   sed -e "s|{{APP_NAME}}|${APP_NAME}|g" \
@@ -78,8 +81,8 @@ ensure_dir() {
 ensure_file "marketing/app-store-listing.md" "${TPL}/marketing-app-store-listing.md"
 ensure_file "fastlane/Fastfile" "${TPL}/Fastfile"
 ensure_file "Gemfile" "${TPL}/Gemfile"
-ensure_file "ci_scripts/ci_post_clone.sh" "${TPL}/ci_post_clone.sh"
-[[ -f ci_scripts/ci_post_clone.sh && ${CHECK} -eq 0 ]] && chmod +x ci_scripts/ci_post_clone.sh
+ensure_file "${CI_POST_CLONE}" "${TPL}/ci_post_clone.sh"
+[[ -f "${CI_POST_CLONE}" && ${CHECK} -eq 0 ]] && chmod +x "${CI_POST_CLONE}"
 ensure_dir "scripts/release-hooks"
 ensure_file "docs/ARCHITECTURE_CHECKLIST.md" "${TPL}/ARCHITECTURE_CHECKLIST.md"
 if [[ ! -f AGENTS.md ]]; then

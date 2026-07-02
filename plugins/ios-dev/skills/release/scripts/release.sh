@@ -55,6 +55,7 @@ else
     -destination "generic/platform=iOS" \
     -archivePath "${archive_path}" \
     DEVELOPMENT_TEAM="${APP_TEAM_ID}" \
+    PRODUCT_BUNDLE_IDENTIFIER="${APP_BUNDLE_ID}" \
     -allowProvisioningUpdates
   cat > build/ExportOptions.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>

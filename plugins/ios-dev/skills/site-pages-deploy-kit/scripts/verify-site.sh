@@ -8,7 +8,6 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export APP_CONFIG_HELPERS_ONLY=1
 # shellcheck source=../../_lib/load_app_config.sh
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../../_lib/load_app_config.sh" 2>/dev/null || true

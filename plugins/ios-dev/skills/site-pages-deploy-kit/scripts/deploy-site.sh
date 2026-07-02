@@ -38,6 +38,10 @@ if [[ -n "$(git status --porcelain -- "${SITE_DIR}")" ]]; then
   exit 1
 fi
 [[ -d "${SITE_DIR}" ]] || { echo "site dir '${SITE_DIR}' not found (app.yml site.dir)" >&2; exit 1; }
+[[ "${SITE_DEPLOY}" == "subtree-ssh" ]] || {
+  echo "site.deploy '${SITE_DEPLOY}' not supported — only 'subtree-ssh' is implemented" >&2
+  exit 1
+}
 
 # Redact userinfo (e.g. https://x-access-token:TOKEN@github.com/...) so a
 # tokenized remote never lands in logs. CI uses an SSH deploy key instead.

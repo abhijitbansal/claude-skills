@@ -47,10 +47,10 @@ if [[ "${PREFLIGHT_SKIP_TOOLCHAIN:-}" != "1" ]]; then
   else
     warn xcodegen-fresh "xcodegen or project.yml missing"
   fi
-  if security find-identity -v -p codesigning 2>/dev/null | grep -q "Apple Distribution"; then
+  if security find-identity -v -p codesigning 2>/dev/null | grep -q "Apple Distribution.*(${APP_TEAM_ID})"; then
     pass signing-identity
   else
-    fail signing-identity "no 'Apple Distribution' identity in keychain"
+    fail signing-identity "no 'Apple Distribution' identity for team ${APP_TEAM_ID} in keychain"
   fi
 fi
 
