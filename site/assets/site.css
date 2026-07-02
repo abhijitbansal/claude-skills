@@ -201,13 +201,24 @@ h3.subtitle{font-size:clamp(20px,2.6vw,26px);font-weight:600;margin:0 0 10px}
 .chip b{color:var(--accent-c,var(--accent));font-weight:600}
 
 /* ── code blocks + copy ─────────────────────────────────────────────────── */
+/* .code no longer scrolls itself — scroll lives on inner .code-body / .cl .ct
+   so the absolutely-positioned copy button stays pinned to the visible box. */
 .code{position:relative;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);
-  padding:13px 15px;font-family:var(--font-mono);font-size:12.5px;color:var(--text);overflow-x:auto;white-space:pre;line-height:1.7}
+  padding:13px 15px;font-family:var(--font-mono);font-size:12.5px;color:var(--text);line-height:1.7}
+.code-body{display:block;overflow-x:auto;white-space:pre;padding-right:58px}
 .code .c{color:var(--text-dim)}
 .code .k{color:var(--accent)}
 .code .s{color:var(--green)}
-.copy{position:absolute;top:8px;right:8px;font-family:var(--font-mono);font-size:10.5px;
+/* per-line command list: one row per command, each with its own copy button */
+.code.cmds{padding:7px 8px}
+.cl{display:flex;align-items:center;gap:10px}
+.cl+.cl{margin-top:1px}
+.cl .ct{flex:1 1 auto;min-width:0;overflow-x:auto;white-space:pre;padding:4px 7px;border-radius:5px}
+.cl:hover .ct{background:var(--surface)}
+.cl .note{flex:1 1 auto;min-width:0;white-space:pre;padding:4px 7px;color:var(--text-dim)}
+.copy{position:absolute;top:8px;right:8px;z-index:2;min-width:52px;text-align:center;font-family:var(--font-mono);font-size:10.5px;
   background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text-dim);cursor:pointer}
+.cl .copy{position:static;flex:none;top:auto;right:auto}
 .copy:hover{border-color:var(--accent);color:var(--accent)}
 .copy.ok{color:var(--green);border-color:var(--green)}
 :where(p,li) code{font-family:var(--font-mono);font-size:.86em;background:var(--surface2);border:1px solid var(--border);

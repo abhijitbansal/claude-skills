@@ -851,9 +851,9 @@ class WizardHarness(unittest.TestCase):
                     "continue",                   # resume message
                     "https://ntfy.sh/topic",      # ntfy url
                 ],
-                # global preset "default"; per repo: override -> acceptEdits (0);
-                # agent claude (0); editor-offer (0 = skip)
-                selects=[2, 1, 0, 0, 0],
+                # global preset "default"; configure-individually (0); per repo:
+                # override -> acceptEdits (0); agent claude (0); editor skip (0)
+                selects=[2, 0, 1, 0, 0, 0],
                 multiselects=[[0]],  # pick repo #0
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha"))])
@@ -928,11 +928,11 @@ class WizardPermissionPresets(unittest.TestCase):
                     "continue",    # resume message
                     "",            # ntfy
                 ],
-                # global preset default (2);
+                # global preset default (2); configure-individually (0);
                 # alpha: override (1) -> plan preset (1), agent claude (0),
                 #        editor skip (0);
                 # beta:  inherit (0), agent claude (0), editor skip (0)
-                selects=[2, 1, 1, 0, 0, 0, 0, 0],
+                selects=[2, 0, 1, 1, 0, 0, 0, 0, 0],
                 multiselects=[[0, 1]],
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha")),
@@ -957,10 +957,10 @@ class WizardPermissionPresets(unittest.TestCase):
                     "continue",        # resume message
                     "",                # ntfy
                 ],
-                # global preset default (2);
+                # global preset default (2); configure-individually (0);
                 # alpha: override (1) -> custom preset (3), agent claude (0),
                 #        editor skip (0)
-                selects=[2, 1, 3, 0, 0],
+                selects=[2, 0, 1, 3, 0, 0],
                 multiselects=[[0]],
                 target=target,
                 scan_result=[("alpha", os.path.join(tmp, "alpha"))])
@@ -2845,6 +2845,25 @@ class DashboardHelp(unittest.TestCase):
                           f"help should mention `{needle}`")
 
 
+class DashboardAddRepo(unittest.TestCase):
+    """The dashboard has an add-repo control wired to /api/scan + /api/add."""
+
+    @classmethod
+    def setUpClass(cls):
+        path = os.path.join(os.path.dirname(__file__), "..", "dashboard.html")
+        with open(path) as f:
+            cls.html = f.read()
+
+    def test_add_button_and_overlay_present(self):
+        self.assertIn('id="add-btn"', self.html)
+        self.assertIn('id="add-overlay"', self.html)
+        self.assertIn('id="add-list"', self.html)
+
+    def test_add_flow_calls_scan_and_add(self):
+        self.assertIn("/api/scan", self.html)
+        self.assertIn('apiPost("/api/add"', self.html)
+
+
 class DashboardAnsiMerge(unittest.TestCase):
     """parseAnsi must MERGE SGR attributes into the active set instead of
     wholesale-replacing them, so ESC[1m then ESC[31m yields bold+red."""
@@ -2871,6 +2890,339 @@ class DashboardAnsiMerge(unittest.TestCase):
             self.html,
             "parseAnsi must merge new classes into active set one-by-one",
         )
+
+
+class FullAutoPreset(unittest.TestCase):
+    def test_bypass_preset_appended_at_index_4(self):
+        label, args = wind.PERMISSION_PRESETS[4]
+        self.assertIn("bypass", label.lower())
+        self.assertEqual(args, "--permission-mode bypassPermissions")
+
+    def test_existing_preset_indices_unchanged(self):
+        self.assertEqual(wind.PERMISSION_PRESETS[0][1],
+                         "--permission-mode acceptEdits")
+        self.assertEqual(wind.PERMISSION_PRESETS[1][1],
+                         "--permission-mode plan")
+        self.assertEqual(wind.PERMISSION_PRESETS[2][1], "")
+        self.assertIsNone(wind.PERMISSION_PRESETS[3][1])  # custom
+
+    def test_merge_fallback_stays_empty_for_backcompat(self):
+        # The full-auto default must NOT live in DEFAULT_CONFIG's merge value,
+        # or an existing config that omits claude_args would silently escalate.
+        self.assertEqual(wind.DEFAULT_CONFIG["claude_args"], "")
+
+    def test_starter_config_carries_full_auto(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            args = mock.Mock(config=target, force=True, defaults=True)
+            wind.write_starter_config(args)
+            with open(target) as f:
+                cfg = json.load(f)
+            self.assertEqual(cfg["claude_args"],
+                             "--permission-mode bypassPermissions")
+
+    def test_existing_minimal_config_not_escalated_on_upgrade(self):
+        # Regression: a hand-written config listing repos but omitting a
+        # top-level claude_args must still resolve to NO args (normal prompts)
+        # after the full-auto default landed — never silent full-bypass.
+        with tempfile.TemporaryDirectory() as tmp:
+            p = os.path.join(tmp, "second-wind.json")
+            wind.atomic_write_json(
+                p, {"session_prefix": "wind",
+                    "repos": [{"name": "foo", "path": tmp}]}, mode=0o644)
+            cfg = wind.load_config(p)
+            agent = wind.resolve_agent(cfg["repos"][0], cfg)
+            self.assertEqual(agent["args"], "")
+
+
+class DashAddScan(unittest.TestCase):
+    def setUp(self):
+        import http.server
+        import threading
+        self.tmp = tempfile.mkdtemp()
+        self.alpha = os.path.join(self.tmp, "alpha")
+        self.beta = os.path.join(self.tmp, "beta")
+        for d in (self.alpha, self.beta):
+            os.makedirs(os.path.join(d, ".git"))
+        self.cfg_path = os.path.join(self.tmp, "second-wind.json")
+        data = {"session_prefix": "wind", "claude_args": "",
+                "scan_roots": [self.tmp],
+                "repos": [{"name": "alpha", "path": self.alpha}]}
+        wind.atomic_write_json(self.cfg_path, data, mode=0o644)
+        self.cfg = dict(wind.DEFAULT_CONFIG)
+        self.cfg.update(data)
+        self.cfg["_path"] = self.cfg_path
+        self.token = "tok123"
+        self.launched = []
+        self._orig = (wind.launch_repo, wind._refresh_watcher)
+        wind.launch_repo = lambda c, r: self.launched.append(r["name"])
+        wind._refresh_watcher = lambda c: None
+        handler = wind.make_dash_handler(self.cfg, self.token, "<html>")
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=self.server.serve_forever,
+                         daemon=True).start()
+        self.port = self.server.server_address[1]
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        wind.launch_repo, wind._refresh_watcher = self._orig
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _req(self, method, path, body=None, token=None):
+        import http.client
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["X-Wind-Token"] = token
+        conn.request(method, path,
+                     json.dumps(body) if body is not None else None, headers)
+        resp = conn.getresponse()
+        data = resp.read().decode()
+        conn.close()
+        return resp.status, data
+
+    def test_scan_lists_candidates_minus_configured(self):
+        status, data = self._req("GET", "/api/scan")
+        self.assertEqual(status, 200)
+        cands = json.loads(data)["candidates"]
+        names = [c["name"] for c in cands]
+        self.assertIn("beta", names)
+        self.assertNotIn("alpha", names)   # already configured
+        for c in cands:
+            self.assertTrue(c["path"].startswith(self.tmp))
+
+    def test_add_without_token_rejected(self):
+        status, _ = self._req("POST", "/api/add", {"path": self.beta})
+        self.assertEqual(status, 401)
+        self.assertEqual(self.launched, [])
+
+    def test_add_candidate_appends_launches_and_updates_snapshot(self):
+        status, data = self._req("POST", "/api/add", {"path": self.beta},
+                                 token=self.token)
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(data)["ok"])
+        # config file updated
+        with open(self.cfg_path) as f:
+            saved = json.load(f)
+        self.assertIn("beta", [r["name"] for r in saved["repos"]])
+        self.assertEqual(set(saved["repos"][-1].keys()), {"name", "path"})
+        # in-memory snapshot updated + launch fired
+        self.assertIn("beta", [r["name"] for r in self.cfg["repos"]])
+        self.assertEqual(self.launched, ["beta"])
+
+    def test_add_rejects_path_outside_scan_roots(self):
+        outside = os.path.join(tempfile.mkdtemp(), "evil")
+        os.makedirs(os.path.join(outside, ".git"))
+        status, _ = self._req("POST", "/api/add", {"path": outside},
+                              token=self.token)
+        self.assertEqual(status, 400)
+        self.assertEqual(self.launched, [])
+
+    def test_add_ignores_injected_claude_args(self):
+        status, _ = self._req("POST", "/api/add",
+                              {"path": self.beta,
+                               "claude_args": "--dangerously-skip-permissions",
+                               "agent": "copilot"},
+                              token=self.token)
+        self.assertEqual(status, 200)
+        with open(self.cfg_path) as f:
+            saved = json.load(f)
+        entry = saved["repos"][-1]
+        self.assertEqual(set(entry.keys()), {"name", "path"})
+
+
+class AddRepo(unittest.TestCase):
+    def _cfg_with(self, tmp, repos, extra=None):
+        path = os.path.join(tmp, "second-wind.json")
+        data = {"session_prefix": "wind", "claude_args": "",
+                "repos": repos, "scan_roots": [tmp]}
+        if extra:
+            data.update(extra)
+        wind.atomic_write_json(path, data, mode=0o644)
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg.update(data)
+        cfg["_path"] = path
+        return cfg, path
+
+    def _git(self, tmp, name):
+        d = os.path.join(tmp, name)
+        os.makedirs(os.path.join(d, ".git"))
+        return d
+
+    def test_add_appends_minimal_entry_and_persists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg, path = self._cfg_with(
+                tmp, [{"name": "alpha", "path": self._git(tmp, "alpha")}])
+            newdir = self._git(tmp, "beta")
+            entry = wind.add_repo_to_config(cfg, newdir)
+            self.assertEqual(entry, {"name": "beta", "path": newdir})
+            with open(path) as f:
+                saved = json.load(f)
+            self.assertIn("beta", [r["name"] for r in saved["repos"]])
+            self.assertEqual(set(saved["repos"][-1].keys()), {"name", "path"})
+
+    def test_add_rejects_non_git_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg, _ = self._cfg_with(tmp, [{"name": "alpha", "path": tmp}])
+            plain = os.path.join(tmp, "plain")
+            os.makedirs(plain)
+            with self.assertRaises(ValueError):
+                wind.add_repo_to_config(cfg, plain)
+
+    def test_add_rejects_duplicate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a = self._git(tmp, "alpha")
+            cfg, _ = self._cfg_with(tmp, [{"name": "alpha", "path": a}])
+            with self.assertRaises(ValueError):
+                wind.add_repo_to_config(cfg, a)
+
+    def test_add_rejects_watcher_name_collision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg, _ = self._cfg_with(
+                tmp, [{"name": "alpha", "path": self._git(tmp, "alpha")}])
+            watcher = self._git(tmp, "watcher")   # -> wind-watcher reserved
+            with self.assertRaises(ValueError):
+                wind.add_repo_to_config(cfg, watcher)
+
+    def test_concurrent_adds_all_persist_under_lock(self):
+        # Two+ concurrent add_repo_to_config calls (as ThreadingHTTPServer would
+        # serve) must not lose an append — the lock serializes the read-write.
+        import threading
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg, path = self._cfg_with(
+                tmp, [{"name": "alpha", "path": self._git(tmp, "alpha")}])
+            names = ["beta", "gamma", "delta", "epsilon"]
+            dirs = [self._git(tmp, n) for n in names]
+            barrier = threading.Barrier(len(dirs))
+            errors = []
+
+            def add(d):
+                barrier.wait()   # maximize contention on the RMW
+                try:
+                    wind.add_repo_to_config(cfg, d)
+                except Exception as e:   # noqa: BLE001 - test aggregation
+                    errors.append(e)
+
+            threads = [threading.Thread(target=add, args=(d,)) for d in dirs]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            self.assertEqual(errors, [])
+            with open(path) as f:
+                saved = json.load(f)
+            saved_names = {r["name"] for r in saved["repos"]}
+            self.assertEqual(saved_names, {"alpha", *names})
+
+    def test_cmd_add_launches_and_refreshes_watcher(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg, _ = self._cfg_with(
+                tmp, [{"name": "alpha", "path": self._git(tmp, "alpha")}])
+            beta = self._git(tmp, "beta")
+            launched, refreshed = [], []
+            # load_config is NOT mocked: cmd_add reloads the just-written file
+            # (alpha + beta) so the beta entry is found for launch.
+            with mock.patch.object(wind, "launch_repo",
+                                   lambda c, r: launched.append(r["name"])), \
+                    mock.patch.object(wind, "_refresh_watcher",
+                                      lambda c: refreshed.append(True)):
+                wind.cmd_add(cfg, mock.Mock(path=beta))
+            self.assertEqual(launched, ["beta"])
+            self.assertTrue(refreshed)
+
+
+class LaunchRepo(unittest.TestCase):
+    def test_launch_repo_creates_session_and_sends_command(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "alpha", "path": "/tmp/alpha"}]
+        cfg["claude_args"] = "--permission-mode bypassPermissions"
+        calls = []
+        with mock.patch.object(wind, "tmux",
+                               lambda *a, **k: calls.append(a)), \
+                mock.patch.object(wind, "session_exists", lambda n: False), \
+                mock.patch("os.path.isdir", lambda p: True):
+            name = wind.launch_repo(cfg, cfg["repos"][0])
+        self.assertEqual(name, "wind-alpha")
+        new = [a for a in calls if a[0] == "new-session"][0]
+        self.assertIn("-c", new)
+        send = [a for a in calls if a[0] == "send-keys"][0]
+        self.assertEqual(send[3], "claude --permission-mode bypassPermissions")
+
+    def test_launch_repo_skips_running_session(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "alpha", "path": "/tmp/alpha"}]
+        with mock.patch.object(wind, "session_exists", lambda n: True):
+            self.assertIsNone(wind.launch_repo(cfg, cfg["repos"][0]))
+
+
+class ScanRootsPersisted(unittest.TestCase):
+    def test_default_config_has_scan_roots(self):
+        self.assertEqual(wind.DEFAULT_CONFIG["scan_roots"], [])
+
+    def test_wizard_persists_scan_roots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            cfg = drive_wizard(
+                texts=["~/projects, ~/work", "", "continue", ""],
+                selects=[0, 1],                 # global preset, accept-all
+                multiselects=[[0]],
+                target=target,
+                scan_result=[("alpha", os.path.join(tmp, "alpha"))])
+            self.assertEqual(cfg["scan_roots"], ["~/projects", "~/work"])
+
+
+class WizardAcceptAll(unittest.TestCase):
+    def test_accept_all_writes_minimal_entries_inheriting_global(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            cfg = drive_wizard(
+                texts=[
+                    "~/projects",   # scan roots
+                    "",             # extra paths
+                    "continue",     # resume message
+                    "",             # ntfy
+                ],
+                # global preset acceptEdits (0); accept-all (1) -> no per-repo
+                selects=[0, 1],
+                multiselects=[[0, 1]],
+                target=target,
+                scan_result=[("alpha", os.path.join(tmp, "alpha")),
+                             ("beta", os.path.join(tmp, "beta"))])
+            self.assertEqual([r["name"] for r in cfg["repos"]],
+                             ["alpha", "beta"])
+            for repo in cfg["repos"]:
+                self.assertEqual(set(repo.keys()), {"name", "path"})
+            self.assertEqual(cfg["claude_args"],
+                             "--permission-mode acceptEdits")
+
+
+class SettingsInheritance(unittest.TestCase):
+    def _run_cmd_up(self, cfg):
+        calls = []
+        with mock.patch.object(wind, "tmux",
+                               lambda *a, **k: calls.append((a, k))), \
+                mock.patch.object(wind, "session_exists", lambda n: False), \
+                mock.patch.object(wind, "spawn_watcher", lambda c, **k: True), \
+                mock.patch("os.path.isdir", lambda p: True), \
+                mock.patch("time.sleep", lambda s: None):
+            args = mock.Mock(no_watch=True)
+            wind.cmd_up(cfg, args)
+        return calls
+
+    def test_launch_injects_no_settings_flag_and_no_env(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = [{"name": "alpha", "path": "/tmp/alpha"}]
+        cfg["claude_args"] = ""            # isolate: no wind-injected flags
+        cfg["_path"] = "/tmp/second-wind.json"
+        calls = self._run_cmd_up(cfg)
+        send = [a for (a, k) in calls if a and a[0] == "send-keys"]
+        self.assertTrue(send, "expected a send-keys launch call")
+        command = send[0][3]
+        self.assertEqual(command, "claude")
+        self.assertNotIn("--settings", command)
+        self.assertTrue(all("env" not in k for (a, k) in calls))
 
 
 if __name__ == "__main__":
