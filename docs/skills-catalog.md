@@ -10,14 +10,34 @@ Five plugins, one CLI, one adapter script. Install only what you need:
 
 ## ios-dev (plugin)
 
-The iOS feedback loop: build, screenshot, deliver to your phone, ship to the App Store.
-Needs `.claude/app.yml` in the target app repo (`app.name`, `app.bundle_id`, `app.scheme`, …).
+The iOS app lifecycle: build, screenshot, deliver to your phone, ship to the App Store,
+standardize the repo, deploy the marketing site — plus a knowledge-skill catalog mined
+from real portfolio bugs. Needs `.claude/app.yml` (schema v2) in the target app repo — `/ios-init` writes it.
 
 | Name | Kind | What it does |
 | --- | --- | --- |
 | `app-preview` | skill | Builds the app on the booted simulator, launches it (optionally deep-linking), screenshots, and delivers the image to your iPhone — iMessage ping for the notification, iCloud Drive for the bytes. Output organized per git branch. |
 | `ios-build` | skill | Builds for simulator or a connected device via `build.sh`, encoding signing and provisioning-profile detection rules. |
-| `release` | skill | Code-complete → App Store Connect: `xcodebuild archive`, export .ipa, validate + upload via altool, tag the commit. `testflight` and `appstore` modes; refuses dirty trees. |
+| `release` | skill | Code-complete → App Store Connect: gated pre-flight (compliance strings, entitlement parity, MainActor runtime-trap audit, whatsnew), version bump + `Release-Note:` trailer notes, Fastlane gym/pilot/deliver (xcodebuild+altool fallback), tag, site deploy. `testflight` / `appstore` modes; `--dry-run` stops before upload. |
+| `ios-scaffold` | skill | Idempotent repo standardizer: marketing copy home, Fastfile/Gemfile, `ci_post_clone.sh`, release-hooks dir, architecture checklist, AGENTS.md skeleton. Creates missing, reports drift, never clobbers. |
+| `site-pages-deploy-kit` | skill | The site standard (floorprint model): `site/` source in the app repo → split-repo public GitHub Pages, subtree force-push over an SSH deploy key, og/CSP/favicon lint, skeleton + runbook. |
+| `xcode-cloud-post-clone-contract` | skill | The four-rule `ci_scripts/ci_post_clone.sh` contract (materialize gitignored .xcodeproj, mirror local generation, pin `Package.resolved`, brew-only) + the PR-check / tag-release workflow recipe. |
+| `alternate-app-icons`, `biometric-applock`, `demo-recording`, `swift6-mainactor-migration`, `xcode-cloud-validate`, `xcodegen-test-targets` | skills | Focused how-to skills for their named features. |
+| `mainactor-launch-watchdog-audit` | skill (mined) | Launch watchdog 0x8BADF00D SIGKILL + boot-loop from heavy work implicitly on MainActor; off-main idioms + idempotent-retry rule. |
+| `mainactor-runtime-isolation-trap` | skill (mined) | `brk 1` on SwiftUI AsyncRenderer from @MainActor closures stored by UIKit (dynamic color/image providers); `.ips` diagnosis reflex + re-entrancy guards. |
+| `swiftdata-cloudkit-model-rules` | skill (mined) | CloudKit-safe SwiftData: explicit `cloudKitDatabase`, throwing container factory + fallback, single-side inverse, reserved names, centralized schema. |
+| `widget-appgroup-snapshot-bridge` | skill (mined) | App→widget snapshot DTO over an App Group, backfill-on-launch, transient-empty-clobber + App-Lock redaction invariants. |
+| `file-handoff-inbox-backstop` | skill (mined) | Share/action-extension inbox with attempt-cap + quarantine so a poison item can't boot-loop the app. |
+| `deep-link-resolver-applock-pathtraversal` | skill (mined) | One pure resolver for all URL entries; drop links under App-Lock; path-traversal validation. |
+| `vision-layout-ocr-grounding` | skill (mined) | Ground on-device AI on Vision-layout text (never `PDFDocument.string`); versioned sidecar; verify on the cold path. |
+| `ondevice-generable-anti-hallucination` | skill (mined) | Flat `@Generable` (nested hangs iOS 26), verbatim-quote pinning, context-window clipping. |
+| `scan-crash-recovery-store` | skill (mined) | Persist RoomPlan/ARKit results before the hang-prone build step; decode-mismatch clearing; crash marker. |
+| `scan-capture-quality-gates` | skill (mined) | Soft variance-of-Laplacian sharpness gate + scan auto-naming discipline. |
+| `site-og-favicon-verify` | skill (mined) | Teams/iMessage unfurl rules: absolute og:image + true dimensions, self-hosted fonts + CSP, complete favicon set. |
+| `/ios-init` | command | Scaffold or `--migrate` `.claude/app.yml` (schema v2) — detects scheme/bundle/team/extensions, interviews for the rest, validates. |
+| `/ios-scaffold` | command | Run the repo standardizer and walk DRIFTs one by one. |
+| `/release` | command | `testflight` / `appstore` (`--dry-run`) — the release skill, staged, stopping at every FAIL gate. |
+| `/site` | command | `create` / `deploy` / `verify` the marketing site per the standard. |
 | `/preview` | command | One-shot build + launch + screenshot + deliver, with deep-link and `--no-build` options. |
 | `/fix` | command | Tight UI-bug loop: apply a focused Swift fix, rebuild, screenshot, deliver proof to your phone. |
 | `app-build-reminder` | hook | Stop hook — reminds the agent to run the build when Swift files are dirty before declaring done. |
@@ -44,6 +64,10 @@ The everyday glue, useful in any repo.
 | --- | --- | --- |
 | `commit` | skill | Stage, shellcheck-lint shell scripts, write a single conventional commit generated from the diff. Local only — never pushes uninvited. |
 | `contribute` | skill | Send improvements back to this repo from any working directory: branches, validates with the test suite, opens a PR. |
+| `learn-lesson` | skill | Capture a session lesson (symptom → root cause → fix → evidence) into the skills catalog: dedupes against existing skills, extends or creates, hands off to `contribute` for the PR. |
+| `/learn` | command | Invoke lesson capture from any repo — reports the dedupe verdict and PR URL. |
+| `branch-explainer` | skill | Generate a self-contained HTML explainer for the current branch/PR: what's implemented, an architecture diagram, key files, test evidence, next steps — scoped to one branch rather than the whole repo. |
+| `/explain-branch` | command | Invoke the branch explainer, diffing against a given base (default `main`); writes to `.scratch/branch-explainer/` and delivers it. |
 | `/team` | command | Multi-agent team orchestration helper. |
 | `/contribute-skill` | command | Scaffold a new skill into a plugin and open the PR (`--plugin` picks the destination). |
 | `image-parser` | agent | Vision subagent: OCR, screenshot comparison, "is the title cut off?" checks. |

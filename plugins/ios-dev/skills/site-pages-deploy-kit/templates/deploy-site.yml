@@ -1,0 +1,68 @@
+name: Deploy site
+
+# Publishes the marketing/legal site to the public {{SITE_REPO}} repo
+# (GitHub Pages source) whenever site/ changes land on main. The site/
+# directory in THIS repo is the source of truth; the public repo is a
+# force-pushed derivative.
+#
+# Auth: SSH deploy key scoped to ONLY the public site repo — least privilege
+# (a PAT can reach every repo on the account). One-time setup: see RUNBOOK.md
+# (ssh-keygen → public half as write Deploy key on the site repo → private
+# half as SITE_DEPLOY_KEY Actions secret here). Missing secret fails loudly.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "scripts/deploy-site.sh"
+      - ".github/workflows/deploy-site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: true
+
+jobs:
+  deploy-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # subtree split walks site/ history
+
+      - name: Push site/ subtree to the public Pages repo
+        env:
+          SITE_DEPLOY_KEY: ${{ secrets.SITE_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${SITE_DEPLOY_KEY:-}" ]]; then
+            echo "::error::SITE_DEPLOY_KEY secret is not set — cannot push to {{SITE_REPO}}. See RUNBOOK.md." >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          KEY_FILE="$(mktemp)"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          printf '%s\n' "$SITE_DEPLOY_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          # Pin GitHub's SSH host keys from the TLS-verified metadata API —
+          # no trust-on-first-use, survives host-key rotation.
+          curl -fsS https://api.github.com/meta \
+            | python3 -c 'import sys, json; [print("github.com", k) for k in json.load(sys.stdin)["ssh_keys"]]' \
+            >> ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i $KEY_FILE -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          ./scripts/deploy-site.sh
+
+      - name: Summary
+        run: |
+          {
+            echo "### Site deployed"
+            echo ""
+            echo "Force-pushed \`site/\` to {{SITE_REPO}} (main). Pages republishes in ~1 min."
+          } >> "$GITHUB_STEP_SUMMARY"

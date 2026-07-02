@@ -1,0 +1,39 @@
+# Rendered by ios-scaffold from .claude/app.yml — edit app.yml + re-scaffold
+# for value changes; edit this file directly for lane logic (drift is reported,
+# not overwritten).
+default_platform(:ios)
+
+APP_IDENTIFIER = "{{APP_BUNDLE_ID}}"
+TEAM_ID = "{{APP_TEAM_ID}}"
+
+platform :ios do
+  desc "Archive and export a signed .ipa"
+  lane :archive do
+    gym(
+      scheme: "{{APP_SCHEME}}",
+      export_method: "app-store",
+      export_team_id: TEAM_ID,
+      output_directory: "build",
+      output_name: "{{APP_NAME}}"
+    )
+  end
+
+  desc "Upload the built .ipa to TestFlight"
+  lane :beta do
+    pilot(
+      ipa: "build/{{APP_NAME}}.ipa",
+      app_identifier: APP_IDENTIFIER,
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+  desc "Upload binary + metadata to App Store Connect (no auto-submit)"
+  lane :release do
+    deliver(
+      ipa: "build/{{APP_NAME}}.ipa",
+      app_identifier: APP_IDENTIFIER,
+      submit_for_review: false,
+      force: true
+    )
+  end
+end
