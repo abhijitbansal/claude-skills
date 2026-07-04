@@ -34,13 +34,23 @@ from real portfolio bugs. Needs `.claude/app.yml` (schema v2) in the target app 
 | `scan-crash-recovery-store` | skill (mined) | Persist RoomPlan/ARKit results before the hang-prone build step; decode-mismatch clearing; crash marker. |
 | `scan-capture-quality-gates` | skill (mined) | Soft variance-of-Laplacian sharpness gate + scan auto-naming discipline. |
 | `site-og-favicon-verify` | skill (mined) | Teams/iMessage unfurl rules: absolute og:image + true dimensions, self-hosted fonts + CSP, complete favicon set. |
+| `avfoundation-capture-delivery-watchdog` | skill (mined) | Camera capture "gets stuck" with no error — delegate callback never fires after a session teardown/re-mount race; timeout watchdog. |
+| `ios26-toolbar-leading-title-truncation` | skill (mined) | SwiftUI title in `ToolbarItem(.topBarLeading)` renders as a single letter + ellipsis on iOS 26 Liquid Glass. |
+| `swiftdata-inmemory-test-harness` | skill (mined) | First SwiftData test in a target: avoids runner crashes, batch-delete "mandatory OTO nullify inverse" failures, cross-suite races. |
+| `vision-barcode-cidetector-fallback` | skill (mined) | `VNDetectBarcodesRequest` returns nil for a valid barcode on Simulator — CIDetector fallback for reliable decode tests. |
+| `nonisolated-struct-codable-mainactor` | skill (mined) | Synthesized `Decodable`/`Equatable` conformance is MainActor-isolated too — fix for stateless structs decoded off-main. |
+| `swiftui-tabbar-swipe-nav-tradeoff` | skill (mined) | `TabView` labeled-bar vs swipe-between-tabs tradeoff, and the custom-pager race with deep-link/NFC/Siri tab routing. |
+| `query-derived-typeahead-vocabulary` | skill (mined) | Type-ahead suggestion chips derived from the persistent store instead of a stale hardcoded list; shared, testable filtering. |
+| `github-pages-flat-deploy-subdir-404` | skill (mined) | Flat `cp docs/*.html _site/` deploy model: subdirectory doc pages 404 live despite a green CI build. |
+| `pillow-favicon-set-no-rasterizer` | skill (mined) | Generate a raster favicon set from a simple SVG mark with Pillow when no SVG rasterizer is available. |
+| `legal-pages-css-scoping-bleed` | skill (mined) | Privacy/support/legal pages break from shared-stylesheet hero bleed and hand-duplicated nav/footer drift. |
+| `parallel-ios-agent-fixes-single-sim` | skill (mined) | Fan out subagents to fix independent findings/tasks in an iOS repo without stomping the tree or racing one simulator. |
 | `/ios-init` | command | Scaffold or `--migrate` `.claude/app.yml` (schema v2) — detects scheme/bundle/team/extensions, interviews for the rest, validates. |
 | `/ios-scaffold` | command | Run the repo standardizer and walk DRIFTs one by one. |
 | `/release` | command | `testflight` / `appstore` (`--dry-run`) — the release skill, staged, stopping at every FAIL gate. |
 | `/site` | command | `create` / `deploy` / `verify` the marketing site per the standard. |
 | `/preview` | command | One-shot build + launch + screenshot + deliver, with deep-link and `--no-build` options. |
 | `/fix` | command | Tight UI-bug loop: apply a focused Swift fix, rebuild, screenshot, deliver proof to your phone. |
-| `app-build-reminder` | hook | Stop hook — reminds the agent to run the build when Swift files are dirty before declaring done. |
 
 ## linear-pm (plugin)
 
@@ -67,6 +77,8 @@ The everyday glue, useful in any repo.
 | `learn-lesson` | skill | Capture a session lesson (symptom → root cause → fix → evidence) into the skills catalog: dedupes against existing skills, extends or creates, hands off to `contribute` for the PR. |
 | `/learn` | command | Invoke lesson capture from any repo — reports the dedupe verdict and PR URL. |
 | `branch-explainer` | skill | Generate a self-contained HTML explainer for the current branch/PR: what's implemented, an architecture diagram, key files, test evidence, next steps — scoped to one branch rather than the whole repo. |
+| `github-repo-go-public-preflight-scan` | skill | Scan working tree AND full git history for secrets before flipping a GitHub repo private → public. |
+| `github-solo-branch-protection-codeowners` | skill | Branch protection on a solo-owner repo: others' PRs need approval, owner can still self-merge. |
 | `/explain-branch` | command | Invoke the branch explainer, diffing against a given base (default `main`); writes to `.scratch/branch-explainer/` and delivers it. |
 | `/team` | command | Multi-agent team orchestration helper. |
 | `/contribute-skill` | command | Scaffold a new skill into a plugin and open the PR (`--plugin` picks the destination). |
