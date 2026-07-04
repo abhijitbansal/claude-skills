@@ -51,7 +51,6 @@ from real portfolio bugs. Needs `.claude/app.yml` (schema v2) in the target app 
 | `/site` | command | `create` / `deploy` / `verify` the marketing site per the standard. |
 | `/preview` | command | One-shot build + launch + screenshot + deliver, with deep-link and `--no-build` options. |
 | `/fix` | command | Tight UI-bug loop: apply a focused Swift fix, rebuild, screenshot, deliver proof to your phone. |
-| `app-build-reminder` | hook | Stop hook — reminds the agent to run the build when Swift files are dirty before declaring done. |
 
 ## linear-pm (plugin)
 

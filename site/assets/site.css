@@ -135,6 +135,7 @@ body.accent-gold .grad{background:linear-gradient(100deg,var(--gold),var(--cyan)
 .statband{margin:54px 0 10px;display:grid;grid-template-columns:repeat(7,1fr);
   background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
 .statband.cols-4{grid-template-columns:repeat(4,1fr)}
+.statband.cols-3{grid-template-columns:repeat(3,1fr)}
 .stat{padding:22px 14px;text-align:center;border-right:1px solid var(--border);position:relative}
 .stat:last-child{border-right:none}
 .stat .n{font-family:var(--font-head);font-weight:700;font-size:clamp(26px,3.4vw,38px);color:var(--text);line-height:1}

@@ -141,14 +141,11 @@ Edit the file in this repo, change goes live immediately — no re-deploy.
 
 ## Hooks (not auto-installed; reference from per-project settings)
 
-`hooks/app-build-reminder.sh` and `hooks/shellcheck-on-edit.sh` are not symlinked anywhere by default. Reference them from a project's `.claude/settings.json` if you want them active in that project:
+`hooks/shellcheck-on-edit.sh` is not symlinked anywhere by default. Reference it from a project's `.claude/settings.json` if you want it active in that project:
 
 ```json
 {
   "hooks": {
-    "Stop": [
-      { "command": "bash", "args": ["~/projects/claude-skills/hooks/app-build-reminder.sh"] }
-    ],
     "PostToolUse": {
       "Edit|Write": [
         { "command": "bash", "args": ["~/projects/claude-skills/hooks/shellcheck-on-edit.sh"] }
