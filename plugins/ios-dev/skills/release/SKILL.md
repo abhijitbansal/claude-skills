@@ -1,6 +1,6 @@
 ---
 name: release
-description: Drive an iOS app from "code complete" to "binary uploaded to App Store Connect" with maximum CLI automation. Use when the user says "release", "ship a TestFlight build", "upload to App Store", "cut a release", or invokes `/release`. Two modes — `testflight` (everyday) and `appstore` (milestone). Gates on mining-derived pre-flight checks (compliance strings, entitlement parity, runtime-trap audit), builds via Fastlane gym (xcodebuild fallback), uploads via pilot/deliver (altool fallback), tags, deploys the site. Reads every per-app value from .claude/app.yml (schema v2) — no hardcoded app assumptions. Refuses on dirty tree unless `--force`.
+description: Drive an iOS app from "code complete" to "binary uploaded to App Store Connect" with maximum CLI automation. Use when the user says "release", "ship a TestFlight build", "upload to App Store", "cut a release", or invokes `/release`. Two modes — `testflight` (everyday) and `appstore` (milestone). Gates on mining-derived pre-flight checks (compliance strings, entitlement parity, iOS 26 NFC-entitlement + iPad-orientation validation traps, runtime-trap audit), builds via Fastlane gym (xcodebuild fallback), uploads via pilot/deliver (altool fallback), tags, deploys the site. Reads every per-app value from .claude/app.yml (schema v2) — no hardcoded app assumptions. Refuses on dirty tree unless `--force`.
 ---
 
 # Release ${APP_NAME} to App Store Connect
@@ -77,6 +77,8 @@ Output contract: `PASS|WARN|FAIL: <gate>[: detail]`; exit 1 iff any FAIL. Gates:
 | `usage-strings` | every `release.usage_strings` key in the GENERATED plist | add to project.yml Info properties |
 | `encryption-flag` | `ITSAppUsesNonExemptEncryption` declared | add it (mining: forgot twice; wastes a review round) |
 | `capabilities` | plist `UIRequiredDeviceCapabilities` ⊆ `release.required_capabilities` | remove stray capability (mining: `lidar-depth-camera` blocked install base) |
+| `nfc-entitlement` | NFC `readersession.formats` is not `NDEF` | the iOS 26 SDK rejects the `NDEF` value (ITMS-90778) — ship `TAG` + migrate `NFCNDEFReaderSession`→`NFCTagReaderSession` (only surfaced at validate, cost a build number) |
+| `ipad-orientation` | universal app declares all 4 iPad orientations | ITMS-90474 — add them to `UISupportedInterfaceOrientations~ipad`; `UIRequiresFullScreen` is deprecated on iOS 26 and no longer opts out |
 | `entitlement-parity` | App Group identical across app + `targets.extensions` | fix entitlements (mining: mismatch only surfaced at validate, wasting a build number) |
 | `runtime-trap` | WARN-only: heavy work in `App.init`/`.task`/`onAppear` without off-main dispatch | read skill `mainactor-launch-watchdog-audit`; fix or accept knowingly |
 | `whatsnew` | `release.whatsnew_file` has an entry for the next version (FAIL in appstore mode, WARN in testflight) | add the entry |
@@ -123,12 +125,37 @@ All checks run locally (user decision: local + Xcode Cloud). On failure surface
 the last 40 lines and STOP — the user fixes, then re-runs (re-bumping is
 correct behavior).
 
+**Verify warnings on a COLD build.** A warm incremental `xcodebuild` does *not*
+re-emit warnings for files it didn't recompile — a release binary can look
+warning-clean while unchanged files still warn. To trust a "zero warnings"
+claim before shipping, force a clean build:
+
+```bash
+rm -rf build ~/Library/Developer/Xcode/DerivedData/${APP_NAME}-*
+./"${APP_BUILD_SCRIPT}" --no-launch
+```
+
 ## Stage 5 — Archive + export 🤖
 
 **Fastlane path** (when `fastlane/Fastfile` exists — `/ios-scaffold` creates it):
 
 ```bash
 bundle exec fastlane archive     # gym: scheme/team from the rendered Fastfile
+```
+
+**Cold-start signing.** On a machine with no App Store *distribution*
+provisioning profile yet, gym's *automatic* export cannot resolve one — the
+archive signs clean but export fails with "no provisioning profile mapping".
+Make the `archive` lane self-contained: create/fetch the profile via the ASC
+API key, then export with a **manual** signing map. In the Fastfile:
+
+```ruby
+profile = get_provisioning_profile(   # sigh; App Store type by default
+  api_key: asc_api_key, app_identifier: APP_IDENTIFIER, readonly: false)
+gym(export_method: "app-store", export_options: {
+  signingStyle: "manual",
+  provisioningProfiles: { APP_IDENTIFIER => profile },
+})
 ```
 
 **Fallback (no Fastfile)** — raw xcodebuild, kept working on purpose:

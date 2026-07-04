@@ -20,6 +20,8 @@ teardown() { rm -rf "${TMP}"; }
   [[ "$output" == *"PASS: usage-strings"* ]]
   [[ "$output" == *"PASS: encryption-flag"* ]]
   [[ "$output" == *"PASS: entitlement-parity"* ]]
+  [[ "$output" == *"PASS: nfc-entitlement"* ]]
+  [[ "$output" == *"PASS: ipad-orientation"* ]]
 }
 
 @test "dirty tree FAILs tree-clean" {
@@ -120,4 +122,79 @@ SWIFT
   run bash "${PREFLIGHT}" --mode appstore --next-version 1.2.0
   [ "$status" -eq 0 ]
   [[ "$output" == *"PASS: whatsnew"* ]]
+}
+
+@test "NDEF NFC entitlement FAILs nfc-entitlement (ITMS-90778)" {
+  cd "${TMP}/app"
+  cat > App.entitlements <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>com.apple.developer.nfc.readersession.formats</key>
+  <array><string>NDEF</string></array>
+</dict></plist>
+PLIST
+  export PREFLIGHT_ENTITLEMENTS_FILE="${TMP}/app/App.entitlements"
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm ent
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: nfc-entitlement"* ]]
+  [[ "$output" == *"ITMS-90778"* ]]
+}
+
+@test "TAG NFC entitlement PASSes nfc-entitlement" {
+  cd "${TMP}/app"
+  cat > App.entitlements <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>com.apple.developer.nfc.readersession.formats</key>
+  <array><string>TAG</string></array>
+</dict></plist>
+PLIST
+  export PREFLIGHT_ENTITLEMENTS_FILE="${TMP}/app/App.entitlements"
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm ent
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: nfc-entitlement"* ]]
+}
+
+@test "universal app without iPad orientations FAILs ipad-orientation (ITMS-90474)" {
+  cd "${TMP}/app"
+  printf '  TARGETED_DEVICE_FAMILY: "1,2"\n' >> project.yml
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm universal
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: ipad-orientation"* ]]
+  [[ "$output" == *"ITMS-90474"* ]]
+}
+
+@test "universal app with all 4 iPad orientations PASSes ipad-orientation" {
+  cd "${TMP}/app"
+  printf '  TARGETED_DEVICE_FAMILY: "1,2"\n' >> project.yml
+  cat > "${PREFLIGHT_PLIST}" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>NSCameraUsageDescription</key><string>Scan documents.</string>
+  <key>ITSAppUsesNonExemptEncryption</key><false/>
+  <key>UISupportedInterfaceOrientations~ipad</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+    <string>UIInterfaceOrientationPortraitUpsideDown</string>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+  </array>
+</dict></plist>
+PLIST
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm universal
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: ipad-orientation"* ]]
+}
+
+@test "iPhone-only app PASSes ipad-orientation without declaring iPad orientations" {
+  cd "${TMP}/app"
+  printf '  TARGETED_DEVICE_FAMILY: "1"\n' >> project.yml
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm iphone
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: ipad-orientation"* ]]
 }
