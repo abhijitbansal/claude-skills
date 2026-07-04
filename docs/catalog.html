@@ -65,7 +65,7 @@
         <div class="top"><span class="nm">second-wind</span><span class="ty t-plugin">Plugin</span></div>
         <div class="dc">Set-and-forget orchestrator for long Claude Code runs across multiple repos. Detects 5-hour usage limit, waits for reset, resumes every tmux session</div>
         <div class="pl">in <a href="features/second-wind.html">second-wind</a></div></div></div></div><div class="cat-group">
-      <h3>Skills <span class="badge">35</span></h3>
+      <h3>Skills <span class="badge">48</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Skill" data-search="commit stage current changes, lint shell scripts with shellcheck, and create a git commit with conventional message core-workflow skill">
         <div class="top"><span class="nm">commit</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Stage current changes, lint shell scripts with shellcheck, and create a git commit with conventional message</div>
@@ -78,6 +78,12 @@
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Skill" data-search="branch-explainer generate a self-contained html visual explainer for the current branch: what's implemented, architecture diagram, key files, test evidence, next steps core-workflow skill">
         <div class="top"><span class="nm">branch-explainer</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Generate a self-contained HTML explainer for the current branch/PR: what's implemented, an architecture diagram, key files, test evidence, next steps — scoped to one branch rather than the whole repo</div>
+        <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Skill" data-search="github-repo-go-public-preflight-scan scan for secrets in both the working tree and full git history before flipping a github repo from private to public core-workflow skill">
+        <div class="top"><span class="nm">github-repo-go-public-preflight-scan</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Scan for secrets in BOTH the working tree and the full git history before flipping a GitHub repo from private to public — a diff-only scan misses secrets committed then deleted, which stay cloneable once public</div>
+        <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Skill" data-search="github-solo-branch-protection-codeowners configure github branch protection so others&#x27; prs require the owner&#x27;s approval while the owner can still self-merge their own prs core-workflow skill">
+        <div class="top"><span class="nm">github-solo-branch-protection-codeowners</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Configure GitHub branch protection on a solo-owner repo so OTHER people's PRs require the owner's approval, while the owner can still self-merge — avoids the "review not required for administrators" lockout</div>
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Skill" data-search="alternate-app-icons adding user-selectable alternate app icons to xcodegen ios app, keeping a new icon as default ios-dev skill">
         <div class="top"><span class="nm">alternate-app-icons</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Adding user-selectable alternate app icons to XcodeGen iOS app, keeping a new icon as default</div>
@@ -147,6 +153,39 @@
         <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="scan-capture-quality-gates soft variance-of-laplacian sharpness gate (not a hard reject) plus scan auto-naming discipline to stop ocr prose becoming an item name ios-dev skill">
         <div class="top"><span class="nm">scan-capture-quality-gates</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Soft variance-of-Laplacian sharpness gate (not a hard reject) plus scan auto-naming discipline to stop OCR prose becoming an item name</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="avfoundation-capture-delivery-watchdog camera capture gets stuck with no error because the avcapturephotocapturedelegate callback never fires after a session teardown/re-mount race ios-dev skill">
+        <div class="top"><span class="nm">avfoundation-capture-delivery-watchdog</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Camera capture "gets stuck" with no error — AVCapturePhotoCaptureDelegate callback never fires after a session mid-teardown/re-mount race; add a timeout watchdog around the one-shot delegate call</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="ios26-toolbar-leading-title-truncation swiftui toolbaritem topbarleading title renders as a single letter and ellipsis inside a glassy circle on ios 26 ios-dev skill">
+        <div class="top"><span class="nm">ios26-toolbar-leading-title-truncation</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">A SwiftUI title placed in ToolbarItem(.topBarLeading) renders on iOS 26 as a single letter + ellipsis inside a glassy circle instead of full text — move it out of the toolbar slot or fix the Liquid Glass layout</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="swiftdata-inmemory-test-harness first swiftdata test in a target crashes the runner or batch-delete fails with mandatory oto nullify inverse or store tests race across the suite ios-dev skill">
+        <div class="top"><span class="nm">swiftdata-inmemory-test-harness</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">SwiftData unit tests crash the runner, a store-reset throws "Batch delete failed due to mandatory OTO nullify inverse", or store tests race when the full suite runs together — in-memory harness fixes all three</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="vision-barcode-cidetector-fallback vndetectbarcodesrequest returns zero results for a valid qr/barcode on the ios simulator because vision&#x27;s ml context fails to initialize ios-dev skill">
+        <div class="top"><span class="nm">vision-barcode-cidetector-fallback</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">VNDetectBarcodesRequest returns zero results for a perfectly valid QR/barcode — Vision's ML context fails to init, reliably on Simulator — fall back to CIDetector so decode tests stay green in CI</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="nonisolated-struct-codable-mainactor main actor-isolated conformance of x to decodable cannot be used in nonisolated context on a plain stateless struct under swift_default_actor_isolation mainactor ios-dev skill">
+        <div class="top"><span class="nm">nonisolated-struct-codable-mainactor</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Compile error "main actor-isolated conformance of 'X' to 'Decodable'/'Equatable' cannot be used in nonisolated context" on a plain value-type struct with zero stored state, hit decoding/comparing off-main</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="swiftui-tabbar-swipe-nav-tradeoff tabview can&#x27;t give a labeled bottom tab bar and swipe-between-tabs at once, and a custom pager races programmatic tab selection with deep link/nfc/siri routing ios-dev skill">
+        <div class="top"><span class="nm">swiftui-tabbar-swipe-nav-tradeoff</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">SwiftUI's TabView won't give you a labeled bottom bar AND swipe-between-tabs at once; a custom pager to get the swipe can race programmatic tab selection against deep link/NFC/Siri routing</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="query-derived-typeahead-vocabulary type-ahead suggestion chips go stale with a hardcoded list, or filtering logic can&#x27;t be unit-tested because it&#x27;s duplicated inline in the view body ios-dev skill">
+        <div class="top"><span class="nm">query-derived-typeahead-vocabulary</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Type-ahead suggestion chips that go stale within days on a hardcoded list, or filtering logic that can't be unit-tested and is duplicated between add/edit screens — derive vocabulary from the persistent store instead</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="github-pages-flat-deploy-subdir-404 a github pages deploy is green in ci but a subdirectory doc page 404s live because cp docs html descends into subdirs ios-dev skill">
+        <div class="top"><span class="nm">github-pages-flat-deploy-subdir-404</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">A GitHub Pages deploy is green in CI but a linked doc page 404s live — a flat `cp docs/*.html _site/` plus top-level-only link rewriting never descends into subdirectory pages</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="pillow-favicon-set-no-rasterizer rsvg-convert command not found, imagemagick or cairosvg missing, no inkscape on path when generating a raster favicon set from an svg mark ios-dev skill">
+        <div class="top"><span class="nm">pillow-favicon-set-no-rasterizer</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">"rsvg-convert: command not found" / no ImageMagick / no cairosvg / no Inkscape — generate favicon.ico, apple-touch-icon.png, and og-card.png from a simple geometric+glyph SVG mark with Pillow instead</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="legal-pages-css-scoping-bleed privacy support legal pages render with broken layout after sharing the homepage&#x27;s global stylesheet, or nav/footer links differ page to page ios-dev skill">
+        <div class="top"><span class="nm">legal-pages-css-scoping-bleed</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Privacy/support/legal pages render with broken layout after sharing the homepage's global stylesheet (hero-only rules bleeding via bare body/html selectors), plus nav/footer links that drift page-to-page</div>
+        <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="parallel-ios-agent-fixes-single-sim fan out multiple subagents to fix a batch of independent code-review findings or plan tasks in an ios repo without them stomping each other ios-dev skill">
+        <div class="top"><span class="nm">parallel-ios-agent-fixes-single-sim</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Fan out multiple subagents to fix a batch of independent code-review findings or plan tasks in an iOS repo without them stomping the same working tree or racing xcodebuild test runs on one simulator</div>
         <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="linear-pm linear project management conventions and slash commands: label vocabulary, status taxonomy, branch/pr naming, issue template, .claude/linear.yml policy linear-pm skill">
         <div class="top"><span class="nm">linear-pm</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Linear project management conventions and slash commands: label vocabulary, status taxonomy, branch/PR naming, issue template, .claude/linear.yml policy</div>

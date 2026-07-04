@@ -15,9 +15,9 @@ Plus private **seed machinery** that rebuilds the owner's full dev environment o
 ```mermaid
 flowchart TD
   MP["marketplace.json (.claude-plugin/)"]
-  IOS["ios-dev — 23 skills · 6 cmds · 1 hook"]
+  IOS["ios-dev — 34 skills · 6 cmds · 1 hook"]
   LIN["linear-pm — 1 skill · 6 cmds"]
-  CW["core-workflow — 4 skills · 4 cmds · 2 agents · 1 hook"]
+  CW["core-workflow — 6 skills · 4 cmds · 2 agents · 1 hook"]
   SW["second-wind — skill wrapper"]
   PC["prompt-craft — 6 skills · 6 hooks"]
   WIND[("tools/second-wind/wind.py")]
@@ -41,7 +41,7 @@ flowchart TD
 | --- | --- | --- |
 | `ios-dev` | build → screenshot → phone → ship | app-preview, ios-build, release skills; `/preview`, `/fix`; build-reminder Stop hook |
 | `linear-pm` | issue conventions + autonomous pickup | linear-pm skill; `/linear-init`, `/linear-new`, `/linear-pick`, `/linear-status`, `/linear-sync`, `/linear-block` |
-| `core-workflow` | everyday glue | commit, contribute, learn-lesson, branch-explainer skills; `/team`, `/contribute-skill`, `/learn`, `/explain-branch`; image-parser + web-researcher agents; shellcheck-on-edit hook |
+| `core-workflow` | everyday glue | commit, contribute, learn-lesson, branch-explainer, github-repo-go-public-preflight-scan, github-solo-branch-protection-codeowners skills; `/team`, `/contribute-skill`, `/learn`, `/explain-branch`; image-parser + web-researcher agents; shellcheck-on-edit hook |
 | `second-wind` | outlast the 5-hour usage limit | SKILL.md wrapper for the `wind` CLI (self-installs when missing) |
 | `prompt-craft` | rough ask → deterministic spec | `/improve-prompt`, `/plan`; debug/refactor/review lens skills; `/refresh`; a command advisor (relevance + history + git state) powering user-only `suggest_next` (Stop), `prompt_hint` (UserPromptSubmit) + `statusline_hint`; `registry_freshness` (SessionStart); opt-in `block_secrets` + `format_on_edit` hooks |
 
