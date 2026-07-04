@@ -85,11 +85,11 @@
           <p class="desc">Set-and-forget orchestrator. Detects the 5-hour limit, waits for reset, resumes every session — overnight, untouched.</p>
         </div>
         <div class="body">
-          <div class="assetline"><span class="chip"><b>9</b> wind subcommands</span><span class="chip"><b>0</b> deps</span></div>
+          <div class="assetline"><span class="chip"><b>10</b> wind subcommands</span><span class="chip"><b>0</b> deps</span></div>
           <ul>
             <li>Multi-repo tmux orchestration, stdlib-only Python</li>
             <li>Live localhost dashboard with per-run CSRF token</li>
-            <li><code>init</code> · <code>up</code> · <code>watch</code> · <code>resume</code> · <code>dash</code></li>
+            <li><code>init</code> · <code>up</code> · <code>add</code> · <code>watch</code> · <code>resume</code> · <code>dash</code></li>
           </ul>
         </div>
         <div class="more"><span>Open the guide</span><span class="ar">→</span></div>
@@ -264,30 +264,21 @@
         <div class="num">01 / CLAUDE CODE</div>
         <h3>Add the marketplace</h3>
         <p>From inside Claude Code, register this repo and install any plugin.</p>
-        <div class="code"><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills
-/plugin install prompt-craft@claude-skills"><span></span>copy</button><span class="c"># in the Claude Code prompt</span>
-<span class="k">/plugin</span> marketplace add abhijitbansal/claude-skills
-<span class="k">/plugin</span> install prompt-craft@claude-skills</div>
+        <div class="code cmds"><div class="cl"><span class="note"><span class="c"># in the Claude Code prompt</span></span></div><div class="cl"><code class="ct"><span class="k">/plugin</span> marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install prompt-craft@claude-skills</code><button class="copy" data-copy="/plugin install prompt-craft@claude-skills">copy</button></div></div>
       </div>
 
       <div class="istep reveal">
         <div class="num">02 / SECOND WIND</div>
         <h3>Install the CLI</h3>
         <p>Standalone — works with or without the plugins.</p>
-        <div class="code"><button class="copy" data-copy="bash tools/second-wind/install.sh
-wind init
-wind up && wind watch">copy</button>bash tools/second-wind/install.sh
-<span class="k">wind</span> init     <span class="c"># pick repos</span>
-<span class="k">wind</span> up <span class="c">&amp;&amp;</span> <span class="k">wind</span> watch  <span class="c"># run + auto-resume</span></div>
+        <div class="code cmds"><div class="cl"><code class="ct">bash tools/second-wind/install.sh</code><button class="copy" data-copy="bash tools/second-wind/install.sh">copy</button></div><div class="cl"><code class="ct"><span class="k">wind</span> init     <span class="c"># pick repos</span></code><button class="copy" data-copy="wind init">copy</button></div><div class="cl"><code class="ct"><span class="k">wind</span> up <span class="c">&amp;&amp;</span> <span class="k">wind</span> watch  <span class="c"># run + auto-resume</span></code><button class="copy" data-copy="wind up && wind watch">copy</button></div></div>
       </div>
 
       <div class="istep reveal">
         <div class="num">03 / OTHER AGENTS</div>
         <h3>Port the skills</h3>
         <p>Wire the same skills into Codex, Copilot CLI, or any AGENTS.md agent.</p>
-        <div class="code"><button class="copy" data-copy="bash adapters/install.sh codex
-bash adapters/install.sh all">copy</button>bash adapters/install.sh codex
-bash adapters/install.sh all   <span class="c"># every target</span></div>
+        <div class="code cmds"><div class="cl"><code class="ct">bash adapters/install.sh codex</code><button class="copy" data-copy="bash adapters/install.sh codex">copy</button></div><div class="cl"><code class="ct">bash adapters/install.sh all   <span class="c"># every target</span></code><button class="copy" data-copy="bash adapters/install.sh all">copy</button></div></div>
       </div>
 
     </div>
@@ -316,6 +307,7 @@ bash adapters/install.sh all   <span class="c"># every target</span></div>
       <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:22px">
         <code style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px"><b style="color:var(--green)">wind</b> init</code>
         <code style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px"><b style="color:var(--green)">wind</b> up</code>
+        <code style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px"><b style="color:var(--green)">wind</b> add</code>
         <code style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px"><b style="color:var(--green)">wind</b> watch</code>
         <code style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px"><b style="color:var(--green)">wind</b> dash</code>
       </div>

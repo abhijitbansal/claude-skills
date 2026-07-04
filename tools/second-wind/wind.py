@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 
@@ -81,6 +82,13 @@ AGENT_PRESETS = {
     },
 }
 
+# The full-auto preset: accepts every tool call without prompting. It is the
+# shipped default for a NEW starter config (write_starter_config) and a wizard
+# preset, but is deliberately NOT baked into DEFAULT_CONFIG's merge value — an
+# existing hand-written config that omits `claude_args` must keep resolving to
+# normal prompts, never silently escalate to full bypass on upgrade.
+FULL_AUTO_ARGS = "--permission-mode bypassPermissions"
+
 DEFAULT_CONFIG = {
     "session_prefix": "wind",
     "claude_cmd": "claude",
@@ -94,6 +102,7 @@ DEFAULT_CONFIG = {
     "caffeinate": True,
     "ntfy_url": "",
     "limit_patterns": [],
+    "scan_roots": [],
     "repos": [
         {
             "name": "example-repo",
@@ -156,7 +165,7 @@ ANSI_CODES = {
 }
 SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 SPINNER_TICK_SECONDS = 0.25
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 
 def use_color(stream=None):
@@ -399,6 +408,7 @@ PERMISSION_PRESETS = [
     ("plan — plans first, asks before acting", "--permission-mode plan"),
     ("default — normal permission prompts", ""),
     ("custom — type your own claude_args", None),
+    ("auto — accepts everything, no prompts (full bypass)", FULL_AUTO_ARGS),
 ]
 
 
@@ -505,6 +515,21 @@ def scan_repos(roots):
             if os.path.isdir(os.path.join(path, ".git")):
                 found.append((child, path))
     return found
+
+
+def _scan_candidates(cfg):
+    """Scanned repos under cfg['scan_roots'] not already configured.
+
+    Returns [{"name", "path"}]. Used by the dashboard's /api/scan (list) and
+    /api/add (allowlist): the dashboard may only add a path that appears here,
+    so it can never write an arbitrary filesystem path over HTTP.
+    """
+    configured = {os.path.expanduser(r.get("path", "")) for r in cfg["repos"]}
+    out = []
+    for name, path in scan_repos(cfg.get("scan_roots", [])):
+        if os.path.expanduser(path) not in configured:
+            out.append({"name": name, "path": path})
+    return out
 
 
 def build_repo_entry(name, path, claude_args, prompt_file, prompt="",
@@ -619,12 +644,14 @@ def _seed_prompt_file(path, repo_name):
     os.chmod(path, 0o600)
 
 
-def build_config(repos, resume_message, ntfy_url, claude_args=""):
+def build_config(repos, resume_message, ntfy_url, claude_args="",
+                 scan_roots=None):
     cfg = dict(DEFAULT_CONFIG)
     cfg["repos"] = repos
     cfg["resume_message"] = resume_message or DEFAULT_CONFIG["resume_message"]
     cfg["ntfy_url"] = ntfy_url or ""
     cfg["claude_args"] = claude_args
+    cfg["scan_roots"] = scan_roots or []
     return cfg
 
 
@@ -665,7 +692,8 @@ def run_wizard(args):
 
     roots = prompt_text("Directories to scan for git repos (comma-separated)",
                         default="~/projects")
-    found = scan_repos(roots.split(","))
+    root_list = [r.strip() for r in roots.split(",") if r.strip()]
+    found = scan_repos(root_list)
     if not found:
         log(f"no git repos found under {roots}", glyph="!", color="yellow")
     existing_paths = {os.path.expanduser(r.get("path", ""))
@@ -702,8 +730,23 @@ def run_wizard(args):
         log("wizard cancelled", glyph="○", color="dim")
         return
 
+    mode = select(
+        "Per-repo setup",
+        ["Configure each repo individually",
+         "Apply the global preset + defaults to all selected repos"])
+    if mode is None:
+        log("wizard cancelled", glyph="○", color="dim")
+        return
+
     repos = []
-    for name, path in chosen:
+    if mode == 1:
+        # Accept-all: every repo inherits the global preset (no per-repo
+        # claude_args key), agent=claude, no prompt file — one choice, zero
+        # per-repo clicks.
+        repos = [build_repo_entry(name, path, "", "", override=False,
+                                  agent="claude")
+                 for name, path in chosen]
+    for name, path in ([] if mode == 1 else chosen):
         print(f"\n{style(name, 'bold')} {style(path, 'dim')}")
         override_pick = select(
             "Permissions for this repo",
@@ -760,7 +803,8 @@ def run_wizard(args):
         log("must start with http:// or https://", glyph="!", color="yellow")
         ntfy = prompt_text("ntfy.sh topic URL (empty to skip)", default="")
 
-    cfg = build_config(repos, resume_message, ntfy, claude_args=global_args)
+    cfg = build_config(repos, resume_message, ntfy, claude_args=global_args,
+                       scan_roots=root_list)
     atomic_write_json(target, cfg, mode=0o644)
 
     print()
@@ -1284,6 +1328,10 @@ def make_dash_handler(cfg, token, template):
                 self._send(200, json.dumps(status_payload(cfg)))
             elif parts.path == "/api/pane":
                 self._serve_pane(parse_qs(parts.query))
+            elif parts.path == "/api/scan":
+                # Read-only candidate list (paths under scan_roots), like
+                # /api/status: tokenless behind the bind + Host allowlist.
+                self._send(200, json.dumps({"candidates": _scan_candidates(cfg)}))
             else:
                 self._send(404, '{"error": "not found"}')
 
@@ -1378,6 +1426,26 @@ def make_dash_handler(cfg, token, template):
                     return
                 tmux("kill-session", "-t", f"={name}")
                 self._send(200, '{"ok": true}')
+            elif self.path == "/api/add":
+                req_path = body.get("path")
+                if not isinstance(req_path, str) or not req_path:
+                    self._send(400, '{"error": "missing path"}')
+                    return
+                full = os.path.expanduser(req_path)
+                # Restrict to candidates under a persisted scan_root — the
+                # dashboard can never add an arbitrary filesystem path.
+                if full not in {c["path"] for c in _scan_candidates(cfg)}:
+                    self._send(400, '{"error": "path not a scanned candidate"}')
+                    return
+                try:
+                    entry = add_repo_to_config(cfg, full)
+                except ValueError as e:
+                    self._send(400, json.dumps({"error": str(e)}))
+                    return
+                cfg["repos"].append(entry)     # live snapshot -> /api/status
+                launch_repo(cfg, entry)
+                _refresh_watcher(cfg)
+                self._send(200, json.dumps({"ok": True, "repo": entry}))
             else:
                 self._send(404, '{"error": "not found"}')
 
@@ -1479,6 +1547,10 @@ def write_starter_config(args):
     if os.path.exists(path) and not args.force:
         die(f"{path} already exists (use --force to overwrite)")
     sample = {k: v for k, v in DEFAULT_CONFIG.items()}
+    # Full-auto is the shipped default for a fresh config (you opt in by running
+    # `wind init`). It lives here, NOT in DEFAULT_CONFIG's merge value, so an
+    # upgrade never silently escalates an existing config that omits claude_args.
+    sample["claude_args"] = FULL_AUTO_ARGS
     atomic_write_json(path, sample, mode=0o644)
     print(f"Wrote starter config to {path} — edit 'repos' and run `wind up`.")
 
@@ -1494,29 +1566,40 @@ def cmd_init(args):
         log("wizard cancelled", glyph="○", color="dim")
 
 
+def launch_repo(cfg, repo):
+    """Create the repo's tmux session and launch its agent.
+
+    Returns the session name, or None if it is already running. die()s on a
+    missing repo path (same guard as cmd_up). Resolves cmd/args from the repo's
+    agent preset — explicit per-repo `claude_cmd`/`claude_args` override, and an
+    explicit "" for args is honored as "no args" (key-presence), not treated as
+    unset → inherit. args_source comes from resolve_agent so log and launch
+    can't diverge. Shared by cmd_up and cmd_add.
+    """
+    name = session_name(cfg, repo)
+    path = os.path.expanduser(repo["path"])
+    if session_exists(name):
+        log(f"{name}: already running, skipping", glyph="○", color="dim")
+        return None
+    if not os.path.isdir(path):
+        die(f"{name}: repo path does not exist: {path}")
+    agent = resolve_agent(repo, cfg)
+    command = agent["cmd"] + (f" {agent['args']}" if agent["args"] else "")
+    tmux("new-session", "-d", "-s", name, "-c", path)
+    tmux("send-keys", "-t", f"={name}:", command, "Enter")
+    log(f"{name}: launched `{command}` in {path} "
+        f"(agent {agent['name']}, {agent['args_source']} args)",
+        glyph="→", color="cyan")
+    return name
+
+
 def cmd_up(cfg, args):
     banner()
     started = []
     for repo in cfg["repos"]:
-        name = session_name(cfg, repo)
-        path = os.path.expanduser(repo["path"])
-        if session_exists(name):
-            log(f"{name}: already running, skipping", glyph="○", color="dim")
-            continue
-        if not os.path.isdir(path):
-            die(f"{name}: repo path does not exist: {path}")
-        # Resolve cmd/args from the repo's agent preset. Explicit per-repo
-        # `claude_cmd`/`claude_args` still override; an explicit "" for args is
-        # honored as "no args" (key-presence), not treated as unset → inherit.
-        # args_source comes from resolve_agent so log and launch can't diverge.
-        agent = resolve_agent(repo, cfg)
-        command = agent["cmd"] + (f" {agent['args']}" if agent["args"] else "")
-        tmux("new-session", "-d", "-s", name, "-c", path)
-        tmux("send-keys", "-t", f"={name}:", command, "Enter")
-        log(f"{name}: launched `{command}` in {path} "
-            f"(agent {agent['name']}, {agent['args_source']} args)",
-            glyph="→", color="cyan")
-        started.append((repo, name))
+        name = launch_repo(cfg, repo)
+        if name is not None:
+            started.append((repo, name))
 
     prompts = [(r, n) for r, n in started
                if r.get("prompt") or r.get("prompt_file")]
@@ -1899,6 +1982,77 @@ def cmd_watch(cfg, args):
             keeper.terminate()
 
 
+# Serializes the read-modify-write in add_repo_to_config. `wind dash` uses a
+# ThreadingHTTPServer, so two concurrent /api/add requests would otherwise read
+# the same repos list and the second write would clobber the first's append.
+_CONFIG_WRITE_LOCK = threading.Lock()
+
+
+def add_repo_to_config(cfg, path):
+    """Append a {name, path} repo to the RAW config file atomically.
+
+    Security: writes ONLY name+path (the entry inherits the top-level global
+    preset); never accepts claude_args/agent/prompt from callers, so no new
+    verbatim-execution surface opens. Raises ValueError on a non-git path, a
+    duplicate name/path, or a reserved watcher-name collision. Returns the new
+    entry dict. The dup-check and write run under a lock so concurrent dashboard
+    adds can't lose an append or both pass the duplicate guard.
+    """
+    full = os.path.expanduser(str(path).strip())
+    if not os.path.isdir(os.path.join(full, ".git")):
+        raise ValueError(f"not a git repo: {full}")
+    name = os.path.basename(full.rstrip("/"))
+    if not name or "/" in name or name in (".", ".."):
+        raise ValueError(f"cannot derive a safe repo name from {full!r}")
+    reserved = watcher_session_name(cfg)
+    if session_name(cfg, {"name": name, "path": full}) == reserved:
+        raise ValueError(
+            f"{name!r} collides with the reserved watcher session "
+            f"{reserved!r}; rename the directory or change 'session_prefix'")
+    entry = build_repo_entry(name, full, "", "", override=False)
+    with _CONFIG_WRITE_LOCK:
+        with open(cfg["_path"]) as f:
+            raw = json.load(f)
+        existing = raw.get("repos", [])
+        for r in existing:
+            if r.get("name") == name:
+                raise ValueError(f"a repo named {name!r} is already configured")
+            if os.path.expanduser(r.get("path", "")) == full:
+                raise ValueError(
+                    f"{full} is already configured as {r.get('name')!r}")
+        raw["repos"] = existing + [entry]
+        atomic_write_json(cfg["_path"], raw, mode=0o644)
+    return entry
+
+
+def _refresh_watcher(cfg):
+    """Restart the watcher so it re-reads config and watches new repos.
+
+    cmd_watch derives its watched set ONCE at startup, so a repo added after
+    the watcher launched is otherwise never auto-resumed. State is persisted
+    (state.json), so a kill + respawn is safe.
+    """
+    name = watcher_session_name(cfg)
+    if session_exists(name):
+        tmux("kill-session", "-t", f"={name}", check=False)
+    spawn_watcher(cfg)
+
+
+def cmd_add(cfg, args):
+    try:
+        entry = add_repo_to_config(cfg, args.path)
+    except ValueError as e:
+        die(str(e))
+    log(f"added {entry['name']} -> {entry['path']}", glyph="✓", color="green")
+    # Re-load so cfg carries the new entry for launch + watcher config.
+    cfg = load_config(cfg["_path"])
+    repo = next(r for r in cfg["repos"] if r["name"] == entry["name"])
+    launch_repo(cfg, repo)
+    _refresh_watcher(cfg)
+    log(f"{entry['name']}: launched and watcher refreshed", glyph="✓",
+        color="green")
+
+
 # ---------------------------------------------------------------- main -----
 
 def main(argv=None):
@@ -1929,6 +2083,9 @@ def main(argv=None):
     p_prompt.add_argument("repo", help="repo name from the config")
     p_prompt.add_argument("--editor",
                           help="editor command (overrides $EDITOR)")
+    p_add = sub.add_parser(
+        "add", help="add a git repo to the config and launch it")
+    p_add.add_argument("path", help="path to a git repo directory")
     sub.add_parser("resume", help="send the resume message to all sessions")
     sub.add_parser("down", help="kill all wind tmux sessions")
     p_dash = sub.add_parser("dash", help="serve the live web dashboard")
@@ -1953,6 +2110,7 @@ def main(argv=None):
         "status": cmd_status,
         "watch": cmd_watch,
         "prompt": cmd_prompt,
+        "add": cmd_add,
         "resume": cmd_resume,
         "down": cmd_down,
         "dash": cmd_dash,

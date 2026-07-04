@@ -81,7 +81,7 @@ Claude Code pauses everything at the 5-hour usage limit. `wind` notices, waits, 
 | Name | Kind | What it does |
 | --- | --- | --- |
 | `wind` | CLI | Single-file, stdlib-only Python at `tools/second-wind/wind.py`. One tmux session per repo (`wind up`), a watcher that scans panes for the limit message (`wind watch`), one account-level reset clock, optional ntfy.sh notifications and macOS caffeinate. 16-test suite. |
-| `second-wind` | skill | Teaches the agent `wind init/up/watch/status/resume/down`, the config keys, and how to self-install `wind` when missing from PATH. |
+| `second-wind` | skill | Teaches the agent `wind init/add/up/watch/status/resume/down`, the config keys (incl. `scan_roots` and the `auto`/full-auto default preset), `wind add` for pulling in a repo without re-init, and how to self-install `wind` when missing from PATH. |
 
 CLI install without the plugin:
 

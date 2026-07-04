@@ -27,7 +27,18 @@ curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/to
 This places everything in `~/.wind` (program, dashboard, config, state),
 writes a `wind` shim to `~/.wind/bin`, and offers to add that to your PATH —
 it never edits your shell profile without asking. From a clone:
-`sh tools/second-wind/install.sh`. Then:
+`sh tools/second-wind/install.sh`.
+
+If `raw.githubusercontent.com` is rate-limited or blocked (a `403` behind some
+VPNs/proxies), install from a clone instead — the installer prints this same
+fallback on a failed download:
+
+```sh
+git clone https://github.com/abhijitbansal/claude-skills
+sh claude-skills/tools/second-wind/install.sh
+```
+
+Then:
 
 ```sh
 exec $SHELL
@@ -77,14 +88,43 @@ The editor is `--editor`, else `$EDITOR`, else `vi`/`nano`. `$EDITOR` is parsed
 with `shlex`, so `EDITOR="code --wait"` or `"emacsclient -nw"` work; `wind`
 never invokes a shell.
 
+## Adding repos later
+
+`wind add <path>` brings a new git repo under management without re-running
+`wind init`: it validates the path, appends a `{name, path}` entry (inheriting
+the global permission preset), launches its tmux session, and refreshes the
+watcher so the new session is auto-resumed. In the dashboard, the **＋ add repo**
+button lists repos found under your persisted `scan_roots` that aren't managed
+yet; click one to add + launch it live. Both paths write `{name, path}` only —
+see Security model.
+
 ## Permissions
 
 The wizard asks for a **global permission preset** (stored as top-level
-`claude_args`) that applies to every repo, then offers a per-repo override.
+`claude_args`) that applies to every repo, then offers either a per-repo
+override **or** a one-choice "apply the global preset + defaults to every
+selected repo" fast path (no clicking through each repo). The presets are
+`acceptEdits`, `plan`, `default`, `custom`, and `auto` — where **`auto`
+(`--permission-mode bypassPermissions`) accepts everything and is the shipped
+default** for a brand-new starter config (see Security model).
 A repo that inherits the global preset carries no `claude_args` key; only an
 explicit override writes one. Per-repo `claude_args` (when the key is present)
 wins over the global preset; an explicit `claude_args: ""` is honored as "no
 args", distinct from "unset → inherit global".
+
+## Settings & hooks inheritance
+
+`wind up` launches the same `claude` binary in the same `$HOME` via
+`tmux new-session` + `send-keys`, with no `--settings`, `CLAUDE_CONFIG_DIR`, or
+`HOME` override and no env stripping. So your `~/.claude/settings.json` defaults
+(e.g. effort, remote control) and your SessionStart hooks fire exactly as they do
+in a normal terminal. `--permission-mode` governs only tool-permission prompting
+and does not suppress settings or hooks.
+
+Caveat: settings tuned via **shell environment variables** (not `settings.json`)
+can be stale, because a long-running tmux server freezes its environment and
+`wind` does not run `tmux update-environment`. Put durable defaults in
+`settings.json` rather than shell exports for the most reliable behavior.
 
 ## Agents (Claude + GitHub Copilot)
 
@@ -195,6 +235,7 @@ New keys vs earlier versions: `agent` (top-level + per-repo) and inline
 | `capture_lines` | how many trailing pane lines to scan |
 | `caffeinate` | on macOS, keep the machine awake while `wind watch` runs (`caffeinate -dims`) |
 | `ntfy_url` | optional; POST a notification here when the limit hits and when sessions resume (works with [ntfy.sh](https://ntfy.sh) topics) |
+| `scan_roots` | directories the `wind init` wizard scanned, persisted so `wind add` and the dashboard's **Add repo** can offer more repos later without re-running `init` |
 | `limit_patterns` | extra regexes tried *before* the **resolved agent's** built-ins (see below); appended to the resolved set, not a fixed Claude append |
 | `repos[].agent` | optional per-repo override of the top-level `agent` |
 | `repos[].claude_args` | optional per-repo permission override; present → wins over the global preset (explicit `""` honored as "no args") |
@@ -248,15 +289,29 @@ Unit tests for the parser: `python3 -m unittest discover tests`.
 - Resuming blindly types `resume_message` into the pane. If a session was
   actually waiting on a permission prompt or a question, "continue" is still
   a reasonable nudge, but review sessions in the morning.
-- Permission mode is your call per repo via `claude_args` (e.g.
-  `--permission-mode acceptEdits` vs a full allowlist). Second Wind does not
-  default to `--dangerously-skip-permissions`.
+- Permission mode is your call per repo via `claude_args`. As of v2.1 the
+  **shipped default is full-auto** (`--permission-mode bypassPermissions`, the
+  `auto` preset) — an unattended overnight run accepts everything, not just
+  edits. This is functionally the same risk class as
+  `--dangerously-skip-permissions`: only ever point `wind` at repos you trust to
+  run agent actions without prompts. Pick the `acceptEdits`, `plan`, or
+  `default` preset in `wind init` (or set `claude_args` in the config) to dial
+  the autonomy back down.
 
 ## Security model
 
 - `second-wind.json` is trusted input. `claude_cmd`, `claude_args`,
   `limit_patterns`, and prompt files are executed/compiled/typed exactly as
   written — never point `wind` at a config file you did not write yourself.
+- `wind add <path>` and the dashboard's **Add repo** (`POST /api/add`) write a
+  new repo entry as **`{name, path}` only** — they never accept `claude_cmd`,
+  `claude_args`, `limit_patterns`, or a prompt from the CLI arg or HTTP body, so
+  they open no new verbatim-execution surface: an added repo simply inherits the
+  top-level global preset. The dashboard endpoint additionally only accepts a
+  path that appears in `GET /api/scan` (a repo already under a persisted
+  `scan_roots`), so a localhost request can't add an arbitrary filesystem path.
+  `/api/scan` is tokenless like `/api/status` (it lists only candidate names +
+  paths under `scan_roots`); `/api/add` is token-gated like the other writes.
 - Prompt files are typed into agent sessions verbatim, with the same trust
   level as typing them by hand.
 - `wind prompt` never invokes a shell. `$EDITOR` is parsed with `shlex.split`
