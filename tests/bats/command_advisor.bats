@@ -19,6 +19,15 @@ _repo() {
     > "$1/plugins/ecc/skills/review/SKILL.md"
 }
 
+# GNU `stat -f %m FILE` misparses `%m` as a second file operand instead of
+# erroring cleanly, leaking filesystem-info stdout (with fields like free
+# block count that churn between calls) into a `cmd1 2>/dev/null || cmd2`
+# capture. Run each attempt in its own substitution so a failed one can't
+# leak stdout into the result.
+_reg_mtime() {
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null
+}
+
 @test "registry_freshness: builds when registry missing" {
   _repo "${TMP}/repo"
   run bash -c "printf '%s' '{\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/registry_freshness.sh'"
@@ -29,10 +38,10 @@ _repo() {
 @test "registry_freshness: no-op when fresh (registry unchanged)" {
   _repo "${TMP}/repo"
   printf '%s' "{\"cwd\":\"${TMP}/repo\"}" | bash "${HOOKS}/registry_freshness.sh"
-  before="$(stat -f %m "${HOME}/.claude/prompt-craft/registry.json" 2>/dev/null || stat -c %Y "${HOME}/.claude/prompt-craft/registry.json")"
+  before="$(_reg_mtime "${HOME}/.claude/prompt-craft/registry.json")"
   sleep 1
   run bash -c "printf '%s' '{\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/registry_freshness.sh'"
-  after="$(stat -f %m "${HOME}/.claude/prompt-craft/registry.json" 2>/dev/null || stat -c %Y "${HOME}/.claude/prompt-craft/registry.json")"
+  after="$(_reg_mtime "${HOME}/.claude/prompt-craft/registry.json")"
   [ "$status" -eq 0 ]
   [ "$before" = "$after" ]
 }
@@ -59,11 +68,11 @@ _repo() {
 @test "registry_freshness: claude absent does not force a rebuild" {
   _repo "${TMP}/repo"
   printf '%s' "{\"cwd\":\"${TMP}/repo\"}" | bash "${HOOKS}/registry_freshness.sh"
-  before="$(stat -f %m "${HOME}/.claude/prompt-craft/registry.json" 2>/dev/null || stat -c %Y "${HOME}/.claude/prompt-craft/registry.json")"
+  before="$(_reg_mtime "${HOME}/.claude/prompt-craft/registry.json")"
   sleep 1
   # PATH without our mock `claude` -> `claude --version` empty -> version dimension skipped
   run env PATH="/usr/bin:/bin" bash -c "printf '%s' '{\"cwd\":\"${TMP}/repo\"}' | bash '${HOOKS}/registry_freshness.sh'"
-  after="$(stat -f %m "${HOME}/.claude/prompt-craft/registry.json" 2>/dev/null || stat -c %Y "${HOME}/.claude/prompt-craft/registry.json")"
+  after="$(_reg_mtime "${HOME}/.claude/prompt-craft/registry.json")"
   [ "$status" -eq 0 ]
   [ "$before" = "$after" ]
 }
