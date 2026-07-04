@@ -105,6 +105,58 @@ else
   warn usage-strings "no generated plist found — build once, or set PREFLIGHT_PLIST"
 fi
 
+# --- nfc-entitlement (ITMS-90778: the iOS 26 SDK rejects the 'NDEF' reader-session
+# format value at upload. Ship formats=[TAG] and read/write NDEF through the
+# NFCNDEFTag protocol on the tag detected by an NFCTagReaderSession.)
+ENT_FILE="${PREFLIGHT_ENTITLEMENTS_FILE:-}"
+if [[ -z "${ENT_FILE}" ]]; then
+  ENT_FILE="$(find . -name '*.entitlements' -not -path './build/*' -not -path './.git/*' 2>/dev/null | head -1)"
+fi
+if [[ -n "${ENT_FILE}" && -f "${ENT_FILE}" ]]; then
+  nfc_fmts="$(python3 -c "
+import plistlib, sys
+try:
+    d = plistlib.load(open('${ENT_FILE}', 'rb'))
+except Exception:
+    sys.exit(0)
+print(' '.join(d.get('com.apple.developer.nfc.readersession.formats', [])))" 2>/dev/null || true)"
+  if [[ " ${nfc_fmts} " == *" NDEF "* ]]; then
+    fail nfc-entitlement "com.apple.developer.nfc.readersession.formats contains 'NDEF' — rejected by the iOS 26 SDK (ITMS-90778). Change it to 'TAG' and migrate NFCNDEFReaderSession -> NFCTagReaderSession (poll .iso14443, read/write via the NFCNDEFTag protocol on the detected tag)"
+  else
+    pass nfc-entitlement
+  fi
+else
+  pass nfc-entitlement
+fi
+
+# --- ipad-orientation (ITMS-90474: a universal app must declare all four iPad
+# orientations. The old UIRequiresFullScreen opt-out is deprecated on the iOS 26
+# SDK — ignored in a future release — so declaring the four is the only
+# future-proof fix. Only checked for universal apps; iPhone-only apps pass.)
+if grep -E 'TARGETED_DEVICE_FAMILY' project.yml 2>/dev/null | grep -q '2'; then
+  if [[ -n "${PLIST}" && -f "${PLIST}" ]]; then
+    ipad_missing="$(python3 -c "
+import plistlib
+d = plistlib.load(open('${PLIST}', 'rb'))
+need = {'UIInterfaceOrientationPortrait', 'UIInterfaceOrientationPortraitUpsideDown',
+        'UIInterfaceOrientationLandscapeLeft', 'UIInterfaceOrientationLandscapeRight'}
+have = set(d.get('UISupportedInterfaceOrientations~ipad', []))
+print(' '.join(sorted(need - have)))" 2>/dev/null || true)"
+    if [[ -n "${ipad_missing}" ]]; then
+      fail ipad-orientation "universal app missing iPad orientations:${ipad_missing:+ }${ipad_missing} (ITMS-90474). Declare all four in UISupportedInterfaceOrientations~ipad in project.yml — UIRequiresFullScreen is deprecated on the iOS 26 SDK and no longer opts out"
+    else
+      pass ipad-orientation
+    fi
+    if python3 -c "import plistlib, sys; d = plistlib.load(open('${PLIST}', 'rb')); sys.exit(0 if d.get('UIRequiresFullScreen') else 1)" 2>/dev/null; then
+      warn ipad-orientation "UIRequiresFullScreen is set but deprecated on the iOS 26 SDK (ignored in a future release) — rely on the four declared iPad orientations instead"
+    fi
+  else
+    warn ipad-orientation "universal app but no generated plist to check iPad orientations — build once, or set PREFLIGHT_PLIST"
+  fi
+else
+  pass ipad-orientation
+fi
+
 # --- entitlement parity (App Group identical across app + extensions)
 if [[ -n "${TARGETS_APP_GROUP}" ]]; then
   ENT_DIR="${PREFLIGHT_ENTITLEMENTS_DIR:-build/gen}"
