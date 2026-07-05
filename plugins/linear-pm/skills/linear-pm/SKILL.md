@@ -7,8 +7,6 @@ description: Linear project management conventions and slash commands. Auto-load
 
 This skill documents the vocabulary every `/linear-*` command relies on. The commands themselves are at `.claude/commands/linear-*.md`. The per-repo policy lives at `.claude/linear.yml`.
 
-See the [design doc](../../../docs/superpowers/specs/2026-05-19-linear-pm-skill-design.md) for the rationale behind every rule in here.
-
 ## Labels (created by /linear-init if missing)
 
 | Label | Purpose | Set by |

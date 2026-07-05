@@ -14,7 +14,7 @@ Mark a Linear issue as blocked, with a reason.
 
 ## Procedure
 
-1. Source `scripts/linear-pm/load-config.sh`. Stop on error.
+1. Source `${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/load-config.sh` (or `.claude/skills/linear-pm/scripts/load-config.sh` if `${CLAUDE_PLUGIN_ROOT}` is unset — project-local copy instead of plugin install). Stop on error.
 
 2. **Resolve issue key.**
    - If first arg matches `[A-Z]+-[0-9]+`, treat it as the key, second arg is the reason.

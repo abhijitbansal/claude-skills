@@ -1,6 +1,12 @@
 ---
 name: ios-scaffold
-description: Standardize an iOS app repo to the portfolio conventions — marketing copy home, Fastlane files, Xcode Cloud ci_post_clone, release-hooks dir, architecture checklist, AGENTS.md skeleton. Use when setting up a new app repo, when the user says "scaffold this repo", "standardize the repo", "set up fastlane/CI here", or invokes /ios-scaffold. Idempotent: creates what's missing, reports drift on what exists, never overwrites.
+description: >-
+  Standardize an iOS app repo to the portfolio conventions — marketing copy
+  home, Fastlane files, Xcode Cloud ci_post_clone, release-hooks dir,
+  architecture checklist, AGENTS.md skeleton. Use when setting up a new app
+  repo, when the user says "scaffold this repo", "standardize the repo",
+  "set up fastlane/CI here", or invokes /ios-scaffold. Idempotent: creates
+  what's missing, reports drift on what exists, never overwrites.
 ---
 
 # iOS repo scaffold

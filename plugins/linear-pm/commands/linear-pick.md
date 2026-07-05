@@ -28,7 +28,7 @@ if ! gh auth status >/dev/null 2>&1; then
 fi
 ```
 
-Source `scripts/linear-pm/load-config.sh`. Stop on error.
+Source `${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/load-config.sh` (or `.claude/skills/linear-pm/scripts/load-config.sh` if `${CLAUDE_PLUGIN_ROOT}` is unset — project-local copy instead of plugin install). Stop on error.
 
 ### Step 2: Pick the issue
 - With arg: call `mcp__claude_ai_Linear__get_issue` by key. Stop if not in configured project.
@@ -54,7 +54,7 @@ Check `$LINEAR_PM_AUTONOMY`:
 - `allowed` → continue.
 
 ### Step 5: Branch creation
-Generate slug: `SLUG=$(bash scripts/linear-pm/make-slug.sh "$ISSUE_TITLE")`.
+Generate slug: `SLUG=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/make-slug.sh" "$ISSUE_TITLE")` (or `.claude/skills/linear-pm/scripts/make-slug.sh` if `${CLAUDE_PLUGIN_ROOT}` is unset).
 Compute: `BRANCH="${LINEAR_PM_BRANCH_PREFIX}${ISSUE_KEY}-${SLUG}"`.
 
 **Dirty-tree check (first):** Run `git status --porcelain`. If non-empty → Step 9 (block-and-exit) with reason "working tree is dirty; commit or stash before /linear-pick".

@@ -39,6 +39,7 @@ sh claude-skills/tools/second-wind/install.sh
 
 | Command | What it does |
 | --- | --- |
+| `wind guide` | print the setup walkthrough (start here); `--open` also opens the visual guide in a browser |
 | `wind init` | interactive wizard: scan dirs (roots persisted as `scan_roots`), pick repos, set a global permission preset, then either configure each repo or **apply the global preset + defaults to all** in one choice; write config (`--defaults` for non-interactive starter file) |
 | `wind prompt <repo>` | create/edit a repo's first-prompt file in `$EDITOR` (convention `~/.wind/prompts/<repo>.md`; wires `prompt_file` into the config); `--editor` to override `$EDITOR` |
 | `wind add <path>` | add a git repo to the config (`{name, path}` only, inherits the global preset), launch its session, and refresh the watcher — no re-`init` |

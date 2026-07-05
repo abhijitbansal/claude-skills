@@ -1,6 +1,6 @@
 ---
 description: Build the iOS app (reads .claude/app.yml; --no-build skips), launch on the booted simulator, optionally deep-link, screenshot, embed inline
-argument-hint: [--no-build] [scan | doc?path=...]
+argument-hint: "[--no-build] [scan | doc?path=...]"
 model: sonnet
 ---
 

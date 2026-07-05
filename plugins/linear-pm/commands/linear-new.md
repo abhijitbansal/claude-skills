@@ -14,7 +14,7 @@ File a new Linear issue.
 
 ## Procedure
 
-1. Source `scripts/linear-pm/load-config.sh`. Stop on error.
+1. Source `${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/load-config.sh` (or `.claude/skills/linear-pm/scripts/load-config.sh` if `${CLAUDE_PLUGIN_ROOT}` is unset — project-local copy instead of plugin install). Stop on error.
 
 2. **Title:** if not given as argument, ask the user. Trim whitespace; reject empty.
 

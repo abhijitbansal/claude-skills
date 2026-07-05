@@ -1,6 +1,6 @@
 {
   "name": "second-wind",
   "description": "Set-and-forget orchestrator for long Claude Code runs across multiple repos. Detects the 5-hour usage limit, waits for reset, resumes every tmux session. Single-file Python CLI (wind), stdlib only.",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "author": { "name": "Abhijit Bansal", "url": "https://github.com/abhijitbansal" }
 }

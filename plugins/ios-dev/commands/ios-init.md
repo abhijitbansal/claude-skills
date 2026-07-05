@@ -1,6 +1,6 @@
 ---
 description: Scaffold .claude/app.yml (schema v2) for this iOS app — detects scheme/bundle-id/team/extensions from project.yml or xcodebuild, fills the rest with TODOs; --migrate upgrades a v1 file in place
-argument-hint: [--force | --migrate]
+argument-hint: "[--force | --migrate]"
 ---
 
 Set up the `ios-dev` plugin for this repo by generating `.claude/app.yml` — the per-app config every ios-dev skill (`/preview`, `/fix`, build, release) reads.

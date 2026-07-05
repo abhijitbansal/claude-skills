@@ -9,7 +9,7 @@ Backfill Linear state for work started by hand.
 
 ## Procedure
 
-1. Source `scripts/linear-pm/load-config.sh`. Stop on error.
+1. Source `${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/load-config.sh` (or `.claude/skills/linear-pm/scripts/load-config.sh` if `${CLAUDE_PLUGIN_ROOT}` is unset — project-local copy instead of plugin install). Stop on error.
 
 2. **Read current branch:**
    ```bash
@@ -19,8 +19,9 @@ Backfill Linear state for work started by hand.
 
 3. **Parse the issue key:**
    ```bash
-   KEY=$(bash scripts/linear-pm/parse-issue-key.sh "$BRANCH")
+   KEY=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/parse-issue-key.sh" "$BRANCH")
    ```
+   (or `.claude/skills/linear-pm/scripts/parse-issue-key.sh` if `${CLAUDE_PLUGIN_ROOT}` is unset)
    If empty: print "No issue key in branch name `$BRANCH`. Rename the branch to include e.g. `ABH-123`, or pick a different branch."
 
 4. **Fetch the issue:** `mcp__claude_ai_Linear__get_issue` by key.
