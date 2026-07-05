@@ -144,7 +144,6 @@ multi-script medical bill.
 
 - `vision-layout-ocr-grounding` — where the grounding text comes from; garbage
   layout in ⇒ confabulation out, no matter how good the schema is.
-- `nonisolated-struct-codable-mainactor` (local learned micro-skill, not
-  shipped with this plugin) — the parsed DTOs (`KeyFact`) and parse/filter
-  helpers must be `nonisolated` in MainActor-default builds.
+- `nonisolated-struct-codable-mainactor` — the parsed DTOs (`KeyFact`) and
+  parse/filter helpers must be `nonisolated` in MainActor-default builds.
 - `swift6-mainactor-migration` — running the AI pipeline off-main correctly.

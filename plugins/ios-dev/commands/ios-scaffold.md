@@ -1,6 +1,6 @@
 ---
 description: Standardize this iOS app repo — marketing home, Fastlane, ci_post_clone, release hooks, architecture checklist (idempotent, drift-reporting).
-argument-hint: [--check]
+argument-hint: "[--check]"
 ---
 
 Run the `ios-scaffold` skill with `$ARGUMENTS`:

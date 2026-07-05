@@ -1,6 +1,17 @@
 ---
 name: legal-pages-css-scoping-bleed
-description: Privacy/support/legal pages render with broken layout (wrong top padding, content shoved down or clipped) after sharing the homepage's global stylesheet, even though those pages have no hero section; OR the nav/footer links differ page-to-page — a link present on the homepage is missing on privacy/support, or a page's own nav is missing its own link. Use when a marketing site has one shared CSS file across index.html + secondary static pages and a layout or nav/footer bug only reproduces on the non-home pages. Root causes: (1) hero-only rules written against bare `body`/`html` selectors leak into every page sharing the stylesheet; (2) nav/footer markup hand-duplicated per page instead of generated from one source of truth, so lists drift out of sync.
+description: >-
+  Privacy/support/legal pages render with broken layout (wrong top padding,
+  content shoved down or clipped) after sharing the homepage's global
+  stylesheet, even though those pages have no hero section; OR the
+  nav/footer links differ page-to-page — a link present on the homepage is
+  missing on privacy/support, or a page's own nav is missing its own link.
+  Use when a marketing site has one shared CSS file across index.html +
+  secondary static pages and a layout or nav/footer bug only reproduces on
+  the non-home pages. Root causes: (1) hero-only rules written against bare
+  `body`/`html` selectors leak into every page sharing the stylesheet; (2)
+  nav/footer markup hand-duplicated per page instead of generated from one
+  source of truth, so lists drift out of sync.
 ---
 
 # Legal/support pages: CSS bleed + nav/footer drift

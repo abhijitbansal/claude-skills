@@ -172,12 +172,9 @@ Add this as an explicit manual-test step; a warm-path check proves nothing.
   pure compute under default-MainActor isolation.
 - `ondevice-generable-anti-hallucination` — downstream consumer; owns the
   clip-on-read `clipForModel` pattern this loader applies.
-- `nonisolated-struct-codable-mainactor` (local learned micro-skill, not
-  shipped with this plugin) — keeping the formatter's value types usable
-  off-main.
-- `vision-barcode-cidetector-fallback` (local learned micro-skill, not
-  shipped with this plugin) — sibling Vision-pipeline fallback pattern
-  (primary detector + deterministic fallback chain).
-- `avfoundation-capture-delivery-watchdog` (local learned micro-skill, not
-  shipped with this plugin) — upstream capture-side failure detection for
-  the same scan pipelines.
+- `nonisolated-struct-codable-mainactor` — keeping the formatter's value types
+  usable off-main.
+- `vision-barcode-cidetector-fallback` — sibling Vision-pipeline fallback
+  pattern (primary detector + deterministic fallback chain).
+- `avfoundation-capture-delivery-watchdog` — upstream capture-side failure
+  detection for the same scan pipelines.

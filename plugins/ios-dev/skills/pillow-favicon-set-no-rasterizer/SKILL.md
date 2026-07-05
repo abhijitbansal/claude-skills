@@ -1,6 +1,13 @@
 ---
 name: pillow-favicon-set-no-rasterizer
-description: "rsvg-convert: command not found", "convert: command not found" (ImageMagick), "No module named 'cairosvg'", or no Inkscape on PATH when trying to turn an SVG mark into favicon.ico / apple-touch-icon.png / og-card.png. Use when a site needs a raster favicon set (site-og-favicon-verify's checklist) and installing a full SVG rasterizer is unavailable, heavy, or blocked, and the mark is a simple geometric shape + letter/glyph (most lettermark logos qualify).
+description: >-
+  "rsvg-convert: command not found", "convert: command not found"
+  (ImageMagick), "No module named 'cairosvg'", or no Inkscape on PATH when
+  trying to turn an SVG mark into favicon.ico / apple-touch-icon.png /
+  og-card.png. Use when a site needs a raster favicon set
+  (site-og-favicon-verify's checklist) and installing a full SVG rasterizer
+  is unavailable, heavy, or blocked, and the mark is a simple geometric
+  shape + letter/glyph (most lettermark logos qualify).
 ---
 
 # Generate a raster favicon set without an SVG rasterizer
