@@ -172,6 +172,7 @@ RELEASE_FONTS_EXPECTED="${RELEASE_FONTS_EXPECTED:-0}";              export RELEA
 RELEASE_REQUIRED_CAPABILITIES="$(_yaml_get_list "${APP_YML}" release.required_capabilities 2>/dev/null || true)"; export RELEASE_REQUIRED_CAPABILITIES
 RELEASE_USAGE_STRINGS="$(_yaml_get_list "${APP_YML}" release.usage_strings 2>/dev/null || true)"; export RELEASE_USAGE_STRINGS
 RELEASE_WHATSNEW_FILE="$(_yaml_get "${APP_YML}" release.whatsnew_file 2>/dev/null || true)"; export RELEASE_WHATSNEW_FILE
+RELEASE_INAPP_CHANGELOG_FILE="$(_yaml_get "${APP_YML}" release.inapp_changelog_file 2>/dev/null || true)"; export RELEASE_INAPP_CHANGELOG_FILE
 RELEASE_ASC_APP_ID="$(_yaml_get "${APP_YML}" release.asc_app_id 2>/dev/null || true)"; export RELEASE_ASC_APP_ID
 RELEASE_HOOKS_DIR="$(_yaml_get "${APP_YML}" release.hooks_dir 2>/dev/null || true)"
 RELEASE_HOOKS_DIR="${RELEASE_HOOKS_DIR:-scripts/release-hooks}";    export RELEASE_HOOKS_DIR

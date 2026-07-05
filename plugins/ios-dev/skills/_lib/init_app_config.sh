@@ -58,7 +58,8 @@ release:
   fonts_expected: 0                     # 0 = skip bundled-font check
   required_capabilities: []             # UIRequiredDeviceCapabilities allow-list
   usage_strings: []                     # plist usage keys asserted at release
-  whatsnew_file:                        # e.g. Sources/WhatsNew.json
+  whatsnew_file:                        # e.g. Sources/WhatsNew.json (ASC metadata side)
+  inapp_changelog_file:                 # optional: in-app changelog/feature-catalog data, e.g. Sources/Changelog.swift (separate from whatsnew_file — see skill release-inapp-vs-asc-whatsnew-surfaces)
   asc_app_id:                           # numeric App Store Connect app id
   hooks_dir: scripts/release-hooks
 YAML

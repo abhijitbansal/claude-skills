@@ -213,6 +213,22 @@ else
   pass whatsnew
 fi
 
+# --- inapp-whatsnew (sibling to whatsnew above, but for the IN-APP changelog/
+# feature-catalog surface, not App Store Connect metadata — see skill
+# release-inapp-vs-asc-whatsnew-surfaces. Optional: only checked when the app
+# configures release.inapp_changelog_file; most apps have no in-app changelog.)
+if [[ -n "${RELEASE_INAPP_CHANGELOG_FILE}" && -n "${NEXT_VERSION}" ]]; then
+  if [[ -f "${RELEASE_INAPP_CHANGELOG_FILE}" ]] && grep -q "\"${NEXT_VERSION}\"" "${RELEASE_INAPP_CHANGELOG_FILE}"; then
+    pass inapp-whatsnew
+  elif [[ "${MODE}" == "appstore" ]]; then
+    fail inapp-whatsnew "no ChangelogEntry for ${NEXT_VERSION} in ${RELEASE_INAPP_CHANGELOG_FILE}"
+  else
+    warn inapp-whatsnew "no ChangelogEntry for ${NEXT_VERSION} in ${RELEASE_INAPP_CHANGELOG_FILE}"
+  fi
+else
+  pass inapp-whatsnew
+fi
+
 if [[ ${fails} -gt 0 ]]; then
   echo "preflight: ${fails} failure(s)"
   exit 1

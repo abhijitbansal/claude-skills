@@ -45,6 +45,7 @@ from real portfolio bugs. Needs `.claude/app.yml` (schema v2) in the target app 
 | `pillow-favicon-set-no-rasterizer` | skill (mined) | Generate a raster favicon set from a simple SVG mark with Pillow when no SVG rasterizer is available. |
 | `legal-pages-css-scoping-bleed` | skill (mined) | Privacy/support/legal pages break from shared-stylesheet hero bleed and hand-duplicated nav/footer drift. |
 | `parallel-ios-agent-fixes-single-sim` | skill (mined) | Fan out subagents to fix independent findings/tasks in an iOS repo without stomping the tree or racing one simulator. |
+| `release-inapp-vs-asc-whatsnew-surfaces` | skill (mined) | In-app What's New/changelog (compiled into the binary) vs. App Store Connect's What's New/What to Test metadata (manual paste) — two surfaces that silently drift; gates the release preflight on both. |
 | `/ios-init` | command | Scaffold or `--migrate` `.claude/app.yml` (schema v2) — detects scheme/bundle/team/extensions, interviews for the rest, validates. |
 | `/ios-scaffold` | command | Run the repo standardizer and walk DRIFTs one by one. |
 | `/release` | command | `testflight` / `appstore` (`--dry-run`) — the release skill, staged, stopping at every FAIL gate. |

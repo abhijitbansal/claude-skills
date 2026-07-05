@@ -124,6 +124,43 @@ SWIFT
   [[ "$output" == *"PASS: whatsnew"* ]]
 }
 
+@test "inapp-whatsnew PASSes when release.inapp_changelog_file is unset" {
+  cd "${TMP}/app"
+  run bash "${PREFLIGHT}" --mode testflight --next-version 1.3.0
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: inapp-whatsnew"* ]]
+}
+
+@test "appstore mode FAILs when inapp_changelog_file configured but missing entry" {
+  cd "${TMP}/app"
+  printf '  inapp_changelog_file: Sources/Changelog.swift\n' >> .claude/app.yml
+  printf 'let x = 1\n' > Sources/Changelog.swift
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm inapp
+  run bash "${PREFLIGHT}" --mode appstore --next-version 1.3.0
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: inapp-whatsnew: no ChangelogEntry for 1.3.0"* ]]
+}
+
+@test "testflight mode only WARNs on missing inapp_changelog_file entry" {
+  cd "${TMP}/app"
+  printf '  inapp_changelog_file: Sources/Changelog.swift\n' >> .claude/app.yml
+  printf 'let x = 1\n' > Sources/Changelog.swift
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm inapp
+  run bash "${PREFLIGHT}" --mode testflight --next-version 1.3.0
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN: inapp-whatsnew"* ]]
+}
+
+@test "inapp_changelog_file entry present PASSes in appstore mode" {
+  cd "${TMP}/app"
+  printf '  inapp_changelog_file: Sources/Changelog.swift\n' >> .claude/app.yml
+  printf 'let entry = ChangelogEntry(version: "1.2.0")\n' > Sources/Changelog.swift
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm inapp
+  run bash "${PREFLIGHT}" --mode appstore --next-version 1.2.0
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: inapp-whatsnew"* ]]
+}
+
 @test "NDEF NFC entitlement FAILs nfc-entitlement (ITMS-90778)" {
   cd "${TMP}/app"
   cat > App.entitlements <<'PLIST'
