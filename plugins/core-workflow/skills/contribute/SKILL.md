@@ -27,6 +27,7 @@ Drives `claude-skills-contribute` from any repo or machine.
    - `site/index.html` — any total-count strings (search for the old total, e.g. "35 skills").
    - `site/og.html` + regenerate `site/og.png` (screenshot og.html at 1200x630) — only if the totals shown there changed.
    Skip this step only for changes that touch no skill/command/agent/hook (e.g. a pure bugfix inside an existing skill's script).
+   If the change adds or edits a command block on any site page, follow the per-line copy-button convention in this repo's `CLAUDE.md` ("Working in this repo") — one button per command, comment-free `data-copy`.
 4. Surface the PR URL printed by `gh`.
 5. If `--no-pr` was used (e.g. offline), tell the user the branch name so they can push later.
 
