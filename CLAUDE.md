@@ -13,6 +13,16 @@ source of the behavioral guidelines that `setup/setup.sh` merges into the
   the single source of truth. `setup/merge_guidelines.py` extracts that region
   and additively merges each missing section into other `CLAUDE.md` files —
   edit the guidelines here, nowhere else.
+- Site pages (`docs/`, `site/`) that show CLI/plugin commands use **per-line
+  copy buttons**: `.code.cmds` wraps one `<div class="cl"><code class="ct">
+  cmd</code><button class="copy" data-copy="cmd">copy</button></div>` per
+  command — one button per command, never one button spanning several. A
+  trailing `# comment` may stay in the visible `<code class="ct">` text for
+  readability, but must **never** appear in `data-copy` — strip it. The one
+  exception: full multi-line code *samples* (JSON/YAML/Swift snippets, not
+  command lists) keep a single copy-all button wrapped in `.code-body`. This
+  bit the site twice (PR #13) — a new page missed the per-line conversion,
+  and later edits baked comments straight into `data-copy`.
 
 <!-- claude-skills:guidelines:begin -->
 Behavioral guidelines to reduce common LLM coding mistakes. Adapted from Andrej
