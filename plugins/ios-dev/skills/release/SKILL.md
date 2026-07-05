@@ -82,6 +82,7 @@ Output contract: `PASS|WARN|FAIL: <gate>[: detail]`; exit 1 iff any FAIL. Gates:
 | `entitlement-parity` | App Group identical across app + `targets.extensions` | fix entitlements (mining: mismatch only surfaced at validate, wasting a build number) |
 | `runtime-trap` | WARN-only: heavy work in `App.init`/`.task`/`onAppear` without off-main dispatch | read skill `mainactor-launch-watchdog-audit`; fix or accept knowingly |
 | `whatsnew` | `release.whatsnew_file` has an entry for the next version (FAIL in appstore mode, WARN in testflight) | add the entry |
+| `inapp-whatsnew` | `release.inapp_changelog_file` has an entry for the next version — sibling gate for the in-app changelog surface, distinct from ASC metadata above; optional, skipped cleanly when unset (FAIL in appstore mode, WARN in testflight when configured) | add the `ChangelogEntry` |
 
 Report every WARN to the user even when the run continues.
 
@@ -113,6 +114,16 @@ draft; let the user edit. In appstore mode also confirm the whatsnew file entry
 (already gated in S1) and update the "What's New" section of
 `marketing/app-store-listing.md`, committing with
 `docs(release): update what's new for v<MV>`.
+
+**Two independent "What's New" surfaces** (see skill
+`release-inapp-vs-asc-whatsnew-surfaces` if either is configured): the in-app
+`Changelog`/`FeatureCatalog` data (`release.inapp_changelog_file`) is
+**binary** — compiled into the app, only visible once a build containing the
+new entry ships. App Store Connect's "What's New"/"What to Test" metadata
+(`release.whatsnew_file`) is a **manual paste**, independent of the binary —
+no upload lane can push it. Updating one does not update the other; gate S1
+checks both when configured, but the content itself still needs writing in
+both places.
 
 ## Stage 4 — Local build + test 🤖
 
@@ -244,7 +255,7 @@ the app has a refresh script, `verify-site.sh`, then subtree-push. Skip freely.
 > 🎉 Build uploaded. Remaining App Store Connect web-UI steps:
 > Open https://appstoreconnect.apple.com → My Apps → ${APP_NAME} → iOS App <MV>.
 > 1. [ ] **Build** — select this build once processing finishes (~5–30 min email).
-> 2. [ ] **What's New** — paste from `marketing/app-store-listing.md`.
+> 2. [ ] **What's New** — paste from `marketing/app-store-listing.md`. This is the ASC-metadata surface specifically — separate from any in-app changelog already baked into the uploaded build.
 > 3. [ ] **App Privacy** — verify declarations still accurate.
 > 4. [ ] **Screenshots** — upload from `marketing/screenshots/` if changed.
 > 5. [ ] **Description/Keywords/Promo text** — paste from `marketing/app-store-listing.md`.

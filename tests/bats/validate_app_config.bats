@@ -92,6 +92,18 @@ YML
   [[ "$output" == *"whatsnew_file"* ]]
 }
 
+@test "inapp_changelog_file pointing nowhere is only a WARN" {
+  mkdir -p "${TMP}/repo2/.claude"
+  good_yml "${TMP}/repo2/.claude/app.yml"
+  cat >> "${TMP}/repo2/.claude/app.yml" <<'YML'
+  inapp_changelog_file: Sources/Changelog.swift
+YML
+  run bash "${VALIDATE}" "${TMP}/repo2/.claude/app.yml"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN"* ]]
+  [[ "$output" == *"inapp_changelog_file"* ]]
+}
+
 @test "missing file exits 2" {
   run bash "${VALIDATE}" "${TMP}/nope.yml"
   [ "$status" -eq 2 ]

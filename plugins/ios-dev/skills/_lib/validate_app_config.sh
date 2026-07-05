@@ -82,6 +82,12 @@ if [[ -n "${whatsnew}" ]]; then
   [[ -f "${root}/${whatsnew}" ]] || warn "release.whatsnew_file '${whatsnew}' not found relative to repo root"
 fi
 
+inapp_changelog="$(get release.inapp_changelog_file)"
+if [[ -n "${inapp_changelog}" ]]; then
+  root="$(dirname "$(dirname "${FILE}")")"
+  [[ -f "${root}/${inapp_changelog}" ]] || warn "release.inapp_changelog_file '${inapp_changelog}' not found relative to repo root"
+fi
+
 if [[ ${errors} -gt 0 ]]; then
   echo "invalid: ${errors} error(s) in ${FILE}"
   exit 1
