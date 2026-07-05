@@ -30,7 +30,7 @@ it does in one line, and — only with the user's go-ahead — run it for them.
    user can jump into the real terminal with full TUI autocomplete.
 
 Then mention the check-in commands: `wind status`, `wind resume`, `wind down`,
-and the visual guide at `docs/second-wind/index.html`.
+and `wind guide` (`--open` for the visual guide at `docs/second-wind/index.html`).
 
 Never run `wind up` or `wind down` without explicit confirmation — they start or
 kill real sessions.

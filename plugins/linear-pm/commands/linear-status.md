@@ -11,8 +11,9 @@ Show what's in flight on the configured Linear project for this repo.
 
 1. Source the config:
    ```bash
-   source scripts/linear-pm/load-config.sh
+   source "${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/load-config.sh"
    ```
+   If `${CLAUDE_PLUGIN_ROOT}` is unset (project-local copy instead of plugin install), use `.claude/skills/linear-pm/scripts/load-config.sh` relative to the repo root instead.
    If exit non-zero, surface the error and stop.
 
 2. Resolve the Linear team and project IDs via MCP (treat `$LINEAR_PM_TEAM` and `$LINEAR_PM_PROJECT` as name OR ID — call `mcp__claude_ai_Linear__list_teams` filtered by query, then `mcp__claude_ai_Linear__list_projects` filtered by team + query).

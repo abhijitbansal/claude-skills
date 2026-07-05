@@ -21,15 +21,13 @@ Then sequentially:
 6. **Generate a commit message:**
    - Title (≤72 chars): imperative mood, lowercase, no trailing period. Match the style of recent commits in this repo.
    - Body (optional): one or two sentences focused on the *why*, not the *what*. Skip the body for trivial changes.
-   - Trailer: `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` (one blank line above).
+   - No attribution trailer — disabled globally via `~/.claude/settings.json`.
 7. **Commit via heredoc** (always — preserves formatting):
    ```
    git commit -m "$(cat <<'EOF'
    <title>
 
    <body if any>
-
-   Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
    EOF
    )"
    ```

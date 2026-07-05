@@ -36,10 +36,16 @@ ok()   { ((PASS++)); $QUIET || printf "${G}[ OK ]${X} %s\n" "$1"; }
 warn() { ((WARN++)); printf "${Y}[WARN]${X} %s\n" "$1"; [[ -n "${2:-}" ]] && printf "       → %s\n" "$2"; }
 fail() { ((FAIL++)); printf "${R}[FAIL]${X} %s\n" "$1"; [[ -n "${2:-}" ]] && printf "       → %s\n" "$2"; }
 
-# Resolve repo root from this script's location. Script lives at
-# <repo>/.claude/skills/linear-pm/scripts/bootstrap.sh — four levels up.
+# Resolve repo root from the invocation cwd (the repo this is being run
+# against), not this script's own location — this script may be running from
+# a plugin cache path (marketplace install) or a project-local copy, and
+# either way the repo being checked is wherever the user is standing.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [[ -z "$REPO_ROOT" ]]; then
+  echo "bootstrap: not inside a git repo (run this from within the target repo)" >&2
+  exit 1
+fi
 cd "$REPO_ROOT" || { echo "bootstrap: failed to cd into $REPO_ROOT" >&2; exit 1; }
 
 $QUIET || printf "${B}linear-pm bootstrap${X} — checking prerequisites in %s\n\n" "$REPO_ROOT"
@@ -122,21 +128,17 @@ if [[ -f "$LINEAR_YML" ]]; then
 fi
 
 # --- 7. helper scripts present (load-config, make-slug, parse-issue-key) ---
-HELPERS_DIR="$REPO_ROOT/scripts/linear-pm"
-if [[ -d "$HELPERS_DIR" ]]; then
-  missing_helpers=()
-  for helper in load-config.sh make-slug.sh parse-issue-key.sh; do
-    [[ -f "$HELPERS_DIR/$helper" ]] || missing_helpers+=("$helper")
-  done
-  if [[ ${#missing_helpers[@]} -eq 0 ]]; then
-    ok "linear-pm helper scripts present (load-config, make-slug, parse-issue-key)"
-  else
-    fail "linear-pm helper scripts missing: ${missing_helpers[*]}" \
-         "These ship with the skill at scripts/linear-pm/. Did you partially copy the skill?"
-  fi
+# These ship as siblings of this script (skills/linear-pm/scripts/), not as a
+# per-repo copy — so this checks SCRIPT_DIR, not anything under REPO_ROOT.
+missing_helpers=()
+for helper in load-config.sh make-slug.sh parse-issue-key.sh; do
+  [[ -f "$SCRIPT_DIR/$helper" ]] || missing_helpers+=("$helper")
+done
+if [[ ${#missing_helpers[@]} -eq 0 ]]; then
+  ok "linear-pm helper scripts present (load-config, make-slug, parse-issue-key)"
 else
-  fail "scripts/linear-pm/ directory missing" \
-       "Helper scripts referenced by /linear-* commands aren't in this repo"
+  fail "linear-pm helper scripts missing: ${missing_helpers[*]}" \
+       "These ship with the skill at skills/linear-pm/scripts/. Did the plugin install incompletely?"
 fi
 
 # --- 8. Linear MCP — informational only (cannot verify from shell) ---
