@@ -43,31 +43,9 @@ ScanRecoveryStore.clear()                           // ④ only now
 **2. Harden the store: atomic writes, tolerate unreadable/partial files, and
 clear on decode-mismatch so there is no restart loop.**
 
-```swift
-nonisolated enum ScanRecoveryStore {
-    private static var fileURL: URL {
-        URL.applicationSupportDirectory.appending(path: "recovery/capturedRoom.json")
-    }
-
-    static func save(_ room: CapturedRoom) throws {
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let data = try JSONEncoder().encode(room)
-        try data.write(to: fileURL, options: .atomic)      // never a partial file
-    }
-
-    static func load() -> CapturedRoom? {
-        guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        guard let room = try? JSONDecoder().decode(CapturedRoom.self, from: data) else {
-            clear()   // stale schema (e.g. CapturedStructure) → delete, don't re-crash
-            return nil
-        }
-        return room
-    }
-
-    static func clear() { try? FileManager.default.removeItem(at: fileURL) }
-}
-```
+**Read `references/crash-marker-store.md` before implementing** — has the
+full `ScanRecoveryStore` (atomic save/load/clear with decode-mismatch
+recovery).
 
 **3. Time-box the processing step with a graceful fallback.** The recovery
 file is already on disk, so timing out is safe — show the raw capture or offer
@@ -87,23 +65,10 @@ let plan = try await withThrowingTaskGroup(of: FloorPlanData.self) { group in
 ```
 
 **4. Freeze the elapsed clock across interruptions.** Accumulate active time;
-never compute `Date().timeIntervalSince(startedAt)` at render time.
-
-```swift
-struct ScanClock {
-    private(set) var accumulated: TimeInterval = 0
-    private(set) var resumedAt: Date?
-
-    mutating func pause() {          // session interruption / scenePhase != .active
-        if let resumedAt { accumulated += Date().timeIntervalSince(resumedAt) }
-        resumedAt = nil
-    }
-    mutating func resume() { resumedAt = Date() }
-    var elapsed: TimeInterval {
-        accumulated + (resumedAt.map { Date().timeIntervalSince($0) } ?? 0)
-    }
-}
-```
+never compute `Date().timeIntervalSince(startedAt)` at render time. Pause the
+accumulator on session interruption / whenever `scenePhase` leaves `.active`,
+and resume it when active again — see `ScanClock` in
+`references/crash-marker-store.md` for the full accumulate-on-pause struct.
 
 **5. Async-signal-safe crash marker armed BEFORE `ModelContainer` init.** A
 corrupt store can crash inside container init — before any Swift recovery
@@ -112,21 +77,11 @@ also usable from a signal handler. Marker present at next launch ⇒ last launch
 died during init ⇒ take the safe path (fresh/in-memory store, keep the
 recovery file) instead of re-crashing.
 
-```swift
-nonisolated enum CrashSentinel {
-    static let path = "/tmp-replaced-at-runtime/crash.marker"  // resolve under App Support
-
-    static func arm()    { let fd = open(path, O_CREAT | O_WRONLY, 0o644); if fd >= 0 { close(fd) } }
-    static func disarm() { unlink(path) }
-    static var crashedLastLaunch: Bool { access(path, F_OK) == 0 }
-}
-
-// App start:
-let crashed = CrashSentinel.crashedLastLaunch
-CrashSentinel.arm()
-let container = try makeModelContainer(safeMode: crashed)   // hang/crash window
-CrashSentinel.disarm()
-```
+**Read `references/crash-marker-store.md` before implementing** — has the
+full `CrashSentinel` (arm/disarm/crashedLastLaunch) and the app-start call
+sequence around `ModelContainer` init. The marker path there is a
+placeholder — resolve it under the real Application Support directory, not
+literally `/tmp`.
 
 ## Evidence
 
@@ -141,6 +96,5 @@ CrashSentinel.disarm()
 ## Related skills
 
 - `avfoundation-capture-delivery-watchdog` — detecting stalled/interrupted capture sessions during the scan itself.
-- `swift6-mainactor-migration` — run the hang-prone plan/scene build off the main actor in the first place.
-- `nonisolated-struct-codable-mainactor` — making the Codable recovery DTOs decodable off-main under MainActor-default isolation.
+- `swift6-mainactor-compile-fixes` — run the hang-prone plan/scene build off the main actor, and make the Codable recovery DTOs decodable off-main under MainActor-default isolation.
 - `swiftdata-inmemory-test-harness` — exercising the safe-mode/recovery path without touching the real ModelContainer.

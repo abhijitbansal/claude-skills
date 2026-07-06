@@ -34,90 +34,28 @@ architecture — this skill is the canonical shape.
 One `Codable` DTO compiled into **both** targets; app-side atomic writer;
 widget-side pure reader; relative paths only; backfill on launch.
 
-```swift
-// Shared/WidgetBridge.swift — compiled into BOTH app and widget targets
-struct WidgetSnapshot: Codable, Equatable {
-    struct Entry: Codable, Equatable {
-        let id: String                       // stable model id — NEVER an absolute URL
-        let title: String
-        let thumbnailRelativePath: String?   // relative to the App Group container
-        let updatedAt: Date
-    }
-    let entries: [Entry]
-    let generatedAt: Date
-}
+Invariants the implementation must hold:
 
-enum WidgetBridge {
-    static let appGroupID = "group.com.example.myapp"
-    static let snapshotFilename = "widget-snapshot-v1.json"
-    static let appLockKey = "appLockEnabled"
+- **IDs are stable model IDs, never absolute URLs**; thumbnail paths stay
+  relative to the App Group container — absolute paths break after
+  reinstall/restore because the container path changes per install.
+- **Invariant A (writer): never clobber a good snapshot with a
+  transient-empty one.** On an iCloud-sync launch the local store is briefly
+  empty — if `documents` is empty but a snapshot with entries already exists
+  on disk, skip the write and let the post-settle backfill publish real state.
+- **Invariant B (writer + reader share one flag): the App-Lock redaction
+  decision has exactly one source of truth.** The writer mirrors App-Lock
+  state into the shared UserDefaults suite; the reader re-checks that SAME
+  flag on every load regardless of what's on disk, so a stale pre-redaction
+  snapshot can never render. Neither side invents its own redaction signal —
+  that's what causes double-redaction bugs.
+- Writes are atomic (`.atomic, .completeFileProtectionUnlessOpen`) so the
+  widget process never reads a half-written file.
 
-    // Optional on purpose: Personal-Team provisioning has no App Group → nil.
-    static var containerURL: URL? {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)
-    }
-    static var snapshotURL: URL? { containerURL?.appendingPathComponent(snapshotFilename) }
-}
-```
-
-```swift
-// App target — the ONLY writer
-enum WidgetSnapshotWriter {
-    static func publish(documents: [Document], isAppLocked: Bool) {
-        guard let url = WidgetBridge.snapshotURL else { return }  // no entitlement → no-op
-
-        // INVARIANT A: never clobber a good snapshot with a transient-empty one.
-        // On an iCloud-sync launch the local store is briefly empty — skip and
-        // let the post-settle backfill publish real state.
-        if documents.isEmpty, snapshotHasEntries(at: url) { return }
-
-        let snapshot = WidgetSnapshot(
-            entries: documents.prefix(4).map {
-                .init(id: $0.stableID, title: $0.title,
-                      thumbnailRelativePath: $0.thumbnailRelativePath,
-                      updatedAt: $0.updatedAt)
-            },
-            generatedAt: .now)
-        do {
-            let data = try JSONEncoder().encode(snapshot)
-            try data.write(to: url, options: [.atomic, .completeFileProtectionUnlessOpen])
-            // INVARIANT B, write half: mirror the App-Lock flag into the shared
-            // suite — the ONE source of truth for the redaction decision.
-            UserDefaults(suiteName: WidgetBridge.appGroupID)?
-                .set(isAppLocked, forKey: WidgetBridge.appLockKey)
-            WidgetCenter.shared.reloadAllTimelines()
-        } catch {
-            Logger.widgetBridge.error("snapshot write failed: \(error.localizedDescription)")
-        }
-    }
-
-    private static func snapshotHasEntries(at url: URL) -> Bool {
-        guard let data = try? Data(contentsOf: url),
-              let existing = try? JSONDecoder().decode(WidgetSnapshot.self, from: data)
-        else { return false }
-        return !existing.entries.isEmpty
-    }
-}
-```
-
-```swift
-// Widget target — pure read, never writes
-enum WidgetSnapshotReader {
-    static func load() -> WidgetSnapshot? {
-        guard let url = WidgetBridge.snapshotURL,
-              let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(WidgetSnapshot.self, from: data)
-    }
-
-    // INVARIANT B, read half: re-check the flag regardless of what's on disk —
-    // a stale pre-redaction snapshot must never render. Both halves consult the
-    // SAME flag; neither side invents its own redaction signal (no double-redaction).
-    static var isRedacted: Bool {
-        UserDefaults(suiteName: WidgetBridge.appGroupID)?
-            .bool(forKey: WidgetBridge.appLockKey) ?? false
-    }
-}
-```
+**Read `references/snapshot-bridge.md` before implementing** — the full
+`WidgetBridge` shared DTO, `WidgetSnapshotWriter` (app-side, the only writer),
+and `WidgetSnapshotReader` (widget-side, pure reader) implementing the
+invariants above.
 
 Completing the shape:
 
@@ -147,9 +85,8 @@ Completing the shape:
 - `deep-link-resolver-applock-pathtraversal` — widget entry taps deep-link into
   the app; route them through the single resolver (dropped, not deferred, while
   locked).
-- `nonisolated-struct-codable-mainactor` — the shared DTO must decode off-main
-  in the widget process under default-MainActor isolation.
-- `swift6-mainactor-migration` — marking the bridge/reader types `nonisolated`
-  honestly instead of `@unchecked Sendable` band-aids.
+- `swift6-mainactor-compile-fixes` — the shared DTO must decode off-main in the
+  widget process; mark the bridge/reader types `nonisolated` honestly instead of
+  `@unchecked Sendable` band-aids.
 - `swiftdata-inmemory-test-harness` — drive the writer from an in-memory store
   to test the never-clobber and backfill paths.

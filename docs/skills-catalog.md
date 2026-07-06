@@ -22,7 +22,7 @@ from real portfolio bugs. Needs `.claude/app.yml` (schema v2) in the target app 
 | `ios-scaffold` | skill | Idempotent repo standardizer: marketing copy home, Fastfile/Gemfile, `ci_post_clone.sh`, release-hooks dir, architecture checklist, AGENTS.md skeleton. Creates missing, reports drift, never clobbers. |
 | `site-pages-deploy-kit` | skill | The site standard (floorprint model): `site/` source in the app repo → split-repo public GitHub Pages, subtree force-push over an SSH deploy key, og/CSP/favicon lint, skeleton + runbook. |
 | `xcode-cloud-post-clone-contract` | skill | The four-rule `ci_scripts/ci_post_clone.sh` contract (materialize gitignored .xcodeproj, mirror local generation, pin `Package.resolved`, brew-only) + the PR-check / tag-release workflow recipe. |
-| `alternate-app-icons`, `biometric-applock`, `demo-recording`, `swift6-mainactor-migration`, `xcode-cloud-validate`, `xcodegen-test-targets` | skills | Focused how-to skills for their named features. |
+| `alternate-app-icons`, `biometric-applock`, `demo-recording`, `xcode-cloud-validate`, `xcodegen-test-targets` | skills | Focused how-to skills for their named features. |
 | `mainactor-launch-watchdog-audit` | skill (mined) | Launch watchdog 0x8BADF00D SIGKILL + boot-loop from heavy work implicitly on MainActor; off-main idioms + idempotent-retry rule. |
 | `mainactor-runtime-isolation-trap` | skill (mined) | `brk 1` on SwiftUI AsyncRenderer from @MainActor closures stored by UIKit (dynamic color/image providers); `.ips` diagnosis reflex + re-entrancy guards. |
 | `swiftdata-cloudkit-model-rules` | skill (mined) | CloudKit-safe SwiftData: explicit `cloudKitDatabase`, throwing container factory + fallback, single-side inverse, reserved names, centralized schema. |
@@ -38,7 +38,7 @@ from real portfolio bugs. Needs `.claude/app.yml` (schema v2) in the target app 
 | `ios26-toolbar-leading-title-truncation` | skill (mined) | SwiftUI title in `ToolbarItem(.topBarLeading)` renders as a single letter + ellipsis on iOS 26 Liquid Glass. |
 | `swiftdata-inmemory-test-harness` | skill (mined) | First SwiftData test in a target: avoids runner crashes, batch-delete "mandatory OTO nullify inverse" failures, cross-suite races. |
 | `vision-barcode-cidetector-fallback` | skill (mined) | `VNDetectBarcodesRequest` returns nil for a valid barcode on Simulator — CIDetector fallback for reliable decode tests. |
-| `nonisolated-struct-codable-mainactor` | skill (mined) | Synthesized `Decodable`/`Equatable` conformance is MainActor-isolated too — fix for stateless structs decoded off-main. |
+| `swift6-mainactor-compile-fixes` | skill (mined) | Two Swift 6 MainActor compile diagnostics: general default-MainActor migration (mark pure-compute types `nonisolated`, cascade through callees) plus the narrower synthesized `Decodable`/`Equatable`/`Hashable` conformance case for stateless structs decoded off-main. |
 | `swiftui-tabbar-swipe-nav-tradeoff` | skill (mined) | `TabView` labeled-bar vs swipe-between-tabs tradeoff, and the custom-pager race with deep-link/NFC/Siri tab routing. |
 | `query-derived-typeahead-vocabulary` | skill (mined) | Type-ahead suggestion chips derived from the persistent store instead of a stale hardcoded list; shared, testable filtering. |
 | `github-pages-flat-deploy-subdir-404` | skill (mined) | Flat `cp docs/*.html _site/` deploy model: subdirectory doc pages 404 live despite a green CI build. |

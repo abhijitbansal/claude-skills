@@ -28,6 +28,11 @@ path-traversal sink; (c) isn't testable, so neither invariant is enforced.
 ## Fix
 
 One pure `nonisolated` resolver returns an enum action; views only perform it.
+Locked state gates it directly: a locked app always resolves to `.ignore` —
+**dropped, never deferred** — because a link queued for after unlock would
+fire without a fresh user gesture, and a stale one could present above the
+lock overlay. Document ids are matched against a **whitelist** of known ids,
+never constructed or fetched straight from URL text.
 
 ```swift
 enum DeepLinkAction: Equatable, Sendable {
@@ -38,47 +43,24 @@ enum DeepLinkAction: Equatable, Sendable {
 
 nonisolated enum DeepLinkResolver {
     static func resolve(
-        _ url: URL,
-        isLocked: Bool,
-        knownDocumentIDs: Set<UUID>
-    ) -> DeepLinkAction {
-        guard !isLocked else { return .ignore }   // DROP, never defer
-        guard url.scheme == "paperix" else { return .ignore }
-        switch url.host {
-        case "doc":
-            guard let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                      .queryItems?.first(where: { $0.name == "id" })?.value,
-                  let id = UUID(uuidString: raw),
-                  knownDocumentIDs.contains(id)   // whitelist, don't trust
-            else { return .ignore }
-            return .openDocument(id: id)
-        case "scan":
-            return .startScan
-        default:
-            return .ignore
-        }
-    }
+        _ url: URL, isLocked: Bool, knownDocumentIDs: Set<UUID>
+    ) -> DeepLinkAction   // isLocked ⇒ .ignore; unknown scheme/host ⇒ .ignore
 }
 ```
 
+**Read `references/deeplink-resolver.md` before implementing** — the full
+`resolve` implementation (lock check, scheme/host routing, id whitelist
+against `knownDocumentIDs`) and the `resolvePayloadPath` traversal guard
+below, matching the invariants section exactly.
+
 If a payload must carry a path (keep it **relative** — never an absolute file
-URL), validate before touching the filesystem:
+URL), validate before touching the filesystem: **reject any `..` before any
+normalization**, then require the resolved path to be a canonical descendant
+of the root — symlinks resolved on **both sides**, with a trailing `/` on the
+root so `…/Docs` can't match `…/DocsEvil`.
 
 ```swift
-nonisolated func resolvePayloadPath(_ relative: String, under root: URL) -> URL? {
-    guard !relative.isEmpty, !relative.hasPrefix("/"),
-          !relative.contains("..")                // reject BEFORE normalization
-    else { return nil }
-    let candidate = root.appendingPathComponent(relative)
-    // Canonical-descendant check: resolve symlinks on BOTH sides,
-    // trailing "/" so "…/Docs" can't match "…/DocsEvil".
-    let canonicalRoot = root.resolvingSymlinksInPath()
-        .standardizedFileURL.path + "/"
-    let canonicalCandidate = candidate.resolvingSymlinksInPath()
-        .standardizedFileURL.path
-    guard canonicalCandidate.hasPrefix(canonicalRoot) else { return nil }
-    return candidate
-}
+nonisolated func resolvePayloadPath(_ relative: String, under root: URL) -> URL?
 ```
 
 Single wiring point — every entry surface funnels here:
@@ -133,5 +115,5 @@ Single wiring point — every entry surface funnels here:
   invariants 2 and 5 here.
 - `file-handoff-inbox-backstop` — the other external-entry surface
   (share/action extensions); same "validate before the host app acts" stance.
-- `swift6-mainactor-migration` — why the resolver is `nonisolated` pure
+- `swift6-mainactor-compile-fixes` — why the resolver is `nonisolated` pure
   compute under MainActor-default isolation, and how to keep it that way.

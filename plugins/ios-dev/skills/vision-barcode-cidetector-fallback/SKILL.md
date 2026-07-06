@@ -109,6 +109,6 @@ like a flaky decode.
   about text layout/reading order for on-device AI grounding, not barcode
   detection; both are examples of "don't trust one Vision output path,"
   applied to different Vision request types.
-- `swift6-mainactor-migration` — keep `decodeWithVision`/`decodeWithCoreImage`
+- `swift6-mainactor-compile-fixes` — keep `decodeWithVision`/`decodeWithCoreImage`
   `nonisolated` pure compute per that playbook, so the fallback chain can run
   off-main from capture-delivery callbacks.

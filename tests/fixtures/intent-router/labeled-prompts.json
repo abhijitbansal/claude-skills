@@ -32,7 +32,8 @@
   {"prompt": "add a biometric face id lock to the app", "expected": "biometric-applock"},
   {"prompt": "record a demo video of the app features", "expected": "demo-recording"},
 
-  {"prompt": "migrate this to swift 6 mainactor concurrency", "expected": "swift6-mainactor-migration"},
+  {"prompt": "migrate this to swift 6 mainactor concurrency", "expected": "swift6-mainactor-compile-fixes"},
+  {"prompt": "main actor-isolated conformance of 'X' to 'Decodable' cannot be used in nonisolated context", "expected": "swift6-mainactor-compile-fixes"},
   {"prompt": "validate the xcode cloud configuration", "expected": "xcode-cloud-validate"},
   {"prompt": "add xcodegen test targets to the project", "expected": "xcodegen-test-targets"},
   {"prompt": "resume my long run after the usage limit reset", "expected": "second-wind"},

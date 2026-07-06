@@ -63,58 +63,23 @@ description: >-
    in parallel as normal.
 
 ```swift
-// 1. One shared container for the whole test run.
-@MainActor
-enum SharedTestStore {
-    static let container: ModelContainer = {
-        do {
-            return try ModelContainer(
-                for: Rack.self, Bin.self, Item.self, ItemPhoto.self, // … full schema
-                configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-            )
-        } catch {
-            fatalError("in-memory container: \(error)")
-        }
-    }()
-}
-
-@MainActor
-func makeInMemoryStore() throws -> (store: InventoryStore, context: ModelContext) {
-    let ctx = SharedTestStore.container.mainContext
-    try wipeAllModels(in: ctx)   // 2. object-by-object, children before parents
-    try ctx.save()
-    return (InventoryStore(ctx), ctx)
-}
-
-// WRONG: throws "mandatory OTO nullify inverse" once a parent↔child pair exists.
-@MainActor private func wipeAllModelsBatch(in ctx: ModelContext) throws {
-    try ctx.delete(model: Item.self)
-}
-
-// CORRECT: object-by-object, honors cascade/nullify, order-independent.
+// CORRECT shape: reset object-by-object, never `context.delete(model:)`.
 @MainActor private func wipeAllModels(in ctx: ModelContext) throws {
     func deleteEach<T: PersistentModel>(_ type: T.Type) throws {
         for object in try ctx.fetch(FetchDescriptor<T>()) { ctx.delete(object) }
     }
-    try deleteEach(ItemPhoto.self)
+    try deleteEach(ItemPhoto.self)   // children before parents
     try deleteEach(Item.self)
     try deleteEach(Bin.self)
     try deleteEach(Rack.self)
 }
-
-// 3. One serialized parent; every store suite nests under it.
-@MainActor @Suite(.serialized) enum StoreTestSuite {}
-
-extension StoreTestSuite {
-    @MainActor @Suite(.serialized) struct ItemFieldsTests {
-        @Test func savingItemPersistsName() throws {
-            let (store, _) = try makeInMemoryStore()
-            // …
-        }
-    }
-    @MainActor @Suite(.serialized) struct BinAssignmentTests { /* … */ }
-}
 ```
+
+**Read `references/test-harness-implementation.md` before implementing** — the
+full worked example: the shared `SharedTestStore` container, the
+`makeInMemoryStore` helper, the WRONG-vs-CORRECT batch-delete contrast above in
+context, and the nested `@Suite(.serialized)` parent (`StoreTestSuite`) every
+store-touching suite must sit under.
 
 ## Evidence
 
@@ -139,6 +104,6 @@ extension StoreTestSuite {
 - `mainactor-runtime-isolation-trap` — covers `@MainActor` isolation and
   re-entrancy traps in production async code; a different failure mode than
   the container-teardown race here, though both are races at `await` points.
-- `swift6-mainactor-migration` — background on why store types and test
+- `swift6-mainactor-compile-fixes` — background on why store types and test
   helpers touching a `ModelContext` need explicit `@MainActor` under
   `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`.
