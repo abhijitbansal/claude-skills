@@ -1,15 +1,6 @@
 ---
 name: vision-layout-ocr-grounding
-description: >-
-  On-device AI (Analyze / Ask / summarize) confabulates values from a scanned
-  document — the scan clearly shows "Patient ID: 110331" next to
-  "Patient Name:", but the model answers with an invented value, and the bug
-  appears ONLY after kill+relaunch (fresh scans answer correctly). Root cause
-  is grounding the model on PDFDocument.string, whose linear reading order
-  collapses multi-column layouts into one jumbled line and drops right-column
-  values. Use when feeding document text to an on-device LLM / Apple
-  Intelligence, when AI answers are wrong only on the cold path, or when
-  extracted text scrambles multi-column scans.
+description: On-device AI (Analyze / Ask / summarize) confabulates values from a scanned document — the scan clearly shows "Patient ID: 110331" next to "Patient Name:", but the model answers with an invented value, and the bug appears ONLY after kill+relaunch (fresh scans answer correctly). Root cause is grounding the model on PDFDocument.string, whose linear reading order collapses multi-column layouts into one jumbled line and drops right-column values. Use when feeding document text to an on-device LLM / Apple Intelligence, when AI answers are wrong only on the cold path, or when extracted text scrambles multi-column scans.
 ---
 
 # Ground AI on Vision-Layout Text, Never `PDFDocument.string`

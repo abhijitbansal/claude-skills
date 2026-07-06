@@ -1,6 +1,8 @@
 # Skill audit & consolidation — plan of action
 
-**Status:** proposal, awaiting approval. No skills refactored yet.
+**Status:** executed on branch `feat/skill-audit-exec` (reference delegation +
+swift6 merge, commit `f8d2414`). Counts below reflect the tree at planning time
+(49 skills / ios-dev 35); post-merge the repo has 48 / 34.
 **Scope:** all 49 skills across 5 plugins; primary target `ios-dev` (35 skills).
 **Goal (as set):** make skills more deterministic and likelier to trigger, and
 cut context load — especially in `ios-dev` — by combining where sensible and
@@ -254,5 +256,5 @@ flags any weak `description`; fix only those. Do not invent families here.
 - Does not merge the MainActor runtime family (triggering risk).
 - Does not touch command/driver skill structure.
 - Does not combine for count's sake — Lever 1 is the context win.
-- **Does not start the refactor.** Awaiting approval on the cluster table and
-  phase plan before any skill is edited.
+- ~~Does not start the refactor.~~ Approval landed; the refactor was executed
+  on this same branch (`feat/skill-audit-exec`) — see Status at the top.

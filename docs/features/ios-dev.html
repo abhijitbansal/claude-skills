@@ -121,7 +121,7 @@ try await UIApplication.shared.setAlternateIconName("AppIconClassic")</span></di
         AppLockOverlayView().interactiveDismissDisabled()
     }
     .onAppear { appLock.bootstrap() }</span></div></div>
-<div class="gitem reveal"><h4>swift6-mainactor-compile-fixes skill: Fix MainActor isolation compile errors</h4><p>When your project sets SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor (Xcode 15.1+), pure-compute types (exporters, builders, parsers) emit 'cannot be called from outside of the actor' errors, and plain zero-state structs/enums fail to compile off-main purely from synthesized Decodable/Equatable/Hashable conformance. This skill teaches the honest fix: mark those types <code>nonisolated</code> at the type declaration, then cascade through flagged callees. Forbids @unchecked Sendable and @preconcurrency band-aids.</p><div class="code"><button class="copy" data-copy="# Before:
+<div class="gitem reveal"><h4>swift6-mainactor-compile-fixes skill: Fix MainActor isolation compile errors</h4><p>When your project sets SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor (Swift 6.2 / Xcode 26), pure-compute types (exporters, builders, parsers) emit 'cannot be called from outside of the actor' errors, and plain zero-state structs/enums fail to compile off-main purely from synthesized Decodable/Equatable/Hashable conformance. This skill teaches the honest fix: mark those types <code>nonisolated</code> at the type declaration, then cascade through flagged callees. Forbids @unchecked Sendable and @preconcurrency band-aids.</p><div class="code"><button class="copy" data-copy="# Before:
 struct PDFExporter { … }  // implicitly @MainActor, but runs off-main
 
 # After:

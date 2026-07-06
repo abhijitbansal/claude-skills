@@ -1,16 +1,6 @@
 ---
 name: ondevice-generable-anti-hallucination
-description: >-
-  Fixing on-device FoundationModels (Apple Intelligence / SystemLanguageModel)
-  generation that hangs indefinitely — spinner spins forever,
-  respond(generating:) never returns — when a @Generable schema nests another
-  @Generable type in an array (iOS 26), and output that hallucinates —
-  bracketed placeholders like "[Insert Number Here]", dummy values
-  ("John Doe", "12345"), concatenated fields
-  ("Card Reference: Credit Card Amount: 25.0"), or an empty SOURCES/citations
-  section — or degrades on long multi-script documents that blow the
-  ~4K-token context window. Use when designing @Generable schemas, grounding
-  prompts, or citation rendering for the on-device model.
+description: Fixing on-device FoundationModels (Apple Intelligence / SystemLanguageModel) generation that hangs indefinitely — spinner spins forever, respond(generating:) never returns — when a @Generable schema nests another @Generable type in an array (iOS 26), and output that hallucinates — bracketed placeholders like "[Insert Number Here]", dummy values ("John Doe", "12345"), concatenated fields ("Card Reference: Credit Card Amount: 25.0"), or an empty SOURCES/citations section — or degrades on long multi-script documents that blow the ~4K-token context window. Use when designing @Generable schemas, grounding prompts, or citation rendering for the on-device model.
 ---
 
 # On-Device @Generable: Flat Schemas, Verbatim Pinning, Context Clipping

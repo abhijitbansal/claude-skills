@@ -1,8 +1,10 @@
 # AGENTS.md — claude-skills conventions
 
 The engineering guide for **claude-skills**, for human contributors and AI
-coding agents (Claude Code, Cursor, Codex, …). [`CLAUDE.md`](./CLAUDE.md) loads
-this file so Claude Code always reads it; other tools read it directly.
+coding agents (Claude Code, Cursor, Codex, …). [`CLAUDE.md`](./CLAUDE.md)
+points here and instructs Claude Code to read this file before dispatching
+subagents or opening a PR (it is not auto-loaded into context); other tools
+read it directly.
 `CLAUDE.md` remains the source of truth for the **behavioral guidelines** (the
 `claude-skills:guidelines` block merged into other repos by
 `setup/merge_guidelines.py`) — this file covers **process**: orchestration,

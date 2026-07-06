@@ -3,7 +3,7 @@
 ```swift
 import Accelerate
 
-extension BlurGate {
+nonisolated extension BlurGate {
     /// Variance of the Laplacian over an 8-bit luma plane. Higher = sharper.
     static func laplacianVariance(luma src: inout vImage_Buffer) -> Double {
         var dst = vImage_Buffer()

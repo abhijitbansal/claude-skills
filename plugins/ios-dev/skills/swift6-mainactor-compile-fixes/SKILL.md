@@ -1,6 +1,6 @@
 ---
 name: swift6-mainactor-compile-fixes
-description: Compile-time Swift 6 MainActor-isolation failures under SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor. Covers two diagnostics: (1) "main actor-isolated X cannot be called from outside of the actor" on pure-compute types (exporters, geometry builders, parsers, value-model structs) implicitly @MainActor but actually run off-main in Task.detached / @concurrent contexts — general default-MainActor migration; and (2) "main actor-isolated conformance of 'X' to 'Decodable' cannot be used in nonisolated context" (or the Equatable/Hashable/Encodable variants) on a zero-stored-state struct or enum whose synthesized conformance alone fails off-main — the narrower struct-Codable case. Teaches the honest fix: mark the type nonisolated at its declaration, cascade through flagged callees, change signatures to accept resolved values instead of actor-isolated objects. Forbids @unchecked Sendable / nonisolated(unsafe) / @preconcurrency band-aids. Trigger on Swift 6 default-MainActor migration, either isolation error above, or synthesized-conformance decode/encode/compare failures off-main.
+description: Compile-time Swift 6 MainActor-isolation failures under SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor. Two diagnostics: (1) "main actor-isolated X cannot be called from outside of the actor" on pure-compute types (exporters, geometry builders, parsers, value-model structs) implicitly @MainActor but run off-main in Task.detached / @concurrent contexts; (2) "main actor-isolated conformance of X to Decodable cannot be used in nonisolated context" (or Equatable/Hashable/Encodable variants) when a zero-state struct/enum — a DTO, response model, or filter-criteria type — is JSON-decoded, encoded, or compared from a background/nonisolated path: a nonisolated helper, a @ModelActor, Task.detached, or an off-main JSONDecoder call. Honest fix: mark the type nonisolated at its declaration, cascade through flagged callees, pass resolved values instead of actor-isolated objects. Forbids @unchecked Sendable / nonisolated(unsafe) / @preconcurrency band-aids. Trigger on Swift 6 default-MainActor migration or either error.
 ---
 
 # Swift 6 MainActor Compile Fixes
@@ -70,14 +70,10 @@ because the directory came from `@Published` state — resolve it at the call si
 
 ## The narrower case: synthesized Codable/Equatable/Hashable conformance
 
-A plain data struct — no methods, no UI, nothing stateful — fails to compile
-the moment it's decoded, encoded, or compared from off-main code, even though
-nothing about the struct *looks* MainActor-bound. Under default-MainActor
-isolation, the compiler isolates not just a type's own members but its
-**synthesized conformances** too, because synthesis happens on the
-MainActor-isolated type. The fix is the same idiom as the general case — mark
-the type `nonisolated` at its declaration — applied to a type with zero
-isolated state, so there's no downside.
+Default-MainActor isolation covers a type's **synthesized conformances** too,
+so a plain zero-state struct or enum fails to decode, encode, or compare
+off-main even though nothing about it looks MainActor-bound. Same fix —
+`nonisolated` at the declaration — with zero downside on a stateless type.
 
 **Read `references/synthesized-conformance-codable.md` before implementing** —
 it has the full symptom, root cause, and before/after code for this sub-case.

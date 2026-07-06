@@ -1,16 +1,6 @@
 ---
 name: swiftdata-inmemory-test-harness
-description: >-
-  SwiftData unit tests crash the test runner ("Test runner crashed before
-  establishing connection", "Thread 1: EXC_BREAKPOINT" / brk trap on the
-  second test that touches the store), a store-reset step throws "Batch
-  delete failed due to mandatory OTO nullify inverse on <relationship>", or
-  store tests pass individually but fail/hang/race when the full suite runs
-  together (`@Suite(.serialized)` on one suite doesn't help). Use when
-  writing the first test that touches a SwiftData
-  `ModelContext`/`ModelContainer` (Swift Testing or XCTest), when adding a
-  second or third store-backed test suite, or when a "wipe between tests"
-  helper needs to clear persisted parent↔child model pairs.
+description: SwiftData unit tests crash the test runner ("Test runner crashed before establishing connection", "Thread 1: EXC_BREAKPOINT" / brk trap on the second test that touches the store), a store-reset step throws "Batch delete failed due to mandatory OTO nullify inverse on <relationship>", or store tests pass individually but fail/hang/race when the full suite runs together (`@Suite(.serialized)` on one suite doesn't help). Use when writing the first test that touches a SwiftData `ModelContext`/`ModelContainer` (Swift Testing or XCTest), when adding a second or third store-backed test suite, or when a "wipe between tests" helper needs to clear persisted parent↔child model pairs.
 ---
 
 # SwiftData In-Memory Test Harness: Crashes, Batch-Delete Failures, and Cross-Suite Races
