@@ -33,8 +33,6 @@ Three verdicts, not pass/fail. Auto-accept after a retry budget so low-texture
 subjects can't strand the user.
 
 ```swift
-import Accelerate
-
 nonisolated enum ScanConstants {
     static let sharpnessThreshold: Double = 50  // NOT 80 — 80 strands low-texture subjects
     static let maxBlurRetries = 2               // then auto-accept
@@ -52,30 +50,15 @@ nonisolated enum BlurGate {
         if retryCount >= ScanConstants.maxBlurRetries { return .autoAccept }
         return .warnAllowOverride
     }
-
-    /// Variance of the Laplacian over an 8-bit luma plane. Higher = sharper.
-    static func laplacianVariance(luma src: inout vImage_Buffer) -> Double {
-        var dst = vImage_Buffer()
-        guard vImageBuffer_Init(&dst, src.height, src.width, 8,
-                                vImage_Flags(kvImageNoFlags)) == kvImageNoError
-        else { return 0 }
-        defer { free(dst.data) }
-        var kernel: [Int16] = [0, 1, 0,  1, -4, 1,  0, 1, 0]
-        vImageConvolve_Planar8(&src, &dst, nil, 0, 0, &kernel, 3, 3, 1, 0,
-                               vImage_Flags(kvImageEdgeExtend))
-        let w = Int(dst.width), h = Int(dst.height)
-        var floats = [Float](repeating: 0, count: w * h)
-        let bytes = dst.data.assumingMemoryBound(to: UInt8.self)
-        for row in 0..<h {
-            let rowPtr = bytes + row * dst.rowBytes
-            for col in 0..<w { floats[row * w + col] = Float(rowPtr[col]) }
-        }
-        var mean: Float = 0, stdDev: Float = 0
-        vDSP_normalize(floats, 1, nil, 1, &mean, &stdDev, vDSP_Length(floats.count))
-        return Double(stdDev) * Double(stdDev)
-    }
 }
 ```
+
+Sharpness itself is measured as the variance of the Laplacian over an 8-bit
+luma plane (higher = sharper) — a vImage convolution, not a decision rule, so
+it lives out-of-line.
+
+**Read `references/blur-gate.md` before implementing** — `laplacianVariance`,
+the vImage/Accelerate sharpness measurement that feeds `verdict` above.
 
 Rules: the gate is advisory (`warnAllowOverride` always keeps a "Use Anyway"
 button); never block delivery of the frame itself — gate the *accept* step.
@@ -93,34 +76,20 @@ nonisolated enum NamingConstants {
 }
 
 nonisolated struct NameCandidate { let text: String; let confidence: Double }
-
-nonisolated enum ItemNamer {
-    /// The ONLY way an item gets a name. No caller-supplied name parameter.
-    static func resolveName(ocrCandidates: [NameCandidate],
-                            defaultName: String) -> NameCandidate {
-        let best = ocrCandidates
-            .filter { !isSentenceLike($0.text) }
-            // Per-glyph OCR confidence says "read correctly", not "is a name" — cap it.
-            .map { NameCandidate(text: $0.text,
-                                 confidence: min($0.confidence,
-                                                 NamingConstants.ocrNameConfidenceCap)) }
-            .max { $0.confidence < $1.confidence }
-        guard let best, best.confidence >= NamingConstants.minNameConfidence
-        else { return NameCandidate(text: defaultName, confidence: 0) }
-        return best
-    }
-
-    /// Prose fragments ("Complete the form below and") are instructions, not names.
-    static func isSentenceLike(_ text: String) -> Bool {
-        let words = text.split(separator: " ")
-        if words.count > 6 { return true }               // names are short noun phrases
-        if text.hasSuffix(".") || text.hasSuffix(",") || text.hasSuffix(":") { return true }
-        let proseMarkers: Set<String> = ["the", "and", "your", "please", "below",
-                                         "above", "complete", "enter", "fill"]
-        return words.filter { proseMarkers.contains($0.lowercased()) }.count >= 2
-    }
-}
 ```
+
+`ItemNamer.resolveName` is the ONLY way an item gets a name (no caller can
+inject a name string): it filters out sentence-like candidates, caps every
+surviving candidate's confidence at `ocrNameConfidenceCap`, takes the best,
+and falls back to `defaultName` if nothing clears `minNameConfidence`.
+`isSentenceLike` is the prose-fragment reject rule — text is sentence-like
+(not a name) if it has more than 6 words, ends in `.`/`,`/`:`, or contains
+2+ words from a prose-marker set (the/and/your/please/below/above/complete/
+enter/fill). This is what stops fragments like "Complete the form below and"
+from becoming an item name.
+
+**Read `references/ocr-name-scoring.md` before implementing** — the full
+`ItemNamer.resolveName` and `isSentenceLike` implementations.
 
 ## Evidence
 
@@ -139,5 +108,5 @@ nonisolated enum ItemNamer {
   watchdog delivery there.
 - `vision-barcode-cidetector-fallback` — recognition fallbacks on the captured
   frame; a soft blur gate reduces how often those fallbacks fire.
-- `swift6-mainactor-migration` — `BlurGate`/`ItemNamer` are pure compute:
+- `swift6-mainactor-compile-fixes` — `BlurGate`/`ItemNamer` are pure compute:
   keep them `nonisolated` so they run off-main in the capture pipeline.

@@ -51,29 +51,13 @@ that silently disables the feature there.
 the persistence layer's reactive query mechanism (SwiftData `@Query`, Core
 Data `@FetchRequest`, a Combine/Room/Realm live query — whatever the stack
 provides) scoped to the relevant records, then reduce it to a deduped,
-normalized set:
+normalized set. Normalize (trim + lowercase) at the point of dedup, not at
+display time — otherwise "Tools" and "tools" typed on different days
+silently become two vocabulary entries.
 
-```swift
-// Live vocabulary: reactive query over persisted items, reduced to a
-// deduped label set. Self-maintaining — no editorial list to keep in sync.
-@Query(filter: #Predicate<Item> { $0.isActive })
-private var activeItems: [Item]
-
-private var labelVocabulary: [String] {
-    var seen = Set<String>()
-    var ordered: [String] = []
-    for item in activeItems {
-        let normalized = item.label.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
-        ordered.append(normalized)
-    }
-    return ordered
-}
-```
-
-Normalize (trim + lowercase) at the point of dedup, not at display time —
-otherwise "Tools" and "tools" typed on different days silently become two
-vocabulary entries.
+**Read `references/vocabulary-query.md` before implementing** — the full
+`@Query` scoped to active items reduced to a deduped, normalized
+`labelVocabulary: [String]`.
 
 **2. Put the filter in a pure, framework-free type.** It takes the full
 vocabulary, the user's current typed text, and current selections, and
@@ -92,28 +76,16 @@ var body: some View {
 ```
 
 ```swift
-// CORRECT — pure, framework-free filter type. Ten unit tests, zero simulator.
 enum LabelSuggestions {
     static func filtered(
-        vocabulary: [String],
-        typed: String,
-        excluding selected: Set<String>
-    ) -> [String] {
-        let query = typed.trimmingCharacters(in: .whitespaces).lowercased()
-        let candidates = vocabulary.filter { !selected.contains($0) }
-        guard !query.isEmpty else { return candidates }   // empty field = browse-all
-        return candidates.filter { $0.hasPrefix(query) }   // non-empty = type-to-filter
-    }
+        vocabulary: [String], typed: String, excluding selected: Set<String>
+    ) -> [String]   // empty typed = browse-all; non-empty = prefix filter
 }
 ```
 
-```swift
-func testEmptyTextReturnsAllVocabularyExcludingSelected() {
-    let result = LabelSuggestions.filtered(
-        vocabulary: ["tools", "electronics", "holiday"], typed: "", excluding: ["holiday"])
-    XCTAssertEqual(result, ["tools", "electronics"])
-}
-```
+**Read `references/typeahead-filter.md` before implementing** — the full
+`LabelSuggestions.filtered` implementation and its unit test (ten cases,
+zero simulator).
 
 The empty-vs-non-empty branch is deliberate: an empty text field means "let
 me browse everything I've used before" (tap-to-reveal), while typed text
@@ -123,26 +95,11 @@ affordance.
 **3. Make the shared chip component's vocabulary dependency optional.**
 Every call site that wires the component gets the feature only if it wants
 it; nothing is forced to plumb through a real (or fake-empty) vocabulary it
-doesn't have:
+doesn't have — the parameter is `var labelVocabulary: [String]? = nil`.
 
-```swift
-// Shared across add-screen and edit-screen. A third call site (e.g. a
-// multi-crop bulk-review flow) that has no vocabulary just omits the
-// parameter — it isn't forced to wire anything.
-struct LabelChipEditor: View {
-    @Binding var selected: Set<String>
-    var labelVocabulary: [String]? = nil   // optional — composes, doesn't impose
-
-    var body: some View {
-        // ... text field ...
-        if let vocabulary = labelVocabulary {
-            let suggestions = LabelSuggestions.filtered(
-                vocabulary: vocabulary, typed: typedText, excluding: selected)
-            ChipList(items: suggestions)
-        }
-    }
-}
-```
+**Read `references/chip-component.md` before implementing** — the shared
+`LabelChipEditor`, used by both the add and edit screens, gated behind that
+optional vocabulary.
 
 ## Evidence
 

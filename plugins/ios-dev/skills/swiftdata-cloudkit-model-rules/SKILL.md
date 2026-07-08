@@ -57,57 +57,29 @@ fixed at launch): [references/container-factory.md](references/container-factory
 
 ### 2. @Model rules for a valid CloudKit mirror
 
-```swift
-@Model
-final class Item {
-    // Every stored property optional OR defaulted — CloudKit rejects
-    // non-optional, non-defaulted attributes at container init.
-    var name: String = ""
-    var createdAt: Date = Date.now   // NOT `.now` — @Model requires the
-    var notes: String?               // fully qualified `Date.now`
+- Every stored property must be optional or have a default value — CloudKit
+  rejects non-optional, non-defaulted attributes at container init.
+- Default values must use the fully-qualified static member (`Date.now`, not
+  `.now`) — @Model's macro expansion requires it.
+- Never use an NSManagedObject-reserved property name (`isDeleted` is the
+  common one) — pick an alternate name (e.g. `isTrashed`); a reserved name
+  silently breaks sync with no error.
+- Declare `@Relationship(inverse:)` on exactly ONE side of a relationship —
+  declaring it on both sides crashes the container at init.
+- @Model suppresses the synthesized init — always declare one explicitly.
 
-    // Never NSManagedObject-reserved names: `isDeleted` silently breaks
-    // sync — use `isTrashed`.
-    var isTrashed: Bool = false
-
-    // inverse on exactly ONE side; declaring it on both sides crashes
-    // the container at init.
-    @Relationship(deleteRule: .cascade, inverse: \Photo.item)
-    var photos: [Photo]? = []
-
-    init() {}    // @Model suppresses the synthesized init — one is required
-}
-
-@Model
-final class Photo {
-    var item: Item?                      // no @Relationship(inverse:) here
-    @Attribute(.externalStorage)
-    var imageData: Data?                 // travels as CKAsset (rule 3)
-
-    init() {}
-}
-```
+**Read `references/model-rules-example.md` before implementing** — a full
+`Item`/`Photo` model pair applying all five rules together, including the
+`@Attribute(.externalStorage)` property that bridges to CKAsset (rule 3).
 
 ### 3. externalStorage ↔ CKAsset bridge: idempotent, gated, batched
 
-```swift
-// If blobs also live as file sidecars, reconcile bidirectionally and
-// idempotently — and only when sync is ON. (Sketch: `reconcile(_:)` is
-// your app's per-photo reconcile step.)
-func reconcileAssets(context: ModelContext, mode: CloudSyncMode) async throws {
-    guard mode != .off else { return }              // gate on sync-ON
-    let batchSize = 32
-    let photos = try context.fetch(FetchDescriptor<Photo>())
-    for (index, photo) in photos.enumerated() {
-        try reconcile(photo)                        // safe to re-run
-        if (index + 1).isMultiple(of: batchSize) {
-            try context.save()                      // flush blobs per batch —
-            await Task.yield()                      // else the first pass holds
-        }                                           // the whole library resident
-    }
-    try context.save()
-}
-```
+Reconcile file-sidecar blobs bidirectionally and idempotently, and only when
+sync is ON. Batch the save: flush every N photos and yield, rather than
+holding the whole photo library resident in memory across one giant save.
+
+**Read `references/model-rules-example.md` before implementing** — the
+`reconcileAssets` batching loop (batch size, per-batch save, `Task.yield()`).
 
 Coalesce re-entrant passes with a run guard — see
 `mainactor-runtime-isolation-trap` for why `@MainActor` doesn't prevent
@@ -147,5 +119,5 @@ model list inline at a call site.
   `cloudKitDatabase: .none` and resolve the same centralized schema (rule 4).
 - `mainactor-runtime-isolation-trap` — run-guard pattern
   (`PhotoSyncRunGuard`) for coalescing re-entrant async passes (rule 3).
-- `swift6-mainactor-migration` — why the schema type (and other pure-compute
+- `swift6-mainactor-compile-fixes` — why the schema type (and other pure-compute
   types) must be `nonisolated` under `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`.

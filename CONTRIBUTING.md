@@ -14,9 +14,10 @@ any AGENTS.md-aware agent.
 
 | Path | What |
 | --- | --- |
-| `plugins/` | the four plugins (`ios-dev`, `linear-pm`, `core-workflow`, `second-wind`) — each ships skills, commands, agents, hooks |
+| `plugins/` | the five plugins (`ios-dev`, `linear-pm`, `core-workflow`, `prompt-craft`, `second-wind`) — each ships skills, commands, agents, hooks |
 | `tools/` | standalone CLIs (`second-wind`) |
 | `adapters/` | wire the skills into non-Claude tools |
+| `AGENTS.md`, `CLAUDE.md` | contributor + agent conventions — `AGENTS.md` owns process (orchestration modes, model-tier/effort routing, branch/commit/CI workflow); `CLAUDE.md` owns the behavioral guidelines |
 | `setup/`, `templates/`, `claude-setup.toml` | the owner's personal machine seed — safe to ignore |
 | `tests/` | bats + pytest suites |
 

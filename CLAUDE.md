@@ -9,6 +9,12 @@ source of the behavioral guidelines that `setup/setup.sh` merges into the
 - Plugins live under `plugins/`; the machine bootstrap is `setup/setup.sh`,
   driven by `claude-setup.toml`. Tests are bats under `tests/bats/`.
 - Run `bats tests/bats` after touching anything in `setup/`.
+- **Process conventions — orchestration, model routing (tiers/effort), and the
+  branch/commit/CI workflow — live in [`AGENTS.md`](./AGENTS.md); read it before
+  dispatching subagents or opening a PR.** This CLAUDE.md stays the source of
+  truth for the *behavioral* guidelines below; AGENTS.md owns *process*. (The
+  `AGENTS.md` pointer sits outside the guideline markers, so it is not merged
+  into other repos.)
 - The guideline block below (between the `claude-skills:guidelines` markers) is
   the single source of truth. `setup/merge_guidelines.py` extracts that region
   and additively merges each missing section into other `CLAUDE.md` files —

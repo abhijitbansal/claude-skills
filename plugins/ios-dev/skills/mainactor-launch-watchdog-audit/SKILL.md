@@ -125,12 +125,12 @@ cannot reproduce the watchdog; sim-green explicitly does not clear this class.
 
 ## Related skills
 
-- `swift6-mainactor-migration` — the compile-time face of the same default:
-  marking pure-compute types `nonisolated` and cascading honestly.
+- `swift6-mainactor-compile-fixes` — the compile-time face of the same
+  default: marking pure-compute types `nonisolated` and cascading honestly,
+  plus the Codable-specific synthesized-conformance micro-fix; distinct from
+  this launch-path audit.
 - `mainactor-runtime-isolation-trap` — the other runtime faces: `brk 1` on
   AsyncRenderer from MainActor-inheriting closures, and re-entrancy across
   `await`.
-- `nonisolated-struct-codable-mainactor` — the Codable-specific isolation
-  micro-fix; distinct from this launch-path audit.
 - `avfoundation-capture-delivery-watchdog` — a different watchdog: stalled
   capture delivery, not launch scene-update.

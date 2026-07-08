@@ -1,15 +1,6 @@
 ---
 name: vision-layout-ocr-grounding
-description: >-
-  On-device AI (Analyze / Ask / summarize) confabulates values from a scanned
-  document — the scan clearly shows "Patient ID: 110331" next to
-  "Patient Name:", but the model answers with an invented value, and the bug
-  appears ONLY after kill+relaunch (fresh scans answer correctly). Root cause
-  is grounding the model on PDFDocument.string, whose linear reading order
-  collapses multi-column layouts into one jumbled line and drops right-column
-  values. Use when feeding document text to an on-device LLM / Apple
-  Intelligence, when AI answers are wrong only on the cold path, or when
-  extracted text scrambles multi-column scans.
+description: On-device AI (Analyze / Ask / summarize) confabulates values from a scanned document — the scan clearly shows "Patient ID: 110331" next to "Patient Name:", but the model answers with an invented value, and the bug appears ONLY after kill+relaunch (fresh scans answer correctly). Root cause is grounding the model on PDFDocument.string, whose linear reading order collapses multi-column layouts into one jumbled line and drops right-column values. Use when feeding document text to an on-device LLM / Apple Intelligence, when AI answers are wrong only on the cold path, or when extracted text scrambles multi-column scans.
 ---
 
 # Ground AI on Vision-Layout Text, Never `PDFDocument.string`
@@ -41,11 +32,9 @@ Rebuild layout from `VNRecognizedTextObservation` bounding boxes. Encode:
 rows → `\n`, columns within a row → `\t`, pages → `\n\n`. Single-column pages
 degenerate to `\n`-joined text, so this is a strict superset of the old
 behavior. Keep it pure (no UI, no actor state) so Vision callbacks and
-detached tasks can call it — see `swift6-mainactor-migration`.
+detached tasks can call it — see `swift6-mainactor-compile-fixes`.
 
 ```swift
-import Vision
-
 nonisolated enum VisionLayoutFormatter {
     struct LineItem: Equatable {
         let text: String
@@ -57,57 +46,28 @@ nonisolated enum VisionLayoutFormatter {
     static let columnGapFraction: CGFloat = 0.04  // X-gap => column break
     static let minColumnRowsPerSide = 3           // gutter rows before real columns
     static let fullWidthFraction: CGFloat = 0.55  // full-width row = heading
-
-    static func formatPages(observationsPerPage pages: [[LineItem]]) -> String {
-        pages.map(formatPage).filter { !$0.isEmpty }.joined(separator: "\n\n")
-    }
-
-    static func formatPage(_ items: [LineItem]) -> String {
-        guard !items.isEmpty else { return "" }
-        // Rows: sort by Y-center descending (Vision origin is bottom-left);
-        // same row while |ΔyCenter| <= max(rowToleranceFactor × median line
-        // height, minRowTolerance).
-        let sorted = items.sorted { $0.bbox.midY > $1.bbox.midY }
-        let heights = sorted.map(\.bbox.height).sorted()
-        let tolerance = max(rowToleranceFactor * heights[heights.count / 2],
-                            minRowTolerance)
-        let rows = sorted.dropFirst().reduce(into: [[sorted[0]]]) { bands, item in
-            if abs(bands[bands.count - 1][0].bbox.midY - item.bbox.midY) <= tolerance {
-                bands[bands.count - 1].append(item)
-            } else {
-                bands.append([item])
-            }
-        }
-        // Columns: within a row sort by minX; split into segments where the
-        // X-gap >= columnGapFraction of page width; join segment text by " ",
-        // segments by "\t" — reading ACROSS the row is what protects
-        // receipts/key-value pairs from being scrambled.
-        let lines: [String] = rows.map { row in
-            let cells = row.sorted { $0.bbox.minX < $1.bbox.minX }
-            let segments = cells.dropFirst().reduce(into: [[cells[0]]]) { segs, cell in
-                if let tail = segs[segs.count - 1].last,
-                   cell.bbox.minX - tail.bbox.maxX >= columnGapFraction {
-                    segs.append([cell])
-                } else {
-                    segs[segs.count - 1].append(cell)
-                }
-            }
-            return segments.map { $0.map(\.text).joined(separator: " ") }
-                .joined(separator: "\t")
-        }
-        return lines.filter { !$0.isEmpty }.joined(separator: "\n")
-    }
 }
 ```
 
-The full implementation (see Evidence) adds two refinements: a shared vertical
-gutter with >= `minColumnRowsPerSide` rows on EACH side is a real column block
-— emit each column top-to-bottom instead of tab-joining across; and a single
-segment spanning >= `fullWidthFraction` of the page width is a heading/footer
-that terminates the column block above it.
+The decision rule: **rows** are formed by sorting items by Y-center
+descending (Vision origin is bottom-left) and grouping while
+`|ΔyCenter| <= max(rowToleranceFactor × median line height, minRowTolerance)`.
+**Columns** are formed by sorting a row's items by `minX` and splitting into
+segments wherever the X-gap `>= columnGapFraction` of page width; segment
+text joins with a space, segments join with a tab — reading ACROSS the row is
+what protects receipts/key-value pairs from being scrambled. Beyond that base
+split, two refinements apply: a shared vertical gutter with
+`>= minColumnRowsPerSide` rows on EACH side is a real column block — emit
+each column top-to-bottom instead of tab-joining across; and a single segment
+spanning `>= fullWidthFraction` of the page width is a heading/footer that
+terminates the column block above it.
 
 `LineItem` exists because tests can't construct `VNRecognizedTextObservation`;
 test the row/column geometry directly on `LineItem` arrays.
+
+**Read `references/ocr-layout-formatter.md` before implementing** — the full
+`formatPage`/`formatPages` row-grouping and column-splitting implementation
+with the two refinements above.
 
 ### 2. ONE entry point, versioned sidecar cache, `searchableText` fallback
 
@@ -119,25 +79,21 @@ Every AI feature must get its grounding text from a single loader — never call
 enum DocumentTextLoader {
     static let cacheSuffix = "aitext.v2.txt" // bump when formatter contract changes
 
-    /// Always returns something — the fallback chain ends in searchableText.
-    /// clipForModel is the clip-on-read pattern from
-    /// `ondevice-generable-anti-hallucination` Fix #4 (~4000-char cap +
-    /// truncation marker; the cache file keeps the full text).
     static func aiInputText(
         for document: Document, contentHash: String, store: DocumentStore
-    ) async -> String {
-        if let cached = readCache(for: document, hash: contentHash), !cached.isEmpty {
-            return clipForModel(cached)
-        }
-        let formatted = await rasterizeRecognizeFormat(url: document.url)
-        guard !formatted.isEmpty else {                 // image-only PDF, OCR failure
-            return clipForModel(store.searchableText(for: document))
-        }
-        writeCache(formatted, for: document, hash: contentHash) // atomic write
-        return clipForModel(formatted)
-    }
+    ) async -> String
 }
 ```
+
+The fallback chain always returns something: versioned cache → fresh
+rasterize/recognize/format → `store.searchableText` (image-only PDF or OCR
+failure). `clipForModel` is the clip-on-read pattern from
+`ondevice-generable-anti-hallucination` Fix #4 (~4000-char cap + truncation
+marker; the cache file itself keeps the full text). Cache writes are atomic.
+
+**Read `references/ai-text-loader.md` before implementing** — the full
+`aiInputText` implementation with the cache-read → rasterize → fallback
+chain.
 
 Invariants that matter:
 
@@ -168,12 +124,10 @@ Add this as an explicit manual-test step; a warm-path check proves nothing.
 
 ## Related skills
 
-- `swift6-mainactor-migration` — why the formatter must be `nonisolated`
-  pure compute under default-MainActor isolation.
+- `swift6-mainactor-compile-fixes` — why the formatter must be `nonisolated`
+  pure compute under default-MainActor isolation, keeping its value types usable off-main.
 - `ondevice-generable-anti-hallucination` — downstream consumer; owns the
   clip-on-read `clipForModel` pattern this loader applies.
-- `nonisolated-struct-codable-mainactor` — keeping the formatter's value types
-  usable off-main.
 - `vision-barcode-cidetector-fallback` — sibling Vision-pipeline fallback
   pattern (primary detector + deterministic fallback chain).
 - `avfoundation-capture-delivery-watchdog` — upstream capture-side failure

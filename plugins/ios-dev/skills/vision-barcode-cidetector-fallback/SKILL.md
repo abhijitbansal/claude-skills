@@ -1,17 +1,6 @@
 ---
 name: vision-barcode-cidetector-fallback
-description: >-
-  `VNDetectBarcodesRequest` returns zero results for a perfectly valid,
-  freshly generated QR/barcode — decode returns `nil`, not a thrown error —
-  and OSLog shows "Could not create inference context" or similar Vision ML
-  context failures. Reproduces reliably on the iOS Simulator (Vision's
-  barcode ML context often can't initialize there) and can also happen on
-  device when the ML context is unavailable or the image is low-contrast,
-  silently dropping scannable codes. Use when a Vision-based barcode/QR
-  decode test fails on the Simulator while the QR generator clearly works,
-  when you're writing barcode-decode tests that must run in CI, or when you
-  want scan robustness (competitors get dinged for "won't scan") instead of
-  a single point of failure.
+description: `VNDetectBarcodesRequest` returns zero results for a perfectly valid, freshly generated QR/barcode — decode returns `nil`, not a thrown error — and OSLog shows "Could not create inference context" or similar Vision ML context failures. Reproduces reliably on the iOS Simulator (Vision's barcode ML context often can't initialize there) and can also happen on device when the ML context is unavailable or the image is low-contrast, silently dropping scannable codes. Use when a Vision-based barcode/QR decode test fails on the Simulator while the QR generator clearly works, when you're writing barcode-decode tests that must run in CI, or when you want scan robustness (competitors get dinged for "won't scan") instead of a single point of failure.
 ---
 
 # Vision Barcode Decode Fails on Simulator → CIDetector Fallback
@@ -109,6 +98,6 @@ like a flaky decode.
   about text layout/reading order for on-device AI grounding, not barcode
   detection; both are examples of "don't trust one Vision output path,"
   applied to different Vision request types.
-- `swift6-mainactor-migration` — keep `decodeWithVision`/`decodeWithCoreImage`
+- `swift6-mainactor-compile-fixes` — keep `decodeWithVision`/`decodeWithCoreImage`
   `nonisolated` pure compute per that playbook, so the fallback chain can run
   off-main from capture-delivery callbacks.

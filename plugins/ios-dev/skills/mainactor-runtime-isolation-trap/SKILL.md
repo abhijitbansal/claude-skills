@@ -39,43 +39,22 @@ trigger, second tap) begins before the first Task finishes.
 
 ## Fix — variant A: nonisolated-clean providers
 
-```swift
-// WRONG — formed in @MainActor context, closure inherits @MainActor;
-// UIKit caches it and resolves it on com.apple.SwiftUI.AsyncRenderer → brk 1
-enum Palette {
-    static let card = UIColor { traits in
-        traits.userInterfaceStyle == .dark ? darkCard : lightCard
-    }
-}
-```
+Store the resolved provider as `nonisolated static let`; mark the closure
+`@Sendable` so inherited isolation becomes a compile error instead of a
+runtime trap; everything it calls must itself be `nonisolated` (pure compute,
+no main-actor state):
 
 ```swift
-// CORRECT
-enum Palette {
-    // 1. Store the resolved provider as `nonisolated static let`.
-    // 2. Mark the closure @Sendable so inherited isolation is a compile error.
-    nonisolated static let card = UIColor { @Sendable traits in
-        resolvedCard(for: traits.userInterfaceStyle)   // 3. everything it calls…
-    }
-
-    // …must itself be nonisolated (pure compute, no main-actor state).
-    nonisolated static func resolvedCard(for style: UIUserInterfaceStyle) -> UIColor {
-        style == .dark ? darkCard : lightCard
-    }
+nonisolated static let card = UIColor { @Sendable traits in
+    resolvedCard(for: traits.userInterfaceStyle)
 }
+nonisolated static func resolvedCard(for style: UIUserInterfaceStyle) -> UIColor { … }
 ```
 
-The `nonisolated` seam (`resolvedCard`) doubles as the off-main regression test
-hook:
-
-```swift
-func testDynamicColorResolvesOffMain() async {
-    await Task.detached {
-        _ = Palette.card.resolvedColor(
-            with: UITraitCollection(userInterfaceStyle: .dark))
-    }.value
-}
-```
+**Read `references/dynamic-provider.md` before implementing** — the WRONG
+version (closure formed in `@MainActor` context, crashes on AsyncRenderer)
+next to the full CORRECT pattern, plus the off-main regression test that
+exercises the `nonisolated` seam.
 
 Audit every closure handed to a UIKit/Obj-C API that stores it: color/image
 providers, `UIAction` handlers, `CADisplayLink`/timer targets.
@@ -83,49 +62,16 @@ providers, `UIAction` handlers, `CADisplayLink`/timer targets.
 ## Fix — variant B: run guards + idempotent lifecycle
 
 Coalescing run guard (cubby's `PhotoSyncRunGuard`): one pass in flight, a
-re-trigger schedules exactly one follow-up instead of interleaving.
+re-trigger schedules exactly one follow-up instead of interleaving. Pair it
+with idempotent lifecycle guards at every entry point: a no-op guard so a
+double-fired `viewDidAppear` doesn't restart work, `timer?.invalidate()`
+before scheduling a new one so a second timer is never leaked, and a busy
+guard so a tap mid-processing is dropped instead of misrouted.
 
-```swift
-@MainActor
-final class PhotoSyncRunGuard {
-    private var activeTask: Task<Void, Never>?
-    private var isRerunRequested = false
-
-    func run(_ pass: @escaping @MainActor () async -> Void) {
-        guard activeTask == nil else { isRerunRequested = true; return }
-        activeTask = Task {
-            repeat {
-                isRerunRequested = false
-                await pass()
-            } while isRerunRequested
-            activeTask = nil
-        }
-    }
-}
-```
-
-`isProcessing` no-op guard for UI actions, and idempotent lifecycle
-(floorprint: `viewDidAppear` fired twice → restarted the capture session, reset
-the elapsed clock, leaked a second timer):
-
-```swift
-override func viewDidAppear(_ animated: Bool) {
-    super.viewDidAppear(animated)
-    guard !hasStartedCapture else { return }   // UIKit can fire this twice
-    hasStartedCapture = true
-    startCaptureSession()
-}
-
-func startTimer() {
-    timer?.invalidate()                        // never leak a second timer
-    timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { … }
-}
-
-func overlayTapped(_ action: OverlayAction) {
-    guard !isProcessing else { return }        // lock actions mid-processing
-    handle(action)
-}
-```
+**Read `references/reentrancy-guards.md` before implementing** — the full
+`PhotoSyncRunGuard` class plus the `viewDidAppear`/timer/`overlayTapped`
+guard examples (floorprint: a double-fire restarted the capture session,
+reset the elapsed clock, and leaked a second timer).
 
 This is distinct from the exactly-once `CheckedContinuation` idiom — that
 guards a *callback resuming twice*; this guards a *pass starting twice*.
@@ -144,7 +90,5 @@ guards a *callback resuming twice*; this guards a *pass starting twice*.
 
 - `mainactor-launch-watchdog-audit` — the launch-time trap: 0x8BADF00D
   watchdog SIGKILL + boot-loop from heavy work on main.
-- `swift6-mainactor-migration` — compile-time isolation errors and the
-  honest `nonisolated` cascade for pure-compute types.
-- `nonisolated-struct-codable-mainactor` — Codable synthesis under
-  MainActor-default isolation.
+- `swift6-mainactor-compile-fixes` — compile-time isolation errors: the honest
+  `nonisolated` cascade for pure-compute types, incl. off-main Codable synthesis.

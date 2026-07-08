@@ -1,8 +1,3 @@
----
-name: nonisolated-struct-codable-mainactor
-description: Compile error "main actor-isolated conformance of 'X' to 'Decodable' cannot be used in nonisolated context" (or the 'Equatable'/'Hashable'/'Encodable' variants) on a plain value-type struct or enum, hit while JSON-decoding, encoding, or comparing it from a background/nonisolated path — a nonisolated helper function, a @ModelActor, Task.detached, or an off-main JSONDecoder call. Use when a DTO, response model, or filter-criteria struct that has ZERO stored state of its own still fails to compile off-main purely because of its synthesized Codable/Equatable/Hashable conformance, in a project built with SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor.
----
-
 # Synthesized Codable/Equatable Conformance Is MainActor-Isolated Too
 
 ## Symptom
@@ -89,16 +84,3 @@ decode inside a nonisolated barcode-lookup helper), `FilterCriteria` (encoded
 for a saved-search feature from nonisolated code), `ShoppingReason` (synthesized
 `Equatable` clashing with a nonisolated enclosing struct). All three were fixed
 by adding `nonisolated` at the type declaration, with zero other changes.
-
-## Related skills
-
-- `swift6-mainactor-migration` — the general version of this trap: methods and
-  functions failing with "main actor-isolated X cannot be called from outside
-  of the actor" on pure-compute types (exporters, geometry builders), fixed by
-  cascading `nonisolated` through call chains. This skill is the narrower,
-  conformance-specific case — a struct with no isolated members of its own
-  still fails to compile because its *synthesized* `Codable`/`Equatable`/
-  `Hashable` inherits MainActor isolation from the type.
-- `mainactor-runtime-isolation-trap` — runtime crashes/re-entrancy that compile
-  clean under MainActor-default isolation; this skill is the opposite failure
-  mode (a compile-time error), not a runtime one.
