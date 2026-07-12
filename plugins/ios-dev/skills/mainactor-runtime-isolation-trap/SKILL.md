@@ -92,3 +92,9 @@ guards a *callback resuming twice*; this guards a *pass starting twice*.
   watchdog SIGKILL + boot-loop from heavy work on main.
 - `swift6-mainactor-compile-fixes` — compile-time isolation errors: the honest
   `nonisolated` cascade for pure-compute types, incl. off-main Codable synthesis.
+- `ml-actor-lazy-load-graded-eviction` — a different actor-lifecycle failure
+  on the same isolation model: eager load at init + undifferentiated eviction,
+  not a runtime crash from a MainActor-inheriting closure.
+- `navigationsplitview-single-stack-per-detail-column` — another crash whose
+  stack trace points entirely into a framework internal, away from the app's
+  own model/isolation code.

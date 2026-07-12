@@ -140,3 +140,6 @@ got silently dropped.
 - `site-pages-deploy-kit` — the skeleton/deploy pipeline these pages ship
   through; use its `verify-site.sh` for the metadata lint, but it does not
   check CSS scoping or nav/footer link parity — that's this skill.
+- `subpage-nav-anchor-baseurl-ssr-label-drift` — another shared-component-on-
+  a-growing-site mined lesson from the same marketing-site family (bare
+  `#anchor` hrefs and SSR-default drift, rather than CSS scoping bleed).

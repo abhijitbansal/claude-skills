@@ -80,8 +80,6 @@ sink sites."
 
 ## Related skills
 
-- `redact-errors-at-shareable-export-boundary` and `on-device-model-eval-harness-precommitted-kill-criteria`
-  are from the same Cubby VLM wave's privacy/security review pass.
 - `widget-appgroup-snapshot-bridge` — a different redaction boundary (App-Group
   snapshot DTO flags) on the same app; compare when a feature needs more than
   one kind of redaction gate.

@@ -90,3 +90,9 @@ Completing the shape:
   `@unchecked Sendable` band-aids.
 - `swiftdata-inmemory-test-harness` — drive the writer from an in-memory store
   to test the never-clobber and backfill paths.
+- `background-assets-manifest-drift-blind-redownload` — another shared/cached
+  resource whose identity must be verified by content, not presence, before
+  reuse.
+- `diagnostic-export-error-redaction-boundary` — a different redaction
+  boundary (raw error descriptions) on the same app; compare when a feature
+  needs more than one kind of redaction gate.

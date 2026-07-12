@@ -152,3 +152,10 @@ not either mode alone, is the untested seam.
   (`PhotoSyncRunGuard`) for coalescing re-entrant async passes (rule 3).
 - `swift6-mainactor-compile-fixes` — why the schema type (and other pure-compute
   types) must be `nonisolated` under `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`.
+- `devicectl-crashlog-oslog-cli-diagnostics` — the device-only diagnostic path
+  (crash log + `CloudKitDebug` OS-level logging) that actually surfaces which
+  of this skill's rules got violated, behind a generic `SwiftDataError error 1`.
+- `swiftdata-predicate-optional-coalesce-contains-trap` — another SwiftData
+  failure that compiles clean and only surfaces at runtime against a real
+  container/context, this one in `#Predicate` SQL generation rather than
+  container init or sync.

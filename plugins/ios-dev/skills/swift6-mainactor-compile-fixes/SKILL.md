@@ -100,3 +100,10 @@ changed files (or clean) to force recompilation, then grep build output for
 - `mainactor-runtime-isolation-trap` — runtime crashes/re-entrancy that compile
   clean under MainActor-default isolation; this skill is the opposite failure
   mode (compile-time errors), not a runtime one.
+- `ml-actor-lazy-load-graded-eviction` — an actor-lifecycle skill that applies
+  this skill's `nonisolated` discipline to a heavier case: an actor wrapping
+  a large on-device ML resource.
+- `nonsendable-hardware-handle-inline-io` — the distinct case this skill's
+  general advice does NOT cover: a framework object that is non-Sendable and
+  session-scoped, and so cannot leave its calling context at all, regardless
+  of `nonisolated` annotation.

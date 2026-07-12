@@ -98,3 +98,6 @@ literally `/tmp`.
 - `avfoundation-capture-delivery-watchdog` — detecting stalled/interrupted capture sessions during the scan itself.
 - `swift6-mainactor-compile-fixes` — run the hang-prone plan/scene build off the main actor, and make the Codable recovery DTOs decodable off-main under MainActor-default isolation.
 - `swiftdata-inmemory-test-harness` — exercising the safe-mode/recovery path without touching the real ModelContainer.
+- `devicectl-crashlog-oslog-cli-diagnostics` — the device-only crash-log
+  retrieval and bounded-depth error-unwrap pattern this recovery store's
+  diagnostic surface is a natural home for.

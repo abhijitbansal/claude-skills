@@ -98,3 +98,9 @@ multi-script medical bill.
 - `swift6-mainactor-compile-fixes` — the parsed DTOs (`KeyFact`) and
   parse/filter helpers must be `nonisolated` in MainActor-default builds; run the
   AI pipeline off-main correctly.
+- `async-enrichment-silent-loss-outcome-states` — a related on-device AI
+  output-quality issue (a silently dropped async result) that also needs a
+  visible, distinguishable failure state rather than silently-wrong output.
+- `ondevice-model-eval-harness-kill-criteria` — the selection-phase skill
+  upstream of this one: picks the model this skill guards against
+  hallucinating, before any integration work begins.

@@ -86,6 +86,10 @@ looking at what actually rendered.
   neighborhood: subagents that **do** have Bash but contend over the same
   simulator device. This skill is about subagents that have **no** shell at
   all; that one is about isolating shell-capable subagents from each other.
+- `realityview-fullscreencover-black-defer-mount` — the diagnostic/fix cycle
+  this check most concretely applies to: "screenshot and verify a 3D render"
+  is exactly the kind of acceptance test a no-Bash subagent silently stalls
+  on.
 - `superpowers:subagent-driven-development` — general subagent-dispatch
   guidance; this skill sharpens one specific pre-flight check it doesn't spell
   out explicitly: verifying the tool grant matches the acceptance test before

@@ -109,3 +109,6 @@ Organizer) surfaced the true SwiftUI-internal cause.
   architecture tradeoffs in tab-based navigation.
 - `mainactor-runtime-isolation-trap` — another case of a crash whose stack
   trace points away from the actual app-level cause.
+- `swiftui-sheet-in-sheet-uikit-present-bridge` — a different SwiftUI
+  presentation bug that shares the same debugging shape: only reveals itself
+  by tracing the actual runtime hierarchy, not the call site in isolation.

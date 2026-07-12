@@ -97,3 +97,7 @@ store-touching suite must sit under.
 - `swift6-mainactor-compile-fixes` — background on why store types and test
   helpers touching a `ModelContext` need explicit `@MainActor` under
   `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`.
+- `swiftdata-predicate-optional-coalesce-contains-trap` — a `#Predicate` SQL-
+  generation trap this harness is what actually catches: a pure-logic unit
+  test around the predicate closure alone never touches SwiftData's SQL
+  generator, only a real (even in-memory) `ModelContext` fetch does.
