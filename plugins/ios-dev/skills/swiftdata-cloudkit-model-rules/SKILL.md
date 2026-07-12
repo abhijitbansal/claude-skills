@@ -1,6 +1,6 @@
 ---
 name: swiftdata-cloudkit-model-rules
-description: SwiftData + CloudKit failures that compile clean and fail at runtime — ModelContainer crashes at init ("CloudKit integration requires that all attributes be optional or have a default value set", @Relationship(inverse:) declared on both sides), launch bricks behind a try!/fatalError when iCloud is signed out or unprovisioned, a local-only/in-memory/preview store silently starts syncing to iCloud (cloudKitDatabase defaults to .automatic the moment the entitlement exists; .automatic + isStoredInMemoryOnly is invalid), or records silently stop syncing (NSManagedObject-reserved names like isDeleted). Use when enabling CloudKit sync on a SwiftData app, writing @Model types that must mirror to CloudKit, configuring ModelConfiguration for local-only/preview/test stores, or bridging @Attribute(.externalStorage) blobs to CKAsset.
+description: SwiftData + CloudKit failures that compile clean and fail at runtime — ModelContainer crashes at init ("CloudKit integration requires that all attributes be optional or have a default value set", @Relationship(inverse:) declared on both sides), launch bricks behind a try!/fatalError when iCloud is signed out or unprovisioned, a local-only/in-memory/preview store silently starts syncing to iCloud (cloudKitDatabase defaults to .automatic the moment the entitlement exists; .automatic + isStoredInMemoryOnly is invalid), or records silently stop syncing (NSManagedObject-reserved names like isDeleted). Use when enabling CloudKit sync on a SwiftData app, writing @Model types that must mirror to CloudKit, configuring ModelConfiguration for local-only/preview/test stores, or bridging @Attribute(.externalStorage) blobs to CKAsset. Or CKShare sharing concurrent with SwiftData sync risks corruption (two mirroring engines, one store, unvalidated by Apple) — exactly one engine mirrors at a time.
 ---
 
 # SwiftData + CloudKit: Model & Container Rules That Only Fail at Runtime
@@ -102,6 +102,32 @@ nonisolated enum AppModelSchema {
 Resolve every `Schema`/`ModelContainer` from this type — never assemble the
 model list inline at a call site.
 
+### 5. CKShare sharing and native sync cannot mirror the same store concurrently
+
+Adding record sharing (`CKShare`/`UICloudSharingController`) to an app that
+already syncs via SwiftData's own `ModelConfiguration(cloudKitDatabase:)`
+tempts a design where a second, separate `NSPersistentCloudKitContainer`
+opens over the *same underlying store* purely to get `CKShare` support,
+while SwiftData's own sync keeps running. This dual-mirror pattern — two
+independent CloudKit mirroring engines both watching one store — is
+explicitly **unvalidated by Apple** (DTS forum thread 770513): a real risk
+for silent divergence/corruption, not just a performance concern.
+
+Architect for **single-mirror handoff** instead: exactly one engine owns
+CloudKit mirroring for the store at any time.
+
+```swift
+// Sharing OFF: SwiftData's own sync owns mirroring.
+cloudKitDatabase: .private("iCloud.com.example.app")
+
+// Sharing ON: hand mirroring entirely to NSPersistentCloudKitContainer;
+// SwiftData's sync config steps aside.
+cloudKitDatabase: .none
+```
+
+Spike-test the handoff transition itself before shipping — the mode switch,
+not either mode alone, is the untested seam.
+
 ## Evidence
 
 - **cubby** — `in-memory ModelConfiguration must pass cloudKitDatabase: .none`;
@@ -112,6 +138,11 @@ model list inline at a call site.
 - All four rule groups mined from cubby's CloudKit adoption; none produced a
   compile error — every one surfaced as a runtime container-init crash,
   bricked launch, or silent mis-sync.
+- **Rule 5:** 0016 session-end checkpoint: "Research-driven correction to the
+  S4 assumption: dual-mirror (SwiftData private sync + NSPCKC over one store)
+  is unvalidated per Apple DTS (forums 770513) — plan switches to
+  single-mirror architecture (sharing ON ⇒ NSPCKC owns all mirroring,
+  SwiftData .none); H4 spike tests the engine handoff."
 
 ## Related skills
 

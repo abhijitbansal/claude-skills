@@ -28,6 +28,16 @@ The release skill's stage 7 tags `v<version>-b<build>` (testflight) or
 hosted-release trigger**. This makes local S5/S6 (gym/pilot) the fast path and
 Xcode Cloud the canonical path; per app you can rely on either.
 
+**Either path, never both, for one build number.** If S5/S6 already
+fastlane-uploaded a build locally, pushing that same build's release tag
+afterward kicks a redundant Xcode Cloud build that tries to upload the exact
+same version/build number and fails `ITMS-90189` (redundant binary upload).
+The trap bites at the very end of an otherwise-successful release, when the
+habit is to "finish" by pushing the tag: after a local upload, either create
+the release tag **without pushing it** (`tag-only` — it stays a local marker,
+push later only if a Cloud rebuild is wanted) or push it and accept/ignore the
+resulting redundant-upload failure, since the binary already made it to ASC.
+
 Floorprint precedent: its GitHub `release.yml` (manual dispatch) bumps
 versions, pushes the `v*` tag, and lets Xcode Cloud take over — Start
 Condition "Tag Changes: v*". GH-Actions-side app builds are deliberately NOT
