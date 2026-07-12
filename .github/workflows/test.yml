@@ -63,3 +63,77 @@ jobs:
 
       - name: pytest (second-wind)
         run: uv tool run pytest tools/second-wind/tests/ -q
+
+  # A plugin's plugin.json `version` is the ONLY update trigger — Claude Code
+  # skips a plugin whose version string is unchanged, even when its code moved.
+  # So: any PR that touches plugins/<name>/** must bump that plugin's version.
+  # Escape hatch: put [skip-plugin-bump] in a commit message when the change
+  # ships nothing to users. PR-only (a merge base is required to diff against).
+  plugin-version-guard:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: require plugin.json version bump for changed plugins
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess, sys
+
+          base, head = os.environ["BASE_SHA"], os.environ["HEAD_SHA"]
+          # Compare against the merge base, not the base tip, so commits landed
+          # on main after this branch forked don't count as "changed here".
+          mb = subprocess.run(["git", "merge-base", base, head],
+                              capture_output=True, text=True, check=True).stdout.strip()
+
+          def git(*args):
+              return subprocess.run(["git", *args], capture_output=True, text=True)
+
+          msgs = git("log", "--format=%B", f"{mb}..{head}").stdout
+          if "[skip-plugin-bump]" in msgs:
+              print("skip: [skip-plugin-bump] found in commit range")
+              sys.exit(0)
+
+          changed = [l for l in git("diff", "--name-only", f"{mb}..{head}").stdout.splitlines() if l]
+          touched = sorted({
+              p.split("/")[1] for p in changed
+              if p.startswith("plugins/") and len(p.split("/")) > 2
+          })
+
+          def version_at(rev, plugin):
+              r = git("show", f"{rev}:plugins/{plugin}/.claude-plugin/plugin.json")
+              if r.returncode != 0:
+                  return None
+              try:
+                  return json.loads(r.stdout).get("version")
+              except json.JSONDecodeError:
+                  return "INVALID"
+
+          failures = []
+          for plugin in touched:
+              base_v = version_at(mb, plugin)
+              if base_v is None:                       # newly added plugin
+                  continue
+              head_v = version_at(head, plugin)
+              if head_v in (None, "INVALID"):
+                  failures.append(f"{plugin}: plugin.json missing or invalid at HEAD")
+              elif base_v == head_v:
+                  failures.append(
+                      f"{plugin}: content changed but version still {head_v} — "
+                      f"bump plugins/{plugin}/.claude-plugin/plugin.json"
+                  )
+
+          if failures:
+              print("Plugin version guard FAILED:")
+              for f in failures:
+                  print("  - " + f)
+              print("\nBump the plugin's version (patch/minor/major), or add "
+                    "[skip-plugin-bump] to a commit message if this ships nothing to users.")
+              sys.exit(1)
+
+          print(f"OK: version bump present for changed plugins ({', '.join(touched) or 'none'})")
+          PY
