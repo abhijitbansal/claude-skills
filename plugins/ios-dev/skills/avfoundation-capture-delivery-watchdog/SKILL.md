@@ -98,3 +98,9 @@ freeze.
 - `mainactor-runtime-isolation-trap` — variant B (re-entrancy across
   `await`) covers a *different* capture bug: a session restarted mid-flight
   from a double-fired lifecycle callback, not a delegate that never fires.
+- `field-log-duration-clustering-race-diagnosis` — a related timeout/race
+  pattern (a timer arming before its guarded async task exists) diagnosed via
+  field-log duration clustering rather than a repro.
+- `nonsendable-hardware-handle-inline-io` — another AVFoundation/hardware
+  session-lifetime hazard: a non-Sendable session handle that must do I/O
+  inline rather than cross into a helper.

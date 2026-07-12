@@ -105,3 +105,7 @@ rsync/cp-based static-site staging step, not anything GitHub Pages-specific.
 - `site-og-favicon-verify` — checks that pages which *do* deploy render
   correctly (unfurl/favicon/CSP); orthogonal to whether a page reaches the
   artifact at all.
+- `subpage-nav-anchor-baseurl-ssr-label-drift` — the base-path/subdirectory
+  deploy context this bug family lives in; a different failure mode
+  (in-page nav anchors, not the deploy artifact itself) on the same kind of
+  site.

@@ -78,6 +78,17 @@ off-main even though nothing about it looks MainActor-bound. Same fix —
 **Read `references/synthesized-conformance-codable.md` before implementing** —
 it has the full symptom, root cause, and before/after code for this sub-case.
 
+## The WidgetKit case: TimelineProvider needs whole-type nonisolated
+
+A third diagnostic surface: `conformance of 'X' to protocol 'TimelineProvider'
+crosses into main actor-isolated code`. Per-method `nonisolated` on
+`placeholder`/`getSnapshot`/`getTimeline` is insufficient — the protocol
+conformance itself stays isolated. Fix: mark the whole provider struct *and*
+its `TimelineEntry` type `nonisolated struct`, not just the methods.
+
+**Read `references/widgetkit-timelineprovider.md` before implementing** — full
+symptom, root cause, and code for this sub-case.
+
 ## Verification
 
 Incremental builds skip unchanged files and can hide warnings — `touch` the
@@ -89,3 +100,10 @@ changed files (or clean) to force recompilation, then grep build output for
 - `mainactor-runtime-isolation-trap` — runtime crashes/re-entrancy that compile
   clean under MainActor-default isolation; this skill is the opposite failure
   mode (compile-time errors), not a runtime one.
+- `ml-actor-lazy-load-graded-eviction` — an actor-lifecycle skill that applies
+  this skill's `nonisolated` discipline to a heavier case: an actor wrapping
+  a large on-device ML resource.
+- `nonsendable-hardware-handle-inline-io` — the distinct case this skill's
+  general advice does NOT cover: a framework object that is non-Sendable and
+  session-scoped, and so cannot leave its calling context at all, regardless
+  of `nonisolated` annotation.

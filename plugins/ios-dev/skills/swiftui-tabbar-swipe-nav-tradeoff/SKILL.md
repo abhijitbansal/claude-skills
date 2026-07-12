@@ -137,3 +137,15 @@ ever reached by a user's own swipe/tap gesture.
   `@MainActor` methods rather than a SwiftUI render pass; both are fixed by
   not asserting two state changes happen atomically across a suspension
   point.
+- `swiftui-pushed-list-tabbar-scroll-clearance` — a companion gotcha in the
+  same architecture: once this skill's custom pager + tab bar exists, a
+  pushed `List` (unlike `ScrollView`) needs an explicit scroll-clearance fix
+  for its last row, not automatic safe-area handling.
+- `navigationsplitview-single-stack-per-detail-column` — a different
+  navigation-architecture invariant (iPad `NavigationSplitView` tolerates
+  only one live `NavigationStack` per detail column) that can interact with
+  this skill's per-tab `NavigationStack` pattern on iPad.
+- `realityview-fullscreencover-black-defer-mount` — if a 3D view sits behind
+  this skill's custom tab bar / pager, that skill's render-surface fix is a
+  related-but-separate SwiftUI layout/rendering gotcha in the same feature
+  area.

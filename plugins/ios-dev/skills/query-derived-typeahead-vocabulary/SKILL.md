@@ -120,3 +120,8 @@ the burst/multi-crop review flow — which has no per-item vocabulary to offer
   skill's pure-type/optional-dependency composition problem, though the same
   "push logic into a `nonisolated`/framework-free type" instinct applies to
   both.
+- `shared-action-overload-callsite-audit` — a different flavor of the same
+  "shared component/identifier reused by callers with different needs"
+  shape: here the fix is making the shared dependency *optional* per call
+  site; there it's *splitting* the shared identifier into distinct cases
+  when intents genuinely diverge.

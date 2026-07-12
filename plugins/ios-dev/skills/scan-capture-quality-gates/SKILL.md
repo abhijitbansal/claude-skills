@@ -110,3 +110,6 @@ from becoming an item name.
   frame; a soft blur gate reduces how often those fallbacks fire.
 - `swift6-mainactor-compile-fixes` — `BlurGate`/`ItemNamer` are pure compute:
   keep them `nonisolated` so they run off-main in the capture pipeline.
+- `async-enrichment-silent-loss-outcome-states` — downstream on the same scan
+  pipeline: once a frame passes this gate, its async AI enrichment result
+  still needs a visible outcome state, win or lose the merge.

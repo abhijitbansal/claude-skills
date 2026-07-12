@@ -132,3 +132,9 @@ Add this as an explicit manual-test step; a warm-path check proves nothing.
   pattern (primary detector + deterministic fallback chain).
 - `avfoundation-capture-delivery-watchdog` — upstream capture-side failure
   detection for the same scan pipelines.
+- `async-enrichment-silent-loss-outcome-states` — a different on-device-AI
+  trust failure on the same scan pipeline (a silently dropped async result)
+  rather than confabulated values from jumbled OCR text.
+- `ondevice-model-eval-harness-kill-criteria` — the selection-phase skill
+  upstream of this one: picks the model this skill grounds, before any
+  integration work begins.

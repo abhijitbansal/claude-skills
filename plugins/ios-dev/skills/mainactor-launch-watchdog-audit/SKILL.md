@@ -134,3 +134,6 @@ cannot reproduce the watchdog; sim-green explicitly does not clear this class.
   `await`.
 - `avfoundation-capture-delivery-watchdog` — a different watchdog: stalled
   capture delivery, not launch scene-update.
+- `field-log-duration-clustering-race-diagnosis` — the field-log-clustering
+  diagnostic technique this skill's timing hypotheses can be confirmed with
+  when a device-only launch timing bug can't be reproduced locally.

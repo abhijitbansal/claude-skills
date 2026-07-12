@@ -70,3 +70,7 @@ cp Package.resolved "$RESOLVED_DST/Package.resolved"
   hosted archive.
 - Skill `xcode-cloud-validate` — pre-push validation of the cloud setup.
 - Skill `release` — S7 tag push is the release trigger.
+- Skill `xcodebuild-plugin-macro-validation-per-invocation` — a project
+  adopting an SPM package with a build-tool plugin or macro needs the same
+  per-invocation validation flags added to `ci_post_clone.sh`'s xcodebuild
+  path as any other independent xcodebuild invocation.

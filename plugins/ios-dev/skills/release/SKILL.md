@@ -161,13 +161,26 @@ Make the `archive` lane self-contained: create/fetch the profile via the ASC
 API key, then export with a **manual** signing map. In the Fastfile:
 
 ```ruby
-profile = get_provisioning_profile(   # sigh; App Store type by default
-  api_key: asc_api_key, app_identifier: APP_IDENTIFIER, readonly: false)
+# Fetch/map a profile for the main app AND every signed embedded extension
+# (targets.extensions in .claude/app.yml, e.g. a widget/share/notification-
+# service .appex) — a target left out of this loop archives fine but fails
+# at export with "no provisioning profile mapping" for its bundle id.
+signed_targets = [APP_IDENTIFIER] + APP_EXTENSION_IDENTIFIERS   # from app.yml
+profiles = signed_targets.map do |identifier|
+  name = get_provisioning_profile(   # sigh; App Store type by default
+    api_key: asc_api_key, app_identifier: identifier, readonly: false)
+  [identifier, name]
+end.to_h
 gym(export_method: "app-store", export_options: {
   signingStyle: "manual",
-  provisioningProfiles: { APP_IDENTIFIER => profile },
+  provisioningProfiles: profiles,   # every signed target, not just the app
 })
 ```
+
+Every embedded extension added to the app must be added to this list at the
+same time it's added to the Xcode project — treat it like entitlement parity
+(S1 gate): both are "every signed target needs matching setup," just for
+different concerns.
 
 **Fallback (no Fastfile)** — raw xcodebuild, kept working on purpose:
 
@@ -229,7 +242,7 @@ Recovery table:
 | Error | Recovery |
 |---|---|
 | `ITMS-90283 Invalid Provisioning Profile` | signing drift — re-archive |
-| `ITMS-90189 Redundant Binary Upload` | build number already used — re-run, S2 bumps |
+| `ITMS-90189 Redundant Binary Upload` | usually: build number already used — re-run, S2 bumps. If this fired from a Cloud build **after** S6 already uploaded this build locally: expected — see S7's tag-push caveat, no action needed |
 | `Authentication failed` | check `~/.app-store-connect/config` IDs + `.p8` filename |
 | "missing entitlement" at validate | App Group parity across targets — see S1 gate, re-archive |
 
@@ -244,6 +257,11 @@ git tag -a "<tag>" -F "build/release-notes-<MV>.md"
 Ask before pushing (`yes` / `tag-only` / `skip`) — pushed tags are public, and
 a pushed `v*` tag is the Xcode Cloud release trigger (see skill
 `xcode-cloud-post-clone-contract`), so pushing may start a hosted build.
+**This build was already uploaded in S6 above** — if Xcode Cloud is also
+tag-triggered for this app, pushing now kicks a *redundant* hosted build that
+will fail `ITMS-90189` re-uploading the same binary. That failure is expected
+and harmless (the binary already made it to ASC); default to `tag-only`
+unless a Cloud rebuild is specifically wanted.
 
 ## Stage 8 — Site deploy (appstore mode, if `site.repo` is set) ✋
 

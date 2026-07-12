@@ -59,3 +59,6 @@ first impressions cache, so verify BEFORE sharing widely.
 
 - `site-pages-deploy-kit` — deploy + skeleton (skeleton pages pass this lint
   by construction).
+- `subpage-nav-anchor-baseurl-ssr-label-drift` — a sibling per-page-metadata
+  drift on the same kind of site (in-page nav anchors and SSR-default text,
+  rather than unfurl/favicon/CSP).

@@ -46,6 +46,22 @@ from real portfolio bugs. Needs `.claude/app.yml` (schema v2) in the target app 
 | `legal-pages-css-scoping-bleed` | skill (mined) | Privacy/support/legal pages break from shared-stylesheet hero bleed and hand-duplicated nav/footer drift. |
 | `parallel-ios-agent-fixes-single-sim` | skill (mined) | Fan out subagents to fix independent findings/tasks in an iOS repo without stomping the tree or racing one simulator. |
 | `release-inapp-vs-asc-whatsnew-surfaces` | skill (mined) | In-app What's New/changelog (compiled into the binary) vs. App Store Connect's What's New/What to Test metadata (manual paste) — two surfaces that silently drift; gates the release preflight on both. |
+| `ml-actor-lazy-load-graded-eviction` | skill (mined) | Lazy-load a heavy on-device ML resource off actor init, cache load failure, and grade eviction by reason — `.backgrounded` cancels now, `.memoryPressure` defers until in-flight work resolves. |
+| `background-assets-manifest-drift-blind-redownload` | skill (mined) | Apple Background Assets: pull `Manifest.json` schema live via `ba-package template`, sha256-check local caches before re-downloading multi-GB models, immutable pack-id versioning. |
+| `async-enrichment-silent-loss-outcome-states` | skill (mined) | Async AI enrichment that loses a confidence merge needs a distinct visible outcome state — never collapse "not ready" and "ran and lost" into the same silent no-op. |
+| `shared-action-overload-callsite-audit` | skill (mined) | Widening a shared deep-link/enum-case/routing-key action for one new caller silently changes behavior at every other reuse site; audit every call site's intent first. |
+| `field-log-duration-clustering-race-diagnosis` | skill (mined) | Confirm a device-only timeout-race hypothesis (timer arms before its guarded async task exists) by clustering field-log durations near the threshold — no repro needed. |
+| `devicectl-crashlog-oslog-cli-diagnostics` | skill (mined) | Pull the real device crash log before hypothesizing; `devicectl` needs `--` before framework debug flags; `os_log` needs `OS_ACTIVITY_DT_MODE`, not `devicectl --console`. |
+| `navigationsplitview-single-stack-per-detail-column` | skill (mined) | `NavigationSplitView` corrupts its column-path state when more than one `NavigationStack` stays mounted in one detail column — conditionally mount only the active one. |
+| `nonsendable-hardware-handle-inline-io` | skill (mined) | A non-Sendable, session-scoped hardware handle (`NFCTag`, mid-transaction `CBPeripheral`) can't cross into a `@concurrent` helper — do the I/O inline, extract only pure logic. |
+| `diagnostic-export-error-redaction-boundary` | skill (mined) | A "share diagnostics" feature leaks absolute paths/OCR'd content via `String(describing: error)`; redact to domain+code at every export sink. |
+| `subpage-nav-anchor-baseurl-ssr-label-drift` | skill (mined) | A static site's shared nav breaks on subpages (bare `#anchor` hrefs need `BASE_URL` prefixing); SSR-rendered labels drift from a flipped client-side default. |
+| `swiftdata-predicate-optional-coalesce-contains-trap` | skill (mined) | Coalescing an optional column on a `#Predicate` `contains()` LHS compiles but throws `NSInvalidArgumentException` at fetch time — widen the RHS list to `[T?]` instead. |
+| `swiftui-sheet-in-sheet-uikit-present-bridge` | skill (mined) | `UIActivityViewController` via `.sheet(item:)` from inside another SwiftUI sheet flashes and self-dismisses — present imperatively on the real top UIKit controller. |
+| `xcodebuild-plugin-macro-validation-per-invocation` | skill (mined) | An SPM build-tool plugin/macro needs `-skipPackagePluginValidation -skipMacroValidation` on every independent `xcodebuild` invocation, never a machine-wide default; includes a repair-agent review-gate note. |
+| `realityview-fullscreencover-black-defer-mount` | skill (mined) | A `.virtual`-camera RealityView renders solid black as a `fullScreenCover` root because the cover's present animation races the scene's first frame — defer the mount. |
+| `swiftui-pushed-list-tabbar-scroll-clearance` | skill (mined) | A custom tab bar attached via `safeAreaInset` to the pager (not the `NavigationStack`) leaves a pushed `List`'s last row clipped — apply the same clearance fix as `ScrollView`. |
+| `ondevice-model-eval-harness-kill-criteria` | skill (mined) | Pick on-device AI models from an empirical offline eval harness with pre-committed kill criteria, not paper/vendor benchmarks — expect broken tooling to eliminate strong candidates. |
 | `/ios-init` | command | Scaffold or `--migrate` `.claude/app.yml` (schema v2) — detects scheme/bundle/team/extensions, interviews for the rest, validates. |
 | `/ios-scaffold` | command | Run the repo standardizer and walk DRIFTs one by one. |
 | `/release` | command | `testflight` / `appstore` (`--dry-run`) — the release skill, staged, stopping at every FAIL gate. |
@@ -86,6 +102,11 @@ The everyday glue, useful in any repo.
 | `image-parser` | agent | Vision subagent: OCR, screenshot comparison, "is the title cut off?" checks. |
 | `web-researcher` | agent | Docs/API lookup subagent: tight synthesis with sources, not raw page dumps. |
 | `shellcheck-on-edit` | hook | PostToolUse hook — lints any `.sh` file the agent edits. |
+| `hook-merge-base-diff-command-regex-anchoring` | skill (mined) | Two-dot git diff against a moving ref leaks unrelated commits into a hook check; anchor command-matching regexes to statement position; fail-open sentinel writes. |
+| `claude-transcript-purge-accreting-stats-archive` | skill (mined) | Claude Code purges session transcripts after ~30 days — an "all-time" stats pipeline needs a committed, per-field-max-merged accreting archive, not live re-mining. |
+| `launchd-git-automation-self-heal` | skill (mined) | launchd git jobs die silently on a dirty tree, a missing clone, or a stale retry branch — bootstrap outside the script, hard-reset before pull, `checkout -B` for retries. |
+| `declarative-hook-rules-inert-without-dispatcher` | skill (mined) | A declarative hook-rule-file format is inert unless something in the settings stack actually loads it — verify the dispatcher before authoring rules. |
+| `subagent-buildverify-tool-grant-check` | skill (mined) | A subagent whose acceptance test needs a build/test run silently stalls forever if its tool grant lacks Bash — check the grant before dispatching build/verify work. |
 
 ## second-wind (plugin + CLI)
 
@@ -121,6 +142,7 @@ Sharpen the ask before the work, surface the right next step after it. Zero conf
 | `statusline_hint` | hook (statusLine) | Live `💡 next: /x` statusline segment; chains to your existing statusline command. Wire with `wire_statusline.py --wire`. |
 | `block_secrets` | hook (PreToolUse, opt-in) | Blocks reads/edits of secret-looking files. Enable via `PROMPT_CRAFT_BLOCK_SECRETS=1`. |
 | `format_on_edit` | hook (PostToolUse, opt-in) | Formats edited files with the installed formatter. Enable via `PROMPT_CRAFT_FORMAT_ON_EDIT=1`. |
+| `structured-output-adaptive-thinking-token-bloat` | skill (mined) | `json_schema`-constrained Claude API calls waste ~5x tokens on adaptive thinking that doesn't improve output quality — omit the `thinking` parameter for schema-constrained calls. |
 
 ## adapters (multi-tool)
 
