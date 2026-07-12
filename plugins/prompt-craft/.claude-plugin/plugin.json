@@ -1,6 +1,6 @@
 {
   "name": "prompt-craft",
   "description": "Turn rough prompts into deterministic specs and surface the right next step: /improve-prompt, /plan, debug/refactor/review lenses, a follow-up-suggesting Stop hook, and opt-in secret/format guardrails. Zero config; guardrails off by default.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": { "name": "Abhijit Bansal", "url": "https://github.com/abhijitbansal" }
 }

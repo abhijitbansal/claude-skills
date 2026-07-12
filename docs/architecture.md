@@ -15,11 +15,11 @@ Plus private **seed machinery** that rebuilds the owner's full dev environment o
 ```mermaid
 flowchart TD
   MP["marketplace.json (.claude-plugin/)"]
-  IOS["ios-dev — 34 skills · 6 cmds"]
+  IOS["ios-dev — 50 skills · 6 cmds"]
   LIN["linear-pm — 1 skill · 6 cmds"]
-  CW["core-workflow — 6 skills · 4 cmds · 2 agents · 1 hook"]
+  CW["core-workflow — 11 skills · 4 cmds · 2 agents · 1 hook"]
   SW["second-wind — skill wrapper"]
-  PC["prompt-craft — 6 skills · 6 hooks"]
+  PC["prompt-craft — 7 skills · 6 hooks"]
   WIND[("tools/second-wind/wind.py")]
   AD["adapters/install.sh"]
   SEED["setup/ — setup.sh · capture.sh · contribute.sh"]
