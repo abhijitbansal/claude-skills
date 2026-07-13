@@ -1,7 +1,7 @@
 {
   "name": "ios-dev",
   "description": "iOS app lifecycle: simulator build + preview, TestFlight/App Store release (Fastlane + gated pre-flight), repo scaffolding, Xcode Cloud contract, marketing-site kit, and a mined knowledge-skill catalog (MainActor traps, SwiftData+CloudKit rules, widget bridges, Vision/OCR grounding). Requires .claude/app.yml (schema v2) in the target app repo \u2014 run /ios-init.",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "author": {
     "name": "Abhijit Bansal",
     "url": "https://github.com/abhijitbansal"

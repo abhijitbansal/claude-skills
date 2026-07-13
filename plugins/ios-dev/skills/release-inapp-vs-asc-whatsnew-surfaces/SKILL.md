@@ -97,3 +97,6 @@ Treat the two surfaces as genuinely separate checklist items, not one
   version keys) is cheap insurance — this data has no compiler-checked
   connection to the actual shipped version the way, say, an enum-driven URL
   router does.
+- [`inapp-whatsnew-popup-and-about-buildinfo`](../inapp-whatsnew-popup-and-about-buildinfo/SKILL.md)
+  — the in-app SwiftUI implementation of the What's New pop-up + About
+  build-info screen.
