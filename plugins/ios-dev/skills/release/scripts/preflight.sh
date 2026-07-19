@@ -69,16 +69,24 @@ if [[ -z "${PLIST}" ]]; then
   PLIST="$(find build -name "${APP_NAME}-Info.plist" 2>/dev/null | head -1)"
 fi
 if [[ -n "${PLIST}" && -f "${PLIST}" ]]; then
+  # Xcode's generated Info.plist is binary by default — <key> tags never
+  # appear as literal text there, so grep against a plutil-converted XML
+  # copy instead of the raw (possibly binary) PLIST.
+  PLIST_XML="$(mktemp)"
+  if ! plutil -convert xml1 -o "${PLIST_XML}" "${PLIST}" 2>/dev/null; then
+    cp "${PLIST}" "${PLIST_XML}"
+  fi
+
   usage_ok=1
   for key in ${RELEASE_USAGE_STRINGS}; do
-    if ! grep -q "<key>${key}</key>" "${PLIST}"; then
+    if ! grep -q "<key>${key}</key>" "${PLIST_XML}"; then
       fail "usage-strings" "${key} missing from generated plist"
       usage_ok=0
     fi
   done
   [[ ${usage_ok} -eq 1 ]] && pass usage-strings
 
-  if grep -q "ITSAppUsesNonExemptEncryption" "${PLIST}"; then
+  if grep -q "ITSAppUsesNonExemptEncryption" "${PLIST_XML}"; then
     pass encryption-flag
   else
     fail encryption-flag "ITSAppUsesNonExemptEncryption not declared (app.yml release.encryption_exempt=${RELEASE_ENCRYPTION_EXEMPT})"
@@ -101,6 +109,7 @@ print(' '.join(d.get('UIRequiredDeviceCapabilities', [])))" 2>/dev/null || true)
   else
     pass capabilities
   fi
+  rm -f "${PLIST_XML}"
 else
   warn usage-strings "no generated plist found — build once, or set PREFLIGHT_PLIST"
 fi

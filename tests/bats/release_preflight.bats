@@ -235,3 +235,14 @@ PLIST
   [ "$status" -eq 0 ]
   [[ "$output" == *"PASS: ipad-orientation"* ]]
 }
+
+@test "binary Info.plist still PASSes usage-strings and encryption-flag" {
+  command -v plutil >/dev/null 2>&1 || skip "plutil not available (Linux CI)"
+  cd "${TMP}/app"
+  plutil -convert binary1 "${PREFLIGHT_PLIST}"
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm binplist
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: usage-strings"* ]]
+  [[ "$output" == *"PASS: encryption-flag"* ]]
+}
