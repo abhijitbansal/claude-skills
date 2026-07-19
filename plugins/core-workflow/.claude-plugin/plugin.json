@@ -1,7 +1,7 @@
 {
   "name": "core-workflow",
   "description": "General dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook; /learn lesson-capture into the skills catalog.",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": {
     "name": "Abhijit Bansal",
     "url": "https://github.com/abhijitbansal"
