@@ -138,3 +138,7 @@ describing the same "RealityView black as a modal root" symptom.
 - `swiftui-tabbar-swipe-nav-tradeoff` — if this 3D view sits behind a custom
   tab bar / pager, that skill's pushed-scroll-clearance sibling is a
   related-but-separate SwiftUI layout gotcha in the same feature area.
+- `realitykit-windowed-view-ios-gotchas` — the umbrella skill for windowed
+  RealityKit on iOS (camera framing per presentation context,
+  scene-rebuild-on-drift, tiered fidelity); this skill is its deep-dive on
+  the fullScreenCover black-render mount bug.
