@@ -69,7 +69,6 @@ from real portfolio bugs. Needs `.claude/app.yml` (schema v2) in the target app 
 | `siri-app-intents-ios26-reliability` | skill (mined) | Siri App Shortcuts reliability on iOS 26: phrase quota, parameterized-phrase matching, donated vocabulary. |
 | `sheet-in-sheet-present-bridge-generalization` | skill (mined) | The sheet-in-sheet UIKit-present bug as a CLASS (camera, QuickLook, mail, share, doc picker) — generalization of `swiftui-sheet-in-sheet-uikit-present-bridge`. |
 | `fastlane-archive-multi-target-signing` | skill (mined) | Fastlane archive/export must map a provisioning profile for EVERY signed embedded target, not just the main app. |
-| `realitykit-windowed-view-ios-gotchas` | skill (mined) | Windowed RealityKit on iOS (not visionOS): black-feed bug, camera framing per presentation context, rebuild-on-drift, tiered fidelity. |
 | `/ios-init` | command | Scaffold or `--migrate` `.claude/app.yml` (schema v2) — detects scheme/bundle/team/extensions, interviews for the rest, validates. |
 | `/ios-scaffold` | command | Run the repo standardizer and walk DRIFTs one by one. |
 | `/release` | command | `testflight` / `appstore` (`--dry-run`) — the release skill, staged, stopping at every FAIL gate. |

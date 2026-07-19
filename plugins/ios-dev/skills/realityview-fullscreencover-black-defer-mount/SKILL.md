@@ -1,6 +1,6 @@
 ---
 name: realityview-fullscreencover-black-defer-mount
-description: A .virtual-camera RealityKit RealityView renders correctly inline (a sheet, a List row, embedded in another screen) but is a solid black feed with zero content the moment it's the root of a fullScreenCover — not navy, not empty-but-lit, fully black, as if nothing was ever added to the scene — and wrapping it in GeometryReader with concrete width/height (the fix everyone tries first) does not work. Use whenever building or debugging a RealityKit RealityView in a windowed iOS/iPadOS app (NOT visionOS) — a 3D companion view next to 2D UI, a scene mounted in a sheet or fullScreenCover, or any windowed .virtual-camera scene — even if the user says "3D view," "rack/bin/map viewer," or "blank/black render" without saying "RealityKit" explicitly.
+description: A .virtual-camera RealityKit RealityView renders correctly inline (a sheet, a List row, embedded in another screen) but is a solid black feed with zero content the moment it's the root of a fullScreenCover — not navy, not empty-but-lit, fully black, as if nothing was ever added to the scene — and wrapping it in GeometryReader with concrete width/height (the fix everyone tries first) does not work. Use whenever building or debugging a RealityKit RealityView in a windowed iOS/iPadOS app (NOT visionOS) — a 3D companion view next to 2D UI, a scene mounted in a sheet or fullScreenCover, or any windowed .virtual-camera scene — even if the user says "3D view," "rack/bin/map viewer," "blank/black render," or "make this look like the 3D mockup" without saying "RealityKit" explicitly.
 ---
 
 # RealityKit `fullScreenCover` Black Render — Defer the Mount, Not the Layout
@@ -138,7 +138,3 @@ describing the same "RealityView black as a modal root" symptom.
 - `swiftui-tabbar-swipe-nav-tradeoff` — if this 3D view sits behind a custom
   tab bar / pager, that skill's pushed-scroll-clearance sibling is a
   related-but-separate SwiftUI layout gotcha in the same feature area.
-- `realitykit-windowed-view-ios-gotchas` — the umbrella skill for windowed
-  RealityKit on iOS (camera framing per presentation context,
-  scene-rebuild-on-drift, tiered fidelity); this skill is its deep-dive on
-  the fullScreenCover black-render mount bug.
