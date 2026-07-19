@@ -88,7 +88,9 @@ Report every WARN to the user even when the run continues.
 
 ## Stage 2 — Version bump 🤖/✋
 
-Ask which bump (`patch`/`minor`/`major` for appstore; `build` for testflight), then:
+Ask which bump. For appstore: `patch`/`minor`/`major`. For testflight: offer
+`release.testflight_bump` from `.claude/app.yml` as the default (`build` when the
+key is unset — some repos bump `patch` per TestFlight release instead). Then:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/skills/release/scripts/bump_version.sh" <kind>

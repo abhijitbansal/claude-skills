@@ -106,3 +106,21 @@ YML
   [ "$status" -eq 3 ]
   [[ "$output" == *"--force"* ]]
 }
+
+@test "fresh scaffold includes release.testflight_bump comment line" {
+  cd "${TMP}"
+  cat > project.yml <<'YML'
+name: Demo
+targets:
+  Demo:
+    type: application
+    platform: iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.demo
+        DEVELOPMENT_TEAM: ABCDE12345
+YML
+  run bash "${INIT}"
+  [ "$status" -eq 0 ]
+  grep -q 'testflight_bump:' .claude/app.yml
+}

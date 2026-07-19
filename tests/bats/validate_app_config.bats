@@ -124,3 +124,24 @@ YML
   [ "$status" -eq 1 ]
   [[ "$output" == *"ERROR: app.bundle_id"* ]]
 }
+
+@test "release.testflight_bump build and patch are valid" {
+  good_yml "${TMP}/app.yml"
+  printf '  testflight_bump: patch\n' >> "${TMP}/app.yml"
+  run bash "${VALIDATE}" "${TMP}/app.yml"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"ERROR"* ]]
+  good_yml "${TMP}/app.yml"
+  printf '  testflight_bump: build\n' >> "${TMP}/app.yml"
+  run bash "${VALIDATE}" "${TMP}/app.yml"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"ERROR"* ]]
+}
+
+@test "release.testflight_bump rejects values other than build|patch" {
+  good_yml "${TMP}/app.yml"
+  printf '  testflight_bump: minor\n' >> "${TMP}/app.yml"
+  run bash "${VALIDATE}" "${TMP}/app.yml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ERROR: release.testflight_bump"* ]]
+}
