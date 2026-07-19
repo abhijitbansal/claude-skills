@@ -55,21 +55,27 @@ APP_IDENTIFIER = "com.yourcompany.App"
 WIDGET_IDENTIFIER = "com.yourcompany.App.Widget"
 
 lane :archive do
-  c = asc_creds
+  api_key = app_store_connect_api_key(
+    key_id: ENV.fetch("ASC_KEY_ID"),
+    issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+    key_filepath: ENV.fetch("ASC_KEY_PATH")   # path to the AuthKey_*.p8
+  )
   # Ensure an App Store distribution profile for the app AND every embedded
   # extension, capturing each profile name. gym's automatic export can't
   # resolve a sigh-created profile, so export with manual signing and map
   # each profile explicitly. Missing an extension here leaves it unsigned at
   # export — the failure only surfaces then, not at archive time.
+  # (get_provisioning_profile returns the profile UUID; the profile NAME —
+  # what exportOptions maps by, though either works — is in SIGH_NAME.)
   profiles = [APP_IDENTIFIER, WIDGET_IDENTIFIER].map do |identifier|
-    name = get_provisioning_profile(
-      api_key: asc_api_key,
+    get_provisioning_profile(
+      api_key: api_key,
       app_identifier: identifier,
       team_id: TEAM_ID,
       readonly: false,
       output_path: "build"
     )
-    [identifier, name]
+    [identifier, lane_context[SharedValues::SIGH_NAME]]
   end.to_h
 
   gym(
