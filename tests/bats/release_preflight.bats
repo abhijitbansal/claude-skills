@@ -43,7 +43,7 @@ teardown() { rm -rf "${TMP}"; }
 
 @test "missing ITSAppUsesNonExemptEncryption FAILs encryption-flag" {
   cd "${TMP}/app"
-  sed -i.bak '/ITSAppUsesNonExemptEncryption/,+1d' "${PREFLIGHT_PLIST}"
+  sed -i.bak '/ITSAppUsesNonExemptEncryption/d' "${PREFLIGHT_PLIST}"
   rm -f "${PREFLIGHT_PLIST}.bak"
   git add -A && git -c user.email=t@t -c user.name=t commit -qm plist
   run bash "${PREFLIGHT}" --mode testflight
@@ -234,4 +234,100 @@ PLIST
   run bash "${PREFLIGHT}" --mode testflight
   [ "$status" -eq 0 ]
   [[ "$output" == *"PASS: ipad-orientation"* ]]
+}
+
+@test "binary Info.plist still PASSes usage-strings and encryption-flag" {
+  command -v plutil >/dev/null 2>&1 || skip "plutil not available (Linux CI)"
+  cd "${TMP}/app"
+  plutil -convert binary1 "${PREFLIGHT_PLIST}"
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm binplist
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: usage-strings"* ]]
+  [[ "$output" == *"PASS: encryption-flag"* ]]
+}
+
+@test "binary plist without plutil falls back to python3 and still gates correctly" {
+  cd "${TMP}/app"
+  python3 - "${PREFLIGHT_PLIST}" <<'PY'
+import plistlib, sys
+with open(sys.argv[1], 'rb') as f:
+    d = plistlib.load(f)
+with open(sys.argv[1], 'wb') as f:
+    plistlib.dump(d, f, fmt=plistlib.FMT_BINARY)
+PY
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm binplist
+  mkdir -p "${TMP}/shim"
+  printf '#!/bin/sh\nexit 127\n' > "${TMP}/shim/plutil"
+  chmod +x "${TMP}/shim/plutil"
+  run env PATH="${TMP}/shim:${PATH}" bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN: plist-conversion"* ]]
+  [[ "$output" == *"PASS: usage-strings"* ]]
+  [[ "$output" == *"PASS: encryption-flag"* ]]
+}
+
+@test "unconvertible plist FAILs plist-conversion instead of false usage-strings results" {
+  cd "${TMP}/app"
+  printf 'not a plist at all\n' > "${PREFLIGHT_PLIST}"
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm badplist
+  mkdir -p "${TMP}/shim"
+  printf '#!/bin/sh\nexit 1\n' > "${TMP}/shim/plutil"
+  chmod +x "${TMP}/shim/plutil"
+  run env PATH="${TMP}/shim:${PATH}" bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: plist-conversion"* ]]
+  [[ "$output" != *"FAIL: usage-strings"* ]]
+}
+
+@test "capabilities gate FAILs on unexpected capability even with a quote in the plist path" {
+  cd "${TMP}/app"
+  printf '  required_capabilities: [arm64]\n' >> .claude/app.yml
+  mkdir -p "${TMP}/app/O'Brien"
+  python3 - "${PREFLIGHT_PLIST}" "${TMP}/app/O'Brien/Demo-Info.plist" <<'PY'
+import plistlib, sys
+with open(sys.argv[1], 'rb') as f:
+    d = plistlib.load(f)
+d['UIRequiredDeviceCapabilities'] = ['arm64', 'lidar-depth-camera']
+with open(sys.argv[2], 'wb') as f:
+    plistlib.dump(d, f)
+PY
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm caps
+  export PREFLIGHT_PLIST="${TMP}/app/O'Brien/Demo-Info.plist"
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: capabilities"* ]]
+  [[ "$output" == *"lidar-depth-camera"* ]]
+}
+
+@test "python3 failure on nfc gate WARNs only, never PASSes" {
+  cd "${TMP}/app"
+  cat > App.entitlements <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>com.apple.developer.nfc.readersession.formats</key>
+  <array><string>TAG</string></array>
+</dict></plist>
+PLIST
+  export PREFLIGHT_ENTITLEMENTS_FILE="${TMP}/app/App.entitlements"
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm ent
+  PYREAL="$(command -v python3)"
+  mkdir -p "${TMP}/shim"
+  printf '#!/bin/sh\nif [ "$1" = "-c" ]; then exit 1; fi\nexec "%s" "$@"\n' "${PYREAL}" > "${TMP}/shim/python3"
+  chmod +x "${TMP}/shim/python3"
+  run env PATH="${TMP}/shim:${PATH}" bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN: nfc-entitlement"* ]]
+  [[ "$output" != *"PASS: nfc-entitlement"* ]]
+}
+
+@test "mktemp failure FAILs plist-conversion, not usage-strings" {
+  cd "${TMP}/app"
+  mkdir -p "${TMP}/shim"
+  printf '#!/bin/sh\necho "mktemp: failed" >&2\nexit 1\n' > "${TMP}/shim/mktemp"
+  chmod +x "${TMP}/shim/mktemp"
+  run env PATH="${TMP}/shim:${PATH}" bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: plist-conversion"* ]]
+  [[ "$output" != *"FAIL: usage-strings"* ]]
 }

@@ -89,3 +89,7 @@ call site in isolation.
   but share the same debugging shape: a SwiftUI presentation/render bug that
   only reveals itself by tracing the actual runtime hierarchy, not by reading
   the call site in isolation.
+- `sheet-in-sheet-present-bridge-generalization` — the generalization note for
+  this skill: the same root cause recurred across camera picker, QuickLook,
+  and mail composer; read it when the presented flow isn't a share sheet or
+  document picker.

@@ -174,6 +174,8 @@ RELEASE_USAGE_STRINGS="$(_yaml_get_list "${APP_YML}" release.usage_strings 2>/de
 RELEASE_WHATSNEW_FILE="$(_yaml_get "${APP_YML}" release.whatsnew_file 2>/dev/null || true)"; export RELEASE_WHATSNEW_FILE
 RELEASE_INAPP_CHANGELOG_FILE="$(_yaml_get "${APP_YML}" release.inapp_changelog_file 2>/dev/null || true)"; export RELEASE_INAPP_CHANGELOG_FILE
 RELEASE_ASC_APP_ID="$(_yaml_get "${APP_YML}" release.asc_app_id 2>/dev/null || true)"; export RELEASE_ASC_APP_ID
+RELEASE_TESTFLIGHT_BUMP="$(_yaml_get "${APP_YML}" release.testflight_bump 2>/dev/null || true)"
+RELEASE_TESTFLIGHT_BUMP="${RELEASE_TESTFLIGHT_BUMP:-build}";        export RELEASE_TESTFLIGHT_BUMP
 RELEASE_HOOKS_DIR="$(_yaml_get "${APP_YML}" release.hooks_dir 2>/dev/null || true)"
 RELEASE_HOOKS_DIR="${RELEASE_HOOKS_DIR:-scripts/release-hooks}";    export RELEASE_HOOKS_DIR
 

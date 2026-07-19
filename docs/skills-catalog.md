@@ -63,6 +63,12 @@ from real portfolio bugs. Needs `.claude/app.yml` (schema v2) in the target app 
 | `realityview-fullscreencover-black-defer-mount` | skill (mined) | A `.virtual`-camera RealityView renders solid black as a `fullScreenCover` root because the cover's present animation races the scene's first frame — defer the mount. |
 | `swiftui-pushed-list-tabbar-scroll-clearance` | skill (mined) | A custom tab bar attached via `safeAreaInset` to the pager (not the `NavigationStack`) leaves a pushed `List`'s last row clipped — apply the same clearance fix as `ScrollView`. |
 | `ondevice-model-eval-harness-kill-criteria` | skill (mined) | Pick on-device AI models from an empirical offline eval harness with pre-committed kill criteria, not paper/vendor benchmarks — expect broken tooling to eliminate strong candidates. |
+| `swiftdata-cloudkit-production-schema` | skill (mined) | CloudKit schema-lifecycle sharp edges (Production deploys, CD_-prefixed mystery fields, rename safety) — delta on `swiftdata-cloudkit-model-rules`. |
+| `background-assets-apple-hosted-packs` | skill (mined) | Apple-hosted Background Assets delivery/extraction failures (ProcessingPipelineError, TestFlight-only faults) — delta on `background-assets-manifest-drift-blind-redownload`. |
+| `ios-photo-sidecar-store` | skill (mined) | Photo/attachment sidecar-store pattern for DB-backed iOS apps: bytes on disk, thumbnails, trash, iCloud sync, cover photos. |
+| `siri-app-intents-ios26-reliability` | skill (mined) | Siri App Shortcuts reliability on iOS 26: phrase quota, parameterized-phrase matching, donated vocabulary. |
+| `sheet-in-sheet-present-bridge-generalization` | skill (mined) | The sheet-in-sheet UIKit-present bug as a CLASS (camera, QuickLook, mail, share, doc picker) — generalization of `swiftui-sheet-in-sheet-uikit-present-bridge`. |
+| `fastlane-archive-multi-target-signing` | skill (mined) | Fastlane archive/export must map a provisioning profile for EVERY signed embedded target, not just the main app. |
 | `/ios-init` | command | Scaffold or `--migrate` `.claude/app.yml` (schema v2) — detects scheme/bundle/team/extensions, interviews for the rest, validates. |
 | `/ios-scaffold` | command | Run the repo standardizer and walk DRIFTs one by one. |
 | `/release` | command | `testflight` / `appstore` (`--dry-run`) — the release skill, staged, stopping at every FAIL gate. |
@@ -108,6 +114,7 @@ The everyday glue, useful in any repo.
 | `launchd-git-automation-self-heal` | skill (mined) | launchd git jobs die silently on a dirty tree, a missing clone, or a stale retry branch — bootstrap outside the script, hard-reset before pull, `checkout -B` for retries. |
 | `declarative-hook-rules-inert-without-dispatcher` | skill (mined) | A declarative hook-rule-file format is inert unless something in the settings stack actually loads it — verify the dispatcher before authoring rules. |
 | `subagent-buildverify-tool-grant-check` | skill (mined) | A subagent whose acceptance test needs a build/test run silently stalls forever if its tool grant lacks Bash — check the grant before dispatching build/verify work. |
+| `dev-tracker-portable` | skill (mined) | In-repo dev tracker starter kit (one markdown ledger + archives + capture/list/fix/learn modes), the proven Cubby system genericized. |
 
 ## second-wind (plugin + CLI)
 

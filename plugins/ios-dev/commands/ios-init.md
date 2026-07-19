@@ -21,6 +21,7 @@ Run the scaffolder, then verify and finish the config with me:
    - `release.whatsnew_file` — path to the App Store Connect release-notes file (e.g. a what's-new JSON), if the app has one.
    - `release.inapp_changelog_file` — path to the in-app changelog/feature-catalog data file (e.g. a Swift `ChangelogEntry` list), if the app has an in-app What's New screen. This is a separate surface from `whatsnew_file` — see skill `release-inapp-vs-asc-whatsnew-surfaces`. Optional; leave blank if the app has no in-app changelog.
    - `release.asc_app_id` — the numeric App Store Connect app id, if the app is already registered.
+   - `release.testflight_bump` — `build` (default) or `patch`: which version-bump kind a TestFlight release offers by default in the release skill's Stage 2.
    - `site.repo` / `site.domain` — if a marketing site exists or is planned.
    - If the repo uses Linear, also offer `linear.team_key`.
    Apply my answers by editing the file directly.

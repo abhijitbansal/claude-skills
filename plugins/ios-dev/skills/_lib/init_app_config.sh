@@ -61,6 +61,7 @@ release:
   whatsnew_file:                        # e.g. Sources/WhatsNew.json (ASC metadata side)
   inapp_changelog_file:                 # optional: in-app changelog/feature-catalog data, e.g. Sources/Changelog.swift (separate from whatsnew_file — see skill release-inapp-vs-asc-whatsnew-surfaces)
   asc_app_id:                           # numeric App Store Connect app id
+  testflight_bump: build                # default bump per TestFlight release: build|patch
   hooks_dir: scripts/release-hooks
 YAML
 }

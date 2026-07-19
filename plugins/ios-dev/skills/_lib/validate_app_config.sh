@@ -68,6 +68,10 @@ enc="$(get release.encryption_exempt)"
 if [[ -n "${enc}" && "${enc}" != "true" && "${enc}" != "false" ]]; then
   err "release.encryption_exempt must be true or false (got '${enc}')"
 fi
+tf_bump="$(get release.testflight_bump)"
+if [[ -n "${tf_bump}" && "${tf_bump}" != "build" && "${tf_bump}" != "patch" ]]; then
+  err "release.testflight_bump must be build or patch (got '${tf_bump}')"
+fi
 for p in $(get_list app.platforms); do
   case "${p}" in
     ios|macos) ;;

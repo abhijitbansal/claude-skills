@@ -69,6 +69,7 @@ release:
   whatsnew_file: Sources/WhatsNew.json
   inapp_changelog_file: Sources/Changelog.swift
   asc_app_id: "6740000000"
+  testflight_bump: patch
 site:
   repo: example/demo-site
   domain: demo.app
@@ -92,6 +93,7 @@ YML
   [ "${RELEASE_WHATSNEW_FILE}" = "Sources/WhatsNew.json" ]
   [ "${RELEASE_INAPP_CHANGELOG_FILE}" = "Sources/Changelog.swift" ]
   [ "${RELEASE_ASC_APP_ID}" = "6740000000" ]
+  [ "${RELEASE_TESTFLIGHT_BUMP}" = "patch" ]
   [ "${SITE_REPO}" = "example/demo-site" ]
   [ "${SITE_DOMAIN}" = "demo.app" ]
   [ "${CI_PROVIDER}" = "xcode-cloud" ]
@@ -108,6 +110,7 @@ YML
   [ "${RELEASE_ENCRYPTION_EXEMPT}" = "true" ]
   [ "${RELEASE_FONTS_EXPECTED}" = "0" ]
   [ "${RELEASE_INAPP_CHANGELOG_FILE}" = "" ]
+  [ "${RELEASE_TESTFLIGHT_BUMP}" = "build" ]
   [ "${RELEASE_HOOKS_DIR}" = "scripts/release-hooks" ]
   [ "${SITE_DIR}" = "site" ]
   [ "${SITE_DEPLOY}" = "subtree-ssh" ]

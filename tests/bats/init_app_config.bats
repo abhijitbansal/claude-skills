@@ -37,6 +37,7 @@ YML
   grep -q '^ci:' .claude/app.yml
   grep -q '^targets:' .claude/app.yml
   grep -q 'DemoWidget' .claude/app.yml
+  grep -q 'testflight_bump: build' .claude/app.yml
 }
 
 @test "--migrate upgrades v1 in place preserving values" {
