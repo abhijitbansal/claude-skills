@@ -149,7 +149,7 @@ if [[ -z "${ENT_FILE}" ]]; then
   ENT_FILE="$(find . -name '*.entitlements' -not -path './build/*' -not -path './.git/*' 2>/dev/null | head -1)"
 fi
 if [[ -n "${ENT_FILE}" && -f "${ENT_FILE}" ]]; then
-  if ! nfc_fmts="$(python3 -c "
+  if nfc_fmts="$(python3 -c "
 import plistlib, sys
 try:
     with open(sys.argv[1], 'rb') as f:
@@ -157,13 +157,13 @@ try:
 except Exception:
     sys.exit(0)
 print(' '.join(d.get('com.apple.developer.nfc.readersession.formats', [])))" "${ENT_FILE}" 2>/dev/null)"; then
-    nfc_fmts=""
-    warn nfc-entitlement "could not inspect ${ENT_FILE} (python3 failed) — gate skipped"
-  fi
-  if [[ " ${nfc_fmts} " == *" NDEF "* ]]; then
-    fail nfc-entitlement "com.apple.developer.nfc.readersession.formats contains 'NDEF' — rejected by the iOS 26 SDK (ITMS-90778). Change it to 'TAG' and migrate NFCNDEFReaderSession -> NFCTagReaderSession (poll .iso14443, read/write via the NFCNDEFTag protocol on the detected tag)"
+    if [[ " ${nfc_fmts} " == *" NDEF "* ]]; then
+      fail nfc-entitlement "com.apple.developer.nfc.readersession.formats contains 'NDEF' — rejected by the iOS 26 SDK (ITMS-90778). Change it to 'TAG' and migrate NFCNDEFReaderSession -> NFCTagReaderSession (poll .iso14443, read/write via the NFCNDEFTag protocol on the detected tag)"
+    else
+      pass nfc-entitlement
+    fi
   else
-    pass nfc-entitlement
+    warn nfc-entitlement "could not inspect ${ENT_FILE} (python3 failed) — gate skipped"
   fi
 else
   pass nfc-entitlement

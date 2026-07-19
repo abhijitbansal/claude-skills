@@ -300,6 +300,27 @@ PY
   [[ "$output" == *"lidar-depth-camera"* ]]
 }
 
+@test "python3 failure on nfc gate WARNs only, never PASSes" {
+  cd "${TMP}/app"
+  cat > App.entitlements <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>com.apple.developer.nfc.readersession.formats</key>
+  <array><string>TAG</string></array>
+</dict></plist>
+PLIST
+  export PREFLIGHT_ENTITLEMENTS_FILE="${TMP}/app/App.entitlements"
+  git add -A && git -c user.email=t@t -c user.name=t commit -qm ent
+  PYREAL="$(command -v python3)"
+  mkdir -p "${TMP}/shim"
+  printf '#!/bin/sh\nif [ "$1" = "-c" ]; then exit 1; fi\nexec "%s" "$@"\n' "${PYREAL}" > "${TMP}/shim/python3"
+  chmod +x "${TMP}/shim/python3"
+  run env PATH="${TMP}/shim:${PATH}" bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN: nfc-entitlement"* ]]
+  [[ "$output" != *"PASS: nfc-entitlement"* ]]
+}
+
 @test "mktemp failure FAILs plist-conversion, not usage-strings" {
   cd "${TMP}/app"
   mkdir -p "${TMP}/shim"
