@@ -134,6 +134,11 @@ Upstreams the local plugin-cache patch (Cubby TASK-023)."
   run bash "${VALIDATE}" "${TMP}/app.yml"
   [ "$status" -eq 0 ]
   [[ "$output" != *"ERROR"* ]]
+  good_yml "${TMP}/app.yml"
+  printf '  testflight_bump: build\n' >> "${TMP}/app.yml"
+  run bash "${VALIDATE}" "${TMP}/app.yml"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"ERROR"* ]]
 }
 
 @test "release.testflight_bump rejects values other than build|patch" {
@@ -281,12 +286,11 @@ In `realityview-fullscreencover-black-defer-mount/SKILL.md`, append to its `## R
   the fullScreenCover black-render mount bug.
 ```
 
-In the copied `realitykit-windowed-view-ios-gotchas/SKILL.md`, append at end of file:
+The copied `realitykit-windowed-view-ios-gotchas/SKILL.md` ALREADY has a
+`## Related skills` section (~line 292) — append this bullet to that existing
+list (do NOT add a second heading):
 
 ```markdown
-
-## Related skills
-
 - `realityview-fullscreencover-black-defer-mount` — the focused deep-dive on
   the fullScreenCover black-feed bug this skill summarizes; read it for the
   defer-the-mount fix mechanics and its evidence trail.
@@ -356,7 +360,7 @@ genericized; platform-agnostic so it lives in core-workflow."
 ### Task 5: Catalog + counts sweep (one scripted pass)
 
 **Files:**
-- Modify: `docs/architecture.md` (ios-dev/core-workflow skill counts), `docs/architecture.html` (same, if counts present), `site/index.html` (plugin tag counts), `docs/skills-catalog.md` (new rows), `docs/catalog.html` (new entries)
+- Modify: `docs/architecture.md`, `docs/architecture.html`, `site/index.html`, `docs/skills-catalog.md`, `docs/catalog.html`, `docs/features/ios-dev.html`, `docs/features/core-workflow.html`, all other `docs/features/*.html` + `docs/machine-setup.html` (shared footer totals)
 
 **Interfaces:**
 - Consumes: skill dir names from Tasks 3–4.
@@ -364,29 +368,34 @@ genericized; platform-agnostic so it lives in core-workflow."
 - [ ] **Step 1: Compute true counts** (don't trust prior claims):
 
 ```bash
-ls -d plugins/ios-dev/skills/*/ | grep -v '/_lib/' | wc -l          # ios-dev skill count
-ls -d plugins/core-workflow/skills/*/ | wc -l                        # core-workflow skill count
-grep -rn -E '[0-9]+ skills' docs/architecture.md docs/architecture.html site/index.html docs/skills-catalog.md docs/catalog.html plugins/ios-dev/README.md plugins/core-workflow/README.md 2>/dev/null
+ls -d plugins/ios-dev/skills/*/ | grep -v '/_lib/' | wc -l           # ios-dev per-plugin count (expect 58)
+ls -d plugins/core-workflow/skills/*/ | wc -l                         # core-workflow count (expect 12)
+ls -d plugins/*/skills/*/ | grep -v '/_lib/' | wc -l                  # TOTAL across plugins (expect 79)
+grep -rn -E '[0-9]+ skills' docs site                                 # every count claim, recursively
 ```
 
-- [ ] **Step 2: Update every count found in Step 1's grep** to the computed values via one `sed`/scripted pass (e.g. old ios-dev claim "51 skills" → new computed count; adjust core-workflow claims likewise). No hand-editing files one by one; write a tiny loop covering all hits.
+- [ ] **Step 2: Update EVERY count hit from Step 1's grep** via one scripted `sed` pass — this includes per-plugin claims (ios-dev `51 skills` → 58, core-workflow if shown → 12) AND the repo-wide totals (`71 skills` → 79) which appear in `docs/architecture.html:255`, `site/index.html:19` (the og:image:alt meta — yes, update it too), `site/index.html:166,331,387`, `docs/catalog.html:395`, and the shared footer (`5 plugins · 71 skills · …`) in all five `docs/features/*.html` + `docs/machine-setup.html`. No hand-editing files one by one.
+
+- [ ] **Step 2b: Features-page skill enumerations** (these pages are kept in sync on every skill-adoption PR — see PR #18/#20 history):
+  - `docs/features/ios-dev.html`: kicker at line ~39 `plugin · 51 skills` → 58 (covered by Step 2's sed), and append 7 `<div class="row">` entries to the per-skill Skills block (~line 185) — clone the exact markup of an existing mined-skill row (e.g. `swiftdata-cloudkit-model-rules`), one row per new skill, name + one-line description.
+  - `docs/features/core-workflow.html`: append 1 row for `dev-tracker-portable` to its skill enumeration.
 
 - [ ] **Step 3: Add catalog rows.** In `docs/skills-catalog.md`: locate the ios-dev learned-lesson skill table (rows like `` `swiftdata-cloudkit-model-rules` ``) and append rows for the 7 new skills; locate the core-workflow table and append `dev-tracker-portable`. Row text — first sentence of each skill's description, e.g.:
 
 ```markdown
-| `swiftdata-cloudkit-production-schema` | skill | CloudKit schema-lifecycle sharp edges (Production deploys, CD_-prefixed mystery fields, rename safety) — delta on `swiftdata-cloudkit-model-rules`. |
-| `background-assets-apple-hosted-packs` | skill | Apple-hosted Background Assets delivery/extraction failures (ProcessingPipelineError, TestFlight-only faults) — delta on `background-assets-manifest-drift-blind-redownload`. |
-| `ios-photo-sidecar-store` | skill | Photo/attachment sidecar-store pattern for DB-backed iOS apps: bytes on disk, thumbnails, trash, iCloud sync, cover photos. |
-| `siri-app-intents-ios26-reliability` | skill | Siri App Shortcuts reliability on iOS 26: phrase quota, parameterized-phrase matching, donated vocabulary. |
-| `sheet-in-sheet-present-bridge-generalization` | skill | The sheet-in-sheet UIKit-present bug as a CLASS (camera, QuickLook, mail, share, doc picker) — generalization of `swiftui-sheet-in-sheet-uikit-present-bridge`. |
-| `fastlane-archive-multi-target-signing` | skill | Fastlane archive/export must map a provisioning profile for EVERY signed embedded target, not just the main app. |
-| `realitykit-windowed-view-ios-gotchas` | skill | Windowed RealityKit on iOS (not visionOS): black-feed bug, camera framing per presentation context, rebuild-on-drift, tiered fidelity. |
+| `swiftdata-cloudkit-production-schema` | skill (mined) | CloudKit schema-lifecycle sharp edges (Production deploys, CD_-prefixed mystery fields, rename safety) — delta on `swiftdata-cloudkit-model-rules`. |
+| `background-assets-apple-hosted-packs` | skill (mined) | Apple-hosted Background Assets delivery/extraction failures (ProcessingPipelineError, TestFlight-only faults) — delta on `background-assets-manifest-drift-blind-redownload`. |
+| `ios-photo-sidecar-store` | skill (mined) | Photo/attachment sidecar-store pattern for DB-backed iOS apps: bytes on disk, thumbnails, trash, iCloud sync, cover photos. |
+| `siri-app-intents-ios26-reliability` | skill (mined) | Siri App Shortcuts reliability on iOS 26: phrase quota, parameterized-phrase matching, donated vocabulary. |
+| `sheet-in-sheet-present-bridge-generalization` | skill (mined) | The sheet-in-sheet UIKit-present bug as a CLASS (camera, QuickLook, mail, share, doc picker) — generalization of `swiftui-sheet-in-sheet-uikit-present-bridge`. |
+| `fastlane-archive-multi-target-signing` | skill (mined) | Fastlane archive/export must map a provisioning profile for EVERY signed embedded target, not just the main app. |
+| `realitykit-windowed-view-ios-gotchas` | skill (mined) | Windowed RealityKit on iOS (not visionOS): black-feed bug, camera framing per presentation context, rebuild-on-drift, tiered fidelity. |
 ```
 
 core-workflow row:
 
 ```markdown
-| `dev-tracker-portable` | skill | In-repo dev tracker starter kit (one markdown ledger + archives + capture/list/fix/learn modes), the proven Cubby system genericized. |
+| `dev-tracker-portable` | skill (mined) | In-repo dev tracker starter kit (one markdown ledger + archives + capture/list/fix/learn modes), the proven Cubby system genericized. |
 ```
 
 In `docs/catalog.html`: read the existing entry markup for `swiftdata-cloudkit-model-rules`, clone its exact structure for each of the 8 skills (name, plugin, one-line description), keeping the page's copy-button contract (no new command samples → no copy-button work expected).
@@ -398,17 +407,19 @@ In `docs/catalog.html`: read the existing entry markup for `swiftdata-cloudkit-m
 - [ ] **Step 6: Commit**
 
 ```bash
-git add docs/architecture.md docs/architecture.html site/index.html docs/skills-catalog.md docs/catalog.html
+git add docs/architecture.md docs/architecture.html site/index.html docs/skills-catalog.md docs/catalog.html docs/features docs/machine-setup.html
 git commit -m "docs: catalog + counts sweep for 8 adopted skills"
 ```
 
-(with trailers; include READMEs in the add list if Step 1 found count hits there)
+(with trailers; include any other file Step 1's grep surfaced)
+
+Note: `.claude-plugin/marketplace.json` has a marketplace-level `metadata.version: "1.0.0"` — deliberately untouched (nothing per-plugin, nothing CI-checked).
 
 ---
 
 ### Task 6: Push, PR, report
 
-- [ ] **Step 1: Final full verification.** `bats tests/bats`, `python3 -m pytest tests/pytest -q`, `git status` clean.
+- [ ] **Step 1: Final full verification (mirror CI exactly).** `bats tests/bats`, `python3 -m pytest tests/pytest -q`, `python3 -m pytest tools/second-wind/tests -q`, `git status` clean.
 
 - [ ] **Step 2: Push + PR**
 
