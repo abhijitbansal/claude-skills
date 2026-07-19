@@ -74,6 +74,7 @@ Output contract: `PASS|WARN|FAIL: <gate>[: detail]`; exit 1 iff any FAIL. Gates:
 | `xcodegen-fresh` | `xcodegen generate` succeeds | fix project.yml |
 | `signing-identity` | "Apple Distribution" identity in keychain | switch to paid team in Xcode |
 | `fonts` | `.ttf` count == `release.fonts_expected` (skip if 0) | run the app's font installer |
+| `plist-conversion` | XML copy of the generated plist staged via `plutil` (python3 `plistlib` fallback → WARN); FAIL means the three plist gates below could not run | fix the environment (plutil/python3) or the corrupt plist — never grep the binary plist raw |
 | `usage-strings` | every `release.usage_strings` key in the GENERATED plist | add to project.yml Info properties |
 | `encryption-flag` | `ITSAppUsesNonExemptEncryption` declared | add it (mining: forgot twice; wastes a review round) |
 | `capabilities` | plist `UIRequiredDeviceCapabilities` ⊆ `release.required_capabilities` | remove stray capability (mining: `lidar-depth-camera` blocked install base) |
@@ -89,8 +90,9 @@ Report every WARN to the user even when the run continues.
 ## Stage 2 — Version bump 🤖/✋
 
 Ask which bump. For appstore: `patch`/`minor`/`major`. For testflight: offer
-`release.testflight_bump` from `.claude/app.yml` as the default (`build` when the
-key is unset — some repos bump `patch` per TestFlight release instead). Then:
+`${RELEASE_TESTFLIGHT_BUMP}` as the default (exported by `load_app_config.sh`
+from `release.testflight_bump` in `.claude/app.yml`; `build` when the key is
+unset — some repos bump `patch` per TestFlight release instead). Then:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/skills/release/scripts/bump_version.sh" <kind>

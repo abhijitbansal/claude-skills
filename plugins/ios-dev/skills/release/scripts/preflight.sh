@@ -70,13 +70,33 @@ if [[ -z "${PLIST}" ]]; then
 fi
 if [[ -n "${PLIST}" && -f "${PLIST}" ]]; then
   # Xcode's generated Info.plist is binary by default — <key> tags never
-  # appear as literal text there, so grep against a plutil-converted XML
-  # copy instead of the raw (possibly binary) PLIST.
-  PLIST_XML="$(mktemp)"
-  if ! plutil -convert xml1 -o "${PLIST_XML}" "${PLIST}" 2>/dev/null; then
-    cp "${PLIST}" "${PLIST_XML}"
+  # appear as literal text there, so grep against an XML-converted copy
+  # instead of the raw (possibly binary) PLIST. plutil first, python3
+  # plistlib as the fallback (plutil-less hosts, e.g. Linux CI); if neither
+  # converts, FAIL loudly — grepping binary bytes produces false results in
+  # both directions.
+  PLIST_XML="$(mktemp)" || PLIST_XML=""
+  trap '[[ -n "${PLIST_XML:-}" ]] && rm -f "${PLIST_XML}"' EXIT
+  plist_converted=0
+  if [[ -n "${PLIST_XML}" ]]; then
+    if plutil -convert xml1 -o "${PLIST_XML}" "${PLIST}" 2>/dev/null; then
+      plist_converted=1
+    elif python3 - "${PLIST}" "${PLIST_XML}" <<'PY' 2>/dev/null
+import plistlib, sys
+with open(sys.argv[1], 'rb') as f:
+    data = plistlib.load(f)
+with open(sys.argv[2], 'wb') as f:
+    plistlib.dump(data, f, fmt=plistlib.FMT_XML)
+PY
+    then
+      plist_converted=1
+      warn plist-conversion "plutil unavailable or failed — converted with python3 plistlib"
+    fi
   fi
 
+  if [[ ${plist_converted} -eq 0 ]]; then
+    fail plist-conversion "cannot stage an XML copy of ${PLIST} (mktemp, plutil and python3 plistlib all failed) — usage-strings/encryption-flag/capabilities not checked"
+  else
   usage_ok=1
   for key in ${RELEASE_USAGE_STRINGS}; do
     if ! grep -q "<key>${key}</key>" "${PLIST_XML}"; then
@@ -93,23 +113,30 @@ if [[ -n "${PLIST}" && -f "${PLIST}" ]]; then
   fi
 
   if [[ -n "${RELEASE_REQUIRED_CAPABILITIES}" ]]; then
-    caps_in_plist="$(python3 -c "
-import plistlib
-d = plistlib.load(open('${PLIST}', 'rb'))
-print(' '.join(d.get('UIRequiredDeviceCapabilities', [])))" 2>/dev/null || true)"
-    bad=""
-    for c in ${caps_in_plist}; do
-      case " ${RELEASE_REQUIRED_CAPABILITIES} " in
-        *" ${c} "*) ;;
-        *) bad="${bad} ${c}" ;;
-      esac
-    done
-    if [[ -z "${bad}" ]]; then pass capabilities
-    else fail capabilities "unexpected UIRequiredDeviceCapabilities:${bad}"; fi
+    # Path passed as argv, never interpolated into the python source — a
+    # quote in the path must not become a SyntaxError that a swallowed
+    # stderr turns into a vacuous pass.
+    if caps_in_plist="$(python3 -c "
+import plistlib, sys
+with open(sys.argv[1], 'rb') as f:
+    d = plistlib.load(f)
+print(' '.join(d.get('UIRequiredDeviceCapabilities', [])))" "${PLIST}" 2>/dev/null)"; then
+      bad=""
+      for c in ${caps_in_plist}; do
+        case " ${RELEASE_REQUIRED_CAPABILITIES} " in
+          *" ${c} "*) ;;
+          *) bad="${bad} ${c}" ;;
+        esac
+      done
+      if [[ -z "${bad}" ]]; then pass capabilities
+      else fail capabilities "unexpected UIRequiredDeviceCapabilities:${bad}"; fi
+    else
+      fail capabilities "could not read UIRequiredDeviceCapabilities from ${PLIST} (python3 plistlib failed)"
+    fi
   else
     pass capabilities
   fi
-  rm -f "${PLIST_XML}"
+  fi
 else
   warn usage-strings "no generated plist found — build once, or set PREFLIGHT_PLIST"
 fi
@@ -122,13 +149,17 @@ if [[ -z "${ENT_FILE}" ]]; then
   ENT_FILE="$(find . -name '*.entitlements' -not -path './build/*' -not -path './.git/*' 2>/dev/null | head -1)"
 fi
 if [[ -n "${ENT_FILE}" && -f "${ENT_FILE}" ]]; then
-  nfc_fmts="$(python3 -c "
+  if ! nfc_fmts="$(python3 -c "
 import plistlib, sys
 try:
-    d = plistlib.load(open('${ENT_FILE}', 'rb'))
+    with open(sys.argv[1], 'rb') as f:
+        d = plistlib.load(f)
 except Exception:
     sys.exit(0)
-print(' '.join(d.get('com.apple.developer.nfc.readersession.formats', [])))" 2>/dev/null || true)"
+print(' '.join(d.get('com.apple.developer.nfc.readersession.formats', [])))" "${ENT_FILE}" 2>/dev/null)"; then
+    nfc_fmts=""
+    warn nfc-entitlement "could not inspect ${ENT_FILE} (python3 failed) — gate skipped"
+  fi
   if [[ " ${nfc_fmts} " == *" NDEF "* ]]; then
     fail nfc-entitlement "com.apple.developer.nfc.readersession.formats contains 'NDEF' — rejected by the iOS 26 SDK (ITMS-90778). Change it to 'TAG' and migrate NFCNDEFReaderSession -> NFCTagReaderSession (poll .iso14443, read/write via the NFCNDEFTag protocol on the detected tag)"
   else
@@ -144,19 +175,27 @@ fi
 # future-proof fix. Only checked for universal apps; iPhone-only apps pass.)
 if grep -E 'TARGETED_DEVICE_FAMILY' project.yml 2>/dev/null | grep -q '2'; then
   if [[ -n "${PLIST}" && -f "${PLIST}" ]]; then
-    ipad_missing="$(python3 -c "
-import plistlib
-d = plistlib.load(open('${PLIST}', 'rb'))
+    if ipad_missing="$(python3 -c "
+import plistlib, sys
+with open(sys.argv[1], 'rb') as f:
+    d = plistlib.load(f)
 need = {'UIInterfaceOrientationPortrait', 'UIInterfaceOrientationPortraitUpsideDown',
         'UIInterfaceOrientationLandscapeLeft', 'UIInterfaceOrientationLandscapeRight'}
 have = set(d.get('UISupportedInterfaceOrientations~ipad', []))
-print(' '.join(sorted(need - have)))" 2>/dev/null || true)"
-    if [[ -n "${ipad_missing}" ]]; then
-      fail ipad-orientation "universal app missing iPad orientations:${ipad_missing:+ }${ipad_missing} (ITMS-90474). Declare all four in UISupportedInterfaceOrientations~ipad in project.yml — UIRequiresFullScreen is deprecated on the iOS 26 SDK and no longer opts out"
+print(' '.join(sorted(need - have)))" "${PLIST}" 2>/dev/null)"; then
+      if [[ -n "${ipad_missing}" ]]; then
+        fail ipad-orientation "universal app missing iPad orientations:${ipad_missing:+ }${ipad_missing} (ITMS-90474). Declare all four in UISupportedInterfaceOrientations~ipad in project.yml — UIRequiresFullScreen is deprecated on the iOS 26 SDK and no longer opts out"
+      else
+        pass ipad-orientation
+      fi
     else
-      pass ipad-orientation
+      warn ipad-orientation "could not read UISupportedInterfaceOrientations~ipad from ${PLIST} (python3 plistlib failed) — gate skipped"
     fi
-    if python3 -c "import plistlib, sys; d = plistlib.load(open('${PLIST}', 'rb')); sys.exit(0 if d.get('UIRequiresFullScreen') else 1)" 2>/dev/null; then
+    if python3 -c "
+import plistlib, sys
+with open(sys.argv[1], 'rb') as f:
+    d = plistlib.load(f)
+sys.exit(0 if d.get('UIRequiresFullScreen') else 1)" "${PLIST}" 2>/dev/null; then
       warn ipad-orientation "UIRequiresFullScreen is set but deprecated on the iOS 26 SDK (ignored in a future release) — rely on the four declared iPad orientations instead"
     fi
   else
