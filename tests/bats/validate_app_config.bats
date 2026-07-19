@@ -125,12 +125,15 @@ YML
   [[ "$output" == *"ERROR: app.bundle_id"* ]]
 }
 
-@test "release.testflight_bump build and patch are valid" {
+@test "release.testflight_bump patch is valid" {
   good_yml "${TMP}/app.yml"
   printf '  testflight_bump: patch\n' >> "${TMP}/app.yml"
   run bash "${VALIDATE}" "${TMP}/app.yml"
   [ "$status" -eq 0 ]
   [[ "$output" != *"ERROR"* ]]
+}
+
+@test "release.testflight_bump build is valid" {
   good_yml "${TMP}/app.yml"
   printf '  testflight_bump: build\n' >> "${TMP}/app.yml"
   run bash "${VALIDATE}" "${TMP}/app.yml"
