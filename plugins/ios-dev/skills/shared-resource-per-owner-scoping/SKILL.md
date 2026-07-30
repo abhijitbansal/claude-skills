@@ -73,7 +73,7 @@ not interchangeable:
 |---|---|---|
 | Monotonic generation token | Exactly one owner is live at a time | A stale token compares unequal, so a late `stop` no-ops |
 | Per-owner registry (`Set<ObjectIdentifier>`) | Several owners can be live concurrently | Each `stop` releases only its own entry; the resource stays up while anyone holds it |
-| A reference **count** | Never | A count cannot *attribute* a stop — a stop from an earlier teardown decrements to zero and releases a resource a later owner is still using |
+| A reference **count** | Never | A count records *how many*, never *which*, so any stop satisfies any claim — a stale stop from an owner that already went away drops the count to zero and releases the gate while the outgoing session is still draining |
 
 The count row is the trap, because a count looks like a generation token and
 compiles the same. "Is anyone using it?" is not the question; "is this caller
