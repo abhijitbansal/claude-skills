@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Skills &amp; tools catalog — claude-skills</title>
 <meta name="description" content="Search and filter every skill, command, agent, hook, and CLI tool across the five claude-skills plugins.">
@@ -14,9 +15,6 @@
 <meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../site/assets/site.css">
 </head>
 <body class="accent-cyan">
@@ -35,7 +33,7 @@
 
 <header class="page-head wrap narrow">
   <div class="crumbs"><a href="../site/index.html">Home</a><span class="sep">/</span>Catalog</div>
-  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>90 assets · 5 plugins</span>
+  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>108 assets · 5 plugins</span>
   <h1>Skills &amp; tools <span class="grad">catalog</span></h1>
   <p class="lead">Every skill, command, agent, hook, and CLI tool in the repo — searchable and filterable.
      Each links back to the plugin it ships in.</p>
@@ -46,7 +44,7 @@
     <input id="search" type="search" placeholder="Search skills, commands, hooks…" aria-label="Search the catalog" autocomplete="off">
     <div class="filters"><button class="fchip active" data-filter="all">All</button><button class="fchip" data-filter="Plugin">Plugins</button><button class="fchip" data-filter="Skill">Skills</button><button class="fchip" data-filter="Command">Commands</button><button class="fchip" data-filter="CLI">CLI</button><button class="fchip" data-filter="Agent">Agents</button><button class="fchip" data-filter="Hook">Hooks</button></div>
   </div>
-  <p class="cat-count">90 results</p>
+  <p class="cat-count">113 results</p>
   <div class="cat-group">
       <h3>Plugins <span class="badge">5</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Plugin" data-search="core-workflow general dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook core-workflow plugin">
