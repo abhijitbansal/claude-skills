@@ -1,6 +1,6 @@
 ---
 name: async-enrichment-silent-loss-outcome-states
-description: A background AI/ML enrichment step (VLM naming, on-device classification, autocomplete) runs and produces a real result, but the user sees nothing — no spinner ever appeared, no suggestion shows up, and there is no way to tell "the model hasn't finished yet" apart from "it ran and a higher-confidence rule silently outvoted it," because a correct confidence-merge (e.g. OCR 0.69 beats VLM 0.65) just drops the losing result instead of surfacing it, making a working pipeline look completely dead. Use when adding any async, sometimes-lossy AI/ML enrichment layered on top of a deterministic primary path (autocomplete, background transcription/classification, LLM-assisted field-filling) — model every terminal state as a distinct visible UI state before shipping.
+description: A background AI/ML enrichment step (VLM naming, on-device classification, autocomplete) runs and produces a real result, but the user sees nothing — no spinner ever appeared, no suggestion shows up, and there is no way to tell "the model hasn't finished yet" apart from "it ran and a higher-confidence rule silently outvoted it," because a correct confidence-merge (e.g. OCR 0.69 beats VLM 0.65) just drops the losing result instead of surfacing it, making a working pipeline look completely dead. The degenerate form ships even more easily: the step returns *successfully* with an empty or whitespace-only string, which then gets cached, rendered as blank space, and logged as a success — a card headed "AI-generated" above no text at all, with nothing in the diagnostics to say why. Use when adding any async, sometimes-lossy AI/ML enrichment layered on top of a deterministic primary path (autocomplete, background transcription/classification, LLM-assisted field-filling), or when a generation step's output reaches a cache or a renderer without a non-blank check at the boundary — model every terminal state as a distinct visible UI state before shipping.
 ---
 
 # Async AI Enrichment: Every Outcome Needs a Distinct, Visible UI State
@@ -33,7 +33,7 @@ feature is disabled/broken" and "AI feature is working exactly as designed."
 The user explicitly diagnosed this as a trust problem, not a correctness
 problem: **"AI must be visible + user chooses."**
 
-## Fix
+## Fix 1 — every terminal state gets its own visible UI state
 
 Model every terminal state of the async enrichment step as a distinct,
 user-visible payload — never collapse the outcome down to a boolean or a
@@ -60,6 +60,41 @@ of a deterministic primary path — the identical trust gap appears whenever a
 technically-correct "AI lost the merge" is allowed to silently read as "AI is
 broken."
 
+## Fix 2 — a blank result is a FAILURE outcome, not an empty success
+
+The same defect has a degenerate form that is easier to ship and harder to see:
+the enrichment step returns successfully with an **empty string**.
+
+Generation succeeded from the pipeline's point of view — no throw, no nil — so
+the empty value flows straight through: it gets cached (poisoning every
+subsequent request for that key), rendered as blank space, and logged as a
+success. The user sees a feature that "generates nothing", and the diagnostics
+agree that everything worked.
+
+**Validate non-blankness at the generation boundary, before the cache and before
+the render:**
+
+```swift
+let text = try await model.generate(prompt)
+guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    throw GenerationError.emptyOutput      // its own case, its own user-facing copy
+}
+cache[key] = text                          // only a validated value is cacheable
+```
+
+Three requirements, all load-bearing:
+
+1. **Its own error case with its own message.** Folding it into a generic
+   failure loses the one diagnostic that identifies it ("the model returned
+   nothing" is a different bug from "the model errored").
+2. **Validate before caching.** An empty value written to the cache converts a
+   transient failure into a permanent one for that key.
+3. **Whitespace-only counts as empty.** Models return `"\n"` and `" "` more
+   often than `""`.
+
+Test it by stubbing the model to return `""` and `"   "` and asserting a
+user-visible error state — not by asserting the happy path still works.
+
 ## Evidence
 
 Session 0018 (09:58 checkpoint), Cubby iOS: "User's first scan (LITE SALT
@@ -70,6 +105,15 @@ indistinguishable from a dead engine. User directive: AI must be visible +
 user chooses. Shipped `VLMUpgradeOutcome` payload (auto-merge OR offered
 names)... spinner state..., 'AI suggests' chips when Vision/OCR keeps the
 field, tap-to-apply."
+
+Fix 2 comes from the same app one wave later — session 0066 (2026-07-25),
+BUG-043: "an empty model reply was stored as a valid summary, and
+`SummaryMarkdown.blocks(from: "")` returns zero blocks, so the card rendered
+'Generated now / AI-generated' with no text and no error." Shipped as a
+`ContainerSummaryValidation` boundary that "rejects blank output at the
+summarizer boundary", a cache "made to refuse to store a blank entry", and a
+failure that surfaces "its **own** `LocalizedError` copy instead of one generic
+retry line" — the three requirements above, in the order they were needed.
 
 ## Related skills
 
