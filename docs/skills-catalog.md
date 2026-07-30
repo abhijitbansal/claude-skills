@@ -69,6 +69,9 @@ from real portfolio bugs. Needs `.claude/app.yml` (schema v2) in the target app 
 | `siri-app-intents-ios26-reliability` | skill (mined) | Siri App Shortcuts reliability on iOS 26: phrase quota, parameterized-phrase matching, donated vocabulary. |
 | `sheet-in-sheet-present-bridge-generalization` | skill (mined) | The sheet-in-sheet UIKit-present bug as a CLASS (camera, QuickLook, mail, share, doc picker) — generalization of `swiftui-sheet-in-sheet-uikit-present-bridge`. |
 | `fastlane-archive-multi-target-signing` | skill (mined) | Fastlane archive/export must map a provisioning profile for EVERY signed embedded target, not just the main app. |
+| `pasteboard-universal-clipboard-egress` | skill (mined) | A plain `UIPasteboard.general.string =` write relays off-device via Universal Clipboard and persists indefinitely — scope every copy `.localOnly` + expiry; leave deliberate share-sheet paths alone. |
+| `shared-resource-per-owner-scoping` | skill (mined) | A shared transcriber / capture session / model session / circuit breaker whose stop path checks a bare `Bool` lets any caller tear down anyone's session — compare owner identity, claimed before the first `await`. |
+| `swiftdata-rollback-attribute-restore` | skill (mined) | `ModelContext.rollback()` discards pending inserts but does NOT revert attribute mutations on fetched `@Model` objects — capture prior values before mutating, restore explicitly on failure. |
 | `/ios-init` | command | Scaffold or `--migrate` `.claude/app.yml` (schema v2) — detects scheme/bundle/team/extensions, interviews for the rest, validates. |
 | `/ios-scaffold` | command | Run the repo standardizer and walk DRIFTs one by one. |
 | `/release` | command | `testflight` / `appstore` (`--dry-run`) — the release skill, staged, stopping at every FAIL gate. |
