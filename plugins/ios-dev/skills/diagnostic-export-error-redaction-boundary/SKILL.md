@@ -83,3 +83,8 @@ sink sites."
 - `widget-appgroup-snapshot-bridge` — a different redaction boundary (App-Group
   snapshot DTO flags) on the same app; compare when a feature needs more than
   one kind of redaction gate.
+- `pasteboard-universal-clipboard-egress` — the other half of the same screen.
+  This skill governs *what* enters the exportable buffer; that one governs
+  *where* the buffer goes (a plain `UIPasteboard` write syncs off-device via
+  Universal Clipboard). Redacting the content and leaving the Copy button
+  unscoped still breaks the promise.
