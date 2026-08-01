@@ -37,18 +37,24 @@ jobs:
           mkdir -p _site _site/features _site/second-wind
           cp site/index.html _site/index.html
           cp site/og.png _site/og.png
+          cp site/favicon.ico _site/favicon.ico
+          cp site/apple-touch-icon.png _site/apple-touch-icon.png
           cp -r site/assets _site/assets
           cp docs/*.html _site/ 2>/dev/null || true
           cp docs/features/*.html _site/features/ 2>/dev/null || true
           cp docs/second-wind/index.html _site/second-wind/index.html 2>/dev/null || true
           # local link forms -> flat deployed forms (applied to every page):
-          #   ../docs/<path>        -> <path>          (landing into docs/)
-          #   ../site/index.html    -> index.html      (any page back to landing)
-          #   ../site/assets/<f>    -> assets/<f>       (shared css/js; leading ../ preserved in subdirs)
+          #   ../docs/<path>              -> <path>                  (landing into docs/)
+          #   ../site/index.html          -> index.html              (any page back to landing)
+          #   ../site/assets/<f>          -> assets/<f>              (shared css/js; leading ../ preserved in subdirs)
+          #   ../site/favicon.ico         -> favicon.ico             (leading ../ preserved in subdirs)
+          #   ../site/apple-touch-icon.png -> apple-touch-icon.png   (leading ../ preserved in subdirs)
           find _site -name '*.html' -print0 | xargs -0 sed -i \
             -e 's#\.\./docs/##g' \
             -e 's#\.\./site/index.html#index.html#g' \
-            -e 's#\.\./site/assets/#assets/#g'
+            -e 's#\.\./site/assets/#assets/#g' \
+            -e 's#\.\./site/favicon\.ico#favicon.ico#g' \
+            -e 's#\.\./site/apple-touch-icon\.png#apple-touch-icon.png#g'
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
