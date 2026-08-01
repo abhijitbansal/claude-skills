@@ -5,6 +5,20 @@
    Per-page accent: add class accent-{cyan|gold|violet|green|rose} to <body>.
    ========================================================================== */
 
+/* Self-hosted fonts (latin, variable) — see skill site-og-favicon-verify:
+   externally-hosted fonts break under a strict CSP and leak visitor IPs. */
+@font-face{font-family:'Inter';font-style:normal;font-weight:400;font-display:swap;src:url('fonts/inter-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'Inter';font-style:normal;font-weight:450;font-display:swap;src:url('fonts/inter-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'Inter';font-style:normal;font-weight:500;font-display:swap;src:url('fonts/inter-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'Inter';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/inter-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:400;font-display:swap;src:url('fonts/space-grotesk-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:500;font-display:swap;src:url('fonts/space-grotesk-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/space-grotesk-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/space-grotesk-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400;font-display:swap;src:url('fonts/jetbrains-mono-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:500;font-display:swap;src:url('fonts/jetbrains-mono-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/jetbrains-mono-latin-variable.woff2') format('woff2');}
+
 :root{
   --bg:#f5f7fa; --surface:#ffffff; --surface2:#eef2f7; --surface3:#e6ecf3;
   --border:rgba(13,40,66,.12); --border-bright:rgba(13,40,66,.20);

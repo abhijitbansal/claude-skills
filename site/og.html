@@ -2,9 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
 <!-- Source for og.png (1200×630 social card). Rendered to og.png; not served directly. -->
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:500;font-display:swap;src:url('assets/fonts/space-grotesk-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:600;font-display:swap;src:url('assets/fonts/space-grotesk-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:700;font-display:swap;src:url('assets/fonts/space-grotesk-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400;font-display:swap;src:url('assets/fonts/jetbrains-mono-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:500;font-display:swap;src:url('assets/fonts/jetbrains-mono-latin-variable.woff2') format('woff2');}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:700;font-display:swap;src:url('assets/fonts/jetbrains-mono-latin-variable.woff2') format('woff2');}
 *{margin:0;box-sizing:border-box}
 html,body{width:1200px;height:630px;overflow:hidden}
 body{
