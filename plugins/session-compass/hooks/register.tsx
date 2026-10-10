@@ -1,9 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
-import type { SessionRecord } from '../types'
+import type { Artifact, SessionRecord } from '../types'
+import { capture } from './capture'
 import { GIT_TIMEOUT_MS, INDEX, PREFIX, isRecord, recordKey } from './io'
 import {
-  LIMITS, applyStatus, basename, capArtifacts, newRecord, orderIndex, sortByActive,
+  LIMITS, addArtifact, applyStatus, basename, capArtifacts, newRecord, orderIndex, sortByActive,
   type StatusInput, type Where,
 } from './record'
 
@@ -33,6 +34,8 @@ const REMINDER = {
   text: 'Keep the session compass current with the compass_status tool when the goal or phase changes.',
   scope: 'session',
 } as const
+const CAPTURED = new Set(['Artifact', 'SendUserFile', 'Write', 'Bash'])
+const GIT_MOVE = /\bgit\s+(checkout|switch|worktree|commit|push)\b/
 
 export async function loadRecord($: EngineInterface, id: string): Promise<SessionRecord | undefined> {
   const raw = await $.store.get(recordKey(id))
@@ -135,12 +138,34 @@ function onlyStrings(input: Record<string, unknown>): StatusInput {
   return { goal: pick(input.goal), step: pick(input.step), next: pick(input.next) }
 }
 
-async function commit($: EngineInterface, rec: SessionRecord): Promise<void> {
-  await update($, record, () => rec)
-  await saveRecord($, rec)
+// Folds new artifacts (and a fresh branch, after a git move) into the record
+// with CAS updates, then saves what was written. Callers queue it so saves never interleave.
+async function applyCapture($: EngineInterface, found: Artifact[], isGitMove: boolean): Promise<void> {
+  if ((await read($, record)) === null) return
+  let written = await update($, record, cur => (cur === null ? cur : found.reduce(addArtifact, cur)))
+  if (written === null) return
+  if (isGitMove) {
+    const where = await locate($, written)
+    written = await update($, record, cur => (cur === null ? cur : { ...cur, ...where }))
+  }
+  if (written !== null) await saveRecord($, written)
+}
+
+type Chain = { chain: Promise<void> }
+
+// Record writes run one at a time so store saves never interleave; a failure is
+// logged and never breaks the chain or the tool call.
+function queue(state: Chain, job: () => Promise<void>, $: EngineInterface): Promise<void> {
+  state.chain = state.chain.then(job).catch((err: unknown) => {
+    $.ui.log(`session-compass: capture skipped: ${String(err).slice(0, 120)}`)
+  })
+  return state.chain
 }
 
 export const register: Register = on => {
+  // One promise chain per load: capture passes run one at a time.
+  const state = { chain: Promise.resolve() }
+
   on('session.start', async ($, e, next) => {
     await $.tool.register(STATUS_TOOL)
     await $.command.register({ name: 'compass', description: 'Open the session compass pane' })
@@ -151,18 +176,50 @@ export const register: Register = on => {
       return undefined
     })
     const where = await locate($, stored, e.cwd)
-    await commit($, stored ? { ...stored, ...where, lastActive: now } : newRecord(id, where, now))
+    const started = stored ? { ...stored, ...where, lastActive: now } : newRecord(id, where, now)
+    await queue(state, async () => {
+      await update($, record, () => started)
+      await saveRecord($, started)
+    }, $)
     return next(e)
   })
 
   on('tool.call', { tool: STATUS_TOOL_ID }, async ($, e) => {
-    const rec = await read($, record)
-    if (rec === null) return { deny: 'session-compass: no session record yet' }
-    const out = applyStatus(rec, onlyStrings(e as unknown as Record<string, unknown>), await $.clock.now())
-    if ('error' in out) return { deny: out.error }
-    await commit($, out)
-    return { result: { text: 'ok' } }
+    const input = onlyStrings(e as unknown as Record<string, unknown>)
+    const outcome: { deny?: string } = {}
+    await queue(state, async () => {
+      const now = await $.clock.now()
+      let error: string | undefined
+      const written = await update($, record, cur => {
+        error = undefined
+        if (cur === null) return cur
+        const out = applyStatus(cur, input, now)
+        if ('error' in out) {
+          error = out.error
+          return cur
+        }
+        return out
+      })
+      if (written === null) outcome.deny = 'session-compass: no session record yet'
+      else if (error !== undefined) outcome.deny = error
+      else await saveRecord($, written)
+    }, $)
+    return outcome.deny === undefined ? { result: { text: 'ok' } } : { deny: outcome.deny }
   })
+
+  on('tool.call', async ($, e, next) => {
+    const ran = await next(e)
+    const tool = String(e.tool)
+    if (!CAPTURED.has(tool) || ran.deny !== undefined) return ran
+    await queue(state, async () => {
+      const input = e as unknown as Record<string, unknown>
+      const found = capture({ tool, input, result: ran.result, isError: ran.isError === true, now: await $.clock.now() })
+      const command = typeof input.command === 'string' ? input.command : ''
+      const isGitMove = tool === 'Bash' && GIT_MOVE.test(command)
+      if (found.length > 0 || isGitMove) await applyCapture($, found, isGitMove)
+    }, $)
+    return ran
+  }).catch(($, e, next) => next(e))
 
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
