@@ -2,7 +2,7 @@
 
 > Visual version: [searchable catalog](catalog.html) (open in a browser)
 
-Five plugins, one CLI, one adapter script. Install only what you need:
+Six plugins, one CLI, one adapter script. Install only what you need:
 
 ```
 /plugin marketplace add abhijitbansal/claude-skills
@@ -154,6 +154,17 @@ Sharpen the ask before the work, surface the right next step after it. Zero conf
 | `block_secrets` | hook (PreToolUse, opt-in) | Blocks reads/edits of secret-looking files. Enable via `PROMPT_CRAFT_BLOCK_SECRETS=1`. |
 | `format_on_edit` | hook (PostToolUse, opt-in) | Formats edited files with the installed formatter. Enable via `PROMPT_CRAFT_FORMAT_ON_EDIT=1`. |
 | `structured-output-adaptive-thinking-token-bloat` | skill (mined) | `json_schema`-constrained Claude API calls waste ~5x tokens on adaptive thinking that doesn't improve output quality — omit the `thinking` parameter for schema-constrained calls. |
+
+## portable-artifacts (plugin)
+
+Dashboards and animated explainers from a prompt — built locally, offline, from open-source parts, by any coding agent. The model writes one small JSON spec; deterministic Node scripts validate it and build, preview or render. Needs Node.js ≥ 20 (`npm ci` once per skill); `make-motion` also needs Chromium and ffmpeg. `bin/install.mjs` ports both skills to Codex, Copilot, Gemini CLI and Claude Code.
+
+| Name | Kind | What it does |
+| --- | --- | --- |
+| `make-dashboard` | skill | Prompt + data file (CSV, Parquet, JSON, DuckDB, SQLite, Postgres, MySQL) → `dashboard.json` → one self-contained `index.html` of KPI tiles and Vega-Lite charts. Every chart shows its SQL, row count and refresh time; refresh is one command, no LLM. Invoke `/make-dashboard` (`$make-dashboard` in Codex). |
+| `make-motion` | skill | Prompt → `motion.json` scene spec → live preview with a scrubber and a deterministic 1080p MP4. A change is one field in the spec. Invoke `/make-motion` (`$make-motion` in Codex). |
+
+Visual guide: [portable-artifacts](features/portable-artifacts.html).
 
 ## adapters (multi-tool)
 

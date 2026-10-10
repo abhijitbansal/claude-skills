@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>portable-artifacts — claude-skills</title>
+<meta name="description" content="Dashboards and animated explainers from a prompt — built locally, offline, from open-source parts, by any coding agent: /make-dashboard and /make-motion.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%23b07a18'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='6.5'%20fill='%230a1420'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='3'%20fill='%23e8b94a'/%3E%3C/svg%3E">
+<link rel="icon" href="../../site/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../../site/apple-touch-icon.png">
+<meta name="theme-color" content="#b07a18">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="claude-skills">
+<meta property="og:title" content="portable-artifacts — claude-skills">
+<meta property="og:description" content="Dashboards and animated explainers from a prompt — built locally, offline, from open-source parts, by any coding agent: /make-dashboard and /make-motion.">
+<meta property="og:url" content="https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html">
+<meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
+<link rel="stylesheet" href="../../site/assets/site.css">
+</head>
+<body class="accent-gold">
+<a class="skip" href="#main">Skip to content</a>
+<nav class="site">
+  <div class="wrap">
+    <a class="brand" href="../../site/index.html"><span class="dot"></span>claude-skills</a>
+    <div class="nav-links">
+      <a href="../../site/index.html#features" aria-current="page">Features</a>
+      <a href="../catalog.html">Catalog</a>
+      <a href="../architecture.html">Architecture</a>
+      <a class="nav-cta" href="https://github.com/abhijitbansal/claude-skills">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head wrap narrow">
+  <div class="crumbs"><a href="../../site/index.html">Home</a><span class="sep">/</span><a href="../../site/index.html#features">Features</a><span class="sep">/</span>portable-artifacts</div>
+  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>plugin · 2 skills · installer</span>
+  <h1>portable-artifacts</h1>
+  <p class="lead">Dashboards and animated explainers from a prompt — built locally, offline, from open-source parts, by any coding agent.</p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="#install">Install →</a>
+    <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills/tree/main/plugins/portable-artifacts">View source ↗</a>
+  </div>
+  <div class="statband plain cols-4 reveal"><div class="stat"><div class="n" data-count="2">2</div><div class="l">skills</div></div><div class="stat"><div class="n" data-count="4">4</div><div class="l">hosts supported</div></div><div class="stat"><div class="n" data-count="0">0</div><div class="l">cloud calls</div></div><div class="stat"><div class="n" data-count="1">1</div><div class="l">JSON spec per artifact</div></div></div>
+</header>
+
+<div class="wrap narrow">
+ <div class="doc">
+  <aside class="toc" aria-label="On this page">
+    <p class="lbl">On this page</p>
+    <a href="#overview">Overview</a>
+    <a href="#why">Problem &amp; why</a>
+    <a href="#install">Install</a>
+    <a href="#requirements">Requirements</a>
+    <a href="#usability">Usability guide</a>
+    <a href="#security">Security model</a>
+    <a href="#licences">Licences</a>
+    <a href="#inventory">What's inside</a>
+  </aside>
+  <main id="main" class="doc-main">
+
+    <section id="overview" class="doc-section">
+      <h2><span class="ix">01</span> Overview</h2>
+      <p>Two agent skills that do what hosted "artifact" features do, without a cloud, an account or a particular model. <b>make-dashboard</b> turns a prompt and a data file into one self-contained <code>index.html</code> of KPI tiles and Vega-Lite charts, where every chart expands to show its SQL, row count and refresh time. <b>make-motion</b> turns a prompt into a live preview with a scrubber and a deterministic 1080p MP4. They work with any agent that can read files and run shell commands, and an installer ports them to Codex, GitHub Copilot, Gemini CLI and Claude Code.</p>
+      <p style="margin-top:12px">The design is <b>spec-first</b>: the model writes one small JSON spec, and deterministic Node scripts do everything else. Field-level errors from the validator drive the retry loop.</p>
+      <div class="arch reveal" aria-hidden="true"><div class="arch-row" style="gap:6px;flex-wrap:wrap;justify-content:center"><div class="node"><div class="nt">prompt</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">any agent</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">spec.json</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">validate</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">build · preview · render</div></div></div></div>
+    </section>
+
+    <section id="why" class="doc-section">
+      <h2><span class="ix">02</span> Problem &amp; why it's needed</h2>
+      <div class="prob reveal" style="margin:6px 0 16px">
+        <span class="pill">The friction</span>
+        <p style="color:var(--text-dim);font-size:15px;margin:12px 0 0">Hosted artifact features lock you to one vendor, need an account and the network, and regenerate whole pages of code for every small tweak — so "make the second scene slower" can change everything else too.</p>
+      </div>
+      <div class="callout"><span class="ti">Why it matters</span>Writing JSON that matches a schema is a small job that weak and local models can do. A change is one field in the spec, never regenerated code, and the same spec always produces the same page or video. After a one-time install nothing touches the network except your own data sources.</div>
+    </section>
+
+    <section id="install" class="doc-section">
+      <h2><span class="ix">03</span> Install</h2>
+      <div class="steps">
+        <div class="gitem"><h4>Claude Code — add the marketplace, then install portable-artifacts</h4><div class="code cmds"><div class="cl"><code class="ct">/plugin marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct">/plugin install portable-artifacts@claude-skills</code><button class="copy" data-copy="/plugin install portable-artifacts@claude-skills">copy</button></div></div><p style="margin-top:10px">Then ask for a dashboard or a video, or call a skill directly: <code>/make-dashboard …</code> or <code>/make-motion …</code>. On first use the agent runs the one-time <code>npm ci</code> inside the skill folder.</p></div>
+        <div class="gitem"><h4>Codex, GitHub Copilot, Gemini CLI — or Claude Code without the marketplace</h4><p>Each host reads skill folders from its own directory, and the skill itself is the slash command. The installer copies both skills to the right place and installs their dependencies.</p><div class="code cmds"><div class="cl"><code class="ct">git clone https://github.com/abhijitbansal/claude-skills</code><button class="copy" data-copy="git clone https://github.com/abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct">node claude-skills/plugins/portable-artifacts/bin/install.mjs codex  # ~/.agents/skills</code><button class="copy" data-copy="node claude-skills/plugins/portable-artifacts/bin/install.mjs codex">copy</button></div><div class="cl"><code class="ct">node claude-skills/plugins/portable-artifacts/bin/install.mjs copilot --project .  # ./.github/skills</code><button class="copy" data-copy="node claude-skills/plugins/portable-artifacts/bin/install.mjs copilot --project .">copy</button></div><div class="cl"><code class="ct">node claude-skills/plugins/portable-artifacts/bin/install.mjs gemini  # ~/.gemini/skills + commands</code><button class="copy" data-copy="node claude-skills/plugins/portable-artifacts/bin/install.mjs gemini">copy</button></div><div class="cl"><code class="ct">node claude-skills/plugins/portable-artifacts/bin/install.mjs claude  # ~/.claude/skills, no marketplace</code><button class="copy" data-copy="node claude-skills/plugins/portable-artifacts/bin/install.mjs claude">copy</button></div></div></div>
+        <div class="gitem"><h4>Hosts and where skills land</h4><div class="inv"><div class="row"><span class="nm">Claude Code</span><span class="dc"><code>install.mjs claude</code> · user <code>~/.claude/skills</code> · project <code>.claude/skills</code> · invoke <code>/make-dashboard …</code></span></div><div class="row"><span class="nm">Codex CLI</span><span class="dc"><code>install.mjs codex</code> · user <code>~/.agents/skills</code> · project <code>.agents/skills</code> · invoke <code>$make-dashboard …</code> (or <code>/skills</code>)</span></div><div class="row"><span class="nm">GitHub Copilot (CLI + VS Code)</span><span class="dc"><code>install.mjs copilot</code> · user <code>~/.copilot/skills</code> · project <code>.github/skills</code> · invoke <code>/make-dashboard …</code></span></div><div class="row"><span class="nm">Gemini CLI</span><span class="dc"><code>install.mjs gemini</code> · user <code>~/.gemini/skills</code> + <code>~/.gemini/commands/*.toml</code> · project <code>.gemini/…</code> · invoke <code>/make-dashboard …</code></span></div><div class="row"><span class="nm">Anything reading <code>.agents/skills</code></span><span class="dc"><code>install.mjs agents</code> · user <code>~/.agents/skills</code> · project <code>.agents/skills</code> · invoke host-specific</span></div></div></div>
+        <div class="gitem"><h4>Installer flags</h4><div class="inv"><div class="row"><span class="nm">--project &lt;dir&gt;</span><span class="dc">install into that project instead of your home directory</span></div><div class="row"><span class="nm">--skills make-motion</span><span class="dc">install just one skill</span></div><div class="row"><span class="nm">--link</span><span class="dc">symlink to this checkout so <code>git pull</code> updates it</span></div><div class="row"><span class="nm">--force</span><span class="dc">replace an existing install</span></div><div class="row"><span class="nm">--no-deps</span><span class="dc">skip <code>npm ci</code></span></div></div></div>
+        <div class="gitem"><h4>Any other agent</h4><p>If it can read files and run shell commands: copy a skill folder into your project, run <code>npm ci</code> inside it, and add one line to your <code>AGENTS.md</code> (or <code>.github/copilot-instructions.md</code>).</p><div class="code"><button class="copy" data-copy="To build a dashboard or an animated explainer, read and follow skills/make-dashboard/SKILL.md or skills/make-motion/SKILL.md.">copy</button><span class="code-body">To build a dashboard or an animated explainer, read and follow skills/make-dashboard/SKILL.md or skills/make-motion/SKILL.md.</span></div></div>
+      </div>
+    </section>
+
+    <section id="requirements" class="doc-section">
+      <h2><span class="ix">04</span> Requirements</h2>
+      <div class="inv"><div class="row"><span class="nm">Node.js ≥ 20</span><span class="dc">both skills</span></div><div class="row"><span class="nm"><code>npm ci</code> (once)</span><span class="dc">in each skill folder; the agent runs it on first use</span></div><div class="row"><span class="nm">Chromium (once, ≈150 MB)</span><span class="dc">make-motion only — <code>npx playwright install chromium</code>; falls back to an installed Google Chrome</span></div><div class="row"><span class="nm">ffmpeg on <code>PATH</code></span><span class="dc">make-motion only — <code>brew install ffmpeg</code> / <code>apt-get install ffmpeg</code></span></div></div>
+    </section>
+
+    <section id="usability" class="doc-section">
+      <h2><span class="ix">05</span> Usability guide</h2>
+      <div class="guide">
+        <div class="gitem reveal"><h4>/make-dashboard — a dashboard from a data file</h4><p>You say "Revenue by region and the monthly trend from <code>data/sales.csv</code>". The agent inspects the data, writes <code>dashboard.json</code> (sources, SQL queries, KPIs, Vega-Lite charts), validates it, and builds one offline <code>index.html</code>. Every chart expands to show its SQL, row count and refresh time. Rerun one command to refresh — no LLM involved. Sources: CSV, Parquet, JSON, DuckDB, SQLite, Postgres and MySQL.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:14px"><img src="img/portable-artifacts/dashboard-light.jpg" alt="A make-dashboard page in light mode: four KPI tiles and four charts, each with a Query disclosure" loading="lazy" style="width:100%;height:auto;border:1px solid var(--border);border-radius:var(--r-md);display:block"><img src="img/portable-artifacts/dashboard-dark.jpg" alt="The same dashboard in dark mode" loading="lazy" style="width:100%;height:auto;border:1px solid var(--border);border-radius:var(--r-md);display:block"></div><div class="code"><button class="copy" data-copy="/make-dashboard revenue by region and the monthly trend from data/sales.csv">copy</button><span class="code-body">/make-dashboard revenue by region and the monthly trend from data/sales.csv</span></div></div>
+        <div class="gitem reveal"><h4>/make-motion — an animated explainer</h4><p>You say "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3". The agent writes <code>motion.json</code>, validates it, opens a live preview with a scrubber, and renders a deterministic 1080p MP4. "Slow scene 2" changes one field, not the whole video.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:14px"><img src="img/portable-artifacts/motion-q3-revenue.gif" alt="A make-motion render: a +18% counter, then animated revenue bars" loading="lazy" style="width:100%;height:auto;border:1px solid var(--border);border-radius:var(--r-md);display:block"><img src="img/portable-artifacts/motion-how-it-works.gif" alt="A make-motion explainer titled how it works" loading="lazy" style="width:100%;height:auto;border:1px solid var(--border);border-radius:var(--r-md);display:block"></div><div class="code"><button class="copy" data-copy="/make-motion 8-second clip: Q3 revenue up 18%, then a bar chart of Q1-Q3">copy</button><span class="code-body">/make-motion 8-second clip: Q3 revenue up 18%, then a bar chart of Q1-Q3</span></div></div>
+        <div class="gitem reveal"><h4>Codex syntax</h4><p>Codex invokes skills with <code>$</code>: <code>$make-dashboard …</code> or <code>$make-motion …</code> (or browse with <code>/skills</code>).</p></div>
+      </div>
+    </section>
+
+    <section id="security" class="doc-section">
+      <h2><span class="ix">06</span> Security model</h2>
+      <div class="guide">
+        <div class="gitem reveal"><h4>Dashboards run model-written SQL — read-only, boxed in</h4><p>Each query must parse (DuckDB's own parser) as a single read-only statement, runs wrapped in a row limit and a timeout, against a DuckDB connection locked to the exact declared files (<code>allowed_paths</code>, external access off, configuration locked). Sources must live under the spec's folder unless you pass <code>--allow-outside</code>. Database sources attach <code>READ_ONLY</code>; credentials come only from environment variables and never appear in the spec, errors or the page.</p></div>
+        <div class="gitem reveal"><h4>Built pages embed the query results</h4><p>Publishing <code>index.html</code> publishes the data.</p></div>
+        <div class="gitem reveal"><h4>No network from specs</h4><p>Chart <code>url</code>/<code>data</code>/<code>usermeta</code> keys are rejected at any depth; motion colours can't be <code>url()</code>; pages run under a CSP without <code>unsafe-eval</code>; the renderer aborts any non-local request; local servers bind <code>127.0.0.1</code> and check the <code>Host</code> header.</p></div>
+      </div>
+    </section>
+
+    <section id="licences" class="doc-section">
+      <h2><span class="ix">07</span> Licences</h2>
+      <p style="margin-bottom:12px">Everything this plugin depends on is open source.</p>
+      <div class="inv"><div class="row"><span class="nm">DuckDB (<code>@duckdb/node-api</code>)</span><span class="dc">MIT</span></div><div class="row"><span class="nm">Vega, Vega-Lite, vega-embed, vega-interpreter</span><span class="dc">BSD-3-Clause</span></div><div class="row"><span class="nm">anime.js v4</span><span class="dc">MIT</span></div><div class="row"><span class="nm">Playwright</span><span class="dc">Apache-2.0</span></div><div class="row"><span class="nm">Ajv</span><span class="dc">MIT</span></div><div class="row"><span class="nm">Inter, JetBrains Mono (Fontsource)</span><span class="dc">OFL-1.1</span></div><div class="row"><span class="nm">ffmpeg (system binary, not vendored)</span><span class="dc">LGPL/GPL</span></div></div>
+      <p style="margin-top:12px">Not used, by design: Remotion and GSAP (free to use, but not under OSI licences).</p>
+    </section>
+
+    <section id="inventory" class="doc-section">
+      <h2><span class="ix">08</span> What's inside</h2>
+      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Skills</h4><div class="inv"><div class="row"><span class="nm">/make-dashboard</span><span class="dc">Prompt → SQL + Vega-Lite spec → one self-contained HTML page with per-chart SQL provenance. Offline; one-command refresh.</span></div><div class="row"><span class="nm">/make-motion</span><span class="dc">Prompt → scene spec → local preview with scrubber + deterministic 1080p MP4. Targeted edits change one field.</span></div></div>
+      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Tooling</h4><div class="inv"><div class="row"><span class="nm">bin/install.mjs</span><span class="dc">Cross-host installer for Claude Code, Codex, GitHub Copilot and Gemini CLI.</span></div><div class="row"><span class="nm">eval/</span><span class="dc">Cross-host eval: 10 fixed prompts per skill through claude, codex, codex --oss, gemini and copilot.</span></div></div>
+    </section>
+
+    <section class="doc-section" style="border-bottom:none">
+      <h2 style="font-size:22px">Explore the other plugins</h2>
+      <div class="feat-grid"><a class="feat gr reveal" href="second-wind.html">
+          <div class="head"><h3>Second Wind</h3><p class="desc">Run Claude overnight; auto-resume after 5-hour limit resets</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat ro reveal" href="prompt-craft.html">
+          <div class="head"><h3>prompt-craft</h3><p class="desc">Sharpen rough prompts into specs, suggest follow-up commands</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat cy reveal" href="ios-dev.html">
+          <div class="head"><h3>ios-dev</h3><p class="desc">Build iOS apps, screenshot remotely, release to App Store</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat vi reveal" href="core-workflow.html">
+          <div class="head"><h3>core-workflow</h3><p class="desc">Opinionated dev workflow: commit + share + team up</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat go reveal" href="linear-pm.html">
+          <div class="head"><h3>linear-pm</h3><p class="desc">Linear issues → code, branches, PRs — autonomous end-to-end</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a></div>
+      <p style="margin-top:18px"><a href="../catalog.html">Browse the full skills &amp; tools catalog →</a></p>
+    </section>
+
+  </main>
+ </div>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div><b>claude-skills</b>A Claude Code plugin marketplace<br>by Abhijit Bansal.</div>
+      <div>
+        <b>Features</b>
+        <a href="second-wind.html">Second Wind</a>
+        <a href="prompt-craft.html">prompt-craft</a>
+        <a href="portable-artifacts.html">portable-artifacts</a>
+        <a href="ios-dev.html">ios-dev</a>
+        <a href="core-workflow.html">core-workflow</a>
+        <a href="linear-pm.html">linear-pm</a>
+      </div>
+      <div>
+        <b>Explore</b>
+        <a href="../catalog.html">Skills &amp; tools catalog</a>
+        <a href="../architecture.html">Architecture</a>
+        <a href="../machine-setup.html">Machine-setup runbook</a>
+        <a href="../second-wind/index.html">Second Wind CLI guide</a>
+      </div>
+      <div>
+        <b>Project</b>
+        <a href="https://github.com/abhijitbansal/claude-skills">GitHub repository ↗</a>
+        <a href="https://github.com/abhijitbansal/claude-skills/blob/main/CONTRIBUTING.md">Contributing</a>
+        <a href="https://github.com/abhijitbansal/claude-skills/blob/main/SECURITY.md">Security policy</a>
+      </div>
+    </div>
+    <div class="foot-meta">
+      <span class="lic">MIT licensed</span>
+      <span>6 plugins · 83 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
+      <span>Tested on macOS &amp; Ubuntu</span>
+    </div>
+  </div>
+</footer>
+<script src="../../site/assets/site.js"></script>
+</body>
+</html>

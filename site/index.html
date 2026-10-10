@@ -19,7 +19,7 @@
 <meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="claude-skills — 5 plugins, 81 skills, 17 commands. One repo, every agent.">
+<meta property="og:image:alt" content="claude-skills — 6 plugins, 83 skills, 17 commands. One repo, every agent.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="claude-skills — one repo, every agent">
 <meta name="twitter:description" content="Second Wind, prompt-craft, an iOS loop, Linear PM, commit helpers. Long runs that survive the 5-hour limit. Claude Code, Codex, Copilot, AGENTS.md.">
@@ -51,7 +51,7 @@
     <h1>One repo. <span class="grad">Every agent.</span></h1>
     <p class="lead"><b>claude-skills</b> packages real-world agent workflows into installable plugins —
       <b>Second Wind</b> keeps long runs alive across the 5-hour limit, <b>prompt-craft</b> turns rough asks
-      into deterministic specs, and an <b>iOS loop</b> builds, previews, and ships apps from chat. Plus Linear
+      into deterministic specs, <b>portable-artifacts</b> builds offline dashboards and videos, and an <b>iOS loop</b> builds, previews, and ships apps from chat. Plus Linear
       project management and commit helpers. Install one in Claude Code, or port the skills into Codex,
       Copilot CLI, and any AGENTS.md agent.</p>
     <div class="cta-row">
@@ -60,8 +60,8 @@
     </div>
 
     <div class="statband reveal" aria-label="Repository at a glance">
-      <div class="stat"><div class="n" data-count="5">5</div><div class="l">Plugins</div></div>
-      <div class="stat"><div class="n" data-count="81">81</div><div class="l">Skills</div></div>
+      <div class="stat"><div class="n" data-count="6">6</div><div class="l">Plugins</div></div>
+      <div class="stat"><div class="n" data-count="83">83</div><div class="l">Skills</div></div>
       <div class="stat"><div class="n" data-count="17">17</div><div class="l">Commands</div></div>
       <div class="stat"><div class="n" data-count="2">2</div><div class="l">Agents</div></div>
       <div class="stat"><div class="n" data-count="7">7</div><div class="l">Hooks</div></div>
@@ -73,7 +73,7 @@
   <!-- FEATURES: quick show, links to detail -->
   <section id="features">
     <div class="eyebrow violet">The features</div>
-    <h2 class="title">Five plugins. Each its own deep-dive.</h2>
+    <h2 class="title">Six plugins. Each its own deep-dive.</h2>
     <p class="section-lead">A quick look at every plugin — open any card for the full guide: what it solves,
       how to install, a complete usability walkthrough, and how it works under the hood.</p>
 
@@ -107,6 +107,22 @@
             <li>Lenses: <code>debug</code> · <code>refactor</code> · <code>review</code></li>
             <li>A command advisor ranks the top next command (relevance + history + git state)</li>
             <li>Stop hook routes git-aware follow-ups through the advisor — user-only</li>
+          </ul>
+        </div>
+        <div class="more"><span>Open the guide</span><span class="ar">→</span></div>
+      </a>
+
+      <a class="feat go reveal" href="../docs/features/portable-artifacts.html">
+        <div class="head">
+          <h3>portable-artifacts <span class="tag">2 skills</span></h3>
+          <p class="desc">Dashboards and animated explainers from a prompt — built locally, offline, by any coding agent.</p>
+        </div>
+        <div class="body">
+          <div class="assetline"><span class="chip"><b>2</b> skills</span><span class="chip"><b>4</b> hosts</span></div>
+          <ul>
+            <li><code>/make-dashboard</code>: data file → one HTML page, every chart shows its SQL</li>
+            <li><code>/make-motion</code>: prompt → live preview + deterministic 1080p MP4</li>
+            <li>Spec-first: the model writes JSON, scripts do the rest — Codex, Copilot, Gemini, Claude</li>
           </ul>
         </div>
         <div class="more"><span>Open the guide</span><span class="ar">→</span></div>
@@ -163,7 +179,7 @@
       <a class="feat cy reveal" href="../docs/catalog.html" style="--accent-c:var(--cyan);justify-content:center">
         <div class="head" style="border-bottom:none">
           <h3>Browse everything <span class="tag">catalog</span></h3>
-          <p class="desc">Search and filter all 81 skills, 17 commands, agents, hooks, and the CLI in one place.</p>
+          <p class="desc">Search and filter all 83 skills, 17 commands, agents, hooks, and the CLI in one place.</p>
         </div>
         <div class="more"><span>Open the catalog</span><span class="ar">→</span></div>
       </a>
@@ -174,7 +190,7 @@
   <!-- PROBLEMS -->
   <section id="problems">
     <div class="eyebrow rose">What it solves</div>
-    <h2 class="title">Five real frictions, removed</h2>
+    <h2 class="title">Six real frictions, removed</h2>
     <p class="section-lead">Each plugin started as a daily annoyance worth automating away — not a demo.</p>
     <div class="grid cols-3">
       <div class="prob reveal">
@@ -188,6 +204,12 @@
         <div class="p">A rough one-line ask sends the agent wandering — no acceptance criteria, no plan.</div>
         <div class="arrow">↓ becomes</div>
         <div class="s"><b>prompt-craft</b>: <code>/improve-prompt</code> turns the ask into a deterministic spec, <code>/plan</code> decomposes it, and debug/refactor/review lenses keep execution honest.</div>
+      </div>
+      <div class="prob reveal">
+        <span class="pill">Friction</span>
+        <div class="p">Hosted dashboard and video features lock you to one vendor, one model, and the cloud.</div>
+        <div class="arrow">↓ becomes</div>
+        <div class="s"><b>portable-artifacts</b>: <code>/make-dashboard</code> and <code>/make-motion</code> turn a prompt into an offline HTML dashboard or MP4 explainer, on any agent that can run shell commands.</div>
       </div>
       <div class="prob reveal">
         <span class="pill">Friction</span>
@@ -220,7 +242,7 @@
   <section id="architecture">
     <div class="eyebrow">How it fits together</div>
     <h2 class="title">A marketplace, a CLI, and adapters</h2>
-    <p class="section-lead">One <code>marketplace.json</code> feeds five plugins. Second Wind ships as a standalone CLI. Adapters port the skills everywhere else.</p>
+    <p class="section-lead">One <code>marketplace.json</code> feeds six plugins. Second Wind ships as a standalone CLI. Adapters port the skills everywhere else.</p>
     <div class="arch reveal">
       <div class="arch-row">
         <div class="node mk"><div class="nt">marketplace.json</div><div class="ns">.claude-plugin/</div></div>
@@ -234,6 +256,7 @@
         <a class="pnode g" href="../docs/features/linear-pm.html"><div class="pn">linear-pm</div><div class="pc">1 sk · 6 cmd</div></a>
         <a class="pnode e" href="../docs/features/second-wind.html"><div class="pn">second-wind</div><div class="pc">skill + CLI</div></a>
         <a class="pnode r" href="../docs/features/prompt-craft.html"><div class="pn">prompt-craft</div><div class="pc">7 sk · 6 hook</div></a>
+        <a class="pnode g" href="../docs/features/portable-artifacts.html"><div class="pn">portable-artifacts</div><div class="pc">2 sk · installer</div></a>
       </div>
       <div class="arch-foot">
         <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
@@ -264,7 +287,7 @@
         <div class="num">01 / CLAUDE CODE</div>
         <h3>Add the marketplace</h3>
         <p>From inside Claude Code, register this repo and install any plugin.</p>
-        <div class="code cmds"><div class="cl"><span class="note"><span class="c"># in the Claude Code prompt</span></span></div><div class="cl"><code class="ct"><span class="k">/plugin</span> marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install prompt-craft@claude-skills</code><button class="copy" data-copy="/plugin install prompt-craft@claude-skills">copy</button></div></div>
+        <div class="code cmds"><div class="cl"><span class="note"><span class="c"># in the Claude Code prompt</span></span></div><div class="cl"><code class="ct"><span class="k">/plugin</span> marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install prompt-craft@claude-skills</code><button class="copy" data-copy="/plugin install prompt-craft@claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install portable-artifacts@claude-skills</code><button class="copy" data-copy="/plugin install portable-artifacts@claude-skills">copy</button></div></div>
       </div>
 
       <div class="istep reveal">
@@ -328,7 +351,7 @@
       <div class="istep reveal">
         <div class="num">CATALOG</div>
         <h3>Every skill &amp; tool</h3>
-        <p>One searchable, filterable index of all 81 skills, 17 commands, both agents, every hook, and the CLI — grouped by type.</p>
+        <p>One searchable, filterable index of all 83 skills, 17 commands, both agents, every hook, and the CLI — grouped by type.</p>
         <a class="btn btn-ghost" href="../docs/catalog.html">Open the catalog →</a>
       </div>
 
@@ -364,6 +387,7 @@
         <b>Features</b>
         <a href="../docs/features/second-wind.html">Second Wind</a>
         <a href="../docs/features/prompt-craft.html">prompt-craft</a>
+        <a href="../docs/features/portable-artifacts.html">portable-artifacts</a>
         <a href="../docs/features/ios-dev.html">ios-dev</a>
         <a href="../docs/features/linear-pm.html">linear-pm</a>
         <a href="../docs/features/core-workflow.html">core-workflow</a>
@@ -384,7 +408,7 @@
     </div>
     <div class="foot-meta">
       <span class="lic">MIT licensed</span>
-      <span>5 plugins · 81 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
+      <span>6 plugins · 83 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
       <span>Tested on macOS &amp; Ubuntu · 184 bats cases + pytest</span>
     </div>
   </div>
