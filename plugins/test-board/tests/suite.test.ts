@@ -18,6 +18,21 @@ describe('splitCommand', () => {
   test('unwraps cartoon --tag … --', () => {
     expect(splitCommand('cartoon --tag ios -- swift test').normalized).toBe('swift test')
   })
+  test('unwraps cartoon with leading flags', () => {
+    expect(splitCommand("cartoon --merge-streams -c 'pytest -q'").normalized)
+      .toBe(splitCommand('pytest -q').normalized)
+  })
+  test('keeps a cd inside a wrapped command', () => {
+    expect(splitCommand("cartoon -c 'cd app && pytest'")).toEqual({ cdDir: 'app', normalized: 'pytest' })
+  })
+  test('composes an outer and an inner cd', () => {
+    expect(splitCommand("cd a && cartoon -c 'cd b && pytest'")).toEqual({ cdDir: 'a/b', normalized: 'pytest' })
+    expect(splitCommand("cd a && cartoon -c 'cd /b && pytest'").cdDir).toBe('/b')
+  })
+  test('leaves cartoon utility commands untouched', () => {
+    for (const c of ['cartoon logs grep x', 'cartoon stats', 'cartoon adapters', 'cartoon doctor'])
+      expect(splitCommand(c).normalized).toBe(c)
+  })
   test('piped and bare runs share one normalized command', () => {
     const piped = splitCommand('xcodebuild test -scheme Cubby 2>&1 | tail -30').normalized
     expect(piped).toBe(splitCommand('xcodebuild   test -scheme Cubby').normalized)
