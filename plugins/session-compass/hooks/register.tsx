@@ -346,7 +346,9 @@ export const register: Register = on => {
       else await saveRecord($, state, written)
     }, $).then(() => true, () => false)
     if (!done) return { deny: 'session-compass: status not saved, try again' }
-    return outcome.deny === undefined ? { result: { text: 'ok' } } : { deny: outcome.deny }
+    // A registered tool's result is read like an MCP tool's: a string or content
+    // blocks. An object here fails the host's shape check and the status is lost.
+    return outcome.deny === undefined ? { result: 'ok' } : { deny: outcome.deny }
   }).catch(($, e, next) => (next.called ? next(e) : { deny: 'session compass is busy; try again' }))
 
   on('tool.call', async ($, e, next) => {
