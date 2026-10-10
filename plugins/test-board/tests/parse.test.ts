@@ -1,0 +1,70 @@
+import { describe, expect, test } from 'claude-code/testing'
+
+import { isTestCommand, parseTestOutput } from '../hooks/parse'
+import {
+  BUN_RAW, CARTOON_PYTEST, JEST_RAW, LS_OUTPUT, PYTEST_RAW, PYTEST_REAL,
+  SWIFT_TESTING_RAW, VITEST_RAW, XCODEBUILD_RAW,
+} from './fixtures/output'
+
+const run = (command: string, text: string, exitCode = 1) => parseTestOutput({ command, text, exitCode })
+
+describe('readers', () => {
+  test('cartoon summary, any command', () => {
+    expect(run('make check', CARTOON_PYTEST)).toEqual({
+      total: 13, passed: 10, failed: 2, skipped: 1, durationS: 3.21, exitCode: 1, parsed: true,
+      failures: [
+        { id: 'tests/test_a.py::test_x', loc: 'tests/test_a.py:12' },
+        { id: 'tests/test_b.py::test_y', loc: 'tests/test_b.py:40' },
+      ],
+    })
+  })
+  test('xcodebuild uses the last Executed line and maps failure locations', () => {
+    expect(run('xcodebuild test -scheme Cubby', XCODEBUILD_RAW)).toEqual({
+      total: 415, passed: 410, failed: 3, skipped: 2, durationS: 71.9, exitCode: 1, parsed: true,
+      failures: [{
+        id: 'CubbyTests.ScanTests.testBarcode',
+        loc: '/Users/x/Cubby/CubbyTests/ScanTests.swift:42',
+      }],
+    })
+  })
+  test('swift-testing run line', () => {
+    expect(run('swift test', SWIFT_TESTING_RAW)).toMatchObject({
+      total: 12, failed: 1, passed: 11, skipped: 0, durationS: 0.5, failures: [{ id: 'parsesDate()' }],
+    })
+  })
+  test('pytest final line', () => {
+    expect(run('pytest -q', PYTEST_RAW)).toMatchObject({
+      total: 13, passed: 10, failed: 1, skipped: 2, durationS: 3.5,
+      failures: [{ id: 'tests/test_a.py::test_x' }],
+    })
+  })
+  test('real pytest -q output (no = banner)', () => {
+    expect(run('pytest .scratch/session-mods-probe/pyfail -q', PYTEST_REAL)).toMatchObject({
+      total: 44, passed: 40, failed: 3, skipped: 1, durationS: 0.02, parsed: true,
+    })
+  })
+  test('jest', () => expect(run('npx jest', JEST_RAW)).toMatchObject({ total: 13, passed: 10, failed: 1, skipped: 2 }))
+  test('vitest', () => expect(run('vitest run', VITEST_RAW)).toMatchObject({ total: 10, passed: 9, failed: 1, skipped: 0 }))
+  test('bun', () => expect(run('bun test', BUN_RAW)).toMatchObject({
+    total: 12, passed: 9, failed: 1, skipped: 2, failures: [{ id: 'math > adds' }],
+  }))
+})
+
+describe('detection', () => {
+  test('test command with unreadable output is parsed: false', () => {
+    expect(run('bun test', 'segfault', 139)).toEqual({
+      total: 0, passed: 0, failed: 0, skipped: 0, failures: [], exitCode: 139, parsed: false,
+    })
+  })
+  test('non-test command is ignored', () => expect(run('ls', LS_OUTPUT, 0)).toBeNull())
+  test('non-test command printing a test summary is ignored', () => {
+    expect(run('cat pytest.log', PYTEST_RAW, 0)).toBeNull()
+  })
+  test('test-command pattern', () => {
+    for (const cmd of ['xcodebuild -scheme A test', 'swift test', 'python -m pytest', 'npm run test',
+      'cargo test', 'go test ./...', 'fastlane scan', 'bun test', 'npx vitest']) {
+      expect(isTestCommand(cmd)).toBe(true)
+    }
+    expect(isTestCommand('xcodebuild build')).toBe(false)
+  })
+})
