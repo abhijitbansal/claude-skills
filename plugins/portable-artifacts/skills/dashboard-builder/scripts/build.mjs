@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec, MAX_ROWS_DEFAULT } from './lib/spec.mjs';
 import { runQueries, checkFields, QueryError } from './lib/data.mjs';
 import { renderPage } from './lib/html.mjs';
-import { checkSource } from './lib/sources.mjs';
+import { checkSource, FILE_TYPES } from './lib/sources.mjs';
 import { UsageError, parseCli, parseTimeout, exitUsage } from './lib/cli.mjs';
 import { printResult } from './lib/errors.mjs';
 
@@ -82,7 +82,10 @@ try {
   const outDir = path.resolve(values.out ?? path.join(dir, 'dist'));
   const target = writePage(outDir, renderPage(spec, results, { vendor }));
 
-  const sources = Object.entries(spec.sources).map(([name, src]) => [name, checkSource(src, dir, { allowOutside }).abs]);
+  const sources = Object.entries(spec.sources).map(([name, src]) => [
+    name,
+    FILE_TYPES.includes(src.type) ? checkSource(src, dir, { allowOutside }).abs : `${src.type} (env ${src.env})`,
+  ]);
   const serveHint = `node ${JSON.stringify(path.join(HERE, 'serve.mjs'))} ${JSON.stringify(outDir)} --open`;
   if (jsonMode) {
     const queries = Object.fromEntries(Object.entries(results).map(([n, r]) => [n, { rowCount: r.rowCount, truncated: r.truncated }]));

@@ -48,7 +48,7 @@ test('bad source type reports the enum', async () => {
   const r = await check(s);
   assert.equal(r.ok, false);
   assert.equal(r.errors[0].path, 'sources.sales.type');
-  assert.match(r.errors[0].message, /must be one of "csv", "parquet", "json", "duckdb"; did you mean "parquet"\?/);
+  assert.match(r.errors[0].message, /must be one of "csv", "parquet", "json", "duckdb", "sqlite", "postgres", "mysql"; did you mean "parquet"\?/);
 });
 
 test('chart query typo suggests the real query', async () => {

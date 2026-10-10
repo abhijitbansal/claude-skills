@@ -1,11 +1,14 @@
 // DuckDB helpers: in-memory instances (plain and locked down), a parser-backed
 // SELECT-only guard, the LIMIT wrapper, and the timed runner.
 import { DuckDBInstance } from '@duckdb/node-api';
-import { checkSource } from './sources.mjs';
+import { fileURLToPath } from 'node:url';
+import {
+  checkSource, extensionsFor, sourceStatement, envUrl, FILE_TYPES, sqlLiteral, quoteId,
+} from './sources.mjs';
 
+export { sqlLiteral, quoteId };
 export const DEFAULT_TIMEOUT_MS = 30000;
-export const sqlLiteral = (s) => `'${String(s).replaceAll("'", "''")}'`;
-export const quoteId = (s) => `"${String(s).replaceAll('"', '""')}"`;
+const SETUP_SCRIPT = fileURLToPath(new URL('../setup.mjs', import.meta.url));
 
 export async function openDb() {
   const instance = await DuckDBInstance.create(':memory:');
@@ -19,37 +22,82 @@ export async function openDb() {
   };
 }
 
-const READERS = { csv: 'read_csv_auto', parquet: 'read_parquet', json: 'read_json_auto' };
+// Replaces secrets (the env connection strings), URL credentials and
+// password= pairs, so DuckDB error text can be printed safely. `secrets` is read
+// at call time, so it may grow after the scrubber is made.
+export function makeScrubber(secrets = []) {
+  return (text) => {
+    let out = String(text);
+    for (const secret of secrets) if (secret) out = out.split(secret).join('<redacted>');
+    return out
+      .replace(/(\/\/[^/\s:@]*:)[^@\s]*@/g, '$1<redacted>@')
+      .replace(/\b(password|passwd|pwd)\s*=\s*[^\s;'"]+/gi, '$1=<redacted>');
+  };
+}
 
-// Views / attachments first, then the lockdown (attaching needs file access).
-// allowed_paths pins reads to exactly the declared files; the config is then
-// locked so no query can undo it. Throws an error carrying `.errors`.
+// Where extensions are cached; the env var lets an offline machine point at a
+// pre-filled directory.
+export async function useExtensionDirectory(conn) {
+  const dir = process.env.DUCKDB_EXTENSION_DIRECTORY;
+  if (dir) await conn.run(`SET extension_directory=${sqlLiteral(dir)}`);
+}
+
+// Sources first (attaching needs file/network access), then the lockdown:
+// allowed_paths pins file reads to exactly the declared files and the config
+// is locked so no query can undo it. Extensions are only ever LOADed from the
+// cache, never installed or autoloaded, so a build makes no downloads.
+// Throws an error carrying `.errors`; the db it returns has a `scrub` function.
 export async function openLockedDb(spec, dir, { allowOutside = false, folderLabel } = {}) {
   const db = await openDb();
+  const secrets = [];
+  const scrub = makeScrubber(secrets);
+  let current = null;
   try {
+    await useExtensionDirectory(db.conn);
+    await db.conn.run('SET autoinstall_known_extensions=false');
+    await db.conn.run('SET autoload_known_extensions=false');
+    const entries = Object.entries(spec.sources ?? {});
+    for (const ext of extensionsFor(spec)) {
+      current = entries.find(([, src]) => src.type === ext)[0];
+      try {
+        await db.conn.run(`LOAD ${ext}`);
+      } catch {
+        throw new Error(`the "${ext}" DuckDB extension is not installed; run: node "${SETUP_SCRIPT}"`);
+      }
+    }
     const allowed = [];
-    for (const [name, src] of Object.entries(spec.sources ?? {})) {
-      const { abs, error } = checkSource(src, dir, { allowOutside, folderLabel });
-      if (error) throw Object.assign(new Error(error), { errors: [{ path: `sources.${name}.path`, message: error }] });
-      allowed.push(abs);
-      await db.conn.run(src.type === 'duckdb'
-        ? `ATTACH ${sqlLiteral(abs)} AS ${quoteId(name)} (READ_ONLY)`
-        : `CREATE VIEW ${quoteId(name)} AS SELECT * FROM ${READERS[src.type]}(${sqlLiteral(abs)})`);
+    for (const [name, src] of entries) {
+      current = name;
+      let resolved;
+      if (FILE_TYPES.includes(src.type)) {
+        const { abs, error } = checkSource(src, dir, { allowOutside, folderLabel });
+        if (error) throw Object.assign(new Error(error), { errors: [{ path: `sources.${name}.path`, message: error }] });
+        allowed.push(abs);
+        resolved = { abs };
+      } else {
+        const { url, error } = envUrl(src);
+        if (error) throw Object.assign(new Error(error), { errors: [{ path: `sources.${name}.env`, message: error }] });
+        secrets.push(url);
+        resolved = { url };
+      }
+      await db.conn.run(sourceStatement(name, src, resolved));
     }
     await db.conn.run(`SET allowed_paths=[${allowed.map(sqlLiteral).join(', ')}]`);
     await db.conn.run('SET enable_external_access=false');
     await db.conn.run('SET lock_configuration=true');
-    return db;
+    return { ...db, scrub };
   } catch (e) {
     db.close();
-    throw e;
+    if (e.errors) throw e;
+    const message = errMessage(e, 3, scrub);
+    throw Object.assign(new Error(message), { errors: [{ path: current ? `sources.${current}` : 'sources', message }] });
   }
 }
 
 // Cause lines of a DuckDB error, without the LINE/caret context (it points
 // into our wrapped SQL, not the author's).
-export function errMessage(e, maxLines = 3) {
-  return String(e.message ?? e)
+export function errMessage(e, maxLines = 3, scrub = (t) => t) {
+  return scrub(String(e.message ?? e))
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l && !/^LINE \d+:/.test(l) && !/^\^+$/.test(l))
@@ -72,7 +120,9 @@ export async function runTimed(conn, sql, timeoutMs = DEFAULT_TIMEOUT_MS) {
 
 const NOT_SELECT = 'must be a single SELECT statement';
 // Functions that would let a query read local settings and paths.
-const FORBIDDEN_FUNCTIONS = ['duckdb_settings', 'current_setting', 'duckdb_secrets', 'duckdb_extensions', 'getenv'];
+// The sqlite/postgres/mysql bridge functions open files or connections of their
+// own, outside allowed_paths and enable_external_access, so they are never allowed.
+const FORBIDDEN_FUNCTIONS = ['duckdb_settings', 'current_setting', 'duckdb_secrets', 'duckdb_extensions', 'getenv', '(?:sqlite|postgres|mysql)_[a-z_]+'];
 const FORBIDDEN_RE = new RegExp(`"function_name":"(${FORBIDDEN_FUNCTIONS.join('|')})"`, 'i');
 
 // null when `sql` is exactly one SELECT; otherwise a message for the author.
@@ -94,7 +144,7 @@ export async function checkSelect(conn, sql) {
   }
   if (parsed.statements?.length !== 1) return NOT_SELECT;
   const bad = text.match(FORBIDDEN_RE);
-  if (bad) return `function ${bad[1].toLowerCase()}() is not allowed (it can expose local settings and paths)`;
+  if (bad) return `function ${bad[1].toLowerCase()}() is not allowed (it can expose local settings and paths or reach outside the declared sources)`;
   return null;
 }
 

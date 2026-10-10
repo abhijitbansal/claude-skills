@@ -24,7 +24,7 @@ Authoritative schema: `SCHEMA` in `scripts/lib/spec.mjs`. Unknown properties are
 | `title` | required string |
 | `description` | optional subtitle |
 | `maxRows` | integer 1–100000, default 5000; applied to every query. Longer results are cut and the card says "truncated at N" |
-| `sources.<name>` | `name` matches `^[a-z][a-z0-9_]*$` and is not `main`, `temp` or `system` (DuckDB catalogs). `type`: `csv`, `parquet`, `json`, `duckdb`. `path` is relative to the **spec file**, not the cwd, and must resolve (symlinks followed) to a regular file inside the spec's folder. Only `--allow-outside` on validate/build lifts the folder rule; it is deliberately not a spec field |
+| `sources.<name>` | `name` matches `^[a-z][a-z0-9_]*$` and is not `main`, `temp` or `system` (DuckDB catalogs). `type`: `csv`, `parquet`, `json`, `duckdb`, `sqlite` (take `path`) or `postgres`, `mysql` (take `env`, never `path`). `path` is relative to the **spec file**, not the cwd, and must resolve (symlinks followed) to a regular file inside the spec's folder. Only `--allow-outside` on validate/build lifts the folder rule; it is deliberately not a spec field |
 | `queries.<name>` | one SQL `SELECT` (CTEs and UNIONs fine). Each source name is a table/view in the query. No other statement types |
 | `kpis[]` | `id`, `title`, `query`, `field` required. Shows the first row's `field`. `format`: `number`, `currency` (USD), `percent` (value is a fraction: 0.25 → 25%), `compact` |
 | `charts[]` | `id`, `title`, `query`, `vegaLite` required. `width`: `full` (default) or `half` (two columns from 900px) |
@@ -35,7 +35,26 @@ Authoritative schema: `SCHEMA` in `scripts/lib/spec.mjs`. Unknown properties are
 
 - `csv`, `json`: `read_csv_auto` / `read_json_auto` view named after the source.
 - `parquet`: `read_parquet` view.
-- `duckdb`: the file is attached read-only under the source name; query `name.table`.
+- `duckdb`, `sqlite`: the file is attached read-only under the source name; query `name.table`
+  (`SELECT item FROM shop.items`). `sqlite` follows the same folder and regular-file rules as `path` sources.
+- `postgres`, `mysql`: `"env": "PG_URL"` names an environment variable that holds the connection string
+  (`postgres://user:pass@host:5432/db`, or `host=… user=… password=… dbname=…`; MySQL uses `host=… user=… password=… database=…`).
+  It is attached read-only under the source name; query `name.table`, or `name.schema.table` for postgres.
+  `env` must match `^[A-Z_][A-Z0-9_]*$`. Credentials never go in the spec. An unset or empty variable is an error
+  at validate and at build (`sources.db.env: environment variable PG_URL is not set`).
+  The connection string is scrubbed from every error message, and it never reaches the page, the SQL shown or EVAL_LOG.
+
+### Extensions (sqlite, postgres, mysql)
+
+These sources need a DuckDB extension. Run once, while online: `node <skill-dir>/scripts/setup.mjs [spec.json]`
+(only what the spec needs; all three without a spec). It prints the extension directory. Builds only `LOAD` from that
+cache: autoinstall and autoload are switched off, so nothing is downloaded silently. A missing extension fails with
+`run: node "<skill-dir>/scripts/setup.mjs"`. `DUCKDB_EXTENSION_DIRECTORY` points setup and builds at another cache folder.
+
+Lockdown still applies after attaching: an attached sqlite file stays queryable under `enable_external_access=false` and
+`allowed_paths` (tested). The extensions' own bridge functions (`sqlite_scan`, `postgres_query`, `mysql_scan`, …, any
+`sqlite_*`/`postgres_*`/`mysql_*` function) open files and connections outside that lockdown, so queries may not call them.
+Postgres and MySQL are attached before the lock; they were not run against a live server in the tests.
 
 ## vegaLite
 

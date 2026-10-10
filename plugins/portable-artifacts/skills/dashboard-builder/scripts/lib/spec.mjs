@@ -8,17 +8,18 @@ import { formatAjvErrors, didYouMean, pathJoin } from './errors.mjs';
 import {
   openDb, openLockedDb, checkSelect, wrapLimit, runTimed, errMessage, DEFAULT_TIMEOUT_MS,
 } from './sql.mjs';
-import { checkSource, RESERVED_SOURCE_NAMES } from './sources.mjs';
+import {
+  checkSource, envUrl, sourceShapeErrors, RESERVED_SOURCE_NAMES, FILE_TYPES, SOURCE_TYPES, URL_TYPES,
+} from './sources.mjs';
 import { UsageError } from './cli.mjs';
 
 const NAME = '^[a-z][a-z0-9_]*$';
 const ID = '^[A-Za-z][A-Za-z0-9_-]*$';
 
-export const SOURCE_TYPES = ['csv', 'parquet', 'json', 'duckdb'];
 export const FORMATS = ['number', 'currency', 'percent', 'compact'];
 export const WIDTHS = ['full', 'half'];
 export const MAX_ROWS_DEFAULT = 5000;
-export { UsageError };
+export { UsageError, SOURCE_TYPES };
 
 export const SCHEMA = {
   type: 'object',
@@ -34,10 +35,11 @@ export const SCHEMA = {
       additionalProperties: {
         type: 'object',
         additionalProperties: false,
-        required: ['type', 'path'],
+        required: ['type'],
         properties: {
           type: { enum: SOURCE_TYPES },
           path: { type: 'string', minLength: 1 },
+          env: { type: 'string', pattern: '^[A-Z_][A-Z0-9_]*$' },
         },
       },
     },
@@ -125,8 +127,16 @@ function crossRefs(spec, dir, { allowOutside }) {
       errors.push({ path: `sources.${name}`, message: `${JSON.stringify(name)} is reserved by DuckDB; choose another source name` });
       continue;
     }
-    const { error } = checkSource(src, dir, { allowOutside });
-    if (error) errors.push({ path: `sources.${name}.path`, message: error });
+    const shape = sourceShapeErrors(name, src);
+    errors.push(...shape);
+    if (shape.length) continue;
+    if (FILE_TYPES.includes(src.type)) {
+      const { error } = checkSource(src, dir, { allowOutside });
+      if (error) errors.push({ path: `sources.${name}.path`, message: error });
+    } else if (URL_TYPES.includes(src.type)) {
+      const { error } = envUrl(src);
+      if (error) errors.push({ path: `sources.${name}.env`, message: error });
+    }
   }
   return errors;
 }
@@ -222,7 +232,7 @@ async function bindErrors(spec, dir, { allowOutside, timeoutMs }) {
       try {
         await runTimed(db.conn, wrapLimit(sql, 0), timeoutMs);
       } catch (e) {
-        errors.push({ path: `queries.${name}`, message: errMessage(e) });
+        errors.push({ path: `queries.${name}`, message: errMessage(e, 3, db.scrub) });
       }
     }
   } finally {

@@ -131,7 +131,7 @@ export async function runQueries(spec, dir, { now = new Date(), allowOutside = f
         const { rows, columns, truncated } = await fetchQuery(db.conn, sql, maxRows, timeoutMs);
         results[name] = { rows, columns, rowCount: rows.length, truncated, sql, refreshedAt };
       } catch (e) {
-        errors.push({ path: `queries.${name}`, message: errMessage(e) });
+        errors.push({ path: `queries.${name}`, message: errMessage(e, 3, db.scrub) });
       }
     }
   } finally {

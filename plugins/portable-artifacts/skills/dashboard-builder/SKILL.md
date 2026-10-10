@@ -26,7 +26,7 @@ row count and refresh time. No network, no LLM at build time.
 5. Show it: run the `serve:` line that build printed (it already has the right paths).
    Or open `dist/index.html` directly: it is one file.
 6. To change anything, edit **only `dashboard.json`**, then rerun steps 3 and 4. Never edit `dist/`.
-   A refresh is just a rebuild (e.g. from cron).
+   A refresh is just a rebuild; for scheduled rebuilds see `references/refresh.md`.
 
 Data outside the spec's folder is refused. Do not work around that: move or copy the data under the
 spec folder. Only the person running the commands may add `--allow-outside` to validate/build.
@@ -50,7 +50,9 @@ Queries have a 30 s limit (`--timeout <seconds>` on build).
 }
 ```
 
-- `sources.type`: `csv | parquet | json | duckdb`. Each source is a table named after its key.
+- `sources.type`: `csv | parquet | json` (a table named after the key), `duckdb | sqlite` (attached; query `name.table`, `path`),
+  `postgres | mysql` (attached; `"env": "PG_URL"` names the variable holding the connection string, never put it in the spec).
+  sqlite/postgres/mysql need a one-time `node <skill-dir>/scripts/setup.mjs dashboard.json` (online; builds stay offline).
 - `queries`: one SELECT each, names `[a-z][a-z0-9_]*`. Alias every aggregate (`AS revenue`); chart fields are those aliases.
 - `kpis[].format`: `number | currency | percent | compact` (percent expects a fraction).
 - `charts[].width`: `full` (default) or `half`. `vegaLite`: any Vega-Lite spec **without `data`**.
