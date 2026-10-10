@@ -96,7 +96,7 @@ nav.site .wrap{display:flex;align-items:center;gap:20px;height:58px}
 .nav-cta{font-family:var(--font-mono);font-size:12.5px;border:1px solid var(--border-bright);
   border-radius:7px;padding:6px 12px;color:var(--text)!important}
 .nav-cta:hover{border-color:var(--text);text-decoration:none}
-@media(max-width:760px){nav.site .wrap{flex-wrap:wrap;height:auto;padding-top:10px;padding-bottom:10px;gap:10px 16px}.nav-cta{margin-left:auto}.nav-links{margin-left:0;flex:1 0 100%;order:3;gap:16px;font-size:13px;overflow-x:auto;white-space:nowrap;scrollbar-width:none;padding-bottom:2px}.nav-links::-webkit-scrollbar{display:none}.nav-links .nav-cta{display:none}}
+@media(max-width:760px){nav.site .wrap{flex-wrap:wrap;height:auto;padding-top:10px;padding-bottom:10px;gap:10px 16px}.nav-links{margin-left:0;flex:1 0 100%;gap:16px;font-size:13px;overflow-x:auto;white-space:nowrap;scrollbar-width:none;padding-bottom:2px}.nav-links::-webkit-scrollbar{display:none}.nav-links a{flex:none}.nav-links .nav-cta{padding:4px 10px}}
 
 /* ── buttons ────────────────────────────────────────────────────────────── */
 .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--font-body);font-weight:600;font-size:15px;
