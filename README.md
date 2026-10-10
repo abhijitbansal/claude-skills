@@ -21,7 +21,7 @@ auto-resume** orchestrator that keeps overnight runs alive (`second-wind`),
 | `portable-artifacts` | `/make-dashboard` (data file → offline HTML dashboard, per-chart SQL) and `/make-motion` (prompt → preview + MP4); cross-host installer for Codex, Copilot, Gemini |
 | `prompt-craft` | rough ask → deterministic spec (`/improve-prompt`, `/plan`), debug/refactor/review lenses, git-aware Stop hook + opt-in secret/format guardrails |
 | `test-board` | band above the prompt: passed/failed/skipped after every test run, next to the previous run of the same suite in the same worktree |
-| `session-compass` | what each session is building, where it stands and what it produced: return band, `/compass` pane, `compass_status` tool |
+| `session-compass` | what each session is building, where it stands and what it produced: compass band, `/compass` pane, `compass_status` tool |
 
 **Feature guides:** [Second Wind](docs/features/second-wind.html) ·
 [prompt-craft](docs/features/prompt-craft.html) ·

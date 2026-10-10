@@ -64,19 +64,3 @@ test('M-5: a copy the surface refuses raises a toast', async ($, on) => {
   await ui.press({ key: 'a-doc-0' })
   expect(world.toasts.join('\n')).toContain('Copy failed: no-clipboard')
 })
-
-test('M-10: a rejected state read during an idle tick is logged and the next tick still runs', async ($, on) => {
-  const { world, clock } = startWorld(on)
-  let isFailing = false
-  on('state.get', (_$, e, next) => {
-    if (isFailing) return { deny: 'state unavailable' } as never
-    return next(e)
-  })
-  await $.session.start(START)
-  isFailing = true
-  await clock.advance(60_000)
-  expect(world.logged.join('\n')).toContain('idle tick failed')
-  isFailing = false
-  await clock.advance(16 * 60_000)
-  expect(world.seen.get('band') ?? world.seen.get('session-compass:band')).toBe('return')
-})

@@ -18,33 +18,32 @@ const bottom = (on: On) =>
     return <Box />
   })
 
-// band atom writes are read back from the state.set recorder in startWorld.
-const bandOf = (seen: Map<string, unknown>) => seen.get('session-compass:band') ?? seen.get('band')
-
-test('15 idle minutes raise the band; the next prompt hides it', async ($, on) => {
-  const { clock, world } = startWorld(on)
+test('the band is up as soon as the session has a record, with no turns and no wait', async ($, on) => {
+  startWorld(on)
+  bottom(on)
   await $.session.start(START)
-  await clock.advance(14 * 60_000)
-  expect(bandOf(world.seen)).not.toBe('return')
-  await clock.advance(2 * 60_000)
-  expect(bandOf(world.seen)).toBe('return')
-  await $.prompt.submit({ text: 'back again' } as never)
-  expect(bandOf(world.seen)).toBe('hidden')
+  const ui = await $.ui.mount({ plugin: 'session-compass', surface: 'terminal', component: 'AbovePrompt', props: BAND_PROPS as never })
+  expect(await ui.find({ text: /cubby · .*feature-scan/ })).toBeDefined()
 })
 
-test('a resumed session starts with the band up', async ($, on) => {
-  const { world } = startWorld(on, { turns: 3 })
-  await $.session.start(START)
-  expect(bandOf(world.seen)).toBe('return')
-})
-
-test('no band while a turn runs, even past 15 minutes', async ($, on) => {
-  const { clock, world } = startWorld(on)
+test('the band stays up across prompts and turns', async ($, on) => {
+  const { clock } = startWorld(on)
+  bottom(on)
   await $.session.start(START)
   await $.prompt.submit({ text: 'long task' } as never)
   await $.turn.start({ turnId: 't0', text: 'long task' } as never)
   await clock.advance(20 * 60_000)
-  expect(bandOf(world.seen)).not.toBe('return')
+  const ui = await $.ui.mount({ plugin: 'session-compass', surface: 'terminal', component: 'AbovePrompt', props: BAND_PROPS as never })
+  expect(await ui.find({ text: /cubby · / })).toBeDefined()
+})
+
+test('no band while a survey is on screen', async ($, on) => {
+  startWorld(on)
+  bottom(on)
+  await $.session.start(START)
+  const props = { ...(BAND_PROPS as Record<string, unknown>), hasSurvey: true }
+  const ui = await $.ui.mount({ plugin: 'session-compass', surface: 'terminal', component: 'AbovePrompt', props: props as never })
+  expect(await ui.find({ text: /cubby · / })).toBeUndefined()
 })
 
 test('the first prompt is kept as the no-goal fallback', async ($, on) => {
@@ -74,14 +73,6 @@ test('the band stacks above another mod band on both surfaces', { plugins: [OTHE
   }
 })
 
-test('no band is drawn while hidden', async ($, on) => {
-  startWorld(on)
-  bottom(on)
-  await $.session.start(START)
-  const ui = await $.ui.mount({ plugin: 'session-compass', surface: 'terminal', component: 'AbovePrompt', props: BAND_PROPS as never })
-  expect(await ui.find({ text: /cubby · / })).toBeUndefined()
-})
-
 const MAIN_TURN = { turnId: 't1', text: 'work' } as never
 const SUB_DONE = { turnId: 't2', agentId: 'sub-1', reason: 'end_turn', durationMs: 5, isAborted: false } as never
 
@@ -93,38 +84,19 @@ test('a subagent turn.complete neither ends the main turn nor touches lastActive
   await clock.advance(16 * 60_000)
   await $.turn.complete(SUB_DONE)
   await clock.advance(60_000)
-  expect(bandOf(world.seen)).not.toBe('return')
   expect((world.data.get('session:sess-1') as { lastActive: number }).lastActive).toBeLessThan(T0 + 16 * 60_000)
 })
 
-test('a dropped prompt changes nothing and idle still raises the band', async ($, on) => {
-  const { clock, world } = startWorld(on, { drop: 'blocked by settings hook' })
+test('a dropped prompt is not kept as the first prompt', async ($, on) => {
+  const { world } = startWorld(on, { drop: 'blocked by settings hook' })
   await $.session.start(START)
   await $.prompt.submit({ text: 'refused words' } as never)
   expect((world.data.get('session:sess-1') as { firstPrompt?: string }).firstPrompt).toBeUndefined()
-  await clock.advance(16 * 60_000)
-  expect(bandOf(world.seen)).toBe('return')
 })
 
-test('a prompt the person did not type leaves the band up and is not the first prompt', async ($, on) => {
+test('a prompt the person did not type is not the first prompt', async ($, on) => {
   const { world } = startWorld(on, { turns: 2 })
   await $.session.start(START)
   await $.prompt.submit({ text: 'peer says hi', origin: { kind: 'peer' } } as never)
-  expect(bandOf(world.seen)).toBe('return')
   expect((world.data.get('session:sess-1') as { firstPrompt?: string }).firstPrompt).toBeUndefined()
-})
-
-test('a repeat session.start leaves one idle timer running', async ($, on) => {
-  const { clock, world } = startWorld(on)
-  let reads = 0
-  on('state.get', (_$, e, next) => {
-    if (String((e as { key?: unknown }).key) === 'record') reads += 1
-    return next(e)
-  })
-  await $.session.start(START)
-  await $.session.start(START)
-  const before = reads
-  await clock.advance(60_000)
-  expect(reads - before).toBe(1)
-  expect(world.id).toBe('sess-1')
 })

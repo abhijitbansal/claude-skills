@@ -95,7 +95,7 @@ table.t th{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.06em;te
     <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills/tree/main/plugins/test-board">test-board source ↗</a>
     <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills/tree/main/plugins/session-compass">session-compass source ↗</a>
   </div>
-  <div class="statband plain cols-4 reveal"><div class="stat"><div class="n">2</div><div class="l">mods</div></div><div class="stat"><div class="n">10</div><div class="l">runs kept per suite</div></div><div class="stat"><div class="n">15 min</div><div class="l">idle before the return band</div></div><div class="stat"><div class="n">0</div><div class="l">background model calls</div></div></div>
+  <div class="statband plain cols-4 reveal"><div class="stat"><div class="n">2</div><div class="l">mods</div></div><div class="stat"><div class="n">10</div><div class="l">runs kept per suite</div></div><div class="stat"><div class="n">50</div><div class="l">sessions kept for /compass</div></div><div class="stat"><div class="n">0</div><div class="l">background model calls</div></div></div>
 </header>
 
 <div class="wrap narrow">
@@ -114,12 +114,12 @@ table.t th{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.06em;te
     <section id="overview" class="doc-section">
       <h2><span class="ix">01</span> Overview</h2>
       <p>A mod is a Claude Code plugin made of TypeScript function hooks that wrap Claude Code's own behavior. Each hook has the shape <code>($, e, next)</code>. These two mods each draw one line above the prompt, and they stack over any other mod's band. <b>test-board</b> shows the result of your last test run. <b>session-compass</b> shows what a session is building when you come back to it.</p>
-      <div class="term" id="demo" role="img" aria-label="Animated terminal demo: a pytest run produces the Test Board band, 45 minutes later the Session Compass return band appears above it, then the /compass pane opens.">
+      <div class="term" id="demo" role="img" aria-label="Animated terminal demo: a pytest run produces the Test Board band under the always-on Session Compass band, the goal is set, then the /compass pane opens.">
         <div class="term-bar"><i></i><i></i><i></i><span>claude — claude-skills</span></div>
         <div class="term-body">
           <div class="ln rv" data-s="1">⏺ Ran pytest -q</div>
           <div class="ln rv dim" data-s="1">  44 tests collected · 40 passed, 3 failed, 1 skipped</div>
-          <div class="ln rv dim" data-s="2" style="margin-top:6px">— 45 min later —</div>
+          <div class="ln rv dim" data-s="2" style="margin-top:6px">— compass_status sets the goal —</div>
           <div class="sep"></div>
           <div class="ln rv band sc" data-s="2"><span class="bt">claude-skills · worktrees/claude-mods (feat/session-mods) · Goal: barcode fallback · Now: fixing 3 failing tests · 4 artifacts · tests 40 <span class="ok">✓</span> 3 <span class="bad">✗</span></span></div>
           <div class="ln rv band tb" data-s="1"><span class="bt">claude-skills · pytest -q   40 <span class="ok">✓</span>  3 <span class="bad">✗</span>  1 skip   <span class="bad">▲</span>3 <span class="bad">✗</span>   1s   prev 43 <span class="ok">✓</span> 0 <span class="bad">✗</span> · 5m ago</span></div>
@@ -136,7 +136,7 @@ table.t th{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.06em;te
           </div>
         </div>
       </div>
-      <div class="term-foot"><span class="cap" id="demo-cap" aria-live="polite">Final frame, all three scenes: a test run, the return band above it, then the /compass pane. Sample values.</span><button type="button" id="demo-replay" hidden>Replay</button></div>
+      <div class="term-foot"><span class="cap" id="demo-cap" aria-live="polite">Final frame, all three scenes: a test run, the compass band above it, then the /compass pane. Sample values.</span><button type="button" id="demo-replay" hidden>Replay</button></div>
     </section>
 
     <section id="why" class="doc-section">
@@ -173,7 +173,7 @@ table.t th{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.06em;te
       <h3 id="session-compass" style="margin:26px 0 10px;font-size:20px">session-compass</h3>
       <div class="guide">
         <div class="gitem reveal"><h4><code>compass_status</code> — the model sets the goal</h4><p>The model sees the tool as <code>mcp__session-compass__compass_status</code>, with optional <code>goal</code> (80 characters), <code>step</code> and <code>next</code> (60 each). A short standing reminder asks Claude to call it when the goal is first clear and whenever the phase changes (spec, plan, implement, review, PR, done), not every turn. A call with no non-empty field is refused.</p></div>
-        <div class="gitem reveal"><h4>The return band</h4><p>One line above the prompt: <code>repo · worktree (branch) · Goal · Now · N artifacts · tests</code>. It appears when a session starts with earlier turns (a resume, or a plugin reload), and after 15 idle minutes with no turn running. Only a prompt you type, or one that arrives through the bridge (for example from your phone), dismisses it. Prompts from peers, notifications, other plugins and subagent turns, and dropped prompts, leave it up. With no goal set it shows your first prompt dimmed and <code>(no goal set)</code>. <code>tests</code> appears when test-board is installed and has parsed runs.</p></div>
+        <div class="gitem reveal"><h4>The compass band</h4><p>One line above the prompt: <code>repo · worktree (branch) · Goal · Now · N artifacts · tests</code>. It is always up, from the moment the session starts, and updates as the goal, step and artifacts change. Only a survey on screen takes its place. With no goal set it shows your first prompt dimmed and <code>(no goal set)</code>. <code>tests</code> appears when test-board is installed and has parsed runs.</p></div>
         <div class="gitem reveal"><h4>The <code>/compass</code> pane</h4><p><b>This session</b> shows repo, worktree and branch; goal; step and next; how long ago the status was set; test-board's tally; and every artifact. <b>All sessions</b> lists the other recorded sessions, most recently active first, up to 50. Press an entry to copy it: a URL, a path, a commit sha, a branch name, or <code>claude --resume &lt;id&gt;</code> for a session row.</p></div>
         <div class="gitem reveal"><h4>What counts as an artifact</h4><p>Captured automatically from successful tool calls:</p>
           <div class="tbl-wrap"><table class="t"><thead><tr><th>Source</th><th>What is kept</th></tr></thead><tbody>
@@ -223,7 +223,7 @@ table.t th{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.06em;te
       <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-dim);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">test-board</h4>
       <div class="inv"><div class="row"><span class="nm">hooks/</span><span class="dc"><code>register.tsx</code>, <code>suite.ts</code>, <code>parse.ts</code>, <code>history.ts</code>, <code>format.ts</code>, <code>hooks.json</code></span></div><div class="row"><span class="nm">limits</span><span class="dc">10 runs per suite per worktree · 20 failure IDs per run · 3 runs in the band · 2 MiB soft store cap (least recently used suites dropped first)</span></div><div class="row"><span class="nm">known limit</span><span class="dc">A hot reload mid-session forgets which agent ids belong to which subagent, so their later runs show as <code>via workflow</code>.</span></div></div>
       <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-dim);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">session-compass</h4>
-      <div class="inv"><div class="row"><span class="nm">hooks/</span><span class="dc"><code>register.tsx</code>, <code>record.ts</code>, <code>capture.ts</code>, <code>git.ts</code>, <code>io.ts</code>, <code>band.tsx</code>, <code>pane.tsx</code>, <code>hooks.json</code></span></div><div class="row"><span class="nm">limits</span><span class="dc">Goal 80 characters, step and next 60 · 100 artifacts per session · 50 sessions · 15 minutes idle (checked once a minute)</span></div><div class="row"><span class="nm">privacy</span><span class="dc">Records live in the plugin's local store. Nothing leaves the machine and the plugin makes no model calls. The store keeps the first 80 characters of a session's first prompt, worktree paths, commit subjects and artifact URLs until the session ages out of the 50-session cap; avoid pasting secrets into a first prompt.</span></div></div>
+      <div class="inv"><div class="row"><span class="nm">hooks/</span><span class="dc"><code>register.tsx</code>, <code>record.ts</code>, <code>capture.ts</code>, <code>git.ts</code>, <code>io.ts</code>, <code>band.tsx</code>, <code>pane.tsx</code>, <code>hooks.json</code></span></div><div class="row"><span class="nm">limits</span><span class="dc">Goal 80 characters, step and next 60 · 100 artifacts per session · 50 sessions</span></div><div class="row"><span class="nm">privacy</span><span class="dc">Records live in the plugin's local store. Nothing leaves the machine and the plugin makes no model calls. The store keeps the first 80 characters of a session's first prompt, worktree paths, commit subjects and artifact URLs until the session ages out of the 50-session cap; avoid pasting secrets into a first prompt.</span></div></div>
     </section>
 
     <section class="doc-section" style="border-bottom:none">
@@ -289,7 +289,7 @@ table.t th{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.06em;te
 var demo=document.getElementById('demo'),cap=document.getElementById('demo-cap'),btn=document.getElementById('demo-replay'),typed=document.getElementById('typed');
 if(!demo)return;
 var els=demo.querySelectorAll('.rv'),FULL='/compass',timers=[];
-var caps={1:'Scene 1: a test run. The Test Board band appears above the prompt.',2:'Scene 2: 45 minutes later, the Session Compass return band appears above it.',3:'Scene 3: /compass opens the pane with This session and All sessions tabs.'};
+var caps={1:'Scene 1: a test run. The Test Board band appears above the prompt.',2:'Scene 2: the Session Compass band above it picks up the goal set by compass_status.',3:'Scene 3: /compass opens the pane with This session and All sessions tabs.'};
 var final=cap.textContent;
 function later(f,ms){timers.push(setTimeout(f,ms))}
 function show(s){for(var i=0;i<els.length;i++)if(els[i].getAttribute('data-s')==s)els[i].classList.add('on');cap.textContent=caps[s]}

@@ -24,7 +24,6 @@ declare module 'claude-code' {
   interface PluginState {
     'session-compass': {
       record: SessionRecord | null
-      band: 'hidden' | 'return'
       tab: 'this' | 'all'
     }
   }

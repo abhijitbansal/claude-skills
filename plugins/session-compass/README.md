@@ -9,18 +9,15 @@ Cubby · worktrees/claude-mods (feat/session-mods) · Goal: Ship the session mod
 
 ## What it adds
 
-### Return band
+### Compass band
 
 One line above the prompt: `repo · worktree (branch) · Goal · Now · N artifacts · tests`.
 
-- It appears when a session starts with earlier turns (a resume, or a plugin reload),
-  and after 15 idle minutes with no turn running. The idle check runs once a minute.
-- Only a prompt you type (or one from the bridge) dismisses it. Prompts from peers,
-  notifications and other plugins, and dropped prompts leave it up.
+- It is always up, from the moment the session starts, and updates as the goal, step
+  and artifacts change. Only a survey on screen takes its place.
 - With no goal set, it shows your first prompt dimmed and `(no goal set)`.
 - `tests` appears when [test-board](../test-board) is installed and has parsed runs.
 - Narrow terminals drop the artifact count, then `tests`, then shorten the worktree path.
-- It stays hidden while a survey is on screen.
 
 ### `/compass` pane
 
@@ -71,11 +68,6 @@ makes no model calls. It reads Test Board's latest runs when Test Board is insta
 The store keeps the first 80 characters of a session's first prompt, worktree paths, commit
 subjects and artifact URLs until the session ages out of the 50-session cap; avoid pasting
 secrets into a first prompt.
-
-## Known limits
-
-A plugin hot reload re-runs session start, so a reloaded or resumed session raises the
-return band once. The band is cleared by your next prompt.
 
 ## Develop
 
