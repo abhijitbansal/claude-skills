@@ -42,18 +42,29 @@
   }
 
   /* ── copy buttons ── */
+  var live = document.createElement('div');
+  live.setAttribute('aria-live', 'polite'); live.className = 'sr-live';
+  live.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)';
+  document.body.appendChild(live);
   $('.copy').forEach(function (btn) {
+    var text = btn.getAttribute('data-copy') || '';
+    if (!btn.getAttribute('aria-label')) btn.setAttribute('aria-label', 'Copy: ' + text);
     btn.addEventListener('click', function () {
-      var text = btn.getAttribute('data-copy') || '';
-      var done = function () {
-        var o = btn.textContent; btn.textContent = 'copied'; btn.classList.add('ok');
-        setTimeout(function () { btn.textContent = o; btn.classList.remove('ok'); }, 1400);
+      var o = btn.textContent;
+      var flash = function (word, cls) {
+        btn.textContent = word; btn.classList.add(cls);
+        live.textContent = (cls === 'ok' ? 'Copied: ' : 'Copy failed: ') + text;
+        setTimeout(function () { btn.textContent = o; btn.classList.remove(cls); }, 1400);
       };
+      var ok = function () { flash('copied', 'ok'); };
+      var fail = function () { flash('failed', 'err'); };
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(done, done);
+        navigator.clipboard.writeText(text).then(ok, fail);
       } else {
         var t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select();
-        try { document.execCommand('copy'); } catch (e) {} document.body.removeChild(t); done();
+        var copied = false;
+        try { copied = document.execCommand('copy'); } catch (e) {} document.body.removeChild(t);
+        if (copied) ok(); else fail();
       }
     });
   });

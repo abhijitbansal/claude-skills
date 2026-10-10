@@ -27,9 +27,9 @@
 <link rel="stylesheet" href="assets/site.css">
 </head>
 <body class="accent-gold">
-<a class="skip" href="#spotlight">Skip to content</a>
+<a class="skip" href="#top">Skip to content</a>
 
-<nav class="site">
+<nav class="site" aria-label="Site">
   <div class="wrap">
     <a class="brand" href="#top"><span class="dot"></span>claude-skills</a>
     <div class="nav-links">
@@ -43,29 +43,29 @@
   </div>
 </nav>
 
-<div id="top" class="wrap">
+<main id="top" class="wrap">
 
   <!-- HERO -->
   <header class="hero">
     <span class="kicker"><span class="pulse"></span>Claude Code plugin marketplace · MIT</span>
     <h1>Plugins for Claude Code, mined from real sessions.</h1>
-    <p class="lead">An iOS build-and-ship loop, offline dashboards and videos from any agent, two mods that live above the prompt, an overnight auto-resume for the 5-hour limit, and the workflow helpers around them. Install one line at a time in Claude Code, or port the skills to Codex, Copilot CLI and any AGENTS.md agent.</p>
+    <p class="lead">Test results above the prompt. Dashboards and videos built offline. iOS apps built, previewed and shipped from chat. Sessions that resume themselves after the 5-hour limit. Eight plugins, each from a real job, each one line to install.</p>
     <div class="hero-cmd">
       <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div></div>
-      <p class="hint">Paste it into Claude Code, then <code>/plugin install &lt;name&gt;@claude-skills</code> for any plugin below.</p>
+      <p class="hint">Paste it into Claude Code, then <code>/plugin install &lt;name&gt;@claude-skills</code> for any plugin below. The skills also port to Codex and Copilot CLI.</p>
     </div>
     <div class="inventory" aria-label="Repository at a glance">
       <span>8 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
       <span>Tested on macOS and Ubuntu</span>
-      <span>Shell and stdlib Python, no build step</span>
+      <span>Markdown, shell and stdlib Python; portable-artifacts needs Node</span>
     </div>
   </header>
 
   <!-- SPOTLIGHT -->
   <section id="spotlight">
     <div class="eyebrow">Spotlight</div>
-    <h2 class="title">The two newest plugins.</h2>
-    <p class="section-lead">One changes what you see in the terminal. The other changes what an agent can hand you.</p>
+    <h2 class="title">One changes what you see in the terminal. The other changes what an agent can hand you.</h2>
+    <p class="section-lead">The three newest plugins: two mods and a pair of artifact skills. All of them run locally, and each is one line to install.</p>
 
     <article class="spot">
       <div class="spot-media">
@@ -88,9 +88,9 @@
         <h3>Two lines above the prompt</h3>
         <p><b>test-board</b> shows passed, failed and skipped counts after every test run, next to the previous run of the same suite in the same worktree. <b>session-compass</b> shows what a session is building, where it stands and what it has produced when you come back to it, and <code>/compass</code> opens the full list.</p>
         <ol class="howlist" aria-label="How the mods work">
-          <li><b>A mod is a plugin of TypeScript hooks.</b> Each hook has the shape <code>($, e, next)</code> and wraps one piece of Claude Code's own behaviour: it sees a tool call before it runs and the result after, and passes both through unchanged.</li>
-          <li><b>Results are parsed, never asked for.</b> test-board reads the output of recognised test commands (<code>pytest</code>, <code>jest</code>, <code>xcodebuild … test</code>, <code>cargo test</code> and more) and keeps the last 10 runs per suite. session-compass records commits, pushes, pull requests and published files from successful tool calls; the model sets the goal through a <code>compass_status</code> tool.</li>
-          <li><b>Bands stack.</b> Each hook draws its own line and appends whatever the next hook drew, so both mods share one column above the prompt. Nothing leaves the machine, and neither mod makes a model call.</li>
+          <li><b>What you see.</b> One line per mod above the prompt. test-board: the counts of the last run, the change in failures against the run before, and <code>via</code> which subagent ran it. session-compass: repo, branch, goal, current step and what the session has produced, shown when you resume or after 15 idle minutes.</li>
+          <li><b>Where it comes from.</b> Nothing is asked of the model. test-board reads the output of test commands it recognises (<code>pytest</code>, <code>jest</code>, <code>xcodebuild … test</code>, <code>cargo test</code> and more) and keeps the last 10 runs per suite. session-compass records commits, pushes, pull requests and published files as tool calls succeed, and the model sets the goal through one small tool.</li>
+          <li><b>How it is built.</b> A mod is a plugin written as TypeScript hooks that wrap Claude Code's own behaviour: each hook sees a tool call before it runs and the result after, and passes both through unchanged. Each band draws its line and then whatever the next hook drew, so mods stack. Everything stays on your machine; neither mod makes a model call.</li>
         </ol>
         <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> install test-board@claude-skills</code><button class="copy" data-copy="/plugin install test-board@claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install session-compass@claude-skills</code><button class="copy" data-copy="/plugin install session-compass@claude-skills">copy</button></div></div>
         <div class="links">
@@ -104,7 +104,7 @@
     <article class="spot flip">
       <div class="spot-media media-stack">
         <figure>
-          <video id="pa-video" autoplay muted loop playsinline preload="metadata" poster="../docs/features/showcase/portable-artifacts/prompt-to-dashboard-poster.jpg" aria-label="A 15-second explainer video rendered by make-motion: a title, three step cards, a bar chart of validate errors per attempt and a counter."><source src="../docs/features/showcase/portable-artifacts/prompt-to-dashboard.mp4" type="video/mp4"></video>
+          <video id="pa-video" autoplay muted loop playsinline controls preload="metadata" poster="../docs/features/showcase/portable-artifacts/prompt-to-dashboard-poster.jpg" aria-label="A 15-second explainer video rendered by make-motion: a title, three step cards, a bar chart of validate errors per attempt and a counter."><source src="../docs/features/showcase/portable-artifacts/prompt-to-dashboard.mp4" type="video/mp4"></video>
           <figcaption><b>/make-motion</b> “15-second explainer, 1920x1080, titled ‘From prompt to dashboard’ …” — rendered to a 1080p MP4 from a JSON spec.</figcaption>
         </figure>
         <figure>
@@ -117,9 +117,9 @@
         <h3>Dashboards and videos, built offline by any agent</h3>
         <p><code>/make-dashboard</code> turns a data file into one self-contained HTML page of KPI tiles and charts, and every chart expands to show its SQL, row count and refresh time. <code>/make-motion</code> turns a prompt into a live preview with a scrubber and a deterministic 1080p MP4. Both work in Claude Code, Codex, GitHub Copilot and Gemini CLI.</p>
         <ol class="howlist" aria-label="How portable-artifacts works">
-          <li><b>The model writes one small JSON spec.</b> That is the whole model job, so it works on small and local models too.</li>
-          <li><b>Scripts validate it with field-level errors.</b> A wrong query name comes back as <code>charts[0].query: "rev_by_regin" not found; did you mean "rev_by_region"?</code>, and the agent fixes one field instead of regenerating everything.</li>
-          <li><b>Build, preview and render are deterministic.</b> The same spec always produces the same page or video. After a one-time <code>npm ci</code> nothing touches the network except your own data; specs that try are rejected, and the outputs ship with a strict CSP.</li>
+          <li><b>Offline, and the same result every time.</b> After a one-time install nothing touches the network except your own data files, and the same spec always produces the same page or video. A spec that tries to reach the network is rejected.</li>
+          <li><b>The model's whole job is one small JSON file.</b> Writing a spec that matches a schema is easy work, so this runs on small and local models too. A mistake comes back as a precise message, for example <code>charts[0].query: "rev_by_regin" not found; did you mean "rev_by_region"?</code>, and the agent fixes one field instead of regenerating everything.</li>
+          <li><b>Scripts do the rest.</b> Plain Node scripts validate the spec, build the HTML page, run the preview and render the MP4. "Slow down scene 2" changes one field, so everything else stays exactly as it was. Needs Node 20; make-motion also needs Chromium and ffmpeg.</li>
         </ol>
         <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> install portable-artifacts@claude-skills</code><button class="copy" data-copy="/plugin install portable-artifacts@claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">npx</span> skills add abhijitbansal/claude-skills --skill make-dashboard make-motion</code><button class="copy" data-copy="npx skills add abhijitbansal/claude-skills --skill make-dashboard make-motion">copy</button></div></div>
         <div class="links">
@@ -145,6 +145,7 @@
           <h3><a href="../docs/features/ios-dev.html">ios-dev</a></h3>
           <span class="meta">60 skills · 6 commands</span>
           <p class="what">Build, preview and ship iOS apps from chat, with the simulator screenshot delivered to your phone.</p>
+          <p class="flow"><b>edit</b> → <b>/preview</b> → simulator build → screenshot → iCloud Drive + iMessage ping → <b>/fix</b> → <b>/release</b> → TestFlight or App Store</p>
           <div class="get">
             <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> install ios-dev@claude-skills</code><button class="copy" data-copy="/plugin install ios-dev@claude-skills">copy</button></div></div>
             <a class="guide-link" href="../docs/features/ios-dev.html">ios-dev guide</a>
@@ -152,8 +153,8 @@
         </div>
         <ul>
           <li><code>/ios-init</code> writes <code>.claude/app.yml</code> once: scheme, bundle ID, team, URL scheme. Every other command reads it.</li>
-          <li><code>/preview</code> builds on the booted simulator, launches, deep-links, screenshots and sends the image to your iPhone. <code>/fix</code> applies a UI change and proves it the same way.</li>
-          <li><code>/release</code> runs a gated pre-flight, a Fastlane build and upload to TestFlight or the App Store, then tags and deploys the site.</li>
+          <li><code>/preview</code> builds on the booted simulator, launches, deep-links and screenshots, then drops the image in iCloud Drive and pings your iPhone over iMessage. <code>/fix</code> applies a UI change and proves it the same way.</li>
+          <li><code>/release</code> runs a gated pre-flight, a Fastlane build and upload to TestFlight or the App Store, then tags the release; App Store mode can also deploy the marketing site.</li>
           <li>Dozens of skills mined from real app bugs: Swift 6 MainActor traps, SwiftData with CloudKit, Vision OCR grounding, launch watchdogs, widget bridges.</li>
         </ul>
       </article>
@@ -163,6 +164,7 @@
           <h3><a href="../docs/features/core-workflow.html">core-workflow</a></h3>
           <span class="meta">17 skills · 4 commands · 2 agents · 1 hook</span>
           <p class="what">The workflow layer: commits, lessons that become skills, branch explainers and two worker agents.</p>
+          <p class="flow"><b>/learn</b> → dedupe against the catalog → draft the skill → PR → merged → every repo on the next update</p>
           <div class="get">
             <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> install core-workflow@claude-skills</code><button class="copy" data-copy="/plugin install core-workflow@claude-skills">copy</button></div></div>
             <a class="guide-link" href="../docs/features/core-workflow.html">core-workflow guide</a>
@@ -170,7 +172,7 @@
         </div>
         <ul>
           <li><code>commit</code> stages, runs shellcheck and writes a conventional commit from the diff. A hook lints shell scripts after every edit.</li>
-          <li><code>/learn</code> captures a lesson from the session as a new or extended skill and opens a PR, so every other repo inherits it. <code>/contribute-skill</code> does the same for any change.</li>
+          <li><code>/learn</code> captures a lesson from the session as a new or extended skill and opens a PR; once merged, every other repo inherits it on the next plugin update. <code>/contribute-skill</code> does the same for any change.</li>
           <li><code>/explain-branch</code> writes a self-contained HTML explainer of the branch. <code>/team</code> decides whether a task deserves an agent team, and says no when it does not.</li>
           <li>Agents <code>image-parser</code> and <code>web-researcher</code> take screenshots and documentation lookups out of the main context.</li>
         </ul>
@@ -196,10 +198,10 @@
       <article class="prow">
         <div class="name">
           <h3><a href="../docs/features/second-wind.html">second-wind</a></h3>
-          <span class="meta">skill + CLI · stdlib Python, no dependencies</span>
-          <p class="what">Runs Claude Code overnight. When the 5-hour limit pauses a session, wind waits for the reset and resumes every tmux session.</p>
+          <span class="meta">1 skill · 1 command · CLI · stdlib Python, no dependencies</span>
+          <p class="what">Runs Claude Code overnight. When the 5-hour limit pauses a session, the <code>wind</code> CLI waits for the reset and resumes every tmux session.</p>
           <div class="get">
-            <div class="code cmds"><div class="cl"><code class="ct">bash tools/second-wind/install.sh</code><button class="copy" data-copy="bash tools/second-wind/install.sh">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install second-wind@claude-skills</code><button class="copy" data-copy="/plugin install second-wind@claude-skills">copy</button></div></div>
+            <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> install second-wind@claude-skills</code><button class="copy" data-copy="/plugin install second-wind@claude-skills">copy</button></div><div class="cl"><code class="ct">curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh</code><button class="copy" data-copy="curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh">copy</button></div></div>
             <a class="guide-link" href="../docs/features/second-wind.html">second-wind guide</a> · <a class="guide-link" href="../docs/second-wind/index.html">CLI reference</a>
           </div>
         </div>
@@ -269,28 +271,22 @@
   <section id="install">
     <div class="eyebrow">Install</div>
     <h2 class="title">Three ways in.</h2>
-    <p class="section-lead">Pick the surface you work on. Everything is shell and stdlib Python, so there is no build step and nothing to update by hand.</p>
-    <div class="install-grid">
+    <p class="section-lead">Claude Code is the main path. The marketplace itself is Markdown and shell; portable-artifacts needs Node 20, and the Second Wind CLI is one stdlib Python file.</p>
+    <div class="install-rows">
 
-      <div class="istep">
-        <div class="num">01 / Claude Code</div>
-        <h3>Add the marketplace, install a plugin</h3>
-        <p>Inside any Claude Code session. Install only what you need; each plugin is self-contained.</p>
+      <div class="irow">
+        <div><h3>Claude Code</h3><p>Inside any session. Install only what you need; each plugin is self-contained.</p></div>
         <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install ios-dev@claude-skills</code><button class="copy" data-copy="/plugin install ios-dev@claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install test-board@claude-skills</code><button class="copy" data-copy="/plugin install test-board@claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install portable-artifacts@claude-skills</code><button class="copy" data-copy="/plugin install portable-artifacts@claude-skills">copy</button></div></div>
       </div>
 
-      <div class="istep">
-        <div class="num">02 / Other agents</div>
-        <h3>Port the skills</h3>
-        <p>Wire the same skills into Codex, Copilot CLI or any AGENTS.md agent from a checkout of the repo.</p>
-        <div class="code cmds"><div class="cl"><code class="ct">git clone https://github.com/abhijitbansal/claude-skills</code><button class="copy" data-copy="git clone https://github.com/abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct">bash adapters/install.sh codex</code><button class="copy" data-copy="bash adapters/install.sh codex">copy</button></div><div class="cl"><code class="ct">bash adapters/install.sh all   <span class="c"># every target</span></code><button class="copy" data-copy="bash adapters/install.sh all">copy</button></div></div>
+      <div class="irow">
+        <div><h3>Other agents</h3><p>Wire the same skills into Codex, Copilot CLI or any AGENTS.md agent from a checkout of the repo.</p></div>
+        <div class="code cmds"><div class="cl"><code class="ct">git clone https://github.com/abhijitbansal/claude-skills</code><button class="copy" data-copy="git clone https://github.com/abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct">cd claude-skills</code><button class="copy" data-copy="cd claude-skills">copy</button></div><div class="cl"><code class="ct">bash adapters/install.sh codex</code><button class="copy" data-copy="bash adapters/install.sh codex">copy</button></div><div class="cl"><code class="ct">bash adapters/install.sh all   <span class="c"># every target</span></code><button class="copy" data-copy="bash adapters/install.sh all">copy</button></div></div>
       </div>
 
-      <div class="istep">
-        <div class="num">03 / Second Wind</div>
-        <h3>Install the CLI</h3>
-        <p>Standalone. Works with or without the plugins.</p>
-        <div class="code cmds"><div class="cl"><code class="ct">bash tools/second-wind/install.sh</code><button class="copy" data-copy="bash tools/second-wind/install.sh">copy</button></div><div class="cl"><code class="ct"><span class="k">wind</span> init     <span class="c"># pick repos</span></code><button class="copy" data-copy="wind init">copy</button></div><div class="cl"><code class="ct"><span class="k">wind</span> up <span class="c">&amp;&amp;</span> <span class="k">wind</span> watch  <span class="c"># run + auto-resume</span></code><button class="copy" data-copy="wind up && wind watch">copy</button></div></div>
+      <div class="irow">
+        <div><h3>Second Wind CLI</h3><p>Standalone, no checkout needed. Works with or without the plugins.</p></div>
+        <div class="code cmds"><div class="cl"><code class="ct">curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh</code><button class="copy" data-copy="curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh">copy</button></div><div class="cl"><code class="ct"><span class="k">wind</span> init     <span class="c"># pick repos</span></code><button class="copy" data-copy="wind init">copy</button></div><div class="cl"><code class="ct"><span class="k">wind</span> up <span class="c">&amp;&amp;</span> <span class="k">wind</span> watch  <span class="c"># run + auto-resume</span></code><button class="copy" data-copy="wind up && wind watch">copy</button></div></div>
       </div>
 
     </div>
@@ -311,7 +307,7 @@
     </div>
   </section>
 
-</div>
+</main>
 
 <footer class="site">
   <div class="wrap">
@@ -340,7 +336,6 @@
     </div>
     <div class="foot-meta">
       <span class="lic">MIT licensed</span>
-      <span>8 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
       <span>Tested on macOS and Ubuntu</span>
     </div>
   </div>
