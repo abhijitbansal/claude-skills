@@ -26,6 +26,7 @@ auto-resume** orchestrator that keeps overnight runs alive (`second-wind`),
 **Feature guides:** [Second Wind](docs/features/second-wind.html) ·
 [prompt-craft](docs/features/prompt-craft.html) ·
 [portable-artifacts](docs/features/portable-artifacts.html) ·
+[session mods](docs/features/mods.html) ·
 [ios-dev](docs/features/ios-dev.html) ·
 [linear-pm](docs/features/linear-pm.html) ·
 [core-workflow](docs/features/core-workflow.html)

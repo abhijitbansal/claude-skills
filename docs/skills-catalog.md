@@ -175,9 +175,13 @@ Visual guide: [portable-artifacts](features/portable-artifacts.html).
 
 Test results band: passed/failed/skipped after every test run, next to the previous run of the same suite in the same worktree.
 
+Visual guide: [session mods](features/mods.html).
+
 ## session-compass (plugin)
 
 Session compass: what each session is building, where it stands and what it produced, as a return band, a /compass pane and a compass_status tool.
+
+Visual guide: [session mods](features/mods.html).
 
 ## adapters (multi-tool)
 

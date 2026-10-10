@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>session mods — claude-skills</title>
+<meta name="description" content="Two Claude Code mods: test-board shows pass/fail counts above the prompt after every test run, and session-compass shows what each session is building when you come back.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%23c03060'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='6.5'%20fill='%230a1420'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='3'%20fill='%23e8b94a'/%3E%3C/svg%3E">
+<link rel="icon" href="../../site/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../../site/apple-touch-icon.png">
+<meta name="theme-color" content="#c03060">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="claude-skills">
+<meta property="og:title" content="session mods — claude-skills">
+<meta property="og:description" content="Two Claude Code mods: test-board shows pass/fail counts above the prompt after every test run, and session-compass shows what each session is building when you come back.">
+<meta property="og:url" content="https://abhijitbansal.github.io/claude-skills/features/mods.html">
+<meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
+<link rel="stylesheet" href="../../site/assets/site.css">
+<style>
+.term{border:1px solid var(--border-bright);border-radius:var(--r-md);background:var(--surface2);overflow:hidden;box-shadow:var(--shadow)}
+.term-bar{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);background:var(--surface3);font-family:var(--font-mono);font-size:12px;color:var(--text-faint)}
+.term-bar i{width:9px;height:9px;border-radius:50%;background:var(--border-bright);display:block}
+.term-bar span{margin-left:8px}
+.term-body{padding:14px 16px;overflow:hidden;font-family:var(--font-mono);font-size:12.5px;line-height:1.7;color:var(--text)}
+.term-body .ln{white-space:pre;overflow:hidden;text-overflow:ellipsis;min-height:1.7em}
+.term-body .dim{color:var(--text-faint)}
+.term-body .ok{color:var(--green)}.term-body .bad{color:var(--rose)}
+.term-body .tbl{color:var(--gold)}.term-body .scl{color:var(--violet)}
+.term-body .sep{height:1px;background:var(--border);margin:8px 0}
+.pane{margin-top:10px;border:1px solid var(--border-bright);border-radius:var(--r-sm);background:var(--surface);padding:10px 12px;display:block;max-width:520px;min-width:0;overflow:hidden}
+.pane .tabs{display:flex;gap:16px;margin-bottom:8px}
+.pane .tabs b{font-weight:500;color:var(--text-faint)}
+.pane .tabs b.sel{color:var(--violet);border-bottom:2px solid var(--violet)}
+.pane .grp{color:var(--text-faint);margin-top:4px}
+.term.js .rv{opacity:0;transform:translateY(6px)}
+.term.js .rv.on{opacity:1;transform:none;transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.2,1)}
+.term-foot{display:flex;align-items:center;gap:12px;margin-top:10px;font-size:13.5px;color:var(--text-dim)}
+.term-foot .cap{flex:1;min-width:0}
+.term-foot button{font-family:var(--font-mono);font-size:11.5px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 12px;cursor:pointer}
+.term-foot button:hover{color:var(--accent);border-color:var(--accent)}
+.term-foot button[hidden]{display:none}
+.fig{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);padding:12px;margin:14px 0}
+.fig svg{display:block;width:100%;height:auto}
+.fig svg text{font-family:var(--font-mono);font-size:13px;fill:var(--text)}
+.fig svg .sub{fill:var(--text-dim);font-size:11.5px}
+.fig svg .bx{fill:var(--surface2);stroke:var(--border-bright);stroke-width:1.5}
+.fig svg .bx.g{stroke:var(--gold)}.fig svg .bx.v{stroke:var(--violet)}
+.fig svg .zone{fill:none;stroke:var(--border-bright);stroke-dasharray:5 4}
+.fig svg .ar{fill:none;stroke:var(--text-dim);stroke-width:2}
+.fig svg .ar.g{stroke:var(--gold)}.fig svg .ar.v{stroke:var(--violet)}
+.fig svg .tg{fill:var(--gold)}.fig svg .tv{fill:var(--violet)}
+.fig figcaption{font-size:13px;color:var(--text-dim);margin-top:8px}
+.tbl-wrap{overflow-x:auto}
+table.t{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}
+table.t th,table.t td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text-dim)}
+table.t th{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint)}
+.anat{white-space:pre;overflow-x:auto}
+.anat .k{color:var(--accent)}
+</style>
+</head>
+<body class="accent-rose">
+<a class="skip" href="#main">Skip to content</a>
+<nav class="site">
+  <div class="wrap">
+    <a class="brand" href="../../site/index.html"><span class="dot"></span>claude-skills</a>
+    <div class="nav-links">
+      <a href="../../site/index.html#features" aria-current="page">Features</a>
+      <a href="../catalog.html">Catalog</a>
+      <a href="../architecture.html">Architecture</a>
+      <a class="nav-cta" href="https://github.com/abhijitbansal/claude-skills">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head wrap narrow">
+  <div class="crumbs"><a href="../../site/index.html">Home</a><span class="sep">/</span><a href="../../site/index.html#features">Features</a><span class="sep">/</span>session mods</div>
+  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>2 plugins · mods</span>
+  <h1>Session mods</h1>
+  <p class="lead">test-board and session-compass: two lines above the prompt that show your last test run and where each session stands.</p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="#install">Install →</a>
+    <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills/tree/main/plugins/test-board">test-board source ↗</a>
+    <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills/tree/main/plugins/session-compass">session-compass source ↗</a>
+  </div>
+  <div class="statband plain cols-4 reveal"><div class="stat"><div class="n">2</div><div class="l">mods</div></div><div class="stat"><div class="n">10</div><div class="l">runs kept per suite</div></div><div class="stat"><div class="n">15 min</div><div class="l">idle before the return band</div></div><div class="stat"><div class="n">0</div><div class="l">background model calls</div></div></div>
+</header>
+
+<div class="wrap narrow">
+ <div class="doc">
+  <aside class="toc" aria-label="On this page">
+    <p class="lbl">On this page</p>
+    <a href="#overview">Overview</a>
+    <a href="#why">Problem &amp; why</a>
+    <a href="#install">Install</a>
+    <a href="#usability">Usability guide</a>
+    <a href="#how">How it works</a>
+    <a href="#inventory">What's inside</a>
+  </aside>
+  <main id="main" class="doc-main">
+
+    <section id="overview" class="doc-section">
+      <h2><span class="ix">01</span> Overview</h2>
+      <p>A mod is a Claude Code plugin made of TypeScript function hooks that wrap Claude Code's own behavior. Each hook has the shape <code>($, e, next)</code>. These two mods each draw one line above the prompt, and they stack over any other mod's band. <b>test-board</b> shows the result of your last test run. <b>session-compass</b> shows what a session is building when you come back to it.</p>
+      <div class="term" id="demo" role="img" aria-label="Animated terminal demo: a pytest run produces the Test Board band, 45 minutes later the Session Compass return band appears above it, then the /compass pane opens.">
+        <div class="term-bar"><i></i><i></i><i></i><span>claude — claude-skills</span></div>
+        <div class="term-body">
+          <div class="ln rv" data-s="1">⏺ Ran pytest -q</div>
+          <div class="ln rv dim" data-s="1">  43 tests collected · 40 passed, 3 failed, 1 skipped</div>
+          <div class="ln rv dim" data-s="2" style="margin-top:6px">— 45 min later —</div>
+          <div class="sep"></div>
+          <div class="ln rv scl" data-s="2">claude-skills · feat/session-mods · Goal: barcode fallback · Now: fixing 3 failing tests · 4 artifacts · tests 40 ✓ 3 ✗</div>
+          <div class="ln rv tbl" data-s="1">pytest -q   <span class="ok">40 ✓</span>  <span class="bad">3 ✗</span>  1 skip  0.6s   prev <span class="ok">43 ✓</span> 0 ✗ · 5m ago   <span class="bad">▲3 ✗</span></div>
+          <div class="sep"></div>
+          <div class="ln">❯ <span id="typed">/compass</span></div>
+          <div class="pane rv" data-s="3">
+            <div class="tabs"><b class="sel">This session</b><b>All sessions</b></div>
+            <div class="grp">Commits</div>
+            <div class="ln">  a281438  Merge origin/main into feat/session-mods</div>
+            <div class="grp">Documents</div>
+            <div class="ln">  docs/superpowers/specs/2026-10-10-session-mods-decisions.md</div>
+            <div class="grp">Pull requests</div>
+            <div class="ln">  #27  github.com/abhijitbansal/claude-skills/pull/27</div>
+          </div>
+        </div>
+      </div>
+      <div class="term-foot"><span class="cap" id="demo-cap" aria-live="polite">Final frame, all three scenes: a test run, the return band above it, then the /compass pane. Sample values.</span><button type="button" id="demo-replay" hidden>Replay</button></div>
+    </section>
+
+    <section id="why" class="doc-section">
+      <h2><span class="ix">02</span> Problem &amp; why it's needed</h2>
+      <div class="guide">
+        <div class="gitem reveal"><h4>Test counts are buried (test-board)</h4><p>The pass and fail counts sit deep in tool output that nobody scrolls through. test-board lifts them into one line above the prompt, next to the previous run of the same suite, so you see at once whether failures went up or down.</p></div>
+        <div class="gitem reveal"><h4>You lose track of sessions (session-compass)</h4><p>With several sessions across repos and worktrees, it is hard to remember what each one was doing. session-compass records the goal, the phase and everything the session produced, and shows it when you come back, without scrolling.</p></div>
+      </div>
+    </section>
+
+    <section id="install" class="doc-section">
+      <h2><span class="ix">03</span> Install</h2>
+      <div class="steps">
+        <div class="gitem"><h4>Add the marketplace, then install the mods you want</h4><div class="code cmds"><div class="cl"><code class="ct">/plugin marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct">/plugin install test-board@claude-skills</code><button class="copy" data-copy="/plugin install test-board@claude-skills">copy</button></div><div class="cl"><code class="ct">/plugin install session-compass@claude-skills</code><button class="copy" data-copy="/plugin install session-compass@claude-skills">copy</button></div></div><p style="margin-top:10px">Both run immediately after install; no restart.</p></div>
+        <div class="gitem"><h4>Optional: try them from a checkout</h4><div class="code cmds"><div class="cl"><code class="ct">claude --plugin-dir plugins/test-board --plugin-dir plugins/session-compass</code><button class="copy" data-copy="claude --plugin-dir plugins/test-board --plugin-dir plugins/session-compass">copy</button></div></div></div>
+      </div>
+    </section>
+
+    <section id="usability" class="doc-section">
+      <h2><span class="ix">04</span> Usability guide</h2>
+
+      <h3 id="test-board" style="margin:8px 0 10px;font-size:20px">test-board</h3>
+      <div class="guide">
+        <div class="gitem reveal"><h4>What counts as a test run</h4><p>These commands count, alone or after a leading <code>cd</code> or env vars, behind <code>npx</code>, <code>bunx</code>, <code>uv run</code>, <code>uv tool run</code>, <code>uvx</code>, <code>poetry run</code>, <code>python -m</code>, <code>pnpm exec</code>, <code>pnpm dlx</code> or <code>yarn</code>: <code>xcodebuild … test</code> (or <code>test-without-building</code>), <code>swift test</code>, <code>pytest</code>, <code>jest</code>, <code>vitest</code>, <code>bun test</code>, <code>npm|pnpm|yarn [run] test</code>, <code>cargo test</code>, <code>go test</code>, <code>fastlane scan|test</code>. <code>cat pytest.log</code> is not one. It reads cartoon's test summary first, then raw xcodebuild, swift test, pytest, jest/vitest and bun output.</p></div>
+        <div class="gitem reveal"><h4>Anatomy of the band line</h4><p>One line per recent run, up to 3. Runs in the same turn stack; the first run after you submit a prompt replaces the previous turn's lines.</p><div class="code"><span class="code-body anat">Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip  1m12s   prev 415 ✓ 0 ✗ · 2h ago   via ios-fixer
+<span class="k">└ repo · suite</span>                        <span class="k">└ counts</span>         <span class="k">└ time</span>  <span class="k">└ previous run</span>          <span class="k">└ subagent</span></span></div></div>
+        <div class="gitem reveal"><h4>▲ and ▼</h4><p>An arrow shows the change in failures against the previous run of the suite: <code>▲</code> means more failures, <code>▼</code> fewer. A suite with no earlier run shows <code>first run</code> in place of <code>prev</code>.</p></div>
+        <div class="gitem reveal"><h4>Press to expand failures</h4><p>Press the line to list up to 10 failing tests with their locations.</p></div>
+        <div class="gitem reveal"><h4>When counts can't be read</h4><p>A recognised test command whose output it cannot read shows <code>ran · exit N · counts unavailable</code> (the run is stored with <code>parsed: false</code>).</p></div>
+        <div class="gitem reveal"><h4>Narrow terminals and subagents</h4><p>Narrow terminals drop <code>via</code>, then <code>prev</code>, then the duration. Runs from a subagent are tagged <code>via &lt;the agent's description&gt;</code>; workflow agents are tagged <code>via workflow</code>. When a session starts, the newest stored run of the current worktree appears dimmed until a new run replaces it. The band stays hidden while a survey is on screen.</p></div>
+      </div>
+
+      <h3 id="session-compass" style="margin:26px 0 10px;font-size:20px">session-compass</h3>
+      <div class="guide">
+        <div class="gitem reveal"><h4><code>compass_status</code> — the model sets the goal</h4><p>The model sees the tool as <code>mcp__session-compass__compass_status</code>, with optional <code>goal</code> (80 characters), <code>step</code> and <code>next</code> (60 each). A short standing reminder asks Claude to call it when the goal is first clear and whenever the phase changes (spec, plan, implement, review, PR, done), not every turn. A call with no non-empty field is refused.</p></div>
+        <div class="gitem reveal"><h4>The return band</h4><p>One line above the prompt: <code>repo · worktree (branch) · Goal · Now · N artifacts · tests</code>. It appears when a session starts with earlier turns (a resume, or a plugin reload), and after 15 idle minutes with no turn running. Only a prompt you type, or send from your phone or the web, dismisses it. Prompts from peers, notifications, other plugins and subagent turns leave it up. With no goal set it shows your first prompt dimmed and <code>(no goal set)</code>. <code>tests</code> appears when test-board is installed and has parsed runs.</p></div>
+        <div class="gitem reveal"><h4>The <code>/compass</code> pane</h4><p><b>This session</b> shows repo, worktree and branch; goal; step and next; how long ago the status was set; test-board's tally; and every artifact. <b>All sessions</b> lists the other recorded sessions, most recently active first, up to 50. Press an entry to copy it: a URL, a path, a commit sha, a branch name, or <code>claude --resume &lt;id&gt;</code> for a session row.</p></div>
+        <div class="gitem reveal"><h4>What counts as an artifact</h4><p>Captured automatically from successful tool calls:</p>
+          <div class="tbl-wrap"><table class="t"><thead><tr><th>Source</th><th>What is kept</th></tr></thead><tbody>
+            <tr><td><code>Artifact</code> publish</td><td>The claude.ai URL. Opens, reads and lists are ignored.</td></tr>
+            <tr><td><code>SendUserFile</code></td><td>Attachments that uploaded without error.</td></tr>
+            <tr><td>Deliverable <code>Write</code></td><td>An <code>.html</code>, <code>.md</code>, <code>.pdf</code>, <code>.png</code> or <code>.svg</code> under <code>.scratch/</code>, <code>docs/</code>, <code>reports/</code> or <code>test-checklists/</code>, or under a Claude scratchpad directory.</td></tr>
+            <tr><td>Git commits, pushes, PRs</td><td>As reported by the Bash tool. A <code>checkout</code>, <code>switch</code>, <code>worktree</code>, <code>commit</code> or <code>push</code> from the main session also refreshes the recorded worktree and branch.</td></tr>
+          </tbody></table></div></div>
+      </div>
+    </section>
+
+    <section id="how" class="doc-section">
+      <h2><span class="ix">05</span> How it works under the hood</h2>
+      <div class="guide">
+        <div class="gitem reveal"><h4>The hook chain</h4><p>A tool call goes down through the mods to the engine, and the result comes back up. Each mod wraps <code>next(e)</code>, so it sees the command before it runs and the result after, without owning either. Neither mod alters or denies another tool's call.</p>
+          <div class="fig"><svg viewBox="0 0 900 330" role="img" aria-label="A Bash call from the model passes down through the session-compass hook and the test-board hook to the engine, where Bash runs. The result passes back up: test-board parses test output and session-compass captures commits. The model receives the result unchanged.">
+            <defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--text-dim)"/></marker></defs>
+            <rect class="zone" x="300" y="14" width="580" height="304" rx="4"/><text class="sub" x="312" y="34">MOD CHAIN · on('tool.call')</text>
+            <rect class="bx" x="30" y="50" width="170" height="64" rx="6"/><text x="115" y="88" text-anchor="middle">Model</text>
+            <rect class="bx v" x="340" y="50" width="380" height="64" rx="6"/><text x="530" y="76" text-anchor="middle">session-compass</text><text class="sub" x="530" y="98" text-anchor="middle">captures artifacts · never alters</text>
+            <rect class="bx g" x="340" y="150" width="380" height="64" rx="6"/><text x="530" y="176" text-anchor="middle">test-board</text><text class="sub" x="530" y="198" text-anchor="middle">records runs · never alters</text>
+            <rect class="bx" x="340" y="250" width="380" height="56" rx="6"/><text x="530" y="283" text-anchor="middle">engine · Bash runs</text>
+            <path class="ar" marker-end="url(#ah)" d="M200 70H336"/><text class="sub" x="268" y="62" text-anchor="middle">Bash call</text>
+            <path class="ar" marker-end="url(#ah)" d="M420 114V146"/><path class="ar" marker-end="url(#ah)" d="M420 214V246"/><text class="sub" x="412" y="136" text-anchor="end">next(e)</text>
+            <path class="ar g" marker-end="url(#ah)" d="M640 250V218"/><text class="sub" x="650" y="238">result · parse tests</text>
+            <path class="ar v" marker-end="url(#ah)" d="M640 150V118"/><text class="sub" x="650" y="138">result · capture commits</text>
+            <path class="ar" marker-end="url(#ah)" d="M340 100H204"/><text class="sub" x="270" y="122" text-anchor="middle">same result</text>
+          </svg><figcaption>The order of the two mods does not matter.</figcaption></div></div>
+        <div class="gitem reveal"><h4>Band stacking</h4><p>Each band hook draws its own line, then appends whatever <code>next(e)</code> drew below it. A band never replaces another, so the two mods and any other mod's band stack in one column above the prompt.</p>
+          <div class="fig"><svg viewBox="0 0 900 230" role="img" aria-label="Each AbovePrompt render hook returns a column holding its own line above whatever next(e) drew. session-compass, test-board and the engine or other mods produce three stacked lines.">
+            <rect class="bx v" x="30" y="35" width="270" height="50" rx="6"/><text x="165" y="65" text-anchor="middle">my line + next(e)</text><text class="sub" x="165" y="30" text-anchor="middle">session-compass</text>
+            <rect class="bx g" x="30" y="105" width="270" height="50" rx="6"/><text x="165" y="135" text-anchor="middle">my line + next(e)</text><text class="sub" x="165" y="100" text-anchor="middle">test-board</text>
+            <rect class="bx" x="30" y="175" width="270" height="50" rx="6"/><text x="165" y="205" text-anchor="middle">engine / other mods</text>
+            <path class="ar" marker-end="url(#ah)" d="M300 60H356"/><path class="ar" marker-end="url(#ah)" d="M300 130H356"/><path class="ar" marker-end="url(#ah)" d="M300 200H356"/>
+            <rect class="zone" x="360" y="20" width="510" height="200" rx="4"/><text class="sub" x="372" y="40">ui.render · AbovePrompt</text>
+            <text class="tv" x="380" y="85" style="font-size:13px">cubby · feature/scan · Goal: barcode fallback</text>
+            <text class="tg" x="380" y="130" style="font-size:13px">pytest -q   40 ✓  3 ✗  1 skip   prev 43 ✓ 0 ✗</text>
+            <text class="sub" x="380" y="185">other band</text>
+          </svg><figcaption>Each hook draws its line and then appends whatever <code>next(e)</code> drew.</figcaption></div></div>
+        <div class="gitem reveal"><h4>test-board internals</h4><p>Pure modules (<code>suite.ts</code>, <code>parse.ts</code>, <code>history.ts</code>, <code>format.ts</code>) and one <code>register.tsx</code> that talks to the engine. History lives in the plugin store under <code>runs:&lt;key&gt;</code>, where the key is the worktree root plus the normalized command, so <code>… | tail -30</code> and the bare command share one history. It keeps the last 10 runs per suite per worktree, plus an <code>index</code> of keys by last use. The latest runs are in the <code>test-board.latest</code> state value, which session-compass reads when test-board is installed.</p></div>
+        <div class="gitem reveal"><h4>session-compass internals</h4><p>Pure modules (<code>record.ts</code>, <code>capture.ts</code>, <code>git.ts</code>, <code>io.ts</code>, <code>band.tsx</code>, <code>pane.tsx</code>) and one <code>register.tsx</code>. The store holds one <code>session:&lt;id&gt;</code> record per session and an <code>index</code> of ids. All store work runs on one serial queue, and the record changes only through compare-and-swap updates of the current state value, so concurrent events never interleave. <code>compass_status</code> is denied for subagents, so a subagent cannot rewrite the session goal; a subagent's artifacts still count. Atoms and every function that touches <code>$</code> sit in <code>register.tsx</code> because the host does not follow <code>$</code> into imported files.</p></div>
+      </div>
+    </section>
+
+    <section id="inventory" class="doc-section">
+      <h2><span class="ix">06</span> What's inside</h2>
+      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">test-board</h4>
+      <div class="inv"><div class="row"><span class="nm">hooks/</span><span class="dc"><code>register.tsx</code>, <code>suite.ts</code>, <code>parse.ts</code>, <code>history.ts</code>, <code>format.ts</code>, <code>hooks.json</code></span></div><div class="row"><span class="nm">limits</span><span class="dc">10 runs per suite per worktree · 20 failure IDs per run · 3 runs in the band · 2 MiB soft store cap (least recently used suites dropped first)</span></div><div class="row"><span class="nm">known limit</span><span class="dc">A hot reload mid-session forgets which agent ids belong to which subagent, so their later runs show as <code>via workflow</code>.</span></div></div>
+      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">session-compass</h4>
+      <div class="inv"><div class="row"><span class="nm">hooks/</span><span class="dc"><code>register.tsx</code>, <code>record.ts</code>, <code>capture.ts</code>, <code>git.ts</code>, <code>io.ts</code>, <code>band.tsx</code>, <code>pane.tsx</code>, <code>hooks.json</code></span></div><div class="row"><span class="nm">limits</span><span class="dc">Goal 80 characters, step and next 60 · 100 artifacts per session · 50 sessions · 15 minutes idle (checked once a minute)</span></div><div class="row"><span class="nm">privacy</span><span class="dc">Records live in the plugin's local store. Nothing leaves the machine and the plugin makes no model calls. The store keeps the first 80 characters of a session's first prompt, worktree paths, commit subjects and artifact URLs until the session ages out of the 50-session cap; avoid pasting secrets into a first prompt.</span></div></div>
+    </section>
+
+    <section class="doc-section" style="border-bottom:none">
+      <h2 style="font-size:22px">Explore the other plugins</h2>
+      <div class="feat-grid"><a class="feat gr reveal" href="second-wind.html">
+          <div class="head"><h3>Second Wind</h3><p class="desc">Run Claude overnight; auto-resume after 5-hour limit resets</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat cy reveal" href="ios-dev.html">
+          <div class="head"><h3>ios-dev</h3><p class="desc">Build iOS apps, screenshot remotely, release to App Store</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat vi reveal" href="core-workflow.html">
+          <div class="head"><h3>core-workflow</h3><p class="desc">Opinionated dev workflow: commit + share + team up</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat go reveal" href="linear-pm.html">
+          <div class="head"><h3>linear-pm</h3><p class="desc">Linear issues → code, branches, PRs — autonomous end-to-end</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat go reveal" href="portable-artifacts.html">
+          <div class="head"><h3>portable-artifacts</h3><p class="desc">Dashboards and animated explainers from a prompt — offline, any agent</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat ro reveal" href="prompt-craft.html">
+          <div class="head"><h3>prompt-craft</h3><p class="desc">Sharpen rough prompts into specs, suggest follow-up commands</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a></div>
+      <p style="margin-top:18px"><a href="../catalog.html">Browse the full skills &amp; tools catalog →</a></p>
+    </section>
+
+  </main>
+ </div>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div><b>claude-skills</b>A Claude Code plugin marketplace<br>by Abhijit Bansal.</div>
+      <div>
+        <b>Features</b>
+        <a href="second-wind.html">Second Wind</a>
+        <a href="prompt-craft.html">prompt-craft</a>
+        <a href="portable-artifacts.html">portable-artifacts</a>
+        <a href="mods.html">Session mods</a>
+        <a href="ios-dev.html">ios-dev</a>
+        <a href="core-workflow.html">core-workflow</a>
+        <a href="linear-pm.html">linear-pm</a>
+      </div>
+      <div>
+        <b>Explore</b>
+        <a href="../catalog.html">Skills &amp; tools catalog</a>
+        <a href="../architecture.html">Architecture</a>
+        <a href="../machine-setup.html">Machine-setup runbook</a>
+        <a href="../second-wind/index.html">Second Wind CLI guide</a>
+      </div>
+      <div>
+        <b>Project</b>
+        <a href="https://github.com/abhijitbansal/claude-skills">GitHub repository ↗</a>
+        <a href="https://github.com/abhijitbansal/claude-skills/blob/main/CONTRIBUTING.md">Contributing</a>
+        <a href="https://github.com/abhijitbansal/claude-skills/blob/main/SECURITY.md">Security policy</a>
+      </div>
+    </div>
+    <div class="foot-meta">
+      <span class="lic">MIT licensed</span>
+      <span>8 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
+      <span>Tested on macOS &amp; Ubuntu</span>
+    </div>
+  </div>
+</footer>
+<script src="../../site/assets/site.js"></script>
+<script>
+(function(){
+var demo=document.getElementById('demo'),cap=document.getElementById('demo-cap'),btn=document.getElementById('demo-replay'),typed=document.getElementById('typed');
+if(!demo)return;
+var els=demo.querySelectorAll('.rv'),FULL='/compass',timers=[];
+var caps={1:'Scene 1: a test run. The Test Board band appears above the prompt.',2:'Scene 2: 45 minutes later, the Session Compass return band appears above it.',3:'Scene 3: /compass opens the pane with This session and All sessions tabs.'};
+var final=cap.textContent;
+function later(f,ms){timers.push(setTimeout(f,ms))}
+function show(s){for(var i=0;i<els.length;i++)if(els[i].getAttribute('data-s')==s)els[i].classList.add('on');cap.textContent=caps[s]}
+function reset(){timers.forEach(clearTimeout);timers=[];for(var i=0;i<els.length;i++)els[i].classList.remove('on');typed.textContent=''}
+function type(i){if(i>FULL.length)return;typed.textContent=FULL.slice(0,i);later(function(){type(i+1)},90)}
+function play(){reset();btn.hidden=true;later(function(){show(1)},300);later(function(){show(2)},3200);later(function(){cap.textContent=caps[3];type(1)},6200);later(function(){show(3);btn.hidden=false},7600)}
+function still(){demo.classList.remove('js');btn.hidden=true}
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches||!('IntersectionObserver' in window)){still();return}
+var started=false;
+demo.classList.add('js');cap.textContent='Plays when visible.';
+btn.addEventListener('click',play);
+reset();
+var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting&&!started){started=true;io.disconnect();play()}})},{threshold:.4});
+io.observe(demo);
+})();
+</script>
+
+</body>
+</html>
