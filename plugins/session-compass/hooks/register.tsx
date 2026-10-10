@@ -1,15 +1,18 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 import type { Artifact, SessionRecord } from '../types'
+import { bandView, formatBand, tally } from './band'
 import { capture } from './capture'
 import { GIT_TIMEOUT_MS, INDEX, PREFIX, isRecord, recordKey } from './io'
 import {
-  LIMITS, addArtifact, applyStatus, basename, capArtifacts, newRecord, orderIndex, sortByActive,
+  LIMITS, addArtifact, applyStatus, basename, capArtifacts, newRecord, orderIndex, sortByActive, touch, withFirstPrompt,
   type StatusInput, type Where,
 } from './record'
 
 // Atoms sit in this file: the host's state scan reads only atoms declared here.
 const record = atom({ plugin: 'session-compass', key: 'record' } as const, null)
+const band = atom({ plugin: 'session-compass', key: 'band' } as const, 'hidden' as 'hidden' | 'return')
+const IDLE_TICK_MS = 60_000
 
 export const STATUS_TOOL_ID = 'mcp__session-compass__compass_status'
 const STATUS_TOOL = {
@@ -151,7 +154,22 @@ async function applyCapture($: EngineInterface, found: Artifact[], isGitMove: bo
   if (written !== null) await saveRecord($, written)
 }
 
-type Chain = { chain: Promise<void> }
+type Chain = { chain: Promise<void>; isTurnRunning: boolean }
+
+async function idleTick($: EngineInterface, state: Chain): Promise<void> {
+  const rec = await read($, record)
+  if (rec === null || state.isTurnRunning) return
+  const isIdle = (await $.clock.now()) - rec.lastActive >= LIMITS.idleMs
+  if (isIdle && (await read($, band)) !== 'return') await update($, band, () => 'return')
+}
+
+async function touchRecord($: EngineInterface, state: Chain, change: (r: SessionRecord, now: number) => SessionRecord) {
+  await queue(state, 'touch', async () => {
+    const now = await $.clock.now()
+    const written = await update($, record, cur => (cur === null ? cur : change(cur, now)))
+    if (written !== null) await saveRecord($, written)
+  }, $).catch(() => undefined)
+}
 
 // Record writes run one at a time so store saves never interleave. The chain
 // link is catch-wrapped so one failure never poisons it; the caller gets the
@@ -170,7 +188,7 @@ function queue(state: Chain, kind: string, job: () => Promise<void>, $: EngineIn
 
 export const register: Register = on => {
   // One promise chain per load: capture passes run one at a time.
-  const state = { chain: Promise.resolve() }
+  const state: Chain = { chain: Promise.resolve(), isTurnRunning: false }
 
   on('session.start', async ($, e, next) => {
     await $.tool.register(STATUS_TOOL)
@@ -187,7 +205,33 @@ export const register: Register = on => {
       await update($, record, () => started)
       await saveRecord($, started)
     }, $).catch(() => undefined)
+    if ((await $.session.turns()) > 0) await update($, band, () => 'return')
+    $.clock.every(IDLE_TICK_MS, () => idleTick($, state))
     return next(e)
+  })
+
+  on('prompt.submit', async ($, e, next) => {
+    // A delivery into a running turn (turnId set) is not a new prompt.
+    if (e.turnId === undefined) {
+      state.isTurnRunning = true
+      await update($, band, () => 'hidden')
+      await touchRecord($, state, (r, now) => touch(withFirstPrompt(r, e.text), now))
+    }
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('turn.complete', async ($, e, next) => {
+    state.isTurnRunning = false
+    await touchRecord($, state, touch)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const shown = await read($, band)
+    const rec = await read($, record)
+    if (e.props.hasSurvey || shown !== 'return' || rec === null) return next(e)
+    const line = formatBand(rec, tally(await readTestBoard($)), e.props.bodyColumns)
+    return bandView($.ui.resolve(e), line, await next(e))
   })
 
   on('tool.call', { tool: STATUS_TOOL_ID }, async ($, e) => {
