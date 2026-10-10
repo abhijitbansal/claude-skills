@@ -54,6 +54,14 @@ Notes on the counts:
 | C3 | Which artifacts are listed? (multi-select) | published claude.ai artifacts · files sent with SendUserFile · generated deliverables · git activity | **All four** |
 | C4 | Show other sessions too? | yes, in the pane · this session only | **Yes**, as an "All sessions" tab in the pane |
 
+### Delivery
+
+| # | Question | Options offered | Answer |
+| --- | --- | --- | --- |
+| D1 | Where does plan and build work happen? | new branch off `feat/session-mods` · reset the worktree branch · draft only | **`feat/session-mods`**, worked from the `claude-mods` worktree; its local branch tracks `origin/feat/session-mods` and pushes with `HEAD:feat/session-mods`, because git will not check out one branch in two worktrees |
+| D2 | One PR per plugin, or one for both? | one per plugin (recommended) · one for both | **One PR for both**, with a single inventory-count sync |
+| D3 | Where do probes U1–U12 run? | one shared probe phase first (recommended) · embedded per plugin | **One shared probe phase first.** Results go into §5 and any fallback is written into the specs before feature code starts |
+
 ### Approval gates
 
 | Gate | Status |
@@ -61,7 +69,7 @@ Notes on the counts:
 | Approach A + Test Board design section | Approved |
 | Session Compass design section | Approved |
 | Written specs (`46bb9aa`) | Approved 2026-10-10, after four review fixes: Test Board `stale` field, a `tsconfig.json` per plugin, Compass `firstPrompt` capture in `prompt.submit`, and `repo` resolved through `--git-common-dir` |
-| Implementation plans | Not started. They are written only after spec approval. |
+| Implementation plans | Written 2026-10-10: `plans/2026-10-10-session-mods-00-probes.md`, `-01-test-board.md`, `-02-session-compass.md`. **Awaiting user review** |
 
 ## 3. Decisions made without a question
 
@@ -124,6 +132,43 @@ before any feature code. Status is updated here as probes run.
 | U10 | Does `$.clock.every(60_000)` keep firing while the session is idle with no turn running? | Compass idle band | Probe increments a store counter each tick; idle 3 min | Raise the band on the next `prompt.submit` after a gap (late, but correct) | Open |
 | U11 | Does a band set while idle redraw immediately, without user input? | Compass idle band | Same probe sets `$.state` from the timer; observe the terminal | Accept a redraw at the next keypress | Open |
 | U12 | Does `$.ui.copy` work in the terminal surface (iTerm2 through herdr)? | Compass pane row actions | Probe copies a string; paste | Show the text selectable instead of copying | Open |
+| U13 | Does `$.session.cwd()` follow a Bash `cd` that persisted in the session? `tool.call` carries no cwd. | Test Board `worktreeRoot` | Probe logs `cwd()` after `cd /tmp && echo hi`, then after a bare `pwd` | Track cwd in the mod: apply each command's leading `cd <dir>` to a per-loop cwd seeded from `$.session.root()` | Open |
+| U14 | Can one mod `$.state.get` another mod's value with no `dependencies` entry, and does `claude plugin validate` accept it? | Compass reads `test-board.latest` | probe-b reads probe-a's value in its band; run validate on probe-b | List `test-board` under Compass's `dependencies` | Open |
+| U15 | Does a Bash result carry `result.gitOperation` for commit, push and PR? The types say it does. | Compass git capture | Probe logs `gitOperation` after an unpushed empty commit | Parse stdout with regexes (the spec's original `git.ts`) | Open |
+
+U13 to U15 were added while writing the plans, from the 2.1.296 types. The probes run
+as [plan 00](../plans/2026-10-10-session-mods-00-probes.md).
+
+## 5a. Plan-time deviations from the specs
+
+Found while writing plans 01 and 02. Each is written into the plan as a deliberate
+deviation; the user reviews them with the plans.
+
+**Test Board (plan 01)**
+- Raw readers run only when the command matches the test-command pattern, so `cat pytest.log`
+  is not counted. The cartoon summary reader still runs for any command.
+- Background-moved runs (no output yet) record nothing.
+- When one suite runs twice in a turn, `latest` keeps only the newest run.
+- Adds `hooks/format.ts` (band text, arrows, narrow-terminal drops). `register.test.ts` becomes `.tsx`.
+
+**Session Compass (plan 02)**
+- The model sees the tool as `mcp__session-compass__compass_status` (mod tools are listed as
+  `mcp__<plugin>__<name>`). It is registered with `isDeferred: false` so its schema is in the tool list from turn one.
+- Git artifacts come from the Bash result's structured `gitOperation`. The commit subject still
+  comes from the `[<branch> <sha>] <subject>` stdout line, and the push remote from the `To <remote>` line
+  (default `origin`). This depends on U15.
+- `repo` is the basename of `$.session.repo().root`, which the engine documents as the main
+  working tree's root. This matches the amended spec's `--git-common-dir` intent.
+- Copy buttons take the surface from the render event, because `command.run` carries no surface.
+- A hot reload fires `session.start` again, so `turns() > 0` raises the return band after each
+  reload during development. This is accepted.
+- The whole no-goal band line is dimmed, not only the goal part.
+- When a store write fails, the trim to 50 artifacts per session rewrites other sessions' records (`trimOthers`).
+
+**Both**
+- `tsc` is not installed on the machine. Gates run `npx -y -p typescript@5.6.3 tsc`. Plan 02 also
+  type-checks after each task through a gitignored `.scratch/tsc` config that points at the skill's
+  declaration file, before the first `--plugin-dir` load.
 
 ## 6. Not taken forward (yet)
 
