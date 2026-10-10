@@ -6,14 +6,14 @@ import path from 'node:path';
 
 export const SKILLS = {
   dashboard: {
-    dir: 'dashboard-builder',
+    dir: 'make-dashboard',
     spec: 'dashboard.json',
     // Build into <work>/dist; success = dist/index.html exists.
     outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/build.mjs'), spec, '--out', path.join(work, 'dist')],
     artifacts: ['dist/index.html'],
   },
   motion: {
-    dir: 'motion-explainer',
+    dir: 'make-motion',
     spec: 'motion.json',
     // Contact sheet into <work>/out; success = at least one PNG.
     outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/render.mjs'), spec, '--contact-sheet', '--out', path.join(work, 'out')],

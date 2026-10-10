@@ -6,8 +6,8 @@ what the host left behind.
 
 ```bash
 # one-time: install each skill's deps
-(cd ../skills/dashboard-builder && npm ci)
-(cd ../skills/motion-explainer && npm ci && npx playwright install chromium)
+(cd ../skills/make-dashboard && npm ci)
+(cd ../skills/make-motion && npm ci && npx playwright install chromium)
 
 node run-eval.mjs --skill dashboard --host claude --limit 3
 node run-eval.mjs --skill motion --host codex --only q3-counter,edit-existing

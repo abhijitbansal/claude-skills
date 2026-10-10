@@ -1,5 +1,8 @@
 # Portable Artifacts Implementation Plan
 
+> **Renamed 2026-10-10:** `dashboard-builder` → `make-dashboard`, `motion-explainer` → `make-motion` (one name on every host; avoids a clash with an existing `dashboard-builder` skill). Paths below use the original names.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build two host-agnostic, offline, open-source agent skills: `dashboard-builder` (prompt → SQL + Vega-Lite → static HTML with per-chart provenance) and `motion-explainer` (prompt → scene spec → preview + MP4).

@@ -1,5 +1,8 @@
 # Portable Motion & Dashboard Skills — Design
 
+> **Renamed 2026-10-10:** `dashboard-builder` → `make-dashboard`, `motion-explainer` → `make-motion` (one name on every host; avoids a clash with an existing `dashboard-builder` skill). Paths below use the original names.
+
+
 *2026-10-09 · source proposal: `foundry/.scratch/portable-motion-dashboard-skills.md`*
 
 This doc refines the proposal into a buildable design. The proposal's goals,

@@ -1,9 +1,10 @@
 ---
-name: dashboard-builder
-description: Use when the user wants a dashboard, KPI page or charts built from local data files (CSV, Parquet, JSON, DuckDB) as a self-contained static HTML page whose charts show their SQL and refresh time; works offline with any agent that can run shell commands.
+name: make-dashboard
+description: Use when the user wants a dashboard, KPI page or charts built from local data files (CSV, Parquet, JSON, DuckDB, SQLite) or Postgres/MySQL as a self-contained static HTML page whose charts show their SQL and refresh time; works offline with any agent that can run shell commands.
+argument-hint: what to build, e.g. "revenue by region and monthly trend from data/sales.csv"
 ---
 
-# dashboard-builder
+# make-dashboard
 
 You write one JSON spec (`dashboard.json`: sources, SQL queries, KPIs, Vega-Lite charts).
 Scripts validate it and build a single offline `index.html`. Every chart card shows its SQL,
@@ -12,7 +13,10 @@ row count and refresh time. No network, no LLM at build time.
 ## Workflow
 
 `<skill-dir>` is the folder that contains this SKILL.md. Run every command from the project folder
-(where `dashboard.json` lives), using the full path to the scripts. One-time: `npm ci` in `<skill-dir>`.
+(where `dashboard.json` lives), using the full path to the scripts.
+
+First use: if `<skill-dir>/node_modules` is missing, tell the user it is a one-time local install and run
+`npm ci --prefix <skill-dir>`. If the request is empty, ask what to build and from which data file(s).
 
 1. Look at the data first. Never guess columns:
    `node <skill-dir>/scripts/inspect.mjs data/sales.csv` (column names, types, 5 sample rows; csv, parquet or json).
@@ -64,6 +68,8 @@ Queries have a 30 s limit (`--timeout <seconds>` on build).
 ## Degraded mode
 
 If you cannot run shell commands, write `dashboard.json` and give the user the exact commands from steps 3, 4 and 5 to run (with the real `<skill-dir>` path).
+
+When done, report the spec path, the built `index.html` path, the serve URL and one line per chart. Remind the user that the page embeds the query results: do not publish it if the data is private.
 
 ## Security
 
