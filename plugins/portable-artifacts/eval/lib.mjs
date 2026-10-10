@@ -73,6 +73,23 @@ export function run(argv, { cwd, env, timeoutMs = 0, logFile } = {}) {
   });
 }
 
+// A workdir gets a REAL node_modules directory whose entries are symlinks to
+// the source packages. Hosts sometimes run `npm ci` / delete node_modules; with
+// a single symlinked node_modules that wiped the source checkout's deps. Here
+// they can only delete the links.
+export function linkNodeModules(srcNodeModules, dstNodeModules) {
+  fs.mkdirSync(dstNodeModules, { recursive: true });
+  for (const entry of fs.readdirSync(srcNodeModules)) {
+    const from = path.join(srcNodeModules, entry);
+    const to = path.join(dstNodeModules, entry);
+    if (entry.startsWith('@') && fs.statSync(from).isDirectory()) {
+      linkNodeModules(from, to); // scoped packages: link each package, not the scope
+    } else {
+      fs.symlinkSync(from, to);
+    }
+  }
+}
+
 export function countValidateRuns(logPath) {
   if (!fs.existsSync(logPath)) return 0;
   return fs.readFileSync(logPath, 'utf8').split('\n').filter((l) => l.trim()).length;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { buildPrompt, expandCmd, diffPaths, countValidateRuns, scoreRun, summarize, run } from '../lib.mjs';
+import { buildPrompt, expandCmd, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules } from '../lib.mjs';
 
 const made = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-eval-test-')); made.push(d); return d; };
@@ -142,4 +142,23 @@ test('summarize renders a markdown table with totals and escaped notes', () => {
   assert.match(md, /valid 1\/2/);
   assert.match(md, /\| a \| ✓ \| ✓ \| 2 \| ✓ \| 12 \|/);
   assert.match(md, /a\\\|b/);
+});
+
+test('linkNodeModules: an agent wiping the workdir node_modules cannot touch the source', () => {
+  const src = tmp();
+  fs.mkdirSync(path.join(src, 'node_modules/ajv'), { recursive: true });
+  fs.writeFileSync(path.join(src, 'node_modules/ajv/index.js'), 'x');
+  fs.mkdirSync(path.join(src, 'node_modules/@scope/pkg'), { recursive: true });
+  fs.mkdirSync(path.join(src, 'node_modules/.bin'));
+  fs.writeFileSync(path.join(src, 'node_modules/.package-lock.json'), '{}');
+  const dst = path.join(tmp(), 'node_modules');
+  linkNodeModules(path.join(src, 'node_modules'), dst);
+  assert.ok(fs.lstatSync(dst).isDirectory() && !fs.lstatSync(dst).isSymbolicLink());
+  assert.equal(fs.readFileSync(path.join(dst, 'ajv/index.js'), 'utf8'), 'x');
+  assert.ok(fs.existsSync(path.join(dst, '@scope/pkg')));
+  // what `npm ci` does first: remove node_modules entirely
+  fs.rmSync(dst, { recursive: true, force: true });
+  assert.equal(fs.readFileSync(path.join(src, 'node_modules/ajv/index.js'), 'utf8'), 'x');
+  assert.ok(fs.existsSync(path.join(src, 'node_modules/@scope/pkg')));
+  assert.ok(fs.existsSync(path.join(src, 'node_modules/.bin')));
 });

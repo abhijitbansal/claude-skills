@@ -57,9 +57,12 @@ needs no LLM.
   so a run can execute arbitrary code as you. Codex runs in its
   `workspace-write` sandbox. Run evals on a machine and account you trust the
   host with.
-- **Shared `node_modules`.** Each workdir symlinks `node_modules` back to the
-  skill in this checkout, so a host that runs `npm install <pkg>` changes the
-  real dependencies. Run `npm ci` in the skill afterwards if that happens.
+- **Shared packages.** Each workdir gets its own `node_modules` folder whose
+  entries are symlinks to the packages in this checkout, so a host that runs
+  `npm ci` or deletes `node_modules` only removes the links. (An earlier
+  version symlinked the whole folder, and a local model's `npm ci` emptied the
+  real one.) A host that runs `npm install <pkg>` inside a package folder can
+  still modify it.
 - On timeout the harness kills the host's whole process group (renders and
   servers included). Workdirs are deleted once their artifacts have been
   copied to `results/`.

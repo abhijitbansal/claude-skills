@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { SKILLS, buildPrompt, expandCmd, run, scoreRun, summarize } from './lib.mjs';
+import { SKILLS, buildPrompt, expandCmd, run, scoreRun, summarize, linkNodeModules } from './lib.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { values: opts } = parseArgs({
@@ -74,7 +74,7 @@ function prepareWorkdir(p) {
     recursive: true,
     filter: (src) => !path.relative(skillSrc, src).split(path.sep).some((seg) => SKIP_DIRS.has(seg)),
   });
-  fs.symlinkSync(path.join(skillSrc, 'node_modules'), path.join(skillDst, 'node_modules'), 'dir');
+  linkNodeModules(path.join(skillSrc, 'node_modules'), path.join(skillDst, 'node_modules'));
   fs.cpSync(path.join(here, 'fixtures', 'data'), path.join(work, 'data'), { recursive: true });
   let seedSpec = null;
   if (p.seed) {
