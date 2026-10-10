@@ -75,6 +75,9 @@ jobs:
           node-version: '24'
       - name: shared errors.mjs copies are byte-identical
         run: cmp plugins/portable-artifacts/skills/dashboard-builder/scripts/lib/errors.mjs plugins/portable-artifacts/skills/motion-explainer/scripts/lib/errors.mjs
+      - name: eval harness (fake host, no LLM)
+        working-directory: plugins/portable-artifacts/eval
+        run: node --test "test/**/*.test.mjs"
       - name: dashboard-builder
         working-directory: plugins/portable-artifacts/skills/dashboard-builder
         run: npm ci && npm test
