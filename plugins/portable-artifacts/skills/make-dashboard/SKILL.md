@@ -12,6 +12,8 @@ row count and refresh time. No network, no LLM at build time.
 
 ## Workflow
 
+Run every step yourself, in this same turn, with your shell or file tools. Do not end your reply after showing or describing the JSON: keep going until validate prints `valid` and the output file exists.
+
 `<skill-dir>` is the folder that contains this SKILL.md. Run every command from the project folder
 (where `dashboard.json` lives), using the full path to the scripts.
 

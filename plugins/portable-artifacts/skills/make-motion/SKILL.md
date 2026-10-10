@@ -18,6 +18,8 @@ You write one JSON file, `motion.json`. Scripts validate it, preview it in a bro
 
 ## Workflow
 
+Run every step yourself, in this same turn, with your shell or file tools. Do not end your reply after showing or describing the JSON: keep going until validate prints `valid` and the output file exists.
+
 1. Write `motion.json` in the project (shape below; full reference in `<skill-dir>/references/schema.md`; copy a file from `<skill-dir>/references/examples/` to start).
    Actually create the file: describing it or announcing a patch is not enough. If your file tool fails, write it from the shell (`cat > motion.json <<'EOF'` … `EOF`), then `ls motion.json` to confirm it exists before validating.
 2. `node <skill-dir>/scripts/validate.mjs motion.json` — fix every line it prints (`<json.path>: <message>`, with did-you-mean) and re-run until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage/IO error.
