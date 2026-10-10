@@ -58,3 +58,10 @@ ROOT="${BATS_TEST_DIRNAME}/../.."
   grep -q 'docs/features/ios-dev.html' "$f"
   grep -q 'docs/features/mods.html' "$f"
 }
+
+@test "copy buttons never carry a trailing comment in data-copy" {
+  # A trailing "# comment" may stay in the visible <code class="ct"> text, but
+  # must never reach the clipboard payload (bit the site twice, PR #13).
+  run grep -rnE 'data-copy="[^"]*[[:space:]]#' "$ROOT/site" "$ROOT/docs"
+  [ "$status" -ne 0 ]
+}
