@@ -24,7 +24,7 @@ Optional root `audio` array, up to 20 tracks. Tracks mix over the whole video; c
 | `duration` | seconds > 0 | whole clip | trim; the track stops at `start + duration`, clamped to the video end |
 | `volume` | 0–1 | 1 | literal gain (the mix is not normalised) |
 | `fadeIn` | seconds ≥ 0 | 0 | from the track start |
-| `fadeOut` | seconds ≥ 0 | 0 | ends at the `duration` trim, else at the video end. A clip that ends earlier gets no fade (the file length is never probed). No `loop`: a short file just stops |
+| `fadeOut` | seconds ≥ 0 | 0 | ends at the `duration` trim, else at the video end. `fadeIn + fadeOut` must fit in the time the track plays. A clip that ends earlier gets no fade (the file length is never probed). No `loop`: a short file just stops |
 
 ## Elements
 Common: `id` (unique across scenes and elements), `type`, `x`, `y` (required), `opacity` (0–1, default 1), `scale` (1), `rotate` (deg, 0), `keyframes`.
@@ -60,6 +60,7 @@ Chart notes: data must be inline: `data.values`, or `datasets` plus `data: {name
 - `audio[0].src: unsupported audio format ".wma"; use mp3, wav, m4a, aac, ogg or flac`
 - `audio[1].scene: scene "outro" not found; scenes: intro, chart`
 - `audio[1].at: starts at 9s (scene "chart" + 4s), but the video ends at 8s`
+- `audio[0].fadeOut: fadeIn 1s + fadeOut 2.5s exceed the 3s the track plays (from 2s to the video end at 5s)`
 - `scenes[0].elements[1].src: file not found: pic.png` (also `must stay inside the spec folder`, `hidden files are not allowed`)
 - `scenes[0].elements[0].vegaLite.layer[1].data.url: remote data is not allowed — inline data.values`
 - `background: must be a CSS colour (hex, rgb(), rgba(), hsl(), hsla() or a named colour)`
@@ -67,7 +68,7 @@ Chart notes: data must be inline: `data.values`, or `datasets` plus `data: {name
 
 ## CLI
 - `node scripts/validate.mjs <spec> [--json]` — exit 0 / 1 / 2.
-- `node scripts/voice.mjs "<text>" --out <file.wav> [--voice af_heart] [--speed 0.5–2]` / `--list-voices` — synthesises a voiceover locally with Kokoro (kokoro-js, Apache-2.0; 24 kHz mono wav; prints the path and duration). Needs `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (on demand, not part of `npm ci`) and a one-time ~90 MB model download into `<skill-dir>/.cache/models`; offline after that. Exit 0 / 2 usage or not installed / 1 synthesis error.
+- `node scripts/voice.mjs "<text>" | --text-file <file> --out <file.wav> [--voice af_heart] [--speed 0.5–2]` / `--list-voices` — synthesises a voiceover locally with Kokoro (kokoro-js, Apache-2.0; 24 kHz mono wav; prints the path and duration). Needs `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (on demand, not part of `npm ci`) and a one-time ~90 MB model download into `<skill-dir>/.cache/models`; offline after that. Exit 0 / 2 usage or not installed / 1 synthesis error.
 - `node scripts/preview.mjs <spec> [--open]`
-- `node scripts/render.mjs <spec> [--out file.mp4] [--fps n] [--size WxH] [--contact-sheet]` — default out `<specdir>/out/<name>.mp4`; with `--contact-sheet`, `--out` is a directory and PNGs go to `<out>/contact/<scene-id>.png` (default `<specdir>/out`). `--size` sides must be 16–3840 and even. Output is written to `<name>.partial.mp4` and renamed on success; Ctrl+C removes it (exit 130/143). When the spec has `audio`, the MP4 also carries an AAC 48 kHz stereo track at 192 kb/s, mixed with normalisation off so `volume` is literal; the video length never changes because of audio. Before any frame is captured each audio file gets a decode probe: a bad file fails with `audio[i].src: ffmpeg cannot decode …` and exit 1. A spec without `audio` renders exactly as before, with no audio stream. `--fps` is an output override (integer 1–120); the spec's own `fps` is limited to 24/25/30/60.
+- `node scripts/render.mjs <spec> [--out file.mp4] [--fps n] [--size WxH] [--contact-sheet]` — default out `<specdir>/out/<name>.mp4`; with `--contact-sheet`, `--out` is a directory and PNGs go to `<out>/contact/<scene-id>.png` (default `<specdir>/out`). `--size` sides must be 16–3840 and even. Output is written to `<name>.partial.mp4` and renamed on success; Ctrl+C removes it (exit 130/143). When the spec has `audio`, the MP4 also carries an AAC 48 kHz stereo track at 192 kb/s, mixed with normalisation off so `volume` is literal; the video length never changes because of audio. Before any frame is captured each audio file gets a decode probe on its first audio stream (a bad or video-only file fails with `audio[i].src: ffmpeg cannot decode …`, exit 1), and the whole mix graph is dry-run for 0.1 s against a generated video (an ffmpeg older than 4.4 fails with `audio: ffmpeg rejected the mix …`, exit 1). Every track is converted to 48 kHz stereo before mixing, so track order never changes the result. A spec without `audio` renders exactly as before, with no audio stream. `--fps` is an output override (integer 1–120); the spec's own `fps` is limited to 24/25/30/60.
 - ffmpeg is looked up as `$FFMPEG_PATH`, then `ffmpeg` on PATH, then an optionally installed `ffmpeg-static`. Audio mixing needs ffmpeg ≥ 4.4 (`amix normalize`, `adelay all`); an older build fails at encode time with `Option normalize not found`.

@@ -16,20 +16,30 @@ const HAVE_FUTURE_DATA = 3; // HTMLMediaElement.HAVE_FUTURE_DATA
 
 const isInRange = (track, time) => time >= track.start && time < track.end;
 
-// The file has already played to its own end, so there is nothing left to restart.
-const isFinished = (el, offset) => el.ended && offset >= el.duration;
-
 // A seek that has not landed yet, or an unbuffered region: the media clock is stalled, not drifting.
 const isSettling = (el) => el.seeking || el.readyState < HAVE_FUTURE_DATA;
 
-// Elements whose play() was rejected for good (unsupported codec, decode error, autoplay block):
-// never retried every frame. An AbortError (interrupted by pause() or a seek) is transient and retried.
+// Elements whose play() was rejected for good (unsupported codec, decode error): never retried
+// every frame. AbortError (interrupted by pause() or a seek) and NotAllowedError (no user gesture
+// yet; the next real Play fixes it) are transient and retried.
 const failed = new WeakSet();
+const TRANSIENT = new Set(['AbortError', 'NotAllowedError']);
+
+// Offset at which an element reported `ended`. The browser may over-report `duration`, so
+// `ended` alone decides; a rewind below that offset (scrub, Play from earlier) clears it.
+const endedAt = new WeakMap();
+
+function isFinished(el, offset) {
+  if (!el.ended) { endedAt.delete(el); return false; }
+  if (!endedAt.has(el)) endedAt.set(el, offset);
+  if (offset < endedAt.get(el)) { endedAt.delete(el); return false; }
+  return true;
+}
 
 function startTrack(track, offset) {
   if (failed.has(track.el)) return;
   track.el.currentTime = offset;
-  track.el.play().catch((e) => { if (e?.name !== 'AbortError') failed.add(track.el); });
+  track.el.play().catch((e) => { if (!TRANSIENT.has(e?.name)) failed.add(track.el); });
 }
 
 function driveTrack(track, time, playing) {

@@ -25,6 +25,7 @@ export function initPreviewUI() {
   let playing = false;
   let last = 0;
   const audio = audioController(() => motion().audio ?? []);
+  const audible = () => playing && !document.hidden; // rAF stops in a hidden tab; audio must stop with it
 
   const show = () => {
     scrub.value = String(time);
@@ -33,7 +34,7 @@ export function initPreviewUI() {
   const seek = (sec) => {
     time = Math.min(Math.max(0, sec), motion().duration);
     motion().seek(time);
-    audio.update(time, playing);
+    audio.update(time, audible());
     show();
   };
   const setMuted = (on) => {
@@ -49,7 +50,7 @@ export function initPreviewUI() {
       last = performance.now();
       requestAnimationFrame(tick);
     }
-    audio.update(time, on);
+    audio.update(time, audible());
   };
   function tick(now) {
     if (!playing) return;
@@ -74,8 +75,8 @@ export function initPreviewUI() {
 
   // rAF stops in a hidden tab but <audio> keeps going: pause there, resume when visible.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) audio.update(time, false);
-    else if (playing) { last = performance.now(); audio.update(time, true); }
+    if (!document.hidden && playing) last = performance.now();
+    audio.update(time, audible());
   });
   play.addEventListener('click', () => setPlaying(!playing));
   muteButton.addEventListener('click', () => setMuted(!audio.muted));

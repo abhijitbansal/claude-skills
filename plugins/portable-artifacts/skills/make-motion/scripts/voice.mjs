@@ -1,36 +1,48 @@
 #!/usr/bin/env node
 // node scripts/voice.mjs "<text>" --out <file.wav> [--voice af_heart] [--speed 1]
+// node scripts/voice.mjs --text-file narration.txt --out <file.wav>   (no shell expansion of $ or backticks)
 // node scripts/voice.mjs --list-voices
 // Synthesises a voiceover clip locally with Kokoro; reference the wav from motion.json `audio[].src`.
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { UsageError } from './lib/spec.mjs';
-import { parseVoiceArgs, loadKokoro, loadModel, synthesize, USAGE } from './lib/voice.mjs';
+import { parseVoiceArgs, loadKokoro, loadModel, synthesize, USAGE, INSTALL_HINT } from './lib/voice.mjs';
+
+const EXIT_USAGE = 2;
+const EXIT_FAILURE = 1;
 
 function listVoices(tts) {
-  const voices = tts.voices ?? {};
-  for (const [name, info] of Object.entries(voices)) {
+  for (const [name, info] of Object.entries(tts.voices ?? {})) {
     process.stdout.write(`${name}\t${info.language ?? ''}\t${info.gender ?? ''}\t${info.overallGrade ?? ''}\n`);
   }
 }
 
-async function main() {
-  const opts = parseVoiceArgs(process.argv.slice(2));
-  const kokoro = await loadKokoro();
-  const tts = await loadModel(kokoro);
-  if (opts.listVoices) { listVoices(tts); return 0; }
-  if (!(opts.voice in (tts.voices ?? {}))) throw new UsageError(`unknown voice "${opts.voice}"; run --list-voices`);
+async function run(opts, tts, kokoro) {
+  if (opts.listVoices) { listVoices(tts); return; }
+  if (!Object.hasOwn(tts.voices ?? {}, opts.voice)) throw new UsageError(`unknown voice "${opts.voice}"; run --list-voices`);
   const out = path.resolve(opts.out);
   mkdirSync(path.dirname(out), { recursive: true });
   const seconds = await synthesize(tts, kokoro, { ...opts, out });
   process.stdout.write(`${out}\n${seconds.toFixed(2)} s, ${opts.voice}\n`);
-  await tts.model.dispose(); // onnxruntime aborts ("mutex lock failed") if the process exits with a live session
-  return 0;
 }
 
-// Success returns normally: process.exit() while onnxruntime threads are alive crashes with SIGABRT.
-main().then(() => {}, (e) => {
+// The model session is always disposed before the process ends, on success and on failure:
+// exiting with a live onnxruntime session aborts with "mutex lock failed" (SIGABRT), and so does
+// process.exit(), so the exit code is set and the event loop is left to drain.
+async function main() {
+  const opts = parseVoiceArgs(process.argv.slice(2));
+  const kokoro = await loadKokoro();
+  const tts = await loadModel(kokoro);
+  try {
+    await run(opts, tts, kokoro);
+  } finally {
+    await tts.model.dispose();
+  }
+}
+
+main().catch((e) => {
   process.stderr.write(`${e.message}\n`);
-  if (e instanceof UsageError && e.message !== USAGE && !e.message.startsWith('kokoro-js')) process.stderr.write(`${USAGE}\n`);
-  process.exit(e instanceof UsageError ? 2 : 1);
+  const usage = e instanceof UsageError;
+  if (usage && e.message !== USAGE && e.message !== INSTALL_HINT) process.stderr.write(`${USAGE}\n`);
+  process.exitCode = usage ? EXIT_USAGE : EXIT_FAILURE;
 });

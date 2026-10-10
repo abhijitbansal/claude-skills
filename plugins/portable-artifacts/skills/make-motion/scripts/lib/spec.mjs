@@ -260,6 +260,17 @@ function checkAssetPath(src, at, dir, errors) {
   return !error;
 }
 
+// Fades must fit inside the time the track plays, so the preview ramps and ffmpeg's afade agree.
+function checkFades(track, start, total, base, errors) {
+  const fadeIn = track.fadeIn ?? 0;
+  const fadeOut = track.fadeOut ?? 0;
+  const end = track.duration === undefined ? total : Math.min(total, start + track.duration);
+  const plays = Math.round((end - start) * 1000) / 1000;
+  if (fadeIn + fadeOut <= plays) return;
+  const until = track.duration === undefined ? `the video end at ${total}s` : `${end}s`;
+  errors.push({ path: pathJoin(base, 'fadeOut'), message: `fadeIn ${fadeIn}s + fadeOut ${fadeOut}s exceed the ${plays}s the track plays (from ${start}s to ${until})` });
+}
+
 function checkAudio(spec, dir, errors) {
   const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
   const sceneIds = spec.scenes.map((s) => s.id);
@@ -278,7 +289,9 @@ function checkAudio(spec, dir, errors) {
     if (start >= total) {
       const how = track.scene === undefined ? '' : ` (scene "${track.scene}" + ${track.at ?? 0}s)`;
       errors.push({ path: pathJoin(base, 'at'), message: `starts at ${start}s${how}, but the video ends at ${total}s` });
+      return;
     }
+    checkFades(track, start, total, base, errors);
   });
 }
 

@@ -8,7 +8,7 @@ import { loadSpec, validateSpec, withDefaults, UsageError } from './lib/spec.mjs
 import { printResult } from './lib/errors.mjs';
 import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
-import { findFfmpeg, encodeArgs, probeAudio } from './lib/ffmpeg.mjs';
+import { findFfmpeg, encodeArgs, probeAudio, probeGraph } from './lib/ffmpeg.mjs';
 import { resolveAsset } from './lib/paths.mjs';
 import { resolveAudio } from '../template/audio.mjs';
 
@@ -63,13 +63,18 @@ function partialPath(out) {
 }
 
 // Resolve each audio track to an absolute file and fail before the browser launches if ffmpeg cannot decode one.
-function planAudio(spec, dir, ffmpeg) {
-  return resolveAudio(spec).map((track, i) => {
+function planAudio(spec, dir, ffmpeg, fps) {
+  const audio = resolveAudio(spec).map((track, i) => {
     const { file } = resolveAsset(dir, track.src); // the path the validator already accepted (normalised, realpath)
     const problem = probeAudio(ffmpeg, file);
     if (problem) throw new Error(`audio[${i}].src: ffmpeg cannot decode ${track.src}: ${problem}`);
     return { ...track, file };
   });
+  if (audio.length) {
+    const problem = probeGraph(ffmpeg, { fps, audio }); // an old ffmpeg without amix normalize / adelay all fails here, not at frame 1
+    if (problem) throw new Error(`audio: ffmpeg rejected the mix (needs ffmpeg >= 4.4): ${problem}`);
+  }
+  return audio;
 }
 
 // Validate the spec and work out every input before launching anything.
@@ -92,7 +97,7 @@ async function plan(opts) {
   return {
     spec, specPath, fps, frames, total, contact: opts.contact, size: opts.size ?? spec.size,
     out: path.resolve(opts.out ?? defaultOut), ffmpeg,
-    audio: opts.contact ? [] : planAudio(spec, dir, ffmpeg),
+    audio: opts.contact ? [] : planAudio(spec, dir, ffmpeg, fps),
   };
 }
 

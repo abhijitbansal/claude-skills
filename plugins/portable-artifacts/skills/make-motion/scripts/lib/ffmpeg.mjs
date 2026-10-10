@@ -33,6 +33,10 @@ const VIDEO_CODEC = ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+fa
 const AUDIO_CODEC = ['-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2']; // always stereo: amix follows the first input's layout
 const MS_PER_SECOND = 1000;
 const PROBE_SECONDS = '0.1';
+// amix adopts the first input's rate and layout, so every track is normalised first;
+// without this a mono 24 kHz voice listed first collapses stereo music to mono 24 kHz.
+const AFORMAT = 'aformat=sample_rates=48000:channel_layouts=stereo';
+const PREFLIGHT_VIDEO = (fps) => `color=s=16x16:r=${fps}:d=${PROBE_SECONDS}`;
 
 // Round to ms so float noise (1.3000000000000003) never reaches a filter graph.
 const sec = (n) => String(Math.round(n * MS_PER_SECOND) / MS_PER_SECOND);
@@ -40,7 +44,7 @@ const sec = (n) => String(Math.round(n * MS_PER_SECOND) / MS_PER_SECOND);
 // One track -> trim to its clip, gain, fades, then delay to its absolute start. `end` is the fade-out anchor.
 function trackChain(track, index) {
   const length = track.end - track.start;
-  const steps = [`atrim=end=${sec(length)}`, `volume=${sec(track.volume)}`];
+  const steps = [AFORMAT, `atrim=end=${sec(length)}`, `volume=${sec(track.volume)}`];
   if (track.fadeIn > 0) steps.push(`afade=t=in:st=0:d=${sec(track.fadeIn)}`);
   if (track.fadeOut > 0) steps.push(`afade=t=out:st=${sec(Math.max(0, length - track.fadeOut))}:d=${sec(track.fadeOut)}`);
   steps.push(`adelay=${Math.round(track.start * MS_PER_SECOND)}:all=1`);
@@ -57,16 +61,33 @@ function audioGraph(audio) {
 // `audio`: resolveAudio() output plus an absolute `file` per track. `duration` caps the MP4 at the video length.
 export function encodeArgs({ fps, out, audio = [], duration }) {
   if (audio.length === 0) return [...VIDEO_INPUT(fps), ...VIDEO_CODEC, out];
+  if (!Number.isFinite(duration)) throw new Error('encodeArgs: duration is required when audio tracks are given');
   const { graph, label } = audioGraph(audio);
   return [...VIDEO_INPUT(fps), ...audio.flatMap((t) => ['-i', t.file]), '-filter_complex', graph,
     '-map', '0:v', '-map', label, ...VIDEO_CODEC, ...AUDIO_CODEC, '-t', sec(duration), out];
+}
+
+// The real mix graph against a lavfi video stand-in, discarded after PROBE_SECONDS: proves the
+// installed ffmpeg accepts every filter and option before a single frame is captured.
+export function preflightArgs({ fps, audio }) {
+  const { graph, label } = audioGraph(audio);
+  return ['-v', 'error', '-f', 'lavfi', '-i', PREFLIGHT_VIDEO(fps), ...audio.flatMap((t) => ['-i', t.file]),
+    '-filter_complex', graph, '-map', '0:v', '-map', label, '-t', PROBE_SECONDS, '-f', 'null', '-'];
+}
+
+function firstStderrLine(r) {
+  if (r.status === 0) return null;
+  return (r.stderr ?? '').split('\n').find((l) => l.trim()) ?? r.error?.message ?? `ffmpeg exited ${r.status}`;
+}
+
+// null when ffmpeg accepts the mix graph, else the first stderr line. `args` overrides for tests.
+export function probeGraph(ffmpegPath, plan, args = preflightArgs(plan)) {
+  return firstStderrLine(spawnSync(ffmpegPath, args, { encoding: 'utf8' }));
 }
 
 // null when ffmpeg can decode the start of `file`'s first audio stream, else the first stderr line.
 // Mapping 0:a:0 makes a video-only or image file fail here instead of after every frame is captured.
 export function probeAudio(ffmpegPath, file) {
   const args = ['-v', 'error', '-i', file, '-map', '0:a:0', '-t', PROBE_SECONDS, '-f', 'null', '-'];
-  const r = spawnSync(ffmpegPath, args, { encoding: 'utf8' });
-  if (r.status === 0) return null;
-  return (r.stderr ?? '').split('\n').find((l) => l.trim()) ?? r.error?.message ?? `ffmpeg exited ${r.status}`;
+  return firstStderrLine(spawnSync(ffmpegPath, args, { encoding: 'utf8' }));
 }

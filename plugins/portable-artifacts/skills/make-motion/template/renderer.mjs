@@ -249,7 +249,7 @@ function replaceAudio(spec) {
   const tracks = resolveAudio(spec).map(({ src, ...timing }) => {
     const el = document.createElement('audio');
     el.preload = 'auto';
-    el.src = assetUrl(src);
+    el.src = `${assetUrl(src)}?v=${Date.now()}`; // a re-synthesised clip at the same path must not come from the media cache
     holder.append(el);
     return { el, ...timing };
   });

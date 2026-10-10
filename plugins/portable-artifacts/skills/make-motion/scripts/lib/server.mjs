@@ -67,6 +67,7 @@ function sendFile(res, file, rangeHeader) {
   res.writeHead(status, headers);
   const stream = createReadStream(file, streamOpts);
   stream.on('error', () => res.destroy());
+  res.on('close', () => stream.destroy()); // an aborted range request must not keep the fd open
   stream.pipe(res);
 }
 
@@ -171,13 +172,22 @@ function broadcastSpecState(ctx) {
   for (const c of ctx.clients) c.write(message);
 }
 
+// The spec file, or any image/audio file it references (also in subfolders), triggers a reload.
+function isWatched(ctx, name) {
+  if (!name) return false;
+  const rel = path.posix.normalize(String(name).replaceAll('\\', '/'));
+  return rel === path.basename(ctx.specFile) || referencedAssets(ctx.specFile).has(rel);
+}
+
 function watchSpec(ctx) {
   let timer = null;
-  const watcher = watch(ctx.specDir, (_event, name) => {
-    if (name !== path.basename(ctx.specFile)) return;
+  const onChange = (_event, name) => {
+    if (!isWatched(ctx, name)) return;
     clearTimeout(timer);
     timer = setTimeout(() => broadcastSpecState(ctx), WATCH_DEBOUNCE_MS);
-  });
+  };
+  let watcher;
+  try { watcher = watch(ctx.specDir, { recursive: true }, onChange); } catch { watcher = watch(ctx.specDir, onChange); }
   watcher.on('error', () => {}); // directory removed: previews just stop reloading
   return { stop: () => { clearTimeout(timer); watcher.close(); } };
 }

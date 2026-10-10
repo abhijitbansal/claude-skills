@@ -63,7 +63,7 @@ test('preview mounts one idle <audio> per track, outside the stage', async (t) =
   await withPage('preview', async (page) => {
     const s = await audioState(page);
     assert.equal(s.count, 1);
-    assert.ok(s.srcs[0].endsWith('/assets/voice.wav'), s.srcs[0]);
+    assert.match(s.srcs[0], /\/assets\/voice\.wav\?v=\d+$/, s.srcs[0]); // cache-busted per mount
     assert.deepEqual(s.paused, [true]);
     assert.equal(s.inStage, 0);
     assert.equal(s.exposed, 1);
@@ -160,5 +160,22 @@ test('a track outside the playhead stays paused and fades apply to el.volume whi
     const volume = await page.evaluate(() => window.__motion.audio[0].el.volume);
     assert.ok(Math.abs(volume - 0.25) < 1e-6, `volume ${volume}`); // 0.5 * (1s into a 2s fade-in)
   }, track);
+  return undefined;
+});
+
+test('a spec reload while the tab is hidden and playing does not start the new audio', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  await withPage('preview', async (page) => {
+    await page.click('#play');
+    await page.waitForFunction(() => window.__motion.audio[0].el.paused === false, null, { timeout: PLAY_TIMEOUT_MS });
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    assert.equal(await page.evaluate(() => window.__motion.audio[0].el.paused), true, 'hidden tab pauses');
+    await page.evaluate(() => window.__reload());
+    await page.waitForFunction(() => window.__motion.audio.length === 1);
+    assert.equal(await page.evaluate(() => window.__motion.audio[0].el.paused), true, 'new audio must stay paused while hidden');
+  });
   return undefined;
 });

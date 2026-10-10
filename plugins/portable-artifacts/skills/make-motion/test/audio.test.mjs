@@ -106,3 +106,12 @@ test('resolveAudio clamps a trimmed track to the video end', () => {
   const spec = withDefaults(base([{ src: 'voice.wav', scene: 'body', at: 2, duration: 10 }]));
   assert.equal(resolveAudio(spec)[0].end, 5);
 });
+
+test('fades longer than the time a track plays are rejected', () => {
+  const dir = fixture();
+  assert.deepEqual(errs(base([{ src: 'voice.wav', scene: 'body', at: 0, fadeIn: 1, fadeOut: 2.5 }]), dir),
+    ['audio[0].fadeOut: fadeIn 1s + fadeOut 2.5s exceed the 3s the track plays (from 2s to the video end at 5s)']);
+  assert.deepEqual(errs(base([{ src: 'voice.wav', duration: 0.5, fadeOut: 2 }]), dir),
+    ['audio[0].fadeOut: fadeIn 0s + fadeOut 2s exceed the 0.5s the track plays (from 0s to 0.5s)']);
+  assert.deepEqual(errs(base([{ src: 'voice.wav', duration: 2, fadeIn: 1, fadeOut: 1 }]), dir), []);
+});

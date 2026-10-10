@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startServer } from '../scripts/lib/server.mjs';
@@ -177,4 +177,48 @@ test('/events emits spec-error with formatted errors when the changed spec is in
   assert.deepEqual(data[0], { path: 'fsp', message: 'unknown property; did you mean "fps"?' });
   const got2 = await sseUntil(srv, () => writeFileSync(f.specPath, '{not json'), /event: spec-error\ndata: .*\n\n/);
   assert.match(JSON.parse(/event: spec-error\ndata: (.*)\n/.exec(got2)[1])[0].message, /not valid JSON/);
+}));
+
+const openFds = () => readdirSync('/dev/fd').length;
+const BIG_FILE_BYTES = 1 << 20; // past the 64 KiB read-stream buffer
+const ABORTED_REQUESTS = 20;
+const FD_SLACK = 3;
+
+function abortedRangeGet(url, rawPath) {
+  const u = new URL(url);
+  return new Promise((resolve) => {
+    const req = http.get({ host: u.hostname, port: u.port, path: rawPath, headers: { range: 'bytes=0-' } }, (res) => {
+      res.once('data', () => { req.destroy(); resolve(); });
+    });
+    req.on('error', () => resolve());
+  });
+}
+
+test('an aborted /assets range request does not leak the file descriptor', { skip: !existsSync('/dev/fd') && 'no /dev/fd' }, () => withServer(async (srv, f) => {
+  writeFileSync(path.join(f.dir, 'big.wav'), Buffer.alloc(BIG_FILE_BYTES, 1));
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('a'), audio: [{ src: 'big.wav' }] }));
+  await abortedRangeGet(srv.url, '/assets/big.wav');
+  await new Promise((r) => setTimeout(r, 50));
+  const before = openFds();
+  for (let i = 0; i < ABORTED_REQUESTS; i++) await abortedRangeGet(srv.url, '/assets/big.wav');
+  await new Promise((r) => setTimeout(r, 100));
+  assert.ok(openFds() - before <= FD_SLACK, `fds grew from ${before} to ${openFds()}`);
+}));
+
+test('/events emits reload when a referenced audio file changes, even in a subfolder', () => withServer(async (srv, f) => {
+  mkdirSync(path.join(f.dir, 'voice'));
+  writeFileSync(path.join(f.dir, 'voice', 'intro.wav'), 'v1');
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('a'), audio: [{ src: 'voice/intro.wav' }] }));
+  await new Promise((r) => setTimeout(r, 300)); // let the spec write's own reload drain first
+  const seen = await new Promise((resolve, reject) => {
+    const u = new URL(srv.url);
+    const req = http.get({ host: u.hostname, port: u.port, path: '/events' }, (res) => {
+      let buf = '';
+      res.on('data', (c) => { buf += c; if (buf.includes('data: reload')) { req.destroy(); resolve(buf); } });
+      setTimeout(() => writeFileSync(path.join(f.dir, 'voice', 'intro.wav'), 'v2 longer'), 150);
+    });
+    req.on('error', reject);
+    setTimeout(() => reject(new Error('no reload event within 3 s')), 3000);
+  });
+  assert.match(seen, /data: reload/);
 }));

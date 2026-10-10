@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { encodeArgs, findFfmpeg, probeAudio } from '../scripts/lib/ffmpeg.mjs';
+import { encodeArgs, findFfmpeg, probeAudio, preflightArgs, probeGraph } from '../scripts/lib/ffmpeg.mjs';
 import { writeWav } from './helpers/wav.mjs';
 
 test('encodeArgs shape', () => {
@@ -60,7 +60,7 @@ test('encodeArgs one track: no amix, mapped directly', () => {
   const audio = [{ file: '/a/v.wav', start: 0, end: 5, volume: 1, fadeIn: 0, fadeOut: 0 }];
   assert.deepEqual(encodeArgs({ fps: 10, out: 'o.mp4', audio, duration: 5 }), [
     ...VIDEO_HEAD, '-i', '/a/v.wav',
-    '-filter_complex', '[1:a]atrim=end=5,volume=1,adelay=0:all=1[a0]',
+    '-filter_complex', '[1:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=end=5,volume=1,adelay=0:all=1[a0]',
     '-map', '0:v', '-map', '[a0]', ...VIDEO_TAIL, ...AUDIO_OUT, '-t', '5', 'o.mp4']);
 });
 
@@ -72,8 +72,8 @@ test('encodeArgs two tracks with fades, delay and volume are mixed without norma
   assert.deepEqual(encodeArgs({ fps: 10, out: 'o.mp4', audio, duration: 6 }), [
     ...VIDEO_HEAD, '-i', '/a/music.mp3', '-i', '/a/voice.wav',
     '-filter_complex',
-    '[1:a]atrim=end=6,volume=0.4,afade=t=in:st=0:d=1,afade=t=out:st=4:d=2,adelay=0:all=1[a0];'
-      + '[2:a]atrim=end=4.5,volume=1,afade=t=out:st=4:d=0.5,adelay=1500:all=1[a1];'
+    '[1:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=end=6,volume=0.4,afade=t=in:st=0:d=1,afade=t=out:st=4:d=2,adelay=0:all=1[a0];'
+      + '[2:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=end=4.5,volume=1,afade=t=out:st=4:d=0.5,adelay=1500:all=1[a1];'
       + '[a0][a1]amix=inputs=2:duration=longest:normalize=0[aout]',
     '-map', '0:v', '-map', '[aout]', ...VIDEO_TAIL, ...AUDIO_OUT, '-t', '6', 'o.mp4']);
 });
@@ -82,7 +82,7 @@ test('encodeArgs trims a track to its resolved end and clamps a fade-out longer 
   const audio = [{ file: '/a/s.wav', start: 2, end: 3, volume: 1, fadeIn: 0, fadeOut: 4 }];
   const args = encodeArgs({ fps: 10, out: 'o.mp4', audio, duration: 8 });
   assert.equal(args[args.indexOf('-filter_complex') + 1],
-    '[1:a]atrim=end=1,volume=1,afade=t=out:st=0:d=4,adelay=2000:all=1[a0]');
+    '[1:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=end=1,volume=1,afade=t=out:st=0:d=4,adelay=2000:all=1[a0]');
   assert.equal(args[args.indexOf('-t') + 1], '8');
 });
 
@@ -130,4 +130,34 @@ test('probeAudio reports a message instead of throwing when ffmpeg cannot be spa
   const msg = probeAudio('/nonexistent/ffmpeg', '/nonexistent/x.wav');
   assert.equal(typeof msg, 'string');
   assert.match(msg, /ENOENT|spawn/);
+});
+
+test('encodeArgs with audio but no duration throws instead of emitting -t NaN', () => {
+  const audio = [{ file: '/a/s.wav', start: 0, end: 1, volume: 1, fadeIn: 0, fadeOut: 0 }];
+  assert.throws(() => encodeArgs({ fps: 10, out: 'o.mp4', audio }), /duration/);
+});
+
+test('preflightArgs runs the real mix graph against a lavfi video stand-in for a tenth of a second', () => {
+  const audio = [
+    { file: '/a/music.mp3', start: 0, end: 6, volume: 0.4, fadeIn: 1, fadeOut: 2 },
+    { file: '/a/voice.wav', start: 1.5, end: 6, volume: 1, fadeIn: 0, fadeOut: 0.5 },
+  ];
+  const full = encodeArgs({ fps: 10, out: 'o.mp4', audio, duration: 6 });
+  const graph = full[full.indexOf('-filter_complex') + 1];
+  assert.deepEqual(preflightArgs({ fps: 10, audio }), [
+    '-v', 'error', '-f', 'lavfi', '-i', 'color=s=16x16:r=10:d=0.1', '-i', '/a/music.mp3', '-i', '/a/voice.wav',
+    '-filter_complex', graph, '-map', '0:v', '-map', '[aout]', '-t', '0.1', '-f', 'null', '-']);
+});
+
+test('probeGraph accepts a valid mix and reports the first stderr line for a bad one', async (t) => {
+  const ff = await findFfmpeg().catch(() => null);
+  if (!ff) return t.skip('ffmpeg unavailable');
+  const dir = mkdtempSync(path.join(tmpdir(), 'graph-'));
+  const a = path.join(dir, 'a.wav');
+  writeWav(a, { seconds: 0.5 });
+  const audio = [{ file: a, start: 0.2, end: 1, volume: 0.5, fadeIn: 0.1, fadeOut: 0.1 }];
+  assert.equal(probeGraph(ff, { fps: 10, audio }), null);
+  const bad = preflightArgs({ fps: 10, audio }).map((x) => x.replace('normalize=0', 'normalise=0').replace('aformat=', 'afromat='));
+  assert.match(probeGraph(ff, { fps: 10, audio }, bad) ?? '', /afromat|No such filter/);
+  return undefined;
 });

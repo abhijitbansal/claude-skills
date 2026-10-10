@@ -110,6 +110,34 @@ test('render with two audio tracks muxes one AAC stream and keeps the spec lengt
   return undefined;
 });
 
+const SILENCE_DB = -60;
+const meanDb = (ff, file, filters) => {
+  const r = spawnSync(ff, ['-i', file, '-af', `${filters}volumedetect`, '-f', 'null', '-'], { encoding: 'utf8' });
+  const m = /mean_volume: (-?[\d.]+) dB/.exec(r.stderr);
+  return m ? Number(m[1]) : Number.NaN;
+};
+
+test('a stereo track listed after a mono one keeps its channels and sample rate, and tracks start where the spec says', async (t) => {
+  const ff = await haveFfmpeg();
+  if (!ff || !(await haveBrowser())) return t.skip('browser or ffmpeg unavailable');
+  const dir = tmp('mix-');
+  writeWav(path.join(dir, 'voice.wav'), { seconds: 1, sampleRate: 24000 }); // what voice.mjs writes
+  writeWav(path.join(dir, 'music.wav'), { seconds: 3, sampleRate: 44100, channels: 2, leftOnly: true });
+  const spec = { size: [160, 90], scenes: [{ id: 'one', duration: 4, elements: [] }],
+    audio: [{ src: 'voice.wav', at: 0 }, { src: 'music.wav', at: 2.5 }] }; // mono voice first: the collapse trigger
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify(spec));
+  const out = path.join(dir, 'v.mp4');
+  const r = render([path.join(dir, 'm.json'), '--out', out, '--fps', '10', '--size', '160x90']);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const right = meanDb(ff, out, 'atrim=2.6:4,pan=mono|c0=c1,');
+  assert.ok(right < SILENCE_DB, `right channel should stay silent during left-only music, got ${right} dB`);
+  const left = meanDb(ff, out, 'atrim=2.6:4,pan=mono|c0=c0,');
+  assert.ok(left > -30, `left channel should carry the music, got ${left} dB`);
+  const gap = meanDb(ff, out, 'atrim=1.2:2.4,');
+  assert.ok(gap < SILENCE_DB, `nothing should play between the voice and the music (adelay), got ${gap} dB`);
+  return undefined;
+});
+
 test('render fails before launching a browser when an audio file cannot be decoded', async (t) => {
   const ff = await haveFfmpeg();
   if (!ff) return t.skip('ffmpeg unavailable');
