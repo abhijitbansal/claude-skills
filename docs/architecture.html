@@ -176,6 +176,20 @@ flowchart TD
           <li><strong>hooks</strong> — <code>suggest_next</code> (Stop, now routed through the command advisor), <code>prompt_hint</code> (UserPromptSubmit), <code>registry_freshness</code> (SessionStart), <code>statusline_hint</code> (statusLine) + opt-in <code>block_secrets</code> / <code>format_on_edit</code></li>
         </ul>
       </div>
+      <div class="card pcard cy reveal">
+        <h3><code>test-board</code></h3>
+        <p class="sub">pass/fail band after every test run</p>
+        <ul>
+          <li><strong>band</strong> — passed/failed/skipped counts above the prompt, next to the previous run of the same suite in the same worktree</li>
+        </ul>
+      </div>
+      <div class="card pcard go reveal">
+        <h3><code>session-compass</code></h3>
+        <p class="sub">what each session is building and where it stands</p>
+        <ul>
+          <li><strong>return band</strong>, <strong>/compass pane</strong> and <strong>compass_status tool</strong> — what each session is building, where it stands and what it produced</li>
+        </ul>
+      </div>
     </div>
   </section>
 
