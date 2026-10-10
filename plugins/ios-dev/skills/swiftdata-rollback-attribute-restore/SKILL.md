@@ -1,6 +1,6 @@
 ---
 name: swiftdata-rollback-attribute-restore
-description: A multi-object SwiftData save fails partway, the code calls context.rollback() expecting the batch to be undone, and the objects keep their new values anyway — because rollback() discards pending INSERTS and DELETES but does not revert attribute mutations on already-fetched @Model objects. Symptom: a failed batch edit leaves the UI showing values that were never persisted, and a later unrelated save flushes them. Use whenever writing a save path that mutates attributes on more than one fetched model before a single save(), or when an existing rollback-based error path is being reviewed or copied from an insert-shaped precedent.
+description: "A multi-object SwiftData save fails partway, the code calls context.rollback() expecting the batch to be undone, and the objects keep their new values anyway — because rollback() discards pending INSERTS and DELETES but does not revert attribute mutations on already-fetched @Model objects. Symptom: a failed batch edit leaves the UI showing values that were never persisted, and a later unrelated save flushes them. Use whenever writing a save path that mutates attributes on more than one fetched model before a single save(), or when an existing rollback-based error path is being reviewed or copied from an insert-shaped precedent."
 ---
 
 # `ModelContext.rollback()` Does Not Restore Mutated Attributes

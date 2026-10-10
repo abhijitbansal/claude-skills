@@ -1,0 +1,76 @@
+{
+  "title": "Sales overview 2025",
+  "description": "Revenue and units by region, product and month",
+  "maxRows": 5000,
+  "sources": {
+    "sales": { "type": "parquet", "path": "data/sales.parquet" },
+    "sales_csv": { "type": "csv", "path": "data/sales.csv" }
+  },
+  "queries": {
+    "total": "SELECT SUM(amount) AS revenue, SUM(units) AS units, AVG(amount) AS avg_sale FROM sales",
+    "top_region_share": "SELECT MAX(r) / SUM(r) AS share FROM (SELECT SUM(amount) AS r FROM sales GROUP BY region)",
+    "rev_by_region": "SELECT region, SUM(amount) AS revenue FROM sales GROUP BY 1 ORDER BY 2 DESC",
+    "rev_by_month": "SELECT date_trunc('month', date) AS month, SUM(amount) AS revenue FROM sales GROUP BY 1 ORDER BY 1",
+    "rev_by_quarter_region": "SELECT 'Q' || quarter(date) AS quarter, region, SUM(amount) AS revenue FROM sales_csv GROUP BY 1, 2 ORDER BY 1, 2",
+    "units_by_product": "SELECT product, SUM(units) AS units FROM sales GROUP BY 1 ORDER BY 2 DESC"
+  },
+  "kpis": [
+    { "id": "k1", "title": "Total revenue", "query": "total", "field": "revenue", "format": "currency" },
+    { "id": "k2", "title": "Units sold", "query": "total", "field": "units", "format": "number" },
+    { "id": "k3", "title": "Average sale", "query": "total", "field": "avg_sale", "format": "currency" },
+    { "id": "k4", "title": "Top region share", "query": "top_region_share", "field": "share", "format": "percent" }
+  ],
+  "charts": [
+    {
+      "id": "c1",
+      "title": "Revenue by region",
+      "query": "rev_by_region",
+      "width": "half",
+      "vegaLite": {
+        "mark": "bar",
+        "encoding": {
+          "x": { "field": "region", "type": "nominal", "sort": null, "title": null },
+          "y": { "field": "revenue", "type": "quantitative", "title": "Revenue" }
+        }
+      }
+    },
+    {
+      "id": "c2",
+      "title": "Units by product",
+      "query": "units_by_product",
+      "width": "half",
+      "vegaLite": {
+        "mark": "bar",
+        "encoding": {
+          "x": { "field": "product", "type": "nominal", "sort": null, "title": null },
+          "y": { "field": "units", "type": "quantitative", "title": "Units" }
+        }
+      }
+    },
+    {
+      "id": "c3",
+      "title": "Monthly revenue",
+      "query": "rev_by_month",
+      "vegaLite": {
+        "mark": { "type": "line", "point": true },
+        "encoding": {
+          "x": { "field": "month", "type": "temporal", "timeUnit": "utcyearmonth", "title": null },
+          "y": { "field": "revenue", "type": "quantitative", "title": "Revenue" }
+        }
+      }
+    },
+    {
+      "id": "c4",
+      "title": "Revenue by quarter and region",
+      "query": "rev_by_quarter_region",
+      "vegaLite": {
+        "mark": "bar",
+        "encoding": {
+          "x": { "field": "quarter", "type": "ordinal", "title": null },
+          "y": { "field": "revenue", "type": "quantitative", "title": "Revenue" },
+          "color": { "field": "region", "type": "nominal", "title": "Region" }
+        }
+      }
+    }
+  ]
+}

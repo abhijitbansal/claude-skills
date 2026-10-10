@@ -1,0 +1,161 @@
+{
+  "size": [
+    1920,
+    1080
+  ],
+  "fps": 30,
+  "background": "#0b0d12",
+  "scenes": [
+    {
+      "id": "chart",
+      "duration": 10,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "title",
+          "type": "text",
+          "text": "Monthly active users",
+          "x": 960,
+          "y": 150,
+          "fontSize": 72,
+          "fontWeight": 700,
+          "color": "#f4f6fb",
+          "keyframes": [
+            {
+              "t": 0.2,
+              "opacity": 0,
+              "y": 186
+            },
+            {
+              "t": 0.8999999999999999,
+              "opacity": 1,
+              "y": 150,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "growth",
+          "type": "chart",
+          "x": 960,
+          "y": 560,
+          "width": 1560,
+          "height": 600,
+          "vegaLite": {
+            "mark": {
+              "type": "line",
+              "point": true,
+              "strokeWidth": 5,
+              "interpolate": "monotone"
+            },
+            "data": {
+              "values": [
+                {
+                  "month": "Jan",
+                  "users": 12
+                },
+                {
+                  "month": "Feb",
+                  "users": 13
+                },
+                {
+                  "month": "Mar",
+                  "users": 15
+                },
+                {
+                  "month": "Apr",
+                  "users": 31
+                },
+                {
+                  "month": "May",
+                  "users": 38
+                },
+                {
+                  "month": "Jun",
+                  "users": 42
+                },
+                {
+                  "month": "Jul",
+                  "users": 45
+                },
+                {
+                  "month": "Aug",
+                  "users": 47
+                },
+                {
+                  "month": "Sep",
+                  "users": 50
+                },
+                {
+                  "month": "Oct",
+                  "users": 52
+                },
+                {
+                  "month": "Nov",
+                  "users": 55
+                },
+                {
+                  "month": "Dec",
+                  "users": 58
+                }
+              ]
+            },
+            "encoding": {
+              "x": {
+                "field": "month",
+                "type": "ordinal",
+                "sort": null,
+                "title": null
+              },
+              "y": {
+                "field": "users",
+                "type": "quantitative",
+                "title": "Monthly active users (k)"
+              }
+            }
+          },
+          "keyframes": [
+            {
+              "t": 0.6,
+              "reveal": 0,
+              "opacity": 0
+            },
+            {
+              "t": 0.9,
+              "opacity": 1
+            },
+            {
+              "t": 4.6,
+              "reveal": 1,
+              "ease": "inOutCubic"
+            }
+          ]
+        },
+        {
+          "id": "caption",
+          "type": "text",
+          "text": "Up 4.8\u00d7 since January, with a step change at the March launch",
+          "x": 960,
+          "y": 940,
+          "fontSize": 44,
+          "fontWeight": 400,
+          "color": "#c9cfdd",
+          "maxWidth": 1500,
+          "keyframes": [
+            {
+              "t": 5.2,
+              "opacity": 0,
+              "y": 976
+            },
+            {
+              "t": 6.1000000000000005,
+              "opacity": 1,
+              "y": 940,
+              "ease": "outCubic"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

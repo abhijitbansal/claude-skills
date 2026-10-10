@@ -1,0 +1,26 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "title",
+      "duration": 3,
+      "transition": "fade",
+      "elements": [
+        { "id": "headline", "type": "text", "text": "Weekly active teams", "x": 960, "y": 540, "fontSize": 96, "fontWeight": 700, "color": "#ffffff",
+          "keyframes": [ { "t": 0, "opacity": 0, "y": 580 }, { "t": 0.8, "opacity": 1, "y": 540, "ease": "outCubic" } ] }
+      ]
+    },
+    {
+      "id": "number",
+      "duration": 4,
+      "transition": "fade",
+      "elements": [
+        { "id": "count", "type": "counter", "from": 0, "to": 12, "suffix": "k", "x": 960, "y": 500, "fontSize": 180, "fontWeight": 800, "color": "#5eead4",
+          "keyframes": [ { "t": 0.2, "value": 0 }, { "t": 2.5, "value": 12, "ease": "outQuad" } ] },
+        { "id": "caption", "type": "text", "text": "teams active this week", "x": 960, "y": 680, "fontSize": 48, "color": "#cbd5e1",
+          "keyframes": [ { "t": 1, "opacity": 0 }, { "t": 1.6, "opacity": 1 } ] }
+      ]
+    }
+  ]
+}

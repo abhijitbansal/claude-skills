@@ -1,0 +1,12 @@
+[
+  { "id": "rev-by-region", "prompt": "Build a dashboard from data/sales.csv showing total revenue (sum of amount) by region as a bar chart, plus a KPI tile with overall total revenue." },
+  { "id": "monthly-trend", "prompt": "Build a dashboard from data/sales.csv with a line chart of monthly revenue (sum of amount per month of date)." },
+  { "id": "product-mix", "prompt": "Build a dashboard from data/sales.csv showing units sold per product as a stacked bar chart, stacked by region." },
+  { "id": "top-products", "prompt": "Build a dashboard from data/sales.csv showing the top 3 products by revenue as a horizontal bar chart, sorted descending." },
+  { "id": "kpi-row", "prompt": "Build a dashboard from data/sales.csv with three KPI tiles: total revenue (currency), total units, and average amount per sale." },
+  { "id": "quarterly-grouped", "prompt": "Build a dashboard from data/sales.csv with quarterly revenue by region as a grouped (side-by-side) bar chart." },
+  { "id": "traffic-lines", "prompt": "Build a dashboard from data/web_traffic.csv with a multi-line chart of daily sessions, one line per channel." },
+  { "id": "conversion", "prompt": "Build a dashboard from data/web_traffic.csv showing signup conversion rate (signups divided by sessions) per channel as a bar chart, plus an overall conversion rate KPI formatted as a percent." },
+  { "id": "overview", "prompt": "Build a sales overview dashboard from data/sales.csv: two KPI tiles (total revenue, total units) and three half-width charts (revenue by region, monthly revenue trend, units by product)." },
+  { "id": "edit-existing", "seed": "seeds/dashboard.json", "prompt": "Edit the existing dashboard.json: change the revenue-by-region chart from bars to a line chart ordered by region, and add a KPI tile for total units. Keep everything else unchanged." }
+]

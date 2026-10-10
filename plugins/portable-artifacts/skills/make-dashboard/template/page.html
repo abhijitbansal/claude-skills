@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title><!--@TITLE--></title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f4f3f0;
+  --surface: #fcfcfb;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --text-3: #75746f;
+  --line: #e4e3df;
+  --grid: #e9e8e4;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --seq1: #cde2fb; --seq2: #9ec5f4; --seq3: #6da7ec; --seq4: #3987e5; --seq5: #256abf; --seq6: #184f95; --seq7: #0d366b;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #121211;
+    --surface: #1a1a19;
+    --text: #f0efec;
+    --text-2: #c3c2b7;
+    --text-3: #a3a298;
+    --line: #2f2f2c;
+    --grid: #2b2b29;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    --seq1: #184f95; --seq2: #1c5cab; --seq3: #256abf; --seq4: #2a78d6; --seq5: #3987e5; --seq6: #6da7ec; --seq7: #9ec5f4;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text); font: 15px/1.5 var(--font); -webkit-text-size-adjust: 100%; }
+main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+header { margin-bottom: 20px; }
+h1 { margin: 0; font-size: 1.6rem; line-height: 1.2; font-weight: 650; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.desc { margin: 6px 0 0; color: var(--text-2); }
+.refreshed { margin: 6px 0 0; color: var(--text-3); font-size: 0.85rem; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.kpi-label { color: var(--text-2); font-size: 0.85rem; }
+.kpi-value { margin-top: 4px; font-size: 1.75rem; line-height: 1.15; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+@media (min-width: 900px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card.full { grid-column: 1 / -1; }
+}
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.card h2 { margin: 0 0 8px; font-size: 1rem; font-weight: 600; overflow-wrap: anywhere; }
+.chart { width: 100%; min-height: 120px; }
+.chart .vega-embed { width: 100%; display: block; }
+.chart-error { color: var(--s8); font-size: 0.85rem; }
+.meta { margin: 8px 0 0; color: var(--text-3); font-size: 0.8rem; }
+details { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; font-size: 0.85rem; }
+summary { cursor: pointer; color: var(--text-2); }
+pre.sql { margin: 8px 0 0; padding: 10px 12px; background: var(--page); border-radius: 8px; overflow-x: auto; font: 0.8rem/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.tablewrap { overflow-x: auto; margin-top: 6px; max-height: 280px; overflow-y: auto; }
+table { border-collapse: collapse; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 4px 12px 4px 0; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th { color: var(--text-2); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1><!--@TITLE--></h1>
+<!--@DESCRIPTION-->
+<p class="refreshed">Refreshed <!--@REFRESHED--></p>
+</header>
+<!--@KPIS-->
+<!--@CARDS-->
+</main>
+<script type="application/json" id="dash-data"><!--@DATA--></script>
+<!--@VENDOR-->
+<script>
+(function () {
+  var data = JSON.parse(document.getElementById('dash-data').textContent);
+  var root = document.documentElement;
+  var css = function (name) { return getComputedStyle(root).getPropertyValue(name).trim(); };
+
+  // Local-time display for refresh stamps (server text is UTC fallback).
+  document.querySelectorAll('time[data-t]').forEach(function (el) {
+    var d = new Date(el.getAttribute('datetime'));
+    if (isNaN(d)) return;
+    el.textContent = el.getAttribute('data-t') === 'hm'
+      ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  });
+
+  // Vega config built from the CSS tokens, so charts follow light/dark.
+  function config() {
+    var surface = css('--surface'), ink2 = css('--text-2'), ink3 = css('--text-3'), grid = css('--grid');
+    var font = css('--font');
+    var cat = [1, 2, 3, 4, 5, 6, 7, 8].map(function (i) { return css('--s' + i); });
+    var seq = [1, 2, 3, 4, 5, 6, 7].map(function (i) { return css('--seq' + i); });
+    return {
+      background: null,
+      font: font,
+      view: { stroke: null },
+      range: { category: cat, ordinal: seq, ramp: seq, heatmap: seq },
+      axis: {
+        labelColor: ink3, titleColor: ink2, labelFont: font, titleFont: font,
+        labelFontSize: 11, titleFontSize: 12, titleFontWeight: 'normal', labelPadding: 6,
+        gridColor: grid, gridWidth: 1, domainColor: grid, tickColor: grid
+      },
+      axisX: { grid: false, labelAngle: 0, labelOverlap: 'greedy' },
+      legend: {
+        labelColor: ink2, titleColor: ink2, labelFont: font, titleFont: font,
+        labelFontSize: 12, titleFontSize: 12, titleFontWeight: 'normal', symbolType: 'circle', orient: 'top', direction: 'horizontal', padding: 0
+      },
+      title: { color: ink2, font: font },
+      bar: { cornerRadiusEnd: 4, stroke: surface, strokeWidth: 2, fill: cat[0] },
+      line: { strokeWidth: 2, strokeCap: 'round', strokeJoin: 'round', stroke: cat[0] },
+      point: { size: 64, filled: true, stroke: surface, strokeWidth: 2, fill: cat[0] },
+      area: { opacity: 0.85, line: { strokeWidth: 2 }, fill: cat[0] },
+      rect: { stroke: surface, strokeWidth: 2 },
+      text: { color: ink2, font: font, fontSize: 11 }
+    };
+  }
+
+  // Hover layer by default: tooltips on every mark that did not ask for its own.
+  function withTooltip(node) {
+    if (Array.isArray(node)) return node.map(withTooltip);
+    if (!node || typeof node !== 'object') return node;
+    var out = {};
+    Object.keys(node).forEach(function (k) { out[k] = k === 'data' ? node[k] : withTooltip(node[k]); });
+    if (typeof node.mark === 'string') out.mark = { type: node.mark, tooltip: true };
+    else if (node.mark && typeof node.mark === 'object' && node.mark.tooltip === undefined) out.mark = Object.assign({}, node.mark, { tooltip: true });
+    return out;
+  }
+
+  function render() {
+    var cfg = config();
+    data.charts.forEach(function (c) {
+      var el = document.getElementById('chart-' + c.id);
+      if (!el) return;
+      var vl = withTooltip(c.vegaLite);
+      var unit = !('hconcat' in vl || 'vconcat' in vl || 'concat' in vl || 'repeat' in vl || 'facet' in vl);
+      var spec = Object.assign({ height: 260 }, vl, {
+        data: { values: data.queries[c.query].rows },
+        config: cfg
+      });
+      if (unit) { spec.width = 'container'; spec.autosize = { type: 'fit', contains: 'padding' }; }
+      el.textContent = '';
+      // ast: true uses the bundled expression interpreter, so the strict CSP
+      // needs no 'unsafe-eval'. Actions (export, editor links) stay off.
+      var opts = { renderer: 'svg', ast: true };
+      opts.actions = false;
+      window.vegaEmbed(el, spec, opts).catch(function (err) {
+        el.innerHTML = '';
+        var p = document.createElement('p');
+        p.className = 'chart-error';
+        p.textContent = 'Chart failed to render: ' + (err && err.message ? err.message : err);
+        el.appendChild(p);
+      });
+    });
+  }
+
+  render();
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    (mq.addEventListener ? mq.addEventListener.bind(mq, 'change') : mq.addListener.bind(mq))(render);
+  }
+})();
+</script>
+</body>
+</html>

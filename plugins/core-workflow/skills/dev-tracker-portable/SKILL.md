@@ -1,6 +1,6 @@
 ---
 name: dev-tracker-portable
-description: Set up or run a lightweight in-repo dev tracker (features / issues / tasks as one markdown ledger + archive) in ANY project — the proven Cubby tracker system, genericized. Use when a project wants issue/feature/backlog tracking inside the repo ("set up a tracker", "log bugs in the repo", "I want a backlog file"), or when running tracker operations (capture / list / fix / learn) in a repo that has adopted this system. Upstream: Cubby's .claude/skills/tracker/SKILL.md (dogfooded across 20+ sessions, 90+ items, plus an archive-pipeline fix learned the hard way) — mirror structural changes both ways.
+description: "Set up or run a lightweight in-repo dev tracker (features / issues / tasks as one markdown ledger + archive) in ANY project — the proven Cubby tracker system, genericized. Use when a project wants issue/feature/backlog tracking inside the repo (\"set up a tracker\", \"log bugs in the repo\", \"I want a backlog file\"), or when running tracker operations (capture / list / fix / learn) in a repo that has adopted this system. Upstream: Cubby's .claude/skills/tracker/SKILL.md (dogfooded across 20+ sessions, 90+ items, plus an archive-pipeline fix learned the hard way) — mirror structural changes both ways."
 ---
 
 # dev-tracker (portable starter kit)

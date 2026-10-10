@@ -1,6 +1,6 @@
 ---
 name: declarative-hook-rules-inert-without-dispatcher
-description: A compliance report or workflow recommends "promote this to a hook," and the obvious move is to write a declarative hook-rule file (e.g. .claude/hookify.*.local.md) in whatever format a rule-authoring skill defines — but if nothing in the settings stack (project settings.json, global settings, every installed plugin's hooks.json) actually reads that rule-file glob, the file is inert: it silently does nothing, and the failure mode only shows up much later as "the hook didn't fire," with no error anywhere. Use before authoring any hook-rule-file content, or when auditing why a hook that "should" be firing per a rule file never actually runs.
+description: "A compliance report or workflow recommends \"promote this to a hook,\" and the obvious move is to write a declarative hook-rule file (e.g. .claude/hookify.*.local.md) in whatever format a rule-authoring skill defines — but if nothing in the settings stack (project settings.json, global settings, every installed plugin's hooks.json) actually reads that rule-file glob, the file is inert: it silently does nothing, and the failure mode only shows up much later as \"the hook didn't fire,\" with no error anywhere. Use before authoring any hook-rule-file content, or when auditing why a hook that \"should\" be firing per a rule file never actually runs."
 ---
 
 # Verify a Hook-Rule-File Mechanism Has a Dispatcher Before Authoring Rules

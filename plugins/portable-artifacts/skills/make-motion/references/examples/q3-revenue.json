@@ -1,0 +1,366 @@
+{
+  "size": [
+    1920,
+    1080
+  ],
+  "fps": 30,
+  "background": "#0b0d12",
+  "scenes": [
+    {
+      "id": "intro",
+      "duration": 4,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "kicker",
+          "type": "text",
+          "text": "Q3 2026  \u00b7  REVENUE",
+          "x": 960,
+          "y": 330,
+          "fontSize": 34,
+          "fontWeight": 600,
+          "color": "#8b93a7",
+          "font": "mono",
+          "keyframes": [
+            {
+              "t": 0.2,
+              "opacity": 0,
+              "y": 366
+            },
+            {
+              "t": 0.8999999999999999,
+              "opacity": 1,
+              "y": 330,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "pct",
+          "type": "counter",
+          "from": 0,
+          "to": 18,
+          "prefix": "+",
+          "suffix": "%",
+          "x": 960,
+          "y": 530,
+          "fontSize": 280,
+          "fontWeight": 800,
+          "color": "#5eead4",
+          "keyframes": [
+            {
+              "t": 0.4,
+              "value": 0,
+              "opacity": 0
+            },
+            {
+              "t": 0.7,
+              "opacity": 1
+            },
+            {
+              "t": 2.4,
+              "value": 18,
+              "ease": "outQuart"
+            }
+          ]
+        },
+        {
+          "id": "sub",
+          "type": "text",
+          "text": "vs. Q2, driven by new enterprise accounts",
+          "x": 960,
+          "y": 760,
+          "fontSize": 48,
+          "fontWeight": 400,
+          "color": "#c9cfdd",
+          "keyframes": [
+            {
+              "t": 2.0,
+              "opacity": 0,
+              "y": 796
+            },
+            {
+              "t": 2.7,
+              "opacity": 1,
+              "y": 760,
+              "ease": "outCubic"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bars",
+      "duration": 6,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "bars-title",
+          "type": "text",
+          "text": "Revenue by quarter",
+          "x": 960,
+          "y": 170,
+          "fontSize": 64,
+          "fontWeight": 700,
+          "color": "#f4f6fb",
+          "keyframes": [
+            {
+              "t": 0.2,
+              "opacity": 0,
+              "y": 206
+            },
+            {
+              "t": 0.8999999999999999,
+              "opacity": 1,
+              "y": 170,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "baseline",
+          "type": "shape",
+          "shape": "line",
+          "x": 960,
+          "y": 904,
+          "width": 900,
+          "strokeWidth": 3,
+          "stroke": "#2a3142",
+          "keyframes": [
+            {
+              "t": 0.3,
+              "draw": 0
+            },
+            {
+              "t": 1.2,
+              "draw": 1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "bar-q1",
+          "type": "shape",
+          "shape": "line",
+          "x": 660,
+          "y": 756.0,
+          "width": 288,
+          "strokeWidth": 150,
+          "stroke": "#8b93a7",
+          "rotate": 270,
+          "keyframes": [
+            {
+              "t": 1.0,
+              "draw": 0
+            },
+            {
+              "t": 2.1,
+              "draw": 1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "val-q1",
+          "type": "counter",
+          "from": 0,
+          "to": 32.0,
+          "decimals": 1,
+          "prefix": "$",
+          "suffix": "M",
+          "x": 660,
+          "y": 564,
+          "fontSize": 48,
+          "fontWeight": 700,
+          "color": "#8b93a7",
+          "font": "mono",
+          "keyframes": [
+            {
+              "t": 1.0,
+              "opacity": 0,
+              "value": 0
+            },
+            {
+              "t": 1.3,
+              "opacity": 1
+            },
+            {
+              "t": 2.1,
+              "value": 32.0,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "lbl-q1",
+          "type": "text",
+          "text": "Q1",
+          "x": 660,
+          "y": 966,
+          "fontSize": 40,
+          "fontWeight": 600,
+          "color": "#8b93a7",
+          "keyframes": [
+            {
+              "t": 1.2,
+              "opacity": 0
+            },
+            {
+              "t": 1.7999999999999998,
+              "opacity": 1,
+              "ease": "outQuad"
+            }
+          ]
+        },
+        {
+          "id": "bar-q2",
+          "type": "shape",
+          "shape": "line",
+          "x": 960,
+          "y": 739.5,
+          "width": 321,
+          "strokeWidth": 150,
+          "stroke": "#8b93a7",
+          "rotate": 270,
+          "keyframes": [
+            {
+              "t": 1.6,
+              "draw": 0
+            },
+            {
+              "t": 2.7,
+              "draw": 1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "val-q2",
+          "type": "counter",
+          "from": 0,
+          "to": 35.7,
+          "decimals": 1,
+          "prefix": "$",
+          "suffix": "M",
+          "x": 960,
+          "y": 531,
+          "fontSize": 48,
+          "fontWeight": 700,
+          "color": "#8b93a7",
+          "font": "mono",
+          "keyframes": [
+            {
+              "t": 1.6,
+              "opacity": 0,
+              "value": 0
+            },
+            {
+              "t": 1.9000000000000001,
+              "opacity": 1
+            },
+            {
+              "t": 2.7,
+              "value": 35.7,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "lbl-q2",
+          "type": "text",
+          "text": "Q2",
+          "x": 960,
+          "y": 966,
+          "fontSize": 40,
+          "fontWeight": 600,
+          "color": "#8b93a7",
+          "keyframes": [
+            {
+              "t": 1.8,
+              "opacity": 0
+            },
+            {
+              "t": 2.4,
+              "opacity": 1,
+              "ease": "outQuad"
+            }
+          ]
+        },
+        {
+          "id": "bar-q3",
+          "type": "shape",
+          "shape": "line",
+          "x": 1260,
+          "y": 710.5,
+          "width": 379,
+          "strokeWidth": 150,
+          "stroke": "#5eead4",
+          "rotate": 270,
+          "keyframes": [
+            {
+              "t": 2.2,
+              "draw": 0
+            },
+            {
+              "t": 3.3000000000000003,
+              "draw": 1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "val-q3",
+          "type": "counter",
+          "from": 0,
+          "to": 42.1,
+          "decimals": 1,
+          "prefix": "$",
+          "suffix": "M",
+          "x": 1260,
+          "y": 473,
+          "fontSize": 48,
+          "fontWeight": 700,
+          "color": "#f4f6fb",
+          "font": "mono",
+          "keyframes": [
+            {
+              "t": 2.2,
+              "opacity": 0,
+              "value": 0
+            },
+            {
+              "t": 2.5,
+              "opacity": 1
+            },
+            {
+              "t": 3.3000000000000003,
+              "value": 42.1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "lbl-q3",
+          "type": "text",
+          "text": "Q3",
+          "x": 1260,
+          "y": 966,
+          "fontSize": 40,
+          "fontWeight": 600,
+          "color": "#f4f6fb",
+          "keyframes": [
+            {
+              "t": 2.4000000000000004,
+              "opacity": 0
+            },
+            {
+              "t": 3.0000000000000004,
+              "opacity": 1,
+              "ease": "outQuad"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

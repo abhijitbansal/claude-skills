@@ -1,0 +1,1 @@
+Build a "Support operations" dashboard from data/tickets.csv: KPI tiles for total tickets, median first response (minutes), median resolution (hours) and average CSAT; weekly ticket volume by priority as a stacked area chart; median resolution hours by team; CSAT distribution (1-5) as a bar chart; and first response by channel.

@@ -1,0 +1,25 @@
+{
+  "size": [1920, 1080], "fps": 30, "background": "#0b0d12",
+  "scenes": [
+    { "id": "intro", "duration": 2.5, "elements": [
+      { "id": "name", "type": "text", "text": "Lumen 2.0", "x": 960, "y": 470, "fontSize": 160, "fontWeight": 700, "color": "#ffffff",
+        "keyframes": [ { "t": 0, "opacity": 0, "scale": 0.6 }, { "t": 0.8, "opacity": 1, "scale": 1, "ease": "outCubic" } ] },
+      { "id": "tagline", "type": "text", "text": "Search that keeps up", "x": 960, "y": 620, "fontSize": 56, "color": "#9aa4b8",
+        "keyframes": [ { "t": 0.5, "opacity": 0, "y": 650 }, { "t": 1.1, "opacity": 1, "y": 620, "ease": "outCubic" } ] } ] },
+    { "id": "speed", "duration": 2.5, "transition": "fade", "elements": [
+      { "id": "count", "type": "counter", "from": 1, "to": 3, "decimals": 0, "suffix": "x faster", "x": 960, "y": 470, "fontSize": 160, "fontWeight": 700, "color": "#7cc4ff",
+        "keyframes": [ { "t": 0, "value": 1 }, { "t": 1.5, "value": 3, "ease": "outCubic" } ] },
+      { "id": "caption", "type": "text", "text": "Median query time vs 1.0", "x": 960, "y": 640, "fontSize": 44, "color": "#9aa4b8",
+        "keyframes": [ { "t": 0.3, "opacity": 0 }, { "t": 0.9, "opacity": 1, "ease": "outQuad" } ] } ] },
+    { "id": "features", "duration": 3, "transition": "fade", "elements": [
+      { "id": "f1", "type": "text", "text": "Offline index", "x": 960, "y": 340, "fontSize": 96, "fontWeight": 700, "color": "#ffffff",
+        "keyframes": [ { "t": 0.2, "opacity": 0, "y": 370 }, { "t": 0.7, "opacity": 1, "y": 340, "ease": "outCubic" } ] },
+      { "id": "f2", "type": "text", "text": "Typo-tolerant", "x": 960, "y": 540, "fontSize": 96, "fontWeight": 700, "color": "#ffffff",
+        "keyframes": [ { "t": 0.9, "opacity": 0, "y": 570 }, { "t": 1.4, "opacity": 1, "y": 540, "ease": "outCubic" } ] },
+      { "id": "f3", "type": "text", "text": "Private by default", "x": 960, "y": 740, "fontSize": 96, "fontWeight": 700, "color": "#ffffff",
+        "keyframes": [ { "t": 1.6, "opacity": 0, "y": 770 }, { "t": 2.1, "opacity": 1, "y": 740, "ease": "outCubic" } ] } ] },
+    { "id": "outro", "duration": 2, "transition": "fade", "elements": [
+      { "id": "cta", "type": "text", "text": "Available today", "x": 960, "y": 540, "fontSize": 128, "fontWeight": 700, "color": "#ffffff",
+        "keyframes": [ { "t": 0, "opacity": 0, "scale": 0.9 }, { "t": 0.7, "opacity": 1, "scale": 1, "ease": "outCubic" } ] } ] }
+  ]
+}

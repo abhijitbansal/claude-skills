@@ -1,0 +1,38 @@
+{
+  "title": "Web traffic deep dive",
+  "description": "Sessions, signups and conversion by channel from data/web_traffic.csv",
+  "sources": { "web_traffic": { "type": "csv", "path": "data/web_traffic.csv" } },
+  "queries": {
+    "totals": "SELECT SUM(sessions) AS sessions, SUM(signups) AS signups, SUM(signups) * 1.0 / SUM(sessions) AS conversion FROM web_traffic",
+    "weekly_sessions": "SELECT CAST(date_trunc('week', date) AS VARCHAR) AS week, channel, SUM(sessions) AS sessions FROM web_traffic GROUP BY 1, 2 ORDER BY 1, 2",
+    "channel_share": "SELECT channel, SUM(sessions) AS sessions, SUM(sessions) * 1.0 / SUM(SUM(sessions)) OVER () AS share FROM web_traffic GROUP BY 1 ORDER BY 2 DESC",
+    "weekly_conversion": "SELECT CAST(date_trunc('week', date) AS VARCHAR) AS week, channel, SUM(signups) * 1.0 / SUM(sessions) AS conversion FROM web_traffic GROUP BY 1, 2 ORDER BY 1, 2",
+    "best_worst_day": "WITH d AS (SELECT date, SUM(signups) AS signups FROM web_traffic GROUP BY 1) SELECT * FROM (SELECT 'Best day' AS label, CAST(date AS VARCHAR) AS day, signups FROM d ORDER BY signups DESC, date LIMIT 1) UNION ALL SELECT * FROM (SELECT 'Worst day' AS label, CAST(date AS VARCHAR) AS day, signups FROM d ORDER BY signups ASC, date LIMIT 1)"
+  },
+  "kpis": [
+    { "id": "k_sessions", "title": "Total sessions", "query": "totals", "field": "sessions", "format": "number" },
+    { "id": "k_signups", "title": "Total signups", "query": "totals", "field": "signups", "format": "number" },
+    { "id": "k_conv", "title": "Overall conversion", "query": "totals", "field": "conversion", "format": "percent" }
+  ],
+  "charts": [
+    { "id": "c_weekly", "title": "Weekly sessions by channel", "query": "weekly_sessions", "width": "full",
+      "vegaLite": { "mark": "bar", "encoding": {
+        "x": { "field": "week", "type": "temporal", "timeUnit": "utcyearmonthdate", "title": "Week" },
+        "y": { "field": "sessions", "type": "quantitative", "stack": "zero", "title": "Sessions" },
+        "color": { "field": "channel", "type": "nominal" } } } },
+    { "id": "c_share", "title": "Share of sessions by channel", "query": "channel_share", "width": "half",
+      "vegaLite": { "mark": "bar", "encoding": {
+        "y": { "field": "channel", "type": "nominal", "sort": null, "title": null },
+        "x": { "field": "share", "type": "quantitative", "axis": { "format": "%" }, "title": "Share of sessions" } } } },
+    { "id": "c_best_worst", "title": "Best and worst day by signups", "query": "best_worst_day", "width": "half",
+      "vegaLite": { "mark": "bar", "encoding": {
+        "y": { "field": "label", "type": "nominal", "sort": null, "title": null },
+        "x": { "field": "signups", "type": "quantitative", "title": "Signups" },
+        "tooltip": [ { "field": "day", "type": "nominal" }, { "field": "signups", "type": "quantitative" } ] } } },
+    { "id": "c_conv", "title": "Conversion rate by channel over time", "query": "weekly_conversion", "width": "full",
+      "vegaLite": { "mark": { "type": "line", "point": true }, "encoding": {
+        "x": { "field": "week", "type": "temporal", "timeUnit": "utcyearmonthdate", "title": "Week" },
+        "y": { "field": "conversion", "type": "quantitative", "axis": { "format": "%" }, "title": "Conversion rate" },
+        "color": { "field": "channel", "type": "nominal" } } } }
+  ]
+}

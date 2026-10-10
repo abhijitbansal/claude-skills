@@ -1,6 +1,6 @@
 ---
 name: async-enrichment-silent-loss-outcome-states
-description: A background AI/ML enrichment step (VLM naming, on-device classification, autocomplete) runs and produces a real result, but the user sees nothing — no spinner ever appeared, no suggestion shows up, and there is no way to tell "the model hasn't finished yet" apart from "it ran and a higher-confidence rule silently outvoted it," because a correct confidence-merge (e.g. OCR 0.69 beats VLM 0.65) just drops the losing result instead of surfacing it, making a working pipeline look completely dead. The degenerate form ships even more easily: the step returns *successfully* with an empty or whitespace-only string, which then gets cached, rendered as blank space, and logged as a success — a card headed "AI-generated" above no text at all, with nothing in the diagnostics to say why. Use when adding any async, sometimes-lossy AI/ML enrichment layered on top of a deterministic primary path (autocomplete, background transcription/classification, LLM-assisted field-filling), or when a generation step's output reaches a cache or a renderer without a non-blank check at the boundary — model every terminal state as a distinct visible UI state before shipping.
+description: "A background AI/ML enrichment step (VLM naming, on-device classification, autocomplete) runs and produces a real result, but the user sees nothing — no spinner ever appeared, no suggestion shows up, and there is no way to tell \"the model hasn't finished yet\" apart from \"it ran and a higher-confidence rule silently outvoted it,\" because a correct confidence-merge (e.g. OCR 0.69 beats VLM 0.65) just drops the losing result instead of surfacing it, making a working pipeline look completely dead. The degenerate form ships even more easily: the step returns *successfully* with an empty or whitespace-only string, which then gets cached, rendered as blank space, and logged as a success — a card headed \"AI-generated\" above no text at all, with nothing in the diagnostics to say why. Use when adding any async, sometimes-lossy AI/ML enrichment layered on top of a deterministic primary path (autocomplete, background transcription/classification, LLM-assisted field-filling), or when a generation step's output reaches a cache or a renderer without a non-blank check at the boundary — model every terminal state as a distinct visible UI state before shipping. Also covers a transient Vision/ML failure or task cancellation on one page that silently falls back to a lower-quality recogniser whose non-empty text passes the never-cache-empty guard and is cached permanently."
 ---
 
 # Async AI Enrichment: Every Outcome Needs a Distinct, Visible UI State
@@ -94,6 +94,35 @@ Three requirements, all load-bearing:
 
 Test it by stubbing the model to return `""` and `"   "` and asserting a
 user-visible error state — not by asserting the happy path still works.
+
+## Fix 3 — a degraded fallback is not a success either
+
+Fix 2's non-blank guard does not catch this: a recogniser swallows a Vision
+error and returns `[]`, so the caller silently falls back to a second source
+(e.g. the document API's lines). That text is non-empty, passes the guard,
+and the layout and AI-text caches persist it until the file is rewritten. A
+cancelled Analyze run did the same: the document API throws on cancellation
+but the legacy text recogniser does not, so table-less text got cached.
+
+Root cause: the recogniser returns `[]` for both "no text" and "threw", and
+the caller treats the fallback as a normal page. Nothing checks
+`Task.isCancelled` or source quality before the cache write.
+
+Fix:
+1. Make failure a distinct outcome (throw, or an enum case), never a silent
+   fallback to the weaker source.
+2. Allow a cache write only if every page came from the full-quality source
+   AND `!Task.isCancelled`.
+3. Record the entry's source; rebuild entries marked degraded.
+4. Regression test: inject a throw or cancellation on one page and assert no
+   cache file is written.
+5. Version-bump cache keys on pipeline changes and sweep old suffixes at
+   launch.
+
+Evidence (doc-scan, 6 sessions): paddle-ocr worktree `4918f6eb` (error
+swallowed, fell back to document-API lines) and `27e2731c` (cancellation
+asymmetry), main checkout `19b46702` (review flagged the permanent cache
+write in the document-structure recognizer).
 
 ## Evidence
 

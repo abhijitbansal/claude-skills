@@ -1,0 +1,19 @@
+{
+  "title": "Units by product",
+  "sources": { "sales": { "type": "csv", "path": "data/sales.csv" } },
+  "queries": { "units_by_product": "SELECT product, SUM(units) AS units FROM sales GROUP BY 1 ORDER BY 2 DESC" },
+  "charts": [
+    {
+      "id": "c1",
+      "title": "Units by product",
+      "query": "units_by_product",
+      "vegaLite": {
+        "mark": "bar",
+        "encoding": {
+          "x": { "field": "product", "type": "nominal", "sort": null },
+          "y": { "field": "units", "type": "quantitative" }
+        }
+      }
+    }
+  ]
+}
