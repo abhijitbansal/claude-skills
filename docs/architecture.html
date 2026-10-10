@@ -102,13 +102,15 @@ flowchart TD
   CW["core-workflow<br/><small>12 skills · 4 cmds · 2 agents · 1 hook</small>"]
   SW["second-wind<br/><small>skill wrapper</small>"]
   PC["prompt-craft<br/><small>7 skills · 6 hooks</small>"]
+  TB["test-board<br/><small>test-run band</small>"]
+  SC["session-compass<br/><small>return band · /compass pane</small>"]
   WIND[("tools/second-wind<br/>wind.py")]
   AD["adapters/install.sh"]
   SEED["setup/<br/><small>setup.sh · capture.sh · contribute.sh</small>"]
   CC(("Claude Code"))
   OTHER(("Codex / Copilot /<br/>AGENTS.md agents"))
 
-  MP --> IOS & LIN & CW & SW & PC
+  MP --> IOS & LIN & CW & SW & PC & TB & SC
   SW -.->|"wraps"| WIND
   CC -->|"/plugin marketplace add"| MP
   SEED -->|"local_plugins step"| CC
@@ -118,7 +120,7 @@ flowchart TD
 
   classDef plugin fill:#0e8fb01a,stroke:#0e8fb0,stroke-width:2px
   classDef infra fill:#b07a181a,stroke:#b07a18,stroke-width:2px
-  class IOS,LIN,CW,SW,PC plugin
+  class IOS,LIN,CW,SW,PC,TB,SC plugin
   class SEED,AD infra
         </pre></div></div>
       </div>
