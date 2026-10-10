@@ -20,6 +20,7 @@ plugin is, read the [README](README.md). For every spec field, see each skill's
 | Codex CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs codex` | `$make-dashboard …`, `$make-motion …` (or pick from `/skills`) |
 | GitHub Copilot CLI / VS Code | `node <repo>/plugins/portable-artifacts/bin/install.mjs copilot` (add `--project .` for `.github/skills`) | `/make-dashboard …`, `/make-motion …` |
 | Gemini CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs gemini` | `/make-dashboard …` (a TOML command that activates the skill) |
+| Any agent `npx skills` supports | `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-motion` (pick agents interactively, or pass `-a claude-code codex github-copilot -y`) | That agent's skill invocation |
 | Any other agent | Copy `skills/make-dashboard` and/or `skills/make-motion` into your project, run `npm ci` in each, and point `AGENTS.md` at their `SKILL.md` | Ask for a dashboard or a video |
 
 `<repo>` is a clone of `https://github.com/abhijitbansal/claude-skills`. The

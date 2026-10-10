@@ -91,6 +91,7 @@ need `npm ci` in each skill folder. Their own installer does that and covers Gem
 project-scoped installs too:
 `node plugins/portable-artifacts/bin/install.mjs <claude|codex|copilot|gemini|agents> [--project .]`
 — see [plugins/portable-artifacts/USAGE.md](plugins/portable-artifacts/USAGE.md).
+With [`npx skills`](https://github.com/vercel-labs/skills): `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-motion`.
 
 ### Cartoon (token-optimized CLI output)
 

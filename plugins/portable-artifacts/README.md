@@ -11,6 +11,8 @@ an account or a particular model:
 | [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + Vega-Lite charts. Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh — no LLM involved. |
 | [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. "Slow scene 2" changes one field, not the whole video. |
 
+[**See them in action**](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#showcase): a real dashboard and video an agent generated from one prompt each, with the prompts and specs.
+
 <p>
   <img src="../../docs/features/img/portable-artifacts/dashboard-light.jpg" alt="A make-dashboard page: four KPI tiles and four charts, each with a Query disclosure" width="49%">
   <img src="../../docs/features/img/portable-artifacts/motion-q3-revenue.gif" alt="A make-motion render: a +18% counter, then animated revenue bars" width="49%">
@@ -50,6 +52,21 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
 Then ask for a dashboard or a video, or call the skill directly:
 `/make-dashboard …` or `/make-motion …`. On first use the agent runs the
 one-time `npm ci` inside the skill folder.
+
+### Any agent, with `npx skills`
+
+[`skills`](https://github.com/vercel-labs/skills) installs the two skill
+folders into whichever agents you pick (Claude Code, Codex, Copilot,
+Cursor, Gemini CLI, and others):
+
+```bash
+npx skills add abhijitbansal/claude-skills --skill make-dashboard make-motion
+npx skills add abhijitbansal/claude-skills --skill make-dashboard make-motion -a claude-code codex github-copilot -y
+```
+
+It copies the folders but doesn't install their dependencies, so the agent
+runs `npm ci` inside each skill folder on first use (the SKILL.md tells it
+to).
 
 ### Codex, GitHub Copilot, Gemini CLI (or Claude Code without the marketplace)
 
