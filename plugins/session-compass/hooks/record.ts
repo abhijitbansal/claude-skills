@@ -62,6 +62,22 @@ export function addArtifact(rec: SessionRecord, a: Artifact): SessionRecord {
   return { ...rec, artifacts: [a, ...rest].slice(0, LIMITS.artifacts) }
 }
 
+// A record the store could not be read for starts empty; once the store answers,
+// what was stored fills the empty fields and the artifacts merge, newest first.
+export function mergeStored(cur: SessionRecord, stored: SessionRecord): SessionRecord {
+  const base: SessionRecord = {
+    ...cur,
+    goal: cur.goal ?? stored.goal,
+    step: cur.step ?? stored.step,
+    next: cur.next ?? stored.next,
+    firstPrompt: cur.firstPrompt ?? stored.firstPrompt,
+    statusAt: cur.statusAt ?? stored.statusAt,
+    artifacts: [],
+  }
+  const oldestFirst = [...cur.artifacts, ...stored.artifacts].sort((a, b) => a.at - b.at)
+  return oldestFirst.reduce(addArtifact, base)
+}
+
 export function capArtifacts(rec: SessionRecord, max: number): SessionRecord {
   return rec.artifacts.length <= max ? rec : { ...rec, artifacts: rec.artifacts.slice(0, max) }
 }

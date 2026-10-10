@@ -43,8 +43,9 @@ test('all-sessions tab lists other sessions; pressing a row copies the resume co
 })
 
 test('a corrupt index is rebuilt from session keys', async ($, on) => {
-  startWorld(on, {}, { 'session:sess-0': OTHER, index: 'garbage' })
+  const { world } = startWorld(on, {}, { 'session:sess-0': OTHER, index: ['sess-0'] })
   await $.session.start(START)
+  world.data.set('index', 'garbage')
   const ui = await mount($, 'terminal')
   await ui.press({ key: 'tab-all' })
   expect(await ui.find({ text: /table OCR/ })).toBeDefined()

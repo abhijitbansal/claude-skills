@@ -21,6 +21,10 @@ export type World = {
   sets: string[]
   setFailures: Record<string, number>
   isGetFailing: boolean
+  getFailures: number
+  isCopyFailing: boolean
+  isToolRegisterFailing: boolean
+  toasts: string[]
   drop?: string
 }
 
@@ -49,6 +53,10 @@ export function startWorld(on: On, over: Partial<World> = {}, seed: Record<strin
     sets: [],
     setFailures: {},
     isGetFailing: false,
+    getFailures: 0,
+    isCopyFailing: false,
+    isToolRegisterFailing: false,
+    toasts: [],
     ...over,
   }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -65,6 +73,7 @@ export function startWorld(on: On, over: Partial<World> = {}, seed: Record<strin
       : { value: { exitCode: 0, stdout: out, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('tool.register', (_$, e) => {
+    if (world.isToolRegisterFailing) throw new Error('register unavailable')
     world.registered.push(e.name)
     return { value: { tool: `mcp__session-compass__${e.name}` } }
   })
@@ -81,15 +90,25 @@ export function startWorld(on: On, over: Partial<World> = {}, seed: Record<strin
     return { value: undefined }
   })
   on('ui.copy', (_$, e) => {
+    if (world.isCopyFailing) return { value: { isCopied: false, reason: 'no-clipboard' } }
     world.copied.push(e.text)
     return { value: { isCopied: true } }
   })
+  on('ui.toast', (_$, e) => {
+    world.toasts.push(e.text)
+    return { value: undefined }
+  })
+
   on('prompt.submit', (_$, e) => (world.drop === undefined ? { text: e.text } : { drop: world.drop }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'engine intro', scope: 'shared' }] }))
   on('store.get', (_$, e) => {
     if (world.isGetFailing) throw new Error('store unavailable')
+    if (world.getFailures > 0) {
+      world.getFailures -= 1
+      throw new Error('store hiccup')
+    }
     return { value: world.data.get(e.key) }
   })
   on('store.set', (_$, e) => {

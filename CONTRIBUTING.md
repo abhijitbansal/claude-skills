@@ -14,7 +14,7 @@ any AGENTS.md-aware agent.
 
 | Path | What |
 | --- | --- |
-| `plugins/` | the seven plugins (`ios-dev`, `linear-pm`, `core-workflow`, `prompt-craft`, `second-wind`, `test-board`, `session-compass`) — each ships skills, commands, agents, hooks |
+| `plugins/` | the seven plugins (`ios-dev`, `linear-pm`, `core-workflow`, `prompt-craft`, `second-wind`, `test-board`, `session-compass`) — most ship skills, commands, agents and hooks; `test-board` and `session-compass` are function-hook mods |
 | `tools/` | standalone CLIs (`second-wind`) |
 | `adapters/` | wire the skills into non-Claude tools |
 | `AGENTS.md`, `CLAUDE.md` | contributor + agent conventions — `AGENTS.md` owns process (orchestration modes, model-tier/effort routing, branch/commit/CI workflow); `CLAUDE.md` owns the behavioral guidelines |

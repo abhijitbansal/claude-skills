@@ -13,6 +13,7 @@ export type PaneData = {
   tab: Tab
   rec: SessionRecord | null
   others: readonly SessionRecord[]
+  isOthersUnreadable: boolean
   tests: Tally | undefined
   now: number
   columns: number
@@ -60,7 +61,8 @@ export function paneView({ Box, Text, Button }: Els, d: PaneData, act: PaneActio
     return (
       <Box flexDirection="column">
         {tabs}
-        {rows.length === 0 && <Text dimColor>No other sessions recorded.</Text>}
+        {d.isOthersUnreadable && <Text dimColor>Could not read other sessions.</Text>}
+        {rows.length === 0 && !d.isOthersUnreadable && <Text dimColor>No other sessions recorded.</Text>}
         {rows.map(o => {
           const head = `${o.repo} · ${basename(o.worktree)}/${o.branch} · ${o.goal ?? o.firstPrompt ?? '(no goal)'} · ${o.step ?? '-'}`
           return (

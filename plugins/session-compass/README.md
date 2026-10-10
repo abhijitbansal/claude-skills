@@ -28,7 +28,7 @@ One line above the prompt: `repo · worktree (branch) · Goal · Now · N artifa
   the status was set; Test Board's pass/fail tally; and every artifact, grouped as
   Published artifacts, Files sent, Documents, Commits, Pushes and Pull requests.
   Press an entry to copy it (URL for artifacts and PRs, path for files and documents,
-  full SHA for commits, branch name for pushes).
+  the commit sha as the Bash tool reports it, branch name for pushes).
 - **All sessions** tab: the other recorded sessions, most recently active first, up to
   50. Press a row to copy `claude --resume <id>`.
 
@@ -68,6 +68,9 @@ text is truncated; past the caps the oldest artifacts and sessions are dropped.
 
 Records live in the plugin's local store. Nothing leaves the machine and the plugin
 makes no model calls. It reads Test Board's latest runs when Test Board is installed.
+The store keeps the first 80 characters of a session's first prompt, worktree paths, commit
+subjects and artifact URLs until the session ages out of the 50-session cap; avoid pasting
+secrets into a first prompt.
 
 ## Known limits
 

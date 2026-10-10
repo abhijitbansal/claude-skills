@@ -6,7 +6,7 @@ import { capture } from './capture'
 import { PANE_ID, paneView, type Tab } from './pane'
 import { GIT_TIMEOUT_MS, INDEX, PREFIX, isRecord, recordKey } from './io'
 import {
-  LIMITS, addArtifact, applyStatus, basename, capArtifacts, newRecord, orderIndex, sortByActive, touch, withFirstPrompt,
+  LIMITS, addArtifact, applyStatus, basename, capArtifacts, mergeStored, newRecord, orderIndex, sortByActive, touch, withFirstPrompt,
   type StatusInput, type Where,
 } from './record'
 
@@ -87,7 +87,24 @@ async function freeSpace($: EngineInterface, keepId: string): Promise<void> {
   await trimOthers($, keepId)
 }
 
-export async function saveRecord($: EngineInterface, rec: SessionRecord): Promise<void> {
+// While the start-time read failed twice, the atom holds a fresh record. Before
+// the first write, try the store once more and fold what it holds into the atom.
+async function verifyStore($: EngineInterface, state: Chain, rec: SessionRecord): Promise<SessionRecord> {
+  if (!state.isStoreUnverified) return rec
+  let stored: SessionRecord | undefined
+  try {
+    stored = await loadRecord($, rec.id)
+  } catch {
+    return rec
+  }
+  state.isStoreUnverified = false
+  if (stored === undefined) return rec
+  const merged = await update($, record, cur => (cur === null ? cur : mergeStored(cur, stored)))
+  return merged ?? rec
+}
+
+export async function saveRecord($: EngineInterface, state: Chain, first: SessionRecord): Promise<void> {
+  const rec = await verifyStore($, state, first)
   try {
     await writeAll($, rec, LIMITS.sessions)
   } catch {
@@ -145,7 +162,7 @@ function onlyStrings(input: Record<string, unknown>): StatusInput {
 
 // Folds new artifacts (and a fresh branch, after a git move) into the record
 // with CAS updates, then saves what was written. Callers queue it so saves never interleave.
-async function applyCapture($: EngineInterface, found: Artifact[], isGitMove: boolean): Promise<void> {
+async function applyCapture($: EngineInterface, state: Chain, found: Artifact[], isGitMove: boolean): Promise<void> {
   if ((await read($, record)) === null) return
   let written = await update($, record, cur => (cur === null ? cur : found.reduce(addArtifact, cur)))
   if (written === null) return
@@ -153,23 +170,31 @@ async function applyCapture($: EngineInterface, found: Artifact[], isGitMove: bo
     const where = await locate($, written)
     written = await update($, record, cur => (cur === null ? cur : { ...cur, ...where }))
   }
-  if (written !== null) await saveRecord($, written)
+  if (written !== null) await saveRecord($, state, written)
 }
 
-type Chain = { chain: Promise<void>; isTurnRunning: boolean; idle?: Timer }
+export type Chain = { chain: Promise<void>; isTurnRunning: boolean; isStoreUnverified: boolean; idle?: Timer }
 
 async function idleTick($: EngineInterface, state: Chain): Promise<void> {
-  const rec = await read($, record)
-  if (rec === null || state.isTurnRunning) return
-  const isIdle = (await $.clock.now()) - rec.lastActive >= LIMITS.idleMs
-  if (isIdle && (await read($, band)) !== 'return') await update($, band, () => 'return')
+  try {
+    const rec = await read($, record)
+    if (rec === null || state.isTurnRunning) return
+    const isIdle = (await $.clock.now()) - rec.lastActive >= LIMITS.idleMs
+    if (isIdle && (await read($, band)) !== 'return') await update($, band, () => 'return')
+  } catch (err) {
+    try {
+      $.ui.log(`session-compass: idle tick failed: ${String(err).slice(0, 120)}`)
+    } catch {
+      // a throwing log must not become an unhandled rejection
+    }
+  }
 }
 
 async function touchRecord($: EngineInterface, state: Chain, change: (r: SessionRecord, now: number) => SessionRecord) {
   await queue(state, 'touch', async () => {
     const now = await $.clock.now()
     const written = await update($, record, cur => (cur === null ? cur : change(cur, now)))
-    if (written !== null) await saveRecord($, written)
+    if (written !== null) await saveRecord($, state, written)
   }, $).catch(() => undefined)
 }
 
@@ -188,28 +213,48 @@ function queue(state: Chain, kind: string, job: () => Promise<void>, $: EngineIn
   return run
 }
 
+function logPane($: EngineInterface, what: string, err: unknown): void {
+  try {
+    $.ui.log(`session-compass: pane ${what} failed: ${String(err).slice(0, 120)}`)
+  } catch {
+    // a throwing log must not become an unhandled rejection
+  }
+}
+
 export const register: Register = on => {
   // One promise chain per load: capture passes run one at a time.
-  const state: Chain = { chain: Promise.resolve(), isTurnRunning: false }
+  const state: Chain = { chain: Promise.resolve(), isTurnRunning: false, isStoreUnverified: false }
 
   on('session.start', async ($, e, next) => {
     await $.tool.register(STATUS_TOOL)
     await $.command.register({ name: 'compass', description: 'Open the session compass pane' })
     const id = await $.session.id()
     const now = await $.clock.now()
-    const stored = await loadRecord($, id).catch(err => {
-      $.ui.log(`session-compass: store read failed, starting fresh: ${String(err).slice(0, 120)}`)
-      return undefined
-    })
-    const where = await locate($, stored, e.cwd)
-    const started = stored ? { ...stored, ...where, lastActive: now } : newRecord(id, where, now)
+    // A new load starts verified; a read that fails twice flips the flag until the store answers.
+    state.isStoreUnverified = false
     await queue(state, 'start', async () => {
+      let stored: SessionRecord | undefined
+      try {
+        stored = await loadRecord($, id).catch(() => loadRecord($, id))
+      } catch (err) {
+        state.isStoreUnverified = true
+        $.ui.log(`session-compass: store read failed, starting fresh: ${String(err).slice(0, 120)}`)
+      }
+      const where = await locate($, stored, e.cwd)
+      const started = stored ? { ...stored, ...where, lastActive: now } : newRecord(id, where, now)
       await update($, record, () => started)
-      await saveRecord($, started)
+      if (!state.isStoreUnverified) await saveRecord($, state, started)
     }, $).catch(() => undefined)
     if ((await $.session.turns()) > 0) await update($, band, () => 'return')
     state.idle?.cancel()
     state.idle = $.clock.every(IDLE_TICK_MS, () => idleTick($, state))
+    return next(e)
+  }).catch(($, e, next) => {
+    try {
+      $.ui.log(`session-compass: start failed (the hook error is not passed to .catch)`)
+    } catch {
+      // a throwing log must not mask the original failure
+    }
     return next(e)
   })
 
@@ -256,17 +301,31 @@ export const register: Register = on => {
     const shown = await read($, tab)
     const rec = await read($, record)
     // A corrupt or missing index never crashes the pane: loadIndex rebuilds from session keys.
-    const others = shown === 'all' ? await listSessions($, rec?.id ?? '').catch(() => []) : []
+    let isOthersUnreadable = false
+    const others = shown === 'all'
+      ? await listSessions($, rec?.id ?? '').catch((err: unknown) => {
+          isOthersUnreadable = true
+          $.ui.log(`session-compass: could not read other sessions: ${String(err).slice(0, 120)}`)
+          return []
+        })
+      : []
     const tests = shown === 'this' ? tally(await readTestBoard($)) : undefined
     return paneView($.ui.resolve(e), {
-      tab: shown, rec, others, tests, now: await $.clock.now(), columns: e.props.bodyColumns,
+      tab: shown, rec, others, isOthersUnreadable, tests, now: await $.clock.now(), columns: e.props.bodyColumns,
     }, {
-      onTab: next => { void update($, tab, () => next) },
-      onCopy: text => { void $.ui.copy({ text, surface: e.surface }) },
+      onTab: next => { update($, tab, () => next).catch(err => logPane($, 'tab change', err)) },
+      onCopy: text => {
+        $.ui.copy({ text, surface: e.surface }).then(
+          done => { if (!done.isCopied) $.ui.toast(`Copy failed: ${done.reason}`) },
+          err => logPane($, 'copy', err),
+        )
+      },
     })
   })
 
   on('tool.call', { tool: STATUS_TOOL_ID }, async ($, e) => {
+    // A subagent's status would overwrite the main session's goal, step and next.
+    if (e.agentId !== undefined) return { deny: 'session-compass: compass_status is for the main session only' }
     const input = onlyStrings(e as unknown as Record<string, unknown>)
     const outcome: { deny?: string } = {}
     const done = await queue(state, 'status', async () => {
@@ -284,7 +343,7 @@ export const register: Register = on => {
       })
       if (written === null) outcome.deny = 'session-compass: no session record yet'
       else if (error !== undefined) outcome.deny = error
-      else await saveRecord($, written)
+      else await saveRecord($, state, written)
     }, $).then(() => true, () => false)
     if (!done) return { deny: 'session-compass: status not saved, try again' }
     return outcome.deny === undefined ? { result: { text: 'ok' } } : { deny: outcome.deny }
@@ -306,7 +365,7 @@ export const register: Register = on => {
     const isGitMove = tool === 'Bash' && input.agentId === undefined && GIT_MOVE.test(command)
     // Decided before waiting: a call that captures nothing never queues behind the chain.
     if (found.length === 0 && !isGitMove) return ran
-    await queue(state, 'capture', () => applyCapture($, found, isGitMove), $).catch(() => undefined)
+    await queue(state, 'capture', () => applyCapture($, state, found, isGitMove), $).catch(() => undefined)
     return ran
   }).catch(($, e, next) => next(e))
 
