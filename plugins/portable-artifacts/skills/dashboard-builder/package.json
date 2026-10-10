@@ -1,0 +1,17 @@
+{
+  "name": "dashboard-builder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Prompt -> SQL + Vega-Lite -> static HTML dashboard with per-chart provenance. Local, offline, open source.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "dependencies": {
+    "ajv": "8.20.0"
+  }
+}
