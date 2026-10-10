@@ -109,3 +109,11 @@ test('non-string compass_status fields are treated as left out, never thrown on'
   expect(world.seen.get('record')).toMatchObject({ step: 'ok' })
   expect((world.seen.get('record') as { goal?: unknown }).goal).toBeUndefined()
 })
+
+test('compass_status answers with a plain string result, as a registered tool must', async ($, on) => {
+  startWorld(on)
+  await $.session.start(START)
+  const out = await $.tool.call({ tool: STATUS, goal: 'barcode fallback' } as never)
+  expect(out.deny).toBeUndefined()
+  expect(typeof out.result).toBe('string')
+})
