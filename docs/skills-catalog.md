@@ -117,6 +117,11 @@ The everyday glue, useful in any repo.
 | `launchd-git-automation-self-heal` | skill (mined) | launchd git jobs die silently on a dirty tree, a missing clone, or a stale retry branch — bootstrap outside the script, hard-reset before pull, `checkout -B` for retries. |
 | `declarative-hook-rules-inert-without-dispatcher` | skill (mined) | A declarative hook-rule-file format is inert unless something in the settings stack actually loads it — verify the dispatcher before authoring rules. |
 | `subagent-buildverify-tool-grant-check` | skill (mined) | A subagent whose acceptance test needs a build/test run silently stalls forever if its tool grant lacks Bash — check the grant before dispatching build/verify work. |
+| `subagent-report-truncation-delivery-contract` | skill (mined) | Subagent reports get cut off mid-finding and SendMessage relays fail — give every dispatch a report-delivery contract (verdict first, line cap, END OF REPORT marker). |
+| `blast-radius-rm-hold-unattended-subagent-stall` | skill (mined) | rm -rf in agent-written scripts is held by the Blast Radius hook for 10 minutes and stalls unattended subagents — use mktemp -d and never delete. |
+| `xcode-license-blocks-git-exit-69` | skill (mined) | Every git command exits 69 after an Xcode update until the user runs sudo xcodebuild -license accept — detect it once, use CLT git read-only, hold commits. |
+| `worktree-isolation-guard-refuses-complex-bash` | skill (mined) | The worktree isolation guard refuses -C, chains, eval, source, heredocs and computed command names — one plain command per call, Write for file content. |
+| `claude-mod-store-race-host-rules-checklist` | skill (mined) | Claude Code mod checklist: $.store has no compare-and-swap and is shared across sessions, keep $ in register.tsx, next(e) first — serial write chain and fail-closed hooks. |
 | `dev-tracker-portable` | skill (mined) | In-repo dev tracker starter kit (one markdown ledger + archives + capture/list/fix/learn modes), the proven Cubby system genericized. |
 
 ## second-wind (plugin + CLI)
