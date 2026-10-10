@@ -115,6 +115,19 @@ background colour.
 **Charts in videos** are Vega-Lite specs with inline `data.values`. Animate
 `reveal` from 0 to 1 for a left-to-right wipe.
 
+**Audio is opt-in.** The agent adds `audio` tracks only when you ask for
+sound ("with background music from music.mp3", "with a voiceover reading
+it"); a prompt that says nothing about sound renders silent, as before.
+A track is a local file next to `motion.json` (mp3, wav, m4a, aac, ogg or
+flac) with `at` (seconds), or `scene` plus `at` so the clip moves with its
+scene, and optional `duration`, `volume`, `fadeIn` and `fadeOut`. ffmpeg
+mixes the tracks into the MP4 as AAC stereo; the preview plays them in sync
+(approximately; `M` mutes) and the MP4 timing is exact. Music is always a
+file you supply. For narration the agent runs
+`voice.mjs "<text>" --out voice/<scene>.wav` (Kokoro, local, 28 voices,
+`--voice af_heart` by default) after asking once to install `kokoro-js`
+(about 250 MB plus a 90 MB model downloaded a single time).
+
 ## 4. Asking for changes
 
 Both skills edit **one field of the spec**, so everything else stays the

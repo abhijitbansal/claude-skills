@@ -162,12 +162,12 @@ Sharpen the ask before the work, surface the right next step after it. Zero conf
 
 ## portable-artifacts (plugin)
 
-Dashboards and animated explainers from a prompt — built locally, offline, from open-source parts, by any coding agent. The model writes one small JSON spec; deterministic Node scripts validate it and build, preview or render. Needs Node.js ≥ 20 (`npm ci` once per skill); `make-motion` also needs Chromium and ffmpeg. `bin/install.mjs` ports both skills to Codex, Copilot, Gemini CLI and Claude Code.
+Dashboards and animated explainers from a prompt — built locally, offline, from open-source parts, by any coding agent. The model writes one small JSON spec; deterministic Node scripts validate it and build, preview or render. Needs Node.js ≥ 20 (`npm ci` once per skill); `make-motion` also needs Chromium and ffmpeg, and installs kokoro-js on demand when a voiceover is asked for. `bin/install.mjs` ports both skills to Codex, Copilot, Gemini CLI and Claude Code.
 
 | Name | Kind | What it does |
 | --- | --- | --- |
 | `make-dashboard` | skill | Prompt + data file (CSV, Parquet, JSON, DuckDB, SQLite, Postgres, MySQL) → `dashboard.json` → one self-contained `index.html` of KPI tiles and Vega-Lite charts. Every chart shows its SQL, row count and refresh time; refresh is one command, no LLM. Invoke `/make-dashboard` (`$make-dashboard` in Codex). |
-| `make-motion` | skill | Prompt → `motion.json` scene spec → live preview with a scrubber and a deterministic 1080p MP4. A change is one field in the spec. Invoke `/make-motion` (`$make-motion` in Codex). |
+| `make-motion` | skill | Prompt → `motion.json` scene spec → live preview with a scrubber and a deterministic 1080p MP4. Optional `audio` tracks (music, voiceover, SFX) are mixed in by ffmpeg and played in sync in the preview; narration is synthesised locally with Kokoro when the prompt asks for it. A change is one field in the spec. Invoke `/make-motion` (`$make-motion` in Codex). |
 
 Visual guide: [portable-artifacts](features/portable-artifacts.html).
 
