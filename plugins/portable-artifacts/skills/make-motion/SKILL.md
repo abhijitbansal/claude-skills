@@ -1,6 +1,6 @@
 ---
 name: make-motion
-description: Use when the user wants a short animated explainer video (titles, counters, shapes, charts, images with keyframed motion) previewed locally and exported to MP4; spec-driven, offline, open source, works with any agent that can run shell commands.
+description: Use when the user wants a short animated explainer video (titles, counters, shapes, charts, images with keyframed motion) previewed locally and exported to MP4 with optional music or voiceover; spec-driven, offline, open source, works with any agent that can run shell commands.
 argument-hint: what to make, e.g. an 8s clip with Q3 revenue up 18% then a bar chart of Q1-Q3
 ---
 
@@ -8,7 +8,7 @@ argument-hint: what to make, e.g. an 8s clip with Q3 revenue up 18% then a bar c
 
 You write one JSON file, `motion.json`. Scripts validate it, preview it in a browser and render it to MP4. You never write animation code, and you never edit generated output.
 
-`<skill-dir>` is the folder that contains this SKILL.md. Run every command from the project folder (where `motion.json` lives), using the full path to the scripts. Image paths resolve relative to the spec file. If the request is empty, ask what the video should say, how long it should be, and the size (default 1920x1080, 30 fps).
+`<skill-dir>` is the folder that contains this SKILL.md. Run every command from the project folder (where `motion.json` lives), using the full path to the scripts. Image paths resolve relative to the spec file. If the request is empty, ask what the video should say, how long it should be, the size (default 1920x1080, 30 fps), and whether it needs music or a voiceover file (the user supplies the audio file; the skill does not generate speech).
 
 ## First use (say what each step is before running it)
 
@@ -24,8 +24,8 @@ Run every step yourself, in this same turn, with your shell or file tools. Do no
    Actually create the file: describing it or announcing a patch is not enough. If your file tool fails, write it from the shell (`cat > motion.json <<'EOF'` … `EOF`), then `ls motion.json` to confirm it exists before validating.
 2. `node <skill-dir>/scripts/validate.mjs motion.json` — fix every line it prints (`<json.path>: <message>`, with did-you-mean) and re-run until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage/IO error.
 3. Self-check: `node <skill-dir>/scripts/render.mjs motion.json --contact-sheet` writes `out/contact/<scene-id>.png` next to the spec (one frame per scene, at 85% of its duration). Look at each PNG: clipped text, invisible elements, overlaps, wrong fonts. Fix the spec and repeat.
-4. `node <skill-dir>/scripts/preview.mjs motion.json [--open]` prints a localhost URL with scrubber, play/pause, scene markers, Space and arrow keys. The page reloads when the file changes.
-5. `node <skill-dir>/scripts/render.mjs motion.json [--out out/video.mp4] [--fps 30] [--size 1920x1080]` writes the MP4 (H.264, yuv420p, no audio). It prints the path and frame count.
+4. `node <skill-dir>/scripts/preview.mjs motion.json [--open]` prints a localhost URL with scrubber, play/pause, scene markers, Space and arrow keys. The page reloads when the file changes. It plays the audio tracks in sync (approximate; M mutes); the MP4 timing is exact.
+5. `node <skill-dir>/scripts/render.mjs motion.json [--out out/video.mp4] [--fps 30] [--size 1920x1080]` writes the MP4 (H.264, yuv420p; AAC audio when the spec has tracks). It prints the path and frame count.
 
 When asked for a change ("slow scene 2", "make the title blue"), edit only the fields the request names in `motion.json`, then validate again. Do not rewrite the spec from scratch.
 
@@ -42,11 +42,15 @@ When done, report the spec path, the MP4 path with its duration and size, and on
         { "id": "title", "type": "text", "text": "Q3 revenue up 18%", "x": 960, "y": 480,
           "fontSize": 96, "fontWeight": 700, "color": "#ffffff",
           "keyframes": [ { "t": 0, "opacity": 0, "y": 520 },
-                         { "t": 0.6, "opacity": 1, "y": 480, "ease": "outCubic" } ] } ] } ]
+                         { "t": 0.6, "opacity": 1, "y": 480, "ease": "outCubic" } ] } ] } ],
+  "audio": [
+    { "src": "music.mp3", "volume": 0.4, "fadeOut": 2 },
+    { "src": "voice.wav", "scene": "intro", "at": 0.5 } ]
 }
 ```
 
 - Root: `size` (default 1920x1080), `fps` (24, 25, 30, 60), `background`, `scenes` (1–50, total ≤ 120 s). Only `scenes` is required.
+- Audio track (optional root `audio` array, up to 20): `src` (relative to the spec, inside the spec folder; mp3, wav, m4a, aac, ogg or flac), `at` (seconds from the video start, default 0), `scene` (a scene `id`; `at` is then relative to that scene's start, so lengthening an earlier scene keeps a voiceover aligned), `duration` (trim, seconds), `volume` (0–1, default 1), `fadeIn` / `fadeOut` (seconds). `fadeOut` anchors to the `duration` trim or the video end; a clip that ends earlier gets no fade. No `loop`: a short music file just stops.
 - Scene: `id`, `duration` (0.2–60 s), `elements`, optional `background`, `transition` (`none` or `fade`, a 0.4 s fade-in). Only one scene is visible at a time; scenes play back to back.
 - Every element: `id` (unique in the whole spec), `type`, `x`, `y` (canvas pixels; the anchor is the element centre), optional `opacity`, `scale`, `rotate` (degrees), `keyframes`.
 - Types: `text`, `counter` (`from`, `to`, `decimals`, `prefix`, `suffix`; animate `value`), `shape` (`rect`, `ellipse`, `line`; a line is horizontal of length `width`, use `rotate` to angle it; animate `draw` 0–1), `image` (`src` relative to the spec), `chart` (`vegaLite` with inline `data.values`, `width`, `height`; animate `reveal` 0–1 for a left-to-right wipe).

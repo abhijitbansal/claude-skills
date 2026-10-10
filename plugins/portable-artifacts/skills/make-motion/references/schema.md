@@ -14,6 +14,18 @@ Validate with `node scripts/validate.mjs motion.json`. Unknown properties are er
 `id` (string, globally unique), `duration` (0.2–60 s), `elements` (array), optional `background`, `transition` (`none` default | `fade`: scene opacity 0→1 over min(0.4 s, duration)).
 Scenes play sequentially; scene *n* starts at the sum of earlier durations. Only the active scene is drawn.
 
+## Audio
+Optional root `audio` array, up to 20 tracks. Tracks mix over the whole video; contact sheets ignore them.
+| field | type | default | notes |
+|---|---|---|---|
+| `src` | string | required | relative to the spec file; same path rules as image `src`; `mp3` \| `wav` \| `m4a` \| `aac` \| `ogg` \| `flac` |
+| `at` | seconds ≥ 0 | 0 | from the video start; with `scene`, from that scene's start |
+| `scene` | scene `id` | none | anchors `at` to the scene, so changing an earlier scene's duration keeps the track aligned |
+| `duration` | seconds > 0 | whole clip | trim; the track stops at `start + duration`, clamped to the video end |
+| `volume` | 0–1 | 1 | literal gain (the mix is not normalised) |
+| `fadeIn` | seconds ≥ 0 | 0 | from the track start |
+| `fadeOut` | seconds ≥ 0 | 0 | ends at the `duration` trim, else at the video end. A clip that ends earlier gets no fade (the file length is never probed). No `loop`: a short file just stops |
+
 ## Elements
 Common: `id` (unique across scenes and elements), `type`, `x`, `y` (required), `opacity` (0–1, default 1), `scale` (1), `rotate` (deg, 0), `keyframes`.
 
@@ -45,6 +57,9 @@ Chart notes: data must be inline: `data.values`, or `datasets` plus `data: {name
 - `scenes[0].elements[0].keyframes[1].draw: not animatable on text; animatable: opacity, x, y, scale, rotate`
 - `scenes[0].elements[0].keyframes[2].t: 5 exceeds scene duration 3`
 - `scenes: total duration 121s exceeds the 120s limit`
+- `audio[0].src: unsupported audio format ".wma"; use mp3, wav, m4a, aac, ogg or flac`
+- `audio[1].scene: scene "outro" not found; scenes: intro, chart`
+- `audio[1].at: starts at 9s (scene "chart" + 4s), but the video ends at 8s`
 - `scenes[0].elements[1].src: file not found: pic.png` (also `must stay inside the spec folder`, `hidden files are not allowed`)
 - `scenes[0].elements[0].vegaLite.layer[1].data.url: remote data is not allowed — inline data.values`
 - `background: must be a CSS colour (hex, rgb(), rgba(), hsl(), hsla() or a named colour)`
@@ -53,5 +68,5 @@ Chart notes: data must be inline: `data.values`, or `datasets` plus `data: {name
 ## CLI
 - `node scripts/validate.mjs <spec> [--json]` — exit 0 / 1 / 2.
 - `node scripts/preview.mjs <spec> [--open]`
-- `node scripts/render.mjs <spec> [--out file.mp4] [--fps n] [--size WxH] [--contact-sheet]` — default out `<specdir>/out/<name>.mp4`; with `--contact-sheet`, `--out` is a directory and PNGs go to `<out>/contact/<scene-id>.png` (default `<specdir>/out`). `--size` sides must be 16–3840 and even. Output is written to `<name>.partial.mp4` and renamed on success; Ctrl+C removes it (exit 130/143). `--fps` is an output override (integer 1–120); the spec's own `fps` is limited to 24/25/30/60.
-- ffmpeg is looked up as `$FFMPEG_PATH`, then `ffmpeg` on PATH, then an optionally installed `ffmpeg-static`.
+- `node scripts/render.mjs <spec> [--out file.mp4] [--fps n] [--size WxH] [--contact-sheet]` — default out `<specdir>/out/<name>.mp4`; with `--contact-sheet`, `--out` is a directory and PNGs go to `<out>/contact/<scene-id>.png` (default `<specdir>/out`). `--size` sides must be 16–3840 and even. Output is written to `<name>.partial.mp4` and renamed on success; Ctrl+C removes it (exit 130/143). When the spec has `audio`, the MP4 also carries an AAC 48 kHz stereo track at 192 kb/s, mixed with normalisation off so `volume` is literal; the video length never changes because of audio. Before any frame is captured each audio file gets a decode probe: a bad file fails with `audio[i].src: ffmpeg cannot decode …` and exit 1. A spec without `audio` renders exactly as before, with no audio stream. `--fps` is an output override (integer 1–120); the spec's own `fps` is limited to 24/25/30/60.
+- ffmpeg is looked up as `$FFMPEG_PATH`, then `ffmpeg` on PATH, then an optionally installed `ffmpeg-static`. Audio mixing needs ffmpeg ≥ 4.4 (`amix normalize`, `adelay all`); an older build fails at encode time with `Option normalize not found`.

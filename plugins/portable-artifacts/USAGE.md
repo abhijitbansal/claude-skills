@@ -105,7 +105,7 @@ work around this.
    play/pause, scene markers and frame-by-frame arrow keys. It reloads
    whenever `motion.json` changes, and shows validation errors in the page.
 5. `render.mjs motion.json` writes `out/motion.mp4` (1920×1080, 30 fps,
-   H.264).
+   H.264, plus AAC audio when the spec has `audio` tracks).
 
 **Other sizes:** set `"size": [1080, 1080]` in the spec for a square social
 clip, or override at render time with `--size 1280x720 --fps 24`. If the
@@ -146,6 +146,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `environment variable WAREHOUSE_URL is not set` | Export it in the shell (and in the cron/launchd environment) |
 | Query stopped after 30 s | Make it cheaper, or pass `--timeout 120` to `build` |
 | `npx playwright install chromium` hint on render | Install Chromium once, or install Google Chrome for the fallback |
+| `audio[0].src: ffmpeg cannot decode …` | The file is not a valid audio file. Re-export it as mp3 or wav |
 | `ffmpeg not found` | `brew install ffmpeg`, `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` |
 | `remote data is not allowed` / `not allowed — external URLs are never fetched` | Charts must carry their data inline (motion) or come from a SQL query (dashboard) |
 | A final counter value or keyframe never shows | Frame *i* samples `t = i/fps`. End keyframes at least one frame before the scene ends |
