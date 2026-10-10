@@ -1,0 +1,177 @@
+// Local-only HTTP server for preview and render. Binds 127.0.0.1, accepts only
+// local Host headers, serves the page template, vendored libraries from
+// node_modules, the live spec, and the image files the spec names.
+import http from 'node:http';
+import { createHash } from 'node:crypto';
+import { readFileSync, statSync, createReadStream, watch } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { resolveAsset, resolveUrlPath } from './paths.mjs';
+import { validateSpec } from './spec.mjs';
+
+const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const NODE_MODULES = path.join(SKILL_ROOT, 'node_modules');
+const TEMPLATE_DIR = path.join(SKILL_ROOT, 'template');
+const WATCH_DEBOUNCE_MS = 100;
+const SSE_KEEPALIVE_MS = 15000;
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8', '.woff2': 'font/woff2', '.woff': 'font/woff',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+  '.svg': 'image/svg+xml', '.webp': 'image/webp', '.txt': 'text/plain; charset=utf-8',
+};
+
+const VENDOR_ROOTS = {
+  animejs: path.join(NODE_MODULES, 'animejs/dist/bundles'),
+  vega: path.join(NODE_MODULES, 'vega/build'),
+  'vega-lite': path.join(NODE_MODULES, 'vega-lite/build'),
+  'vega-util': path.join(NODE_MODULES, 'vega-util/build'),
+  'vega-interpreter': path.join(NODE_MODULES, 'vega-interpreter/build'),
+};
+const FONT_ROOTS = ['@fontsource/inter', '@fontsource/jetbrains-mono'].map((p) => path.join(NODE_MODULES, p, 'files'));
+
+function sendFile(res, file) {
+  res.writeHead(200, {
+    'content-type': MIME[path.extname(file).toLowerCase()] ?? 'application/octet-stream',
+    'content-length': statSync(file).size,
+    'cache-control': 'no-store',
+  });
+  const stream = createReadStream(file);
+  stream.on('error', () => res.destroy());
+  stream.pipe(res);
+}
+
+function reply(res, status, text) {
+  res.writeHead(status, { 'content-type': 'text/plain' });
+  res.end(text);
+}
+const notFound = (res) => reply(res, 404, 'not found');
+
+// The index page, its CSP (script hash computed from the inline importmap) and mode marker.
+function loadIndex(mode) {
+  const template = readFileSync(path.join(TEMPLATE_DIR, 'index.html'), 'utf8');
+  const importmap = /<script type="importmap">([\s\S]*?)<\/script>/.exec(template)?.[1] ?? '';
+  const hash = createHash('sha256').update(importmap).digest('base64');
+  const csp = ["default-src 'self'", "img-src 'self' data: blob:", "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'", "connect-src 'self'", `script-src 'self' 'sha256-${hash}'`, "object-src 'none'", "base-uri 'none'"].join('; ');
+  return { html: template.replace('{{MODE}}', mode), csp };
+}
+
+// Image srcs named by the current spec; /assets serves nothing else.
+function referencedImages(specFile) {
+  try {
+    const spec = JSON.parse(readFileSync(specFile, 'utf8'));
+    const srcs = spec.scenes.flatMap((s) => s.elements).filter((e) => e.type === 'image').map((e) => e.src);
+    return new Set(srcs.map((src) => path.posix.normalize(String(src))));
+  } catch { return new Set(); }
+}
+
+function serveAsset(ctx, res, rel) {
+  let decoded;
+  try { decoded = decodeURIComponent(rel); } catch { return notFound(res); }
+  if (!referencedImages(ctx.specFile).has(path.posix.normalize(decoded))) return notFound(res);
+  const { file } = resolveAsset(ctx.specDir, decoded);
+  return file ? sendFile(res, file) : notFound(res);
+}
+
+function serveUnder(res, root, rel) {
+  const file = resolveUrlPath(root, rel);
+  return file ? sendFile(res, file) : notFound(res);
+}
+
+function serveFont(res, name) {
+  for (const root of FONT_ROOTS) {
+    const file = resolveUrlPath(root, name);
+    if (file) return sendFile(res, file);
+  }
+  return notFound(res);
+}
+
+function serveEvents(ctx, req, res) {
+  res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
+  res.write(': connected\n\n');
+  ctx.clients.add(res);
+  const ping = setInterval(() => res.write(': ping\n\n'), SSE_KEEPALIVE_MS);
+  req.on('close', () => { clearInterval(ping); ctx.clients.delete(res); });
+}
+
+function route(ctx, req, res) {
+  const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
+  if (pathname === '/' || pathname === '/index.html') {
+    res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-store', 'content-security-policy': ctx.index.csp });
+    return res.end(ctx.index.html);
+  }
+  if (pathname === '/spec.json') return serveSpec(ctx, res);
+  if (pathname === '/events') return serveEvents(ctx, req, res);
+  if (pathname.startsWith('/template/')) return serveUnder(res, TEMPLATE_DIR, pathname.slice('/template/'.length));
+  if (pathname.startsWith('/assets/')) return serveAsset(ctx, res, pathname.slice('/assets/'.length));
+  if (pathname.startsWith('/vendor/fonts/')) return serveFont(res, pathname.slice('/vendor/fonts/'.length));
+  const vendor = /^\/vendor\/([^/]+)\/(.*)$/.exec(pathname);
+  if (vendor && VENDOR_ROOTS[vendor[1]]) return serveUnder(res, VENDOR_ROOTS[vendor[1]], vendor[2]);
+  return notFound(res);
+}
+
+function serveSpec(ctx, res) {
+  try {
+    const body = readFileSync(ctx.specFile);
+    res.writeHead(200, { 'content-type': MIME['.json'], 'cache-control': 'no-store' });
+    return res.end(body);
+  } catch { return notFound(res); }
+}
+
+function handle(ctx, req, res) {
+  if (!ctx.allowedHosts.has(req.headers.host)) return reply(res, 403, 'forbidden host');
+  if (req.method !== 'GET' && req.method !== 'HEAD') return reply(res, 405, 'method not allowed');
+  try { return route(ctx, req, res); } catch (e) {
+    if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain' });
+    return res.end(`error: ${e.message}`);
+  }
+}
+
+// Tell connected previews whether the changed spec is usable.
+function broadcastSpecState(ctx) {
+  let errors;
+  try {
+    const spec = JSON.parse(readFileSync(ctx.specFile, 'utf8'));
+    errors = validateSpec(spec, { dir: ctx.specDir }).errors;
+  } catch (e) {
+    errors = [{ path: '(root)', message: `not valid JSON: ${e.message}` }];
+  }
+  const message = errors.length ? `event: spec-error\ndata: ${JSON.stringify(errors)}\n\n` : 'data: reload\n\n';
+  for (const c of ctx.clients) c.write(message);
+}
+
+function watchSpec(ctx) {
+  let timer = null;
+  const watcher = watch(ctx.specDir, (_event, name) => {
+    if (name !== path.basename(ctx.specFile)) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => broadcastSpecState(ctx), WATCH_DEBOUNCE_MS);
+  });
+  watcher.on('error', () => {}); // directory removed: previews just stop reloading
+  return { stop: () => { clearTimeout(timer); watcher.close(); } };
+}
+
+export async function startServer({ specPath, mode = 'preview' }) {
+  const specFile = path.resolve(specPath);
+  const ctx = { specFile, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
+  const watcher = watchSpec(ctx);
+  const server = http.createServer((req, res) => handle(ctx, req, res));
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const { port } = server.address();
+  ctx.allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
+  return {
+    url: `http://127.0.0.1:${port}/`,
+    close: () => new Promise((resolve) => {
+      watcher.stop();
+      for (const c of ctx.clients) c.end();
+      server.close(() => resolve());
+      server.closeAllConnections();
+    }),
+  };
+}

@@ -1,0 +1,25 @@
+{
+  "title": "Regional sales",
+  "sources": { "sales": { "type": "csv", "path": "data/sales.csv" } },
+  "queries": {
+    "total": "SELECT SUM(amount) AS revenue FROM sales",
+    "rev_by_region": "SELECT region, SUM(amount) AS revenue FROM sales GROUP BY 1 ORDER BY 2 DESC"
+  },
+  "kpis": [
+    { "id": "k_revenue", "title": "Total revenue", "query": "total", "field": "revenue", "format": "currency" }
+  ],
+  "charts": [
+    {
+      "id": "c_region",
+      "title": "Revenue by region",
+      "query": "rev_by_region",
+      "vegaLite": {
+        "mark": "bar",
+        "encoding": {
+          "x": { "field": "region", "type": "nominal", "sort": null },
+          "y": { "field": "revenue", "type": "quantitative" }
+        }
+      }
+    }
+  ]
+}

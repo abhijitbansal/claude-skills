@@ -1,0 +1,273 @@
+// motion.json schema, loading, cross-field validation and defaults.
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import Ajv from 'ajv';
+import { compile as compileVegaLite } from 'vega-lite';
+import { formatAjvErrors, pathJoin } from './errors.mjs';
+import { resolveAsset } from './paths.mjs';
+
+// Browser-safe pieces live in template/ so the renderer can import them too.
+export { withDefaults } from '../../template/defaults.mjs';
+
+export class UsageError extends Error {}
+
+const MAX_TOTAL_SECONDS = 120;
+
+const EASE_FAMILIES = ['Quad', 'Cubic', 'Quart', 'Back', 'Elastic', 'Bounce', 'Sine', 'Expo', 'Circ'];
+export const EASES = ['linear', ...['in', 'out', 'inOut'].flatMap((d) => EASE_FAMILIES.map((f) => d + f))];
+
+const POSE = ['opacity', 'x', 'y', 'scale', 'rotate'];
+export const ANIMATABLE = {
+  text: [...POSE],
+  counter: [...POSE, 'value'],
+  shape: [...POSE, 'draw'],
+  image: [...POSE],
+  chart: [...POSE, 'reveal'],
+};
+
+const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes'];
+const TEXT_STYLE = ['fontSize', 'fontWeight', 'color', 'align', 'maxWidth', 'font'];
+const FIELDS = {
+  text: [...COMMON, 'text', ...TEXT_STYLE],
+  counter: [...COMMON, 'from', 'to', 'decimals', 'prefix', 'suffix', ...TEXT_STYLE],
+  shape: [...COMMON, 'shape', 'width', 'height', 'radius', 'fill', 'stroke', 'strokeWidth'],
+  image: [...COMMON, 'src', 'width', 'height', 'fit'],
+  chart: [...COMMON, 'vegaLite', 'width', 'height'],
+};
+const REQUIRED = {
+  text: ['text'],
+  counter: ['to'],
+  shape: ['shape'],
+  image: ['src', 'width', 'height'],
+  chart: ['vegaLite', 'width', 'height'],
+};
+
+const num = { type: 'number' };
+const unit = { type: 'number', minimum: 0, maximum: 1 };
+const color = { type: 'string', minLength: 1 };
+const keyframe = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['t'],
+  properties: {
+    t: { type: 'number', minimum: 0 },
+    ease: { enum: EASES },
+    opacity: unit, x: num, y: num, scale: num, rotate: num, draw: unit, reveal: unit, value: num,
+  },
+};
+const element = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['id', 'type', 'x', 'y'],
+  properties: {
+    id: { type: 'string', minLength: 1 },
+    type: { enum: Object.keys(FIELDS) },
+    x: num, y: num, opacity: unit, scale: num, rotate: num,
+    keyframes: { type: 'array', items: keyframe },
+    text: { type: 'string' },
+    fontSize: { type: 'number', minimum: 1 },
+    fontWeight: { enum: [400, 500, 600, 700, 800] },
+    color,
+    align: { enum: ['left', 'center', 'right'] },
+    maxWidth: { type: 'number', minimum: 1 },
+    font: { enum: ['sans', 'mono'] },
+    from: num, to: num,
+    decimals: { type: 'integer', minimum: 0, maximum: 6 },
+    prefix: { type: 'string' }, suffix: { type: 'string' },
+    shape: { enum: ['rect', 'ellipse', 'line'] },
+    width: { type: 'number', minimum: 0 },
+    height: { type: 'number', minimum: 0 },
+    radius: { type: 'number', minimum: 0 },
+    fill: color, stroke: color,
+    strokeWidth: { type: 'number', minimum: 0 },
+    src: { type: 'string', minLength: 1 },
+    fit: { enum: ['contain', 'cover', 'fill'] },
+    vegaLite: { type: 'object' },
+  },
+};
+export const SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['scenes'],
+  properties: {
+    size: {
+      type: 'array', minItems: 2, maxItems: 2,
+      items: { type: 'integer', minimum: 16, maximum: 3840 },
+    },
+    fps: { enum: [24, 25, 30, 60] },
+    background: color,
+    scenes: {
+      type: 'array', minItems: 1, maxItems: 50,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'duration', 'elements'],
+        properties: {
+          id: { type: 'string', minLength: 1 },
+          duration: { type: 'number', minimum: 0.2, maximum: 60 },
+          background: color,
+          transition: { enum: ['none', 'fade'] },
+          elements: { type: 'array', items: element },
+        },
+      },
+    },
+  },
+};
+
+const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
+const schemaCheck = ajv.compile(SCHEMA);
+
+export function loadSpec(file) {
+  const abs = path.resolve(file);
+  let raw;
+  try {
+    raw = readFileSync(abs, 'utf8');
+  } catch (e) {
+    throw new UsageError(`cannot read ${file}: ${e.code ?? e.message}`);
+  }
+  try {
+    return { spec: JSON.parse(raw), dir: path.dirname(abs) };
+  } catch (e) {
+    throw new UsageError(`${file} is not valid JSON: ${e.message}`);
+  }
+}
+
+function checkIds(spec, errors) {
+  const seen = new Map();
+  const claim = (id, at) => {
+    if (seen.has(id)) errors.push({ path: at, message: `duplicate id "${id}" (first used at ${seen.get(id)})` });
+    else seen.set(id, at);
+  };
+  spec.scenes.forEach((scene, si) => {
+    claim(scene.id, `scenes[${si}].id`);
+    scene.elements.forEach((el, ei) => claim(el.id, `scenes[${si}].elements[${ei}].id`));
+  });
+}
+
+function checkKeyframes(el, base, sceneDuration, errors) {
+  const allowed = ANIMATABLE[el.type];
+  (el.keyframes ?? []).forEach((kf, i) => {
+    const at = pathJoin(pathJoin(base, 'keyframes'), i);
+    for (const prop of Object.keys(kf)) {
+      if (prop === 't' || prop === 'ease' || allowed.includes(prop)) continue;
+      errors.push({
+        path: pathJoin(at, prop),
+        message: `not animatable on ${el.type}; animatable: ${allowed.join(', ')}`,
+      });
+    }
+    const prev = el.keyframes[i - 1];
+    if (prev && kf.t < prev.t) {
+      errors.push({
+        path: pathJoin(at, 't'),
+        message: `${kf.t} is before previous keyframe t=${prev.t}; keyframes must be sorted by t`,
+      });
+    }
+    if (kf.t > sceneDuration) {
+      errors.push({ path: pathJoin(at, 't'), message: `${kf.t} exceeds scene duration ${sceneDuration}` });
+    }
+  });
+}
+
+const CSS_NAMED = new Set(('aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown '
+  + 'burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod '
+  + 'darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon '
+  + 'darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey '
+  + 'dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey '
+  + 'honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral '
+  + 'lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue '
+  + 'lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine '
+  + 'mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise '
+  + 'mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange '
+  + 'orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum '
+  + 'powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna '
+  + 'silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet '
+  + 'wheat white whitesmoke yellow yellowgreen transparent currentcolor').split(' '));
+const HEX_COLOR = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const FUNC_COLOR = /^(?:rgb|hsl)a?\([0-9a-z\s.,%/+-]*\)$/i; // one flat call: no nesting, so no url()/var()/calc()
+
+function isCssColor(value) {
+  if (typeof value !== 'string') return false;
+  const v = value.trim();
+  return HEX_COLOR.test(v) || FUNC_COLOR.test(v) || CSS_NAMED.has(v.toLowerCase());
+}
+
+function checkColor(obj, key, base, errors) {
+  if (obj[key] === undefined || isCssColor(obj[key])) return;
+  errors.push({ path: pathJoin(base, key), message: 'must be a CSS colour (hex, rgb(), rgba(), hsl(), hsla() or a named colour)' });
+}
+
+const REMOTE_DATA = 'remote data is not allowed — inline data.values';
+const REMOTE_OTHER = 'remote URLs are not allowed — charts cannot load external resources';
+const DATA_ROWS = new Set(['values', 'datasets']); // row contents may legitimately have a "url" column
+
+// Every `url` key anywhere in the Vega-Lite spec, except inside inline data rows.
+function findUrls(node, at, found = []) {
+  if (!node || typeof node !== 'object') return found;
+  for (const [key, child] of Object.entries(node)) {
+    const here = pathJoin(at, Array.isArray(node) ? Number(key) : key);
+    if (key === 'url') found.push(here);
+    else if (!DATA_ROWS.has(key)) findUrls(child, here, found);
+  }
+  return found;
+}
+
+function checkChart(el, base, errors) {
+  const vl = el.vegaLite;
+  const vlPath = pathJoin(base, 'vegaLite');
+  const urls = findUrls(vl, vlPath);
+  for (const at of urls) errors.push({ path: at, message: at.endsWith('.data.url') ? REMOTE_DATA : REMOTE_OTHER });
+  if (urls.length) return;
+  const named = vl.data?.name;
+  if (typeof named === 'string' && !Array.isArray(vl.datasets?.[named])) {
+    errors.push({ path: pathJoin(vlPath, 'data.name'), message: `dataset "${named}" not found in vegaLite.datasets` });
+    return;
+  }
+  if (typeof named !== 'string' && !Array.isArray(vl.data?.values)) {
+    errors.push({ path: pathJoin(vlPath, 'data.values'), message: 'required — chart needs inline data.values' });
+    return;
+  }
+  try {
+    compileVegaLite({ ...vl, width: el.width, height: el.height });
+  } catch (e) {
+    errors.push({ path: vlPath, message: `Vega-Lite compile error: ${String(e.message).split('\n')[0]}` });
+  }
+}
+
+function checkElement(el, base, scene, dir, errors) {
+  const fields = FIELDS[el.type];
+  for (const key of Object.keys(el)) {
+    if (!fields.includes(key)) {
+      errors.push({ path: pathJoin(base, key), message: `not valid on ${el.type}; allowed: ${fields.join(', ')}` });
+    }
+  }
+  for (const key of REQUIRED[el.type]) {
+    if (el[key] === undefined) errors.push({ path: pathJoin(base, key), message: `required for type ${el.type}` });
+  }
+  checkKeyframes(el, base, scene.duration, errors);
+  for (const key of ['color', 'fill', 'stroke']) checkColor(el, key, base, errors);
+  if (el.type === 'image' && typeof el.src === 'string') {
+    if (/^[a-z][a-z0-9+.-]*:/i.test(el.src) || path.isAbsolute(el.src)) {
+      errors.push({ path: pathJoin(base, 'src'), message: 'must be a path relative to the spec file' });
+    } else {
+      const { error } = resolveAsset(dir, el.src);
+      if (error) errors.push({ path: pathJoin(base, 'src'), message: error });
+    }
+  }
+  if (el.type === 'chart' && el.vegaLite) checkChart(el, base, errors);
+}
+
+export function validateSpec(spec, { dir = process.cwd() } = {}) {
+  if (!schemaCheck(spec)) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
+  const errors = [];
+  checkIds(spec, errors);
+  checkColor(spec, 'background', '', errors);
+  spec.scenes.forEach((scene, si) => {
+    checkColor(scene, 'background', `scenes[${si}]`, errors);
+    scene.elements.forEach((el, ei) => checkElement(el, `scenes[${si}].elements[${ei}]`, scene, dir, errors));
+  });
+  const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
+  if (total > MAX_TOTAL_SECONDS) {
+    errors.push({ path: 'scenes', message: `total duration ${total}s exceeds the ${MAX_TOTAL_SECONDS}s limit` });
+  }
+  return { ok: errors.length === 0, errors };
+}

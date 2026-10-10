@@ -2,18 +2,21 @@
 // every portable-artifacts skill (CI checks it) so each skill folder stays
 // self-contained. Edit one copy, then copy it to the others.
 
+// Edit distance where an adjacent transposition ("bra" -> "bar") costs 1
+// (optimal string alignment), so swapped letters rank as the closest typo.
 export function levenshtein(a, b) {
-  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
   for (let i = 1; i <= a.length; i++) {
-    let diag = prev[0];
-    prev[0] = i;
     for (let j = 1; j <= b.length; j++) {
-      const tmp = prev[j];
-      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
-      diag = tmp;
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
     }
   }
-  return prev[b.length];
+  return d[a.length][b.length];
 }
 
 // Closest candidate, or null when nothing is close enough to be a typo.

@@ -46,6 +46,15 @@ test('didYouMean returns closest candidate within threshold', () => {
   assert.equal(didYouMean('x', []), null);
 });
 
+test('levenshtein counts an adjacent transposition as one edit', () => {
+  assert.equal(levenshtein('bra', 'bar'), 1);
+  assert.equal(levenshtein('ca', 'abc'), 3);
+});
+
+test('didYouMean prefers a transposition over an unrelated tie', () => {
+  assert.equal(didYouMean('bra', ['arc', 'area', 'bar', 'line']), 'bar');
+});
+
 test('didYouMean accepts prefix matches', () => {
   assert.equal(didYouMean('desc', ['description', 'title']), 'description');
 });
