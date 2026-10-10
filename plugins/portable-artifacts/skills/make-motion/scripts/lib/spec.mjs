@@ -5,6 +5,7 @@ import Ajv from 'ajv';
 import { compile as compileVegaLite } from 'vega-lite';
 import { formatAjvErrors, pathJoin } from './errors.mjs';
 import { resolveAsset } from './paths.mjs';
+import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, trackStart } from '../../template/audio.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
@@ -85,11 +86,27 @@ const element = {
     vegaLite: { type: 'object' },
   },
 };
+const seconds = { type: 'number', minimum: 0 };
+const audioTrack = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['src'],
+  properties: {
+    src: { type: 'string', minLength: 1 },
+    scene: { type: 'string', minLength: 1 },
+    at: seconds,
+    duration: { type: 'number', exclusiveMinimum: 0 },
+    volume: unit,
+    fadeIn: seconds,
+    fadeOut: seconds,
+  },
+};
 export const SCHEMA = {
   type: 'object',
   additionalProperties: false,
   required: ['scenes'],
   properties: {
+    audio: { type: 'array', maxItems: MAX_AUDIO_TRACKS, items: audioTrack },
     size: {
       type: 'array', minItems: 2, maxItems: 2,
       items: { type: 'integer', minimum: 16, maximum: 3840 },
@@ -233,6 +250,38 @@ function checkChart(el, base, errors) {
   }
 }
 
+function checkAssetPath(src, at, dir, errors) {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(src) || path.isAbsolute(src)) {
+    errors.push({ path: at, message: 'must be a path relative to the spec file' });
+    return false;
+  }
+  const { error } = resolveAsset(dir, src);
+  if (error) errors.push({ path: at, message: error });
+  return !error;
+}
+
+function checkAudio(spec, dir, errors) {
+  const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
+  const sceneIds = spec.scenes.map((s) => s.id);
+  (spec.audio ?? []).forEach((track, i) => {
+    const base = `audio[${i}]`;
+    const ext = path.extname(track.src).slice(1).toLowerCase();
+    if (checkAssetPath(track.src, pathJoin(base, 'src'), dir, errors) && !AUDIO_EXTENSIONS.includes(ext)) {
+      const list = `${AUDIO_EXTENSIONS.slice(0, -1).join(', ')} or ${AUDIO_EXTENSIONS.at(-1)}`;
+      errors.push({ path: pathJoin(base, 'src'), message: `unsupported audio format "${path.extname(track.src)}"; use ${list}` });
+    }
+    if (track.scene !== undefined && !sceneIds.includes(track.scene)) {
+      errors.push({ path: pathJoin(base, 'scene'), message: `scene "${track.scene}" not found; scenes: ${sceneIds.join(', ')}` });
+      return;
+    }
+    const start = trackStart(track, spec);
+    if (start >= total) {
+      const how = track.scene === undefined ? '' : ` (scene "${track.scene}" + ${track.at ?? 0}s)`;
+      errors.push({ path: pathJoin(base, 'at'), message: `starts at ${start}s${how}, but the video ends at ${total}s` });
+    }
+  });
+}
+
 function checkElement(el, base, scene, dir, errors) {
   const fields = FIELDS[el.type];
   for (const key of Object.keys(el)) {
@@ -245,14 +294,7 @@ function checkElement(el, base, scene, dir, errors) {
   }
   checkKeyframes(el, base, scene.duration, errors);
   for (const key of ['color', 'fill', 'stroke']) checkColor(el, key, base, errors);
-  if (el.type === 'image' && typeof el.src === 'string') {
-    if (/^[a-z][a-z0-9+.-]*:/i.test(el.src) || path.isAbsolute(el.src)) {
-      errors.push({ path: pathJoin(base, 'src'), message: 'must be a path relative to the spec file' });
-    } else {
-      const { error } = resolveAsset(dir, el.src);
-      if (error) errors.push({ path: pathJoin(base, 'src'), message: error });
-    }
-  }
+  if (el.type === 'image' && typeof el.src === 'string') checkAssetPath(el.src, pathJoin(base, 'src'), dir, errors);
   if (el.type === 'chart' && el.vegaLite) checkChart(el, base, errors);
 }
 
@@ -269,5 +311,6 @@ export function validateSpec(spec, { dir = process.cwd() } = {}) {
   if (total > MAX_TOTAL_SECONDS) {
     errors.push({ path: 'scenes', message: `total duration ${total}s exceeds the ${MAX_TOTAL_SECONDS}s limit` });
   }
+  checkAudio(spec, dir, errors);
   return { ok: errors.length === 0, errors };
 }
