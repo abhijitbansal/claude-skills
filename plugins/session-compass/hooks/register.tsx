@@ -153,13 +153,19 @@ async function applyCapture($: EngineInterface, found: Artifact[], isGitMove: bo
 
 type Chain = { chain: Promise<void> }
 
-// Record writes run one at a time so store saves never interleave; a failure is
-// logged and never breaks the chain or the tool call.
-function queue(state: Chain, job: () => Promise<void>, $: EngineInterface): Promise<void> {
-  state.chain = state.chain.then(job).catch((err: unknown) => {
-    $.ui.log(`session-compass: capture skipped: ${String(err).slice(0, 120)}`)
+// Record writes run one at a time so store saves never interleave. The chain
+// link is catch-wrapped so one failure never poisons it; the caller gets the
+// job's own settled promise and decides what a failure means.
+function queue(state: Chain, kind: string, job: () => Promise<void>, $: EngineInterface): Promise<void> {
+  const run = state.chain.then(job)
+  state.chain = run.catch((err: unknown) => {
+    try {
+      $.ui.log(`session-compass: ${kind} failed: ${String(err).slice(0, 120)}`)
+    } catch {
+      // a throwing log must not leave the chain rejected
+    }
   })
-  return state.chain
+  return run
 }
 
 export const register: Register = on => {
@@ -177,17 +183,17 @@ export const register: Register = on => {
     })
     const where = await locate($, stored, e.cwd)
     const started = stored ? { ...stored, ...where, lastActive: now } : newRecord(id, where, now)
-    await queue(state, async () => {
+    await queue(state, 'start', async () => {
       await update($, record, () => started)
       await saveRecord($, started)
-    }, $)
+    }, $).catch(() => undefined)
     return next(e)
   })
 
   on('tool.call', { tool: STATUS_TOOL_ID }, async ($, e) => {
     const input = onlyStrings(e as unknown as Record<string, unknown>)
     const outcome: { deny?: string } = {}
-    await queue(state, async () => {
+    const done = await queue(state, 'status', async () => {
       const now = await $.clock.now()
       let error: string | undefined
       const written = await update($, record, cur => {
@@ -203,21 +209,28 @@ export const register: Register = on => {
       if (written === null) outcome.deny = 'session-compass: no session record yet'
       else if (error !== undefined) outcome.deny = error
       else await saveRecord($, written)
-    }, $)
+    }, $).then(() => true, () => false)
+    if (!done) return { deny: 'session-compass: status not saved, try again' }
     return outcome.deny === undefined ? { result: { text: 'ok' } } : { deny: outcome.deny }
-  })
+  }).catch(($, e, next) => (next.called ? next(e) : { deny: 'session compass is busy; try again' }))
 
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
     const tool = String(e.tool)
     if (!CAPTURED.has(tool) || ran.deny !== undefined) return ran
-    await queue(state, async () => {
-      const input = e as unknown as Record<string, unknown>
-      const found = capture({ tool, input, result: ran.result, isError: ran.isError === true, now: await $.clock.now() })
-      const command = typeof input.command === 'string' ? input.command : ''
-      const isGitMove = tool === 'Bash' && GIT_MOVE.test(command)
-      if (found.length > 0 || isGitMove) await applyCapture($, found, isGitMove)
-    }, $)
+    const input = e as unknown as Record<string, unknown>
+    let found: Artifact[] = []
+    try {
+      found = capture({ tool, input, result: ran.result, isError: ran.isError === true, now: await $.clock.now() })
+    } catch (err) {
+      $.ui.log(`session-compass: capture failed: ${String(err).slice(0, 120)}`)
+    }
+    // A subagent's git move happens in its own worktree: it must not relocate this session.
+    const command = typeof input.command === 'string' ? input.command : ''
+    const isGitMove = tool === 'Bash' && input.agentId === undefined && GIT_MOVE.test(command)
+    // Decided before waiting: a call that captures nothing never queues behind the chain.
+    if (found.length === 0 && !isGitMove) return ran
+    await queue(state, 'capture', () => applyCapture($, found, isGitMove), $).catch(() => undefined)
     return ran
   }).catch(($, e, next) => next(e))
 

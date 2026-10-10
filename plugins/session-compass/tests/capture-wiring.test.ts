@@ -20,10 +20,12 @@ test('a successful git commit adds a commit artifact and passes the result throu
 
 test('a failed commit adds nothing', async ($, on) => {
   const { world } = startWorld(on)
+  on('tool.call', { tool: 'Artifact' }, () => answer(ARTIFACT_PUBLISH) as never)
   on('tool.call', { tool: 'Bash' }, () => answer(BASH_COMMIT_FAILED) as never)
   await $.session.start(START)
   await $.tool.call({ tool: 'Bash', ...BASH_COMMIT_FAILED.input } as never)
-  expect((world.seen.get('record') as Rec).artifacts).toEqual([])
+  await $.tool.call({ tool: 'Artifact', ...ARTIFACT_PUBLISH.input } as never)
+  expect((world.seen.get('record') as Rec).artifacts.map(a => a.kind)).toEqual(['artifact'])
 })
 
 test('an Artifact publish is captured', async ($, on) => {
@@ -51,6 +53,8 @@ test('a Bash command that is not a git move does not refresh the branch', async 
   world.git['rev-parse --abbrev-ref HEAD'] = 'main\n'
   await $.tool.call({ tool: 'Bash', command: 'ls -la' } as never)
   expect((world.seen.get('record') as Rec).branch).toBe('feature/scan')
+  await $.tool.call({ tool: 'Bash', command: 'git checkout main' } as never)
+  expect((world.seen.get('record') as Rec).branch).toBe('main')
 })
 
 test('a Write of a deliverable doc is captured', async ($, on) => {
@@ -63,11 +67,13 @@ test('a Write of a deliverable doc is captured', async ($, on) => {
 
 test('a denied call is returned untouched and records nothing', async ($, on) => {
   const { world } = startWorld(on)
+  on('tool.call', { tool: 'Artifact' }, () => answer(ARTIFACT_PUBLISH) as never)
   on('tool.call', { tool: 'Write' }, () => ({ deny: 'nope' }) as never)
   await $.session.start(START)
   const out = await $.tool.call({ tool: 'Write', file_path: '/repo/docs/plan.md', content: 'x' } as never)
   expect(out).toMatchObject({ deny: 'nope' })
-  expect((world.seen.get('record') as Rec).artifacts).toEqual([])
+  await $.tool.call({ tool: 'Artifact', ...ARTIFACT_PUBLISH.input } as never)
+  expect((world.seen.get('record') as Rec).artifacts.map(a => a.kind)).toEqual(['artifact'])
 })
 
 test('a throwing capture logs, and the result still passes through', async ($, on) => {
@@ -82,7 +88,7 @@ test('a throwing capture logs, and the result still passes through', async ($, o
   gate.isBroken = true
   const out = await $.tool.call({ tool: 'Write', file_path: '/repo/docs/plan.md', content: 'x' } as never)
   expect(out).toMatchObject({ text: 'ok' })
-  expect(world.logged.join('\n')).toContain('capture skipped')
+  expect(world.logged.join('\n')).toContain('capture failed')
 })
 
 test('concurrent captures keep every artifact', async ($, on) => {
@@ -112,4 +118,55 @@ test('a compass_status call racing an artifact capture keeps both', async ($, on
   expect(seen.artifacts.map(a => a.path)).toEqual(['/repo/docs/raced.md'])
   expect(world.data.get('session:sess-1')).toMatchObject({ goal: 'raced goal', step: 'raced step' })
   expect((world.data.get('session:sess-1') as Rec).artifacts.length).toBe(1)
+})
+
+test('compass_status answers a deny, not ok, when its write fails', async ($, on) => {
+  startWorld(on)
+  const gate = { isBroken: false }
+  on('state.get', (_$, e, next) => (gate.isBroken ? ({ deny: 'state down' } as never) : next(e)))
+  await $.session.start(START)
+  gate.isBroken = true
+  const out = await $.tool.call({ tool: 'mcp__session-compass__compass_status', goal: 'g' } as never)
+  expect(JSON.stringify(out)).toContain('status not saved')
+  expect(JSON.stringify(out)).not.toContain('"ok"')
+})
+
+test('a call that captures nothing does not wait for a slow queued job', async ($, on) => {
+  const { world } = startWorld(on)
+  const gate: { isHeld: boolean; release: () => void; reached: () => void } = {
+    isHeld: false, release: () => undefined, reached: () => undefined,
+  }
+  const released = new Promise<void>(r => { gate.release = r })
+  const reached = new Promise<void>(r => { gate.reached = r })
+  on('tool.call', { tool: 'Write' }, () => ({ result: {}, text: 'ok' }) as never)
+  on('tool.call', { tool: 'Bash' }, () => quiet as never)
+  on('state.get', async (_$, e, next) => {
+    if (gate.isHeld) {
+      gate.reached()
+      await released
+    }
+    return next(e)
+  })
+  await $.session.start(START)
+  gate.isHeld = true
+  const slow = $.tool.call({ tool: 'Write', file_path: '/repo/docs/slow.md', content: 'x' } as never)
+  await reached
+  const out = await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  expect(out).toMatchObject({ text: '' })
+  expect((world.seen.get('record') as Rec).artifacts).toEqual([])
+  gate.isHeld = false
+  gate.release()
+  await slow
+  expect((world.seen.get('record') as Rec).artifacts[0]).toMatchObject({ kind: 'doc', path: '/repo/docs/slow.md' })
+})
+
+test('a subagent git move keeps its artifacts but does not relocate the session', async ($, on) => {
+  const { world } = startWorld(on)
+  on('tool.call', { tool: 'Bash' }, () => answer(BASH_COMMIT) as never)
+  await $.session.start(START)
+  world.git['rev-parse --abbrev-ref HEAD'] = 'sub-branch\n'
+  await $.tool.call({ tool: 'Bash', agentId: 'a1', command: 'git commit -m x' } as never)
+  const rec = world.seen.get('record') as Rec
+  expect(rec.artifacts[0]).toMatchObject({ kind: 'commit', sha: '1a2b3c4' })
+  expect(rec.branch).toBe('feature/scan')
 })
