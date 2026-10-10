@@ -8,7 +8,7 @@ type Reader = (text: string) => Counts | null
 // Anchored to the start of a command segment (optionally behind a runner prefix), so `cat pytest.log` is not a test run.
 const RUNNER_PREFIX = '(?:(?:python3?\\s+-m|npx|bunx|uv\\s+run|poetry\\s+run|pnpm\\s+exec|pnpm\\s+dlx|yarn)\\s+)*'
 const TEST_COMMAND = new RegExp(
-  `(?:^|[;&|]\\s*)${RUNNER_PREFIX}(?:xcodebuild\\b.*\\btest\\b|swift\\s+test\\b|pytest\\b|jest\\b|vitest\\b|bun\\s+test\\b|(?:npm|pnpm|yarn)\\s+(?:run\\s+)?test\\b|cargo\\s+test\\b|go\\s+test\\b|fastlane\\s+(?:scan|test)\\b)`,
+  `(?:^|[;&|]\\s*)${RUNNER_PREFIX}(?:xcodebuild\\b(?:\\s+\\S+)*?\\s+test(?:-without-building)?(?=\\s|$|[;&|])|swift\\s+test\\b|pytest\\b|jest\\b|vitest\\b|bun\\s+test\\b|(?:npm|pnpm|yarn)\\s+(?:run\\s+)?test\\b|cargo\\s+test\\b|go\\s+test\\b|fastlane\\s+(?:scan|test)\\b)`,
 )
 
 export function isTestCommand(normalized: string): boolean {
@@ -46,15 +46,17 @@ const readXcodebuild: Reader = text => {
   const locs = new Map<string, string>()
   for (const l of text.matchAll(/^(.+?:\d+): error: -\[(\S+) (\S+)\]/gm)) locs.set(`${l[2]}.${l[3]}`, l[1] ?? '')
   const ids = [...new Set([...text.matchAll(/Test Case '-\[(\S+) (\S+)\]' failed/g)].map(f => `${f[1]}.${f[2]}`))]
-  const total = Number(m[1]); const skipped = Number(m[2] ?? 0); const failed = Number(m[3])
+  const total = Number(m[1]); const skipped = Number(m[2] ?? 0)
+  // XCTest's "N failures" counts failed assertions, not tests: prefer the distinct failed case ids.
+  const failed = Math.min(total, ids.length > 0 ? ids.length : Number(m[3]))
   return {
-    total, skipped, failed, passed: total - failed - skipped, durationS: Number(m[4]),
+    total, skipped, failed, passed: Math.max(0, total - failed - skipped), durationS: Number(m[4]),
     failures: ids.map(id => (locs.has(id) ? { id, loc: locs.get(id) } : { id })),
   }
 }
 
 const readSwiftTesting: Reader = text => {
-  const m = /Test run with (\d+) tests? (passed|failed) after ([\d.]+) seconds/.exec(text)
+  const m = /Test run with (\d+) tests?(?: in \d+ suites?)? (passed|failed) after ([\d.]+) seconds/.exec(text)
   if (!m) return null
   const ids = [...text.matchAll(/✘ Test (\S+) failed after/g)].map(f => f[1] ?? '')
   const total = Number(m[1])
@@ -64,6 +66,21 @@ const readSwiftTesting: Reader = text => {
 
 // Final pytest line: `=== 1 failed, 10 passed in 3.50s ===` (default) or bare `1 failed, 10 passed in 3.50s` (-q).
 const PYTEST_SUMMARY = /^(?:=+ )?((?:\d+ (?:passed|failed|skipped|errors?|xfailed|xpassed|deselected|warnings?)(?:, )?)+) in ([\d.]+)s\b/gm
+
+// `swift test` prints an XCTest summary (possibly "Executed 0 tests") and then a swift-testing run line.
+// Sum both when present; an empty XCTest run therefore never shadows swift-testing.
+const readSwiftPackage: Reader = text => {
+  const parts = [attempt(readXcodebuild, text), attempt(readSwiftTesting, text)].filter((c): c is Counts => c !== null)
+  const live = parts.filter(c => c.total > 0)
+  if (live.length === 0) return parts[0] ?? null
+  if (live.length === 1) return live[0] ?? null
+  const sum = (pick: (c: Counts) => number) => live.reduce((acc, c) => acc + pick(c), 0)
+  const durationS = live.reduce<number | undefined>((acc, c) => (c.durationS === undefined ? acc : (acc ?? 0) + c.durationS), undefined)
+  return {
+    total: sum(c => c.total), passed: sum(c => c.passed), failed: sum(c => c.failed), skipped: sum(c => c.skipped),
+    ...(durationS === undefined ? {} : { durationS }), failures: live.flatMap(c => c.failures),
+  }
+}
 
 const readPytest: Reader = text => {
   const m = lastMatch(PYTEST_SUMMARY, text)
@@ -76,14 +93,22 @@ const readPytest: Reader = text => {
   return { total: passed + failed + skipped, passed, failed, skipped, durationS: Number(m[2]), failures: ids }
 }
 
+function tokenCounts(list: string): { failed: number; skipped: number; passed: number; todo: number } {
+  const n = (word: string) => Number(new RegExp(`(\\d+) ${word}\\b`).exec(list)?.[1] ?? 0)
+  return { failed: n('failed'), skipped: n('skipped'), passed: n('passed'), todo: n('todo') }
+}
+
 const readJest: Reader = text => {
-  const jest = /Tests:\s+(?:(\d+) failed, )?(?:(\d+) skipped, )?(\d+) passed, (\d+) total/.exec(text)
-  if (jest) {
-    return { failed: Number(jest[1] ?? 0), skipped: Number(jest[2] ?? 0), passed: Number(jest[3]), total: Number(jest[4]), failures: [] }
+  const jest = /^\s*Tests:\s+(.+)$/m.exec(text)
+  const jestTotal = jest?.[1] ? /(\d+) total/.exec(jest[1]) : null
+  if (jest?.[1] && jestTotal) {
+    const t = tokenCounts(jest[1])
+    return { failed: t.failed, skipped: t.skipped + t.todo, passed: t.passed, total: Number(jestTotal[1]), failures: [] }
   }
-  const vitest = /Tests\s+(?:(\d+) failed \| )?(?:(\d+) skipped \| )?(\d+) passed \((\d+)\)/.exec(text)
-  if (vitest) {
-    return { failed: Number(vitest[1] ?? 0), skipped: Number(vitest[2] ?? 0), passed: Number(vitest[3]), total: Number(vitest[4]), failures: [] }
+  const vitest = /^\s*Tests\s+(.+?) \((\d+)\)\s*$/m.exec(text)
+  if (vitest?.[1]) {
+    const t = tokenCounts(vitest[1])
+    return { failed: t.failed, skipped: t.skipped + t.todo, passed: t.passed, total: Number(vitest[2]), failures: [] }
   }
   const pass = /^\s*(\d+) pass\s*$/m.exec(text)
   if (!pass) return null
@@ -93,7 +118,7 @@ const readJest: Reader = text => {
   return { passed: Number(pass[1]), failed: fail, skipped: skip, total: Number(pass[1]) + fail + skip, failures: ids }
 }
 
-const RAW_READERS: Reader[] = [readXcodebuild, readSwiftTesting, readPytest, readJest]
+const RAW_READERS: Reader[] = [readSwiftPackage, readPytest, readJest]
 
 function attempt(reader: Reader, text: string): Counts | null {
   try {
