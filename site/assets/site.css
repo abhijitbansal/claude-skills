@@ -317,6 +317,7 @@ h3.subtitle{font-size:clamp(20px,2.6vw,26px);font-weight:600;margin:0 0 10px}
 @media(max-width:680px){.plug-row{grid-template-columns:repeat(2,1fr)}}
 .pnode{background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--cyan);border-radius:10px;padding:12px;text-align:center}
 .pnode.v{border-top-color:var(--violet)}.pnode.g{border-top-color:var(--gold)}.pnode.e{border-top-color:var(--green)}.pnode.r{border-top-color:var(--rose)}
+.pnode:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .pnode .pn{font-family:var(--font-head);font-weight:600;font-size:13.5px}
 .pnode .pc{font-family:var(--font-mono);font-size:10.5px;color:var(--text-dim);margin-top:3px}
 .arch-foot{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:8px}
