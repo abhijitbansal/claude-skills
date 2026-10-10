@@ -1,6 +1,6 @@
 ---
 name: launchd-git-automation-self-heal
-description: A launchd (or cron) job that pulls a git clone, generates/commits/pushes, and repeats on a schedule dies silently for weeks — "local changes would be overwritten" from `git pull --ff-only` after a prior run left dirty tracked files, a bootstrap block that never runs because the script it lives in only exists inside the clone it's supposed to create, or "branch already exists" on retrying a `git checkout -b` after a prior push-then-fail. Use when writing or reviewing any launchd plist/script pair (or cron job) that does git pull → generate → commit → push from a long-lived clone, or when auditing `set -euo pipefail` automation for what the NEXT run sees after THIS run dies mid-script.
+description: "A launchd (or cron) job that pulls a git clone, generates/commits/pushes, and repeats on a schedule dies silently for weeks — \"local changes would be overwritten\" from `git pull --ff-only` after a prior run left dirty tracked files, a bootstrap block that never runs because the script it lives in only exists inside the clone it's supposed to create, or \"branch already exists\" on retrying a `git checkout -b` after a prior push-then-fail. Use when writing or reviewing any launchd plist/script pair (or cron job) that does git pull → generate → commit → push from a long-lived clone, or when auditing `set -euo pipefail` automation for what the NEXT run sees after THIS run dies mid-script. Also covers unattended launchd jobs that run claude -p: 'OAuth session expired', a PushNotification skipped because the terminal is active, status text claiming 'auto-merge queued' after the merge failed, or stale code because the live checkout sits on a feature branch and the plist sets fewer env vars than the shell."
 ---
 
 # launchd Git Automation in a Persistent Clone: Three Silent Death Modes
@@ -84,6 +84,44 @@ When reviewing shell automation that combines `set -e` with persistent state
 across runs, ask explicitly: **"what does the next scheduled run see after
 this run dies at each line?"** Each of the three death modes above answers
 that question with "a wedge, not a retry."
+
+## Unattended `claude -p` jobs and live-checkout hygiene
+
+Symptoms: `Failed to authenticate: OAuth session expired and could not be
+refreshed` (two jobs one morning); a PushNotification skipped so no ping
+arrived; a status line saying "auto-merge queued" after the merge request
+failed; a job running whatever branch the repo folder had checked out; an
+offline failure because `HF_HOME` was set only in the interactive shell
+while the doctor check passed.
+
+Root cause: `claude -p` needs a live OAuth session and an awake Mac; status
+text was built before the call's result was known; launchd gives the job
+only the plist environment while health checks run in the user's shell; the
+working tree doubles as dev checkout and deployed code.
+
+Fix, unattended `claude -p`:
+- Preflight auth before the run; on failure write a durable marker file and
+  exit non-zero.
+- Use a non-terminal fallback channel (file, iMessage, gh issue) when
+  PushNotification is skipped.
+- Build status messages from each step's real exit code; exit non-zero on
+  partial failure.
+
+Fix, deploy hygiene:
+- Keep the live checkout on `main`; develop in worktrees.
+- After a merge, pull the live folder and re-run doctor THERE.
+- Make doctor probe under the plist's environment (or warn when shell-only
+  vars differ); put required env vars in the plist.
+- A versioned Homebrew Cellar path in a plist breaks a Full Disk Access
+  grant on upgrade; use the stable symlink path.
+
+Evidence (mined, 10 sessions across 3 projects): foundry-weekly `dc2223e6`
+(OAuth text above), foundry `41c27adc` (status said queued after a failed
+merge), a private bot `c2a681f5` and a worktree `9c45683b` (live checkout
+on another branch; plist set only PATH and $APP_HOME).
+
+Related: `core-workflow:github-solo-branch-protection-codeowners` for the
+merge step these jobs hand back to the user.
 
 ## Evidence
 
