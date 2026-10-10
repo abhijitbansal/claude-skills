@@ -74,6 +74,13 @@ describe('fix round 1', () => {
   test('jest todo', () => expect(run('jest', JEST_TODO)).toMatchObject({ total: 6, failed: 1, skipped: 2, passed: 3 }))
   test('vitest all failing', () => expect(run('vitest', VITEST_ALL_FAIL)).toMatchObject({ total: 2, failed: 2, passed: 0 }))
   test('vitest token order', () => expect(run('vitest', VITEST_ORDER)).toMatchObject({ total: 4, failed: 1, passed: 2, skipped: 1 }))
+  test('xcodebuild token scan stops at shell operators', () => {
+    expect(isTestCommand('xcodebuild build -scheme A | tee b.log; grep test b.log')).toBe(false)
+    expect(isTestCommand('xcodebuild build -scheme A && echo test')).toBe(false)
+    expect(isTestCommand('xcodebuild -scheme A test')).toBe(true)
+    expect(isTestCommand('xcodebuild test-without-building')).toBe(true)
+  })
+
   test('xcodebuild build with test.xcresult is not a test command', () => {
     expect(isTestCommand('xcodebuild build -resultBundlePath out/test.xcresult')).toBe(false)
     expect(isTestCommand('xcodebuild test-without-building -scheme A')).toBe(true)

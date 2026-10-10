@@ -48,7 +48,8 @@ Session Compass reads the latest runs from `test-board.latest` when it is instal
 
 A hot reload of the plugin mid-session forgets which agent ids belong to which
 subagent, so their later runs show as `via workflow`. It also resets the per-turn
-grouping once: the next run replaces the lines on the band.
+grouping once: the next run replaces the lines on the band. After a hot reload or
+worker restart the band may show the newest stored run dimmed until the next test run.
 
 ## Develop
 

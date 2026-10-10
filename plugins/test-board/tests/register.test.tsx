@@ -11,13 +11,18 @@ const LATEST = { plugin: 'test-board', key: 'latest' } as const
 type Proc = { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: boolean; isStderrTruncated: boolean }
 const proc = (stdout: string): Proc => ({ exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
 
-function store(on: On, seed: Record<string, unknown> = {}, isReadFailing = false): Map<string, unknown> {
+function store(on: On, seed: Record<string, unknown> = {}, isReadFailing = false, failRunSets = 0): Map<string, unknown> {
   const data = new Map<string, unknown>(Object.entries(seed))
+  let failures = failRunSets
   on('store.get', (_$, e) => {
     if (isReadFailing) throw new Error('store unavailable')
     return { value: data.get(e.key) }
   })
   on('store.set', (_$, e) => {
+    if (e.key.startsWith('runs:') && failures > 0) {
+      failures -= 1
+      throw new Error('quota exceeded')
+    }
     data.set(e.key, e.value)
     return { value: undefined }
   })
@@ -29,8 +34,10 @@ function store(on: On, seed: Record<string, unknown> = {}, isReadFailing = false
   return data
 }
 
-function world(on: On, getCwd: () => string = () => ROOT, isReadFailing = false): { writes: Map<string, unknown>; seen: Map<string, unknown> } {
-  const writes = store(on, {}, isReadFailing)
+function world(
+  on: On, getCwd: () => string = () => ROOT, isReadFailing = false, seed: Record<string, unknown> = {}, failRunSets = 0,
+): { writes: Map<string, unknown>; seen: Map<string, unknown> } {
+  const writes = store(on, seed, isReadFailing, failRunSets)
   const seen = watchState(on)
   mock.clock(on, { now: 1_000_000 })
   on('session.cwd', () => ({ value: getCwd() }))
@@ -145,6 +152,15 @@ describe('recording', () => {
     expect(latest(seen)).toHaveLength(1)
   })
 
+  test('a mid-turn delivery does not start a new turn', async ($, on) => {
+    const { seen } = world(on); bash(on, PYTEST_RAW); turns(on)
+    await $.prompt.submit({ text: 'run tests' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    await $.prompt.submit({ text: 'peer says hi', turnId: 't1' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'swift test' })
+    expect(latest(seen).map(r => r.suite).sort()).toEqual(['pytest -q', 'swift test'])
+  })
+
   test('a leading cd decides the worktree', async ($, on) => {
     const { seen } = world(on); bash(on, PYTEST_RAW)
     await $.tool.call({ tool: 'Bash', command: 'cd ../wt-b && pytest -q' })
@@ -184,6 +200,45 @@ describe('concurrency and failure', () => {
   })
 })
 
+describe('store trimming', () => {
+  const stored = (n: string): TestRun => ({
+    suite: n, key: n, total: 1, passed: 1, failed: 0, skipped: 0, failures: [], exitCode: 0, at: 5, parsed: true,
+  })
+  const KEY = `${ROOT}::pytest -q`
+
+  test('a quota failure deletes orphaned runs keys, then the retry succeeds', async ($, on) => {
+    const { writes } = world(on, () => ROOT, false, { index: [], 'runs:x': [stored('x')] }, 1); bash(on, PYTEST_RAW)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    expect(writes.has('runs:x')).toBe(false)
+    expect(writes.get(`runs:${KEY}`)).toHaveLength(1)
+  })
+
+  test('one failed write deletes the oldest quarter and retries', async ($, on) => {
+    const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+    const seed: Record<string, unknown> = { index: names }
+    for (const n of names) seed[`runs:${n}`] = [stored(n)]
+    const { writes } = world(on, () => ROOT, false, seed, 1); bash(on, PYTEST_RAW)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    expect(writes.has('runs:g')).toBe(false)
+    expect(writes.has('runs:h')).toBe(false)
+    expect(writes.has('runs:a')).toBe(true)
+    expect(writes.get(`runs:${KEY}`)).toHaveLength(1)
+    expect(writes.get('index')).toEqual([KEY, ...names.slice(0, 6)])
+  })
+
+  test('two failed writes log, and latest is still updated', async ($, on) => {
+    const logs: string[] = []
+    on('ui.log', (_$, e, next) => {
+      logs.push((e as unknown as { text: string }).text)
+      return next(e)
+    })
+    const { seen } = world(on, () => ROOT, false, {}, 2); bash(on, PYTEST_RAW)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    expect(logs.some(l => l.includes('history not saved'))).toBe(true)
+    expect(latest(seen)[0]).toMatchObject({ key: KEY })
+  })
+})
+
 describe('session start', () => {
   test('loads the worktree’s most recent run as stale', async ($, on) => {
     const old: TestRun = {
@@ -198,6 +253,26 @@ describe('session start', () => {
     on('session.start', () => ({ cwd: ROOT }))
     await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true } as never)
     expect(latest(seen)[0]).toMatchObject({ key: old.key, stale: true })
+  })
+
+  test('does not read the session cwd, using the event cwd', async ($, on) => {
+    const old: TestRun = {
+      suite: 'pytest -q', key: `${ROOT}::pytest -q`, total: 1, passed: 1, failed: 0, skipped: 0,
+      failures: [], exitCode: 0, at: 5, parsed: true,
+    }
+    const seen = watchState(on)
+    store(on, { index: [old.key], [`runs:${old.key}`]: [old] })
+    mock.clock(on)
+    let cwdReads = 0
+    on('session.cwd', () => {
+      cwdReads += 1
+      return { value: ROOT }
+    })
+    on('process.run', () => ({ value: proc(`${ROOT}\n`) }))
+    on('session.start', () => ({ cwd: ROOT }))
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true } as never)
+    expect(latest(seen)[0]).toMatchObject({ key: old.key, stale: true })
+    expect(cwdReads).toBe(0)
   })
 
   test('an empty history leaves latest empty', async ($, on) => {

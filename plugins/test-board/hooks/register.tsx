@@ -55,6 +55,14 @@ async function writeRuns($: EngineInterface, key: string, runs: TestRun[], index
   await $.store.set(`runs:${key}`, runs)
 }
 
+// Runs whose key lost the shared index race (concurrent sessions) are never sized or trimmed; reclaim them.
+async function dropOrphans($: EngineInterface, index: string[]): Promise<void> {
+  const known = new Set(index.map(k => `runs:${k}`))
+  for (const k of asKeys(await $.store.keys())) {
+    if (k.startsWith('runs:') && !known.has(k)) await $.store.delete(k)
+  }
+}
+
 async function saveRun($: EngineInterface, run: TestRun): Promise<void> {
   try {
     await trySaveRun($, run)
@@ -75,6 +83,7 @@ async function trySaveRun($: EngineInterface, run: TestRun): Promise<void> {
     await writeRuns($, run.key, runs, index, drop)
   } catch {
     try {
+      await dropOrphans($, index)
       const more = oldestQuarter(index.filter(k => !drop.includes(k)), run.key)
       await writeRuns($, run.key, runs, index, [...drop, ...more])
     } catch (err) {
@@ -158,20 +167,22 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', ($, e, next) => {
-    state.turn.isNew = true
+    // A delivery into a running turn (peer message, notification) is not a new turn.
+    if (e.turnId === undefined) state.turn.isNew = true
     return next(e)
   })
 
   on('session.start', async ($, e, next) => {
+    const result = next(e)
     try {
-      const root = await worktreeRoot($, state.roots, await $.session.cwd())
+      const root = await worktreeRoot($, state.roots, e.cwd)
       const key = asKeys(await $.store.get('index')).find(k => k.startsWith(`${root}::`))
       const newest = key === undefined ? undefined : asRuns(await $.store.get(`runs:${key}`))[0]
       if (newest !== undefined) await update($, latest, () => [{ ...newest, stale: true }])
     } catch (err) {
       $.ui.log(`test-board: history not loaded: ${String(err).slice(0, 120)}`)
     }
-    return next(e)
+    return result
   })
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const runs = await read($, latest)
