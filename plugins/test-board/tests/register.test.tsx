@@ -238,7 +238,7 @@ describe('band', () => {
       expect(await ui.find({ text: /1 ✗/ })).toBeDefined()
       expect(await ui.find({ text: /first run/ })).toBeDefined()
       expect(await ui.find({ text: /tests\/test_a\.py::test_x/ })).toBeUndefined()
-      await ui.press({ key: 'run-0' })
+      await ui.press({ key: `run-${ROOT}::pytest -q` })
       expect(await ui.find({ text: /tests\/test_a\.py::test_x/ })).toBeDefined()
     })
   }
@@ -279,5 +279,38 @@ describe('band', () => {
     expect(await ui.find({ text: /via workflow/ })).toBeDefined()
     expect(await ui.find({ text: /prev 10 ✓ 1 ✗/ })).toBeDefined()
     expect(await ui.find({ text: /first run/ })).toBeUndefined()
+  })
+  test('only the failed count carries the error color', async ($, on) => {
+    world(on); bash(on, PYTEST_RAW); emptyBand(on)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+    expect((await ui.find({ text: /^1 ✗$/ }))?.props).toMatchObject({ color: 'error' })
+    expect((await ui.find({ text: /10 ✓/ }))?.props?.color).toBeUndefined()
+  })
+
+  test('a store read failure at draw time still draws the run as a first run', async ($, on) => {
+    let isBroken = false
+    const data = new Map<string, unknown>()
+    on('store.get', (_$, e) => {
+      if (isBroken) throw new Error('store unavailable')
+      return { value: data.get(e.key) }
+    })
+    on('store.set', (_$, e) => {
+      data.set(e.key, e.value)
+      return { value: undefined }
+    })
+    on('store.delete', (_$, e) => {
+      data.delete(e.key)
+      return { value: undefined }
+    })
+    watchState(on); mock.clock(on, { now: 1_000_000 })
+    on('session.cwd', () => ({ value: ROOT }))
+    on('process.run', () => ({ value: proc(`${ROOT}\n`) }))
+    bash(on, PYTEST_RAW); emptyBand(on)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    isBroken = true
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+    expect(await ui.find({ text: /1 ✗/ })).toBeDefined()
+    expect(await ui.find({ text: /first run/ })).toBeDefined()
   })
 })

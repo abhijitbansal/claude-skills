@@ -84,7 +84,12 @@ async function trySaveRun($: EngineInterface, run: TestRun): Promise<void> {
 }
 
 async function partsFor($: EngineInterface, run: TestRun, now: number, columns: number) {
-  const history = asRuns(await $.store.get(`runs:${run.key}`))
+  let history: TestRun[] = []
+  try {
+    history = asRuns(await $.store.get(`runs:${run.key}`))
+  } catch {
+    // history unreadable: the run still draws, as a first run
+  }
   return { run, parts: lineParts(run, previousRun(history, run), now, columns) }
 }
 
@@ -177,11 +182,16 @@ export const register: Register = on => {
     const rows = await Promise.all(runs.map(run => partsFor($, run, now, e.props.bodyColumns)))
     return (
       <Box flexDirection="column">
-        {rows.map(({ run, parts }, i) => (
+        {rows.map(({ run, parts }) => (
           <Box flexDirection="column">
-            <Button key={`run-${i}`} plain onPress={() => update($, expanded, v => !v)}>
+            <Button key={`run-${run.key}`} plain onPress={() => update($, expanded, v => !v)}>
               <Text dimColor={run.stale === true}>{parts.label}   </Text>
-              <Text color={parts.isFailing ? 'error' : undefined} dimColor={run.stale === true}>{parts.counts}</Text>
+              {parts.split === undefined && <Text dimColor={run.stale === true}>{parts.counts}</Text>}
+              {parts.split !== undefined && <Text dimColor={run.stale === true}>{parts.split.head}</Text>}
+              {parts.split !== undefined && (
+                <Text color={parts.isFailing ? 'error' : undefined} dimColor={run.stale === true}>{parts.split.failed}</Text>
+              )}
+              {parts.split !== undefined && <Text dimColor={run.stale === true}>{parts.split.tail}</Text>}
               <Text dimColor={run.stale === true}>
                 {[parts.trend, parts.duration].filter(Boolean).map(s => `   ${s}`).join('')}
               </Text>

@@ -24,6 +24,12 @@ describe('lineParts', () => {
     expect(lineParts(mk({ parsed: false, exitCode: 1, suite: 'bun test' }), undefined, 0, 200).counts)
       .toBe('ran · exit 1 · counts unavailable')
   })
+  test('counts split around the failed segment, unparsed has no split', () => {
+    const p = lineParts(mk(), undefined, 10 * H, 200)
+    expect(p.split).toEqual({ head: '412 ✓  ', failed: '3 ✗', tail: '  2 skip' })
+    expect(`${p.split?.head}${p.split?.failed}${p.split?.tail}`).toBe(p.counts)
+    expect(lineParts(mk({ parsed: false }), undefined, 0, 200).split).toBeUndefined()
+  })
   test('narrow terminal drops via, then prev, then duration', () => {
     const at79 = lineParts(mk(), prev, 10 * H, 79)
     expect(at79.via).toBeUndefined()

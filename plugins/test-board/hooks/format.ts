@@ -6,6 +6,8 @@ const GAP = '   '
 
 export type LineParts = {
   label: string; counts: string; isFailing: boolean
+  /** `counts` cut around its failed segment so the UI can color only that part; absent when unparsed. */
+  split?: { head: string; failed: string; tail: string }
   trend?: string; duration?: string; prev?: string; via?: string
 }
 
@@ -26,10 +28,17 @@ function repoName(key: string): string {
   return key.slice(0, key.indexOf('::')).split('/').filter(Boolean).pop() ?? ''
 }
 
-function counts(run: TestRun): string {
+function countSplit(run: TestRun): LineParts['split'] {
   return run.parsed
-    ? `${run.passed} ✓  ${run.failed} ✗  ${run.skipped} skip`
-    : `ran · exit ${run.exitCode} · counts unavailable`
+    ? { head: `${run.passed} ✓  `, failed: `${run.failed} ✗`, tail: `  ${run.skipped} skip` }
+    : undefined
+}
+
+function counts(run: TestRun): string {
+  const split = countSplit(run)
+  return split === undefined
+    ? `ran · exit ${run.exitCode} · counts unavailable`
+    : `${split.head}${split.failed}${split.tail}`
 }
 
 export function joinParts(p: LineParts): string {
@@ -41,6 +50,7 @@ export function lineParts(run: TestRun, prev: TestRun | undefined, now: number, 
   let parts: LineParts = {
     label: `${repoName(run.key)} · ${run.suite}`,
     counts: counts(run),
+    ...(run.parsed ? { split: countSplit(run) } : {}),
     isFailing: run.parsed ? run.failed > 0 : run.exitCode !== 0,
     ...(delta > 0 ? { trend: `▲${delta} ✗` } : delta < 0 ? { trend: `▼${-delta} ✗` } : {}),
     ...(run.durationS === undefined ? {} : { duration: formatDuration(run.durationS) }),
