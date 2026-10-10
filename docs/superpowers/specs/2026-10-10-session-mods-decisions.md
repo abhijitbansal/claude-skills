@@ -69,7 +69,7 @@ Notes on the counts:
 | Approach A + Test Board design section | Approved |
 | Session Compass design section | Approved |
 | Written specs (`46bb9aa`) | Approved 2026-10-10, after four review fixes: Test Board `stale` field, a `tsconfig.json` per plugin, Compass `firstPrompt` capture in `prompt.submit`, and `repo` resolved through `--git-common-dir` |
-| Implementation plans | Written 2026-10-10: `plans/2026-10-10-session-mods-00-probes.md`, `-01-test-board.md`, `-02-session-compass.md`. **Awaiting user review** |
+| Implementation plans | Written 2026-10-10: `plans/2026-10-10-session-mods-00-probes.md`, `-01-test-board.md`, `-02-session-compass.md`. Approved and built 2026-10-10 in PR #27 (headless probes recorded in §5; U1, U8, U10, U11, U12 and the U14 runtime read stay on the manual checklist) |
 
 ## 3. Decisions made without a question
 
