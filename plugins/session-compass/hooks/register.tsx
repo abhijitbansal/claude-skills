@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { Artifact, SessionRecord } from '../types'
 import { bandView, formatBand, tally } from './band'
 import { capture } from './capture'
@@ -154,7 +154,7 @@ async function applyCapture($: EngineInterface, found: Artifact[], isGitMove: bo
   if (written !== null) await saveRecord($, written)
 }
 
-type Chain = { chain: Promise<void>; isTurnRunning: boolean }
+type Chain = { chain: Promise<void>; isTurnRunning: boolean; idle?: Timer }
 
 async function idleTick($: EngineInterface, state: Chain): Promise<void> {
   const rec = await read($, record)
@@ -206,23 +206,34 @@ export const register: Register = on => {
       await saveRecord($, started)
     }, $).catch(() => undefined)
     if ((await $.session.turns()) > 0) await update($, band, () => 'return')
-    $.clock.every(IDLE_TICK_MS, () => idleTick($, state))
+    state.idle?.cancel()
+    state.idle = $.clock.every(IDLE_TICK_MS, () => idleTick($, state))
     return next(e)
   })
 
-  on('prompt.submit', async ($, e, next) => {
-    // A delivery into a running turn (turnId set) is not a new prompt.
-    if (e.turnId === undefined) {
-      state.isTurnRunning = true
-      await update($, band, () => 'hidden')
-      await touchRecord($, state, (r, now) => touch(withFirstPrompt(r, e.text), now))
-    }
+  on('turn.start', async ($, e, next) => {
+    state.isTurnRunning = true
     return next(e)
   }).catch(($, e, next) => next(e))
 
+  on('prompt.submit', async ($, e, next) => {
+    const ran = await next(e)
+    // Only a prompt the person typed that entered as a new turn counts; a drop
+    // or a peer/notification/plugin prompt changes nothing.
+    const isPerson = e.origin === undefined || e.origin.kind === 'composer' || e.origin.kind === 'bridge'
+    if (ran.drop === undefined && e.turnId === undefined && isPerson) {
+      await update($, band, () => 'hidden')
+      await touchRecord($, state, (r, now) => touch(withFirstPrompt(r, e.text), now))
+    }
+    return ran
+  }).catch(($, e, next) => next(e))
+
   on('turn.complete', async ($, e, next) => {
-    state.isTurnRunning = false
-    await touchRecord($, state, touch)
+    // A subagent's turn (agentId set) is not the main loop's.
+    if (e.agentId === undefined) {
+      state.isTurnRunning = false
+      await touchRecord($, state, touch)
+    }
     return next(e)
   }).catch(($, e, next) => next(e))
 

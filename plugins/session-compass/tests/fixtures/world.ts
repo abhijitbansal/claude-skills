@@ -21,6 +21,7 @@ export type World = {
   sets: string[]
   setFailures: Record<string, number>
   isGetFailing: boolean
+  drop?: string
 }
 
 export const START = { cwd: WT, surface: 'terminal', isInteractive: true } as const
@@ -83,7 +84,9 @@ export function startWorld(on: On, over: Partial<World> = {}, seed: Record<strin
     world.copied.push(e.text)
     return { value: { isCopied: true } }
   })
-  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  on('prompt.submit', (_$, e) => (world.drop === undefined ? { text: e.text } : { drop: world.drop }))
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
   on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'engine intro', scope: 'shared' }] }))
   on('store.get', (_$, e) => {
     if (world.isGetFailing) throw new Error('store unavailable')
