@@ -39,3 +39,22 @@ test('a Bash commit goes through git mapping; a failed one records nothing', () 
 test('an unrelated tool records nothing', () => {
   expect(run('Read', { input: {}, result: {}, isError: false })).toEqual([])
 })
+
+test('opening or reading an existing artifact records nothing', () => {
+  const opened = { input: { action: 'open', url: 'https://claude.ai/artifact/old1' }, isError: false,
+    result: { opened: true, url: 'https://claude.ai/artifact/old1', artifact_id: 'old1', title: 'Old' } }
+  expect(run('Artifact', opened)).toEqual([])
+  expect(run('Artifact', { ...ARTIFACT_PUBLISH, input: { action: 'read', url: 'https://claude.ai/artifact/old1' } })).toEqual([])
+  expect(run('Artifact', { ...ARTIFACT_PUBLISH, input: { action: 'publish', file_path: 'a.html' } })).toHaveLength(1)
+})
+test('an opened result is skipped even without an action', () => {
+  const opened = { ...ARTIFACT_PUBLISH, result: { opened: true, url: 'https://claude.ai/artifact/x', artifact_id: 'x' } }
+  expect(run('Artifact', opened)).toEqual([])
+})
+test('SendUserFile skips attachments whose upload failed', () => {
+  const mixed = { ...SEND_USER_FILE, result: { attachments: [
+    { path: '/a/ok.html', size: 1, isImage: false },
+    { path: '/a/bad.html', size: 1, isImage: false, upload_error: 'too large', upload_error_code: 'size' },
+  ] } }
+  expect(run('SendUserFile', mixed)).toEqual([{ kind: 'file', path: '/a/ok.html', at: 7 }])
+})

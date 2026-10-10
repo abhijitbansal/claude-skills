@@ -29,6 +29,8 @@ export function capture(c: CaptureInput): Artifact[] {
   const result = fields(c.result)
   switch (c.tool) {
     case 'Artifact': {
+      const action = text(c.input.action)
+      if ((action !== undefined && action !== 'publish') || result.opened === true) return []
       const url = text(result.url)
       if (url === undefined || !CLAUDE_URL.test(url)) return []
       const filePath = text(c.input.file_path)
@@ -38,7 +40,7 @@ export function capture(c: CaptureInput): Artifact[] {
     case 'SendUserFile': {
       const list = Array.isArray(result.attachments) ? result.attachments : []
       return list
-        .map(a => text(fields(a).path))
+        .map(a => (text(fields(a).upload_error) === undefined ? text(fields(a).path) : undefined))
         .filter((p): p is string => p !== undefined)
         .map((path): Artifact => ({ kind: 'file', path, at: c.now }))
     }
