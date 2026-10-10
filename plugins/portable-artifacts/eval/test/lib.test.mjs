@@ -114,6 +114,16 @@ test('scoreRun: valid spec runs the output step and does not count its own valid
   assert.equal(countValidateRuns(path.join(work, '.eval-log.jsonl')), 2);
 });
 
+test('scoreRun: an edit prompt that leaves the seed unchanged fails', async () => {
+  const work = tmp();
+  fs.writeFileSync(path.join(work, 'spec.json'), '{"ok": true}');
+  const s = await scoreRun({ work, skillCfg: cfg, skillDir: fakeSkill(), seedSpec: { ok: true } });
+  assert.equal(s.finalValid, false);
+  assert.deepEqual(s.changedPaths, []);
+  assert.deepEqual(s.errors, [{ path: '(edit)', message: 'spec unchanged from the seed: the requested edit was not made' }]);
+  assert.equal(s.outputOk, false);
+});
+
 test('scoreRun: invalid spec reports errors and skips output', async () => {
   const work = tmp();
   fs.writeFileSync(path.join(work, 'spec.json'), '{"ok": false}');

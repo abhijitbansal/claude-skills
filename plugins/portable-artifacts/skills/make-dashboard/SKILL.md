@@ -24,6 +24,7 @@ First use: if `<skill-dir>/node_modules` is missing, tell the user it is a one-t
    `node <skill-dir>/scripts/inspect.mjs --spec dashboard.json --source shop` and `... --source shop --table items`.
 2. Write `dashboard.json` next to the data. Source paths are relative to the spec file and must stay
    inside the spec's folder.
+   Actually create the file: describing it or announcing a patch is not enough. If your file tool fails, write it from the shell (`cat > dashboard.json <<'EOF'` … `EOF`), then `ls dashboard.json` to confirm it exists before validating.
 3. Validate and fix until it prints `valid` (it also runs every query, so valid means buildable):
    `node <skill-dir>/scripts/validate.mjs dashboard.json`
 4. Build: `node <skill-dir>/scripts/build.mjs dashboard.json` (writes `dist/index.html`, `--out <dir>` to change).

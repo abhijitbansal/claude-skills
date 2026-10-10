@@ -117,6 +117,11 @@ export async function scoreRun({ work, skillCfg, skillDir, seedSpec, outputTimeo
   }
   if (seedSpec) {
     try { score.changedPaths = diffPaths(seedSpec, JSON.parse(fs.readFileSync(specPath, 'utf8'))); } catch { /* invalid JSON already scored */ }
+    // An untouched seed validates trivially; for an edit prompt that is a miss.
+    if (score.changedPaths?.length === 0) {
+      score.finalValid = false;
+      score.errors = [{ path: '(edit)', message: 'spec unchanged from the seed: the requested edit was not made' }];
+    }
   }
   if (!score.finalValid) return score;
   const o = await run(['node', ...skillCfg.outputCmd(skillDir, specPath, work)], {
