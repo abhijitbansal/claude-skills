@@ -1,0 +1,10 @@
+{
+  "name": "session-compass",
+  "version": "0.1.0",
+  "description": "Shows what each session is building, where it stands and what it produced: a return band, a /compass pane and a compass_status tool",
+  "author": {
+    "name": "Abhijit Bansal",
+    "url": "https://github.com/abhijitbansal"
+  },
+  "types": "./types/index.d.ts"
+}
