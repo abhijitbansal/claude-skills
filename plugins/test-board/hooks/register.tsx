@@ -1,8 +1,9 @@
-import { atom, update } from 'claude-code'
+import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { TestRun } from '../types'
-import { appendRun, keysToDrop, MAX_LATEST, oldestQuarter, STORE_SOFT_CAP_BYTES, touchIndex } from './history'
+import { lineParts, MAX_SHOWN_FAILURES } from './format'
+import { appendRun, keysToDrop, MAX_LATEST, oldestQuarter, previousRun, STORE_SOFT_CAP_BYTES, touchIndex } from './history'
 import { parseTestOutput } from './parse'
 import { resolveDir, splitCommand, suiteKey, suiteLabel } from './suite'
 
@@ -80,6 +81,11 @@ async function trySaveRun($: EngineInterface, run: TestRun): Promise<void> {
       $.ui.log(`test-board: history not saved: ${String(err).slice(0, 120)}`)
     }
   }
+}
+
+async function partsFor($: EngineInterface, run: TestRun, now: number, columns: number) {
+  const history = asRuns(await $.store.get(`runs:${run.key}`))
+  return { run, parts: lineParts(run, previousRun(history, run), now, columns) }
 }
 
 async function record(
@@ -161,5 +167,33 @@ export const register: Register = on => {
       $.ui.log(`test-board: history not loaded: ${String(err).slice(0, 120)}`)
     }
     return next(e)
+  })
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const runs = await read($, latest)
+    if (runs.length === 0 || e.props.hasSurvey) return next(e)
+    const isOpen = await read($, expanded)
+    const now = await $.clock.now()
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const rows = await Promise.all(runs.map(run => partsFor($, run, now, e.props.bodyColumns)))
+    return (
+      <Box flexDirection="column">
+        {rows.map(({ run, parts }, i) => (
+          <Box flexDirection="column">
+            <Button key={`run-${i}`} plain onPress={() => update($, expanded, v => !v)}>
+              <Text dimColor={run.stale === true}>{parts.label}   </Text>
+              <Text color={parts.isFailing ? 'error' : undefined} dimColor={run.stale === true}>{parts.counts}</Text>
+              <Text dimColor={run.stale === true}>
+                {[parts.trend, parts.duration].filter(Boolean).map(s => `   ${s}`).join('')}
+              </Text>
+              <Text dimColor>{[parts.prev, parts.via].filter(Boolean).map(s => `   ${s}`).join('')}</Text>
+            </Button>
+            {isOpen && run.failures.slice(0, MAX_SHOWN_FAILURES).map(f => (
+              <Text dimColor>{`    ${f.id}${f.loc === undefined ? '' : `  ${f.loc}`}`}</Text>
+            ))}
+          </Box>
+        ))}
+        {await next(e)}
+      </Box>
+    )
   })
 }

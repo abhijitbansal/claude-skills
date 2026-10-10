@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { On, Register, RenderPropsOf } from 'claude-code'
 
 import type { TestRun } from '../types'
 import { PYTEST_RAW } from './fixtures/output'
@@ -209,5 +209,75 @@ describe('session start', () => {
     const started = await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true } as never)
     expect(started).toEqual({ cwd: ROOT })
     expect(latest(seen)).toEqual([])
+  })
+})
+
+const bandProps = (bodyColumns: number) =>
+  ({ hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns, scroll: { bodyRows: 11 } }) as unknown as RenderPropsOf['AbovePrompt']
+
+function emptyBand(on: On): void {
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Box } = $.ui.resolve(e)
+    return <Box />
+  })
+}
+
+const otherBand: Register = on => {
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const { Box, Text } = $.ui.resolve(e)
+    return <Box flexDirection="column"><Text>other band</Text>{await next(e)}</Box>
+  })
+}
+
+describe('band', () => {
+  for (const surface of ['terminal', 'desktop'] as const) {
+    test(`${surface}: draws the run and expands failures`, async ($, on) => {
+      world(on); bash(on, PYTEST_RAW); emptyBand(on)
+      await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+      const ui = await $.ui.mount({ plugin: 'test-board', surface, component: 'AbovePrompt', props: bandProps(120) })
+      expect(await ui.find({ text: /1 ✗/ })).toBeDefined()
+      expect(await ui.find({ text: /first run/ })).toBeDefined()
+      expect(await ui.find({ text: /tests\/test_a\.py::test_x/ })).toBeUndefined()
+      await ui.press({ key: 'run-0' })
+      expect(await ui.find({ text: /tests\/test_a\.py::test_x/ })).toBeDefined()
+    })
+  }
+
+  test('draws nothing of its own when there is no run', async ($, on) => {
+    world(on); emptyBand(on)
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+    expect(await ui.findAll({ type: 'Button' })).toHaveLength(0)
+  })
+
+  test('stacks with another mod’s band', { plugins: [{ name: 'other-band', register: otherBand }] }, async ($, on) => {
+    world(on); bash(on, PYTEST_RAW); emptyBand(on)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+    expect(await ui.find({ text: /other band/ })).toBeDefined()
+    expect(await ui.find({ text: /1 ✗/ })).toBeDefined()
+  })
+
+  test('narrow terminal drops the via tag', async ($, on) => {
+    world(on); bash(on, PYTEST_RAW); emptyBand(on)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q', agentId: 'zz' } as never)
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(70) })
+    expect(await ui.find({ text: /1 ✗/ })).toBeDefined()
+    expect(await ui.find({ text: /via workflow/ })).toBeUndefined()
+  })
+  test('wide terminal keeps the via tag; a second run shows prev', async ($, on) => {
+    let t = 1_000_000
+    store(on); watchState(on)
+    on('clock.now', () => ({ value: (t += 60_000) }))
+    on('session.cwd', () => ({ value: ROOT }))
+    on('process.run', () => ({ value: proc(`${ROOT}\n`) }))
+    bash(on, PYTEST_RAW); emptyBand(on); turns(on)
+    await $.prompt.submit({ text: 'go' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    await $.prompt.submit({ text: 'again' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q', agentId: 'zz' } as never)
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(160) })
+    expect(await ui.find({ text: /via workflow/ })).toBeDefined()
+    expect(await ui.find({ text: /prev 10 ✓ 1 ✗/ })).toBeDefined()
+    expect(await ui.find({ text: /first run/ })).toBeUndefined()
   })
 })
