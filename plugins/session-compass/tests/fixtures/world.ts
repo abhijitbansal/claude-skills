@@ -17,6 +17,10 @@ export type World = {
   registered: string[]
   data: Map<string, unknown>
   seen: Map<string, unknown>
+  logged: string[]
+  sets: string[]
+  setFailures: Record<string, number>
+  isGetFailing: boolean
 }
 
 export const START = { cwd: WT, surface: 'terminal', isInteractive: true } as const
@@ -40,6 +44,10 @@ export function startWorld(on: On, over: Partial<World> = {}, seed: Record<strin
     registered: [],
     data: new Map<string, unknown>(Object.entries(seed)),
     seen: new Map<string, unknown>(),
+    logged: [],
+    sets: [],
+    setFailures: {},
+    isGetFailing: false,
     ...over,
   }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -67,15 +75,27 @@ export function startWorld(on: On, over: Partial<World> = {}, seed: Record<strin
     world.opened.push(e.id)
     return { value: { isPlaced: true } }
   })
-  on('ui.log', () => ({ value: undefined }))
+  on('ui.log', (_$, e) => {
+    world.logged.push(String((e as { text?: unknown }).text ?? JSON.stringify(e)))
+    return { value: undefined }
+  })
   on('ui.copy', (_$, e) => {
     world.copied.push(e.text)
     return { value: { isCopied: true } }
   })
   on('prompt.submit', (_$, e) => ({ text: e.text }))
   on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'engine intro', scope: 'shared' }] }))
-  on('store.get', (_$, e) => ({ value: world.data.get(e.key) }))
+  on('store.get', (_$, e) => {
+    if (world.isGetFailing) throw new Error('store unavailable')
+    return { value: world.data.get(e.key) }
+  })
   on('store.set', (_$, e) => {
+    const left = world.setFailures[e.key] ?? 0
+    if (left > 0) {
+      world.setFailures[e.key] = left - 1
+      throw new Error('quota exceeded')
+    }
+    world.sets.push(e.key)
     world.data.set(e.key, e.value)
     return { value: undefined }
   })

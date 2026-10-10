@@ -39,16 +39,18 @@ export async function loadRecord($: EngineInterface, id: string): Promise<Sessio
   return isRecord(raw) ? raw : undefined
 }
 
-async function rebuildIndex($: EngineInterface): Promise<string[]> {
-  const ids = (await $.store.keys()).filter(k => k.startsWith(PREFIX)).map(k => k.slice(PREFIX.length))
-  const recs = (await Promise.all(ids.map(id => loadRecord($, id)))).filter(isRecord)
-  return sortByActive(recs).map(r => r.id)
-}
-
+// The index is last-write-wins across concurrent sessions, so it can lose an id
+// whose record is still stored. Every read merges those back in, newest first.
 export async function loadIndex($: EngineInterface): Promise<string[]> {
   const raw = await $.store.get(INDEX)
-  const isValid = Array.isArray(raw) && raw.every(x => typeof x === 'string')
-  return isValid ? (raw as string[]) : rebuildIndex($)
+  const listed = Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : []
+  const known = new Set(listed)
+  const missing = (await $.store.keys())
+    .filter(k => k.startsWith(PREFIX)).map(k => k.slice(PREFIX.length)).filter(id => !known.has(id))
+  if (missing.length === 0) return listed
+  const recs = (await Promise.all([...listed, ...missing].map(id => loadRecord($, id)))).filter(isRecord)
+  const sorted = sortByActive(recs).map(r => r.id)
+  return [...sorted, ...listed.filter(id => !sorted.includes(id))]
 }
 
 async function writeAll($: EngineInterface, rec: SessionRecord, maxSessions: number): Promise<void> {
@@ -68,13 +70,22 @@ async function trimOthers($: EngineInterface, keepId: string): Promise<void> {
   }
 }
 
+// Frees space before a retry: shrink the index, drop what falls off it, cap the
+// artifacts of every session that stays.
+async function freeSpace($: EngineInterface, keepId: string): Promise<void> {
+  const { index, dropped } = orderIndex(await loadIndex($), keepId, LIMITS.trimSessions)
+  for (const id of dropped) await $.store.delete(recordKey(id))
+  await $.store.set(INDEX, index)
+  await trimOthers($, keepId)
+}
+
 export async function saveRecord($: EngineInterface, rec: SessionRecord): Promise<void> {
   try {
     await writeAll($, rec, LIMITS.sessions)
   } catch {
     try {
+      await freeSpace($, rec.id)
       await writeAll($, capArtifacts(rec, LIMITS.trimArtifacts), LIMITS.trimSessions)
-      await trimOthers($, rec.id)
     } catch (err) {
       $.ui.log(`session-compass: store write failed, kept in session only: ${String(err).slice(0, 120)}`)
     }
@@ -97,8 +108,8 @@ async function git($: EngineInterface, args: readonly string[]): Promise<string 
   }
 }
 
-export async function locate($: EngineInterface, prev?: Where): Promise<Where> {
-  const cwd = await $.session.cwd().catch(() => prev?.worktree ?? '')
+export async function locate($: EngineInterface, prev?: Where, startCwd?: string): Promise<Where> {
+  const cwd = startCwd ?? (await $.session.cwd().catch(() => prev?.worktree ?? ''))
   const repoRoot = await $.session.repo().then(r => r?.root).catch(() => undefined)
   const worktree = (await git($, ['rev-parse', '--show-toplevel'])) ?? prev?.worktree ?? cwd
   const branch = (await git($, ['rev-parse', '--abbrev-ref', 'HEAD'])) ?? prev?.branch ?? ''
@@ -118,6 +129,12 @@ export async function readTestBoard($: EngineInterface): Promise<unknown[] | und
   }
 }
 
+// The model supplies the input; anything that is not a string counts as left out.
+function onlyStrings(input: Record<string, unknown>): StatusInput {
+  const pick = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
+  return { goal: pick(input.goal), step: pick(input.step), next: pick(input.next) }
+}
+
 async function commit($: EngineInterface, rec: SessionRecord): Promise<void> {
   await update($, record, () => rec)
   await saveRecord($, rec)
@@ -129,8 +146,11 @@ export const register: Register = on => {
     await $.command.register({ name: 'compass', description: 'Open the session compass pane' })
     const id = await $.session.id()
     const now = await $.clock.now()
-    const stored = await loadRecord($, id)
-    const where = await locate($, stored)
+    const stored = await loadRecord($, id).catch(err => {
+      $.ui.log(`session-compass: store read failed, starting fresh: ${String(err).slice(0, 120)}`)
+      return undefined
+    })
+    const where = await locate($, stored, e.cwd)
     await commit($, stored ? { ...stored, ...where, lastActive: now } : newRecord(id, where, now))
     return next(e)
   })
@@ -138,7 +158,7 @@ export const register: Register = on => {
   on('tool.call', { tool: STATUS_TOOL_ID }, async ($, e) => {
     const rec = await read($, record)
     if (rec === null) return { deny: 'session-compass: no session record yet' }
-    const out = applyStatus(rec, e as unknown as StatusInput, await $.clock.now())
+    const out = applyStatus(rec, onlyStrings(e as unknown as Record<string, unknown>), await $.clock.now())
     if ('error' in out) return { deny: out.error }
     await commit($, out)
     return { result: { text: 'ok' } }
