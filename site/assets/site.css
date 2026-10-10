@@ -44,38 +44,40 @@
 /* dark: follows the OS unless the theme switch pins light; the switch can also pin dark */
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#131110; --surface:#1a1715; --surface2:#201c19; --surface3:#2a2521;
-    --border:rgba(236,226,206,.10); --border-bright:rgba(236,226,206,.20);
-    --text:#ede7dc; --text-dim:#b0a797; --text-faint:#958d80;
+    /* cool slate base, one amber accent */
+    --bg:#0f1114; --surface:#161a1f; --surface2:#1c2127; --surface3:#252b33;
+    --border:rgba(226,232,240,.09); --border-bright:rgba(226,232,240,.18);
+    --text:#e6e9ee; --text-dim:#a3abb6; --text-faint:#8a93a0;
 
-    --accent:#e3ad52; --accent-dim:rgba(227,173,82,.13); --on-accent:#1b1409;
-    --green:#78c58d;  --green-dim:rgba(120,197,141,.12);
-    --rose:#e57d70;   --rose-dim:rgba(229,125,112,.12);
-    --cyan:#86b6c6;   --cyan-dim:rgba(134,182,198,.12);
-    --violet:#ad9dd0; --violet-dim:rgba(173,157,208,.12);
+    --accent:#e8b45a; --accent-dim:rgba(232,180,90,.13); --on-accent:#17120a;
+    --green:#6fcf97;  --green-dim:rgba(111,207,151,.12);
+    --rose:#ef8a7a;   --rose-dim:rgba(239,138,122,.12);
+    --cyan:#7cc0d8;   --cyan-dim:rgba(124,192,216,.12);
+    --violet:#b3a3e0; --violet-dim:rgba(179,163,224,.12);
 
-    --shadow:0 1px 2px rgba(0,0,0,.35), 0 18px 40px -20px rgba(0,0,0,.7);
-    --lift:inset 0 1px 0 rgba(255,255,255,.045);
-    --ambient:radial-gradient(1100px 480px at 12% -12%, rgba(227,173,82,.10), transparent 62%);
-    --grain:.06;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 18px 40px -20px rgba(0,0,0,.75);
+    --lift:inset 0 1px 0 rgba(255,255,255,.05);
+    --ambient:radial-gradient(1100px 480px at 12% -12%, rgba(232,180,90,.07), transparent 62%);
+    --grain:.045;
     color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-    --bg:#131110; --surface:#1a1715; --surface2:#201c19; --surface3:#2a2521;
-    --border:rgba(236,226,206,.10); --border-bright:rgba(236,226,206,.20);
-    --text:#ede7dc; --text-dim:#b0a797; --text-faint:#958d80;
+    /* cool slate base, one amber accent */
+    --bg:#0f1114; --surface:#161a1f; --surface2:#1c2127; --surface3:#252b33;
+    --border:rgba(226,232,240,.09); --border-bright:rgba(226,232,240,.18);
+    --text:#e6e9ee; --text-dim:#a3abb6; --text-faint:#8a93a0;
 
-    --accent:#e3ad52; --accent-dim:rgba(227,173,82,.13); --on-accent:#1b1409;
-    --green:#78c58d;  --green-dim:rgba(120,197,141,.12);
-    --rose:#e57d70;   --rose-dim:rgba(229,125,112,.12);
-    --cyan:#86b6c6;   --cyan-dim:rgba(134,182,198,.12);
-    --violet:#ad9dd0; --violet-dim:rgba(173,157,208,.12);
+    --accent:#e8b45a; --accent-dim:rgba(232,180,90,.13); --on-accent:#17120a;
+    --green:#6fcf97;  --green-dim:rgba(111,207,151,.12);
+    --rose:#ef8a7a;   --rose-dim:rgba(239,138,122,.12);
+    --cyan:#7cc0d8;   --cyan-dim:rgba(124,192,216,.12);
+    --violet:#b3a3e0; --violet-dim:rgba(179,163,224,.12);
 
-    --shadow:0 1px 2px rgba(0,0,0,.35), 0 18px 40px -20px rgba(0,0,0,.7);
-    --lift:inset 0 1px 0 rgba(255,255,255,.045);
-    --ambient:radial-gradient(1100px 480px at 12% -12%, rgba(227,173,82,.10), transparent 62%);
-    --grain:.06;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 18px 40px -20px rgba(0,0,0,.75);
+    --lift:inset 0 1px 0 rgba(255,255,255,.05);
+    --ambient:radial-gradient(1100px 480px at 12% -12%, rgba(232,180,90,.07), transparent 62%);
+    --grain:.045;
     color-scheme:dark;
 }
 
