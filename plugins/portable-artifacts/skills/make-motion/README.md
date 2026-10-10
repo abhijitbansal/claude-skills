@@ -80,6 +80,7 @@ examples in [`references/examples/`](references/examples/).
 | Command | Does | Flags |
 |---|---|---|
 | `validate.mjs <spec>` | Schema plus cross-field checks (unique ids, keyframe times, per-type props, image paths, chart compile, no remote URLs) | `--json` |
+| `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` |
 | `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. The MP4 timing is exact | `--open` |
 | `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks) via Playwright frame capture → ffmpeg | `--out <file>`, `--fps <n>`, `--size WxH`, `--contact-sheet` |
 

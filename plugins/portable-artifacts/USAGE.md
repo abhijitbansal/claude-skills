@@ -146,6 +146,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `environment variable WAREHOUSE_URL is not set` | Export it in the shell (and in the cron/launchd environment) |
 | Query stopped after 30 s | Make it cheaper, or pass `--timeout 120` to `build` |
 | `npx playwright install chromium` hint on render | Install Chromium once, or install Google Chrome for the fallback |
+| `kokoro-js is not installed` | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (voiceover only; `npm ci` removes it) |
 | `audio[0].src: ffmpeg cannot decode …` | The file is not a valid audio file. Re-export it as mp3 or wav |
 | `ffmpeg not found` | `brew install ffmpeg`, `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` |
 | `remote data is not allowed` / `not allowed — external URLs are never fetched` | Charts must carry their data inline (motion) or come from a SQL query (dashboard) |
