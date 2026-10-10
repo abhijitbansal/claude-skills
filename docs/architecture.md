@@ -4,7 +4,7 @@
 
 `claude-skills` is three things in one repo:
 
-1. A **Claude Code plugin marketplace** hosting six focused plugins.
+1. A **Claude Code plugin marketplace** hosting eight focused plugins.
 2. A home for **standalone CLI tools** (currently Second Wind).
 3. **Adapters** that wire the same skills into Codex, Copilot CLI, and any AGENTS.md-aware agent.
 
@@ -21,13 +21,15 @@ flowchart TD
   SW["second-wind — skill wrapper"]
   PC["prompt-craft — 7 skills · 6 hooks"]
   PA["portable-artifacts — 2 skills · installer"]
+  TB["test-board — test-run band"]
+  SC["session-compass — return band · /compass pane"]
   WIND[("tools/second-wind/wind.py")]
   AD["adapters/install.sh"]
   SEED["setup/ — setup.sh · capture.sh · contribute.sh"]
   CC(("Claude Code"))
   OTHER(("Codex / Copilot / AGENTS.md agents"))
 
-  MP --> IOS & LIN & CW & SW & PC & PA
+  MP --> IOS & LIN & CW & SW & PC & PA & TB & SC
   SW -.->|wraps| WIND
   CC -->|"/plugin marketplace add"| MP
   SEED -->|local_plugins step| CC
@@ -36,7 +38,7 @@ flowchart TD
   IOS & LIN & CW & SW & PC & PA -->|skills/| AD
 ```
 
-## The six plugins
+## The eight plugins
 
 | Plugin | One-liner | Contents |
 | --- | --- | --- |
@@ -46,6 +48,8 @@ flowchart TD
 | `second-wind` | outlast the 5-hour usage limit | SKILL.md wrapper for the `wind` CLI (self-installs when missing) |
 | `prompt-craft` | rough ask → deterministic spec | `/improve-prompt`, `/plan`; debug/refactor/review lens skills; `/refresh`; a command advisor (relevance + history + git state) powering user-only `suggest_next` (Stop), `prompt_hint` (UserPromptSubmit) + `statusline_hint`; `registry_freshness` (SessionStart); opt-in `block_secrets` + `format_on_edit` hooks |
 | `portable-artifacts` | dashboards + animated explainers from a prompt, offline | `/make-dashboard`, `/make-motion`; `bin/install.mjs` cross-host installer (Claude Code, Codex, Copilot, Gemini) |
+| `test-board` | pass/fail band after every test run | `register.tsx` band + test-run hooks; compares with the previous run of the same suite in the same worktree |
+| `session-compass` | what each session is building and where it stands | return band, `/compass` pane, `compass_status` tool; capture + register hooks |
 
 Full per-item descriptions: [skills-catalog.md](skills-catalog.md).
 

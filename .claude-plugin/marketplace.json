@@ -38,6 +38,16 @@
       "name": "portable-artifacts",
       "source": "./plugins/portable-artifacts",
       "description": "Host-agnostic, offline, open-source artifact skills: static SQL + Vega-Lite dashboards with per-chart provenance, and spec-driven animated explainers rendered to MP4"
+    },
+    {
+      "name": "test-board",
+      "source": "./plugins/test-board",
+      "description": "Test results band: passed/failed/skipped after every test run, next to the previous run of the same suite in the same worktree"
+    },
+    {
+      "name": "session-compass",
+      "source": "./plugins/session-compass",
+      "description": "Session compass: what each session is building, where it stands and what it produced, as a return band, a /compass pane and a compass_status tool"
     }
   ]
 }

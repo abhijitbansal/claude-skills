@@ -2,7 +2,7 @@
 
 > Visual version: [searchable catalog](catalog.html) (open in a browser)
 
-Six plugins, one CLI, one adapter script. Install only what you need:
+Eight plugins, one CLI, one adapter script. Install only what you need:
 
 ```
 /plugin marketplace add abhijitbansal/claude-skills
@@ -170,6 +170,18 @@ Dashboards and animated explainers from a prompt — built locally, offline, fro
 | `make-motion` | skill | Prompt → `motion.json` scene spec → live preview with a scrubber and a deterministic 1080p MP4. A change is one field in the spec. Invoke `/make-motion` (`$make-motion` in Codex). |
 
 Visual guide: [portable-artifacts](features/portable-artifacts.html).
+
+## test-board (plugin)
+
+Test results band: passed/failed/skipped after every test run, next to the previous run of the same suite in the same worktree.
+
+Visual guide: [session mods](features/mods.html).
+
+## session-compass (plugin)
+
+Session compass: what each session is building, where it stands and what it produced, as a return band, a /compass pane and a compass_status tool.
+
+Visual guide: [session mods](features/mods.html).
 
 ## adapters (multi-tool)
 

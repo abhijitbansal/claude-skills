@@ -1,0 +1,10 @@
+{
+  "name": "test-board",
+  "version": "0.1.0",
+  "description": "Band above the prompt with pass/fail/skip counts for every test run, compared with the previous run of the same suite in the same worktree",
+  "author": {
+    "name": "Abhijit Bansal",
+    "url": "https://github.com/abhijitbansal"
+  },
+  "types": "./types/index.d.ts"
+}

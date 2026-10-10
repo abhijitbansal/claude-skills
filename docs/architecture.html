@@ -103,13 +103,15 @@ flowchart TD
   SW["second-wind<br/><small>skill wrapper</small>"]
   PC["prompt-craft<br/><small>7 skills · 6 hooks</small>"]
   PA["portable-artifacts<br/><small>2 skills · installer</small>"]
+  TB["test-board<br/><small>test-run band</small>"]
+  SC["session-compass<br/><small>return band · /compass pane</small>"]
   WIND[("tools/second-wind<br/>wind.py")]
   AD["adapters/install.sh"]
   SEED["setup/<br/><small>setup.sh · capture.sh · contribute.sh</small>"]
   CC(("Claude Code"))
   OTHER(("Codex / Copilot /<br/>AGENTS.md agents"))
 
-  MP --> IOS & LIN & CW & SW & PC & PA
+  MP --> IOS & LIN & CW & SW & PC & PA & TB & SC
   SW -.->|"wraps"| WIND
   CC -->|"/plugin marketplace add"| MP
   SEED -->|"local_plugins step"| CC
@@ -119,7 +121,7 @@ flowchart TD
 
   classDef plugin fill:#0e8fb01a,stroke:#0e8fb0,stroke-width:2px
   classDef infra fill:#b07a181a,stroke:#b07a18,stroke-width:2px
-  class IOS,LIN,CW,SW,PC,PA plugin
+  class IOS,LIN,CW,SW,PC,PA,TB,SC plugin
   class SEED,AD infra
         </pre></div></div>
       </div>
@@ -127,7 +129,7 @@ flowchart TD
   </section>
 
   <section class="tight">
-    <p class="eyebrow violet">The six plugins</p>
+    <p class="eyebrow violet">The eight plugins</p>
     <div class="grid cols-3">
       <div class="card pcard cy reveal">
         <h3><code>ios-dev</code></h3>
@@ -177,6 +179,20 @@ flowchart TD
           <li><strong>hooks</strong> — <code>suggest_next</code> (Stop, now routed through the command advisor), <code>prompt_hint</code> (UserPromptSubmit), <code>registry_freshness</code> (SessionStart), <code>statusline_hint</code> (statusLine) + opt-in <code>block_secrets</code> / <code>format_on_edit</code></li>
         </ul>
       </div>
+      <div class="card pcard cy reveal">
+        <h3><code>test-board</code></h3>
+        <p class="sub">pass/fail band after every test run</p>
+        <ul>
+          <li><strong>band</strong> — passed/failed/skipped counts above the prompt, next to the previous run of the same suite in the same worktree</li>
+        </ul>
+      </div>
+      <div class="card pcard go reveal">
+        <h3><code>session-compass</code></h3>
+        <p class="sub">what each session is building and where it stands</p>
+        <ul>
+          <li><strong>return band</strong>, <strong>/compass pane</strong> and <strong>compass_status tool</strong> — what each session is building, where it stands and what it produced</li>
+            </ul>
+          </div>
       <div class="card pcard go reveal">
         <h3><code>portable-artifacts</code></h3>
         <p class="sub">dashboards + animated explainers, offline</p>
@@ -245,6 +261,7 @@ flowchart TD
         <a href="features/second-wind.html">Second Wind</a>
         <a href="features/prompt-craft.html">prompt-craft</a>
         <a href="features/portable-artifacts.html">portable-artifacts</a>
+        <a href="features/mods.html">Session mods</a>
         <a href="features/ios-dev.html">ios-dev</a>
         <a href="features/core-workflow.html">core-workflow</a>
         <a href="features/linear-pm.html">linear-pm</a>
@@ -265,7 +282,7 @@ flowchart TD
     </div>
     <div class="foot-meta">
       <span class="lic">MIT licensed</span>
-      <span>6 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
+      <span>8 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
       <span>Tested on macOS &amp; Ubuntu</span>
     </div>
   </div>

@@ -129,7 +129,7 @@
         <div class="gitem"><h4><code>skills</code> <span class="idem">idempotent</span></h4><p>Run <code>npx -y skills add &lt;source&gt;@&lt;name&gt; -g -y</code> for each <code>[[skills]]</code> entry, then a global update pass.</p></div>
         <div class="gitem"><h4><code>dotfiles</code> <span class="idem write">writes + backup</span></h4><p>Copy <code>templates/home-CLAUDE.md → $HOME/CLAUDE.md</code> and <code>templates/user-settings.json → $HOME/.claude/settings.json</code>. Existing files are backed up to <code>*.bak.&lt;timestamp&gt;</code> first.</p></div>
         <div class="gitem"><h4><code>guidelines</code> <span class="idem">additive merge</span></h4><p>Run <code>merge_guidelines.py</code>: extract the region between the <code>claude-skills:guidelines</code> markers in <code>CLAUDE.md</code>, and append only the <code>##</code> sections not already present (heading match is case- and number-insensitive). Targets <code>$HOME/CLAUDE.md</code>, the current repo, and any <code>--merge-claude-md &lt;path&gt;</code>.</p></div>
-        <div class="gitem"><h4><code>local_plugins</code> <span class="idem">idempotent</span></h4><p>Register this repo itself as a marketplace (<code>.claude-plugin/marketplace.json</code>) and install/update its own four plugins.</p></div>
+        <div class="gitem"><h4><code>local_plugins</code> <span class="idem">idempotent</span></h4><p>Register this repo itself as a marketplace (<code>.claude-plugin/marketplace.json</code>) and install/update its own eight plugins.</p></div>
         <div class="gitem"><h4><code>symlinks</code> <span class="idem">safe</span></h4><p>Remove stale links into the repo from the pre-plugin layout, then link <code>$HOME/.local/bin/claude-skills-contribute</code> and <code>$HOME/.local/bin/wind</code>. Never clobbers a foreign symlink or real file.</p></div>
       </div>
       <div class="callout"><span class="ti">Exit codes</span><code>0</code> clean · <code>1</code> a step failed · <code>2</code> warnings only (e.g. an unsupported version pin). The loop never aborts early — failures are tallied and reported by the <code>summary</code> step.</div>
@@ -225,6 +225,7 @@
         <a href="features/second-wind.html">Second Wind</a>
         <a href="features/prompt-craft.html">prompt-craft</a>
         <a href="features/portable-artifacts.html">portable-artifacts</a>
+        <a href="features/mods.html">Session mods</a>
         <a href="features/ios-dev.html">ios-dev</a>
         <a href="features/core-workflow.html">core-workflow</a>
         <a href="features/linear-pm.html">linear-pm</a>
@@ -245,7 +246,7 @@
     </div>
     <div class="foot-meta">
       <span class="lic">MIT licensed</span>
-      <span>6 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
+      <span>8 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
       <span>Tested on macOS &amp; Ubuntu</span>
     </div>
   </div>

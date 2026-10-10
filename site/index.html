@@ -19,7 +19,7 @@
 <meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="claude-skills — 6 plugins, 88 skills, 17 commands. One repo, every agent.">
+<meta property="og:image:alt" content="claude-skills — 8 plugins, 88 skills, 17 commands. One repo, every agent.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="claude-skills — one repo, every agent">
 <meta name="twitter:description" content="Second Wind, prompt-craft, an iOS loop, Linear PM, commit helpers. Long runs that survive the 5-hour limit. Claude Code, Codex, Copilot, AGENTS.md.">
@@ -60,7 +60,7 @@
     </div>
 
     <div class="statband reveal" aria-label="Repository at a glance">
-      <div class="stat"><div class="n" data-count="6">6</div><div class="l">Plugins</div></div>
+      <div class="stat"><div class="n" data-count="8">8</div><div class="l">Plugins</div></div>
       <div class="stat"><div class="n" data-count="88">88</div><div class="l">Skills</div></div>
       <div class="stat"><div class="n" data-count="17">17</div><div class="l">Commands</div></div>
       <div class="stat"><div class="n" data-count="2">2</div><div class="l">Agents</div></div>
@@ -73,7 +73,7 @@
   <!-- FEATURES: quick show, links to detail -->
   <section id="features">
     <div class="eyebrow violet">The features</div>
-    <h2 class="title">Six plugins. Each its own deep-dive.</h2>
+    <h2 class="title">Eight plugins. Each with a guide.</h2>
     <p class="section-lead">A quick look at every plugin — open any card for the full guide: what it solves,
       how to install, a complete usability walkthrough, and how it works under the hood.</p>
 
@@ -123,6 +123,21 @@
             <li><code>/make-dashboard</code>: data file → one HTML page, every chart shows its SQL</li>
             <li><code>/make-motion</code>: prompt → live preview + deterministic 1080p MP4</li>
             <li>Spec-first: the model writes JSON, scripts do the rest — Codex, Copilot, Gemini, Claude</li>
+          </ul>
+        </div>
+        <div class="more"><span>Open the guide</span><span class="ar">→</span></div>
+      </a>
+
+      <a class="feat ro reveal" href="../docs/features/mods.html">
+        <div class="head">
+          <h3>Session mods <span class="tag">2 mods</span></h3>
+          <p class="desc">Two lines above the prompt: your last test run next to the one before it, and what each session is building when you come back.</p>
+        </div>
+        <div class="body">
+          <div class="assetline"><span class="chip"><b>0</b> background model calls</span></div>
+          <ul>
+            <li><code>test-board</code>: pass/fail counts after every test run, with ▲/▼ against the previous run</li>
+            <li><code>session-compass</code>: return band, <code>/compass</code> pane, <code>compass_status</code> tool</li>
           </ul>
         </div>
         <div class="more"><span>Open the guide</span><span class="ar">→</span></div>
@@ -242,7 +257,7 @@
   <section id="architecture">
     <div class="eyebrow">How it fits together</div>
     <h2 class="title">A marketplace, a CLI, and adapters</h2>
-    <p class="section-lead">One <code>marketplace.json</code> feeds six plugins. Second Wind ships as a standalone CLI. Adapters port the skills everywhere else.</p>
+    <p class="section-lead">One <code>marketplace.json</code> feeds eight plugins. Second Wind ships as a standalone CLI. Adapters port the skills everywhere else.</p>
     <div class="arch reveal">
       <div class="arch-row">
         <div class="node mk"><div class="nt">marketplace.json</div><div class="ns">.claude-plugin/</div></div>
@@ -257,6 +272,8 @@
         <a class="pnode e" href="../docs/features/second-wind.html"><div class="pn">second-wind</div><div class="pc">skill + CLI</div></a>
         <a class="pnode r" href="../docs/features/prompt-craft.html"><div class="pn">prompt-craft</div><div class="pc">7 sk · 6 hook</div></a>
         <a class="pnode g" href="../docs/features/portable-artifacts.html"><div class="pn">portable-artifacts</div><div class="pc">2 sk · installer</div></a>
+        <a class="pnode r" href="../docs/features/mods.html#test-board"><div class="pn">test-board</div><div class="pc">mod · band</div></a>
+        <a class="pnode r" href="../docs/features/mods.html#session-compass"><div class="pn">session-compass</div><div class="pc">mod · band + pane</div></a>
       </div>
       <div class="arch-foot">
         <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
@@ -399,7 +416,7 @@
       </div>
 
     </div>
-    <p class="arch-note" style="margin-top:18px">Also: the <a href="../docs/architecture.html">architecture overview</a> and the project
+    <p class="arch-note" style="margin-top:18px">Also: the <a href="../docs/features/mods.html">Session mods</a> guide, the <a href="../docs/architecture.html">architecture overview</a> and the project
       <a href="https://github.com/abhijitbansal/claude-skills/blob/main/USAGE.md">usage &amp; how-to guide</a>.</p>
   </section>
 
@@ -417,6 +434,7 @@
         <a href="../docs/features/second-wind.html">Second Wind</a>
         <a href="../docs/features/prompt-craft.html">prompt-craft</a>
         <a href="../docs/features/portable-artifacts.html">portable-artifacts</a>
+        <a href="../docs/features/mods.html">Session mods</a>
         <a href="../docs/features/ios-dev.html">ios-dev</a>
         <a href="../docs/features/linear-pm.html">linear-pm</a>
         <a href="../docs/features/core-workflow.html">core-workflow</a>
@@ -437,7 +455,7 @@
     </div>
     <div class="foot-meta">
       <span class="lic">MIT licensed</span>
-      <span>6 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
+      <span>8 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
       <span>Tested on macOS &amp; Ubuntu · 184 bats cases + pytest</span>
     </div>
   </div>

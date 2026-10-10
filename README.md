@@ -20,10 +20,13 @@ auto-resume** orchestrator that keeps overnight runs alive (`second-wind`),
 | `second-wind` | usage-limit-aware overnight orchestrator (`wind` CLI + skill wrapper) |
 | `portable-artifacts` | `/make-dashboard` (data file → offline HTML dashboard, per-chart SQL) and `/make-motion` (prompt → preview + MP4); cross-host installer for Codex, Copilot, Gemini |
 | `prompt-craft` | rough ask → deterministic spec (`/improve-prompt`, `/plan`), debug/refactor/review lenses, git-aware Stop hook + opt-in secret/format guardrails |
+| `test-board` | band above the prompt: passed/failed/skipped after every test run, next to the previous run of the same suite in the same worktree |
+| `session-compass` | what each session is building, where it stands and what it produced: return band, `/compass` pane, `compass_status` tool |
 
 **Feature guides:** [Second Wind](docs/features/second-wind.html) ·
 [prompt-craft](docs/features/prompt-craft.html) ·
 [portable-artifacts](docs/features/portable-artifacts.html) ·
+[session mods](docs/features/mods.html) ·
 [ios-dev](docs/features/ios-dev.html) ·
 [linear-pm](docs/features/linear-pm.html) ·
 [core-workflow](docs/features/core-workflow.html)
@@ -46,6 +49,8 @@ Inside any Claude Code session:
 /plugin install core-workflow@claude-skills
 /plugin install prompt-craft@claude-skills
 /plugin install portable-artifacts@claude-skills
+/plugin install test-board@claude-skills
+/plugin install session-compass@claude-skills
 ```
 
 Install only what you need — each plugin is self-contained. Skills, slash commands,
@@ -149,7 +154,7 @@ users can ignore them entirely; plugins never touch them.
 | Path | What |
 | --- | --- |
 | `.claude-plugin/` | marketplace manifest |
-| `plugins/` | the six plugins (skills, commands, agents, hooks) |
+| `plugins/` | the eight plugins (skills, commands, agents, hooks) |
 | `tools/` | standalone CLIs (second-wind) |
 | `adapters/` | wire skills into non-Claude tools |
 | `setup/`, `templates/`, `claude-setup.toml` | personal machine seed |

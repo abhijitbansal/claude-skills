@@ -5,14 +5,14 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Skills &amp; tools catalog — claude-skills</title>
-<meta name="description" content="Search and filter every skill, command, agent, hook, and CLI tool across the six claude-skills plugins.">
+<meta name="description" content="Search and filter every skill, command, agent, hook, and CLI tool across the eight claude-skills plugins.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%230e8fb0'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='6.5'%20fill='%230a1420'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='3'%20fill='%23e8b94a'/%3E%3C/svg%3E">
 <link rel="icon" href="../site/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="../site/apple-touch-icon.png">
 <meta name="theme-color" content="#0e8fb0">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Skills &amp; tools catalog — claude-skills">
-<meta property="og:description" content="Search and filter every skill, command, agent, hook, and CLI across the six claude-skills plugins.">
+<meta property="og:description" content="Search and filter every skill, command, agent, hook, and CLI across the eight claude-skills plugins.">
 <meta property="og:url" content="https://abhijitbansal.github.io/claude-skills/catalog.html">
 <meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
 <meta property="og:image:width" content="1200">
@@ -37,7 +37,7 @@
 
 <header class="page-head wrap narrow">
   <div class="crumbs"><a href="../site/index.html">Home</a><span class="sep">/</span>Catalog</div>
-  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>111 assets · 6 plugins</span>
+  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>115 assets · 8 plugins</span>
   <h1>Skills &amp; tools <span class="grad">catalog</span></h1>
   <p class="lead">Every skill, command, agent, hook, and CLI tool in the repo — searchable and filterable.
      Each links back to the plugin it ships in.</p>
@@ -48,9 +48,9 @@
     <input id="search" type="search" placeholder="Search skills, commands, hooks…" aria-label="Search the catalog" autocomplete="off">
     <div class="filters"><button class="fchip active" data-filter="all">All</button><button class="fchip" data-filter="Plugin">Plugins</button><button class="fchip" data-filter="Skill">Skills</button><button class="fchip" data-filter="Command">Commands</button><button class="fchip" data-filter="CLI">CLI</button><button class="fchip" data-filter="Agent">Agents</button><button class="fchip" data-filter="Hook">Hooks</button></div>
   </div>
-  <p class="cat-count">116 results</p>
+  <p class="cat-count">123 results</p>
   <div class="cat-group">
-      <h3>Plugins <span class="badge">6</span></h3>
+      <h3>Plugins <span class="badge">8</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Plugin" data-search="core-workflow general dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook core-workflow plugin">
         <div class="top"><span class="nm">core-workflow</span><span class="ty t-plugin">Plugin</span></div>
         <div class="dc">General dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook</div>
@@ -69,7 +69,13 @@
         <div class="pl">in <a href="features/prompt-craft.html">prompt-craft</a></div></div><div class="crow" data-type="Plugin" data-search="second-wind set-and-forget orchestrator for long claude code runs across multiple repos. detects 5-hour usage limit, waits for reset, resumes every tmux session second-wind plugin">
         <div class="top"><span class="nm">second-wind</span><span class="ty t-plugin">Plugin</span></div>
         <div class="dc">Set-and-forget orchestrator for long Claude Code runs across multiple repos. Detects 5-hour usage limit, waits for reset, resumes every tmux session</div>
-        <div class="pl">in <a href="features/second-wind.html">second-wind</a></div></div></div></div><div class="cat-group">
+        <div class="pl">in <a href="features/second-wind.html">second-wind</a></div></div><div class="crow" data-type="Plugin" data-search="test-board test results band: passed/failed/skipped after every test run, next to the previous run of the same suite in the same worktree test-board plugin">
+        <div class="top"><span class="nm">test-board</span><span class="ty t-plugin">Plugin</span></div>
+        <div class="dc">Test results band: passed/failed/skipped after every test run, next to the previous run of the same suite in the same worktree</div>
+        <div class="pl">in <a href="features/mods.html#test-board">test-board</a></div></div><div class="crow" data-type="Plugin" data-search="session-compass session compass: what each session is building, where it stands and what it produced, as a return band, a /compass pane and a compass_status tool session-compass plugin">
+        <div class="top"><span class="nm">session-compass</span><span class="ty t-plugin">Plugin</span></div>
+        <div class="dc">Session compass: what each session is building, where it stands and what it produced, as a return band, a /compass pane and a compass_status tool</div>
+        <div class="pl">in <a href="features/mods.html#session-compass">session-compass</a></div></div></div></div><div class="cat-group">
       <h3>Skills <span class="badge">88</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Skill" data-search="commit stage current changes, lint shell scripts with shellcheck, and create a git commit with conventional message core-workflow skill">
         <div class="top"><span class="nm">commit</span><span class="ty t-skill">Skill</span></div>
@@ -435,6 +441,7 @@
       <a href="features/second-wind.html">Second Wind</a>
       <a href="features/prompt-craft.html">prompt-craft</a>
       <a href="features/portable-artifacts.html">portable-artifacts</a>
+      <a href="features/mods.html">Session mods</a>
       <a href="features/ios-dev.html">ios-dev</a>
       <a href="features/linear-pm.html">linear-pm</a>
       <a href="features/core-workflow.html">core-workflow</a></div>
@@ -449,7 +456,7 @@
       <a href="https://github.com/abhijitbansal/claude-skills/blob/main/SECURITY.md">Security policy</a></div>
   </div>
   <div class="foot-meta"><span class="lic">MIT licensed</span>
-    <span>6 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
+    <span>8 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
     <span>Tested on macOS &amp; Ubuntu</span></div>
 </div></footer>
 <script src="../site/assets/site.js"></script>
