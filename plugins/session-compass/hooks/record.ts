@@ -9,7 +9,6 @@ export const LIMITS = {
   sessions: 50,
   trimArtifacts: 50,
   trimSessions: 40,
-  idleMs: 15 * 60_000,
 } as const
 
 export type StatusInput = { goal?: string; step?: string; next?: string }

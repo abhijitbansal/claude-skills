@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, Timer } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 import type { Artifact, SessionRecord } from '../types'
 import { bandView, formatBand, tally } from './band'
 import { capture } from './capture'
@@ -12,9 +12,7 @@ import {
 
 // Atoms sit in this file: the host's state scan reads only atoms declared here.
 const record = atom({ plugin: 'session-compass', key: 'record' } as const, null)
-const band = atom({ plugin: 'session-compass', key: 'band' } as const, 'hidden' as 'hidden' | 'return')
 const tab = atom({ plugin: 'session-compass', key: 'tab' } as const, 'this' as Tab)
-const IDLE_TICK_MS = 60_000
 
 export const STATUS_TOOL_ID = 'mcp__session-compass__compass_status'
 const STATUS_TOOL = {
@@ -173,22 +171,7 @@ async function applyCapture($: EngineInterface, state: Chain, found: Artifact[],
   if (written !== null) await saveRecord($, state, written)
 }
 
-export type Chain = { chain: Promise<void>; isTurnRunning: boolean; isStoreUnverified: boolean; idle?: Timer }
-
-async function idleTick($: EngineInterface, state: Chain): Promise<void> {
-  try {
-    const rec = await read($, record)
-    if (rec === null || state.isTurnRunning) return
-    const isIdle = (await $.clock.now()) - rec.lastActive >= LIMITS.idleMs
-    if (isIdle && (await read($, band)) !== 'return') await update($, band, () => 'return')
-  } catch (err) {
-    try {
-      $.ui.log(`session-compass: idle tick failed: ${String(err).slice(0, 120)}`)
-    } catch {
-      // a throwing log must not become an unhandled rejection
-    }
-  }
-}
+export type Chain = { chain: Promise<void>; isTurnRunning: boolean; isStoreUnverified: boolean }
 
 async function touchRecord($: EngineInterface, state: Chain, change: (r: SessionRecord, now: number) => SessionRecord) {
   await queue(state, 'touch', async () => {
@@ -245,9 +228,6 @@ export const register: Register = on => {
       await update($, record, () => started)
       if (!state.isStoreUnverified) await saveRecord($, state, started)
     }, $).catch(() => undefined)
-    if ((await $.session.turns()) > 0) await update($, band, () => 'return')
-    state.idle?.cancel()
-    state.idle = $.clock.every(IDLE_TICK_MS, () => idleTick($, state))
     return next(e)
   }).catch(($, e, next) => {
     try {
@@ -269,7 +249,6 @@ export const register: Register = on => {
     // or a peer/notification/plugin prompt changes nothing.
     const isPerson = e.origin === undefined || e.origin.kind === 'composer' || e.origin.kind === 'bridge'
     if (ran.drop === undefined && e.turnId === undefined && isPerson) {
-      await update($, band, () => 'hidden')
       await touchRecord($, state, (r, now) => touch(withFirstPrompt(r, e.text), now))
     }
     return ran
@@ -285,9 +264,9 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const shown = await read($, band)
+    // The compass line is always up; only a survey on screen takes its place.
     const rec = await read($, record)
-    if (e.props.hasSurvey || shown !== 'return' || rec === null) return next(e)
+    if (e.props.hasSurvey || rec === null) return next(e)
     const line = formatBand(rec, tally(await readTestBoard($)), e.props.bodyColumns)
     return bandView($.ui.resolve(e), line, await next(e))
   })
