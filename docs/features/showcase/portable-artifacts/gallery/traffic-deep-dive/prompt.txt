@@ -1,0 +1,1 @@
+Build a "Web traffic deep dive" dashboard from data/web_traffic.csv: KPI tiles for total sessions, total signups and overall conversion; weekly sessions by channel as a stacked bar chart; each channel's share of sessions; conversion rate by channel over time as a multi-line chart; and the best and worst day by signups.

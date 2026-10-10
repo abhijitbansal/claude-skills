@@ -1,0 +1,78 @@
+{
+  "title": "Support operations",
+  "description": "Ticket volume, response and resolution times, and CSAT",
+  "maxRows": 5000,
+  "sources": {
+    "tickets": { "type": "csv", "path": "data/tickets.csv" }
+  },
+  "queries": {
+    "total": "SELECT COUNT(*) AS tickets FROM tickets",
+    "med_first_response": "SELECT MEDIAN(first_response_min) AS minutes FROM tickets",
+    "med_resolution": "SELECT MEDIAN(resolved_hours) AS hours FROM tickets",
+    "avg_csat": "SELECT AVG(csat) AS csat FROM tickets",
+    "weekly_by_priority": "SELECT date_trunc('week', created_at) AS week, priority, COUNT(*) AS tickets FROM tickets GROUP BY 1, 2 ORDER BY 1, 2",
+    "resolution_by_team": "SELECT team, MEDIAN(resolved_hours) AS median_hours FROM tickets GROUP BY 1 ORDER BY 2 DESC",
+    "csat_dist": "SELECT csat, COUNT(*) AS tickets FROM tickets WHERE csat IS NOT NULL GROUP BY 1 ORDER BY 1",
+    "response_by_channel": "SELECT channel, MEDIAN(first_response_min) AS median_minutes FROM tickets GROUP BY 1 ORDER BY 2 DESC"
+  },
+  "kpis": [
+    { "id": "k1", "title": "Total tickets", "query": "total", "field": "tickets", "format": "number" },
+    { "id": "k2", "title": "Median first response (min)", "query": "med_first_response", "field": "minutes", "format": "number" },
+    { "id": "k3", "title": "Median resolution (hours)", "query": "med_resolution", "field": "hours", "format": "number" },
+    { "id": "k4", "title": "Average CSAT", "query": "avg_csat", "field": "csat", "format": "number" }
+  ],
+  "charts": [
+    {
+      "id": "c1",
+      "title": "Weekly ticket volume by priority",
+      "query": "weekly_by_priority",
+      "vegaLite": {
+        "mark": "area",
+        "encoding": {
+          "x": { "field": "week", "type": "temporal", "timeUnit": "utcyearmonthdate", "title": null },
+          "y": { "field": "tickets", "type": "quantitative", "stack": "zero", "title": "Tickets" },
+          "color": { "field": "priority", "type": "nominal", "title": "Priority" }
+        }
+      }
+    },
+    {
+      "id": "c2",
+      "title": "Median resolution hours by team",
+      "query": "resolution_by_team",
+      "width": "half",
+      "vegaLite": {
+        "mark": "bar",
+        "encoding": {
+          "x": { "field": "team", "type": "nominal", "sort": null, "title": null },
+          "y": { "field": "median_hours", "type": "quantitative", "title": "Median hours" }
+        }
+      }
+    },
+    {
+      "id": "c3",
+      "title": "CSAT distribution",
+      "query": "csat_dist",
+      "width": "half",
+      "vegaLite": {
+        "mark": "bar",
+        "encoding": {
+          "x": { "field": "csat", "type": "ordinal", "title": "CSAT score" },
+          "y": { "field": "tickets", "type": "quantitative", "title": "Tickets" }
+        }
+      }
+    },
+    {
+      "id": "c4",
+      "title": "Median first response by channel",
+      "query": "response_by_channel",
+      "width": "half",
+      "vegaLite": {
+        "mark": "bar",
+        "encoding": {
+          "x": { "field": "channel", "type": "nominal", "sort": null, "title": null },
+          "y": { "field": "median_minutes", "type": "quantitative", "title": "Median minutes" }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+Build a "Product performance" dashboard from data/sales.csv: KPI tiles for revenue, units and average order value; revenue by product and region as a grouped bar chart; units per product per quarter as a line chart; a heatmap of revenue by region (rows) and month (columns); and revenue share by product.
