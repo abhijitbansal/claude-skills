@@ -7,6 +7,22 @@
   var hasIO = 'IntersectionObserver' in window;
   var $ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
+  /* ── theme switch: auto (OS) → light → dark, remembered per browser ── */
+  var root = document.documentElement, THEME_KEY = 'theme', THEMES = ['auto', 'light', 'dark'];
+  function themeNow() { try { var t = localStorage.getItem(THEME_KEY); return (t === 'light' || t === 'dark') ? t : 'auto'; } catch (e) { return 'auto'; } }
+  function applyTheme(t) {
+    if (t === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', t);
+    $('[data-theme-toggle]').forEach(function (b) { b.textContent = 'theme: ' + t; b.setAttribute('aria-label', 'Theme: ' + t + '. Press to change.'); });
+  }
+  $('[data-theme-toggle]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var t = THEMES[(THEMES.indexOf(themeNow()) + 1) % THEMES.length];
+      try { if (t === 'auto') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, t); } catch (e) {}
+      applyTheme(t);
+    });
+  });
+  applyTheme(themeNow());
+
   /* ── reveal on scroll ── */
   var revealEls = $('.reveal');
   if (reduce || !hasIO) {
