@@ -169,6 +169,8 @@ coverage numbers.
 
 ## Risks to verify early in the plan
 
+Tracked with probe method, fallback and status in the [decision log](./2026-10-10-session-mods-decisions.md#5-mod-api-unverified).
+
 1. **Stacking under `next(e)`:** confirm an `AbovePrompt` hook can render its own tree
    above the tree `next(e)` returns. If not, fall back to drawing only when no other band
    is showing, and say so in the README.

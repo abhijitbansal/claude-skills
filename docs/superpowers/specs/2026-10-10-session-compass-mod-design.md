@@ -172,6 +172,8 @@ cleanup or deletion of other sessions' artifacts, and notifications.
 
 ## Risks to verify early in the plan
 
+Tracked with probe method, fallback and status in the [decision log](./2026-10-10-session-mods-decisions.md#5-mod-api-unverified).
+
 1. **Cross-session reads:** confirm `$.store` is shared across sessions of the same plugin
    (the doc says values persist "across sessions"). Confirm concurrent sessions writing
    different keys don't clobber each other, and that `index` updates survive races
