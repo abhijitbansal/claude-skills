@@ -50,3 +50,16 @@ copied to `results/summary-*.md`.
 
 `node --test "test/**/*.test.mjs"` uses a fake skill and fake host, so it
 needs no LLM.
+
+## Caveats
+
+- **Not a sandbox.** Hosts may run `node` (and `npm` for the `claude` host),
+  so a run can execute arbitrary code as you. Codex runs in its
+  `workspace-write` sandbox. Run evals on a machine and account you trust the
+  host with.
+- **Shared `node_modules`.** Each workdir symlinks `node_modules` back to the
+  skill in this checkout, so a host that runs `npm install <pkg>` changes the
+  real dependencies. Run `npm ci` in the skill afterwards if that happens.
+- On timeout the harness kills the host's whole process group (renders and
+  servers included). Workdirs are deleted once their artifacts have been
+  copied to `results/`.

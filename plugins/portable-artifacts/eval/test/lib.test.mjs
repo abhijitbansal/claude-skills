@@ -1,11 +1,13 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { buildPrompt, expandCmd, diffPaths, countValidateRuns, scoreRun, summarize, run } from '../lib.mjs';
 
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pa-eval-test-'));
+const made = [];
+const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-eval-test-')); made.push(d); return d; };
+after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 
 // A fake skill: validate passes iff the spec has "ok": true; output writes a file.
 function fakeSkill() {
@@ -45,6 +47,27 @@ test('expandCmd substitutes placeholders and appends model args only when given'
   const host = { cmd: ['h', '-C', '{cwd}', '{prompt}'], modelArgs: ['-m', '{model}'] };
   assert.deepEqual(expandCmd(host, { prompt: 'hi there', cwd: '/w' }), ['h', '-C', '/w', 'hi there']);
   assert.deepEqual(expandCmd(host, { prompt: 'p', cwd: '/w', model: 'gemma4' }), ['h', '-C', '/w', 'p', '-m', 'gemma4']);
+});
+
+test('expandCmd substitutes in one pass: placeholders and $-patterns inside the prompt survive', () => {
+  const host = { cmd: ['h', '-C', '{cwd}', '{prompt}'], modelArgs: ['-m', '{model}'] };
+  const prompt = 'write {cwd} and {model} literally, cost $& and $$';
+  assert.deepEqual(expandCmd(host, { prompt, cwd: '/w', model: 'm' }), ['h', '-C', '/w', prompt, '-m', 'm']);
+});
+
+test('buildPrompt tells hosts not to start long-running servers', () => {
+  assert.match(buildPrompt(cfg, 'x'), /do not start serve\.mjs or preview\.mjs/i);
+});
+
+test('run kills the whole process group on timeout (no orphaned grandchildren)', async () => {
+  const d = tmp();
+  const pidFile = path.join(d, 'gc.pid');
+  const script = `const c=require('child_process').spawn(process.execPath,['-e','setTimeout(()=>{},60000)'],{stdio:'ignore'});require('fs').writeFileSync(${JSON.stringify(pidFile)},String(c.pid));setTimeout(()=>{},60000);`;
+  const r = await run(['node', '-e', script], { timeoutMs: 500 });
+  assert.equal(r.timedOut, true);
+  const gc = Number(fs.readFileSync(pidFile, 'utf8'));
+  await new Promise((res) => setTimeout(res, 300));
+  assert.throws(() => process.kill(gc, 0), /ESRCH/);
 });
 
 test('diffPaths lists only changed leaves', () => {

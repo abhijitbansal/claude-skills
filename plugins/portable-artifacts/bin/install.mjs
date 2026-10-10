@@ -53,6 +53,9 @@ function geminiCommand(skill, description) {
 function installSkill(skill, dstRoot, { link, force, deps }) {
   const src = path.join(SKILLS_SRC, skill);
   const dst = path.join(dstRoot, skill);
+  if (fs.existsSync(dst) && fs.realpathSync(dst) === fs.realpathSync(src)) {
+    throw new Error(`${dst} is the source skill itself (the host dir points into this checkout); refusing to replace it`);
+  }
   if (fs.existsSync(dst) || isSymlink(dst)) {
     if (!force) throw new Error(`${dst} already exists; pass --force to replace it`);
     fs.rmSync(dst, { recursive: true, force: true });
@@ -67,8 +70,13 @@ function installSkill(skill, dstRoot, { link, force, deps }) {
     });
   }
   if (deps) {
-    const r = spawnSync('npm', ['ci', '--no-audit', '--no-fund'], { cwd: link ? src : dst, stdio: 'inherit' });
-    if (r.status !== 0) throw new Error(`npm ci failed in ${link ? src : dst}`);
+    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const where = link ? src : dst;
+    const r = spawnSync(npm, ['ci', '--no-audit', '--no-fund'], { cwd: where, stdio: 'inherit' });
+    if (r.status !== 0) {
+      fs.rmSync(dst, { recursive: true, force: true }); // a link is removed, never its target
+      throw new Error(`npm ci failed in ${where}${r.error ? ` (${r.error.message})` : ''}; removed the partial install at ${dst}`);
+    }
   }
   return dst;
 }
@@ -97,7 +105,8 @@ function parse(argv) {
   const [host] = parsed.positionals;
   if (!HOSTS[host]) throw new UsageError(`unknown host "${host ?? ''}"; use one of: ${Object.keys(HOSTS).join(', ')}`);
   const all = fs.readdirSync(SKILLS_SRC).filter((d) => fs.existsSync(path.join(SKILLS_SRC, d, 'SKILL.md')));
-  const skills = parsed.values.skills ? parsed.values.skills.split(',') : all;
+  if (parsed.values.project === '') throw new UsageError('--project needs a directory');
+  const skills = parsed.values.skills ? [...new Set(parsed.values.skills.split(','))] : all;
   const unknown = skills.filter((s) => !all.includes(s));
   if (unknown.length) throw new UsageError(`unknown skill(s): ${unknown.join(', ')}; available: ${all.join(', ')}`);
   return { ...parsed.values, host, skills };

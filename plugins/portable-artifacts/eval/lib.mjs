@@ -26,14 +26,18 @@ export function buildPrompt(skillCfg, task) {
     `Read skills/${skillCfg.dir}/SKILL.md and follow its workflow exactly.`,
     `The skill's scripts are in skills/${skillCfg.dir}/scripts/ and its dependencies are already installed.`,
     'Work only inside the current directory.',
+    'Do not start serve.mjs or preview.mjs (they never exit); stop after validate and build/render.',
     `Task: ${task}`,
     `Save the spec as ./${skillCfg.spec}.`,
   ].join(' ');
 }
 
 // Substitute {prompt} {cwd} {model} in a host command template.
+// One pass, function replacer: text inside the prompt is never re-substituted
+// and `$&`-style patterns stay literal.
 export function expandCmd(host, { prompt, cwd, model }) {
-  const sub = (s) => s.replaceAll('{prompt}', prompt).replaceAll('{cwd}', cwd).replaceAll('{model}', model ?? '');
+  const values = { prompt, cwd, model: model ?? '' };
+  const sub = (s) => s.replace(/\{(prompt|cwd|model)\}/g, (_, k) => values[k]);
   const argv = host.cmd.map(sub);
   if (model && host.modelArgs) argv.push(...host.modelArgs.map(sub));
   return argv;
@@ -42,22 +46,30 @@ export function expandCmd(host, { prompt, cwd, model }) {
 export function run(argv, { cwd, env, timeoutMs = 0, logFile } = {}) {
   return new Promise((resolve) => {
     const started = Date.now();
+    // detached = own process group, so a timeout also kills grandchildren
+    // (renders, servers) the host started.
     const child = spawn(argv[0], argv.slice(1), {
-      cwd, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
     });
     let out = '';
     const onData = (d) => { out += d; };
     child.stdout.on('data', onData);
     child.stderr.on('data', onData);
     let timedOut = false;
-    const timer = timeoutMs > 0 ? setTimeout(() => { timedOut = true; child.kill('SIGTERM'); }, timeoutMs) : null;
+    const killGroup = () => {
+      try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
+    };
+    const timer = timeoutMs > 0 ? setTimeout(() => { timedOut = true; killGroup(); }, timeoutMs) : null;
     const finish = (code) => {
       if (timer) clearTimeout(timer);
       if (logFile) fs.writeFileSync(logFile, out);
       resolve({ code, out, timedOut, seconds: (Date.now() - started) / 1000 });
     };
     child.on('error', (e) => { out += `\n[spawn error] ${e.message}`; finish(127); });
-    child.on('close', (code) => finish(code ?? 1));
+    child.on('close', (code) => {
+      try { process.kill(-child.pid, 'SIGKILL'); } catch { /* group already gone */ }
+      finish(code ?? 1);
+    });
   });
 }
 

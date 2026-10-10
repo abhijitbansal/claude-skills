@@ -46,8 +46,20 @@ if (!fs.existsSync(path.join(skillSrc, 'node_modules'))) {
 }
 
 let prompts = JSON.parse(fs.readFileSync(path.join(here, 'prompts', `${opts.skill}.json`), 'utf8'));
-if (opts.only) prompts = prompts.filter((p) => opts.only.split(',').includes(p.id));
-if (opts.limit) prompts = prompts.slice(0, Number(opts.limit));
+if (opts.only) {
+  const ids = opts.only.split(',');
+  const unknown = ids.filter((id) => !prompts.some((p) => p.id === id));
+  if (unknown.length) usage(`unknown --only id(s): ${unknown.join(', ')}; available: ${prompts.map((p) => p.id).join(', ')}`);
+  prompts = prompts.filter((p) => ids.includes(p.id));
+}
+if (opts.limit !== undefined) {
+  const n = Number(opts.limit);
+  if (!Number.isInteger(n) || n < 1) usage(`--limit must be a positive integer, got "${opts.limit}"`);
+  prompts = prompts.slice(0, n);
+}
+for (const k of ['timeout']) {
+  if (!(Number(opts[k]) > 0)) usage(`--${k} must be a positive number of seconds, got "${opts[k]}"`);
+}
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const resultsDir = path.resolve(opts.out ?? path.join(here, 'results', stamp), `${opts.host}-${opts.skill}`);
@@ -94,6 +106,7 @@ for (const p of prompts) {
     const src = path.join(work, f);
     if (fs.existsSync(src)) fs.cpSync(src, path.join(caseDir, path.basename(f)), { recursive: true });
   }
+  fs.rmSync(work, { recursive: true, force: true }); // artifacts already copied; rmSync does not follow the node_modules symlink
   process.stdout.write(`  spec ${row.specExists ? '✓' : '✗'}  valid ${row.finalValid ? '✓' : '✗'}  runs ${row.validateRuns}  output ${row.outputOk ? '✓' : '✗'}  ${row.seconds.toFixed(0)}s\n`);
 }
 

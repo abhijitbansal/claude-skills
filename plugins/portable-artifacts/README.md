@@ -12,8 +12,8 @@ an account or a particular model:
 | [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. "Slow scene 2" changes one field, not the whole video. |
 
 <p>
-  <img src="docs/img/dashboard-light.jpg" alt="A make-dashboard page: four KPI tiles and four charts, each with a Query disclosure" width="49%">
-  <img src="docs/img/motion-q3-revenue.gif" alt="A make-motion render: a +18% counter, then animated revenue bars" width="49%">
+  <img src="../../docs/features/img/portable-artifacts/dashboard-light.jpg" alt="A make-dashboard page: four KPI tiles and four charts, each with a Query disclosure" width="49%">
+  <img src="../../docs/features/img/portable-artifacts/motion-q3-revenue.gif" alt="A make-motion render: a +18% counter, then animated revenue bars" width="49%">
 </p>
 
 ## How it works

@@ -6,8 +6,8 @@ images), rendered locally from open-source parts by any agent that can run
 shell commands.
 
 <p>
-  <img src="../../docs/img/motion-q3-revenue.gif" alt="A counter animates to +18%, then three revenue bars grow" width="49%">
-  <img src="../../docs/img/motion-how-it-works.gif" alt="Three step cards appear while connecting lines draw in" width="49%">
+  <img src="../../../../docs/features/img/portable-artifacts/motion-q3-revenue.gif" alt="A counter animates to +18%, then three revenue bars grow" width="49%">
+  <img src="../../../../docs/features/img/portable-artifacts/motion-how-it-works.gif" alt="Three step cards appear while connecting lines draw in" width="49%">
 </p>
 
 - **One spec, `motion.json`**: scenes → elements → keyframes. The agent

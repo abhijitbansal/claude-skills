@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -9,7 +9,9 @@ import { targetsFor, HOSTS } from '../install.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const installer = path.resolve(here, '../install.mjs');
-const tmp = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pa-install-')));
+const made = [];
+const tmp = () => { const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pa-install-'))); made.push(d); return d; };
+after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 
 function runInstall(args, home) {
   return spawnSync(process.execPath, [installer, ...args, '--no-deps'], {
@@ -90,6 +92,56 @@ test('--link symlinks instead of copying', () => {
   const r = runInstall(['agents', '--link'], home);
   assert.equal(r.status, 0, r.stderr);
   assert.ok(fs.lstatSync(path.join(home, '.agents/skills/make-motion')).isSymbolicLink());
+});
+
+test('empty --project is a usage error, not a silent user-scope install', () => {
+  const home = tmp();
+  const r = runInstall(['claude', '--project='], home);
+  assert.equal(r.status, 2);
+  assert.equal(fs.existsSync(path.join(home, '.claude/skills')), false);
+});
+
+test('duplicate --skills entries install once', () => {
+  const home = tmp();
+  const r = runInstall(['claude', '--skills', 'make-motion,make-motion'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal((r.stdout.match(/installed make-motion/g) || []).length, 1);
+});
+
+// Sandbox: a copy of install.mjs next to a fake skills/ tree, so a regression
+// here can only ever delete throwaway files, never the real skills.
+function sandbox() {
+  const root = tmp();
+  fs.mkdirSync(path.join(root, 'bin'));
+  fs.copyFileSync(installer, path.join(root, 'bin/install.mjs'));
+  fs.mkdirSync(path.join(root, 'skills/make-motion'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'skills/make-motion/SKILL.md'), '---\nname: make-motion\ndescription: fake\n---\n');
+  return root;
+}
+
+test('--force refuses when the target resolves to the source skill (never deletes the source)', () => {
+  const home = tmp();
+  const root = sandbox();
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  fs.symlinkSync(path.join(root, 'skills'), path.join(home, '.claude/skills'), 'dir');
+  const r = spawnSync(process.execPath, [path.join(root, 'bin/install.mjs'), 'claude', '--force', '--no-deps'], {
+    encoding: 'utf8', env: { ...process.env, HOME: home },
+  });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /is the source skill itself/);
+  assert.ok(fs.existsSync(path.join(root, 'skills/make-motion/SKILL.md')));
+});
+
+test('a failed npm ci removes the half-installed copy and says so', () => {
+  const home = tmp();
+  const bin = tmp();
+  fs.writeFileSync(path.join(bin, 'npm'), '#!/bin/sh\necho boom >&2\nexit 1\n', { mode: 0o755 });
+  const r = spawnSync(process.execPath, [installer, 'claude', '--skills', 'make-motion'], {
+    encoding: 'utf8', env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
+  });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /npm ci failed.*removed/);
+  assert.equal(fs.existsSync(path.join(home, '.claude/skills/make-motion')), false);
 });
 
 test('usage errors exit 2', () => {
