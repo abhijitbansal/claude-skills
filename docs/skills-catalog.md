@@ -2,7 +2,7 @@
 
 > Visual version: [searchable catalog](catalog.html) (open in a browser)
 
-Five plugins, one CLI, one adapter script. Install only what you need:
+Seven plugins, one CLI, one adapter script. Install only what you need:
 
 ```
 /plugin marketplace add abhijitbansal/claude-skills
@@ -154,6 +154,14 @@ Sharpen the ask before the work, surface the right next step after it. Zero conf
 | `block_secrets` | hook (PreToolUse, opt-in) | Blocks reads/edits of secret-looking files. Enable via `PROMPT_CRAFT_BLOCK_SECRETS=1`. |
 | `format_on_edit` | hook (PostToolUse, opt-in) | Formats edited files with the installed formatter. Enable via `PROMPT_CRAFT_FORMAT_ON_EDIT=1`. |
 | `structured-output-adaptive-thinking-token-bloat` | skill (mined) | `json_schema`-constrained Claude API calls waste ~5x tokens on adaptive thinking that doesn't improve output quality — omit the `thinking` parameter for schema-constrained calls. |
+
+## test-board (plugin)
+
+Test results band: passed/failed/skipped after every test run, next to the previous run of the same suite in the same worktree.
+
+## session-compass (plugin)
+
+Session compass: what each session is building, where it stands and what it produced, as a return band, a /compass pane and a compass_status tool.
 
 ## adapters (multi-tool)
 

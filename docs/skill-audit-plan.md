@@ -3,7 +3,7 @@
 **Status:** executed on branch `feat/skill-audit-exec` (reference delegation +
 swift6 merge, commit `f8d2414`). Counts below reflect the tree at planning time
 (49 skills / ios-dev 35); post-merge the repo has 48 / 34.
-**Scope:** all 49 skills across 5 plugins; primary target `ios-dev` (35 skills).
+**Scope:** all 49 skills across 7 plugins; primary target `ios-dev` (35 skills).
 **Goal (as set):** make skills more deterministic and likelier to trigger, and
 cut context load — especially in `ios-dev` — by combining where sensible and
 using reference delegation with code samples.

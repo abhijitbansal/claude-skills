@@ -33,6 +33,16 @@
       "name": "prompt-craft",
       "source": "./plugins/prompt-craft",
       "description": "Turn rough prompts into deterministic specs and surface the right next step: /improve-prompt, /plan, debug/refactor/review lenses, a follow-up-suggesting Stop hook, and opt-in secret/format guardrails"
+    },
+    {
+      "name": "test-board",
+      "source": "./plugins/test-board",
+      "description": "Test results band: passed/failed/skipped after every test run, next to the previous run of the same suite in the same worktree"
+    },
+    {
+      "name": "session-compass",
+      "source": "./plugins/session-compass",
+      "description": "Session compass: what each session is building, where it stands and what it produced, as a return band, a /compass pane and a compass_status tool"
     }
   ]
 }

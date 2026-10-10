@@ -35,7 +35,7 @@ flowchart TD
   IOS & LIN & CW & SW & PC -->|skills/| AD
 ```
 
-## The five plugins
+## The seven plugins
 
 | Plugin | One-liner | Contents |
 | --- | --- | --- |

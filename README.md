@@ -19,6 +19,8 @@ auto-resume** orchestrator that keeps overnight runs alive (`second-wind`),
 | `core-workflow` | commit flow, skill contribution, image-parser + web-researcher agents, shellcheck-on-edit hook |
 | `second-wind` | usage-limit-aware overnight orchestrator (`wind` CLI + skill wrapper) |
 | `prompt-craft` | rough ask → deterministic spec (`/improve-prompt`, `/plan`), debug/refactor/review lenses, git-aware Stop hook + opt-in secret/format guardrails |
+| `test-board` | band above the prompt: passed/failed/skipped after every test run, next to the previous run of the same suite in the same worktree |
+| `session-compass` | what each session is building, where it stands and what it produced: return band, `/compass` pane, `compass_status` tool |
 
 **Feature guides:** [Second Wind](docs/features/second-wind.html) ·
 [prompt-craft](docs/features/prompt-craft.html) ·
@@ -43,6 +45,8 @@ Inside any Claude Code session:
 /plugin install second-wind@claude-skills
 /plugin install core-workflow@claude-skills
 /plugin install prompt-craft@claude-skills
+/plugin install test-board@claude-skills
+/plugin install session-compass@claude-skills
 ```
 
 Install only what you need — each plugin is self-contained. Skills, slash commands,
@@ -139,7 +143,7 @@ users can ignore them entirely; plugins never touch them.
 | Path | What |
 | --- | --- |
 | `.claude-plugin/` | marketplace manifest |
-| `plugins/` | the five plugins (skills, commands, agents, hooks) |
+| `plugins/` | the seven plugins (skills, commands, agents, hooks) |
 | `tools/` | standalone CLIs (second-wind) |
 | `adapters/` | wire skills into non-Claude tools |
 | `setup/`, `templates/`, `claude-setup.toml` | personal machine seed |
