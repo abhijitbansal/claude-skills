@@ -6,7 +6,7 @@ type Counts = Omit<ParsedRun, 'exitCode' | 'parsed'>
 type Reader = (text: string) => Counts | null
 
 // Anchored to the start of a command segment (optionally behind a runner prefix), so `cat pytest.log` is not a test run.
-const RUNNER_PREFIX = '(?:(?:python3?\\s+-m|npx|bunx|uv\\s+run|poetry\\s+run|pnpm\\s+exec|pnpm\\s+dlx|yarn)\\s+)*'
+const RUNNER_PREFIX = '(?:(?:python3?\\s+-m|npx|bunx|uv\\s+run|uv\\s+tool\\s+run|uvx|poetry\\s+run|pnpm\\s+exec|pnpm\\s+dlx|yarn)\\s+)*'
 const TEST_COMMAND = new RegExp(
   `(?:^|[;&|]\\s*)${RUNNER_PREFIX}(?:xcodebuild\\b(?:\\s+\\S+)*?\\s+test(?:-without-building)?(?=\\s|$|[;&|])|swift\\s+test\\b|pytest\\b|jest\\b|vitest\\b|bun\\s+test\\b|(?:npm|pnpm|yarn)\\s+(?:run\\s+)?test\\b|cargo\\s+test\\b|go\\s+test\\b|fastlane\\s+(?:scan|test)\\b)`,
 )

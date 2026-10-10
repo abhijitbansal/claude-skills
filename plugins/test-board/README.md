@@ -21,6 +21,11 @@ Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   ▲3 ✗   1m1
   (stale) until a new run replaces it.
 - The band stays hidden while a survey is on screen. Narrow terminals drop `via`,
   then `prev`, then the duration.
+- These commands count as test runs, alone or after a leading `cd`/env vars, behind
+  `npx`, `bunx`, `uv run`, `uv tool run`, `uvx`, `poetry run`, `python -m`, `pnpm exec`,
+  `pnpm dlx` or `yarn`: `xcodebuild … test` (or `test-without-building`), `swift test`,
+  `pytest`, `jest`, `vitest`, `bun test`, `npm|pnpm|yarn [run] test`, `cargo test`,
+  `go test`, `fastlane scan|test`. `cat pytest.log` is not one.
 - It reads cartoon's test summary first, then raw xcodebuild, swift test, pytest,
   jest/vitest and bun output.
 - A recognised test command whose output it cannot read shows `ran · exit N · counts unavailable`.

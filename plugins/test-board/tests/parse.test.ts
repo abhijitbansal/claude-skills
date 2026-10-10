@@ -97,4 +97,9 @@ describe('detection', () => {
     }
     expect(isTestCommand('xcodebuild build')).toBe(false)
   })
+  test('uv tool run and uvx runner prefixes', () => {
+    expect(isTestCommand('uv tool run pytest tests/pytest -q')).toBe(true)
+    expect(isTestCommand('uvx pytest -q')).toBe(true)
+    expect(isTestCommand('cat pytest.log')).toBe(false)
+  })
 })
