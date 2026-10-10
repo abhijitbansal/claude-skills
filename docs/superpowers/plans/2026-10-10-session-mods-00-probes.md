@@ -28,13 +28,14 @@
 
 ## Questions this phase answers
 
-U1–U12 are the decision log's. U13–U15 were added during planning, from the types:
+U1–U12 are the decision log's. U13–U16 were added during planning, from the types:
 
 | # | Question | Why it matters | Fallback if false |
 | --- | --- | --- | --- |
 | U13 | Does `$.session.cwd()` follow a Bash `cd` that persisted in the session? (`tool.call` carries no cwd.) | Test Board's `worktreeRoot` | Track cwd in the mod: apply each command's leading `cd <dir>` to a per-loop cwd, seeded from `$.session.root()` |
 | U14 | Can one mod `$.state.get` another mod's value with no `dependencies` entry, and does `claude plugin validate` accept it? | Compass reads `test-board.latest` | List `test-board` under Compass's `dependencies` (auto-installs it) |
 | U15 | Does a Bash `tool.call` result carry `result.gitOperation` (commit/push/pr) for `git commit`, `git push` and `gh pr create`? | Compass git capture | Parse stdout with regexes (the spec's original `git.ts`) |
+| U16 | Under `claude plugin test`, which engine calls (`session.*`, `process.run`, `tool.register`, `command.register`, `ui.open`, `store`, `clock`) does the kit answer by itself, and which throw unless a test hook answers? | Every plan 01/02 test that stubs the engine | None needed: the answer tells the plans what to stub |
 
 ---
 
@@ -49,6 +50,7 @@ U1–U12 are the decision log's. U13–U15 were added during planning, from the 
 - Create: `.scratch/session-mods-probe/probe-b/.claude-plugin/plugin.json`
 - Create: `.scratch/session-mods-probe/probe-b/hooks/hooks.json`
 - Create: `.scratch/session-mods-probe/probe-b/hooks/register.tsx`
+- Create: `.scratch/session-mods-probe/probe-a/tests/kit.test.ts`
 
 **Interfaces:**
 - Produces: store keys `probe:<U#>…` and the `/probe-report`, `/probe-race`, `/probe-copy` commands, used by Tasks 2–3.
@@ -266,6 +268,37 @@ The engine lays `.claude-plugin/types/` on first load, so type-checking waits fo
 Run: `npx -y -p typescript@5.6.3 tsc -p .scratch/session-mods-probe/probe-a` after temporarily adding the declaration file's absolute path to `include`.
 Expected: no errors. Fix the probe code until clean; do not change what it records.
 
+- [ ] **Step 6: U16 — what the test kit needs stubbed**
+
+Under `claude plugin test`, a call that no test hook answers reaches the kit's bottom hook, which throws. Plans 01 and 02 stub these calls from the types alone. This step records what the kit actually does with each call.
+
+`.scratch/session-mods-probe/probe-a/tests/kit.test.ts`:
+```ts
+import { test } from 'claude-code/testing'
+
+// Each test calls one engine noun with no stub. A pass means the kit answers it
+// by itself; a failure's message is the kit's own answer, which goes into §5.
+test('U16 session.cwd', async $ => { await $.session.cwd({}) })
+test('U16 session.id', async $ => { await $.session.id({}) })
+test('U16 session.turns', async $ => { await $.session.turns({}) })
+test('U16 session.repo', async $ => { await $.session.repo({}) })
+test('U16 process.run', async $ => { await $.process.run({ argv: ['git', 'status'] }) })
+test('U16 tool.register', async $ => {
+  await $.tool.register({ name: 'probe_tool', description: 'probe', isDeferred: false })
+})
+test('U16 command.register', async $ => {
+  await $.command.register({ name: 'probe-x', description: 'probe' })
+})
+test('U16 ui.open', async $ => { await $.ui.open({ id: 'probe', title: 'Probe' }) })
+test('U16 store.get', async $ => { await $.store.get({ key: 'x' }) })
+test('U16 clock.now', async $ => { await $.clock.now({}) })
+```
+
+A test's `$` raises events whole, so the argument shapes above follow `EngineCall<E>` (`Args<E>`). If `tsc` or the kit rejects one, fix the argument to what `Args<'<noun>.<verb>'>` declares; the result being recorded is what the kit answers.
+
+Run: `claude plugin test .scratch/session-mods-probe/probe-a`
+Expected: some tests fail. For each, copy the failure line into §5 row U16: the noun, and whether the kit answered or threw (with the message). Plans 01 and 02 stub exactly the nouns that threw, with answer shapes matching what the message names.
+
 ---
 
 ### Task 2: Single-session probes (U1, U2, U3, U4, U8, U9, U12, U13, U14, U15) **[person]**
@@ -348,7 +381,7 @@ Expected: `probe:U7.turnsAtStart` shows `turns` above 0 for that id.
 
 - [ ] **Step 1: Update §5**
 
-Rows U13–U15 are already in §5. Set each Status to `Confirmed (2026-10-10)`, `False → fallback applied`, or `Not run` with the reason, quoting the decisive report line.
+Rows U13–U16 are already in §5. Set each Status to `Confirmed (2026-10-10)`, `False → fallback applied`, or `Not run` with the reason, quoting the decisive report line.
 
 - [ ] **Step 2: Apply each fallback to its spec**
 
@@ -362,6 +395,6 @@ For every `False` row, note which task of plan 01 or 02 it changes, in a short l
 
 ```bash
 git add docs/superpowers/specs/2026-10-10-session-mods-decisions.md docs/superpowers/specs/2026-10-10-test-board-mod-design.md docs/superpowers/specs/2026-10-10-session-compass-mod-design.md
-git commit -m "docs: session mods probe results (U1-U15)"
+git commit -m "docs: session mods probe results (U1-U16)"
 git push origin HEAD:feat/session-mods
 ```

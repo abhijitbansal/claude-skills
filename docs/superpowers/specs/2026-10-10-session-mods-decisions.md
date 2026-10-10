@@ -135,8 +135,9 @@ before any feature code. Status is updated here as probes run.
 | U13 | Does `$.session.cwd()` follow a Bash `cd` that persisted in the session? `tool.call` carries no cwd. | Test Board `worktreeRoot` | Probe logs `cwd()` after `cd /tmp && echo hi`, then after a bare `pwd` | Track cwd in the mod: apply each command's leading `cd <dir>` to a per-loop cwd seeded from `$.session.root()` | Open |
 | U14 | Can one mod `$.state.get` another mod's value with no `dependencies` entry, and does `claude plugin validate` accept it? | Compass reads `test-board.latest` | probe-b reads probe-a's value in its band; run validate on probe-b | List `test-board` under Compass's `dependencies` | Open |
 | U15 | Does a Bash result carry `result.gitOperation` for commit, push and PR? The types say it does. | Compass git capture | Probe logs `gitOperation` after an unpushed empty commit | Parse stdout with regexes (the spec's original `git.ts`) | Open |
+| U16 | Under `claude plugin test`, which engine calls does the kit answer by itself, and which throw unless a test hook answers? | Every plan 01/02 test that stubs the engine | `tests/kit.test.ts` in probe-a calls each noun with no stub; `claude plugin test` reports which threw | None: the answer sets what the plans stub | Open |
 
-U13 to U15 were added while writing the plans, from the 2.1.296 types. The probes run
+U13 to U16 were added while writing the plans, from the 2.1.296 types. The probes run
 as [plan 00](../plans/2026-10-10-session-mods-00-probes.md).
 
 ## 5a. Plan-time deviations from the specs
