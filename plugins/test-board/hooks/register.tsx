@@ -32,6 +32,7 @@ function exitCodeOf(ran: Ran): number {
 
 type Roots = Map<string, string>
 type Loops = Map<string, Loop>
+type State = { loops: Loops; roots: Roots; turn: { isNew: boolean }; chain: Promise<void> }
 
 async function worktreeRoot($: EngineInterface, roots: Roots, cwd: string): Promise<string> {
   const cached = roots.get(cwd)
@@ -54,6 +55,14 @@ async function writeRuns($: EngineInterface, key: string, runs: TestRun[], index
 }
 
 async function saveRun($: EngineInterface, run: TestRun): Promise<void> {
+  try {
+    await trySaveRun($, run)
+  } catch (err) {
+    $.ui.log(`test-board: history not saved: ${String(err).slice(0, 120)}`)
+  }
+}
+
+async function trySaveRun($: EngineInterface, run: TestRun): Promise<void> {
   const runs = appendRun(asRuns(await $.store.get(`runs:${run.key}`)), run)
   const index = touchIndex(asKeys(await $.store.get('index')), run.key)
   const sizes = await Promise.all(index.map(async key => ({
@@ -74,7 +83,7 @@ async function saveRun($: EngineInterface, run: TestRun): Promise<void> {
 }
 
 async function record(
-  $: EngineInterface, state: { loops: Loops; roots: Roots; turn: { isNew: boolean } },
+  $: EngineInterface, state: State,
   call: { command: string; agentId: string | undefined; startCwd: string }, ran: Ran,
 ) {
   const text = outputOf(ran)
@@ -102,7 +111,7 @@ async function record(
 }
 
 export const register: Register = on => {
-  const state = { loops: new Map<string, Loop>(), roots: new Map<string, string>(), turn: { isNew: true } }
+  const state = { loops: new Map<string, Loop>(), roots: new Map<string, string>(), turn: { isNew: true }, chain: Promise.resolve() } as State
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     // The directory the command starts in: read it before the command can change it.
@@ -114,11 +123,13 @@ export const register: Register = on => {
     }
     const ran = await next(e)
     if (startCwd !== undefined) {
-      try {
-        await record($, state, { command: e.command, agentId: e.agentId, startCwd }, ran as Ran)
-      } catch (err) {
-        $.ui.log(`test-board: run not recorded: ${String(err).slice(0, 120)}`)
-      }
+      // Serial queue: record() calls never interleave, so store and latest updates cannot be lost.
+      state.chain = state.chain
+        .then(() => record($, state, { command: e.command, agentId: e.agentId, startCwd }, ran as Ran))
+        .catch((err: unknown) => {
+          $.ui.log(`test-board: run not recorded: ${String(err).slice(0, 120)}`)
+        })
+      await state.chain
     }
     return ran
   })

@@ -11,9 +11,12 @@ const LATEST = { plugin: 'test-board', key: 'latest' } as const
 type Proc = { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: boolean; isStderrTruncated: boolean }
 const proc = (stdout: string): Proc => ({ exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
 
-function store(on: On, seed: Record<string, unknown> = {}): Map<string, unknown> {
+function store(on: On, seed: Record<string, unknown> = {}, isReadFailing = false): Map<string, unknown> {
   const data = new Map<string, unknown>(Object.entries(seed))
-  on('store.get', (_$, e) => ({ value: data.get(e.key) }))
+  on('store.get', (_$, e) => {
+    if (isReadFailing) throw new Error('store unavailable')
+    return { value: data.get(e.key) }
+  })
   on('store.set', (_$, e) => {
     data.set(e.key, e.value)
     return { value: undefined }
@@ -26,8 +29,8 @@ function store(on: On, seed: Record<string, unknown> = {}): Map<string, unknown>
   return data
 }
 
-function world(on: On, getCwd: () => string = () => ROOT): { writes: Map<string, unknown>; seen: Map<string, unknown> } {
-  const writes = store(on)
+function world(on: On, getCwd: () => string = () => ROOT, isReadFailing = false): { writes: Map<string, unknown>; seen: Map<string, unknown> } {
+  const writes = store(on, {}, isReadFailing)
   const seen = watchState(on)
   mock.clock(on, { now: 1_000_000 })
   on('session.cwd', () => ({ value: getCwd() }))
@@ -157,6 +160,27 @@ describe('recording', () => {
     })
     await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
     expect(latest(seen)[0]?.key).toBe(`${ROOT}::pytest -q`)
+  })
+})
+
+describe('concurrency and failure', () => {
+  test('two concurrent runs both land in the index, in history, and in latest', async ($, on) => {
+    const { writes, seen } = world(on); bash(on, PYTEST_RAW); turns(on)
+    await $.prompt.submit({ text: 'go' } as never)
+    await Promise.all([
+      $.tool.call({ tool: 'Bash', command: 'pytest -q' }),
+      $.tool.call({ tool: 'Bash', command: 'swift test' }),
+    ])
+    const keys = [`${ROOT}::pytest -q`, `${ROOT}::swift test`]
+    expect([...(writes.get('index') as string[])].sort()).toEqual([...keys].sort())
+    for (const k of keys) expect(writes.get(`runs:${k}`)).toHaveLength(1)
+    expect(latest(seen).map(r => r.key).sort()).toEqual([...keys].sort())
+  })
+
+  test('a store read failure still updates latest', async ($, on) => {
+    const { seen } = world(on, () => ROOT, true); bash(on, PYTEST_RAW)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    expect(latest(seen)[0]).toMatchObject({ key: `${ROOT}::pytest -q`, failed: 1 })
   })
 })
 
