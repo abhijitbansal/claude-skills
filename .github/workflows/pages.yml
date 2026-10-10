@@ -43,6 +43,7 @@ jobs:
           cp docs/*.html _site/ 2>/dev/null || true
           cp docs/features/*.html _site/features/ 2>/dev/null || true
           cp -r docs/features/img _site/features/img 2>/dev/null || true
+          cp -r docs/features/showcase _site/features/showcase 2>/dev/null || true
           cp docs/second-wind/index.html _site/second-wind/index.html 2>/dev/null || true
           # local link forms -> flat deployed forms (applied to every page):
           #   ../docs/<path>              -> <path>                  (landing into docs/)
