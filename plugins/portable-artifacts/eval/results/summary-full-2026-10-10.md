@@ -1,6 +1,6 @@
 # Cross-host eval — full prompt sets, 2026-10-10
 
-The full 10-prompt set for each skill, run with `run-eval.mjs` on every target host that could authenticate on the dev machine: Claude Code 2.1.296 (Sonnet), Codex CLI 0.145.0 (default model), GitHub Copilot CLI 1.0.95 (via `npx @github/copilot`, default model), and a local model through Ollama (`codex exec --oss`, gemma4). Gemini CLI has no auth method configured here (needs a Google login or `GEMINI_API_KEY`), so it was not run.
+The full 10-prompt set for each skill, run with `run-eval.mjs` on every target host that could authenticate on the dev machine: Claude Code 2.1.296 (Sonnet), Codex CLI 0.145.0 (default model), GitHub Copilot CLI 1.0.95 (via `npx @github/copilot`, default model), and a local model through Ollama (`codex exec --oss`, gemma4). Gemini CLI has no auth method configured here (needs a Google login or `GEMINI_API_KEY`); the owner chose to skip it for this release and track it as a follow-up (the harness already has a `gemini` host entry).
 
 | Host (model) | Skill | Spec written | Final validate | Build / contact sheet | Median validate runs (valid cases) |
 |---|---|---|---|---|---|
