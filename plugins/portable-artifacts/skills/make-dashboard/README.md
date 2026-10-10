@@ -4,7 +4,7 @@
 its SQL and when it was refreshed.** Local, offline, open source, and usable
 by any agent that can run shell commands.
 
-<img src="../../docs/img/dashboard-light.jpg" alt="Dashboard with KPI tiles, bar, line and stacked charts; each card has a Query disclosure" width="100%">
+<img src="../../../../docs/features/img/portable-artifacts/dashboard-light.jpg" alt="Dashboard with KPI tiles, bar, line and stacked charts; each card has a Query disclosure" width="100%">
 
 - **One spec, `dashboard.json`**: data sources, named SQL queries, KPI tiles and
   Vega-Lite charts. The agent writes it; scripts do the rest.
@@ -98,17 +98,30 @@ sources, the connection-string variable must be set in that environment.
 
 The agent writes the SQL, so it is treated as untrusted:
 
-- Every query must parse with DuckDB's own parser as a single read-only
-  statement. Functions that read files outside DuckDB's file controls
-  (`sqlite_*`, `postgres_*`, `mysql_*`) are rejected.
+- Every query must parse with DuckDB's own parser as a single SELECT, and then
+  an **allowlist** runs over its syntax tree. It may read only the declared
+  sources (`name`, `source.table`, `source.schema.table`) and CTEs defined in
+  the same query. The only table functions allowed are `range`,
+  `generate_series` and `unnest`, so `query()`, `read_*`, `glob`, `duckdb_*()`,
+  `sqlite_*`/`postgres_*`/`mysql_*` and `pragma_*` are all rejected. System
+  catalogs (`pg_catalog`, `information_schema`) and functions that read
+  settings or the environment (`current_setting`, `getenv`) are rejected too.
+  Scalar and aggregate functions are otherwise open (a denylist), because they
+  cannot read files.
 - Queries run on a connection locked to the exact declared files
   (`allowed_paths`, external access off, configuration locked). Each one is
   wrapped in a row limit and stopped after a timeout.
+- An attached DuckDB file that defines views or macros is refused: they would
+  run outside the allowlist. Export plain tables instead.
 - Sources must resolve to regular files inside the spec's folder.
   `--allow-outside` is a flag only the person running the command can add.
   The spec can't add it.
-- Database sources attach `READ_ONLY`. Connection strings are read from
-  environment variables and scrubbed from every error message.
+- Database sources attach `READ_ONLY`, which limits DuckDB only. For Postgres
+  and MySQL, **use a read-only database role**: that is the real guard, because
+  statements are passed through to the server. Connection strings are read from
+  environment variables and scrubbed from error messages. Result cells are
+  scrubbed for them too, but that is defence in depth only: the guard above is
+  the control that keeps secrets out of result rows.
 - Charts can't load anything: `url`, `data` and `usermeta` are rejected
   anywhere in `vegaLite`. The page runs under a CSP without `unsafe-eval`
   (Vega's AST interpreter is used) and with chart actions disabled.

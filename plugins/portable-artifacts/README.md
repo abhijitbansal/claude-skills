@@ -100,12 +100,17 @@ Each skill folder also has its own README.
 ## Security model
 
 - **Dashboards run model-written SQL.** Each query must parse (DuckDB's own
-  parser) as a single read-only statement, runs wrapped in a row limit and a
-  timeout, against a DuckDB connection locked to the exact declared files
-  (`allowed_paths`, external access off, configuration locked). Sources must
-  live under the spec's folder unless you pass `--allow-outside`.
-  Database sources attach `READ_ONLY`; credentials come only from environment
-  variables and never appear in the spec, errors or the page.
+  parser) as a single SELECT, and an allowlist over its syntax tree lets it read
+  only the declared sources and its own CTEs (table functions: `range`,
+  `generate_series`, `unnest`; no `query()`, `read_*`, `duckdb_*`, system
+  catalogs or `sqlite_*`/`postgres_*`/`mysql_*` bridges). It runs wrapped in a
+  row limit and a timeout, against a DuckDB connection locked to the exact
+  declared files (`allowed_paths`, external access off, configuration locked).
+  Sources must live under the spec's folder unless you pass `--allow-outside`.
+  Attached DuckDB files with views or macros are refused. For Postgres and
+  MySQL, `READ_ONLY` only limits DuckDB: **use a read-only database role**.
+  Credentials come only from environment variables and are scrubbed from
+  errors and result cells (defence in depth: the SQL allowlist is the control).
 - **Built pages embed the query results.** Publishing `index.html` publishes
   the data.
 - **No network from specs.** Chart `url`/`data`/`usermeta` keys are rejected at

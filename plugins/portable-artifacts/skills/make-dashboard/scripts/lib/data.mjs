@@ -92,6 +92,13 @@ function parseNested(text) {
       : value));
 }
 
+function scrubValue(value, scrub) {
+  if (typeof value === 'string') return scrub(value);
+  if (Array.isArray(value)) return value.map((v) => scrubValue(v, scrub));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [scrub(k), scrubValue(v, scrub)]));
+  return value;
+}
+
 const CONVERT = {
   timestamp: (v) => timestampToJson(v),
   decimal: (v) => decimalToJson(v),
@@ -99,7 +106,9 @@ const CONVERT = {
 };
 
 // Run one query (already validated as a SELECT). -> { rows, columns, types, truncated }
-export async function fetchQuery(conn, sql, maxRows, timeoutMs = DEFAULT_TIMEOUT_MS) {
+// Every string cell goes through `scrubCell` (defence in depth: a secret that
+// reached a result row must not reach the page).
+export async function fetchQuery(conn, sql, maxRows, timeoutMs = DEFAULT_TIMEOUT_MS, scrubCell = (t) => t) {
   const { columns, types } = await describeQuery(conn, sql, timeoutMs);
   const kinds = types.map(classify);
   const select = kinds.some((k) => k !== 'plain')
@@ -108,7 +117,7 @@ export async function fetchQuery(conn, sql, maxRows, timeoutMs = DEFAULT_TIMEOUT
   const reader = await runTimed(conn, wrapLimit(sql, maxRows + 1, select), timeoutMs);
   const all = reader.getRowObjectsJS().map((row) => Object.fromEntries(columns.map((c, i) => {
     const v = toJsonSafe(row[c]);
-    return [c, v === null ? null : (CONVERT[kinds[i]]?.(v) ?? v)];
+    return [c, v === null ? null : scrubValue(CONVERT[kinds[i]]?.(v) ?? v, scrubCell)];
   })));
   const truncated = all.length > maxRows;
   return { rows: truncated ? all.slice(0, maxRows) : all, columns, types, truncated };
@@ -128,7 +137,7 @@ export async function runQueries(spec, dir, { now = new Date(), allowOutside = f
   try {
     for (const [name, sql] of Object.entries(spec.queries)) {
       try {
-        const { rows, columns, truncated } = await fetchQuery(db.conn, sql, maxRows, timeoutMs);
+        const { rows, columns, truncated } = await fetchQuery(db.conn, sql, maxRows, timeoutMs, db.scrubData);
         results[name] = { rows, columns, rowCount: rows.length, truncated, sql, refreshedAt };
       } catch (e) {
         errors.push({ path: `queries.${name}`, message: errMessage(e, 3, db.scrub) });

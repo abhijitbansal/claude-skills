@@ -9,7 +9,7 @@ import {
   openDb, openLockedDb, checkSelect, wrapLimit, runTimed, errMessage, DEFAULT_TIMEOUT_MS,
 } from './sql.mjs';
 import {
-  checkSource, envUrl, sourceShapeErrors, RESERVED_SOURCE_NAMES, FILE_TYPES, SOURCE_TYPES, URL_TYPES,
+  checkSource, envUrl, sourceShapeErrors, policyFor, RESERVED_SOURCE_NAMES, FILE_TYPES, SOURCE_TYPES, URL_TYPES,
 } from './sources.mjs';
 import { UsageError } from './cli.mjs';
 
@@ -143,10 +143,11 @@ function crossRefs(spec, dir, { allowOutside }) {
 
 async function sqlErrors(spec) {
   const errors = [];
+  const policy = policyFor(spec);
   const db = await openDb();
   try {
     for (const [name, sql] of Object.entries(spec.queries ?? {})) {
-      const msg = await checkSelect(db.conn, sql);
+      const msg = await checkSelect(db.conn, sql, policy);
       if (msg) errors.push({ path: `queries.${name}`, message: msg });
     }
   } finally {

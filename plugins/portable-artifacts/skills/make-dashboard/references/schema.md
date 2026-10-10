@@ -52,9 +52,13 @@ cache: autoinstall and autoload are switched off, so nothing is downloaded silen
 `run: node "<skill-dir>/scripts/setup.mjs"`. `DUCKDB_EXTENSION_DIRECTORY` points setup and builds at another cache folder.
 
 Lockdown still applies after attaching: an attached sqlite file stays queryable under `enable_external_access=false` and
-`allowed_paths` (tested). The extensions' own bridge functions (`sqlite_scan`, `postgres_query`, `mysql_scan`, …, any
-`sqlite_*`/`postgres_*`/`mysql_*` function) open files and connections outside that lockdown, so queries may not call them.
+`allowed_paths` (tested). The extensions' own bridge functions (`sqlite_scan`, `postgres_query`, `mysql_scan`, …) open files
+and connections outside that lockdown, so the SQL allowlist rejects them (see "SQL rules").
 Postgres and MySQL are attached before the lock; they were not run against a live server in the tests.
+**For postgres and mysql, use a read-only database role.** `READ_ONLY` on the ATTACH limits what DuckDB itself does; it is not
+a guarantee about what the server executes for the statements DuckDB passes through.
+An attached `duckdb` file may not define views or macros (they would run outside the allowlist); the source is refused
+with their names. Export plain tables instead.
 
 ## vegaLite
 
@@ -81,9 +85,27 @@ queries run (30 s limit, `--timeout <seconds>`), and fields are checked against 
 
 ## SQL rules
 
-One statement that DuckDB's own parser accepts as a SELECT: CTEs, UNIONs, `DESCRIBE`, `SUMMARIZE`, `SHOW` and `VALUES`
-are read-only and work. A trailing `;` or `-- comment` is fine. `duckdb_settings()`, `current_setting()`, `duckdb_secrets()`,
-`duckdb_extensions()` and `getenv()` are rejected by name because they can expose local paths and settings.
+A query is one statement that DuckDB's parser accepts as a SELECT. An allowlist then walks its whole syntax tree
+(subqueries, CTEs, set operations, lateral joins, `IN (SELECT …)`, string constants cannot hide anything):
+
+- **Tables:** only the declared sources: a `csv`/`parquet`/`json` source by name (`sales`), an attached source as
+  `name.table` or `name.schema.table`, and CTEs defined in the same query. Everything else is rejected:
+  other schemas and catalogs, `pg_catalog`, `information_schema`, `system`, `temp`, replacement scans like `FROM 'file.csv'`.
+- **Table functions:** only `range`, `generate_series` and `unnest`. That rejects `query()`, `query_table()`, `read_*`, `glob`,
+  `duckdb_*()` (such as `duckdb_settings()`, `duckdb_databases()`), `pragma_*` and the `sqlite_*`/`postgres_*`/`mysql_*` bridges.
+- **Other functions:** scalar, aggregate and window functions are allowed except those that read settings, the environment
+  or files (`current_setting`, `getenv`, `duckdb_*`, `pg_*`, `sqlite_*`, `postgres_*`, `mysql_*`, `query*`, `read_*`, `glob`,
+  `which_secret`, `nextval`, `currval`) and schema-qualified calls. This part is a denylist: scalar functions cannot read files
+  or open connections, so the table-function allowlist is what closes the file and network paths.
+- `DESCRIBE <query>`, `SUMMARIZE <query>` and `VALUES` work. `SHOW TABLES`, `PIVOT` and anything that is not a SELECT do not.
+  A trailing `;` or `-- comment` is fine.
+
+CTE scoping follows DuckDB's binder: a CTE body sees only the CTEs defined before it, plus itself in the recursive branch of a
+real `WITH RECURSIVE` (a self or forward reference would bind to the *catalog*). CTE names that shadow a system view, table or
+table function (`duckdb_databases`, `pg_settings`, …) are rejected: `CTE name "x" shadows a system object; rename it`.
+
+Every query is also bound with `LIMIT 0` against the real sources at validate time. Result cells pass through a scrubber for
+connection-string secrets, but that is defence in depth only: the guard is the control.
 
 ## Types in results
 
@@ -100,8 +122,10 @@ are read-only and work. A trailing `;` or `-- comment` is fine. `duckdb_settings
 
 ## Security model
 
-Queries run in in-memory DuckDB. After the sources are attached, reads are limited to exactly the declared files
-(`allowed_paths`), external access is disabled and the configuration is locked, so a query cannot read other files
-or turn that off. Source paths must be inside the spec folder. Titles and SQL are HTML-escaped and embedded data has `<` escaped.
-The page carries `Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:`;
-charts use Vega's bundled expression interpreter (`ast: true`), so no `unsafe-eval` is needed.
+Queries are model-written, so they are untrusted; the SQL allowlist is the control, the rest is depth. Layers, in order: the SQL allowlist above; in-memory DuckDB with reads limited
+to exactly the declared files (`allowed_paths`), external access off and the configuration locked; sources confined to the
+spec folder (`--allow-outside` is a CLI flag, never a spec field); attached DuckDB files without views or macros; a row limit
+and a timeout. For postgres and mysql the read-only database role is the guard that matters. Titles and SQL are HTML-escaped and
+embedded data has `<` escaped. The page carries `Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:`;
+charts use Vega's bundled expression interpreter (`ast: true`), so no `unsafe-eval` is needed. The built page contains the query
+results: sharing it shares the data.

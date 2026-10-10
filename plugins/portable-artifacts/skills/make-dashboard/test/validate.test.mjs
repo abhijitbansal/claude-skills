@@ -218,9 +218,9 @@ test('validate binds queries to the real sources (valid means buildable)', async
   s.queries.total = 'SELECT SUM(amount) AS revenue FROM nope';
   let r = await check(s);
   assert.equal(r.errors[0].path, 'queries.total');
-  assert.match(r.errors[0].message, /Catalog Error: Table with name nope does not exist/);
-  assert.doesNotMatch(r.errors[0].message, /LINE 1/);
+  assert.equal(r.errors[0].message, 'table "nope" is not allowed; queries may read only the declared sources (sales) and their own CTEs');
 
+  // an unknown table is stopped by the allowlist; an unknown column reaches DuckDB's binder
   const s2 = base();
   s2.queries.total = 'SELECT nosuch FROM sales';
   r = await check(s2);

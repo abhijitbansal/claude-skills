@@ -20,6 +20,8 @@ First use: if `<skill-dir>/node_modules` is missing, tell the user it is a one-t
 
 1. Look at the data first. Never guess columns:
    `node <skill-dir>/scripts/inspect.mjs data/sales.csv` (column names, types, 5 sample rows; csv, parquet or json).
+   For an attached source in a spec (duckdb, sqlite, postgres, mysql) list its tables, then look at one:
+   `node <skill-dir>/scripts/inspect.mjs --spec dashboard.json --source shop` and `... --source shop --table items`.
 2. Write `dashboard.json` next to the data. Source paths are relative to the spec file and must stay
    inside the spec's folder.
 3. Validate and fix until it prints `valid` (it also runs every query, so valid means buildable):
@@ -73,7 +75,14 @@ When done, report the spec path, the built `index.html` path, the serve URL and 
 
 ## Security
 
-Queries are checked to be a single SELECT, then run in DuckDB locked to the declared files only.
+The SQL is written by a model, so it is untrusted. Each query must parse as one SELECT, and then an
+allowlist runs over its syntax tree (nesting, CTEs, subqueries and string constants cannot hide anything):
+it may read only the declared sources (`name`, `source.table`, `source.schema.table`) and its own CTEs, and the
+only table functions allowed are `range`, `generate_series` and `unnest`. System catalogs (`pg_catalog`,
+`information_schema`, `duckdb_*` views) and functions that read settings, the environment or files are rejected.
+It then runs in DuckDB locked to the declared files. Attached DuckDB files that define views or macros are refused.
 Titles, SQL and data are escaped in the page. Keep credentials out of specs and data paths.
 Do not point `path` at files the user did not mention. Charts can never load URLs
 (`url`, `data`, `usermeta` are rejected anywhere in `vegaLite`) and the page ships a strict CSP.
+The SQL allowlist is the control; the cell/error scrubber is only defence in depth.
+For postgres/mysql, `READ_ONLY` on the attach only limits DuckDB: the real guard is a read-only database role.

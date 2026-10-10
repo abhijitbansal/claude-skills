@@ -8,7 +8,7 @@ import path from 'node:path';
 import { UsageError, parseCli, exitUsage } from './lib/cli.mjs';
 import { loadSpec } from './lib/spec.mjs';
 import { extensionsFor } from './lib/sources.mjs';
-import { openDb, useExtensionDirectory, errMessage } from './lib/sql.mjs';
+import { openDb, runOne, sqlLiteral, useExtensionDirectory, errMessage } from './lib/sql.mjs';
 
 const USAGE = 'node scripts/setup.mjs [spec.json]';
 const ALL = ['sqlite', 'postgres', 'mysql'];
@@ -26,12 +26,12 @@ try {
       const installed = [];
       for (const ext of needed) {
         try {
-          await db.conn.run(`INSTALL ${ext}`);
+          await runOne(db.conn, `INSTALL ${ext}`);
         } catch (e) {
           process.stderr.write(`cannot install ${ext}: ${errMessage(e, 1)}\n`);
           process.exit(1);
         }
-        const rows = (await db.conn.runAndReadAll(`SELECT install_path FROM duckdb_extensions() WHERE extension_name LIKE '${ext}%'`)).getRowObjectsJS();
+        const rows = (await db.conn.runAndReadAll(`SELECT install_path FROM duckdb_extensions() WHERE extension_name LIKE ${sqlLiteral(`${ext}%`)}`)).getRowObjectsJS();
         installed.push([ext, rows[0]?.install_path ?? '(installed)']);
       }
       const dir = path.dirname(installed.find(([, p]) => p.startsWith('/') || /^[A-Za-z]:/.test(p))?.[1] ?? '.');

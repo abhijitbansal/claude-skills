@@ -4,19 +4,29 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const RESERVED_SOURCE_NAMES = ['main', 'temp', 'system'];
+export const RESERVED_SOURCE_NAMES = ['main', 'temp', 'system', 'memory'];
 export const FILE_TYPES = ['csv', 'parquet', 'json', 'duckdb', 'sqlite']; // take `path`
 export const URL_TYPES = ['postgres', 'mysql']; // take `env`
 export const SOURCE_TYPES = [...FILE_TYPES, ...URL_TYPES];
 const EXTENSION_FOR = { sqlite: 'sqlite', postgres: 'postgres', mysql: 'mysql' };
+// Fixed SQL for the TYPE clause: spec text is never interpolated into it.
+const ATTACH_TYPE = { duckdb: '', sqlite: 'TYPE sqlite, ', postgres: 'TYPE postgres, ', mysql: 'TYPE mysql, ' };
+const own = (table, key) => typeof key === 'string' && Object.hasOwn(table, key);
 const READERS = { csv: 'read_csv_auto', parquet: 'read_parquet', json: 'read_json_auto' };
 
 export const sqlLiteral = (s) => `'${String(s).replaceAll("'", "''")}'`;
 export const quoteId = (s) => `"${String(s).replaceAll('"', '""')}"`;
 
+// What model-written SQL may reference (see guard.mjs): source views and attached catalogs.
+export function policyFor(spec) {
+  const entries = Object.entries(spec.sources ?? {});
+  const named = (isView) => new Set(entries.filter(([, src]) => own(READERS, src.type) === isView).map(([name]) => name));
+  return { views: named(true), attached: named(false) };
+}
+
 // DuckDB extensions the spec's sources need, in source order, once each.
 export function extensionsFor(spec) {
-  const wanted = Object.values(spec.sources ?? {}).map((src) => EXTENSION_FOR[src.type]).filter(Boolean);
+  const wanted = Object.values(spec.sources ?? {}).map((src) => (own(EXTENSION_FOR, src.type) ? EXTENSION_FOR[src.type] : null)).filter(Boolean);
   return [...new Set(wanted)];
 }
 
@@ -24,10 +34,10 @@ export function extensionsFor(spec) {
 // types (a checked realpath) or { url } for postgres/mysql (the env value).
 export function sourceStatement(name, src, resolved) {
   const id = quoteId(name);
-  if (src.type in READERS) return `CREATE VIEW ${id} AS SELECT * FROM ${READERS[src.type]}(${sqlLiteral(resolved.abs)})`;
-  if (src.type === 'duckdb') return `ATTACH ${sqlLiteral(resolved.abs)} AS ${id} (READ_ONLY)`;
-  if (src.type === 'sqlite') return `ATTACH ${sqlLiteral(resolved.abs)} AS ${id} (TYPE sqlite, READ_ONLY)`;
-  return `ATTACH ${sqlLiteral(resolved.url)} AS ${id} (TYPE ${src.type}, READ_ONLY)`;
+  if (own(READERS, src.type)) return `CREATE VIEW ${id} AS SELECT * FROM ${READERS[src.type]}(${sqlLiteral(resolved.abs)})`;
+  if (!own(ATTACH_TYPE, src.type) && !URL_TYPES.includes(src.type)) throw new Error(`unknown source type ${JSON.stringify(src.type)}`);
+  const target = URL_TYPES.includes(src.type) ? resolved.url : resolved.abs;
+  return `ATTACH ${sqlLiteral(target)} AS ${id} (${ATTACH_TYPE[src.type]}READ_ONLY)`;
 }
 
 // path-vs-env rules the JSON Schema cannot express. env comes first so a csv
