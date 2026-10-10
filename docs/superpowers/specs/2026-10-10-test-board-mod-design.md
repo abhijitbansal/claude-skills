@@ -34,6 +34,7 @@ plugins/test-board/
   hooks/history.ts                pure: append/trim history, pick previous run
   types/index.d.ts                PluginState contract (last runs, expanded flag)
   tests/*.test.ts                 claude plugin test suites with output fixtures
+  tsconfig.json                   the hooks-module options from the claude-code.d.ts header
   README.md
 ```
 
@@ -53,6 +54,8 @@ type TestRun = {
   at: number              // epoch ms
   via?: string            // subagent description, "workflow", or undefined for the main loop
   parsed: boolean         // false: looked like a test run, counts unavailable
+  stale?: boolean         // true only in `latest` for a run loaded from history at
+                          // session start; never written to the store
 }
 ```
 
@@ -153,6 +156,10 @@ Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip  1m12s   prev 41
   `claude plugin test plugins/test-board` run locally. CI keeps its manifest check, which
   passes for a plugin without `skills/`. CI does not run the TS tests (the runner has no
   `claude` CLI). Adding that is out of scope.
+- **Type-check setup:** `tsconfig.json` includes `.claude-plugin/types`, which the engine
+  lays down (API, built-in tools, generated `tsconfig.json`) each time it loads the plugin
+  from a folder it hot-reloads, such as `claude --plugin-dir plugins/test-board`. That
+  folder is generated, so it is gitignored. `tsc -p` runs after one such load.
 
 ## Repo obligations
 

@@ -60,7 +60,7 @@ Notes on the counts:
 | --- | --- |
 | Approach A + Test Board design section | Approved |
 | Session Compass design section | Approved |
-| Written specs (`46bb9aa`) | **Awaiting user review** |
+| Written specs (`46bb9aa`) | Approved 2026-10-10, after four review fixes: Test Board `stale` field, a `tsconfig.json` per plugin, Compass `firstPrompt` capture in `prompt.submit`, and `repo` resolved through `--git-common-dir` |
 | Implementation plans | Not started. They are written only after spec approval. |
 
 ## 3. Decisions made without a question

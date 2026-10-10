@@ -38,6 +38,7 @@ plugins/session-compass/
   hooks/pane.tsx                  pane tree (two tabs)
   types/index.d.ts                PluginState contract
   tests/*.test.ts
+  tsconfig.json                   same options as Test Board's
   README.md
 ```
 
@@ -54,7 +55,8 @@ type Artifact =
 
 type SessionRecord = {
   id: string                 // $.session.id()
-  repo: string               // repo name (top-level folder name of the main worktree)
+  repo: string               // repo name: folder holding `git rev-parse --git-common-dir`,
+                             // so linked worktrees report the main checkout's name
   worktree: string           // absolute worktree root
   branch: string
   goal?: string; step?: string; next?: string
@@ -112,6 +114,7 @@ re-read the branch with `git rev-parse --abbrev-ref HEAD`.
 - **Resume:** in `session.start`, when `$.session.turns()` is above 0 (an existing
   session), it sets `band = 'return'`.
 - **Dismiss:** `prompt.submit` sets `band = 'hidden'` and passes the prompt through unchanged.
+  The same hook stores `firstPrompt` (first 80 chars) when the record has none yet.
 
 ## Band
 
@@ -158,7 +161,7 @@ Registered with `$.command.register({ name: 'compass' })`. The `command.run` hoo
   idle tick past 15 min raises the band; `prompt.submit` hides it; the band stacks over
   `next(e)`; `/compass` opens the pane and both tabs render.
 - **Gates:** `claude plugin validate`, `tsc -p` and `claude plugin test` on
-  `plugins/session-compass`, all local, as for Test Board.
+  `plugins/session-compass`, all local, with the same type-check setup as Test Board.
 
 ## Repo obligations
 
