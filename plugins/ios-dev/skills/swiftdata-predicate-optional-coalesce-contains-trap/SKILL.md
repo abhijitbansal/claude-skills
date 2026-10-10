@@ -1,6 +1,6 @@
 ---
 name: swiftdata-predicate-optional-coalesce-contains-trap
-description: SwiftData #Predicate like `ids.contains($0.fromBinID ?? sentinelUUID)` compiles fine but throws NSInvalidArgumentException "unimplemented SQL generation … (bad LHS)" at fetch time against a real (even in-memory) ModelContext. Use when writing a #Predicate that filters an optional model column (nullable foreign-key / relationship ID) against a caller-supplied Set or Array of candidate IDs.
+description: "SwiftData #Predicate like `ids.contains($0.fromBinID ?? sentinelUUID)` compiles fine but throws NSInvalidArgumentException \"unimplemented SQL generation … (bad LHS)\" at fetch time against a real (even in-memory) ModelContext. Use when writing a #Predicate that filters an optional model column (nullable foreign-key / relationship ID) against a caller-supplied Set or Array of candidate IDs."
 ---
 
 # SwiftData #Predicate: coalescing an optional column on the LHS of contains() throws at fetch time

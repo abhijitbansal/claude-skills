@@ -64,6 +64,30 @@ jobs:
       - name: pytest (second-wind)
         run: uv tool run pytest tools/second-wind/tests/ -q
 
+  # portable-artifacts skills are self-contained Node packages (own lockfile).
+  # Render tests skip themselves when no browser/ffmpeg is present.
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: shared errors.mjs copies are byte-identical
+        run: cmp plugins/portable-artifacts/skills/make-dashboard/scripts/lib/errors.mjs plugins/portable-artifacts/skills/make-motion/scripts/lib/errors.mjs
+      - name: cross-host installer
+        working-directory: plugins/portable-artifacts/bin
+        run: node --test "test/*.test.mjs"
+      - name: eval harness (fake host, no LLM)
+        working-directory: plugins/portable-artifacts/eval
+        run: node --test "test/**/*.test.mjs"
+      - name: make-dashboard
+        working-directory: plugins/portable-artifacts/skills/make-dashboard
+        run: npm ci && npm test
+      - name: make-motion
+        working-directory: plugins/portable-artifacts/skills/make-motion
+        run: npm ci && npm test
+
   # A plugin's plugin.json `version` is the ONLY update trigger — Claude Code
   # skips a plugin whose version string is unchanged, even when its code moved.
   # So: any PR that touches plugins/<name>/** must bump that plugin's version.

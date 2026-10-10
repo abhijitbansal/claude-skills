@@ -102,23 +102,24 @@ flowchart TD
   CW["core-workflow<br/><small>12 skills · 4 cmds · 2 agents · 1 hook</small>"]
   SW["second-wind<br/><small>skill wrapper</small>"]
   PC["prompt-craft<br/><small>7 skills · 6 hooks</small>"]
+  PA["portable-artifacts<br/><small>2 skills · installer</small>"]
   WIND[("tools/second-wind<br/>wind.py")]
   AD["adapters/install.sh"]
   SEED["setup/<br/><small>setup.sh · capture.sh · contribute.sh</small>"]
   CC(("Claude Code"))
   OTHER(("Codex / Copilot /<br/>AGENTS.md agents"))
 
-  MP --> IOS & LIN & CW & SW & PC
+  MP --> IOS & LIN & CW & SW & PC & PA
   SW -.->|"wraps"| WIND
   CC -->|"/plugin marketplace add"| MP
   SEED -->|"local_plugins step"| CC
   SEED -->|"wind → ~/.local/bin"| WIND
   AD -->|"symlink skills"| OTHER
-  IOS & LIN & CW & SW & PC -->|"skills/"| AD
+  IOS & LIN & CW & SW & PC & PA -->|"skills/"| AD
 
   classDef plugin fill:#0e8fb01a,stroke:#0e8fb0,stroke-width:2px
   classDef infra fill:#b07a181a,stroke:#b07a18,stroke-width:2px
-  class IOS,LIN,CW,SW,PC plugin
+  class IOS,LIN,CW,SW,PC,PA plugin
   class SEED,AD infra
         </pre></div></div>
       </div>
@@ -126,7 +127,7 @@ flowchart TD
   </section>
 
   <section class="tight">
-    <p class="eyebrow violet">The five plugins</p>
+    <p class="eyebrow violet">The six plugins</p>
     <div class="grid cols-3">
       <div class="card pcard cy reveal">
         <h3><code>ios-dev</code></h3>
@@ -174,6 +175,15 @@ flowchart TD
           <li><strong>/refresh</strong> — re-scan skills and rebuild the command-advisor registry + history profile on demand; also wires the statusline</li>
           <li><strong>command advisor</strong> — ranks the most relevant next command by combining keyword relevance, your command-history frequency, and git-state context (at most 3 recommendations). It powers the pre-prompt banner, the Stop-hook follow-ups, and the statusline segment. Every surface is user-only — advisor output never enters the model context.</li>
           <li><strong>hooks</strong> — <code>suggest_next</code> (Stop, now routed through the command advisor), <code>prompt_hint</code> (UserPromptSubmit), <code>registry_freshness</code> (SessionStart), <code>statusline_hint</code> (statusLine) + opt-in <code>block_secrets</code> / <code>format_on_edit</code></li>
+        </ul>
+      </div>
+      <div class="card pcard go reveal">
+        <h3><code>portable-artifacts</code></h3>
+        <p class="sub">dashboards + animated explainers, offline</p>
+        <ul>
+          <li><strong>/make-dashboard</strong> — prompt + data file → SQL + Vega-Lite spec → one static HTML page; every chart shows its SQL and refresh time</li>
+          <li><strong>/make-motion</strong> — prompt → scene spec → live preview + deterministic 1080p MP4</li>
+          <li><strong>bin/install.mjs</strong> — copies both skills into Claude Code, Codex, Copilot or Gemini CLI skill directories</li>
         </ul>
       </div>
     </div>
@@ -234,6 +244,7 @@ flowchart TD
         <b>Features</b>
         <a href="features/second-wind.html">Second Wind</a>
         <a href="features/prompt-craft.html">prompt-craft</a>
+        <a href="features/portable-artifacts.html">portable-artifacts</a>
         <a href="features/ios-dev.html">ios-dev</a>
         <a href="features/core-workflow.html">core-workflow</a>
         <a href="features/linear-pm.html">linear-pm</a>
@@ -254,7 +265,7 @@ flowchart TD
     </div>
     <div class="foot-meta">
       <span class="lic">MIT licensed</span>
-      <span>5 plugins · 81 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
+      <span>6 plugins · 83 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
       <span>Tested on macOS &amp; Ubuntu</span>
     </div>
   </div>

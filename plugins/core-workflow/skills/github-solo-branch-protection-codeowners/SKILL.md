@@ -1,6 +1,6 @@
 ---
 name: github-solo-branch-protection-codeowners
-description: Configure GitHub branch protection on a solo-owner (or owner-led) repo so that OTHER people's PRs require the owner's approval before merge, while the owner can still merge their OWN PRs solo. Use when the user asks to "require approval on PRs but let me still self-merge", "make it so at least I have to approve any other PR", is hardening a repo just before making it public (forks will open PRs from strangers), or hits GitHub's "Pull request review is not required for administrators" / cannot approve own PR wall after turning on required reviews. Also fires when `required_approving_review_count: 1` locks the owner out of their own PRs, or a CODEOWNERS file "does nothing" on a feature branch.
+description: "Configure GitHub branch protection on a solo-owner (or owner-led) repo so that OTHER people's PRs require the owner's approval before merge, while the owner can still merge their OWN PRs solo. Use when the user asks to \"require approval on PRs but let me still self-merge\", \"make it so at least I have to approve any other PR\", is hardening a repo just before making it public (forks will open PRs from strangers), or hits GitHub's \"Pull request review is not required for administrators\" / cannot approve own PR wall after turning on required reviews. Also fires when `required_approving_review_count: 1` locks the owner out of their own PRs, or a CODEOWNERS file \"does nothing\" on a feature branch."
 ---
 
 # GitHub branch protection: require others' approval, keep owner self-merge

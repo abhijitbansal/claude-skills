@@ -6,3 +6,9 @@ __pycache__/
 node_modules/
 .tmp/
 .scratch/
+
+# portable-artifacts eval output (summaries are copied to results/summary-*.md)
+plugins/portable-artifacts/eval/results/*
+!plugins/portable-artifacts/eval/results/summary-*.md
+plugins/portable-artifacts/**/out/
+plugins/portable-artifacts/**/dist/

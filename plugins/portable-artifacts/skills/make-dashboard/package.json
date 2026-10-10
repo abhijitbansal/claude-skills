@@ -1,0 +1,21 @@
+{
+  "name": "make-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Prompt -> SQL + Vega-Lite -> static HTML dashboard with per-chart provenance. Local, offline, open source.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "dependencies": {
+    "@duckdb/node-api": "1.5.6-r.1",
+    "ajv": "8.20.0",
+    "vega": "6.4.0",
+    "vega-embed": "7.3.0",
+    "vega-lite": "6.5.0"
+  }
+}

@@ -1,6 +1,6 @@
 ---
 name: contribute
-description: Contribute a change or new skill back to the claude-skills seeding repo from any working directory. Use when the user says "contribute this back", "add this to claude-skills", "share this skill", or invokes /contribute-skill. Wraps the claude-skills-contribute script: branches, validates, commits, opens a PR. Refuses on dirty tree and unauthenticated gh.
+description: "Contribute a change or new skill back to the claude-skills seeding repo from any working directory. Use when the user says \"contribute this back\", \"add this to claude-skills\", \"share this skill\", or invokes /contribute-skill. Wraps the claude-skills-contribute script: branches, validates, commits, opens a PR. Refuses on dirty tree and unauthenticated gh."
 ---
 
 # Contribute to claude-skills

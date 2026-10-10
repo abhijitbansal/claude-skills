@@ -18,10 +18,12 @@ auto-resume** orchestrator that keeps overnight runs alive (`second-wind`),
 | `linear-pm` | Linear PM conventions + 6 `/linear-*` commands, including `/linear-pick` autonomous issue pickup |
 | `core-workflow` | commit flow, skill contribution, image-parser + web-researcher agents, shellcheck-on-edit hook |
 | `second-wind` | usage-limit-aware overnight orchestrator (`wind` CLI + skill wrapper) |
+| `portable-artifacts` | `/make-dashboard` (data file → offline HTML dashboard, per-chart SQL) and `/make-motion` (prompt → preview + MP4); cross-host installer for Codex, Copilot, Gemini |
 | `prompt-craft` | rough ask → deterministic spec (`/improve-prompt`, `/plan`), debug/refactor/review lenses, git-aware Stop hook + opt-in secret/format guardrails |
 
 **Feature guides:** [Second Wind](docs/features/second-wind.html) ·
 [prompt-craft](docs/features/prompt-craft.html) ·
+[portable-artifacts](docs/features/portable-artifacts.html) ·
 [ios-dev](docs/features/ios-dev.html) ·
 [linear-pm](docs/features/linear-pm.html) ·
 [core-workflow](docs/features/core-workflow.html)
@@ -43,6 +45,7 @@ Inside any Claude Code session:
 /plugin install second-wind@claude-skills
 /plugin install core-workflow@claude-skills
 /plugin install prompt-craft@claude-skills
+/plugin install portable-artifacts@claude-skills
 ```
 
 Install only what you need — each plugin is self-contained. Skills, slash commands,
@@ -82,6 +85,13 @@ adapters/install.sh all
 ```
 
 Idempotent — re-run after pulling updates; it prunes links for removed skills.
+
+The `portable-artifacts` skills (`make-dashboard`, `make-motion`) are Node packages: they also
+need `npm ci` in each skill folder. Their own installer does that and covers Gemini CLI and
+project-scoped installs too:
+`node plugins/portable-artifacts/bin/install.mjs <claude|codex|copilot|gemini|agents> [--project .]`
+— see [plugins/portable-artifacts/USAGE.md](plugins/portable-artifacts/USAGE.md).
+With [`npx skills`](https://github.com/vercel-labs/skills): `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-motion`.
 
 ### Cartoon (token-optimized CLI output)
 
@@ -139,7 +149,7 @@ users can ignore them entirely; plugins never touch them.
 | Path | What |
 | --- | --- |
 | `.claude-plugin/` | marketplace manifest |
-| `plugins/` | the five plugins (skills, commands, agents, hooks) |
+| `plugins/` | the six plugins (skills, commands, agents, hooks) |
 | `tools/` | standalone CLIs (second-wind) |
 | `adapters/` | wire skills into non-Claude tools |
 | `setup/`, `templates/`, `claude-setup.toml` | personal machine seed |

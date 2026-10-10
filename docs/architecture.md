@@ -4,7 +4,7 @@
 
 `claude-skills` is three things in one repo:
 
-1. A **Claude Code plugin marketplace** hosting five focused plugins.
+1. A **Claude Code plugin marketplace** hosting six focused plugins.
 2. A home for **standalone CLI tools** (currently Second Wind).
 3. **Adapters** that wire the same skills into Codex, Copilot CLI, and any AGENTS.md-aware agent.
 
@@ -20,22 +20,23 @@ flowchart TD
   CW["core-workflow — 12 skills · 4 cmds · 2 agents · 1 hook"]
   SW["second-wind — skill wrapper"]
   PC["prompt-craft — 7 skills · 6 hooks"]
+  PA["portable-artifacts — 2 skills · installer"]
   WIND[("tools/second-wind/wind.py")]
   AD["adapters/install.sh"]
   SEED["setup/ — setup.sh · capture.sh · contribute.sh"]
   CC(("Claude Code"))
   OTHER(("Codex / Copilot / AGENTS.md agents"))
 
-  MP --> IOS & LIN & CW & SW & PC
+  MP --> IOS & LIN & CW & SW & PC & PA
   SW -.->|wraps| WIND
   CC -->|"/plugin marketplace add"| MP
   SEED -->|local_plugins step| CC
   SEED -->|"wind → ~/.local/bin"| WIND
   AD -->|symlink skills| OTHER
-  IOS & LIN & CW & SW & PC -->|skills/| AD
+  IOS & LIN & CW & SW & PC & PA -->|skills/| AD
 ```
 
-## The five plugins
+## The six plugins
 
 | Plugin | One-liner | Contents |
 | --- | --- | --- |
@@ -44,6 +45,7 @@ flowchart TD
 | `core-workflow` | everyday glue | commit, contribute, learn-lesson, branch-explainer, github-repo-go-public-preflight-scan, github-solo-branch-protection-codeowners skills; `/team`, `/contribute-skill`, `/learn`, `/explain-branch`; image-parser + web-researcher agents; shellcheck-on-edit hook |
 | `second-wind` | outlast the 5-hour usage limit | SKILL.md wrapper for the `wind` CLI (self-installs when missing) |
 | `prompt-craft` | rough ask → deterministic spec | `/improve-prompt`, `/plan`; debug/refactor/review lens skills; `/refresh`; a command advisor (relevance + history + git state) powering user-only `suggest_next` (Stop), `prompt_hint` (UserPromptSubmit) + `statusline_hint`; `registry_freshness` (SessionStart); opt-in `block_secrets` + `format_on_edit` hooks |
+| `portable-artifacts` | dashboards + animated explainers from a prompt, offline | `/make-dashboard`, `/make-motion`; `bin/install.mjs` cross-host installer (Claude Code, Codex, Copilot, Gemini) |
 
 Full per-item descriptions: [skills-catalog.md](skills-catalog.md).
 

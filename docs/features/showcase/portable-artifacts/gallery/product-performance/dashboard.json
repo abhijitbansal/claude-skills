@@ -1,0 +1,76 @@
+{
+  "title": "Product performance",
+  "description": "Revenue and units by product, region and period, 2025",
+  "maxRows": 5000,
+  "sources": {
+    "sales": { "type": "csv", "path": "data/sales.csv" }
+  },
+  "queries": {
+    "totals": "SELECT SUM(amount) AS revenue, SUM(units) AS units, AVG(amount) AS avg_order_value FROM sales",
+    "rev_by_product_region": "SELECT product, region, SUM(amount) AS revenue FROM sales GROUP BY 1, 2 ORDER BY 1, 2",
+    "units_by_product_quarter": "SELECT 'Q' || quarter(date) AS quarter, product, SUM(units) AS units FROM sales GROUP BY 1, 2 ORDER BY 1, 2",
+    "rev_region_month": "SELECT region, date_trunc('month', date) AS month, SUM(amount) AS revenue FROM sales GROUP BY 1, 2 ORDER BY 2, 1",
+    "share_by_product": "SELECT product, SUM(amount) AS revenue, SUM(amount) / (SELECT SUM(amount) FROM sales) AS share FROM sales GROUP BY 1 ORDER BY 2 DESC"
+  },
+  "kpis": [
+    { "id": "k1", "title": "Revenue", "query": "totals", "field": "revenue", "format": "currency" },
+    { "id": "k2", "title": "Units", "query": "totals", "field": "units", "format": "number" },
+    { "id": "k3", "title": "Average order value", "query": "totals", "field": "avg_order_value", "format": "currency" }
+  ],
+  "charts": [
+    {
+      "id": "c1",
+      "title": "Revenue by product and region",
+      "query": "rev_by_product_region",
+      "width": "half",
+      "vegaLite": {
+        "mark": "bar",
+        "encoding": {
+          "x": { "field": "product", "type": "nominal", "sort": null, "title": null },
+          "xOffset": { "field": "region", "type": "nominal" },
+          "y": { "field": "revenue", "type": "quantitative", "title": "Revenue" },
+          "color": { "field": "region", "type": "nominal", "title": "Region" }
+        }
+      }
+    },
+    {
+      "id": "c2",
+      "title": "Revenue share by product",
+      "query": "share_by_product",
+      "width": "half",
+      "vegaLite": {
+        "mark": "bar",
+        "encoding": {
+          "y": { "field": "product", "type": "nominal", "sort": null, "title": null },
+          "x": { "field": "share", "type": "quantitative", "title": "Share of revenue", "axis": { "format": ".0%" } }
+        }
+      }
+    },
+    {
+      "id": "c3",
+      "title": "Units per product per quarter",
+      "query": "units_by_product_quarter",
+      "vegaLite": {
+        "mark": { "type": "line", "point": true },
+        "encoding": {
+          "x": { "field": "quarter", "type": "ordinal", "title": null },
+          "y": { "field": "units", "type": "quantitative", "title": "Units" },
+          "color": { "field": "product", "type": "nominal", "title": "Product" }
+        }
+      }
+    },
+    {
+      "id": "c4",
+      "title": "Revenue by region and month",
+      "query": "rev_region_month",
+      "vegaLite": {
+        "mark": "rect",
+        "encoding": {
+          "x": { "field": "month", "type": "ordinal", "timeUnit": "utcmonth", "title": null },
+          "y": { "field": "region", "type": "nominal", "sort": null, "title": null },
+          "color": { "field": "revenue", "type": "quantitative", "title": "Revenue" }
+        }
+      }
+    }
+  ]
+}

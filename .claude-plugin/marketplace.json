@@ -33,6 +33,11 @@
       "name": "prompt-craft",
       "source": "./plugins/prompt-craft",
       "description": "Turn rough prompts into deterministic specs and surface the right next step: /improve-prompt, /plan, debug/refactor/review lenses, a follow-up-suggesting Stop hook, and opt-in secret/format guardrails"
+    },
+    {
+      "name": "portable-artifacts",
+      "source": "./plugins/portable-artifacts",
+      "description": "Host-agnostic, offline, open-source artifact skills: static SQL + Vega-Lite dashboards with per-chart provenance, and spec-driven animated explainers rendered to MP4"
     }
   ]
 }

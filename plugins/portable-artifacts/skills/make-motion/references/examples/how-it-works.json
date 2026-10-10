@@ -1,0 +1,426 @@
+{
+  "size": [
+    1920,
+    1080
+  ],
+  "fps": 30,
+  "background": "#0b0d12",
+  "scenes": [
+    {
+      "id": "title",
+      "duration": 2.5,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "t",
+          "type": "text",
+          "text": "How it works",
+          "x": 960,
+          "y": 470,
+          "fontSize": 120,
+          "fontWeight": 800,
+          "color": "#f4f6fb",
+          "keyframes": [
+            {
+              "t": 0.2,
+              "opacity": 0,
+              "y": 506
+            },
+            {
+              "t": 1.0,
+              "opacity": 1,
+              "y": 470,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "t2",
+          "type": "text",
+          "text": "Three steps from idea to video",
+          "x": 960,
+          "y": 620,
+          "fontSize": 46,
+          "fontWeight": 400,
+          "color": "#8b93a7",
+          "keyframes": [
+            {
+              "t": 0.7,
+              "opacity": 0,
+              "y": 656
+            },
+            {
+              "t": 1.4,
+              "opacity": 1,
+              "y": 620,
+              "ease": "outCubic"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "steps",
+      "duration": 9,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "box1",
+          "type": "shape",
+          "shape": "rect",
+          "x": 360,
+          "y": 470,
+          "width": 440,
+          "height": 300,
+          "radius": 28,
+          "fill": "#141925",
+          "stroke": "#2a3142",
+          "strokeWidth": 2,
+          "keyframes": [
+            {
+              "t": 0.4,
+              "opacity": 0,
+              "scale": 0.92
+            },
+            {
+              "t": 1.1,
+              "opacity": 1,
+              "scale": 1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "num1",
+          "type": "text",
+          "text": "1",
+          "x": 360,
+          "y": 385,
+          "fontSize": 56,
+          "fontWeight": 700,
+          "color": "#5eead4",
+          "font": "mono",
+          "keyframes": [
+            {
+              "t": 0.6000000000000001,
+              "opacity": 0,
+              "y": 421
+            },
+            {
+              "t": 1.3,
+              "opacity": 1,
+              "y": 385,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "head1",
+          "type": "text",
+          "text": "Write a spec",
+          "x": 360,
+          "y": 470,
+          "fontSize": 52,
+          "fontWeight": 700,
+          "color": "#f4f6fb",
+          "keyframes": [
+            {
+              "t": 0.7,
+              "opacity": 0,
+              "y": 506
+            },
+            {
+              "t": 1.4,
+              "opacity": 1,
+              "y": 470,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "desc1",
+          "type": "text",
+          "text": "One JSON file describes every scene",
+          "x": 360,
+          "y": 550,
+          "fontSize": 28,
+          "fontWeight": 400,
+          "color": "#8b93a7",
+          "maxWidth": 360,
+          "keyframes": [
+            {
+              "t": 0.8500000000000001,
+              "opacity": 0,
+              "y": 586
+            },
+            {
+              "t": 1.55,
+              "opacity": 1,
+              "y": 550,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "link1",
+          "type": "shape",
+          "shape": "line",
+          "x": 660,
+          "y": 470,
+          "width": 140,
+          "strokeWidth": 4,
+          "stroke": "#5eead4",
+          "keyframes": [
+            {
+              "t": 1.6,
+              "draw": 0
+            },
+            {
+              "t": 2.3,
+              "draw": 1,
+              "ease": "inOutQuad"
+            }
+          ]
+        },
+        {
+          "id": "box2",
+          "type": "shape",
+          "shape": "rect",
+          "x": 960,
+          "y": 470,
+          "width": 440,
+          "height": 300,
+          "radius": 28,
+          "fill": "#141925",
+          "stroke": "#2a3142",
+          "strokeWidth": 2,
+          "keyframes": [
+            {
+              "t": 2.6,
+              "opacity": 0,
+              "scale": 0.92
+            },
+            {
+              "t": 3.3,
+              "opacity": 1,
+              "scale": 1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "num2",
+          "type": "text",
+          "text": "2",
+          "x": 960,
+          "y": 385,
+          "fontSize": 56,
+          "fontWeight": 700,
+          "color": "#5eead4",
+          "font": "mono",
+          "keyframes": [
+            {
+              "t": 2.8000000000000003,
+              "opacity": 0,
+              "y": 421
+            },
+            {
+              "t": 3.5,
+              "opacity": 1,
+              "y": 385,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "head2",
+          "type": "text",
+          "text": "Preview",
+          "x": 960,
+          "y": 470,
+          "fontSize": 52,
+          "fontWeight": 700,
+          "color": "#f4f6fb",
+          "keyframes": [
+            {
+              "t": 2.9,
+              "opacity": 0,
+              "y": 506
+            },
+            {
+              "t": 3.5999999999999996,
+              "opacity": 1,
+              "y": 470,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "desc2",
+          "type": "text",
+          "text": "Scrub the timeline in your browser",
+          "x": 960,
+          "y": 550,
+          "fontSize": 28,
+          "fontWeight": 400,
+          "color": "#8b93a7",
+          "maxWidth": 360,
+          "keyframes": [
+            {
+              "t": 3.0500000000000003,
+              "opacity": 0,
+              "y": 586
+            },
+            {
+              "t": 3.75,
+              "opacity": 1,
+              "y": 550,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "link2",
+          "type": "shape",
+          "shape": "line",
+          "x": 1260,
+          "y": 470,
+          "width": 140,
+          "strokeWidth": 4,
+          "stroke": "#5eead4",
+          "keyframes": [
+            {
+              "t": 3.8,
+              "draw": 0
+            },
+            {
+              "t": 4.5,
+              "draw": 1,
+              "ease": "inOutQuad"
+            }
+          ]
+        },
+        {
+          "id": "box3",
+          "type": "shape",
+          "shape": "rect",
+          "x": 1560,
+          "y": 470,
+          "width": 440,
+          "height": 300,
+          "radius": 28,
+          "fill": "#141925",
+          "stroke": "#2a3142",
+          "strokeWidth": 2,
+          "keyframes": [
+            {
+              "t": 4.800000000000001,
+              "opacity": 0,
+              "scale": 0.92
+            },
+            {
+              "t": 5.500000000000001,
+              "opacity": 1,
+              "scale": 1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "num3",
+          "type": "text",
+          "text": "3",
+          "x": 1560,
+          "y": 385,
+          "fontSize": 56,
+          "fontWeight": 700,
+          "color": "#5eead4",
+          "font": "mono",
+          "keyframes": [
+            {
+              "t": 5.000000000000001,
+              "opacity": 0,
+              "y": 421
+            },
+            {
+              "t": 5.700000000000001,
+              "opacity": 1,
+              "y": 385,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "head3",
+          "type": "text",
+          "text": "Render",
+          "x": 1560,
+          "y": 470,
+          "fontSize": 52,
+          "fontWeight": 700,
+          "color": "#f4f6fb",
+          "keyframes": [
+            {
+              "t": 5.1000000000000005,
+              "opacity": 0,
+              "y": 506
+            },
+            {
+              "t": 5.800000000000001,
+              "opacity": 1,
+              "y": 470,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "desc3",
+          "type": "text",
+          "text": "Deterministic frames, encoded to MP4",
+          "x": 1560,
+          "y": 550,
+          "fontSize": 28,
+          "fontWeight": 400,
+          "color": "#8b93a7",
+          "maxWidth": 360,
+          "keyframes": [
+            {
+              "t": 5.250000000000001,
+              "opacity": 0,
+              "y": 586
+            },
+            {
+              "t": 5.950000000000001,
+              "opacity": 1,
+              "y": 550,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "foot",
+          "type": "text",
+          "text": "Change the JSON. Re-render in seconds.",
+          "x": 960,
+          "y": 860,
+          "fontSize": 44,
+          "fontWeight": 600,
+          "color": "#c9cfdd",
+          "keyframes": [
+            {
+              "t": 7.0,
+              "opacity": 0,
+              "y": 896
+            },
+            {
+              "t": 7.7,
+              "opacity": 1,
+              "y": 860,
+              "ease": "outCubic"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

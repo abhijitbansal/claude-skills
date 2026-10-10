@@ -5,14 +5,14 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Skills &amp; tools catalog — claude-skills</title>
-<meta name="description" content="Search and filter every skill, command, agent, hook, and CLI tool across the five claude-skills plugins.">
+<meta name="description" content="Search and filter every skill, command, agent, hook, and CLI tool across the six claude-skills plugins.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%230e8fb0'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='6.5'%20fill='%230a1420'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='3'%20fill='%23e8b94a'/%3E%3C/svg%3E">
 <link rel="icon" href="../site/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="../site/apple-touch-icon.png">
 <meta name="theme-color" content="#0e8fb0">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Skills &amp; tools catalog — claude-skills">
-<meta property="og:description" content="Search and filter every skill, command, agent, hook, and CLI across the five claude-skills plugins.">
+<meta property="og:description" content="Search and filter every skill, command, agent, hook, and CLI across the six claude-skills plugins.">
 <meta property="og:url" content="https://abhijitbansal.github.io/claude-skills/catalog.html">
 <meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
 <meta property="og:image:width" content="1200">
@@ -37,7 +37,7 @@
 
 <header class="page-head wrap narrow">
   <div class="crumbs"><a href="../site/index.html">Home</a><span class="sep">/</span>Catalog</div>
-  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>108 assets · 5 plugins</span>
+  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>111 assets · 6 plugins</span>
   <h1>Skills &amp; tools <span class="grad">catalog</span></h1>
   <p class="lead">Every skill, command, agent, hook, and CLI tool in the repo — searchable and filterable.
      Each links back to the plugin it ships in.</p>
@@ -48,9 +48,9 @@
     <input id="search" type="search" placeholder="Search skills, commands, hooks…" aria-label="Search the catalog" autocomplete="off">
     <div class="filters"><button class="fchip active" data-filter="all">All</button><button class="fchip" data-filter="Plugin">Plugins</button><button class="fchip" data-filter="Skill">Skills</button><button class="fchip" data-filter="Command">Commands</button><button class="fchip" data-filter="CLI">CLI</button><button class="fchip" data-filter="Agent">Agents</button><button class="fchip" data-filter="Hook">Hooks</button></div>
   </div>
-  <p class="cat-count">113 results</p>
+  <p class="cat-count">116 results</p>
   <div class="cat-group">
-      <h3>Plugins <span class="badge">5</span></h3>
+      <h3>Plugins <span class="badge">6</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Plugin" data-search="core-workflow general dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook core-workflow plugin">
         <div class="top"><span class="nm">core-workflow</span><span class="ty t-plugin">Plugin</span></div>
         <div class="dc">General dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook</div>
@@ -60,14 +60,17 @@
         <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Plugin" data-search="linear-pm linear project management conventions and slash commands: issue templates, status taxonomy, agent-ready workflow, autonomous issue pickup linear-pm plugin">
         <div class="top"><span class="nm">linear-pm</span><span class="ty t-plugin">Plugin</span></div>
         <div class="dc">Linear project management conventions and slash commands: issue templates, status taxonomy, agent-ready workflow, autonomous issue pickup</div>
-        <div class="pl">in <a href="features/linear-pm.html">linear-pm</a></div></div><div class="crow" data-type="Plugin" data-search="prompt-craft turn rough prompts into deterministic specs and surface the right next step: /improve-prompt, /plan, debug/refactor/review lenses, a follow-up-suggesting stop hook, and opt-in secret/format guardrails. zero config; guardrails off by default. prompt-craft plugin">
+        <div class="pl">in <a href="features/linear-pm.html">linear-pm</a></div></div><div class="crow" data-type="Plugin" data-search="portable-artifacts host-agnostic offline open-source artifact skills make-dashboard make-motion dashboards animated explainers mp4 duckdb vega-lite installer codex copilot gemini portable-artifacts plugin">
+        <div class="top"><span class="nm">portable-artifacts</span><span class="ty t-plugin">Plugin</span></div>
+        <div class="dc">Host-agnostic, offline, open-source artifact skills: make-dashboard (prompt → SQL + Vega-Lite → static HTML with per-chart SQL provenance) and make-motion (prompt → scene spec → local preview + MP4). Cross-host installer for Claude Code, Codex, Copilot and Gemini.</div>
+        <div class="pl">in <a href="features/portable-artifacts.html">portable-artifacts</a></div></div><div class="crow" data-type="Plugin" data-search="prompt-craft turn rough prompts into deterministic specs and surface the right next step: /improve-prompt, /plan, debug/refactor/review lenses, a follow-up-suggesting stop hook, and opt-in secret/format guardrails. zero config; guardrails off by default. prompt-craft plugin">
         <div class="top"><span class="nm">prompt-craft</span><span class="ty t-plugin">Plugin</span></div>
         <div class="dc">Turn rough prompts into deterministic specs and surface the right next step: /improve-prompt, /plan, debug/refactor/review lenses, a follow-up-suggesting Stop hook, and opt-in secret/format guardrails. Zero config; guardrails off by default.</div>
         <div class="pl">in <a href="features/prompt-craft.html">prompt-craft</a></div></div><div class="crow" data-type="Plugin" data-search="second-wind set-and-forget orchestrator for long claude code runs across multiple repos. detects 5-hour usage limit, waits for reset, resumes every tmux session second-wind plugin">
         <div class="top"><span class="nm">second-wind</span><span class="ty t-plugin">Plugin</span></div>
         <div class="dc">Set-and-forget orchestrator for long Claude Code runs across multiple repos. Detects 5-hour usage limit, waits for reset, resumes every tmux session</div>
         <div class="pl">in <a href="features/second-wind.html">second-wind</a></div></div></div></div><div class="cat-group">
-      <h3>Skills <span class="badge">81</span></h3>
+      <h3>Skills <span class="badge">83</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Skill" data-search="commit stage current changes, lint shell scripts with shellcheck, and create a git commit with conventional message core-workflow skill">
         <div class="top"><span class="nm">commit</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Stage current changes, lint shell scripts with shellcheck, and create a git commit with conventional message</div>
@@ -194,7 +197,13 @@
         <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="linear-pm linear project management conventions and slash commands: label vocabulary, status taxonomy, branch/pr naming, issue template, .claude/linear.yml policy linear-pm skill">
         <div class="top"><span class="nm">linear-pm</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Linear project management conventions and slash commands: label vocabulary, status taxonomy, branch/PR naming, issue template, .claude/linear.yml policy</div>
-        <div class="pl">in <a href="features/linear-pm.html">linear-pm</a></div></div><div class="crow" data-type="Skill" data-search="debug apply disciplined debugging lens: reproduce first, isolate, form hypothesis, prove with failing test prompt-craft skill">
+        <div class="pl">in <a href="features/linear-pm.html">linear-pm</a></div></div><div class="crow" data-type="Skill" data-search="make-dashboard build self-contained static html dashboard kpi tiles vega-lite charts from csv parquet json duckdb sqlite postgres mysql; every chart shows its sql, row count and refresh time portable-artifacts skill">
+        <div class="top"><span class="nm">make-dashboard</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Build a self-contained static HTML dashboard (KPI tiles + Vega-Lite charts) from CSV, Parquet, JSON, DuckDB, SQLite, Postgres or MySQL. Every chart shows its SQL, row count and refresh time. Offline; one-command refresh</div>
+        <div class="pl">in <a href="features/portable-artifacts.html">portable-artifacts</a></div></div><div class="crow" data-type="Skill" data-search="make-motion build short animated explainer video titles counters shapes charts from json scene spec live preview scrubber deterministic 1080p mp4 portable-artifacts skill">
+        <div class="top"><span class="nm">make-motion</span><span class="ty t-skill">Skill</span></div>
+        <div class="dc">Build a short animated explainer (titles, counters, shapes, charts, images) from a JSON scene spec: live preview with scrubber plus a deterministic 1080p MP4. Offline; targeted edits change one field</div>
+        <div class="pl">in <a href="features/portable-artifacts.html">portable-artifacts</a></div></div><div class="crow" data-type="Skill" data-search="debug apply disciplined debugging lens: reproduce first, isolate, form hypothesis, prove with failing test prompt-craft skill">
         <div class="top"><span class="nm">debug</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Apply disciplined debugging lens: reproduce first, isolate, form hypothesis, prove with failing test</div>
         <div class="pl">in <a href="features/prompt-craft.html">prompt-craft</a></div></div><div class="crow" data-type="Skill" data-search="improve-prompt turn rough/vague request into deterministic spec: restated goal, acceptance criteria, assumptions, recommended commands prompt-craft skill">
@@ -410,6 +419,7 @@
     <div><b>Features</b>
       <a href="features/second-wind.html">Second Wind</a>
       <a href="features/prompt-craft.html">prompt-craft</a>
+      <a href="features/portable-artifacts.html">portable-artifacts</a>
       <a href="features/ios-dev.html">ios-dev</a>
       <a href="features/linear-pm.html">linear-pm</a>
       <a href="features/core-workflow.html">core-workflow</a></div>
@@ -424,7 +434,7 @@
       <a href="https://github.com/abhijitbansal/claude-skills/blob/main/SECURITY.md">Security policy</a></div>
   </div>
   <div class="foot-meta"><span class="lic">MIT licensed</span>
-    <span>5 plugins · 81 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
+    <span>6 plugins · 83 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
     <span>Tested on macOS &amp; Ubuntu</span></div>
 </div></footer>
 <script src="../site/assets/site.js"></script>

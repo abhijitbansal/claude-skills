@@ -1,0 +1,28 @@
+{
+  "claude": {
+    "cmd": ["claude", "-p", "{prompt}", "--permission-mode", "acceptEdits",
+            "--allowedTools", "Read", "Write", "Edit", "Glob", "Grep", "Bash(node:*)", "Bash(npm:*)", "Bash(ls:*)", "Bash(cat:*)"],
+    "modelArgs": ["--model", "{model}"],
+    "check": ["claude", "--version"]
+  },
+  "codex": {
+    "cmd": ["codex", "exec", "-s", "workspace-write", "--skip-git-repo-check", "-C", "{cwd}", "{prompt}"],
+    "modelArgs": ["-m", "{model}"],
+    "check": ["codex", "--version"]
+  },
+  "codex-oss": {
+    "cmd": ["codex", "exec", "--oss", "--local-provider", "ollama", "-s", "workspace-write", "--skip-git-repo-check", "-C", "{cwd}", "{prompt}"],
+    "modelArgs": ["-m", "{model}"],
+    "check": ["ollama", "--version"]
+  },
+  "gemini": {
+    "cmd": ["gemini", "-p", "{prompt}", "--yolo"],
+    "modelArgs": ["-m", "{model}"],
+    "check": ["gemini", "--version"]
+  },
+  "copilot": {
+    "cmd": ["copilot", "-p", "{prompt}", "--allow-all-tools"],
+    "modelArgs": ["--model", "{model}"],
+    "check": ["copilot", "--version"]
+  }
+}

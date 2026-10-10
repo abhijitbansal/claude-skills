@@ -1,0 +1,12 @@
+[
+  { "id": "q3-counter", "prompt": "Make a 6-second explainer: the title 'Q3 revenue' fades in, then a large counter animates from 0 to 18 with a % suffix, then the caption 'up from Q2' appears." },
+  { "id": "pipeline-steps", "prompt": "Make a 10-second explainer showing a 3-step pipeline: Ingest, Transform, Publish. Each step is a rounded box with a label; connecting lines draw in between them one after another." },
+  { "id": "signups-chart", "prompt": "Make an 8-second explainer revealing a bar chart of quarterly signups (Q1 1200, Q2 1850, Q3 2400, Q4 3100) with the caption 'Signups grew every quarter'." },
+  { "id": "title-card", "prompt": "Make a 5-second title card: 'Introducing Lumen' slides up and fades in, followed by the subtitle 'Search for your docs'." },
+  { "id": "milestone", "prompt": "Make a 7-second celebration clip: a counter goes from 0 to 2,000,000 with the label 'users', surrounded by a few colourful circles that scale in." },
+  { "id": "before-after", "prompt": "Make an 8-second explainer comparing p95 latency before and after: left side counts to 420 ms, right side counts to 95 ms, with labels 'Before' and 'After' and a headline 'Latency down 77%'." },
+  { "id": "roadmap-line", "prompt": "Make a 10-second roadmap animation: a horizontal line draws across the screen and four milestones (Alpha, Beta, GA, v2) pop in along it in order." },
+  { "id": "quote-code", "prompt": "Make a two-scene, 9-second clip: scene one is a quote card 'Make it work, make it right, make it fast' with the attribution 'Kent Beck'; scene two shows the code line `npm run build` in a monospace font." },
+  { "id": "square-social", "prompt": "Make a square 1080x1080 social clip with three scenes (about 3 seconds each): a hook headline, a key number counting up to 64%, and a call to action 'Read the report'." },
+  { "id": "edit-existing", "seed": "seeds/motion.json", "prompt": "Edit the existing motion.json: make the second scene twice as long and change the counter's target value to 25. Keep everything else unchanged." }
+]

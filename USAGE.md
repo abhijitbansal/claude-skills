@@ -128,6 +128,8 @@ Same as above but instead of scaffolding, runs `capture.sh` to absorb live state
 | `ios-build` | "build", "build for sim", "build on device" | Delegates to app's own `build.sh` if present, falls back to bare `xcodebuild`. Reads `app.yml`. |
 | `app-preview` | "screenshot", "show me", "preview the app", `/preview`, `/fix` | Build → launch on booted sim → deep-link → snap → deliver to phone via iMessage ping + iCloud Drive. Reads `app.yml`. |
 | `contribute` | "contribute back to claude-skills", `/contribute-skill` | Thin wrapper around `claude-skills-contribute`. |
+| `make-dashboard` | "build a dashboard from data/sales.csv", `/make-dashboard` | Writes a `dashboard.json` spec (sources, SQL, KPIs, Vega-Lite charts), validates it, builds one offline `index.html` where every chart shows its SQL and refresh time. See [portable-artifacts USAGE](plugins/portable-artifacts/USAGE.md). |
+| `make-motion` | "make an 8s explainer video …", `/make-motion` | Writes a `motion.json` scene spec, self-checks via contact-sheet PNGs, previews locally, renders a deterministic MP4 (Playwright + ffmpeg). |
 
 ## Files Claude reads automatically
 
@@ -253,3 +255,5 @@ adapters/install.sh all
 ```
 
 Re-run after adding skills; the script is idempotent and prunes links it created for removed skills.
+
+`make-dashboard` / `make-motion` additionally need `npm ci` in their skill folders; `node plugins/portable-artifacts/bin/install.mjs <host>` handles that (plus Gemini and project-scoped installs).

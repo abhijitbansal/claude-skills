@@ -37,7 +37,14 @@ def parse_frontmatter(path) -> dict:
     for line in text[3:end].splitlines():
         if ":" in line and not line.lstrip().startswith("#"):
             key, _, value = line.partition(":")
-            out[key.strip()] = value.strip()
+            value = value.strip()
+            # Strict-YAML-safe values are JSON-style double-quoted strings.
+            if len(value) > 1 and value[0] == value[-1] == '"':
+                try:
+                    value = json.loads(value)
+                except ValueError:
+                    pass
+            out[key.strip()] = value
     return out
 
 

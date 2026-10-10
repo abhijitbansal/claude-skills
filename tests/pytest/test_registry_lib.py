@@ -23,6 +23,21 @@ def test_parse_frontmatter_reads_scalars(tmp_path):
     assert fm == {"name": "plan", "description": "Decompose a task."}
 
 
+def test_parse_frontmatter_unquotes_json_style_double_quoted_values(tmp_path):
+    # Values containing ": " must be double-quoted for strict YAML parsers
+    # (Claude Code, npx skills); the registry must still see the plain text.
+    f = tmp_path / "SKILL.md"
+    f.write_text('---\nname: x\ndescription: "Errors like \\"rsvg: not found\\" — use when: stuck"\n---\nbody\n')
+    fm = rl.parse_frontmatter(f)
+    assert fm["description"] == 'Errors like "rsvg: not found" — use when: stuck'
+
+
+def test_parse_frontmatter_keeps_plain_values_with_quotes_inside(tmp_path):
+    f = tmp_path / "SKILL.md"
+    f.write_text('---\nname: x\ndescription: say "hi" then go\n---\n')
+    assert rl.parse_frontmatter(f)["description"] == 'say "hi" then go'
+
+
 def test_parse_frontmatter_missing_block_returns_empty(tmp_path):
     md = tmp_path / "x.md"
     md.write_text("# no frontmatter here\n")

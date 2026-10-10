@@ -1,0 +1,83 @@
+// Pure, DOM-free: compiles a motion spec into one paused anime.js timeline that
+// animates a plain state object per element. Runs unchanged in Node and the browser.
+import { createTimeline } from 'animejs';
+import { withDefaults, FADE_SECONDS } from './defaults.mjs';
+
+const MS = 1000;
+const MIN_SEGMENT_MS = 1;
+const COUNTER_MAX_SECONDS = 2;
+const COUNTER_SCENE_SHARE = 0.8;
+
+// Keyframes that set `prop`, as [{t, value, ease}] in order.
+function track(keyframes, prop) {
+  return keyframes
+    .filter((kf) => kf[prop] !== undefined)
+    .map((kf) => ({ t: kf.t, value: kf[prop], ease: kf.ease ?? 'linear' }));
+}
+
+// A counter with no `value` keyframes counts from -> to at the start of its scene.
+function counterDefaultTrack(el, sceneDuration) {
+  const seconds = Math.min(COUNTER_MAX_SECONDS, COUNTER_SCENE_SHARE * sceneDuration);
+  return [{ t: 0, value: el.from ?? 0, ease: 'linear' }, { t: seconds, value: el.to, ease: 'outCubic' }];
+}
+
+function elementTrack(el, prop, sceneDuration) {
+  const points = track(el.keyframes, prop);
+  if (prop === 'value' && el.type === 'counter' && !points.length) return counterDefaultTrack(el, sceneDuration);
+  return points;
+}
+
+function addTrack(tl, state, prop, points, sceneStart) {
+  if (!points.length) return;
+  state[prop] = points[0].value; // hold before the first keyframe
+  for (let i = 1; i < points.length; i++) {
+    const from = points[i - 1];
+    const to = points[i];
+    const duration = Math.max(MIN_SEGMENT_MS, (to.t - from.t) * MS);
+    tl.add(state, {
+      [prop]: { from: from.value, to: to.value, duration, ease: to.ease },
+      composition: 'none',
+    }, (sceneStart + from.t) * MS);
+  }
+}
+
+export function buildTimeline(input) {
+  const spec = withDefaults(input);
+  const timeline = createTimeline({ autoplay: false, defaults: { ease: 'linear' } });
+  const states = new Map();
+  const sceneOf = new Map();
+  const sceneStarts = [];
+  let cursor = 0;
+
+  spec.scenes.forEach((scene, si) => {
+    const start = cursor;
+    sceneStarts.push(start);
+
+    const sceneState = { opacity: scene.transition === 'fade' ? 0 : 1 };
+    states.set(`scene:${scene.id}`, sceneState);
+    if (scene.transition === 'fade') {
+      const duration = Math.min(FADE_SECONDS, scene.duration) * MS;
+      timeline.add(sceneState, { opacity: { from: 0, to: 1, duration }, composition: 'none' }, start * MS);
+    }
+
+    for (const el of scene.elements) {
+      sceneOf.set(el.id, si);
+      const state = {
+        x: el.x, y: el.y, opacity: el.opacity, scale: el.scale, rotate: el.rotate,
+        draw: el.draw, reveal: el.reveal, value: el.value,
+      };
+      states.set(el.id, state);
+      for (const prop of Object.keys(state)) {
+        addTrack(timeline, state, prop, elementTrack(el, prop, scene.duration), start);
+      }
+    }
+    cursor += scene.duration;
+  });
+
+  return { timeline, states, duration: cursor, sceneStarts, sceneOf };
+}
+
+// Seek to `sec` seconds. Deterministic: same input time gives the same state.
+export function seekTo(timeline, sec) {
+  timeline.seek(Math.max(0, sec) * MS);
+}

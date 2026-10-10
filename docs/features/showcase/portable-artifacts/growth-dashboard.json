@@ -1,0 +1,49 @@
+{
+  "title": "Growth overview",
+  "description": "Sales and web traffic: revenue, units, sessions and signup conversion",
+  "maxRows": 5000,
+  "sources": {
+    "sales": { "type": "csv", "path": "data/sales.csv" },
+    "web_traffic": { "type": "csv", "path": "data/web_traffic.csv" }
+  },
+  "queries": {
+    "sales_total": "SELECT SUM(amount) AS revenue, SUM(units) AS units FROM sales",
+    "conversion_total": "SELECT SUM(signups) * 1.0 / SUM(sessions) AS conversion FROM web_traffic",
+    "rev_by_region": "SELECT region, SUM(amount) AS revenue FROM sales GROUP BY 1 ORDER BY 2 DESC",
+    "rev_by_month": "SELECT date_trunc('month', date) AS month, SUM(amount) AS revenue FROM sales GROUP BY 1 ORDER BY 1",
+    "sessions_by_channel": "SELECT date, channel, SUM(sessions) AS sessions FROM web_traffic GROUP BY 1, 2 ORDER BY 1, 2",
+    "conversion_by_channel": "SELECT channel, SUM(signups) * 1.0 / SUM(sessions) AS conversion FROM web_traffic GROUP BY 1 ORDER BY 2 DESC"
+  },
+  "kpis": [
+    { "id": "k1", "title": "Total revenue", "query": "sales_total", "field": "revenue", "format": "currency" },
+    { "id": "k2", "title": "Units sold", "query": "sales_total", "field": "units", "format": "number" },
+    { "id": "k3", "title": "Signup conversion rate", "query": "conversion_total", "field": "conversion", "format": "percent" }
+  ],
+  "charts": [
+    {
+      "id": "c1", "title": "Revenue by region", "query": "rev_by_region", "width": "half",
+      "vegaLite": { "mark": "bar", "encoding": {
+        "x": { "field": "region", "type": "nominal", "sort": null, "title": null },
+        "y": { "field": "revenue", "type": "quantitative", "title": "Revenue" } } }
+    },
+    {
+      "id": "c2", "title": "Signup conversion rate by channel", "query": "conversion_by_channel", "width": "half",
+      "vegaLite": { "mark": "bar", "encoding": {
+        "x": { "field": "channel", "type": "nominal", "sort": null, "title": null },
+        "y": { "field": "conversion", "type": "quantitative", "title": "Conversion rate", "axis": { "format": ".1%" } } } }
+    },
+    {
+      "id": "c3", "title": "Monthly revenue", "query": "rev_by_month",
+      "vegaLite": { "mark": { "type": "line", "point": true }, "encoding": {
+        "x": { "field": "month", "type": "temporal", "timeUnit": "utcyearmonth", "title": null },
+        "y": { "field": "revenue", "type": "quantitative", "title": "Revenue" } } }
+    },
+    {
+      "id": "c4", "title": "Daily sessions by channel", "query": "sessions_by_channel",
+      "vegaLite": { "mark": "line", "encoding": {
+        "x": { "field": "date", "type": "temporal", "timeUnit": "utcyearmonthdate", "title": null },
+        "y": { "field": "sessions", "type": "quantitative", "title": "Sessions" },
+        "color": { "field": "channel", "type": "nominal", "title": "Channel" } } }
+    }
+  ]
+}
