@@ -1,6 +1,6 @@
 ---
 name: subpage-nav-anchor-baseurl-ssr-label-drift
-description: Shared nav/skip-link `href="#section"` resolves to a dead URL like `/repo/updates/#work` the moment a single-page static site (Astro/SSG under a base path, e.g. GitHub Pages `base: '/repo/'`) grows a second page, and an SSR-rendered label ("Theme · Light") stays wrong until hydration (or forever with JS off) after the client-side default it mirrors gets flipped. Use when adding page N+1 to a 1-page site, reviewing a shared header/nav/skip-link component on a base-path-hosted static site, or changing any client-side default (theme, locale, sort order) that has an SSR-rendered reflection.
+description: "Shared nav/skip-link `href=\"#section\"` resolves to a dead URL like `/repo/updates/#work` the moment a single-page static site (Astro/SSG under a base path, e.g. GitHub Pages `base: '/repo/'`) grows a second page, and an SSR-rendered label (\"Theme · Light\") stays wrong until hydration (or forever with JS off) after the client-side default it mirrors gets flipped. Use when adding page N+1 to a 1-page site, reviewing a shared header/nav/skip-link component on a base-path-hosted static site, or changing any client-side default (theme, locale, sort order) that has an SSR-rendered reflection."
 ---
 
 # Multi-Page Static Site: Subpage Nav Anchors + SSR Default Drift

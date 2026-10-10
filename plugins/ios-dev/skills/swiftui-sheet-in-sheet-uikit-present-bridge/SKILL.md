@@ -1,6 +1,6 @@
 ---
 name: swiftui-sheet-in-sheet-uikit-present-bridge
-description: UIActivityViewController (or any other UIKit present-based flow like UIDocumentPickerViewController) presented via .sheet(item:) from a SwiftUI view that is itself already presented as a sheet flashes on screen and self-dismisses within a single frame with zero user interaction — confirmed by a user who "didn't tap anything." Use when triggering a system share sheet, document picker, or any UIKit present(_:animated:) flow from a screen that can itself be presented as a sheet (a very common architecture: Settings-as-sheet, detail-as-sheet).
+description: "UIActivityViewController (or any other UIKit present-based flow like UIDocumentPickerViewController) presented via .sheet(item:) from a SwiftUI view that is itself already presented as a sheet flashes on screen and self-dismisses within a single frame with zero user interaction — confirmed by a user who \"didn't tap anything.\" Use when triggering a system share sheet, document picker, or any UIKit present(_:animated:) flow from a screen that can itself be presented as a sheet (a very common architecture: Settings-as-sheet, detail-as-sheet)."
 ---
 
 # SwiftUI Sheet-in-Sheet: UIKit Present Flashes and Self-Dismisses
