@@ -1,6 +1,6 @@
 ---
 name: github-solo-branch-protection-codeowners
-description: "Configure GitHub branch protection on a solo-owner (or owner-led) repo so that OTHER people's PRs require the owner's approval before merge, while the owner can still merge their OWN PRs solo. Use when the user asks to \"require approval on PRs but let me still self-merge\", \"make it so at least I have to approve any other PR\", is hardening a repo just before making it public (forks will open PRs from strangers), or hits GitHub's \"Pull request review is not required for administrators\" / cannot approve own PR wall after turning on required reviews. Also fires when `required_approving_review_count: 1` locks the owner out of their own PRs, or a CODEOWNERS file \"does nothing\" on a feature branch."
+description: "Configure GitHub branch protection on a solo-owner (or owner-led) repo so that OTHER people's PRs require the owner's approval before merge, while the owner can still merge their OWN PRs solo. Use when the user asks to \"require approval on PRs but let me still self-merge\", \"make it so at least I have to approve any other PR\", is hardening a repo just before making it public (forks will open PRs from strangers), or hits GitHub's \"Pull request review is not required for administrators\" / cannot approve own PR wall after turning on required reviews. Also fires when `required_approving_review_count: 1` locks the owner out of their own PRs, or a CODEOWNERS file \"does nothing\" on a feature branch. Also fires when the agent's own gh pr merge --admin is denied by the auto mode classifier ([Merge Without Review]) or git branch -d is blocked by bash-guard, taking any chained remote delete with it."
 ---
 
 # GitHub branch protection: require others' approval, keep owner self-merge
@@ -75,6 +75,38 @@ description: "Configure GitHub branch protection on a solo-owner (or owner-led) 
      No bypass for them.
    - A PR from you → you can't self-approve (GitHub forbids it), but
      `enforce_admins: false` lets you merge anyway via `--admin`.
+
+## Agent-side limits: merge and branch cleanup are the user's step
+
+Symptoms: `Permission for this action was denied by the Claude Code auto mode
+classifier. Reason: [Merge Without Review].` and `BLOCKED (bash-guard): git
+branch delete (-d/-D/--delete)`. A chained local-plus-remote delete is
+blocked WHOLE, so the remote delete never runs either.
+
+Why: self-authored PRs need the owner's `--admin` bypass, and the auto mode
+classifier and a bash guard hook can deliberately deny that merge and any branch
+deletion by the agent. Do not retry, chain, or look for workarounds.
+
+What to do:
+
+1. Verify CI is green and the PR is mergeable (`gh pr checks N`,
+   `gh pr view N --json mergeable`).
+2. Hand the user ONE copy-paste line with the `!` prefix:
+   ```text
+   ! gh pr merge N --squash --admin --delete-branch
+   ```
+3. The agent never deletes branches itself. The `--delete-branch` flag in
+   the line above covers the remote; the user runs `git branch -d <name>`
+   locally.
+4. Check `git branch --merged` and detach any worktree still holding the
+   branch before handing off, so the user's delete succeeds.
+5. State plainly that the merge is pending the user, and continue with
+   independent work.
+
+Evidence (mined, 9 sessions across 6 projects): a private app `6cacae0b` (classifier
+denial text), cubby `1d26271a` (bash-guard text), a private project `fda30a90`
+(agent told the user to run the branch delete themselves), a private bot
+`c2a681f5` (guard blocked a whole compound command).
 
 ## Hard rules
 
