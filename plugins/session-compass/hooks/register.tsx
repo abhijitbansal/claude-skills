@@ -3,6 +3,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { Artifact, SessionRecord } from '../types'
 import { bandView, formatBand, tally } from './band'
 import { capture } from './capture'
+import { PANE_ID, paneView, type Tab } from './pane'
 import { GIT_TIMEOUT_MS, INDEX, PREFIX, isRecord, recordKey } from './io'
 import {
   LIMITS, addArtifact, applyStatus, basename, capArtifacts, newRecord, orderIndex, sortByActive, touch, withFirstPrompt,
@@ -12,6 +13,7 @@ import {
 // Atoms sit in this file: the host's state scan reads only atoms declared here.
 const record = atom({ plugin: 'session-compass', key: 'record' } as const, null)
 const band = atom({ plugin: 'session-compass', key: 'band' } as const, 'hidden' as 'hidden' | 'return')
+const tab = atom({ plugin: 'session-compass', key: 'tab' } as const, 'this' as Tab)
 const IDLE_TICK_MS = 60_000
 
 export const STATUS_TOOL_ID = 'mcp__session-compass__compass_status'
@@ -243,6 +245,25 @@ export const register: Register = on => {
     if (e.props.hasSurvey || shown !== 'return' || rec === null) return next(e)
     const line = formatBand(rec, tally(await readTestBoard($)), e.props.bodyColumns)
     return bandView($.ui.resolve(e), line, await next(e))
+  })
+
+  on('command.run', { command: 'compass' }, async $ => {
+    await $.ui.open({ id: PANE_ID, title: 'Compass' })
+    return { text: 'Compass opened.' }
+  })
+
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
+    const shown = await read($, tab)
+    const rec = await read($, record)
+    // A corrupt or missing index never crashes the pane: loadIndex rebuilds from session keys.
+    const others = shown === 'all' ? await listSessions($, rec?.id ?? '').catch(() => []) : []
+    const tests = shown === 'this' ? tally(await readTestBoard($)) : undefined
+    return paneView($.ui.resolve(e), {
+      tab: shown, rec, others, tests, now: await $.clock.now(), columns: e.props.bodyColumns,
+    }, {
+      onTab: next => { void update($, tab, () => next) },
+      onCopy: text => { void $.ui.copy({ text, surface: e.surface }) },
+    })
   })
 
   on('tool.call', { tool: STATUS_TOOL_ID }, async ($, e) => {
