@@ -182,6 +182,31 @@ deviation; the user reviews them with the plans.
   type-checks after each task through a gitignored `.scratch/tsc` config that points at the skill's
   declaration file, before the first `--plugin-dir` load.
 
+### Build-time deviations (found while implementing)
+
+The host enforces rules the specs did not know about, so the code differs from the specs' file trees:
+
+- **Atoms and `$` code sit in `register.tsx`.** The host reads `$.state` atoms only when `register.tsx` declares
+  them. It does not follow `$` into an imported file, and it refuses a nested helper function that receives
+  `$`. So every atom and every function that touches `$` is in `register.tsx`, and helpers that take `$` are
+  top-level functions. There is no `state.ts`. Session Compass's `io.ts` holds only constants and pure helpers.
+- **Session Compass's `band.tsx` and `pane.tsx` are pure view builders.** They take the element table, plain data
+  and callbacks. The `ui.render` hooks, `/compass` handling and `$.ui.copy` live in `register.tsx`.
+- **The test kit answers only `$.state`, invalidate and `session.append`.** Every other op is stubbed with
+  `on('<op>', () => ({ value }))`. An op with no stub skips the hook silently, so every test asserts an effect.
+- **Bash results carry no exit code.** Test Board reads it from `isError` and the "Exit code N" text.
+  `tool.call` carries no cwd either, so the run's directory is the leading `cd`, then the subagent's spawn
+  `cwd`, then `$.session.cwd()`, read before the command runs.
+- **Concurrency is serialized.** Both mods queue their store work on one promise chain. Session Compass writes
+  the record only through CAS `update` transforms of the current atom value.
+- **`compass_status` answers `{ result: { text: 'ok' } }`, or `{ deny }` on failure.** It is denied for
+  subagents (`e.agentId`), so a subagent cannot rewrite the session goal. A subagent's artifacts still count.
+- **Only the person's prompts dismiss the return band or become the first prompt.** That means origin
+  `composer`, `bridge`, or none. The main loop's `turn.start` and `turn.complete` decide whether a turn is
+  running.
+- **Test Board recognizes more test runners.** It accepts `uv tool run` and `uvx` prefixes, because this repo's
+  CI uses them.
+
 ## 6. Not taken forward (yet)
 
 Suggested from the same history scan and left for later, at the user's call:
