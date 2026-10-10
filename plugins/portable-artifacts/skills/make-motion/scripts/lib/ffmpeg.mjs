@@ -28,7 +28,45 @@ export async function findFfmpeg({ skipStatic = false } = {}) {
   throw new Error(HINT);
 }
 
-export function encodeArgs({ fps, out }) {
-  return ['-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-',
-    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out];
+const VIDEO_INPUT = (fps) => ['-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-'];
+const VIDEO_CODEC = ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart'];
+const AUDIO_CODEC = ['-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2']; // always stereo: amix follows the first input's layout
+const MS_PER_SECOND = 1000;
+const PROBE_SECONDS = '0.1';
+
+// Round to ms so float noise (1.3000000000000003) never reaches a filter graph.
+const sec = (n) => String(Math.round(n * MS_PER_SECOND) / MS_PER_SECOND);
+
+// One track -> trim to its clip, gain, fades, then delay to its absolute start. `end` is the fade-out anchor.
+function trackChain(track, index) {
+  const length = track.end - track.start;
+  const steps = [`atrim=end=${sec(length)}`, `volume=${sec(track.volume)}`];
+  if (track.fadeIn > 0) steps.push(`afade=t=in:st=0:d=${sec(track.fadeIn)}`);
+  if (track.fadeOut > 0) steps.push(`afade=t=out:st=${sec(Math.max(0, length - track.fadeOut))}:d=${sec(track.fadeOut)}`);
+  steps.push(`adelay=${Math.round(track.start * MS_PER_SECOND)}:all=1`);
+  return `[${index + 1}:a]${steps.join(',')}[a${index}]`;
+}
+
+function audioGraph(audio) {
+  const chains = audio.map(trackChain);
+  if (audio.length === 1) return { graph: chains[0], label: '[a0]' };
+  const labels = audio.map((_, i) => `[a${i}]`).join('');
+  return { graph: `${chains.join(';')};${labels}amix=inputs=${audio.length}:duration=longest:normalize=0[aout]`, label: '[aout]' };
+}
+
+// `audio`: resolveAudio() output plus an absolute `file` per track. `duration` caps the MP4 at the video length.
+export function encodeArgs({ fps, out, audio = [], duration }) {
+  if (audio.length === 0) return [...VIDEO_INPUT(fps), ...VIDEO_CODEC, out];
+  const { graph, label } = audioGraph(audio);
+  return [...VIDEO_INPUT(fps), ...audio.flatMap((t) => ['-i', t.file]), '-filter_complex', graph,
+    '-map', '0:v', '-map', label, ...VIDEO_CODEC, ...AUDIO_CODEC, '-t', sec(duration), out];
+}
+
+// null when ffmpeg can decode the start of `file`'s first audio stream, else the first stderr line.
+// Mapping 0:a:0 makes a video-only or image file fail here instead of after every frame is captured.
+export function probeAudio(ffmpegPath, file) {
+  const args = ['-v', 'error', '-i', file, '-map', '0:a:0', '-t', PROBE_SECONDS, '-f', 'null', '-'];
+  const r = spawnSync(ffmpegPath, args, { encoding: 'utf8' });
+  if (r.status === 0) return null;
+  return (r.stderr ?? '').split('\n').find((l) => l.trim()) ?? r.error?.message ?? `ffmpeg exited ${r.status}`;
 }

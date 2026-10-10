@@ -6,6 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startServer } from '../scripts/lib/server.mjs';
+import { writeWav } from './helpers/wav.mjs';
 
 const spec = (title, src = 'pic.png') => ({ scenes: [{ id: 's', duration: 1, elements: [
   { id: 't', type: 'text', text: title, x: 1, y: 1 },
@@ -90,6 +91,49 @@ test('/assets serves only image srcs named in the spec; blocks traversal, symlin
   assert.equal((await get(srv.url, '/assets/link.png')).status, 404);
   writeFileSync(f.specPath, JSON.stringify(spec('x', '.env')));
   assert.equal((await get(srv.url, '/assets/.env')).status, 404);
+}));
+
+test('/assets serves audio named in spec.audio with its MIME; unreferenced audio is 404, images still work', () => withServer(async (srv, f) => {
+  writeWav(path.join(f.dir, 'voice.wav'), { seconds: 0.1 });
+  writeWav(path.join(f.dir, 'unused.wav'), { seconds: 0.1 });
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('a'), audio: [{ src: 'voice.wav' }] }));
+  const ok = await get(srv.url, '/assets/voice.wav');
+  assert.equal(ok.status, 200);
+  assert.equal(ok.headers['content-type'], 'audio/wav');
+  assert.equal((await get(srv.url, '/assets/unused.wav')).status, 404);
+  assert.equal((await get(srv.url, '/assets/pic.png')).body, 'public');
+}));
+
+test('/assets honours a byte Range request so the browser can seek audio', () => withServer(async (srv, f) => {
+  writeFileSync(path.join(f.dir, 'r.wav'), '0123456789');
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('a'), audio: [{ src: 'r.wav' }] }));
+  const whole = await get(srv.url, '/assets/r.wav');
+  assert.equal(whole.headers['accept-ranges'], 'bytes');
+  const part = await get(srv.url, '/assets/r.wav', { range: 'bytes=2-5' });
+  assert.equal(part.status, 206);
+  assert.equal(part.body, '2345');
+  assert.equal(part.headers['content-range'], 'bytes 2-5/10');
+  const tail = await get(srv.url, '/assets/r.wav', { range: 'bytes=7-' });
+  assert.equal(tail.body, '789');
+  const unsatisfiable = await get(srv.url, '/assets/r.wav', { range: 'bytes=50-60' });
+  assert.equal(unsatisfiable.status, 416);
+  assert.equal(unsatisfiable.headers['cache-control'], 'no-store');
+  const page = await get(srv.url, '/template/styles.css');
+  assert.equal(page.headers['accept-ranges'], undefined, 'only /assets advertises byte ranges');
+}));
+
+test('/assets maps every audio extension to an audio MIME', () => withServer(async (srv, f) => {
+  const mimes = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', flac: 'audio/flac' };
+  for (const ext of Object.keys(mimes)) writeFileSync(path.join(f.dir, `t.${ext}`), 'x');
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('a'), audio: Object.keys(mimes).map((ext) => ({ src: `t.${ext}` })) }));
+  for (const [ext, mime] of Object.entries(mimes)) {
+    assert.equal((await get(srv.url, `/assets/t.${ext}`)).headers['content-type'], mime, ext);
+  }
+}));
+
+test('/assets answers 404, not 500, while the spec is temporarily invalid JSON', () => withServer(async (srv, f) => {
+  writeFileSync(f.specPath, '{not json');
+  assert.equal((await get(srv.url, '/assets/pic.png')).status, 404);
 }));
 
 test('vendor routes and template serve 200', () => withServer(async (srv) => {
