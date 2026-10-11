@@ -34,7 +34,8 @@ runtime-trap warning).
 **Config:** `bash "${CLAUDE_PLUGIN_ROOT}/skills/_lib/validate_app_config.sh"`
 must print `ok:`. On ERROR lines, stop and fix `.claude/app.yml` with the user.
 
-**ASC API key** (needed for upload; skippable under `--dry-run`): required files
+**ASC API key** (required for the Fastlane archive path, validate and upload,
+so NOT skippable under `--dry-run`): required files
 - `~/.app-store-connect/AuthKey_<KEY_ID>.p8`
 - `~/.app-store-connect/config` containing `KEY_ID=…` and `ISSUER_ID=…`
 
@@ -56,6 +57,11 @@ If missing, STOP and print:
 >    chmod 600 ~/.app-store-connect/config
 >    ```
 > 6. Re-run `release <mode>`.
+
+`release.sh` sources that config file before Stage 5 and exports
+`ASC_KEY_ID` (from `KEY_ID`), `ASC_ISSUER_ID` (from `ISSUER_ID`) and
+`ASC_KEY_PATH` (`${API_PRIVATE_KEYS_DIR}/AuthKey_<KEY_ID>.p8`) for the
+Fastfile's `archive` lane; values already set in the environment win.
 
 Never echo `KEY_ID`, `ISSUER_ID`, or `.p8` contents into any output or log.
 
@@ -124,20 +130,22 @@ draft; let the user edit. In appstore mode also confirm the whatsnew file entry
 `Changelog`/`FeatureCatalog` data (`release.inapp_changelog_file`) is
 **binary** — compiled into the app, only visible once a build containing the
 new entry ships. App Store Connect's "What's New"/"What to Test" metadata
-(`release.whatsnew_file`) is a **manual paste**, independent of the binary —
-no upload lane can push it. Updating one does not update the other; gate S1
-checks both when configured, but the content itself still needs writing in
-both places.
+(`release.whatsnew_file`) is independent of the binary: copy
+`release.whatsnew_file` into `fastlane/metadata/<locale>/release_notes.txt`
+(deliver) or pass it as pilot's `changelog:`, or paste it manually in App
+Store Connect. Updating one does not update the other; gate S1 checks both
+when configured, but the content itself still needs writing in both places.
 
 ## Stage 4 — Local build + test 🤖
 
 ```bash
 ./"${APP_BUILD_SCRIPT}" --no-launch   # sim build via the app's wrapper
-xcodebuild test -scheme "${APP_SCHEME}" -destination 'platform=iOS Simulator,name=iPhone 17 Pro' 2>&1 | tail -40
+xcodebuild test -scheme "${APP_SCHEME}" -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-All checks run locally (user decision: local + Xcode Cloud). On failure surface
-the last 40 lines and STOP — the user fixes, then re-runs (re-bumping is
+All checks run locally (user decision: local + Xcode Cloud). Run it bare — a
+`| tail` pipe would swallow the exit status. On failure surface the last 40
+lines of output and STOP — the user fixes, then re-runs (re-bumping is
 correct behavior).
 
 **Verify warnings on a COLD build.** A warm incremental `xcodebuild` does *not*
@@ -161,30 +169,68 @@ bundle exec fastlane archive     # gym: scheme/team from the rendered Fastfile
 **Cold-start signing.** On a machine with no App Store *distribution*
 provisioning profile yet, gym's *automatic* export cannot resolve one — the
 archive signs clean but export fails with "no provisioning profile mapping".
-Make the `archive` lane self-contained: create/fetch the profile via the ASC
-API key, then export with a **manual** signing map. In the Fastfile:
+Make the `archive` lane self-contained: fetch or create the profile via the ASC
+API key (the App IDs must already exist in the developer portal), then export
+with a **manual** signing map. The canonical full lane is `ios-scaffold`'s
+`templates/Fastfile`; the snippet below shows only the signing core (scheme,
+output options etc. live in the template):
 
 ```ruby
+# Fail early, not with a KeyError: release.sh exports these from the Stage 0
+# key files (~/.app-store-connect).
+unless %w[ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_PATH].all? { |k| !ENV[k].to_s.empty? }
+  UI.user_error!("ASC_KEY_ID/ASC_ISSUER_ID/ASC_KEY_PATH unset — run release Stage 0 (/release) or export them")
+end
+api_key = app_store_connect_api_key(
+  key_id: ENV.fetch("ASC_KEY_ID"),
+  issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+  key_filepath: ENV.fetch("ASC_KEY_PATH"))   # path to the AuthKey_*.p8
+
 # Fetch/map a profile for the main app AND every signed embedded extension
-# (targets.extensions in .claude/app.yml, e.g. a widget/share/notification-
-# service .appex) — a target left out of this loop archives fine but fails
-# at export with "no provisioning profile mapping" for its bundle id.
-signed_targets = [APP_IDENTIFIER] + APP_EXTENSION_IDENTIFIERS   # from app.yml
+# (a widget/share/notification-service .appex) — a target left out of this
+# loop archives fine but fails at export with "no provisioning profile
+# mapping" for its bundle id.
+# TARGETS_EXTENSIONS (targets.extensions in .claude/app.yml, exported by
+# load_app_config.sh) holds target NAMES, space-separated, not bundle ids.
+# Each id is derived as "<app bundle id>.<TargetName>", Xcode's default for a
+# new extension target. Apps that deviate set APP_EXTENSION_BUNDLE_IDS
+# (space-separated bundle ids) to override.
+# APP_IDENTIFIER is rendered from app.bundle_id into the Fastfile by
+# ios-scaffold (see the template), so no env var can be missing here.
+app_identifier = APP_IDENTIFIER
+extension_identifiers =
+  if ENV["APP_EXTENSION_BUNDLE_IDS"].to_s.strip.empty?
+    ENV.fetch("TARGETS_EXTENSIONS", "").split.map { |name| "#{app_identifier}.#{name}" }
+  else
+    ENV["APP_EXTENSION_BUNDLE_IDS"].split
+  end
+UI.important("TARGETS_EXTENSIONS is empty: signing only the main app") if extension_identifiers.empty?
+signed_targets = [app_identifier] + extension_identifiers
 profiles = signed_targets.map do |identifier|
-  name = get_provisioning_profile(   # sigh; App Store type by default
-    api_key: asc_api_key, app_identifier: identifier, readonly: false)
-  [identifier, name]
+  get_provisioning_profile(   # sigh; App Store type by default
+    api_key: api_key, app_identifier: identifier, readonly: false)
+  [identifier, lane_context[SharedValues::SIGH_NAME]]   # profile name (SIGH_NAME); the action itself returns the UUID
 end.to_h
-gym(export_method: "app-store", export_options: {
-  signingStyle: "manual",
-  provisioningProfiles: profiles,   # every signed target, not just the app
-})
+gym(export_method: ENV.fetch("RELEASE_EXPORT_METHOD", "app-store-connect"),
+    export_options: {
+      signingStyle: "manual",
+      provisioningProfiles: profiles,   # every signed target, not just the app
+    })
 ```
 
-Every embedded extension added to the app must be added to this list at the
-same time it's added to the Xcode project — treat it like entitlement parity
-(S1 gate): both are "every signed target needs matching setup," just for
-different concerns.
+Fastlane does not source `load_app_config.sh`. Run the lane through
+`release.sh` (or `source plugins/ios-dev/skills/_lib/load_app_config.sh` first,
+plus the ASC key files from Stage 0) so `APP_*`, `TARGETS_EXTENSIONS` and
+`ASC_*` are exported; a bare `bundle exec fastlane archive` sees an empty
+extension list, and the lane warns when it does.
+
+Read `fastlane-archive-multi-target-signing` before editing the archive lane.
+The extension list is derived from `targets.extensions` in `.claude/app.yml`
+(set `APP_EXTENSION_BUNDLE_IDS` when a derived bundle id does not match), not
+edited in the Fastfile. Add every embedded extension to `targets.extensions`
+at the same time it's added to the Xcode project — treat it like entitlement
+parity (S1 gate): both are "every signed target needs matching setup," just
+for different concerns.
 
 **Fallback (no Fastfile)** — raw xcodebuild, kept working on purpose:
 
@@ -215,9 +261,12 @@ validate (S6) but stops before upload.
 
 ## Stage 6 — Validate + upload ✋ (the only irreversible step)
 
-Validate first (both paths):
+Validate first (both paths). `altool --apiKey` looks for `AuthKey_<KEY_ID>.p8`
+in `API_PRIVATE_KEYS_DIR` (or `~/.private_keys` etc.), not `~/.app-store-connect/`
+— point it there first:
 
 ```bash
+export API_PRIVATE_KEYS_DIR="${API_PRIVATE_KEYS_DIR:-${HOME}/.app-store-connect}"
 xcrun altool --validate-app -f "build/${APP_NAME}.ipa" --type ios \
   --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
 ```
@@ -236,7 +285,8 @@ Only on the exact answer `upload`:
 # fastlane path
 bundle exec fastlane beta       # testflight (pilot)
 bundle exec fastlane release    # appstore  (deliver, no auto-submit)
-# fallback
+# fallback (same API_PRIVATE_KEYS_DIR export as the validate step above)
+export API_PRIVATE_KEYS_DIR="${API_PRIVATE_KEYS_DIR:-${HOME}/.app-store-connect}"
 xcrun altool --upload-app -f "build/${APP_NAME}.ipa" --type ios \
   --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
 ```
@@ -248,6 +298,7 @@ Recovery table:
 | `ITMS-90283 Invalid Provisioning Profile` | signing drift — re-archive |
 | `ITMS-90189 Redundant Binary Upload` | usually: build number already used — re-run, S2 bumps. If this fired from a Cloud build **after** S6 already uploaded this build locally: expected — see S7's tag-push caveat, no action needed |
 | `Authentication failed` | check `~/.app-store-connect/config` IDs + `.p8` filename |
+| altool cannot find the key (`AuthKey_<KEY_ID>.p8` not found) | `export API_PRIVATE_KEYS_DIR="$HOME/.app-store-connect"` — altool does not search that dir by default |
 | "missing entitlement" at validate | App Group parity across targets — see S1 gate, re-archive |
 
 ## Stage 7 — Tag ✋
