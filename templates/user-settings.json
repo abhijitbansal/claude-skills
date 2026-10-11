@@ -37,17 +37,10 @@
       "WebFetch(domain:developer.apple.com)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(xcodebuild -scheme FloorPlanScanner -destination 'platform=iOS Simulator,id=927E2B69-BF25-4880-BDBE-001E00074836' -configuration Debug build)",
-      "Bash(xcodebuild -scheme FloorPlanScanner -destination 'platform=iOS Simulator,id=927E2B69-BF25-4880-BDBE-001E00074836' -configuration Debug -showBuildSettings)",
       "Bash(xcrun simctl *)",
-      "Bash(/usr/libexec/PlistBuddy -c \"Print CFBundleIdentifier\" \"/Users/abhijitbansal/Library/Developer/Xcode/DerivedData/FloorPlanScanner-bzvqtrxxzdioxdekmouubozzitql/Build/Products/Debug-iphonesimulator/FloorPlanScanner.app/Info.plist\")",
-      "Bash(git merge *)",
-      "Bash(rm -f Paperix/WhatsNew.swift Paperix/WhatsNewGate.swift Paperix/WhatsNewHistoryView.swift Paperix/WhatsNewSheet.swift PaperixTests/WhatsNewTests.swift docs/superpowers/plans/2026-05-20-versioned-release-notes.md scripts/release-notes-collect.sh scripts/release-notes-fallback.sh scripts/release-notes-finalize.sh && git merge origin/main --no-edit 2>&1 | tail -30)"
+      "Bash(git merge *)"
     ],
-    "defaultMode": "auto",
-    "additionalDirectories": [
-      "/Users/abhijitbansal/projects/doc-scan/Paperix"
-    ]
+    "defaultMode": "auto"
   },
   "hooks": {
     "SessionStart": [

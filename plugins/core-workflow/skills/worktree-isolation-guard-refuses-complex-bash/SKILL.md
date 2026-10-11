@@ -46,7 +46,7 @@ compound forms; advice also conflicted across sessions (some said use
 ## Evidence
 
 Mined from session digests; about 6 sessions across 3 projects found
-independently: a private-project worktree `e9097288` (the `-C` refusal), doc-scan
+independently: a private-project worktree `e9097288` (the `-C` refusal), a private document-scanner app
 `ea9bc432` (string through `.`), a private-bot worktree `bb35f1a6`
 (too complex to verify), a private bot `c2a681f5` (withheld error text).
 

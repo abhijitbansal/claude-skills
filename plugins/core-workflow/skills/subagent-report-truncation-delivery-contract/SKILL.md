@@ -57,7 +57,7 @@ Orchestrator side:
 
 Mined from Claude Code session digests; 15 sessions across 6 projects.
 Representative sessions: claude-skills `c33995d6`, a private-project worktree
-`8edde5a5`, cubby `52367698`, doc-scan `9e25d11a` (the `SendMessage` error
+`8edde5a5`, cubby `52367698`, a private document-scanner app `9e25d11a` (the `SendMessage` error
 text above). In about ten of them the lead asked for a resend of the tail.
 
 ## Related skills

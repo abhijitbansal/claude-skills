@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Draft release notes from Release-Note: commit trailers since the last v* tag
-# (same trailer contract as floorprint/doc-scan's release-notes-collect.sh).
+# (same trailer contract as two private apps' release-notes-collect.sh).
 # Falls back to a generic line when no trailers exist in the range.
 #
 # Usage: release_notes.sh <version>   → prints build/release-notes-<version>.md

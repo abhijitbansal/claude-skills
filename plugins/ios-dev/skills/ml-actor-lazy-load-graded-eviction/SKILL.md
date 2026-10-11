@@ -9,7 +9,7 @@ description: A heavy on-device model (Core ML, MLX VLM, or any large-buffer reso
 
 - App hangs or crashes on launch/object creation, before the heavy model is
   ever used — traced back to eager model loading in the actor's/type's
-  `init`. (Paperix `DocEnhanceModel.swift`, fixed by commit `1f3040c`.)
+  `init`. (a private document-scanner app's `DocEnhanceModel.swift`, fixed by commit `1f3040c`.)
 - A low-memory warning fires, the app's memory handler calls
   `vlmEngine.evict()`, and the *in-flight generation the user was actively
   waiting on* aborts with `CancellationError` after ~0.4s — even though the
@@ -91,9 +91,9 @@ func evict(reason: EvictionReason) async {
 
 ## Evidence
 
-- Session 0018: "Learn model-loading lessons from the Paperix repo branch ...
+- Session 0018: "Learn model-loading lessons from a private document-scanner app's repo branch ...
   its Core ML model initially hung/crashed on load; fix commit `1f3040c` =
-  lazy-load off init." "MLXVLMEngine actor implements the Paperix contract
+  lazy-load off init." "MLXVLMEngine actor implements the scanner app contract
   (lazy load, cached failure, evict) + reentrancy-safe shared load task."
 - Session 0019: "model load spiked memory → iOS low-memory warning →
   `CubbyApp.swift:325-334` handler called `vlmEngine.evict()` → evict

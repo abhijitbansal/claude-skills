@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy the app's marketing/legal site (a subtree of the app repo) to its
-# public GitHub Pages repo. Generalized port of floorprint's deploy-site.sh —
+# public GitHub Pages repo. Generalized port of the originating app's deploy-site.sh —
 # every guard preserved. Force-push is intentional: the public repo's history
 # is a derivative, not a source of truth.
 #

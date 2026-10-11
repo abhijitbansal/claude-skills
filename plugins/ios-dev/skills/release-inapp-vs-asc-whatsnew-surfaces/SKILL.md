@@ -72,7 +72,7 @@ Treat the two surfaces as genuinely separate checklist items, not one
 
 ## Evidence
 
-- **Paperix** (`WhatsNewGate.swift`) — `WhatsNewGateModifier` presents the
+- **a private document-scanner app** (`WhatsNewGate.swift`) — `WhatsNewGateModifier` presents the
   sheet by comparing `WhatsNew.bundled?.currentVersion` (the compiled-in
   payload, backed by `FeatureCatalog.swift`/`WhatsNew.swift`) against
   `lastSeenWhatsNewVersion` in `UserDefaults`. `WhatsNew.bundled` only

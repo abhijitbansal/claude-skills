@@ -87,7 +87,7 @@ files** — they're build artifacts of a one-off, not something regenerated on
 every deploy. Re-running the script is how you handle a rebrand.
 
 ## Evidence
-Used on a static marketing site (doc-scan/Paperix-style site skeleton) whose
+Used on a static marketing site (a private document-scanner app's site skeleton) whose
 favicon was a single letter on a rounded-square tile — SVG existed, but the
 dev container had no `rsvg-convert`/ImageMagick/cairosvg/Inkscape and
 installing one wasn't worth it for a handful of PNGs. Same pattern applies

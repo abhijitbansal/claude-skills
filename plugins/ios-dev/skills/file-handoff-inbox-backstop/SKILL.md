@@ -8,7 +8,7 @@ description: App boot-loops after receiving a share — every cold launch is jet
 ## Symptom
 
 - App crashes on launch, **every** launch, after a user shares a large item.
-  doc-scan's case: a 24MP EXIF-rotated shared image decoded to a ~880MB bitmap
+  A private document-scanner app's case: a 24MP EXIF-rotated shared image decoded to a ~880MB bitmap
   → jetsam during the inbox drain → drain died before clearing the batch →
   cold-launch boot-loop. Widget timeline launches re-triggered it too.
 - Shared items imported twice (drain ran concurrently) or never appeared
@@ -71,7 +71,7 @@ let out = UIGraphicsImageRenderer(size: targetSize, format: format).image { _ in
 
 ## Evidence
 
-- doc-scan (Paperix, 5 targets incl. share extension + `ShareExtensionInbox`
+- a private document-scanner app (5 targets incl. share extension + `ShareExtensionInbox`
   helper): `stop launch boot-loop on large rotated shared images`,
   `cap drain attempts and quarantine poison batches`.
 

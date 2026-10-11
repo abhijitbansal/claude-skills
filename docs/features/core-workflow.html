@@ -166,7 +166,7 @@ Result: Feature branch created, new skill scaffolded and committed, PR opened.">
 Claude runs: contribute skill with --skill my-new-agent --message "..."
 Result: Feature branch created, new skill scaffolded and committed, PR opened.</span></div></div>
 <div class="gitem reveal"><h4>image-parser agent — Analyze screenshots and images</h4><p>Specialized subagent for image and screenshot analysis. Answers questions like 'what does this screenshot show', 'OCR the text', 'compare these two simulator screenshots', 'is the title cut off', 'extract the data table from this PNG'. Runs on Sonnet for cost efficiency.</p>
-<p>Reads image files with the Read tool (content rendered visually), answers the specific question first, references UI elements concretely, flags uncertainty, and avoids fabrication. Common Paperix use case: check sheet titles, button labels, list item rendering, dark-mode contrast, PAS capsule presence.</p><div class="code"><button class="copy" data-copy="User: &#x27;Compare these two simulator screenshots and tell me what changed&#x27;
+<p>Reads image files with the Read tool (content rendered visually), answers the specific question first, references UI elements concretely, flags uncertainty, and avoids fabrication. Common use case for document-scanner app screenshots: check sheet titles, button labels, list item rendering, dark-mode contrast, PAS capsule presence.</p><div class="code"><button class="copy" data-copy="User: &#x27;Compare these two simulator screenshots and tell me what changed&#x27;
 
 Claude dispatches to image-parser agent with two image paths.
 

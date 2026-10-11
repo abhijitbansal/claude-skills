@@ -61,7 +61,7 @@ fi
 if git rev-parse --show-toplevel >/dev/null 2>&1; then
   ok "inside a git repo ($(git rev-parse --show-toplevel))"
 else
-  fail "not inside a git repo" "cd into the Paperix repo before running this script"
+  fail "not inside a git repo" "cd into your app repo before running this script"
 fi
 
 # --- 3. gh CLI installed ---

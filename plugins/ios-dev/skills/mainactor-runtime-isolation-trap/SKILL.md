@@ -70,7 +70,7 @@ guard so a tap mid-processing is dropped instead of misrouted.
 
 **Read `references/reentrancy-guards.md` before implementing** — the full
 `PhotoSyncRunGuard` class plus the `viewDidAppear`/timer/`overlayTapped`
-guard examples (floorprint: a double-fire restarted the capture session,
+guard examples (a private floor-plan scanner app: a double-fire restarted the capture session,
 reset the elapsed clock, and leaked a second timer).
 
 This is distinct from the exactly-once `CheckedContinuation` idiom — that
@@ -81,7 +81,7 @@ guards a *callback resuming twice*; this guards a *pass starting twice*.
 - **cubby** — `brk 1` on AsyncRenderer in the `Theme.Palette` dynamic-color
   closure; initially misblamed SwiftData, `.ips` exonerated it; fixed b67f6b6.
   Also "coalesce re-entrant photo-sync passes via PhotoSyncRunGuard".
-- **floorprint** — "guard re-entrant viewDidAppear" (double fire → restarted
+- **a private floor-plan scanner app** — "guard re-entrant viewDidAppear" (double fire → restarted
   capture session, reset elapsed clock, leaked second timer); "lock overlay
   actions while a room is processing" (tap misrouted the next `didEndWith` /
   resurrected a stopped session).

@@ -26,7 +26,7 @@ that file via `skills/_lib/load_app_config.sh`. Stage 0 of every run is
 Before/after each stage `N`, if `${RELEASE_HOOKS_DIR}/s<N>-pre.sh` /
 `s<N>-post.sh` exists (default dir `scripts/release-hooks/`), run it with the
 mode as `$1`. A non-zero pre-hook aborts the stage — that's the per-app escape
-hatch (e.g. Paperix regenerating fonts before S1, or suppressing a reviewed
+hatch (e.g. an app regenerating fonts before S1, or suppressing a reviewed
 runtime-trap warning).
 
 ## Stage 0 — Credentials + config

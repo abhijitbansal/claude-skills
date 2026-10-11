@@ -72,7 +72,7 @@ Completing the shape:
 
 ## Evidence
 
-- **doc-scan (Paperix)** — `WidgetBridge` / `WidgetSnapshotReader` commit
+- **a private document-scanner app** — `WidgetBridge` / `WidgetSnapshotReader` commit
   series, incl. `stop iCloud-sync launch from blanking widget recents`
   (invariant A) and the App-Lock redaction mirroring fixes (invariant B).
 - **folix** — independently re-derived the same App-Group snapshot

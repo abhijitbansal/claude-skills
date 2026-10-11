@@ -88,7 +88,7 @@ git checkout -b "$BRANCH"
 
 ### Step 7: Implementation
 This is normal Claude Code flow. Honor:
-- Project skills (e.g. for Paperix, the `ios-build` skill defines how to compile; the `commit` skill defines how to commit).
+- Project skills (e.g. for a private document-scanner app, the `ios-build` skill defines how to compile; the `commit` skill defines how to commit).
 - Project CLAUDE.md / AGENTS.md.
 - TDD if the issue has testable behavior.
 

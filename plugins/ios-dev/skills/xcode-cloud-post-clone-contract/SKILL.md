@@ -7,7 +7,7 @@ description: Xcode Cloud build fails with "project not found" / cannot find the 
 
 Xcode Cloud clones clean. An XcodeGen repo has **no `.xcodeproj` in git** —
 without a post-clone hook the cloud build can't even find a project. Every
-app in the portfolio (Paperix → Floorprint) re-derived this the hard way;
+app in the portfolio re-derived this the hard way;
 this skill is the contract.
 
 ## The four rules
@@ -21,7 +21,7 @@ the developer ran steps by hand; the clean clone has none of their outputs.
 **2. Mirror rule.**
 Any NEW local generation step lands in `ci_post_clone.sh` **in the same
 change**. Drift here is invisible until release time, when the cloud archive
-breaks. (Floorprint's real script mirrors `GenerateBuildInfo.sh` before
+breaks. (A private floor-plan scanner app's real script mirrors `GenerateBuildInfo.sh` before
 `xcodegen generate` — that's the pattern.)
 
 **3. Pin SPM via committed `Package.resolved`.**
@@ -35,7 +35,7 @@ mkdir -p "$RESOLVED_DST"
 cp Package.resolved "$RESOLVED_DST/Package.resolved"
 ```
 
-Evidence: floorprint `fix: commit Package.resolved pin for Xcode Cloud SPM
+Evidence: a private floor-plan scanner app `fix: commit Package.resolved pin for Xcode Cloud SPM
 resolution` — cloud resolved different versions than local until pinned.
 
 **4. brew + stdlib only.**
@@ -56,9 +56,9 @@ steps go.
 set -euo pipefail
 cd "$CI_PRIMARY_REPOSITORY_PATH"
 brew install xcodegen
-SRCROOT="$(pwd)" ./Floorprint/App/GenerateBuildInfo.sh   # mirror rule in action
+SRCROOT="$(pwd)" ./<App>/App/GenerateBuildInfo.sh   # mirror rule in action
 xcodegen generate
-RESOLVED_DST="Floorprint.xcodeproj/project.xcworkspace/xcshareddata/swiftpm"
+RESOLVED_DST="<App>.xcodeproj/project.xcworkspace/xcshareddata/swiftpm"
 mkdir -p "$RESOLVED_DST"
 cp Package.resolved "$RESOLVED_DST/Package.resolved"
 ```

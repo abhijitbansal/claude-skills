@@ -119,7 +119,7 @@ Fix:
 5. Version-bump cache keys on pipeline changes and sweep old suffixes at
    launch.
 
-Evidence (doc-scan, 6 sessions): paddle-ocr worktree `4918f6eb` (error
+Evidence (a private document-scanner app, 6 sessions): paddle-ocr worktree `4918f6eb` (error
 swallowed, fell back to document-API lines) and `27e2731c` (cancellation
 asymmetry), main checkout `19b46702` (review flagged the permanent cache
 write in the document-structure recognizer).

@@ -127,12 +127,12 @@ The default `/linear-pick` flow uses `git checkout -b` in the current working tr
 
 1. **Before** triggering `/linear-pick`, create a worktree for the issue:
    ```bash
-   git worktree add ../doc-scan-ABH-123 -b agent/ABH-123-dark-mode
+   git worktree add ../myapp-ABH-123 -b agent/ABH-123-dark-mode
    ```
 
 2. **Start a fresh Claude session in the worktree:**
    ```bash
-   cd ../doc-scan-ABH-123
+   cd ../myapp-ABH-123
    claude --remote-control "ABH-123 dark mode"
    ```
 
@@ -140,11 +140,11 @@ The default `/linear-pick` flow uses `git checkout -b` in the current working tr
    ```
    /linear-pick ABH-123
    ```
-   Because the branch is already checked out in this worktree, `/linear-pick` operates within it. A second worktree at `../doc-scan-ABH-456/` can run in parallel without colliding.
+   Because the branch is already checked out in this worktree, `/linear-pick` operates within it. A second worktree at `../myapp-ABH-456/` can run in parallel without colliding.
 
 4. **When the PR is merged, clean up:**
    ```bash
-   git worktree remove ../doc-scan-ABH-123
+   git worktree remove ../myapp-ABH-123
    git branch -d agent/ABH-123-dark-mode    # if GitHub didn't auto-delete on merge
    ```
 
@@ -190,7 +190,7 @@ verify:                      # commands /linear-pick must run green before openi
   - ./build.sh
 max_pr_lines: 500            # diff size beyond which /linear-pick self-blocks
 default_labels:              # labels added to every /linear-new issue on top of the type label
-  - paperix
+  - myapp
 poll:
   enabled: false             # if true, an external polling agent wakes /linear-pick on a schedule
   interval_minutes: 60

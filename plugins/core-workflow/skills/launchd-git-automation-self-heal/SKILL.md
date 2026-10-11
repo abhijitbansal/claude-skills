@@ -115,8 +115,8 @@ Fix, deploy hygiene:
 - A versioned Homebrew Cellar path in a plist breaks a Full Disk Access
   grant on upgrade; use the stable symlink path.
 
-Evidence (mined, 10 sessions across 3 projects): foundry-weekly `dc2223e6`
-(OAuth text above), foundry `41c27adc` (status said queued after a failed
+Evidence (mined, 10 sessions across 3 projects): a private weekly launchd job `dc2223e6`
+(OAuth text above), a private web project `41c27adc` (status said queued after a failed
 merge), a private bot `c2a681f5` and a worktree `9c45683b` (live checkout
 on another branch; plist set only PATH and $APP_HOME).
 
@@ -125,8 +125,8 @@ merge step these jobs hand back to the user.
 
 ## Evidence
 
-Source pattern observed in the `sift-publish` / `foundry-weekly` launchd
-automation clones:
+Source pattern observed in the launchd automation clones behind a private
+publish job and a private weekly job:
 
 - `git pull --ff-only` failing with "local changes would be overwritten" after
   a run left generated data committed-then-modified in the tracked tree.

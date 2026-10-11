@@ -3,7 +3,7 @@ name: site-pages-deploy-kit
 description: Create, deploy, and verify an app's marketing/legal site using the portfolio standard — site/ source dir in the app repo, split-repo public GitHub Pages target, subtree force-push over an SSH deploy key. Use when the user says "set up the site", "deploy the site", "create a marketing site for this app", or invokes /site. Covers the one-time Pages/deploy-key runbook and the og/CSP/favicon lint.
 ---
 
-# Site kit (floorprint model)
+# Site kit (portfolio model)
 
 **The standard:** the site source lives in the app repo (`${SITE_DIR}`,
 default `site/`); a separate PUBLIC repo (`site.repo` in app.yml) serves it
@@ -28,7 +28,7 @@ Remote precedence: `SITE_REMOTE` env > `.site-remote` file > app.yml
 1. Copy `templates/site-skeleton/` into `${SITE_DIR}`, rendering
    `{{APP_NAME}}`, `{{SITE_DOMAIN}}`, `{{APP_TEAM_ID}}`, `{{APP_BUNDLE_ID}}`
    tokens (sed). Generate `og-card.png` (1200×630), `favicon.ico`,
-   `apple-touch-icon.png` — see floorprint's `build-og-card.sh` pattern for an
+   `apple-touch-icon.png` — see the originating app's `build-og-card.sh` pattern for an
    idempotent generator.
 2. Install the CI deploy path: render `templates/deploy-site.sh` into
    `scripts/deploy-site.sh` (standalone — CI has no plugin) and
@@ -37,7 +37,7 @@ Remote precedence: `SITE_REMOTE` env > `.site-remote` file > app.yml
    Pages + DNS setup.
 4. `verify-site.sh` must pass before the first deploy.
 
-## Security invariants (do not regress — floorprint security review)
+## Security invariants (do not regress — a private floor-plan scanner app's security review)
 
 - **SSH deploy key, never a PAT** — key is scoped to the one public site repo.
 - **Host keys pinned from `api.github.com/meta`** (TLS-verified), not

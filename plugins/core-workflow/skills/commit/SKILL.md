@@ -38,7 +38,7 @@ Then sequentially:
 - **Never amend.** Use a new commit even if the previous one was small. Amending a pushed commit is hostile to anyone who pulled it.
 - **Never `--no-verify`.** If a pre-commit hook fails, fix the underlying issue and re-stage.
 - **Don't commit secrets.** If you see something that looks like a token, key, or credential staged, abort and warn the user.
-- **Don't commit `Paperix.xcodeproj/`, `build/`, `.dev-team`, `.tmp/`, or anything matched by `.gitignore`.**
+- **Don't commit `<App>.xcodeproj/`, `build/`, `.dev-team`, `.tmp/`, or anything matched by `.gitignore`.**
 - **One commit per call.** If the changes are clearly two unrelated things, ask the user whether to split — don't decide unilaterally.
 
 ## When NOT to use this skill

@@ -114,17 +114,17 @@ Between screens the script does `terminate` + `launch` + `openurl` rather than j
 
 The app registers the `${APP_URL_SCHEME}://` URL scheme. The exact routes depend on what `handleDeepLink` in your app currently handles — re-grep it before claiming you can deep-link somewhere.
 
-The examples below are **Paperix-shaped** (how Paperix shipped its `handleDeepLink` in `Paperix/PaperixApp.swift`). Your app's vocabulary may differ:
+The examples below are **scanner-app-shaped** (how a private document-scanner app shipped its `handleDeepLink` in `<App>/<App>App.swift`). Your app's vocabulary may differ:
 
 ```bash
 xcrun simctl openurl booted "${APP_URL_SCHEME}://scan"
-# → (Paperix) opens the app and triggers the scanner (posts .snapDocTriggerScan)
+# → (scanner app) opens the app and triggers the scanner (posts .snapDocTriggerScan)
 
 xcrun simctl openurl booted "${APP_URL_SCHEME}://doc?path=<relative-path-under-store-dir>"
-# → (Paperix) opens the app and navigates to that document, if it exists
+# → (scanner app) opens the app and navigates to that document, if it exists
 ```
 
-These two patterns were the full navigable surface for Paperix at the time this skill was written. Your app's `handleDeepLink` may route fewer or more patterns. Always verify against the source.
+These two patterns were the full navigable surface for the scanner app at the time this skill was written. Your app's `handleDeepLink` may route fewer or more patterns. Always verify against the source.
 
 **For any other screen** (settings, the import sheet, OCR detail, widget config, etc.) you have three honest options:
 
@@ -152,19 +152,19 @@ The user says: *"the home-row spacing looks off on the doc screen, and the scann
 
 ### Screen vocabulary
 
-The table below is **Paperix-shaped** — these are the screen IDs that Paperix's `handleDeepLink` recognizes. Your app's vocabulary is determined by what routes your `handleDeepLink` actually implements. The IDs and deep-link patterns below are illustrative examples:
+The table below is **scanner-app-shaped** — these are the screen IDs that the scanner app's `handleDeepLink` recognizes. Your app's vocabulary is determined by what routes your `handleDeepLink` actually implements. The IDs and deep-link patterns below are illustrative examples:
 
 | Screen ID | What it captures | How `bundle.sh` reaches it |
 |---|---|---|
 | `home` | The default view the app lands on at cold launch | No deep link — just the launched app |
-| `scan` | Scanner sheet over home (Paperix: `${APP_URL_SCHEME}://scan`) | `${APP_URL_SCHEME}://scan` |
-| `doc:<rel-path>` | Document detail view (Paperix: `${APP_URL_SCHEME}://doc?path=<rel-path>`) | `${APP_URL_SCHEME}://doc?path=<rel-path>` |
+| `scan` | Scanner sheet over home (scanner app: `${APP_URL_SCHEME}://scan`) | `${APP_URL_SCHEME}://scan` |
+| `doc:<rel-path>` | Document detail view (scanner app: `${APP_URL_SCHEME}://doc?path=<rel-path>`) | `${APP_URL_SCHEME}://doc?path=<rel-path>` |
 
 For anything else (settings, OCR review, trash, folders, share sheet, app lock, …), pick `home` and mention the limitation in your final summary — the user can navigate manually on their device or in Xcode and ask for another snap once they're there.
 
 ### Caveat: `scan` is a sheet over `home`
 
-`${APP_URL_SCHEME}://scan` (in Paperix: posts `.snapDocTriggerScan`) presents the scanner as a sheet — the home screen is still mounted underneath. The resulting screenshot shows the scanner UI; that's the intended state for verifying a scan-flow change. If the user actually wants to see *home* with no sheet, capture `home` separately (which `bundle.sh` already does via terminate-and-relaunch between screens).
+`${APP_URL_SCHEME}://scan` (in the scanner app: posts `.snapDocTriggerScan`) presents the scanner as a sheet — the home screen is still mounted underneath. The resulting screenshot shows the scanner UI; that's the intended state for verifying a scan-flow change. If the user actually wants to see *home* with no sheet, capture `home` separately (which `bundle.sh` already does via terminate-and-relaunch between screens).
 
 ## The full remote-control loop
 

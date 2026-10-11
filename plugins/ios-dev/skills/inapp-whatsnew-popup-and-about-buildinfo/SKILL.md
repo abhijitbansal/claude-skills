@@ -1,6 +1,6 @@
 ---
 name: inapp-whatsnew-popup-and-about-buildinfo
-description: You're building or standardizing an iOS app's in-app "What's New" launch pop-up — the sheet that auto-appears once after a version upgrade listing new features and fixes — and/or the Settings/About "Build" screen showing version, build number, git commit, branch and build date. Use when adding a launch changelog gate, deciding whether What's-New content lives in an external JSON vs a hardcoded Swift array, wiring a build-time git-commit constant for in-app display, or when a new app repo needs the same What's-New + build-info feature that otherwise means "go look at Paperix". Covers the in-app SwiftUI implementation only — for release-time whatsnew_file / App Store Connect notes gating see release-inapp-vs-asc-whatsnew-surfaces.
+description: You're building or standardizing an iOS app's in-app "What's New" launch pop-up — the sheet that auto-appears once after a version upgrade listing new features and fixes — and/or the Settings/About "Build" screen showing version, build number, git commit, branch and build date. Use when adding a launch changelog gate, deciding whether What's-New content lives in an external JSON vs a hardcoded Swift array, wiring a build-time git-commit constant for in-app display, or when a new app repo needs the same What's-New + build-info feature. Covers the in-app SwiftUI implementation only — for release-time whatsnew_file / App Store Connect notes gating see release-inapp-vs-asc-whatsnew-surfaces.
 ---
 
 # In-App What's New Pop-up + About Build-Info
@@ -13,7 +13,7 @@ Two small, reusable in-app features that every app rebuilds from scratch:
    git commit, branch, and build date for support / bug-report correlation.
 
 This skill is the paste-ready pattern for both, lifted from a known-good
-implementation (Paperix) with a battle-tested data-invariant test suite (Cubby)
+implementation (a private document-scanner app) with a battle-tested data-invariant test suite (Cubby)
 grafted on. Build both from this page alone — no need to read another app.
 
 ## When to use
@@ -22,7 +22,7 @@ grafted on. Build both from this page alone — no need to read another app.
 - Deciding **where** What's-New content lives (external JSON vs hardcoded Swift).
 - Showing version / build / git-commit inside the running app (About screen).
 - Baking the git commit into the binary at build time.
-- A new app repo needs "the Paperix What's New + build-info feature."
+- A new app repo needs the scanner app's What's New + build-info feature.
 
 ## Two surfaces, one skill
 
@@ -79,7 +79,7 @@ Bundle this as a resource (`Resources/WhatsNew.json`). `entries` is newest-first
       "buildNumber": 18,
       "releasedAt": "2026-06-07",
       "headline": "iPad support",
-      "highlights": ["Paperix is now a universal app with a two-column iPad layout."],
+      "highlights": ["The app is now a universal app with a two-column iPad layout."],
       "fixes": []
     }
   ]
@@ -300,7 +300,7 @@ struct WhatsNewSheet: View {
 }
 ```
 
-**Optional — "See all features" handoff.** Paperix's sheet ends with a
+**Optional — "See all features" handoff.** The scanner app's sheet ends with a
 `See all features →` button that dismisses and opens an evergreen feature index
 (`FeatureCatalog`/`FeaturesView` — a hardcoded Swift list of *all* current
 features, distinct from the versioned changelog). To add it, give `WhatsNewSheet`
@@ -539,7 +539,7 @@ recompile to edit copy and no easy release-pipeline regeneration.
 
 ## Canonical references
 
-- **Paperix** (JSON variant + build-info): `Paperix/WhatsNew.swift`,
+- **Scanner app** (JSON variant + build-info): `<App>/WhatsNew.swift`,
   `WhatsNewGate.swift` (decider + `.whatsNewGate()` modifier),
   `WhatsNewSheet.swift`, `WhatsNewHistoryView.swift`, `AboutView.swift`
   (`buildSection`), `scripts/generate-build-info.sh`, `Resources/WhatsNew.json`.

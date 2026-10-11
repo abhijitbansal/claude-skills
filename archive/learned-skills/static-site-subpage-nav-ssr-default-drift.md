@@ -5,7 +5,7 @@
 
 ## Problem
 
-Three related failure modes, all shipped and user-reported/review-caught in foundry:
+Three related failure modes, all shipped and user-reported/review-caught in a private web project:
 
 1. **Bare `#section` anchors in shared nav break on every subpage.** `href="#work"` in a shared `Nav` component resolves to `/repo/updates/#work` on the subpage — dead URL, user can't navigate back. Works on the page it was written for; silently broken everywhere else.
 2. **Skip links target sections that don't exist on other pages/states.** Same shared-component blindness (`#work` on a page without a work section), plus the subtler variant: target id rendered inside a conditional branch (`weeks.length > 0 ? <div id="weeks">…` ) is a dead skip-link in the empty state — put the id on a wrapper that always renders.
