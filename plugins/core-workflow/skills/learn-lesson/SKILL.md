@@ -33,8 +33,7 @@ ever sees.
    ```markdown
    ---
    name: <kebab-case, symptom-oriented>
-   description: <symptom first — what the user SEES (error text, crash thread,
-     wrong behavior) — then "use when …". This is the trigger surface.>
+   description: <one physical line — symptom first (what the user SEES, e.g. error text, crash thread, wrong behavior), then "use when …". This is the trigger surface.>
    ---
 
    # <Title>
@@ -49,9 +48,32 @@ ever sees.
    Link related skills by name. iOS lessons default to the `ios-dev` plugin;
    ask which plugin when it's not obvious.
 
-4. **Hand off.** Invoke the `contribute` skill to branch/commit/PR:
-   `claude-skills-contribute --skill <name> --plugin <plugin> --message "learn: <one-liner>"`
-   for a new skill, or plain `--message` after editing an existing one.
+4. **Hand off.** Use the `contribute` skill's script, in this order:
+   - **New skill:** on a clean claude-skills tree (the script refuses a dirty
+     tree and an existing skill dir), run
+     `claude-skills-contribute --skill <name> --plugin <plugin> --message "learn: <one-liner>" --no-pr`
+     FIRST. It branches and scaffolds a placeholder `SKILL.md`, then runs
+     bats and pytest BEFORE committing. A freshly scaffolded skill fails
+     `tests/pytest/test_sweep_counts.py::test_live_tree_counts_in_sync` and
+     the catalog-row invariant (counts stale, no catalog row), so expect the
+     script to stop with "pytest failing — leaving branch contrib/…" and the
+     scaffold UNCOMMITTED on that branch. That is the normal flow, not an
+     error. Continue on that branch:
+     1. Overwrite the scaffold with the drafted `SKILL.md` (and any
+        `references/*.md`).
+     2. Run `python3 scripts/sweep_counts.py --write`.
+     3. Add the three hand rows: the `.crow` entry in `docs/catalog.html`, the
+        row in `docs/skills-catalog.md`, and the inventory row in
+        `docs/features/<plugin>.html`.
+     4. Run `bats tests/bats` and `pytest tests/pytest -q`.
+     5. Commit, push, and `gh pr create`.
+     If the skill dir already exists, the script fails after switching to a
+     new `contrib/…` branch; switch back and delete that branch.
+   - **Extension to an existing skill:** do not use `--skill`, and do not use a
+     bare `--message` (that is the manifest-capture path, not "commit my
+     edit"). Start from an updated `main` in
+     `${CLAUDE_SKILLS_HOME:-$HOME/projects/claude-skills}` on a clean tree,
+     branch manually, edit, commit, push, `gh pr create`.
    Surface the PR URL.
 
 5. **Host-repo pointer (optional).** Only if the user asks, add a one-line
@@ -64,5 +86,11 @@ ever sees.
   future evidence between two homes.
 - Symptom-first descriptions. "SwiftData best practices" never triggers;
   "crash at launch with brk 1 on AsyncRenderer" does.
+- `description:` on one physical line — no `>-` or `|` block scalars, no
+  wrapped continuation lines (the registry parser truncates them). Quote the
+  value as a JSON string if it contains ": " or " #" (the strict frontmatter
+  test rejects those in a plain value).
 - One lesson per skill. Two root causes = two skills.
+- vs `ecc:learn`: this skill publishes to the shared catalog via PR;
+  `ecc:learn` saves local patterns under `~/.claude/skills`.
 - Do not auto-merge the PR; review stays with the user.

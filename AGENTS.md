@@ -50,7 +50,19 @@ that bite hardest in this repo:
 - **Inventory counts are cross-file invariants.** Adding/removing a skill
   changes counts in multiple docs (`docs/skills-catalog.md`,
   `docs/architecture.*`, `docs/catalog.html`, `site/*`, plugin `README`s).
-  Update them atomically with one scripted sweep, never hand-edit each site.
+  Update them atomically with one scripted sweep, never hand-edit each site:
+  `python3 scripts/sweep_counts.py --check` finds stale counts, `--write` fixes
+  them (CI runs the check via `tests/pytest/test_sweep_counts.py`). For the
+  plugins listed in `SITES`, it rewrites skill counts: footers carry only the
+  total, while per-plugin counts live in mermaid labels, `data-count` stat
+  bands, kickers, and site index rows. Never hand-edit what the sweep covers.
+  It only checks catalog Skill rows, which are still added by hand. Still a
+  manual grep: the second-wind and mods feature pages and diagram nodes, the
+  portable-artifacts and mods index rows, word forms ("five"/"5"),
+  `data-to`/`data-target` attributes, meta/OG descriptions, other diagram node
+  lists, "each/every/deep-dive" prose, and plugin/command/agent/hook counts.
+  Regenerate `site/og.png` from `site/og.html` only when a total shown there
+  changed.
 
 ---
 
