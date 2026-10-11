@@ -76,6 +76,19 @@ reset) in its own detached tmux session — `--no-watch` skips it.
 Full reference: [tools/second-wind/README.md](tools/second-wind/README.md) ·
 [visual explainer](docs/second-wind/index.html)
 
+### Cache Clock (Copilot CLI extension)
+
+A [cache-tax](https://github.com/karanb192/cache-tax)-style guard for GitHub Copilot CLI:
+shows when the prompt cache goes cold, what the next send costs cold vs warm, and drops a
+costly cold send once. Its report also covers VS Code's Copilot agent sessions.
+
+```bash
+sh tools/cache-clock/install.sh            # links ~/.copilot/extensions/cache-clock
+node tools/cache-clock/bin/report.mjs      # what cold sends already cost you
+```
+
+Full reference: [tools/cache-clock/README.md](tools/cache-clock/README.md)
+
 ### Other AI tools (Codex, Copilot CLI, Hermes, …)
 
 The skills are plain SKILL.md directories — tool-agnostic. Clone, then run the adapter:
@@ -155,7 +168,7 @@ users can ignore them entirely; plugins never touch them.
 | --- | --- |
 | `.claude-plugin/` | marketplace manifest |
 | `plugins/` | the eight plugins (skills, commands, agents, hooks) |
-| `tools/` | standalone CLIs (second-wind) |
+| `tools/` | standalone CLIs (second-wind) and the Copilot CLI extension (cache-clock) |
 | `adapters/` | wire skills into non-Claude tools |
 | `setup/`, `templates/`, `claude-setup.toml` | personal machine seed |
 | `docs/` | architecture + catalog docs, design specs, implementation plans |
@@ -167,6 +180,7 @@ users can ignore them entirely; plugins never touch them.
 bats tests/bats/                                  # shell suites (setup, adapters, skills, manifests)
 uv tool run pytest tests/pytest -q                # TOML round-trip
 uv tool run pytest tools/second-wind/tests -q     # wind CLI
+(cd tools/cache-clock && node --test "test/*.test.mjs")   # cache-clock
 shellcheck setup/*.sh adapters/*.sh
 ```
 
