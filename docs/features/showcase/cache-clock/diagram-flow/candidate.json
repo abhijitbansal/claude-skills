@@ -1,0 +1,436 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "How Cache Clock decides: every prompt",
+    "quality_profile": "showcase",
+    "output": "docs/features/showcase/cache-clock/diagram-flow/cache-clock-flow.html",
+    "repository": {
+      "url": "https://github.com/abhijitbansal/claude-skills",
+      "provider": "github",
+      "revision": "1edd20cf1c5992962b4321579337efa9afc7f453"
+    }
+  },
+  "lanes": [
+    {
+      "id": "gate",
+      "label": "Prompt guard: filters"
+    },
+    {
+      "id": "through",
+      "label": "Allowed through"
+    },
+    {
+      "id": "costly",
+      "label": "Prompt guard: cold and costly",
+      "variant": "exception"
+    },
+    {
+      "id": "sent",
+      "label": "Cold send goes ahead"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "prompt",
+      "lane": "gate",
+      "col": 0,
+      "type": "frontend",
+      "label": "Prompt submitted",
+      "sublabel": "snapshot, config, busy",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 67,
+          "end_line": 72
+        }
+      ]
+    },
+    {
+      "id": "cmdq",
+      "lane": "gate",
+      "col": 1,
+      "type": "security",
+      "label": "/command or !",
+      "sublabel": "never guarded",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 11,
+          "end_line": 17
+        }
+      ]
+    },
+    {
+      "id": "offq",
+      "lane": "gate",
+      "col": 2,
+      "type": "security",
+      "label": "Guard off?",
+      "sublabel": "mode = off",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 18
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 8,
+          "label": "defaults"
+        }
+      ]
+    },
+    {
+      "id": "warmq",
+      "lane": "gate",
+      "col": 3,
+      "type": "security",
+      "label": "Warm or unknown?",
+      "sublabel": "clock snapshot state",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 18
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/clock.mjs",
+          "line": 42,
+          "end_line": 43
+        }
+      ]
+    },
+    {
+      "id": "cheapq",
+      "lane": "gate",
+      "col": 4,
+      "type": "security",
+      "label": "Extra under min?",
+      "sublabel": "cold-warm < $0.10",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 19
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "id": "handler",
+      "lane": "through",
+      "col": 0,
+      "type": "backend",
+      "label": "/cache-clock",
+      "sublabel": "card, guard, min",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 134,
+          "end_line": 148
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 77,
+          "end_line": 96
+        }
+      ]
+    },
+    {
+      "id": "pass",
+      "lane": "through",
+      "col": 3,
+      "type": "frontend",
+      "label": "Pass silently",
+      "sublabel": "model call as usual",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 17,
+          "end_line": 19
+        }
+      ]
+    },
+    {
+      "id": "busyq",
+      "lane": "costly",
+      "col": 4,
+      "type": "security",
+      "label": "Turn running?",
+      "sublabel": "abort would cancel it",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 21,
+          "end_line": 22
+        }
+      ]
+    },
+    {
+      "id": "busyflag",
+      "lane": "costly",
+      "col": 5,
+      "type": "database",
+      "label": "busy flag",
+      "sublabel": "turn_start, idle",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 97,
+          "end_line": 102
+        }
+      ]
+    },
+    {
+      "id": "modeq",
+      "lane": "costly",
+      "col": 3,
+      "type": "security",
+      "label": "Mode warn?",
+      "sublabel": "refuse is default",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 22,
+          "end_line": 23
+        }
+      ]
+    },
+    {
+      "id": "seenq",
+      "lane": "costly",
+      "col": 2,
+      "type": "security",
+      "label": "Episode refused?",
+      "sublabel": "model@expiresAt",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 8,
+          "end_line": 9
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 22
+        }
+      ]
+    },
+    {
+      "id": "refuse",
+      "lane": "costly",
+      "col": 1,
+      "type": "security",
+      "label": "Refuse once",
+      "sublabel": "price, abort, no call",
+      "tag": "0 AI credits",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 71,
+          "end_line": 77
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/format.mjs",
+          "line": 34,
+          "end_line": 41
+        }
+      ]
+    },
+    {
+      "id": "remember",
+      "lane": "costly",
+      "col": 0,
+      "type": "database",
+      "label": "refused.json",
+      "sublabel": "per session, 7 days",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 42,
+          "end_line": 69
+        }
+      ]
+    },
+    {
+      "id": "note",
+      "lane": "sent",
+      "col": 3,
+      "type": "frontend",
+      "label": "Send with note",
+      "sublabel": "cold price, then model",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 79
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/format.mjs",
+          "line": 43,
+          "end_line": 45
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-prompt-cmd",
+      "from": "prompt",
+      "to": "cmdq"
+    },
+    {
+      "id": "e-cmd-off",
+      "from": "cmdq",
+      "to": "offq",
+      "label": "plain prompt"
+    },
+    {
+      "id": "e-off-warm",
+      "from": "offq",
+      "to": "warmq",
+      "label": "on"
+    },
+    {
+      "id": "e-warm-cheap",
+      "from": "warmq",
+      "to": "cheapq",
+      "label": "cold"
+    },
+    {
+      "id": "e-cmd-handler",
+      "from": "cmdq",
+      "to": "handler",
+      "label": "/cache-clock",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-cmd-pass",
+      "from": "cmdq",
+      "to": "pass",
+      "label": "other /cmd, !",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-off-pass",
+      "from": "offq",
+      "to": "pass",
+      "label": "off",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-warm-pass",
+      "from": "warmq",
+      "to": "pass",
+      "label": "warm, unknown",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-cheap-pass",
+      "from": "cheapq",
+      "to": "pass",
+      "label": "under min",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-cheap-busy",
+      "from": "cheapq",
+      "to": "busyq",
+      "label": "cold, costly",
+      "variant": "security"
+    },
+    {
+      "id": "e-flag-busy",
+      "from": "busyflag",
+      "to": "busyq",
+      "label": "read"
+    },
+    {
+      "id": "e-busy-mode",
+      "from": "busyq",
+      "to": "modeq",
+      "label": "idle"
+    },
+    {
+      "id": "e-mode-seen",
+      "from": "modeq",
+      "to": "seenq",
+      "label": "refuse"
+    },
+    {
+      "id": "e-seen-refuse",
+      "from": "seenq",
+      "to": "refuse",
+      "label": "no"
+    },
+    {
+      "id": "e-refuse-remember",
+      "from": "refuse",
+      "to": "remember",
+      "label": "save"
+    },
+    {
+      "id": "e-busy-note",
+      "from": "busyq",
+      "to": "note",
+      "label": "running",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-mode-note",
+      "from": "modeq",
+      "to": "note",
+      "label": "warn",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-seen-note",
+      "from": "seenq",
+      "to": "note",
+      "label": "yes: resend",
+      "variant": "dashed",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Refusal contract",
+      "items": [
+        "session.abort() is not awaited: awaiting it inside the hook deadlocks.",
+        "Refused episodes live in refused.json for 7 days, so a resend from a new process goes through.",
+        "A queued prompt during a running turn is never refused, only priced."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Limits",
+      "items": [
+        "Early eviction: Luna was served cold at 29 of 30 min. The guard trusts cacheExpiresAt and stays quiet; the report counts a prefix break.",
+        "The price is an estimate: last input plus answer, not your new message.",
+        "With auto, the next prompt may use a different model than the one priced.",
+        "copilot -p: the guard works, but slash commands go to the model as text."
+      ]
+    }
+  ]
+}

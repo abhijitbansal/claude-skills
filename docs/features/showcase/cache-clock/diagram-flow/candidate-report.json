@@ -1,0 +1,338 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "How Cache Clock warns and reports: heads-up, report, VS Code",
+    "quality_profile": "showcase",
+    "output": "docs/features/showcase/cache-clock/diagram-flow/cache-clock-flow-report.html",
+    "repository": {
+      "url": "https://github.com/abhijitbansal/claude-skills",
+      "provider": "github",
+      "revision": "1edd20cf1c5992962b4321579337efa9afc7f453"
+    }
+  },
+  "lanes": [
+    {
+      "id": "headsup",
+      "label": "Heads-up timer"
+    },
+    {
+      "id": "report",
+      "label": "Report (bin/report.mjs)"
+    },
+    {
+      "id": "vscode",
+      "label": "VS Code (measured 11 Oct 2026)",
+      "variant": "exception"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "sched",
+      "lane": "headsup",
+      "col": 0,
+      "type": "backend",
+      "label": "Schedule",
+      "sublabel": "warm snapshot only",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 116,
+          "end_line": 123
+        }
+      ]
+    },
+    {
+      "id": "timer",
+      "lane": "headsup",
+      "col": 1,
+      "type": "messagebus",
+      "label": "Timer",
+      "sublabel": "expiry - lead",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 12,
+          "end_line": 13
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 123,
+          "end_line": 131
+        }
+      ]
+    },
+    {
+      "id": "fireq",
+      "lane": "headsup",
+      "col": 2,
+      "type": "security",
+      "label": "Still worth it?",
+      "sublabel": "idle, warm, >= min",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 125,
+          "end_line": 129
+        }
+      ]
+    },
+    {
+      "id": "say",
+      "lane": "headsup",
+      "col": 3,
+      "type": "frontend",
+      "label": "Heads-up line",
+      "sublabel": "ephemeral, goes cold in",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 129
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/format.mjs",
+          "line": 47,
+          "end_line": 52
+        }
+      ]
+    },
+    {
+      "id": "quiet",
+      "lane": "headsup",
+      "col": 4,
+      "type": "external",
+      "label": "Stay silent",
+      "sublabel": "headsup off: no timer",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 121
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 91,
+          "end_line": 94
+        }
+      ]
+    },
+    {
+      "id": "logs",
+      "lane": "report",
+      "col": 0,
+      "type": "database",
+      "label": "Session logs",
+      "sublabel": "every events.jsonl",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/bin/report.mjs",
+          "line": 36,
+          "end_line": 51
+        }
+      ]
+    },
+    {
+      "id": "parse",
+      "lane": "report",
+      "col": 1,
+      "type": "backend",
+      "label": "Parse per call",
+      "sublabel": "epochs split at compact",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/history.mjs",
+          "line": 11,
+          "end_line": 41
+        }
+      ]
+    },
+    {
+      "id": "classify",
+      "lane": "report",
+      "col": 2,
+      "type": "security",
+      "label": "Cold after idle?",
+      "sublabel": "else prefix break",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/usage.mjs",
+          "line": 79,
+          "end_line": 85
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/usage.mjs",
+          "line": 97,
+          "end_line": 103,
+          "label": "extraUsd"
+        }
+      ]
+    },
+    {
+      "id": "table",
+      "lane": "report",
+      "col": 3,
+      "type": "frontend",
+      "label": "Report table",
+      "sublabel": "counts, extra paid",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/history.mjs",
+          "line": 122,
+          "end_line": 141
+        }
+      ]
+    },
+    {
+      "id": "vsc",
+      "lane": "vscode",
+      "col": 0,
+      "type": "external",
+      "label": "VS Code agent host",
+      "sublabel": "Copilot sessions",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/README.md",
+          "line": 145,
+          "end_line": 152
+        }
+      ]
+    },
+    {
+      "id": "novsc",
+      "lane": "vscode",
+      "col": 1,
+      "type": "security",
+      "label": "/cache-clock",
+      "sublabel": "not registered",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/README.md",
+          "line": 145,
+          "end_line": 152
+        }
+      ]
+    },
+    {
+      "id": "nolive",
+      "lane": "vscode",
+      "col": 2,
+      "type": "external",
+      "label": "No live guard",
+      "sublabel": "no clock, no heads-up",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/README.md",
+          "line": 145,
+          "end_line": 152
+        }
+      ]
+    },
+    {
+      "id": "ckpt",
+      "lane": "vscode",
+      "col": 3,
+      "type": "database",
+      "label": "usage_checkpoint",
+      "sublabel": "totals only",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/history.mjs",
+          "line": 33
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-sched-timer",
+      "from": "sched",
+      "to": "timer",
+      "label": "warm only"
+    },
+    {
+      "id": "e-timer-fire",
+      "from": "timer",
+      "to": "fireq",
+      "label": "fires"
+    },
+    {
+      "id": "e-fire-say",
+      "from": "fireq",
+      "to": "say",
+      "label": "yes",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-fire-quiet",
+      "from": "fireq",
+      "to": "quiet",
+      "label": "no",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-logs-parse",
+      "from": "logs",
+      "to": "parse"
+    },
+    {
+      "id": "e-parse-classify",
+      "from": "parse",
+      "to": "classify"
+    },
+    {
+      "id": "e-classify-table",
+      "from": "classify",
+      "to": "table",
+      "label": "per model"
+    },
+    {
+      "id": "e-vsc-no",
+      "from": "vsc",
+      "to": "novsc"
+    },
+    {
+      "id": "e-no-nolive",
+      "from": "novsc",
+      "to": "nolive",
+      "label": "sent as text"
+    },
+    {
+      "id": "e-vsc-ckpt",
+      "from": "nolive",
+      "to": "ckpt",
+      "label": "persists",
+      "variant": "dashed"
+    },
+    {
+      "id": "e-ckpt-table",
+      "from": "ckpt",
+      "to": "table",
+      "label": "totals only",
+      "variant": "dashed",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "VS Code, measured 11 Oct 2026",
+      "items": [
+        "/cache-clock was sent to the model as text and answered that it is not available.",
+        "Sessions persist session.usage_checkpoint totals only, so the report counts them as totals."
+      ]
+    }
+  ]
+}
