@@ -11,7 +11,7 @@ import { resolveDir, splitCommand, suiteKey, suiteLabel } from './suite'
 
 const latest = atom({ plugin: 'test-board', key: 'latest' } as const, [] as TestRun[])
 const expanded = atom({ plugin: 'test-board', key: 'expanded' } as const, false)
-const closedAt = atom({ plugin: 'test-board', key: 'closedAt' } as const, 0)
+const closed = atom({ plugin: 'test-board', key: 'closed' } as const, false)
 
 const CLOSE_LABEL = '  ✕'
 
@@ -133,6 +133,7 @@ async function record(
   state.turn.isNew = false
   await update($, latest, list =>
     [run, ...(isFresh ? [] : list.filter(r => r.key !== run.key && r.stale !== true))].slice(0, MAX_LATEST))
+  await update($, closed, () => false)
 }
 
 export const register: Register = on => {
@@ -183,22 +184,24 @@ export const register: Register = on => {
       const root = await worktreeRoot($, state.roots, e.cwd)
       const key = asKeys(await $.store.get('index')).find(k => k.startsWith(`${root}::`))
       const newest = key === undefined ? undefined : asRuns(await $.store.get(`runs:${key}`))[0]
-      if (newest !== undefined) await update($, latest, () => [{ ...newest, stale: true }])
+      if (newest !== undefined) {
+        await update($, latest, () => [{ ...newest, stale: true }])
+        await update($, closed, () => false)
+      }
     } catch (err) {
       $.ui.log(`test-board: history not loaded: ${String(err).slice(0, 120)}`)
     }
     return result
   })
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey) return next(e)
+    if (e.props.hasSurvey || await read($, closed)) return next(e)
     const now = await $.clock.now()
-    const runs = visibleRuns(await read($, latest), now, await read($, closedAt))
+    const runs = visibleRuns(await read($, latest), now)
     if (runs.length === 0) return next(e)
     const isOpen = await read($, expanded)
-    const newestAt = Math.max(...runs.map(r => r.at))
     const { Box, Button, Text } = $.ui.resolve(e)
-    const columns = e.props.bodyColumns - CLOSE_LABEL.length
-    const rows = await Promise.all(runs.map(run => partsFor($, run, now, columns)))
+    const columns = e.props.bodyColumns
+    const rows = await Promise.all(runs.map((run, i) => partsFor($, run, now, i === 0 ? columns - CLOSE_LABEL.length : columns)))
     return (
       <Box flexDirection="column">
         {rows.map(({ run, parts }, i) => (
@@ -218,7 +221,7 @@ export const register: Register = on => {
                 <Text dimColor>{[parts.ranAt, parts.prev, parts.via].filter(Boolean).map(s => `   ${s}`).join('')}</Text>
               </Button>
               {i === 0 && (
-                <Button key="close" plain onPress={() => update($, closedAt, v => Math.max(v, newestAt))}>
+                <Button key="close" plain onPress={() => update($, closed, () => true)}>
                   <Text dimColor>{CLOSE_LABEL}</Text>
                 </Button>
               )}

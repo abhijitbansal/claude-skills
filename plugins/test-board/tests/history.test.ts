@@ -33,11 +33,8 @@ describe('previousRun', () => {
 describe('visibleRuns', () => {
   test('hides runs an hour old or older', () => {
     const now = 10 * BAND_TTL_MS
-    expect(visibleRuns([mk(now - BAND_TTL_MS + 1), mk(now - BAND_TTL_MS)], now, 0).map(r => r.at))
+    expect(visibleRuns([mk(now - BAND_TTL_MS + 1), mk(now - BAND_TTL_MS)], now).map(r => r.at))
       .toEqual([now - BAND_TTL_MS + 1])
-  })
-  test('hides runs at or before the last close', () => {
-    expect(visibleRuns([mk(30), mk(20), mk(10)], 40, 20).map(r => r.at)).toEqual([30])
   })
 })
 

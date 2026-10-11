@@ -16,6 +16,6 @@ export type TestRun = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'test-board': { latest: TestRun[]; expanded: boolean; closedAt: number }
+    'test-board': { latest: TestRun[]; expanded: boolean; closed: boolean }
   }
 }

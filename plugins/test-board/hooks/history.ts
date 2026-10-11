@@ -21,9 +21,9 @@ export function previousRun(history: TestRun[], run: TestRun): TestRun | undefin
   return history.find(r => r.at < run.at)
 }
 
-/** Runs the band still shows: under an hour old and newer than the last close. */
-export function visibleRuns(latest: TestRun[], now: number, closedAt: number): TestRun[] {
-  return latest.filter(r => now - r.at < BAND_TTL_MS && r.at > closedAt)
+/** Runs the band still shows: under an hour old. */
+export function visibleRuns(latest: TestRun[], now: number): TestRun[] {
+  return latest.filter(r => now - r.at < BAND_TTL_MS)
 }
 
 export function touchIndex(index: string[], key: string): string[] {

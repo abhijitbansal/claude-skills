@@ -405,6 +405,26 @@ describe('band', () => {
     expect(await again.find({ text: /1 ✗/ })).toBeDefined()
   })
 
+  test('a run in the same millisecond as the close still reopens the band', async ($, on) => {
+    world(on); bash(on, PYTEST_RAW); emptyBand(on)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+    await ui.press({ key: 'close' })
+    expect(await ui.find({ text: /1 ✗/ })).toBeUndefined()
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    const again = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+    expect(await again.find({ text: /1 ✗/ })).toBeDefined()
+  })
+
+  test('only the first row gives up width to the close button', async ($, on) => {
+    world(on); bash(on, PYTEST_RAW); emptyBand(on); turns(on)
+    await $.prompt.submit({ text: 'go' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q a.py', agentId: 'zz' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q b.py', agentId: 'zz' } as never)
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(85) })
+    expect(await ui.findAll({ type: 'Text', text: /via workflow/ })).toHaveLength(1)
+  })
+
   test('a store read failure at draw time still draws the run as a first run', async ($, on) => {
     let isBroken = false
     const data = new Map<string, unknown>()
