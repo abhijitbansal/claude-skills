@@ -134,7 +134,7 @@ refusal capture's resend, the Luna rows include the gap test.
 
 "Extra paid" is what each cold call cost above a warm read of the same tokens.
 "Prefix breaks" are cold calls inside the reported TTL: something changed the prompt
-prefix (tools, instructions, model routing), or the provider evicted early, as in the
+prefix (tools, instructions, model routing), or the provider served it cold early (eviction or a different backend), as in the
 Luna gap test above.
 
 ## VS Code
@@ -161,7 +161,7 @@ VS Code's own Cache Explorer (Agent Debug Logs) is the built-in view.
 - **`-p` mode.** The guard works in `copilot -p`, but slash commands there go to the
   model as text, so `/cache-clock` needs the interactive CLI.
 - **Early eviction is invisible to the guard.** It trusts Copilot's `cacheExpiresAt`.
-  When a provider drops a cache sooner (Luna at 29 of 30 minutes, once), the send is
+  When a provider serves a cache cold sooner (Luna at 29 of 30 minutes, once), the send is
   billed cold and the guard stays quiet; the report counts it as a prefix break.
 - Claude was measured through `auto` only; the seat used for testing could not pick
   Claude models directly. Each boundary result above is a single run.
