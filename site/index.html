@@ -228,7 +228,7 @@
         <ul>
           <li>Reads expiry, TTL and per-token prices from Copilot's own <code>assistant.usage</code> events. Through Copilot, a Claude Sonnet 5.5 cache write costs 25× a read and the cache lives 5 minutes.</li>
           <li><code>/cache-clock</code> shows the card: time left, warm vs cold price, session tally. A heads-up appears just before expiry.</li>
-          <li>The report reads every persisted Copilot session, CLI and VS Code, and totals what cold sends already cost.</li>
+          <li>The report reads every persisted Copilot session and totals what cold sends already cost. VS Code's Copilot agent does not load the extension; its sessions count as totals only.</li>
         </ul>
       </article>
 

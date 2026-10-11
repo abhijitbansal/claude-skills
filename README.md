@@ -80,7 +80,8 @@ Full reference: [tools/second-wind/README.md](tools/second-wind/README.md) ·
 
 A [cache-tax](https://github.com/karanb192/cache-tax)-style guard for GitHub Copilot CLI:
 shows when the prompt cache goes cold, what the next send costs cold vs warm, and drops a
-costly cold send once. Its report also covers VS Code's Copilot agent sessions.
+costly cold send once. Copilot CLI only: VS Code's Copilot agent does not load it, though the
+report still counts VS Code sessions as totals.
 
 ```bash
 sh tools/cache-clock/install.sh            # links ~/.copilot/extensions/cache-clock

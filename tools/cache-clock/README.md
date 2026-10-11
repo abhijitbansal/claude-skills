@@ -144,12 +144,18 @@ Luna gap test above.
 
 ## VS Code
 
-VS Code's Copilot agent harness runs the same runtime and writes to the same
-`~/.copilot/session-state` directory, so the **report covers VS Code sessions**.
-Some VS Code sessions persist only totals, not per-call records; the report counts
-them separately. Whether a user-installed CLI extension, and so the live guard, loads
-inside VS Code's harness is not verified yet. For per-turn cache hit rates there,
-VS Code's own Cache Explorer (Agent Debug Logs) is the built-in view.
+**The live extension does not run in VS Code.** Measured on 11 October 2026: VS Code's
+Copilot agent host runs its own bundled runtime (`session.start` reports
+`copilotVersion: 1.0.92-4.unstable`) and does not register `/cache-clock`. Typing it
+sent the text to the model, which answered "`/cache-clock` isn't available in this
+workspace" (one model turn spent). No card, no guard, no heads-up there, and nothing to
+install for VS Code.
+
+The **report still counts VS Code sessions**: they are written to the same
+`~/.copilot/session-state` directory (`client_name: vscode-agent-host`), but persist only
+`session.usage_checkpoint` totals, not per-call records, so the report can count them
+only as totals. For per-turn cache hit rates there, VS Code's own Cache Explorer (Agent
+Debug Logs) is the built-in view.
 
 ## Limits
 

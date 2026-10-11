@@ -428,7 +428,7 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
     <div class="card"><span class="chip risk">■ cold after idle</span><p>The call came <b>after</b> the reported expiry. The fix is behavior: send sooner, or accept the price.</p></div>
     <div class="card"><span class="chip warn">▲ prefix break</span><p>A cold call <b>inside</b> the TTL. Something changed the prompt prefix (tools, instructions, model routing), or the provider served it cold early.</p></div>
   </div>
-  <p>“Extra paid” is what each cold call cost above a warm read of the same tokens. Some VS Code sessions persist only totals, not per-call records; the report counts them separately.</p>
+  <p>“Extra paid” is what each cold call cost above a warm read of the same tokens. VS Code sessions persist only totals, not per-call records; the report counts them separately. The live clock, guard and <code>/cache-clock</code> do not run in VS Code: its Copilot agent host does not load the extension (measured 11&nbsp;October&nbsp;2026).</p>
 </section>
 
 <!-- 7 MEASURED -->

@@ -157,7 +157,7 @@ GPT-6 Luna                201                1              2      44.9k      $0
 
 extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at this rate</span></div>
       <p style="margin-top:12px">"Extra paid" is what each cold call cost above a warm read of the same tokens. "Prefix breaks" are cold calls inside the reported TTL: something changed the prompt prefix, or the provider served it cold early.</p>
-      <div class="callout" style="margin-top:14px"><span class="ti">VS Code</span>VS Code's Copilot agent harness writes to the same <code>~/.copilot/session-state</code> directory, so the report covers VS Code sessions. Whether the live guard loads inside VS Code's harness is not verified yet; VS Code's own Cache Explorer (Agent Debug Logs) shows per-turn hit rates there.</div>
+      <div class="callout" style="margin-top:14px"><span class="ti">VS Code</span>The live extension does not run in VS Code. Measured on 11 October 2026: VS Code's Copilot agent host runs its own bundled runtime (1.0.92-4.unstable) and does not register <code>/cache-clock</code>; typing it sends the text to the model. No card, guard or heads-up there. Its sessions still land in <code>~/.copilot/session-state</code>, but only as <code>session.usage_checkpoint</code> totals, so the report counts them as totals. VS Code's own Cache Explorer (Agent Debug Logs) shows per-turn hit rates.</div>
     </section>
 
     <section id="limits" class="doc-section">

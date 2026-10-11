@@ -17,7 +17,7 @@ Companion test plan (Claude Docs): "Copilot cache-tax: test plan".
 | Q7 Real tax paid | Measurable for free from `~/.copilot/session-state/*/events.jsonl`, which persists `session.usage_record` per call. | the `report` command |
 | Can a prompt hook stop a send? | Yes. `onUserPromptSubmitted` firing `session.abort()` **without awaiting it** cancels the turn before any model call (0 AI credits, no usage event). Awaiting it inside the hook deadlocks. | probe runs A and the hung run |
 | Do extensions load in `-p` mode? | Yes, without `--experimental`. | probe |
-| VS Code | The Copilot harness writes to the same `session-state` dir (`client_name: vscode-agent-host`) but persisted only checkpoints, no per-call records. Whether user extensions load there is unverified. | one session on disk |
+| VS Code | The Copilot harness writes to the same `session-state` dir (`client_name: vscode-agent-host`) but persisted only checkpoints, no per-call records. Later measured (11 October 2026): VS Code's agent host (bundled runtime 1.0.92-4.unstable) does not register `/cache-clock`; the text went to the model. The live extension does not run there. | one session on disk; a VS Code `/cache-clock` run |
 
 Prices: `costPerBatch` is nano-AIU per `batchSize` tokens; 1 AI credit = $0.01, so
 USD = nano-AIU / 1e11. No price table ships with the tool.
