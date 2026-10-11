@@ -69,6 +69,14 @@ Dark background, Inter for text, JetBrains Mono for `"font": "mono"`, 1920x1080 
 
 If Node, Chromium or ffmpeg cannot be installed here, still write and validate `motion.json` (validation needs only `npm ci`), then give the user the exact preview and render commands above to run themselves.
 
+## Voiceover and audio notes
+
+What the scripts do, and why:
+
+- `voice.mjs` disposes the ORT session (`tts.model.dispose()`) in a `finally`; on failure it sets `process.exitCode` (never `process.exit()`) and lets the event loop drain. Exiting with a live session, or calling `process.exit()`, aborts with exit 134 / `mutex lock failed`. Keep it that way if you edit or wrap the script.
+- Long narration is synthesised sentence by sentence: the text is split into sentences capped at 300 characters, each goes through its own `tts.generate()` call and the clips are joined, because Kokoro truncates one call at about 27 s. Pass the text with `--text-file`, never as a quoted argument.
+- `amix` takes the first input's sample rate and channel layout, so every track is normalised with `aformat=sample_rates=48000:channel_layouts=stereo` before mixing and the encode pins `-ac 2`. Without it a mono 24 kHz voice listed first collapses stereo music.
+
 ## Security
 
-The preview server binds 127.0.0.1 only and accepts only local Host headers, and serves only this skill's own folders plus the image and audio files the spec names. The renderer aborts every non-local request and sends a strict CSP. No network access at validate, preview or render time. The one exception is `voice.mjs`: its first run downloads the Kokoro voice model (about 90 MB) from huggingface.co into `<skill-dir>/.cache/models`, after which it is offline too.
+The preview server binds 127.0.0.1 only and accepts only local Host headers, and serves only this skill's own folders plus the image and audio files the spec names. The renderer aborts every non-local request and sends a strict CSP. The validator is not the offline guarantee; the CSP and the renderer's request abort (`guardNetwork()`) are. No network access at validate, preview or render time. The one exception is `voice.mjs`: its first run downloads the Kokoro voice model (about 90 MB) from huggingface.co into `<skill-dir>/.cache/models`, after which it is offline too.

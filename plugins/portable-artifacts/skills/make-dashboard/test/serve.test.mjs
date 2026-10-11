@@ -64,6 +64,22 @@ test('traversal and symlinks out of the served folder are refused', async () => 
   }
 });
 
+// Raw request with an explicit Host header (DNS rebinding).
+const withHost = (port, host) => new Promise((resolve, reject) => {
+  http.get({ host: '127.0.0.1', port, path: '/', headers: { host } }, (res) => {
+    res.resume();
+    res.on('end', () => resolve(res.statusCode));
+  }).on('error', reject);
+});
+
+test('a foreign Host header is refused (DNS rebinding) but localhost is served', async () => {
+  const { port } = await start([path.join(root, 'dist')]);
+  assert.equal(await withHost(port, 'evil.test'), 403);
+  assert.equal(await withHost(port, `evil.test:${port}`), 403);
+  assert.equal(await withHost(port, `127.0.0.1:${port}`), 200);
+  assert.equal(await withHost(port, `localhost:${port}`), 200);
+});
+
 test('unknown flag, missing index.html and a busy port exit 2 with one line', async () => {
   let r = spawnSync(process.execPath, [SERVE, path.join(root, 'dist'), '--bogus'], { encoding: 'utf8' });
   assert.equal(r.status, 2);
