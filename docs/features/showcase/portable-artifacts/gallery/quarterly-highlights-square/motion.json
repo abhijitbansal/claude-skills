@@ -77,5 +77,11 @@
             { "t": 0.7, "opacity": 1, "y": 540, "ease": "outCubic" } ] }
       ]
     }
+  ],
+  "audio": [
+    { "src": "voice/title.wav", "scene": "title", "at": 0.3 },
+    { "src": "voice/revenue.wav", "scene": "revenue", "at": 0.3 },
+    { "src": "voice/signups.wav", "scene": "signups", "at": 0.3 },
+    { "src": "voice/thanks.wav", "scene": "thanks", "at": 0.3 }
   ]
 }

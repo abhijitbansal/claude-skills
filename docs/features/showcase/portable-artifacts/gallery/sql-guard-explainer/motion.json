@@ -39,5 +39,11 @@
       { "id": "cap", "type": "text", "text": "Only declared files. No network.", "x": 960, "y": 540, "fontSize": 96, "fontWeight": 700, "color": "#f4f6fb",
         "keyframes": [ { "t": 0.2, "opacity": 0, "y": 576 }, { "t": 0.9, "opacity": 1, "y": 540, "ease": "outCubic" } ] }
     ] }
+  ],
+  "audio": [
+    { "src": "voice/title.wav", "scene": "title", "at": 0.3 },
+    { "src": "voice/reject.wav", "scene": "reject", "at": 0.3 },
+    { "src": "voice/layers.wav", "scene": "layers", "at": 0.3 },
+    { "src": "voice/caption.wav", "scene": "caption", "at": 0.3 }
   ]
 }

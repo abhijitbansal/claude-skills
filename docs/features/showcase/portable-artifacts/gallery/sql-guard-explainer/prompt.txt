@@ -1,1 +1,3 @@
 Make a 12-second explainer, 1920x1080, titled "How the SQL guard works": scene 1 the title; scene 2 a query card "SELECT … FROM query('…')" with a red "rejected" label drawing in; scene 3 three stacked rounded boxes labelled "Parse with DuckDB", "Allowlist the tables", "Locked connection" connected by lines drawing downward; scene 4 the caption "Only declared files. No network."
+
+Follow-up: Add a voiceover that reads each scene aloud.

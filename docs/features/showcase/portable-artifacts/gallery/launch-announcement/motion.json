@@ -21,5 +21,11 @@
     { "id": "outro", "duration": 2, "transition": "fade", "elements": [
       { "id": "cta", "type": "text", "text": "Available today", "x": 960, "y": 540, "fontSize": 128, "fontWeight": 700, "color": "#ffffff",
         "keyframes": [ { "t": 0, "opacity": 0, "scale": 0.9 }, { "t": 0.7, "opacity": 1, "scale": 1, "ease": "outCubic" } ] } ] }
+  ],
+  "audio": [
+    { "src": "voice/intro.wav", "scene": "intro", "at": 0.3 },
+    { "src": "voice/speed.wav", "scene": "speed", "at": 0.3 },
+    { "src": "voice/features.wav", "scene": "features", "at": 0.3 },
+    { "src": "voice/outro.wav", "scene": "outro", "at": 0.3 }
   ]
 }
