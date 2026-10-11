@@ -106,8 +106,8 @@
     <article class="spot flip">
       <div class="spot-media media-stack">
         <figure>
-          <video id="pa-video" autoplay muted loop playsinline controls preload="metadata" poster="../docs/features/showcase/portable-artifacts/prompt-to-dashboard-poster.jpg" aria-label="A 15-second explainer video rendered by make-motion: a title, three step cards, a bar chart of validate errors per attempt and a counter."><source src="../docs/features/showcase/portable-artifacts/prompt-to-dashboard.mp4" type="video/mp4"></video>
-          <figcaption><b>/make-motion</b> “15-second explainer, 1920x1080, titled ‘From prompt to dashboard’ …” — rendered to a 1080p MP4 from a JSON spec.</figcaption>
+          <video id="pa-video" autoplay muted loop playsinline controls preload="metadata" poster="../docs/features/showcase/portable-artifacts/prompt-to-dashboard-poster.jpg" aria-label="A 15-second explainer video rendered by make-motion: a title, three step cards, a bar chart of validate errors per attempt and a counter, with a voiceover synthesised locally by Kokoro."><source src="../docs/features/showcase/portable-artifacts/prompt-to-dashboard.mp4" type="video/mp4"></video>
+          <figcaption><b>/make-motion</b> “15-second explainer, 1920x1080, titled ‘From prompt to dashboard’ …” — rendered to a 1080p MP4 from a JSON spec. Unmute for the voiceover, which a one-line follow-up asked for; audio is never added unasked.</figcaption>
         </figure>
         <figure>
           <a href="../docs/features/portable-artifacts.html#showcase-dashboard"><img src="../docs/features/img/portable-artifacts/growth-dashboard.jpg" alt="The Growth overview dashboard built by make-dashboard: four KPI tiles and four charts, each with a disclosure that shows its SQL" loading="lazy" width="1600" height="900"></a>
@@ -117,7 +117,7 @@
       <div class="spot-text">
         <p class="tagline">portable-artifacts · /make-dashboard · /make-motion</p>
         <h3>Dashboards and videos, built offline by any agent</h3>
-        <p><code>/make-dashboard</code> turns a data file into one self-contained HTML page of KPI tiles and charts, and every chart expands to show its SQL, row count and refresh time. <code>/make-motion</code> turns a prompt into a live preview with a scrubber and a deterministic 1080p MP4, with optional music and a locally synthesised voiceover. Both work in Claude Code, Codex, GitHub Copilot and Gemini CLI.</p>
+        <p><code>/make-dashboard</code> turns a data file into one self-contained HTML page of KPI tiles and charts, and every chart expands to show its SQL, row count and refresh time. <code>/make-motion</code> turns a prompt into a live preview with a scrubber and a deterministic 1080p MP4, silent unless you ask for sound, then music from your file or a locally synthesised voiceover. Both work in Claude Code, Codex, GitHub Copilot and Gemini CLI.</p>
         <ol class="howlist" aria-label="How portable-artifacts works">
           <li><b>Offline, and the same result every time.</b> After a one-time install nothing touches the network except your own data files, and the same spec always produces the same page or video. A spec that tries to reach the network is rejected.</li>
           <li><b>The model's whole job is one small JSON file.</b> Writing a spec that matches a schema is easy work, so this runs on small and local models too. A mistake comes back as a precise message, for example <code>charts[0].query: "rev_by_regin" not found; did you mean "rev_by_region"?</code>, and the agent fixes one field instead of regenerating everything.</li>

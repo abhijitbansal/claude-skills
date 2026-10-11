@@ -1,6 +1,6 @@
 ---
 name: make-motion
-description: Use when the user wants a short animated explainer video (titles, counters, shapes, charts, images with keyframed motion) previewed locally and exported to MP4 with optional music or voiceover; spec-driven, offline, open source, works with any agent that can run shell commands.
+description: Use when the user wants a short animated explainer video (titles, counters, shapes, charts, images with keyframed motion) previewed locally and exported to MP4, with music or a voiceover only when asked; spec-driven, offline, open source, works with any agent that can run shell commands.
 argument-hint: what to make, e.g. an 8s clip with Q3 revenue up 18% then a bar chart of Q1-Q3
 ---
 

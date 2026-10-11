@@ -91,5 +91,11 @@
           "keyframes": [ { "t": 1.4, "opacity": 0, "y": 730 }, { "t": 2.2, "opacity": 1, "y": 700, "ease": "outCubic" } ] }
       ]
     }
+  ],
+  "audio": [
+    { "src": "voice/title.wav", "scene": "title", "at": 0.3 },
+    { "src": "voice/steps.wav", "scene": "steps", "at": 0.3 },
+    { "src": "voice/errors.wav", "scene": "errors", "at": 0.3 },
+    { "src": "voice/one-file.wav", "scene": "one-file", "at": 0.3 }
   ]
 }

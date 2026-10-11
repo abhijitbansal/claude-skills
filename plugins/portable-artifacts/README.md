@@ -9,7 +9,7 @@ an account or a particular model:
 | Skill | You say | You get |
 |---|---|---|
 | [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + Vega-Lite charts. Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh — no LLM involved. |
-| [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. Optional `audio` tracks (music, voiceover, SFX); narration synthesised locally with Kokoro when asked. "Slow scene 2" changes one field, not the whole video. |
+| [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. Silent unless you ask for sound: `audio` tracks (music, voiceover, SFX) are added only when the prompt asks, and narration is synthesised locally with Kokoro. "Slow scene 2" changes one field, not the whole video. |
 
 [**See them in action**](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#showcase): a real dashboard and video an agent generated from one prompt each, with the prompts and specs.
 
