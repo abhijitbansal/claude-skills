@@ -37,26 +37,40 @@ certainly covered the current diff or `HEAD`, not every commit ever made.
      | grep -iE '(^|/)(\.env($|\.)|.*\.(pem|p12|key|keystore)$|id_rsa|credential|secrets?\.(json|ya?ml|toml))'
    ```
 
-3. **PII sweep** — emails other than the intended public contact, anywhere in
-   history:
+3. **Scan the full history for secret CONTENT.** Step 2 checks file *names*
+   only; a secret committed in an ordinary file and later removed is invisible
+   to it. Search every commit's diffs for the same secret shapes as step 1:
+   ```bash
+   git log --all -p -E -G'(AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|xox[baprs]-[0-9A-Za-z-]{10,}|sk-(live|proj|ant)[A-Za-z0-9_-]{16,})'
+   # or, per-commit tree search (same regex as above):
+   git rev-list --all | xargs -n 50 git grep -nIE '(AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|xox[baprs]-[0-9A-Za-z-]{10,}|sk-(live|proj|ant)[A-Za-z0-9_-]{16,})'
+   ```
+   `-E` is required: without it, glibc BRE treats `(`, `|` and `{16}`
+   literally and matches nothing. In the `xargs` form, do not read the exit
+   status: `xargs` exits 123 when ANY batch exits 1, and `git grep` exits 1
+   on no match. Judge by printed output: any printed line is a finding.
+
+4. **PII sweep (working tree only)** — emails other than the intended public
+   contact. Plain `git grep` reads the current tree, not history; for history,
+   reuse the step 3 `git log --all -p -E -G'<email regex>'` form:
    ```bash
    git grep -hoIE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' \
      | sort -u | grep -viE '(your-public-contact@|noreply|example\.com)'
    ```
 
-4. **Prefer a real scanner over the greps above when one is installed** —
+5. **Prefer a real scanner over the greps above when one is installed** —
    `gitleaks detect` or `trufflehog` (both scan full history by default) catch
    secret shapes the regexes above don't enumerate. Treat the greps as the
    always-available fallback, not the ceiling.
 
-5. **If anything turns up in history**: stop before flipping visibility.
+6. **If anything turns up in history**: stop before flipping visibility.
    - Rotate the exposed credential regardless of how old the commit is —
      assume it's burned the moment it could go public.
    - Remove it from history (`git filter-repo` or equivalent) or recreate the
      repo from a clean history before publishing. Deleting the file in a new
      commit is not sufficient; the old commit is still reachable.
 
-6. **Only once both scans are clean**, flip visibility with explicit consent
+7. **Only once all scans above are clean**, flip visibility with explicit consent
    and verify it took effect:
    ```bash
    gh repo edit OWNER/REPO --visibility public --accept-visibility-change-consequences
@@ -67,11 +81,16 @@ certainly covered the current diff or `HEAD`, not every commit ever made.
 
 - Never treat a working-tree/diff scan as sufficient for this decision — the
   threat model is "every commit ever made," not "what's on disk now."
-- Never flip visibility while step 2 (history scan) is still pending or has
-  unresolved hits.
+- Never flip visibility while steps 2-3 (history scans) are still pending or
+  have unresolved hits.
 - If history contains a secret, rotating it is mandatory even if you plan to
   scrub history — don't rely on the scrub alone.
 - This step is irreversible in practice: flipping back to private after
   exposure does not un-clone, un-cache, or un-index the history that was
   public in the interim. Treat it as a one-way door and get explicit user
   confirmation before proceeding, not just before typing the command.
+
+## Related skills
+
+- `core-workflow:github-solo-branch-protection-codeowners` — harden `main`
+  at the same go-public moment.

@@ -33,9 +33,27 @@ dead weight.
 stack** for a reference to the rule-file glob/loader:
 
 ```bash
-grep -rn "hookify" .claude/settings.json ~/.claude/settings.json \
-  ~/.claude/plugins/*/hooks.json 2>/dev/null
+grep -ln '<rule-glob>' .claude/settings*.json ~/.claude/settings*.json 2>/dev/null
+grep -rln '<rule-glob>' ~/.claude/plugins --include='*.json' --include='*.py' --include='*.sh' --include='*.mjs'
 ```
+
+(Or drop `--include` entirely.) A real dispatcher (e.g. hookify) keeps the
+rule glob in its Python hook scripts, not in `hooks.json`, so a search
+limited to `hooks.json` reports "no dispatcher" wrongly.
+
+Use two commands: `--include` also filters the explicit `settings*.json`
+arguments (verified on BSD grep), so a single combined command never reads
+the settings files. zsh aborts on an unmatched glob ("no matches found"):
+run the first command in bash, or `setopt nullglob` first.
+
+(Plugin hooks live at
+`~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/hooks/hooks.json`,
+so a shallow `~/.claude/plugins/*/hooks.json` glob matches nothing and always
+reports "no dispatcher".)
+
+Also confirm the plugin is listed under `enabledPlugins` in settings, and
+count a hit only in the active version directory (cache keeps old
+versions).
 
 - If nothing loads the rule-file pattern, **do not author rule-file
   content** expecting it to run. Implement the behavior as a native

@@ -5,7 +5,7 @@ description: Stage the current changes, lint shell scripts with shellcheck, and 
 
 # Commit current work
 
-A small, opinionated commit flow tuned for this repo's iterative shell+Swift workflow. The goal is to make snapshotting working state cheap so debug rounds don't accumulate uncommitted regressions.
+A small, opinionated commit flow tuned for this repo's iterative workflow. The goal is to make snapshotting working state cheap so debug rounds don't accumulate uncommitted regressions.
 
 ## Steps
 
@@ -17,11 +17,11 @@ Run these in parallel where possible:
 Then sequentially:
 
 4. **Lint any changed `.sh` files** with `shellcheck`. If shellcheck reports errors (not info/style), surface them and **ask the user whether to commit anyway** — don't auto-block, but don't silently ship known issues either.
-5. **Stage** the relevant changes by file name. Never `git add -A` or `git add .` — that risks committing `.env`, `.dev-team`, build artifacts, or other gitignored-but-not-yet-tracked files.
+5. **Stage** the relevant changes by file name. Never `git add -A` or `git add .` — that risks committing `.env`, build artifacts, or other untracked files you did not mean to commit.
 6. **Generate a commit message:**
    - Title (≤72 chars): imperative mood, lowercase, no trailing period. Match the style of recent commits in this repo.
    - Body (optional): one or two sentences focused on the *why*, not the *what*. Skip the body for trivial changes.
-   - No attribution trailer — disabled globally via `~/.claude/settings.json`.
+   - Add whatever attribution trailer the repo/harness requires.
 7. **Commit via heredoc** (always — preserves formatting):
    ```
    git commit -m "$(cat <<'EOF'
@@ -38,11 +38,11 @@ Then sequentially:
 - **Never amend.** Use a new commit even if the previous one was small. Amending a pushed commit is hostile to anyone who pulled it.
 - **Never `--no-verify`.** If a pre-commit hook fails, fix the underlying issue and re-stage.
 - **Don't commit secrets.** If you see something that looks like a token, key, or credential staged, abort and warn the user.
-- **Don't commit `<App>.xcodeproj/`, `build/`, `.dev-team`, `.tmp/`, or anything matched by `.gitignore`.**
+- **Don't commit generated project files, `build/`, `.tmp/`, anything gitignored.**
 - **One commit per call.** If the changes are clearly two unrelated things, ask the user whether to split — don't decide unilaterally.
 
 ## When NOT to use this skill
 
-- User asked for "push" or "open PR" — those need explicit confirmation; don't bundle them into the commit flow.
+- User asked for "push" or "open PR" — don't bundle push or PR creation into the commit flow; pushing follows the repo's own authorization rules.
 - User specified the commit message themselves — just commit with their message verbatim, skip the message-generation step.
 - Mid-rebase or mid-merge — investigate state first; don't blindly snapshot a half-resolved conflict.

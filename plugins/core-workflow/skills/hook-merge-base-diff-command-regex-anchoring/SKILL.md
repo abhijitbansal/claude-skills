@@ -59,7 +59,8 @@ git diff --name-only "$BASE_REF"..HEAD
 # RIGHT: pin the base to the actual divergence point first.
 merge_base="$(git merge-base "$BASE_REF" HEAD)"
 git log --name-only "$merge_base"..HEAD
-# (equivalently: git diff --name-only "$BASE_REF"...HEAD — three-dot form)
+# (same file set: git diff --name-only "$BASE_REF"...HEAD — three-dot form;
+# log output also carries commit headers)
 ```
 
 **2. Command regex — anchor to statement position, widen the boundary:**
@@ -72,8 +73,18 @@ git log --name-only "$merge_base"..HEAD
 # RIGHT: anchor to start-of-string or after a statement separator
 # (;  &&  ||  |), and terminate on a boundary that includes metacharacters,
 # not just whitespace/end-of-string.
-[[ "$cmd" =~ (^|[\;\&\|]) *git\ push([[:space:]]|[\;\&\|]|$) ]]
+#
+# Keep the regex in a variable: written inline, the unescaped space before
+# `*` is a bash syntax error. Verified in bash 3.2 (macOS /bin/bash):
+# "git push" and "cd x; git push origin" match; "echo git push" and
+# "git pushx" do not.
+re='(^|[;&|]) *git[[:space:]]+push([[:space:]]|[;&|]|$)'
+[[ "$cmd" =~ $re ]]
 ```
+
+This regex still misses `git -C <dir> push`, `git -c foo=bar push`,
+`FOO=1 git push` (anything between `git` and `push`, or an env prefix before
+`git`) and the subshell form `(git push)`; widen it if those matter.
 
 Statement-anchoring alone doesn't fix the quoted-string false positive —
 if the hook payload gives you the parsed argv (not just the raw string), match
@@ -85,16 +96,24 @@ them; treat a match as advisory, not authoritative.
 
 ```bash
 sentinel="$SENTINEL_DIR/${session_id}-${command_hash}"
+[[ -f "$sentinel" ]] && exit 0   # already nudged this (session, command)
 if ! mkdir -p "$SENTINEL_DIR" 2>/dev/null || ! : > "$sentinel" 2>/dev/null; then
   exit 0   # can't record the nudge -> don't block; advisory gates must
            # degrade to "never block," never to "always block."
 fi
-[[ -f "$sentinel.acked" ]] && exit 0   # already nudged this (session, command)
+# first call only: sentinel now exists, so the next call exits above
+echo "Nudge: ..." >&2
+exit 2     # block once
 ```
 
-Combine the sentinel with `stop_hook_active` (Claude Code sets this on the
-*second* Stop-hook invocation in a turn) so the nudge fires once and the
-re-invocation after the user acts doesn't loop.
+Check for the sentinel BEFORE creating it. With the order reversed, the
+sentinel always exists by the time it is checked, so the check always
+passes and the nudge never fires.
+
+When the gate is a Stop hook, combine the sentinel with `stop_hook_active`
+(Claude Code sets this on the *second* Stop-hook invocation in a turn) so
+the nudge fires once and the re-invocation after the user acts doesn't
+loop.
 
 ## Evidence
 

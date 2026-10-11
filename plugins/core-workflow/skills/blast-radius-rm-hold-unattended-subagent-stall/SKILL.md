@@ -28,7 +28,7 @@ commands, so agents reached for `rm` as routine tidy-up.
    unnecessary:
    ```bash
    OUT="$(mktemp -d "${TMPDIR:-/tmp}/scenarios.XXXXXX")"   # fresh dir per run
-# (or use the session scratch dir)
+   # (or use the session scratch dir)
    run_scenario "$OUT/case-1"    # nothing to clean up afterwards
    ```
 2. Write harnesses to a file with the Write tool and run the file, rather

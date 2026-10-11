@@ -126,3 +126,8 @@ denial text), cubby `1d26271a` (bash-guard text), a private project `fda30a90`
 - To also gate merges on your own CI, add the check name(s) to
   `required_status_checks.contexts` once that check actually runs on PRs —
   don't add a context that never posts a status, or it blocks forever.
+
+## Related skills
+
+- `core-workflow:github-repo-go-public-preflight-scan` — scan history for
+  secrets at the same go-public moment.
