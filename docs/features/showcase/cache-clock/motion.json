@@ -50,7 +50,9 @@
       { "id": "ref-badge-text", "type": "text", "text": "refused before the model call · 0 AI credits", "x": 960, "y": 760, "fontSize": 40, "fontWeight": 700, "color": "#34d399",
         "keyframes": [ { "t": 2.4, "opacity": 0 }, { "t": 2.8, "opacity": 1, "ease": "outCubic" } ] },
       { "id": "ref-foot", "type": "text", "text": "send again and it goes through", "x": 960, "y": 880, "fontSize": 36, "fontWeight": 500, "color": "#9aa3b5",
-        "keyframes": [ { "t": 3.0, "opacity": 0 }, { "t": 3.4, "opacity": 1, "ease": "outCubic" } ] }
+        "keyframes": [ { "t": 3.0, "opacity": 0 }, { "t": 3.4, "opacity": 1, "ease": "outCubic" } ] },
+      { "id": "ref-note", "type": "text", "text": "captured with /cache-clock min 0.01 · the default threshold is $0.10", "x": 960, "y": 960, "fontSize": 28, "fontWeight": 500, "font": "mono", "color": "#6b7385",
+        "keyframes": [ { "t": 3.2, "opacity": 0 }, { "t": 3.6, "opacity": 1, "ease": "outCubic" } ] }
     ] },
     { "id": "outro", "duration": 3.4, "transition": "fade", "elements": [
       { "id": "out-title", "type": "text", "text": "Cache Clock", "x": 960, "y": 330, "fontSize": 100, "fontWeight": 800, "color": "#f4f6fb",

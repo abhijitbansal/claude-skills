@@ -347,7 +347,7 @@ svg text{font-family:var(--mono)}
 <section id="headsup" class="s">
   <span class="step-no">4 · The heads-up</span>
   <h2>A warning one minute before a Claude cache expires</h2>
-  <p>One ephemeral line appears before expiry. It fires only when a cold send would cost at least the threshold and no turn is running. The lead time is the <b>smaller</b> of your setting (5&nbsp;min) and a fifth of the TTL. A 5-minute lead on a 5-minute cache would fire right after every call.</p>
+  <p>One ephemeral line appears before expiry. It fires only when a cold send’s extra cost (cold minus warm) is at least the threshold and no turn is running. The lead time is the <b>smaller</b> of your setting (5&nbsp;min) and a fifth of the TTL. A 5-minute lead on a 5-minute cache would fire right after every call.</p>
 
   <figure>
     <div class="frame">
@@ -443,7 +443,7 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
   <p>Two sessions were warmed at 14:55Z, then resumed with <code>copilot --resume &lt;id&gt; -p</code>, guard threshold at $0.</p>
   <figure>
     <div class="frame scroll" style="padding:var(--s-4)">
-      <svg viewBox="0 0 620 170" role="img" aria-label="Luna timeline: reported TTL 30 minutes. A send at 29 minutes read 0 and wrote 20,771 (served cold). A send at 31 minutes was refused with 0 credits; the resend read 10,157 and wrote 10,653.">
+      <svg viewBox="0 0 620 170" role="img" aria-label="Luna timeline: reported TTL 30 minutes. A send at 29 minutes read 0 and wrote 20,771 (served cold). A send at 31 minutes was refused with 0 credits.">
         <!-- 0..32 min -> x 30..590 (17.5 px/min) -->
         <line x1="30" y1="90" x2="600" y2="90" stroke="var(--border-bright)" stroke-width="1"/>
         <rect x="30" y="76" width="525" height="28" rx="4" fill="var(--ok-dim)" stroke="var(--ok)" stroke-width="1.5"/>
@@ -473,7 +473,7 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
       <tr><td>resend, new process</td><td>1 min after</td><td class="r">10,157</td><td class="r">10,653</td><td>let it through with the cold note</td></tr>
     </tbody>
   </table></div>
-  <p>The refused-then-resent pair also shows the refusal memory working across processes. The cache of a brand-new session still read 10,157 tokens: separate sessions share the cached system-prompt prefix, the conversation itself is per session.</p>
+  <p>The refused-then-resent pair also shows the refusal memory working across processes. Separately, a brand-new session’s first call read 10,157 tokens from cache: sessions share the cached system-prompt prefix, while the conversation itself is per session.</p>
 
   <h3>Limits</h3>
   <div class="grid2">

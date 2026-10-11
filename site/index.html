@@ -217,11 +217,11 @@
       <article class="prow">
         <div class="name">
           <h3><a href="../docs/features/cache-clock.html">cache-clock</a></h3>
-          <span class="meta">Copilot CLI extension · report CLI · no dependencies</span>
+          <span class="meta">Copilot CLI extension · report CLI · no npm dependencies</span>
           <p class="what">A prompt-cache clock for GitHub Copilot CLI. It shows when the cache goes cold and what the next send costs, and stops one costly cold send before any credits are spent.</p>
           <p class="flow"><b>assistant.usage</b> → clock per model → prompt submitted → cold and costly? → refuse once at 0 AI credits → resend goes through</p>
           <div class="get">
-            <div class="code cmds"><div class="cl"><code class="ct">sh claude-skills/tools/cache-clock/install.sh</code><button class="copy" data-copy="sh claude-skills/tools/cache-clock/install.sh">copy</button></div><div class="cl"><code class="ct"><span class="k">node</span> claude-skills/tools/cache-clock/bin/report.mjs --since 7d</code><button class="copy" data-copy="node claude-skills/tools/cache-clock/bin/report.mjs --since 7d">copy</button></div></div>
+            <div class="code cmds"><div class="cl"><code class="ct"><span class="k">git</span> clone https://github.com/abhijitbansal/claude-skills</code><button class="copy" data-copy="git clone https://github.com/abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct">sh claude-skills/tools/cache-clock/install.sh</code><button class="copy" data-copy="sh claude-skills/tools/cache-clock/install.sh">copy</button></div><div class="cl"><code class="ct"><span class="k">node</span> claude-skills/tools/cache-clock/bin/report.mjs --since 7d</code><button class="copy" data-copy="node claude-skills/tools/cache-clock/bin/report.mjs --since 7d">copy</button></div></div>
             <a class="guide-link" href="../docs/features/cache-clock.html">cache-clock guide</a> · <a class="guide-link" href="../docs/features/showcase/cache-clock/how-it-works.html">visual explainer</a>
           </div>
         </div>
@@ -291,7 +291,7 @@
   <section id="install">
     <div class="eyebrow">Install</div>
     <h2 class="title">Three ways in.</h2>
-    <p class="section-lead">Claude Code is the main path. The marketplace itself is Markdown and shell; portable-artifacts needs Node 20, and the Second Wind CLI is one stdlib Python file.</p>
+    <p class="section-lead">Claude Code is the main path. The marketplace itself is Markdown and shell; portable-artifacts needs Node 20, the Second Wind CLI is one stdlib Python file, and the Cache Clock report needs Node 18.</p>
     <div class="install-rows">
 
       <div class="irow">
@@ -320,7 +320,7 @@
     <h2 class="title">Guides and references.</h2>
     <div class="parts" style="max-width:760px">
       <div class="part"><span class="k"><a href="../docs/catalog.html">Catalog</a></span><span class="v">Every skill, command, agent, hook and CLI tool, searchable and filterable.</span></div>
-      <div class="part"><span class="k"><a href="../docs/architecture.html">Architecture</a></span><span class="v">How the marketplace, the plugins, the Second Wind CLI, the adapters and the machine setup fit together.</span></div>
+      <div class="part"><span class="k"><a href="../docs/architecture.html">Architecture</a></span><span class="v">How the marketplace, the plugins, the Second Wind CLI, the Cache Clock extension, the adapters and the machine setup fit together.</span></div>
       <div class="part"><span class="k"><a href="../docs/machine-setup.html">Machine setup</a></span><span class="v">Rebuild a Claude Code environment on a new machine from one TOML manifest: <code>capture.sh</code> snapshots, <code>setup.sh</code> restores, <code>contribute.sh</code> round-trips changes back.</span></div>
       <div class="part"><span class="k"><a href="../docs/second-wind/index.html">Second Wind CLI</a></span><span class="v">Every <code>wind</code> command, the live dashboard, how limit detection parses the reset time, the config schema and the security model.</span></div>
       <div class="part"><span class="k"><a href="../docs/features/cache-clock.html">Cache Clock</a></span><span class="v">The Copilot CLI cache guard: the <a href="../docs/features/showcase/cache-clock/how-it-works.html">visual explainer</a>, the <a href="../docs/features/showcase/cache-clock/diagram/cache-clock-architecture.html">architecture diagram</a>, measured TTLs and prices, and the cold-send report.</span></div>

@@ -37,7 +37,7 @@ sh claude-skills/tools/cache-clock/install.sh          # links ~/.copilot/extens
 ```
 
 `--copy` copies instead of linking; `--uninstall` removes it. `COPILOT_HOME` moves
-`~/.copilot`. The installer only replaces its own install. Link mode was tested on
+`~/.copilot`. The installer replaces only a symlink or an earlier cache-clock copy at that path. Link mode was tested on
 1.0.95: Copilot resolves the `@github/copilot-sdk` import itself, wherever the files
 live. Start a new `copilot` session. Copilot asks once whether the extension
 may "register hooks": say yes (option 2 remembers it for that repo). Then run
@@ -83,8 +83,8 @@ cache-clock · Claude Sonnet 5.5
   escapes are never guarded. A message queued while a turn is running only gets the
   note: aborting then would cancel the running turn. After a compaction the next send
   is exempt, since the context was rewritten anyway.
-- **The heads-up.** One ephemeral line before expiry, only when a cold send would cost
-  at least the threshold and no turn is running. The lead is the smaller of your setting and a fifth of the
+- **The heads-up.** One ephemeral line before expiry, only when a cold send's extra cost
+  is at least the threshold and no turn is running. The lead is the smaller of your setting and a fifth of the
   TTL, so a 5-minute Claude cache warns 1 minute ahead, not right after every call.
 - **Resume.** `assistant.usage` is not replayed when you resume, so the extension seeds
   the clock from the session's own `~/.copilot/session-state/<id>/events.jsonl`.
