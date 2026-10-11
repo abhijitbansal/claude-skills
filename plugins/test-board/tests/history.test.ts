@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { TestRun } from '../types'
-import { appendRun, keysToDrop, oldestQuarter, previousRun, touchIndex } from '../hooks/history'
+import { appendRun, BAND_TTL_MS, keysToDrop, oldestQuarter, previousRun, touchIndex, visibleRuns } from '../hooks/history'
 
 const mk = (at: number, extra: Partial<TestRun> = {}): TestRun => ({
   suite: 'pytest -q', key: '/r::pytest -q', total: 1, passed: 1, failed: 0, skipped: 0,
@@ -27,6 +27,17 @@ describe('previousRun', () => {
     const h = [mk(30), mk(20), mk(10)]
     expect(previousRun(h, mk(30))?.at).toBe(20)
     expect(previousRun([mk(30)], mk(30))).toBeUndefined()
+  })
+})
+
+describe('visibleRuns', () => {
+  test('hides runs an hour old or older', () => {
+    const now = 10 * BAND_TTL_MS
+    expect(visibleRuns([mk(now - BAND_TTL_MS + 1), mk(now - BAND_TTL_MS)], now, 0).map(r => r.at))
+      .toEqual([now - BAND_TTL_MS + 1])
+  })
+  test('hides runs at or before the last close', () => {
+    expect(visibleRuns([mk(30), mk(20), mk(10)], 40, 20).map(r => r.at)).toEqual([30])
   })
 })
 

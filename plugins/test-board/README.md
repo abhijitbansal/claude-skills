@@ -5,7 +5,7 @@ above the prompt shows how many tests passed, failed and were skipped, next to t
 previous run of the same suite in the same worktree.
 
 ```
-Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   ▲3 ✗   1m12s   prev 415 ✓ 0 ✗ · 2h ago   via ios-fixer
+Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   ▲3 ✗   1m12s   ran 14:32   prev 415 ✓ 0 ✗ · 2h ago   via ios-fixer  ✕
 ```
 
 ## What the band shows
@@ -13,14 +13,17 @@ Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   ▲3 ✗   1m1
 - One line per recent run, up to 3. Runs in the same turn stack; the first run after
   you submit a prompt replaces the previous turn's lines.
 - Each line: repo and suite, counts, change in failures against the previous run
-  (`▲` more, `▼` fewer), duration, `prev …` (or `first run`), and `via …`.
+  (`▲` more, `▼` fewer), duration, the time it ran (`ran 14:32`), `prev …` (or
+  `first run`), and `via …`.
+- The band closes itself once a run is 60 minutes old. Press `✕` at the end of the
+  first line to close it sooner; the next test run brings it back.
 - Press the line to list up to 10 failing tests with their locations.
 - Runs from a subagent are tagged `via <the agent's description>`. Workflow agents are
   tagged `via workflow`.
 - When a session starts, the newest stored run of the current worktree appears dimmed
-  (stale) until a new run replaces it.
+  (stale) until a new run replaces it, if it ran within the last 60 minutes.
 - The band stays hidden while a survey is on screen. Narrow terminals drop `via`,
-  then `prev`, then the duration.
+  then `prev`, then the duration, then the run time.
 - These commands count as test runs, alone or after a leading `cd`/env vars, behind
   `npx`, `bunx`, `uv run`, `uv tool run`, `uvx`, `poetry run`, `python -m`, `pnpm exec`,
   `pnpm dlx` or `yarn`: `xcodebuild … test` (or `test-without-building`), `swift test`,

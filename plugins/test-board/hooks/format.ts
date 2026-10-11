@@ -8,7 +8,7 @@ export type LineParts = {
   label: string; counts: string; isFailing: boolean
   /** `counts` cut around its failed segment so the UI can color only that part; absent when unparsed. */
   split?: { head: string; failed: string; tail: string }
-  trend?: string; duration?: string; prev?: string; via?: string
+  trend?: string; duration?: string; ranAt?: string; prev?: string; via?: string
 }
 
 export function formatDuration(seconds: number): string {
@@ -22,6 +22,11 @@ export function formatAgo(ms: number): string {
   if (minutes < 60) return `${minutes}m ago`
   const hours = Math.floor(minutes / 60)
   return hours < 48 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`
+}
+
+export function formatClock(at: number): string {
+  const d = new Date(at)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function repoName(key: string): string {
@@ -42,7 +47,7 @@ function counts(run: TestRun): string {
 }
 
 export function joinParts(p: LineParts): string {
-  return [p.label, p.counts, p.trend, p.duration, p.prev, p.via].filter(Boolean).join(GAP)
+  return [p.label, p.counts, p.trend, p.duration, p.ranAt, p.prev, p.via].filter(Boolean).join(GAP)
 }
 
 export function lineParts(run: TestRun, prev: TestRun | undefined, now: number, columns: number): LineParts {
@@ -54,13 +59,14 @@ export function lineParts(run: TestRun, prev: TestRun | undefined, now: number, 
     isFailing: run.parsed ? run.failed > 0 : run.exitCode !== 0,
     ...(delta > 0 ? { trend: `▲${delta} ✗` } : delta < 0 ? { trend: `▼${-delta} ✗` } : {}),
     ...(run.durationS === undefined ? {} : { duration: formatDuration(run.durationS) }),
+    ranAt: `ran ${formatClock(run.at)}`,
     prev: prev === undefined
       ? 'first run'
       : `prev ${prev.parsed ? `${prev.passed} ✓ ${prev.failed} ✗` : `ran · exit ${prev.exitCode}`} · ${formatAgo(now - prev.at)}`,
     ...(run.via === undefined ? {} : { via: `via ${run.via}` }),
   }
   if (columns < NARROW_COLUMNS) parts = { ...parts, via: undefined }
-  for (const field of ['via', 'prev', 'duration'] as const) {
+  for (const field of ['via', 'prev', 'duration', 'ranAt'] as const) {
     if (joinParts(parts).length <= columns) break
     parts = { ...parts, [field]: undefined }
   }

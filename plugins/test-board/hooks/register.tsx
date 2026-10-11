@@ -3,12 +3,17 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { TestRun } from '../types'
 import { lineParts, MAX_SHOWN_FAILURES } from './format'
-import { appendRun, keysToDrop, MAX_LATEST, oldestQuarter, previousRun, STORE_SOFT_CAP_BYTES, touchIndex } from './history'
+import {
+  appendRun, keysToDrop, MAX_LATEST, oldestQuarter, previousRun, STORE_SOFT_CAP_BYTES, touchIndex, visibleRuns,
+} from './history'
 import { parseTestOutput } from './parse'
 import { resolveDir, splitCommand, suiteKey, suiteLabel } from './suite'
 
 const latest = atom({ plugin: 'test-board', key: 'latest' } as const, [] as TestRun[])
 const expanded = atom({ plugin: 'test-board', key: 'expanded' } as const, false)
+const closedAt = atom({ plugin: 'test-board', key: 'closedAt' } as const, 0)
+
+const CLOSE_LABEL = '  ✕'
 
 type Loop = { description: string; cwd?: string; isWorkflow: boolean }
 type Ran = { deny?: string; isError?: true; result?: unknown; text?: string }
@@ -185,29 +190,39 @@ export const register: Register = on => {
     return result
   })
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const runs = await read($, latest)
-    if (runs.length === 0 || e.props.hasSurvey) return next(e)
-    const isOpen = await read($, expanded)
+    if (e.props.hasSurvey) return next(e)
     const now = await $.clock.now()
+    const runs = visibleRuns(await read($, latest), now, await read($, closedAt))
+    if (runs.length === 0) return next(e)
+    const isOpen = await read($, expanded)
+    const newestAt = Math.max(...runs.map(r => r.at))
     const { Box, Button, Text } = $.ui.resolve(e)
-    const rows = await Promise.all(runs.map(run => partsFor($, run, now, e.props.bodyColumns)))
+    const columns = e.props.bodyColumns - CLOSE_LABEL.length
+    const rows = await Promise.all(runs.map(run => partsFor($, run, now, columns)))
     return (
       <Box flexDirection="column">
-        {rows.map(({ run, parts }) => (
+        {rows.map(({ run, parts }, i) => (
           <Box flexDirection="column">
-            <Button key={`run-${run.key}`} plain onPress={() => update($, expanded, v => !v)}>
-              <Text dimColor={run.stale === true}>{parts.label}   </Text>
-              {parts.split === undefined && <Text dimColor={run.stale === true}>{parts.counts}</Text>}
-              {parts.split !== undefined && <Text dimColor={run.stale === true}>{parts.split.head}</Text>}
-              {parts.split !== undefined && (
-                <Text color={parts.isFailing ? 'error' : undefined} dimColor={run.stale === true}>{parts.split.failed}</Text>
+            <Box flexDirection="row">
+              <Button key={`run-${run.key}`} plain onPress={() => update($, expanded, v => !v)}>
+                <Text dimColor={run.stale === true}>{parts.label}   </Text>
+                {parts.split === undefined && <Text dimColor={run.stale === true}>{parts.counts}</Text>}
+                {parts.split !== undefined && <Text dimColor={run.stale === true}>{parts.split.head}</Text>}
+                {parts.split !== undefined && (
+                  <Text color={parts.isFailing ? 'error' : undefined} dimColor={run.stale === true}>{parts.split.failed}</Text>
+                )}
+                {parts.split !== undefined && <Text dimColor={run.stale === true}>{parts.split.tail}</Text>}
+                <Text dimColor={run.stale === true}>
+                  {[parts.trend, parts.duration].filter(Boolean).map(s => `   ${s}`).join('')}
+                </Text>
+                <Text dimColor>{[parts.ranAt, parts.prev, parts.via].filter(Boolean).map(s => `   ${s}`).join('')}</Text>
+              </Button>
+              {i === 0 && (
+                <Button key="close" plain onPress={() => update($, closedAt, v => Math.max(v, newestAt))}>
+                  <Text dimColor>{CLOSE_LABEL}</Text>
+                </Button>
               )}
-              {parts.split !== undefined && <Text dimColor={run.stale === true}>{parts.split.tail}</Text>}
-              <Text dimColor={run.stale === true}>
-                {[parts.trend, parts.duration].filter(Boolean).map(s => `   ${s}`).join('')}
-              </Text>
-              <Text dimColor>{[parts.prev, parts.via].filter(Boolean).map(s => `   ${s}`).join('')}</Text>
-            </Button>
+            </Box>
             {isOpen && run.failures.slice(0, MAX_SHOWN_FAILURES).map(f => (
               <Text dimColor>{`    ${f.id}${f.loc === undefined ? '' : `  ${f.loc}`}`}</Text>
             ))}

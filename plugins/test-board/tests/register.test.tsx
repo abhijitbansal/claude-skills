@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On, Register, RenderPropsOf } from 'claude-code'
 
 import type { TestRun } from '../types'
+import { formatClock } from '../hooks/format'
 import { PYTEST_RAW } from './fixtures/output'
 
 const ROOT = '/repo/wt-a'
@@ -361,6 +362,47 @@ describe('band', () => {
     const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
     expect((await ui.find({ text: /^1 ✗$/ }))?.props).toMatchObject({ color: 'error' })
     expect((await ui.find({ text: /10 ✓/ }))?.props?.color).toBeUndefined()
+  })
+
+  test('shows the time the run happened', async ($, on) => {
+    world(on); bash(on, PYTEST_RAW); emptyBand(on)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+    expect(await ui.find({ text: new RegExp(`ran ${formatClock(1_000_000)}`) })).toBeDefined()
+  })
+
+  test('closes itself once the run is an hour old', async ($, on) => {
+    let t = 1_000_000
+    store(on); watchState(on)
+    on('clock.now', () => ({ value: t }))
+    on('session.cwd', () => ({ value: ROOT }))
+    on('process.run', () => ({ value: proc(`${ROOT}\n`) }))
+    bash(on, PYTEST_RAW); emptyBand(on)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    t += 59 * 60_000
+    const before = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+    expect(await before.find({ text: /1 ✗/ })).toBeDefined()
+    t += 60_000
+    const after = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+    expect(await after.find({ text: /1 ✗/ })).toBeUndefined()
+    expect(await after.findAll({ type: 'Button' })).toHaveLength(0)
+  })
+
+  test('the close button hides the band until the next run', async ($, on) => {
+    let t = 1_000_000
+    store(on); watchState(on)
+    on('clock.now', () => ({ value: (t += 1_000) }))
+    on('session.cwd', () => ({ value: ROOT }))
+    on('process.run', () => ({ value: proc(`${ROOT}\n`) }))
+    bash(on, PYTEST_RAW); emptyBand(on)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+    expect(await ui.find({ text: /1 ✗/ })).toBeDefined()
+    await ui.press({ key: 'close' })
+    expect(await ui.find({ text: /1 ✗/ })).toBeUndefined()
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    const again = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+    expect(await again.find({ text: /1 ✗/ })).toBeDefined()
   })
 
   test('a store read failure at draw time still draws the run as a first run', async ($, on) => {
