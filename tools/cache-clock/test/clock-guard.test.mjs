@@ -65,7 +65,32 @@ test("ingest classifies calls and tallies cold writes per session", () => {
   assert.ok(Math.abs(t.extraUsd - 90_500 * (0.125 - 0.01) / 1e6) < 1e-12);
 });
 
+test("the first call after a compaction is not tallied as a cold rewrite", () => {
+  const c = createClock();
+  feed(c, { at: T0, input: 100_000, read: 0, write: 100_000 });
+  c.invalidate();
+  assert.equal(feed(c, { at: T0 + MIN, input: 20_000, read: 0, write: 20_000 }).kind, "first");
+  assert.equal(c.tally().coldBreak, 0);
+  assert.equal(c.tally().extraUsd, 0);
+});
+
 const cfg = { mode: "refuse", minUsd: 0.1 };
+
+test("decide guards prompts that merely start with a path, but not commands or shell escapes", () => {
+  assert.equal(decide({ snap: coldSnap, prompt: "/etc/hosts is broken, fix it", config: cfg }).action, "refuse");
+  assert.equal(decide({ snap: coldSnap, prompt: "/model claude-sonnet-5.5", config: cfg }).action, "allow");
+  assert.equal(decide({ snap: coldSnap, prompt: "/compact", config: cfg }).action, "allow");
+  assert.equal(decide({ snap: coldSnap, prompt: "!git status", config: cfg }).action, "allow");
+});
+
+test("decide only warns while a turn is running", () => {
+  assert.equal(decide({ snap: coldSnap, prompt: "queued follow-up", config: cfg, busy: true }).action, "warn");
+});
+
+test("after one refusal any prompt in the same cold episode goes through", () => {
+  const first = decide({ snap: coldSnap, prompt: "recap please", config: cfg });
+  assert.equal(decide({ snap: coldSnap, prompt: "something else", config: cfg, refusedKey: first.key }).action, "warn");
+});
 const coldSnap = { model: "claude-sonnet-5.5", state: "cold", expiresAt: T0, extraUsd: 0.48 };
 
 test("decide allows slash commands, warm caches and cheap cold sends", () => {

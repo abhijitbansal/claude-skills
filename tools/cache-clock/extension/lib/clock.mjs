@@ -11,7 +11,8 @@ export function createClock() {
 
   function ingest(call) {
     if (!call) return null;
-    const prev = lastByModel.get(call.model) ?? null;
+    // After a compaction the context is new: its first write is not a cold rewrite.
+    const prev = stale ? null : (lastByModel.get(call.model) ?? null);
     const kind = classifyCall(prev, call);
     const isCold = kind === "cold-idle" || kind === "cold-break";
     const lost = isCold ? lostTokens(prev, call) : 0;

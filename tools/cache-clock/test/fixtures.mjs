@@ -27,6 +27,7 @@ export function usage({
   expiresAt,
   prices = model.startsWith("claude") ? SONNET_PRICES : LUNA_PRICES,
   initiator = "user",
+  interactionType = "conversation-agent",
   display = model === "gpt-6-luna" ? "GPT-6 Luna" : "Claude Sonnet 5.5",
 } = {}) {
   const exp = expiresAt === undefined ? new Date(Date.parse(at) + ttl * 1000).toISOString() : expiresAt;
@@ -40,6 +41,7 @@ export function usage({
     ...(exp === null ? {} : { cacheExpiresAt: exp }),
     ...(ttl === null ? {} : { cacheTtlSeconds: ttl }),
     initiator,
+    interactionType,
     copilotUsage: {
       tokenDetails: prices.map((p) => ({
         ...p,

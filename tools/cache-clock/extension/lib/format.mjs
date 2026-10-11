@@ -66,7 +66,7 @@ function guardLine(config) {
 
 export function card(snap, tally, config) {
   if (!snap) return `${NAME}: no model call yet in this session.`;
-  const ratio = snap.prices ? `${Math.round(snap.prices.write / snap.prices.read)}× per token` : "prices not reported";
+  const ratio = snap.prices?.read > 0 ? `${Math.round(snap.prices.write / snap.prices.read)}× per token` : "prices not reported";
   const lines = [
     `${NAME} · ${snap.displayName}`,
     `  cache      ${stateLine(snap)}`,

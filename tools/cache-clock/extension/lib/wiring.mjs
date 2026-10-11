@@ -4,17 +4,23 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createClock } from "./clock.mjs";
-import { configDir, loadConfig, parseCommand, saveConfig } from "./config.mjs";
+import { configDir, loadConfig, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
 import { HELP, card, coldWarn, headsUp, refusal, usd } from "./format.mjs";
 import { decide } from "./guard.mjs";
-import { normalizeUsage } from "./usage.mjs";
+import { isMainInteraction, normalizeUsage } from "./usage.mjs";
 
-const MAIN_INTERACTION = "conversation-agent";
 // The heads-up comes at most a fifth of the ttl before expiry.
 const HEADS_UP_TTL_SHARE = 5;
 
 /** Main-agent conversation calls only: sub-agents and background calls have their own caches. */
-const isMainCall = (event) => !event.agentId && (event.data?.interactionType ?? MAIN_INTERACTION) === MAIN_INTERACTION;
+const mainCall = (event) => {
+  if (event.agentId) return null;
+  const call = normalizeUsage(event.data, event.timestamp);
+  return call && isMainInteraction(call) ? call : null;
+};
+
+/** A failed compaction leaves the context as it was. */
+const compacted = (event) => event.data?.success !== false;
 
 const readSessionLog = (session) => readFileSync(join(session.workspacePath, "events.jsonl"), "utf8");
 
@@ -35,93 +41,108 @@ function seed(clock, readHistory, session) {
     } catch {
       continue;
     }
-    if (event.type === "session.compaction_complete") clock.invalidate();
+    if (!event || typeof event !== "object") continue;
+    if (event.type === "session.compaction_complete" && compacted(event)) clock.invalidate();
     if (event.type !== "session.usage_record") continue;
-    const replay = { ...event, data: event.data?.usage };
-    if (isMainCall(replay)) clock.ingest(normalizeUsage(replay.data, event.timestamp));
+    const call = mainCall({ ...event, data: event.data?.usage });
+    if (call) clock.ingest(call);
+  }
+}
+
+/** Calls fn, swallowing sync throws and async rejections: the host may be gone. */
+function quietly(fn) {
+  try {
+    Promise.resolve(fn()).catch(() => {});
+  } catch {
+    // nothing to do
   }
 }
 
 export async function attach({ joinSession, now = Date.now, timers = globalThis, dir = configDir(), readHistory = readSessionLog }) {
   const clock = createClock();
-  let refusedKey = null;
-  let headsUpTimer = null;
-  let session = null;
-
-  // Fire and forget: a failing or slow timeline must never block a prompt.
-  const say = (message, options) => {
-    try {
-      Promise.resolve(session?.log(message, options)).catch(() => {});
-    } catch {
-      // the host is gone; nothing to tell
-    }
-  };
-
-  function scheduleHeadsUp() {
-    timers.clearTimeout(headsUpTimer);
-    headsUpTimer = null;
-    const config = loadConfig(dir);
-    const snap = clock.snapshot(now());
-    if (config.headsUpMin <= 0 || snap?.state !== "warm") return;
-    // A 5-minute lead on a 5-minute cache would fire right after every call.
-    const leadMs = Math.min(config.headsUpMin * 60_000, snap.ttlSec ? (snap.ttlSec * 1000) / HEADS_UP_TTL_SHARE : Infinity);
-    const delay = snap.msLeft - leadMs;
-    headsUpTimer = timers.setTimeout(() => {
-      headsUpTimer = null;
-      const live = clock.snapshot(now());
-      if (live?.state === "warm" && live.extraUsd !== null && live.extraUsd >= loadConfig(dir).minUsd) {
-        say(headsUp(live), { ephemeral: true });
-      }
-    }, Math.max(0, delay));
-    headsUpTimer?.unref?.();
-  }
+  const state = { session: null, refusedKey: null, busy: false, headsUpTimer: null };
+  const say = (message, options) => quietly(() => state.session?.log(message, options));
+  const scheduleHeadsUp = () => headsUpScheduler({ state, clock, now, timers, dir, say });
 
   function onPrompt(input) {
-    const snap = clock.snapshot(now());
-    const verdict = decide({ snap, prompt: input?.prompt, config: loadConfig(dir), refusedKey });
-    if (verdict.action === "refuse") {
-      refusedKey = verdict.key;
-      say(refusal(snap), { level: "warning" });
-      // Not awaited: abort() waits for this hook to return, so awaiting it deadlocks.
-      Promise.resolve(session.abort()).catch(() => {});
-      return { suppressOutput: true };
+    try {
+      const snap = clock.snapshot(now());
+      const verdict = decide({ snap, prompt: input?.prompt, config: loadConfig(dir), refusedKey: state.refusedKey, busy: state.busy });
+      if (verdict.action === "refuse") {
+        state.refusedKey = verdict.key;
+        quietly(() => saveRefusal(dir, state.session?.sessionId, verdict.key, now()));
+        say(refusal(snap), { level: "warning" });
+        // Not awaited: abort() waits for this hook to return, so awaiting it deadlocks.
+        quietly(() => state.session.abort());
+        return { suppressOutput: true };
+      }
+      if (verdict.action === "warn") say(coldWarn(snap), { level: "warning" });
+    } catch {
+      // never block the user's message on our own failure
     }
-    if (verdict.action === "warn") say(coldWarn(snap), { level: "warning" });
     return undefined;
   }
 
-  function onCommand(context) {
-    const parsed = parseCommand(context?.args);
-    if (parsed.kind === "status") return say(card(clock.snapshot(now()), clock.tally(), loadConfig(dir)));
-    if (parsed.kind === "help") return say(HELP);
-    if (parsed.kind === "error") return say(`cache-clock: ${parsed.message}. Try /cache-clock help.`, { level: "error" });
-    const next = { ...loadConfig(dir), ...parsed.patch };
-    try {
-      saveConfig(dir, next);
-    } catch (err) {
-      return say(`cache-clock: could not save settings to ${dir}: ${err.message}`, { level: "error" });
-    }
-    scheduleHeadsUp();
-    return say(`cache-clock: guard: ${next.mode} · min ${usd(next.minUsd)} · heads-up ${next.headsUpMin > 0 ? `${next.headsUpMin}m` : "off"} (saved for all sessions)`);
-  }
+  const onCommand = (context) => runCommand({ context, clock, now, dir, say, scheduleHeadsUp });
 
-  session = await joinSession({
+  state.session = await joinSession({
     commands: [{ name: "cache-clock", description: "Prompt-cache clock: cold-send price, guard settings", handler: onCommand }],
     hooks: { onUserPromptSubmitted: onPrompt },
   });
 
-  seed(clock, readHistory, session);
+  seed(clock, readHistory, state.session);
+  state.refusedKey = loadRefusal(dir, state.session.sessionId);
   scheduleHeadsUp();
 
-  session.on("assistant.usage", (event) => {
-    if (!isMainCall(event)) return;
-    if (!clock.ingest(normalizeUsage(event.data, event.timestamp))) return;
-    scheduleHeadsUp();
+  state.session.on("assistant.turn_start", () => {
+    state.busy = true;
   });
-  session.on("session.compaction_complete", () => {
+  state.session.on("session.idle", () => {
+    state.busy = false;
+  });
+  state.session.on("assistant.usage", (event) => {
+    const call = mainCall(event);
+    if (call && clock.ingest(call)) scheduleHeadsUp();
+  });
+  state.session.on("session.compaction_complete", (event) => {
+    if (!compacted(event)) return;
     clock.invalidate();
     scheduleHeadsUp();
   });
 
-  return { session, clock };
+  return { session: state.session, clock };
+}
+
+function headsUpScheduler({ state, clock, now, timers, dir, say }) {
+  timers.clearTimeout(state.headsUpTimer);
+  state.headsUpTimer = null;
+  const config = loadConfig(dir);
+  const snap = clock.snapshot(now());
+  if (config.headsUpMin <= 0 || snap?.state !== "warm") return;
+  // A 5-minute lead on a 5-minute cache would fire right after every call.
+  const leadMs = Math.min(config.headsUpMin * 60_000, snap.ttlSec ? (snap.ttlSec * 1000) / HEADS_UP_TTL_SHARE : Infinity);
+  state.headsUpTimer = timers.setTimeout(() => {
+    state.headsUpTimer = null;
+    const live = clock.snapshot(now());
+    // Mid-turn the next model call refreshes the cache on its own.
+    if (state.busy || live?.state !== "warm" || live.extraUsd === null) return;
+    if (live.extraUsd >= loadConfig(dir).minUsd) say(headsUp(live), { ephemeral: true });
+  }, Math.max(0, snap.msLeft - leadMs));
+  state.headsUpTimer?.unref?.();
+}
+
+function runCommand({ context, clock, now, dir, say, scheduleHeadsUp }) {
+  const parsed = parseCommand(context?.args);
+  if (parsed.kind === "status") return say(card(clock.snapshot(now()), clock.tally(), loadConfig(dir)));
+  if (parsed.kind === "help") return say(HELP);
+  if (parsed.kind === "error") return say(`cache-clock: ${parsed.message}. Try /cache-clock help.`, { level: "error" });
+  const next = { ...loadConfig(dir), ...parsed.patch };
+  try {
+    saveConfig(dir, next);
+  } catch (err) {
+    return say(`cache-clock: could not save settings to ${dir}: ${err.message}`, { level: "error" });
+  }
+  scheduleHeadsUp();
+  const heads = next.headsUpMin > 0 ? `${next.headsUpMin}m` : "off";
+  return say(`cache-clock: guard: ${next.mode} · min ${usd(next.minUsd)} · heads-up ${heads} (saved for all sessions)`);
 }

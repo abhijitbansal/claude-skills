@@ -16,9 +16,10 @@ that price, and by default drops a costly cold send once so you can decide.
   Send it again to pay it, or /clear and start fresh.
 ```
 
-That refusal is a real capture (Copilot CLI 1.0.95, 11 October 2026). The resend that
-followed read 0 cached tokens and wrote 44,388: the cache had expired exactly when
-Copilot said it would.
+That refusal is a real capture (Copilot CLI 1.0.95, 11 October 2026), taken with
+`/cache-clock min 0.01`: at the default $0.10 threshold this $0.08 rewrite would pass
+silently. The resend that followed read 0 cached tokens and wrote 44,388: the cache had
+expired exactly when Copilot said it would.
 
 ## Install
 
@@ -31,21 +32,25 @@ sh claude-skills/tools/cache-clock/install.sh          # links ~/.copilot/extens
 ```
 
 `--copy` copies instead of linking; `--uninstall` removes it. `COPILOT_HOME` moves
-`~/.copilot`. Start a new `copilot` session. Copilot asks once whether the extension
+`~/.copilot`. The installer only replaces its own install. Link mode was tested on
+1.0.95: Copilot resolves the `@github/copilot-sdk` import itself, wherever the files
+live. Start a new `copilot` session. Copilot asks once whether the extension
 may "register hooks": say yes (option 2 remembers it for that repo). Then run
 `/cache-clock`.
 
 ## Commands
 
     /cache-clock                 the card
-    /cache-clock guard refuse    drop a costly cold send once; the resend goes through (default)
+    /cache-clock guard refuse    drop a costly cold send once; the next send goes through (default)
     /cache-clock guard warn      send it and print the price
     /cache-clock guard off       no guard
     /cache-clock min 0.25        guard only cold sends whose extra cost is at least $0.25 (default $0.10)
     /cache-clock headsup 5       warn up to 5 minutes before expiry (off to disable)
     /cache-clock help
 
-Settings live in `~/.copilot/cache-clock/config.json` and apply to every session.
+Settings live in `~/.copilot/cache-clock/config.json` and apply to every session
+(`CACHE_CLOCK_HOME` moves that directory). The heads-up has its own switch: it keeps
+running under `guard off` until you set `headsup off`.
 
 The card, from a real resumed session:
 
@@ -67,11 +72,14 @@ cache-clock · Claude Sonnet 5.5
 - **The guard.** `onUserPromptSubmitted` checks the last model's clock. If the cache has
   expired and rewriting it would cost at least the threshold more than reading it, the
   guard prints the price and aborts the turn before any model call (0 AI credits).
-  Sending the same thing again goes through with a one-line note. Slash commands are
-  never guarded. After a compaction the next send is exempt, since the context was
-  rewritten anyway.
+  The next send in that cold episode goes through with a one-line note, even from a
+  new process (`copilot --resume … -p`): the refusal is remembered per session in
+  `~/.copilot/cache-clock/refused.json` for a week. Slash commands and `!` shell
+  escapes are never guarded. A message queued while a turn is running only gets the
+  note: aborting then would cancel the running turn. After a compaction the next send
+  is exempt, since the context was rewritten anyway.
 - **The heads-up.** One ephemeral line before expiry, only when a cold send would cost
-  at least the threshold. The lead is the smaller of your setting and a fifth of the
+  at least the threshold and no turn is running. The lead is the smaller of your setting and a fifth of the
   TTL, so a 5-minute Claude cache warns 1 minute ahead, not right after every call.
 - **Resume.** `assistant.usage` is not replayed when you resume, so the extension seeds
   the clock from the session's own `~/.copilot/session-state/<id>/events.jsonl`.
@@ -81,7 +89,7 @@ cache-clock · Claude Sonnet 5.5
 | Model (via Copilot) | Reported TTL | Write ÷ read | Evidence |
 |---|---|---|---|
 | Claude Sonnet 5.5 | 300 s | 25× | Sent 20 s after `cacheExpiresAt`: read 0, wrote 44,388 |
-| GPT-6 Luna | 1800 s | 12.5× | 198 persisted calls, all `cacheTtlSeconds: 1800` |
+| GPT-6 Luna | 1800 s | 12.5× | Every persisted call (198 on this machine) reports `cacheTtlSeconds: 1800`; gap test below |
 
 Prices in the log already include discounts: through `auto`, Sonnet's write was
 $2.25/M (list $2.50, auto's 10% off). 1 AI credit = $0.01.
@@ -127,7 +135,8 @@ VS Code's own Cache Explorer (Agent Debug Logs) is the built-in view.
   than the last. The guard prices the last model used.
 - **The estimate is approximate.** It is the last call's input plus its answer. The
   real resend adds your new message and anything Copilot attaches (44.4k actual vs
-  37.2k estimated in the capture above).
+  37.2k estimated in the capture above). Pulling the other way, Copilot's shared system
+  prefix (~10k tokens) often stays cached, so on a long idle a little less is rewritten.
 - **`-p` mode.** The guard works in `copilot -p`, but slash commands there go to the
   model as text, so `/cache-clock` needs the interactive CLI.
 - Claude was measured through `auto` only; the seat used for testing could not pick

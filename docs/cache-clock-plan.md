@@ -12,7 +12,7 @@ Companion test plan (Claude Docs): "Copilot cache-tax: test plan".
 | Question | Answer | Evidence |
 |---|---|---|
 | Q1 Does an extension see the cache fields? | Yes. `assistant.usage` (ephemeral, live) carries `cacheReadTokens`, `cacheWriteTokens`, `cacheExpiresAt`, `cacheTtlSeconds` and per-token prices in `copilotUsage.tokenDetails`. | probe extension event dump |
-| Q2 What TTL is reported? | GPT-6 Luna: 1800 s on every call (195 persisted calls + live). Claude: not testable on this seat (only `auto` is enabled; premium entitlement 0). | `session.usage_record` across 23 sessions |
+| Q2 What TTL is reported? | GPT-6 Luna: 1800 s on every call (198 persisted calls + live). Claude Sonnet 5.5: 300 s, measured when `auto` routed a turn to it (the seat cannot pick Claude directly). | `session.usage_record` across 23 sessions |
 | Q3 Does a resend hit? | Yes: second call read 17,114 of 17,384 input tokens. | persisted record |
 | Q7 Real tax paid | Measurable for free from `~/.copilot/session-state/*/events.jsonl`, which persists `session.usage_record` per call. | the `report` command |
 | Can a prompt hook stop a send? | Yes. `onUserPromptSubmitted` firing `session.abort()` **without awaiting it** cancels the turn before any model call (0 AI credits, no usage event). Awaiting it inside the hook deadlocks. | probe runs A and the hung run |
@@ -32,7 +32,7 @@ Ships:
      estimated extra cost of a cold rewrite is at least the threshold (default $0.10),
      `refuse` mode drops the send once (resend goes through); `warn` mode only logs; `off`.
    - Heads-up line a few minutes before expiry when a cold send would cost at least the threshold.
-   - `/cache-clock` card; `/cache-clock guard refuse|warn|off`; `/cache-clock min <usd>`.
+   - `/cache-clock` card; `/cache-clock guard refuse|warn|off`; `/cache-clock min <usd>`; `/cache-clock headsup <min>|off`.
 2. `tools/cache-clock/bin/report.mjs` — reads persisted session logs; per model:
    calls, cold-after-idle writes, prefix breaks inside the TTL, extra dollars paid.
 3. `install.sh` — symlinks the extension into `~/.copilot/extensions/cache-clock`.
@@ -53,7 +53,8 @@ Deferred, gated on measurement (test plan Phase 3):
 - `lib/format.mjs` — pure: money, durations, card, refusal and heads-up text.
 - `lib/config.mjs` — config file read/write under `~/.copilot/cache-clock/`.
 - `lib/history.mjs` — pure: parse a session `events.jsonl` into calls; aggregate a report.
-- `extension.mjs` — wiring only.
+- `lib/wiring.mjs` — connects the above to a session (injected `joinSession`, clock, timers).
+- `extension.mjs` — entry point: `attach({ joinSession })`.
 
 ## Tests
 

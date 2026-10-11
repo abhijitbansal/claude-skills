@@ -57,6 +57,37 @@ test("summarize counts cold-after-idle, prefix breaks, extra dollars and idle ga
   assert.deepEqual(sum.surfaces, { "github/cli": 1 });
 });
 
+test("background calls neither break the main chain nor hide its idle tax", () => {
+  const log = [
+    record(T0, { model: "claude-sonnet-5.5", ttl: 300, input: 100_000, read: 0, write: 100_000 }),
+    record(T0 + MIN, { model: "claude-sonnet-5.5", ttl: 300, input: 2000, read: 0, write: 2000, interactionType: "conversation-background" }),
+    record(T0 + 40 * MIN, { model: "claude-sonnet-5.5", ttl: 300, input: 100_500, read: 10_000, write: 90_500 }),
+  ].join("\n");
+  const m = summarize([{ id: "a", client: "github/cli", ...parseSessionLog(log) }], { since: 0 }).models[0];
+  assert.equal(m.coldIdle, 1);
+  assert.equal(m.coldBreak, 0);
+  assert.deepEqual(m.idleMinutes, [40]);
+});
+
+test("the first call after a compaction is not counted as a cold rewrite", () => {
+  const log = [
+    record(T0, { model: "claude-sonnet-5.5", ttl: 300, input: 100_000, read: 0, write: 100_000 }),
+    JSON.stringify({ type: "session.compaction_complete", timestamp: iso(T0 + MIN), data: { success: true } }),
+    record(T0 + 2 * MIN, { model: "claude-sonnet-5.5", ttl: 300, input: 20_000, read: 0, write: 20_000 }),
+  ].join("\n");
+  const m = summarize([{ id: "a", client: "github/cli", ...parseSessionLog(log) }], { since: 0 }).models[0];
+  assert.equal(m.coldBreak, 0);
+  assert.equal(m.extraUsd, 0);
+});
+
+test("the weekly rate spreads a bounded window, not just the busy hour", () => {
+  const sessions = [{ id: "a", client: "github/cli", ...parseSessionLog(sonnetLog) }];
+  const all = summarize(sessions, { since: 0 });
+  const week = summarize(sessions, { since: T0 - 7 * 24 * 60 * MIN, now: T0 + 60 * MIN });
+  assert.ok(Math.abs(all.perWeekUsd - all.extraUsd * 7) < 1e-9);
+  assert.ok(Math.abs(week.perWeekUsd - week.extraUsd * (7 * 24 * 60) / (7 * 24 * 60 + 60)) < 1e-9);
+});
+
 test("summarize honours --since and counts checkpoint-only sessions", () => {
   const old = { id: "old", client: "github/cli", ...parseSessionLog(sonnetLog) };
   const vscode = {
@@ -107,4 +138,19 @@ test("report CLI fails clearly on a missing directory or bad flag", () => {
   assert.match(missing.stderr, /no session logs/);
   const bad = spawnSync(process.execPath, [REPORT, "--since", "soon"], { encoding: "utf8" });
   assert.equal(bad.status, 2);
+  const unknown = spawnSync(process.execPath, [REPORT, "--frobnicate"], { encoding: "utf8" });
+  assert.equal(unknown.status, 2);
+  const file = spawnSync(process.execPath, [REPORT, "--dir", REPORT], { encoding: "utf8" });
+  assert.equal(file.status, 1);
+  assert.match(file.stderr, /cannot read/);
+});
+
+test("report CLI prints help even beside bad flags, and accepts --flag=value", () => {
+  const help = spawnSync(process.execPath, [REPORT, "--since", "soon", "--help"], { encoding: "utf8" });
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /usage:/);
+  const root = mkdtempSync(join(tmpdir(), "cc-report-"));
+  const eq = spawnSync(process.execPath, [REPORT, `--dir=${root}`, "--since=7d", "--json"], { encoding: "utf8" });
+  assert.equal(eq.status, 0, eq.stderr);
+  assert.deepEqual(JSON.parse(eq.stdout).models, []);
 });

@@ -1,7 +1,7 @@
 // Reads Copilot's persisted session logs (~/.copilot/session-state/<id>/events.jsonl)
 // and totals what cold sends cost. Pure: callers pass file contents in.
 
-import { classifyCall, extraUsd, lostTokens, normalizeUsage } from "./usage.mjs";
+import { classifyCall, extraUsd, isMainInteraction, lostTokens, normalizeUsage } from "./usage.mjs";
 import { tokens, usd } from "./format.mjs";
 
 const NANO_AIU_PER_USD = 1e11;
@@ -13,6 +13,8 @@ export function parseSessionLog(text) {
   let checkpoint = null;
   let badLines = 0;
   let lastAt = null;
+  // Calls in different epochs are never compared: a compaction rewrote the context in between.
+  let epoch = 0;
   for (const line of String(text).split("\n")) {
     if (!line.trim()) continue;
     let event;
@@ -22,14 +24,19 @@ export function parseSessionLog(text) {
       badLines += 1;
       continue;
     }
+    if (!event || typeof event !== "object") {
+      badLines += 1;
+      continue;
+    }
     const at = Date.parse(event.timestamp);
     if (Number.isFinite(at)) lastAt = Math.max(lastAt ?? at, at);
     if (event.type === "session.usage_checkpoint") checkpoint = event.data ?? null;
+    if (event.type === "session.compaction_complete" && event.data?.success !== false) epoch += 1;
     if (event.type !== "session.usage_record") continue;
     const raw = event.data?.usage;
     const call = normalizeUsage(raw, event.timestamp);
     if (!call) continue;
-    calls.push({ agentKey: event.agentId ?? "main", call, nanoAiu: raw.copilotUsage?.totalNanoAiu ?? 0 });
+    calls.push({ agentKey: event.agentId ?? "main", call, epoch, nanoAiu: raw.copilotUsage?.totalNanoAiu ?? 0 });
   }
   return { calls, checkpoint, badLines, lastAt };
 }
@@ -43,7 +50,7 @@ function emptyModel(call) {
  * Calls before `since` still seed the previous-call state, so the first counted
  * call is classified against its real predecessor.
  */
-export function summarize(sessions, { since = 0 } = {}) {
+export function summarize(sessions, { since = 0, now = Date.now() } = {}) {
   const models = new Map();
   const surfaces = {};
   let withCalls = 0;
@@ -65,18 +72,21 @@ export function summarize(sessions, { since = 0 } = {}) {
     withCalls += 1;
     surfaces[s.client ?? "unknown"] = (surfaces[s.client ?? "unknown"] ?? 0) + 1;
     const prevByKey = new Map();
-    for (const { agentKey, call, nanoAiu } of s.calls) {
+    for (const { agentKey, call, epoch, nanoAiu } of s.calls) {
       const key = `${agentKey}:${call.model}`;
-      const prev = prevByKey.get(key) ?? null;
-      prevByKey.set(key, call);
+      const last = isMainInteraction(call) ? prevByKey.get(key) : undefined;
+      const prev = last && last.epoch === epoch ? last.call : null;
+      if (isMainInteraction(call)) prevByKey.set(key, { call, epoch });
       if (call.at < since) continue;
       firstAt = Math.min(firstAt ?? call.at, call.at);
       lastAt = Math.max(lastAt ?? call.at, call.at);
       const m = models.get(call.model) ?? emptyModel(call);
       models.set(call.model, m);
-      const kind = classifyCall(prev, call);
       m.calls += 1;
       m.spentUsd += nanoAiu / NANO_AIU_PER_USD;
+      // Background calls (titles, summaries) cost money but keep their own cache.
+      if (!isMainInteraction(call)) continue;
+      const kind = classifyCall(prev, call);
       if (kind !== "cold-idle" && kind !== "cold-break") continue;
       m.lostTokens += lostTokens(prev, call);
       m.extraUsd += extraUsd(prev, call);
@@ -90,7 +100,9 @@ export function summarize(sessions, { since = 0 } = {}) {
 
   const list = [...models.values()].sort((a, b) => b.extraUsd - a.extraUsd);
   const extraUsdTotal = list.reduce((t, m) => t + m.extraUsd, 0);
-  const days = firstAt === null ? 0 : Math.max(1, (lastAt - firstAt) / DAY_MS);
+  // A bounded window spreads over the whole window, not just the hours that had calls.
+  const spanMs = firstAt === null ? 0 : Math.max(lastAt - firstAt, since > 0 ? now - since : 0);
+  const days = firstAt === null ? 0 : Math.max(1, spanMs / DAY_MS);
   return {
     since,
     firstAt,

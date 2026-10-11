@@ -66,6 +66,7 @@ test("card covers state, context, prices, tally and guard", () => {
   assert.match(card(snap, tally, DEFAULTS), /cold for 2m10s/);
   assert.match(card({ ...snap, state: "unknown" }, tally, DEFAULTS), /unknown/);
   assert.match(card(null, tally, DEFAULTS), /no model call yet/);
+  assert.match(card({ ...snap, prices: { ...prices, read: 0 } }, tally, DEFAULTS), /prices not reported/);
 });
 
 test("configDir honours CACHE_CLOCK_HOME, then COPILOT_HOME", () => {

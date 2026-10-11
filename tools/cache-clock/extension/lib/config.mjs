@@ -39,6 +39,35 @@ export function saveConfig(dir, config) {
   renameSync(tmp, join(dir, FILE));
 }
 
+// The last refused cold episode per session, so a resend from a new process
+// (`copilot --resume … -p`, or quit and resume) goes through instead of being refused again.
+const REFUSALS = "refused.json";
+const REFUSAL_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+
+function readRefusals(dir) {
+  try {
+    const raw = JSON.parse(readFileSync(join(dir, REFUSALS), "utf8"));
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+export function loadRefusal(dir, sessionId) {
+  const entry = sessionId ? readRefusals(dir)[sessionId] : null;
+  return typeof entry?.key === "string" ? entry.key : null;
+}
+
+export function saveRefusal(dir, sessionId, key, at) {
+  if (!sessionId) return;
+  const kept = Object.entries(readRefusals(dir)).filter(([, v]) => Number.isFinite(v?.at) && at - v.at < REFUSAL_KEEP_MS);
+  const next = { ...Object.fromEntries(kept), [sessionId]: { key, at } };
+  mkdirSync(dir, { recursive: true });
+  const tmp = join(dir, `${REFUSALS}.${process.pid}.tmp`);
+  writeFileSync(tmp, JSON.stringify(next) + "\n");
+  renameSync(tmp, join(dir, REFUSALS));
+}
+
 function amount(text) {
   const v = Number(String(text).replace(/^\$/, ""));
   return text !== undefined && text !== "" && isAmount(v) ? v : null;

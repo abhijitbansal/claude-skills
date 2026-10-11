@@ -80,6 +80,26 @@ test("classifyCall: unknown expiry falls back to the reported ttl, then to warm-
   assert.equal(classifyCall(prevNoTtl, cur), "cold-break");
 });
 
+test("classifyCall: a small context that only reads the shared system prefix is cold", () => {
+  const prev = call({ at: "2026-10-11T14:55:22.482Z", input: 17_743 });
+  const cur = call({ at: "2026-10-11T15:26:31.000Z", input: 17_900, read: 10_157, write: 7_743 });
+  assert.equal(classifyCall(prev, cur), "cold-idle");
+});
+
+test("extraUsd prices lost tokens sent uncached at input minus read", () => {
+  const prev = call({ at: "2026-10-10T08:00:00.000Z", input: 1_000_000 });
+  const cur = call({ at: "2026-10-10T08:31:00.000Z", input: 1_000_000, read: 0, write: 400_000 });
+  close(extraUsd(prev, cur), 0.4 * (0.125 - 0.01) + 0.6 * (0.10 - 0.01), 1e-9);
+});
+
+test("normalizeUsage ignores an implausible expiry and keeps interactionType", () => {
+  const seconds = normalizeUsage({ ...usage(), cacheExpiresAt: 1_791_731_000 }, T0);
+  assert.equal(seconds.expiresAt, null);
+  const farFuture = normalizeUsage({ ...usage(), cacheExpiresAt: "2099-01-01T00:00:00Z" }, T0);
+  assert.equal(farFuture.expiresAt, null);
+  assert.equal(normalizeUsage({ ...usage(), interactionType: "conversation-background" }, T0).interactionType, "conversation-background");
+});
+
 test("lostTokens counts the old context that was not read back", () => {
   const prev = call({ at: "2026-10-10T08:00:00.000Z", input: 100_000 });
   const cur = call({ at: "2026-10-10T08:31:00.000Z", input: 100_500, read: 10_000, write: 90_500 });

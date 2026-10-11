@@ -8,8 +8,7 @@ import { saveConfig } from "../extension/lib/config.mjs";
 import { usage, T0, MIN } from "./fixtures.mjs";
 
 // A stand-in for the CopilotSession an extension gets from joinSession().
-function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 } } = {}) {
-  const dir = mkdtempSync(join(tmpdir(), "cc-wiring-"));
+function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir = mkdtempSync(join(tmpdir(), "cc-wiring-")) } = {}) {
   saveConfig(dir, config);
   const host = { now: T0, logs: [], aborts: 0, handlers: new Map(), timers: [], joinConfig: null };
   host.session = {
@@ -196,6 +195,82 @@ test("an unreadable session log leaves the clock empty instead of breaking start
   h.history = new Error("ENOENT");
   await h.start();
   assert.equal(await h.prompt("hi"), undefined);
+});
+
+const coldHost = async (opts) => {
+  const h = fakeHost(opts);
+  await h.start();
+  h.emit("assistant.usage", sonnet({ at: new Date(T0).toISOString() }));
+  h.advance(7 * MIN);
+  return h;
+};
+
+test("a synchronously throwing abort still returns from the hook", async () => {
+  const h = fakeHost();
+  h.session.abort = () => { throw new Error("sync abort"); };
+  await h.start();
+  h.emit("assistant.usage", sonnet({ at: new Date(T0).toISOString() }));
+  h.advance(7 * MIN);
+  assert.deepEqual(await h.prompt("recap"), { suppressOutput: true });
+});
+
+test("a synchronously throwing log never breaks the hook", async () => {
+  const h = await coldHost();
+  h.session.log = () => { throw new Error("sync log"); };
+  await h.prompt("recap");
+  assert.equal(h.aborts, 1);
+});
+
+test("a null line in the session log is skipped", async () => {
+  const h = fakeHost();
+  h.history = ["null", "42", JSON.stringify({ type: "session.usage_record", timestamp: new Date(T0).toISOString(), data: { usage: sonnet() } })].join("\n");
+  await h.start();
+  h.advance(7 * MIN);
+  await h.prompt("recap");
+  assert.equal(h.aborts, 1);
+});
+
+test("a refusal is remembered for the session across processes", async () => {
+  const first = await coldHost();
+  await first.prompt("recap");
+  assert.equal(first.aborts, 1);
+  const second = fakeHost({ dir: first.dir });
+  second.history = JSON.stringify({ type: "session.usage_record", timestamp: new Date(T0).toISOString(), data: { usage: sonnet() } });
+  await second.start();
+  second.advance(7 * MIN);
+  await second.prompt("recap");
+  assert.equal(second.aborts, 0);
+  assert.match(second.logs.at(-1).message, /sending cold/);
+});
+
+test("a prompt queued while a turn runs is warned about, never aborted", async () => {
+  const h = await coldHost();
+  h.emit("assistant.turn_start", { turnId: "1" });
+  await h.prompt("queued follow-up");
+  assert.equal(h.aborts, 0);
+  assert.match(h.logs.at(-1).message, /sending cold/);
+  h.emit("session.idle", {});
+  await h.prompt("now idle");
+  assert.equal(h.aborts, 1);
+});
+
+test("no heads-up fires mid-turn", async () => {
+  const h = fakeHost();
+  await h.start();
+  h.emit("assistant.usage", sonnet({ ttl: 1800 }));
+  h.emit("assistant.turn_start", { turnId: "1" });
+  h.advance(26 * MIN);
+  assert.equal(h.logs.length, 0);
+});
+
+test("a failed compaction does not exempt the next send", async () => {
+  const h = fakeHost();
+  await h.start();
+  h.emit("assistant.usage", sonnet({ at: new Date(T0).toISOString() }));
+  h.emit("session.compaction_complete", { success: false });
+  h.advance(7 * MIN);
+  await h.prompt("recap");
+  assert.equal(h.aborts, 1);
 });
 
 test("a throwing session.log never breaks the prompt hook", async () => {

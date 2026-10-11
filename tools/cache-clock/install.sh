@@ -19,6 +19,17 @@ for arg in "$@"; do
   esac
 done
 
+# Only ever replace our own install: a link, or a directory holding extension.mjs.
+if [ -e "$DEST" ] && [ ! -L "$DEST" ] && [ ! -f "$DEST/extension.mjs" ]; then
+  printf 'cache-clock: %s exists and is not a cache-clock install; leaving it alone\n' "$DEST" >&2
+  exit 1
+fi
+case "$SRC/" in
+  "$DEST"/*)
+    printf 'cache-clock: run install.sh from a checkout outside %s\n' "$DEST" >&2
+    exit 1 ;;
+esac
+
 if [ "$MODE" = uninstall ]; then
   rm -rf "$DEST"
   printf 'cache-clock: removed %s\n' "$DEST"
