@@ -5,7 +5,7 @@ description: Linear project management conventions and slash commands. Auto-load
 
 # Linear PM — Conventions
 
-This skill documents the vocabulary every `/linear-*` command relies on. The commands themselves are at `.claude/commands/linear-*.md`. The per-repo policy lives at `.claude/linear.yml`.
+This skill documents the vocabulary every `/linear-*` command relies on. The commands ship at `plugins/linear-pm/commands/` and locate their helper scripts via `${CLAUDE_PLUGIN_ROOT}`. The prerequisite check is `${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/bootstrap.sh` (or a project-local copy at `.claude/skills/linear-pm/scripts/bootstrap.sh` if `${CLAUDE_PLUGIN_ROOT}` is unset). The per-repo policy lives at `.claude/linear.yml`.
 
 ## Labels (created by /linear-init if missing)
 
@@ -110,7 +110,7 @@ When a /linear-new or /linear-pick run is about to print its final user-facing m
 
 ### Known limitations
 
-- **Within-session scan only.** If the session was resumed and the existing session title `ABH-6` came from an earlier conversation no longer in context, the scan won't see it and the emitted command will clobber it with just the newest key. The user can manually edit the `/rename` line before running it.
+- **Within-session scan only.** If the session was resumed and the existing session title `TEAM-123` came from an earlier conversation no longer in context, the scan won't see it and the emitted command will clobber it with just the newest key. The user can manually edit the `/rename` line before running it.
 - **Surface support.** `/rename` is supported across Claude Code surfaces (CLI, VS Code extension, web). On any surface where the slash doesn't fire, the emitted line is harmless text — the user simply doesn't run it. AC #5 of the originating ticket (no-op if unavailable) is satisfied by the suggestion being inert when ignored.
 
 ## Per-repo config: .claude/linear.yml
@@ -127,7 +127,7 @@ Required. See `templates/linear.yml.template`. Keys:
 | `verify` | no | `[]` | Shell commands /linear-pick must run green |
 | `max_pr_lines` | no | `500` | Self-block threshold for diff size |
 | `default_labels` | no | `[]` | Added to /linear-new issues |
-| `poll.enabled` | no | `false` | Polling agent picks up from this repo |
+| `poll.enabled` | no | `false` | An external scheduler (not shipped with this plugin) picks up from this repo |
 | `poll.interval_minutes` | no | `15` | Poll interval |
 
 The skill refuses to write to Linear or git if `.claude/linear.yml` is missing or required keys are absent.
@@ -138,7 +138,7 @@ The skill refuses to write to Linear or git if `.claude/linear.yml` is missing o
 - ❌ Auto-merge any PR
 - ❌ Delete branches
 - ❌ Modify `.claude/linear.yml` outside `/linear-init`
-- ❌ Run the polling agent or `/linear-pick` if `autonomy: disabled` (user-initiated `/linear-new`, `/linear-status`, `/linear-sync`, `/linear-block`, `/linear-init` remain available — `autonomy` gates the code-writing loop, not human-driven Linear edits)
+- ❌ Run /linear-pick (manually, or when woken by an external scheduler — not shipped with this plugin) if `autonomy: disabled` (user-initiated `/linear-new`, `/linear-status`, `/linear-sync`, `/linear-block`, `/linear-init` remain available — `autonomy` gates the code-writing loop, not human-driven Linear edits)
 - ❌ Write code if `autonomy: review-only`
 - ❌ Run /linear-pick if Acceptance criteria section is missing
 - ❌ Continue past a verify failure (treat all verify failures as agent-blocked)

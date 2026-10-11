@@ -11,7 +11,7 @@ Interactive bootstrap for a new repo.
 
 1. **Check for existing config.** If `.claude/linear.yml` already exists, ask: "A config already exists. Overwrite? (yes / no)". Default no. Stop on no.
 
-2. **Ask which Linear team.** Call `mcp__claude_ai_Linear__list_teams`. Present the list with keys (e.g. "ABH — Abhijitbansal"). Ask the user to pick by key.
+2. **Ask which Linear team.** Call `mcp__claude_ai_Linear__list_teams`. Present the list with keys (e.g. "ENG — Engineering"). Ask the user to pick by key.
 
 3. **Ask which project.** Call `mcp__claude_ai_Linear__list_projects` filtered by `team: <key>`. Present the list. Options:
    - Pick existing project by name

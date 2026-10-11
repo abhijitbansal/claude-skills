@@ -17,11 +17,12 @@ than the size of the returned JSON.
 `thinking: {type: "adaptive"}` was left on for a schema-constrained call. The
 schema already fully determines the response shape, so most of what the
 model spends thinking tokens on is reasoning about *form* the schema already
-fixed — not improving the actual content. Observed: **~21k of ~24k output
-tokens were thinking, vs ~3k for the JSON itself** — the run was ~5x more
-expensive than the same call with thinking off ($0.39 on Sonnet 4.6 with
-thinking on vs ~$0.12 on Opus 4.8 with thinking off, despite Opus being the
-pricier model per token).
+fixed — not improving the actual content. Observed (single run, 2026-07-12):
+**~21k of ~24k output tokens were thinking, vs ~3k for the JSON itself.** The
+measured cost ratio was 3.25x ($0.39 with thinking on vs ~$0.12 with thinking
+off), but that comparison changed both the model and the thinking setting
+(Sonnet 4.6 thinking-on vs Opus 4.8 thinking-off), so the ratio is confounded
+by the model change and is not a clean thinking-only figure.
 
 Cost on these calls is dominated by `output_tokens`; with thinking off,
 output tokens ≈ the JSON itself.
@@ -31,9 +32,11 @@ output tokens ≈ the JSON itself.
 For `json_schema`-constrained tasks, **default adaptive thinking OFF** and
 make it opt-in/configurable rather than opt-out:
 
-- Omit the `thinking` parameter entirely by default — both Opus 4.8 and 4.7
-  accept omission. Structured output already prevents prose leak even with
-  thinking off, so there is no correctness downside to leaving it out.
+- Omit the `thinking` parameter entirely by default — the models tested on
+  2026-07-12 accepted omission. Structured output already prevents prose leak
+  even with thinking off, so there is no correctness downside to leaving it out.
+  Re-verify "omit thinking" on current models via the claude-api reference
+  before generalizing.
 - Only set `thinking: {type: "adaptive"}` when the task needs genuine
   reasoning over ambiguous input (e.g., judgment calls, multi-step inference)
   — not merely to get well-formatted output. The schema already guarantees
@@ -49,7 +52,7 @@ if config.effort:
     output_config["effort"] = config.effort
 
 kwargs = {
-    "model": "claude-opus-4-8",
+    "model": "<model-id>",   # from config; check the claude-api reference for current ids
     "max_tokens": 32000,
     "system": ...,
     "messages": [...],
@@ -61,12 +64,12 @@ if config.thinking == "adaptive":   # default is "off" -> key omitted entirely
 
 ## Evidence
 
-- Source run: a schema-constrained extraction/classification call on Sonnet
-  4.6 with `thinking: {type:"adaptive"}` produced ~21k of ~24k output tokens
-  as thinking (~3k as the actual JSON) — run cost $0.39.
+- Source run (observed 2026-07-12): a schema-constrained extraction/classification
+  call on Sonnet 4.6 with `thinking: {type:"adaptive"}` produced ~21k of ~24k
+  output tokens as thinking (~3k as the actual JSON) — run cost $0.39.
 - The same task on Opus 4.8 with the `thinking` key omitted cost ~$0.12 —
-  cheaper per-token model input, thinking off, better result quality, lower
-  total cost.
+  thinking off, better result quality, lower total cost (3.25x, model and
+  thinking both changed).
 - Diagnostic: compare `usage.output_tokens` against the byte size of the
   returned JSON — a large gap between the two is thinking spend, not JSON
   spend.

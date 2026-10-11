@@ -22,7 +22,7 @@ Backfill Linear state for work started by hand.
    KEY=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/parse-issue-key.sh" "$BRANCH")
    ```
    (or `.claude/skills/linear-pm/scripts/parse-issue-key.sh` if `${CLAUDE_PLUGIN_ROOT}` is unset)
-   If empty: print "No issue key in branch name `$BRANCH`. Rename the branch to include e.g. `ABH-123`, or pick a different branch."
+   If empty: print "No issue key in branch name `$BRANCH`. Rename the branch to include e.g. `TEAM-123`, or pick a different branch."
 
 4. **Fetch the issue:** `mcp__claude_ai_Linear__get_issue` by key.
    Stop with error if not found in the configured project (project mismatch means the user is on the wrong repo or wrong config).

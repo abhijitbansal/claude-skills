@@ -72,7 +72,7 @@ The config may live at `./second-wind.json` or `~/.wind/config.json`.
 
 - `agent`: top-level default agent (`claude` | `copilot`), overridable per repo. Absent → `claude` → today's behavior.
 - `repos[]`: `name`, `path`, optional `agent` override, optional `prompt_file` (sent as first prompt; convention `~/.wind/prompts/<repo>.md`) or inline `prompt` string (wins over `prompt_file`), optional per-repo `claude_args` override.
-- `claude_args`: top-level **global permission preset**; a repo inherits it unless it sets its own `claude_args`. The `auto` preset (`--permission-mode bypassPermissions`, accepts everything) is the **shipped default** for a new starter config — same risk class as `--dangerously-skip-permissions`; pick `acceptEdits`/`plan`/`default` to reduce autonomy.
+- `claude_args`: top-level **global permission preset**; a repo inherits it unless it sets its own `claude_args`. `auto` is the default for `--defaults` starter configs; the wizard suggests `acceptEdits`. The `auto` preset is **full bypass** (`--permission-mode bypassPermissions`, accepts everything, no prompts) — same risk class as `--dangerously-skip-permissions`, and not Claude Code's classifier-gated auto mode; pick `acceptEdits`/`plan`/`default` to reduce autonomy.
 - `scan_roots`: directories the wizard scanned, persisted so `wind add` and the dashboard's Add-repo can offer more repos without re-`init`.
 - `resume_message`: text typed into each paused **claude** session after reset (default `continue`); copilot uses its own preset message.
 - `ntfy_url`: optional ntfy.sh topic URL — notifies when the limit hits and when sessions resume.

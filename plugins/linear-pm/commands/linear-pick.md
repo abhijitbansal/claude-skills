@@ -9,7 +9,7 @@ The agent loop primitive. Pick up one issue and either propose a plan or do the 
 ## Usage
 
 - `/linear-pick` — pick the highest-priority `agent-ready` issue in the configured project.
-- `/linear-pick ABH-123` — jump to a specific issue (skips priority filter; still validates everything else).
+- `/linear-pick TEAM-123` — jump to a specific issue (skips priority filter; still validates everything else).
 
 ## State machine
 
@@ -46,7 +46,7 @@ Grep the body for `^## Acceptance criteria` (case-insensitive). If absent:
 ### Step 4: Autonomy gate
 Check `$LINEAR_PM_AUTONOMY`:
 
-- `disabled` → print "autonomy disabled, exiting", stop. (This shouldn't happen via the poller; defensive only.)
+- `disabled` → print "autonomy disabled, exiting", stop. (This shouldn't happen via an external scheduler; defensive only.)
 - `review-only` →
   1. Generate a short implementation plan from the issue body (no code changes). Use the writing-plans skill if the issue looks like a multi-step feature; otherwise produce a 5-15 line plan inline.
   2. `mcp__claude_ai_Linear__save_comment`: `🤖 Plan (review-only) — \n\n<plan>`.

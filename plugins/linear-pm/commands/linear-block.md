@@ -9,7 +9,7 @@ Mark a Linear issue as blocked, with a reason.
 
 ## Usage
 
-- `/linear-block ABH-123 "Reason this is stuck"` — explicit issue + reason.
+- `/linear-block TEAM-123 "Reason this is stuck"` — explicit issue + reason.
 - `/linear-block "Reason"` — only valid if there's an obvious current issue from context (e.g. you just ran `/linear-pick` and it failed).
 
 ## Procedure
