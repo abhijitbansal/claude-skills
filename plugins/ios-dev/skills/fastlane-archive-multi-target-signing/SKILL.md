@@ -47,11 +47,32 @@ archiving.
 Loop the profile fetch/ensure step over **every** signed embedded target, not
 just the main app, and map all of them into `export_options`:
 
+The canonical lane is `ios-scaffold`'s `templates/Fastfile`; this is its
+signing core:
+
 ```ruby
-APP_IDENTIFIER = "com.yourcompany.App"
-# Every embedded extension added to the app needs its own entry here — see
-# the archive lane, which loops this list for provisioning.
-WIDGET_IDENTIFIER = "com.yourcompany.App.Widget"
+APP_IDENTIFIER = "com.yourcompany.App"   # rendered from app.bundle_id
+TEAM_ID = ENV.fetch("APP_TEAM_ID")       # exported by load_app_config.sh
+# gym rejects "app-store-connect"; map the app.yml value to gym's name.
+RELEASE_EXPORT_METHOD = ENV.fetch("RELEASE_EXPORT_METHOD", "app-store-connect")
+GYM_EXPORT_METHOD = {
+  "app-store-connect" => "app-store",
+  "release-testing" => "ad-hoc",
+  "debugging" => "development"
+}.fetch(RELEASE_EXPORT_METHOD, RELEASE_EXPORT_METHOD)
+# Every embedded extension needs a profile. Derive the ids from
+# TARGETS_EXTENSIONS (targets.extensions in .claude/app.yml: target NAMES,
+# space-separated) as "<app bundle id>.<rfc1034-sanitised name>" (runs of
+# spaces/underscores become '-'). A target whose bundle id deviates sets
+# APP_EXTENSION_BUNDLE_IDS (space-separated bundle ids) to override.
+APP_EXTENSION_IDENTIFIERS =
+  if ENV["APP_EXTENSION_BUNDLE_IDS"].to_s.strip.empty?
+    ENV.fetch("TARGETS_EXTENSIONS", "").split.map do |name|
+      "#{APP_IDENTIFIER}.#{name.gsub(/[ _]+/, '-')}"
+    end
+  else
+    ENV["APP_EXTENSION_BUNDLE_IDS"].split
+  end
 
 lane :archive do
   api_key = app_store_connect_api_key(
@@ -66,7 +87,7 @@ lane :archive do
   # export — the failure only surfaces then, not at archive time.
   # (get_provisioning_profile returns the profile UUID; the profile NAME —
   # what exportOptions maps by, though either works — is in SIGH_NAME.)
-  profiles = [APP_IDENTIFIER, WIDGET_IDENTIFIER].map do |identifier|
+  profiles = ([APP_IDENTIFIER] + APP_EXTENSION_IDENTIFIERS).map do |identifier|
     get_provisioning_profile(
       api_key: api_key,
       app_identifier: identifier,
@@ -79,9 +100,9 @@ lane :archive do
 
   gym(
     scheme: "App",
-    export_method: "app-store",
+    export_method: GYM_EXPORT_METHOD,
     export_options: {
-      method: "app-store",
+      method: GYM_EXPORT_METHOD,
       signingStyle: "manual",
       teamID: TEAM_ID,
       provisioningProfiles: profiles   # every signed target, not just the app
@@ -127,9 +148,9 @@ only at export, so each first hit burns a build number.
 
 ## Related skills
 
-- `release` — Stage 5 "Cold-start signing" already carries the
-  every-signed-target profile loop (the fix above), and Stage 6 the
-  validate/upload step after it.
+- `release` — Stage 5 "Cold-start signing" carries the same
+  every-signed-target profile loop (ids derived from `targets.extensions`, as
+  in the snippet above), and Stage 6 the validate/upload step after it.
 - `xcode-cloud-validate` — when the hosted Xcode Cloud archive fails at
   "Prepare Build for App Store Connect", validate the exported `.ipa` locally
   with `altool`.

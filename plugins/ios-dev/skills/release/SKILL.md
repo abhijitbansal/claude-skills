@@ -192,15 +192,19 @@ api_key = app_store_connect_api_key(
 # mapping" for its bundle id.
 # TARGETS_EXTENSIONS (targets.extensions in .claude/app.yml, exported by
 # load_app_config.sh) holds target NAMES, space-separated, not bundle ids.
-# Each id is derived as "<app bundle id>.<TargetName>", Xcode's default for a
-# new extension target. Apps that deviate set APP_EXTENSION_BUNDLE_IDS
-# (space-separated bundle ids) to override.
+# Each id is derived as "<app bundle id>.<TargetName>" with the name
+# rfc1034-sanitised (runs of spaces/underscores become '-', as Xcode does for
+# PRODUCT_NAME), Xcode's default for a new extension target. A target whose
+# product name differs from its target name, or any other deviation, needs
+# APP_EXTENSION_BUNDLE_IDS (space-separated bundle ids) to override.
 # APP_IDENTIFIER is rendered from app.bundle_id into the Fastfile by
 # ios-scaffold (see the template), so no env var can be missing here.
 app_identifier = APP_IDENTIFIER
 extension_identifiers =
   if ENV["APP_EXTENSION_BUNDLE_IDS"].to_s.strip.empty?
-    ENV.fetch("TARGETS_EXTENSIONS", "").split.map { |name| "#{app_identifier}.#{name}" }
+    ENV.fetch("TARGETS_EXTENSIONS", "").split.map do |name|
+      "#{app_identifier}.#{name.gsub(/[ _]+/, '-')}"
+    end
   else
     ENV["APP_EXTENSION_BUNDLE_IDS"].split
   end
@@ -211,23 +215,46 @@ profiles = signed_targets.map do |identifier|
     api_key: api_key, app_identifier: identifier, readonly: false)
   [identifier, lane_context[SharedValues::SIGH_NAME]]   # profile name (SIGH_NAME); the action itself returns the UUID
 end.to_h
-gym(export_method: ENV.fetch("RELEASE_EXPORT_METHOD", "app-store-connect"),
+# gym rejects the app.yml value "app-store-connect" (it accepts app-store,
+# validation, ad-hoc, package, enterprise, development, developer-id,
+# mac-application), so map it to gym's name.
+m = ENV.fetch("RELEASE_EXPORT_METHOD", "app-store-connect")
+GYM_EXPORT_METHOD = { "app-store-connect" => "app-store", "release-testing" => "ad-hoc",
+                      "debugging" => "development" }.fetch(m, m)
+gym(export_method: GYM_EXPORT_METHOD,
     export_options: {
+      method: GYM_EXPORT_METHOD,
       signingStyle: "manual",
       provisioningProfiles: profiles,   # every signed target, not just the app
     })
 ```
 
-Fastlane does not source `load_app_config.sh`. Run the lane through
-`release.sh` (or `source plugins/ios-dev/skills/_lib/load_app_config.sh` first,
-plus the ASC key files from Stage 0) so `APP_*`, `TARGETS_EXTENSIONS` and
-`ASC_*` are exported; a bare `bundle exec fastlane archive` sees an empty
-extension list, and the lane warns when it does.
+Fastlane does not source `load_app_config.sh`. **`release.sh` does all of the
+following for you and is the supported path** — it loads `.claude/app.yml`,
+reads the Stage 0 key files and exports `APP_*`, `TARGETS_EXTENSIONS` and
+`ASC_*` before invoking the lane. A bare `bundle exec fastlane archive` sees an
+empty extension list, and the lane warns when it does. To run the lane by hand,
+from the app repo (the loader walks up from `$PWD` to find `.claude/app.yml`):
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT}/skills/_lib/load_app_config.sh"   # or the installed plugin cache path
+source ~/.app-store-connect/config
+export ASC_KEY_ID="$KEY_ID" ASC_ISSUER_ID="$ISSUER_ID" \
+  ASC_KEY_PATH="$HOME/.app-store-connect/AuthKey_$KEY_ID.p8"
+bundle exec fastlane archive
+```
 
 Read `fastlane-archive-multi-target-signing` before editing the archive lane.
-The extension list is derived from `targets.extensions` in `.claude/app.yml`
-(set `APP_EXTENSION_BUNDLE_IDS` when a derived bundle id does not match), not
-edited in the Fastfile. Add every embedded extension to `targets.extensions`
+The extension list is derived from `targets.extensions` in `.claude/app.yml`,
+not edited in the Fastfile. When a derived bundle id does not match (for
+example a target whose product name differs from its target name), set
+`APP_EXTENSION_BUNDLE_IDS` to the space-separated bundle ids. There is no
+`app.yml` key for it: `export` it in the shell that runs `release.sh` (a
+`direnv` `.envrc` or your shell profile). A `release-hooks` script is
+executed, not sourced, so it cannot export the variable into the lane. The
+Stage 0 config file is sourced by `release.sh`, but it holds credentials and
+is shared across apps, so keep per-app overrides out of it. Add every embedded
+extension to `targets.extensions`
 at the same time it's added to the Xcode project — treat it like entitlement
 parity (S1 gate): both are "every signed target needs matching setup," just
 for different concerns.
@@ -236,11 +263,20 @@ for different concerns.
 
 ```bash
 mkdir -p build
-xcodebuild archive -scheme "${APP_SCHEME}" -configuration Release \
-  -destination "generic/platform=iOS" -archivePath "build/${APP_NAME}.xcarchive" \
-  DEVELOPMENT_TEAM="${APP_TEAM_ID}" -allowProvisioningUpdates \
+archive_args=(-scheme "${APP_SCHEME}" -configuration Release
+  -destination "generic/platform=iOS" -archivePath "build/${APP_NAME}.xcarchive"
+  DEVELOPMENT_TEAM="${APP_TEAM_ID}" -allowProvisioningUpdates)
+# A command-line PRODUCT_BUNDLE_IDENTIFIER overrides every target, so with
+# embedded extensions it would give them the app's id (duplicate
+# CFBundleIdentifier in the archive). Pass it only for single-target apps.
+if [[ -z "${TARGETS_EXTENSIONS:-}" ]]; then
+  archive_args+=(PRODUCT_BUNDLE_IDENTIFIER="${APP_BUNDLE_ID}")
+fi
+xcodebuild archive "${archive_args[@]}" \
   | tee build/archive.log | xcbeautify || true
 grep -q "ARCHIVE SUCCEEDED" build/archive.log   # exit code is eaten by the pipe
+# Unlike gym (which needs app-store), xcodebuild -exportArchive accepts the
+# Xcode 15.3+ names, so ${RELEASE_EXPORT_METHOD} is used unmapped here.
 cat > build/ExportOptions.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -263,9 +299,11 @@ validate (S6) but stops before upload.
 
 Validate first (both paths). `altool --apiKey` looks for `AuthKey_<KEY_ID>.p8`
 in `API_PRIVATE_KEYS_DIR` (or `~/.private_keys` etc.), not `~/.app-store-connect/`
-— point it there first:
+— point it there first. `$KEY_ID` / `$ISSUER_ID` come from the Stage 0
+config file (`release.sh` sources it for you; by hand, source it first):
 
 ```bash
+source ~/.app-store-connect/config   # defines KEY_ID, ISSUER_ID
 export API_PRIVATE_KEYS_DIR="${API_PRIVATE_KEYS_DIR:-${HOME}/.app-store-connect}"
 xcrun altool --validate-app -f "build/${APP_NAME}.ipa" --type ios \
   --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
@@ -285,7 +323,8 @@ Only on the exact answer `upload`:
 # fastlane path
 bundle exec fastlane beta       # testflight (pilot)
 bundle exec fastlane release    # appstore  (deliver, no auto-submit)
-# fallback (same API_PRIVATE_KEYS_DIR export as the validate step above)
+# fallback (same config source + API_PRIVATE_KEYS_DIR export as the validate step above)
+source ~/.app-store-connect/config
 export API_PRIVATE_KEYS_DIR="${API_PRIVATE_KEYS_DIR:-${HOME}/.app-store-connect}"
 xcrun altool --upload-app -f "build/${APP_NAME}.ipa" --type ios \
   --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
@@ -299,6 +338,7 @@ Recovery table:
 | `ITMS-90189 Redundant Binary Upload` | usually: build number already used — re-run, S2 bumps. If this fired from a Cloud build **after** S6 already uploaded this build locally: expected — see S7's tag-push caveat, no action needed |
 | `Authentication failed` | check `~/.app-store-connect/config` IDs + `.p8` filename |
 | altool cannot find the key (`AuthKey_<KEY_ID>.p8` not found) | `export API_PRIVATE_KEYS_DIR="$HOME/.app-store-connect"` — altool does not search that dir by default |
+| altool errors on an empty `--apiKey` / `--apiIssuer` (`$KEY_ID` / `$ISSUER_ID` unset), or the lane stops with `ASC_KEY_ID/ASC_ISSUER_ID/ASC_KEY_PATH unset` | `source ~/.app-store-connect/config` and export `ASC_*` as in Stage 5, or run via `release.sh`, which does both |
 | "missing entitlement" at validate | App Group parity across targets — see S1 gate, re-archive |
 
 ## Stage 7 — Tag ✋

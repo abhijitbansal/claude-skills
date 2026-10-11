@@ -3,7 +3,7 @@ name: xcodebuild-plugin-macro-validation-per-invocation
 description: An SPM dependency with a build-tool plugin and/or macro (e.g. an MLX package) makes a specific xcodebuild invocation fail with "Plugin ... must be enabled" / "must be enabled to be used" and run 0 build/test steps, even though another invocation of the same project (build.sh, an IDE scheme) already works fine — because -skipPackagePluginValidation -skipMacroValidation must be passed per xcodebuild invocation and do not propagate across gym/fastlane/CI/IDE call sites. Use when adding a package with a build-tool plugin or Swift macro to a project with more than one place that shells out to xcodebuild, when a release/CI lane fails at the plugin-trust prompt while other build paths work, or when reviewing an automated repair/fix-stage commit that resolves a build failure by writing machine-wide Xcode defaults.
 ---
 
-# xcodebuild Plugin/Macro Validation: Per-Invocation Flags, Never a Machine-Wide Default
+# xcodebuild Plugin/Macro Validation: Per-Invocation Flags, Never a Machine-Wide Default on a Persistent Mac
 
 ## Symptom
 
@@ -92,8 +92,11 @@ by an unrelated background commit-security review.
 as regular implementation commits** — don't exempt the "cleanup" stage just
 because its job is to make a failing check pass. Prefer per-invocation flags
 over global defaults/env changes whenever a repair agent proposes disabling a
-validation gate, and treat "disables a security control machine-wide" as a
-hard stop regardless of which stage of the pipeline produced the commit.
+validation gate, and treat "disables a security control machine-wide on a
+machine that outlives the build" as a hard stop regardless of which stage of
+the pipeline produced the commit. The one exemption is the ephemeral
+Xcode Cloud VM, where `ci_post_clone.sh` may write the defaults (see the
+Xcode Cloud carve-out above); anywhere else it stays a hard stop.
 
 ## Evidence
 

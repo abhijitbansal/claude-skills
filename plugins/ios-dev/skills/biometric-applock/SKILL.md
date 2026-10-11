@@ -74,4 +74,5 @@ ContentView()
   for deep links: drops (never defers) links while locked and validates paths.
 - `widget-appgroup-snapshot-bridge` — widgets render from an App Group
   snapshot outside the app process, so the lock does not cover them; the
-  snapshot writer must redact while the lock is engaged.
+  snapshot writer mirrors the lock flag into the shared suite and the widget
+  reader redacts at render time while it is set.

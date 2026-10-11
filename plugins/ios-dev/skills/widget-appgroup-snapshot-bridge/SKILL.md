@@ -84,7 +84,7 @@ Completing the shape:
 - **a private document-scanner app** — `WidgetBridge` / `WidgetSnapshotReader` commit
   series, incl. `stop iCloud-sync launch from blanking widget recents`
   (invariant A) and the App-Lock redaction mirroring fixes (invariant B).
-- **folix** — independently re-derived the same App-Group snapshot
+- **a second private iOS app** — independently re-derived the same App-Group snapshot
   architecture, motivating this canonical skill.
 
 ## Related skills

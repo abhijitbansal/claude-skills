@@ -47,7 +47,9 @@ load_asc_credentials() {
   if [[ -n "${KEY_ID:-}" && -n "${ISSUER_ID:-}" ]]; then
     export ASC_KEY_ID="${ASC_KEY_ID:-${KEY_ID}}"
     export ASC_ISSUER_ID="${ASC_ISSUER_ID:-${ISSUER_ID}}"
-    export ASC_KEY_PATH="${ASC_KEY_PATH:-${API_PRIVATE_KEYS_DIR}/AuthKey_${KEY_ID}.p8}"
+    # Derive the path from the (possibly pre-set) ASC_KEY_ID so the key file
+    # matches the key id in use; a pre-set ASC_KEY_PATH still wins.
+    export ASC_KEY_PATH="${ASC_KEY_PATH:-${API_PRIVATE_KEYS_DIR}/AuthKey_${ASC_KEY_ID}.p8}"
   fi
 }
 
@@ -68,14 +70,21 @@ if [[ -f fastlane/Fastfile ]]; then
   bundle exec fastlane archive
 else
   archive_path="build/${APP_NAME}.xcarchive"
-  xcodebuild archive \
-    -scheme "${APP_SCHEME}" \
-    -configuration Release \
-    -destination "generic/platform=iOS" \
-    -archivePath "${archive_path}" \
-    DEVELOPMENT_TEAM="${APP_TEAM_ID}" \
-    PRODUCT_BUNDLE_IDENTIFIER="${APP_BUNDLE_ID}" \
+  archive_args=(
+    -scheme "${APP_SCHEME}"
+    -configuration Release
+    -destination "generic/platform=iOS"
+    -archivePath "${archive_path}"
+    DEVELOPMENT_TEAM="${APP_TEAM_ID}"
     -allowProvisioningUpdates
+  )
+  # A command-line PRODUCT_BUNDLE_IDENTIFIER overrides every target, so with
+  # embedded extensions it would give them the app's id (duplicate
+  # CFBundleIdentifier in the archive). Only pass it for single-target apps.
+  if [[ -z "${TARGETS_EXTENSIONS:-}" ]]; then
+    archive_args+=(PRODUCT_BUNDLE_IDENTIFIER="${APP_BUNDLE_ID}")
+  fi
+  xcodebuild archive "${archive_args[@]}"
   cat > build/ExportOptions.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

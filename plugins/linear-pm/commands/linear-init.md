@@ -33,7 +33,13 @@ Interactive bootstrap for a new repo.
      - `chore` → gray
      - `docs` → purple
 
-6. **Print next steps:**
+6. **Run the prerequisite check.** Run
+   `bash "${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/bootstrap.sh" --quiet`
+   from the repo root. It only diagnoses (installs nothing). If it exits
+   non-zero, show its `[FAIL]` / `[WARN]` lines and the fix command printed
+   under each, and still continue to step 7.
+
+7. **Print next steps:**
    > Created `.claude/linear.yml` with `autonomy: review-only` (skill writes to Linear, never touches code).
    >
    > Next:
@@ -56,3 +62,4 @@ Interactive bootstrap for a new repo.
 | MCP team/project list fails | Surface error, stop. |
 | `save_project` fails | Print error, ask if user wants to retry or pick existing. |
 | `create_issue_label` fails for one label | Continue with others, report which failed at the end. |
+| `bootstrap.sh` exits non-zero | Report its failures. The config and labels are already in place; do not undo them. |

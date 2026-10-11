@@ -53,6 +53,11 @@ and make the link rewrite **recursive** so it reaches every staged page:
   run: |
     mkdir -p _site _site/second-wind
     cp site/index.html _site/index.html
+    # the rewrite below points links at assets/ and the favicons, so those
+    # files must be staged too, or every asset link 404s
+    cp -r site/assets _site/assets
+    cp site/favicon.ico _site/favicon.ico
+    cp site/apple-touch-icon.png _site/apple-touch-icon.png
     cp docs/*.html _site/
     # the glob above misses subdirs — create and copy each one explicitly
     cp docs/second-wind/index.html _site/second-wind/index.html
@@ -60,12 +65,12 @@ and make the link rewrite **recursive** so it reaches every staged page:
     # rewrite every staged page, at any depth. A subdir page keeps its leading
     # ../ (docs/<sub>/x.html links ../../site/assets/ -> ../assets/ after the
     # sed below), so subdir pages can use ../../ links to the shared assets.
-    # extend this sed list for other shared root files (favicon.ico,
-    # apple-touch-icon.png), as pages.yml does
     find _site -name '*.html' -print0 | xargs -0 sed -i \
       -e 's#\.\./docs/##g' \
       -e 's#\.\./site/index\.html#index.html#g' \
-      -e 's#\.\./site/assets/#assets/#g'
+      -e 's#\.\./site/assets/#assets/#g' \
+      -e 's#\.\./site/favicon\.ico#favicon.ico#g' \
+      -e 's#\.\./site/apple-touch-icon\.png#apple-touch-icon.png#g'
 ```
 
 This repo's own `.github/workflows/pages.yml` is a working example of only two

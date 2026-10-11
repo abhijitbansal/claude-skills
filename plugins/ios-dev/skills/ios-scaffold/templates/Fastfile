@@ -2,27 +2,46 @@
 # for value changes; edit this file directly for lane logic (drift is reported,
 # not overwritten).
 #
-# Environment contract: run lanes through the release skill's release.sh, or
-# `source plugins/ios-dev/skills/_lib/load_app_config.sh` first. Fastlane does
-# not load app.yml itself, so a bare `bundle exec fastlane archive` sees an
-# empty TARGETS_EXTENSIONS and signs only the main app. release.sh also
-# exports ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_PATH from the Stage 0 key files
-# in ~/.app-store-connect.
+# Environment contract: run lanes through the release skill's release.sh (the
+# supported path). It loads app.yml and exports APP_*, TARGETS_EXTENSIONS and
+# ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_PATH (from the Stage 0 key files in
+# ~/.app-store-connect). Fastlane does not load app.yml itself, so a bare
+# `bundle exec fastlane archive` sees an empty TARGETS_EXTENSIONS and signs
+# only the main app. To run a lane by hand, from the app repo: source
+# "${CLAUDE_PLUGIN_ROOT}/skills/_lib/load_app_config.sh" (or the installed
+# plugin cache path), source ~/.app-store-connect/config, then export
+# ASC_KEY_ID="$KEY_ID" ASC_ISSUER_ID="$ISSUER_ID"
+# ASC_KEY_PATH="$HOME/.app-store-connect/AuthKey_$KEY_ID.p8".
 default_platform(:ios)
 
 APP_IDENTIFIER = "{{APP_BUNDLE_ID}}"
 TEAM_ID = "{{APP_TEAM_ID}}"
+# gym rejects "app-store-connect" for export_method (it accepts app-store,
+# validation, ad-hoc, package, enterprise, development, developer-id,
+# mac-application), so map the app.yml value to gym's name. The raw-xcodebuild
+# ExportOptions.plist in release.sh / SKILL.md keeps the Xcode 15.3+ names
+# instead: xcodebuild -exportArchive accepts app-store-connect, gym does not.
+RELEASE_EXPORT_METHOD = ENV.fetch("RELEASE_EXPORT_METHOD", "app-store-connect")
+GYM_EXPORT_METHOD = {
+  "app-store-connect" => "app-store",
+  "release-testing" => "ad-hoc",
+  "debugging" => "development"
+}.fetch(RELEASE_EXPORT_METHOD, RELEASE_EXPORT_METHOD)
 # Bundle ids of every signed embedded extension (.appex). TARGETS_EXTENSIONS
 # (exported by load_app_config.sh, same as release Stage 5) holds target NAMES,
 # space-separated, not bundle ids. Each id is derived as
 # "<app bundle id>.<TargetName>", where the suffix is the rfc1034-sanitised
-# product name (spaces and underscores become '-'), which is Xcode's default
-# for a new extension target. On any mismatch, set APP_EXTENSION_BUNDLE_IDS
-# (space-separated bundle ids) to override. A target left out archives fine
-# but fails at export with "no provisioning profile mapping".
+# target name (runs of spaces and underscores become '-', as Xcode does for
+# PRODUCT_NAME), which is Xcode's default for a new extension target. A target
+# whose product name differs from its target name, or whose bundle id deviates
+# otherwise, needs APP_EXTENSION_BUNDLE_IDS (space-separated bundle ids) to
+# override. A target left out archives fine but fails at export with "no
+# provisioning profile mapping".
 APP_EXTENSION_IDENTIFIERS =
   if ENV["APP_EXTENSION_BUNDLE_IDS"].to_s.strip.empty?
-    ENV.fetch("TARGETS_EXTENSIONS", "").split.map { |name| "#{APP_IDENTIFIER}.#{name}" }
+    ENV.fetch("TARGETS_EXTENSIONS", "").split.map do |name|
+      "#{APP_IDENTIFIER}.#{name.gsub(/[ _]+/, '-')}"
+    end
   else
     ENV["APP_EXTENSION_BUNDLE_IDS"].split
   end
@@ -70,9 +89,10 @@ platform :ios do
 
     gym(
       scheme: "{{APP_SCHEME}}",
-      export_method: ENV.fetch("RELEASE_EXPORT_METHOD", "app-store-connect"),
+      export_method: GYM_EXPORT_METHOD,
       export_team_id: TEAM_ID,
       export_options: {
+        method: GYM_EXPORT_METHOD,
         signingStyle: "manual",
         teamID: TEAM_ID,
         provisioningProfiles: profiles   # every signed target, not just the app

@@ -28,10 +28,8 @@ and easy-to-conflate purposes:
 2. **App Store Connect "What's New" / "What to Test"** — metadata fields
    attached to a version/build record in App Store Connect, edited through
    the web UI (or a metadata-upload tool). These are **completely
-   independent of the binary** — a `fastlane pilot`/`fastlane deliver` upload
-   with `skip_waiting_for_build_processing` cannot push this text; in that
-   case it requires a separate, usually manual, paste step once the build
-   finishes processing.
+   independent of the binary** and of the in-app data: they drift silently
+   unless the release step feeds the same text to both.
 
    **Nuance: the text can ride along with a lane.**
    `deliver` sets What's New from `fastlane/metadata/<locale>/release_notes.txt`,

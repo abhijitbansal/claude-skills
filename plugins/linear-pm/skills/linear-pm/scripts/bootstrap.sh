@@ -13,9 +13,11 @@
 #   1  — one or more checks failed; see [FAIL] / [WARN] entries above
 #
 # Usage:
-#   plugins/linear-pm/skills/linear-pm/scripts/bootstrap.sh   # source checkout
-#   plugins/linear-pm/skills/linear-pm/scripts/bootstrap.sh --quiet   # only print failures + summary
-# Installed copy: ~/.claude/plugins/cache/<marketplace>/linear-pm/<version>/skills/linear-pm/scripts/bootstrap.sh
+#   <plugin root>/skills/linear-pm/scripts/bootstrap.sh
+#   <plugin root>/skills/linear-pm/scripts/bootstrap.sh --quiet   # only print failures + summary
+# <plugin root> is the installed plugin directory
+# (~/.claude/plugins/cache/<marketplace>/linear-pm/<version>) or a source
+# checkout's plugins/linear-pm. Run it from the repo being checked.
 
 set -uo pipefail   # not -e; we want to keep going past failures and report all of them
 
@@ -160,7 +162,7 @@ if [[ $FAIL -eq 0 ]]; then
     printf "  • File a feature:    ${B}/linear-new \"<title>\"${X}\n"
     printf "  • Pick it up:        ${B}/linear-pick${X} (after adding agent-ready in Linear UI)\n"
     printf "  • See what's flying: ${B}/linear-status${X}\n"
-    printf "  • Full guide:        ${B}plugins/linear-pm/skills/linear-pm/README.md${X}\n"
+    printf "  • Full guide:        ${B}%s${X}\n" "$SCRIPT_DIR/../README.md"
   }
   exit 0
 else

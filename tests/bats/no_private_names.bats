@@ -7,13 +7,9 @@
 
 REPO="${BATS_TEST_DIRNAME}/../.."
 
-@test "no private project names in plugins, docs, archive, site, templates, tests or root docs" {
-  run grep -rIEilw '(doc-scan|paperix|foundry|floorprint|sift)' \
-    "${REPO}/plugins" "${REPO}/docs" "${REPO}/archive" "${REPO}/site" \
-    "${REPO}/README.md" "${REPO}/AGENTS.md" "${REPO}/CLAUDE.md" "${REPO}/USAGE.md" \
-    "${REPO}/templates" "${REPO}/tests" "${REPO}/setup" \
-    --exclude-dir=superpowers --exclude-dir=node_modules --exclude-dir=.cache \
-    --exclude=no_private_names.bats
+@test "no private project names anywhere in the tracked tree" {
+  run git -C "$REPO" grep -Iilw -E '(doc-scan|paperix|foundry|floorprint|sift|folix|memekit)' \
+    -- . ':!docs/superpowers' ':!tests/bats/no_private_names.bats'
   if [ "$status" -eq 0 ]; then
     echo "private project names found in:"
     echo "$output"
