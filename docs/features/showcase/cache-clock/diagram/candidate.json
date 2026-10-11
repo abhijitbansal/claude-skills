@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Cache Clock for Copilot CLI",
+    "output": "docs/features/showcase/cache-clock/diagram/cache-clock-architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/abhijitbansal/claude-skills",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "d28590b22a6c8df6b61c020817844e874461f44d"
+    }
+  },
+  "components": [
+    {
+      "id": "install", "type": "external", "label": "install.sh", "sublabel": "links ~/.copilot/extensions", "pos": [40, 250], "size": [170, 64],
+      "sources": [
+        { "path": "tools/cache-clock/install.sh", "line": 9, "end_line": 11, "label": "source and destination paths" },
+        { "path": "tools/cache-clock/install.sh", "line": 44, "end_line": 50, "label": "link or copy into place" }
+      ]
+    },
+    {
+      "id": "runtime", "type": "external", "label": "Copilot CLI runtime", "sublabel": "emits events, runs hooks", "pos": [280, 245], "size": [170, 74],
+      "sources": [
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 88, "end_line": 91, "label": "command and hook registration" },
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 97, "end_line": 106, "label": "events the extension listens to" }
+      ]
+    },
+    {
+      "id": "refuse", "type": "security", "label": "Refusal", "sublabel": "session.abort(), not awaited", "tag": "0 AI credits", "pos": [280, 100], "size": [170, 64],
+      "sources": [
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 71, "end_line": 77, "label": "refuse verdict aborts the turn" },
+        { "path": "tools/cache-clock/README.md", "line": 72, "end_line": 75, "label": "abort before any model call" }
+      ]
+    },
+    {
+      "id": "notes", "type": "frontend", "label": "session.log output", "sublabel": "price note, heads-up, card", "pos": [280, 400], "size": [170, 64],
+      "sources": [
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 79, "label": "price note on warn verdict" },
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 129, "label": "ephemeral heads-up" },
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 136, "label": "card for /cache-clock" }
+      ]
+    },
+    {
+      "id": "wiring", "type": "backend", "label": "wiring.mjs", "sublabel": "attach, busy, heads-up, seed", "tag": "extension.mjs entry", "pos": [620, 210], "size": [200, 144],
+      "sources": [
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 61, "end_line": 114, "label": "attach and event wiring" },
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 116, "end_line": 132, "label": "heads-up scheduler" },
+        { "path": "tools/cache-clock/extension/extension.mjs", "line": 5, "label": "entry point" }
+      ]
+    },
+    {
+      "id": "config", "type": "database", "label": "config.json, refused.json", "sublabel": "~/.copilot/cache-clock/", "pos": [500, 60], "size": [170, 64],
+      "sources": [
+        { "path": "tools/cache-clock/extension/lib/config.mjs", "line": 8, "end_line": 15, "label": "defaults and directory" },
+        { "path": "tools/cache-clock/extension/lib/config.mjs", "line": 42, "end_line": 69, "label": "refusal memory" }
+      ]
+    },
+    {
+      "id": "format", "type": "backend", "label": "format.mjs", "sublabel": "card, refusal, heads-up", "pos": [740, 60], "size": [170, 64],
+      "sources": [
+        { "path": "tools/cache-clock/extension/lib/format.mjs", "line": 34, "end_line": 52, "label": "refusal, warn, heads-up text" },
+        { "path": "tools/cache-clock/extension/lib/format.mjs", "line": 67, "end_line": 79, "label": "card text" }
+      ]
+    },
+    {
+      "id": "guard", "type": "security", "label": "guard.mjs", "sublabel": "decide: refuse, warn, off", "tag": "once per cold episode", "pos": [970, 100], "size": [170, 64],
+      "sources": [
+        { "path": "tools/cache-clock/extension/lib/guard.mjs", "line": 9, "label": "episode key" },
+        { "path": "tools/cache-clock/extension/lib/guard.mjs", "line": 16, "end_line": 24, "label": "decide()" }
+      ]
+    },
+    {
+      "id": "clock", "type": "backend", "label": "clock.mjs", "sublabel": "per-model clock, snapshot", "pos": [970, 250], "size": [170, 64],
+      "sources": [
+        { "path": "tools/cache-clock/extension/lib/clock.mjs", "line": 6, "end_line": 69, "label": "last call per model, warm or cold" }
+      ]
+    },
+    {
+      "id": "usage", "type": "backend", "label": "usage.mjs", "sublabel": "normalize, nano-AIU to USD", "tag": "classifyCall", "pos": [970, 420], "size": [170, 64],
+      "sources": [
+        { "path": "tools/cache-clock/extension/lib/usage.mjs", "line": 20, "end_line": 35, "label": "prices from tokenDetails" },
+        { "path": "tools/cache-clock/extension/lib/usage.mjs", "line": 51, "end_line": 69, "label": "normalizeUsage" },
+        { "path": "tools/cache-clock/extension/lib/usage.mjs", "line": 80, "end_line": 85, "label": "classifyCall" }
+      ]
+    },
+    {
+      "id": "sessionlog", "type": "database", "label": "session-state log", "sublabel": "<id>/events.jsonl", "tag": "session.usage_record", "pos": [40, 470], "size": [170, 70],
+      "sources": [
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 25, "label": "path read for seeding" },
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 30, "end_line": 50, "label": "seed the clock" },
+        { "path": "tools/cache-clock/bin/report.mjs", "line": 37, "end_line": 51, "label": "report reads every log" }
+      ]
+    },
+    {
+      "id": "vscode", "type": "external", "label": "VS Code agent host", "sublabel": "same runtime, same state dir", "pos": [40, 610], "size": [170, 64],
+      "sources": [
+        { "path": "tools/cache-clock/README.md", "line": 142, "end_line": 147, "label": "shares session-state" },
+        { "path": "tools/cache-clock/bin/report.mjs", "line": 29, "end_line": 35, "label": "client_name from workspace.yaml" }
+      ]
+    },
+    {
+      "id": "report", "type": "backend", "label": "bin/report.mjs", "sublabel": "reads every events.jsonl", "pos": [620, 620], "size": [170, 64],
+      "sources": [
+        { "path": "tools/cache-clock/bin/report.mjs", "line": 37, "end_line": 51, "label": "loadSessions" },
+        { "path": "tools/cache-clock/bin/report.mjs", "line": 75, "end_line": 76, "label": "summarize and print" }
+      ]
+    },
+    {
+      "id": "history", "type": "backend", "label": "history.mjs", "sublabel": "per-model cold-send totals", "pos": [910, 620], "size": [170, 64],
+      "sources": [
+        { "path": "tools/cache-clock/extension/lib/history.mjs", "line": 11, "end_line": 42, "label": "parseSessionLog" },
+        { "path": "tools/cache-clock/extension/lib/history.mjs", "line": 53, "end_line": 117, "label": "summarize by model" }
+      ]
+    }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Copilot session", "wraps": ["runtime", "refuse", "notes"] }
+  ],
+  "connections": [
+    { "id": "install-links", "from": "install", "to": "runtime", "label": "link", "variant": "dashed" },
+    { "id": "runtime-events", "from": "runtime", "to": "wiring", "label": "events, hook, cmd", "variant": "emphasis" },
+    { "id": "wiring-abort", "from": "wiring", "to": "refuse", "label": "abort()", "variant": "security" },
+    { "id": "wiring-log", "from": "wiring", "to": "notes", "label": "log()" },
+    { "id": "refuse-turn", "from": "refuse", "to": "runtime", "label": "turn dropped", "variant": "security" },
+    { "id": "notes-timeline", "from": "notes", "to": "runtime", "label": "shown in timeline" },
+    { "id": "runtime-writes", "from": "runtime", "to": "sessionlog", "label": "writes", "variant": "dashed" },
+    { "id": "vscode-writes", "from": "vscode", "to": "sessionlog", "label": "same dir", "variant": "dashed" },
+    { "id": "log-seeds", "from": "sessionlog", "to": "wiring", "label": "seed on resume", "variant": "dashed" },
+    { "id": "log-report", "from": "sessionlog", "to": "report", "label": "reads all", "variant": "dashed" },
+    { "id": "report-history", "from": "report", "to": "history", "label": "summarize" },
+    { "id": "wiring-config", "from": "wiring", "to": "config", "label": "load, save" },
+    { "id": "wiring-format", "from": "wiring", "to": "format", "label": "text" },
+    { "id": "wiring-guard", "from": "wiring", "to": "guard", "label": "decide", "variant": "security" },
+    { "id": "wiring-clock", "from": "wiring", "to": "clock", "label": "ingest, snapshot" },
+    { "id": "clock-usage", "from": "clock", "to": "usage", "label": "classify, prices" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan", "title": "Guard",
+      "items": [
+        "Refuses a costly cold send once per cold episode, never while a turn is running",
+        "Slash commands and ! shell escapes are never guarded",
+        "refused.json lets the resend from a new process through"
+      ]
+    },
+    {
+      "dot": "emerald", "title": "Clock",
+      "items": [
+        "TTL, expiry and prices come from assistant.usage; nothing is guessed",
+        "assistant.usage is not replayed on resume, so events.jsonl seeds the clock",
+        "Heads-up leads by the smaller of the setting and a fifth of the TTL, never mid-turn"
+      ]
+    },
+    {
+      "dot": "amber", "title": "Limits",
+      "items": [
+        "Reported expiry is an upper bound: Luna was served cold at 29 of 30 minutes",
+        "Live guard inside VS Code is not verified; the report covers its sessions",
+        "No keep-warm pings yet"
+      ]
+    }
+  ]
+}
