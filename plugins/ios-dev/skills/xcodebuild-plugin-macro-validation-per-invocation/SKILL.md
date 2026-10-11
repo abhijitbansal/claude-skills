@@ -7,8 +7,8 @@ description: An SPM dependency with a build-tool plugin and/or macro (e.g. an ML
 
 ## Symptom
 
-A `fastlane archive` (or any second/independent xcodebuild invocation — CI
-post-clone script, a second IDE scheme) dies at a plugin-trust prompt:
+A `fastlane archive` (or any second/independent xcodebuild invocation — a
+second script, a second IDE scheme) dies at a plugin-trust prompt:
 
 ```
 Validate plug-in 'CudaBuild' in package 'mlx-swift'
@@ -47,11 +47,12 @@ gym(
 ```
 
 ```bash
-# build.sh / CI post-clone script — same flags, same reasoning
+# build.sh (or any script that shells out to xcodebuild) — same flags, same reasoning
 xcodebuild -scheme App -skipPackagePluginValidation -skipMacroValidation build
 ```
 
-**Do NOT reach for the machine-wide fix** —
+**Do NOT reach for the machine-wide fix on a developer or other persistent
+Mac** —
 `defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation`
 / `IDESkipMacroFingerprintValidation` — even though it "fixes" every
 invocation at once. It silently disables plugin/macro fingerprint validation
@@ -59,6 +60,19 @@ invocation at once. It silently disables plugin/macro fingerprint validation
 not just this one. Per-invocation flags are scoped to the build that actually
 needs the exception; a machine-wide default is a standing security
 regression that outlives the project that prompted it.
+
+**Xcode Cloud carve-out.** Hosted Xcode Cloud runs `xcodebuild` itself and
+accepts no flags, and `ci_post_clone.sh` has no `xcodebuild` call to add them
+to. There the ephemeral, single-use VM may use the `defaults write` above
+from inside `ci_post_clone.sh` (it is discarded after the run). Pasteable
+lines (the first key's misspelling is Apple's):
+
+```bash
+defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation -bool YES
+defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
+```
+
+The ban stays in force for every machine that outlives the build.
 
 ## Autonomous repair-stage agents: route through the same review as any commit
 
@@ -112,7 +126,7 @@ the shortest path.
 
 ## Related skills
 
-- `xcode-cloud-post-clone-contract` — the other place a project's CI
-  invokes xcodebuild independently of local build.sh; check it for the same
-  per-invocation flag gap when adding a plugin/macro package.
+- `xcode-cloud-post-clone-contract` — hosted Xcode Cloud runs its own
+  xcodebuild with no flags, so the per-invocation fix does not apply there;
+  see its plugin/macro-trust note and this skill's Xcode Cloud carve-out.
 - `release` — the fastlane archive/gym lane this fix most commonly lands in.

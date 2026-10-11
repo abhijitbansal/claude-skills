@@ -51,16 +51,24 @@ img = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
 d = ImageDraw.Draw(img)
 d.rounded_rectangle([0, 0, 511, 511], radius=112, fill=(180, 84, 46))
 
-font = ImageFont.truetype(
-    "/System/Library/Fonts/Supplemental/Georgia.ttf", 358
-)
+# Font path is a parameter: the default below is macOS-only. On Linux/CI pass
+# any .ttf (e.g. DejaVuSans-Bold.ttf); if it can't be loaded, fall back to
+# Pillow's bundled font (load_default(size=...) needs Pillow >= 10.1).
+FONT_PATH = "/System/Library/Fonts/Supplemental/Georgia.ttf"
+FONT_SIZE = 358
+try:
+    font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
+except OSError:
+    font = ImageFont.load_default(size=FONT_SIZE)
 bb = d.textbbox((0, 0), "S", font=font)
 w, h = bb[2] - bb[0], bb[3] - bb[1]
 d.text(((512 - w) / 2 - bb[0], (512 - h) / 2 - bb[1]), "S",
         font=font, fill=(253, 253, 251))
 
-# 2. favicon.ico: Pillow downscales one master into the multi-res ICO.
-img.resize((32, 32)).save("favicon.ico", sizes=[(16, 16), (32, 32), (48, 48)])
+# 2. favicon.ico: save the 512 master directly. Pillow downscales it into each
+#    requested size. Do NOT pre-resize to 32x32 first — Pillow drops any ICO
+#    size larger than the source image, so the 48x48 entry would silently vanish.
+img.save("favicon.ico", sizes=[(16, 16), (32, 32), (48, 48)])
 
 # 3. apple-touch-icon.png: 180x180, FULL-BLEED + OPAQUE.
 #    iOS applies its own rounded-corner mask — a transparent or

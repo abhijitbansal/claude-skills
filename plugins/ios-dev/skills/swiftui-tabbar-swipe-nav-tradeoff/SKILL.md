@@ -83,9 +83,9 @@ if usesCustomPager {
 ```
 
 **The programmatic-navigation guard.** Never set `selectedTab` and push a
-nav path in the same render when the custom pager is active. Split the
-mutation across two run-loop ticks so the pager finishes laying out the new
-tab before the path push arrives:
+nav path in the same render when the custom pager is active. The proposed
+mitigation is to defer the path push so the pager can finish laying out the
+new tab before it arrives:
 
 ```swift
 // WRONG — races the pager's own render pass; can land on wrong page
@@ -97,15 +97,22 @@ func handleDeepLink(_ target: DeepLinkTarget) {
 ```
 
 ```swift
-// CORRECT — split across two ticks so the pager settles first
+// PROPOSED — unverified on device. Defer the push so the pager settles
+// first
 func handleDeepLink(_ target: DeepLinkTarget) {
     selectedTab = target.tab
     Task { @MainActor in
-        await Task.yield()             // let the pager's render pass complete
+        await Task.yield()             // one cooperative yield — intended to let the pager settle; unverified on device
         browsePath.append(target.itemID)
     }
 }
 ```
+
+`Task.yield()` is one cooperative yield, not a guaranteed second render tick:
+the pager's layout pass may need more than one turn, so verify on a device
+(or add a more explicit signal, such as waiting for the pager to report the
+new selection) before relying on it. Treat this as the mitigation under test,
+not a proven fix.
 
 If the app has several programmatic-navigation entry points (deep links, NFC,
 Siri App Intents) feeding a tabbed area, it's often simpler and lower-risk to

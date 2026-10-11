@@ -63,14 +63,13 @@ mkdir -p "$RESOLVED_DST"
 cp Package.resolved "$RESOLVED_DST/Package.resolved"
 ```
 
-## Related
+## Related skills
 
 - `references/workflow-recipe.md` — the two Xcode Cloud workflows (PR check +
   tag-triggered release) and how the release skill's `v*` tag push fires the
   hosted archive.
 - Skill `xcode-cloud-validate` — pre-push validation of the cloud setup.
 - Skill `release` — S7 tag push is the release trigger.
-- Skill `xcodebuild-plugin-macro-validation-per-invocation` — a project
-  adopting an SPM package with a build-tool plugin or macro needs the same
-  per-invocation validation flags added to `ci_post_clone.sh`'s xcodebuild
-  path as any other independent xcodebuild invocation.
+- Skill `xcodebuild-plugin-macro-validation-per-invocation` — plugin/macro
+  trust prompt in Xcode Cloud: see its Xcode Cloud carve-out (the
+  `defaults write` lines for `ci_post_clone.sh`).

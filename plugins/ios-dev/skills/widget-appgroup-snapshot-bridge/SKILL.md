@@ -17,6 +17,9 @@ description: Home-screen widget goes blank or stale — recents blanked after an
 - Widget silently empty on one target: missing App Group entitlement makes
   `containerURL(forSecurityApplicationGroupIdentifier:)` return `nil` with no
   error (surfaces only at altool validate).
+- A Lock Screen/StandBy widget renders blank while the device is locked — the
+  snapshot file's protection class blocks the widget process from reading it
+  (see the file-protection invariant under Fix).
 
 ## Root cause
 
@@ -49,8 +52,14 @@ Invariants the implementation must hold:
   flag on every load regardless of what's on disk, so a stale pre-redaction
   snapshot can never render. Neither side invents its own redaction signal —
   that's what causes double-redaction bugs.
-- Writes are atomic (`.atomic, .completeFileProtectionUnlessOpen`) so the
-  widget process never reads a half-written file.
+- Writes are atomic (`.atomic, .completeFileProtectionUntilFirstUserAuthentication`)
+  so the widget process never reads a half-written file. Do not use
+  `.completeFileProtectionUnlessOpen`: a Lock Screen/StandBy widget cannot open
+  the file while the device is locked, so it renders blank while locked (see
+  Symptom). The trade-off: the snapshot holds real titles and thumbnail paths
+  on disk, protected only until the first unlock after boot. The writer does
+  not redact the file; redaction is applied at render time by the reader
+  (invariant B).
 
 **Read `references/snapshot-bridge.md` before implementing** — the full
 `WidgetBridge` shared DTO, `WidgetSnapshotWriter` (app-side, the only writer),
@@ -80,6 +89,8 @@ Completing the shape:
 
 ## Related skills
 
+- `biometric-applock` — the App-Lock state this skill's invariant B mirrors
+  into the shared suite and redacts against at render time.
 - `file-handoff-inbox-backstop` — widget timeline launches re-trigger app cold
   starts; a poison share-inbox batch turns that into a boot loop.
 - `deep-link-resolver-applock-pathtraversal` — widget entry taps deep-link into
