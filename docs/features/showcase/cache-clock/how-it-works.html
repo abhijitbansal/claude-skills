@@ -74,6 +74,7 @@ figure{margin:var(--s-5) 0 0}
 .frame{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-2);padding:var(--s-5)}
 figcaption{margin-top:var(--s-3);color:var(--text-dim);max-width:65ch;text-wrap:pretty}
 figcaption .fig{font:600 var(--t-label)/1 var(--mono);color:var(--text);margin-right:var(--s-2)}
+.film{display:block;width:100%;height:auto;aspect-ratio:16/9;background:#000;border:1px solid var(--border);border-radius:var(--r-2)}
 .scroll{overflow-x:auto}
 .scroll svg{display:block;min-width:36rem;width:100%;max-width:44rem;height:auto}
 .hint{display:none;font:var(--t-label)/1 var(--mono);color:var(--text-dim);margin-top:var(--s-2)}
@@ -180,6 +181,11 @@ svg text{font-family:var(--mono)}
   <h1>One idle gap, one <em>25×</em> price.</h1>
   <p class="lead">Copilot bills tokens in AI credits. When the prompt cache expires, the next message rewrites your whole conversation at the <b>cache-write price</b>. Cache Clock shows the clock, prices the send, and drops a costly cold send once so you can decide.</p>
   <p class="meta">Tested on Copilot CLI 1.0.95 · numbers measured 11&nbsp;October&nbsp;2026 · 1 AI credit = $0.01</p>
+
+  <figure>
+    <video class="film" controls playsinline preload="metadata" poster="poster.jpg" aria-label="17-second silent video: the 25× price, the cache countdown, the one-time refusal, and the install and report commands"><source src="video.mp4" type="video/mp4"></video>
+    <figcaption><span class="fig">Film</span>The whole idea in 17 seconds, silent. Made with make-motion.</figcaption>
+  </figure>
 
   <figure>
     <div class="frame">
