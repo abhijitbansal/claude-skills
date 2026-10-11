@@ -1,6 +1,6 @@
 ---
 name: swiftui-sheet-in-sheet-uikit-present-bridge
-description: "UIActivityViewController (or any other UIKit present-based flow like UIDocumentPickerViewController) presented via .sheet(item:) from a SwiftUI view that is itself already presented as a sheet flashes on screen and self-dismisses within a single frame with zero user interaction — confirmed by a user who \"didn't tap anything.\" Use when triggering a system share sheet, document picker, or any UIKit present(_:animated:) flow from a screen that can itself be presented as a sheet (a very common architecture: Settings-as-sheet, detail-as-sheet)."
+description: "UIActivityViewController (or any other UIKit present-based flow like UIDocumentPickerViewController) presented via .sheet(item:) from a SwiftUI view that is itself already presented as a sheet flashes on screen and self-dismisses within a single frame with zero user interaction — confirmed by a user who \"didn't tap anything.\" The same bug class hits UIImagePickerController (camera picker), QLPreviewController (QuickLook preview) and MFMailComposeViewController (mail composer): the flow flashes and dismisses its PARENT sheet, or never appears. Use when triggering a system share sheet, document picker, or any UIKit present(_:animated:) flow from a screen that can itself be presented as a sheet (a very common architecture: Settings-as-sheet, detail-as-sheet)."
 ---
 
 # SwiftUI Sheet-in-Sheet: UIKit Present Flashes and Self-Dismisses
@@ -34,9 +34,10 @@ walk `UIApplication.shared.connectedScenes` → key window → follow
 `.presentedViewController` to the actual top-most UIKit view controller, and
 call `present(_:animated:)` on it directly, with iPad popover-source
 anchoring handled explicitly. This sidesteps SwiftUI's declarative sheet
-stack entirely for the one case (system share sheet, document picker) that
-needs guaranteed top-of-hierarchy presentation regardless of how many
-SwiftUI sheets are already stacked:
+stack entirely for the share sheet / document picker and every other
+UIKit-presented system flow (see Generalization) that needs guaranteed
+top-of-hierarchy presentation regardless of how many SwiftUI sheets are
+already stacked:
 
 ```swift
 enum ActivitySharePresenter {
@@ -82,6 +83,29 @@ migrated." Root cause confirmed by tracing the actual runtime presentation
 hierarchy (`RootTabView.swift:42` presents Settings as a sheet), not from the
 call site in isolation.
 
+## Generalization
+
+This is a CLASS of bug, not a share-sheet quirk. Four recurrences in one app
+(each initially treated as a new bug): share sheet, QuickLook, camera, mail
+composer. The camera case showed as a flash followed by the parent sheet being
+dismissed; an earlier incomplete fix had only removed an imperative dismiss call
+and left the underlying declarative race.
+
+**Rule:** ANY UIKit `present(_:animated:)`-based system flow launched from a
+SwiftUI view that is — or can ever be — inside a `.sheet`/`.fullScreenCover`
+must go through an imperative top-most-view-controller presenter (walk
+connectedScenes → key window → `.presentedViewController` chain, as in
+`ActivitySharePresenter` above). Never drive it with a nested `.sheet(item:)`,
+`.fullScreenCover`, or a `UIViewControllerRepresentable` mounted inside the
+second sheet layer — SwiftUI's sheet state machine races the nested
+presentation and tears down one side.
+
+**Review heuristic:** when a diff adds a `UIViewControllerRepresentable` or a
+`.sheet`-presented UIKit controller, ask "can the presenting view itself be a
+sheet anywhere in the app?" — if yes, flag it; the bug only reproduces from the
+nested context, so the call site looks innocent in isolation and unit tests
+can't see it.
+
 ## Related skills
 
 - `navigationsplitview-single-stack-per-detail-column` and
@@ -89,7 +113,3 @@ call site in isolation.
   but share the same debugging shape: a SwiftUI presentation/render bug that
   only reveals itself by tracing the actual runtime hierarchy, not by reading
   the call site in isolation.
-- `sheet-in-sheet-present-bridge-generalization` — the generalization note for
-  this skill: the same root cause recurred across camera picker, QuickLook,
-  and mail composer; read it when the presented flow isn't a share sheet or
-  document picker.

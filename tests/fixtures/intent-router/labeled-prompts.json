@@ -43,5 +43,11 @@
   {"prompt": "tell me a joke", "expected": "none"},
   {"prompt": "recommend a pasta recipe", "expected": "none"},
   {"prompt": "who won the football match", "expected": "none"},
-  {"prompt": "explain quantum entanglement briefly", "expected": "none"}
+  {"prompt": "explain quantum entanglement briefly", "expected": "none"},
+
+  {"prompt": "camera picker flashes and dismisses the parent sheet", "expected": "swiftui-sheet-in-sheet-uikit-present-bridge"},
+  {"prompt": "QuickLook preview never appears from a sheet", "expected": "swiftui-sheet-in-sheet-uikit-present-bridge"},
+  {"prompt": "mail composer closes my settings sheet", "expected": "swiftui-sheet-in-sheet-uikit-present-bridge"},
+  {"prompt": "share sheet flashes and self-dismisses", "expected": "swiftui-sheet-in-sheet-uikit-present-bridge"},
+  {"prompt": "document picker dismisses itself from a sheet", "expected": "swiftui-sheet-in-sheet-uikit-present-bridge"}
 ]
