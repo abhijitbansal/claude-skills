@@ -1,6 +1,9 @@
-// Preview chrome: scrubber, play/pause, scene markers, shortcuts, live reload.
+// Preview chrome: scrubber, play/pause, mute, scene markers, shortcuts, live reload.
+import { audioController } from './preview-audio.mjs';
+
 const PLAY_ICON = '▶';
 const PAUSE_ICON = '❚❚';
+const MUTE_ICON = '♪';
 
 const fmt = (sec) => `${sec.toFixed(2)}s`;
 const motion = () => window.__motion;
@@ -9,9 +12,11 @@ export function initPreviewUI() {
   const ui = document.getElementById('ui');
   ui.innerHTML = `
     <button id="play" aria-label="Play">${PLAY_ICON}</button>
+    <button id="mute" aria-label="Mute audio (M)" aria-pressed="false" title="Mute (M)" hidden>${MUTE_ICON}</button>
     <div id="track"><div id="marks"></div><input id="scrub" type="range" min="0" value="0" step="any" aria-label="Timeline"></div>
     <div id="readout"></div>`;
   const play = ui.querySelector('#play');
+  const muteButton = ui.querySelector('#mute');
   const scrub = ui.querySelector('#scrub');
   const marks = ui.querySelector('#marks');
   const readout = ui.querySelector('#readout');
@@ -19,6 +24,8 @@ export function initPreviewUI() {
   let time = 0;
   let playing = false;
   let last = 0;
+  const audio = audioController(() => motion().audio ?? []);
+  const audible = () => playing && !document.hidden; // rAF stops in a hidden tab; audio must stop with it
 
   const show = () => {
     scrub.value = String(time);
@@ -27,7 +34,12 @@ export function initPreviewUI() {
   const seek = (sec) => {
     time = Math.min(Math.max(0, sec), motion().duration);
     motion().seek(time);
+    audio.update(time, audible());
     show();
+  };
+  const setMuted = (on) => {
+    audio.setMuted(on);
+    muteButton.setAttribute('aria-pressed', String(on));
   };
   const setPlaying = (on) => {
     playing = on;
@@ -38,6 +50,7 @@ export function initPreviewUI() {
       last = performance.now();
       requestAnimationFrame(tick);
     }
+    audio.update(time, audible());
   };
   function tick(now) {
     if (!playing) return;
@@ -49,6 +62,7 @@ export function initPreviewUI() {
   const layout = () => {
     const m = motion();
     scrub.max = String(m.duration);
+    muteButton.hidden = m.audio.length === 0;
     marks.innerHTML = '';
     m.sceneStarts.forEach((start, i) => {
       const tick = document.createElement('i');
@@ -59,11 +73,18 @@ export function initPreviewUI() {
     seek(time);
   };
 
+  // rAF stops in a hidden tab but <audio> keeps going: pause there, resume when visible.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && playing) last = performance.now();
+    audio.update(time, audible());
+  });
   play.addEventListener('click', () => setPlaying(!playing));
+  muteButton.addEventListener('click', () => setMuted(!audio.muted));
   scrub.addEventListener('input', () => { setPlaying(false); seek(Number(scrub.value)); });
   window.addEventListener('keydown', (e) => {
     const frame = 1 / motion().fps;
     if (e.code === 'Space') { e.preventDefault(); setPlaying(!playing); }
+    else if (e.code === 'KeyM' && !e.metaKey && !e.ctrlKey && !e.altKey) setMuted(!audio.muted);
     else if (e.code === 'ArrowRight') { e.preventDefault(); setPlaying(false); seek(time + frame); }
     else if (e.code === 'ArrowLeft') { e.preventDefault(); setPlaying(false); seek(time - frame); }
   });

@@ -8,7 +8,9 @@ import { loadSpec, validateSpec, withDefaults, UsageError } from './lib/spec.mjs
 import { printResult } from './lib/errors.mjs';
 import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
-import { findFfmpeg, encodeArgs } from './lib/ffmpeg.mjs';
+import { findFfmpeg, encodeArgs, probeAudio, probeGraph } from './lib/ffmpeg.mjs';
+import { resolveAsset } from './lib/paths.mjs';
+import { resolveAudio } from '../template/audio.mjs';
 
 const CONTACT_POINT = 0.85;
 const PROGRESS_STEPS = 10;
@@ -60,6 +62,21 @@ function partialPath(out) {
   return path.join(p.dir, `${p.name}.partial${p.ext}`);
 }
 
+// Resolve each audio track to an absolute file and fail before the browser launches if ffmpeg cannot decode one.
+function planAudio(spec, dir, ffmpeg, fps) {
+  const audio = resolveAudio(spec).map((track, i) => {
+    const { file } = resolveAsset(dir, track.src); // the path the validator already accepted (normalised, realpath)
+    const problem = probeAudio(ffmpeg, file);
+    if (problem) throw new Error(`audio[${i}].src: ffmpeg cannot decode ${track.src}: ${problem}`);
+    return { ...track, file };
+  });
+  if (audio.length) {
+    const problem = probeGraph(ffmpeg, { fps, audio }); // an old ffmpeg without amix normalize / adelay all fails here, not at frame 1
+    if (problem) throw new Error(`audio: ffmpeg rejected the mix (needs ffmpeg >= 4.4): ${problem}`);
+  }
+  return audio;
+}
+
 // Validate the spec and work out every input before launching anything.
 async function plan(opts) {
   const { spec: raw, dir } = loadSpec(opts.spec);
@@ -76,15 +93,16 @@ async function plan(opts) {
   if (!opts.contact && frames < 1) throw new UsageError(`spec is too short for ${fps} fps: no frames to render`);
   const name = path.basename(specPath, path.extname(specPath));
   const defaultOut = opts.contact ? path.join(dir, 'out') : path.join(dir, 'out', `${name}.mp4`);
+  const ffmpeg = opts.contact ? null : await findFfmpeg();
   return {
-    spec, specPath, fps, frames, contact: opts.contact, size: opts.size ?? spec.size,
-    out: path.resolve(opts.out ?? defaultOut),
-    ffmpeg: opts.contact ? null : await findFfmpeg(),
+    spec, specPath, fps, frames, total, contact: opts.contact, size: opts.size ?? spec.size,
+    out: path.resolve(opts.out ?? defaultOut), ffmpeg,
+    audio: opts.contact ? [] : planAudio(spec, dir, ffmpeg, fps),
   };
 }
 
-function startEncoder(ffmpegPath, fps, file) {
-  const proc = spawn(ffmpegPath, encodeArgs({ fps, out: file }), { stdio: ['pipe', 'ignore', 'pipe'] });
+function startEncoder(ffmpegPath, args) {
+  const proc = spawn(ffmpegPath, args, { stdio: ['pipe', 'ignore', 'pipe'] });
   let stderr = '';
   proc.stderr.on('data', (c) => { stderr = (stderr + c).slice(-4000); });
   const closed = new Promise((resolve) => {
@@ -123,7 +141,7 @@ async function renderContactSheets(page, p, info) {
 async function renderVideo(page, p, state) {
   mkdirSync(path.dirname(p.out), { recursive: true });
   state.partial = partialPath(p.out);
-  state.encoder = startEncoder(p.ffmpeg, p.fps, state.partial);
+  state.encoder = startEncoder(p.ffmpeg, encodeArgs({ fps: p.fps, out: state.partial, audio: p.audio, duration: p.total }));
   let nextMark = 1;
   for (let i = 0; i < p.frames; i++) {
     await page.evaluate((s) => window.__motion.seek(s), i / p.fps);

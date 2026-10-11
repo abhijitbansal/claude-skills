@@ -11,7 +11,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 const SKILLS_SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../skills');
-const SKIP = new Set(['node_modules', 'test', 'dist', 'out']);
+const SKIP = new Set(['node_modules', 'test', 'dist', 'out', '.cache']);
 
 // host -> [user dir, project dir] relative to HOME / project root, plus how to invoke.
 export const HOSTS = {

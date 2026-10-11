@@ -2,6 +2,7 @@
 // window.__motion for the preview UI and the Playwright frame loop.
 import { buildTimeline, seekTo } from './timeline.mjs';
 import { withDefaults } from './defaults.mjs';
+import { resolveAudio } from './audio.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -233,10 +234,34 @@ async function fetchSpec() {
   return withDefaults(await response.json());
 }
 
-function makeMotion(spec, built, apply) {
+let currentAudio = null;
+
+// Preview only: one idle <audio> per track in a hidden holder outside the scaled stage.
+// Returns [{ el, start, end, volume, fadeIn, fadeOut }] for preview-ui to drive; nothing plays here.
+function replaceAudio(spec) {
+  currentAudio?.querySelectorAll('audio').forEach((el) => el.pause()); // a detached element keeps playing
+  currentAudio?.remove();
+  currentAudio = null;
+  if (MODE !== 'preview') return [];
+  const holder = document.createElement('div');
+  holder.id = 'audio';
+  holder.hidden = true;
+  const tracks = resolveAudio(spec).map(({ src, ...timing }) => {
+    const el = document.createElement('audio');
+    el.preload = 'auto';
+    el.src = `${assetUrl(src)}?v=${Date.now()}`; // a re-synthesised clip at the same path must not come from the media cache
+    holder.append(el);
+    return { el, ...timing };
+  });
+  document.body.append(holder);
+  currentAudio = holder;
+  return tracks;
+}
+
+function makeMotion(spec, built, apply, audio) {
   return {
     duration: built.duration, fps: spec.fps, size: spec.size, sceneStarts: built.sceneStarts,
-    sceneIds: spec.scenes.map((s) => s.id),
+    sceneIds: spec.scenes.map((s) => s.id), audio,
     seek(sec) {
       const t = Math.min(Math.max(0, sec), built.duration);
       seekTo(built.timeline, t);
@@ -261,7 +286,7 @@ async function mount() {
   currentStage = dom.stage;
   if (MODE === 'render') document.documentElement.style.background = spec.background; // letterbox
   fitStage(spec.size);
-  const motion = makeMotion(spec, built, apply);
+  const motion = makeMotion(spec, built, apply, replaceAudio(spec));
   motion.seek(0);
   return motion;
 }

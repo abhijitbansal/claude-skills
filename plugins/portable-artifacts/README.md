@@ -9,7 +9,7 @@ an account or a particular model:
 | Skill | You say | You get |
 |---|---|---|
 | [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + Vega-Lite charts. Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh — no LLM involved. |
-| [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. "Slow scene 2" changes one field, not the whole video. |
+| [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. Optional `audio` tracks (music, voiceover, SFX); narration synthesised locally with Kokoro when asked. "Slow scene 2" changes one field, not the whole video. |
 
 [**See them in action**](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#showcase): a real dashboard and video an agent generated from one prompt each, with the prompts and specs.
 
@@ -107,7 +107,8 @@ To build a dashboard or an animated explainer, read and follow skills/make-dashb
 | Node.js ≥ 20 | ✓ | ✓ |
 | `npm ci` in the skill folder (once) | ✓ | ✓ |
 | Chromium for frame capture (once, ≈150 MB) | — | `npx playwright install chromium` (falls back to installed Google Chrome) |
-| ffmpeg on `PATH` | — | `brew install ffmpeg` / `apt-get install ffmpeg` |
+| ffmpeg on `PATH` | — | `brew install ffmpeg` / `apt-get install ffmpeg` (≥ 4.4 for audio tracks) |
+| kokoro-js (voiceover only, on demand) | — | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (≈250 MB) plus a one-time 90 MB voice model download; the agent asks first |
 
 ## Usage
 
@@ -155,6 +156,7 @@ Everything this plugin depends on is open source:
 | [Ajv](https://ajv.js.org) | MIT |
 | Inter, JetBrains Mono (via Fontsource) | OFL-1.1 |
 | ffmpeg (system binary, not vendored) | LGPL/GPL |
+| [Kokoro](https://github.com/hexgrad/kokoro) TTS (`kokoro-js`, installed on demand) | Apache-2.0 |
 
 Not used, by design: Remotion and GSAP (free to use, but not under OSI
 licences).

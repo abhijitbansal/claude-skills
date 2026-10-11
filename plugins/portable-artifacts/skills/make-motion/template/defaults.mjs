@@ -8,6 +8,7 @@ export function withDefaults(spec) {
   out.size ??= [...DEFAULTS.size];
   out.fps ??= DEFAULTS.fps;
   out.background ??= DEFAULTS.background;
+  out.audio = (out.audio ?? []).map((track) => ({ at: 0, volume: 1, fadeIn: 0, fadeOut: 0, ...track }));
   for (const scene of out.scenes) {
     scene.transition ??= 'none';
     for (const el of scene.elements) {

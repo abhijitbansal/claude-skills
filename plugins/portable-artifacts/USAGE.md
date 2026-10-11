@@ -105,7 +105,7 @@ work around this.
    play/pause, scene markers and frame-by-frame arrow keys. It reloads
    whenever `motion.json` changes, and shows validation errors in the page.
 5. `render.mjs motion.json` writes `out/motion.mp4` (1920×1080, 30 fps,
-   H.264).
+   H.264, plus AAC audio when the spec has `audio` tracks).
 
 **Other sizes:** set `"size": [1080, 1080]` in the spec for a square social
 clip, or override at render time with `--size 1280x720 --fps 24`. If the
@@ -114,6 +114,19 @@ background colour.
 
 **Charts in videos** are Vega-Lite specs with inline `data.values`. Animate
 `reveal` from 0 to 1 for a left-to-right wipe.
+
+**Audio is opt-in.** The agent adds `audio` tracks only when you ask for
+sound ("with background music from music.mp3", "with a voiceover reading
+it"); a prompt that says nothing about sound renders silent, as before.
+A track is a local file next to `motion.json` (mp3, wav, m4a, aac, ogg or
+flac) with `at` (seconds), or `scene` plus `at` so the clip moves with its
+scene, and optional `duration`, `volume`, `fadeIn` and `fadeOut`. ffmpeg
+mixes the tracks into the MP4 as AAC stereo; the preview plays them in sync
+(approximately; `M` mutes) and the MP4 timing is exact. Music is always a
+file you supply. For narration the agent runs
+`voice.mjs "<text>" --out voice/<scene>.wav` (Kokoro, local, 28 voices,
+`--voice af_heart` by default) after asking once to install `kokoro-js`
+(about 250 MB plus a 90 MB model downloaded a single time).
 
 ## 4. Asking for changes
 
@@ -146,6 +159,8 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `environment variable WAREHOUSE_URL is not set` | Export it in the shell (and in the cron/launchd environment) |
 | Query stopped after 30 s | Make it cheaper, or pass `--timeout 120` to `build` |
 | `npx playwright install chromium` hint on render | Install Chromium once, or install Google Chrome for the fallback |
+| `kokoro-js is not installed` | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (voiceover only; `npm ci` removes it) |
+| `audio[0].src: ffmpeg cannot decode …` | The file is not a valid audio file. Re-export it as mp3 or wav |
 | `ffmpeg not found` | `brew install ffmpeg`, `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` |
 | `remote data is not allowed` / `not allowed — external URLs are never fetched` | Charts must carry their data inline (motion) or come from a SQL query (dashboard) |
 | A final counter value or keyframe never shows | Frame *i* samples `t = i/fps`. End keyframes at least one frame before the scene ends |

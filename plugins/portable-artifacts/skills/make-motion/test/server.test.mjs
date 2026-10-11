@@ -2,10 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startServer } from '../scripts/lib/server.mjs';
+import { writeWav } from './helpers/wav.mjs';
 
 const spec = (title, src = 'pic.png') => ({ scenes: [{ id: 's', duration: 1, elements: [
   { id: 't', type: 'text', text: title, x: 1, y: 1 },
@@ -92,6 +93,49 @@ test('/assets serves only image srcs named in the spec; blocks traversal, symlin
   assert.equal((await get(srv.url, '/assets/.env')).status, 404);
 }));
 
+test('/assets serves audio named in spec.audio with its MIME; unreferenced audio is 404, images still work', () => withServer(async (srv, f) => {
+  writeWav(path.join(f.dir, 'voice.wav'), { seconds: 0.1 });
+  writeWav(path.join(f.dir, 'unused.wav'), { seconds: 0.1 });
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('a'), audio: [{ src: 'voice.wav' }] }));
+  const ok = await get(srv.url, '/assets/voice.wav');
+  assert.equal(ok.status, 200);
+  assert.equal(ok.headers['content-type'], 'audio/wav');
+  assert.equal((await get(srv.url, '/assets/unused.wav')).status, 404);
+  assert.equal((await get(srv.url, '/assets/pic.png')).body, 'public');
+}));
+
+test('/assets honours a byte Range request so the browser can seek audio', () => withServer(async (srv, f) => {
+  writeFileSync(path.join(f.dir, 'r.wav'), '0123456789');
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('a'), audio: [{ src: 'r.wav' }] }));
+  const whole = await get(srv.url, '/assets/r.wav');
+  assert.equal(whole.headers['accept-ranges'], 'bytes');
+  const part = await get(srv.url, '/assets/r.wav', { range: 'bytes=2-5' });
+  assert.equal(part.status, 206);
+  assert.equal(part.body, '2345');
+  assert.equal(part.headers['content-range'], 'bytes 2-5/10');
+  const tail = await get(srv.url, '/assets/r.wav', { range: 'bytes=7-' });
+  assert.equal(tail.body, '789');
+  const unsatisfiable = await get(srv.url, '/assets/r.wav', { range: 'bytes=50-60' });
+  assert.equal(unsatisfiable.status, 416);
+  assert.equal(unsatisfiable.headers['cache-control'], 'no-store');
+  const page = await get(srv.url, '/template/styles.css');
+  assert.equal(page.headers['accept-ranges'], undefined, 'only /assets advertises byte ranges');
+}));
+
+test('/assets maps every audio extension to an audio MIME', () => withServer(async (srv, f) => {
+  const mimes = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', flac: 'audio/flac' };
+  for (const ext of Object.keys(mimes)) writeFileSync(path.join(f.dir, `t.${ext}`), 'x');
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('a'), audio: Object.keys(mimes).map((ext) => ({ src: `t.${ext}` })) }));
+  for (const [ext, mime] of Object.entries(mimes)) {
+    assert.equal((await get(srv.url, `/assets/t.${ext}`)).headers['content-type'], mime, ext);
+  }
+}));
+
+test('/assets answers 404, not 500, while the spec is temporarily invalid JSON', () => withServer(async (srv, f) => {
+  writeFileSync(f.specPath, '{not json');
+  assert.equal((await get(srv.url, '/assets/pic.png')).status, 404);
+}));
+
 test('vendor routes and template serve 200', () => withServer(async (srv) => {
   for (const p of ['/vendor/animejs/anime.esm.js', '/vendor/vega/vega.min.js', '/vendor/vega-lite/vega-lite.min.js',
     '/vendor/vega-util/index.js', '/vendor/vega-interpreter/vega-interpreter.js',
@@ -133,4 +177,48 @@ test('/events emits spec-error with formatted errors when the changed spec is in
   assert.deepEqual(data[0], { path: 'fsp', message: 'unknown property; did you mean "fps"?' });
   const got2 = await sseUntil(srv, () => writeFileSync(f.specPath, '{not json'), /event: spec-error\ndata: .*\n\n/);
   assert.match(JSON.parse(/event: spec-error\ndata: (.*)\n/.exec(got2)[1])[0].message, /not valid JSON/);
+}));
+
+const openFds = () => readdirSync('/dev/fd').length;
+const BIG_FILE_BYTES = 1 << 20; // past the 64 KiB read-stream buffer
+const ABORTED_REQUESTS = 20;
+const FD_SLACK = 3;
+
+function abortedRangeGet(url, rawPath) {
+  const u = new URL(url);
+  return new Promise((resolve) => {
+    const req = http.get({ host: u.hostname, port: u.port, path: rawPath, headers: { range: 'bytes=0-' } }, (res) => {
+      res.once('data', () => { req.destroy(); resolve(); });
+    });
+    req.on('error', () => resolve());
+  });
+}
+
+test('an aborted /assets range request does not leak the file descriptor', { skip: !existsSync('/dev/fd') && 'no /dev/fd' }, () => withServer(async (srv, f) => {
+  writeFileSync(path.join(f.dir, 'big.wav'), Buffer.alloc(BIG_FILE_BYTES, 1));
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('a'), audio: [{ src: 'big.wav' }] }));
+  await abortedRangeGet(srv.url, '/assets/big.wav');
+  await new Promise((r) => setTimeout(r, 50));
+  const before = openFds();
+  for (let i = 0; i < ABORTED_REQUESTS; i++) await abortedRangeGet(srv.url, '/assets/big.wav');
+  await new Promise((r) => setTimeout(r, 100));
+  assert.ok(openFds() - before <= FD_SLACK, `fds grew from ${before} to ${openFds()}`);
+}));
+
+test('/events emits reload when a referenced audio file changes, even in a subfolder', () => withServer(async (srv, f) => {
+  mkdirSync(path.join(f.dir, 'voice'));
+  writeFileSync(path.join(f.dir, 'voice', 'intro.wav'), 'v1');
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('a'), audio: [{ src: 'voice/intro.wav' }] }));
+  await new Promise((r) => setTimeout(r, 300)); // let the spec write's own reload drain first
+  const seen = await new Promise((resolve, reject) => {
+    const u = new URL(srv.url);
+    const req = http.get({ host: u.hostname, port: u.port, path: '/events' }, (res) => {
+      let buf = '';
+      res.on('data', (c) => { buf += c; if (buf.includes('data: reload')) { req.destroy(); resolve(buf); } });
+      setTimeout(() => writeFileSync(path.join(f.dir, 'voice', 'intro.wav'), 'v2 longer'), 150);
+    });
+    req.on('error', reject);
+    setTimeout(() => reject(new Error('no reload event within 3 s')), 3000);
+  });
+  assert.match(seen, /data: reload/);
 }));

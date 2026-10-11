@@ -1,6 +1,6 @@
 // Local-only HTTP server for preview and render. Binds 127.0.0.1, accepts only
 // local Host headers, serves the page template, vendored libraries from
-// node_modules, the live spec, and the image files the spec names.
+// node_modules, the live spec, and the image and audio files the spec names.
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { readFileSync, statSync, createReadStream, watch } from 'node:fs';
@@ -21,6 +21,7 @@ const MIME = {
   '.json': 'application/json; charset=utf-8', '.woff2': 'font/woff2', '.woff': 'font/woff',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.txt': 'text/plain; charset=utf-8',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.flac': 'audio/flac',
 };
 
 const VENDOR_ROOTS = {
@@ -32,14 +33,41 @@ const VENDOR_ROOTS = {
 };
 const FONT_ROOTS = ['@fontsource/inter', '@fontsource/jetbrains-mono'].map((p) => path.join(NODE_MODULES, p, 'files'));
 
-function sendFile(res, file) {
-  res.writeHead(200, {
+// Single byte range from a Range header against a file of `size` bytes; null when absent or malformed.
+function parseRange(header, size) {
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header ?? '');
+  if (!m || (m[1] === '' && m[2] === '')) return null;
+  if (m[1] === '') return { start: Math.max(0, size - Number(m[2])), end: size - 1 };
+  return { start: Number(m[1]), end: m[2] === '' ? size - 1 : Math.min(Number(m[2]), size - 1) };
+}
+
+// `rangeHeader` is only passed for /assets: media elements need byte ranges to seek.
+// Ranges are advertised and honoured there only; every other route sends the whole file.
+function sendFile(res, file, rangeHeader) {
+  const size = statSync(file).size;
+  const headers = {
     'content-type': MIME[path.extname(file).toLowerCase()] ?? 'application/octet-stream',
-    'content-length': statSync(file).size,
+    'content-length': size,
     'cache-control': 'no-store',
-  });
-  const stream = createReadStream(file);
+  };
+  if (rangeHeader !== undefined) headers['accept-ranges'] = 'bytes';
+  const range = parseRange(rangeHeader, size);
+  let status = 200;
+  let streamOpts;
+  if (range && (range.start >= size || range.end < range.start)) {
+    res.writeHead(416, { 'content-range': `bytes */${size}`, 'cache-control': 'no-store' });
+    return res.end();
+  }
+  if (range) {
+    status = 206;
+    streamOpts = range;
+    headers['content-length'] = range.end - range.start + 1;
+    headers['content-range'] = `bytes ${range.start}-${range.end}/${size}`;
+  }
+  res.writeHead(status, headers);
+  const stream = createReadStream(file, streamOpts);
   stream.on('error', () => res.destroy());
+  res.on('close', () => stream.destroy()); // an aborted range request must not keep the fd open
   stream.pipe(res);
 }
 
@@ -59,21 +87,22 @@ function loadIndex(mode) {
   return { html: template.replace('{{MODE}}', mode), csp };
 }
 
-// Image srcs named by the current spec; /assets serves nothing else.
-function referencedImages(specFile) {
+// Image and audio srcs named by the current spec; /assets serves nothing else.
+function referencedAssets(specFile) {
   try {
     const spec = JSON.parse(readFileSync(specFile, 'utf8'));
-    const srcs = spec.scenes.flatMap((s) => s.elements).filter((e) => e.type === 'image').map((e) => e.src);
-    return new Set(srcs.map((src) => path.posix.normalize(String(src))));
+    const images = spec.scenes.flatMap((s) => s.elements).filter((e) => e.type === 'image').map((e) => e.src);
+    const audio = (spec.audio ?? []).map((a) => a.src);
+    return new Set([...images, ...audio].map((src) => path.posix.normalize(String(src))));
   } catch { return new Set(); }
 }
 
-function serveAsset(ctx, res, rel) {
+function serveAsset(ctx, req, res, rel) {
   let decoded;
   try { decoded = decodeURIComponent(rel); } catch { return notFound(res); }
-  if (!referencedImages(ctx.specFile).has(path.posix.normalize(decoded))) return notFound(res);
+  if (!referencedAssets(ctx.specFile).has(path.posix.normalize(decoded))) return notFound(res);
   const { file } = resolveAsset(ctx.specDir, decoded);
-  return file ? sendFile(res, file) : notFound(res);
+  return file ? sendFile(res, file, req.headers.range ?? '') : notFound(res);
 }
 
 function serveUnder(res, root, rel) {
@@ -106,7 +135,7 @@ function route(ctx, req, res) {
   if (pathname === '/spec.json') return serveSpec(ctx, res);
   if (pathname === '/events') return serveEvents(ctx, req, res);
   if (pathname.startsWith('/template/')) return serveUnder(res, TEMPLATE_DIR, pathname.slice('/template/'.length));
-  if (pathname.startsWith('/assets/')) return serveAsset(ctx, res, pathname.slice('/assets/'.length));
+  if (pathname.startsWith('/assets/')) return serveAsset(ctx, req, res, pathname.slice('/assets/'.length));
   if (pathname.startsWith('/vendor/fonts/')) return serveFont(res, pathname.slice('/vendor/fonts/'.length));
   const vendor = /^\/vendor\/([^/]+)\/(.*)$/.exec(pathname);
   if (vendor && VENDOR_ROOTS[vendor[1]]) return serveUnder(res, VENDOR_ROOTS[vendor[1]], vendor[2]);
@@ -143,13 +172,22 @@ function broadcastSpecState(ctx) {
   for (const c of ctx.clients) c.write(message);
 }
 
+// The spec file, or any image/audio file it references (also in subfolders), triggers a reload.
+function isWatched(ctx, name) {
+  if (!name) return false;
+  const rel = path.posix.normalize(String(name).replaceAll('\\', '/'));
+  return rel === path.basename(ctx.specFile) || referencedAssets(ctx.specFile).has(rel);
+}
+
 function watchSpec(ctx) {
   let timer = null;
-  const watcher = watch(ctx.specDir, (_event, name) => {
-    if (name !== path.basename(ctx.specFile)) return;
+  const onChange = (_event, name) => {
+    if (!isWatched(ctx, name)) return;
     clearTimeout(timer);
     timer = setTimeout(() => broadcastSpecState(ctx), WATCH_DEBOUNCE_MS);
-  });
+  };
+  let watcher;
+  try { watcher = watch(ctx.specDir, { recursive: true }, onChange); } catch { watcher = watch(ctx.specDir, onChange); }
   watcher.on('error', () => {}); // directory removed: previews just stop reloading
   return { stop: () => { clearTimeout(timer); watcher.close(); } };
 }

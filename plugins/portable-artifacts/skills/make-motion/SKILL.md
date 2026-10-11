@@ -1,6 +1,6 @@
 ---
 name: make-motion
-description: Use when the user wants a short animated explainer video (titles, counters, shapes, charts, images with keyframed motion) previewed locally and exported to MP4; spec-driven, offline, open source, works with any agent that can run shell commands.
+description: Use when the user wants a short animated explainer video (titles, counters, shapes, charts, images with keyframed motion) previewed locally and exported to MP4 with optional music or voiceover; spec-driven, offline, open source, works with any agent that can run shell commands.
 argument-hint: what to make, e.g. an 8s clip with Q3 revenue up 18% then a bar chart of Q1-Q3
 ---
 
@@ -10,11 +10,14 @@ You write one JSON file, `motion.json`. Scripts validate it, preview it in a bro
 
 `<skill-dir>` is the folder that contains this SKILL.md. Run every command from the project folder (where `motion.json` lives), using the full path to the scripts. Image paths resolve relative to the spec file. If the request is empty, ask what the video should say, how long it should be, and the size (default 1920x1080, 30 fps).
 
+**Audio is opt-in.** Add `audio` tracks only when the prompt asks for sound (music, soundtrack, voiceover, narration, "read it aloud", a sound effect) or the user confirms when you ask. Never add audio to a prompt that does not mention it. When the prompt is about sound but unclear (for example "make it feel polished" with an mp3 in the folder), ask one question before writing the spec. Music and sound effects are files the user supplies; a voiceover can be synthesised with `voice.mjs` (workflow step 2) when the prompt asks for narration without giving a file.
+
 ## First use (say what each step is before running it)
 
 1. `<skill-dir>/node_modules` missing: run `npm ci --prefix <skill-dir>` (animejs, vega-lite, playwright, fonts).
 2. Chromium for frame capture: ask first (about 150 MB), then run `npx playwright install chromium` inside `<skill-dir>`. If the user declines, rendering falls back to installed Google Chrome.
 3. `ffmpeg` not on PATH: stop and give the install command (`brew install ffmpeg` or `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH`). Never install system packages yourself.
+4. Voiceover requested and `<skill-dir>/node_modules/kokoro-js` missing: ask first (about 250 MB of packages plus a 90 MB voice model downloaded once on first use, then offline), then run `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>`. `npm ci` removes it again; reinstall when `voice.mjs` prints the hint. If the user declines, ask for a voice file instead.
 
 ## Workflow
 
@@ -22,10 +25,11 @@ Run every step yourself, in this same turn, with your shell or file tools. Do no
 
 1. Write `motion.json` in the project (shape below; full reference in `<skill-dir>/references/schema.md`; copy a file from `<skill-dir>/references/examples/` to start).
    Actually create the file: describing it or announcing a patch is not enough. If your file tool fails, write it from the shell (`cat > motion.json <<'EOF'` … `EOF`), then `ls motion.json` to confirm it exists before validating.
-2. `node <skill-dir>/scripts/validate.mjs motion.json` — fix every line it prints (`<json.path>: <message>`, with did-you-mean) and re-run until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage/IO error.
-3. Self-check: `node <skill-dir>/scripts/render.mjs motion.json --contact-sheet` writes `out/contact/<scene-id>.png` next to the spec (one frame per scene, at 85% of its duration). Look at each PNG: clipped text, invisible elements, overlaps, wrong fonts. Fix the spec and repeat.
-4. `node <skill-dir>/scripts/preview.mjs motion.json [--open]` prints a localhost URL with scrubber, play/pause, scene markers, Space and arrow keys. The page reloads when the file changes.
-5. `node <skill-dir>/scripts/render.mjs motion.json [--out out/video.mp4] [--fps 30] [--size 1920x1080]` writes the MP4 (H.264, yuv420p, no audio). It prints the path and frame count.
+2. Voiceover (only when asked, see above): write the narration to `voice/<scene-id>.txt` (plain spoken text, no markdown), then `node <skill-dir>/scripts/voice.mjs --text-file voice/<scene-id>.txt --out voice/<scene-id>.wav [--voice af_heart] [--speed 1]` writes a 24 kHz wav and prints its length. Use `--text-file`, not a quoted argument: the shell would expand `$4.2M` or backticks inside a double-quoted string and the clip would silently say something else. One clip per scene, scene-anchored in the spec (`"scene": "<id>", "at": 0.3`); keep each clip shorter than its scene (lengthen the scene if the printed duration does not fit). Voices: `af_heart` (default, warm US female), `af_bella`, `am_michael` (US male), `bf_emma` (UK female); `--list-voices` prints all. Write the narration text yourself from the prompt; keep it short and spoken, no markdown.
+3. `node <skill-dir>/scripts/validate.mjs motion.json` — fix every line it prints (`<json.path>: <message>`, with did-you-mean) and re-run until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage/IO error.
+4. Self-check: `node <skill-dir>/scripts/render.mjs motion.json --contact-sheet` writes `out/contact/<scene-id>.png` next to the spec (one frame per scene, at 85% of its duration). Look at each PNG: clipped text, invisible elements, overlaps, wrong fonts. Fix the spec and repeat.
+5. `node <skill-dir>/scripts/preview.mjs motion.json [--open]` prints a localhost URL with scrubber, play/pause, scene markers, Space and arrow keys. The page reloads when the file changes. It plays the audio tracks in sync (approximate; M mutes); the MP4 timing is exact.
+6. `node <skill-dir>/scripts/render.mjs motion.json [--out out/video.mp4] [--fps 30] [--size 1920x1080]` writes the MP4 (H.264, yuv420p; AAC audio when the spec has tracks). It prints the path and frame count.
 
 When asked for a change ("slow scene 2", "make the title blue"), edit only the fields the request names in `motion.json`, then validate again. Do not rewrite the spec from scratch.
 
@@ -42,11 +46,15 @@ When done, report the spec path, the MP4 path with its duration and size, and on
         { "id": "title", "type": "text", "text": "Q3 revenue up 18%", "x": 960, "y": 480,
           "fontSize": 96, "fontWeight": 700, "color": "#ffffff",
           "keyframes": [ { "t": 0, "opacity": 0, "y": 520 },
-                         { "t": 0.6, "opacity": 1, "y": 480, "ease": "outCubic" } ] } ] } ]
+                         { "t": 0.6, "opacity": 1, "y": 480, "ease": "outCubic" } ] } ] } ],
+  "audio": [
+    { "src": "music.mp3", "volume": 0.4, "fadeOut": 2 },
+    { "src": "voice.wav", "scene": "intro", "at": 0.5 } ]
 }
 ```
 
 - Root: `size` (default 1920x1080), `fps` (24, 25, 30, 60), `background`, `scenes` (1–50, total ≤ 120 s). Only `scenes` is required.
+- Audio track (optional root `audio` array, up to 20): `src` (relative to the spec, inside the spec folder; mp3, wav, m4a, aac, ogg or flac), `at` (seconds from the video start, default 0), `scene` (a scene `id`; `at` is then relative to that scene's start, so lengthening an earlier scene keeps a voiceover aligned), `duration` (trim, seconds), `volume` (0–1, default 1), `fadeIn` / `fadeOut` (seconds). `fadeOut` anchors to the `duration` trim or the video end; a clip that ends earlier gets no fade. No `loop`: a short music file just stops.
 - Scene: `id`, `duration` (0.2–60 s), `elements`, optional `background`, `transition` (`none` or `fade`, a 0.4 s fade-in). Only one scene is visible at a time; scenes play back to back.
 - Every element: `id` (unique in the whole spec), `type`, `x`, `y` (canvas pixels; the anchor is the element centre), optional `opacity`, `scale`, `rotate` (degrees), `keyframes`.
 - Types: `text`, `counter` (`from`, `to`, `decimals`, `prefix`, `suffix`; animate `value`), `shape` (`rect`, `ellipse`, `line`; a line is horizontal of length `width`, use `rotate` to angle it; animate `draw` 0–1), `image` (`src` relative to the spec), `chart` (`vegaLite` with inline `data.values`, `width`, `height`; animate `reveal` 0–1 for a left-to-right wipe).
@@ -63,4 +71,4 @@ If Node, Chromium or ffmpeg cannot be installed here, still write and validate `
 
 ## Security
 
-The preview server binds 127.0.0.1 only and accepts only local Host headers, and serves only this skill's own folders plus the image files the spec names. The renderer aborts every non-local request and sends a strict CSP. No network access at build, preview or render time.
+The preview server binds 127.0.0.1 only and accepts only local Host headers, and serves only this skill's own folders plus the image and audio files the spec names. The renderer aborts every non-local request and sends a strict CSP. No network access at validate, preview or render time. The one exception is `voice.mjs`: its first run downloads the Kokoro voice model (about 90 MB) from huggingface.co into `<skill-dir>/.cache/models`, after which it is offline too.

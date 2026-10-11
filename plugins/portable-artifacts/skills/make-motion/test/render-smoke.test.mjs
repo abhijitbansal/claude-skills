@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { findFfmpeg } from '../scripts/lib/ffmpeg.mjs';
 import { launchBrowser, guardNetwork } from '../scripts/lib/browser.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
+import { writeWav } from './helpers/wav.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER = path.join(root, 'scripts/render.mjs');
@@ -68,6 +69,96 @@ test('render q3-revenue at 320x180 / 10 fps, probe it, and the frame is not blan
   assert.equal(info.streams[0].height, 180);
   assert.ok(Math.abs(Number(info.format.duration) - 10) <= 0.1 + 1e-6, `duration ${info.format.duration}`);
   assert.equal(Number(info.streams[0].nb_frames), 100);
+  return undefined;
+});
+
+const DURATION_SLACK_S = 0.2;
+const SECONDS_PER_MINUTE = 60;
+const SCENE_SECONDS = 2;
+
+function audioSpec() {
+  const scene = (id) => ({ id, duration: SCENE_SECONDS, elements: [] });
+  return {
+    size: [160, 90],
+    scenes: [scene('one'), scene('two')],
+    audio: [
+      { src: 'music.wav', scene: 'one', at: 0.5, volume: 0.5, fadeIn: 0.3, fadeOut: 0.3 },
+      { src: 'voice.wav', scene: 'two', at: 0, duration: 1 },
+    ],
+  };
+}
+
+function containerDuration(stderr) {
+  const m = /Duration: (\d+):(\d+):(\d+\.\d+)/.exec(stderr);
+  return Number(m[1]) * SECONDS_PER_MINUTE * SECONDS_PER_MINUTE + Number(m[2]) * SECONDS_PER_MINUTE + Number(m[3]);
+}
+
+test('render with two audio tracks muxes one AAC stream and keeps the spec length', async (t) => {
+  const ff = await haveFfmpeg();
+  if (!ff || !(await haveBrowser())) return t.skip('browser or ffmpeg unavailable');
+  const dir = tmp('aud-');
+  writeWav(path.join(dir, 'music.wav'), { seconds: 3 });
+  writeWav(path.join(dir, 'voice.wav'), { seconds: 1 });
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify(audioSpec()));
+  const out = path.join(dir, 'v.mp4');
+  const r = render([path.join(dir, 'm.json'), '--out', out, '--fps', '10', '--size', '160x90']);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const info = spawnSync(ff, ['-i', out], { encoding: 'utf8' }).stderr;
+  assert.match(info, /Audio: aac/);
+  assert.match(info, /Audio: aac.*stereo/, 'the mix is always stereo, even from mono inputs');
+  assert.ok(containerDuration(info) <= SCENE_SECONDS * 2 + DURATION_SLACK_S, `duration ${containerDuration(info)}`);
+  return undefined;
+});
+
+const SILENCE_DB = -60;
+const meanDb = (ff, file, filters) => {
+  const r = spawnSync(ff, ['-i', file, '-af', `${filters}volumedetect`, '-f', 'null', '-'], { encoding: 'utf8' });
+  const m = /mean_volume: (-?[\d.]+) dB/.exec(r.stderr);
+  return m ? Number(m[1]) : Number.NaN;
+};
+
+test('a stereo track listed after a mono one keeps its channels and sample rate, and tracks start where the spec says', async (t) => {
+  const ff = await haveFfmpeg();
+  if (!ff || !(await haveBrowser())) return t.skip('browser or ffmpeg unavailable');
+  const dir = tmp('mix-');
+  writeWav(path.join(dir, 'voice.wav'), { seconds: 1, sampleRate: 24000 }); // what voice.mjs writes
+  writeWav(path.join(dir, 'music.wav'), { seconds: 3, sampleRate: 44100, channels: 2, leftOnly: true });
+  const spec = { size: [160, 90], scenes: [{ id: 'one', duration: 4, elements: [] }],
+    audio: [{ src: 'voice.wav', at: 0 }, { src: 'music.wav', at: 2.5 }] }; // mono voice first: the collapse trigger
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify(spec));
+  const out = path.join(dir, 'v.mp4');
+  const r = render([path.join(dir, 'm.json'), '--out', out, '--fps', '10', '--size', '160x90']);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const right = meanDb(ff, out, 'atrim=2.6:4,pan=mono|c0=c1,');
+  assert.ok(right < SILENCE_DB, `right channel should stay silent during left-only music, got ${right} dB`);
+  const left = meanDb(ff, out, 'atrim=2.6:4,pan=mono|c0=c0,');
+  assert.ok(left > -30, `left channel should carry the music, got ${left} dB`);
+  const gap = meanDb(ff, out, 'atrim=1.2:2.4,');
+  assert.ok(gap < SILENCE_DB, `nothing should play between the voice and the music (adelay), got ${gap} dB`);
+  return undefined;
+});
+
+test('render fails before launching a browser when an audio file cannot be decoded', async (t) => {
+  const ff = await haveFfmpeg();
+  if (!ff) return t.skip('ffmpeg unavailable');
+  const dir = tmp('badaud-');
+  writeFileSync(path.join(dir, 'voice.wav'), 'not audio');
+  const spec = { scenes: [{ id: 's', duration: 1, elements: [] }], audio: [{ src: 'voice.wav' }] };
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify(spec));
+  const r = render([path.join(dir, 'm.json'), '--out', path.join(dir, 'v.mp4')]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stderr, /audio\[0\]\.src: ffmpeg cannot decode voice\.wav: /);
+  assert.deepEqual(readdirSync(dir).filter((f) => f.endsWith('.mp4')), []);
+  return undefined;
+});
+
+test('--contact-sheet ignores audio, even an undecodable file', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const dir = tmp('csaud-');
+  writeFileSync(path.join(dir, 'voice.wav'), 'not audio');
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify({ scenes: [{ id: 's', duration: 1, elements: [] }], audio: [{ src: 'voice.wav' }] }));
+  const r = render([path.join(dir, 'm.json'), '--contact-sheet', '--out', dir, '--size', '160x90']);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
   return undefined;
 });
 
