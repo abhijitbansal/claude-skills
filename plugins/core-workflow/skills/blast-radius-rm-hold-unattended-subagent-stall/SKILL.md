@@ -28,7 +28,7 @@ commands, so agents reached for `rm` as routine tidy-up.
    unnecessary:
    ```bash
    OUT="$(mktemp -d "${TMPDIR:-/tmp}/scenarios.XXXXXX")"   # fresh dir per run
-# (or use the session scratch dir)
+   # (or use the session scratch dir)
    run_scenario "$OUT/case-1"    # nothing to clean up afterwards
    ```
 2. Write harnesses to a file with the Write tool and run the file, rather
@@ -51,7 +51,7 @@ commands, so agents reached for `rm` as routine tidy-up.
 ## Evidence
 
 Mined from session digests; 8 sessions across 3 projects. claude-skills
-`094ecb81` (the Blast Radius hold text above), foundry `41c27adc` (safety
+`094ecb81` (the Blast Radius hold text above), a private web project `41c27adc` (safety
 check blocked an `rm -rf` in a test loop; rewritten to a temp dir per
 scenario), a private-bot worktree `60710e29` (a report-only sweeper
 hung on a blocked call).

@@ -238,7 +238,7 @@ Templated skills (`release`, `ios-build`, `app-preview`) source `skills/_lib/loa
 
 ## Open follow-ups
 
-- **doc-scan cutover** — still has its own `scripts/claude-setup/` and `.claude/skills/{commit,linear-pm,paperix-preview,release,ios-build}/`. Once the symlinked skills here are battle-tested on a Paperix release cycle, delete the doc-scan copies and add `doc-scan/.claude/app.yml`.
+- **Legacy app cutover** — an older app repo may still have its own `scripts/claude-setup/` and `.claude/skills/{commit,linear-pm,<app>-preview,release,ios-build}/`. Once the symlinked skills here are battle-tested on one of its release cycles, delete the local copies and add `<app>/.claude/app.yml`.
 - **Mac mini validation** — clone fresh, run `setup.sh`, run a real `release` cycle. Original failure mode never reproduced; defensive measures in place.
 - **Phase 2: marketplace publication** — register the repo as a Claude marketplace + push skills to skills.sh so friends can `claude plugin marketplace add <yours>`. Out of scope for v1.
 - **Caveman skills under `~/.claude/skills/`** — symlinks to `~/.agents/skills/caveman*` exist but aren't in any lockfile. Provenance unknown — investigate before next capture.

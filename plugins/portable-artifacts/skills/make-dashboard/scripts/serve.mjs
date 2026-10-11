@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// node scripts/serve.mjs [dir] [--port n] [--open]   static server on 127.0.0.1 only
+// node scripts/serve.mjs [dir] [--port n] [--open]   static server on 127.0.0.1 only, local Host headers only
 // exit 2 on usage errors or when the port cannot be bound
 import fs from 'node:fs';
 import http from 'node:http';
@@ -34,7 +34,17 @@ try {
 const inside = (p) => p === root || p.startsWith(root + path.sep);
 const reply = (res, code, text) => res.writeHead(code, { 'content-type': 'text/plain' }).end(text);
 
+// Only local Host headers are served (DNS rebinding); the port is known once listening.
+const hostAllowed = (host) => {
+  const { port: bound } = server.address();
+  return host === `127.0.0.1:${bound}` || host === `localhost:${bound}`;
+};
+
 const server = http.createServer((req, res) => {
+  if (!hostAllowed(req.headers.host)) {
+    reply(res, 403, 'forbidden host');
+    return;
+  }
   let rel;
   try {
     rel = decodeURIComponent(new URL(req.url, 'http://127.0.0.1').pathname);

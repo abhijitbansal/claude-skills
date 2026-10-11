@@ -23,7 +23,7 @@ final class PhotoSyncRunGuard {
 ```
 
 `isProcessing` no-op guard for UI actions, and idempotent lifecycle
-(floorprint: `viewDidAppear` fired twice → restarted the capture session, reset
+(a private floor-plan scanner app: `viewDidAppear` fired twice → restarted the capture session, reset
 the elapsed clock, leaked a second timer):
 
 ```swift

@@ -65,7 +65,8 @@ padding rule is rarely the only offender once you go looking.
 The nav or footer differs across pages that are supposed to share identical
 site-wide navigation: the homepage has a link that privacy.html or
 support.html is missing, the footer is missing a link on some pages but not
-others, or a page's *own* nav is missing the link back to itself.
+others, or a page's *own* nav silently drops the link to itself (a per-page
+"self-omit" rule), so the nav is a different shape on every page.
 
 ### Root cause
 No single source of truth for the link list. Each page's nav and footer
@@ -75,9 +76,9 @@ copy-paste drift, not a CSS issue.
 
 A specific trap that caused one of the missing-link regressions: a
 "self-omit" rule — logic meant to hide the current page's own link from its
-own nav (so you're not shown a link to the page you're already on). Because
-this was implemented per-page rather than derived centrally, it silently
-dropped the wrong link on one page.
+own nav. Because it was implemented per-page, it gave every page a different
+nav shape and, when buggy, dropped the wrong link. Rendering all links with
+`aria-current` (see Fix) removes the rule.
 
 ### Fix
 Generate nav/footer markup from one shared list (a JS array, a template
@@ -97,18 +98,22 @@ const NAV_LINKS = [
   { href: '/privacy.html', label: 'Privacy' },
 ];
 
+// Render EVERY link on every page; mark the current one instead of omitting it.
 function renderNav(currentPath) {
   return NAV_LINKS
-    .filter(link => link.href !== currentPath) // the self-omit rule — the one place a link silently disappears
-    .map(link => `<a href="${link.href}">${link.label}</a>`)
+    .map(link => {
+      const current = link.href === currentPath ? ' aria-current="page"' : '';
+      return `<a href="${link.href}"${current}>${link.label}</a>`;
+    })
     .join('');
 }
 ```
 
-If a self-omit (or any other per-page conditional) rule exists, treat it as
-the highest-suspicion line in the file when a link goes missing — it is
-exactly the kind of logic that looks correct for the page you're testing and
-wrong for every other page.
+Style the current link via `a[aria-current="page"]` if it should look
+different. Do not reintroduce a self-omit `.filter(...)`: if a self-omit (or
+any other per-page conditional) rule exists, treat it as the highest-suspicion
+line in the file when a link goes missing — it is exactly the kind of logic
+that looks correct for the page you're testing and wrong for every other page.
 
 ## Evidence
 

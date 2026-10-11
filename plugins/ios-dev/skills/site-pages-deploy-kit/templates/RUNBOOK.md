@@ -50,8 +50,8 @@ skill `site-og-favicon-verify`).
 
 ## Per-app migration notes (2026-07)
 
-- **cubby-site / paperix-site** — already split-repo; align pages to the
+- **cubby-site / a second app site (a private document-scanner app)** — already split-repo; align pages to the
   skeleton (CSP meta, og dims, favicon set), add the deploy-site.yml workflow
-  + deploy key, keep existing content. paperix-site: refresh stale assets via
-  doc-scan's `refresh-site-assets.sh` first.
-- **floorprint** — already fully on this model (it IS the model). Nothing to do.
+  + deploy key, keep existing content. The second app site: refresh stale assets via
+  the scanner app's `refresh-site-assets.sh` first.
+- **a private floor-plan scanner app** — already fully on this model (it IS the model). Nothing to do.

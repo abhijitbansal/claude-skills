@@ -48,9 +48,24 @@ extracted.**
 
 ```swift
 // Inside the write session's delegate callback — NOT a separate @concurrent helper.
-func readerSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
-    let tag = tags.first!
-    session.connect(to: tag) { error in
+func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
+    guard let detected = tags.first else { return }
+    // NFCTag is an enum; the NFCNDEFTag-conforming value is its associated payload.
+    let tag: NFCNDEFTag
+    switch detected {
+    case .miFare(let t): tag = t
+    case .iso7816(let t): tag = t
+    case .feliCa(let t): tag = t
+    case .iso15693(let t): tag = t
+    @unknown default:
+        session.invalidate(errorMessage: "Unsupported tag type")
+        return
+    }
+    session.connect(to: detected) { error in
+        guard error == nil else {
+            session.invalidate(errorMessage: "Could not connect to tag")
+            return
+        }
         // readNDEF happens inline, in this session, on this tag.
         tag.readNDEF { message, error in
             // Pure, Sendable, unit-testable — no NFCTag crosses this boundary.

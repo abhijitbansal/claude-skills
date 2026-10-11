@@ -28,10 +28,14 @@ and easy-to-conflate purposes:
 2. **App Store Connect "What's New" / "What to Test"** — metadata fields
    attached to a version/build record in App Store Connect, edited through
    the web UI (or a metadata-upload tool). These are **completely
-   independent of the binary** — a `fastlane pilot`/`fastlane deliver` upload
-   with `skip_waiting_for_build_processing` cannot push this text; it always
-   requires a separate, usually manual, paste step once the build finishes
-   processing.
+   independent of the binary** and of the in-app data: they drift silently
+   unless the release step feeds the same text to both.
+
+   **Nuance: the text can ride along with a lane.**
+   `deliver` sets What's New from `fastlane/metadata/<locale>/release_notes.txt`,
+   and `pilot` has a `changelog:` option for What to Test. The surfaces are
+   still independent of the binary, so the drift risk remains: the file or lane
+   argument must be updated to match the in-app data, and nothing checks that.
 
 A preflight gate that only checks "does the release-notes file have an entry
 for this version" (the ASC-metadata side) gives false confidence — it says
@@ -72,7 +76,7 @@ Treat the two surfaces as genuinely separate checklist items, not one
 
 ## Evidence
 
-- **Paperix** (`WhatsNewGate.swift`) — `WhatsNewGateModifier` presents the
+- **a private document-scanner app** (`WhatsNewGate.swift`) — `WhatsNewGateModifier` presents the
   sheet by comparing `WhatsNew.bundled?.currentVersion` (the compiled-in
   payload, backed by `FeatureCatalog.swift`/`WhatsNew.swift`) against
   `lastSeenWhatsNewVersion` in `UserDefaults`. `WhatsNew.bundled` only

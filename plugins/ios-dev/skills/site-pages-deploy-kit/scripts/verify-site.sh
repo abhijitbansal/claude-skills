@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Lint the app site for the unfurl/CSP/asset bugs that recurred across
-# doc-scan, floorprint and sift: og:image absolute + true dimensions,
+# three private sites: og:image absolute + true dimensions,
 # CSP meta present, self-hosted assets only, favicon set complete.
 #
 # Usage: verify-site.sh [site-dir]   (default: app.yml site.dir, else ./site)

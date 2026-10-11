@@ -29,7 +29,7 @@ containers (production, in-memory tests, a coexisting
 `NSPersistentCloudKitContainer`) open the same store with schemas assembled
 inline, any drift between them corrupts data.
 
-## Fix — four rule groups
+## Fix — five rule groups
 
 ### 1. Always pass `cloudKitDatabase` explicitly
 
@@ -135,7 +135,7 @@ not either mode alone, is the untested seam.
   `coalesce re-entrant photo-sync passes via PhotoSyncRunGuard` and the
   surrounding photo-sync commit series (externalStorage↔CKAsset reconcile,
   per-batch save + `Task.yield()`).
-- All four rule groups mined from cubby's CloudKit adoption; none produced a
+- All five rule groups mined from cubby's CloudKit adoption; none produced a
   compile error — every one surfaced as a runtime container-init crash,
   bricked launch, or silent mis-sync.
 - **Rule 5:** 0016 session-end checkpoint: "Research-driven correction to the

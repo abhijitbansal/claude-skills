@@ -97,7 +97,7 @@ from becoming an item name.
   `.warnAllowOverride` / `.autoAccept`, threshold lowered 80 → 50, auto-accept
   after retry budget) and the auto-naming cleanup after background OCR prose
   ("Complete the form below and") became an item name.
-- **doc-scan (Paperix)** — shares the auto-naming discipline; had *no*
+- **a private document-scanner app** — shares the auto-naming discipline; had *no*
   sharpness gate at all (the gap this skill closes for new scanning apps).
 - Mining report Themes 3.3–3.4 (`docs/superpowers/specs/2026-07-01-ios-mining-report.md`).
 

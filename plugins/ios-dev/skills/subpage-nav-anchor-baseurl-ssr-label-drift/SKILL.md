@@ -77,7 +77,7 @@ re-verified when the site (or a client-side default) grew past it:
 
 ## Evidence
 
-Mined from a foundry Astro site served under a GitHub Pages project base
+Mined from an Astro site (a private web project) served under a GitHub Pages project base
 path (`base: '/repo/'`), growing from one page to several. Three related
 failure modes, all shipped and user-reported/review-caught:
 

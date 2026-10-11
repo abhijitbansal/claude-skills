@@ -79,3 +79,6 @@ only the two genuine "Scan" pills that actually wanted auto-trigger.
   shape: there it's solved by making the shared dependency *optional* per
   call site; here the fix is *splitting* the shared identifier into distinct
   cases when intents genuinely diverge.
+- `siri-app-intents-ios26-reliability` — App Intents/Siri shortcuts are one
+  of the shared-action surfaces this audit covers; that skill covers making
+  them fire reliably.

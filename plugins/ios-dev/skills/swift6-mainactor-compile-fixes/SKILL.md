@@ -49,6 +49,9 @@ already execute at runtime. Process:
    `let` before the `MainActor.run` hop — a 2-line fix, no restructuring.
 6. Extensions get their own implicit isolation — a `nonisolated` parent type
    does NOT cover a separate `extension`; mark it too.
+7. Under `SWIFT_APPROACHABLE_CONCURRENCY` (SE-0461) a plain `nonisolated async`
+   function runs on the caller's actor; mark it `@concurrent` to genuinely hop
+   off the main actor.
 
 Safe-off-main APIs worth knowing: SceneKit scene-graph construction
 (`SCNScene` / `SCNNode` building), `UIGraphicsPDFRenderer`, CoreGraphics PDF
@@ -56,9 +59,18 @@ contexts.
 
 ## Hard rules — do NOT regress
 
-No `@unchecked Sendable`, no `nonisolated(unsafe)`, no `@preconcurrency`. If a
+For pure-compute value types (exporters, geometry builders, parsers, DTOs): no
+`@unchecked Sendable`, no `nonisolated(unsafe)`, no `@preconcurrency`. If such a
 type can't be made `nonisolated` honestly, fix the call site instead. These
 rules apply to both the general case and the struct-Codable sub-case below.
+
+They do not cover non-Sendable framework or hardware objects. There the escape
+hatches can be legitimate when a value is handed once across the boundary and
+the invariant is documented — see `avfoundation-capture-delivery-watchdog` (an
+`@unchecked Sendable` settings box handed once to `sessionQueue`). For
+session-scoped handles that must not leave their context at all, see
+`nonsendable-hardware-handle-inline-io` (do the I/O inline rather than forcing
+the handle across).
 
 ## Example shape (general case)
 

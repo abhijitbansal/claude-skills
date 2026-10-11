@@ -13,8 +13,11 @@
 #   1  — one or more checks failed; see [FAIL] / [WARN] entries above
 #
 # Usage:
-#   ./.claude/skills/linear-pm/scripts/bootstrap.sh
-#   ./.claude/skills/linear-pm/scripts/bootstrap.sh --quiet   # only print failures + summary
+#   <plugin root>/skills/linear-pm/scripts/bootstrap.sh
+#   <plugin root>/skills/linear-pm/scripts/bootstrap.sh --quiet   # only print failures + summary
+# <plugin root> is the installed plugin directory
+# (~/.claude/plugins/cache/<marketplace>/linear-pm/<version>) or a source
+# checkout's plugins/linear-pm. Run it from the repo being checked.
 
 set -uo pipefail   # not -e; we want to keep going past failures and report all of them
 
@@ -61,7 +64,7 @@ fi
 if git rev-parse --show-toplevel >/dev/null 2>&1; then
   ok "inside a git repo ($(git rev-parse --show-toplevel))"
 else
-  fail "not inside a git repo" "cd into the Paperix repo before running this script"
+  fail "not inside a git repo" "cd into your app repo before running this script"
 fi
 
 # --- 3. gh CLI installed ---
@@ -159,7 +162,7 @@ if [[ $FAIL -eq 0 ]]; then
     printf "  • File a feature:    ${B}/linear-new \"<title>\"${X}\n"
     printf "  • Pick it up:        ${B}/linear-pick${X} (after adding agent-ready in Linear UI)\n"
     printf "  • See what's flying: ${B}/linear-status${X}\n"
-    printf "  • Full guide:        ${B}.claude/skills/linear-pm/README.md${X}\n"
+    printf "  • Full guide:        ${B}%s${X}\n" "$SCRIPT_DIR/../README.md"
   }
   exit 0
 else

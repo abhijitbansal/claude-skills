@@ -21,7 +21,7 @@ description: Publishing a multi-GB ML model / media pack / offline-data asset vi
 
 ## Root cause
 
-Background Assets' `Manifest.json` schema is undocumented-feels: it isn't
+Background Assets' `Manifest.json` schema is effectively undocumented: it isn't
 stable across Xcode versions, so any copy-pasted or memorized schema is a
 snapshot that can already be stale. There is no local step that checks a
 downloadable source asset against on-disk caches by content before re-fetching
@@ -76,6 +76,9 @@ From Cubby iOS session logs (session 0022, mined and adversarially verified):
 
 ## Related skills
 
+- `background-assets-apple-hosted-packs` — builds on this skill; covers the
+  delivery/extraction failures (download or extract errors on device or
+  TestFlight) that this skill does not.
 - `release` — reuses the same App Store Connect API key / fastlane
   credential setup (`~/.app-store-connect/`, `API_PRIVATE_KEYS_DIR`) that
   `xcrun altool --upload-asset-pack` piggybacks on.

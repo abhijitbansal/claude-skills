@@ -2,15 +2,16 @@
 
 A small set of `/linear-*` slash commands that turn Linear into the source of truth for "what to build next," and let Claude pick up an issue, branch it, implement it, run your verify commands, and open a PR — without leaving the repo.
 
-Skill internals (label/status/branch conventions) live in [`SKILL.md`](SKILL.md). Per-repo policy lives in [`.claude/linear.yml`](../../linear.yml).
+Skill internals (label/status/branch conventions) live in [`SKILL.md`](SKILL.md). Per-repo policy lives in `.claude/linear.yml` in the repo you run the commands against (template: [`templates/linear.yml.template`](templates/linear.yml.template)).
 
 ## Prerequisites — run the bootstrap
 
-From the repo root:
-
-```bash
-./.claude/skills/linear-pm/scripts/bootstrap.sh
-```
+Run `/linear-init` inside Claude Code (it runs the bootstrap). From a
+terminal, run it from the repo root using the installed copy at
+`~/.claude/plugins/cache/<marketplace>/linear-pm/<version>/skills/linear-pm/scripts/bootstrap.sh`
+(or a source checkout's `plugins/linear-pm/skills/linear-pm/scripts/bootstrap.sh`).
+`CLAUDE_PLUGIN_ROOT` is set only inside plugin execution contexts, so it is
+not available in a plain terminal.
 
 It checks `git`, `gh` (installed + authenticated), this being a git repo, and `.claude/linear.yml` having the required keys. For each missing piece it prints the exact command to fix it. Idempotent — run it whenever you suspect setup drift. **It does not install anything for you** (so it can never accidentally `brew install` something on the wrong machine) — it just diagnoses.
 
@@ -31,17 +32,17 @@ The everyday loop.
    ```
    /linear-new "Add dark-mode toggle to settings"
    ```
-   Answer the prompts: type (`feature`), Why (one sentence), What (one or two sentences), Acceptance criteria (at least one checkbox). Claude returns `Created ABH-XXX: <title> — <linear url>`.
+   Answer the prompts: type (`feature`), Why (one sentence), What (one or two sentences), Acceptance criteria (at least one checkbox). Claude returns `Created TEAM-123: <title> — <linear url>`.
 
 2. **Mark it `agent-ready` in the Linear web UI.** Open the URL from step 1 → Labels → add `agent-ready`. This is the human gate that says "an agent may touch this." Claude does not add this label itself.
 
 3. **Trigger the pickup:**
    ```
-   /linear-pick ABH-XXX
+   /linear-pick TEAM-123
    ```
    (or just `/linear-pick` to grab the highest-priority agent-ready issue.)
 
-4. **Review what comes back.** Current repo is in `autonomy: review-only`, so you'll get a 5–15 line plan as a Linear comment (prefixed `🤖 Plan (review-only) —`). No branch, no code, no PR. Read the plan in Linear; if it makes sense, go to Flow 2.
+4. **Review what comes back.** With `autonomy: review-only` (the default), you'll get a 5–15 line plan as a Linear comment (prefixed `🤖 Plan (review-only) —`). No branch, no code, no PR. Read the plan in Linear; if it makes sense, go to Flow 2.
 
 ### Flow 2 — Switch from review-only to letting Claude actually write code
 
@@ -51,14 +52,14 @@ After you've reviewed the plan from Flow 1 and want execution.
 
 2. **Re-label and re-pick:** in Linear, ensure `agent-ready` is still on the issue, then in Claude Code:
    ```
-   /linear-pick ABH-XXX
+   /linear-pick TEAM-123
    ```
 
 3. **What happens automatically:**
-   - Branch `agent/ABH-XXX-<slug>` is created.
+   - Branch `agent/TEAM-123-<slug>` is created.
    - Claude implements the change, committing as it goes.
-   - `./build.sh` (your configured `verify`) runs — if it fails, the issue is auto-labeled `agent-blocked` with the failing command + tail of output as a Linear comment, and Claude stops.
-   - On success: branch is pushed, PR is opened with title `ABH-XXX: <title>` and body `Fixes ABH-XXX`. Linear issue moves to `In Review`.
+   - Each command in your configured `verify` (e.g. `./build.sh`) runs — if it fails, the issue is auto-labeled `agent-blocked` with the failing command + tail of output as a Linear comment, and Claude stops.
+   - On success: branch is pushed, PR is opened with title `TEAM-123: <title>` and body `Fixes TEAM-123`. Linear issue moves to `In Review`.
 
 4. **You merge.** The skill never merges PRs. Review the PR on GitHub, merge there, and Linear auto-closes via the `Fixes` keyword.
 
@@ -95,7 +96,7 @@ When you're context-switching back to the project and want to know what the agen
 
 If you created a branch and started coding without `/linear-pick` (e.g., you knew the change off the top of your head), use this to bring Linear up to date.
 
-1. Make sure your branch name contains the Linear issue key somewhere (e.g., `abhi/ABH-123-quick-fix` or `agent/ABH-123-foo`). `/linear-sync` parses the key out of the branch name.
+1. Make sure your branch name contains the Linear issue key somewhere (e.g., `you/TEAM-123-quick-fix` or `agent/TEAM-123-foo`). `/linear-sync` parses the key out of the branch name.
 
 2. ```
    /linear-sync
@@ -111,7 +112,7 @@ If you created a branch and started coding without `/linear-pick` (e.g., you kne
 When you (the human) need to flag an issue as blocked so it doesn't get picked up by `/linear-pick`, and so `/linear-status` surfaces it.
 
 1. ```
-   /linear-block ABH-XXX "Need design clarification on the toggle position"
+   /linear-block TEAM-123 "Need design clarification on the toggle position"
    ```
 
 2. What it does:
@@ -127,30 +128,30 @@ The default `/linear-pick` flow uses `git checkout -b` in the current working tr
 
 1. **Before** triggering `/linear-pick`, create a worktree for the issue:
    ```bash
-   git worktree add ../doc-scan-ABH-123 -b agent/ABH-123-dark-mode
+   git worktree add ../myapp-TEAM-123 -b agent/TEAM-123-dark-mode
    ```
 
 2. **Start a fresh Claude session in the worktree:**
    ```bash
-   cd ../doc-scan-ABH-123
-   claude --remote-control "ABH-123 dark mode"
+   cd ../myapp-TEAM-123
+   claude --remote-control "TEAM-123 dark mode"
    ```
 
 3. **Inside that session, run `/linear-pick`:**
    ```
-   /linear-pick ABH-123
+   /linear-pick TEAM-123
    ```
-   Because the branch is already checked out in this worktree, `/linear-pick` operates within it. A second worktree at `../doc-scan-ABH-456/` can run in parallel without colliding.
+   Because the branch is already checked out in this worktree, `/linear-pick` operates within it. A second worktree at `../myapp-TEAM-456/` can run in parallel without colliding.
 
 4. **When the PR is merged, clean up:**
    ```bash
-   git worktree remove ../doc-scan-ABH-123
-   git branch -d agent/ABH-123-dark-mode    # if GitHub didn't auto-delete on merge
+   git worktree remove ../myapp-TEAM-123
+   git branch -d agent/TEAM-123-dark-mode    # if GitHub didn't auto-delete on merge
    ```
 
 **Worktree gotchas:**
-- **Xcode DerivedData is shared** across all worktrees of the same project — two simultaneous `./build.sh` invocations can race. Stagger them, or use the `app-preview` skill's `--no-build` path on one.
-- **`.imessage-to` is gitignored**, so each fresh worktree starts without it. Recreate per worktree: `echo 'you@example.com' > .claude/skills/app-preview/.imessage-to`.
+- **Shared build caches** (e.g. Xcode DerivedData) are shared across all worktrees of the same project — two simultaneous `verify` builds can race. Stagger them.
+- **Gitignored local files** (env files, per-machine config) don't exist in a fresh worktree. Recreate them per worktree.
 - **`.claude/linear.yml` is tracked**, so all worktrees share the same `autonomy:` policy — you can't have one worktree at `review-only` and another at `allowed`.
 
 ### Flow 8 — Recover from an `agent-blocked` issue
@@ -163,7 +164,7 @@ When `/linear-pick` self-blocked (verify failed, diff too large, ambiguous spec,
 
 3. **Decide:** retry from the existing branch or start fresh?
    - **Retry:** keep the branch, push fixes, run `/linear-sync` to update Linear.
-   - **Start fresh:** delete the branch (`git branch -D agent/ABH-XXX-...` + `git push origin --delete agent/ABH-XXX-...`), remove `agent-blocked` in Linear, re-add `agent-ready`, re-run `/linear-pick ABH-XXX`.
+   - **Start fresh:** delete the branch (`git branch -D agent/TEAM-123-...` + `git push origin --delete agent/TEAM-123-...`), remove `agent-blocked` in Linear, re-add `agent-ready`, re-run `/linear-pick TEAM-123`.
 
 ---
 
@@ -190,9 +191,9 @@ verify:                      # commands /linear-pick must run green before openi
   - ./build.sh
 max_pr_lines: 500            # diff size beyond which /linear-pick self-blocks
 default_labels:              # labels added to every /linear-new issue on top of the type label
-  - paperix
+  - myapp
 poll:
-  enabled: false             # if true, an external polling agent wakes /linear-pick on a schedule
+  enabled: false             # if true, an external scheduler (not shipped with this plugin) wakes /linear-pick on a schedule
   interval_minutes: 60
 ```
 

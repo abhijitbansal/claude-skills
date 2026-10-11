@@ -46,7 +46,12 @@ enum WidgetSnapshotWriter {
             generatedAt: .now)
         do {
             let data = try JSONEncoder().encode(snapshot)
-            try data.write(to: url, options: [.atomic, .completeFileProtectionUnlessOpen])
+            // UntilFirstUserAuthentication, not UnlessOpen: a Lock Screen/StandBy
+            // widget can't open the file while the device is locked (blank widget).
+            // Trade-off: readable after first unlock until reboot. The snapshot
+            // holds real titles on disk; redaction happens at render time
+            // (invariant B).
+            try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             // INVARIANT B, write half: mirror the App-Lock flag into the shared
             // suite — the ONE source of truth for the redaction decision.
             UserDefaults(suiteName: WidgetBridge.appGroupID)?

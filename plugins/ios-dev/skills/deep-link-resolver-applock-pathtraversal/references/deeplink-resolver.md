@@ -14,7 +14,7 @@ nonisolated enum DeepLinkResolver {
         knownDocumentIDs: Set<UUID>
     ) -> DeepLinkAction {
         guard !isLocked else { return .ignore }   // DROP, never defer
-        guard url.scheme == "paperix" else { return .ignore }
+        guard url.scheme == "myapp" else { return .ignore }
         switch url.host {
         case "doc":
             guard let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?

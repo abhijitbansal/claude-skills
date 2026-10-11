@@ -64,3 +64,11 @@ MinimumOSVersion X" wording is misleading; the string is simply unrecognized).
 There is no install-time LiDAR gate — use a runtime check like
 `RoomCaptureSession.isSupported`. Distinguish severities: `ITMS` errors block;
 `server_warning` entries (e.g. `ITMS-90984`) do not.
+
+## Related skills
+
+- `xcode-cloud-post-clone-contract` — the `ci_post_clone.sh` contract; check
+  it when the cloud archive breaks before reaching App Store Connect
+  validation.
+- `release` — Stage 6 runs the same `xcrun altool --validate-app` against the
+  locally built `.ipa`.

@@ -34,12 +34,33 @@ run_hook() {  # $1 = hook name, e.g. s5-pre
   fi
 }
 
+# Credentials (Stage 0 files): KEY_ID / ISSUER_ID feed the Fastfile's ASC_*
+# env vars (Stage 5) and altool (Stage 6). Pre-set ASC_* values win.
+# Kept self-contained so tests/bats/release.bats can extract and run it.
+load_asc_credentials() {
+  if [[ -f "${HOME}/.app-store-connect/config" ]]; then
+    # shellcheck disable=SC1091
+    source "${HOME}/.app-store-connect/config"
+  fi
+  # altool finds AuthKey_<KEY_ID>.p8 via API_PRIVATE_KEYS_DIR; Stage 0 puts it here.
+  export API_PRIVATE_KEYS_DIR="${API_PRIVATE_KEYS_DIR:-${HOME}/.app-store-connect}"
+  if [[ -n "${KEY_ID:-}" && -n "${ISSUER_ID:-}" ]]; then
+    export ASC_KEY_ID="${ASC_KEY_ID:-${KEY_ID}}"
+    export ASC_ISSUER_ID="${ASC_ISSUER_ID:-${ISSUER_ID}}"
+    # Derive the path from the (possibly pre-set) ASC_KEY_ID so the key file
+    # matches the key id in use; a pre-set ASC_KEY_PATH still wins.
+    export ASC_KEY_PATH="${ASC_KEY_PATH:-${API_PRIVATE_KEYS_DIR}/AuthKey_${ASC_KEY_ID}.p8}"
+  fi
+}
+
 # --- Stage 1: preflight gates
 if [[ ${FORCE} -eq 1 ]]; then
   bash "${SCRIPT_DIR}/preflight.sh" --mode "${MODE}" || echo "preflight FAILs bypassed (--force)"
 else
   bash "${SCRIPT_DIR}/preflight.sh" --mode "${MODE}"
 fi
+
+load_asc_credentials  # sets KEY_ID / ISSUER_ID globals; exports ASC_* + API_PRIVATE_KEYS_DIR
 
 # --- Stage 5: archive + export
 run_hook s5-pre
@@ -49,14 +70,21 @@ if [[ -f fastlane/Fastfile ]]; then
   bundle exec fastlane archive
 else
   archive_path="build/${APP_NAME}.xcarchive"
-  xcodebuild archive \
-    -scheme "${APP_SCHEME}" \
-    -configuration Release \
-    -destination "generic/platform=iOS" \
-    -archivePath "${archive_path}" \
-    DEVELOPMENT_TEAM="${APP_TEAM_ID}" \
-    PRODUCT_BUNDLE_IDENTIFIER="${APP_BUNDLE_ID}" \
+  archive_args=(
+    -scheme "${APP_SCHEME}"
+    -configuration Release
+    -destination "generic/platform=iOS"
+    -archivePath "${archive_path}"
+    DEVELOPMENT_TEAM="${APP_TEAM_ID}"
     -allowProvisioningUpdates
+  )
+  # A command-line PRODUCT_BUNDLE_IDENTIFIER overrides every target, so with
+  # embedded extensions it would give them the app's id (duplicate
+  # CFBundleIdentifier in the archive). Only pass it for single-target apps.
+  if [[ -z "${TARGETS_EXTENSIONS:-}" ]]; then
+    archive_args+=(PRODUCT_BUNDLE_IDENTIFIER="${APP_BUNDLE_ID}")
+  fi
+  xcodebuild archive "${archive_args[@]}"
   cat > build/ExportOptions.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -76,11 +104,7 @@ fi
 run_hook s5-post
 [[ -f "${ipa_path}" ]] || { echo "no ${ipa_path} after export" >&2; exit 1; }
 
-# --- Stage 6: credentials, validate, (confirm), upload
-if [[ -f "${HOME}/.app-store-connect/config" ]]; then
-  # shellcheck disable=SC1091
-  source "${HOME}/.app-store-connect/config"
-fi
+# --- Stage 6: credentials check, validate, (confirm), upload
 if [[ -z "${KEY_ID:-}" || -z "${ISSUER_ID:-}" ]]; then
   echo "Missing App Store Connect credentials. See stage 0 in SKILL.md." >&2
   exit 1

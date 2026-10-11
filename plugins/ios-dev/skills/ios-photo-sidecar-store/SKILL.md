@@ -41,6 +41,13 @@ has a production incident behind it.
 ## Concurrency
 
 9. Off-main image loaders in a MainActor-default Swift 6 build: see the
-   swift-concurrency rules — a plain `nonisolated async` loader runs on the CALLER's
-   actor under SE-0461; it needs `@concurrent` to genuinely hop off-main.
-   (Cross-reference — the concurrency rules own this; don't restate.)
+   `swift6-mainactor-compile-fixes` skill — a plain `nonisolated async` loader runs
+   on the CALLER's actor under SE-0461; it needs `@concurrent` to genuinely hop
+   off-main. (Cross-reference — that skill owns this; don't restate.)
+
+## Related skills
+
+- `swift6-mainactor-compile-fixes` — owns the MainActor-default / `@concurrent`
+  rules the off-main loader in rule 9 depends on.
+- `swiftdata-cloudkit-model-rules` — the model-side rules (including
+  `@Attribute(.externalStorage)` fields) the sync bridge in rule 6 mirrors into.

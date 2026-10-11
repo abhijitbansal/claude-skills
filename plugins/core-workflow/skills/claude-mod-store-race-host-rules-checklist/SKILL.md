@@ -21,6 +21,9 @@ Review rounds on store-writing mods rediscover the same data-loss bugs:
 - A helper that was passed `$` or `$.store` in an imported file is refused
   by the host.
 - Tests silently skip a hook because an op was not stubbed with `{ value }`.
+- A tool answers with a handler error: `tool.call step resolved … with a
+  result that does not match its output shape … expected string | array |
+  undefined, received object`.
 
 ## Root cause
 
@@ -42,9 +45,25 @@ is in the authoring docs, so each task rediscovers it in review.
    shared index (repairs lost updates from other sessions).
 6. On quota failure free space FIRST, then retry; never retry first.
 7. Gating tool hooks get a `.catch` that denies (fail closed).
-8. Register tools as `mcp__<plugin>__<name>` with `isDeferred: false`.
+8. Register tools with the bare `name` (e.g. `compass_status`) and
+   `isDeferred: false`; hooks match on the id `mcp__<plugin>__<name>`.
+   A handler registered with `$.tool.register` answers
+   `{ result: <string | content-block array> }`. `result` must never be an
+   object such as `{ text: 'ok' }` (PR #31 in claude-skills, the
+   session-compass `compass_status` fix, squashed as 55a83b3, changed
+   `{ result: { text: 'ok' } }` to `{ result: 'ok' }`).
 9. Tests stub every op with `{ value }` and assert an observable effect, so
-   a skipped hook fails the test.
+   a skipped hook fails the test. Register every `on()` stub BEFORE the first
+   `$` call, and never re-register an event the world fixture owns. A
+   throwing stub is treated as a skipped hook, so inject failure with
+   `return { deny: '…' }`.
+10. Hooks see events from EVERY origin. Gate per-turn resets on
+    `e.turnId === undefined` (peer/notification/plugin submits arrive
+    mid-turn carrying a `turnId`). Skip per-session state refresh
+    (branch/cwd/worktree) when `e.agentId !== undefined`, while still
+    counting subagent artifacts.
+11. `Button` children must be `Text` nodes.
+12. Wrap render-path store reads in try/catch defaulting to empty.
 
 Serial-chain shape:
 

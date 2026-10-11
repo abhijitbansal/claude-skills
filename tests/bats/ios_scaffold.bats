@@ -59,6 +59,14 @@ teardown() { rm -rf "${TMP}"; }
   ! grep -q '{{' marketing/app-store-listing.md
 }
 
+@test "rendered Fastfile archive lane maps provisioning profiles for manual export" {
+  cd "${TMP}/app"
+  bash "${SCAFFOLD}" >/dev/null
+  grep -q 'provisioningProfiles' fastlane/Fastfile
+  grep -q 'get_provisioning_profile' fastlane/Fastfile
+  grep -q 'app_store_connect_api_key' fastlane/Fastfile
+}
+
 @test "ci_post_clone is executable and xcodegen-generating" {
   cd "${TMP}/app"
   bash "${SCAFFOLD}" >/dev/null

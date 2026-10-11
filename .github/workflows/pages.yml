@@ -2,8 +2,15 @@ name: pages
 
 # Deploys the public site (site/index.html) + companion docs to GitHub Pages.
 # DORMANT until the repo is public AND Pages is enabled (Settings ▸ Pages ▸ Source: GitHub Actions).
-# Triggers only on a published release, or manually — never on plain pushes.
+# Triggers on a push to main that touches the site or docs, on a published
+# release, or manually. (Release-only deploys left PRs #22/#23/#25/#28 undeployed
+# until someone ran the workflow by hand.)
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'docs/**'
   release:
     types: [published]
   workflow_dispatch:

@@ -38,7 +38,7 @@ the release tag **without pushing it** (`tag-only` — it stays a local marker,
 push later only if a Cloud rebuild is wanted) or push it and accept/ignore the
 resulting redundant-upload failure, since the binary already made it to ASC.
 
-Floorprint precedent: its GitHub `release.yml` (manual dispatch) bumps
+Precedent from a private floor-plan scanner app: its GitHub `release.yml` (manual dispatch) bumps
 versions, pushes the `v*` tag, and lets Xcode Cloud take over — Start
 Condition "Tag Changes: v*". GH-Actions-side app builds are deliberately NOT
 part of the standard (Xcode Cloud owns hosted build/release; the only GH

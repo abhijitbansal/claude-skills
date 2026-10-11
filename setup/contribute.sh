@@ -119,7 +119,7 @@ git add -A
 msg="${MESSAGE:-chore: contribute via claude-skills-contribute}"
 git commit -m "${msg}
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+Co-Authored-By: Claude <noreply@anthropic.com>"
 
 # Step 7: push
 git push -u origin "${branch}" 2>/dev/null || warn "git push failed (no remote?)"

@@ -81,7 +81,7 @@ Hard-truncate each retrieval excerpt too (~1400 chars) before assembly.
 
 ## Evidence
 
-doc-scan (Paperix) abh-9 commit series:
+A private document-scanner app, abh-9 commit series:
 `fix(abh-9): flat schema for KeyFact — nested @Generable hangs gen` (the
 nested-schema predecessor `structured KeyFact schema kills hallucination +
 concat` hung on device),

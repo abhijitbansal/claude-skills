@@ -11,7 +11,7 @@ Interactive bootstrap for a new repo.
 
 1. **Check for existing config.** If `.claude/linear.yml` already exists, ask: "A config already exists. Overwrite? (yes / no)". Default no. Stop on no.
 
-2. **Ask which Linear team.** Call `mcp__claude_ai_Linear__list_teams`. Present the list with keys (e.g. "ABH — Abhijitbansal"). Ask the user to pick by key.
+2. **Ask which Linear team.** Call `mcp__claude_ai_Linear__list_teams`. Present the list with keys (e.g. "ENG — Engineering"). Ask the user to pick by key.
 
 3. **Ask which project.** Call `mcp__claude_ai_Linear__list_projects` filtered by `team: <key>`. Present the list. Options:
    - Pick existing project by name
@@ -33,7 +33,13 @@ Interactive bootstrap for a new repo.
      - `chore` → gray
      - `docs` → purple
 
-6. **Print next steps:**
+6. **Run the prerequisite check.** Run
+   `bash "${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/bootstrap.sh" --quiet`
+   from the repo root. It only diagnoses (installs nothing). If it exits
+   non-zero, show its `[FAIL]` / `[WARN]` lines and the fix command printed
+   under each, and still continue to step 7.
+
+7. **Print next steps:**
    > Created `.claude/linear.yml` with `autonomy: review-only` (skill writes to Linear, never touches code).
    >
    > Next:
@@ -56,3 +62,4 @@ Interactive bootstrap for a new repo.
 | MCP team/project list fails | Surface error, stop. |
 | `save_project` fails | Print error, ask if user wants to retry or pick existing. |
 | `create_issue_label` fails for one label | Continue with others, report which failed at the end. |
+| `bootstrap.sh` exits non-zero | Report its failures. The config and labels are already in place; do not undo them. |

@@ -57,20 +57,38 @@ have reached (a framework-internal assertion, not app code):
 - CoreData/CloudKit diagnosis — always put `--` before the debug flags:
 
   ```
-  xcrun devicectl device process launch --console -- \
+  xcrun devicectl device process launch --device <UDID> --console <bundle-id> -- \
     -com.apple.CoreData.CloudKitDebug 3 \
     -com.apple.CoreData.Logging.stderr 1
   ```
 
-  Omitting `--` is the failure mode described above — the flags vanish
-  silently, no error. With `--` in place, this is what surfaced the real
-  underlying error (`NSCocoaErrorDomain 134060`, "CloudKit integration
-  requires that all relationships be optional") behind a wrapper that only
-  said `SwiftDataError error 1`.
+  `--device <UDID>` and the `<bundle-id>` positional are required (usage:
+  `devicectl device process launch [<options>] --device <device>
+  <bundle-identifier-or-path> [<command-line-arguments> ...]`); list devices
+  with `xcrun devicectl list devices`. Omitting `--` is the failure mode
+  described above — the flags vanish silently, no error. With `--` in place,
+  this is what surfaced the real underlying error (`NSCocoaErrorDomain
+  134060`, "CloudKit integration requires that all relationships be
+  optional") behind a wrapper that only said `SwiftDataError error 1`.
 - General `os_log`/`Logger` capture — do **not** reach for `devicectl
   --console` or `idevicesyslog`; launch with the `OS_ACTIVITY_DT_MODE`
   environment variable set instead, or use Console.app (GUI, but reliably
   shows unified-logging output devicectl and idevicesyslog both miss).
+  devicectl forwards environment variables to the launched process in two
+  ways, either of which sets `OS_ACTIVITY_DT_MODE`. Unverified: expect
+  `os_log` output mirrored to stderr, so it appears on the `--console`
+  stream; confirm on a device before relying on it.
+
+  ```
+  # caller-environment form: set in the calling environment with a
+  # DEVICECTL_CHILD_ prefix (per devicectl help)
+  DEVICECTL_CHILD_OS_ACTIVITY_DT_MODE=YES \
+    xcrun devicectl device process launch --device <UDID> --console <bundle-id>
+
+  # explicit form: JSON dictionary (overrides DEVICECTL_CHILD_ variables)
+  xcrun devicectl device process launch --device <UDID> --console \
+    -e '{"OS_ACTIVITY_DT_MODE": "YES"}' <bundle-id>
+  ```
 - Once diagnosed, don't leave the next occurrence dependent on repeating a
   device-console capture: mirror the framework's error-unwrap logic to
   bounded depth (walk `NSUnderlyingErrorKey` up to ~10 levels, guarding

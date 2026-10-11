@@ -88,4 +88,8 @@ Titles, SQL and data are escaped in the page. Keep credentials out of specs and 
 Do not point `path` at files the user did not mention. Charts can never load URLs
 (`url`, `data`, `usermeta` are rejected anywhere in `vegaLite`) and the page ships a strict CSP.
 The SQL allowlist is the control; the cell/error scrubber is only defence in depth.
+Each known bypass vector and the test that pins it is in `references/sql-sandbox.md`.
+The allowlist is the query control; offline is guaranteed by the locked DuckDB
+connection and the page's `default-src 'none'` CSP, not by the validator.
+`serve.mjs` binds 127.0.0.1 and refuses non-local Host headers (403).
 For postgres/mysql, `READ_ONLY` on the attach only limits DuckDB: the real guard is a read-only database role.

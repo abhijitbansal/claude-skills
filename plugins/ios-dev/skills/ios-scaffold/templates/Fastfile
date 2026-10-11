@@ -1,18 +1,102 @@
 # Rendered by ios-scaffold from .claude/app.yml — edit app.yml + re-scaffold
 # for value changes; edit this file directly for lane logic (drift is reported,
 # not overwritten).
+#
+# Environment contract: run lanes through the release skill's release.sh (the
+# supported path). It loads app.yml and exports APP_*, TARGETS_EXTENSIONS and
+# ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_PATH (from the Stage 0 key files in
+# ~/.app-store-connect). Fastlane does not load app.yml itself, so a bare
+# `bundle exec fastlane archive` sees an empty TARGETS_EXTENSIONS and signs
+# only the main app. To run a lane by hand, from the app repo: source
+# "${CLAUDE_PLUGIN_ROOT}/skills/_lib/load_app_config.sh" (or the installed
+# plugin cache path), source ~/.app-store-connect/config, then export
+# ASC_KEY_ID="$KEY_ID" ASC_ISSUER_ID="$ISSUER_ID"
+# ASC_KEY_PATH="$HOME/.app-store-connect/AuthKey_$KEY_ID.p8".
 default_platform(:ios)
 
 APP_IDENTIFIER = "{{APP_BUNDLE_ID}}"
 TEAM_ID = "{{APP_TEAM_ID}}"
+# gym rejects "app-store-connect" for export_method (it accepts app-store,
+# validation, ad-hoc, package, enterprise, development, developer-id,
+# mac-application), so map the app.yml value to gym's name. The raw-xcodebuild
+# ExportOptions.plist in release.sh / SKILL.md keeps the Xcode 15.3+ names
+# instead: xcodebuild -exportArchive accepts app-store-connect, gym does not.
+RELEASE_EXPORT_METHOD = ENV.fetch("RELEASE_EXPORT_METHOD", "app-store-connect")
+GYM_EXPORT_METHOD = {
+  "app-store-connect" => "app-store",
+  "release-testing" => "ad-hoc",
+  "debugging" => "development"
+}.fetch(RELEASE_EXPORT_METHOD, RELEASE_EXPORT_METHOD)
+# Bundle ids of every signed embedded extension (.appex). TARGETS_EXTENSIONS
+# (exported by load_app_config.sh, same as release Stage 5) holds target NAMES,
+# space-separated, not bundle ids. Each id is derived as
+# "<app bundle id>.<TargetName>", where the suffix is the rfc1034-sanitised
+# target name (runs of spaces and underscores become '-', as Xcode does for
+# PRODUCT_NAME), which is Xcode's default for a new extension target. A target
+# whose product name differs from its target name, or whose bundle id deviates
+# otherwise, needs APP_EXTENSION_BUNDLE_IDS (space-separated bundle ids) to
+# override. A target left out archives fine but fails at export with "no
+# provisioning profile mapping".
+APP_EXTENSION_IDENTIFIERS =
+  if ENV["APP_EXTENSION_BUNDLE_IDS"].to_s.strip.empty?
+    ENV.fetch("TARGETS_EXTENSIONS", "").split.map do |name|
+      "#{APP_IDENTIFIER}.#{name.gsub(/[ _]+/, '-')}"
+    end
+  else
+    ENV["APP_EXTENSION_BUNDLE_IDS"].split
+  end
 
 platform :ios do
-  desc "Archive and export a signed .ipa"
+  desc "Private: App Store Connect API key from ASC_* env (guards unset vars)"
+  private_lane :asc_api_key do
+    missing_asc = %w[ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_PATH].select { |name| ENV[name].to_s.empty? }
+    unless missing_asc.empty?
+      UI.user_error!("ASC_KEY_ID/ASC_ISSUER_ID/ASC_KEY_PATH unset — run release Stage 0 (/release) or export them")
+    end
+
+    app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_filepath: ENV.fetch("ASC_KEY_PATH")   # path to the AuthKey_*.p8
+    )
+  end
+
+  desc "Archive and export a signed .ipa (self-contained: fetches profiles, manual export signing)"
   lane :archive do
+    api_key = asc_api_key
+    if APP_EXTENSION_IDENTIFIERS.empty?
+      UI.important("TARGETS_EXTENSIONS is empty: signing only the main app. Run via release.sh " \
+                   "(or source load_app_config.sh) if this app embeds extensions.")
+    end
+
+    # Fetch or create an App Store profile for the app AND every extension.
+    # get_provisioning_profile (sigh) fetches App Store profiles by default;
+    # this lane assumes export_method app-store-connect. For ad-hoc or
+    # development export methods, also pass adhoc: true / development: true.
+    # The App IDs must already exist in the developer portal. gym's automatic
+    # export cannot resolve a cold-start (sigh-created) profile, so export with
+    # manual signing and map each profile name explicitly.
+    profiles = ([APP_IDENTIFIER] + APP_EXTENSION_IDENTIFIERS).map do |identifier|
+      get_provisioning_profile(
+        api_key: api_key,
+        app_identifier: identifier,
+        team_id: TEAM_ID,
+        readonly: false,
+        output_path: "build"
+      )
+      [identifier, lane_context[SharedValues::SIGH_NAME]]   # profile name (SIGH_NAME); the action itself returns the UUID
+    end.to_h
+
     gym(
       scheme: "{{APP_SCHEME}}",
-      export_method: "app-store",
+      export_method: GYM_EXPORT_METHOD,
       export_team_id: TEAM_ID,
+      export_options: {
+        method: GYM_EXPORT_METHOD,
+        signingStyle: "manual",
+        teamID: TEAM_ID,
+        provisioningProfiles: profiles   # every signed target, not just the app
+      },
       output_directory: "build",
       output_name: "{{APP_NAME}}"
     )
@@ -21,6 +105,7 @@ platform :ios do
   desc "Upload the built .ipa to TestFlight"
   lane :beta do
     pilot(
+      api_key: asc_api_key,
       ipa: "build/{{APP_NAME}}.ipa",
       app_identifier: APP_IDENTIFIER,
       skip_waiting_for_build_processing: true
@@ -30,6 +115,7 @@ platform :ios do
   desc "Upload binary + metadata to App Store Connect (no auto-submit)"
   lane :release do
     deliver(
+      api_key: asc_api_key,
       ipa: "build/{{APP_NAME}}.ipa",
       app_identifier: APP_IDENTIFIER,
       submit_for_review: false,

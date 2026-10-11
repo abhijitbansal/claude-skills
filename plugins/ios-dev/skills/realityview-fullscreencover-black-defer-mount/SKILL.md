@@ -136,5 +136,5 @@ describing the same "RealityView black as a modal root" symptom.
   diagnostic/fix cycle to a subagent, confirm it actually has a shell before
   handing it a "screenshot and verify" acceptance test.
 - `swiftui-tabbar-swipe-nav-tradeoff` — if this 3D view sits behind a custom
-  tab bar / pager, that skill's pushed-scroll-clearance sibling is a
+  tab bar / pager, `swiftui-pushed-list-tabbar-scroll-clearance` is a
   related-but-separate SwiftUI layout gotcha in the same feature area.

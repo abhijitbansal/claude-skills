@@ -8,11 +8,11 @@ setup() {
   cat >"${TMP}/proj/.claude/app.yml" <<EOF
 schema_version: 1
 app:
-  name: Paperix
-  bundle_id: com.abhijit.paperix
-  scheme: Paperix
+  name: MyApp
+  bundle_id: com.example.myapp
+  scheme: MyApp
   team_id: ABC123
-  url_scheme: paperix
+  url_scheme: myapp
 linear:
   team_key: PAP
 EOF
@@ -25,11 +25,11 @@ teardown() { rm -rf "${TMP}"; }
 @test "load_app_config exports keys from .claude/app.yml" {
   cd "${TMP}/proj"
   source "${REPO_ROOT}/plugins/ios-dev/skills/_lib/load_app_config.sh"
-  [ "${APP_NAME}" = "Paperix" ]
-  [ "${APP_BUNDLE_ID}" = "com.abhijit.paperix" ]
-  [ "${APP_SCHEME}" = "Paperix" ]
+  [ "${APP_NAME}" = "MyApp" ]
+  [ "${APP_BUNDLE_ID}" = "com.example.myapp" ]
+  [ "${APP_SCHEME}" = "MyApp" ]
   [ "${APP_TEAM_ID}" = "ABC123" ]
-  [ "${APP_URL_SCHEME}" = "paperix" ]
+  [ "${APP_URL_SCHEME}" = "myapp" ]
   [ "${LINEAR_TEAM_KEY}" = "PAP" ]
 }
 
@@ -37,7 +37,7 @@ teardown() { rm -rf "${TMP}"; }
   mkdir -p "${TMP}/proj/deep/nested"
   cd "${TMP}/proj/deep/nested"
   source "${REPO_ROOT}/plugins/ios-dev/skills/_lib/load_app_config.sh"
-  [ "${APP_NAME}" = "Paperix" ]
+  [ "${APP_NAME}" = "MyApp" ]
 }
 
 @test "load_app_config errors when no app.yml is found" {
@@ -102,7 +102,7 @@ YML
 @test "v1 file: v2 vars fall back to defaults, existing exports unchanged" {
   cd "${TMP}/proj"
   source "${REPO_ROOT}/plugins/ios-dev/skills/_lib/load_app_config.sh"
-  [ "${APP_NAME}" = "Paperix" ]
+  [ "${APP_NAME}" = "MyApp" ]
   [ "${APP_CONFIG_SCHEMA}" = "1" ]
   [ "${APP_PLATFORMS}" = "ios" ]
   [ "${TARGETS_EXTENSIONS}" = "" ]

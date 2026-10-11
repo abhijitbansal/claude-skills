@@ -23,7 +23,7 @@ Output contract: `CREATE: <path>` (written), `OK: <path>` (matches template),
 | Path | Purpose |
 |---|---|
 | `marketing/app-store-listing.md` | canonical store copy (ASC/site/in-app derive from it) |
-| `fastlane/Fastfile` + `Gemfile` | archive/beta/release lanes (release skill S5/S6) |
+| `fastlane/Fastfile` + `Gemfile` | archive/beta/release lanes (release skill S5/S6); `archive` is self-contained; ASC API key from `ASC_KEY_ID`/`ASC_ISSUER_ID`/`ASC_KEY_PATH`; one profile per app and extension target; extension id is `<app-id>.<TargetName>`, override with `APP_EXTENSION_BUNDLE_IDS`; manual `provisioningProfiles` export map |
 | `ci_scripts/ci_post_clone.sh` | Xcode Cloud contract (skill `xcode-cloud-post-clone-contract`) |
 | `scripts/release-hooks/` | per-app pre/post stage hooks for the release skill |
 | `docs/ARCHITECTURE_CHECKLIST.md` | per-subsystem pointers to the knowledge skills |

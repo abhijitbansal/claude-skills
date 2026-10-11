@@ -7,17 +7,17 @@ description: "`VNDetectBarcodesRequest` returns zero results for a perfectly val
 
 ## Symptom
 
-- `VNDetectBarcodesRequest` returns an empty results array for a QR/barcode
+- `VNDetectBarcodesRequest` returns an empty results array for a QR code
   in a `CGImage` that was just generated in the same test and is visibly
   valid. The decoder returns `nil` — it does not throw, so this looks like
   "no code found," not a crash.
 - OSLog/console shows something like `QR Vision detect failed: Could not
   create inference context` — Vision's barcode ML inference context failed
   to initialize.
-- Reproduces reliably on the **iOS Simulator**; the same failure mode can
-  also surface on a real device under memory pressure, low contrast, or
-  whenever the ML context is unavailable, silently dropping a code a human
-  eye can read fine.
+- Reproduces reliably on the **iOS Simulator**; the same failure mode could
+  also surface on a real device whenever the ML context is unavailable
+  (not reproduced on device here), silently dropping a code a human eye can
+  read fine.
 - Any unit/UI test that generates a code then round-trips it through Vision
   decode fails on CI (which runs on Simulator) even though the feature works
   when a person tests it by hand on a phone.
@@ -29,20 +29,28 @@ Simulator's software rendering path frequently fails to construct. This is
 an environment limitation, not a bug in the input image or in your request
 configuration — retrying the same `VNDetectBarcodesRequest` won't help.
 Treating a single detector as the whole decode pipeline means this one
-initialization failure (Simulator-only, or device-under-pressure) silently
-turns into "this app can't scan codes."
+initialization failure (observed on Simulator; possible on device if the ML
+context is unavailable) silently turns into "this app can't scan codes."
 
 ## Fix
 
 Don't rely on a single detector. Try Vision first — it's fast and accurate
 on real hardware — then fall back to CoreImage's `CIDetector` QR reader,
-which initializes reliably on the Simulator and tolerates low-contrast
-images better in practice. This is a pure upside: Vision still runs first
-and wins on device; `CIDetector` only fires when Vision comes back empty.
+which initializes reliably on the Simulator. This is a pure upside: Vision
+still runs first and wins on device; `CIDetector` only fires when Vision
+comes back empty.
+
+**Scope: QR codes only.** `CIDetectorTypeQRCode` detects QR codes and
+nothing else, so this fallback does not cover 1D barcodes (EAN, UPC,
+Code 128, ...) or other 2D symbologies (Data Matrix, PDF417, Aztec). For
+those there is no `CIDetector` equivalent; if Vision's barcode context is
+unavailable, options are `AVCaptureMetadataOutput` for live camera scanning
+on device (it supports those symbologies via `metadataObjectTypes`), or
+skipping the round-trip test for that symbology on Simulator.
 
 ```swift
 // WRONG — single detector, silently drops codes when Vision's ML
-// context fails to initialize (Simulator, low contrast, memory pressure)
+// context fails to initialize (Simulator, or any time the ML context is unavailable)
 func decode(_ image: CGImage) -> URL? {
     decodeWithVision(image)
 }

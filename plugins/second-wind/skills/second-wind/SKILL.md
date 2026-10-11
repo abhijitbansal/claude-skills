@@ -40,7 +40,7 @@ sh claude-skills/tools/second-wind/install.sh
 | Command | What it does |
 | --- | --- |
 | `wind guide` | print the setup walkthrough (start here); `--open` also opens the visual guide in a browser |
-| `wind init` | interactive wizard: scan dirs (roots persisted as `scan_roots`), pick repos, set a global permission preset, then either configure each repo or **apply the global preset + defaults to all** in one choice; write config (`--defaults` for non-interactive starter file) |
+| `wind init` | interactive wizard: scan dirs (roots persisted as `scan_roots`), pick repos, set a global permission preset, then either configure each repo or **apply the global preset + defaults to all** in one choice; write config (`--defaults`, or any non-TTY run, writes the starter file without prompts) |
 | `wind prompt <repo>` | create/edit a repo's first-prompt file in `$EDITOR` (convention `~/.wind/prompts/<repo>.md`; wires `prompt_file` into the config); `--editor` to override `$EDITOR` |
 | `wind add <path>` | add a git repo to the config (`{name, path}` only, inherits the global preset), launch its session, and refresh the watcher — no re-`init` |
 | `wind up` | start a tmux session per repo, launch the agent, send each repo's initial prompt, and auto-spawn the watcher (`--no-watch` to skip) |
@@ -72,7 +72,7 @@ The config may live at `./second-wind.json` or `~/.wind/config.json`.
 
 - `agent`: top-level default agent (`claude` | `copilot`), overridable per repo. Absent → `claude` → today's behavior.
 - `repos[]`: `name`, `path`, optional `agent` override, optional `prompt_file` (sent as first prompt; convention `~/.wind/prompts/<repo>.md`) or inline `prompt` string (wins over `prompt_file`), optional per-repo `claude_args` override.
-- `claude_args`: top-level **global permission preset**; a repo inherits it unless it sets its own `claude_args`. The `auto` preset (`--permission-mode bypassPermissions`, accepts everything) is the **shipped default** for a new starter config — same risk class as `--dangerously-skip-permissions`; pick `acceptEdits`/`plan`/`default` to reduce autonomy.
+- `claude_args`: top-level **global permission preset**; a repo inherits it unless it sets its own `claude_args`. The starter config written by `--defaults` or any non-interactive `wind init` (stdin or stdout not a TTY) sets `auto`; only the interactive wizard suggests `acceptEdits`. The `auto` preset is **full bypass** (`--permission-mode bypassPermissions`, accepts everything, no prompts) — same risk class as `--dangerously-skip-permissions`, and not Claude Code's classifier-gated auto mode; pick `acceptEdits`/`plan`/`default` to reduce autonomy.
 - `scan_roots`: directories the wizard scanned, persisted so `wind add` and the dashboard's Add-repo can offer more repos without re-`init`.
 - `resume_message`: text typed into each paused **claude** session after reset (default `continue`); copilot uses its own preset message.
 - `ntfy_url`: optional ntfy.sh topic URL — notifies when the limit hits and when sessions resume.

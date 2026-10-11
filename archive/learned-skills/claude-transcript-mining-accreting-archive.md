@@ -1,11 +1,11 @@
 # Claude Code Transcript Mining Loses History — Accreting Archive Pattern
 
 **Extracted:** 2026-07-11
-**Context:** Any stats/telemetry pipeline that mines `~/.claude/projects/**/*.jsonl` session transcripts (foundry telemetry, cc-dashboard, similar dashboards).
+**Context:** Any stats/telemetry pipeline that mines `~/.claude/projects/**/*.jsonl` session transcripts (a telemetry site, cc-dashboard, similar dashboards).
 
 ## Problem
 
-Claude Code purges local transcripts after ~30 days (`cleanupPeriodDays`). Any pipeline that regenerates aggregates by re-mining transcripts silently loses history each run — a sliding window that *looks* all-time. In foundry, `date_min` slid from 2026-05-22 to 2026-06-10 between two regenerations with nobody noticing; the "always everything since May 1st" requirement was already broken when the user reported it. Data that ages past the purge without being archived is **permanently unrecoverable** (unless an old committed snapshot happens to carry it).
+Claude Code purges local transcripts after ~30 days (`cleanupPeriodDays`). Any pipeline that regenerates aggregates by re-mining transcripts silently loses history each run — a sliding window that *looks* all-time. In a private web project, `date_min` slid from 2026-05-22 to 2026-06-10 between two regenerations with nobody noticing; the "always everything since May 1st" requirement was already broken when the user reported it. Data that ages past the purge without being archived is **permanently unrecoverable** (unless an old committed snapshot happens to carry it).
 
 ## Solution
 

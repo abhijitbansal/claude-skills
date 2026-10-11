@@ -58,8 +58,10 @@ Run:
 ```bash
 xcodegen generate && \
 xcodebuild test -project App.xcodeproj -scheme App \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+  -destination 'platform=iOS Simulator,name=<installed iPhone sim>'
 ```
+
+Look up an installed simulator name with `xcrun simctl list devices available`.
 
 ## Traps
 
@@ -75,3 +77,12 @@ xcodebuild test -project App.xcodeproj -scheme App \
   `UserDefaults` reads the argument domain first.
 - SwiftUI `List` rows render as `staticTexts`, not `buttons`, and bottom
   sections need `app.swipeUp()` before querying.
+
+## Related skills
+
+- `swiftdata-inmemory-test-harness` — in-memory SwiftData containers for the
+  unit tests this skill sets up.
+- `swift6-mainactor-compile-fixes` — the `SWIFT_DEFAULT_ACTOR_ISOLATION`
+  errors behind the matching-isolation setting above.
+- `xcode-cloud-post-clone-contract` — Xcode Cloud's clean clone needs
+  `xcodegen generate` in `ci_post_clone.sh` before any build or test.

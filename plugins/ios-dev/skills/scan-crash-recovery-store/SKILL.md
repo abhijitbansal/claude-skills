@@ -85,7 +85,7 @@ literally `/tmp`.
 
 ## Evidence
 
-- **floorprint** — scan-recovery commit series: `ScanRecoveryStore.save` writes
+- **a private floor-plan scanner app** — scan-recovery commit series: `ScanRecoveryStore.save` writes
   `CapturedRoom` JSON right after `RoomBuilder` succeeds and before the
   FloorPlanData/scene build; hardening against unreadable/partial files; clear
   on `CapturedStructure` vs `CapturedRoom` decode-mismatch; time-boxed

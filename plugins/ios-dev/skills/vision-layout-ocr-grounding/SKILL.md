@@ -113,12 +113,12 @@ Add this as an explicit manual-test step; a warm-path check proves nothing.
 
 ## Evidence
 
-- **doc-scan (Paperix):** `fix(ai): ground Analyze + Ask on Vision-layout
+- **a private document-scanner app:** `fix(ai): ground Analyze + Ask on Vision-layout
   text, restore copy` (e32db4a); `fix(ocr): column-aware reading order for
   multi-column scans` (4edae2e); `fix(import,ocr): edge-detect shared photos
   + layout-preserve Extract Text` (eba5e12). The `Patient ID: 110331`
   confabulation was the originating user repro. Full formatter:
-  `AI/VisionLayoutFormatter.swift` in the originating doc-scan repo.
+  `AI/VisionLayoutFormatter.swift` in the originating scanner-app repo.
 - **cubby:** OCR reading-order fixes; raw OCR prose leaking into user-visible
   surfaces (auto-naming) required the same "one grounded entry point" cure.
 

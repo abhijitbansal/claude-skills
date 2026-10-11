@@ -36,9 +36,8 @@ gets flattened by a `sed 's#\.\./docs/##g'` rewrite to `second-wind/index.html`
 
 ## Fix
 
-Explicitly `mkdir` + `cp` each subdirectory page (globs won't find them for
-you), and keep subdir pages self-contained so the missing rewrite never
-matters:
+Explicitly `mkdir` + `cp` each subdirectory (globs won't find them for you),
+and make the link rewrite **recursive** so it reaches every staged page:
 
 ```yaml
 # WRONG — glob silently drops subdir pages, no error, no CI failure
@@ -49,23 +48,45 @@ matters:
     cp docs/*.html _site/
     sed -i 's#\.\./docs/##g' _site/index.html
 
-# CORRECT — subdirs created and copied explicitly
+# CORRECT — subdirs created and copied explicitly, rewrite is recursive
 - name: Stage site
   run: |
     mkdir -p _site _site/second-wind
     cp site/index.html _site/index.html
-    cp docs/*.html _site/ 2>/dev/null || true
-    # the glob above misses this — copy each subdir page by hand
-    cp docs/second-wind/index.html _site/second-wind/index.html 2>/dev/null || true
-    # link rewrites only ever touch top-level _site/*.html — by design,
-    # because subdir pages below are self-contained (no rewrite needed)
-    sed -i 's#\.\./docs/##g'                      _site/index.html
-    sed -i 's#\.\./site/index.html#index.html#g'  _site/*.html
+    # the rewrite below points links at assets/ and the favicons, so those
+    # files must be staged too, or every asset link 404s
+    cp -r site/assets _site/assets
+    cp site/favicon.ico _site/favicon.ico
+    cp site/apple-touch-icon.png _site/apple-touch-icon.png
+    cp docs/*.html _site/
+    # the glob above misses subdirs — create and copy each one explicitly
+    cp docs/second-wind/index.html _site/second-wind/index.html
+    # (a subdir with assets: cp -r docs/<sub>/img _site/<sub>/img)
+    # rewrite every staged page, at any depth. A subdir page keeps its leading
+    # ../ (docs/<sub>/x.html links ../../site/assets/ -> ../assets/ after the
+    # sed below), so subdir pages can use ../../ links to the shared assets.
+    find _site -name '*.html' -print0 | xargs -0 sed -i \
+      -e 's#\.\./docs/##g' \
+      -e 's#\.\./site/index\.html#index.html#g' \
+      -e 's#\.\./site/assets/#assets/#g' \
+      -e 's#\.\./site/favicon\.ico#favicon.ico#g' \
+      -e 's#\.\./site/apple-touch-icon\.png#apple-touch-icon.png#g'
 ```
 
-Make every subdir page self-contained — inline CSS, no `../` back-links or
-asset paths — so the fact that the rewrite step doesn't reach it is a
-non-issue. Confirm with:
+This repo's own `.github/workflows/pages.yml` is a working example of only two
+parts of this shape: the recursive `find … | xargs -0 sed -i` rewrite and the
+explicit `mkdir` per subdir. It still suffixes its optional `cp` lines with
+`|| true`, so it is not an example of the no-`|| true` rule below.
+
+Do not suffix the `cp` lines with `2>/dev/null || true`: it turns a missing
+source file into a green build with a 404 live, which is this bug again. If a
+copy is genuinely optional, keep `|| true` only when it is followed by the
+MISSING-href check below, which fails the job.
+
+**Alternative — self-contained subdir pages.** If you would rather not
+rewrite subdir pages at all, make each one self-contained (inline CSS, no
+`../` back-links or asset paths) so the rewrite never needs to reach it.
+Confirm with:
 
 ```bash
 grep -n 'href="\.\.\|src="\.\.' docs/<sub>/*.html   # expect no output
@@ -74,9 +95,12 @@ grep -n 'href="\.\.\|src="\.\.' docs/<sub>/*.html   # expect no output
 **Verify before trusting it, two cheap checks:**
 
 ```bash
-# A. Locally simulate staging; confirm every flattened href has a matching file
-grep -oE 'href="[^"]+\.html"' _site/index.html | cut -d'"' -f2 | \
-  while read f; do test -f "_site/$f" || echo "MISSING: $f"; done
+# A. Locally simulate staging; confirm every flattened href has a matching file.
+#    Covers links from the landing page (_site/index.html) only — repeat it
+#    per page to cover links from subdir pages. The subshell keeps `exit 1`
+#    from closing an interactive zsh; as a CI step it still fails the job.
+( grep -oE 'href="[^"]+\.html"' _site/index.html | cut -d'"' -f2 | \
+  while read f; do test -f "_site/$f" || { echo "MISSING: $f"; exit 1; }; done )
 
 # B. After deploy, curl every linked path for 200 — not just the homepage
 for u in / /machine-setup.html /second-wind/index.html /og.png; do

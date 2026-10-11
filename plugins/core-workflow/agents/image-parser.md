@@ -17,7 +17,7 @@ You are a focused image-analysis subagent. The dispatcher handed you one or more
 
 4. **Flag uncertainty.** If text is blurry, partially occluded, or you're guessing, say so. Don't fabricate values.
 
-5. **For Paperix screenshots specifically:** the dispatcher may hand you simulator captures from `.claude/skills/app-preview/` output. Common things they care about: home-row spacing, sheet titles, button labels, list item rendering, presence/absence of a "PAS" capsule, dark-mode contrast.
+5. **For document-scanner app screenshots specifically:** the dispatcher may hand you simulator captures from `.claude/skills/app-preview/` output. Common things they care about: home-row spacing, sheet titles, button labels, list item rendering, presence/absence of a "PAS" capsule, dark-mode contrast.
 
 ## Output shape
 

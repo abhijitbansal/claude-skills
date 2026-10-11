@@ -1,6 +1,6 @@
 ---
 name: deep-link-resolver-applock-pathtraversal
-description: A deep link (e.g. paperix://doc?id=…) opens its document ON TOP of the Face ID App-Lock overlay — or fires the moment the user unlocks, navigating somewhere they never chose; a URL payload containing ../ resolves to a file outside the app's documents root; onOpenURL routing is inline in view closures and untestable. Use when adding a custom URL scheme, widget/notification/App Intent deep links, or reviewing any onOpenURL handler that maps URL text to file paths or model ids — route every entry through one pure nonisolated resolver that DROPS (never defers) links while locked and canonically validates paths.
+description: A deep link (e.g. myapp://doc?id=…) opens its document ON TOP of the Face ID App-Lock overlay — or fires the moment the user unlocks, navigating somewhere they never chose; a URL payload containing ../ resolves to a file outside the app's documents root; onOpenURL routing is inline in view closures and untestable. Use when adding a custom URL scheme, widget/notification/App Intent deep links, or reviewing any onOpenURL handler that maps URL text to file paths or model ids — route every entry through one pure nonisolated resolver that DROPS (never defers) links while locked and canonically validates paths.
 ---
 
 # One Pure Deep-Link Resolver: App-Lock Drops + Path-Traversal Guard
@@ -95,7 +95,7 @@ Single wiring point — every entry surface funnels here:
 
 ## Evidence
 
-- **doc-scan (Paperix)** — `paperix://doc` deep links + App-Lock fixes:
+- **a private document-scanner app** — `myapp://doc` deep links + App-Lock fixes:
   inline `onOpenURL` routing presented above the lock overlay and accepted
   path payloads; replaced with the single `nonisolated` resolver returning an
   enum action, `.ignore` while locked, `..`-reject + descendant check +
@@ -117,3 +117,6 @@ Single wiring point — every entry surface funnels here:
   (share/action extensions); same "validate before the host app acts" stance.
 - `swift6-mainactor-compile-fixes` — why the resolver is `nonisolated` pure
   compute under MainActor-default isolation, and how to keep it that way.
+- `siri-app-intents-ios26-reliability` — App Intents are one of the entry
+  surfaces that funnel through the resolver; that skill covers making them
+  fire reliably.

@@ -8,6 +8,9 @@ node_modules/
 .scratch/
 plugins/*/.claude-plugin/types/
 
+# app-preview iMessage fallback destination: holds a personal contact
+plugins/ios-dev/skills/app-preview/.imessage-to
+
 # portable-artifacts eval output (summaries are copied to results/summary-*.md)
 plugins/portable-artifacts/eval/results/*
 !plugins/portable-artifacts/eval/results/summary-*.md

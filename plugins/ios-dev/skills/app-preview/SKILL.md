@@ -79,7 +79,7 @@ scripts/deliver.sh --no-icloud <path>   # skip the iCloud copy (just notify)
 Two-channel delivery:
 
 1. **iCloud Drive copy** → `~/Library/Mobile Documents/com~apple~CloudDocs/$(basename "${APP_PREVIEW_ROOT}")/<branch>/<basename>`. iCloud syncs to iPhone Files app in 5–30s.
-2. **iMessage text ping** → reads destination from `app-preview/.imessage-to` (first non-blank line; Apple ID email or E.164 phone). Sends a text like:
+2. **iMessage text ping** → reads the destination (Apple ID email or E.164 phone) from the `IMESSAGE_TO` environment variable (it must be set in the environment Claude Code inherits); if unset, falls back to the first non-blank line of `.imessage-to` next to the skill. When the plugin is installed from the marketplace that file sits inside the plugin cache and is wiped on update — prefer `IMESSAGE_TO`; for a source checkout it is a gitignored repo file. Sends a text like:
    ```
    ${APP_NAME} preview: ${APP_NAME_LC}-snap-...-after-fix.png — Files → iCloud Drive → $(basename "${APP_PREVIEW_ROOT}") → <branch>
    ```
@@ -114,17 +114,17 @@ Between screens the script does `terminate` + `launch` + `openurl` rather than j
 
 The app registers the `${APP_URL_SCHEME}://` URL scheme. The exact routes depend on what `handleDeepLink` in your app currently handles — re-grep it before claiming you can deep-link somewhere.
 
-The examples below are **Paperix-shaped** (how Paperix shipped its `handleDeepLink` in `Paperix/PaperixApp.swift`). Your app's vocabulary may differ:
+The examples below are **scanner-app-shaped** (how a private document-scanner app shipped its `handleDeepLink` in `<App>/<App>App.swift`). Your app's vocabulary may differ:
 
 ```bash
 xcrun simctl openurl booted "${APP_URL_SCHEME}://scan"
-# → (Paperix) opens the app and triggers the scanner (posts .snapDocTriggerScan)
+# → (scanner app) opens the app and triggers the scanner (posts .snapDocTriggerScan)
 
 xcrun simctl openurl booted "${APP_URL_SCHEME}://doc?path=<relative-path-under-store-dir>"
-# → (Paperix) opens the app and navigates to that document, if it exists
+# → (scanner app) opens the app and navigates to that document, if it exists
 ```
 
-These two patterns were the full navigable surface for Paperix at the time this skill was written. Your app's `handleDeepLink` may route fewer or more patterns. Always verify against the source.
+These two patterns were the full navigable surface for the scanner app at the time this skill was written. Your app's `handleDeepLink` may route fewer or more patterns. Always verify against the source.
 
 **For any other screen** (settings, the import sheet, OCR detail, widget config, etc.) you have three honest options:
 
@@ -152,19 +152,19 @@ The user says: *"the home-row spacing looks off on the doc screen, and the scann
 
 ### Screen vocabulary
 
-The table below is **Paperix-shaped** — these are the screen IDs that Paperix's `handleDeepLink` recognizes. Your app's vocabulary is determined by what routes your `handleDeepLink` actually implements. The IDs and deep-link patterns below are illustrative examples:
+The table below is **scanner-app-shaped** — these are the screen IDs that the scanner app's `handleDeepLink` recognizes. Your app's vocabulary is determined by what routes your `handleDeepLink` actually implements. The IDs and deep-link patterns below are illustrative examples:
 
 | Screen ID | What it captures | How `bundle.sh` reaches it |
 |---|---|---|
 | `home` | The default view the app lands on at cold launch | No deep link — just the launched app |
-| `scan` | Scanner sheet over home (Paperix: `${APP_URL_SCHEME}://scan`) | `${APP_URL_SCHEME}://scan` |
-| `doc:<rel-path>` | Document detail view (Paperix: `${APP_URL_SCHEME}://doc?path=<rel-path>`) | `${APP_URL_SCHEME}://doc?path=<rel-path>` |
+| `scan` | Scanner sheet over home (scanner app: `${APP_URL_SCHEME}://scan`) | `${APP_URL_SCHEME}://scan` |
+| `doc:<rel-path>` | Document detail view (scanner app: `${APP_URL_SCHEME}://doc?path=<rel-path>`) | `${APP_URL_SCHEME}://doc?path=<rel-path>` |
 
 For anything else (settings, OCR review, trash, folders, share sheet, app lock, …), pick `home` and mention the limitation in your final summary — the user can navigate manually on their device or in Xcode and ask for another snap once they're there.
 
 ### Caveat: `scan` is a sheet over `home`
 
-`${APP_URL_SCHEME}://scan` (in Paperix: posts `.snapDocTriggerScan`) presents the scanner as a sheet — the home screen is still mounted underneath. The resulting screenshot shows the scanner UI; that's the intended state for verifying a scan-flow change. If the user actually wants to see *home* with no sheet, capture `home` separately (which `bundle.sh` already does via terminate-and-relaunch between screens).
+`${APP_URL_SCHEME}://scan` (in the scanner app: posts `.snapDocTriggerScan`) presents the scanner as a sheet — the home screen is still mounted underneath. The resulting screenshot shows the scanner UI; that's the intended state for verifying a scan-flow change. If the user actually wants to see *home* with no sheet, capture `home` separately (which `bundle.sh` already does via terminate-and-relaunch between screens).
 
 ## The full remote-control loop
 
@@ -241,7 +241,7 @@ scripts/launch.sh --no-build
 - **Build failures**: surface the `xcodebuild` error verbatim to the user, then stop. Don't try to "fix and retry" inside this skill — the build error might be the very thing the user wants to know about. Hand off to the project's existing iOS skills (e.g., `swiftui-expert-skill`, `xcode-build-fixer`) if remediation is needed.
 - **Simulator not booted on first run**: `launch.sh` boots `iPhone 17 Pro` by default to match the build script's default destination. If the user wants a different simulator, pass `--sim "<name>"` to both.
 - **Multiple sims booted**: `xcrun simctl ... booted` errors out when more than one device is booted. Shut extras down: `xcrun simctl shutdown <UDID>`.
-- **iMessage destination not configured**: deliver.sh skips the ping with a warning and proceeds with iCloud Drive only. To enable pings: `echo 'you@example.com' > ~/.claude/skills/app-preview/.imessage-to`. **First-time setup also requires** the user to manually send themselves one message in Messages.app first — without that bootstrap, AppleScript-generated text sends don't deliver either.
+- **iMessage destination not configured**: deliver.sh skips the ping with a warning and proceeds with iCloud Drive only. To enable pings, set `IMESSAGE_TO` (primary mechanism; e.g. `export IMESSAGE_TO='you@example.com'` in your shell profile). Fallback: a `.imessage-to` file in the skill directory (next to `scripts/`) — but that lives inside the plugin cache and is wiped on update. **First-time setup also requires** the user to manually send themselves one message in Messages.app first — without that bootstrap, AppleScript-generated text sends don't deliver either.
 - **Do not try to attach the image to iMessage** — AppleScript file attachments to self-destinations are silently rejected by Apple's iMessage server. The hybrid pattern (text ping + iCloud Drive image) is the workaround. See "Why hybrid?" above.
 - **iCloud sync latency**: usually a few seconds for a 200KB PNG. If the user reports "I don't see it on my phone," ask them to pull-to-refresh in Files → iCloud Drive → `$(basename "${APP_PREVIEW_ROOT}")` → `<branch>`. If still not there after ~30s, check that iCloud Drive is on for both devices.
 - **Preview folder grows unbounded**: each preview adds another PNG. Nothing prunes them. With branch subfolders the cleanup target is more obvious — delete the folder for a merged branch and you reclaim everything that was about that line of work.

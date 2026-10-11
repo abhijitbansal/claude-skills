@@ -5,7 +5,7 @@ description: Teams/iMessage/Slack link unfurl shows no image, a stretched image,
 
 # Site metadata: unfurl, favicon, CSP
 
-The same three bugs shipped independently in doc-scan, floorprint, and sift
+The same three bugs shipped independently in three private sites
 (`fix(meta): Teams titled-link preview — static og:image + dimensions`,
 `fix(site): self-host fonts and add CSP meta`, `feat: complete favicon set`).
 This skill is the checklist; `site-pages-deploy-kit/scripts/verify-site.sh`
@@ -40,10 +40,10 @@ woff2, then:
 **3. Complete favicon set at the site root.**
 Minimum: `favicon.ico` + `apple-touch-icon.png` (180×180). Generate all icon
 sizes + the og card from ONE master image with an idempotent script
-(floorprint's `scripts/build-og-card.sh` pattern) so a rebrand is one re-run.
+(a private floor-plan scanner app's `scripts/build-og-card.sh` pattern) so a rebrand is one re-run.
 
 **4. Progressive enhancement.**
-Content visible with JS disabled — scrapers don't run your JS. (doc-scan:
+Content visible with JS disabled — scrapers don't run your JS. (a private document-scanner app:
 `content defaults visible if GSAP CDN fails to load`.)
 
 ## Verify
@@ -55,10 +55,12 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/site-pages-deploy-kit/scripts/verify-site.sh"
 Smoke-test a real unfurl after deploying: paste the URL into Teams/iMessage —
 first impressions cache, so verify BEFORE sharing widely.
 
-## Related
+## Related skills
 
 - `site-pages-deploy-kit` — deploy + skeleton (skeleton pages pass this lint
   by construction).
+- `pillow-favicon-set-no-rasterizer` — how to generate the raster favicon set
+  (favicon.ico, apple-touch-icon.png) when no SVG rasterizer is installed.
 - `subpage-nav-anchor-baseurl-ssr-label-drift` — a sibling per-page-metadata
   drift on the same kind of site (in-page nav anchors and SSR-default text,
   rather than unfurl/favicon/CSP).

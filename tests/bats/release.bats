@@ -23,6 +23,41 @@ teardown() { rm -rf "${TMP}"; }
   [[ "$output" == *"usage:"* ]]
 }
 
+@test "release.sh credential block exports ASC_* from config; pre-set ASC_* values win" {
+  local rs="${BATS_TEST_DIRNAME}/../../plugins/ios-dev/skills/release/scripts/release.sh"
+  mkdir -p "${TMP}/home/.app-store-connect"
+  printf 'KEY_ID=FAKEKEY123\nISSUER_ID=fake-issuer-uuid\n' > "${TMP}/home/.app-store-connect/config"
+  # Extract just the credential function; sourcing the whole script would run the pipeline.
+  sed -n '/^load_asc_credentials() {/,/^}/p' "${rs}" > "${TMP}/cred.sh"
+  [ -s "${TMP}/cred.sh" ]
+  # Print from a CHILD process so a dropped `export` shows up as empty fields.
+  cat > "${TMP}/probe.sh" <<'EOF'
+source "$1"
+load_asc_credentials
+bash -c 'printf "%s|%s|%s\n" "${ASC_KEY_ID-}" "${ASC_ISSUER_ID-}" "${ASC_KEY_PATH-}"'
+EOF
+
+  run env -u ASC_KEY_ID -u ASC_ISSUER_ID -u ASC_KEY_PATH -u API_PRIVATE_KEYS_DIR \
+    HOME="${TMP}/home" bash "${TMP}/probe.sh" "${TMP}/cred.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" = "FAKEKEY123|fake-issuer-uuid|${TMP}/home/.app-store-connect/AuthKey_FAKEKEY123.p8" ]
+
+  run env -u ASC_ISSUER_ID -u ASC_KEY_PATH -u API_PRIVATE_KEYS_DIR \
+    ASC_KEY_ID=PRESET HOME="${TMP}/home" bash "${TMP}/probe.sh" "${TMP}/cred.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" = "PRESET|fake-issuer-uuid|${TMP}/home/.app-store-connect/AuthKey_PRESET.p8" ]
+
+  run env -u ASC_KEY_ID -u ASC_KEY_PATH -u API_PRIVATE_KEYS_DIR \
+    ASC_ISSUER_ID=PRESET-ISSUER HOME="${TMP}/home" bash "${TMP}/probe.sh" "${TMP}/cred.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" = "FAKEKEY123|PRESET-ISSUER|${TMP}/home/.app-store-connect/AuthKey_FAKEKEY123.p8" ]
+
+  run env -u ASC_KEY_ID -u ASC_ISSUER_ID -u API_PRIVATE_KEYS_DIR \
+    ASC_KEY_PATH=/custom/AuthKey_OTHER.p8 HOME="${TMP}/home" bash "${TMP}/probe.sh" "${TMP}/cred.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" = "FAKEKEY123|fake-issuer-uuid|/custom/AuthKey_OTHER.p8" ]
+}
+
 @test "release.sh stops at preflight FAIL on dirty tree" {
   make_fixture_app "${TMP}/app"
   cd "${TMP}/app"

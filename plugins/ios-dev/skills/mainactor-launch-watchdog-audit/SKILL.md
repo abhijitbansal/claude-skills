@@ -12,7 +12,7 @@ description: App killed at launch with 0x8BADF00D (the ~10s scene-update watchdo
   watchdog, so a sim smoke build stays green while TestFlight crashes.
 - App **freezes on the first frame** (same mechanism, under the 10s limit).
 - **Boot-loop**: the killed work retries unconditionally on every launch, gets
-  killed again, forever — unrecoverable without a reinstall (doc-scan's
+  killed again, forever — unrecoverable without a reinstall (a private document-scanner app's
   embedding backfill did exactly this).
 
 ## Root cause
@@ -37,7 +37,12 @@ grep -rnE 'VNImageRequestHandler|VNRecognizeTextRequest|MLModel|\.pdfData\(|Data
 ```
 
 Anything found that is unannotated is implicitly `@MainActor` — it runs on
-main no matter how "background" it looks.
+main no matter how "background" it looks. Under `SWIFT_APPROACHABLE_CONCURRENCY`
+(SE-0461) a plain `nonisolated async` function also runs on the caller's actor,
+so mark the worker `@concurrent` to actually leave the main actor (see
+`swift6-mainactor-compile-fixes`). `Task.detached` and `TaskGroup` child tasks
+already leave the caller's actor, so `@concurrent` matters when the worker is
+awaited directly.
 
 ### 2. Offload: nonisolated worker, Sendable results, one hop back
 
@@ -84,7 +89,7 @@ render(images)   // back on @MainActor once, with everything decoded
 
 ### 3. Make retried launch work idempotent
 
-doc-scan's boot-loop: `index.upsert` progress was recorded **after** the loop,
+The scanner app's boot-loop: `index.upsert` progress was recorded **after** the loop,
 so a watchdog kill mid-loop persisted nothing and every launch restarted from
 zero. Record progress per unit, *before* the heavy step, so a crash still
 advances state and a retried launch skips completed work:
@@ -114,11 +119,11 @@ cannot reproduce the watchdog; sim-green explicitly does not clear this class.
 
 ## Evidence
 
-- **doc-scan** — `fix(ai): run embedding backfill off the main actor…`: names
+- **a private document-scanner app** — `fix(ai): run embedding backfill off the main actor…`: names
   `0x8BADF00D`, the 10s scene-update watchdog, and the boot-loop from the
   index.upsert-after-loop non-idempotency. `EmbeddingBackfillService.swift`
   carries the verbatim `0x8BADF00D` comment.
-- **floorprint** — `build floor plan + quality report off the main actor`,
+- **a private floor-plan scanner app** — `build floor plan + quality report off the main actor`,
   `prewarm furniture templates off-main`.
 - **cubby** — `pre-load report photos off-main` (N disk reads + JPEG decodes
   on main inside `renderer.pdfData`).
