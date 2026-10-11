@@ -1,8 +1,18 @@
 # Skill catalog review (2026-10-10) — additions, updates, deletions
 
-**Status:** **Proposed — not yet executed, awaiting repo-owner approval.** This
-document only *proposes* edits. No skill has been written, merged or deleted;
-no `~/.claude/skills` file has been touched.
+**Status:** **Executed on this branch (2026-10-10), owner decisions F1–F5 taken
+as recommended.** Phases 1–4 of §H landed as the commits on
+`docs/skill-catalog-review` (PR #32): private-name scrub + bats guard (F1),
+`pages.yml` push trigger (F3), `scripts/sweep_counts.py` + live pytest check
+(F4), every §B extension, every §C1–C4 item, the §D1 merge and the launchd
+split (§C3). **Deferred, not skipped:** Phase 5 — the eval-gated description
+pass (F2 = wait): the 13 oversized descriptions, the two ◐ description items
+(`release-inapp-vs-asc-whatsnew-surfaces` trigger, `swift6` "Two
+diagnostics"), the `vision-barcode` QR-only description, the `commit`
+description's "need confirmation" clause and `linear-pick.md`'s "polling
+agent" clause are untouched and listed for that pass. F5 is report-only;
+nothing under `~/.claude/skills` was touched. `docs/superpowers/` keeps its
+historical private names (exempt from the guard).
 
 **Scope:** every skill in the catalog (88 across 6 plugins at `0dce572`) and
 every Claude Code session transcript still on this machine (318 sessions,
