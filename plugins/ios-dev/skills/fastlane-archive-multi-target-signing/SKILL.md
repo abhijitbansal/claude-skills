@@ -1,7 +1,6 @@
 ---
 name: fastlane-archive-multi-target-signing
 description: An app just gained its first Widget/Share/Notification-Service/other embedded extension target, and a fastlane archive+export that worked fine before now fails at export (after the archive itself succeeds) with something like "requires a provisioning profile with the App Groups feature" or "no provisioning profile mapping" for the extension's bundle id. Use this whenever adding, reviewing, or debugging a fastlane Fastfile `archive`/`gym` lane in a project with more than one signed target (main app + any .appex), or whenever a release fails specifically at the export step right after "ARCHIVE SUCCEEDED."
-promotion_target: Patch the ios-dev plugin's release skill, Stage 5 "Cold-start signing" snippet and the Stage-6 recovery table — the existing snippet only maps a single APP_IDENTIFIER profile; it needs to loop every signed embedded target.
 ---
 
 # Fastlane Archive Lane Must Sign *Every* Embedded Extension, Not Just the Main App
@@ -15,7 +14,7 @@ its own `.appex` with its own bundle id — the **archive itself still
 succeeds** (`ARCHIVE SUCCEEDED`), but export fails:
 
 ```
-error: exportArchive "CubbyWidget.appex" requires a provisioning profile
+error: exportArchive "<App>Widget.appex" requires a provisioning profile
 with the App Groups feature
 ```
 
@@ -116,13 +115,21 @@ the preflight if one is missing — catching the gap before archiving, not after
   add the profile-mapping check alongside any existing entitlement-parity
   check.
 
-## Related note — verify the rendered version before archiving
+## Evidence
 
-A separate, smaller trap in the same release flow: if your version-bump step
-supports multiple "kinds" (e.g. `build` vs `minor` vs `patch`), it's easy to
-run the wrong one from muscle memory — especially right after a prior release
-used a different kind. Before archiving, print and eyeball the **actual
-rendered** version/build values from the project's single source of truth
-(e.g. `project.yml`), not just the flag you think you passed — a build-only
-bump that silently ran as a patch bump (or vice versa) is much cheaper to
-catch at this print-and-confirm step than after upload.
+Adding the first widget extension to an app whose `archive` lane already
+shipped releases: `ARCHIVE SUCCEEDED`, then export failed with
+`exportArchive "<App>Widget.appex" requires a provisioning profile with the
+App Groups feature`. The lane fetched and mapped one profile (the main app's
+`APP_IDENTIFIER`); the extension's bundle id had no profile at all. Looping
+the profile fetch over every signed target fixed it. The failure surfaces
+only at export, so each first hit burns a build number.
+
+## Related skills
+
+- `release` — Stage 5 "Cold-start signing" already carries the
+  every-signed-target profile loop (the fix above), and Stage 6 the
+  validate/upload step after it.
+- `xcode-cloud-validate` — when the hosted Xcode Cloud archive fails at
+  "Prepare Build for App Store Connect", validate the exported `.ipa` locally
+  with `altool`.

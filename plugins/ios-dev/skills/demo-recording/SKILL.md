@@ -62,7 +62,7 @@ regenerate on demand or in CI.
    `@AppStorage` per-launch through the NSArgumentDomain:
    `app.launchArguments = ["-hasSeenOnboarding", "YES"]`.
 
-## Related
+## Related skills
 
 This is the manual/CI counterpart to the simulator screenshot loop in the
 `app-preview` skill — use `app-preview` for single inline screenshots,

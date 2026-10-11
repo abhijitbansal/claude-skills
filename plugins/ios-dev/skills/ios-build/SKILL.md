@@ -18,6 +18,24 @@ Run the project's `./build.sh` rather than constructing `xcodebuild` invocations
 | Real device (connected iPhone) | `./build.sh -d` |
 | Inspect what would happen without building | `./build.sh -d --debug` |
 
+## Fallback: the bundled wrapper
+
+This skill also bundles `scripts/build.sh`. It is not the app's `./build.sh`
+and does less:
+
+- Takes only `sim` (default) or `device`; anything else exits 2. It forwards
+  no other flags, so there is no `-s <simulator>` and no `--debug`.
+- If the app's own `./${APP_BUILD_SCRIPT}` is executable it just `exec`s it
+  (`device` becomes `-d`); otherwise it runs bare `xcodebuild`.
+- The bare path hard-codes `name=iPhone 16` for `sim`, and `generic/platform=iOS`
+  with `DEVELOPMENT_TEAM="${APP_TEAM_ID}"` and `-allowProvisioningUpdates` for
+  `device`.
+- The bare path does no xcodegen regeneration, no provisioning-profile team
+  detection, and no install — a `device` run builds but never installs on the
+  phone.
+
+Prefer the app's `./build.sh` (table above) whenever it exists.
+
 ## Hard rules — do NOT regress these
 
 These are house rules earned through past debugging. Violating them will reintroduce specific bugs we've already fixed:

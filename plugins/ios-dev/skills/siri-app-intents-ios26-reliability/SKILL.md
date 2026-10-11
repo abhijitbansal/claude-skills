@@ -5,7 +5,8 @@ description: Building or debugging Siri voice invocation for App Intents / App S
 
 # Siri App Shortcuts on iOS 26: reliability under the phrase quota
 
-Evidence: one shipped feature (inventory voice queries), device-verified (s0044).
+Evidence: one shipped feature (inventory voice queries), verified on a physical
+device.
 Platform caps below are iOS-26-observed — **verify against current docs before
 relying on exact numbers** (dated 2026-07; OS-version-volatile).
 
@@ -31,3 +32,12 @@ relying on exact numbers** (dated 2026-07; OS-version-volatile).
    same-timestamp tiebreak, use dense rank, not position rank — position rank after a
    timestamp collision skips ranks and silently drops donation slots. (Real algorithm
    bug, caught in review, not by the implementer.)
+
+## Related skills
+
+- `shared-action-overload-callsite-audit` — before reusing an existing
+  deep-link/enum case or App Intent for a new Siri shortcut that needs one
+  extra behavior, audit every other callsite of that case.
+- `deep-link-resolver-applock-pathtraversal` — Siri/App Intent entry points
+  that route into the app must go through the same lock-aware resolver
+  (drop, never defer, while locked).

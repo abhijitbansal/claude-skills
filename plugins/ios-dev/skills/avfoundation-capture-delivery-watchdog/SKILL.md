@@ -141,26 +141,14 @@ this fixed from a simulator run.
 
 ## Evidence
 
-- **cubby** — continuous-add capture loop ("scan another item") intermittently
-  froze the shutter with no error after a few captures; traced to the
-  `AVCapturePhotoCaptureDelegate` callback never firing on a session
-  re-mount race, fixed with a `uniqueID`-keyed watchdog + exactly-once
-  resolver.
-- **cubby, session 0063 (2026-07-23)** — Fix 2's origin. A unified capture
-  screen hosted three flows behind a mode pill and re-hosted them with
-  `.id(mode)`; the review found the resulting `AVCaptureSession` contention as a
-  device-only hazard. The first fix (`e224b25`) rendered a neutral placeholder
-  instead of the flow "so the outgoing flow unmounts (`viewWillDisappear` →
-  `stopRunning`) before the incoming flow can mount + `startRunning`" — but was
-  logged explicitly as "a MITIGATION, not a proven fix … the 350ms window is a
-  heuristic, not a teardown-complete signal."
-- **cubby, session 0066 (2026-07-25), BUG-045** — the real fix, two sessions
-  later: "replaced the blind 350ms sleep with a real camera-idle signal
-  (`CameraSessionHandoff`), keeping 350ms as a **ceiling** so the switch can only
-  get faster and the s63 contention serialization is preserved." The structural
-  cure — one long-lived session hoisted above the mode switch — was scoped out
-  as its own task, which is why the gate is the shipped answer and not a
-  placeholder for one.
+- **Fix 1 (Cubby)** — a continuous-add capture loop froze the shutter after a
+  few captures; the delegate never fired on a session re-mount race. Fixed with
+  the `uniqueID`-keyed watchdog + exactly-once resolver.
+- **Fix 2, Cubby session 0063 (2026-07-23)** — `.id(mode)` re-hosting caused
+  device-only `AVCaptureSession` contention; `e224b25` added a placeholder plus
+  a 350ms window, logged as a mitigation.
+- **Fix 2, Cubby session 0066 (2026-07-25), BUG-045** — replaced the blind sleep
+  with a camera-idle signal (`CameraSessionHandoff`), keeping 350ms as a ceiling.
 
 ## Related skills
 

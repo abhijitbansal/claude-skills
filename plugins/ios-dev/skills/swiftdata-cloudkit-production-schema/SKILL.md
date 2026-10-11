@@ -97,17 +97,19 @@ Reference implementation: Cubby `scripts/verify-cloudkit-schema.sh` +
 ## 6. Diagnosis flags — the error message lies
 
 `SwiftDataError` code 1 (and most sync failures) surface as a generic wrapper. The
-real diagnostics:
-
-```
-xcrun devicectl device process launch --console <device> <bundle-id> -- \
-  -com.apple.CoreData.CloudKitDebug 3 -com.apple.CoreData.Logging.stderr 1
-```
-
-Note the `--` separator — without it devicectl's own ArgumentParser swallows the
-`-`-prefixed app arguments.
+real diagnostics (the `-com.apple.CoreData.CloudKitDebug` launch flags and the
+`--` separator they need) live in `devicectl-crashlog-oslog-cli-diagnostics`.
 
 ## 7. Production is add-only
 
 Never rename/delete/retype a live Production field. Design additive; a "wrong" field
 stays forever (harmless) — plan names carefully before first deploy.
+
+## Related skills
+
+- `swiftdata-cloudkit-model-rules` — the prerequisite: modeling basics and
+  container rules this skill builds on.
+- `devicectl-crashlog-oslog-cli-diagnostics` — device-only diagnosis flags
+  for the generic `SwiftDataError` / sync failures (rule 6).
+- `release` — the pipeline the schema-deploy preflight gate (rule 5) hooks
+  into.

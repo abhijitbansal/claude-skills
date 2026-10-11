@@ -44,6 +44,9 @@ reviewer — hits the exact timing.
    from a non-key window can fail silently. App Intents, deep links, and
    notification handlers arrive *before* auth resolves — gate them on
    `isLocked`, or an action (e.g. a scan) can start behind the lock screen.
+   The gate is **drop, never defer**: a link queued for after unlock fires
+   the moment the user authenticates and navigates somewhere they never
+   chose. See `deep-link-resolver-applock-pathtraversal`.
 
 ## Example wiring
 
@@ -64,3 +67,11 @@ ContentView()
 - Disabling the lock passes through an auth gate.
 - Background (not inactive) drives locking; every external entry point checks
   `isLocked` before acting.
+
+## Related skills
+
+- `deep-link-resolver-applock-pathtraversal` — the one-pure-resolver pattern
+  for deep links: drops (never defers) links while locked and validates paths.
+- `widget-appgroup-snapshot-bridge` — widgets render from an App Group
+  snapshot outside the app process, so the lock does not cover them; the
+  snapshot writer must redact while the lock is engaged.

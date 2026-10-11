@@ -55,10 +55,12 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/site-pages-deploy-kit/scripts/verify-site.sh"
 Smoke-test a real unfurl after deploying: paste the URL into Teams/iMessage —
 first impressions cache, so verify BEFORE sharing widely.
 
-## Related
+## Related skills
 
 - `site-pages-deploy-kit` — deploy + skeleton (skeleton pages pass this lint
   by construction).
+- `pillow-favicon-set-no-rasterizer` — how to generate the raster favicon set
+  (favicon.ico, apple-touch-icon.png) when no SVG rasterizer is installed.
 - `subpage-nav-anchor-baseurl-ssr-label-drift` — a sibling per-page-metadata
   drift on the same kind of site (in-page nav anchors and SSR-default text,
   rather than unfurl/favicon/CSP).

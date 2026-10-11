@@ -79,7 +79,7 @@ scripts/deliver.sh --no-icloud <path>   # skip the iCloud copy (just notify)
 Two-channel delivery:
 
 1. **iCloud Drive copy** → `~/Library/Mobile Documents/com~apple~CloudDocs/$(basename "${APP_PREVIEW_ROOT}")/<branch>/<basename>`. iCloud syncs to iPhone Files app in 5–30s.
-2. **iMessage text ping** → reads destination from `app-preview/.imessage-to` (first non-blank line; Apple ID email or E.164 phone). Sends a text like:
+2. **iMessage text ping** → reads the destination (Apple ID email or E.164 phone) from the `IMESSAGE_TO` environment variable (it must be set in the environment Claude Code inherits); if unset, falls back to the first non-blank line of `.imessage-to` next to the skill. When the plugin is installed from the marketplace that file sits inside the plugin cache and is wiped on update — prefer `IMESSAGE_TO`; for a source checkout it is a gitignored repo file. Sends a text like:
    ```
    ${APP_NAME} preview: ${APP_NAME_LC}-snap-...-after-fix.png — Files → iCloud Drive → $(basename "${APP_PREVIEW_ROOT}") → <branch>
    ```
@@ -241,7 +241,7 @@ scripts/launch.sh --no-build
 - **Build failures**: surface the `xcodebuild` error verbatim to the user, then stop. Don't try to "fix and retry" inside this skill — the build error might be the very thing the user wants to know about. Hand off to the project's existing iOS skills (e.g., `swiftui-expert-skill`, `xcode-build-fixer`) if remediation is needed.
 - **Simulator not booted on first run**: `launch.sh` boots `iPhone 17 Pro` by default to match the build script's default destination. If the user wants a different simulator, pass `--sim "<name>"` to both.
 - **Multiple sims booted**: `xcrun simctl ... booted` errors out when more than one device is booted. Shut extras down: `xcrun simctl shutdown <UDID>`.
-- **iMessage destination not configured**: deliver.sh skips the ping with a warning and proceeds with iCloud Drive only. To enable pings: `echo 'you@example.com' > ~/.claude/skills/app-preview/.imessage-to`. **First-time setup also requires** the user to manually send themselves one message in Messages.app first — without that bootstrap, AppleScript-generated text sends don't deliver either.
+- **iMessage destination not configured**: deliver.sh skips the ping with a warning and proceeds with iCloud Drive only. To enable pings, set `IMESSAGE_TO` (primary mechanism; e.g. `export IMESSAGE_TO='you@example.com'` in your shell profile). Fallback: a `.imessage-to` file in the skill directory (next to `scripts/`) — but that lives inside the plugin cache and is wiped on update. **First-time setup also requires** the user to manually send themselves one message in Messages.app first — without that bootstrap, AppleScript-generated text sends don't deliver either.
 - **Do not try to attach the image to iMessage** — AppleScript file attachments to self-destinations are silently rejected by Apple's iMessage server. The hybrid pattern (text ping + iCloud Drive image) is the workaround. See "Why hybrid?" above.
 - **iCloud sync latency**: usually a few seconds for a 200KB PNG. If the user reports "I don't see it on my phone," ask them to pull-to-refresh in Files → iCloud Drive → `$(basename "${APP_PREVIEW_ROOT}")` → `<branch>`. If still not there after ~30s, check that iCloud Drive is on for both devices.
 - **Preview folder grows unbounded**: each preview adds another PNG. Nothing prunes them. With branch subfolders the cleanup target is more obvious — delete the folder for a merged branch and you reclaim everything that was about that line of work.

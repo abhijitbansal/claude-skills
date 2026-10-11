@@ -148,37 +148,16 @@ and these become plain unit tests with no hardware.
 
 ## Evidence
 
-Cubby iOS, four separate reports of one defect across two sessions — the reason
-this is a skill and not a bug note.
+Cubby iOS, four reports of one defect across two sessions.
 
-- **Session 0066 (2026-07-25), BUG-044** — "one transcriber is shared app-wide
-  and every host fires `.onDisappear { voice?.stop() }` — including hosts that
-  never started anything." First scoped to `phase != .idle`, then corrected on
-  review to a real ownership flag, because `.preparing` also spans a vocabulary
-  fetch during which the model owns no session: "the coarse guard still allowed
-  a cross-host kill from that window." That is rule 1 — the claim has to bracket
-  the suspension, not follow it.
-- **Session 0066, BUG-045** — the count row of the table above, found the hard
-  way: "Handoff is a live-session registry, not a stop counter. A counter cannot
-  attribute a stop, so a stop from an earlier teardown could release a later
-  switch while the outgoing session was still draining — reintroducing the very
-  contention the window exists to prevent."
-- **Session 0068 (2026-07-26), findings #4 and #5** — rule 2, twice. The guard
-  shipped for BUG-044 "reached `handleRecognition` but not `stop()`", re-opening
-  the original symptom; and a camera handoff "is a process-wide unkeyed `Bool`"
-  while its own sibling in the same file had already moved to a per-owner
-  `Set<ObjectIdentifier>`. Fixed with a session token handed out by an
-  `onStarted` callback fired "right after the generation bump — deliberately
-  **before** hardware setup, so a dismiss racing setup still holds a token", and
-  a `stop(sessionToken:)` gated on a pure `ownsLiveSession` predicate.
-- **Session 0068, finding #2** — rule 3, the availability direction: one circuit
-  breaker served both an output refiner and a label suggester, so the suggester
-  inherited every trip the refiner earned. Fixed with a second breaker instance
-  at the composition root.
-
-The pure-predicate shape in "How to test it" is not hypothetical: making
-ownership a free function is what let these land as plain unit tests on a
-codebase whose camera and microphone paths are otherwise device-only.
+- **Session 0066 (2026-07-25), BUG-044** — a shared transcriber stopped by hosts
+  that never started it; a coarse `phase` guard still allowed a kill during
+  `.preparing` (rule 1).
+- **Session 0066, BUG-045** — a stop counter could not attribute a stop; replaced
+  by a live-session registry (the count row of the table).
+- **Session 0068 (2026-07-26), findings #4/#5/#2** — rule 2 (a guard missing from
+  `stop()`; an unkeyed camera-handoff `Bool`) and rule 3 (one breaker shared by
+  two consumers). Ownership as a pure predicate made each a plain unit test.
 
 ## Related skills
 

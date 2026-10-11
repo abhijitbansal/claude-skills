@@ -29,9 +29,15 @@ and easy-to-conflate purposes:
    attached to a version/build record in App Store Connect, edited through
    the web UI (or a metadata-upload tool). These are **completely
    independent of the binary** — a `fastlane pilot`/`fastlane deliver` upload
-   with `skip_waiting_for_build_processing` cannot push this text; it always
-   requires a separate, usually manual, paste step once the build finishes
-   processing.
+   with `skip_waiting_for_build_processing` cannot push this text; in that
+   case it requires a separate, usually manual, paste step once the build
+   finishes processing.
+
+   **Nuance: the text can ride along with a lane.**
+   `deliver` sets What's New from `fastlane/metadata/<locale>/release_notes.txt`,
+   and `pilot` has a `changelog:` option for What to Test. The surfaces are
+   still independent of the binary, so the drift risk remains: the file or lane
+   argument must be updated to match the in-app data, and nothing checks that.
 
 A preflight gate that only checks "does the release-notes file have an entry
 for this version" (the ASC-metadata side) gives false confidence — it says

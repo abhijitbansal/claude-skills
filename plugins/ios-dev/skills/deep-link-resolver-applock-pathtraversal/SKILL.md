@@ -117,3 +117,6 @@ Single wiring point — every entry surface funnels here:
   (share/action extensions); same "validate before the host app acts" stance.
 - `swift6-mainactor-compile-fixes` — why the resolver is `nonisolated` pure
   compute under MainActor-default isolation, and how to keep it that way.
+- `siri-app-intents-ios26-reliability` — App Intents are one of the entry
+  surfaces that funnel through the resolver; that skill covers making them
+  fire reliably.

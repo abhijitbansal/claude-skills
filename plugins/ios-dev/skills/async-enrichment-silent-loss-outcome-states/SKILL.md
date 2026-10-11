@@ -126,23 +126,13 @@ write in the document-structure recognizer).
 
 ## Evidence
 
-Session 0018 (09:58 checkpoint), Cubby iOS: "User's first scan (LITE SALT
-jar) showed OCR name at 69% and 'nothing AI-ish' — diagnosed: merge working
-as designed (OCR 0.69 > VLM 0.65) but the losing VLM result was silently
-discarded and both silent paths (not-ready, ran-and-lost) were unlogged,
-indistinguishable from a dead engine. User directive: AI must be visible +
-user chooses. Shipped `VLMUpgradeOutcome` payload (auto-merge OR offered
-names)... spinner state..., 'AI suggests' chips when Vision/OCR keeps the
-field, tap-to-apply."
-
-Fix 2 comes from the same app one wave later — session 0066 (2026-07-25),
-BUG-043: "an empty model reply was stored as a valid summary, and
-`SummaryMarkdown.blocks(from: "")` returns zero blocks, so the card rendered
-'Generated now / AI-generated' with no text and no error." Shipped as a
-`ContainerSummaryValidation` boundary that "rejects blank output at the
-summarizer boundary", a cache "made to refuse to store a blank entry", and a
-failure that surfaces "its **own** `LocalizedError` copy instead of one generic
-retry line" — the three requirements above, in the order they were needed.
+- Fix 1, Cubby session 0018: a correct merge (OCR 0.69 beat VLM 0.65) silently
+  discarded the VLM result, unlogged; shipped a `VLMUpgradeOutcome` payload,
+  a spinner state, and tap-to-apply "AI suggests" chips.
+- Fix 2, Cubby session 0066 (2026-07-25), BUG-043: an empty model reply was
+  stored as a valid summary and rendered an "AI-generated" card with no text;
+  shipped a blank-rejecting boundary, a cache that refuses blanks, and its own
+  error copy.
 
 ## Related skills
 

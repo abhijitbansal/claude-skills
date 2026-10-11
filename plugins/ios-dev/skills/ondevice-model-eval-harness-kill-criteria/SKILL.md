@@ -27,7 +27,7 @@ already been sunk into one candidate — at which point sunk-cost pressure
 biases the decision toward keeping the already-integrated model rather than
 the actually-best one.
 
-## Solution
+## Fix
 
 Gate all integration engineering behind a standalone offline evaluation
 phase (Cubby called it M0):
@@ -66,6 +66,15 @@ phase (Cubby called it M0):
    feature). Harness-machine numbers and on-device numbers are not
    interchangeable.
 
+Use this for any app or service adding an on-device or edge-deployed AI/ML
+model (VLM, speech, embedding, classifier) where multiple candidate models
+exist and integration cost (runtime engine, delivery mechanism, UI) is
+nontrivial. Run the eval harness as its own gated phase *before* writing
+integration code — treat it as a go/no-go and model-picking gate, not a
+post-hoc justification step for a model already chosen. Generalizes beyond
+iOS/MLX to any edge/on-device model-selection decision (Android, embedded,
+browser-side WASM models).
+
 ## Evidence
 
 Roadmap doc (2026-07-07): "Selection is empirical, not paper-driven. Nearly
@@ -90,17 +99,6 @@ incompatible; mlx-vlm pinned to git rev in pyproject." Decision log: "Model =
 Qwen2-VL-2B (working everywhere today) over Qwen3-VL (better paper numbers,
 broken Python inference) — empirical M0 rule followed; Qwen3-VL re-eval noted
 for the M1 device spike."
-
-## When to Use
-
-Any app or service adding an on-device or edge-deployed AI/ML model (VLM,
-speech, embedding, classifier) where multiple candidate models exist and
-integration cost (runtime engine, delivery mechanism, UI) is nontrivial. Run
-the eval harness as its own gated phase *before* writing integration code —
-treat it as a go/no-go and model-picking gate, not a post-hoc justification
-step for a model already chosen. Generalizes beyond iOS/MLX to any
-edge/on-device model-selection decision (Android, embedded, browser-side WASM
-models).
 
 ## Related skills
 

@@ -37,7 +37,12 @@ grep -rnE 'VNImageRequestHandler|VNRecognizeTextRequest|MLModel|\.pdfData\(|Data
 ```
 
 Anything found that is unannotated is implicitly `@MainActor` — it runs on
-main no matter how "background" it looks.
+main no matter how "background" it looks. Under `SWIFT_APPROACHABLE_CONCURRENCY`
+(SE-0461) a plain `nonisolated async` function also runs on the caller's actor,
+so mark the worker `@concurrent` to actually leave the main actor (see
+`swift6-mainactor-compile-fixes`). `Task.detached` and `TaskGroup` child tasks
+already leave the caller's actor, so `@concurrent` matters when the worker is
+awaited directly.
 
 ### 2. Offload: nonisolated worker, Sendable results, one hop back
 
