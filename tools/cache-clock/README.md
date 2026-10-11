@@ -89,10 +89,24 @@ cache-clock · Claude Sonnet 5.5
 | Model (via Copilot) | Reported TTL | Write ÷ read | Evidence |
 |---|---|---|---|
 | Claude Sonnet 5.5 | 300 s | 25× | Sent 20 s after `cacheExpiresAt`: read 0, wrote 44,388 |
-| GPT-6 Luna | 1800 s | 12.5× | Every persisted call (198 on this machine) reports `cacheTtlSeconds: 1800`; gap test below |
+| GPT-6 Luna | 1800 s | 12.5× | Every persisted call (201 on this machine) reports `cacheTtlSeconds: 1800`; gap test below |
+
+**Gap test, GPT-6 Luna.** Two sessions were warmed at 14:55Z, then resumed with
+`copilot --resume <id> -p`, with the guard threshold at $0:
+
+| Resumed | vs reported expiry | Cache read | Cache written | What Cache Clock did |
+|---|---|---|---|---|
+| after 29 min | 1 min before | 0 | 20,771 | allowed it (clock said warm) |
+| after 31 min | 1 min after | (refused, no model call) | | refused, 0 AI credits |
+| resend, new process | 1 min after | 10,157 | 10,653 | let it through with the cold note |
+
+So the reported expiry is an upper bound on Luna, not a guarantee: the 29-minute send
+was already fully cold. On Claude the reported expiry held to the second. The
+refused-then-resent pair also shows the refusal memory working across processes.
 
 Prices in the log already include discounts: through `auto`, Sonnet's write was
-$2.25/M (list $2.50, auto's 10% off). 1 AI credit = $0.01.
+$2.25/M (list $2.50) and Luna's $0.1125/M (list $0.125), auto's 10% off.
+1 AI credit = $0.01.
 
 Separate sessions share the cached system-prompt prefix: a brand-new session's first
 call read 10,157 tokens from cache. The conversation itself is per session.
@@ -109,12 +123,19 @@ node tools/cache-clock/bin/report.mjs --since 7d   # or 12h, all; --json for raw
 
 ```
 model                   calls  cold after idle  prefix breaks  rewritten  extra paid  total spent  idle before cold sends
-GPT-6 Luna                198                0              1      19.6k      $0.002        $0.13  -
+Claude Sonnet 5.5           5                1              0      37.1k       $0.08        $0.16  5m
+GPT-6 Luna                201                1              2      44.9k      $0.005        $0.14  31m
+
+extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at this rate
 ```
 
+That is the test machine after this README's experiments: the Sonnet row is the
+refusal capture's resend, the Luna rows include the gap test.
+
 "Extra paid" is what each cold call cost above a warm read of the same tokens.
-"Prefix breaks" are cold calls inside the TTL: something changed the prompt prefix
-(tools, instructions, model routing), not idling.
+"Prefix breaks" are cold calls inside the reported TTL: something changed the prompt
+prefix (tools, instructions, model routing), or the provider evicted early, as in the
+Luna gap test above.
 
 ## VS Code
 
@@ -139,9 +160,11 @@ VS Code's own Cache Explorer (Agent Debug Logs) is the built-in view.
   prefix (~10k tokens) often stays cached, so on a long idle a little less is rewritten.
 - **`-p` mode.** The guard works in `copilot -p`, but slash commands there go to the
   model as text, so `/cache-clock` needs the interactive CLI.
+- **Early eviction is invisible to the guard.** It trusts Copilot's `cacheExpiresAt`.
+  When a provider drops a cache sooner (Luna at 29 of 30 minutes, once), the send is
+  billed cold and the guard stays quiet; the report counts it as a prefix break.
 - Claude was measured through `auto` only; the seat used for testing could not pick
-  Claude models directly. GPT-6 Luna's TTL boundary was measured with a 29- and
-  31-minute gap test (below).
+  Claude models directly. Each boundary result above is a single run.
 
 ## Tests
 
