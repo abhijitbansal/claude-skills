@@ -5,7 +5,7 @@
 `claude-skills` is three things in one repo:
 
 1. A **Claude Code plugin marketplace** hosting eight focused plugins.
-2. A home for **standalone CLI tools** (currently Second Wind).
+2. A home for **standalone tools**: the Second Wind CLI and the Cache Clock extension for Copilot CLI.
 3. **Adapters** that wire the same skills into Codex, Copilot CLI, and any AGENTS.md-aware agent.
 
 Plus private **seed machinery** that rebuilds the owner's full dev environment on a fresh machine.
@@ -24,6 +24,7 @@ flowchart TD
   TB["test-board — test-run band"]
   SC["session-compass — compass band · /compass pane"]
   WIND[("tools/second-wind/wind.py")]
+  CCLK[("tools/cache-clock — Copilot CLI extension")]
   AD["adapters/install.sh"]
   SEED["setup/ — setup.sh · capture.sh · contribute.sh"]
   CC(("Claude Code"))
@@ -35,6 +36,7 @@ flowchart TD
   SEED -->|local_plugins step| CC
   SEED -->|"wind → ~/.local/bin"| WIND
   AD -->|symlink skills| OTHER
+  CCLK -->|"install.sh → ~/.copilot/extensions"| OTHER
   IOS & LIN & CW & SW & PC & PA -->|skills/| AD
 ```
 
@@ -86,6 +88,7 @@ second code path to drift. The `symlinks` step also cleans up pre-plugin-era sym
 | `.claude-plugin/marketplace.json` | marketplace manifest — the list of plugins |
 | `plugins/<name>/` | one plugin each: `.claude-plugin/plugin.json` + `skills/`, `commands/`, `agents/`, `hooks/` |
 | `tools/second-wind/` | canonical `wind.py` + its pytest suite |
+| `tools/cache-clock/` | Copilot CLI extension (prompt-cache clock + cold-send guard), `bin/report.mjs`, node tests |
 | `adapters/install.sh` | codex / copilot / agents-md wiring |
 | `setup/` | seed machinery (setup, capture, contribute) |
 | `templates/`, `claude-setup.toml` | personal machine seed data |
@@ -97,4 +100,5 @@ second code path to drift. The `symlinks` step also cleans up pre-plugin-era sym
 - `bats tests/bats/` — shell behavior: setup steps, adapters, contribute flow, skill scripts, manifest validation.
 - `uv tool run pytest tests/pytest -q` — TOML parse/write round-trip.
 - `uv tool run pytest tools/second-wind/tests -q` — wind's limit-detection and classification logic.
+- `(cd tools/cache-clock && node --test "test/*.test.mjs")` — Cache Clock's clock, guard, report and installer.
 - CI (GitHub Actions, macOS + Ubuntu): manifest validation, shellcheck, all three suites.

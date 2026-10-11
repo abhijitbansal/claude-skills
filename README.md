@@ -87,7 +87,11 @@ sh tools/cache-clock/install.sh            # links ~/.copilot/extensions/cache-c
 node tools/cache-clock/bin/report.mjs      # what cold sends already cost you
 ```
 
-Full reference: [tools/cache-clock/README.md](tools/cache-clock/README.md)
+Full reference: [tools/cache-clock/README.md](tools/cache-clock/README.md) ·
+[guide](docs/features/cache-clock.html) ·
+[visual explainer](docs/features/showcase/cache-clock/how-it-works.html) ·
+[architecture diagram](docs/features/showcase/cache-clock/diagram/cache-clock-architecture.html) ·
+[17-second video](docs/features/showcase/cache-clock/video.mp4)
 
 ### Other AI tools (Codex, Copilot CLI, Hermes, …)
 

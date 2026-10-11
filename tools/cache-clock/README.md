@@ -10,6 +10,11 @@ step away longer than the cache lives, the next message, even "give me a recap",
 rewrites the whole conversation at the write price. Cache Clock shows that clock and
 that price, and by default drops a costly cold send once so you can decide.
 
+See it first: the [guide](../../docs/features/cache-clock.html), the
+[visual explainer](../../docs/features/showcase/cache-clock/how-it-works.html), the
+[architecture diagram](../../docs/features/showcase/cache-clock/diagram/cache-clock-architecture.html)
+and a [17-second video](../../docs/features/showcase/cache-clock/video.mp4).
+
 ```
 ! cache-clock: the Claude Sonnet 5.5 prompt cache went cold 2s ago. Sending this rewrites
   about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).

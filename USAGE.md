@@ -216,6 +216,7 @@ Templated skills (`release`, `ios-build`, `app-preview`) source `skills/_lib/loa
 - **No version pinning for plugins.** `claude plugin install` has no version flag, so any pin in the TOML is surfaced as a warning and the latest is installed.
 - **The guidelines merge is additive only.** It appends `##` sections that are missing; it never edits or removes a section already present, so a drifted section must be reconciled by hand.
 - **Second Wind needs tmux + the Claude Code CLI** and is validated on macOS and Ubuntu only. It detects the usage limit by parsing pane text, so an upstream wording change could require a pattern update — see the limit-detection section of the [Second Wind guide](docs/second-wind/index.html).
+- **Cache Clock is tested on Copilot CLI 1.0.95 only.** It reads Copilot's `assistant.usage` events, so a change to that payload could need an update; whether its guard loads inside VS Code's Copilot harness is not verified yet — see the [Cache Clock guide](docs/features/cache-clock.html).
 - **GitHub Pages is gated.** The public site deploys only when the repo is public, Pages source is set to GitHub Actions, and a release is published — see the [machine-setup runbook](docs/machine-setup.html).
 
 ## Troubleshooting
