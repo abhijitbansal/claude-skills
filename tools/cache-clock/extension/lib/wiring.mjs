@@ -58,10 +58,15 @@ function quietly(fn) {
   }
 }
 
-export async function attach({ joinSession, now = Date.now, timers = globalThis, dir = configDir(), readHistory = readSessionLog }) {
+// VS Code's agent host sets this for the extensions it launches. Its chat shows only
+// error-level session messages; info and warning go to its log file (measured 11 Oct 2026).
+const isVsCode = (env) => Boolean(env?.VSCODE_CANVAS_DATA_DIR);
+
+export async function attach({ joinSession, now = Date.now, timers = globalThis, dir = configDir(), readHistory = readSessionLog, env = process.env }) {
   const clock = createClock();
   const state = { session: null, refusedKey: null, busy: false, headsUpTimer: null };
-  const say = (message, options) => quietly(() => state.session?.log(message, options));
+  const visible = isVsCode(env) ? () => ({ level: "error" }) : (options) => options;
+  const say = (message, options) => quietly(() => state.session?.log(message, visible(options)));
   const scheduleHeadsUp = () => headsUpScheduler({ state, clock, now, timers, dir, say });
 
   function onPrompt(input) {

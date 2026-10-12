@@ -8,7 +8,7 @@ import { saveConfig } from "../extension/lib/config.mjs";
 import { usage, T0, MIN } from "./fixtures.mjs";
 
 // A stand-in for the CopilotSession an extension gets from joinSession().
-function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir = mkdtempSync(join(tmpdir(), "cc-wiring-")) } = {}) {
+function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir = mkdtempSync(join(tmpdir(), "cc-wiring-")), env = {} } = {}) {
   saveConfig(dir, config);
   const host = { now: T0, logs: [], aborts: 0, handlers: new Map(), timers: [], joinConfig: null };
   host.session = {
@@ -37,7 +37,7 @@ function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir
   host.command = (args) => host.joinConfig.commands.find((c) => c.name === "cache-clock").handler({ sessionId: "s-1", command: `/cache-clock ${args}`, commandName: "cache-clock", args });
   host.history = "";
   const readHistory = () => { if (host.history instanceof Error) throw host.history; return host.history; };
-  host.start = () => attach({ joinSession: host.joinSession, now: () => host.now, timers: host.timerApi, dir, readHistory });
+  host.start = () => attach({ joinSession: host.joinSession, now: () => host.now, timers: host.timerApi, dir, readHistory, env });
   host.dir = dir;
   return host;
 }
@@ -65,6 +65,43 @@ test("a costly cold send is refused once without awaiting abort, and the resend 
   assert.equal(h.aborts, 1);
   assert.equal(second, undefined);
   assert.match(h.logs.at(-1).message, /sending cold/);
+});
+
+// VS Code's agent host shows only error-level session messages in the chat (measured 11 Oct 2026).
+const VS_CODE = { VSCODE_CANVAS_DATA_DIR: "/tmp/agentHostCanvasData/x" };
+
+test("in VS Code the refusal, the resend note and the card are logged at error level so the chat shows them", async () => {
+  const h = fakeHost({ env: VS_CODE });
+  await h.start();
+  h.emit("assistant.usage", sonnet({ at: new Date(T0).toISOString() }));
+  h.advance(7 * MIN);
+  await h.prompt("give me a recap");
+  assert.match(h.logs.at(-1).message, /went cold/);
+  assert.equal(h.logs.at(-1).level, "error");
+  await h.prompt("give me a recap");
+  assert.match(h.logs.at(-1).message, /sending cold/);
+  assert.equal(h.logs.at(-1).level, "error");
+  h.command("");
+  assert.match(h.logs.at(-1).message, /^cache-clock · /);
+  assert.equal(h.logs.at(-1).level, "error");
+});
+
+test("in VS Code the heads-up is logged at error level and not ephemeral", async () => {
+  const h = fakeHost({ env: VS_CODE });
+  await h.start();
+  h.emit("assistant.usage", sonnet({ at: new Date(T0).toISOString() }));
+  h.advance(4.5 * MIN);
+  const line = h.logs.at(-1);
+  assert.match(line.message, /goes cold in/);
+  assert.equal(line.level, "error");
+  assert.equal(line.ephemeral, undefined);
+});
+
+test("in the CLI the card keeps the default level", async () => {
+  const h = fakeHost();
+  await h.start();
+  h.command("");
+  assert.equal(h.logs.at(-1).level, undefined);
 });
 
 test("a warm send passes silently", async () => {
