@@ -3,6 +3,7 @@
 //   node bin/install.mjs <claude|codex|copilot|gemini|agents> [--project <dir>] [--skills a,b] [--link] [--force] [--no-deps]
 // Each host reads SKILL.md folders from its own documented locations; the
 // skill itself is the slash command there (/name, or $name in Codex).
+// A skill's package.json "portableArtifacts": {"requires": [...]} pulls in sibling skills first.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -31,7 +32,44 @@ export function targetsFor(host, scope, { home, proj }) {
   };
 }
 
-class UsageError extends Error {}
+export class UsageError extends Error {}
+
+// Skills a skill needs installed beside it: package.json -> portableArtifacts.requires.
+function readRequires(skill, src) {
+  const file = path.join(src, skill, 'package.json');
+  if (!fs.existsSync(file)) return [];
+  let pkg;
+  try {
+    pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    throw new UsageError(`${skill}: package.json is not valid JSON (${e.message})`);
+  }
+  const requires = pkg.portableArtifacts?.requires ?? [];
+  if (!Array.isArray(requires) || requires.some((r) => typeof r !== 'string')) {
+    throw new UsageError(`${skill}: portableArtifacts.requires must be an array of skill names`);
+  }
+  return requires;
+}
+
+// Expand the requested skills with everything they require (transitively):
+// dependency first, each skill once. requiredBy is set only on skills nobody asked for by name.
+export function expandRequires(requested, src = SKILLS_SRC) {
+  const asked = new Set(requested);
+  const plan = [];
+  const done = new Set();
+  const visit = (skill, requiredBy, chain) => {
+    if (done.has(skill)) return;
+    if (chain.includes(skill)) throw new UsageError(`dependency cycle: ${[...chain.slice(chain.indexOf(skill)), skill].join(' -> ')}`);
+    if (requiredBy && !fs.existsSync(path.join(src, skill, 'SKILL.md'))) {
+      throw new UsageError(`${requiredBy} requires unknown skill "${skill}"`);
+    }
+    for (const dep of readRequires(skill, src)) visit(dep, skill, [...chain, skill]);
+    done.add(skill);
+    plan.push(asked.has(skill) ? { skill } : { skill, requiredBy });
+  };
+  for (const skill of requested) visit(skill, undefined, []);
+  return plan;
+}
 
 function readDescription(skillDir) {
   const md = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8');
@@ -116,10 +154,14 @@ function parse(argv) {
 
 function main() {
   const opts = parse(process.argv.slice(2));
+  const plan = expandRequires(opts.skills);
+  for (const { skill, requiredBy } of plan) {
+    if (requiredBy) process.stdout.write(`also installing ${skill} (required by ${requiredBy})\n`);
+  }
   const scope = opts.project ? 'project' : 'user';
   const dirs = targetsFor(opts.host, scope, { home: os.homedir(), proj: path.resolve(opts.project ?? '.') });
   const h = HOSTS[opts.host];
-  for (const skill of opts.skills) {
+  for (const { skill } of plan) {
     const dst = installSkill(skill, dirs.skills, { link: opts.link, force: opts.force, deps: !opts['no-deps'] });
     if (dirs.commands) {
       fs.mkdirSync(dirs.commands, { recursive: true });

@@ -1,6 +1,6 @@
 # portable-artifacts usage guide
 
-Walkthroughs for the three skills on every supported host. To find out what the
+Walkthroughs for the four skills on every supported host. To find out what the
 plugin is, read the [README](README.md). For every spec field, see each skill's
 `references/schema.md`.
 
@@ -21,7 +21,7 @@ plugin is, read the [README](README.md). For every spec field, see each skill's
 | Codex CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs codex` | `$make-dashboard …`, `$make-diagram …`, `$make-motion …` (or pick from `/skills`) |
 | GitHub Copilot CLI / VS Code | `node <repo>/plugins/portable-artifacts/bin/install.mjs copilot` (add `--project .` for `.github/skills`) | `/make-dashboard …`, `/make-diagram …`, `/make-motion …` |
 | Gemini CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs gemini` | `/make-dashboard …` (a TOML command that activates the skill) |
-| Any agent `npx skills` supports | `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-motion` (pick agents interactively, or pass `-a claude-code codex github-copilot -y`) | That agent's skill invocation |
+| Any agent `npx skills` supports | `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion` (pick agents interactively, or pass `-a claude-code codex github-copilot -y`) | That agent's skill invocation |
 | Any other agent | Copy `skills/make-dashboard`, `skills/make-diagram` and/or `skills/make-motion` into your project **with each skill's `shared/` folder**, run `npm ci` in each (`npm ci --omit=dev` for make-dashboard and make-diagram), and point `AGENTS.md` at their `SKILL.md` | Ask for a dashboard, a diagram or a video |
 
 `<repo>` is a clone of `https://github.com/abhijitbansal/claude-skills`. The

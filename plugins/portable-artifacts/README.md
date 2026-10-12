@@ -56,13 +56,13 @@ one-time `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboar
 
 ### Any agent, with `npx skills`
 
-[`skills`](https://github.com/vercel-labs/skills) installs the three skill
+[`skills`](https://github.com/vercel-labs/skills) installs the four skill
 folders into whichever agents you pick (Claude Code, Codex, Copilot,
 Cursor, Gemini CLI, and others):
 
 ```bash
-npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-motion
-npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-motion -a claude-code codex github-copilot -y
+npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion
+npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion -a claude-code codex github-copilot -y
 ```
 
 It copies the folders but doesn't install their dependencies, so the agent
@@ -72,7 +72,7 @@ to; make-dashboard and make-diagram need only `npm ci --omit=dev`).
 ### Codex, GitHub Copilot, Gemini CLI (or Claude Code without the marketplace)
 
 Each host reads skill folders from its own directory, and the skill itself is
-the slash command. The installer copies all three skills to the right place and
+the slash command. The installer copies all four skills to the right place and
 installs their dependencies:
 
 ```bash
