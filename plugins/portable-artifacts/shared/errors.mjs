@@ -1,6 +1,6 @@
-// Shared validator error helpers. This file is copied byte-identically into
-// every portable-artifacts skill (CI checks it) so each skill folder stays
-// self-contained. Edit one copy, then copy it to the others.
+// Shared validator error helpers for every portable-artifacts skill.
+// Source of truth: plugins/portable-artifacts/shared/. Each skill carries a
+// generated copy in <skill>/shared/ (node bin/sync-shared.mjs).
 
 // Edit distance where an adjacent transposition ("bra" -> "bar") costs 1
 // (optimal string alignment), so swapped letters rank as the closest typo.

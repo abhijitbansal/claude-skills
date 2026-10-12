@@ -1,6 +1,6 @@
 // Run the spec's queries against locked-down in-memory DuckDB and make the
 // results JSON-safe. Also: the post-query field check for charts and KPIs.
-import { didYouMean, pathJoin } from './errors.mjs';
+import { didYouMean, pathJoin } from '../../shared/errors.mjs';
 import {
   openLockedDb, runTimed, describeQuery, wrapLimit, quoteId, errMessage, DEFAULT_TIMEOUT_MS,
 } from './sql.mjs';

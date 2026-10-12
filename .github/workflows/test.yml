@@ -73,8 +73,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: shared errors.mjs copies are byte-identical
-        run: cmp plugins/portable-artifacts/skills/make-dashboard/scripts/lib/errors.mjs plugins/portable-artifacts/skills/make-motion/scripts/lib/errors.mjs
+      - name: shared/ copies are in sync
+        run: node plugins/portable-artifacts/bin/sync-shared.mjs --check
       - name: cross-host installer
         working-directory: plugins/portable-artifacts/bin
         run: node --test "test/*.test.mjs"

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
 import { compile as compileVegaLite } from 'vega-lite';
-import { formatAjvErrors, pathJoin } from './errors.mjs';
+import { formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
 import { resolveAsset } from './paths.mjs';
 import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, trackStart } from '../../template/audio.mjs';
 

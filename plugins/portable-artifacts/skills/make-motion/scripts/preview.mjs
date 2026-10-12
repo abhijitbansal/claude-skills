@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { loadSpec, validateSpec, UsageError } from './lib/spec.mjs';
-import { printResult } from './lib/errors.mjs';
+import { printResult } from '../shared/errors.mjs';
 import { startServer } from './lib/server.mjs';
 
 const USAGE = 'usage: node scripts/preview.mjs <motion.json> [--open]';

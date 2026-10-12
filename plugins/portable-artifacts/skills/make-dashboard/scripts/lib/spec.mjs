@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
 import { compile } from 'vega-lite';
-import { formatAjvErrors, didYouMean, pathJoin } from './errors.mjs';
+import { formatAjvErrors, didYouMean, pathJoin } from '../../shared/errors.mjs';
 import {
   openDb, openLockedDb, checkSelect, wrapLimit, runTimed, errMessage, DEFAULT_TIMEOUT_MS,
 } from './sql.mjs';

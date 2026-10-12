@@ -10,7 +10,7 @@ import { UsageError, parseCli, exitUsage } from './lib/cli.mjs';
 import { openLockedDb, checkSelect, errMessage, sqlLiteral, quoteId } from './lib/sql.mjs';
 import { fetchQuery } from './lib/data.mjs';
 import { loadSpec, validateSpec } from './lib/spec.mjs';
-import { printResult } from './lib/errors.mjs';
+import { printResult } from '../shared/errors.mjs';
 import { policyFor } from './lib/sources.mjs';
 
 const USAGE = 'node scripts/inspect.mjs <file.csv|parquet|json> [--type t] [--json] [--allow-outside] | --spec dashboard.json --source <name> [--table <t>]';

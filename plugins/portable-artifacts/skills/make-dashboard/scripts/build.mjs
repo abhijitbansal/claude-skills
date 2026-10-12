@@ -9,7 +9,7 @@ import { runQueries, checkFields, QueryError } from './lib/data.mjs';
 import { renderPage } from './lib/html.mjs';
 import { checkSource, FILE_TYPES } from './lib/sources.mjs';
 import { UsageError, parseCli, parseTimeout, exitUsage } from './lib/cli.mjs';
-import { printResult } from './lib/errors.mjs';
+import { printResult } from '../shared/errors.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(HERE, '..');

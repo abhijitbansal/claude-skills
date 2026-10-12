@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { loadSpec, validateSpec, withDefaults, UsageError } from './lib/spec.mjs';
-import { printResult } from './lib/errors.mjs';
+import { printResult } from '../shared/errors.mjs';
 import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
 import { findFfmpeg, encodeArgs, probeAudio, probeGraph } from './lib/ffmpeg.mjs';

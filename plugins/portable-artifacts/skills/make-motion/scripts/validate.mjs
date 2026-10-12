@@ -2,7 +2,7 @@
 // node scripts/validate.mjs <motion.json> [--json]   exit 0 ok, 1 spec errors, 2 usage/IO
 import { appendFileSync } from 'node:fs';
 import { loadSpec, validateSpec, UsageError } from './lib/spec.mjs';
-import { printResult } from './lib/errors.mjs';
+import { printResult } from '../shared/errors.mjs';
 
 const args = process.argv.slice(2);
 const json = args.includes('--json');
