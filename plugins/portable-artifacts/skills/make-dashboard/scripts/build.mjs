@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MAX_ROWS_DEFAULT } from './lib/spec.mjs';
 import { buildDashboard } from './lib/pipeline.mjs';
-import { UsageError, parseCli, parseTimeout, exitUsage } from './lib/cli.mjs';
+import { UsageError, parseCli, parseTimeout, exitUsage } from '../shared/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

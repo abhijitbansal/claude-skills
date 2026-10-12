@@ -1,14 +1,15 @@
 # portable-artifacts
 
-**Dashboards and animated explainers from a prompt — built locally, offline,
+**Dashboards, diagrams and animated explainers from a prompt — built locally, offline,
 from open-source parts, by any coding agent.**
 
-Two agent skills that do what hosted "artifact" features do, without a cloud,
+Three agent skills that do what hosted "artifact" features do, without a cloud,
 an account or a particular model:
 
 | Skill | You say | You get |
 |---|---|---|
 | [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + charts (11 kinds, alternate views, a sortable Table, PNG/SVG/CSV export, four themes). Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh, or `serve.mjs --watch` for live reload — no LLM involved. |
+| [`make-diagram`](skills/make-diagram/) | "Draw the checkout request path from the browser to the orders DB" | One self-contained HTML diagram (architecture, flowchart, sequence or state) laid out with ELK: zoom, hover tracing, a step-by-step presentation mode and export. The agent writes a small JSON topology; scripts do the rest. |
 | [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. Silent unless you ask for sound: `audio` tracks (music, voiceover, SFX) are added only when the prompt asks, and narration is synthesised locally with Kokoro. "Slow scene 2" changes one field, not the whole video. |
 
 [**See them in action**](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#showcase): a real dashboard and video an agent generated from one prompt each, with the prompts and specs.
@@ -55,13 +56,13 @@ one-time `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboar
 
 ### Any agent, with `npx skills`
 
-[`skills`](https://github.com/vercel-labs/skills) installs the two skill
+[`skills`](https://github.com/vercel-labs/skills) installs the three skill
 folders into whichever agents you pick (Claude Code, Codex, Copilot,
 Cursor, Gemini CLI, and others):
 
 ```bash
-npx skills add abhijitbansal/claude-skills --skill make-dashboard make-motion
-npx skills add abhijitbansal/claude-skills --skill make-dashboard make-motion -a claude-code codex github-copilot -y
+npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-motion
+npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-motion -a claude-code codex github-copilot -y
 ```
 
 It copies the folders but doesn't install their dependencies, so the agent
@@ -71,7 +72,7 @@ to; make-dashboard needs only `npm ci --omit=dev`).
 ### Codex, GitHub Copilot, Gemini CLI (or Claude Code without the marketplace)
 
 Each host reads skill folders from its own directory, and the skill itself is
-the slash command. The installer copies both skills to the right place and
+the slash command. The installer copies all three skills to the right place and
 installs their dependencies:
 
 ```bash
@@ -99,18 +100,18 @@ the skill folder, so copy the folder whole), run `npm ci` inside it
 `AGENTS.md` (or `.github/copilot-instructions.md`):
 
 ```markdown
-To build a dashboard or an animated explainer, read and follow skills/make-dashboard/SKILL.md or skills/make-motion/SKILL.md.
+To build a dashboard, a diagram or an animated explainer, read and follow skills/make-dashboard/SKILL.md, skills/make-diagram/SKILL.md or skills/make-motion/SKILL.md.
 ```
 
 ### Requirements
 
-| | make-dashboard | make-motion |
-|---|---|---|
-| Node.js ≥ 20 | ✓ | ✓ |
-| `npm ci` in the skill folder (once; `--omit=dev` is enough for make-dashboard) | ✓ | ✓ |
-| Chromium for frame capture (once, ≈150 MB) | — | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) |
-| ffmpeg on `PATH` | — | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 4.4 for audio tracks) |
-| kokoro-js (voiceover only, on demand) | — | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (≈250 MB) plus a one-time 90 MB voice model download; the agent asks first |
+| | make-dashboard | make-diagram | make-motion |
+|---|---|---|---|
+| Node.js ≥ 20 | ✓ | ✓ | ✓ |
+| `npm ci` in the skill folder (once; `--omit=dev` is enough for make-dashboard and make-diagram) | ✓ | ✓ | ✓ |
+| Chromium for frame capture (once, ≈150 MB) | — | — | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) |
+| ffmpeg on `PATH` | — | — | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 4.4 for audio tracks) |
+| kokoro-js (voiceover only, on demand) | — | — | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (≈250 MB) plus a one-time 90 MB voice model download; the agent asks first |
 
 Install make-motion's tools per OS (run the Chromium download inside the
 make-motion skill folder, so it matches the Playwright version `npm ci` installed):

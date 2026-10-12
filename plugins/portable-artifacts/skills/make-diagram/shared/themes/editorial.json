@@ -1,0 +1,86 @@
+{
+  "name": "editorial",
+  "label": "Editorial",
+  "fonts": {
+    "display": {
+      "family": "Bricolage Grotesque",
+      "fallback": "'Trebuchet MS', 'Segoe UI', sans-serif",
+      "weights": {
+        "600": "bricolage-grotesque-latin-600-normal.woff2"
+      }
+    },
+    "body": {
+      "family": "Atkinson Hyperlegible",
+      "fallback": "-apple-system, 'Segoe UI', sans-serif",
+      "weights": {
+        "400": "atkinson-hyperlegible-latin-400-normal.woff2",
+        "700": "atkinson-hyperlegible-latin-700-normal.woff2"
+      }
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "fallback": "ui-monospace, Menlo, Consolas, monospace",
+      "weights": {
+        "400": "jetbrains-mono-latin-400-normal.woff2"
+      }
+    }
+  },
+  "light": {
+    "page": "#f7f5f0",
+    "surface": "#fffefb",
+    "text": "#1b1a17",
+    "text2": "#4a4740",
+    "text3": "#6a665d",
+    "line": "#e4e0d6",
+    "grid": "#ece8df",
+    "accent": "#1f4e79",
+    "accentSoft": "#e5edf5",
+    "warn": "#a16207",
+    "good": "#166534",
+    "bad": "#b91c1c",
+    "cat1": "#2a78d6",
+    "cat2": "#eb6834",
+    "cat3": "#1baf7a",
+    "cat4": "#eda100",
+    "cat5": "#e87ba4",
+    "cat6": "#008300",
+    "cat7": "#4a3aa7",
+    "cat8": "#e34948",
+    "seq1": "#cde2fb",
+    "seq2": "#9ec5f4",
+    "seq3": "#6da7ec",
+    "seq4": "#3987e5",
+    "seq5": "#256abf",
+    "seq6": "#184f95",
+    "seq7": "#0d366b"
+  },
+  "dark": {
+    "page": "#13120f",
+    "surface": "#1b1a17",
+    "text": "#f2efe8",
+    "text2": "#c9c4b8",
+    "text3": "#a8a397",
+    "line": "#33302a",
+    "grid": "#2a2823",
+    "accent": "#8fb8e0",
+    "accentSoft": "#1d2f42",
+    "warn": "#f5a524",
+    "good": "#4ade80",
+    "bad": "#f87171",
+    "cat1": "#3987e5",
+    "cat2": "#d95926",
+    "cat3": "#199e70",
+    "cat4": "#c98500",
+    "cat5": "#d55181",
+    "cat6": "#008300",
+    "cat7": "#9085e9",
+    "cat8": "#e66767",
+    "seq1": "#184f95",
+    "seq2": "#1c5cab",
+    "seq3": "#256abf",
+    "seq4": "#2a78d6",
+    "seq5": "#3987e5",
+    "seq6": "#6da7ec",
+    "seq7": "#9ec5f4"
+  }
+}

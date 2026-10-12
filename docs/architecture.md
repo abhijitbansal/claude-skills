@@ -20,7 +20,7 @@ flowchart TD
   CW["core-workflow — 18 skills · 4 cmds · 2 agents · 1 hook"]
   SW["second-wind — skill wrapper"]
   PC["prompt-craft — 7 skills · 6 hooks"]
-  PA["portable-artifacts — 2 skills · installer"]
+  PA["portable-artifacts — 3 skills · installer"]
   TB["test-board — test-run band"]
   SC["session-compass — compass band · /compass pane"]
   WIND[("tools/second-wind/wind.py")]
@@ -49,7 +49,7 @@ flowchart TD
 | `core-workflow` | everyday glue | commit, contribute, learn-lesson, branch-explainer, github-repo-go-public-preflight-scan, github-solo-branch-protection-codeowners skills; `/team`, `/contribute-skill`, `/learn`, `/explain-branch`; image-parser + web-researcher agents; shellcheck-on-edit hook |
 | `second-wind` | outlast the 5-hour usage limit | SKILL.md wrapper for the `wind` CLI (self-installs when missing) |
 | `prompt-craft` | rough ask → deterministic spec | `/improve-prompt`, `/plan`; debug/refactor/review lens skills; `/refresh`; a command advisor (relevance + history + git state) powering user-only `suggest_next` (Stop), `prompt_hint` (UserPromptSubmit) + `statusline_hint`; `registry_freshness` (SessionStart); opt-in `block_secrets` + `format_on_edit` hooks |
-| `portable-artifacts` | dashboards + animated explainers from a prompt, offline | `/make-dashboard`, `/make-motion` (audio only when asked: music from a file, or a local Kokoro voiceover); `bin/install.mjs` cross-host installer (Claude Code, Codex, Copilot, Gemini) |
+| `portable-artifacts` | dashboards + diagrams + animated explainers from a prompt, offline | `/make-dashboard`, `/make-diagram`, `/make-motion` (audio only when asked: music from a file, or a local Kokoro voiceover); `bin/install.mjs` cross-host installer (Claude Code, Codex, Copilot, Gemini) |
 | `test-board` | pass/fail band after every test run | `register.tsx` band + test-run hooks; compares with the previous run of the same suite in the same worktree |
 | `session-compass` | what each session is building and where it stands | compass band, `/compass` pane, `compass_status` tool; capture + register hooks |
 

@@ -5,7 +5,7 @@
 // from the cache, so they stay offline. DUCKDB_EXTENSION_DIRECTORY overrides
 // the cache location. Exit 0 ok, 1 install failed, 2 usage.
 import path from 'node:path';
-import { UsageError, parseCli, exitUsage } from './lib/cli.mjs';
+import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { loadSpec } from './lib/spec.mjs';
 import { extensionsFor } from './lib/sources.mjs';
 import { openDb, runOne, sqlLiteral, useExtensionDirectory, errMessage } from './lib/sql.mjs';

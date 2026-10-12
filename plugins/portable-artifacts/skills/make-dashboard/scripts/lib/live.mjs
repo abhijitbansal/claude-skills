@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { buildDashboard } from './pipeline.mjs';
-import { UsageError } from './cli.mjs';
+import { UsageError } from '../../shared/cli.mjs';
 
 const LIVE_JS = new URL('../../template/live.js', import.meta.url);
 const LIVE_CSS = '.pa-live{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 16px;background:var(--surface);border-bottom:1px solid var(--line);font-size:.8rem;color:var(--text-2)}.pa-live button{border:1px solid var(--line);background:none;border-radius:6px;padding:2px 8px;cursor:pointer}#pa-live-banner{flex-basis:100%;color:var(--bad)}';

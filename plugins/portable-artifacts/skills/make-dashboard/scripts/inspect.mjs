@@ -6,7 +6,7 @@
 // against the current folder; with --spec, an attached source (duckdb, sqlite,
 // postgres, mysql) lists its tables, or --table shows one of them.
 import path from 'node:path';
-import { UsageError, parseCli, exitUsage } from './lib/cli.mjs';
+import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { openLockedDb, checkSelect, errMessage, sqlLiteral, quoteId } from './lib/sql.mjs';
 import { fetchQuery } from './lib/data.mjs';
 import { loadSpec, validateSpec } from './lib/spec.mjs';

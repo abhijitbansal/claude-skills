@@ -3,7 +3,7 @@
 // exit 0 valid, 1 spec errors, 2 usage/IO
 import fs from 'node:fs';
 import { loadSpec, validateSpec } from './lib/spec.mjs';
-import { UsageError, parseCli, parseTimeout, exitUsage } from './lib/cli.mjs';
+import { UsageError, parseCli, parseTimeout, exitUsage } from '../shared/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
 
 const USAGE = 'node scripts/validate.mjs <spec.json> [--json] [--allow-outside] [--timeout <seconds>]';

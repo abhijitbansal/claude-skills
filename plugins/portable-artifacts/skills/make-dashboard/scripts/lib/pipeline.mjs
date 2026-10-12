@@ -7,7 +7,7 @@ import { runQueries, checkFields, QueryError } from './data.mjs';
 import { renderPage } from './html.mjs';
 import { expandCharts } from './views.mjs';
 import { checkSource, FILE_TYPES } from './sources.mjs';
-import { UsageError } from './cli.mjs';
+import { UsageError } from '../../shared/cli.mjs';
 import { didYouMean } from '../../shared/errors.mjs';
 import { loadTheme, listThemes, DEFAULT_THEME, ThemeError } from '../../shared/theme.mjs';
 import { checkTheme } from '../../shared/contrast.mjs';

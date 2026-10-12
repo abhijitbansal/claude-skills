@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { UsageError, parseCli, parseTimeout, exitUsage } from './lib/cli.mjs';
+import { UsageError, parseCli, parseTimeout, exitUsage } from '../shared/cli.mjs';
 import { startLiveServer, MIN_INTERVAL_S, MAX_INTERVAL_S } from './lib/live.mjs';
 import { printResult } from '../shared/errors.mjs';
 

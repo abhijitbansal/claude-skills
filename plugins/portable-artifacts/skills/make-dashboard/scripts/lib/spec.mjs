@@ -11,7 +11,7 @@ import {
 import {
   checkSource, envUrl, sourceShapeErrors, policyFor, RESERVED_SOURCE_NAMES, FILE_TYPES, SOURCE_TYPES, URL_TYPES,
 } from './sources.mjs';
-import { UsageError } from './cli.mjs';
+import { UsageError } from '../../shared/cli.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { KIND_NAMES, roleErrors } from './kinds.mjs';
 import { checkFields } from './data.mjs';

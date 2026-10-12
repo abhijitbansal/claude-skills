@@ -89,6 +89,9 @@ jobs:
       - name: make-motion
         working-directory: plugins/portable-artifacts/skills/make-motion
         run: npm ci && npm test
+      - name: make-diagram
+        working-directory: plugins/portable-artifacts/skills/make-diagram
+        run: npm ci && npx playwright install --with-deps chromium && npm test
       - name: cache-clock (Copilot CLI extension, fake session)
         working-directory: tools/cache-clock
         run: node --test "test/*.test.mjs"
