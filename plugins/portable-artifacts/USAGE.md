@@ -36,6 +36,17 @@ For **make-motion**, also run the one-time `npx playwright install chromium`
 inside the skill folder (about 150 MB), and make sure `ffmpeg` is on your
 `PATH`. Agents ask before downloading Chromium.
 
+Install make-motion's tools per OS (run the Chromium download inside the
+make-motion skill folder, so it matches the Playwright version `npm ci` installed):
+
+| | macOS (Homebrew) | Windows (PowerShell) | Linux (Debian/Ubuntu) |
+|---|---|---|---|
+| Node.js ≥ 20 | `brew install node` | `winget install OpenJS.NodeJS.LTS` | nodejs.org or a version manager (distro packages are often older) |
+| ffmpeg | `brew install ffmpeg` | `winget install Gyan.FFmpeg` (or `choco install ffmpeg` / `scoop install ffmpeg`) | `sudo apt-get install ffmpeg` |
+| Chromium | `npx playwright install chromium` | `npx playwright install chromium` | `npx playwright install --with-deps chromium` (adds the system libraries; asks for sudo) |
+
+On Windows, open a new terminal after `winget` so `node` and `ffmpeg` are on `PATH`.
+
 ## 2. Dashboards with make-dashboard
 
 **Ask:**
@@ -158,10 +169,10 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `queries.q: …` with a DuckDB message | The SQL doesn't bind (wrong table or column). Run `inspect.mjs` on the file and compare |
 | `environment variable WAREHOUSE_URL is not set` | Export it in the shell (and in the cron/launchd environment) |
 | Query stopped after 30 s | Make it cheaper, or pass `--timeout 120` to `build` |
-| `npx playwright install chromium` hint on render | Install Chromium once, or install Google Chrome for the fallback |
+| `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |
 | `kokoro-js is not installed` | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (voiceover only; `npm ci` removes it) |
 | `audio[0].src: ffmpeg cannot decode …` | The file is not a valid audio file. Re-export it as mp3 or wav |
-| `ffmpeg not found` | `brew install ffmpeg`, `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` |
+| `ffmpeg not found` | macOS `brew install ffmpeg`, Windows `winget install Gyan.FFmpeg` (then a new terminal), Linux `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` |
 | `remote data is not allowed` / `not allowed — external URLs are never fetched` | Charts must carry their data inline (motion) or come from a SQL query (dashboard) |
 | A final counter value or keyframe never shows | Frame *i* samples `t = i/fps`. End keyframes at least one frame before the scene ends |
 

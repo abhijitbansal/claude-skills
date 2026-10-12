@@ -15,8 +15,8 @@ You write one JSON file, `motion.json`. Scripts validate it, preview it in a bro
 ## First use (say what each step is before running it)
 
 1. `<skill-dir>/node_modules` missing: run `npm ci --prefix <skill-dir>` (animejs, vega-lite, playwright, fonts).
-2. Chromium for frame capture: ask first (about 150 MB), then run `npx playwright install chromium` inside `<skill-dir>`. If the user declines, rendering falls back to installed Google Chrome.
-3. `ffmpeg` not on PATH: stop and give the install command (`brew install ffmpeg` or `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH`). Never install system packages yourself.
+2. Chromium for frame capture: ask first (about 150 MB), then run `npx playwright install chromium` inside `<skill-dir>`. If the user declines, rendering falls back to installed Google Chrome. On Linux, if Chromium then fails to launch for missing system libraries, give the user `npx playwright install --with-deps chromium` (it needs sudo).
+3. `ffmpeg` not on PATH: stop and give the install command (macOS `brew install ffmpeg`, Windows `winget install Gyan.FFmpeg` then a new terminal, Debian/Ubuntu `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH`). Never install system packages yourself.
 4. Voiceover requested and `<skill-dir>/node_modules/kokoro-js` missing: ask first (about 250 MB of packages plus a 90 MB voice model downloaded once on first use, then offline), then run `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>`. `npm ci` removes it again; reinstall when `voice.mjs` prints the hint. If the user declines, ask for a voice file instead.
 
 ## Workflow

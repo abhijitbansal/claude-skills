@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
 
-const HINT = 'ffmpeg not found. Install it (macOS: brew install ffmpeg; Debian/Ubuntu: apt install ffmpeg), '
+const HINT = 'ffmpeg not found. Install it (macOS: brew install ffmpeg; Windows: winget install Gyan.FFmpeg; Debian/Ubuntu: apt install ffmpeg), '
   + 'or set FFMPEG_PATH, or run: npm i ffmpeg-static';
 
 const isExecutable = (p) => {
