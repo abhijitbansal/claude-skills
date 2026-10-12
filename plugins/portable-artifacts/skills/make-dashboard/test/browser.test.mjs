@@ -69,3 +69,48 @@ test('no horizontal overflow at 390 px; screenshot for review', async (t) => {
   await page.screenshot({ path: path.join(out, 'mobile.png'), fullPage: true });
   assert.deepEqual(problems, []);
 });
+
+const KINDS_SPEC = {
+  title: 'Kinds',
+  sources: { sales: { type: 'csv', path: 'data/sales.csv' } },
+  queries: {
+    rev: 'SELECT region, SUM(amount) AS "Total Revenue" FROM sales GROUP BY 1 ORDER BY 2 DESC',
+    q_region: "SELECT 'Q' || quarter(date) AS quarter, region, SUM(amount) AS revenue FROM sales GROUP BY 1, 2 ORDER BY 1, 2",
+    monthly: "SELECT date_trunc('month', date)::DATE AS month, region, SUM(amount) AS revenue FROM sales GROUP BY 1, 2 ORDER BY 1",
+    pts: 'SELECT amount, units, region FROM sales WHERE region IN (\'North\', \'South\', \'West\')',
+  },
+  charts: [
+    { id: 'bar', title: 'Bar', query: 'rev', kind: 'bar', x: 'region', y: 'Total Revenue', format: 'currency' },
+    { id: 'stack', title: 'Stack', query: 'q_region', kind: 'stacked-bar', x: 'quarter', y: 'revenue', color: 'region' },
+    { id: 'line', title: 'Line', query: 'monthly', kind: 'line', x: 'month', y: 'revenue', color: 'region' },
+    { id: 'pts', title: 'Points', query: 'pts', kind: 'scatter', x: 'amount', y: 'units', color: 'region' },
+  ],
+};
+
+test('every kind chart renders; hover dims bars, legend filters, wheel zooms scatter', async (t) => {
+  if (!(await haveBrowser())) return t.skip('no browser');
+  const { out } = buildProject(KINDS_SPEC);
+  const { page, problems } = await open(out);
+  assert.equal(await page.locator('.chart svg').count(), 4);
+  // Column name with a space renders under its raw title.
+  assert.ok((await page.locator('#chart-bar').textContent()).includes('Total Revenue'));
+  const opacities = (sel) => page.evaluate((s) => [...document.querySelectorAll(`${s} .mark-rect path`)].map((p) => p.getAttribute('opacity') ?? '1'), sel);
+  const bar = page.locator('#chart-bar .mark-rect path').first();
+  await bar.hover();
+  assert.ok((await opacities('#chart-bar')).includes('0.55'), 'other bars dimmed on hover');
+  await page.locator('#chart-stack .role-legend-symbol path').first().click();
+  assert.ok((await opacities('#chart-stack')).includes('0.2'), 'legend click filters');
+  const domain = () => page.evaluate(() => {
+    const svg = document.querySelector('#chart-pts svg');
+    return [...svg.querySelectorAll('.role-axis-label text')].map((t) => t.textContent).join('|');
+  });
+  await page.locator('#chart-pts').scrollIntoViewIfNeeded(); // wheel needs the pointer over the chart, inside the viewport
+  const before = await domain();
+  const box = await page.locator('#chart-pts svg').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.wheel(0, -400);
+  await page.waitForTimeout(300);
+  assert.notEqual(await domain(), before, 'scatter axis labels change after wheel zoom');
+  assert.deepEqual(problems, []);
+  await page.screenshot({ path: path.join(out, 'kinds.png'), fullPage: true });
+});

@@ -1,0 +1,39 @@
+{
+  "params": [
+    {
+      "name": "pa_hover",
+      "select": {
+        "type": "point",
+        "on": "pointerover",
+        "clear": "pointerout"
+      }
+    }
+  ],
+  "mark": {
+    "type": "bar",
+    "tooltip": true
+  },
+  "encoding": {
+    "x": {
+      "field": "a",
+      "type": "quantitative",
+      "title": "a",
+      "bin": {
+        "maxbins": 20
+      }
+    },
+    "y": {
+      "aggregate": "count",
+      "type": "quantitative",
+      "title": "Count"
+    },
+    "opacity": {
+      "condition": {
+        "param": "pa_hover",
+        "empty": true,
+        "value": 1
+      },
+      "value": 0.55
+    }
+  }
+}

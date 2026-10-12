@@ -1,0 +1,19 @@
+{
+  "mark": {
+    "type": "boxplot",
+    "extent": 1.5,
+    "tooltip": true
+  },
+  "encoding": {
+    "y": {
+      "field": "a",
+      "type": "quantitative",
+      "title": "a"
+    },
+    "x": {
+      "field": "g",
+      "type": "nominal",
+      "title": "g"
+    }
+  }
+}

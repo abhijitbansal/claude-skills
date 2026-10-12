@@ -1,0 +1,40 @@
+{
+  "params": [
+    {
+      "name": "pa_legend",
+      "select": {
+        "type": "point",
+        "fields": [
+          "region"
+        ]
+      },
+      "bind": "legend"
+    }
+  ],
+  "mark": {
+    "type": "arc",
+    "innerRadius": 60,
+    "tooltip": true
+  },
+  "encoding": {
+    "theta": {
+      "field": "revenue",
+      "type": "quantitative",
+      "title": "revenue",
+      "stack": true
+    },
+    "color": {
+      "field": "region",
+      "type": "nominal",
+      "title": "region"
+    },
+    "opacity": {
+      "condition": {
+        "param": "pa_legend",
+        "empty": true,
+        "value": 1
+      },
+      "value": 0.2
+    }
+  }
+}

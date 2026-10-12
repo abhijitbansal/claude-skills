@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec, MAX_ROWS_DEFAULT } from './lib/spec.mjs';
 import { runQueries, checkFields, QueryError } from './lib/data.mjs';
 import { renderPage } from './lib/html.mjs';
+import { expandCharts } from './lib/views.mjs';
 import { checkSource, FILE_TYPES } from './lib/sources.mjs';
 import { UsageError, parseCli, parseTimeout, exitUsage } from './lib/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
@@ -81,6 +82,8 @@ try {
   }
   const fieldErrors = checkFields(spec, results);
   if (fieldErrors.length) fail(fieldErrors);
+  const expanded = expandCharts(spec, results);
+  if (expanded.errors.length) fail(expanded.errors);
 
   let theme;
   try {
@@ -93,7 +96,7 @@ try {
   if (themeErrors.length) fail(themeErrors);
 
   const outDir = path.resolve(values.out ?? path.join(dir, 'dist'));
-  const target = writePage(outDir, renderPage(spec, results, { vendor, theme }));
+  const target = writePage(outDir, renderPage(spec, results, { vendor, theme, charts: expanded.charts }));
 
   const sources = Object.entries(spec.sources).map(([name, src]) => [
     name,

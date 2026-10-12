@@ -60,11 +60,12 @@ function dataTable(res) {
 function card(chart, results, maxRows) {
   const res = results[chart.query];
   const note = res.truncated ? `<p class="meta">truncated at ${maxRows} rows</p>` : '';
+  const empty = res.rowCount === 0 ? '<p class="meta empty">No rows returned</p>' : '';
   const shown = Math.min(res.rowCount, TABLE_ROWS);
   return `<article class="card ${chart.width === 'half' ? 'half' : 'full'}" id="card-${escapeHtml(chart.id)}">
   <h2>${escapeHtml(chart.title)}</h2>
   <div class="chart" id="chart-${escapeHtml(chart.id)}" role="img" aria-label="${escapeHtml(chart.title)}"></div>
-  ${note}
+  ${empty}${note}
   <details>
     <summary>Query · ${res.rowCount} rows · refreshed ${timeTag(res.refreshedAt, 'hm')}</summary>
     <pre class="sql">${escapeHtml(res.sql)}</pre>
@@ -74,8 +75,9 @@ function card(chart, results, maxRows) {
 </article>`;
 }
 
-// vendor: { vega, vegaLite, vegaEmbed } source strings; theme: a loaded shared/ theme.
-export function renderPage(spec, results, { vendor, theme }) {
+// vendor: { vega, vegaLite, vegaEmbed } source strings; theme: a loaded shared/ theme;
+// charts: expandCharts(...).charts.
+export function renderPage(spec, results, { vendor, theme, charts }) {
   const maxRows = spec.maxRows ?? MAX_ROWS_DEFAULT;
   const charted = new Set((spec.charts ?? []).map((c) => c.query));
   const queries = Object.fromEntries(
@@ -83,10 +85,7 @@ export function renderPage(spec, results, { vendor, theme }) {
       .filter(([name]) => charted.has(name))
       .map(([name, r]) => [name, { rows: r.rows, columns: r.columns, rowCount: r.rowCount, truncated: r.truncated, refreshedAt: r.refreshedAt }]),
   );
-  const data = {
-    queries,
-    charts: (spec.charts ?? []).map((c) => ({ id: c.id, query: c.query, vegaLite: c.vegaLite })),
-  };
+  const data = { queries, charts };
   const refreshed = Object.values(results)[0]?.refreshedAt ?? new Date().toISOString();
   const kpis = (spec.kpis ?? []).length
     ? `<section class="kpis" aria-label="Key metrics">${spec.kpis.map((k) => kpiTile(k, results)).join('')}</section>`

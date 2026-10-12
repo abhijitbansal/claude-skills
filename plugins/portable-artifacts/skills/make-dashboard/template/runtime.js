@@ -68,17 +68,6 @@
     };
   }
 
-  // Hover layer by default: tooltips on every mark that did not ask for its own.
-  function withTooltip(node) {
-    if (Array.isArray(node)) return node.map(withTooltip);
-    if (!node || typeof node !== 'object') return node;
-    var out = {};
-    Object.keys(node).forEach(function (k) { out[k] = k === 'data' ? node[k] : withTooltip(node[k]); });
-    if (typeof node.mark === 'string') out.mark = { type: node.mark, tooltip: true };
-    else if (node.mark && typeof node.mark === 'object' && node.mark.tooltip === undefined) out.mark = Object.assign({}, node.mark, { tooltip: true });
-    return out;
-  }
-
   function embed(el, vl, rows, cfg) {
     var unit = !('hconcat' in vl || 'vconcat' in vl || 'concat' in vl || 'repeat' in vl || 'facet' in vl);
     var spec = Object.assign({ height: 260 }, vl, { data: { values: rows }, config: cfg });
@@ -102,11 +91,16 @@
     var cfg = config();
     return Promise.all(data.charts.map(function (c) {
       var el = document.getElementById('chart-' + c.id);
-      return el ? embed(el, withTooltip(c.vegaLite), data.queries[c.query].rows, cfg) : null;
+      var view = c.views[0];
+      return el && view.vegaLite ? embed(el, view.vegaLite, data.queries[c.query].rows, cfg) : null;
     }));
   }
 
-  render().then(function () { window.paReady = true; });
+  // First render waits for the embedded fonts so Vega measures labels with them.
+  (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve())
+    .catch(function () {})
+    .then(render)
+    .then(function () { window.paReady = true; });
   if (window.matchMedia) {
     var mq = window.matchMedia('(prefers-color-scheme: dark)');
     (mq.addEventListener ? mq.addEventListener.bind(mq, 'change') : mq.addListener.bind(mq))(render);
