@@ -51,25 +51,51 @@
   <header class="hero">
     <span class="kicker"><span class="pulse"></span>Claude Code plugin marketplace · MIT</span>
     <h1>Plugins for Claude Code, mined from real sessions.</h1>
-    <p class="lead">Test results above the prompt. Dashboards and videos built offline. iOS apps built, previewed and shipped from chat. Sessions that resume themselves after the 5-hour limit. Eight plugins, each from a real job, each one line to install.</p>
+    <p class="lead">Test results above the prompt. Dashboards and videos built offline. iOS apps built, previewed and shipped from chat. Sessions that resume themselves after the 5-hour limit. A Copilot extension that asks before a cold prompt cache costs you. Eight plugins and two tools, each from a real job, each one line to install.</p>
     <div class="hero-cmd">
       <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div></div>
       <p class="hint">Paste it into Claude Code, then <code>/plugin install &lt;name&gt;@claude-skills</code> for any plugin below. The skills also port to Codex and Copilot CLI.</p>
     </div>
     <div class="inventory" aria-label="Repository at a glance">
-      <span>8 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
+      <span>8 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI · 1 Copilot extension</span>
       <span>Tested on macOS and Ubuntu</span>
-      <span>Markdown, shell and stdlib Python; portable-artifacts needs Node</span>
+      <span>Markdown, shell and stdlib Python; portable-artifacts and the Cache Clock report need Node</span>
     </div>
   </header>
 
   <!-- SPOTLIGHT -->
   <section id="spotlight">
     <div class="eyebrow">Spotlight</div>
-    <h2 class="title">One changes what you see in the terminal. The other changes what an agent can hand you.</h2>
-    <p class="section-lead">The three newest plugins: two mods and a pair of artifact skills. All of them run locally, and each is one line to install.</p>
+    <h2 class="title">A cost guard for Copilot, two lines above the prompt, and artifacts any agent can build.</h2>
+    <p class="section-lead">The newest work: a Copilot extension, two mods and a pair of artifact skills. All of them run locally, and each is one line to install.</p>
 
-    <article class="spot">
+    <article class="spot" id="cache-clock">
+      <div class="spot-media media-stack">
+        <figure>
+          <video id="cc-video" autoplay muted loop playsinline controls preload="metadata" poster="../docs/features/showcase/cache-clock/poster.jpg" aria-label="A 17-second silent explainer: a cache write costs 25 times a read on Claude, the cache counts down to cold, and Cache Clock asks before the cold send, which costs 0 AI credits if you don't send."><source src="../docs/features/showcase/cache-clock/video.mp4" type="video/mp4"></video>
+          <figcaption><b>Cache Clock</b> in 17 seconds: the clock, the price, and one question before a cold send.</figcaption>
+        </figure>
+      </div>
+      <div class="spot-text">
+        <p class="tagline">cache-clock · GitHub Copilot CLI and VS Code</p>
+        <h3>Know before a cold prompt cache costs you</h3>
+        <p>Copilot bills tokens in AI credits, and a cache write costs far more than a read: 25× on Claude Sonnet 5.5, whose cache lives 5 minutes. Step away and the next message rewrites the whole conversation at the write price. Cache Clock shows that clock and that price, and asks before a costly cold send goes out.</p>
+        <ol class="howlist" aria-label="How Cache Clock works">
+          <li><b>The clock.</b> Every model call reports when its cache expires and what a read and a write cost. <code>/cache-clock</code> shows the time left and what the next send costs warm and cold; a heads-up comes just before expiry.</li>
+          <li><b>The question.</b> When the cache is cold and the rewrite costs at least $0.10 more than a warm send, it asks: <b>Send anyway</b> or <b>Don't send</b>. Don't send stops it before any model call, at 0 AI credits. It asks once per cold cache.</li>
+          <li><b>The report.</b> <code>report.mjs</code> reads every saved Copilot session and totals what cold sends already cost you, per model.</li>
+        </ol>
+        <div class="code cmds"><div class="cl"><code class="ct">curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh</code><button class="copy" data-copy="curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh">copy</button></div></div>
+        <p class="hint" style="margin-top:10px">Then <code>/cache-clock help</code> in Copilot CLI. For VS Code's Copilot chat, also set <code>"chat.canvases.enabled": true</code> in VS Code settings, then type <code>/cache-clock</code> in full: it works, but VS Code does not list it in the <code>/</code> menu.</p>
+        <div class="links">
+          <a href="../docs/features/cache-clock.html">Cache Clock guide</a>
+          <a href="../docs/features/showcase/cache-clock/how-it-works.html">Visual explainer</a>
+          <a href="https://github.com/abhijitbansal/claude-skills/tree/main/tools/cache-clock">Source ↗</a>
+        </div>
+      </div>
+    </article>
+
+    <article class="spot flip">
       <div class="spot-media">
         <div class="term" role="img" aria-label="A terminal after a pytest run. Two bands sit above the prompt: the session-compass band with the goal, the current step and the artifact count, and the test-board band with 40 passed, 3 failed, 1 skipped, three more failures than the previous run five minutes ago, the time it finished and a close button.">
           <div class="term-bar"><i></i><i></i><i></i><span>claude — claude-skills</span></div>
@@ -103,7 +129,7 @@
       </div>
     </article>
 
-    <article class="spot flip">
+    <article class="spot">
       <div class="spot-media media-stack">
         <figure>
           <video id="pa-video" autoplay muted loop playsinline controls preload="metadata" poster="../docs/features/showcase/portable-artifacts/prompt-to-dashboard-poster.jpg" aria-label="A 15-second explainer video rendered by make-motion: a title, three step cards, a bar chart of validate errors per attempt and a counter, with a voiceover synthesised locally by Kokoro."><source src="../docs/features/showcase/portable-artifacts/prompt-to-dashboard.mp4" type="video/mp4"></video>
@@ -131,7 +157,7 @@
         </div>
       </div>
     </article>
-    <script>(function(){var v=document.getElementById('pa-video');if(v&&window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){v.removeAttribute('autoplay');v.pause();v.controls=true;}})();</script>
+    <script>(function(){if(!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches))return;['pa-video','cc-video'].forEach(function(id){var v=document.getElementById(id);if(v){v.removeAttribute('autoplay');v.pause();v.controls=true;}});})();</script>
   </section>
 
   <!-- PLUGINS -->
@@ -214,6 +240,24 @@
         </ul>
       </article>
 
+      <article class="prow">
+        <div class="name">
+          <h3><a href="../docs/features/cache-clock.html">cache-clock</a></h3>
+          <span class="meta">Copilot extension · CLI and VS Code · no npm dependencies</span>
+          <p class="what">A prompt-cache clock for GitHub Copilot CLI and VS Code's Copilot chat. It shows when the cache goes cold and what the next send costs, and asks before a costly cold send goes out.</p>
+          <p class="flow"><b>assistant.usage</b> → clock per model → prompt submitted → cold and costly? → Send anyway / Don't send (0 AI credits)</p>
+          <div class="get">
+            <div class="code cmds"><div class="cl"><code class="ct">curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh</code><button class="copy" data-copy="curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh">copy</button></div><div class="cl"><code class="ct"><span class="k">node</span> ~/.copilot/extensions/cache-clock/report.mjs --since 7d</code><button class="copy" data-copy="node ~/.copilot/extensions/cache-clock/report.mjs --since 7d">copy</button></div></div>
+            <a class="guide-link" href="../docs/features/cache-clock.html">cache-clock guide</a> · <a class="guide-link" href="../docs/features/showcase/cache-clock/how-it-works.html">visual explainer</a>
+          </div>
+        </div>
+        <ul>
+          <li>Reads expiry, TTL and per-token prices from Copilot's own <code>assistant.usage</code> events. Through Copilot, a Claude Sonnet 5.5 cache write costs 25× a read and the cache lives 5 minutes.</li>
+          <li><code>/cache-clock</code> shows the card: time left, warm vs cold price, session tally. A heads-up appears just before expiry.</li>
+          <li>The report reads every persisted Copilot session and totals what cold sends already cost. In VS Code it needs <code>"chat.canvases.enabled": true</code>.</li>
+        </ul>
+      </article>
+
       <article class="prow compact">
         <div class="name">
           <h3><a href="../docs/features/linear-pm.html">linear-pm</a></h3>
@@ -273,7 +317,7 @@
   <section id="install">
     <div class="eyebrow">Install</div>
     <h2 class="title">Three ways in.</h2>
-    <p class="section-lead">Claude Code is the main path. The marketplace itself is Markdown and shell; portable-artifacts needs Node 20, and the Second Wind CLI is one stdlib Python file.</p>
+    <p class="section-lead">Claude Code is the main path. The marketplace itself is Markdown and shell; portable-artifacts needs Node 20, the Second Wind CLI is one stdlib Python file, and the Cache Clock report needs Node 18.</p>
     <div class="install-rows">
 
       <div class="irow">
@@ -302,9 +346,10 @@
     <h2 class="title">Guides and references.</h2>
     <div class="parts" style="max-width:760px">
       <div class="part"><span class="k"><a href="../docs/catalog.html">Catalog</a></span><span class="v">Every skill, command, agent, hook and CLI tool, searchable and filterable.</span></div>
-      <div class="part"><span class="k"><a href="../docs/architecture.html">Architecture</a></span><span class="v">How the marketplace, the plugins, the Second Wind CLI, the adapters and the machine setup fit together.</span></div>
+      <div class="part"><span class="k"><a href="../docs/architecture.html">Architecture</a></span><span class="v">How the marketplace, the plugins, the Second Wind CLI, the Cache Clock extension, the adapters and the machine setup fit together.</span></div>
       <div class="part"><span class="k"><a href="../docs/machine-setup.html">Machine setup</a></span><span class="v">Rebuild a Claude Code environment on a new machine from one TOML manifest: <code>capture.sh</code> snapshots, <code>setup.sh</code> restores, <code>contribute.sh</code> round-trips changes back.</span></div>
       <div class="part"><span class="k"><a href="../docs/second-wind/index.html">Second Wind CLI</a></span><span class="v">Every <code>wind</code> command, the live dashboard, how limit detection parses the reset time, the config schema and the security model.</span></div>
+      <div class="part"><span class="k"><a href="../docs/features/cache-clock.html">Cache Clock</a></span><span class="v">The Copilot CLI cache guard: the <a href="../docs/features/showcase/cache-clock/how-it-works.html">visual explainer</a>, the <a href="../docs/features/showcase/cache-clock/diagram/cache-clock-architecture.html">architecture diagram</a>, measured TTLs and prices, and the cold-send report.</span></div>
       <div class="part"><span class="k"><a href="https://github.com/abhijitbansal/claude-skills/blob/main/USAGE.md">Usage guide</a></span><span class="v">The project's how-to guide on GitHub, including contributing a skill back.</span></div>
     </div>
   </section>
@@ -326,6 +371,7 @@
         <a href="../docs/features/core-workflow.html">core-workflow</a>
         <a href="../docs/features/prompt-craft.html">prompt-craft</a>
         <a href="../docs/features/second-wind.html">second-wind</a>
+        <a href="../docs/features/cache-clock.html">cache-clock</a>
         <a href="../docs/features/linear-pm.html">linear-pm</a>
       </div>
       <div>

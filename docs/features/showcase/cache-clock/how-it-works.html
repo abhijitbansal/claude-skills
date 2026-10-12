@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Cache Clock works</title>
+<meta name="description" content="Cache Clock for GitHub Copilot CLI and VS Code shows when your prompt cache goes cold, prices the cold send, and asks before it goes out.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%232c4cd0' stroke-width='3'/%3E%3Cpath d='M16 8v8l5 3' fill='none' stroke='%232c4cd0' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#f7f7f4; --surface:#ffffff; --border:#e3e3dc; --border-bright:#8e8e8a;
+  --text:#17191c; --text-dim:#575c63; --accent:#2c4cd0;
+  --ok:#1d7443; --warn:#836000; --risk:#b3301d; --info:#1b6a94;
+  --accent-dim:color-mix(in srgb,var(--accent) 14%,transparent);
+  --ok-dim:color-mix(in srgb,var(--ok) 14%,transparent);
+  --risk-dim:color-mix(in srgb,var(--risk) 14%,transparent);
+  --lift:rgb(18 22 20 / .12); --halo:22%;
+  --t-label:.75rem; --t-small:.875rem; --t-body:1rem; --t-lead:1.25rem;
+  --t-h2:1.625rem; --t-h1:clamp(2.25rem,5.5vw,4rem);
+  --s-1:.25rem; --s-2:.5rem; --s-3:.75rem; --s-4:1rem; --s-5:1.5rem; --s-6:2rem; --s-7:3rem; --s-8:4.5rem;
+  --r-1:4px; --r-2:10px;
+  --serif:Charter,"Bitstream Charter","Sitka Text",Cambria,Georgia,serif;
+  --sans:"Atkinson Hyperlegible Next","Atkinson Hyperlegible",ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+  --mono:"Atkinson Hyperlegible Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#111316; --surface:#181b1f; --border:#262a30; --border-bright:#62676c;
+    --text:#e8e8e3; --text-dim:#9ba1a9; --accent:#93a6ff;
+    --ok:#6cc492; --warn:#e3b94d; --risk:#f0806b; --info:#6fb8dc;
+    --lift:rgb(0 0 0 / .45); --halo:32%;
+  }
+}
+*{box-sizing:border-box}
+html{font-size:17px;-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:400 var(--t-body)/1.6 var(--sans);font-kerning:normal;font-synthesis:none;overflow-wrap:break-word}
+::selection{background:var(--accent-dim)}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-1)}
+code,pre,.mono{font-family:var(--mono)}
+code{font-size:.875em}
+.wrap{max-width:64rem;margin:0 auto;padding:0 var(--s-4)}
+.num{font-variant-numeric:tabular-nums}
+.unit{font-size:.7em;color:var(--text-dim);font-weight:400}
+
+/* nav */
+nav.toc{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 94%,transparent);border-bottom:1px solid var(--border)}
+nav.toc .wrap{display:flex;gap:var(--s-4);overflow-x:auto;padding-top:var(--s-2);padding-bottom:var(--s-2);scrollbar-width:thin}
+nav.toc a{font:600 var(--t-label)/1 var(--mono);color:var(--text-dim);text-decoration:none;white-space:nowrap;padding:var(--s-2) 0;border-bottom:2px solid transparent}
+nav.toc a[aria-current="true"]{color:var(--text);border-bottom-color:var(--accent)}
+nav.toc a:hover{color:var(--text)}
+section{scroll-margin-top:3.5rem}
+
+/* header */
+header.page{padding:var(--s-8) 0 var(--s-6)}
+.kicker{font:600 var(--t-label)/1 var(--mono);color:var(--text-dim);display:flex;align-items:center;gap:var(--s-2);margin:0 0 var(--s-4);letter-spacing:.08em;text-transform:uppercase}
+.kicker::before{content:"";width:1.5rem;height:2px;background:var(--accent)}
+h1,h2,h3{font-family:var(--serif);font-weight:500;text-wrap:balance;margin:0}
+h1{font-size:var(--t-h1);line-height:1.05;letter-spacing:-.03em;max-width:18ch}
+h1 em{font-style:normal;color:var(--accent)}
+h2{font-size:var(--t-h2);line-height:1.15;letter-spacing:-.01em;margin-top:var(--s-3);max-width:30ch}
+h3{font-size:var(--t-lead);line-height:1.2;margin:var(--s-6) 0 var(--s-2)}
+.lead{font-size:var(--t-lead);line-height:1.5;color:var(--text-dim);max-width:40rem;margin:var(--s-4) 0 0}
+.lead b{color:var(--text);font-weight:600}
+.meta{font:var(--t-label)/1.4 var(--mono);color:var(--text-dim);margin-top:var(--s-4)}
+section.s{padding-top:var(--s-8)}
+p{max-width:65ch;margin:var(--s-3) 0 0;text-wrap:pretty}
+p b{font-weight:600}
+.step-no{font:600 var(--t-label)/1 var(--mono);color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase}
+
+/* figures */
+figure{margin:var(--s-5) 0 0}
+.frame{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-2);padding:var(--s-5)}
+figcaption{margin-top:var(--s-3);color:var(--text-dim);max-width:65ch;text-wrap:pretty}
+figcaption .fig{font:600 var(--t-label)/1 var(--mono);color:var(--text);margin-right:var(--s-2)}
+.film{display:block;width:100%;height:auto;aspect-ratio:16/9;background:#000;border:1px solid var(--border);border-radius:var(--r-2)}
+.scroll{overflow-x:auto}
+.scroll svg{display:block;min-width:36rem;width:100%;max-width:44rem;height:auto}
+.hint{display:none;font:var(--t-label)/1 var(--mono);color:var(--text-dim);margin-top:var(--s-2)}
+@media (max-width:40rem){.hint{display:block}.frame{padding:var(--s-4)}}
+
+/* bars */
+.bars{display:grid;gap:var(--s-3);grid-template-columns:minmax(0,1fr)}
+.brow{display:grid;grid-template-columns:minmax(0,9rem) minmax(0,1fr);gap:var(--s-3);align-items:center}
+.brow .lab{font:var(--t-label)/1.3 var(--mono);color:var(--text-dim)}
+.brow .lab b{color:var(--text);font-weight:600;display:block}
+.track{position:relative;height:1.75rem;background:color-mix(in srgb,var(--text) 5%,transparent);border-radius:var(--r-1)}
+.fill{position:absolute;inset:0 auto 0 0;border-radius:var(--r-1);min-width:3px}
+.fill.read{background:var(--ok)}
+.fill.write{background:var(--risk)}
+.fill.ttl{background:var(--accent-dim);border:1px solid var(--accent)}
+.val{position:absolute;top:50%;transform:translateY(-50%);left:calc(100% + .5rem);font:600 var(--t-small)/1 var(--mono);white-space:nowrap}
+.track.inside .val{left:auto;right:.5rem;color:#fff}
+.track-wrap{padding-right:5.5rem}
+@media (max-width:40rem){.brow{grid-template-columns:minmax(0,1fr)}.brow .lab{display:flex;gap:var(--s-2);align-items:baseline}.track-wrap{padding-right:5rem}}
+
+/* kpi strip */
+.kpi{display:flex;flex-wrap:wrap;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r-2);overflow:hidden;margin-top:var(--s-5)}
+.kpi>div{flex:1 1 11rem;background:var(--surface);padding:var(--s-4);min-width:0}
+.kpi .l{font:var(--t-label)/1.3 var(--mono);color:var(--text-dim)}
+.kpi .v{font:600 2.25rem/1.1 var(--sans);letter-spacing:-.04em;font-variant-numeric:tabular-nums;margin-top:var(--s-1)}
+.kpi .v.hot{color:var(--risk)} .kpi .v.cool{color:var(--ok)}
+.kpi .n{font-size:var(--t-small);color:var(--text-dim);margin-top:var(--s-1)}
+
+/* chips */
+.chip{display:inline-block;font:600 var(--t-label)/1 var(--mono);border:1px solid currentColor;border-radius:var(--r-1);padding:.25rem .5rem;white-space:nowrap}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.risk{color:var(--risk)} .chip.info{color:var(--info)}
+
+/* code */
+pre{margin:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-2);padding:var(--s-4);overflow-x:auto;font-size:var(--t-small);line-height:1.5;tab-size:2}
+pre code{font-size:inherit}
+.cap{font:600 var(--t-label)/1 var(--mono);color:var(--text-dim);margin:var(--s-5) 0 var(--s-2);display:block}
+
+/* tables */
+.table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-2);margin-top:var(--s-4);background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:34rem}
+th{font:600 var(--t-label)/1.3 var(--mono);color:var(--text-dim);text-align:left;padding:var(--s-3) var(--s-4);background:var(--surface);border-bottom:1px solid var(--border-bright);white-space:nowrap}
+td{padding:var(--s-3) var(--s-4);border-bottom:1px solid var(--border);vertical-align:top;font-size:var(--t-small)}
+tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
+table.wide{min-width:52rem}
+
+/* flowchart (HTML so it reflows) */
+ol.flow{list-style:none;margin:0;padding:0;counter-reset:n}
+.fstep{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:var(--s-3) var(--s-5);position:relative;padding-bottom:var(--s-6)}
+.fstep:last-child{padding-bottom:0}
+.fstep::before{content:"";position:absolute;left:1.25rem;top:100%;height:0}
+.node{background:var(--surface);border:1.5px solid var(--border-bright);border-radius:var(--r-1);padding:var(--s-3) var(--s-4);box-shadow:0 2px 6px var(--lift);position:relative;min-width:0}
+.node.key{border:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--surface));box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) var(--halo),transparent)}
+.node.q::before{content:"?";position:absolute;left:-.7rem;top:-.7rem;width:1.4rem;height:1.4rem;border-radius:50%;background:var(--accent);color:var(--bg);font:700 .8rem/1.4rem var(--mono);text-align:center}
+.node b{font-weight:600}
+.node small{display:block;color:var(--text-dim);font-size:var(--t-small);margin-top:var(--s-1)}
+/* down arrow to next step */
+.fstep:not(:last-child) .node::after{content:"";position:absolute;left:1.5rem;top:100%;height:calc(var(--s-6) + var(--s-3));border-left:1.75px solid var(--text-dim)}
+.fstep:not(:last-child) .node::before{}
+.fstep:not(:last-child) .no{position:absolute;left:2rem;top:calc(100% + .6rem);font:600 var(--t-label)/1 var(--mono);color:var(--text-dim);background:var(--bg);padding:0 .25rem;z-index:1}
+.fstep:not(:last-child) .node.q{margin-bottom:0}
+.out{display:flex;flex-direction:column;gap:var(--s-2);align-items:flex-start;justify-content:center;min-width:0}
+.out p{margin:0;font-size:var(--t-small);color:var(--text-dim)}
+.out .arrow{font:600 var(--t-label)/1 var(--mono);color:var(--text-dim)}
+.out.last{justify-content:flex-start}
+@media (max-width:44rem){.fstep{grid-template-columns:minmax(0,1fr)}.fstep:not(:last-child){padding-bottom:var(--s-7)}.out{padding-left:var(--s-5);margin-top:var(--s-5)}.fstep:last-child .out,.fstep:first-child .out{margin-top:0}.fstep:not(:last-child) .node::after{height:calc(var(--s-7) + .5rem)}}
+
+/* two-col helpers */
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));gap:var(--s-4)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-2);padding:var(--s-4);min-width:0}
+.card h4{margin:var(--s-3) 0 var(--s-2);font:600 var(--t-body)/1.3 var(--sans)}
+.card p{font-size:var(--t-small);margin-top:var(--s-2)}
+ul.plain{margin:var(--s-3) 0 0;padding-left:1.1rem;max-width:65ch}
+ul.plain li{margin:var(--s-2) 0}
+.fields{display:flex;flex-wrap:wrap;gap:var(--s-2);margin:0;padding:0;list-style:none}
+.fields li{font:var(--t-small)/1.2 var(--mono);border:1px solid var(--border-bright);border-radius:var(--r-1);padding:.3rem .5rem;background:var(--surface)}
+.fields li.hot{border-color:var(--accent);background:var(--accent-dim)}
+.flowrow{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr);gap:var(--s-3);align-items:center}
+.flowrow .ar{font:600 var(--t-label)/1.2 var(--mono);color:var(--text-dim);text-align:center}
+@media (max-width:48rem){.flowrow{grid-template-columns:minmax(0,1fr)}.flowrow .ar{padding:0}}
+.sources{font-size:var(--t-small);color:var(--text-dim)}
+.sources li{margin:var(--s-1) 0;overflow-wrap:anywhere}
+footer{padding:var(--s-8) 0 var(--s-8)}
+svg text{font-family:var(--mono)}
+@media print{nav.toc{display:none}:root{color-scheme:light}}
+</style>
+</head>
+<body>
+
+<nav class="toc" aria-label="Sections"><div class="wrap">
+  <a href="#problem">1 Problem</a>
+  <a href="#clock">2 Clock</a>
+  <a href="#guard">3 Guard</a>
+  <a href="#headsup">4 Heads-up</a>
+  <a href="#resume">5 Resume</a>
+  <a href="#report">6 Report</a>
+  <a href="#measured">7 Measured &amp; limits</a>
+</div></nav>
+
+<main class="wrap">
+
+<header class="page">
+  <p class="kicker">Cache Clock · GitHub Copilot CLI and VS Code</p>
+  <h1>One idle gap, one <em>25×</em> price.</h1>
+  <p class="lead">Copilot bills tokens in AI credits. When the prompt cache expires, the next message rewrites your whole conversation at the <b>cache-write price</b>. Cache Clock shows the clock, prices the send, and asks before a costly cold send goes out.</p>
+  <p class="meta">Tested on Copilot CLI 1.0.95 · numbers measured 11&nbsp;October&nbsp;2026 · 1 AI credit = $0.01</p>
+
+  <figure>
+    <video class="film" controls playsinline preload="metadata" poster="poster.jpg" aria-label="17-second silent video: the 25× price, the cache countdown, the one-time refusal, and the install and report commands"><source src="video.mp4" type="video/mp4"></video>
+    <figcaption><span class="fig">Film</span>The whole idea in 17 seconds, silent. Made with make-motion.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="frame">
+      <div class="bars" role="img" aria-label="Bar chart: the same 37.2k-token context costs $0.003 on a warm send and $0.08 on a cold send">
+        <div class="brow"><div class="lab"><b>Warm send</b>cache read</div>
+          <div class="track-wrap"><div class="track"><div class="fill read" style="width:3.75%"></div><span class="val" style="color:var(--ok)">$0.003</span></div></div></div>
+        <div class="brow"><div class="lab"><b>Cold send</b>cache rewrite</div>
+          <div class="track-wrap"><div class="track"><div class="fill write" style="width:100%"></div><span class="val" style="left:auto;right:.5rem;color:#fff">$0.08</span></div></div></div>
+      </div>
+    </div>
+    <figcaption><span class="fig">Fig. 1</span>The same 37.2k-token context costs $0.003 to read and $0.08 to rewrite. Real capture, Claude Sonnet 5.5. Bars share one scale from zero.</figcaption>
+  </figure>
+</header>
+
+<!-- 1 PROBLEM -->
+<section id="problem" class="s">
+  <span class="step-no">1 · The problem</span>
+  <h2>A cache write costs far more than a cache read</h2>
+  <p>On Claude and newer GPT models in Copilot, writing a prompt to cache is priced well above reading it back. The cache also expires. Step away longer than the <b>TTL</b> (time to live) and the next message, even “give me a recap”, pays the write price for everything.</p>
+
+  <figure>
+    <div class="frame">
+      <div class="bars" role="img" aria-label="Write price divided by read price: 25 times on Claude Sonnet 5.5, 12.5 times on GPT-6 Luna">
+        <div class="brow"><div class="lab"><b>Claude Sonnet 5.5</b>TTL 300&nbsp;s</div>
+          <div class="track-wrap" style="display:grid;gap:6px">
+            <div class="track"><div class="fill read" style="width:4%"></div><span class="val" style="color:var(--ok)">read 1×</span></div>
+            <div class="track"><div class="fill write" style="width:100%"></div><span class="val" style="left:auto;right:.5rem;color:#fff">write 25×</span></div></div></div>
+        <div class="brow"><div class="lab"><b>GPT-6 Luna</b>TTL 1800&nbsp;s</div>
+          <div class="track-wrap" style="display:grid;gap:6px">
+            <div class="track"><div class="fill read" style="width:4%"></div><span class="val" style="color:var(--ok)">read 1×</span></div>
+            <div class="track"><div class="fill write" style="width:50%"></div><span class="val" style="color:var(--risk)">write 12.5×</span></div></div></div>
+      </div>
+    </div>
+    <figcaption><span class="fig">Fig. 2</span>Write price relative to read price, per token. One scale for both models.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="frame scroll" style="padding:var(--s-4)">
+      <svg viewBox="0 0 620 170" role="img" aria-label="Timeline for Claude Sonnet 5.5: a call at 0 seconds makes the cache warm until 300 seconds; a send at 320 seconds, 20 seconds after expiry, reads 0 tokens and writes 44,388">
+        <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--text-dim)"/></marker></defs>
+        <!-- axis: 0..340s -> x 30..590 -->
+        <line x1="30" y1="95" x2="600" y2="95" stroke="var(--border-bright)" stroke-width="1"/>
+        <rect x="30" y="80" width="494" height="30" rx="4" fill="var(--ok-dim)" stroke="var(--ok)" stroke-width="1.5"/>
+        <text x="40" y="100" font-size="13" fill="var(--text)">cache warm · TTL 300 s</text>
+        <rect x="524" y="80" width="66" height="30" rx="4" fill="var(--risk-dim)" stroke="var(--risk)" stroke-width="1.5" stroke-dasharray="6 5"/>
+        <text x="532" y="100" font-size="13" fill="var(--text)">cold</text>
+        <!-- call at 0 -->
+        <line x1="30" y1="40" x2="30" y2="80" stroke="var(--text-dim)" stroke-width="1.75"/>
+        <text x="30" y="30" font-size="13" fill="var(--text)" font-weight="600">0 s · last call</text>
+        <!-- expiry at 300 -> x=30+300*1.6471=524 -->
+        <line x1="524" y1="55" x2="524" y2="80" stroke="var(--text-dim)" stroke-width="1.75"/>
+        <text x="518" y="48" font-size="13" fill="var(--text)" text-anchor="end">300 s · cacheExpiresAt</text>
+        <!-- send at 320 -> x=557 -->
+        <line x1="557" y1="110" x2="557" y2="128" stroke="var(--risk)" stroke-width="2.5"/>
+        <text x="590" y="146" font-size="13" fill="var(--risk)" text-anchor="end" font-weight="600">320 s · resend: read 0, wrote 44,388</text>
+        <text x="590" y="164" font-size="12" fill="var(--text-dim)" text-anchor="end">20 s after expiry</text>
+      </svg>
+      <div class="hint">scroll sideways to see the whole timeline →</div>
+    </div>
+    <figcaption><span class="fig">Fig. 3</span>The cache expired exactly when Copilot said it would. The resend 20&nbsp;s later read nothing and rewrote the context.</figcaption>
+  </figure>
+
+  <div class="kpi" role="group" aria-label="Real capture">
+    <div><div class="l">context</div><div class="v">37.2<span class="unit">k tokens</span></div><div class="n">the estimate</div></div>
+    <div><div class="l">cold send</div><div class="v hot">$0.08</div><div class="n">rewrite at write price</div></div>
+    <div><div class="l">warm send</div><div class="v cool">$0.003</div><div class="n">read at read price</div></div>
+    <div><div class="l">resend, cache read</div><div class="v">0<span class="unit">tokens</span></div><div class="n">cache written: 44,388</div></div>
+  </div>
+  <p>The estimate (37.2k) is the last call’s input plus its answer. The real resend also carried your new message and what Copilot attaches, so it wrote 44,388.</p>
+</section>
+
+<!-- 2 CLOCK -->
+<section id="clock" class="s">
+  <span class="step-no">2 · The clock</span>
+  <h2>Copilot reports the expiry, so nothing is guessed</h2>
+  <p>Every main-agent model call emits an <code>assistant.usage</code> event. It carries the cache numbers and the prices. Cache Clock keeps the last call for each model.</p>
+
+  <figure>
+    <div class="frame">
+      <div class="flowrow">
+        <div class="card">
+          <span class="chip info">◆ event</span>
+          <h4><code>assistant.usage</code></h4>
+          <ul class="fields" aria-label="Fields Cache Clock reads">
+            <li class="hot">cacheReadTokens</li><li class="hot">cacheWriteTokens</li>
+            <li class="hot">cacheExpiresAt</li><li class="hot">cacheTtlSeconds</li>
+            <li class="hot">per-token prices</li><li>model</li>
+          </ul>
+        </div>
+        <div class="ar">keeps last<br>call per<br>model →</div>
+        <div class="card" style="border:2px solid var(--accent)">
+          <span class="chip info">◆ clock</span>
+          <h4>One entry per model</h4>
+          <p>expiry · TTL · context size · read &amp; write price. Answers: warm, cold, or unknown?</p>
+        </div>
+        <div class="ar">prices<br>the next<br>send →</div>
+        <div class="card">
+          <span class="chip info">◆ output</span>
+          <h4>Cold vs warm cost</h4>
+          <p>context × write price against context × read price. The difference is the “extra”.</p>
+        </div>
+      </div>
+    </div>
+    <figcaption><span class="fig">Fig. 4</span>The TTL, the expiry and the prices all come from Copilot. Sub-agent and background calls are ignored: they keep their own caches.</figcaption>
+  </figure>
+
+  <span class="cap">/cache-clock — the card, from a real resumed session</span>
+  <pre><code>cache-clock · Claude Sonnet 5.5
+  cache      warm, 1m17s left (ttl 5m00s)
+  context    37.2k tokens
+  next send  warm $0.003 · cold $0.08 (25× per token)
+  session    5 model calls · 0 cold after idle · 0 prefix breaks · $0 extra paid
+  guard      refuse once above $0.10 · heads-up 5m before expiry</code></pre>
+  <p>Prices come from the payload: nano-AI-credits per batch of tokens, and 1 credit is $0.01. Prices already include discounts. Through <code>auto</code>, Sonnet’s write was $2.25/M (list $2.50).</p>
+</section>
+
+<!-- 3 GUARD -->
+<section id="guard" class="s">
+  <span class="step-no">3 · The guard</span>
+  <h2>A costly cold send asks first</h2>
+  <p>The hook <code>onUserPromptSubmitted</code> runs on every message you send. It checks four things, in this order. Only the last path can stop the message, and only if you say so.</p>
+
+  <figure>
+    <div class="frame">
+      <ol class="flow" aria-label="Guard decision flow">
+        <li class="fstep">
+          <div class="node key"><b>Prompt submitted</b><small><code>onUserPromptSubmitted</code> checks the last model’s clock</small></div>
+          <div class="out"></div>
+        </li>
+        <li class="fstep">
+          <div class="node q"><b>Starts with <code>/name</code> or <code>!</code>?</b><small>Slash commands and shell escapes never call the model with your conversation.</small><span class="no">no ↓</span></div>
+          <div class="out"><span class="arrow">yes →</span><span class="chip ok">● ALLOW · skipped</span><p>Never guarded.</p></div>
+        </li>
+        <li class="fstep">
+          <div class="node q"><b>Guard off, or cache not cold?</b><small>Warm, or unknown (no data yet, or right after a compaction).</small><span class="no">cold ↓</span></div>
+          <div class="out"><span class="arrow">yes →</span><span class="chip ok">● ALLOW · silent</span><p>Compaction exemption: the context was rewritten anyway, so the next send is not an idle tax.</p></div>
+        </li>
+        <li class="fstep">
+          <div class="node q"><b>Extra cost ≥ threshold?</b><small>Default $0.10 (<code>/cache-clock min</code>). Extra = context × (write − read).</small><span class="no">yes ↓</span></div>
+          <div class="out"><span class="arrow">no →</span><span class="chip ok">● ALLOW · silent</span><p>Small rewrites pass quietly. At the default, the $0.08 capture would pass.</p></div>
+        </li>
+        <li class="fstep">
+          <div class="node q"><b>Mode is warn, a turn is running, or this cold episode was already asked about?</b><small>Episode = one model’s cache that expired at one instant. Refusals are remembered per session in <code>refused.json</code> for a week, across processes.</small><span class="no">none ↓</span></div>
+          <div class="out"><span class="arrow">yes →</span><span class="chip warn">▲ SEND with a price note</span><p>While a turn runs, aborting would cancel that turn, so you only get the note. Your resend lands here.</p></div>
+        </li>
+        <li class="fstep">
+          <div class="node key"><b>Ask in the chat</b><small><code>session.ui.select</code> with the price: <b>Send anyway</b> or <b>Don't send</b>. Don't send, dismissed, or no answer in 5 minutes: <code>session.abort()</code> without awaiting it (awaiting inside the hook deadlocks). No model call, <b>0 AI credits</b>.</small></div>
+          <div class="out last"><span class="chip risk">■ ASK · once per cold cache</span><p>Where Copilot cannot ask (<code>copilot -p</code>), it refuses once instead: send the same message again to pay, or <code>/clear</code> and start fresh.</p></div>
+        </li>
+      </ol>
+    </div>
+    <figcaption><span class="fig">Fig. 5</span>Four checks send the message through. Only a costly cold send, not yet asked about and not mid-turn, gets the question, and it goes out if you choose Send anyway.</figcaption>
+  </figure>
+
+  <span class="cap">The question (checked live in Copilot CLI and VS Code, 12 October 2026)</span>
+  <pre><code>cache-clock: the Claude Sonnet 5.5 prompt cache went cold 2s ago. Sending this rewrites
+about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
+  [ Send anyway ]  [ Don't send ]</code></pre>
+  <span class="cap">The refuse-once fallback, where Copilot cannot ask — a real capture (Copilot CLI 1.0.95, 11 October 2026, taken with /cache-clock min 0.01)</span>
+  <pre><code>! cache-clock: the Claude Sonnet 5.5 prompt cache went cold 2s ago. Sending this rewrites
+  about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
+  Send it again to pay it, or /clear and start fresh.</code></pre>
+  <span class="cap">The resend’s note — template, one line</span>
+  <pre><code>cache-clock: sending cold, rewriting about &lt;tokens&gt; tokens for &lt;cold $&gt; (warm: &lt;warm $&gt;).</code></pre>
+  <p>Switch modes with <code>/cache-clock guard refuse</code> (default: ask, or refuse once), <code>warn</code> (send and print the price) or <code>off</code>. <code>/cache-clock help</code> explains it all in the chat.</p>
+</section>
+
+<!-- 4 HEADS-UP -->
+<section id="headsup" class="s">
+  <span class="step-no">4 · The heads-up</span>
+  <h2>A warning one minute before a Claude cache expires</h2>
+  <p>One ephemeral line appears before expiry. It fires only when a cold send’s extra cost (cold minus warm) is at least the threshold and no turn is running. The lead time is the <b>smaller</b> of your setting (5&nbsp;min) and a fifth of the TTL. A 5-minute lead on a 5-minute cache would fire right after every call.</p>
+
+  <figure>
+    <div class="frame">
+      <div class="bars" role="img" aria-label="Heads-up lead: 1 minute before a 5-minute Claude cache expires; 5 minutes before a 30-minute Luna cache expires">
+        <div class="brow"><div class="lab"><b>Claude Sonnet 5.5</b>TTL 5 min</div>
+          <div class="track-wrap" style="padding-right:0"><div class="track" style="background:var(--ok-dim)">
+            <div class="fill" style="left:80%;width:20%;inset:0 0 0 80%;background:var(--warn);border-radius:0 4px 4px 0"></div>
+            <span class="mono" style="position:absolute;left:.5rem;top:50%;transform:translateY(-50%);font-size:var(--t-label)">warm</span>
+            <span class="mono" style="position:absolute;right:.4rem;top:50%;transform:translateY(-50%);font-size:var(--t-label);color:#fff;font-weight:600">1 min</span></div></div></div>
+        <div class="brow"><div class="lab"><b>GPT-6 Luna</b>TTL 30 min</div>
+          <div class="track-wrap" style="padding-right:0"><div class="track" style="background:var(--ok-dim)">
+            <div class="fill" style="inset:0 0 0 83.33%;background:var(--warn);border-radius:0 4px 4px 0"></div>
+            <span class="mono" style="position:absolute;left:.5rem;top:50%;transform:translateY(-50%);font-size:var(--t-label)">warm</span>
+            <span class="mono" style="position:absolute;right:.4rem;top:50%;transform:translateY(-50%);font-size:var(--t-label);color:#fff;font-weight:600">5 min</span></div></div></div>
+      </div>
+    </div>
+    <figcaption><span class="fig">Fig. 6</span>Each bar is one full TTL. The amber end is the heads-up window: min(5 min, TTL ÷ 5) = 1&nbsp;min for Claude, 5&nbsp;min for Luna.</figcaption>
+  </figure>
+  <p>Change it with <code>/cache-clock headsup 5</code>, or <code>headsup off</code>. It keeps running under <code>guard off</code> until you turn it off.</p>
+</section>
+
+<!-- 5 RESUME -->
+<section id="resume" class="s">
+  <span class="step-no">5 · Resume</span>
+  <h2>A resumed session reads its clock from the log</h2>
+  <p><code>assistant.usage</code> is not replayed when you resume, and <code>getEvents()</code> omits usage records. So the extension reads the session’s own log, which keeps every record with its prices.</p>
+
+  <figure>
+    <div class="frame">
+      <div class="flowrow">
+        <div class="card"><span class="chip info">◆ file</span><h4><code>events.jsonl</code></h4><p><code>~/.copilot/session-state/&lt;id&gt;/</code><br>one line per event</p></div>
+        <div class="ar">replays<br><code>session.usage_record</code><br>→</div>
+        <div class="card" style="border:2px solid var(--accent)"><span class="chip info">◆ clock</span><h4>Seeded at start</h4><p>Main-agent calls only. A <code>session.compaction_complete</code> line marks the clock unknown.</p></div>
+        <div class="ar">then live<br>events<br>→</div>
+        <div class="card"><span class="chip info">◆ guard</span><h4>Works on call one</h4><p>Even in <code>copilot --resume … -p</code>.</p></div>
+      </div>
+    </div>
+    <figcaption><span class="fig">Fig. 7</span>The log is the source of truth after a restart. The refusal memory lives next to it in <code>refused.json</code>.</figcaption>
+  </figure>
+</section>
+
+<!-- 6 REPORT -->
+<section id="report" class="s">
+  <span class="step-no">6 · The report</span>
+  <h2>See what cold sends already cost you</h2>
+  <p>The extension only sees sessions it was loaded in. The report reads <b>every</b> session Copilot has persisted, CLI and VS Code alike. It sends nothing anywhere. It needs Node 18+.</p>
+
+  <span class="cap">Run it</span>
+  <pre><code>node ~/.copilot/extensions/cache-clock/report.mjs              # last 30 days
+node ~/.copilot/extensions/cache-clock/report.mjs --since 7d   # or 12h, all; --json for raw numbers</code></pre>
+
+  <span class="cap">Sample output — the test machine after the README’s experiments</span>
+  <pre><code>model                   calls  cold after idle  prefix breaks  rewritten  extra paid  total spent  idle before cold sends
+Claude Sonnet 5.5           5                1              0      37.1k       $0.08        $0.16  5m
+GPT-6 Luna                201                1              2      44.9k      $0.005        $0.14  31m
+
+extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at this rate</code></pre>
+
+  <figure>
+    <div class="frame">
+      <div class="bars" role="img" aria-label="Extra paid for cold rewrites: $0.08 of $0.29 spent">
+        <div class="brow"><div class="lab"><b>Total spent</b>both models</div>
+          <div class="track-wrap"><div class="track"><div class="fill" style="width:100%;background:var(--border-bright)"></div><span class="val" style="left:auto;right:.5rem;color:var(--bg)">$0.29</span></div></div></div>
+        <div class="brow"><div class="lab"><b>Extra paid</b>cold rewrites</div>
+          <div class="track-wrap"><div class="track"><div class="fill write" style="width:27.6%"></div><span class="val" style="color:var(--risk)">$0.08</span></div></div></div>
+      </div>
+    </div>
+    <figcaption><span class="fig">Fig. 8</span>On this machine, $0.08 of $0.29 went to cold rewrites. Bars start at zero on one scale.</figcaption>
+  </figure>
+
+  <div class="grid2" style="margin-top:var(--s-5)">
+    <div class="card"><span class="chip risk">■ cold after idle</span><p>The call came <b>after</b> the reported expiry. The fix is behavior: send sooner, or accept the price.</p></div>
+    <div class="card"><span class="chip warn">▲ prefix break</span><p>A cold call <b>inside</b> the TTL. Something changed the prompt prefix (tools, instructions, model routing), or the provider served it cold early.</p></div>
+  </div>
+  <p>“Extra paid” is what each cold call cost above a warm read of the same tokens. VS Code sessions persist only totals, not per-call records; the report counts them separately. In VS Code's Copilot chat the extension loads once <code>"chat.canvases.enabled": true</code> is set (measured 12&nbsp;October&nbsp;2026); the card and the cold-send question appear as question cards, and the heads-up reaches only VS Code's log.</p>
+</section>
+
+<!-- 7 MEASURED -->
+<section id="measured" class="s">
+  <span class="step-no">7 · Measured, and the limits</span>
+  <h2>Claude held to the second. Luna went cold early</h2>
+  <p>Copilot’s reported expiry was tested on both models on 11&nbsp;October&nbsp;2026.</p>
+
+  <div class="table-scroll"><table>
+    <thead><tr><th>Model (via Copilot)</th><th class="r">Reported TTL</th><th class="r">Write / read</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td>Claude Sonnet 5.5</td><td class="r">300 s</td><td class="r">25×</td><td>Sent 20 s after <code>cacheExpiresAt</code>: read 0, wrote 44,388</td></tr>
+      <tr><td>GPT-6 Luna</td><td class="r">1800 s</td><td class="r">12.5×</td><td>Every persisted call (201 on this machine) reports <code>cacheTtlSeconds: 1800</code>; gap test below</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Gap test, GPT-6 Luna</h3>
+  <p>Two sessions were warmed at 14:55Z, then resumed with <code>copilot --resume &lt;id&gt; -p</code>, guard threshold at $0.</p>
+  <figure>
+    <div class="frame scroll" style="padding:var(--s-4)">
+      <svg viewBox="0 0 620 170" role="img" aria-label="Luna timeline: reported TTL 30 minutes. A send at 29 minutes read 0 and wrote 20,771 (served cold). A send at 31 minutes was refused with 0 credits.">
+        <!-- 0..32 min -> x 30..590 (17.5 px/min) -->
+        <line x1="30" y1="90" x2="600" y2="90" stroke="var(--border-bright)" stroke-width="1"/>
+        <rect x="30" y="76" width="525" height="28" rx="4" fill="var(--ok-dim)" stroke="var(--ok)" stroke-width="1.5"/>
+        <text x="40" y="95" font-size="13" fill="var(--text)">reported warm · 30 min</text>
+        <!-- expiry at 30 => x=555 -->
+        <line x1="555" y1="60" x2="555" y2="76" stroke="var(--text-dim)" stroke-width="1.75"/>
+        <text x="555" y="20" font-size="13" fill="var(--text)" text-anchor="end">30 min · reported expiry</text>
+        <line x1="555" y1="26" x2="555" y2="60" stroke="var(--text-dim)" stroke-width="1" stroke-dasharray="3 4"/>
+        <!-- 29 => x=537.5 -->
+        <line x1="537" y1="104" x2="537" y2="124" stroke="var(--warn)" stroke-width="2.5"/>
+        <text x="530" y="140" font-size="13" fill="var(--warn)" text-anchor="end" font-weight="600">29 min · allowed (clock said warm) · read 0, wrote 20,771</text>
+        <!-- 31 => x=572.5 -->
+        <line x1="573" y1="104" x2="573" y2="152" stroke="var(--risk)" stroke-width="2.5"/>
+        <text x="566" y="162" font-size="13" fill="var(--risk)" text-anchor="end" font-weight="600">31 min · refused, 0 credits</text>
+        <rect x="573" y="76" width="17" height="28" rx="4" fill="var(--risk-dim)" stroke="var(--risk)" stroke-width="1.5" stroke-dasharray="6 5"/>
+      </svg>
+      <div class="hint">scroll sideways to see the whole timeline →</div>
+    </div>
+    <figcaption><span class="fig">Fig. 9</span>The 29-minute send was already fully cold, one minute before Copilot’s reported expiry. The reported expiry is an upper bound on Luna, not a guarantee.</figcaption>
+  </figure>
+
+  <div class="table-scroll"><table class="wide">
+    <thead><tr><th>Resumed</th><th>vs reported expiry</th><th class="r">Cache read</th><th class="r">Cache written</th><th>What Cache Clock did</th></tr></thead>
+    <tbody>
+      <tr><td>after 29 min</td><td>1 min before</td><td class="r">0</td><td class="r">20,771</td><td>allowed it (clock said warm)</td></tr>
+      <tr><td>after 31 min</td><td>1 min after</td><td class="r" colspan="2">(refused, no model call)</td><td>refused, 0 AI credits</td></tr>
+      <tr><td>resend, new process</td><td>1 min after</td><td class="r">10,157</td><td class="r">10,653</td><td>let it through with the cold note</td></tr>
+    </tbody>
+  </table></div>
+  <p>The refused-then-resent pair also shows the refusal memory working across processes. Separately, a brand-new session’s first call read 10,157 tokens from cache: sessions share the cached system-prompt prefix, while the conversation itself is per session.</p>
+
+  <h3>Limits</h3>
+  <div class="grid2">
+    <div class="card"><span class="chip warn">▲ early eviction</span><p>The guard trusts <code>cacheExpiresAt</code>. When a provider serves the cache cold sooner (Luna at 29 of 30 min, once), the send is billed cold and the guard stays quiet. The report counts it as a prefix break.</p></div>
+    <div class="card"><span class="chip warn">▲ approximate price</span><p>The estimate is the last call’s input plus its answer. The real resend adds your message and attachments (44.4k actual vs 37.2k estimated). Copilot’s shared system prefix (~10k tokens) often stays cached, which pulls the other way.</p></div>
+    <div class="card"><span class="chip warn">▲ no keep-warm yet</span><p>cache-tax pings to hold the cache. An extension can only ping with <code>session.send</code>, which adds a user and an assistant turn each time. Run the report to see if pings would pay off.</p></div>
+    <div class="card"><span class="chip info">◆ other limits</span><p>With <code>auto</code>, the next prompt may route to another model; the guard prices the last model used. In <code>-p</code> mode, <code>/cache-clock</code> needs the interactive CLI. Claude was measured through <code>auto</code> only; each boundary result is a single run.</p></div>
+  </div>
+</section>
+
+<footer>
+  <h3 style="margin-top:0">Install</h3>
+  <pre><code>curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh</code></pre>
+  <p>Copilot CLI: start a new <code>copilot</code> session, say yes when Copilot asks to “register hooks”, then run <code>/cache-clock help</code>. VS Code Copilot chat: add <code>"chat.canvases.enabled": true</code> to VS Code settings, reload, and start a new chat.</p>
+  <h3>Sources</h3>
+  <ul class="plain sources">
+    <li><code>tools/cache-clock/README.md</code> — captures, tables, report sample</li>
+    <li><code>docs/cache-clock-plan.md</code> — what the probe settled</li>
+    <li><code>tools/cache-clock/extension/lib/{wiring,clock,guard,usage,format}.mjs</code> — flow, thresholds, message text</li>
+  </ul>
+  <h3>More</h3>
+  <ul class="plain sources">
+    <li><a href="../../cache-clock.html">Cache Clock guide</a> — install, commands, report, limits</li>
+    <li><a href="diagram/cache-clock-architecture.html">Architecture diagram</a> — every module, event and file</li>
+    <li><a href="video.mp4">17-second video</a></li>
+  </ul>
+</footer>
+
+</main>
+
+<script>
+(function(){
+  try{
+    var links=[].slice.call(document.querySelectorAll('nav.toc a'));
+    var map={};links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a});
+    if(!('IntersectionObserver' in window))return;
+    var io=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting){links.forEach(function(a){a.removeAttribute('aria-current')});
+          var a=map[e.target.id];if(a)a.setAttribute('aria-current','true');}
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    Object.keys(map).forEach(function(id){var s=document.getElementById(id);if(s)io.observe(s)});
+  }catch(e){}
+})();
+</script>
+</body>
+</html>

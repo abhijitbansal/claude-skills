@@ -1,0 +1,251 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "How Cache Clock learns: start, resume and every model call",
+    "quality_profile": "showcase",
+    "output": "docs/features/showcase/cache-clock/diagram-flow/cache-clock-flow-clock.html",
+    "repository": {
+      "url": "https://github.com/abhijitbansal/claude-skills",
+      "provider": "github",
+      "revision": "c2c7e5d8410ec563693ead55a473cdac86d90404"
+    }
+  },
+  "lanes": [
+    {
+      "id": "start",
+      "label": "Start & resume"
+    },
+    {
+      "id": "clock",
+      "label": "Cache clock"
+    },
+    {
+      "id": "calls",
+      "label": "Every model call"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "session",
+      "lane": "start",
+      "col": 0,
+      "type": "external",
+      "label": "Session start",
+      "sublabel": "or resume",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 124,
+          "end_line": 131
+        }
+      ]
+    },
+    {
+      "id": "seed",
+      "lane": "start",
+      "col": 1,
+      "type": "backend",
+      "label": "Seed from log",
+      "sublabel": "usage_record lines",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 27,
+          "end_line": 50
+        }
+      ]
+    },
+    {
+      "id": "logcomp",
+      "lane": "start",
+      "col": 2,
+      "type": "security",
+      "label": "Compaction in log?",
+      "sublabel": "success !== false",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 22,
+          "end_line": 23
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 45
+        }
+      ]
+    },
+    {
+      "id": "livecomp",
+      "lane": "clock",
+      "col": 0,
+      "type": "messagebus",
+      "label": "Compaction (live)",
+      "sublabel": "compaction_complete",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 143,
+          "end_line": 147
+        }
+      ]
+    },
+    {
+      "id": "clk",
+      "lane": "clock",
+      "col": 1,
+      "type": "database",
+      "label": "Per-model clock",
+      "sublabel": "last call per model",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/clock.mjs",
+          "line": 6,
+          "end_line": 35
+        }
+      ]
+    },
+    {
+      "id": "snap",
+      "lane": "clock",
+      "col": 3,
+      "type": "backend",
+      "label": "snapshot(now)",
+      "sublabel": "warm | cold | unknown",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/clock.mjs",
+          "line": 37,
+          "end_line": 58
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/usage.mjs",
+          "line": 110,
+          "end_line": 116,
+          "label": "nextSendCosts"
+        }
+      ]
+    },
+    {
+      "id": "usage",
+      "lane": "calls",
+      "col": 0,
+      "type": "messagebus",
+      "label": "assistant.usage",
+      "sublabel": "one per model call",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 139,
+          "end_line": 142
+        }
+      ]
+    },
+    {
+      "id": "mainq",
+      "lane": "calls",
+      "col": 1,
+      "type": "security",
+      "label": "Main agent call?",
+      "sublabel": "conversation-agent",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 15,
+          "end_line": 20
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/usage.mjs",
+          "line": 105,
+          "end_line": 107
+        }
+      ]
+    },
+    {
+      "id": "ignored",
+      "lane": "calls",
+      "col": 2,
+      "type": "external",
+      "label": "Ignored",
+      "sublabel": "sub-agent, background",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 15,
+          "end_line": 20
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-session-seed",
+      "from": "session",
+      "to": "seed"
+    },
+    {
+      "id": "e-seed-logcomp",
+      "from": "seed",
+      "to": "logcomp",
+      "label": "replay",
+      "variant": "dashed"
+    },
+    {
+      "id": "e-seed-clk",
+      "from": "seed",
+      "to": "clk",
+      "label": "ingest",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-logcomp-clk",
+      "from": "logcomp",
+      "to": "clk",
+      "label": "unknown",
+      "variant": "security"
+    },
+    {
+      "id": "e-livecomp-clk",
+      "from": "livecomp",
+      "to": "clk",
+      "label": "unknown",
+      "variant": "security"
+    },
+    {
+      "id": "e-clk-snap",
+      "from": "clk",
+      "to": "snap",
+      "label": "read"
+    },
+    {
+      "id": "e-usage-mainq",
+      "from": "usage",
+      "to": "mainq"
+    },
+    {
+      "id": "e-mainq-clk",
+      "from": "mainq",
+      "to": "clk",
+      "label": "yes: ingest",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-mainq-ignored",
+      "from": "mainq",
+      "to": "ignored",
+      "label": "no",
+      "variant": "dashed",
+      "role": "branch"
+    }
+  ],
+  "cards": []
+}
