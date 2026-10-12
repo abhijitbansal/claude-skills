@@ -8,7 +8,7 @@
     "repository": {
       "url": "https://github.com/abhijitbansal/claude-skills",
       "provider": "github",
-      "revision": "1edd20cf1c5992962b4321579337efa9afc7f453"
+      "revision": "c2c7e5d8410ec563693ead55a473cdac86d90404"
     }
   },
   "lanes": [
@@ -18,11 +18,11 @@
     },
     {
       "id": "report",
-      "label": "Report (bin/report.mjs)"
+      "label": "Report (extension/report.mjs)"
     },
     {
       "id": "vscode",
-      "label": "VS Code (measured 11 Oct 2026)",
+      "label": "VS Code (measured 11-12 Oct 2026)",
       "variant": "exception"
     }
   ],
@@ -38,8 +38,8 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 116,
-          "end_line": 123
+          "line": 152,
+          "end_line": 158
         }
       ]
     },
@@ -59,8 +59,8 @@
         },
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 123,
-          "end_line": 131
+          "line": 159,
+          "end_line": 167
         }
       ]
     },
@@ -75,8 +75,8 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 125,
-          "end_line": 129
+          "line": 162,
+          "end_line": 165
         }
       ]
     },
@@ -91,12 +91,12 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 129
+          "line": 165
         },
         {
           "path": "tools/cache-clock/extension/lib/format.mjs",
-          "line": 47,
-          "end_line": 52
+          "line": 56,
+          "end_line": 61
         }
       ]
     },
@@ -111,7 +111,7 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 121
+          "line": 157
         },
         {
           "path": "tools/cache-clock/extension/lib/config.mjs",
@@ -130,8 +130,8 @@
       "width": 140,
       "sources": [
         {
-          "path": "tools/cache-clock/bin/report.mjs",
-          "line": 36,
+          "path": "tools/cache-clock/extension/report.mjs",
+          "line": 37,
           "end_line": 51
         }
       ]
@@ -195,46 +195,59 @@
       "lane": "vscode",
       "col": 0,
       "type": "external",
-      "label": "VS Code agent host",
-      "sublabel": "Copilot sessions",
+      "label": "VS Code Copilot chat",
+      "sublabel": "chat.canvases.enabled",
       "width": 140,
       "sources": [
         {
-          "path": "tools/cache-clock/README.md",
-          "line": 145,
-          "end_line": 152
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 61,
+          "end_line": 64
+        },
+        {
+          "path": "tools/cache-clock/install.sh",
+          "line": 70
         }
       ]
     },
     {
-      "id": "novsc",
+      "id": "vsshow",
       "lane": "vscode",
       "col": 1,
-      "type": "security",
-      "label": "/cache-clock",
-      "sublabel": "not registered",
+      "type": "frontend",
+      "label": "Command output",
+      "sublabel": "question card, OK button",
       "width": 140,
       "sources": [
         {
-          "path": "tools/cache-clock/README.md",
-          "line": 145,
-          "end_line": 152
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 94,
+          "end_line": 98
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/format.mjs",
+          "line": 117,
+          "end_line": 118
         }
       ]
     },
     {
-      "id": "nolive",
+      "id": "vslog",
       "lane": "vscode",
       "col": 2,
       "type": "external",
-      "label": "No live guard",
-      "sublabel": "no clock, no heads-up",
+      "label": "Heads-up, notes",
+      "sublabel": "reach VS Code's log only",
       "width": 140,
       "sources": [
         {
-          "path": "tools/cache-clock/README.md",
-          "line": 145,
-          "end_line": 152
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 61,
+          "end_line": 64
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 165
         }
       ]
     },
@@ -301,19 +314,20 @@
     {
       "id": "e-vsc-no",
       "from": "vsc",
-      "to": "novsc"
+      "to": "vsshow",
+      "label": "/cache-clock, typed in full"
     },
     {
-      "id": "e-no-nolive",
-      "from": "novsc",
-      "to": "nolive",
-      "label": "sent as text"
+      "id": "e-show-log",
+      "from": "vsshow",
+      "to": "vslog",
+      "label": "other lines"
     },
     {
       "id": "e-vsc-ckpt",
-      "from": "nolive",
+      "from": "vslog",
       "to": "ckpt",
-      "label": "persists",
+      "label": "sessions persist",
       "variant": "dashed"
     },
     {
@@ -328,10 +342,11 @@
   "cards": [
     {
       "dot": "cyan",
-      "title": "VS Code, measured 11 Oct 2026",
+      "title": "VS Code, measured 11-12 Oct 2026",
       "items": [
-        "/cache-clock was sent to the model as text and answered that it is not available.",
-        "Sessions persist session.usage_checkpoint totals only, so the report counts them as totals."
+        "The extension loads in VS Code's Copilot chat only with the setting \"chat.canvases.enabled\": true, from the same ~/.copilot/extensions install.",
+        "Typed in full, /cache-clock works but is not listed in the / menu. Its card, help and settings appear as a question with an OK button, because plain session messages show there only as error boxes.",
+        "The heads-up and the sending-cold note reach only VS Code's log. Sessions keep usage checkpoints only, so the report counts them as totals."
       ]
     }
   ]

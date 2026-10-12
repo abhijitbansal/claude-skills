@@ -8,7 +8,7 @@
     "repository": {
       "url": "https://github.com/abhijitbansal/claude-skills",
       "provider": "github",
-      "revision": "1edd20cf1c5992962b4321579337efa9afc7f453"
+      "revision": "c2c7e5d8410ec563693ead55a473cdac86d90404"
     }
   },
   "lanes": [
@@ -27,7 +27,7 @@
     },
     {
       "id": "sent",
-      "label": "Cold send goes ahead"
+      "label": "What happens to the send"
     }
   ],
   "nodes": [
@@ -42,8 +42,8 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 67,
-          "end_line": 72
+          "line": 101,
+          "end_line": 106
         }
       ]
     },
@@ -128,13 +128,13 @@
       "col": 0,
       "type": "backend",
       "label": "/cache-clock",
-      "sublabel": "card, guard, min",
+      "sublabel": "card, help, guard, min",
       "width": 140,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 134,
-          "end_line": 148
+          "line": 170,
+          "end_line": 184
         },
         {
           "path": "tools/cache-clock/extension/lib/config.mjs",
@@ -162,39 +162,28 @@
     {
       "id": "busyq",
       "lane": "costly",
-      "col": 4,
+      "col": 5,
       "type": "security",
       "label": "Turn running?",
-      "sublabel": "abort would cancel it",
+      "sublabel": "busy flag: turn_start to idle",
       "width": 140,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/guard.mjs",
           "line": 21,
           "end_line": 22
-        }
-      ]
-    },
-    {
-      "id": "busyflag",
-      "lane": "costly",
-      "col": 5,
-      "type": "database",
-      "label": "busy flag",
-      "sublabel": "turn_start, idle",
-      "width": 140,
-      "sources": [
+        },
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 97,
-          "end_line": 102
+          "line": 133,
+          "end_line": 138
         }
       ]
     },
     {
       "id": "modeq",
       "lane": "costly",
-      "col": 3,
+      "col": 4,
       "type": "security",
       "label": "Mode warn?",
       "sublabel": "refuse is default",
@@ -210,7 +199,7 @@
     {
       "id": "seenq",
       "lane": "costly",
-      "col": 2,
+      "col": 3,
       "type": "security",
       "label": "Episode refused?",
       "sublabel": "model@expiresAt",
@@ -228,19 +217,104 @@
       ]
     },
     {
-      "id": "refuse",
-      "lane": "costly",
-      "col": 1,
-      "type": "security",
-      "label": "Refuse once",
-      "sublabel": "price, abort, no call",
-      "tag": "0 AI credits",
+      "id": "remember",
+      "lane": "sent",
+      "col": 3,
+      "type": "database",
+      "label": "refused.json",
+      "sublabel": "saved before asking",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 42,
+          "end_line": 69
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 112,
+          "end_line": 113
+        }
+      ]
+    },
+    {
+      "id": "note",
+      "lane": "sent",
+      "col": 4,
+      "type": "frontend",
+      "label": "Send with note",
+      "sublabel": "cold price, then model",
       "width": 140,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 71,
-          "end_line": 77
+          "line": 110
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/format.mjs",
+          "line": 52,
+          "end_line": 54
+        }
+      ]
+    },
+    {
+      "id": "canask",
+      "lane": "costly",
+      "col": 2,
+      "type": "security",
+      "label": "Host can ask?",
+      "sublabel": "elicitation + select",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 73,
+          "end_line": 75
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 114,
+          "end_line": 116
+        }
+      ]
+    },
+    {
+      "id": "ask",
+      "lane": "costly",
+      "col": 1,
+      "type": "frontend",
+      "label": "Ask in chat",
+      "sublabel": "Send anyway / Don't send",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 66,
+          "end_line": 88
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 114
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/format.mjs",
+          "line": 43,
+          "end_line": 50
+        }
+      ]
+    },
+    {
+      "id": "refuse1",
+      "lane": "sent",
+      "col": 2,
+      "type": "security",
+      "label": "Refuse once",
+      "sublabel": "price message",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 116
         },
         {
           "path": "tools/cache-clock/extension/lib/format.mjs",
@@ -250,40 +324,36 @@
       ]
     },
     {
-      "id": "remember",
-      "lane": "costly",
-      "col": 0,
-      "type": "database",
-      "label": "refused.json",
-      "sublabel": "per session, 7 days",
-      "width": 140,
-      "sources": [
-        {
-          "path": "tools/cache-clock/extension/lib/config.mjs",
-          "line": 42,
-          "end_line": 69
-        }
-      ]
-    },
-    {
-      "id": "note",
+      "id": "go",
       "lane": "sent",
-      "col": 3,
+      "col": 0,
       "type": "frontend",
-      "label": "Send with note",
-      "sublabel": "cold price, then model",
+      "label": "Send anyway",
+      "sublabel": "no abort, no note",
       "width": 140,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 79
-        },
-        {
-          "path": "tools/cache-clock/extension/lib/format.mjs",
-          "line": 43,
-          "end_line": 45
+          "line": 115
         }
       ]
+    },
+    {
+      "id": "hold",
+      "lane": "sent",
+      "col": 1,
+      "type": "security",
+      "label": "Hold the send",
+      "sublabel": "abort(), not awaited",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 117,
+          "end_line": 119
+        }
+      ],
+      "tag": "0 AI credits"
     }
   ],
   "edges": [
@@ -358,12 +428,6 @@
       "variant": "security"
     },
     {
-      "id": "e-flag-busy",
-      "from": "busyflag",
-      "to": "busyq",
-      "label": "read"
-    },
-    {
       "id": "e-busy-mode",
       "from": "busyq",
       "to": "modeq",
@@ -374,18 +438,6 @@
       "from": "modeq",
       "to": "seenq",
       "label": "refuse"
-    },
-    {
-      "id": "e-seen-refuse",
-      "from": "seenq",
-      "to": "refuse",
-      "label": "no"
-    },
-    {
-      "id": "e-refuse-remember",
-      "from": "refuse",
-      "to": "remember",
-      "label": "save"
     },
     {
       "id": "e-busy-note",
@@ -410,16 +462,64 @@
       "label": "yes: resend",
       "variant": "dashed",
       "role": "branch"
+    },
+    {
+      "id": "e-canask-ask",
+      "from": "canask",
+      "to": "ask",
+      "label": "yes"
+    },
+    {
+      "id": "e-canask-refuse",
+      "from": "canask",
+      "to": "refuse1",
+      "label": "no: copilot -p"
+    },
+    {
+      "id": "e-ask-go",
+      "from": "ask",
+      "to": "go",
+      "label": "Send anyway",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-ask-hold",
+      "from": "ask",
+      "to": "hold",
+      "label": "Don't send, 5 min",
+      "variant": "security"
+    },
+    {
+      "id": "e-refuse-hold",
+      "from": "refuse1",
+      "to": "hold",
+      "label": "then abort",
+      "variant": "security"
+    },
+    {
+      "id": "e-seen-canask",
+      "from": "seenq",
+      "to": "canask",
+      "label": "no"
+    },
+    {
+      "id": "e-seen-remember",
+      "from": "seenq",
+      "to": "remember",
+      "label": "save",
+      "variant": "dashed",
+      "role": "branch"
     }
   ],
   "cards": [
     {
       "dot": "rose",
-      "title": "Refusal contract",
+      "title": "Cold-send question",
       "items": [
-        "session.abort() is not awaited: awaiting it inside the hook deadlocks.",
-        "Refused episodes live in refused.json for 7 days, so a resend from a new process goes through.",
-        "A queued prompt during a running turn is never refused, only priced."
+        "Where the host can ask, the refusal is a question: Send anyway goes through; Don't send, dismissed or no answer in 5 minutes holds the send (0 AI credits).",
+        "Where it cannot ask (copilot -p) the old refuse-once message appears, then the abort. Resend to pay.",
+        "session.abort() is not awaited: awaiting it inside the hook deadlocks. Awaiting select() there did not, measured live 12 Oct 2026 in Copilot CLI 1.0.95 and VS Code.",
+        "Asked once per cold episode (refused.json, 7 days); later sends go through with the note. A queued prompt during a running turn is only priced."
       ]
     },
     {

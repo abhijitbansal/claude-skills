@@ -9,7 +9,7 @@
     "repository": {
       "url": "https://github.com/abhijitbansal/claude-skills",
       "provider": "github",
-      "revision": "1edd20cf1c5992962b4321579337efa9afc7f453"
+      "revision": "c2c7e5d8410ec563693ead55a473cdac86d90404"
     }
   },
   "lanes": [
@@ -19,7 +19,11 @@
     },
     {
       "id": "installer",
-      "label": "install.sh"
+      "label": "install.sh: checks"
+    },
+    {
+      "id": "fetch",
+      "label": "curl | sh: download a copy"
     },
     {
       "id": "exits",
@@ -28,7 +32,7 @@
     },
     {
       "id": "after",
-      "label": "In copilot, after install"
+      "label": "After install: Copilot CLI and VS Code"
     }
   ],
   "phases": [
@@ -40,10 +44,16 @@
     },
     {
       "id": "guards",
-      "label": "Checks, then link or copy",
+      "label": "Checks, choose how",
       "fromCol": 2,
-      "toCol": 4,
+      "toCol": 3,
       "variant": "emphasis"
+    },
+    {
+      "id": "put",
+      "label": "Put in place",
+      "fromCol": 4,
+      "toCol": 4
     },
     {
       "id": "first",
@@ -54,42 +64,41 @@
     }
   ],
   "mainPath": [
-    "clone",
-    "run",
+    "curl",
     "flags",
-    "target",
-    "source",
-    "place",
+    "checks",
+    "where",
+    "dl",
     "start"
   ],
   "nodes": [
     {
-      "id": "clone",
+      "id": "curl",
       "lane": "you",
       "col": 0,
       "type": "external",
-      "label": "Clone the repo",
-      "sublabel": "once per machine",
-      "width": 122,
+      "label": "Run the one-liner",
+      "sublabel": "curl … | sh",
+      "width": 142,
       "sources": [
         {
-          "path": "tools/cache-clock/README.md",
-          "line": 35
+          "path": "tools/cache-clock/install.sh",
+          "line": 3
         }
       ]
     },
     {
-      "id": "run",
+      "id": "clone",
       "lane": "you",
       "col": 1,
       "type": "external",
-      "label": "Run install.sh",
+      "label": "Or from a clone",
       "sublabel": "sh install.sh",
-      "width": 122,
+      "width": 142,
       "sources": [
         {
           "path": "tools/cache-clock/install.sh",
-          "line": 2,
+          "line": 4,
           "end_line": 6
         }
       ]
@@ -101,16 +110,16 @@
       "type": "external",
       "label": "Start copilot",
       "sublabel": "asks: register hooks?",
-      "width": 122,
+      "width": 142,
       "sources": [
+        {
+          "path": "tools/cache-clock/install.sh",
+          "line": 69
+        },
         {
           "path": "tools/cache-clock/README.md",
           "line": 41,
           "end_line": 44
-        },
-        {
-          "path": "tools/cache-clock/install.sh",
-          "line": 52
         }
       ]
     },
@@ -121,49 +130,28 @@
       "type": "backend",
       "label": "Pick the mode",
       "sublabel": "link/--copy/--uninstall",
-      "width": 122,
+      "width": 142,
       "sources": [
         {
           "path": "tools/cache-clock/install.sh",
-          "line": 12,
-          "end_line": 20
+          "line": 16,
+          "end_line": 24
         }
       ]
     },
     {
-      "id": "target",
-      "lane": "installer",
-      "col": 2,
-      "type": "backend",
-      "label": "Check target",
-      "sublabel": "extensions dir",
-      "width": 122,
-      "sources": [
-        {
-          "path": "tools/cache-clock/install.sh",
-          "line": 10,
-          "end_line": 11
-        },
-        {
-          "path": "tools/cache-clock/install.sh",
-          "line": 22,
-          "end_line": 26
-        }
-      ]
-    },
-    {
-      "id": "source",
+      "id": "where",
       "lane": "installer",
       "col": 3,
       "type": "backend",
-      "label": "Check checkout",
-      "sublabel": "outside target",
-      "width": 122,
+      "label": "Checkout beside?",
+      "sublabel": "extension.mjs found",
+      "width": 142,
       "sources": [
         {
           "path": "tools/cache-clock/install.sh",
-          "line": 27,
-          "end_line": 31
+          "line": 43,
+          "end_line": 44
         }
       ]
     },
@@ -172,29 +160,50 @@
       "lane": "installer",
       "col": 4,
       "type": "backend",
-      "label": "Replace + place",
+      "label": "Link or copy",
       "sublabel": "rm old, ln -s / cp -R",
-      "width": 122,
+      "width": 142,
       "sources": [
         {
           "path": "tools/cache-clock/install.sh",
           "line": 44,
-          "end_line": 52
+          "end_line": 50
+        }
+      ]
+    },
+    {
+      "id": "dl",
+      "lane": "fetch",
+      "col": 4,
+      "type": "backend",
+      "label": "Download, swap in",
+      "sublabel": "9 files to temp, mv",
+      "width": 142,
+      "sources": [
+        {
+          "path": "tools/cache-clock/install.sh",
+          "line": 13,
+          "end_line": 15
+        },
+        {
+          "path": "tools/cache-clock/install.sh",
+          "line": 52,
+          "end_line": 65
         }
       ]
     },
     {
       "id": "badflag",
       "lane": "exits",
-      "col": 1,
+      "col": 0,
       "type": "security",
       "label": "Exit 2",
       "sublabel": "unknown flag",
-      "width": 122,
+      "width": 142,
       "sources": [
         {
           "path": "tools/cache-clock/install.sh",
-          "line": 18
+          "line": 22
         }
       ]
     },
@@ -204,57 +213,65 @@
       "col": 2,
       "type": "security",
       "label": "Exit 1",
-      "sublabel": "not ours: untouched",
-      "width": 122,
-      "sources": [
-        {
-          "path": "tools/cache-clock/install.sh",
-          "line": 23,
-          "end_line": 26
-        }
-      ]
-    },
-    {
-      "id": "inside",
-      "lane": "exits",
-      "col": 3,
-      "type": "security",
-      "label": "Exit 1",
-      "sublabel": "checkout in target",
-      "width": 122,
+      "sublabel": "not ours / inside target",
+      "width": 142,
       "sources": [
         {
           "path": "tools/cache-clock/install.sh",
           "line": 27,
-          "end_line": 31
+          "end_line": 35
         }
       ]
     },
     {
       "id": "uninstall",
       "lane": "exits",
-      "col": 4,
+      "col": 3,
       "type": "security",
       "label": "Uninstall",
       "sublabel": "rm -rf, exit 0",
-      "width": 122,
+      "width": 142,
       "sources": [
         {
           "path": "tools/cache-clock/install.sh",
-          "line": 33,
-          "end_line": 37
+          "line": 37,
+          "end_line": 41
+        }
+      ]
+    },
+    {
+      "id": "dlfail",
+      "lane": "exits",
+      "col": 4,
+      "type": "security",
+      "label": "Exit 1",
+      "sublabel": "download failed: none",
+      "width": 142,
+      "sources": [
+        {
+          "path": "tools/cache-clock/install.sh",
+          "line": 55
+        },
+        {
+          "path": "tools/cache-clock/install.sh",
+          "line": 58,
+          "end_line": 61
         }
       ]
     },
     {
       "id": "denied",
-      "lane": "after",
-      "col": 5,
+      "lane": "you",
+      "col": 3,
       "type": "security",
       "label": "Denied",
       "sublabel": "not loaded",
-      "width": 122,
+      "width": 142,
       "sources": [
+        {
+          "path": "tools/cache-clock/install.sh",
+          "line": 69
+        },
         {
           "path": "tools/cache-clock/README.md",
           "line": 42,
@@ -265,122 +282,144 @@
     {
       "id": "report",
       "lane": "after",
-      "col": 0,
+      "col": 2,
       "type": "database",
       "label": "Report",
-      "sublabel": "optional, Node 18+",
-      "width": 122,
-      "sources": [
-        {
-          "path": "tools/cache-clock/README.md",
-          "line": 119,
-          "end_line": 131
-        }
-      ]
-    },
-    {
-      "id": "vscode",
-      "lane": "after",
-      "col": 1,
-      "type": "external",
-      "label": "VS Code",
-      "sublabel": "no live card",
-      "width": 122,
-      "sources": [
-        {
-          "path": "tools/cache-clock/README.md",
-          "line": 145,
-          "end_line": 152
-        }
-      ]
-    },
-    {
-      "id": "update",
-      "lane": "after",
-      "col": 2,
-      "type": "messagebus",
-      "label": "Update later",
-      "sublabel": "git pull / rerun",
-      "width": 122,
+      "sublabel": "node …/report.mjs",
+      "width": 142,
       "sources": [
         {
           "path": "tools/cache-clock/install.sh",
-          "line": 2,
-          "end_line": 4
+          "line": 71
+        },
+        {
+          "path": "tools/cache-clock/extension/report.mjs",
+          "line": 1,
+          "end_line": 5
         }
       ]
     },
     {
-      "id": "settings",
+      "id": "vsrun",
       "lane": "after",
       "col": 3,
-      "type": "database",
-      "label": "Settings",
-      "sublabel": "config.json",
-      "width": 122,
+      "type": "frontend",
+      "label": "Type /cache-clock",
+      "sublabel": "in full, not in / menu",
+      "width": 142,
       "sources": [
         {
-          "path": "tools/cache-clock/README.md",
-          "line": 56,
-          "end_line": 58
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 61,
+          "end_line": 64
         },
         {
-          "path": "tools/cache-clock/extension/lib/config.mjs",
-          "line": 12,
-          "end_line": 14
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 94,
+          "end_line": 98
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/format.mjs",
+          "line": 117,
+          "end_line": 118
+        }
+      ]
+    },
+    {
+      "id": "vsset",
+      "lane": "after",
+      "col": 4,
+      "type": "external",
+      "label": "VS Code setting",
+      "sublabel": "chat.canvases.enabled",
+      "width": 142,
+      "sources": [
+        {
+          "path": "tools/cache-clock/install.sh",
+          "line": 70
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/format.mjs",
+          "line": 117,
+          "end_line": 118
         }
       ]
     },
     {
       "id": "verify",
       "lane": "after",
-      "col": 4,
+      "col": 5,
       "type": "frontend",
-      "label": "Run /cache-clock",
-      "sublabel": "card shows if loaded",
-      "width": 122,
+      "label": "/cache-clock help",
+      "sublabel": "how it works, commands",
+      "width": 142,
       "sources": [
         {
-          "path": "tools/cache-clock/README.md",
-          "line": 172,
-          "end_line": 173
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 170,
+          "end_line": 174
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/format.mjs",
+          "line": 90,
+          "end_line": 119
+        }
+      ]
+    },
+    {
+      "id": "checks",
+      "lane": "installer",
+      "col": 2,
+      "type": "backend",
+      "label": "Check target, path",
+      "sublabel": "ours or absent",
+      "width": 142,
+      "sources": [
+        {
+          "path": "tools/cache-clock/install.sh",
+          "line": 11,
+          "end_line": 12
+        },
+        {
+          "path": "tools/cache-clock/install.sh",
+          "line": 26,
+          "end_line": 35
         }
       ]
     }
   ],
   "edges": [
     {
-      "id": "e-clone-run",
-      "from": "clone",
-      "to": "run"
-    },
-    {
-      "id": "e-run-flags",
-      "from": "run",
+      "id": "e-curl-flags",
+      "from": "curl",
       "to": "flags"
     },
     {
-      "id": "e-flags-target",
-      "from": "flags",
-      "to": "target"
+      "id": "e-clone-flags",
+      "from": "clone",
+      "to": "flags"
     },
     {
-      "id": "e-target-source",
-      "from": "target",
-      "to": "source",
-      "label": "ok"
-    },
-    {
-      "id": "e-source-place",
-      "from": "source",
-      "to": "place",
-      "label": "link/copy",
+      "id": "e-where-dl",
+      "from": "where",
+      "to": "dl",
+      "label": "no: curl | sh",
       "variant": "emphasis"
+    },
+    {
+      "id": "e-where-place",
+      "from": "where",
+      "to": "place",
+      "label": "yes: checkout",
+      "variant": "dashed",
+      "role": "branch"
     },
     {
       "id": "e-place-start",
       "from": "place",
-      "to": "start"
+      "to": "start",
+      "variant": "dashed",
+      "role": "branch"
     },
     {
       "id": "e-flags-bad",
@@ -391,52 +430,12 @@
       "role": "error"
     },
     {
-      "id": "e-target-foreign",
-      "from": "target",
-      "to": "foreign",
-      "label": "not ours",
+      "id": "e-dl-fail",
+      "from": "dl",
+      "to": "dlfail",
+      "label": "curl fails",
       "variant": "security",
       "role": "error"
-    },
-    {
-      "id": "e-source-inside",
-      "from": "source",
-      "to": "inside",
-      "label": "inside target",
-      "variant": "security",
-      "role": "error"
-    },
-    {
-      "id": "e-source-uninstall",
-      "from": "source",
-      "to": "uninstall",
-      "label": "--uninstall",
-      "variant": "dashed",
-      "role": "branch"
-    },
-    {
-      "id": "e-verify-settings",
-      "from": "verify",
-      "to": "settings",
-      "label": "tune",
-      "variant": "dashed",
-      "role": "branch"
-    },
-    {
-      "id": "e-settings-update",
-      "from": "settings",
-      "to": "update",
-      "label": "later",
-      "variant": "dashed",
-      "role": "branch"
-    },
-    {
-      "id": "e-vscode-report",
-      "from": "vscode",
-      "to": "report",
-      "label": "totals only",
-      "variant": "dashed",
-      "role": "branch"
     },
     {
       "id": "e-start-verify",
@@ -452,6 +451,64 @@
       "label": "deny",
       "variant": "security",
       "role": "error"
+    },
+    {
+      "id": "e-vsset-vsrun",
+      "from": "vsset",
+      "to": "vsrun",
+      "label": "reload, new chat",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-vsrun-report",
+      "from": "vsrun",
+      "to": "report",
+      "label": "totals only",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-dl-start",
+      "from": "dl",
+      "to": "start",
+      "label": "swapped in",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-flags-checks",
+      "from": "flags",
+      "to": "checks"
+    },
+    {
+      "id": "e-checks-where",
+      "from": "checks",
+      "to": "where",
+      "label": "ok"
+    },
+    {
+      "id": "e-checks-foreign",
+      "from": "checks",
+      "to": "foreign",
+      "label": "refuse",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e-checks-uninstall",
+      "from": "checks",
+      "to": "uninstall",
+      "label": "--uninstall",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-verify-vsset",
+      "from": "verify",
+      "to": "vsset",
+      "label": "in VS Code",
+      "variant": "dashed",
+      "role": "branch"
     }
   ],
   "cards": [
@@ -459,9 +516,10 @@
       "dot": "cyan",
       "title": "Install once per machine",
       "items": [
-        "Not per repo: only the hooks permission is asked per repo",
-        "Target is ${COPILOT_HOME:-~/.copilot}/extensions/cache-clock",
-        "An existing target is replaced only if it is a symlink or holds extension.mjs"
+        "One line: curl -fsSL …/main/tools/cache-clock/install.sh | sh downloads a copy, staged and swapped in whole; a failed download leaves nothing",
+        "From a clone: sh tools/cache-clock/install.sh links (git pull updates it), --copy copies, --uninstall removes; rerun either to update",
+        "An existing target is replaced only if it is a symlink or holds extension.mjs",
+        "Not per repo: only the hooks permission is asked per repo"
       ]
     },
     {
@@ -474,12 +532,12 @@
       ]
     },
     {
-      "dot": "amber",
-      "title": "VS Code, measured 11 Oct 2026",
+      "dot": "violet",
+      "title": "VS Code, measured 11-12 Oct 2026",
       "items": [
-        "Agent host runs its own runtime (copilotVersion 1.0.92-4.unstable)",
-        "Typing /cache-clock reached the model: not available in this workspace",
-        "Sessions still land in ~/.copilot/session-state as usage_checkpoint totals only"
+        "Loads from the same ~/.copilot/extensions/cache-clock, only with \"chat.canvases.enabled\": true (experimental); reload and start a new chat",
+        "Typed in full, /cache-clock works but is not listed in the / menu; its card shows as a question with OK",
+        "Heads-up and sending-cold note reach only VS Code's log; sessions keep usage checkpoints, so the report counts totals"
       ]
     }
   ]

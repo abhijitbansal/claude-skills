@@ -9,44 +9,46 @@
       "url": "https://github.com/abhijitbansal/claude-skills",
       "provider": "github",
       "link_mode": "web",
-      "revision": "d28590b22a6c8df6b61c020817844e874461f44d"
+      "revision": "c2c7e5d8410ec563693ead55a473cdac86d90404"
     }
   },
   "components": [
     {
-      "id": "install", "type": "external", "label": "install.sh", "sublabel": "links ~/.copilot/extensions", "pos": [40, 250], "size": [170, 64],
+      "id": "install", "type": "external", "label": "install.sh", "sublabel": "curl | sh, link or --copy", "pos": [40, 250], "size": [170, 64],
       "sources": [
-        { "path": "tools/cache-clock/install.sh", "line": 9, "end_line": 11, "label": "source and destination paths" },
-        { "path": "tools/cache-clock/install.sh", "line": 44, "end_line": 50, "label": "link or copy into place" }
+        { "path": "tools/cache-clock/install.sh", "line": 3, "end_line": 7, "label": "one-line curl, link, copy, uninstall" },
+        { "path": "tools/cache-clock/install.sh", "line": 44, "end_line": 50, "label": "link or copy from a checkout" },
+        { "path": "tools/cache-clock/install.sh", "line": 52, "end_line": 65, "label": "staged download swapped in whole" }
       ]
     },
     {
       "id": "runtime", "type": "external", "label": "Copilot CLI runtime", "sublabel": "emits events, runs hooks", "pos": [280, 245], "size": [170, 74],
       "sources": [
-        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 88, "end_line": 91, "label": "command and hook registration" },
-        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 97, "end_line": 106, "label": "events the extension listens to" }
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 124, "end_line": 127, "label": "command and hook registration" },
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 133, "end_line": 147, "label": "events the extension listens to" }
       ]
     },
     {
-      "id": "refuse", "type": "security", "label": "Refusal", "sublabel": "session.abort(), not awaited", "tag": "0 AI credits", "pos": [280, 100], "size": [170, 64],
+      "id": "refuse", "type": "security", "label": "Cold-send question", "sublabel": "Send anyway / Don't send", "tag": "hold: 0 AI credits", "pos": [280, 100], "size": [170, 64],
       "sources": [
-        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 71, "end_line": 77, "label": "refuse verdict aborts the turn" },
-        { "path": "tools/cache-clock/README.md", "line": 72, "end_line": 75, "label": "abort before any model call" }
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 66, "end_line": 88, "label": "select with a 5-minute timeout" },
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 114, "end_line": 119, "label": "send, or hold with a non-awaited abort" },
+        { "path": "tools/cache-clock/extension/lib/format.mjs", "line": 43, "end_line": 50, "label": "question text" }
       ]
     },
     {
-      "id": "notes", "type": "frontend", "label": "session.log output", "sublabel": "price note, heads-up, card", "pos": [280, 400], "size": [170, 64],
+      "id": "notes", "type": "frontend", "label": "session.log output", "sublabel": "notes; cards as OK questions in VS Code", "tag": "refuse-once fallback", "pos": [280, 400], "size": [170, 64],
       "sources": [
-        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 79, "label": "price note on warn verdict" },
-        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 129, "label": "ephemeral heads-up" },
-        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 136, "label": "card for /cache-clock" }
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 110, "end_line": 116, "label": "price note and refuse-once message" },
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 94, "end_line": 98, "label": "card as OK question in VS Code" },
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 165, "label": "ephemeral heads-up" }
       ]
     },
     {
-      "id": "wiring", "type": "backend", "label": "wiring.mjs", "sublabel": "attach, busy, heads-up, seed", "tag": "extension.mjs entry", "pos": [620, 210], "size": [200, 144],
+      "id": "wiring", "type": "backend", "label": "wiring.mjs", "sublabel": "attach, ask, busy, heads-up, seed", "tag": "extension.mjs entry", "pos": [620, 210], "size": [200, 144],
       "sources": [
-        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 61, "end_line": 114, "label": "attach and event wiring" },
-        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 116, "end_line": 132, "label": "heads-up scheduler" },
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 90, "end_line": 150, "label": "attach, prompt hook and event wiring" },
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 152, "end_line": 168, "label": "heads-up scheduler" },
         { "path": "tools/cache-clock/extension/extension.mjs", "line": 5, "label": "entry point" }
       ]
     },
@@ -58,14 +60,15 @@
       ]
     },
     {
-      "id": "format", "type": "backend", "label": "format.mjs", "sublabel": "card, refusal, heads-up", "pos": [740, 60], "size": [170, 64],
+      "id": "format", "type": "backend", "label": "format.mjs", "sublabel": "card, question, help, heads-up", "pos": [740, 60], "size": [170, 64],
       "sources": [
-        { "path": "tools/cache-clock/extension/lib/format.mjs", "line": 34, "end_line": 52, "label": "refusal, warn, heads-up text" },
-        { "path": "tools/cache-clock/extension/lib/format.mjs", "line": 67, "end_line": 79, "label": "card text" }
+        { "path": "tools/cache-clock/extension/lib/format.mjs", "line": 34, "end_line": 61, "label": "refusal, question, warn, heads-up text" },
+        { "path": "tools/cache-clock/extension/lib/format.mjs", "line": 76, "end_line": 88, "label": "card text" },
+        { "path": "tools/cache-clock/extension/lib/format.mjs", "line": 90, "end_line": 119, "label": "/cache-clock help text" }
       ]
     },
     {
-      "id": "guard", "type": "security", "label": "guard.mjs", "sublabel": "decide: refuse, warn, off", "tag": "once per cold episode", "pos": [970, 100], "size": [170, 64],
+      "id": "guard", "type": "security", "label": "guard.mjs", "sublabel": "decide: refuse, warn, allow", "tag": "once per cold episode", "pos": [970, 100], "size": [170, 64],
       "sources": [
         { "path": "tools/cache-clock/extension/lib/guard.mjs", "line": 9, "label": "episode key" },
         { "path": "tools/cache-clock/extension/lib/guard.mjs", "line": 16, "end_line": 24, "label": "decide()" }
@@ -90,21 +93,23 @@
       "sources": [
         { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 25, "label": "path read for seeding" },
         { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 30, "end_line": 50, "label": "seed the clock" },
-        { "path": "tools/cache-clock/bin/report.mjs", "line": 37, "end_line": 51, "label": "report reads every log" }
+        { "path": "tools/cache-clock/extension/report.mjs", "line": 37, "end_line": 51, "label": "report reads every log" }
       ]
     },
     {
-      "id": "vscode", "type": "external", "label": "VS Code agent host", "sublabel": "same runtime, same state dir", "pos": [40, 610], "size": [170, 64],
+      "id": "vscode", "type": "external", "label": "VS Code Copilot chat", "sublabel": "needs chat.canvases.enabled", "tag": "totals only in report", "pos": [40, 610], "size": [170, 70],
       "sources": [
-        { "path": "tools/cache-clock/README.md", "line": 142, "end_line": 147, "label": "shares session-state" },
-        { "path": "tools/cache-clock/bin/report.mjs", "line": 29, "end_line": 35, "label": "client_name from workspace.yaml" }
+        { "path": "tools/cache-clock/extension/lib/wiring.mjs", "line": 61, "end_line": 64, "label": "VSCODE_CANVAS_DATA_DIR marks VS Code" },
+        { "path": "tools/cache-clock/install.sh", "line": 70, "label": "setting to turn on" },
+        { "path": "tools/cache-clock/extension/report.mjs", "line": 29, "end_line": 35, "label": "client_name from workspace.yaml" }
       ]
     },
     {
-      "id": "report", "type": "backend", "label": "bin/report.mjs", "sublabel": "reads every events.jsonl", "pos": [620, 620], "size": [170, 64],
+      "id": "report", "type": "backend", "label": "extension/report.mjs", "sublabel": "ships with the extension", "pos": [620, 620], "size": [170, 64],
       "sources": [
-        { "path": "tools/cache-clock/bin/report.mjs", "line": 37, "end_line": 51, "label": "loadSessions" },
-        { "path": "tools/cache-clock/bin/report.mjs", "line": 75, "end_line": 76, "label": "summarize and print" }
+        { "path": "tools/cache-clock/extension/report.mjs", "line": 37, "end_line": 51, "label": "loadSessions" },
+        { "path": "tools/cache-clock/extension/report.mjs", "line": 75, "end_line": 76, "label": "summarize and print" },
+        { "path": "tools/cache-clock/bin/report.mjs", "line": 4, "label": "bin/report.mjs is a shim" }
       ]
     },
     {
@@ -119,11 +124,11 @@
     { "kind": "region", "label": "Copilot session", "wraps": ["runtime", "refuse", "notes"] }
   ],
   "connections": [
-    { "id": "install-links", "from": "install", "to": "runtime", "label": "link", "variant": "dashed" },
+    { "id": "install-links", "from": "install", "to": "runtime", "label": "installs", "variant": "dashed" },
     { "id": "runtime-events", "from": "runtime", "to": "wiring", "label": "events, hook, cmd", "variant": "emphasis" },
-    { "id": "wiring-abort", "from": "wiring", "to": "refuse", "label": "abort()", "variant": "security" },
+    { "id": "wiring-abort", "from": "wiring", "to": "refuse", "label": "select()", "variant": "security" },
     { "id": "wiring-log", "from": "wiring", "to": "notes", "label": "log()" },
-    { "id": "refuse-turn", "from": "refuse", "to": "runtime", "label": "turn dropped", "variant": "security" },
+    { "id": "refuse-turn", "from": "refuse", "to": "runtime", "label": "sent, or turn dropped", "variant": "security" },
     { "id": "notes-timeline", "from": "notes", "to": "runtime", "label": "shown in timeline" },
     { "id": "runtime-writes", "from": "runtime", "to": "sessionlog", "label": "writes", "variant": "dashed" },
     { "id": "vscode-writes", "from": "vscode", "to": "sessionlog", "label": "same dir", "variant": "dashed" },
@@ -140,9 +145,10 @@
     {
       "dot": "cyan", "title": "Guard",
       "items": [
-        "Refuses a costly cold send once per cold episode, never while a turn is running",
-        "Slash commands and ! shell escapes are never guarded",
-        "refused.json lets the resend from a new process through"
+        "Asks before a costly cold send, once per cold episode: Send anyway, or Don't send (hold, 0 AI credits)",
+        "No answer in 5 minutes holds the send. A host that cannot ask gets the old refuse-once message",
+        "Slash commands and ! shell escapes are never guarded; a running turn only gets the price note",
+        "refused.json lets the next send, even from a new process, through"
       ]
     },
     {
@@ -154,10 +160,18 @@
       ]
     },
     {
+      "dot": "violet", "title": "VS Code, measured 11-12 Oct 2026",
+      "items": [
+        "Extension loads only with chat.canvases.enabled, from the same ~/.copilot/extensions install",
+        "Cards, help and settings show as a question with OK; the heads-up and sending-cold note reach only VS Code's log",
+        "Sessions keep usage checkpoints only, so the report counts them as totals"
+      ]
+    },
+    {
       "dot": "amber", "title": "Limits",
       "items": [
         "Reported expiry is an upper bound: Luna was served cold at 29 of 30 minutes",
-        "Live guard inside VS Code is not verified; the report covers its sessions",
+        "/cache-clock works typed in full in VS Code but is not in its / menu",
         "No keep-warm pings yet"
       ]
     }

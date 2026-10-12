@@ -8,7 +8,7 @@
     "repository": {
       "url": "https://github.com/abhijitbansal/claude-skills",
       "provider": "github",
-      "revision": "1edd20cf1c5992962b4321579337efa9afc7f453"
+      "revision": "c2c7e5d8410ec563693ead55a473cdac86d90404"
     }
   },
   "lanes": [
@@ -37,8 +37,8 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 88,
-          "end_line": 95
+          "line": 124,
+          "end_line": 131
         }
       ]
     },
@@ -89,8 +89,8 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 107,
-          "end_line": 111
+          "line": 143,
+          "end_line": 147
         }
       ]
     },
@@ -143,8 +143,8 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 103,
-          "end_line": 106
+          "line": 139,
+          "end_line": 142
         }
       ]
     },
