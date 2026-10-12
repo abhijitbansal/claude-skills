@@ -1,19 +1,62 @@
 # Cache Clock for Copilot
 
-**See your Copilot prompt cache expire, and get stopped once before a cold send.**
+**See your Copilot prompt cache expire, and get asked before a costly cold send.**
 
-Cache Clock is a GitHub Copilot CLI extension modeled on
+Cache Clock is an extension for GitHub Copilot CLI and VS Code's Copilot chat, modeled on
 [cache-tax](https://github.com/karanb192/cache-tax) for Claude Code. Copilot bills
 tokens in AI credits, and on Claude and newer GPT models a cache *write* costs far
 more than a cache *read*: 25× on Claude Sonnet 5.5, 12.5× on GPT-6 Luna. When you
 step away longer than the cache lives, the next message, even "give me a recap",
 rewrites the whole conversation at the write price. Cache Clock shows that clock and
-that price, and by default drops a costly cold send once so you can decide.
+that price, and by default asks before a costly cold send goes out.
 
 See it first: the [guide](../../docs/features/cache-clock.html), the
 [visual explainer](../../docs/features/showcase/cache-clock/how-it-works.html), the
 [architecture diagram](../../docs/features/showcase/cache-clock/diagram/cache-clock-architecture.html)
 and a [17-second video](../../docs/features/showcase/cache-clock/video.mp4).
+
+## Install
+
+One line, no clone and no Node needed (the extension runs inside Copilot's own runtime):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh
+```
+
+That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` moves
+`~/.copilot`). Install once per machine; every Copilot session loads it.
+
+- **Copilot CLI:** start a new `copilot` session. Copilot asks once whether the extension
+  may "register hooks": allow it (option 2 remembers it for that repo). Then run
+  `/cache-clock help`.
+- **VS Code Copilot chat:** add `"chat.canvases.enabled": true` to your VS Code settings,
+  reload the window and start a new chat. VS Code loads extensions only when that
+  (experimental) setting is on. Type `/cache-clock` in full: VS Code does not list it in
+  the `/` menu.
+
+From a clone, `sh tools/cache-clock/install.sh` links the extension instead, so a
+`git pull` updates it; `--copy` copies, `--uninstall` removes it. The installer replaces
+only a symlink or an earlier cache-clock copy at that path, and a failed download leaves
+nothing behind. Tested on Copilot CLI 1.0.95 and VS Code's Copilot agent host
+(runtime 1.0.92-4.unstable).
+
+## What happens on a cold send
+
+When the cache has expired and rewriting it would cost at least $0.10 more than a warm
+send, Cache Clock asks in the chat before anything is sent (the choices appear as
+Copilot's own buttons; the layout differs by host):
+
+```
+cache-clock: the Claude Sonnet 5.5 prompt cache went cold 2s ago. Sending this rewrites
+about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
+  [ Send anyway ]  [ Don't send ]
+```
+
+**Send anyway** sends it. **Don't send** stops it before any model call, so it costs
+0 AI credits; so does dismissing the question or leaving it for 5 minutes. It asks once
+per cold cache: after that, sends go through with a one-line price note. Where Copilot
+cannot show a question (`copilot -p`), it refuses the send once instead, and sending it
+again pays:
 
 ```
 ! cache-clock: the Claude Sonnet 5.5 prompt cache went cold 2s ago. Sending this rewrites
@@ -24,34 +67,19 @@ and a [17-second video](../../docs/features/showcase/cache-clock/video.mp4).
 That refusal is a real capture (Copilot CLI 1.0.95, 11 October 2026), taken with
 `/cache-clock min 0.01`: at the default $0.10 threshold this $0.08 rewrite would pass
 silently. The resend that followed read 0 cached tokens and wrote 44,388: the cache had
-expired exactly when Copilot said it would.
-
-## Install
-
-Tested on Copilot CLI 1.0.95. The extension runs inside Copilot's own runtime, so it
-needs no Node install; the optional report needs Node 18+.
-
-```sh
-git clone https://github.com/abhijitbansal/claude-skills
-sh claude-skills/tools/cache-clock/install.sh          # links ~/.copilot/extensions/cache-clock
-```
-
-`--copy` copies instead of linking; `--uninstall` removes it. `COPILOT_HOME` moves
-`~/.copilot`. The installer replaces only a symlink or an earlier cache-clock copy at that path. Link mode was tested on
-1.0.95: Copilot resolves the `@github/copilot-sdk` import itself, wherever the files
-live. Start a new `copilot` session. Copilot asks once whether the extension
-may "register hooks": say yes (option 2 remembers it for that repo). Then run
-`/cache-clock`.
+expired exactly when Copilot said it would. The question form was checked live on
+12 October 2026 in both Copilot CLI and VS Code: the prompt waits for your answer, and
+**Don't send** ended the turn with no model call.
 
 ## Commands
 
     /cache-clock                 the card
-    /cache-clock guard refuse    drop a costly cold send once; the next send goes through (default)
+    /cache-clock help            how it works, what a cold send triggers, every command
+    /cache-clock guard refuse    ask (or refuse once) before a costly cold send (default)
     /cache-clock guard warn      send it and print the price
     /cache-clock guard off       no guard
     /cache-clock min 0.25        guard only cold sends whose extra cost is at least $0.25 (default $0.10)
     /cache-clock headsup 5       warn up to 5 minutes before expiry (off to disable)
-    /cache-clock help
 
 Settings live in `~/.copilot/cache-clock/config.json` and apply to every session
 (`CACHE_CLOCK_HOME` moves that directory). The heads-up has its own switch: it keeps
@@ -65,7 +93,7 @@ cache-clock · Claude Sonnet 5.5
   context    37.2k tokens
   next send  warm $0.003 · cold $0.08 (25× per token)
   session    5 model calls · 0 cold after idle · 0 prefix breaks · $0 extra paid
-  guard      refuse once above $0.10 · heads-up 5m before expiry
+  guard      ask before a cold send above $0.10 · heads-up 5m before expiry
 ```
 
 ## How it works
@@ -76,16 +104,18 @@ cache-clock · Claude Sonnet 5.5
   TTL, the expiry and the prices all come from Copilot.
 - **The guard.** `onUserPromptSubmitted` checks the last model's clock. If the cache has
   expired and rewriting it would cost at least the threshold more than reading it, the
-  guard prints the price and aborts the turn before any model call (0 AI credits).
-  The next send in that cold episode goes through with a one-line note, even from a
-  new process (`copilot --resume … -p`): the refusal is remembered per session in
-  `~/.copilot/cache-clock/refused.json` for a week. Slash commands and `!` shell
-  escapes are never guarded. A message queued while a turn is running only gets the
-  note: aborting then would cancel the running turn. After a compaction the next send
-  is exempt, since the context was rewritten anyway.
+  hook asks with `session.ui.select` and waits for the answer. To stop the send it calls
+  `session.abort()` without awaiting it (awaiting inside the hook deadlocks), so no model
+  call happens. The episode is remembered per session in
+  `~/.copilot/cache-clock/refused.json` for a week, even across processes
+  (`copilot --resume … -p`). Slash commands and `!` shell escapes are never guarded. A
+  message queued while a turn is running only gets the note: stopping it then would
+  cancel the running turn. After a compaction the next send is exempt, since the context
+  was rewritten anyway.
 - **The heads-up.** One ephemeral line before expiry, only when a cold send's extra cost
-  is at least the threshold and no turn is running. The lead is the smaller of your setting and a fifth of the
-  TTL, so a 5-minute Claude cache warns 1 minute ahead, not right after every call.
+  is at least the threshold and no turn is running. The lead is the smaller of your
+  setting and a fifth of the TTL, so a 5-minute Claude cache warns 1 minute ahead, not
+  right after every call.
 - **Resume.** `assistant.usage` is not replayed when you resume, so the extension seeds
   the clock from the session's own `~/.copilot/session-state/<id>/events.jsonl`.
 
@@ -119,12 +149,15 @@ call read 10,157 tokens from cache. The conversation itself is per session.
 ## Report: what cold sends already cost you
 
 The extension only sees sessions it was loaded in. The report reads every session
-Copilot has persisted, CLI and VS Code alike, and sends nothing anywhere:
+Copilot has persisted, CLI and VS Code alike, and sends nothing anywhere. It needs
+Node 18+ and ships with every install:
 
 ```sh
-node tools/cache-clock/bin/report.mjs              # last 30 days
-node tools/cache-clock/bin/report.mjs --since 7d   # or 12h, all; --json for raw numbers
+node ~/.copilot/extensions/cache-clock/report.mjs              # last 30 days
+node ~/.copilot/extensions/cache-clock/report.mjs --since 7d   # or 12h, all; --json for raw numbers
 ```
+
+From a clone, `node tools/cache-clock/bin/report.mjs` runs the same report.
 
 ```
 model                   calls  cold after idle  prefix breaks  rewritten  extra paid  total spent  idle before cold sends
@@ -139,23 +172,27 @@ refusal capture's resend, the Luna rows include the gap test.
 
 "Extra paid" is what each cold call cost above a warm read of the same tokens.
 "Prefix breaks" are cold calls inside the reported TTL: something changed the prompt
-prefix (tools, instructions, model routing), or the provider served it cold early (eviction or a different backend), as in the
-Luna gap test above.
+prefix (tools, instructions, model routing), or the provider served it cold early
+(eviction or a different backend), as in the Luna gap test above.
 
 ## VS Code
 
-**The live extension does not run in VS Code.** Measured on 11 October 2026: VS Code's
-Copilot agent host runs its own bundled runtime (`session.start` reports
-`copilotVersion: 1.0.92-4.unstable`) and does not register `/cache-clock`. Typing it
-sent the text to the model, which answered "`/cache-clock` isn't available in this
-workspace" (one model turn spent). No card, no guard, no heads-up there, and nothing to
-install for VS Code.
+Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runtime
+`1.0.92-4.unstable`):
 
-The **report still counts VS Code sessions**: they are written to the same
-`~/.copilot/session-state` directory (`client_name: vscode-agent-host`), but persist only
-`session.usage_checkpoint` totals, not per-call records, so the report can count them
-only as totals. For per-turn cache hit rates there, VS Code's own Cache Explorer (Agent
-Debug Logs) is the built-in view.
+- **It loads only with `"chat.canvases.enabled": true`.** VS Code asks its runtime for
+  extensions only in canvas-enabled sessions. With the setting on, it loads the same
+  `~/.copilot/extensions/cache-clock` install; nothing else to install.
+- **`/cache-clock` works typed in full**, but VS Code's `/` menu does not list it.
+- **Output comes as a question card.** VS Code's chat shows plain extension messages only
+  as error boxes, so in VS Code the card, the help and setting changes appear as a card
+  with an OK button, and the cold-send question works as in the CLI.
+- **The heads-up and the "sending cold" note reach only VS Code's log**, since VS Code
+  has no plain-message channel outside a question.
+- **The report counts VS Code sessions as totals.** They land in the same
+  `~/.copilot/session-state` directory (`client_name: vscode-agent-host`) but persist
+  only `session.usage_checkpoint` totals, not per-call records. For per-turn cache hit
+  rates there, VS Code's own Cache Explorer (Agent Debug Logs) is the built-in view.
 
 ## Limits
 
@@ -169,11 +206,13 @@ Debug Logs) is the built-in view.
   real resend adds your new message and anything Copilot attaches (44.4k actual vs
   37.2k estimated in the capture above). Pulling the other way, Copilot's shared system
   prefix (~10k tokens) often stays cached, so on a long idle a little less is rewritten.
-- **`-p` mode.** The guard works in `copilot -p`, but slash commands there go to the
-  model as text, so `/cache-clock` needs the interactive CLI.
+- **`-p` mode.** The guard works in `copilot -p` as a refuse-once, but slash commands
+  there go to the model as text, so `/cache-clock` needs the interactive CLI.
 - **Early eviction is invisible to the guard.** It trusts Copilot's `cacheExpiresAt`.
   When a provider serves a cache cold sooner (Luna at 29 of 30 minutes, once), the send is
   billed cold and the guard stays quiet; the report counts it as a prefix break.
+- **VS Code depends on an experimental setting** (`chat.canvases.enabled`), which VS Code
+  may rename or remove.
 - Claude was measured through `auto` only; the seat used for testing could not pick
   Claude models directly. Each boundary result above is a single run.
 
@@ -184,7 +223,9 @@ cd tools/cache-clock && node --test "test/*.test.mjs"
 ```
 
 The tests drive the extension through a fake Copilot session and a fake clock: the
-refusal and resend, the non-awaited abort (awaiting it inside the hook deadlocks the
-CLI), sub-agent and background calls, compaction, heads-up timing, seeding from a
-session log, settings, the report over fixture logs, and the installer. They make no
-network calls. Live checks are recorded above.
+cold-send question and every answer (send, don't send, dismissed, timed out, host
+without questions), the refuse-once fallback and resend, the non-awaited abort,
+sub-agent and background calls, compaction, heads-up timing, seeding from a session
+log, settings and help, the VS Code card, the report over fixture logs, and the
+installer (link, copy, piped download, failed download). They make no network calls.
+Live checks are recorded above.

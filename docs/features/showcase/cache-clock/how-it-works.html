@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>How Cache Clock works</title>
-<meta name="description" content="Cache Clock for GitHub Copilot CLI shows when your prompt cache goes cold, prices the cold send, and drops it once so you can decide.">
+<meta name="description" content="Cache Clock for GitHub Copilot CLI and VS Code shows when your prompt cache goes cold, prices the cold send, and asks before it goes out.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%232c4cd0' stroke-width='3'/%3E%3Cpath d='M16 8v8l5 3' fill='none' stroke='%232c4cd0' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
 :root{
@@ -177,9 +177,9 @@ svg text{font-family:var(--mono)}
 <main class="wrap">
 
 <header class="page">
-  <p class="kicker">Cache Clock · GitHub Copilot CLI</p>
+  <p class="kicker">Cache Clock · GitHub Copilot CLI and VS Code</p>
   <h1>One idle gap, one <em>25×</em> price.</h1>
-  <p class="lead">Copilot bills tokens in AI credits. When the prompt cache expires, the next message rewrites your whole conversation at the <b>cache-write price</b>. Cache Clock shows the clock, prices the send, and drops a costly cold send once so you can decide.</p>
+  <p class="lead">Copilot bills tokens in AI credits. When the prompt cache expires, the next message rewrites your whole conversation at the <b>cache-write price</b>. Cache Clock shows the clock, prices the send, and asks before a costly cold send goes out.</p>
   <p class="meta">Tested on Copilot CLI 1.0.95 · numbers measured 11&nbsp;October&nbsp;2026 · 1 AI credit = $0.01</p>
 
   <figure>
@@ -305,8 +305,8 @@ svg text{font-family:var(--mono)}
 <!-- 3 GUARD -->
 <section id="guard" class="s">
   <span class="step-no">3 · The guard</span>
-  <h2>A cold send is refused once, then your call</h2>
-  <p>The hook <code>onUserPromptSubmitted</code> runs on every message you send. It asks four questions, in this order. Only one path stops the message.</p>
+  <h2>A costly cold send asks first</h2>
+  <p>The hook <code>onUserPromptSubmitted</code> runs on every message you send. It checks four things, in this order. Only the last path can stop the message, and only if you say so.</p>
 
   <figure>
     <div class="frame">
@@ -328,25 +328,29 @@ svg text{font-family:var(--mono)}
           <div class="out"><span class="arrow">no →</span><span class="chip ok">● ALLOW · silent</span><p>Small rewrites pass quietly. At the default, the $0.08 capture would pass.</p></div>
         </li>
         <li class="fstep">
-          <div class="node q"><b>Mode is warn, a turn is running, or this cold episode was already refused?</b><small>Episode = one model’s cache that expired at one instant. Refusals are remembered per session in <code>refused.json</code> for a week, across processes.</small><span class="no">none ↓</span></div>
+          <div class="node q"><b>Mode is warn, a turn is running, or this cold episode was already asked about?</b><small>Episode = one model’s cache that expired at one instant. Refusals are remembered per session in <code>refused.json</code> for a week, across processes.</small><span class="no">none ↓</span></div>
           <div class="out"><span class="arrow">yes →</span><span class="chip warn">▲ SEND with a price note</span><p>While a turn runs, aborting would cancel that turn, so you only get the note. Your resend lands here.</p></div>
         </li>
         <li class="fstep">
-          <div class="node key"><b>Refuse once</b><small>Print the price, then <code>session.abort()</code> without awaiting it (awaiting inside the hook deadlocks the CLI). No model call, <b>0 AI credits</b>.</small></div>
-          <div class="out last"><span class="chip risk">■ REFUSE · once</span><p>Send the same message again to pay, or <code>/clear</code> and start fresh.</p></div>
+          <div class="node key"><b>Ask in the chat</b><small><code>session.ui.select</code> with the price: <b>Send anyway</b> or <b>Don't send</b>. Don't send, dismissed, or no answer in 5 minutes: <code>session.abort()</code> without awaiting it (awaiting inside the hook deadlocks). No model call, <b>0 AI credits</b>.</small></div>
+          <div class="out last"><span class="chip risk">■ ASK · once per cold cache</span><p>Where Copilot cannot ask (<code>copilot -p</code>), it refuses once instead: send the same message again to pay, or <code>/clear</code> and start fresh.</p></div>
         </li>
       </ol>
     </div>
-    <figcaption><span class="fig">Fig. 5</span>Four questions send the message through. Only a costly cold send, not yet refused and not mid-turn, is dropped.</figcaption>
+    <figcaption><span class="fig">Fig. 5</span>Four checks send the message through. Only a costly cold send, not yet asked about and not mid-turn, gets the question, and it goes out if you choose Send anyway.</figcaption>
   </figure>
 
-  <span class="cap">The refusal — a real capture (Copilot CLI 1.0.95, 11 October 2026, taken with /cache-clock min 0.01)</span>
+  <span class="cap">The question (checked live in Copilot CLI and VS Code, 12 October 2026)</span>
+  <pre><code>cache-clock: the Claude Sonnet 5.5 prompt cache went cold 2s ago. Sending this rewrites
+about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
+  [ Send anyway ]  [ Don't send ]</code></pre>
+  <span class="cap">The refuse-once fallback, where Copilot cannot ask — a real capture (Copilot CLI 1.0.95, 11 October 2026, taken with /cache-clock min 0.01)</span>
   <pre><code>! cache-clock: the Claude Sonnet 5.5 prompt cache went cold 2s ago. Sending this rewrites
   about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
   Send it again to pay it, or /clear and start fresh.</code></pre>
   <span class="cap">The resend’s note — template, one line</span>
   <pre><code>cache-clock: sending cold, rewriting about &lt;tokens&gt; tokens for &lt;cold $&gt; (warm: &lt;warm $&gt;).</code></pre>
-  <p>Switch modes with <code>/cache-clock guard refuse</code> (default), <code>warn</code> (send and print the price) or <code>off</code>.</p>
+  <p>Switch modes with <code>/cache-clock guard refuse</code> (default: ask, or refuse once), <code>warn</code> (send and print the price) or <code>off</code>. <code>/cache-clock help</code> explains it all in the chat.</p>
 </section>
 
 <!-- 4 HEADS-UP -->
@@ -402,8 +406,8 @@ svg text{font-family:var(--mono)}
   <p>The extension only sees sessions it was loaded in. The report reads <b>every</b> session Copilot has persisted, CLI and VS Code alike. It sends nothing anywhere. It needs Node 18+.</p>
 
   <span class="cap">Run it</span>
-  <pre><code>node tools/cache-clock/bin/report.mjs              # last 30 days
-node tools/cache-clock/bin/report.mjs --since 7d   # or 12h, all; --json for raw numbers</code></pre>
+  <pre><code>node ~/.copilot/extensions/cache-clock/report.mjs              # last 30 days
+node ~/.copilot/extensions/cache-clock/report.mjs --since 7d   # or 12h, all; --json for raw numbers</code></pre>
 
   <span class="cap">Sample output — the test machine after the README’s experiments</span>
   <pre><code>model                   calls  cold after idle  prefix breaks  rewritten  extra paid  total spent  idle before cold sends
@@ -428,7 +432,7 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
     <div class="card"><span class="chip risk">■ cold after idle</span><p>The call came <b>after</b> the reported expiry. The fix is behavior: send sooner, or accept the price.</p></div>
     <div class="card"><span class="chip warn">▲ prefix break</span><p>A cold call <b>inside</b> the TTL. Something changed the prompt prefix (tools, instructions, model routing), or the provider served it cold early.</p></div>
   </div>
-  <p>“Extra paid” is what each cold call cost above a warm read of the same tokens. VS Code sessions persist only totals, not per-call records; the report counts them separately. The live clock, guard and <code>/cache-clock</code> do not run in VS Code: its Copilot agent host does not load the extension (measured 11&nbsp;October&nbsp;2026).</p>
+  <p>“Extra paid” is what each cold call cost above a warm read of the same tokens. VS Code sessions persist only totals, not per-call records; the report counts them separately. In VS Code's Copilot chat the extension loads once <code>"chat.canvases.enabled": true</code> is set (measured 12&nbsp;October&nbsp;2026); the card and the cold-send question appear as question cards, and the heads-up reaches only VS Code's log.</p>
 </section>
 
 <!-- 7 MEASURED -->
@@ -492,9 +496,8 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
 
 <footer>
   <h3 style="margin-top:0">Install</h3>
-  <pre><code>git clone https://github.com/abhijitbansal/claude-skills
-sh claude-skills/tools/cache-clock/install.sh   # links ~/.copilot/extensions/cache-clock</code></pre>
-  <p>Start a new <code>copilot</code> session, say yes when Copilot asks to “register hooks”, then run <code>/cache-clock</code>.</p>
+  <pre><code>curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh</code></pre>
+  <p>Copilot CLI: start a new <code>copilot</code> session, say yes when Copilot asks to “register hooks”, then run <code>/cache-clock help</code>. VS Code Copilot chat: add <code>"chat.canvases.enabled": true</code> to VS Code settings, reload, and start a new chat.</p>
   <h3>Sources</h3>
   <ul class="plain sources">
     <li><code>tools/cache-clock/README.md</code> — captures, tables, report sample</li>

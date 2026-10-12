@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cache Clock — claude-skills</title>
-<meta name="description" content="See your Copilot prompt cache expire, and get stopped once before a cold send">
+<meta name="description" content="See your Copilot prompt cache expire, and get asked before a costly cold send">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%23b7791f'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='6.5'%20fill='%230a1420'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='3'%20fill='%23e8b94a'/%3E%3C/svg%3E">
 <link rel="icon" href="../../site/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="../../site/apple-touch-icon.png">
@@ -13,7 +13,7 @@
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="claude-skills">
 <meta property="og:title" content="Cache Clock — claude-skills">
-<meta property="og:description" content="See your Copilot prompt cache expire, and get stopped once before a cold send">
+<meta property="og:description" content="See your Copilot prompt cache expire, and get asked before a costly cold send">
 <meta property="og:url" content="https://abhijitbansal.github.io/claude-skills/features/cache-clock.html">
 <meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
 <meta property="og:image:width" content="1200">
@@ -40,15 +40,15 @@
 
 <header class="page-head wrap narrow">
   <div class="crumbs"><a href="../../site/index.html">Home</a><span class="sep">/</span><a href="../../site/index.html#features">Features</a><span class="sep">/</span>Cache Clock</div>
-  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>Copilot CLI extension</span>
+  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>Copilot extension · CLI and VS Code</span>
   <h1>Cache Clock</h1>
-  <p class="lead">See your Copilot prompt cache expire, and get stopped once before a cold send.</p>
+  <p class="lead">See your Copilot prompt cache expire, and get asked before a costly cold send.</p>
   <div class="cta-row">
     <a class="btn btn-primary" href="#install">Install →</a>
     <a class="btn btn-ghost" href="showcase/cache-clock/how-it-works.html">Visual explainer</a>
     <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills/tree/main/tools/cache-clock">View source ↗</a>
   </div>
-  <div class="statband plain cols-4 reveal"><div class="stat"><div class="n" data-count="25">25</div><div class="l">× write vs read, Claude Sonnet 5.5</div></div><div class="stat"><div class="n" data-count="300">300</div><div class="l">s cache TTL on Claude</div></div><div class="stat"><div class="n" data-count="0">0</div><div class="l">AI credits per refusal</div></div><div class="stat"><div class="n" data-count="77">77</div><div class="l">offline tests</div></div></div>
+  <div class="statband plain cols-4 reveal"><div class="stat"><div class="n" data-count="25">25</div><div class="l">× write vs read, Claude Sonnet 5.5</div></div><div class="stat"><div class="n" data-count="300">300</div><div class="l">s cache TTL on Claude</div></div><div class="stat"><div class="n" data-count="0">0</div><div class="l">AI credits when you don't send</div></div><div class="stat"><div class="n" data-count="89">89</div><div class="l">offline tests</div></div></div>
 </header>
 
 <div class="wrap narrow">
@@ -60,6 +60,7 @@
     <a href="#install">Install</a>
     <a href="#usability">Usability guide</a>
     <a href="#how">How it works</a>
+    <a href="#vscode">VS Code</a>
     <a href="#measured">Measured</a>
     <a href="#report">Report</a>
     <a href="#limits">Limits</a>
@@ -69,55 +70,59 @@
 
     <section id="overview" class="doc-section">
       <h2><span class="ix">01</span> Overview</h2>
-      <p>Cache Clock is a GitHub Copilot CLI extension modelled on <a href="https://github.com/karanb192/cache-tax">cache-tax</a> for Claude Code. Copilot bills tokens in AI credits, and on Claude and newer GPT models a cache write costs far more than a cache read. Step away longer than the cache lives and your next message, even "give me a recap", rewrites the whole conversation at the write price. Cache Clock shows that clock and that price. By default it drops one costly cold send so you can decide; the next send goes through.</p>
+      <p>Cache Clock is an extension for GitHub Copilot CLI and VS Code's Copilot chat, modelled on <a href="https://github.com/karanb192/cache-tax">cache-tax</a> for Claude Code. Copilot bills tokens in AI credits, and on Claude and newer GPT models a cache write costs far more than a cache read. Step away longer than the cache lives and your next message, even "give me a recap", rewrites the whole conversation at the write price. Cache Clock shows that clock and that price, and asks before a costly cold send goes out.</p>
       <video controls playsinline preload="metadata" poster="showcase/cache-clock/poster.jpg" style="width:100%;height:auto;aspect-ratio:16/9;margin-top:14px;border:1px solid var(--border);border-radius:var(--r-md);background:#000"><source src="showcase/cache-clock/video.mp4" type="video/mp4"></video>
-      <p style="margin-top:10px"><a href="showcase/cache-clock/video.mp4" download>Download the MP4 ↓</a> (17 s, 510 KB, silent). Made with <a href="portable-artifacts.html">make-motion</a> from <a href="showcase/cache-clock/motion.json">this spec</a>.</p>
-      <div class="arch reveal" aria-hidden="true"><div class="arch-row" style="gap:6px"><div class="node"><div class="nt">assistant.usage</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">clock per model</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">prompt submitted</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">cold + costly?</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">refuse once</div></div></div></div>
-      <p style="margin-top:14px">Two companion pages go deeper: the <a href="showcase/cache-clock/how-it-works.html">visual explainer</a> walks through the clock, the guard and the report step by step, and the <a href="showcase/cache-clock/diagram/cache-clock-architecture.html">architecture diagram</a> maps every module and event.</p>
+      <p style="margin-top:10px"><a href="showcase/cache-clock/video.mp4" download>Download the MP4 ↓</a> (17 s, silent). Made with <a href="portable-artifacts.html">make-motion</a> from <a href="showcase/cache-clock/motion.json">this spec</a>.</p>
+      <div class="arch reveal" aria-hidden="true"><div class="arch-row" style="gap:6px"><div class="node"><div class="nt">assistant.usage</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">clock per model</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">prompt submitted</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">cold + costly?</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">ask before sending</div></div></div></div>
+      <p style="margin-top:14px">Companion pages go deeper: the <a href="showcase/cache-clock/how-it-works.html">visual explainer</a> walks through the clock, the guard and the report step by step; the diagrams map the <a href="showcase/cache-clock/diagram/cache-clock-architecture.html">architecture</a>, <a href="showcase/cache-clock/diagram-install/cache-clock-install.html">every install case</a>, <a href="showcase/cache-clock/diagram-flow/cache-clock-flow.html">every prompt</a>, <a href="showcase/cache-clock/diagram-flow/cache-clock-flow-clock.html">the clock</a> and <a href="showcase/cache-clock/diagram-flow/cache-clock-flow-report.html">heads-up, report and VS Code</a>.</p>
     </section>
 
     <section id="why" class="doc-section">
       <h2><span class="ix">02</span> Problem &amp; why it's needed</h2>
       <div class="prob reveal" style="margin:6px 0 16px">
         <span class="pill">The friction</span>
-        <p style="color:var(--text-dim);font-size:15px;margin:12px 0 0">Prompt caches expire silently. Through Copilot, a Claude Sonnet 5.5 cache lives 5 minutes and a write costs 25× a read; GPT-6 Luna lives 30 minutes at 12.5×. Copilot CLI shows neither the clock nor the price, so a coffee break turns the next "carry on" into a full rewrite of the context at the write price.</p>
+        <p style="color:var(--text-dim);font-size:15px;margin:12px 0 0">Prompt caches expire silently. Through Copilot, a Claude Sonnet 5.5 cache lives 5 minutes and a write costs 25× a read; GPT-6 Luna lives 30 minutes at 12.5×. Copilot shows neither the clock nor the price, so a coffee break turns the next "carry on" into a full rewrite of the context at the write price.</p>
       </div>
-      <div class="callout"><span class="ti">Why it matters</span>On a real 37.2k-token Claude session the next send would have read the context for $0.003 warm. Sent 20 seconds after the cache expired, it read 0 cached tokens and wrote 44,388: about $0.08 extra. That one sits under the default $0.10 threshold, so it passes with defaults; longer sessions cost more, and <code>/cache-clock min</code> lowers the bar. Above it, Cache Clock warns before expiry, prices the cold send and asks once, at 0 AI credits.</div>
+      <div class="callout"><span class="ti">Why it matters</span>On a real 37.2k-token Claude session the next send would have read the context for $0.003 warm. Sent 20 seconds after the cache expired, it read 0 cached tokens and wrote 44,388: about $0.08 extra. That one sits under the default $0.10 threshold, so it passes with defaults; longer sessions cost more, and <code>/cache-clock min</code> lowers the bar. Above it, Cache Clock warns before expiry, prices the cold send and asks before sending; not sending costs 0 AI credits.</div>
     </section>
 
     <section id="install" class="doc-section">
       <h2><span class="ix">03</span> Install</h2>
-      <p style="margin-bottom:14px">Tested on Copilot CLI 1.0.95. The extension runs inside Copilot's own runtime, so it needs no Node install; the optional report needs Node 18+.</p>
+      <p style="margin-bottom:14px">One line, once per machine. No clone and no Node needed: the extension runs inside Copilot's own runtime.</p>
       <div class="steps">
-        <div class="gitem"><h4>From a clone (links the extension)</h4><div class="code cmds"><div class="cl"><code class="ct">git clone https://github.com/abhijitbansal/claude-skills</code><button class="copy" data-copy="git clone https://github.com/abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct">sh claude-skills/tools/cache-clock/install.sh</code><button class="copy" data-copy="sh claude-skills/tools/cache-clock/install.sh">copy</button></div></div><p style="margin-top:10px">Links <code>~/.copilot/extensions/cache-clock</code> to the clone, so a <code>git pull</code> updates it. <code>COPILOT_HOME</code> moves <code>~/.copilot</code>.</p></div>
-        <div class="gitem"><h4>Copy instead of link, or remove</h4><div class="code cmds"><div class="cl"><code class="ct">sh claude-skills/tools/cache-clock/install.sh --copy</code><button class="copy" data-copy="sh claude-skills/tools/cache-clock/install.sh --copy">copy</button></div><div class="cl"><code class="ct">sh claude-skills/tools/cache-clock/install.sh --uninstall</code><button class="copy" data-copy="sh claude-skills/tools/cache-clock/install.sh --uninstall">copy</button></div></div><p style="margin-top:10px">It replaces only a symlink or an earlier cache-clock copy at that path, and refuses any other folder.</p></div>
-        <div class="gitem"><h4>First run</h4><p>Start a new <code>copilot</code> session. Copilot asks once whether the extension may "register hooks": say yes (option 2 remembers it for that repo). Then run <code>/cache-clock</code>.</p></div>
+        <div class="gitem"><h4>Install</h4><div class="code cmds"><div class="cl"><code class="ct">curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh</code><button class="copy" data-copy="curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh">copy</button></div></div><p style="margin-top:10px">Downloads a copy into <code>~/.copilot/extensions/cache-clock</code>. A failed download leaves nothing behind. <code>COPILOT_HOME</code> moves <code>~/.copilot</code>.</p></div>
+        <div class="gitem"><h4>Copilot CLI</h4><p>Start a new <code>copilot</code> session. Copilot asks once whether the extension may "register hooks": allow it (option 2 remembers it for that repo). Then:</p><div class="code cmds"><div class="cl"><code class="ct">/cache-clock help</code><button class="copy" data-copy="/cache-clock help">copy</button></div></div></div>
+        <div class="gitem"><h4>VS Code Copilot chat</h4><p>Add this to your VS Code <code>settings.json</code>, run "Developer: Reload Window", start a new chat and type <code>/cache-clock</code> in full (VS Code does not list it in the <code>/</code> menu).</p><div class="code cmds"><div class="cl"><code class="ct">"chat.canvases.enabled": true</code><button class="copy" data-copy="&quot;chat.canvases.enabled&quot;: true">copy</button></div></div></div>
+        <div class="gitem"><h4>From a clone, or to remove</h4><div class="code cmds"><div class="cl"><code class="ct">sh claude-skills/tools/cache-clock/install.sh</code><button class="copy" data-copy="sh claude-skills/tools/cache-clock/install.sh">copy</button></div><div class="cl"><code class="ct">sh claude-skills/tools/cache-clock/install.sh --uninstall</code><button class="copy" data-copy="sh claude-skills/tools/cache-clock/install.sh --uninstall">copy</button></div></div><p style="margin-top:10px">From a clone the installer links the extension, so a <code>git pull</code> updates it; <code>--copy</code> copies instead. It replaces only a symlink or an earlier cache-clock copy, and refuses any other folder.</p></div>
       </div>
     </section>
 
     <section id="usability" class="doc-section">
       <h2><span class="ix">04</span> Usability guide</h2>
-      <p style="margin-bottom:14px">One slash command, inside the interactive CLI. Settings live in <code>~/.copilot/cache-clock/config.json</code> and apply to every session.</p>
+      <p style="margin-bottom:14px">One slash command. Settings live in <code>~/.copilot/cache-clock/config.json</code> and apply to every session.</p>
       <div class="guide">
+        <div class="gitem reveal"><h4>A costly cold send: the question</h4><p>When the cache has expired and the rewrite costs at least the threshold more than a warm send, Cache Clock asks in the chat before anything goes out: <b>Send anyway</b> or <b>Don't send</b>. Don't send stops it before any model call, so it costs 0 AI credits; dismissing the question or leaving it for 5 minutes does the same. It asks once per cold cache; after that, sends go through with a price note. Checked live on 12 October 2026 in Copilot CLI and VS Code.</p><div class="code"><button class="copy" data-copy="cache-clock: the Claude Sonnet 5.5 prompt cache went cold 2s ago. Sending this rewrites about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).">copy</button><span class="code-body" style="white-space:pre-wrap">cache-clock: the Claude Sonnet 5.5 prompt cache went cold 2s ago. Sending this rewrites about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
+  [ Send anyway ]  [ Don't send ]</span></div></div>
+        <div class="gitem reveal"><h4>Where it cannot ask: refuse once</h4><p>In <code>copilot -p</code>, which has no question UI, the send is refused once with the price, and sending it again pays. A real capture, taken with <code>/cache-clock min 0.01</code>:</p><div class="code"><button class="copy" data-copy="! cache-clock: the Claude Sonnet 5.5 prompt cache went cold 2s ago. Sending this rewrites
+  about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
+  Send it again to pay it, or /clear and start fresh.">copy</button><span class="code-body">! cache-clock: the Claude Sonnet 5.5 prompt cache went cold 2s ago. Sending this rewrites
+  about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
+  Send it again to pay it, or /clear and start fresh.</span></div></div>
         <div class="gitem reveal"><h4>/cache-clock — the card</h4><p>The last model used, its cache state and time left, the context size, what the next send costs warm and cold, and the session's tally. A real card from a resumed session:</p><div class="code"><button class="copy" data-copy="cache-clock · Claude Sonnet 5.5
   cache      warm, 1m17s left (ttl 5m00s)
   context    37.2k tokens
   next send  warm $0.003 · cold $0.08 (25× per token)
   session    5 model calls · 0 cold after idle · 0 prefix breaks · $0 extra paid
-  guard      refuse once above $0.10 · heads-up 5m before expiry">copy</button><span class="code-body">cache-clock · Claude Sonnet 5.5
+  guard      ask before a cold send above $0.10 · heads-up 5m before expiry">copy</button><span class="code-body">cache-clock · Claude Sonnet 5.5
   cache      warm, 1m17s left (ttl 5m00s)
   context    37.2k tokens
   next send  warm $0.003 · cold $0.08 (25× per token)
   session    5 model calls · 0 cold after idle · 0 prefix breaks · $0 extra paid
-  guard      refuse once above $0.10 · heads-up 5m before expiry</span></div></div>
-        <div class="gitem reveal"><h4>/cache-clock guard refuse | warn | off</h4><p><code>refuse</code> (default) drops a costly cold send once; the next send goes through. <code>warn</code> sends it and prints the price. <code>off</code> disables the guard; the heads-up keeps its own switch.</p><div class="code cmds"><div class="cl"><code class="ct">/cache-clock guard warn</code><button class="copy" data-copy="/cache-clock guard warn">copy</button></div><div class="cl"><code class="ct">/cache-clock guard refuse</code><button class="copy" data-copy="/cache-clock guard refuse">copy</button></div></div></div>
+  guard      ask before a cold send above $0.10 · heads-up 5m before expiry</span></div></div>
+        <div class="gitem reveal"><h4>/cache-clock help</h4><p>How it works, what a cold send triggers, every command, the report and the VS Code setup, in the chat.</p><div class="code cmds"><div class="cl"><code class="ct">/cache-clock help</code><button class="copy" data-copy="/cache-clock help">copy</button></div></div></div>
+        <div class="gitem reveal"><h4>/cache-clock guard refuse | warn | off</h4><p><code>refuse</code> (default) asks before a costly cold send, or refuses it once where it cannot ask. <code>warn</code> sends it and prints the price. <code>off</code> disables the guard; the heads-up keeps its own switch.</p><div class="code cmds"><div class="cl"><code class="ct">/cache-clock guard warn</code><button class="copy" data-copy="/cache-clock guard warn">copy</button></div><div class="cl"><code class="ct">/cache-clock guard refuse</code><button class="copy" data-copy="/cache-clock guard refuse">copy</button></div></div></div>
         <div class="gitem reveal"><h4>/cache-clock min &lt;usd&gt;</h4><p>Guard only cold sends whose extra cost is at least this many dollars (default $0.10).</p><div class="code cmds"><div class="cl"><code class="ct">/cache-clock min 0.25</code><button class="copy" data-copy="/cache-clock min 0.25">copy</button></div></div></div>
         <div class="gitem reveal"><h4>/cache-clock headsup &lt;min&gt; | off</h4><p>One ephemeral line before expiry, when the cold send's extra cost is at least the threshold. The lead is the smaller of this setting and a fifth of the TTL, so a 5-minute Claude cache warns 1 minute ahead.</p><div class="code cmds"><div class="cl"><code class="ct">/cache-clock headsup 5</code><button class="copy" data-copy="/cache-clock headsup 5">copy</button></div><div class="cl"><code class="ct">/cache-clock headsup off</code><button class="copy" data-copy="/cache-clock headsup off">copy</button></div></div></div>
-        <div class="gitem reveal"><h4>The refusal</h4><p>A real capture, taken with <code>/cache-clock min 0.01</code> (at the default $0.10 this $0.08 rewrite passes silently). The turn ends before any model call, so the AI-credit counter does not move.</p><div class="code"><button class="copy" data-copy="! cache-clock: the Claude Sonnet 5.5 prompt cache went cold 2s ago. Sending this rewrites
-  about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
-  Send it again to pay it, or /clear and start fresh.">copy</button><span class="code-body">! cache-clock: the Claude Sonnet 5.5 prompt cache went cold 2s ago. Sending this rewrites
-  about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
-  Send it again to pay it, or /clear and start fresh.</span></div></div>
       </div>
     </section>
 
@@ -125,15 +130,27 @@
       <h2><span class="ix">05</span> How it works under the hood</h2>
       <div class="guide">
         <div class="gitem reveal"><h4>The clock</h4><p>Every main-agent model call emits <code>assistant.usage</code> with <code>cacheReadTokens</code>, <code>cacheWriteTokens</code>, <code>cacheExpiresAt</code>, <code>cacheTtlSeconds</code> and prices in nano-AIU per batch of tokens. Cache Clock keeps the last call per model. Nothing is guessed: the TTL, the expiry and the prices all come from Copilot. Sub-agent and background calls are ignored.</p></div>
-        <div class="gitem reveal"><h4>The guard</h4><p><code>onUserPromptSubmitted</code> checks the last model's clock. If the cache has expired and rewriting it would cost at least the threshold more than reading it, the guard prints the price and calls <code>session.abort()</code> without awaiting it (awaiting inside the hook deadlocks the CLI). The next send in that cold episode goes through with a one-line note, even from a new process: the refusal is remembered per session in <code>~/.copilot/cache-clock/refused.json</code> for a week.</p></div>
-        <div class="gitem reveal"><h4>What is never guarded</h4><p>Slash commands and <code>!</code> shell escapes. A message queued while a turn is running only gets the note, because aborting then would cancel the running turn. The first send after a compaction, since the context was rewritten anyway.</p></div>
+        <div class="gitem reveal"><h4>The guard</h4><p><code>onUserPromptSubmitted</code> checks the last model's clock. If the cache has expired and rewriting it would cost at least the threshold more than reading it, the hook asks with <code>session.ui.select</code> and waits for the answer. To stop the send it calls <code>session.abort()</code> without awaiting it (awaiting inside the hook deadlocks). The cold episode is remembered per session in <code>~/.copilot/cache-clock/refused.json</code> for a week, even across processes.</p></div>
+        <div class="gitem reveal"><h4>What is never guarded</h4><p>Slash commands and <code>!</code> shell escapes. A message queued while a turn is running only gets the note, because stopping it then would cancel the running turn. The first send after a compaction, since the context was rewritten anyway.</p></div>
         <div class="gitem reveal"><h4>Resume</h4><p><code>assistant.usage</code> is not replayed on <code>copilot --resume</code>, and <code>getEvents()</code> omits usage records, so the extension seeds the clock from the session's own <code>~/.copilot/session-state/&lt;id&gt;/events.jsonl</code>.</p></div>
         <div class="gitem reveal"><h4>Architecture</h4><p>Seven small modules: <code>wiring</code> attaches to the session, <code>clock</code> keeps per-model state, <code>guard</code> decides, <code>usage</code> normalises events and prices, <code>format</code> writes every message, <code>config</code> stores settings and refusals, <code>history</code> feeds the report. <a href="showcase/cache-clock/diagram/cache-clock-architecture.html">Open the architecture diagram →</a></p></div>
       </div>
     </section>
 
+    <section id="vscode" class="doc-section">
+      <h2><span class="ix">06</span> VS Code</h2>
+      <p style="margin-bottom:14px">Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runtime 1.0.92-4.unstable).</p>
+      <div class="inv">
+        <div class="row"><span class="nm">Turn it on</span><span class="dc">VS Code loads Copilot extensions only when <code>"chat.canvases.enabled": true</code> (experimental). It then loads the same <code>~/.copilot/extensions/cache-clock</code> install.</span></div>
+        <div class="row"><span class="nm">The command</span><span class="dc"><code>/cache-clock</code> works typed in full; VS Code's <code>/</code> menu does not list it.</span></div>
+        <div class="row"><span class="nm">Output</span><span class="dc">VS Code shows plain extension messages only as error boxes, so the card, help and settings appear as a card with an OK button. The cold-send question works as in the CLI.</span></div>
+        <div class="row"><span class="nm">Heads-up</span><span class="dc">The heads-up and the "sending cold" note reach only VS Code's log.</span></div>
+        <div class="row"><span class="nm">Report</span><span class="dc">VS Code sessions persist only <code>session.usage_checkpoint</code> totals, so the report counts them as totals. VS Code's Cache Explorer (Agent Debug Logs) shows per-turn hit rates.</span></div>
+      </div>
+    </section>
+
     <section id="measured" class="doc-section">
-      <h2><span class="ix">06</span> What Copilot reported, measured</h2>
+      <h2><span class="ix">07</span> What Copilot reported, measured</h2>
       <p style="margin-bottom:14px">Measured on Copilot CLI 1.0.95, 11 October 2026. Each boundary result is a single run.</p>
       <div class="inv">
         <div class="row"><span class="nm">Claude Sonnet 5.5</span><span class="dc">TTL 300 s, write ÷ read 25×. Sent 20 s after <code>cacheExpiresAt</code>: read 0, wrote 44,388. The reported expiry held to the second.</span></div>
@@ -144,9 +161,9 @@
     </section>
 
     <section id="report" class="doc-section">
-      <h2><span class="ix">07</span> Report: what cold sends already cost you</h2>
-      <p>The extension only sees sessions it was loaded in. The report reads every session Copilot has persisted, CLI and VS Code alike, and sends nothing anywhere.</p>
-      <div class="code cmds" style="margin-top:12px"><div class="cl"><code class="ct">node tools/cache-clock/bin/report.mjs</code><button class="copy" data-copy="node tools/cache-clock/bin/report.mjs">copy</button></div><div class="cl"><code class="ct">node tools/cache-clock/bin/report.mjs --since 7d</code><button class="copy" data-copy="node tools/cache-clock/bin/report.mjs --since 7d">copy</button></div><div class="cl"><code class="ct">node tools/cache-clock/bin/report.mjs --json</code><button class="copy" data-copy="node tools/cache-clock/bin/report.mjs --json">copy</button></div></div>
+      <h2><span class="ix">08</span> Report: what cold sends already cost you</h2>
+      <p>The extension only sees sessions it was loaded in. The report reads every session Copilot has persisted, CLI and VS Code alike, and sends nothing anywhere. It ships with every install and needs Node 18+.</p>
+      <div class="code cmds" style="margin-top:12px"><div class="cl"><code class="ct">node ~/.copilot/extensions/cache-clock/report.mjs</code><button class="copy" data-copy="node ~/.copilot/extensions/cache-clock/report.mjs">copy</button></div><div class="cl"><code class="ct">node ~/.copilot/extensions/cache-clock/report.mjs --since 7d</code><button class="copy" data-copy="node ~/.copilot/extensions/cache-clock/report.mjs --since 7d">copy</button></div><div class="cl"><code class="ct">node ~/.copilot/extensions/cache-clock/report.mjs --json</code><button class="copy" data-copy="node ~/.copilot/extensions/cache-clock/report.mjs --json">copy</button></div></div>
       <div class="code" style="margin-top:12px"><button class="copy" data-copy="model                   calls  cold after idle  prefix breaks  rewritten  extra paid  total spent  idle before cold sends
 Claude Sonnet 5.5           5                1              0      37.1k       $0.08        $0.16  5m
 GPT-6 Luna                201                1              2      44.9k      $0.005        $0.14  31m
@@ -157,24 +174,24 @@ GPT-6 Luna                201                1              2      44.9k      $0
 
 extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at this rate</span></div>
       <p style="margin-top:12px">"Extra paid" is what each cold call cost above a warm read of the same tokens. "Prefix breaks" are cold calls inside the reported TTL: something changed the prompt prefix, or the provider served it cold early.</p>
-      <div class="callout" style="margin-top:14px"><span class="ti">VS Code</span>The live extension does not run in VS Code. Measured on 11 October 2026: VS Code's Copilot agent host runs its own bundled runtime (1.0.92-4.unstable) and does not register <code>/cache-clock</code>; typing it sends the text to the model. No card, guard or heads-up there. Its sessions still land in <code>~/.copilot/session-state</code>, but only as <code>session.usage_checkpoint</code> totals, so the report counts them as totals. VS Code's own Cache Explorer (Agent Debug Logs) shows per-turn hit rates.</div>
     </section>
 
     <section id="limits" class="doc-section">
-      <h2><span class="ix">08</span> Limits</h2>
+      <h2><span class="ix">09</span> Limits</h2>
       <div class="guide">
         <div class="gitem reveal"><h4>No keep-warm yet</h4><p>cache-tax pings to hold the cache during a break. An extension can only ping with <code>session.send</code>, which adds a user and an assistant turn to your conversation each time. Run the report first: whether pings pay off depends on your own tax.</p></div>
         <div class="gitem reveal"><h4>Auto routes per prompt</h4><p>With <code>auto</code>, the next prompt may go to a different model than the last. The guard prices the last model used.</p></div>
         <div class="gitem reveal"><h4>The estimate is approximate</h4><p>It is the last call's input plus its answer. The real resend adds your new message and anything Copilot attaches (44.4k actual vs 37.2k estimated in the capture above).</p></div>
         <div class="gitem reveal"><h4>Early eviction is invisible to the guard</h4><p>It trusts Copilot's <code>cacheExpiresAt</code>. When a provider serves a cache cold sooner (Luna at 29 of 30 minutes, once), the send is billed cold and the guard stays quiet; the report counts it as a prefix break.</p></div>
-        <div class="gitem reveal"><h4><code>-p</code> mode</h4><p>The guard works in <code>copilot -p</code>, but slash commands there go to the model as text, so <code>/cache-clock</code> needs the interactive CLI.</p></div>
+        <div class="gitem reveal"><h4>VS Code relies on an experimental setting</h4><p><code>chat.canvases.enabled</code> may be renamed or removed in a later VS Code release.</p></div>
+        <div class="gitem reveal"><h4><code>-p</code> mode</h4><p>The guard refuses once in <code>copilot -p</code>, but slash commands there go to the model as text, so <code>/cache-clock</code> needs the interactive CLI.</p></div>
       </div>
     </section>
 
     <section id="inventory" class="doc-section">
-      <h2><span class="ix">09</span> What's inside</h2>
-      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Copilot extension</h4><div class="inv"><div class="row"><span class="nm">/cache-clock</span><span class="dc">Card, plus <code>guard</code>, <code>min</code>, <code>headsup</code> and <code>help</code> subcommands</span></div><div class="row"><span class="nm">onUserPromptSubmitted</span><span class="dc">The cold-send guard: refuse once, warn or off</span></div><div class="row"><span class="nm">extension/lib/</span><span class="dc"><code>wiring</code>, <code>clock</code>, <code>guard</code>, <code>usage</code>, <code>format</code>, <code>config</code>, <code>history</code></span></div></div>
-      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">CLI and install</h4><div class="inv"><div class="row"><span class="nm">bin/report.mjs</span><span class="dc">Per-model cold-send report over every persisted session: <code>--since</code>, <code>--dir</code>, <code>--json</code></span></div><div class="row"><span class="nm">install.sh</span><span class="dc">Link (default), <code>--copy</code> or <code>--uninstall</code>; replaces only a symlink or an earlier cache-clock copy</span></div><div class="row"><span class="nm">test/</span><span class="dc">77 node tests through a fake Copilot session and a fake clock; no network. CI runs them on every PR.</span></div></div>
+      <h2><span class="ix">10</span> What's inside</h2>
+      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Copilot extension</h4><div class="inv"><div class="row"><span class="nm">/cache-clock</span><span class="dc">Card, plus <code>help</code>, <code>guard</code>, <code>min</code> and <code>headsup</code> subcommands</span></div><div class="row"><span class="nm">onUserPromptSubmitted</span><span class="dc">The cold-send guard: ask (or refuse once), warn, or off</span></div><div class="row"><span class="nm">report.mjs</span><span class="dc">Per-model cold-send report over every persisted session: <code>--since</code>, <code>--dir</code>, <code>--json</code></span></div><div class="row"><span class="nm">lib/</span><span class="dc"><code>wiring</code>, <code>clock</code>, <code>guard</code>, <code>usage</code>, <code>format</code>, <code>config</code>, <code>history</code></span></div></div>
+      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Install and tests</h4><div class="inv"><div class="row"><span class="nm">install.sh</span><span class="dc">Piped: downloads a copy. From a clone: link (default), <code>--copy</code> or <code>--uninstall</code>. Replaces only a symlink or an earlier cache-clock copy.</span></div><div class="row"><span class="nm">test/</span><span class="dc">89 node tests through a fake Copilot session and a fake clock; no network. CI runs them on every PR.</span></div></div>
     </section>
 
     <section class="doc-section" style="border-bottom:none">

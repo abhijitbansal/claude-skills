@@ -76,17 +76,19 @@ reset) in its own detached tmux session — `--no-watch` skips it.
 Full reference: [tools/second-wind/README.md](tools/second-wind/README.md) ·
 [visual explainer](docs/second-wind/index.html)
 
-### Cache Clock (Copilot CLI extension)
+### Cache Clock (Copilot CLI and VS Code Copilot chat)
 
-A [cache-tax](https://github.com/karanb192/cache-tax)-style guard for GitHub Copilot CLI:
-shows when the prompt cache goes cold, what the next send costs cold vs warm, and drops a
-costly cold send once. Copilot CLI only: VS Code's Copilot agent does not load it, though the
-report still counts VS Code sessions as totals.
+A [cache-tax](https://github.com/karanb192/cache-tax)-style guard for GitHub Copilot:
+shows when the prompt cache goes cold, what the next send costs cold vs warm, and asks
+before a costly cold send goes out. Works in Copilot CLI, and in VS Code's Copilot chat
+with `"chat.canvases.enabled": true` in VS Code settings.
 
 ```bash
-sh tools/cache-clock/install.sh            # links ~/.copilot/extensions/cache-clock
-node tools/cache-clock/bin/report.mjs      # what cold sends already cost you
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh
+node ~/.copilot/extensions/cache-clock/report.mjs --since 7d   # what cold sends already cost you
 ```
+
+Then run `/cache-clock help` in Copilot.
 
 Full reference: [tools/cache-clock/README.md](tools/cache-clock/README.md) ·
 [guide](docs/features/cache-clock.html) ·

@@ -17,7 +17,7 @@ Companion test plan (Claude Docs): "Copilot cache-tax: test plan".
 | Q7 Real tax paid | Measurable for free from `~/.copilot/session-state/*/events.jsonl`, which persists `session.usage_record` per call. | the `report` command |
 | Can a prompt hook stop a send? | Yes. `onUserPromptSubmitted` firing `session.abort()` **without awaiting it** cancels the turn before any model call (0 AI credits, no usage event). Awaiting it inside the hook deadlocks. | probe runs A and the hung run |
 | Do extensions load in `-p` mode? | Yes, without `--experimental`. | probe |
-| VS Code | The Copilot harness writes to the same `session-state` dir (`client_name: vscode-agent-host`) but persisted only checkpoints, no per-call records. Later measured (11 October 2026): VS Code's agent host (bundled runtime 1.0.92-4.unstable) does not register `/cache-clock`; the text went to the model. The live extension does not run there. | one session on disk; a VS Code `/cache-clock` run |
+| VS Code | The Copilot harness writes to the same `session-state` dir (`client_name: vscode-agent-host`) but persisted only checkpoints, no per-call records. Later measured (11 October 2026): VS Code's agent host (bundled runtime 1.0.92-4.unstable) does not register `/cache-clock`; the text went to the model. The live extension does not run there. Later still (12 October 2026): it does load once VS Code's experimental `chat.canvases.enabled` setting is on; see the README's VS Code section. | one session on disk; a VS Code `/cache-clock` run |
 
 Prices: `costPerBatch` is nano-AIU per `batchSize` tokens; 1 AI credit = $0.01, so
 USD = nano-AIU / 1e11. No price table ships with the tool.
@@ -65,3 +65,15 @@ logs; an install test against a temp `COPILOT_HOME`. Added to the CI `node` job.
 
 Live checks (manual, recorded in the README): extension loads; card shows real values;
 a cold send is refused once at ~31 minutes idle on Luna.
+
+## After the first build (12 October 2026)
+
+- The refusal became an in-chat question (`session.ui.select`: Send anyway / Don't send)
+  wherever the host supports questions; refuse-once stays as the fallback (`copilot -p`).
+  A live probe showed the prompt hook can await the question in both Copilot CLI 1.0.95
+  and VS Code without deadlocking.
+- VS Code's Copilot chat loads the extension with `"chat.canvases.enabled": true`. Its chat
+  shows plain extension messages only as error boxes, so command output there is a
+  question card with an OK button.
+- One-line install (`curl … | sh` downloads a copy); the report moved to
+  `extension/report.mjs` so every install ships it; `/cache-clock help` explains it all.
