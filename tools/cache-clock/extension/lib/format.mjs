@@ -40,6 +40,15 @@ export function refusal(snap) {
   );
 }
 
+/** The refusal as an in-chat question, for hosts that can ask one. */
+export function coldQuestion(snap) {
+  return (
+    `${NAME}: the ${snap.displayName} prompt cache went cold ${duration(snap.msLeft)} ago. ` +
+    `Sending this rewrites about ${tokens(snap.contextTokens)} tokens at ${perM(snap.prices.write)} = ${usd(snap.coldUsd)} ` +
+    `(a warm send would read them for ${usd(snap.warmUsd)}).`
+  );
+}
+
 export function coldWarn(snap) {
   return `${NAME}: sending cold, rewriting about ${tokens(snap.contextTokens)} tokens for ${usd(snap.coldUsd)} (warm: ${usd(snap.warmUsd)}).`;
 }

@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createClock } from "./clock.mjs";
 import { configDir, loadConfig, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
-import { HELP, card, coldWarn, headsUp, refusal, usd } from "./format.mjs";
+import { HELP, card, coldQuestion, coldWarn, headsUp, refusal, usd } from "./format.mjs";
 import { decide } from "./guard.mjs";
 import { isMainInteraction, normalizeUsage } from "./usage.mjs";
 
@@ -59,36 +59,67 @@ function quietly(fn) {
 }
 
 // VS Code's agent host sets this for the extensions it launches. Its chat shows only
-// error-level session messages; info and warning go to its log file (measured 11 Oct 2026).
+// error-level session messages, as a failure box; info and warning go to its log file
+// (measured 11 Oct 2026). A question card renders cleanly in both VS Code and the CLI.
 const isVsCode = (env) => Boolean(env?.VSCODE_CANVAS_DATA_DIR);
+
+const SEND = "Send anyway";
+const HOLD = "Don't send";
+const OK = "OK";
+// An unanswered question holds the send; the next send in the episode goes through.
+const QUESTION_TIMEOUT_MS = 5 * 60_000;
+const UNASKED = Symbol("unasked");
+
+/** Asks an in-chat question. UNASKED when the host cannot ask or the call fails; null when dismissed or timed out. */
+async function ask(session, timers, message, options) {
+  if (!session?.capabilities?.ui?.elicitation || typeof session.ui?.select !== "function") return UNASKED;
+  let timer;
+  try {
+    const timeout = new Promise((resolve) => {
+      timer = timers.setTimeout(() => resolve(null), QUESTION_TIMEOUT_MS);
+      timer?.unref?.();
+    });
+    return await Promise.race([session.ui.select(message, options), timeout]);
+  } catch {
+    return UNASKED;
+  } finally {
+    timers.clearTimeout(timer);
+  }
+}
 
 export async function attach({ joinSession, now = Date.now, timers = globalThis, dir = configDir(), readHistory = readSessionLog, env = process.env }) {
   const clock = createClock();
   const state = { session: null, refusedKey: null, busy: false, headsUpTimer: null };
-  const visible = isVsCode(env) ? () => ({ level: "error" }) : (options) => options;
-  const say = (message, options) => quietly(() => state.session?.log(message, visible(options)));
+  const say = (message, options) => quietly(() => state.session?.log(message, options));
+  // Command output: a card with OK in VS Code, where a plain log line never reaches the chat.
+  const show = async (message, options) => {
+    if (isVsCode(env) && (await ask(state.session, timers, message, [OK])) !== UNASKED) return;
+    say(message, options);
+  };
   const scheduleHeadsUp = () => headsUpScheduler({ state, clock, now, timers, dir, say });
 
-  function onPrompt(input) {
+  async function onPrompt(input) {
+    let snap;
+    let verdict;
     try {
-      const snap = clock.snapshot(now());
-      const verdict = decide({ snap, prompt: input?.prompt, config: loadConfig(dir), refusedKey: state.refusedKey, busy: state.busy });
-      if (verdict.action === "refuse") {
-        state.refusedKey = verdict.key;
-        quietly(() => saveRefusal(dir, state.session?.sessionId, verdict.key, now()));
-        say(refusal(snap), { level: "warning" });
-        // Not awaited: abort() waits for this hook to return, so awaiting it deadlocks.
-        quietly(() => state.session.abort());
-        return { suppressOutput: true };
-      }
-      if (verdict.action === "warn") say(coldWarn(snap), { level: "warning" });
+      snap = clock.snapshot(now());
+      verdict = decide({ snap, prompt: input?.prompt, config: loadConfig(dir), refusedKey: state.refusedKey, busy: state.busy });
     } catch {
-      // never block the user's message on our own failure
+      return undefined; // never block the user's message on our own failure
     }
-    return undefined;
+    if (verdict.action === "warn") say(coldWarn(snap), { level: "warning" });
+    if (verdict.action !== "refuse") return undefined;
+    state.refusedKey = verdict.key;
+    quietly(() => saveRefusal(dir, state.session?.sessionId, verdict.key, now()));
+    const answer = await ask(state.session, timers, coldQuestion(snap), [SEND, HOLD]);
+    if (answer === SEND) return undefined;
+    if (answer === UNASKED) say(refusal(snap), { level: "warning" });
+    // Not awaited: abort() waits for this hook to return, so awaiting it deadlocks.
+    quietly(() => state.session.abort());
+    return { suppressOutput: true };
   }
 
-  const onCommand = (context) => runCommand({ context, clock, now, dir, say, scheduleHeadsUp });
+  const onCommand = (context) => runCommand({ context, clock, now, dir, show, scheduleHeadsUp });
 
   state.session = await joinSession({
     commands: [{ name: "cache-clock", description: "Prompt-cache clock: cold-send price, guard settings", handler: onCommand }],
@@ -136,18 +167,18 @@ function headsUpScheduler({ state, clock, now, timers, dir, say }) {
   state.headsUpTimer?.unref?.();
 }
 
-function runCommand({ context, clock, now, dir, say, scheduleHeadsUp }) {
+function runCommand({ context, clock, now, dir, show, scheduleHeadsUp }) {
   const parsed = parseCommand(context?.args);
-  if (parsed.kind === "status") return say(card(clock.snapshot(now()), clock.tally(), loadConfig(dir)));
-  if (parsed.kind === "help") return say(HELP);
-  if (parsed.kind === "error") return say(`cache-clock: ${parsed.message}. Try /cache-clock help.`, { level: "error" });
+  if (parsed.kind === "status") return show(card(clock.snapshot(now()), clock.tally(), loadConfig(dir)));
+  if (parsed.kind === "help") return show(HELP);
+  if (parsed.kind === "error") return show(`cache-clock: ${parsed.message}. Try /cache-clock help.`, { level: "error" });
   const next = { ...loadConfig(dir), ...parsed.patch };
   try {
     saveConfig(dir, next);
   } catch (err) {
-    return say(`cache-clock: could not save settings to ${dir}: ${err.message}`, { level: "error" });
+    return show(`cache-clock: could not save settings to ${dir}: ${err.message}`, { level: "error" });
   }
   scheduleHeadsUp();
   const heads = next.headsUpMin > 0 ? `${next.headsUpMin}m` : "off";
-  return say(`cache-clock: guard: ${next.mode} · min ${usd(next.minUsd)} · heads-up ${heads} (saved for all sessions)`);
+  return show(`cache-clock: guard: ${next.mode} · min ${usd(next.minUsd)} · heads-up ${heads} (saved for all sessions)`);
 }

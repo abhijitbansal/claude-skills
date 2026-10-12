@@ -8,10 +8,24 @@ import { saveConfig } from "../extension/lib/config.mjs";
 import { usage, T0, MIN } from "./fixtures.mjs";
 
 // A stand-in for the CopilotSession an extension gets from joinSession().
-function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir = mkdtempSync(join(tmpdir(), "cc-wiring-")), env = {} } = {}) {
+// `answer` turns on in-chat questions: a value (or function of the question) for ui.select,
+// "pending" for a question nobody answers, or an Error for a host that throws.
+function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir = mkdtempSync(join(tmpdir(), "cc-wiring-")), env = {}, answer } = {}) {
   saveConfig(dir, config);
-  const host = { now: T0, logs: [], aborts: 0, handlers: new Map(), timers: [], joinConfig: null };
+  const host = { now: T0, logs: [], aborts: 0, handlers: new Map(), timers: [], joinConfig: null, asked: [] };
+  const ui = answer === undefined ? {} : {
+    capabilities: { ui: { elicitation: true } },
+    ui: {
+      select: async (message, options) => {
+        host.asked.push({ message, options });
+        if (answer instanceof Error) throw answer;
+        if (answer === "pending") return new Promise(() => {});
+        return typeof answer === "function" ? answer(message, options) : answer;
+      },
+    },
+  };
   host.session = {
+    ...ui,
     sessionId: "s-1",
     log: async (message, options = {}) => { host.logs.push({ message, ...options }); },
     // Never resolves: the real abort() waits for the prompt hook, so awaiting it deadlocks.
@@ -67,40 +81,87 @@ test("a costly cold send is refused once without awaiting abort, and the resend 
   assert.match(h.logs.at(-1).message, /sending cold/);
 });
 
-// VS Code's agent host shows only error-level session messages in the chat (measured 11 Oct 2026).
-const VS_CODE = { VSCODE_CANVAS_DATA_DIR: "/tmp/agentHostCanvasData/x" };
-
-test("in VS Code the refusal, the resend note and the card are logged at error level so the chat shows them", async () => {
-  const h = fakeHost({ env: VS_CODE });
+const goCold = async (h) => {
   await h.start();
   h.emit("assistant.usage", sonnet({ at: new Date(T0).toISOString() }));
   h.advance(7 * MIN);
-  await h.prompt("give me a recap");
-  assert.match(h.logs.at(-1).message, /went cold/);
-  assert.equal(h.logs.at(-1).level, "error");
-  await h.prompt("give me a recap");
-  assert.match(h.logs.at(-1).message, /sending cold/);
-  assert.equal(h.logs.at(-1).level, "error");
-  h.command("");
-  assert.match(h.logs.at(-1).message, /^cache-clock · /);
-  assert.equal(h.logs.at(-1).level, "error");
+};
+
+test("when the host can ask, a costly cold send becomes a question with the price", async () => {
+  const h = fakeHost({ answer: "Don't send" });
+  await goCold(h);
+  const result = await h.prompt("give me a recap");
+  assert.equal(h.asked.length, 1);
+  assert.match(h.asked[0].message, /went cold 2m00s ago/);
+  assert.match(h.asked[0].message, /\$0\.\d+/);
+  assert.deepEqual(h.asked[0].options, ["Send anyway", "Don't send"]);
+  assert.deepEqual(result, { suppressOutput: true });
+  assert.equal(h.aborts, 1);
+  assert.equal(h.logs.length, 0, "the question replaces the refusal message");
 });
 
-test("in VS Code the heads-up is logged at error level and not ephemeral", async () => {
-  const h = fakeHost({ env: VS_CODE });
+test("answering Send anyway lets the cold send through without an abort", async () => {
+  const h = fakeHost({ answer: "Send anyway" });
+  await goCold(h);
+  assert.equal(await h.prompt("give me a recap"), undefined);
+  assert.equal(h.aborts, 0);
+});
+
+test("after one question the same cold episode is not asked again", async () => {
+  const h = fakeHost({ answer: "Don't send" });
+  await goCold(h);
+  await h.prompt("give me a recap");
+  assert.equal(await h.prompt("give me a recap"), undefined);
+  assert.equal(h.asked.length, 1);
+  assert.match(h.logs.at(-1).message, /sending cold/);
+});
+
+test("a dismissed question holds the send", async () => {
+  const h = fakeHost({ answer: null });
+  await goCold(h);
+  assert.deepEqual(await h.prompt("give me a recap"), { suppressOutput: true });
+  assert.equal(h.aborts, 1);
+});
+
+test("a host that throws on the question falls back to the refuse-once message", async () => {
+  const h = fakeHost({ answer: new Error("elicitation not supported") });
+  await goCold(h);
+  assert.deepEqual(await h.prompt("give me a recap"), { suppressOutput: true });
+  assert.equal(h.aborts, 1);
+  assert.match(h.logs.at(-1).message, /Send it again to pay it/);
+});
+
+test("an unanswered question times out and holds the send", async () => {
+  const h = fakeHost({ answer: "pending" });
+  await goCold(h);
+  const pending = h.prompt("give me a recap");
+  await Promise.resolve();
+  h.advance(10 * MIN);
+  assert.deepEqual(await pending, { suppressOutput: true });
+  assert.equal(h.aborts, 1);
+});
+
+// VS Code's agent host shows only error-level session messages in its chat (measured 11 Oct 2026),
+// so command output goes into a question card there instead.
+const VS_CODE = { VSCODE_CANVAS_DATA_DIR: "/tmp/agentHostCanvasData/x" };
+
+test("in VS Code /cache-clock shows the card as a question with an OK button", async () => {
+  const h = fakeHost({ env: VS_CODE, answer: "OK" });
   await h.start();
   h.emit("assistant.usage", sonnet({ at: new Date(T0).toISOString() }));
-  h.advance(4.5 * MIN);
-  const line = h.logs.at(-1);
-  assert.match(line.message, /goes cold in/);
-  assert.equal(line.level, "error");
-  assert.equal(line.ephemeral, undefined);
+  await h.command("");
+  assert.match(h.asked.at(-1).message, /^cache-clock · /);
+  assert.deepEqual(h.asked.at(-1).options, ["OK"]);
+  assert.equal(h.logs.length, 0);
 });
 
-test("in the CLI the card keeps the default level", async () => {
-  const h = fakeHost();
+test("in the CLI /cache-clock prints the card at the default level, even when the host can ask", async () => {
+  const h = fakeHost({ answer: "OK" });
   await h.start();
-  h.command("");
+  h.emit("assistant.usage", sonnet({ at: new Date(T0).toISOString() }));
+  await h.command("");
+  assert.equal(h.asked.length, 0);
+  assert.match(h.logs.at(-1).message, /^cache-clock · /);
   assert.equal(h.logs.at(-1).level, undefined);
 });
 
