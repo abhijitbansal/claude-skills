@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { buildPrompt, expandCmd, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules } from '../lib.mjs';
+import { fileURLToPath } from 'node:url';
+import { SKILLS, buildPrompt, expandCmd, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules } from '../lib.mjs';
 
 const made = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-eval-test-')); made.push(d); return d; };
@@ -172,4 +173,38 @@ test('linkNodeModules: an agent wiping the workdir node_modules cannot touch the
   assert.equal(fs.readFileSync(path.join(src, 'node_modules/ajv/index.js'), 'utf8'), 'x');
   assert.ok(fs.existsSync(path.join(src, 'node_modules/@scope/pkg')));
   assert.ok(fs.existsSync(path.join(src, 'node_modules/.bin')));
+});
+
+const evalDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const readJson = (...parts) => JSON.parse(fs.readFileSync(path.join(evalDir, ...parts), 'utf8'));
+
+test('SKILLS.diagram builds into <work>/out/diagram.html and expects that file', () => {
+  const cfg = SKILLS.diagram;
+  assert.equal(cfg.dir, 'make-diagram');
+  assert.equal(cfg.spec, 'diagram.json');
+  assert.deepEqual(cfg.outputCmd('/s', '/w/diagram.json', '/w'), ['/s/scripts/build.mjs', '/w/diagram.json', '--out', '/w/out/diagram.html']);
+  assert.deepEqual(cfg.artifacts, ['out/diagram.html']);
+  assert.match(buildPrompt(cfg, 'Draw X.'), /skills\/make-diagram\/SKILL\.md.*\.\/diagram\.json/);
+});
+
+test('diagram prompts: two per type and one edit prompt whose seed exists', () => {
+  const prompts = readJson('prompts', 'diagram.json');
+  assert.equal(prompts.length, 8);
+  assert.equal(new Set(prompts.map((p) => p.id)).size, 8);
+  const seeded = prompts.filter((p) => p.seed);
+  assert.deepEqual(seeded.map((p) => p.seed), ['seeds/diagram.json']);
+  const seed = readJson('fixtures', seeded[0].seed);
+  assert.equal(seed.type, 'architecture');
+  const typeOf = (p) => (p.seed ? seed.type : ['architecture', 'flowchart', 'sequence', 'state'].find((t) => new RegExp(t, 'i').test(p.prompt)));
+  const counts = {};
+  for (const p of prompts) counts[typeOf(p)] = (counts[typeOf(p)] ?? 0) + 1;
+  assert.deepEqual(counts, { architecture: 2, flowchart: 2, sequence: 2, state: 2 });
+});
+
+test('the edit prompt asks for a change the scorer can see in the spec', () => {
+  const seed = readJson('fixtures', 'seeds', 'diagram.json');
+  const changed = structuredClone(seed);
+  changed.nodes[0].label = 'Storefront';
+  assert.deepEqual(diffPaths(seed, changed), ['nodes[0].label']);
+  assert.match(readJson('prompts', 'diagram.json').find((p) => p.seed).prompt, /Storefront/);
 });

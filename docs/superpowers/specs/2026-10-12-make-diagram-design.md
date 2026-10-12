@@ -63,7 +63,7 @@ writes coordinates, SVG or CSS.
 | Field | Rule |
 |---|---|
 | `type` | `architecture` \| `flow` \| `sequence` \| `state`. |
-| `direction` | `right` (default for architecture, state) \| `down` (default for flow). Ignored for sequence. |
+| `direction` | `right` (default for architecture, state) \| `down` (default for flow). Not allowed for sequence (the validator rejects it). |
 | `theme` | A `shared/themes` name; default `paper`. |
 | `animate` | Start with edge-flow animation on (the viewer toggle still works). Default `false`. |
 | `groups[]` | `id`, `label`, optional `parent` (nesting ≤ 3 deep, no cycles). Not for sequence. |

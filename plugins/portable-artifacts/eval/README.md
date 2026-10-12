@@ -7,10 +7,12 @@ what the host left behind.
 ```bash
 # one-time: install each skill's deps
 (cd ../skills/make-dashboard && npm ci)
+(cd ../skills/make-diagram && npm ci --omit=dev)
 (cd ../skills/make-motion && npm ci && npx playwright install chromium)
 
 node run-eval.mjs --skill dashboard --host claude --limit 3
 node run-eval.mjs --skill motion --host codex --only q3-counter,edit-existing
+node run-eval.mjs --skill diagram --host claude --only checkout-path,edit-existing
 node run-eval.mjs --skill dashboard --host codex-oss --model gemma4
 ```
 
@@ -29,7 +31,7 @@ optional `modelArgs` and a `check` command.
    `EVAL_LOG` is set, so every `validate.mjs` call the host makes adds a
    line to a log, which is how retries are counted.
 3. Scores the result. The harness reruns `validate` and the output step
-   (`build` for dashboards, `render --contact-sheet` for motion) itself,
+   (`build` for dashboards and diagrams, `render --contact-sheet` for motion) itself,
    so a host whose sandbox blocked commands is still scored on its spec.
 
 | Metric | Meaning |

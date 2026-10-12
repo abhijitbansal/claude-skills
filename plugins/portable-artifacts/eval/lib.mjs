@@ -19,6 +19,13 @@ export const SKILLS = {
     outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/render.mjs'), spec, '--contact-sheet', '--out', path.join(work, 'out')],
     artifacts: ['out'],
   },
+  diagram: {
+    dir: 'make-diagram',
+    spec: 'diagram.json',
+    // Build into <work>/out; success = out/diagram.html exists.
+    outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/build.mjs'), spec, '--out', path.join(work, 'out/diagram.html')],
+    artifacts: ['out/diagram.html'],
+  },
 };
 
 export function buildPrompt(skillCfg, task) {

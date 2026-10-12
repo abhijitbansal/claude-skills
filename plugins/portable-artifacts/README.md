@@ -50,9 +50,9 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
 /plugin install portable-artifacts@claude-skills
 ```
 
-Then ask for a dashboard or a video, or call the skill directly:
-`/make-dashboard …` or `/make-motion …`. On first use the agent runs the
-one-time `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboard).
+Then ask for a dashboard, a diagram or a video, or call the skill directly:
+`/make-dashboard …`, `/make-diagram …` or `/make-motion …`. On first use the agent runs the
+one-time `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboard and make-diagram).
 
 ### Any agent, with `npx skills`
 
@@ -67,7 +67,7 @@ npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram m
 
 It copies the folders but doesn't install their dependencies, so the agent
 runs `npm ci` inside each skill folder on first use (the SKILL.md tells it
-to; make-dashboard needs only `npm ci --omit=dev`).
+to; make-dashboard and make-diagram need only `npm ci --omit=dev`).
 
 ### Codex, GitHub Copilot, Gemini CLI (or Claude Code without the marketplace)
 
@@ -96,7 +96,7 @@ so `git pull` updates it), `--force` (replace an existing install),
 **Any other agent** that can read files and run shell commands: copy a skill
 folder into your project **together with its `shared/` folder** (it sits inside
 the skill folder, so copy the folder whole), run `npm ci` inside it
-(`npm ci --omit=dev` for make-dashboard), and add one line to your
+(`npm ci --omit=dev` for make-dashboard and make-diagram), and add one line to your
 `AGENTS.md` (or `.github/copilot-instructions.md`):
 
 ```markdown
@@ -109,7 +109,7 @@ To build a dashboard, a diagram or an animated explainer, read and follow skills
 |---|---|---|---|
 | Node.js ≥ 20 | ✓ | ✓ | ✓ |
 | `npm ci` in the skill folder (once; `--omit=dev` is enough for make-dashboard and make-diagram) | ✓ | ✓ | ✓ |
-| Chromium for frame capture (once, ≈150 MB) | — | — | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) |
+| Chromium for frame capture (once, ≈150 MB) | — | optional: only `check.mjs` (needs a full `npm ci`, not `--omit=dev`, plus `npx playwright install chromium` in the skill folder); build needs no browser, and `check.mjs` skips cleanly without one | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) |
 | ffmpeg on `PATH` | — | — | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 4.4 for audio tracks) |
 | kokoro-js (voiceover only, on demand) | — | — | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (≈250 MB) plus a one-time 90 MB voice model download; the agent asks first |
 
@@ -153,7 +153,7 @@ Each skill folder also has its own README.
 
 ## Cross-host eval
 
-[`eval/`](eval/) runs a fixed set of 10 prompts per skill through `claude`,
+[`eval/`](eval/) runs a fixed set of prompts per skill (8 to 10) through `claude`,
 `codex`, `codex --oss` (Ollama), `gemini` and `copilot`, and scores spec
 written / valid / validate retries / build or render ok / changed paths on edit
 prompts. Results summaries live in `eval/results/summary-*.md`.
@@ -169,6 +169,9 @@ Everything this plugin depends on is open source:
 | [anime.js](https://animejs.com) v4 | MIT |
 | [Playwright](https://playwright.dev) | Apache-2.0 |
 | [Ajv](https://ajv.js.org) | MIT |
+| [ELK](https://github.com/kieler/elkjs) (`elkjs`) | EPL-2.0 |
+| [Lucide](https://lucide.dev) icons | ISC |
+| [Simple Icons](https://simpleicons.org) brand marks | CC0-1.0 |
 | IBM Plex Sans, IBM Plex Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible, JetBrains Mono (latin subsets, via Fontsource) | OFL-1.1 |
 | ffmpeg (system binary, not vendored) | LGPL/GPL |
 | [Kokoro](https://github.com/hexgrad/kokoro) TTS (`kokoro-js`, installed on demand) | Apache-2.0 |

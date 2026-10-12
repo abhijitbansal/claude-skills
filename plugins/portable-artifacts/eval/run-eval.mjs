@@ -23,7 +23,7 @@ const { values: opts } = parseArgs({
 });
 
 function usage(msg) {
-  process.stderr.write(`${msg}\nusage: node eval/run-eval.mjs --skill dashboard|motion --host <${Object.keys(JSON.parse(fs.readFileSync(path.join(here, 'hosts.json'), 'utf8'))).join('|')}> [--model m] [--limit n] [--only id,id] [--timeout sec] [--out dir]\n`);
+  process.stderr.write(`${msg}\nusage: node eval/run-eval.mjs --skill dashboard|motion|diagram --host <${Object.keys(JSON.parse(fs.readFileSync(path.join(here, 'hosts.json'), 'utf8'))).join('|')}> [--model m] [--limit n] [--only id,id] [--timeout sec] [--out dir]\n`);
   process.exit(2);
 }
 
@@ -95,7 +95,7 @@ for (const p of prompts) {
   fs.mkdirSync(caseDir, { recursive: true });
   const r = await run(argv, {
     cwd: work,
-    env: { EVAL_LOG: path.join(work, '.eval-log.jsonl') },
+    env: { EVAL_LOG: path.join(work, '.eval-log.jsonl'), PA_OUTPUT_DIR: path.join(work, 'out') }, // PA_OUTPUT_DIR keeps make-diagram's default output inside the workdir
     timeoutMs: Number(opts.timeout) * 1000,
     logFile: path.join(caseDir, 'transcript.txt'),
   });
