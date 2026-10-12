@@ -89,3 +89,31 @@ test('raw vegaLite charts become [chart, table] with tooltips added at build', (
   assert.deepEqual(c.views.map((v) => v.name), ['chart', 'table']);
   assert.deepEqual(c.views[0].vegaLite.mark, { type: 'bar', tooltip: true });
 });
+
+test('coloured area: hover dots are stacked like the area (read the stacked end field)', () => {
+  const c = expand1({ kind: 'area', query: 'time', x: 'month', y: 'revenue', color: 'region' });
+  const vl = c.views[0].vegaLite;
+  assert.equal(vl.layer[2].encoding.y.stack, 'zero');
+  const file = path.join(GOLDEN, 'area.color.json');
+  if (process.env.PA_WRITE_GOLDEN === '1') fs.writeFileSync(file, `${JSON.stringify(vl, null, 2)}\n`);
+  assert.deepEqual(JSON.parse(JSON.stringify(vl)), JSON.parse(fs.readFileSync(file, 'utf8')), `area+color differs from ${file}`);
+  const marks = compile({ ...vl, data: { values: [] } }).spec.marks;
+  const dots = marks.find((m) => m.type === 'symbol');
+  assert.equal(dots.encode.update.y.field, 'revenue_end');
+});
+
+test('uncoloured area and coloured line keep their dots unstacked', () => {
+  const area = expand1({ kind: 'area', query: 'time', x: 'month', y: 'revenue' }).views[0].vegaLite;
+  assert.equal(area.layer[2].encoding.y.stack, undefined);
+  const line = expand1({ kind: 'line', query: 'time', x: 'month', y: 'revenue', color: 'region' }).views[0].vegaLite;
+  assert.equal(line.layer[2].encoding.y.stack, undefined);
+});
+
+test('line and area with a nominal x keep the query order (sort: null); temporal x is unchanged', () => {
+  for (const kind of ['line', 'area']) {
+    const nominal = expand1({ kind, query: 'catcol', x: 'quarter', y: 'revenue', color: 'region' }).views[0].vegaLite;
+    assert.equal(nominal.encoding.x.sort, null);
+    const temporal = expand1({ kind, query: 'time', x: 'month', y: 'revenue' }).views[0].vegaLite;
+    assert.equal('sort' in temporal.encoding.x, false);
+  }
+});

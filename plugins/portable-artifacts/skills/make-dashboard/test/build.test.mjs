@@ -164,6 +164,20 @@ test('Review Focus 4: empty and truncated results are labelled', () => {
   assert.equal(data.queries.empty.rowCount, 0);
 });
 
+test('Review Focus 1: a kind chart over zero rows builds, says so, and still offers the table', () => {
+  const p = project({
+    queries: { none: 'SELECT region, SUM(amount) AS revenue FROM sales WHERE 1 = 0 GROUP BY 1' },
+    charts: [{ id: 'c1', title: 'Nothing', query: 'none', kind: 'bar', x: 'region', y: 'revenue' }],
+  });
+  const r = build([p.file]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const html = readPage(path.join(p.dir, 'dist'));
+  assert.match(html, /<p class="meta empty">No rows returned<\/p>/);
+  const chart = JSON.parse(dataBlock(html)).charts[0];
+  assert.equal(chart.empty, true);
+  assert.deepEqual(chart.views.map((v) => v.name), ['bar', 'table']);
+});
+
 test('field typo is caught with a did-you-mean', () => {
   const p = project();
   const spec = JSON.parse(fs.readFileSync(p.file, 'utf8'));

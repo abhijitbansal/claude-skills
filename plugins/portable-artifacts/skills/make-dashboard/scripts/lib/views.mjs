@@ -39,7 +39,8 @@ function context(chart, result) {
     && (distinct.size > HORIZONTAL_COUNT || labels.some((l) => l.length > HORIZONTAL_LABEL));
   // The legend field: donut colours by x; every other kind by its color role.
   const legend = chart.kind === 'donut' ? chart.x : chart.color;
-  return { def, horizontal, colorField: legend === undefined ? undefined : fieldRef(legend) };
+  const xNominal = chart.x !== undefined && cls(chart.x) === 'nominal';
+  return { def, horizontal, xNominal, colorField: legend === undefined ? undefined : fieldRef(legend) };
 }
 
 // Bars on a time axis read better as ordinal bands.
@@ -59,12 +60,14 @@ function bar(ctx, { color, stack, offset, sort } = {}) {
 }
 
 function lineLike(ctx, mark) {
-  const x = ctx.def('x');
+  const x = ctx.def('x', ctx.xNominal ? { sort: null } : {}); // nominal x keeps query order
   const y = ctx.def('y');
   const color = ctx.def('color');
+  // A coloured area is stacked by Vega-Lite; the hover dots must sit on their band.
+  const dotsY = mark === 'area' && color ? { ...y, stack: 'zero' } : y;
   const main = { params: [ZOOM_X, ...(color ? [legendParam(ctx.colorField)] : [])], mark, encoding: { y, ...(color ? { color, opacity: { condition: { param: 'pa_legend', empty: true, value: 1 }, value: 0.2 } } : {}) } };
   const rule = { params: [NEAREST_X], mark: { type: 'rule', tooltip: false }, encoding: { opacity: { condition: { param: 'pa_x', empty: false, value: 0.5 }, value: 0 } } };
-  const dots = { mark: { type: 'point', filled: true }, encoding: { y, ...(color ? { color } : {}), opacity: { condition: { param: 'pa_x', empty: false, value: 1 }, value: 0 } } };
+  const dots = { mark: { type: 'point', filled: true }, encoding: { y: dotsY, ...(color ? { color } : {}), opacity: { condition: { param: 'pa_x', empty: false, value: 1 }, value: 0 } } };
   return { encoding: { x }, layer: [main, rule, dots] };
 }
 
