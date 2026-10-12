@@ -133,7 +133,7 @@ export function formatReport(sum) {
   out.push(`extra paid for cold rewrites: ${usd(sum.extraUsd)} of ${usd(sum.spentUsd)} spent · about ${usd(sum.perWeekUsd)} per week at this rate`);
   if (sum.sessions.checkpointOnly) {
     const n = sum.sessions.checkpointOnly;
-    out.push(`${n} ${n === 1 ? "session" : "sessions"} (${usd(sum.sessions.checkpointOnlyUsd)}) kept only totals, no per-call records; not in the table.`);
+    out.push(`${n} ${n === 1 ? "session" : "sessions"} (${usd(sum.sessions.checkpointOnlyUsd)}) kept only totals, no per-call records; not in the table. These are whole-session totals, which may include spending before this window.`);
   }
   out.push(`surfaces: ${Object.entries(sum.surfaces).map(([k, v]) => `${k} ${v}`).join(", ") || "none"}`);
   return out.join("\n");

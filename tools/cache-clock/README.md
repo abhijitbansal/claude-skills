@@ -36,8 +36,8 @@ That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` m
 
 From a clone, `sh tools/cache-clock/install.sh` links the extension instead, so a
 `git pull` updates it; `--copy` copies, `--uninstall` removes it. The installer replaces
-only a symlink or an earlier cache-clock copy at that path, and a failed download leaves
-nothing behind. Tested on Copilot CLI 1.0.95 and VS Code's Copilot agent host
+only its own install (one with cache-clock's own files) or a dangling link at that path, and
+a failed download leaves nothing behind. Tested on Copilot CLI 1.0.95 and VS Code's Copilot agent host
 (runtime 1.0.92-4.unstable).
 
 ## What happens on a cold send
@@ -211,6 +211,8 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 - **Early eviction is invisible to the guard.** It trusts Copilot's `cacheExpiresAt`.
   When a provider serves a cache cold sooner (Luna at 29 of 30 minutes, once), the send is
   billed cold and the guard stays quiet; the report counts it as a prefix break.
+- **Refusal memory is one shared file.** Two Copilot sessions refusing in the same instant
+  can overwrite each other's entry in `refused.json`; the losing session is asked again.
 - **VS Code depends on an experimental setting** (`chat.canvases.enabled`), which VS Code
   may rename or remove.
 - Claude was measured through `auto` only; the seat used for testing could not pick

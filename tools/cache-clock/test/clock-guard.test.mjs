@@ -74,6 +74,17 @@ test("the first call after a compaction is not tallied as a cold rewrite", () =>
   assert.equal(c.tally().extraUsd, 0);
 });
 
+test("a compaction resets every model's clock, not just the next one used", () => {
+  const c = createClock();
+  feed(c, { at: T0, model: "gpt-6-luna", input: 100_000, read: 0, write: 100_000 });
+  feed(c, { at: T0 + MIN, model: "claude-sonnet-5.5", input: 100_000, read: 0, write: 100_000 });
+  c.invalidate();
+  assert.equal(feed(c, { at: T0 + 2 * MIN, model: "claude-sonnet-5.5", input: 20_000, read: 0, write: 20_000 }).kind, "first");
+  assert.equal(feed(c, { at: T0 + 3 * MIN, model: "gpt-6-luna", input: 20_000, read: 0, write: 20_000 }).kind, "first");
+  assert.equal(c.tally().coldBreak, 0);
+  assert.equal(c.snapshot(T0 + 3 * MIN, "gpt-6-luna").state, "warm");
+});
+
 const cfg = { mode: "refuse", minUsd: 0.1 };
 
 test("decide guards prompts that merely start with a path, but not commands or shell escapes", () => {

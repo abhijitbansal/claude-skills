@@ -425,6 +425,23 @@ test("no heads-up fires mid-turn", async () => {
   assert.equal(h.logs.length, 0);
 });
 
+test("a heads-up missed during a turn comes when the session goes idle, once", async () => {
+  const h = fakeHost();
+  await h.start();
+  h.emit("assistant.usage", sonnet({ ttl: 1800 }));
+  h.emit("assistant.turn_start", { turnId: "1" });
+  h.advance(26 * MIN);
+  assert.equal(h.logs.length, 0);
+  h.emit("session.idle", {});
+  h.advance(0);
+  assert.equal(h.logs.length, 1);
+  assert.match(h.logs[0].message, /goes cold in/);
+  h.emit("assistant.turn_start", { turnId: "2" });
+  h.emit("session.idle", {});
+  h.advance(0);
+  assert.equal(h.logs.length, 1, "not repeated for the same cache");
+});
+
 test("a failed compaction does not exempt the next send", async () => {
   const h = fakeHost();
   await h.start();

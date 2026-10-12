@@ -30,8 +30,10 @@ for arg in "$@"; do
   esac
 done
 
-# Only ever replace our own install: a link, or a directory holding extension.mjs.
-if [ -e "$DEST" ] && [ ! -L "$DEST" ] && [ ! -f "$DEST/extension.mjs" ]; then
+# Only ever replace our own install: one with cache-clock's own lib files (a link to a
+# checkout or a copy), or a dangling link left by a deleted checkout. Another tool's
+# folder that happens to be called cache-clock is left alone.
+if [ -e "$DEST" ] && { [ ! -f "$DEST/lib/wiring.mjs" ] || [ ! -f "$DEST/lib/clock.mjs" ]; }; then
   printf 'cache-clock: %s exists and is not a cache-clock install; leaving it alone\n' "$DEST" >&2
   exit 1
 fi

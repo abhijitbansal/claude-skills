@@ -93,7 +93,7 @@ async function ask(session, timers, message, options) {
 
 export async function attach({ joinSession, now = Date.now, timers = globalThis, dir = configDir(), readHistory = readSessionLog, env = process.env }) {
   const clock = createClock();
-  const state = { session: null, refusedKey: null, busy: false, headsUpTimer: null, pendingAnswer: null };
+  const state = { session: null, refusedKey: null, busy: false, headsUpTimer: null, headsUpShown: null, pendingAnswer: null };
   const vsCode = isVsCode(env);
   const say = (message, options) => quietly(() => state.session?.log(message, options));
   // In VS Code only error-level messages reach the chat.
@@ -162,6 +162,8 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
   });
   state.session.on("session.idle", () => {
     state.busy = false;
+    // A heads-up skipped because a turn was running gets another chance now.
+    scheduleHeadsUp();
   });
   state.session.on("assistant.usage", (event) => {
     const call = mainCall(event);
@@ -182,6 +184,8 @@ function headsUpScheduler({ state, clock, now, timers, dir, say }) {
   const config = loadConfig(dir);
   const snap = clock.snapshot(now());
   if (config.headsUpMin <= 0 || snap?.state !== "warm") return;
+  const key = `${snap.model}@${snap.expiresAt}`;
+  if (state.headsUpShown === key) return; // once per cache
   // A 5-minute lead on a 5-minute cache would fire right after every call.
   const leadMs = Math.min(config.headsUpMin * 60_000, snap.ttlSec ? (snap.ttlSec * 1000) / HEADS_UP_TTL_SHARE : Infinity);
   state.headsUpTimer = timers.setTimeout(() => {
@@ -189,7 +193,9 @@ function headsUpScheduler({ state, clock, now, timers, dir, say }) {
     const live = clock.snapshot(now());
     // Mid-turn the next model call refreshes the cache on its own.
     if (state.busy || live?.state !== "warm" || live.extraUsd === null) return;
-    if (live.extraUsd >= loadConfig(dir).minUsd) say(headsUp(live), { ephemeral: true });
+    if (live.extraUsd < loadConfig(dir).minUsd) return;
+    state.headsUpShown = key;
+    say(headsUp(live), { ephemeral: true });
   }, Math.max(0, snap.msLeft - leadMs));
   state.headsUpTimer?.unref?.();
 }

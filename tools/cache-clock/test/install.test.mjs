@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -47,6 +47,27 @@ test("install refuses to replace a directory that is not a cache-clock install",
   assert.equal(r.status, 1);
   assert.match(r.stderr, /not a cache-clock install/);
   assert.ok(existsSync(join(s.dest, "notes.txt")));
+});
+
+test("install and uninstall leave alone another tool's folder that also has an extension.mjs", () => {
+  for (const flag of [[], ["--uninstall"]]) {
+    const s = sandbox();
+    mkdirSync(s.dest, { recursive: true });
+    writeFileSync(join(s.dest, "extension.mjs"), "// someone else's extension\n");
+    writeFileSync(join(s.dest, "settings.json"), "{}");
+    const r = s.run(...flag);
+    assert.equal(r.status, 1, flag.join(" "));
+    assert.match(r.stderr, /not a cache-clock install/);
+    assert.ok(existsSync(join(s.dest, "settings.json")));
+  }
+});
+
+test("install replaces a dangling link, such as one left by a deleted checkout", () => {
+  const s = sandbox();
+  mkdirSync(join(s.home, "extensions"), { recursive: true });
+  symlinkSync(join(s.home, "gone"), s.dest);
+  assert.equal(s.run().status, 0);
+  assert.ok(existsSync(join(s.dest, "extension.mjs")));
 });
 
 test("install rejects unknown flags", () => {

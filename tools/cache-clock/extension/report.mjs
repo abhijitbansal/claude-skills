@@ -44,7 +44,8 @@ function loadSessions(root) {
     try {
       sessions.push({ id: entry.name, client: clientOf(dir), ...parseSessionLog(readFileSync(file, "utf8")) });
     } catch (err) {
-      process.stderr.write(`cache-clock: skipped ${file}: ${err.message}\n`);
+      // The session id only: the full path would expose local directory names.
+      process.stderr.write(`cache-clock: skipped session ${entry.name}: unreadable log (${err.code ?? "parse error"})\n`);
     }
   }
   return sessions;

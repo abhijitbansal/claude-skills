@@ -6,13 +6,14 @@ import { classifyCall, expiryOf, extraUsd, lostTokens, nextSendCosts } from "./u
 export function createClock() {
   const lastByModel = new Map();
   let lastModel = null;
-  let stale = false;
+  // Models whose last call predates a compaction: their next call starts a new context.
+  let staleModels = new Set();
   let tally = { calls: 0, coldIdle: 0, coldBreak: 0, extraUsd: 0 };
 
   function ingest(call) {
     if (!call) return null;
     // After a compaction the context is new: its first write is not a cold rewrite.
-    const prev = stale ? null : (lastByModel.get(call.model) ?? null);
+    const prev = staleModels.has(call.model) ? null : (lastByModel.get(call.model) ?? null);
     const kind = classifyCall(prev, call);
     const isCold = kind === "cold-idle" || kind === "cold-break";
     const lost = isCold ? lostTokens(prev, call) : 0;
@@ -25,13 +26,13 @@ export function createClock() {
     };
     lastByModel.set(call.model, call);
     lastModel = call.model;
-    stale = false;
+    staleModels = new Set([...staleModels].filter((m) => m !== call.model));
     return { kind, lostTokens: lost, extraUsd: extra, call };
   }
 
   /** The context was rewritten (compaction): the next send's cost is not an idle tax. */
   function invalidate() {
-    stale = true;
+    staleModels = new Set(lastByModel.keys());
   }
 
   function snapshot(now, model = lastModel) {
@@ -40,7 +41,7 @@ export function createClock() {
     const expiresAt = expiryOf(last);
     const costs = nextSendCosts(last);
     let state = "unknown";
-    if (!stale && expiresAt !== null) state = now < expiresAt ? "warm" : "cold";
+    if (!staleModels.has(last.model) && expiresAt !== null) state = now < expiresAt ? "warm" : "cold";
     return {
       model: last.model,
       displayName: last.displayName,

@@ -101,6 +101,8 @@ test("summarize honours --since and counts checkpoint-only sessions", () => {
   assert.equal(m.coldBreak, 1);
   assert.equal(sum.sessions.checkpointOnly, 1);
   assert.ok(Math.abs(sum.sessions.checkpointOnlyUsd - 0.007) < 1e-12);
+  // A checkpoint is a running total, so its dollars may predate --since: say so.
+  assert.match(formatReport(sum), /whole-session totals, which may include spending before this window/);
 });
 
 test("formatReport prints a row per model and a weekly rate", () => {
