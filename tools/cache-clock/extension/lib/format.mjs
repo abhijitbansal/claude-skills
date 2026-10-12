@@ -31,16 +31,12 @@ export function tokens(n) {
   return `${(n / 1e6).toFixed(2)}M`;
 }
 
+/** The refuse-once message, for hosts that cannot ask a question. */
 export function refusal(snap) {
-  return (
-    `${NAME}: the ${snap.displayName} prompt cache went cold ${duration(snap.msLeft)} ago. ` +
-    `Sending this rewrites about ${tokens(snap.contextTokens)} tokens at ${perM(snap.prices.write)} = ${usd(snap.coldUsd)} ` +
-    `(a warm send would read them for ${usd(snap.warmUsd)}). ` +
-    `Send it again to pay it, or /clear and start fresh.`
-  );
+  return `${coldQuestion(snap)} Send it again to pay it, or /clear and start fresh.`;
 }
 
-/** The refusal as an in-chat question, for hosts that can ask one. */
+/** The cold-send price as an in-chat question, for hosts that can ask one. */
 export function coldQuestion(snap) {
   return (
     `${NAME}: the ${snap.displayName} prompt cache went cold ${duration(snap.msLeft)} ago. ` +

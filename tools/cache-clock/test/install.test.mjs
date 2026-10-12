@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -61,7 +61,7 @@ function piped(baseUrl) {
   const run = (...args) => spawnSync("sh", ["-s", "--", ...args], {
     input: script, cwd: base, encoding: "utf8", env: { ...process.env, COPILOT_HOME: home, CACHE_CLOCK_BASE_URL: baseUrl },
   });
-  return { home, dest: join(home, "extensions", "cache-clock"), run };
+  return { home, cwd: base, dest: join(home, "extensions", "cache-clock"), run };
 }
 
 test("piped install downloads every extension file into a plain copy", () => {
@@ -78,14 +78,39 @@ test("piped install downloads every extension file into a plain copy", () => {
 test("the download list names every file the extension ships", () => {
   const script = readFileSync(join(ROOT, "install.sh"), "utf8");
   const listed = script.match(/^FILES="([^"]+)"/m)[1].split(/\s+/).filter(Boolean).sort();
-  const onDisk = ["extension.mjs", "report.mjs", ...readdirSync(join(ROOT, "extension", "lib")).map((f) => `lib/${f}`)].sort();
+  const onDisk = readdirSync(join(ROOT, "extension"), { recursive: true })
+    .map((f) => String(f).split("\\").join("/"))
+    .filter((f) => statSync(join(ROOT, "extension", f)).isFile())
+    .sort();
   assert.deepEqual(listed, onDisk);
 });
 
-test("a failed download leaves no partial install", () => {
+test("a failed download leaves no partial install and no stage folder", () => {
   const p = piped(pathToFileURL(join(tmpdir(), "cc-no-such-dir")).href);
   const r = p.run();
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /download failed/);
   assert.ok(!existsSync(p.dest));
+  assert.deepEqual(readdirSync(join(p.home, "extensions")).filter((f) => f.startsWith(".cache-clock")), []);
+});
+
+test("a failed download keeps the install that was already there", () => {
+  const good = piped(pathToFileURL(join(ROOT, "extension")).href);
+  assert.equal(good.run().status, 0);
+  const bad = spawnSync("sh", ["-s"], {
+    input: readFileSync(join(ROOT, "install.sh"), "utf8"), cwd: tmpdir(), encoding: "utf8",
+    env: { ...process.env, COPILOT_HOME: good.home, CACHE_CLOCK_BASE_URL: pathToFileURL(join(tmpdir(), "cc-no-such-dir")).href },
+  });
+  assert.notEqual(bad.status, 0);
+  assert.ok(existsSync(join(good.dest, "extension.mjs")));
+});
+
+test("a piped install ignores an extension folder in the current directory", () => {
+  const p = piped(pathToFileURL(join(ROOT, "extension")).href);
+  mkdirSync(join(p.cwd, "extension"));
+  writeFileSync(join(p.cwd, "extension", "extension.mjs"), "// not cache-clock\n");
+  const r = p.run();
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!lstatSync(p.dest).isSymbolicLink(), "it downloads instead of linking the decoy");
+  assert.notEqual(readFileSync(join(p.dest, "extension.mjs"), "utf8"), "// not cache-clock\n");
 });

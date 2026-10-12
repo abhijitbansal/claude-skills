@@ -7,13 +7,20 @@
 # Env:   COPILOT_HOME (default ~/.copilot), CACHE_CLOCK_BASE_URL (download source)
 set -eu
 
-SRC="$(cd "$(dirname "$0")" && pwd)/extension"
 DEST_DIR="${COPILOT_HOME:-$HOME/.copilot}/extensions"
 DEST="$DEST_DIR/cache-clock"
 BASE_URL="${CACHE_CLOCK_BASE_URL:-https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/extension}"
 # Every file the extension ships; a test keeps this list in step with extension/.
-FILES="extension.mjs report.mjs lib/clock.mjs lib/config.mjs lib/format.mjs lib/guard.mjs lib/history.mjs lib/usage.mjs lib/wiring.mjs"
+# extension.mjs comes last, so an interrupted download never looks like an extension.
+FILES="report.mjs lib/clock.mjs lib/config.mjs lib/format.mjs lib/guard.mjs lib/history.mjs lib/usage.mjs lib/wiring.mjs extension.mjs"
 MODE="link"
+
+# A checkout only when this script is a real file next to extension/. Piped (curl | sh),
+# $0 is the shell, and an extension/ folder in the current directory must not count.
+SRC=""
+if [ -f "$0" ] && [ -f "$(dirname "$0")/extension/extension.mjs" ]; then
+  SRC="$(cd "$(dirname "$0")" && pwd)/extension"
+fi
 
 for arg in "$@"; do
   case "$arg" in
@@ -35,13 +42,13 @@ case "$SRC/" in
 esac
 
 if [ "$MODE" = uninstall ]; then
-  rm -rf "$DEST"
+  rm -rf "$DEST" "$DEST_DIR"/.cache-clock.*
   printf 'cache-clock: removed %s\n' "$DEST"
   exit 0
 fi
 
 mkdir -p "$DEST_DIR"
-if [ -f "$SRC/extension.mjs" ]; then
+if [ -n "$SRC" ]; then
   rm -rf "$DEST"
   if [ "$MODE" = copy ]; then
     cp -R "$SRC" "$DEST"
@@ -49,20 +56,32 @@ if [ -f "$SRC/extension.mjs" ]; then
     ln -s "$SRC" "$DEST"
   fi
 else
-  # No checkout next to the script (curl | sh): download a copy, then swap it in whole.
+  # No checkout next to the script: download a copy into a stage dir, then swap it in.
+  if ! command -v curl >/dev/null 2>&1; then
+    printf 'cache-clock: the one-line install needs curl\n' >&2
+    exit 1
+  fi
   MODE="download"
   STAGE="$(mktemp -d "$DEST_DIR/.cache-clock.XXXXXX")"
+  OLD="$DEST_DIR/.cache-clock.old.$$"
   trap 'rm -rf "$STAGE"' EXIT
-  mkdir -p "$STAGE/lib"
+  trap 'rm -rf "$STAGE"; exit 130' INT TERM HUP
   for f in $FILES; do
-    if ! curl -fsSL "$BASE_URL/$f" -o "$STAGE/$f"; then
+    if ! curl -fsSL --create-dirs "$BASE_URL/$f" -o "$STAGE/$f"; then
       printf 'cache-clock: download failed: %s/%s\n' "$BASE_URL" "$f" >&2
       exit 1
     fi
   done
-  rm -rf "$DEST"
-  mv "$STAGE" "$DEST"
-  trap - EXIT
+  # Keep the old install until the new one is in place.
+  if [ -e "$DEST" ] || [ -L "$DEST" ]; then mv "$DEST" "$OLD"; fi
+  if mv "$STAGE" "$DEST"; then
+    rm -rf "$OLD"
+  else
+    if [ -e "$OLD" ] || [ -L "$OLD" ]; then mv "$OLD" "$DEST"; fi
+    printf 'cache-clock: could not move the download into %s\n' "$DEST" >&2
+    exit 1
+  fi
+  trap - EXIT INT TERM HUP
 fi
 
 printf 'cache-clock: installed (%s) at %s\n' "$MODE" "$DEST"

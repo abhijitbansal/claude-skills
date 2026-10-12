@@ -141,6 +141,50 @@ test("an unanswered question times out and holds the send", async () => {
   assert.equal(h.aborts, 1);
 });
 
+test("Send anyway still counts as asked: the next send in the episode only gets the note", async () => {
+  const h = fakeHost({ answer: "Send anyway" });
+  await goCold(h);
+  await h.prompt("give me a recap");
+  assert.equal(await h.prompt("again"), undefined);
+  assert.equal(h.asked.length, 1);
+  assert.match(h.logs.at(-1).message, /sending cold/);
+});
+
+test("an answered question clears its timeout", async () => {
+  const h = fakeHost({ answer: "Don't send" });
+  await goCold(h);
+  const before = h.timers.length;
+  await h.prompt("give me a recap");
+  const questionTimer = h.timers.slice(before).find((t) => t.due - h.now >= 4 * MIN);
+  assert.ok(questionTimer, "a question timeout was set");
+  assert.equal(questionTimer.cleared, true);
+});
+
+test("an unanswered question says the send was held", async () => {
+  const h = fakeHost({ answer: "pending" });
+  await goCold(h);
+  const pending = h.prompt("give me a recap");
+  await Promise.resolve();
+  h.advance(10 * MIN);
+  await pending;
+  assert.match(h.logs.at(-1).message, /no answer/i);
+});
+
+test("a prompt sent while a question is pending waits for the same answer", async () => {
+  let release;
+  const h = fakeHost({ answer: () => new Promise((resolve) => { release = resolve; }) });
+  await goCold(h);
+  const first = h.prompt("give me a recap");
+  await Promise.resolve();
+  const second = h.prompt("and another thing");
+  await Promise.resolve();
+  release("Don't send");
+  assert.deepEqual(await first, { suppressOutput: true });
+  assert.deepEqual(await second, { suppressOutput: true });
+  assert.equal(h.asked.length, 1, "asked once");
+  assert.equal(h.aborts, 2, "each held send is stopped, none goes out");
+});
+
 // VS Code's agent host shows only error-level session messages in its chat (measured 11 Oct 2026),
 // so command output goes into a question card there instead.
 const VS_CODE = { VSCODE_CANVAS_DATA_DIR: "/tmp/agentHostCanvasData/x" };
@@ -153,6 +197,26 @@ test("in VS Code /cache-clock shows the card as a question with an OK button", a
   assert.match(h.asked.at(-1).message, /^cache-clock · /);
   assert.deepEqual(h.asked.at(-1).options, ["OK"]);
   assert.equal(h.logs.length, 0);
+});
+
+test("in VS Code /cache-clock returns without waiting for OK", async () => {
+  const h = fakeHost({ env: VS_CODE, answer: "pending" });
+  await h.start();
+  h.emit("assistant.usage", sonnet({ at: new Date(T0).toISOString() }));
+  const outcome = await Promise.race([Promise.resolve(h.command("")).then(() => "returned"), new Promise((r) => setTimeout(() => r("waiting"), 20))]);
+  assert.equal(outcome, "returned");
+  assert.match(h.asked.at(-1).message, /^cache-clock · /);
+});
+
+test("in VS Code without questions, the card and the refusal fall back to error level so the chat shows them", async () => {
+  const h = fakeHost({ env: VS_CODE });
+  await goCold(h);
+  await h.prompt("give me a recap");
+  assert.match(h.logs.at(-1).message, /Send it again to pay it/);
+  assert.equal(h.logs.at(-1).level, "error");
+  await h.command("");
+  assert.match(h.logs.at(-1).message, /^cache-clock · /);
+  assert.equal(h.logs.at(-1).level, "error");
 });
 
 test("in the CLI /cache-clock prints the card at the default level, even when the host can ask", async () => {

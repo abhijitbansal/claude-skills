@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createClock } from "./clock.mjs";
 import { configDir, loadConfig, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
 import { HELP, card, coldQuestion, coldWarn, headsUp, refusal, usd } from "./format.mjs";
-import { decide } from "./guard.mjs";
+import { NOT_A_PROMPT, decide } from "./guard.mjs";
 import { isMainInteraction, normalizeUsage } from "./usage.mjs";
 
 // The heads-up comes at most a fifth of the ttl before expiry.
@@ -69,14 +69,18 @@ const OK = "OK";
 // An unanswered question holds the send; the next send in the episode goes through.
 const QUESTION_TIMEOUT_MS = 5 * 60_000;
 const UNASKED = Symbol("unasked");
+const EXPIRED = Symbol("expired");
+const EXPIRED_NOTE = "cache-clock: no answer in 5 minutes, so that send was held. Send it again to send it.";
 
-/** Asks an in-chat question. UNASKED when the host cannot ask or the call fails; null when dismissed or timed out. */
+const canAsk = (session) => Boolean(session?.capabilities?.ui?.elicitation) && typeof session?.ui?.select === "function";
+
+/** Asks an in-chat question. UNASKED when the host cannot ask or the call fails; EXPIRED on timeout; null when dismissed. */
 async function ask(session, timers, message, options) {
-  if (!session?.capabilities?.ui?.elicitation || typeof session.ui?.select !== "function") return UNASKED;
+  if (!canAsk(session)) return UNASKED;
   let timer;
   try {
     const timeout = new Promise((resolve) => {
-      timer = timers.setTimeout(() => resolve(null), QUESTION_TIMEOUT_MS);
+      timer = timers.setTimeout(() => resolve(EXPIRED), QUESTION_TIMEOUT_MS);
       timer?.unref?.();
     });
     return await Promise.race([session.ui.select(message, options), timeout]);
@@ -89,21 +93,40 @@ async function ask(session, timers, message, options) {
 
 export async function attach({ joinSession, now = Date.now, timers = globalThis, dir = configDir(), readHistory = readSessionLog, env = process.env }) {
   const clock = createClock();
-  const state = { session: null, refusedKey: null, busy: false, headsUpTimer: null };
+  const state = { session: null, refusedKey: null, busy: false, headsUpTimer: null, pendingAnswer: null };
+  const vsCode = isVsCode(env);
   const say = (message, options) => quietly(() => state.session?.log(message, options));
+  // In VS Code only error-level messages reach the chat.
+  const warnLevel = vsCode ? { level: "error" } : { level: "warning" };
   // Command output: a card with OK in VS Code, where a plain log line never reaches the chat.
-  const show = async (message, options) => {
-    if (isVsCode(env) && (await ask(state.session, timers, message, [OK])) !== UNASKED) return;
-    say(message, options);
+  // Not awaited, so the command returns while the card waits for OK.
+  const show = (message, options) => {
+    if (vsCode && canAsk(state.session)) return quietly(() => ask(state.session, timers, message, [OK]));
+    return say(message, vsCode ? { level: "error" } : options);
   };
   const scheduleHeadsUp = () => headsUpScheduler({ state, clock, now, timers, dir, say });
 
+  // Send anyway lets the send through; anything else stops it before any model call.
+  const settle = (answer) => {
+    if (answer === SEND) return undefined;
+    // Not awaited: abort() waits for this hook to return, so awaiting it deadlocks.
+    quietly(() => state.session.abort());
+    return { suppressOutput: true };
+  };
+
   async function onPrompt(input) {
+    // A message sent while the question is still open shares its answer, so a held
+    // send never lets a later one slip out (and an abort never hits the wrong turn).
+    if (state.pendingAnswer && !NOT_A_PROMPT.test(String(input?.prompt ?? "").trimStart())) {
+      return settle(await state.pendingAnswer);
+    }
     let snap;
     let verdict;
+    let question;
     try {
       snap = clock.snapshot(now());
       verdict = decide({ snap, prompt: input?.prompt, config: loadConfig(dir), refusedKey: state.refusedKey, busy: state.busy });
+      if (verdict.action === "refuse") question = coldQuestion(snap);
     } catch {
       return undefined; // never block the user's message on our own failure
     }
@@ -111,12 +134,16 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
     if (verdict.action !== "refuse") return undefined;
     state.refusedKey = verdict.key;
     quietly(() => saveRefusal(dir, state.session?.sessionId, verdict.key, now()));
-    const answer = await ask(state.session, timers, coldQuestion(snap), [SEND, HOLD]);
-    if (answer === SEND) return undefined;
-    if (answer === UNASKED) say(refusal(snap), { level: "warning" });
-    // Not awaited: abort() waits for this hook to return, so awaiting it deadlocks.
-    quietly(() => state.session.abort());
-    return { suppressOutput: true };
+    state.pendingAnswer = ask(state.session, timers, question, [SEND, HOLD]);
+    let answer;
+    try {
+      answer = await state.pendingAnswer;
+    } finally {
+      state.pendingAnswer = null;
+    }
+    if (answer === UNASKED) say(refusal(snap), warnLevel);
+    if (answer === EXPIRED) say(EXPIRED_NOTE, warnLevel);
+    return settle(answer);
   }
 
   const onCommand = (context) => runCommand({ context, clock, now, dir, show, scheduleHeadsUp });

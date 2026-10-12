@@ -11,7 +11,7 @@ export const episodeKey = (snap) => `${snap.model}@${snap.expiresAt}`;
 // A slash command (`/name`, `/name args`) or a `!` shell escape never calls the
 // model with the conversation, so it is never guarded. A pasted path like
 // `/etc/hosts is broken` is a prompt.
-const NOT_A_PROMPT = /^(\/[A-Za-z][\w-]*(\s|$)|!)/;
+export const NOT_A_PROMPT = /^(\/[A-Za-z][\w-]*(\s|$)|!)/;
 
 export function decide({ snap, prompt, config, refusedKey = null, busy = false }) {
   if (NOT_A_PROMPT.test(String(prompt ?? "").trimStart())) return { action: "allow" };
