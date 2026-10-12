@@ -95,6 +95,17 @@ test('run reports exit code, output and timeout', async () => {
   assert.equal(missing.code, 127);
 });
 
+test('run drops NODE_USE_SYSTEM_CA from the child environment', async () => {
+  const prev = process.env.NODE_USE_SYSTEM_CA;
+  process.env.NODE_USE_SYSTEM_CA = '1';
+  try {
+    const r = await run(['node', '-e', 'process.stdout.write(String(process.env.NODE_USE_SYSTEM_CA))']);
+    assert.equal(r.out, 'undefined');
+  } finally {
+    if (prev === undefined) delete process.env.NODE_USE_SYSTEM_CA; else process.env.NODE_USE_SYSTEM_CA = prev;
+  }
+});
+
 test('scoreRun: missing spec scores zero', async () => {
   const s = await scoreRun({ work: tmp(), skillCfg: cfg, skillDir: fakeSkill() });
   assert.equal(s.specExists, false);

@@ -48,8 +48,11 @@ export function run(argv, { cwd, env, timeoutMs = 0, logFile } = {}) {
     const started = Date.now();
     // detached = own process group, so a timeout also kills grandchildren
     // (renders, servers) the host started.
+    // NODE_USE_SYSTEM_CA makes Node 24 read the macOS keychain at startup; the codex
+    // sandbox denies that and every node process SIGSEGVs. The eval is offline.
+    const { NODE_USE_SYSTEM_CA: _drop, ...baseEnv } = process.env;
     const child = spawn(argv[0], argv.slice(1), {
-      cwd, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
+      cwd, env: { ...baseEnv, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
     });
     let out = '';
     const onData = (d) => { out += d; };
