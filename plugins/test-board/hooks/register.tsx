@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { TestRun } from '../types'
 import { GAP, lineParts, MAX_SHOWN_FAILURES, tail } from './format'
@@ -40,7 +40,7 @@ function exitCodeOf(ran: Ran): number {
 
 type Roots = Map<string, string>
 type Loops = Map<string, Loop>
-type State = { loops: Loops; roots: Roots; turn: { isNew: boolean }; chain: Promise<void> }
+type State = { loops: Loops; roots: Roots; turn: { isNew: boolean }; chain: Promise<void>; expiry?: Timer }
 
 async function worktreeRoot($: EngineInterface, roots: Roots, cwd: string): Promise<string> {
   const cached = roots.get(cwd)
@@ -109,20 +109,39 @@ async function partsFor($: EngineInterface, run: TestRun, now: number, columns: 
   return { run, parts: lineParts(run, previousRun(history, run), now, columns, reserve) }
 }
 
+// A draw is cached until something it read changes, so the hour has to end in a state write.
+// One timer, due when the oldest run in latest turns an hour old; each fire re-arms it.
+async function armExpiry($: EngineInterface, state: State): Promise<void> {
+  state.expiry?.cancel()
+  state.expiry = undefined
+  const runs = await read($, latest)
+  if (runs.length === 0) return
+  const due = Math.min(...runs.map(r => r.at)) + BAND_TTL_MS
+  state.expiry = $.clock.after(Math.max(0, due - await $.clock.now()), () => void expire($, state))
+}
+
 // Drops runs past the hour from latest: the write redraws every band that reads it (this one, session-compass).
-async function prune($: EngineInterface): Promise<void> {
+// Only expired runs go; a run dated after `now` (a clock stepped back) stays, and the render hides it.
+async function expire($: EngineInterface, state: State): Promise<void> {
   try {
     const now = await $.clock.now()
-    const kept = await update($, latest, list => visibleRuns(list, now))
-    if (kept.length === 0) await update($, expanded, () => false)
+    const isExpired = (r: TestRun): boolean => now - r.at >= BAND_TTL_MS
+    if ((await read($, latest)).some(isExpired)) {
+      const kept = await update($, latest, list => list.filter(r => !isExpired(r)))
+      if (kept.length === 0) await update($, expanded, () => false)
+    }
+    await armExpiry($, state)
   } catch (err) {
     $.ui.log(`test-board: expired runs not cleared: ${String(err).slice(0, 120)}`)
   }
 }
 
-// A draw is cached until something it read changes, so the hour has to end in a state write.
-function expireAt($: EngineInterface, run: TestRun, now: number): void {
-  $.clock.after(Math.max(0, run.at + BAND_TTL_MS - now), () => void prune($))
+// Queued behind record(), so a run cannot land between reading and writing the dismissal.
+async function dismiss($: EngineInterface): Promise<void> {
+  const head = visibleRuns(await read($, latest), await $.clock.now())[0]
+  if (head === undefined) return
+  await update($, dismissed, () => ({ key: head.key, at: head.at }))
+  await update($, expanded, () => false)
 }
 
 const isDismissed = (d: { key: string; at: number } | null, run: TestRun | undefined): boolean =>
@@ -157,7 +176,7 @@ async function record(
   await update($, latest, list =>
     [run, ...(isFresh || wasDismissed ? [] : list.filter(r => r.key !== run.key && r.stale !== true))].slice(0, MAX_LATEST))
   if (wasDismissed) await update($, dismissed, () => null)
-  expireAt($, run, run.at)
+  await armExpiry($, state)
 }
 
 export const register: Register = on => {
@@ -209,11 +228,13 @@ export const register: Register = on => {
       const key = asKeys(await $.store.get('index')).find(k => k.startsWith(`${root}::`))
       const newest = key === undefined ? undefined : asRuns(await $.store.get(`runs:${key}`))[0]
       const now = await $.clock.now()
-      // A reload fires session.start too: a run past the hour stays off the band (a closed one, the render hides).
-      if (newest !== undefined && visibleRuns([newest], now).length > 0) {
+      // A reload fires session.start too: a run past the hour stays off the band, and a closed band stays closed.
+      const isClosed = (await read($, dismissed)) !== null
+      if (newest !== undefined && !isClosed && visibleRuns([newest], now).length > 0) {
         await update($, latest, () => [{ ...newest, stale: true }])
-        expireAt($, newest, now)
       }
+      // A hot reload cancels the old timer: re-arm for whatever latest now holds.
+      await armExpiry($, state)
     } catch (err) {
       $.ui.log(`test-board: history not loaded: ${String(err).slice(0, 120)}`)
     }
@@ -224,17 +245,18 @@ export const register: Register = on => {
     const held = await read($, latest)
     if (held.length === 0) return next(e)
     const now = await $.clock.now()
-    // The filter backs up the expiry timer, which a hot reload cancels.
+    // Hides runs dated after `now` and covers a timer that has not fired yet.
     const runs = visibleRuns(held, now)
     if (runs.length === 0 || isDismissed(await read($, dismissed), runs[0])) return next(e)
     const isOpen = await read($, expanded)
     const { Box, Button, Text } = $.ui.resolve(e)
     const columns = e.props.bodyColumns
     const rows = await Promise.all(runs.map((run, i) => partsFor($, run, now, columns, i === 0 ? CLOSE_RESERVE : 0)))
-    const shown = runs[0] as TestRun
-    const close = async (): Promise<void> => {
-      await update($, dismissed, () => ({ key: shown.key, at: shown.at }))
-      await update($, expanded, () => false)
+    const close = (): Promise<void> => {
+      state.chain = state.chain.then(() => dismiss($)).catch((err: unknown) => {
+        $.ui.log(`test-board: band not closed: ${String(err).slice(0, 120)}`)
+      })
+      return state.chain
     }
     return (
       <Box flexDirection="column">

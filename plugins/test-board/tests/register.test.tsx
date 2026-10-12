@@ -282,11 +282,31 @@ describe('session start', () => {
     }
     const seen = watchState(on)
     store(on, { index: [old.key], [`runs:${old.key}`]: [old] })
-    mock.clock(on, { now: 5 + 2 * 60 * 60_000 })
+    mock.clock(on, { now: 5 + 60 * 60_000 })
     on('session.cwd', () => ({ value: ROOT }))
     on('process.run', () => ({ value: proc(`${ROOT}\n`) }))
     on('session.start', () => ({ cwd: ROOT }))
     await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true } as never)
+    expect(latest(seen)).toEqual([])
+  })
+
+  test('a stale run loaded at session start leaves the band at its hour', async ($, on) => {
+    const old: TestRun = {
+      suite: 'pytest -q', key: `${ROOT}::pytest -q`, total: 1, passed: 1, failed: 1, skipped: 0,
+      failures: [], exitCode: 1, at: 5, parsed: true,
+    }
+    const seen = watchState(on)
+    store(on, { index: [old.key], [`runs:${old.key}`]: [old] })
+    const clock = mock.clock(on, { now: 5 + 59 * 60_000 })
+    on('session.cwd', () => ({ value: ROOT }))
+    on('process.run', () => ({ value: proc(`${ROOT}\n`) }))
+    on('session.start', () => ({ cwd: ROOT }))
+    emptyBand(on)
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true } as never)
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+    expect(await ui.findAll({ type: 'Button' })).toHaveLength(2)
+    await clock.advance(60_000)
+    expect(await ui.findAll({ type: 'Button' })).toHaveLength(0)
     expect(latest(seen)).toEqual([])
   })
 
@@ -454,7 +474,7 @@ describe('band', () => {
     expect(await ui.find({ text: /pytest -q a\.py/ })).toBeUndefined()
   })
 
-  test('a closed band stays closed through a plugin reload (session.start)', async ($, on) => {
+  test('a closed band stays closed when session.start fires again (as on a reload)', async ($, on) => {
     world(on); bash(on, PYTEST_RAW); emptyBand(on)
     on('session.start', () => ({ cwd: ROOT }))
     await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
@@ -463,6 +483,47 @@ describe('band', () => {
     await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true } as never)
     const again = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
     expect(await again.findAll({ type: 'Button' })).toHaveLength(0)
+  })
+
+  test('a band closed on another worktree’s run stays closed when session.start fires again', async ($, on) => {
+    world(on); bash(on, PYTEST_RAW); emptyBand(on); turns(on)
+    on('session.start', () => ({ cwd: ROOT }))
+    on('agent.spawn', () => ({ model: 'sonnet', agentId: 'a1' }))
+    await $.prompt.submit({ text: 'go' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q a.py' })
+    await $.agent.spawn(spawnArgs({ cwd: '/repo/wt-sub' }))
+    await $.tool.call(inAgent('pytest -q', 'a1'))
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(160) })
+    await ui.press({ key: 'close' })
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true } as never)
+    const again = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(160) })
+    expect(await again.findAll({ type: 'Button' })).toHaveLength(0)
+  })
+
+  test('each expiry writes latest once, dropping only the run that turned an hour old', async ($, on) => {
+    store(on)
+    const clock = mock.clock(on, { now: 1_000_000 })
+    on('session.cwd', () => ({ value: ROOT }))
+    on('process.run', () => ({ value: proc(`${ROOT}\n`) }))
+    bash(on, PYTEST_RAW); emptyBand(on); turns(on)
+    const seen = new Map<string, unknown>()
+    let writes = 0
+    on('state.set', (_$, e, next) => {
+      seen.set(e.key, e.value)
+      if (e.key === 'latest') writes += 1
+      return next(e)
+    })
+    await $.prompt.submit({ text: 'go' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q a.py' })
+    await clock.advance(30 * 60_000)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q b.py' })
+    const before = writes
+    await clock.advance(30 * 60_000)
+    expect(writes).toBe(before + 1)
+    expect(latest(seen).map(r => r.suite)).toEqual(['pytest -q b.py'])
+    await clock.advance(30 * 60_000)
+    expect(writes).toBe(before + 2)
+    expect(latest(seen)).toEqual([])
   })
 
   test('closing collapses the failure list, so the next run draws collapsed', async ($, on) => {

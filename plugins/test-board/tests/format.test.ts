@@ -62,8 +62,10 @@ describe('lineParts', () => {
 })
 
 describe('units', () => {
-  test('cell width', () => expect([cellWidth('テスト計画'), cellWidth('412 ✓  3 ✗ · ▲'), cellWidth('🙂a'), cellWidth('e\u0301')])
-    .toEqual([10, 14, 3, 1]))
+  test('cell width', () => expect([cellWidth('テスト計画'), cellWidth('412 ✓  3 ✗ · ▲ ✕'), cellWidth('🙂a'), cellWidth('e\u0301')])
+    .toEqual([10, 16, 3, 1]))
+  test('emoji take two cells', () => expect(['🚀', '✅', '❌', '⚡', '✨', '🟢', '🪲', '🇯🇵', '❤️'].map(cellWidth))
+    .toEqual([2, 2, 2, 2, 2, 2, 2, 2, 2]))
   test('tail prefixes each present part with the gap', () => expect(tail('a', undefined, 'b')).toBe('   a   b'))
   test('durations', () => expect([formatDuration(9.6), formatDuration(72), formatDuration(61)]).toEqual(['10s', '1m12s', '1m01s']))
   test('clock time', () => expect([formatClock(T), formatClock(new Date(2026, 0, 2, 9, 5).getTime())]).toEqual(['14:32', '09:05']))

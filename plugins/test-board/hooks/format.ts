@@ -4,15 +4,16 @@ export const NARROW_COLUMNS = 80
 export const MAX_SHOWN_FAILURES = 10
 export const GAP = '   '
 
-// East Asian Wide/Fullwidth blocks and emoji: two terminal cells each.
-const WIDE = /[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6\u{1f300}-\u{1f64f}\u{1f900}-\u{1f9ff}\u{20000}-\u{3fffd}]/u
-const segmenter = new Intl.Segmenter()
+// East Asian Wide/Fullwidth blocks, emoji drawn as emoji, and an emoji variation selector: two cells.
+const WIDE = /[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6\u{20000}-\u{3fffd}\ufe0f]|\p{Emoji_Presentation}/u
+const segmenter = typeof Intl === 'object' && 'Segmenter' in Intl ? new Intl.Segmenter() : undefined
+
+const graphemes = (s: string): string[] =>
+  segmenter === undefined ? Array.from(s) : Array.from(segmenter.segment(s), g => g.segment)
 
 /** Terminal cells a string takes: a grapheme is one cell, two when wide. */
 export function cellWidth(s: string): number {
-  let cells = 0
-  for (const { segment } of segmenter.segment(s)) cells += WIDE.test(segment) ? 2 : 1
-  return cells
+  return graphemes(s).reduce((cells, g) => cells + (WIDE.test(g) ? 2 : 1), 0)
 }
 
 /** Each present part with the gap before it, as the band draws the end of a line. */

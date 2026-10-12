@@ -59,8 +59,10 @@ grouping once: the next run replaces the lines on the band. After a hot reload o
 worker restart the band may show the newest stored run dimmed until the next test run,
 if it finished within the last 60 minutes and was not closed with `✕`.
 
-Widths count terminal cells for CJK, Hangul, fullwidth forms and common emoji; other
-wide or zero-width characters count as one cell, so a line holding them can wrap.
+Widths count terminal cells for CJK, Hangul, fullwidth forms and emoji drawn as emoji;
+other wide characters count as one cell, so a line holding them can wrap. A hot reload
+cancels the expiry timer; `session.start` re-arms it, so a line due in between leaves
+a moment late.
 
 ## Develop
 
