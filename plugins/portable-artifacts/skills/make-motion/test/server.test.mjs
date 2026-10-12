@@ -145,7 +145,8 @@ test('vendor routes and template serve 200', () => withServer(async (srv) => {
     assert.equal((await get(srv.url, p)).status, 200, p);
   }
   assert.equal((await get(srv.url, '/vendor/fonts/..%2f..%2fpackage.json')).status, 404);
-  assert.equal((await get(srv.url, '/template/../scripts/lib/errors.mjs')).status, 404);
+  assert.equal((await get(srv.url, '/template/../scripts/lib/spec.mjs')).status, 404);
+  assert.equal((await get(srv.url, '/template/..%2fscripts%2flib%2fspec.mjs')).status, 404);
   assert.equal((await get(srv.url, '/nope')).status, 404);
 }));
 
