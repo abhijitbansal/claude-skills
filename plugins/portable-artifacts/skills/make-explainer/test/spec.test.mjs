@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec } from '../scripts/lib/spec.mjs';
-import { registerCheck } from '../scripts/lib/checks.mjs';
+import { registerCheck, unregisterCheck, checksFor } from '../scripts/lib/checks.mjs';
 import { UsageError } from '../shared/cli.mjs';
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
@@ -92,7 +92,7 @@ test('section fields: required, unknown (closed), wrong type', async () => {
     { path: 'sections[0].points', message: 'unknown property; allowed: type, id, title, text' },
   ]);
   assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a' }] }])), [{ path: 'sections[0].items[0].value', message: 'required' }]);
-  assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a', value: 5 }] }])), [{ path: 'sections[0].items[0].value', message: 'must be string' }]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a', value: [] }] }])), [{ path: 'sections[0].items[0].value', message: 'must be string,number' }]);
   assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a', value: '1', tnoe: 'good' }] }])), [
     { path: 'sections[0].items[0].tnoe', message: 'unknown property; did you mean "tone"?' },
   ]);
@@ -255,25 +255,88 @@ test('checklist keys and groups', async () => {
   ]);
 });
 
-test('chart and motion field rules', async () => {
-  const bare = { type: 'chart' };
-  assert.deepEqual(await errorsOf(doc([bare])), [
-    { path: 'sections[0]', message: 'a chart needs either dashboard + chart (a dashboard.json path and a chart id) or inline data + kind; add one' },
+test('chart: exactly one of inline data or dashboard + chart', async () => {
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart' }])), [
+    { path: 'sections[0]', message: 'a chart needs either inline data (data + kind) or dashboard + chart; add one' },
   ]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart', caption: 'c', interactive: true }])), [
+    { path: 'sections[0]', message: 'a chart needs either inline data (data + kind) or dashboard + chart; add one' },
+  ]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart', dashboard: 'd.json', chart: 'c1', data: [{ a: 1 }] }])), [
+    { path: 'sections[0].data', message: '"data" applies to inline data charts; remove it or drop dashboard' },
+  ]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart', chart: 'c1', data: [{ a: 1 }], kind: 'bar' }])), [
+    { path: 'sections[0].dashboard', message: 'required when chart is set' },
+    { path: 'sections[0].kind', message: '"kind" applies to inline data charts; remove it or drop dashboard' },
+    { path: 'sections[0].data', message: '"data" applies to inline data charts; remove it or drop dashboard' },
+  ]);
+});
+
+test('chart: dashboard mode needs dashboard + chart and rejects inline-chart fields', async () => {
   assert.deepEqual(await errorsOf(doc([{ type: 'chart', dashboard: 'd.json' }])), [{ path: 'sections[0].chart', message: 'required when dashboard is set' }]);
   assert.deepEqual(await errorsOf(doc([{ type: 'chart', chart: 'c1' }])), [{ path: 'sections[0].dashboard', message: 'required when chart is set' }]);
-  assert.deepEqual(await errorsOf(doc([{ type: 'chart', dashboard: 'd.json', chart: 'c1' }])), []);
-  assert.deepEqual(await errorsOf(doc([{ type: 'chart', dashboard: 'd.json', chart: 'c1', data: [{ a: 1 }] }])), [
-    { path: 'sections[0].data', message: 'data cannot be combined with dashboard/chart; use inline data or a dashboard chart, not both' },
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart', dashboard: 'd.json', chart: 'c1', caption: 'c', interactive: true }])), []);
+  for (const field of ['kind', 'x', 'y', 'color', 'size', 'value', 'format']) {
+    assert.deepEqual(await errorsOf(doc([{ type: 'chart', dashboard: 'd.json', chart: 'c1', [field]: 'f' }])), [
+      { path: `sections[0].${field}`, message: `"${field}" applies to inline data charts; remove it or drop dashboard` },
+    ], field);
+  }
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart', dashboard: 'd.json', chart: 'c1', kind: 'bar', x: 'a', y: 'b' }])), [
+    { path: 'sections[0].kind', message: '"kind" applies to inline data charts; remove it or drop dashboard' },
+    { path: 'sections[0].x', message: '"x" applies to inline data charts; remove it or drop dashboard' },
+    { path: 'sections[0].y', message: '"y" applies to inline data charts; remove it or drop dashboard' },
   ]);
+});
+
+test('chart: inline data needs kind and at least one row', async () => {
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart', data: [{ a: 1 }] }])), [
+    { path: 'sections[0].kind', message: 'required for inline data charts; set kind to a chart kind such as "bar"' },
+  ]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart', kind: 'bar', data: [] }])), [
+    { path: 'sections[0].data', message: 'data has 0 entries; at least 1 required — add more' },
+  ]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart', kind: 'bubble', x: 'a', y: 'b', size: 's', color: 'c', value: 'v', format: 'f', data: [{ a: 1 }] }])), []);
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart', kind: 'bar', data: Array(500).fill({ a: 1 }) }])), []);
   assert.deepEqual(await errorsOf(doc([{ type: 'chart', kind: 'bar', data: Array(501).fill({ a: 1 }) }])), [
     { path: 'sections[0].data', message: 'data has 501 entries; the limit is 500 — chart a summary or use a dashboard instead' },
   ]);
-  assert.deepEqual(await errorsOf(doc([{ type: 'chart', data: [1] }])), [{ path: 'sections[0].data[0]', message: 'must be object' }]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart', kind: 'bar', data: [1] }])), [{ path: 'sections[0].data[0]', message: 'must be object' }]);
+});
+
+test('motion needs video or spec', async () => {
   assert.deepEqual(await errorsOf(doc([{ type: 'motion' }])), [
     { path: 'sections[0]', message: 'a motion section needs video (an .mp4 path) or spec (a motion.json path); add one' },
   ]);
   assert.deepEqual(await errorsOf(doc([{ type: 'motion', spec: 'motion.json' }])), []);
+});
+
+test('callout requires tone, title and text', async () => {
+  assert.deepEqual(await errorsOf(doc([{ type: 'callout', tone: 'info', text: 'x' }])), [{ path: 'sections[0].title', message: 'required' }]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'callout' }])), [
+    { path: 'sections[0].tone', message: 'required' },
+    { path: 'sections[0].title', message: 'required' },
+    { path: 'sections[0].text', message: 'required' },
+  ]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'callout', tone: 'info', title: 'T', text: 'x' }])), []);
+});
+
+test('kpis values may be numbers', async () => {
+  assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a', value: 612 }, { label: 'b', value: 0.5 }, { label: 'c', value: '42' }] }])), []);
+  assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a', value: true }] }])), [
+    { path: 'sections[0].items[0].value', message: 'must be string,number' },
+  ]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a', value: '  ' }] }])), [
+    { path: 'sections[0].items[0].value', message: 'must contain at least one non-space character' },
+  ]);
+});
+
+test('preset "slides" with mode "page" is a contradiction', async () => {
+  const msg = { path: 'mode', message: 'preset "slides" renders as slides; remove mode or set it to "slides"' };
+  assert.deepEqual(await errorsOf(doc([text()], { preset: 'slides', mode: 'page' })), [msg]);
+  assert.deepEqual(await errorsOf(doc([text()], { preset: 'slides', mode: 'slides' })), []);
+  assert.deepEqual(await errorsOf(doc([text()], { preset: 'slides' })), []);
+  assert.deepEqual(await errorsOf(doc([text()], { preset: 'recap', mode: 'page' })), []);
+  assert.deepEqual(await errorsOf(doc([text()], { preset: 'recap', mode: 'slides' })), []);
 });
 
 test('section ids: spelling and uniqueness', async () => {
@@ -454,16 +517,34 @@ test('image.src must exist inside the spec folder with an image extension', asyn
 
 test('registerCheck adds a per-type check that sees the section, its path and the folder', async () => {
   const seen = [];
-  registerCheck('callout', ({ section: s, path: at, dir, spec }) => {
+  const sync = ({ section: s, path: at, dir, spec }) => {
     seen.push([s.text, at, dir, spec.title]);
     return s.text === 'bad' ? [{ path: `${at}.text`, message: 'registered check says no' }] : [];
-  });
-  registerCheck('callout', async ({ path: at }) => [{ path: at, message: 'async check ran' }]);
-  const errors = await errorsOf(doc([text(), { type: 'callout', tone: 'info', text: 'bad' }]));
-  assert.deepEqual(errors, [
-    { path: 'sections[1].text', message: 'registered check says no' },
-    { path: 'sections[1]', message: 'async check ran' },
-  ]);
-  assert.deepEqual(seen, [['bad', 'sections[1]', FIXTURES, 'T']]);
-  assert.throws(() => registerCheck('callout', 'nope'), /must be a function/);
+  };
+  const later = async ({ path: at }) => [{ path: at, message: 'async check ran' }];
+  const callout = (t) => ({ type: 'callout', tone: 'info', title: 'T', text: t });
+  registerCheck('callout', sync);
+  registerCheck('callout', later);
+  try {
+    assert.deepEqual(await errorsOf(doc([text(), callout('bad')])), [
+      { path: 'sections[1].text', message: 'registered check says no' },
+      { path: 'sections[1]', message: 'async check ran' },
+    ]);
+    assert.deepEqual(seen, [['bad', 'sections[1]', FIXTURES, 'T']]);
+    assert.throws(() => registerCheck('callout', 'nope'), /must be a function/);
+  } finally {
+    unregisterCheck('callout', sync);
+    unregisterCheck('callout', later);
+  }
+  assert.deepEqual(await errorsOf(doc([callout('bad')])), []);
+});
+
+test('unregisterCheck removes one check and tolerates unknown ones', () => {
+  const fn = () => [];
+  registerCheck('table', fn);
+  assert.ok(checksFor('table').includes(fn));
+  unregisterCheck('table', fn);
+  assert.ok(!checksFor('table').includes(fn));
+  unregisterCheck('table', fn);
+  unregisterCheck('nothing-here', fn);
 });

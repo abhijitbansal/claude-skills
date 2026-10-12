@@ -15,8 +15,21 @@ export function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (c) => ESCAPES[c]);
 }
 
+// End of a link url: the ")" that closes "(", with inner "(...)" pairs balanced.
+// -1 when the parenthesis never closes.
+function urlEnd(s, from) {
+  let depth = 0;
+  for (let j = from; j < s.length; j++) {
+    if (s[j] === '(') depth++;
+    else if (s[j] === ')' && depth-- === 0) return j;
+  }
+  return -1;
+}
+
 function safeUrl(url) {
   if (!SAFE_URL.test(url)) return false;
+  // user:password@host links are the classic "looks like good.example" trick.
+  if (url.slice(url.indexOf('//') + 2).split(/[/?#]/, 1)[0].includes('@')) return false;
   try {
     const { protocol } = new URL(url);
     return protocol === 'http:' || protocol === 'https:';
@@ -56,7 +69,7 @@ function inline(s, { links, depth }) {
     } else if (c === '[' && links) {
       const close = s.indexOf(']', i + 1);
       if (close > i + 1 && s[close + 1] === '(') {
-        const end = s.indexOf(')', close + 2);
+        const end = urlEnd(s, close + 2);
         const url = end > 0 ? s.slice(close + 2, end) : '';
         if (end > 0 && safeUrl(url)) {
           const label = inline(s.slice(i + 1, close), { links: false, depth: depth + 1 });

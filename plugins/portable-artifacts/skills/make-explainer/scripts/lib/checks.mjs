@@ -13,6 +13,13 @@ export function registerCheck(type, fn) {
   CHECKS.set(type, [...(CHECKS.get(type) ?? []), fn]);
 }
 
+// Removes one registered check (the same function object); unknown ones are ignored.
+export function unregisterCheck(type, fn) {
+  const rest = (CHECKS.get(type) ?? []).filter((f) => f !== fn);
+  if (rest.length > 0) CHECKS.set(type, rest);
+  else CHECKS.delete(type);
+}
+
 export function checksFor(type) {
   return CHECKS.get(type) ?? [];
 }

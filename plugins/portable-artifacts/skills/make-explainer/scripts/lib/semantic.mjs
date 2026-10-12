@@ -38,6 +38,9 @@ export function checkTop(spec, errors) {
   length(errors, spec, 'subtitle', '', LIMITS.subtitle);
   for (const key of META_KEYS) if (spec.meta) length(errors, spec.meta, key, 'meta', LIMITS.meta);
   count(errors, spec.sections, '', 'sections', LIMITS.sections, 'cut some or split the explainer');
+  if (spec.preset === 'slides' && spec.mode === 'page') {
+    errors.push({ path: 'mode', message: 'preset "slides" renders as slides; remove mode or set it to "slides"' });
+  }
   if (spec.theme !== undefined) {
     const themes = listThemes();
     if (!themes.includes(spec.theme)) errors.push({ path: 'theme', message: `unknown theme ${q(spec.theme)}; ${suggestion(spec.theme, themes)}` });
@@ -77,19 +80,29 @@ function checkTable(s, at, errors) {
   }
 }
 
+// Inline-chart fields; a dashboard chart takes its definition from the dashboard.
+const INLINE_CHART_FIELDS = ['kind', 'x', 'y', 'color', 'size', 'value', 'format', 'data'];
+
 function checkChart(s, at, errors) {
-  const hasData = s.data !== undefined;
-  const hasDashboard = s.dashboard !== undefined;
-  const hasId = s.chart !== undefined;
-  if (hasData) {
-    count(errors, s.data, at, 'data', [0, LIMITS.chartRows], 'chart a summary or use a dashboard instead');
-    if (hasDashboard || hasId) {
-      errors.push({ path: pathJoin(at, 'data'), message: 'data cannot be combined with dashboard/chart; use inline data or a dashboard chart, not both' });
+  const dashboardMode = s.dashboard !== undefined || s.chart !== undefined;
+  if (!dashboardMode && s.data === undefined) {
+    errors.push({ path: at, message: 'a chart needs either inline data (data + kind) or dashboard + chart; add one' });
+    return;
+  }
+  if (dashboardMode) {
+    for (const field of ['dashboard', 'chart']) {
+      if (s[field] === undefined) errors.push({ path: pathJoin(at, field), message: `required when ${field === 'chart' ? 'dashboard' : 'chart'} is set` });
     }
-  } else if (hasDashboard !== hasId) {
-    errors.push({ path: pathJoin(at, hasDashboard ? 'chart' : 'dashboard'), message: `required when ${hasDashboard ? 'dashboard' : 'chart'} is set` });
-  } else if (!hasDashboard) {
-    errors.push({ path: at, message: 'a chart needs either dashboard + chart (a dashboard.json path and a chart id) or inline data + kind; add one' });
+    for (const field of INLINE_CHART_FIELDS) {
+      if (s[field] !== undefined) {
+        errors.push({ path: pathJoin(at, field), message: `${q(field)} applies to inline data charts; remove it or drop dashboard` });
+      }
+    }
+    return;
+  }
+  count(errors, s.data, at, 'data', [1, LIMITS.chartRows], 'chart a summary or use a dashboard instead');
+  if (s.kind === undefined) {
+    errors.push({ path: pathJoin(at, 'kind'), message: 'required for inline data charts; set kind to a chart kind such as "bar"' });
   }
 }
 

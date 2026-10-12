@@ -7,13 +7,14 @@ import path from 'node:path';
 // `exts` (optional) is a list like ['.png', '.svg']; matching is case-insensitive.
 export function resolveRef(dir, p, { exts } = {}) {
   if (typeof p !== 'string' || p.trim() === '') return { error: 'must be a path to a file in the spec folder' };
+  if (path.isAbsolute(p)) return { error: `${JSON.stringify(p)} is absolute; use a path relative to the spec folder` };
   if (exts && !exts.includes(path.extname(p).toLowerCase())) {
     return { error: `must be a ${exts.join(', ')} file; got ${JSON.stringify(path.extname(p) || p)}` };
   }
   const base = path.resolve(dir);
   const wanted = path.resolve(base, p);
   const rel = path.relative(base, wanted);
-  if (rel === '' || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
+  if (rel === '' || rel === '..' || rel.startsWith(`..${path.sep}`)) {
     return { error: `${JSON.stringify(p)} is outside the spec folder; move the file under ${base} and use a relative path` };
   }
   let real;

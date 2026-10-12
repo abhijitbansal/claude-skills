@@ -46,6 +46,35 @@ test('https and http links render with rel="noopener noreferrer"', () => {
   );
 });
 
+test('parentheses inside a url are balanced, not cut at the first )', () => {
+  assert.equal(
+    renderMarkdown('[x](https://a.com/a_(b))'),
+    '<p><a href="https://a.com/a_(b)" rel="noopener noreferrer">x</a></p>',
+  );
+  assert.equal(
+    renderMarkdown('see [wiki](https://en.wikipedia.org/wiki/Foo_(bar)_(baz)) now'),
+    '<p>see <a href="https://en.wikipedia.org/wiki/Foo_(bar)_(baz)" rel="noopener noreferrer">wiki</a> now</p>',
+  );
+  assert.equal(renderMarkdown('[x](https://a.com/a_(b)'), '<p>[x](https://a.com/a_(b)</p>');
+  assert.equal(
+    renderMarkdown('([x](https://a.com/p)) end'),
+    '<p>(<a href="https://a.com/p" rel="noopener noreferrer">x</a>) end</p>',
+  );
+});
+
+test('urls with userinfo are plain text, not links', () => {
+  for (const url of ['https://user:pw@evil.example', 'https://evil.example@good.example/', 'http://@x.example', 'https://good.example@', 'https://a:b@c.example/path?x=y@z']) {
+    const html = renderMarkdown(`[x](${url})`);
+    assertInert(html);
+    assert.ok(!html.includes('<a'), `${url} rendered as a link: ${html}`);
+  }
+  assert.equal(renderMarkdown('[x](https://user:pw@evil.example)'), '<p>[x](https://user:pw@evil.example)</p>');
+  assert.equal(
+    renderMarkdown('[x](https://good.example/path?mail=a@b.example#c@d)'),
+    '<p><a href="https://good.example/path?mail=a@b.example#c@d" rel="noopener noreferrer">x</a></p>',
+  );
+});
+
 // ---- Review Focus 1: injection vectors --------------------------------
 
 test('javascript: links are plain escaped text', () => {

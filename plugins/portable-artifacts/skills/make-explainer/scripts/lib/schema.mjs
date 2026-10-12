@@ -51,6 +51,8 @@ function object(required, properties) {
 
 const tone = { enum: TONES };
 const cell = { type: ['string', 'number'] };
+// A number or non-blank text (the pattern applies to strings only).
+const metric = { type: ['string', 'number'], pattern: NON_SPACE };
 
 // A section schema: every section has type, id and title.
 function section(type, required, props) {
@@ -61,7 +63,7 @@ export const SECTION_SCHEMAS = {
   tldr: section('tldr', ['text'], { text, points: list(text), tone }),
   text: section('text', ['text'], { text }),
   kpis: section('kpis', ['items'], {
-    items: items({ label: text, value: text, delta: text, tone, note: text }, ['label', 'value']),
+    items: items({ label: text, value: metric, delta: text, tone, note: text }, ['label', 'value']),
   }),
   cards: section('cards', ['items'], {
     items: items({ title: text, text, icon: text, tone, tag: text }, ['title', 'text']),
@@ -92,7 +94,7 @@ export const SECTION_SCHEMAS = {
     columns: items({ title: text, points: list(text), tone }, ['title', 'points']),
     verdict: text,
   }),
-  callout: section('callout', ['tone', 'text'], { tone: { enum: CALLOUT_TONES }, text }),
+  callout: section('callout', ['tone', 'title', 'text'], { tone: { enum: CALLOUT_TONES }, text }),
   code: section('code', ['code'], { code: text, language: text, caption: text }),
   details: section('details', ['summary', 'text'], { summary: text, text }),
   checklist: section('checklist', ['key', 'groups'], {
@@ -113,6 +115,8 @@ export const SECTION_SCHEMAS = {
     x: text,
     y: text,
     color: text,
+    size: text,
+    value: text,
     format: text,
     caption: text,
     interactive: { type: 'boolean' },

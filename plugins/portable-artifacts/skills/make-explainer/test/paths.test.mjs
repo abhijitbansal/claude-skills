@@ -38,9 +38,21 @@ test('paths that leave the folder are refused, existing or not', () => {
     const msg = (p) => `${JSON.stringify(p)} is outside the spec folder; move the file under ${dir} and use a relative path`;
     assert.deepEqual(resolveRef(dir, '../secret.png'), { error: msg('../secret.png') });
     assert.deepEqual(resolveRef(dir, 'sub/../../secret.png'), { error: msg('sub/../../secret.png') });
-    assert.deepEqual(resolveRef(dir, path.join(root, 'secret.png')), { error: msg(path.join(root, 'secret.png')) });
     assert.deepEqual(resolveRef(dir, '../nope.png'), { error: msg('../nope.png') });
     assert.deepEqual(resolveRef(dir, '.'), { error: msg('.') });
+  } finally { done(); }
+});
+
+test('absolute paths are refused, inside the folder or not', () => {
+  const { root, dir, done } = folder();
+  try {
+    const msg = (p) => ({ error: `${JSON.stringify(p)} is absolute; use a path relative to the spec folder` });
+    const inside = path.join(dir, 'a.png');
+    assert.deepEqual(resolveRef(dir, inside), msg(inside));
+    assert.deepEqual(resolveRef(dir, inside, { exts: ['.png'] }), msg(inside));
+    const outside = path.join(root, 'secret.png');
+    assert.deepEqual(resolveRef(dir, outside), msg(outside));
+    assert.deepEqual(resolveRef(dir, '/etc/passwd'), msg('/etc/passwd'));
   } finally { done(); }
 });
 
