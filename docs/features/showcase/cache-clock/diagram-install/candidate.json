@@ -535,7 +535,7 @@
       "dot": "violet",
       "title": "VS Code, measured 11-12 Oct 2026",
       "items": [
-        "Loads from the same ~/.copilot/extensions/cache-clock, only with \"chat.canvases.enabled\": true (experimental); reload and start a new chat",
+        "Loads from a project install (install.sh --project: .github/extensions/cache-clock), only with \"chat.canvases.enabled\": true (experimental); reload and start a new chat",
         "Typed in full, /cache-clock works but is not listed in the / menu; its card shows as a question with OK",
         "Heads-up and sending-cold note reach only VS Code's log; sessions keep usage checkpoints, so the report counts totals"
       ]

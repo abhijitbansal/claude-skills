@@ -93,7 +93,8 @@ test("piped install downloads every extension file into a plain copy", () => {
   for (const file of ["extension.mjs", "report.mjs", ...readdirSync(join(ROOT, "extension", "lib")).map((f) => `lib/${f}`)]) {
     assert.ok(existsSync(join(p.dest, file)), `missing ${file}`);
   }
-  assert.match(r.stdout, /chat\.canvases\.enabled/);
+  assert.match(r.stdout, /VS Code.*from a project/);
+  assert.match(r.stdout, /sh -s -- --project/);
 });
 
 test("the download list names every file the extension ships", () => {
@@ -134,4 +135,57 @@ test("a piped install ignores an extension folder in the current directory", () 
   assert.equal(r.status, 0, r.stderr);
   assert.ok(!lstatSync(p.dest).isSymbolicLink(), "it downloads instead of linking the decoy");
   assert.notEqual(readFileSync(join(p.dest, "extension.mjs"), "utf8"), "// not cache-clock\n");
+});
+
+// --project puts the extension in <git root>/.github/extensions, where VS Code's Copilot chat loads it.
+function project({ git = true } = {}) {
+  const base = mkdtempSync(join(tmpdir(), "cc-project-"));
+  const repo = join(base, "repo");
+  mkdirSync(join(repo, "src", "deep"), { recursive: true });
+  if (git) spawnSync("git", ["init", "-q", repo]);
+  return { repo, dest: join(repo, ".github", "extensions", "cache-clock") };
+}
+
+test("--project copies into the git root's .github/extensions, from a subfolder, and uninstalls", () => {
+  const s = sandbox();
+  const p = project();
+  const run = (...args) => spawnSync("sh", [join(s.checkout, "install.sh"), ...args], {
+    cwd: join(p.repo, "src", "deep"), encoding: "utf8", env: { ...process.env, COPILOT_HOME: s.home },
+  });
+  const r = run("--project");
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!lstatSync(p.dest).isSymbolicLink(), "a project install is a copy, never a link into a checkout");
+  assert.ok(existsSync(join(p.dest, "lib", "wiring.mjs")));
+  assert.ok(!existsSync(s.dest), "the user install is left alone");
+  assert.match(r.stdout, /\.github\/extensions\/cache-clock/);
+  assert.match(r.stdout, /chat\.canvases\.enabled/);
+
+  assert.equal(run("--project").status, 0, "reinstalls over its own copy");
+  assert.equal(run("--project", "--uninstall").status, 0);
+  assert.ok(!existsSync(p.dest));
+});
+
+test("--project takes a folder argument, and a folder outside git is used as is", () => {
+  const s = sandbox();
+  const p = project({ git: false });
+  assert.equal(s.run("--project", p.repo).status, 0);
+  assert.ok(existsSync(join(p.dest, "extension.mjs")));
+});
+
+test("--project refuses a missing folder", () => {
+  const s = sandbox();
+  const r = s.run("--project", join(tmpdir(), "cc-no-such-project"));
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /no such folder/);
+});
+
+test("piped --project downloads a copy into the project", () => {
+  const p = project();
+  const r = spawnSync("sh", ["-s", "--", "--project"], {
+    input: readFileSync(join(ROOT, "install.sh"), "utf8"), cwd: p.repo, encoding: "utf8",
+    env: { ...process.env, COPILOT_HOME: join(p.repo, "..", "copilot"), CACHE_CLOCK_BASE_URL: pathToFileURL(join(ROOT, "extension")).href },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(existsSync(join(p.dest, "report.mjs")));
+  assert.deepEqual(readdirSync(join(p.repo, ".github", "extensions")), ["cache-clock"], "no stage folder left behind");
 });

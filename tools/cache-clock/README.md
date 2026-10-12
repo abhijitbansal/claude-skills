@@ -29,10 +29,18 @@ That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` m
 - **Copilot CLI:** start a new `copilot` session. Copilot asks once whether the extension
   may "register hooks": allow it (option 2 remembers it for that repo). Then run
   `/cache-clock help`.
-- **VS Code Copilot chat:** add `"chat.canvases.enabled": true` to your VS Code settings,
-  reload the window and start a new chat. VS Code loads extensions only when that
-  (experimental) setting is on. Type `/cache-clock` in full: VS Code does not list it in
-  the `/` menu.
+- **VS Code Copilot chat:** VS Code loads the extension from the project, not from
+  `~/.copilot/extensions`. Install it into each repo you use it in, from that repo:
+
+  ```sh
+  curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh -s -- --project
+  ```
+
+  That copies it into `<git root>/.github/extensions/cache-clock`; commit it to share it
+  with the repo, or add `.github/extensions/cache-clock/` to `.git/info/exclude` to keep it
+  local. Then add `"chat.canvases.enabled": true` to your VS Code settings, reload the
+  window and start a new chat. VS Code loads extensions only when that (experimental)
+  setting is on. Type `/cache-clock` in full: VS Code does not list it in the `/` menu.
 
 > [!WARNING]
 > **If `/cache-clock` does nothing after install:** Copilot CLI may still need experimental
@@ -40,7 +48,10 @@ That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` m
 > the permission prompts when it asks.
 
 From a clone, `sh tools/cache-clock/install.sh` links the extension instead, so a
-`git pull` updates it; `--copy` copies, `--uninstall` removes it. The installer replaces
+`git pull` updates it; `--copy` copies, `--uninstall` removes it. `--project [DIR]` copies
+into DIR's git root (default: the current folder's) instead of `~/.copilot`, and
+`--uninstall --project [DIR]` removes that copy. A project copy is always a copy, never a
+link, and wins over the user install in that repo. The installer replaces
 only its own install (one with cache-clock's own files) or a dangling link at that path, and
 a failed download leaves nothing behind. Tested on Copilot CLI 1.0.95 and VS Code's Copilot agent host
 (runtime 1.0.92-4.unstable).
@@ -186,8 +197,11 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 `1.0.92-4.unstable`):
 
 - **It loads only with `"chat.canvases.enabled": true`.** VS Code asks its runtime for
-  extensions only in canvas-enabled sessions. With the setting on, it loads the same
-  `~/.copilot/extensions/cache-clock` install; nothing else to install.
+  extensions only in canvas-enabled sessions.
+- **It loads from the project, not `~/.copilot/extensions`.** In testing, VS Code's chat
+  loaded a copy in the repo's `.github/extensions/cache-clock`, and on a second machine
+  the user install did not load. Install it per repo with `--project`. A project
+  copy does not update itself: rerun the `--project` install to pick up a new version.
 - **`/cache-clock` works typed in full**, but VS Code's `/` menu does not list it.
 - **Output comes as a question card.** VS Code's chat shows plain extension messages only
   as error boxes, so in VS Code the card, the help and setting changes appear as a card
@@ -222,7 +236,7 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 - **Refusal memory is one shared file.** Two Copilot sessions refusing in the same instant
   can overwrite each other's entry in `refused.json`; the losing session is asked again.
 - **VS Code depends on an experimental setting** (`chat.canvases.enabled`), which VS Code
-  may rename or remove.
+  may rename or remove, and needs a copy in every repo (`--project`).
 - Claude was measured through `auto` only; the seat used for testing could not pick
   Claude models directly. Each boundary result above is a single run.
 
