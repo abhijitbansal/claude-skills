@@ -18,7 +18,7 @@
 - Default output: `${PA_OUTPUT_DIR:-~/.agent/diagrams}/<slug>.html`; `--out <file.html|dir>` overrides. Never write elsewhere implicitly.
 - Visual rules: hairline `--line` borders, `--surface` fills, `--page` group fills, body font 600 labels, `--text-3` notes, mono only in tooltips/ids, edges orthogonal with 6 px rounded corners, edge labels on a `--surface` plate. Tones colour only the border (1.5 px) and icon. No gradients, shadows, glow, blur, emoji, or accent bars. Shape encodes kind.
 - Limits: ≤ 60 nodes, ≤ 120 edges, ≤ 25 steps, label ≤ 48 chars (≤ 2 wrapped lines), note ≤ 60 chars (1 line), edge label ≤ 40 chars, ≤ 12 participants, ≤ 60 messages, group nesting ≤ 3.
-- Deterministic builds: same spec + same versions → byte-identical HTML except the build timestamp (which is the only time-dependent field and is excluded from golden comparisons).
+- Deterministic builds: same spec + same versions → byte-identical HTML (there is no build timestamp; nothing in the page depends on build time).
 - Size budget: ≤ 400 KB per built example.
 - Zero runtime npm deps in `shared/`. Dev-only deps never needed at run time (catalogs and metrics are committed files).
 - Every validator error has a JSON path and a did-you-mean where a closed set exists.
@@ -174,7 +174,7 @@ argument-hint: what to draw, e.g. "checkout request path from browser to orders 
 - `diagramCss() -> string` — the classes above using `var(--line)`, `var(--surface)`, etc.; animation keyframes for `.pa-animate .pa-edge path` (dash flow) inside `@media (prefers-reduced-motion: no-preference)`.
 - `lintGeometry(geometry) -> {path, message}[]` — node overlap, edge label overlapping a node, text wider than box (using `measure`), node outside its group, payload size check is separate (Task 8).
 - `api.mjs`: `buildDiagram(spec, { theme }) -> Promise<{ svg, css, width, height, steps, ids }>` where `steps` = spec steps or auto steps from `layers` (`[{ title: 'Step n', show: [...ids], focus: [...] }]`, auto titles name the layer's first node: `"<Label> and 2 more"`); `viewerRuntime() -> string` (from Task 8; export a stub that Task 8 fills is NOT allowed — implement `viewerRuntime` in Task 8 and add it to `api.mjs` then; in this task `api.mjs` exports `buildDiagram` only).
-- Tests: render goldens per example (normalised: strip the timestamp); escaping (`label: '<b>&"x"'` appears escaped, no `<b>` element); markers referenced exist; lint RED proof: inject overlapping geometry → errors with node ids; `validateSpec` with layout surfaces lint errors with spec paths (`nodes[3].label: text is 212 px wide; the box fits 180 px — shorten the label`); CJK label overflow caught (Review Focus 3).
+- Tests: render goldens per example (byte-for-byte, no normalising); escaping (`label: '<b>&"x"'` appears escaped, no `<b>` element); markers referenced exist; lint RED proof: inject overlapping geometry → errors with node ids; `validateSpec` with layout surfaces lint errors with spec paths (`nodes[3].label: text is 212 px wide; the box fits 180 px — shorten the label`); CJK label overflow caught (Review Focus 3).
 
 ---
 

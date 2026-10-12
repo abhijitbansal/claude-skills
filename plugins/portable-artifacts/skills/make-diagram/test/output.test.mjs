@@ -19,6 +19,7 @@ test('slugify: lowercase [a-z0-9-], at most 60 chars, fallback "diagram"', () =>
 test('--out ending in .html is the file itself', () => {
   assert.equal(resolveOutput({ out: '/tmp/x/my.html', title: 'T', env: {}, home }), '/tmp/x/my.html');
   assert.equal(resolveOutput({ out: 'rel/my.html', title: 'T', env: {}, home }), path.resolve('rel/my.html'));
+  assert.equal(resolveOutput({ out: '/tmp/x/my.htm', title: 'T', env: {}, home }), '/tmp/x/my.htm', '.htm is a file too');
 });
 
 test('--out otherwise is a directory that receives <slug>.html', () => {

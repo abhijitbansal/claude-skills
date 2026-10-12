@@ -13,8 +13,8 @@ any agent that can run shell commands. Nothing leaves your machine.
 - **Checked before you see it**: validation lays the diagram out and lints
   the geometry (text that does not fit its box, overlapping nodes, labels on
   top of nodes), so a spec that validates is buildable.
-- **Deterministic**: the same spec and versions give the same bytes, apart
-  from a build timestamp.
+- **Deterministic**: the same spec and versions give byte-identical
+  pages (there is no build timestamp).
 - **A page worth opening**: zoom and pan, hover tracing of a node's edges,
   edge-flow animation, light and dark, SVG and PNG export, and a
   step-by-step presentation mode (`P`).

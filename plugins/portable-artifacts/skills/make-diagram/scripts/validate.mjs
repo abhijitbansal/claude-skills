@@ -4,6 +4,7 @@
 import { loadSpec, validateSpec } from './lib/spec.mjs';
 import { UsageError, parseCli, exitUsage, evalLog } from '../shared/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
+import { exitInternal } from './lib/internal-error.mjs';
 
 const USAGE = 'node scripts/validate.mjs <spec.diagram.json> [--json]';
 const OPTIONS = { json: { type: 'boolean' } };
@@ -19,7 +20,7 @@ try {
   evalLog(result.ok, result.errors.length);
   process.exitCode = result.ok ? 0 : 1;
 } catch (e) {
-  if (!(e instanceof UsageError)) throw e;
   evalLog(false, 1);
-  exitUsage(e, { json });
+  if (e instanceof UsageError) exitUsage(e, { json });
+  else exitInternal(e, { json });
 }

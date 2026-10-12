@@ -16,6 +16,8 @@ export const LIMITS = Object.freeze({
   steps: 25,
   participants: 12,
   messages: 60,
+  title: 120,
+  subtitle: 160,
   label: 48,
   note: 60,
   edgeLabel: 40,

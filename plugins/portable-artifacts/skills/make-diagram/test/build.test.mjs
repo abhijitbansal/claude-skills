@@ -150,7 +150,7 @@ test('page parts: toolbar, SVG, text alternative, data block and runtime', () =>
   assert.deepEqual(Object.keys(data).sort(), ['adjacency', 'animate', 'boxes', 'edges', 'frames', 'height', 'ids', 'parents', 'stem', 'steps', 'title', 'type', 'width']);
   assert.deepEqual(data.parents, { vpc: 'aws', api: 'vpc', db: 'vpc' });
   assert.deepEqual(data.adjacency.api.nodes.sort(), ['db', 'pay', 'web']);
-  assert.deepEqual(data.edges.e0, ['web', 'api']);
+  assert.deepEqual(data.edges['edge-0'], ['web', 'api']);
   assert.equal(data.boxes.aws.length, 4);
   assert.equal(data.animate, false);
   assert.equal(data.steps.at(-1).title, 'Everything');
@@ -191,6 +191,9 @@ test('the text alternative of a sequence lists the messages in order', () => {
   assert.equal(order[0], 'Shopper → Web app: press Pay');
   assert.ok(order.length >= 8);
   assert.match(text, /<h3>Frames<\/h3><ul><li>loop until approved: messages 4 to 8<\/li>/);
+  const notes = text.match(/<h3>Notes<\/h3><ul>(.*?)<\/ul>/)[1];
+  assert.match(notes, /<li>idempotency key sent on every charge \(over [^<]+ and [^<]+, after message 4\)<\/li>/);
+  assert.match(notes, /<li>order stays pending until the provider answers \(over [^<]+, after message 3\)<\/li>/);
 });
 
 test('hostile text in every field is escaped in the whole page (Review Focus 1)', () => {

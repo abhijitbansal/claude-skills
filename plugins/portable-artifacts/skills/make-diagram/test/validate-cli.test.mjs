@@ -92,3 +92,26 @@ test('a broken EVAL_LOG path never changes the outcome', () => {
   const r = run([fixture('flow')], { EVAL_LOG: '/nonexistent-dir/x/log.jsonl' });
   assert.equal(r.status, 0);
 });
+
+// ---- a bug inside the tool is one line, not a stack trace -------------------
+
+const PRELOAD = fileURLToPath(new URL('./fixtures/crash-preload.mjs', import.meta.url));
+const BUILD = fileURLToPath(new URL('../scripts/build.mjs', import.meta.url));
+
+for (const [name, script] of [['validate', VALIDATE], ['build', BUILD]]) {
+  const crash = (args) => spawnSync(process.execPath, ['--import', PRELOAD, script, fixture('flow'), ...args], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '', PA_OUTPUT_DIR: os.tmpdir() } });
+
+  test(`${name}: an internal error prints one line and exits 1`, () => {
+    const r = crash([]);
+    assert.equal(r.status, 1);
+    assert.equal(r.stderr, 'internal error: boom; please report it\n');
+    assert.equal(r.stdout, '');
+  });
+
+  test(`${name} --json: an internal error is one { ok: false } line`, () => {
+    const r = crash(['--json']);
+    assert.equal(r.status, 1);
+    assert.equal(r.stderr, '');
+    assert.deepEqual(JSON.parse(r.stdout), { ok: false, errors: [{ path: '', message: 'internal error: boom; please report it' }] });
+  });
+}

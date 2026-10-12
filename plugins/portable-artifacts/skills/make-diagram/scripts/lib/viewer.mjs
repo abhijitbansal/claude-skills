@@ -56,7 +56,12 @@ function sequenceText(spec) {
     const nums = f.messages.map((id) => position.get(id));
     return li(`${f.kind}${f.label ? ` ${oneLine(f.label)}` : ''}: messages ${Math.min(...nums)} to ${Math.max(...nums)}`);
   });
-  return `<h3>Participants</h3><ul>${people.join('')}</ul>${messages.length ? `<h3>Messages in order</h3><ol>${messages.join('')}</ol>` : ''}${frames.length ? `<h3>Frames</h3><ul>${frames.join('')}</ul>` : ''}`;
+  const notes = (spec.notes ?? []).map((n) => {
+    const over = n.over.map((id) => label.get(id)).join(' and ');
+    const after = n.after === undefined ? '' : `, after message ${position.get(n.after)}`;
+    return li(`${oneLine(n.text)} (over ${over}${after})`);
+  });
+  return `<h3>Participants</h3><ul>${people.join('')}</ul>${messages.length ? `<h3>Messages in order</h3><ol>${messages.join('')}</ol>` : ''}${frames.length ? `<h3>Frames</h3><ul>${frames.join('')}</ul>` : ''}${notes.length ? `<h3>Notes</h3><ul>${notes.join('')}</ul>` : ''}`;
 }
 
 function textAlternative(spec) {

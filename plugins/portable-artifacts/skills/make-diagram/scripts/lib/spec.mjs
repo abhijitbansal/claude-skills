@@ -85,6 +85,18 @@ function registerIds(errors, lists, seen = new Map()) {
   return seen;
 }
 
+// Edge ids share the flat id space of nodes and groups (the viewer finds an
+// element by bare id), so one may not reuse another's. Edge-to-edge duplicates
+// are reported as for any other list.
+function registerEdgeIds(errors, edges, taken) {
+  registerIds(errors, [['edges', edges]]);
+  edges.forEach((e, i) => {
+    if (e.id === undefined || !taken.has(e.id)) return;
+    const what = taken.get(e.id).startsWith('groups') ? 'group' : 'node';
+    errors.push({ path: pathJoin(pathJoin('edges', i), 'id'), message: `${q(e.id)} is also a ${what} id; rename one` });
+  });
+}
+
 // ---- kinds, icons, theme ----------------------------------------------
 
 function checkKind(errors, item, p, type) {
@@ -237,7 +249,7 @@ function checkGraph(spec, errors) {
   checkCount(errors, spec, 'edges', LIMITS.edges);
 
   const seen = registerIds(errors, [['groups', groups], ['nodes', nodes]]);
-  registerIds(errors, [['edges', edges]]);
+  registerEdgeIds(errors, edges, seen);
   const groupIds = groups.map((g) => g.id);
   const nodeIds = nodes.map((n) => n.id);
   const container = new Map([...groups, ...nodes].map((x) => [x.id, x.parent ?? x.group]).filter(([, c]) => groupIds.includes(c)));
@@ -398,6 +410,8 @@ export async function validateSpec(spec, { layout = true } = {}) {
   }
   const errors = [...wrongFamilyFields(spec)];
   checkTheme(errors, spec);
+  checkLength(errors, spec, 'title', '', LIMITS.title);
+  checkLength(errors, spec, 'subtitle', '', LIMITS.subtitle);
   if (spec.type === 'sequence') checkSequence(spec, errors);
   else checkGraph(spec, errors);
   if (layout && errors.length === 0) errors.push(...await lintLayout(spec));

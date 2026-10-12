@@ -91,7 +91,7 @@
   ],
   "edges": [
     {
-      "id": "e0",
+      "id": "edge-0",
       "from": "web",
       "to": "api",
       "points": [
@@ -115,7 +115,7 @@
       }
     },
     {
-      "id": "e1",
+      "id": "edge-1",
       "from": "api",
       "to": "db",
       "points": [
@@ -139,7 +139,7 @@
       }
     },
     {
-      "id": "e2",
+      "id": "edge-2",
       "from": "api",
       "to": "pay",
       "points": [
@@ -171,7 +171,7 @@
       }
     },
     {
-      "id": "e3",
+      "id": "edge-3",
       "from": "web",
       "to": "vpc",
       "points": [

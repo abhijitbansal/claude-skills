@@ -280,6 +280,13 @@
       if (!box) box = boxOf(step.highlight);
       return box || boxOf(Object.keys(seen));
     }
+    // A step that frames every id (the closing "Everything" step) shows the whole
+    // diagram, which is the fit camera, not a padded focus box.
+    function framesEverything(step) {
+      var named = step.focus && step.focus.length ? step.focus : (step.show || []);
+      var all = data.ids || [];
+      return all.length > 0 && all.every(function (id) { return named.indexOf(id) >= 0; });
+    }
     var caption = options.caption || null;
     var part = function (name) { return caption ? caption.querySelector('[' + name + ']') : null; };
     function paintCaption() {
@@ -308,7 +315,7 @@
       fitted = false;
       refreshTrace();
       emit();
-      moveTo(cameraFor(stepFocusBox(seen)));
+      moveTo(framesEverything(steps[stepIndex]) ? fitCamera() : cameraFor(stepFocusBox(seen)));
     }
     function present(i) { goTo(i || 0); }
     function next() { if (presenting) goTo(stepIndex + 1); }

@@ -331,25 +331,65 @@ test('geometry carries the contract fields', async () => {
   assert.equal(g.nodes.find((n) => n.id === 'web').group, null);
   assert.deepEqual(g.groups.map((x) => [x.id, x.depth, x.label, x.parent]), [['aws', 0, 'AWS us-east-1', null], ['vpc', 1, 'Private VPC', 'aws']]);
   const [e0, , , e3] = g.edges;
-  assert.deepEqual([e0.id, e0.from, e0.to, e0.style, e0.both], ['e0', 'web', 'api', 'solid', false]);
+  assert.deepEqual([e0.id, e0.from, e0.to, e0.style, e0.both], ['edge-0', 'web', 'api', 'solid', false]);
   assert.equal(e0.label.text, 'POST /checkout');
   assert.deepEqual(Object.keys(e0.label).sort(), ['height', 'text', 'width', 'x', 'y']);
   assert.deepEqual([e3.style, e3.both, e3.label], ['dashed', true, undefined]);
 });
 
-test('an explicit edge id is kept; the default is e<index>', async () => {
+test('an explicit edge id is kept; the default is edge-<index>', async () => {
   const spec = { title: 't', type: 'flow', nodes: [node('a'), node('b'), node('c')], edges: [{ from: 'a', to: 'b', id: 'first' }, { from: 'b', to: 'c' }] };
-  assert.deepEqual((await layout(spec)).edges.map((e) => e.id), ['first', 'e1']);
+  assert.deepEqual((await layout(spec)).edges.map((e) => e.id), ['first', 'edge-1']);
 });
 
-test('a node, group and edge may share an id', async () => {
+test('default edge ids are edge-<index> and never reuse a node, group or authored edge id', async () => {
   const spec = {
-    title: 't', type: 'architecture', groups: [{ id: 'x', label: 'G' }],
-    nodes: [node('y', { group: 'x' }), node('z')], edges: [{ id: 'y', from: 'y', to: 'z' }, { id: 'x', from: 'z', to: 'y' }],
+    title: 't', type: 'architecture', groups: [{ id: 'edge-2', label: 'G' }],
+    nodes: [node('e0', { group: 'edge-2' }), node('e1'), node('edge-0')],
+    edges: [{ from: 'e0', to: 'e1' }, { from: 'e1', to: 'edge-0' }, { from: 'edge-0', to: 'e0' }, { from: 'e0', to: 'edge-0', id: 'edge-3' }, { from: 'e1', to: 'e0' }],
   };
   const g = await layout(spec);
-  assert.deepEqual(g.edges.map((e) => e.id), ['y', 'x']);
-  assertSound(g, spec, 'shared-ids');
+  assert.deepEqual(g.edges.map((e) => e.id), ['edge-0_', 'edge-1', 'edge-2_', 'edge-3', 'edge-4']);
+  const all = [...g.nodes, ...g.groups, ...g.edges].map((x) => x.id);
+  assert.equal(new Set(all).size, all.length, 'one flat id space');
+  assertSound(g, spec, 'unique-ids');
+});
+
+// ---- self loops are visible loops ---------------------------------------------
+
+const extent = (points) => {
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
+};
+const MIN_LOOP = 24;
+
+for (const [type, nodeKind, direction] of [['state', 'state', 'right'], ['state', 'state', 'down'], ['flow', 'step', 'down'], ['flow', 'step', 'right'], ['flow', 'decision', 'down'], ['architecture', 'database', 'right'], ['architecture', 'service', 'down']]) {
+  test(`a self loop on a ${type} ${nodeKind} (${direction}) is at least ${MIN_LOOP} px each way and its label stays beside it`, async () => {
+    const spec = {
+      title: 't', type, direction,
+      nodes: [node('a', { kind: nodeKind }), node('b')],
+      edges: [{ from: 'a', to: 'b' }, { from: 'a', to: 'a', label: 'again' }],
+    };
+    const g = await layout(spec);
+    const a = g.nodes[0];
+    const loop = g.edges[1];
+    const box = extent(loop.points);
+    assert.ok(box.width >= MIN_LOOP - 0.05 && box.height >= MIN_LOOP - 0.05, `loop ${box.width} x ${box.height}`);
+    assert.ok(onBorder(loop.points[0], a) && onBorder(loop.points.at(-1), a), 'both ends sit on the node box');
+    const label = loop.label;
+    assert.ok(!overlaps(label, box), 'the label plate does not sit on the loop');
+    const gap = Math.max(box.x - right(label), label.x - right(box), box.y - bottom(label), label.y - bottom(box));
+    assert.ok(gap >= 0 && gap <= 12, `label gap to the loop: ${gap}`);
+    assertSound(g, spec, 'self-loop');
+  });
+}
+
+test('a self loop on a tiny diamond still leaves the node and returns to it', async () => {
+  const spec = { title: 't', type: 'state', nodes: [node('c', { kind: 'choice' }), node('d')], edges: [{ from: 'c', to: 'd' }, { from: 'c', to: 'c' }] };
+  const g = await layout(spec);
+  const box = extent(g.edges[1].points);
+  assert.ok(box.height >= MIN_LOOP - 0.05 && box.width >= 16, `${box.width} x ${box.height}`);
 });
 
 test('flow layout follows the model order of edges: the back edge is the one that is reversed', async () => {

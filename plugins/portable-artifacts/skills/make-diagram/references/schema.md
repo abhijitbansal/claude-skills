@@ -26,7 +26,7 @@ A field from the other family is an error, for example `direction: not allowed f
 
 ## Ids
 
-Ids are lowercase letters, digits, `-` and `_`, starting with a letter (`^[a-z][a-z0-9_-]*$`). They must be unique across groups and nodes (graph types) or participants and messages (sequence). Edges may carry an optional `id`, unique among edges.
+Ids are lowercase letters, digits, `-` and `_`, starting with a letter (`^[a-z][a-z0-9_-]*$`). They must be unique across groups and nodes (graph types) or participants and messages (sequence). Edges may carry an optional `id`; it must not reuse a group or node id or another edge's id (an unnamed edge gets `edge-<index>`).
 
 ## groups[] (graph types)
 
@@ -73,6 +73,7 @@ Presentation script for `P`. Each step: `title` (required, up to 60 characters),
 | node, group or participant label | 48 characters (wraps to 2 lines) |
 | note | 60 characters (1 line) |
 | edge or message label, frame label | 40 characters |
+| page title / subtitle | 120 / 160 characters |
 | step title / note | 60 / 200 characters |
 | built page | 400 KB |
 
@@ -91,6 +92,6 @@ Beyond the spec checks, validation lays the diagram out and lints the geometry. 
 
 ## Output
 
-`build.mjs` writes one offline HTML file (inline CSS, JS, fonts and icons; CSP `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:`). The same spec and versions give the same bytes apart from the build timestamp.
+`build.mjs` writes one offline HTML file (inline CSS, JS, fonts and icons; CSP `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:`). The same spec and versions give byte-identical pages; nothing in the file depends on when it was built.
 
 In the page: wheel or pinch to zoom, drag to pan, `F` or double-click to fit, `+` and `-` to zoom, arrow keys to pan. Hover or focus a node to trace its edges; click pins the trace; `Esc` clears it. `P` presents: arrows, Page Up/Down or Space step, and `Esc` exits. The presentation camera never zooms past 2x the fit. `A` toggles edge-flow animation. The toolbar exports SVG or PNG and cycles the colour mode (auto, light, dark).

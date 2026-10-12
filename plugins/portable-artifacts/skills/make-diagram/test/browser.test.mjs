@@ -39,7 +39,19 @@ const skipUnlessBrowser = async (t) => {
 
 const viewBox = (page) => page.evaluate(() => document.querySelector('#pa-stage svg').getAttribute('viewBox').split(' ').map(Number));
 const zoom = (page) => page.evaluate(() => Number(document.getElementById('pa-stage').dataset.zoom));
-const settle = (page) => page.waitForTimeout(450); // the camera tween is 300 ms
+// Waits until the viewBox has held still for QUIET_MS (a camera tween or a
+// resize refit has finished); polls every frame instead of sleeping a fixed time.
+const QUIET_MS = 100;
+const settle = async (page) => {
+  await page.evaluate(() => { delete window.__settle; });
+  await page.waitForFunction((quiet) => {
+    const now = performance.now();
+    const vb = document.querySelector('#pa-stage svg').getAttribute('viewBox');
+    const s = (window.__settle ??= { vb, at: now });
+    if (s.vb !== vb) { s.vb = vb; s.at = now; }
+    return now - s.at >= quiet;
+  }, QUIET_MS, { polling: 'raf', timeout: 10000 });
+};
 const classes = (page, sel) => page.evaluate((s) => [...document.querySelector(s).classList], sel);
 const stageCentre = async (page) => {
   const r = await page.locator('#pa-stage').boundingBox();
@@ -124,7 +136,7 @@ test('a stage with no size (display: none) refits without NaN or errors', async 
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('flow').url);
   await page.evaluate(() => { document.getElementById('pa-stage').style.display = 'none'; });
-  await page.waitForTimeout(100);
+  await settle(page);
   await page.keyboard.press('f');
   await page.keyboard.press('p');
   await page.keyboard.press('+');
@@ -133,7 +145,7 @@ test('a stage with no size (display: none) refits without NaN or errors', async 
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await page.evaluate(() => { document.getElementById('pa-stage').style.display = ''; });
-  await page.waitForTimeout(100);
+  await settle(page);
   assert.ok((await viewBox(page)).every(Number.isFinite));
   assert.deepEqual(problems, []);
   await context.close();
@@ -302,13 +314,13 @@ test('presentation hides what is not revealed yet; revealing a nested node revea
   assert.ok(hidden.includes('db') && hidden.includes('pay'), `db and pay wait: ${hidden}`);
   assert.ok(!hidden.includes('aws') && !hidden.includes('vpc'), 'api is in vpc in aws: both groups are revealed with it');
   assert.ok(!hidden.includes('web') && !hidden.includes('api'));
-  assert.ok(hidden.includes('e1') && hidden.includes('label:e1'), 'api > db waits for db, label with it');
-  assert.ok(!hidden.includes('e0'), 'web > api is visible once both ends are');
-  assert.ok(!hidden.includes('e3'), 'web > vpc: both ends (web, the revealed group) are visible');
+  assert.ok(hidden.includes('edge-1') && hidden.includes('label:edge-1'), 'api > db waits for db, label with it');
+  assert.ok(!hidden.includes('edge-0'), 'web > api is visible once both ends are');
+  assert.ok(!hidden.includes('edge-3'), 'web > vpc: both ends (web, the revealed group) are visible');
   await page.keyboard.press('ArrowRight');
   hidden = await hiddenIds(page);
-  assert.ok(!hidden.includes('db') && !hidden.includes('e1'));
-  assert.ok(hidden.includes('pay') && hidden.includes('e2'));
+  assert.ok(!hidden.includes('db') && !hidden.includes('edge-1'));
+  assert.ok(hidden.includes('pay') && hidden.includes('edge-2'));
   assert.ok((await classes(page, '.pa-node[data-id="db"]')).includes('pa-hl'), 'the highlight id is emphasised');
   await page.keyboard.press('ArrowRight');
   assert.deepEqual(await hiddenIds(page), [], 'the closing Everything step reveals the rest');
@@ -328,7 +340,7 @@ test('a step that names only a node deep in nested groups reveals both groups an
   const { page, problems, context } = await open(buildPage(spec, { name: 'nested' }).url);
   await page.keyboard.press('p');
   await settle(page);
-  assert.deepEqual((await hiddenIds(page)).sort(), ['e0', 'y'], 'y and its edge wait; x, its three groups and nothing else show');
+  assert.deepEqual((await hiddenIds(page)).sort(), ['edge-0', 'y'], 'y and its edge wait; x, its three groups and nothing else show');
   const groupsVisible = await page.evaluate(() => ['outer', 'mid', 'inner'].map((id) => !document.querySelector(`.pa-group[data-id="${id}"]`).classList.contains('pa-hidden')));
   assert.deepEqual(groupsVisible, [true, true, true]);
   assert.equal(await page.textContent('[data-pa-count]'), '1 / 2', 'plus the closing Everything step for y');
@@ -417,6 +429,66 @@ test('a zero-message sequence still presents its participants', async (t) => {
   assert.deepEqual(await hiddenIds(page), []);
   assert.deepEqual(problems, []);
   await context.close();
+});
+
+test('hovering a node named like a default edge id lights up only its own edges', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const spec = {
+    title: 'Edge ids', type: 'flow',
+    nodes: ['e0', 'e1', 'e2', 'e3'].map((id) => ({ id, label: id })),
+    edges: [{ from: 'e0', to: 'e1' }, { from: 'e1', to: 'e2' }, { from: 'e2', to: 'e3' }],
+  };
+  const { page, problems, context } = await open(buildPage(spec, { name: 'edge-ids' }).url);
+  await page.hover('.pa-node[data-id="e1"]');
+  const traced = await page.evaluate(() => ({
+    nodes: Object.fromEntries([...document.querySelectorAll('.pa-node')].map((n) => [n.dataset.id, !n.classList.contains('pa-dim')])),
+    edges: Object.fromEntries([...document.querySelectorAll('.pa-edge')].map((e) => [`${e.dataset.from}>${e.dataset.to}`, !e.classList.contains('pa-dim')])),
+  }));
+  assert.deepEqual(traced.nodes, { e0: true, e1: true, e2: true, e3: false });
+  assert.deepEqual(traced.edges, { 'e0>e1': true, 'e1>e2': true, 'e2>e3': false });
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('a step that highlights a group draws its frame in the accent colour', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const spec = {
+    title: 'Group highlight', type: 'architecture',
+    groups: [{ id: 'vpc', label: 'VPC' }],
+    nodes: [{ id: 'a', label: 'A', group: 'vpc' }, { id: 'b', label: 'B' }],
+    edges: [{ from: 'a', to: 'b' }],
+    steps: [{ title: 'Node', show: ['a', 'b'], highlight: ['a'] }, { title: 'Group', show: ['a', 'b'], highlight: ['vpc'] }],
+  };
+  const { page, problems, context } = await open(buildPage(spec, { name: 'group-highlight' }).url);
+  const stroke = (sel) => page.evaluate((s) => { const c = getComputedStyle(document.querySelector(s)); return [c.stroke, c.strokeWidth]; }, sel);
+  await page.keyboard.press('p');
+  const accent = await stroke('.pa-node[data-id="a"] .pa-shape');
+  const plain = await stroke('.pa-group[data-id="vpc"] .pa-group-box');
+  assert.notDeepEqual(plain, accent);
+  await page.keyboard.press('ArrowRight');
+  assert.deepEqual(await stroke('.pa-group[data-id="vpc"] .pa-group-box'), accent, 'the highlighted group takes the accent stroke');
+  await page.keyboard.press('Escape');
+  assert.deepEqual(await stroke('.pa-group[data-id="vpc"] .pa-group-box'), plain, 'leaving presentation restores the frame');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('the Everything step uses the fit camera, not a padded focus box', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const name of ['architecture']) {
+    const { page, problems, context } = await open(built(name).url);
+    const total = example(name).steps.length + 1;
+    await page.keyboard.press('p');
+    for (let i = 1; i < total; i++) await page.keyboard.press('ArrowRight');
+    assert.equal(await page.textContent('[data-pa-title]'), 'Everything', name);
+    await settle(page);
+    assert.ok(Math.abs((await zoom(page)) - 1) < 0.001, `${name}: ${await zoom(page)}`);
+    const [x, y, w, h] = await viewBox(page); // the caption shrinks the stage, so compare the centre, not the box
+    const size = await page.evaluate(() => JSON.parse(document.getElementById('pa-data').textContent));
+    assert.ok(Math.abs(x + w / 2 - size.width / 2) < 1 && Math.abs(y + h / 2 - size.height / 2) < 1, `${name}: centred on the diagram`);
+    assert.deepEqual(problems, []);
+    await context.close();
+  }
 });
 
 test('screenshots: presentation mid-step (light and dark), a hover trace and a phone-width page', async (t) => {

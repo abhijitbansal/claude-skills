@@ -139,7 +139,7 @@
   "groups": [],
   "edges": [
     {
-      "id": "e0",
+      "id": "edge-0",
       "from": "begin",
       "to": "placed",
       "points": [
@@ -156,7 +156,7 @@
       "both": false
     },
     {
-      "id": "e1",
+      "id": "edge-1",
       "from": "placed",
       "to": "paid",
       "points": [
@@ -180,7 +180,7 @@
       }
     },
     {
-      "id": "e2",
+      "id": "edge-2",
       "from": "paid",
       "to": "ok",
       "points": [
@@ -197,7 +197,7 @@
       "both": false
     },
     {
-      "id": "e3",
+      "id": "edge-3",
       "from": "ok",
       "to": "shipped",
       "points": [
@@ -221,7 +221,7 @@
       }
     },
     {
-      "id": "e4",
+      "id": "edge-4",
       "from": "ok",
       "to": "cancelled",
       "points": [
@@ -253,7 +253,7 @@
       }
     },
     {
-      "id": "e5",
+      "id": "edge-5",
       "from": "placed",
       "to": "placed",
       "points": [
@@ -263,11 +263,11 @@
         },
         {
           "x": 164.7,
-          "y": 89
+          "y": 75
         },
         {
           "x": 191.3,
-          "y": 89
+          "y": 75
         },
         {
           "x": 191.3,
@@ -279,13 +279,13 @@
       "label": {
         "text": "retry payment",
         "x": 134,
-        "y": 63,
+        "y": 49,
         "width": 88,
         "height": 20
       }
     },
     {
-      "id": "e6",
+      "id": "edge-6",
       "from": "shipped",
       "to": "finish",
       "points": [
@@ -302,7 +302,7 @@
       "both": false
     },
     {
-      "id": "e7",
+      "id": "edge-7",
       "from": "cancelled",
       "to": "finish",
       "points": [

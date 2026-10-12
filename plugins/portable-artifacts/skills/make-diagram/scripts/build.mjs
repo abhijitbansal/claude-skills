@@ -14,6 +14,7 @@ import { resolveOutput } from './lib/output.mjs';
 import { loadTheme, DEFAULT_THEME } from '../shared/theme.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
+import { exitInternal } from './lib/internal-error.mjs';
 
 const USAGE = 'node scripts/build.mjs <spec.diagram.json> [--out <file.html|dir>] [--theme <name>] [--json]';
 const OPTIONS = { out: { type: 'string' }, theme: { type: 'string' }, json: { type: 'boolean' } };
@@ -63,7 +64,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
       process.stdout.write(`wrote ${result.out}\nopen: ${pathToFileURL(result.out).href}\n`);
     }
   } catch (e) {
-    if (!(e instanceof UsageError)) throw e;
-    exitUsage(e, { json });
+    if (e instanceof UsageError) exitUsage(e, { json });
+    else exitInternal(e, { json });
   }
 }

@@ -34,7 +34,7 @@ For a change ("rename the cache", "add a queue between api and worker"), edit on
 - `state`: `state` (default), `start`, `end`, `choice`. A transition from a state to itself is allowed.
 - `sequence`: participants of kind `service` (default), `actor`, `database`, `queue`, `external`; messages of kind `sync` (default), `async`, `reply`, `self` (from = to).
 
-Writing rules: labels are nouns ("Orders DB"), edge and message labels are verbs ("writes order"). Labels stay under 48 characters, notes under 60 (one line), edge labels under 40. Ids are lowercase letters, digits, `-`, `_`, starting with a letter. At most 12 nodes reads best; split a bigger system into several diagrams (hard limits: 60 nodes, 120 edges, 12 participants, 60 messages). `tone` (neutral, accent, good, warn, bad) recolours only the border and icon. `direction` (right or down) applies to graph types, not sequence.
+Writing rules: labels are nouns ("Orders DB"), edge and message labels are verbs ("writes order"). Labels stay under 48 characters, notes under 60 (one line), edge labels under 40, the title under 120 and the subtitle under 160. Ids are lowercase letters, digits, `-`, `_`, starting with a letter. At most 12 nodes reads best; split a bigger system into several diagrams (hard limits: 60 nodes, 120 edges, 12 participants, 60 messages). `tone` (neutral, accent, good, warn, bad) recolours only the border and icon. `direction` (right or down) applies to graph types, not sequence.
 
 ## Architecture example
 

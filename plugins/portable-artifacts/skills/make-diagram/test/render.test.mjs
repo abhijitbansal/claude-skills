@@ -121,7 +121,7 @@ test('every edge is a group with style class and data-id/from/to', async () => {
   assert.equal(edges.length, spec.edges.length);
   spec.edges.forEach((e, i) => {
     assert.equal(attr(edges[i], 'class'), `pa-edge pa-edge-${e.style ?? 'solid'}`);
-    assert.equal(attr(edges[i], 'data-id'), `e${i}`);
+    assert.equal(attr(edges[i], 'data-id'), `edge-${i}`);
     assert.equal(attr(edges[i], 'data-from'), e.from);
     assert.equal(attr(edges[i], 'data-to'), e.to);
   });
@@ -342,6 +342,7 @@ test('diagramCss holds the viewer state rules: dim, hidden, highlight', () => {
   assert.match(css, /\.pa-hidden\{[^}]*visibility:hidden/);
   assert.ok(!/\.pa-hidden\{[^}]*display:none/.test(css), 'hidden elements still measure');
   assert.match(css, /\.pa-hl /);
+  assert.match(css, /\.pa-hl > \.pa-group-box\{[^}]*stroke:var\(--accent\)/, 'a highlighted group draws an accent frame');
 });
 
 test('every non-dynamic class the renderers emit has a rule', async () => {

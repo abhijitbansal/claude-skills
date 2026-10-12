@@ -13,9 +13,9 @@ export function slugify(title, fallback = DEFAULT_FALLBACK) {
   return slug || fallback;
 }
 
-/** Absolute .html path for a build. `out` ending in .html is the file; any other `out` is a directory. */
+/** Absolute .html path for a build. `out` ending in .html or .htm is the file; any other `out` is a directory. */
 export function resolveOutput({ out, title, fallback = DEFAULT_FALLBACK, env = process.env, home = os.homedir() }) {
-  if (out && /\.html$/i.test(out)) return path.resolve(out);
+  if (out && /\.html?$/i.test(out)) return path.resolve(out);
   const dir = out || env.PA_OUTPUT_DIR || path.join(home, '.agent', 'diagrams');
   return path.join(path.resolve(dir), `${slugify(title, fallback)}.html`);
 }

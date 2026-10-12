@@ -56,6 +56,7 @@ const state = [
   '.pa-dim{opacity:.22}',
   '.pa-hidden{opacity:0;visibility:hidden}',
   '.pa-hl .pa-shape,.pa-on .pa-shape{stroke:var(--accent);stroke-width:2}',
+  '.pa-hl > .pa-group-box{stroke:var(--accent);stroke-width:2}',
   '.pa-edge.pa-hl path,.pa-edge.pa-on path{stroke:var(--accent);stroke-width:2}',
   '.pa-edge.pa-hl .pa-arrow-fill,.pa-edge.pa-on .pa-arrow-fill{fill:var(--accent)}',
 ];

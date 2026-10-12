@@ -10,8 +10,8 @@ const GROUP_PADDING = `[top=40,left=${OUTER_MARGIN},bottom=${OUTER_MARGIN},right
 const ROOT_PADDING = `[top=${OUTER_MARGIN},left=${OUTER_MARGIN},bottom=${OUTER_MARGIN},right=${OUTER_MARGIN}]`;
 const DEFAULT_DIRECTION = { architecture: 'right', flow: 'down', state: 'right' };
 
-// ELK ids are prefixed per kind of thing: node, group and edge ids are
-// separate namespaces in the spec, so a node and an edge may share a spelling.
+// ELK ids are prefixed per kind of thing so a node, group and edge never clash
+// inside ELK (the spec itself keeps one flat id space).
 const elkNodeId = (id) => `n.${id}`;
 const elkGroupId = (id) => `g.${id}`;
 const elkEdgeId = (i) => `e.${i}`;
@@ -26,6 +26,7 @@ const SPACING = {
   'elk.layered.spacing.nodeNodeBetweenLayers': '72',
   'elk.spacing.edgeLabel': '6',
   'elk.layered.spacing.edgeNodeBetweenLayers': '24',
+  'elk.spacing.nodeSelfLoop': '24',
 };
 
 function rootOptions(direction) {
@@ -187,12 +188,47 @@ function readNode(node, size, kindInfo, laid, layerOf, direction) {
   return out;
 }
 
-function readEdge(edge, i, laid) {
+// Every edge's id: the authored one, else `edge-<index>`, extended with `_` while
+// it would reuse a node, group or other edge id (the viewer's id space is flat).
+function edgeIds(spec) {
+  const edges = spec.edges ?? [];
+  const taken = new Set([...(spec.groups ?? []), ...(spec.nodes ?? []), ...edges].map((x) => x.id).filter((id) => id !== undefined));
+  return edges.map((e, i) => {
+    if (e.id !== undefined) return e.id;
+    let id = `edge-${i}`;
+    while (taken.has(id)) id += '_';
+    taken.add(id);
+    return id;
+  });
+}
+
+// ELK spaces a self loop's two ports a third of the node side apart and draws
+// it `nodeSelfLoop` deep, which leaves a small node with an 8-14 px stub. Widen
+// the loop around its middle to SELF_LOOP_SPAN (at most 3/4 of the side, so
+// the ports stay on it); the label is centred on the loop and stays beside it.
+const SELF_LOOP_SPAN = 24;
+const SELF_LOOP_SIDE_SHARE = 0.75;
+
+function widenSelfLoop(points, box) {
+  if (points.length !== 4) return points;
+  const [p0, p1, p2, p3] = points;
+  const leavesSideways = p0.y === p1.y; // the loop sits left or right of the node; otherwise above or below
+  const axis = leavesSideways ? 'y' : 'x';
+  const side = leavesSideways ? box.height : box.width;
+  const half = Math.min(SELF_LOOP_SPAN, side * SELF_LOOP_SIDE_SHARE) / 2;
+  const middle = (p0[axis] + p3[axis]) / 2;
+  if (Math.abs(p3[axis] - p0[axis]) / 2 >= half || p1[axis] !== p0[axis] || p2[axis] !== p3[axis]) return points;
+  const at = (p, offset) => ({ ...p, [axis]: round(middle + offset) });
+  return [at(p0, -half), at(p1, -half), at(p2, half), at(p3, half)];
+}
+
+function readEdge(edge, id, i, laid, laidFrom) {
   if (laid.sections?.length !== 1) throw new Error(`ELK routed edge ${i} in ${laid.sections?.length ?? 0} sections; expected 1`);
   const [section] = laid.sections;
-  const points = [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map((p) => ({ x: round(p.x), y: round(p.y) }));
+  const routed = [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map((p) => ({ x: round(p.x), y: round(p.y) }));
+  const points = edge.from === edge.to ? widenSelfLoop(routed, laidFrom) : routed;
   const out = {
-    id: edge.id ?? `e${i}`,
+    id,
     from: edge.from,
     to: edge.to,
     points,
@@ -226,6 +262,7 @@ export async function layoutGraph(spec, theme) {
   const clustered = clusterLayers(nodes.map((n) => ({ ...laidNodes.get(elkNodeId(n.id)), id: n.id })), axis);
   const layerOf = new Map(clustered.flatMap((layer, i) => layer.map((n) => [n.id, i])));
 
+  const ids = edgeIds(spec);
   const depths = groupDepths(spec.groups ?? []);
   return {
     width: round(result.width),
@@ -238,7 +275,7 @@ export async function layoutGraph(spec, theme) {
       depth: depths.get(g.id),
       parent: g.parent ?? null,
     })),
-    edges: (spec.edges ?? []).map((e, i) => readEdge(e, i, laidEdges.get(elkEdgeId(i)))),
+    edges: (spec.edges ?? []).map((e, i) => readEdge(e, ids[i], i, laidEdges.get(elkEdgeId(i)), laidNodes.get(elkNodeId(e.from)) ?? laidNodes.get(elkGroupId(e.from)))),
     layers: clustered.map((layer) => layer.map((n) => n.id)),
   };
 }

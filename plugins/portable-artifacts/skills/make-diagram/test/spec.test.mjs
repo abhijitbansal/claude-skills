@@ -134,6 +134,14 @@ test('duplicate edge ids are rejected', async () => {
   assert.deepEqual(e, [{ path: 'edges[1].id', message: 'duplicate id "same"; first used at edges[0].id; rename one' }]);
 });
 
+test('an edge id may not reuse a node or group id', async () => {
+  const e = await mutated('architecture', (s) => { s.edges[0].id = 'api'; s.edges[1].id = 'aws'; });
+  assert.deepEqual(e, [
+    { path: 'edges[0].id', message: '"api" is also a node id; rename one' },
+    { path: 'edges[1].id', message: '"aws" is also a group id; rename one' },
+  ]);
+});
+
 // ---- references ---------------------------------------------------------
 
 test('edge endpoint typo suggests the real id', async () => {
@@ -283,6 +291,17 @@ test('other text limits are pinned', async () => {
     { path: 'steps[0].title', message: 'title is 61 characters; the limit is 60 — shorten it' },
     { path: 'steps[0].note', message: 'note is 201 characters; the limit is 200 — shorten it' },
   ]);
+});
+
+test('page title and subtitle limits are pinned for every type', async () => {
+  for (const name of ['architecture', 'sequence']) {
+    const e = await mutated(name, (s) => { s.title = 't'.repeat(121); s.subtitle = 's'.repeat(161); });
+    assert.deepEqual(e, [
+      { path: 'title', message: 'title is 121 characters; the limit is 120 — shorten it' },
+      { path: 'subtitle', message: 'subtitle is 161 characters; the limit is 160 — shorten it' },
+    ], name);
+    assert.deepEqual(await mutated(name, (s) => { s.title = 't'.repeat(120); s.subtitle = 's'.repeat(160); }), [], name);
+  }
 });
 
 test('sequence text limits are pinned', async () => {
