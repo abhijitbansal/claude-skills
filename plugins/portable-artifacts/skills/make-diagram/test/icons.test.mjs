@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { iconSvg, hasIcon, searchIcons, listIcons, DEFAULT_ICON, IconError } from '../scripts/lib/icons.mjs';
-import { sanitizeNodes, resolveCurated, brandEntry } from '../scripts/dev/build-icons.mjs';
+import { sanitizeNodes, resolveCurated, brandEntry, licenseOf } from '../scripts/dev/build-icons.mjs';
 
 const read = (rel) => JSON.parse(fs.readFileSync(new URL(rel, import.meta.url), 'utf8'));
 const lucide = read('../icons/lucide.json');
@@ -223,4 +225,47 @@ test('CLI search with no match exits 0 and prints nothing', () => {
   const r = run('search', 'zzzzzzzzzz');
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '');
+});
+
+test('brandEntry rejects path data outside the SVG path charset', () => {
+  const svg = (d) => `<svg><title>x</title><path d="${d}"/></svg>`;
+  assert.deepEqual(brandEntry(svg('M1 2l-3.5e2,4z')), { title: 'x', path: 'M1 2l-3.5e2,4z' });
+  assert.equal(brandEntry(svg('M1 2&quot;onload=alert(1)')), null);
+  assert.equal(brandEntry(svg('M1 2;<script>')), null);
+  assert.equal(brandEntry(svg('M1 2 url(#x)')), null);
+});
+
+test('licenseOf reads the upstream licence type, null when absent', () => {
+  assert.equal(licenseOf({ license: { type: 'CC0-1.0' } }), 'CC0-1.0');
+  assert.equal(licenseOf({ license: { type: 'custom', url: 'u' } }), 'custom');
+  assert.equal(licenseOf({}), null);
+});
+
+test('every shipped brand is CC0 upstream or carries no licence entry', () => {
+  const upstream = JSON.parse(fs.readFileSync(
+    new URL('../node_modules/simple-icons/data/simple-icons.json', import.meta.url), 'utf8'));
+  const bySlug = new Map(upstream.map((e) => [e.slug, e]));
+  for (const slug of Object.keys(brands.icons)) {
+    const meta = bySlug.get(slug);
+    assert.ok(meta, `${slug} not in upstream simple-icons.json`);
+    const lic = licenseOf(meta);
+    assert.ok(lic === null || lic === 'CC0-1.0', `${slug} is ${lic}, not CC0`);
+  }
+});
+
+test('CLI works when the skill directory is reached through a symlink', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'md-icons-'));
+  try {
+    const link = path.join(tmp, 'skill');
+    fs.symlinkSync(fileURLToPath(new URL('..', import.meta.url)), link, 'dir');
+    const go = (...args) => spawnSync(process.execPath, [path.join(link, 'scripts/icons.mjs'), ...args], { encoding: 'utf8' });
+    const ok = go('search', 'data');
+    assert.equal(ok.status, 0);
+    assert.ok(ok.stdout.split('\n').includes('lucide:database'), 'symlinked search printed nothing');
+    const bad = go('frobnicate');
+    assert.equal(bad.status, 2);
+    assert.match(bad.stderr, /accepted: search, list/);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });

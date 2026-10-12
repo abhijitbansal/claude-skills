@@ -3,6 +3,7 @@
 //   node scripts/icons.mjs search <word>        matching refs, best first, one per line
 //   node scripts/icons.mjs list [lucide|brand]  every ref (both catalogs when omitted)
 // Exit 0 on success (a search with no match prints nothing), 2 on bad usage.
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { searchIcons, listIcons } from './lib/icons.mjs';
@@ -27,7 +28,7 @@ export function run(argv) {
   throw new UsageError(`${command === undefined ? 'missing subcommand' : `unknown subcommand ${JSON.stringify(command)}`}; accepted: search, list; usage: ${USAGE}`);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const refs = run(process.argv.slice(2));
     if (refs.length) process.stdout.write(`${refs.join('\n')}\n`);

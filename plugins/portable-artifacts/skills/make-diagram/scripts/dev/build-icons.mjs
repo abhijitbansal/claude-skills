@@ -105,11 +105,17 @@ const decodeEntities = (s) => s
   .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
   .replace(/&amp;/g, '&');
 
+// SVG path data: commands, numbers, signs, dots, commas, spaces, exponents. Nothing else.
+const PATH_DATA = /^[MmZzLlHhVvCcSsQqTtAa0-9eE.,\s+-]+$/;
+
+// Upstream licence type of a simple-icons.json entry, null when it lists none.
+export const licenseOf = (meta) => meta?.license?.type ?? null;
+
 // One Simple Icons SVG -> { title, path }, or null when it is not a single plain path.
 export function brandEntry(svg) {
   const title = /<title>([^<]*)<\/title>/.exec(svg);
   const paths = [...svg.matchAll(/<path\s+d="([^"]+)"\s*\/>/g)];
-  if (!title || paths.length !== 1) return null;
+  if (!title || paths.length !== 1 || !PATH_DATA.test(paths[0][1])) return null;
   return { title: decodeEntities(title[1]), path: paths[0][1] };
 }
 
@@ -140,18 +146,28 @@ function buildLucide() {
 function buildBrands() {
   const dir = path.join(ROOT, 'node_modules/simple-icons');
   const version = readJson(path.join(dir, 'package.json')).version;
+  const upstream = new Map(readJson(path.join(dir, 'data/simple-icons.json')).map((e) => [e.slug, e]));
   const entries = {};
-  const skipped = [];
+  const missing = [];
+  const unsafe = [];
+  const licensed = new Map();
   for (const slug of new Set(BRAND_SLUGS)) {
+    const meta = upstream.get(slug);
     const file = path.join(dir, 'icons', `${slug}.svg`);
-    const entry = fs.existsSync(file) ? brandEntry(fs.readFileSync(file, 'utf8')) : null;
+    if (!meta || !fs.existsSync(file)) { missing.push(slug); continue; }
+    // THIRD_PARTY_NOTICES.md says every shipped mark is CC0: keep that true.
+    const lic = licenseOf(meta);
+    if (lic !== null && lic !== 'CC0-1.0') { licensed.set(slug, lic); continue; }
+    const entry = brandEntry(fs.readFileSync(file, 'utf8'));
     if (entry) entries[slug] = entry;
-    else skipped.push(slug);
+    else unsafe.push(slug);
   }
   fs.mkdirSync(path.join(ROOT, 'icons'), { recursive: true });
   fs.writeFileSync(path.join(ROOT, 'icons/brands.json'), serialize(version, entries));
   process.stdout.write(`simple-icons ${version}: ${Object.keys(entries).length} brands\n`);
-  if (skipped.length) process.stdout.write(`skipped (missing upstream): ${skipped.join(', ')}\n`);
+  if (missing.length) process.stdout.write(`skipped (missing upstream): ${missing.join(', ')}\n`);
+  if (unsafe.length) process.stdout.write(`skipped (not a single plain path): ${unsafe.join(', ')}\n`);
+  for (const [slug, lic] of licensed) process.stdout.write(`skipped (licence ${lic}): ${slug}\n`);
 }
 
 function main() {
@@ -160,4 +176,4 @@ function main() {
   if (!ok) process.exitCode = 1;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main();
