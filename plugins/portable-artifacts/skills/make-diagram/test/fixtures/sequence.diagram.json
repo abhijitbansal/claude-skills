@@ -1,0 +1,19 @@
+{
+  "type": "sequence",
+  "title": "Login with refresh",
+  "theme": "paper",
+  "participants": [
+    { "id": "u", "label": "User", "kind": "actor" },
+    { "id": "app", "label": "App" },
+    { "id": "auth", "label": "Auth API", "icon": "lucide:lock" }
+  ],
+  "messages": [
+    { "id": "m1", "from": "u", "to": "app", "label": "enter password" },
+    { "id": "m2", "from": "app", "to": "auth", "label": "POST /token" },
+    { "id": "m3", "from": "auth", "to": "app", "label": "access + refresh", "kind": "reply" },
+    { "id": "m4", "from": "app", "to": "app", "label": "store tokens", "kind": "self" }
+  ],
+  "frames": [ { "kind": "alt", "label": "token expired", "messages": ["m2", "m3"] } ],
+  "notes": [ { "over": ["app"], "text": "keeps refresh in Keychain", "after": "m4" } ],
+  "steps": [ { "title": "The user signs in", "show": ["u", "app", "m1"] } ]
+}
