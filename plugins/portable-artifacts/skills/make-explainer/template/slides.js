@@ -16,6 +16,7 @@
   var meter = bar.querySelector('[role=progressbar]');
   var fill = bar.querySelector('[data-progress]');
   var count = bar.querySelector('[data-count]');
+  var live = bar.querySelector('[data-live]');
   var dialog = document.querySelector('[data-outline]');
   var links = [].slice.call(dialog.querySelectorAll('a[data-slide]'));
   var current = 0;
@@ -37,11 +38,16 @@
     meter.setAttribute('aria-valuetext', 'Slide ' + n + ' of ' + total);
     links.forEach(function (a, i) { if (i + 1 === n) a.setAttribute('aria-current', 'location'); else a.removeAttribute('aria-current'); });
     if (!changed || !options) return;
-    if (options.announce && PA.announce) PA.announce(slides[n - 1].getAttribute('aria-label'));
+    if (options.announce) speak(slides[n - 1].getAttribute('aria-label'));
     if (options.persist) {
       setHash(n);
       PA.writeStore(local, storeKey, String(n));
     }
+  }
+
+  // runtime.js owns the live region's behaviour; if its hook is missing, write to the region directly.
+  function speak(text) {
+    if (PA.announce) PA.announce(text); else live.textContent = text;
   }
 
   function setHash(n) {
@@ -57,10 +63,17 @@
     slides[n - 1].focus({ preventScroll: true });
   }
 
+  // Move focus along with the slide, unless it sits on a control outside the slides
+  // (the theme toggle, the Outline button, the open outline) and should stay there.
+  function followFocus(n) {
+    var here = document.activeElement;
+    if (!here || here === document.body || (here.closest && here.closest('.slide'))) focusSlide(n);
+  }
+
   function go(n) {
     n = PA.clampSlide(n, total);
     show(n, { announce: true, persist: true });
-    focusSlide(n);
+    followFocus(n);
     align(n, true);
   }
 
@@ -72,9 +85,7 @@
       var n = PA.slideAtScroll(deck.scrollTop, deck.clientHeight, total);
       if (n === current) return;
       show(n, { announce: true, persist: true });
-      // Follow focus too, unless it sits on a control outside the slides.
-      var here = document.activeElement;
-      if (!here || here === document.body || (here.closest && here.closest('.slide'))) focusSlide(n);
+      followFocus(n);
     }, 90);
   }, { passive: true });
   window.addEventListener('resize', function () { align(current, false); });
@@ -109,7 +120,9 @@
   dialog.addEventListener('close', function () {
     var back = opener;
     opener = null;
-    if (back && back.focus && document.contains(back)) back.focus();
+    // Back to where focus was; if that is gone or inert (a slide we jumped away from), to the current slide.
+    if (back && back.focus && document.contains(back) && !back.closest('[inert]')) back.focus();
+    else focusSlide(current);
   });
   dialog.addEventListener('click', function (event) {
     if (event.target === dialog) { closeOutline(); return; }

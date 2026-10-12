@@ -527,6 +527,7 @@ test('reduced motion: the deck jumps to the slide in the same task; with motion 
   const lively = await openPage(deck5().url, { reducedMotion: 'no-preference' });
   const started = await pressAndMeasure(lively.page);
   assert.notEqual(started.top, started.target, 'motion allowed: the scroll is animated');
+  await lively.page.waitForFunction(() => document.querySelector('[data-deck]').scrollTop === document.getElementById('slide-2').offsetTop);
   await lively.context.close();
 });
 
@@ -637,5 +638,67 @@ test('copying code on a slide still uses the single live region', async (t) => {
   await page.locator('[data-copy]').click();
   await page.waitForFunction(() => /copied/i.test(document.querySelector('[role=status]').textContent));
   assert.equal(await page.locator('[role=status]').count(), 1);
+  await context.close();
+});
+
+// ---- fix round 2 ----------------------------------------------------------------------------------
+
+const activeId = (page) => page.evaluate(() => document.activeElement.id || document.activeElement.tagName);
+
+test('outline opened with O and used to jump: focus lands on the new slide, not the page', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(deck5().url);
+  assert.equal(await activeId(page), 'slide-1');
+  await page.keyboard.press('o');
+  await page.locator('[data-outline] a', { hasText: 'Topic 4' }).click();
+  await settled(page, 5);
+  assert.equal(await page.locator('[data-outline]').evaluate((d) => d.open), false);
+  await page.waitForFunction(() => document.activeElement.id === 'slide-5'); // the dialog's close event hands focus over
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await current(page), 4, 'keys still work after the jump');
+  await context.close();
+});
+
+test('outline opened with the button: Escape without a jump hands focus back to the button', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(deck5().url);
+  await page.locator('[data-outline-open]').click();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-outline-open')), true);
+  assert.equal(await current(page), 1);
+  await context.close();
+});
+
+test('outline opened with O and closed with Escape: focus stays on the slide', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(deck5().url);
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('o');
+  await page.keyboard.press('Escape');
+  assert.equal(await activeId(page), 'slide-2');
+  await context.close();
+});
+
+test('an arrow key with focus on a deck-bar control navigates and leaves focus on that control', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(deck5().url);
+  await page.locator('[data-theme-toggle]').focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await current(page), 2);
+  assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-theme-toggle')), true);
+  await page.locator('[data-outline-open]').focus();
+  await page.keyboard.press('End');
+  assert.equal(await current(page), 5);
+  assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-outline-open')), true);
+  await context.close();
+});
+
+test('slide announcements still reach the deck live region when the runtime hook is missing', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(deck5().url);
+  await page.evaluate(() => { delete window.PA.announce; });
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.locator('[role=status]').count(), 1);
+  assert.equal(await page.locator('[role=status]').textContent(), 'Slide 2 of 5: Topic 1');
   await context.close();
 });

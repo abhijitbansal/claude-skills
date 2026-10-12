@@ -106,6 +106,7 @@ function chrome(total) {
 <button type="button" class="theme-toggle" data-theme-toggle aria-label="Theme: Auto. Change theme">Theme: Auto</button>
 <span class="deck-count" aria-hidden="true"><span data-count>1</span> / ${total}</span>
 </div>
+<div class="sr-only" role="status" data-live></div>
 </div>`;
 }
 
@@ -122,6 +123,5 @@ export function renderDeck({ spec, rendered, metaHtml, slug }) {
 ${slides.join('\n')}
 </main>
 ${chrome(total)}
-${outline(titles)}
-<div class="sr-only" role="status" data-live></div>`;
+${outline(titles)}`;
 }
