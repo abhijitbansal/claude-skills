@@ -12,6 +12,8 @@ const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 const fixture = () => structuredClone(loadSpec(path.join(FIXTURES, 'all-types.explainer.json')).spec);
 const doc = (sections, extra = {}) => ({ title: 'T', sections, ...extra });
 const text = (t = 'Body.') => ({ type: 'text', text: t });
+// The smallest diagram make-diagram accepts (the title is set per test).
+const ONE_NODE = { type: 'flow', nodes: [{ id: 'a', label: 'A' }] };
 const errorsOf = async (spec, opts = { dir: FIXTURES }) => (await validateSpec(spec, opts)).errors;
 const section = (type, patch) => ({ ...fixture().sections.find((s) => s.type === type), ...patch });
 const TYPE_LIST = '"tldr", "text", "kpis", "cards", "table", "risks", "files", "steps", "timeline", "compare", "callout", "code", "details", "checklist", "diagram", "chart", "motion", "image"';
@@ -361,7 +363,7 @@ test('TODO markers are reported anywhere, with the path and the fix', async () =
   const spots = doc([
     { type: 'tldr', title: 'TODO: claim', text: 't', points: ['TODO: one'] },
     { type: 'code', code: '// TODO: later\n' },
-    { type: 'diagram', diagram: { title: 'TODO: name', type: 'flow' } },
+    { type: 'diagram', diagram: { title: 'TODO: name', ...ONE_NODE } },
     { type: 'chart', kind: 'bar', data: [{ a: 'TODO: x' }] },
     { type: 'checklist', key: 'k', groups: [{ title: 'g', items: [{ text: 'TODO: step' }] }] },
     { type: 'files', items: [{ path: 'TODO: path', change: 'added' }] },
@@ -398,7 +400,7 @@ test('lint skips non-prose: code, paths, ids, data, inline diagrams', async () =
   const spec = doc([
     { type: 'code', code: '// we leverage 🚀 here\nutilize()\n' },
     { type: 'files', items: [{ path: 'src/leverage/seamless.mjs', change: 'added' }] },
-    { type: 'diagram', diagram: { title: 'Seamless', type: 'flow' } },
+    { type: 'diagram', diagram: { title: 'Seamless', ...ONE_NODE } },
     { type: 'chart', kind: 'bar', data: [{ a: 'leverage' }], x: 'leverage' },
   ], { meta: { branch: 'feat/leverage-cache' } });
   assert.deepEqual(await errorsOf(spec), []);

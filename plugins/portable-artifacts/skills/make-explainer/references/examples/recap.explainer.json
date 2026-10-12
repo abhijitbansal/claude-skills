@@ -1,0 +1,83 @@
+{
+  "title": "Diagram sections: make-diagram figures inside an explainer",
+  "subtitle": "What the branch adds, how a figure gets onto the page, and what to check by hand",
+  "preset": "recap",
+  "mode": "page",
+  "theme": "paper",
+  "meta": {
+    "date": "2026-10-12",
+    "repo": "claude-skills",
+    "branch": "feat/visual-artifacts",
+    "status": "Ready for review"
+  },
+  "sections": [
+    {
+      "type": "tldr",
+      "id": "verdict",
+      "title": "An explainer can now carry a live diagram, not a screenshot of one",
+      "text": "A diagram section takes a make-diagram spec, inline or from a file, and renders it as an SVG you can hover, with a Present button for a step-by-step walkthrough.",
+      "points": [
+        "Mistakes in the embedded spec are reported under the section that holds it.",
+        "The diagram stylesheet and viewer ship once per page, whatever the diagram count.",
+        "In a slide deck, the arrow keys belong to the overlay while it is open."
+      ],
+      "tone": "good"
+    },
+    {
+      "type": "diagram",
+      "id": "build-path",
+      "title": "A spec becomes a figure in four steps",
+      "diagram": {
+        "title": "From spec to page",
+        "subtitle": "How a diagram section is checked and built",
+        "type": "flow",
+        "direction": "down",
+        "nodes": [
+          { "id": "spec", "label": "Explainer JSON", "kind": "io", "note": "diagram: object or path" },
+          { "id": "check", "label": "Validate", "note": "make-diagram rules" },
+          { "id": "build", "label": "buildDiagram", "kind": "subprocess", "note": "SVG and step data" },
+          { "id": "page", "label": "Page builder", "note": "css and viewer once" },
+          { "id": "file", "label": "One HTML file", "kind": "end" }
+        ],
+        "edges": [
+          { "from": "spec", "to": "check" },
+          { "from": "check", "to": "build" },
+          { "from": "build", "to": "page" },
+          { "from": "page", "to": "file" },
+          { "from": "check", "to": "spec", "label": "errors with paths", "style": "dashed" }
+        ],
+        "steps": [
+          { "title": "The section holds the spec", "note": "Either an inline object or a .json file next to the explainer.", "show": ["spec"] },
+          { "title": "Validation runs first", "note": "Errors come back as sections[i].diagram… so the fix is easy to find.", "show": ["check"], "highlight": ["check"] },
+          { "title": "make-diagram draws the SVG", "note": "Ids are prefixed per diagram, so two figures never clash.", "show": ["build"], "focus": ["check", "build"] },
+          { "title": "The page builder embeds it", "note": "The stylesheet and the viewer script are included once.", "show": ["page", "file"] }
+        ]
+      },
+      "caption": "Hover a box to trace its links. Present walks through the four steps."
+    },
+    {
+      "type": "text",
+      "title": "Present is the only place the keyboard shortcuts live",
+      "text": "Inline, a figure traces links on hover or focus and never captures the mouse wheel, so the page keeps scrolling. **Present** opens a full-screen overlay with Back, Next and Close.\n\nInside it the viewer's shortcuts apply: arrows or Space step forward and back, `Esc` closes and focus returns to the Present button. In a deck, the slide keys stay quiet until the overlay is closed."
+    },
+    {
+      "type": "files",
+      "title": "Where the change lives",
+      "items": [
+        { "path": "scripts/lib/render/diagram.mjs", "change": "added", "add": 62, "note": "Builds the figure and its overlay markup." },
+        { "path": "scripts/lib/diagram-source.mjs", "change": "added", "add": 55, "note": "Reads an inline spec or a file; shared path rules." },
+        { "path": "template/diagram.js", "change": "added", "add": 71, "note": "Mounts the viewer and runs the overlay." },
+        { "path": "scripts/lib/page.mjs", "change": "modified", "add": 28, "del": 1, "note": "Builds each diagram before rendering; ships css and viewer once." },
+        { "path": "template/slides.js", "change": "modified", "add": 2, "del": 0, "note": "Ignores keys while the overlay is open." }
+      ]
+    },
+    {
+      "type": "risks",
+      "title": "What could still bite",
+      "items": [
+        { "risk": "A wide diagram is small inline at phone width.", "severity": "low", "mitigation": "Present fills the screen and supports zoom." },
+        { "risk": "make-diagram is missing on the machine.", "severity": "medium", "mitigation": "Validation prints the exact install command." }
+      ]
+    }
+  ]
+}

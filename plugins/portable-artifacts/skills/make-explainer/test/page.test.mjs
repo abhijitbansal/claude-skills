@@ -116,10 +116,10 @@ test('sections without a title render no heading and no label', async () => {
 
 test('sections without a renderer are reported with paths, all at once (in either mode)', async () => {
   for (const mode of ['page', 'slides']) {
-    await assert.rejects(build(doc([text(1), { type: 'diagram', diagram: 'x.diagram.json' }, { type: 'chart' }], { mode })), (e) => {
+    await assert.rejects(build(doc([text(1), { type: 'chart' }, { type: 'motion', video: 'x.mp4' }], { mode })), (e) => {
       assert.ok(e instanceof BuildError);
       assert.deepEqual(e.errors.map((x) => x.path), ['sections[1].type', 'sections[2].type']);
-      assert.match(e.errors[0].message, /"diagram" sections have no renderer yet/);
+      assert.match(e.errors[0].message, /"chart" sections have no renderer yet/);
       return true;
     });
   }

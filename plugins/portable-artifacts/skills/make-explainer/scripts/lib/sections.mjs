@@ -1,5 +1,5 @@
 // The section registry: type -> { render(section, ctx) -> string, ownHeading?,
-// assets?(section, ctx) -> Promise<{ from, to }[]>, check? }. A section type
+// assets?(section, ctx) -> Promise<{ from, to }[]>, prepare?(section, ctx, i) -> Promise<void>, check? }. A section type
 // with no entry has no renderer yet; buildPage reports it as an error.
 // ctx = { theme, dir, outDir, assetsDir, slug, mode, idFor(section, i), icons }.
 import * as tldr from './render/tldr.mjs';
@@ -17,9 +17,10 @@ import * as code from './render/code.mjs';
 import * as details from './render/details.mjs';
 import * as image from './render/image.mjs';
 import * as checklist from './render/checklist.mjs';
+import * as diagram from './render/diagram.mjs';
 
-const MODULES = { tldr, text, kpis, cards, table, risks, files, steps, timeline, compare, callout, code, details, image, checklist };
+const MODULES = { tldr, text, kpis, cards, table, risks, files, steps, timeline, compare, callout, code, details, image, checklist, diagram };
 
 export const SECTIONS = Object.freeze(Object.fromEntries(
-  Object.entries(MODULES).map(([type, m]) => [type, Object.freeze({ render: m.render, ownHeading: m.ownHeading === true, assets: m.assets, check: m.check })]),
+  Object.entries(MODULES).map(([type, m]) => [type, Object.freeze({ render: m.render, ownHeading: m.ownHeading === true, assets: m.assets, prepare: m.prepare, check: m.check })]),
 ));

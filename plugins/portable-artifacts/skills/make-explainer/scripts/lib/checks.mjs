@@ -8,6 +8,7 @@ import { pathJoin } from '../../shared/errors.mjs';
 import { readImage } from './image.mjs';
 import { loadSibling, SiblingError } from './siblings.mjs';
 import { itemKey } from './render/checklist.mjs';
+import { readDiagramSpec, reportDiagramErrors, inPageTheme } from './diagram-source.mjs';
 
 const CHECKS = new Map();
 
@@ -81,4 +82,25 @@ registerCheck('checklist', ({ section, path: at }) => {
     });
   });
   return errors;
+});
+
+// diagram: the embedded spec (inline, or a file in the spec folder) must pass
+// make-diagram's own validation, geometry lint included, under the page's
+// theme; its errors are re-pathed under the section's `diagram` field. A blank string is already
+// reported by the section's own check.
+registerCheck('diagram', async ({ section, path: at, dir, spec }) => {
+  const where = pathJoin(at, 'diagram');
+  if (typeof section.diagram === 'string' && section.diagram.trim() === '') return [];
+  const source = readDiagramSpec(section.diagram, dir);
+  if (source.error) return [{ path: where, message: source.error }];
+  let diagramSpec;
+  try {
+    diagramSpec = await loadSibling('make-diagram', 'scripts/lib/spec.mjs');
+  } catch (e) {
+    if (!(e instanceof SiblingError)) throw e;
+    return [{ path: where, message: e.message }];
+  }
+  // The build draws it in the page's theme, so validate (and lay out) under that theme too; an embedded theme is overridden.
+  const result = await diagramSpec.validateSpec(inPageTheme(source.spec, spec.theme));
+  return reportDiagramErrors(result.errors, where, source.file);
 });

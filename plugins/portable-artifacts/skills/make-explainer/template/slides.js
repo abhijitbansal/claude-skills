@@ -154,6 +154,8 @@
 
   document.addEventListener('keydown', function (event) {
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+    // A diagram's Present overlay owns every key while it is open.
+    if (document.querySelector('.dg-overlay[open]')) return;
     var act = PA.slideKey(event.key, event.shiftKey);
     if (!act) return;
     var target = event.target;

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SECTIONS } from '../scripts/lib/sections.mjs';
 import { loadSibling } from '../scripts/lib/siblings.mjs';
+import { loadTheme } from '../shared/theme.mjs';
 import { plain, rawText, glyph, toneChip } from '../scripts/lib/render/ui.mjs';
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
@@ -13,7 +14,7 @@ const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 const P = '<i>X</i>"\'';
 const ESCAPED_P = '&lt;i&gt;X&lt;/i&gt;&quot;&#39;';
 
-const ctx = { dir: FIXTURES, icons: null, theme: {}, mode: 'page' };
+const ctx = { dir: FIXTURES, icons: null, theme: loadTheme('paper'), mode: 'page' };
 
 // One section per type with the hostile string in every free-text field.
 const HOSTILE = {
@@ -31,6 +32,7 @@ const HOSTILE = {
   code: { type: 'code', code: P, language: P, caption: P },
   details: { type: 'details', summary: P, text: P },
   image: { type: 'image', src: 'pixel.png', alt: P, caption: P },
+  diagram: { type: 'diagram', caption: P, diagram: { title: P, type: 'flow', nodes: [{ id: 'a', label: P }, { id: 'b', label: P, note: P }], edges: [{ from: 'a', to: 'b', label: P }] } },
   checklist: { type: 'checklist', key: 'k', intro: P, onFail: P, groups: [{ title: P, items: [{ text: P, note: P, tag: 'visual' }] }] },
 };
 
@@ -46,8 +48,10 @@ test('every section type has a renderer under test', () => {
 });
 
 for (const [type, section] of Object.entries(HOSTILE)) {
-  test(`${type}: hostile text is escaped everywhere, never markup`, () => {
-    const html = SECTIONS[type].render(section, ctx);
+  test(`${type}: hostile text is escaped everywhere, never markup`, async () => {
+    const c = { ...ctx, diagrams: { items: new Map(), css: '', runtime: '' } };
+    if (SECTIONS[type].prepare) await SECTIONS[type].prepare(section, c, 0);
+    const html = SECTIONS[type].render(section, c);
     assert.ok(!html.includes('<i>'), `raw <i> leaked:\n${html}`);
     assert.ok(!html.includes('X</i>'), 'raw closing tag leaked');
     const seen = html.split(ESCAPED_P).length - 1;
