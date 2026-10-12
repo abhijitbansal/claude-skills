@@ -5,6 +5,8 @@
 // type. Later tasks add theirs with registerCheck(type, fn).
 import { resolveRef } from './paths.mjs';
 import { pathJoin } from '../../shared/errors.mjs';
+import { readImage } from './image.mjs';
+import { loadSibling, SiblingError } from './siblings.mjs';
 
 const CHECKS = new Map();
 
@@ -26,8 +28,37 @@ export function checksFor(type) {
 
 export const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.svg'];
 
-// image.src: a local file inside the spec folder. (Size limits: a later task.)
+// image.src: a local file inside the spec folder, within the size cap, whose
+// content matches its extension; an SVG must carry no script or external refs.
 registerCheck('image', ({ section, path: at, dir }) => {
   const r = resolveRef(dir, section.src, { exts: IMAGE_EXTS });
-  return r.error ? [{ path: pathJoin(at, 'src'), message: r.error }] : [];
+  if (r.error) return [{ path: pathJoin(at, 'src'), message: r.error }];
+  const img = readImage(r.abs);
+  return img.error ? [{ path: pathJoin(at, 'src'), message: img.error }] : [];
+});
+
+// cards[].icon: a make-diagram catalog ref ("lucide:<name>" or "brand:<slug>").
+// The sibling is loaded only when a card actually has an icon.
+registerCheck('cards', async ({ section, path: at }) => {
+  const withIcon = section.items.map((item, i) => [item, i]).filter(([item]) => item.icon !== undefined);
+  if (withIcon.length === 0) return [];
+  let icons;
+  try {
+    icons = await loadSibling('make-diagram', 'scripts/lib/icons.mjs');
+  } catch (e) {
+    if (!(e instanceof SiblingError)) throw e;
+    return [{ path: pathJoin(at, 'items'), message: `icons need the make-diagram skill: ${e.message}` }];
+  }
+  const errors = [];
+  for (const [item, i] of withIcon) {
+    if (icons.hasIcon(item.icon)) continue;
+    let message;
+    try {
+      icons.iconSvg(item.icon);
+    } catch (e) {
+      message = e.message;
+    }
+    errors.push({ path: pathJoin(pathJoin(pathJoin(at, 'items'), i), 'icon'), message: message ?? `unknown icon ${JSON.stringify(item.icon)}` });
+  }
+  return errors;
 });

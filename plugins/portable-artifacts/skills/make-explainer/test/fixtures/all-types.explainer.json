@@ -9,7 +9,7 @@
     { "type": "tldr", "id": "verdict", "title": "Three skills share one core", "text": "Ready for review.", "points": ["One theme layer", "One lint"], "tone": "good" },
     { "type": "text", "title": "Why", "text": "Plain **bold**, *italic*, `code` and a [link](https://example.com).\n\n- first\n- second" },
     { "type": "kpis", "items": [{ "label": "Commits", "value": "42", "delta": "+3", "tone": "good", "note": "since main" }, { "label": "Tests", "value": "612 pass" }] },
-    { "type": "cards", "title": "Pieces", "columns": 3, "items": [{ "title": "Theme", "text": "Tokens become CSS.", "icon": "palette", "tone": "accent", "tag": "shared" }] },
+    { "type": "cards", "title": "Pieces", "columns": 3, "items": [{ "title": "Theme", "text": "Tokens become CSS.", "icon": "lucide:palette", "tone": "accent", "tag": "shared" }] },
     { "type": "table", "title": "Sizes", "columns": ["Page", "KB"], "rows": [["recap", 410], ["slides", "520"]], "caption": "Built output", "align": ["left", "right"] },
     { "type": "risks", "title": "What could go wrong", "items": [{ "risk": "Fonts drift", "severity": "low", "mitigation": "Synced copy is checked in CI", "owner": "Abhijit" }] },
     { "type": "files", "title": "Files changed", "items": [{ "path": "shared/theme.mjs", "change": "added", "note": "theme tokens to CSS", "add": 40, "del": 0 }] },

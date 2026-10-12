@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 150" role="img" aria-label="The pipeline: a JSON outline is validated, then rendered to one HTML page">
+<rect width="640" height="150" rx="10" fill="#f7f6f3"/>
+<g fill="#ffffff" stroke="#9b978d" stroke-width="1">
+<rect x="24" y="40" width="156" height="70" rx="8"/>
+<rect x="242" y="40" width="156" height="70" rx="8"/>
+<rect x="460" y="40" width="156" height="70" rx="8"/>
+</g>
+<g fill="none" stroke="#4f4d48" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+<path d="M184 75h54m-8-6 8 6-8 6"/>
+<path d="M402 75h54m-8-6 8 6-8 6"/>
+</g>
+<g font-family="Helvetica, Arial, sans-serif" fill="#161513" text-anchor="middle">
+<text x="102" y="72" font-size="16" font-weight="700">Outline</text>
+<text x="102" y="92" font-size="12" fill="#4f4d48">typed JSON sections</text>
+<text x="320" y="72" font-size="16" font-weight="700">Checks</text>
+<text x="320" y="92" font-size="12" fill="#4f4d48">schema, links, prose</text>
+<text x="538" y="72" font-size="16" font-weight="700">Page</text>
+<text x="538" y="92" font-size="12" fill="#4f4d48">one offline HTML file</text>
+</g>
+</svg>
