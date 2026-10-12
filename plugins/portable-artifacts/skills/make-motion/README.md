@@ -27,7 +27,10 @@ shell commands.
 
 ```bash
 cd make-motion && npm ci && npx playwright install chromium && cd -   # one-time
-# plus ffmpeg on PATH: brew install ffmpeg  |  sudo apt-get install ffmpeg
+# plus ffmpeg on PATH:
+#   macOS:   brew install ffmpeg
+#   Windows: winget install Gyan.FFmpeg   (then open a new terminal)
+#   Linux:   sudo apt-get install ffmpeg  (and use: npx playwright install --with-deps chromium)
 
 SKILL=path/to/make-motion
 cp $SKILL/references/examples/q3-revenue.json motion.json

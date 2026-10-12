@@ -1,7 +1,7 @@
 {
   "name": "portable-artifacts",
   "description": "Host-agnostic, offline, open-source artifact skills: make-dashboard (prompt -> SQL + Vega-Lite -> static HTML with per-chart SQL provenance) and make-motion (prompt -> scene spec -> local preview + MP4). Work with any agent that can read files and run shell commands.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "author": {
     "name": "Abhijit Bansal",
     "url": "https://github.com/abhijitbansal"
