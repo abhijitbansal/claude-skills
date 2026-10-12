@@ -1,5 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { launchBrowser, haveBrowser, buildProject } from './helpers/browser.mjs';
@@ -199,5 +200,27 @@ test('clicking a chart view and then Table in the same tick leaves only the tabl
   });
   await page.waitForTimeout(500);
   assert.deepEqual(await paneMatchesTab(page, 'bar'), { selected: 'share', tables: 0, svgs: 1 });
+  assert.deepEqual(problems, []);
+});
+
+test('PNG, SVG and CSV export download under the strict CSP', async (t) => {
+  if (!(await haveBrowser())) return t.skip('no browser');
+  const { out } = buildProject(KINDS_SPEC);
+  const { page, problems } = await open(out);
+  for (const [kind, name] of [['png', 'bar.png'], ['svg', 'bar.svg'], ['csv', 'bar.csv']]) {
+    await page.click('#card-bar details.export summary');
+    const [download] = await Promise.all([page.waitForEvent('download'), page.click(`#card-bar [data-export=${kind}]`)]);
+    assert.equal(download.suggestedFilename(), name);
+    const file = await download.path();
+    const head = fs.readFileSync(file).subarray(0, 8);
+    if (kind === 'png') assert.deepEqual([...head.subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+    if (kind === 'svg') assert.match(head.toString(), /^<svg/);
+    if (kind === 'svg') assert.match(fs.readFileSync(file, 'utf8'), /<rect width="100%" height="100%" fill="[^"]+"\/>/, 'filled with the page surface');
+    if (kind === 'csv') assert.match(fs.readFileSync(file, 'utf8'), /^region,Total Revenue\r\n/);
+  }
+  await page.click('#card-bar [data-view=table]');
+  await page.click('#card-bar details.export summary');
+  assert.equal(await page.isVisible('#card-bar [data-export=png]'), false, 'image export hidden on the Table view');
+  assert.equal(await page.isVisible('#card-bar [data-export=csv]'), true, 'CSV stays on the Table view');
   assert.deepEqual(problems, []);
 });

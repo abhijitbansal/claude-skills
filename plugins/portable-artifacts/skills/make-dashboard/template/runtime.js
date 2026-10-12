@@ -205,8 +205,77 @@
       b.tabIndex = on ? 0 : -1;
       if (on && focus) b.focus();
     });
+    syncExport(c);
     renderChart(c, config());
   }
+
+  // ---- export --------------------------------------------------------------
+  // Images come from the first pane's live Vega view (see paneState); the Table
+  // view has none, so PNG/SVG hide there. CSV is the query's rows as loaded.
+  function firstView(c) {
+    return c.pair ? c.views[0] : c.views.filter(function (v) { return v.name === active[c.id]; })[0] || c.views[0];
+  }
+
+  function syncExport(c) {
+    var menu = document.querySelector('#card-' + c.id + ' details.export');
+    if (!menu) return;
+    var isTable = !firstView(c).vegaLite;
+    menu.querySelectorAll('[data-export=png],[data-export=svg]').forEach(function (b) { b.hidden = isTable; });
+  }
+
+  // The chart itself is transparent; fill it with the page surface so the file
+  // reads the same as on screen (dark-theme text vanishes on white otherwise).
+  function imageHref(view, kind) {
+    var surface = css('--surface');
+    if (kind === 'svg') {
+      return view.toSVG().then(function (svg) {
+        var filled = svg.replace(/<svg[^>]*>/, function (tag) { return tag + '<rect width="100%" height="100%" fill="' + surface + '"/>'; });
+        return URL.createObjectURL(new Blob([filled], { type: 'image/svg+xml;charset=utf-8' }));
+      });
+    }
+    return view.toCanvas(2).then(function (chart) {
+      var flat = document.createElement('canvas');
+      flat.width = chart.width;
+      flat.height = chart.height;
+      var ctx = flat.getContext('2d');
+      ctx.fillStyle = surface;
+      ctx.fillRect(0, 0, flat.width, flat.height);
+      ctx.drawImage(chart, 0, 0);
+      return flat.toDataURL('image/png');
+    });
+  }
+
+  function download(href, name) {
+    var a = document.createElement('a');
+    a.href = href;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  data.charts.forEach(function (c) {
+    var menu = document.querySelector('#card-' + c.id + ' details.export');
+    if (!menu) return;
+    syncExport(c);
+    menu.addEventListener('click', function (e) {
+      var kind = e.target && e.target.getAttribute && e.target.getAttribute('data-export');
+      if (!kind) return;
+      var stem = PA.fileStem(c.title);
+      menu.open = false;
+      if (kind === 'csv') {
+        var q = data.queries[c.query];
+        var url = URL.createObjectURL(new Blob([PA.toCsv(q.columns, q.rows)], { type: 'text/csv;charset=utf-8' }));
+        download(url, stem + '.csv');
+        setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+        return;
+      }
+      var first = document.getElementById('chart-' + c.id);
+      var result = first && pane(first).result;
+      if (!result) return; // Table view, or the chart has not landed yet
+      imageHref(result.view, kind).then(function (href) { download(href, stem + '.' + kind); });
+    });
+  });
 
   data.charts.forEach(function (c) {
     var list = document.querySelector('#card-' + c.id + ' [role=tablist]');

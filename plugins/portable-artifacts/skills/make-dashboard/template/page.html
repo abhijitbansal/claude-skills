@@ -38,6 +38,13 @@ button { font: inherit; color: inherit; }
 .card h2 { margin: 0 0 8px; font-size: 1rem; font-weight: 600; overflow-wrap: anywhere; }
 .card-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
 .card-head h2 { margin: 0; }
+.export { position: relative; margin: 0; border: 0; padding: 0; font-size: 0.8rem; }
+.export summary { list-style: none; border: 1px solid var(--line); border-radius: 8px; padding: 2px 10px; color: var(--text-2); cursor: pointer; }
+.export summary::-webkit-details-marker { display: none; }
+.export .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 2; display: grid; min-width: 96px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
+.export .menu button { border: 0; background: none; text-align: left; padding: 4px 8px; border-radius: 6px; cursor: pointer; color: var(--text); font: inherit; }
+.export .menu button:hover { background: var(--accent-soft); }
+.export .menu button[hidden] { display: none; }
 .views { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 2px; gap: 2px; }
 .views button { border: 0; background: none; padding: 2px 10px; border-radius: 6px; font-size: 0.8rem; color: var(--text-2); cursor: pointer; }
 .views button[aria-selected="true"] { background: var(--accent-soft); color: var(--text); }

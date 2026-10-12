@@ -38,3 +38,28 @@ test('sortRows: numbers numerically, text by locale, NULLs last both ways, input
   assert.deepEqual(PA.sortRows([{ s: 'b' }, { s: 'a' }, { s: 'B' }], 's', 'asc').map((r) => r.s), ['a', 'b', 'B']);
   assert.equal(PA.TABLE_LIMIT, 500);
 });
+
+test('toCsv quotes per RFC 4180, writes NULL as empty, guards formula-like text', () => {
+  const PA = loadPaLib();
+  const csv = PA.toCsv(['name', 'note', 'n'], [
+    { name: 'a,b', note: 'say "hi"', n: 1 },
+    { name: '=HYPERLINK("x")', note: null, n: -5 },
+    { name: '+1', note: '@sum', n: 2.5 },
+    { name: 'line\nbreak', note: '-x', n: null },
+  ]);
+  assert.equal(csv, [
+    'name,note,n',
+    '"a,b","say ""hi""",1',
+    `"'=HYPERLINK(""x"")",,-5`,
+    "'+1,'@sum,2.5",
+    '"line\nbreak",\'-x,',
+    '',
+  ].join('\r\n'));
+});
+
+test('fileStem makes a safe download name', () => {
+  const PA = loadPaLib();
+  assert.equal(PA.fileStem('Revenue by Region (2025)'), 'revenue-by-region-2025');
+  assert.equal(PA.fileStem('***'), 'chart');
+  assert.equal(PA.fileStem('a'.repeat(80)).length, 60);
+});

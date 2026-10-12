@@ -63,6 +63,11 @@ function tabs(c) {
   return `<div class="views" role="tablist" aria-label="${escapeHtml(c.title)} views">${buttons}</div>`;
 }
 
+function exportMenu(c) {
+  return `<details class="export"><summary aria-label="Export ${escapeHtml(c.title)}">Export</summary><div class="menu">`
+    + '<button type="button" data-export="png">PNG</button><button type="button" data-export="svg">SVG</button><button type="button" data-export="csv">CSV</button></div></details>';
+}
+
 function panes(c) {
   const pane = (suffix, i) => `<div class="chart" id="chart-${escapeHtml(c.id)}${suffix}" data-pane="${i}" role="img" aria-label="${escapeHtml(c.title)}"></div>`;
   return c.pair ? `<div class="panes pair">${pane('', 0)}${pane('-2', 1)}</div>` : `<div class="panes">${pane('', 0)}</div>`;
@@ -75,7 +80,7 @@ function card(chart, expanded, results, maxRows) {
   const empty = res.rowCount === 0 ? '<p class="meta empty">No rows returned</p>' : '';
   const shown = Math.min(res.rowCount, TABLE_ROWS);
   return `<article class="card ${expanded.width === 'half' ? 'half' : 'full'}" id="card-${escapeHtml(chart.id)}">
-  <div class="card-head"><h2>${escapeHtml(chart.title)}</h2>${tabs(expanded)}</div>
+  <div class="card-head"><h2>${escapeHtml(chart.title)}</h2>${tabs(expanded)}${exportMenu(chart)}</div>
   ${panes(expanded)}
   ${empty}${note}
   <details>

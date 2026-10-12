@@ -36,5 +36,29 @@
       .map(function (e) { return e.r; });
   }
 
-  root.PA = { nextTheme: nextTheme, readStore: readStore, writeStore: writeStore, sortRows: sortRows, TABLE_LIMIT: TABLE_LIMIT };
+  var FORMULA = /^[=+\-@\t\r]/;
+
+  function csvCell(v) {
+    if (v === null || v === undefined) return '';
+    var s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    // Text a spreadsheet would run as a formula gets a leading quote.
+    if (typeof v === 'string' && FORMULA.test(s)) s = "'" + s;
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  function toCsv(columns, rows) {
+    var lines = [columns.map(csvCell).join(',')];
+    rows.forEach(function (r) { lines.push(columns.map(function (c) { return csvCell(r[c]); }).join(',')); });
+    return lines.join('\r\n') + '\r\n';
+  }
+
+  function fileStem(title) {
+    var s = String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '');
+    return s || 'chart';
+  }
+
+  root.PA = {
+    nextTheme: nextTheme, readStore: readStore, writeStore: writeStore, sortRows: sortRows, TABLE_LIMIT: TABLE_LIMIT,
+    csvCell: csvCell, toCsv: toCsv, fileStem: fileStem
+  };
 })(typeof window !== 'undefined' ? window : globalThis);
