@@ -43,3 +43,8 @@ test('page font payload stays within 200 KB', () => {
   const bytes = [...html.matchAll(/base64,([A-Za-z0-9+/=]+)\)/g)].reduce((n, m) => n + Buffer.from(m[1], 'base64').length, 0);
   assert.ok(bytes > 0 && bytes <= 200 * 1024, `${bytes} bytes`);
 });
+
+test('theme toggle ships with the "Theme: Auto" label', () => {
+  const { html } = buildProject(base);
+  assert.match(html, /data-theme-toggle aria-label="Theme: Auto\. Change theme">Theme: Auto<\/button>/);
+});

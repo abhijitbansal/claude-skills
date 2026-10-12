@@ -114,3 +114,51 @@ test('every kind chart renders; hover dims bars, legend filters, wheel zooms sca
   assert.deepEqual(problems, []);
   await page.screenshot({ path: path.join(out, 'kinds.png'), fullPage: true });
 });
+
+test('theme toggle text reads "Theme: <mode>" and follows the cycle', async (t) => {
+  if (!(await haveBrowser())) return t.skip('no browser');
+  const { out } = buildProject(SPEC);
+  const { page, problems } = await open(out);
+  const text = () => page.locator('[data-theme-toggle]').textContent();
+  assert.equal(await text(), 'Theme: Auto');
+  await page.click('[data-theme-toggle]');
+  assert.equal(await text(), 'Theme: Light');
+  await page.click('[data-theme-toggle]');
+  assert.equal(await text(), 'Theme: Dark');
+  assert.deepEqual(problems, []);
+});
+
+test('view switcher swaps the chart, Table view sorts, pair shows two, state survives reload', async (t) => {
+  if (!(await haveBrowser())) return t.skip('no browser');
+  const spec = { ...KINDS_SPEC, charts: [
+    { ...KINDS_SPEC.charts[0] },
+    { id: 'pair', title: 'Pair', query: 'rev', kind: 'bar', x: 'region', y: 'Total Revenue', pair: true, views: ['share'] },
+  ] };
+  const { out } = buildProject(spec);
+  const { page, problems } = await open(out);
+  const tabs = page.locator('#card-bar [role=tab]');
+  assert.deepEqual(await tabs.allTextContents(), ['Bar', 'Sorted', 'Share', 'Table']);
+  await page.click('#card-bar [data-view=table]');
+  assert.equal(await page.locator('#card-bar .table-view tbody tr').count(), 4);
+  await page.click('#card-bar .table-view th:nth-child(2) button');  // sort by revenue
+  const first = await page.locator('#card-bar .table-view tbody tr:first-child td:nth-child(2)').textContent();
+  await page.click('#card-bar .table-view th:nth-child(2) button');  // reverse
+  assert.notEqual(await page.locator('#card-bar .table-view tbody tr:first-child td:nth-child(2)').textContent(), first);
+  await page.focus('#card-bar [data-view=table]');
+  await page.keyboard.press('ArrowLeft');  // keyboard moves between tabs: Table -> Share
+  assert.equal(await page.getAttribute('#card-bar [data-view=share]', 'aria-selected'), 'true');
+  assert.equal(await page.locator('#card-pair .chart svg').count(), 2, 'pair renders both views');
+  await page.reload();
+  await page.waitForFunction(() => window.paReady === true);
+  assert.equal(await page.getAttribute('#card-bar [data-view=share]', 'aria-selected'), 'true', 'active view restored');
+  assert.deepEqual(problems, []);
+});
+
+test('blocked storage: switching views still works', async (t) => {
+  if (!(await haveBrowser())) return t.skip('no browser');
+  const { out } = buildProject(KINDS_SPEC);
+  const { page, problems } = await open(out, { blockStorage: true });
+  await page.click('#card-bar [data-view=sorted]');
+  assert.equal(await page.getAttribute('#card-bar [data-view=sorted]', 'aria-selected'), 'true');
+  assert.deepEqual(problems, []);
+});

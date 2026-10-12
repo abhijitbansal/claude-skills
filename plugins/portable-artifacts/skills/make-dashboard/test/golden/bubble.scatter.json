@@ -1,0 +1,27 @@
+{
+  "params": [
+    {
+      "name": "pa_zoom",
+      "select": {
+        "type": "interval"
+      },
+      "bind": "scales"
+    }
+  ],
+  "mark": {
+    "type": "point",
+    "tooltip": true
+  },
+  "encoding": {
+    "x": {
+      "field": "a",
+      "type": "quantitative",
+      "title": "a"
+    },
+    "y": {
+      "field": "b",
+      "type": "quantitative",
+      "title": "b"
+    }
+  }
+}

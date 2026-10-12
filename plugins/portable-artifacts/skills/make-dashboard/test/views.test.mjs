@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile } from 'vega-lite';
-import { expandCharts, temporalUnit } from '../scripts/lib/views.mjs';
+import { expandCharts, temporalUnit, availableViews } from '../scripts/lib/views.mjs';
 import { KIND_NAMES } from '../scripts/lib/kinds.mjs';
 
 const GOLDEN = path.join(path.dirname(fileURLToPath(import.meta.url)), 'golden');
@@ -81,7 +81,7 @@ test('long or many labels turn a bar horizontal with step height', () => {
 test('zero rows: chart is marked empty and still offers the table', () => {
   const c = expand1({ kind: 'bar', query: 'none', x: 'region', y: 'revenue' });
   assert.equal(c.empty, true);
-  assert.deepEqual(c.views.map((v) => v.name), ['bar', 'table']);
+  assert.deepEqual(c.views.map((v) => v.name), ['bar', 'sorted', 'table'], 'share is blocked (no positive total); sorted stays');
 });
 
 test('raw vegaLite charts become [chart, table] with tooltips added at build', () => {
@@ -117,3 +117,69 @@ test('line and area with a nominal x keep the query order (sort: null); temporal
     assert.equal('sort' in temporal.encoding.x, false);
   }
 });
+
+const r = (rows, columns = ['region', 'revenue'], types = ['VARCHAR', 'DOUBLE']) => ({ rows, columns, types, rowCount: rows.length });
+
+test('default alternates per kind, in order, with table last', () => {
+  const names = (chart, res) => expandCharts({ charts: [{ id: 'c', title: 'C', ...chart }] }, res).charts[0].views.map((v) => v.name);
+  assert.deepEqual(names({ kind: 'bar', query: 'cat', x: 'region', y: 'revenue' }, results), ['bar', 'sorted', 'share', 'table']);
+  assert.deepEqual(names({ kind: 'line', query: 'time', x: 'month', y: 'revenue', color: 'region' }, results), ['line', 'area', 'table']);
+  assert.deepEqual(names({ kind: 'donut', query: 'cat', x: 'region', y: 'revenue' }, results), ['donut', 'bar', 'table']);
+});
+
+test('negative values block share/normalized; NULLs are ignored; zero total blocks share', () => {
+  const chart = { kind: 'bar', x: 'region', y: 'revenue' };
+  assert.deepEqual(availableViews(chart, r([{ region: 'a', revenue: 5 }, { region: 'b', revenue: -1 }])).blocked.share, 'share needs every revenue >= 0 (row 2 has -1)');
+  assert.deepEqual(availableViews(chart, r([{ region: 'a', revenue: 5 }, { region: 'b', revenue: null }])).offered, ['sorted', 'share']);
+  assert.match(availableViews(chart, r([{ region: 'a', revenue: 0 }])).blocked.share, /positive total/);
+  assert.match(availableViews(chart, r([])).blocked.share, /positive total/, 'zero rows: no division by zero');
+});
+
+test('an unavailable default is dropped silently; an unavailable requested view is an error', () => {
+  const res = { neg: r([{ region: 'a', revenue: 5 }, { region: 'b', revenue: -1 }]) };
+  let out = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'bar', query: 'neg', x: 'region', y: 'revenue' }] }, res);
+  assert.deepEqual(out.charts[0].views.map((v) => v.name), ['bar', 'sorted', 'table']);
+  out = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'bar', query: 'neg', x: 'region', y: 'revenue', views: ['share'] }] }, res);
+  assert.deepEqual(out.errors, [{ path: 'charts[0].views[0]', message: 'share needs every revenue >= 0 (row 2 has -1)' }]);
+});
+
+test('views narrows and reorders; table is always appended once', () => {
+  const out = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'bar', query: 'cat', x: 'region', y: 'revenue', views: ['table', 'share'] }] }, results);
+  assert.deepEqual(out.charts[0].views.map((v) => v.name), ['bar', 'share', 'table']);
+});
+
+test('donut primary needs <= 6 slices; colour needs <= 8 values (<= 3 for scatter)', () => {
+  const seven = r(Array.from({ length: 7 }, (_, i) => ({ region: `r${i}`, revenue: 1 })));
+  let out = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'donut', query: 'q', x: 'region', y: 'revenue' }] }, { q: seven });
+  assert.deepEqual(out.errors, [{ path: 'charts[0].kind', message: 'donut needs <= 6 slices (region has 7); use kind "bar"' }]);
+  const four = { columns: ['a', 'b', 'g'], types: ['DOUBLE', 'DOUBLE', 'VARCHAR'], rows: ['p', 'q', 'r', 's'].map((g, i) => ({ a: i, b: i, g })), rowCount: 4 };
+  out = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'scatter', query: 'q', x: 'a', y: 'b', color: 'g' }] }, { q: four });
+  assert.deepEqual(out.errors, [{ path: 'charts[0].color', message: 'g has 4 values; scatter colour allows at most 3 (fold the rest into "Other" in SQL or drop color)' }]);
+});
+
+test('pair is kept only when there are two views to show', () => {
+  let out = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'bar', query: 'cat', x: 'region', y: 'revenue', pair: true, width: 'half' }] }, results);
+  assert.equal(out.charts[0].pair, true);
+  assert.equal(out.charts[0].width, 'full', 'pair forces full width');
+  out = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'heatmap', query: 'grid', x: 'hour', y: 'day', value: 'n', pair: true }] }, results);
+  assert.equal(out.charts[0].pair, true, 'heatmap + table still makes a pair');
+});
+
+for (const [kind, view, chart] of [
+  ['bar', 'sorted', KIND_CHARTS.bar], ['bar', 'share', KIND_CHARTS.bar],
+  ['stacked-bar', 'grouped', KIND_CHARTS['stacked-bar']], ['stacked-bar', 'normalized', KIND_CHARTS['stacked-bar']],
+  ['grouped-bar', 'stacked', KIND_CHARTS['grouped-bar']],
+  ['line', 'area', KIND_CHARTS.line], ['area', 'line', KIND_CHARTS.area],
+  ['bubble', 'scatter', KIND_CHARTS.bubble], ['histogram', 'boxplot', KIND_CHARTS.histogram],
+  ['boxplot', 'histogram', KIND_CHARTS.boxplot], ['donut', 'bar', KIND_CHARTS.donut],
+]) {
+  test(`alternate ${kind} -> ${view} matches golden and compiles`, () => {
+    const c = expandCharts({ charts: [{ id: 'c', title: 'C', kind, ...chart }] }, results).charts[0];
+    const v = c.views.find((x) => x.name === view);
+    assert.ok(v, `${view} offered for ${kind}`);
+    assert.doesNotThrow(() => compile({ ...v.vegaLite, data: { values: [] } }));
+    const file = path.join(GOLDEN, `${kind}.${view}.json`);
+    if (process.env.PA_WRITE_GOLDEN === '1') fs.writeFileSync(file, `${JSON.stringify(v.vegaLite, null, 2)}\n`);
+    assert.deepEqual(JSON.parse(JSON.stringify(v.vegaLite)), JSON.parse(fs.readFileSync(file, 'utf8')));
+  });
+}

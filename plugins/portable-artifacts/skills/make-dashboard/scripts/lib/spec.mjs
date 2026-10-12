@@ -120,6 +120,9 @@ function items(spec) {
   ];
 }
 
+// Chart keys only a kind chart reads; on a raw vegaLite chart they would be ignored silently.
+const KIND_ONLY_KEYS = ['x', 'y', 'color', 'size', 'value', 'views', 'format', 'pair'];
+
 function crossRefs(spec, dir, { allowOutside }) {
   const errors = [];
   const queryNames = Object.keys(spec.queries ?? {});
@@ -155,6 +158,11 @@ function crossRefs(spec, dir, { allowOutside }) {
     const p = pathJoin('charts', i);
     if (c.kind && c.vegaLite) errors.push({ path: p, message: 'use either kind or vegaLite, not both' });
     else if (!c.kind && !c.vegaLite) errors.push({ path: p, message: `add kind (one of ${KIND_NAMES.join(', ')}) or vegaLite` });
+    else if (!c.kind) {
+      for (const key of KIND_ONLY_KEYS) {
+        if (c[key] !== undefined) errors.push({ path: pathJoin(p, key), message: `${key} needs kind (raw vegaLite charts ignore it)` });
+      }
+    }
   });
   if (spec.theme !== undefined && !listThemes().includes(spec.theme)) {
     const themes = listThemes();

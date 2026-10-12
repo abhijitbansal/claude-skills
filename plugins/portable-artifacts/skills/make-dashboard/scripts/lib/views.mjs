@@ -7,6 +7,10 @@ const AXIS_FORMAT = { number: ',.2~f', currency: '$,.2~f', percent: '.1~%', comp
 const HORIZONTAL_LABEL = 12;
 const HORIZONTAL_COUNT = 8;
 const TABLE = { name: 'table', label: 'Table' };
+export const LABELS = { sorted: 'Sorted', share: 'Share', grouped: 'Grouped', stacked: 'Stacked', normalized: '100%', area: 'Area', line: 'Line', scatter: 'Scatter', boxplot: 'Box plot', histogram: 'Histogram', bar: 'Bar' };
+const MAX_COLORS = 8;
+const MAX_COLORS_ALL_PAIRS = 3; // dataviz: scatter/bubble validate only the first three slots all-pairs
+const MAX_DONUT = 6;
 
 export function temporalUnit(values) {
   const dates = values.filter((v) => v !== null && v !== undefined).map((v) => new Date(String(v).length === 10 ? `${v}T00:00:00Z` : v));
@@ -71,7 +75,7 @@ function lineLike(ctx, mark) {
   return { encoding: { x }, layer: [main, rule, dots] };
 }
 
-const BUILDERS = {
+export const BUILDERS = {
   bar: (ctx) => bar(ctx),
   'stacked-bar': (ctx) => bar(ctx, { color: true }),
   'grouped-bar': (ctx) => bar(ctx, { color: true, offset: true }),
@@ -83,6 +87,27 @@ const BUILDERS = {
   histogram: (ctx) => ({ mark: 'bar', encoding: { x: ctx.def('value', { bin: { maxbins: 20 } }), y: { aggregate: 'count', type: 'quantitative', title: 'Count' } } }),
   boxplot: (ctx) => ({ mark: { type: 'boxplot', extent: 1.5 }, encoding: { y: ctx.def('value'), ...(ctx.def('x') ? { x: ctx.def('x') } : {}) } }),
   donut: (ctx) => ({ mark: { type: 'arc', innerRadius: 60 }, encoding: { theta: ctx.def('y', { stack: true }), color: ctx.def('x') } }),
+  // Alternates reuse the primary helpers; share and normalized add transforms.
+  sorted: (ctx) => bar(ctx, { sort: ctx.horizontal ? '-x' : '-y' }),
+  share: (ctx, chart) => {
+    const total = 'pa_total';
+    const share = 'pa_share';
+    const v = bar(ctx);
+    const valueKey = ctx.horizontal ? 'x' : 'y';
+    v.transform = [
+      { joinaggregate: [{ op: 'sum', field: fieldRef(chart.y), as: total }] },
+      { calculate: `datum[${JSON.stringify(chart.y)}] / datum.${total}`, as: share },
+    ];
+    v.encoding[valueKey] = { field: share, type: 'quantitative', title: `Share of ${chart.y}`, axis: { format: '.0%' } };
+    return v;
+  },
+  stacked: (ctx) => bar(ctx, { color: true }),
+  grouped: (ctx) => bar(ctx, { color: true, offset: true }),
+  normalized: (ctx) => {
+    const v = bar(ctx, { color: true, stack: 'normalize' });
+    v.encoding[ctx.horizontal ? 'x' : 'y'].axis = { format: '.0%' };
+    return v;
+  },
 };
 
 // Adds the kind's params and opacity to a built unit view.
@@ -93,14 +118,69 @@ function interactive(kind, vl, ctx) {
   return addTooltips(withOpacity);
 }
 
+// Alternates share their primary's interaction family.
+const FAMILY = { sorted: 'bar', share: 'bar', stacked: 'stacked-bar', grouped: 'stacked-bar', normalized: 'stacked-bar' };
 export function buildView(name, chart, ctx) {
-  return interactive(name, BUILDERS[name](ctx), ctx);
+  return interactive(FAMILY[name] ?? name, BUILDERS[name](ctx, chart), ctx);
 }
 
-function expandKind(chart, result) {
+// First row (1-based) whose value in `col` is negative, ignoring NULLs.
+function firstNegative(rows, col) {
+  const i = rows.findIndex((r) => typeof r[col] === 'number' && r[col] < 0);
+  return i < 0 ? null : { row: i + 1, value: rows[i][col] };
+}
+const total = (rows, col) => rows.reduce((n, r) => n + (typeof r[col] === 'number' ? r[col] : 0), 0);
+const distinct = (rows, col) => new Set(rows.map((r) => r[col]).filter((v) => v !== null && v !== undefined)).size;
+
+// Which of the kind's alternate views these rows can support, and why not.
+export function availableViews(chart, result) {
+  const offered = [];
+  const blocked = {};
+  const nonNeg = (view) => {
+    const neg = firstNegative(result.rows, chart.y);
+    if (neg) { blocked[view] = `${view} needs every ${chart.y} >= 0 (row ${neg.row} has ${neg.value})`; return false; }
+    if (!(total(result.rows, chart.y) > 0)) { blocked[view] = `${view} needs a positive total of ${chart.y}`; return false; }
+    return true;
+  };
+  for (const view of KINDS[chart.kind].views) {
+    let ok = true;
+    if (view === 'share' || view === 'normalized') ok = nonNeg(view);
+    if (view === 'area' && chart.color !== undefined) ok = nonNeg(view);
+    if (ok) offered.push(view);
+  }
+  return { offered, blocked };
+}
+
+function colourErrors(chart, result, p) {
+  if (chart.color === undefined) return [];
+  const limit = chart.kind === 'scatter' || chart.kind === 'bubble' ? MAX_COLORS_ALL_PAIRS : MAX_COLORS;
+  const n = distinct(result.rows, chart.color);
+  return n > limit
+    ? [{ path: `${p}.color`, message: `${chart.color} has ${n} values; ${chart.kind} colour allows at most ${limit} (fold the rest into "Other" in SQL or drop color)` }]
+    : [];
+}
+
+function expandKind(chart, result, p) {
+  const errors = colourErrors(chart, result, p);
+  if (chart.kind === 'donut') {
+    const n = distinct(result.rows, chart.x);
+    if (n > MAX_DONUT) errors.push({ path: `${p}.kind`, message: `donut needs <= ${MAX_DONUT} slices (${chart.x} has ${n}); use kind "bar"` });
+    else if (firstNegative(result.rows, chart.y)) errors.push({ path: `${p}.kind`, message: `donut needs every ${chart.y} >= 0; use kind "bar"` });
+  }
+  if (errors.length) return { views: [], errors };
   const ctx = context(chart, result);
-  const primary = { name: chart.kind, label: KINDS[chart.kind].label, vegaLite: buildView(chart.kind, chart, ctx) };
-  return { views: [primary, TABLE], errors: [] };
+  const { offered, blocked } = availableViews(chart, result);
+  (chart.views ?? []).forEach((v, i) => {
+    if (v !== 'table' && blocked[v]) errors.push({ path: `${p}.views[${i}]`, message: blocked[v] });
+  });
+  // `views` narrows and reorders the defaults; the table always comes last.
+  const names = chart.views?.filter((v) => v !== 'table') ?? offered;
+  const views = [
+    { name: chart.kind, label: KINDS[chart.kind].label, vegaLite: buildView(chart.kind, chart, ctx) },
+    ...names.filter((v) => offered.includes(v)).map((v) => ({ name: v, label: LABELS[v], vegaLite: buildView(v, chart, ctx) })),
+    TABLE,
+  ];
+  return { views, errors };
 }
 
 function expandRaw(chart, result) {
@@ -111,14 +191,15 @@ function expandRaw(chart, result) {
 export function expandCharts(spec, results) {
   const charts = [];
   const errors = [];
-  for (const chart of spec.charts ?? []) {
+  (spec.charts ?? []).forEach((chart, i) => {
     const result = results[chart.query];
-    const out = chart.kind ? expandKind(chart, result) : expandRaw(chart, result);
+    const out = chart.kind ? expandKind(chart, result, `charts[${i}]`) : expandRaw(chart, result);
     errors.push(...out.errors);
+    const pair = chart.pair === true && out.views.length >= 2;
     charts.push({
-      id: chart.id, title: chart.title, query: chart.query, width: chart.width ?? 'full',
-      pair: false, empty: result.rowCount === 0, views: out.views,
+      id: chart.id, title: chart.title, query: chart.query, width: pair ? 'full' : (chart.width ?? 'full'),
+      pair, empty: result.rowCount === 0, views: out.views,
     });
-  }
+  });
   return { charts, errors };
 }

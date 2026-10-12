@@ -28,3 +28,13 @@ test('storage helpers survive storage that throws (private mode)', () => {
   assert.doesNotThrow(() => PA.writeStore(broken, 'k', 'v'));
   assert.equal(PA.readStore(undefined, 'k'), null);
 });
+
+test('sortRows: numbers numerically, text by locale, NULLs last both ways, input untouched', () => {
+  const PA = loadPaLib();
+  const rows = [{ v: 10 }, { v: null }, { v: 9 }, { v: 100 }];
+  assert.deepEqual(PA.sortRows(rows, 'v', 'asc').map((r) => r.v), [9, 10, 100, null]);
+  assert.deepEqual(PA.sortRows(rows, 'v', 'desc').map((r) => r.v), [100, 10, 9, null]);
+  assert.deepEqual(rows.map((r) => r.v), [10, null, 9, 100]);
+  assert.deepEqual(PA.sortRows([{ s: 'b' }, { s: 'a' }, { s: 'B' }], 's', 'asc').map((r) => r.s), ['a', 'b', 'B']);
+  assert.equal(PA.TABLE_LIMIT, 500);
+});

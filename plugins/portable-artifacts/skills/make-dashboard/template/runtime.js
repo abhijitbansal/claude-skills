@@ -23,7 +23,7 @@
   function currentTheme() { return root.getAttribute('data-theme') || 'auto'; }
   function applyTheme(mode) {
     if (mode === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', mode);
-    if (toggle) { toggle.textContent = LABEL[mode]; toggle.setAttribute('aria-label', 'Theme: ' + LABEL[mode] + '. Change theme'); }
+    if (toggle) { toggle.textContent = 'Theme: ' + LABEL[mode]; toggle.setAttribute('aria-label', 'Theme: ' + LABEL[mode] + '. Change theme'); }
   }
   applyTheme(currentTheme());
   if (toggle) {
@@ -87,14 +87,117 @@
     });
   }
 
+  // ---- views ---------------------------------------------------------------
+  // Active view per chart lives in sessionStorage (per tab); blocked storage
+  // just means the choice is forgotten on reload.
+  var session = safeStorage('sessionStorage');
+  var saved = {};
+  try { saved = JSON.parse(PA.readStore(session, 'pa-views') || '{}') || {}; } catch (e) { saved = {}; }
+  var active = {};
+  data.charts.forEach(function (c) {
+    var names = c.views.map(function (v) { return v.name; });
+    active[c.id] = names.indexOf(saved[c.id]) >= 0 ? saved[c.id] : names[0];
+  });
+  var tableSort = {}; // pane id -> { col, dir }, kept across redraws
+
+  function tableView(el, c) {
+    var q = data.queries[c.query];
+    var state = tableSort[el.id] || (tableSort[el.id] = { col: null, dir: 'asc' });
+    var rows = state.col ? PA.sortRows(q.rows, state.col, state.dir) : q.rows;
+    var shown = rows.slice(0, PA.TABLE_LIMIT);
+    var wrap = document.createElement('div');
+    wrap.className = 'table-view';
+    var table = document.createElement('table');
+    var head = table.createTHead().insertRow();
+    q.columns.forEach(function (col) {
+      var th = document.createElement('th');
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = col;
+      if (state.col === col) {
+        th.setAttribute('aria-sort', state.dir === 'asc' ? 'ascending' : 'descending');
+        b.setAttribute('data-arrow', state.dir === 'asc' ? '\u2191' : '\u2193');
+      }
+      b.addEventListener('click', function () {
+        state.dir = state.col === col && state.dir === 'asc' ? 'desc' : 'asc';
+        state.col = col;
+        tableView(el, c);
+      });
+      th.appendChild(b);
+      head.appendChild(th);
+    });
+    var body = table.createTBody();
+    shown.forEach(function (r) {
+      var tr = body.insertRow();
+      q.columns.forEach(function (col) { tr.insertCell().textContent = r[col] === null || r[col] === undefined ? '' : String(r[col]); });
+    });
+    wrap.appendChild(table);
+    el.textContent = '';
+    el.appendChild(wrap);
+    if (rows.length > shown.length) {
+      var note = document.createElement('p');
+      note.className = 'meta';
+      note.textContent = 'Showing ' + shown.length + ' of ' + rows.length + ' rows';
+      el.appendChild(note);
+    }
+    return Promise.resolve();
+  }
+
+  function paint(el, c, view, cfg) {
+    if (!view.vegaLite) {
+      el.removeAttribute('role'); // a table is not an image
+      return tableView(el, c);
+    }
+    el.setAttribute('role', 'img');
+    return embed(el, view.vegaLite, data.queries[c.query].rows, cfg);
+  }
+
+  function renderChart(c, cfg) {
+    var first = document.getElementById('chart-' + c.id);
+    if (!first) return null;
+    if (c.pair) {
+      return Promise.all([paint(first, c, c.views[0], cfg), paint(document.getElementById('chart-' + c.id + '-2'), c, c.views[1], cfg)]);
+    }
+    var view = c.views.filter(function (v) { return v.name === active[c.id]; })[0] || c.views[0];
+    return paint(first, c, view, cfg);
+  }
+
   function render() {
     var cfg = config();
-    return Promise.all(data.charts.map(function (c) {
-      var el = document.getElementById('chart-' + c.id);
-      var view = c.views[0];
-      return el && view.vegaLite ? embed(el, view.vegaLite, data.queries[c.query].rows, cfg) : null;
-    }));
+    return Promise.all(data.charts.map(function (c) { return renderChart(c, cfg); }));
   }
+
+  function select(c, name, focus) {
+    active[c.id] = name;
+    saved[c.id] = name;
+    PA.writeStore(session, 'pa-views', JSON.stringify(saved));
+    document.querySelectorAll('#card-' + c.id + ' [role=tab]').forEach(function (b) {
+      var on = b.getAttribute('data-view') === name;
+      b.setAttribute('aria-selected', String(on));
+      b.tabIndex = on ? 0 : -1;
+      if (on && focus) b.focus();
+    });
+    renderChart(c, config());
+  }
+
+  data.charts.forEach(function (c) {
+    var list = document.querySelector('#card-' + c.id + ' [role=tablist]');
+    if (!list) return;
+    var buttons = Array.prototype.slice.call(list.querySelectorAll('[role=tab]'));
+    buttons.forEach(function (b) {
+      var on = b.getAttribute('data-view') === active[c.id];
+      b.setAttribute('aria-selected', String(on));
+      b.tabIndex = on ? 0 : -1;
+      b.addEventListener('click', function () { select(c, b.getAttribute('data-view'), false); });
+    });
+    list.addEventListener('keydown', function (e) {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      var i = buttons.map(function (b) { return b.getAttribute('data-view'); }).indexOf(active[c.id]);
+      var next = buttons[(i + (e.key === 'ArrowRight' ? 1 : buttons.length - 1)) % buttons.length];
+      select(c, next.getAttribute('data-view'), true);
+      e.preventDefault();
+    });
+  });
 
   // First render waits for the embedded fonts so Vega measures labels with them.
   (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve())

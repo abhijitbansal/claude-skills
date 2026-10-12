@@ -57,14 +57,26 @@ function dataTable(res) {
   return `<div class="tablewrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
-function card(chart, results, maxRows) {
+function tabs(c) {
+  if (c.pair || c.views.length < 2) return '';
+  const buttons = c.views.map((v, i) => `<button type="button" role="tab" id="tab-${escapeHtml(c.id)}-${escapeHtml(v.name)}" data-view="${escapeHtml(v.name)}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${escapeHtml(v.label)}</button>`).join('');
+  return `<div class="views" role="tablist" aria-label="${escapeHtml(c.title)} views">${buttons}</div>`;
+}
+
+function panes(c) {
+  const pane = (suffix, i) => `<div class="chart" id="chart-${escapeHtml(c.id)}${suffix}" data-pane="${i}" role="img" aria-label="${escapeHtml(c.title)}"></div>`;
+  return c.pair ? `<div class="panes pair">${pane('', 0)}${pane('-2', 1)}</div>` : `<div class="panes">${pane('', 0)}</div>`;
+}
+
+// chart: the spec chart; expanded: its expandCharts() entry (views, pair, width).
+function card(chart, expanded, results, maxRows) {
   const res = results[chart.query];
   const note = res.truncated ? `<p class="meta">truncated at ${maxRows} rows</p>` : '';
   const empty = res.rowCount === 0 ? '<p class="meta empty">No rows returned</p>' : '';
   const shown = Math.min(res.rowCount, TABLE_ROWS);
-  return `<article class="card ${chart.width === 'half' ? 'half' : 'full'}" id="card-${escapeHtml(chart.id)}">
-  <h2>${escapeHtml(chart.title)}</h2>
-  <div class="chart" id="chart-${escapeHtml(chart.id)}" role="img" aria-label="${escapeHtml(chart.title)}"></div>
+  return `<article class="card ${expanded.width === 'half' ? 'half' : 'full'}" id="card-${escapeHtml(chart.id)}">
+  <div class="card-head"><h2>${escapeHtml(chart.title)}</h2>${tabs(expanded)}</div>
+  ${panes(expanded)}
   ${empty}${note}
   <details>
     <summary>Query · ${res.rowCount} rows · refreshed ${timeTag(res.refreshedAt, 'hm')}</summary>
@@ -91,7 +103,7 @@ export function renderPage(spec, results, { vendor, theme, charts }) {
     ? `<section class="kpis" aria-label="Key metrics">${spec.kpis.map((k) => kpiTile(k, results)).join('')}</section>`
     : '';
   const cards = (spec.charts ?? []).length
-    ? `<section class="grid">${spec.charts.map((c) => card(c, results, maxRows)).join('\n')}</section>`
+    ? `<section class="grid">${spec.charts.map((c) => card(c, charts.find((x) => x.id === c.id), results, maxRows)).join('\n')}</section>`
     : '';
   const parts = {
     TITLE: escapeHtml(spec.title),

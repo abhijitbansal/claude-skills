@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classOf, fieldRef, roleErrors, KINDS, KIND_NAMES } from '../scripts/lib/kinds.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
+import { BUILDERS, LABELS } from '../scripts/lib/views.mjs';
 
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const described = { rev: { columns: ['region', 'revenue', 'month', 'Total Revenue'], types: ['VARCHAR', 'DOUBLE', 'DATE', 'DECIMAL(18,2)'] } };
@@ -27,7 +28,14 @@ test('fieldRef escapes characters Vega-Lite reads as nested access', () => {
 
 test('eleven kinds; every view name a kind lists is buildable or "table"', () => {
   assert.deepEqual(KIND_NAMES, ['bar', 'stacked-bar', 'grouped-bar', 'line', 'area', 'scatter', 'bubble', 'heatmap', 'histogram', 'boxplot', 'donut']);
-  for (const k of KIND_NAMES) assert.ok(Array.isArray(KINDS[k].views));
+  for (const k of KIND_NAMES) {
+    assert.ok(Array.isArray(KINDS[k].views));
+    for (const v of KINDS[k].views) {
+      assert.ok(v in BUILDERS, `${k} lists view "${v}" with no builder`);
+      assert.ok(v in LABELS, `${k} lists view "${v}" with no label`);
+    }
+    assert.ok(!KINDS[k].views.includes('table'), `${k} must not list "table" (it is always appended)`);
+  }
 });
 
 test('a valid kind chart has no role errors; spaces in column names are fine', () => {
@@ -62,6 +70,12 @@ test('views must be ones the kind offers', () => {
   ]);
 });
 
+test('views error without a did-you-mean hint has no stray semicolon', () => {
+  assert.deepEqual(errs(chart({ kind: 'bar', x: 'region', y: 'revenue', views: ['zzz'] })), [
+    { path: 'charts[0].views[0]', message: 'kind "bar" has no view "zzz" (views: sorted, share, table)' },
+  ]);
+});
+
 const spec = (chartItem) => ({
   title: 'T',
   sources: { sales: { type: 'csv', path: 'data/sales.csv' } },
@@ -89,4 +103,11 @@ test('validateSpec runs role checks AND vegaLite field checks against real colum
   assert.equal(r.errors[0].path, 'charts[0].vegaLite.encoding.x.field');
   r = await validateSpec(spec({ kind: 'bar', x: 'region', y: 'revenue' }), { dir: FIXTURES });
   assert.deepEqual(r.errors, []);
+});
+
+test('validateSpec: kind-only keys on a raw vegaLite chart are errors at their own path', async () => {
+  for (const [key, value] of [['x', 'region'], ['y', 'revenue'], ['color', 'region'], ['size', 'revenue'], ['value', 'revenue'], ['views', ['table']], ['format', 'currency'], ['pair', true]]) {
+    const r = await validateSpec(spec({ vegaLite: { mark: 'bar' }, [key]: value }), { dir: FIXTURES });
+    assert.deepEqual(r.errors, [{ path: `charts[0].${key}`, message: `${key} needs kind (raw vegaLite charts ignore it)` }], key);
+  }
 });

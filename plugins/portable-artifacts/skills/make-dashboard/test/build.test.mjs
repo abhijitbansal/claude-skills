@@ -175,7 +175,7 @@ test('Review Focus 1: a kind chart over zero rows builds, says so, and still off
   assert.match(html, /<p class="meta empty">No rows returned<\/p>/);
   const chart = JSON.parse(dataBlock(html)).charts[0];
   assert.equal(chart.empty, true);
-  assert.deepEqual(chart.views.map((v) => v.name), ['bar', 'table']);
+  assert.deepEqual(chart.views.map((v) => v.name), ['bar', 'sorted', 'table'], 'share is blocked (no positive total, no divide by zero)');
 });
 
 test('field typo is caught with a did-you-mean', () => {
