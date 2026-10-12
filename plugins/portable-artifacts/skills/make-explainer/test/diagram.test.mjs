@@ -70,12 +70,17 @@ test('errors in a diagram file are re-pathed the same way and name the file', as
   assert.match(errors[0].message, /\(in x\.diagram\.json\)/);
 });
 
-test('the embedded diagram is checked under the page theme, and its own theme is overridden', async () => {
-  const dir = folder();
-  const themed = flow('T', { theme: 'no-such-theme' });
-  assert.deepEqual(await errorsOf(doc([section(themed)], { theme: 'ink' }), dir), []);
-  assert.deepEqual(await errorsOf(doc([section(themed)]), dir), []);
-  const { html } = await buildPage(doc([section(themed)], { theme: 'ink' }), { dir });
+test('an embedded diagram theme is ignored with a warning; the page theme is used', async () => {
+  const dir = folder({ 't.diagram.json': flow('T', { theme: 'no-such-theme' }) });
+  const warning = (theme, file) => [{ path: 'sections[0].diagram.theme', message: `ignored — the page theme (${JSON.stringify(theme)}) is used; remove it or change the explainer's theme${file ? ` (in ${file})` : ''}` }];
+  for (const [diagram, file] of [[flow('T', { theme: 'no-such-theme' }), undefined], ['t.diagram.json', 't.diagram.json']]) {
+    const inkPage = await validateSpec(doc([section(diagram)], { theme: 'ink' }), { dir });
+    assert.equal(inkPage.ok, true, JSON.stringify(inkPage.errors));
+    assert.deepEqual(inkPage.warnings, warning('ink', file));
+    assert.deepEqual((await validateSpec(doc([section(diagram)]), { dir })).warnings, warning('paper', file));
+  }
+  assert.deepEqual((await validateSpec(doc([section(flow())]), { dir })).warnings, [], 'no theme, no warning');
+  const { html } = await buildPage(doc([section(flow('T', { theme: 'no-such-theme' }))], { theme: 'ink' }), { dir });
   assert.match(html, /class="pa-diagram/);
 });
 
@@ -134,13 +139,18 @@ test('building an invalid embedded spec is a BuildError with re-pathed errors', 
 // ---- missing make-diagram ---------------------------------------------------------------
 
 // The skill copied next to no make-diagram: the sibling lookup must fail the way an install without it would.
-function skillWithoutSibling() {
+function skillWithoutSibling(fake = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-nosib-')));
   made.push(root);
   const copy = path.join(root, 'make-explainer');
   fs.mkdirSync(copy);
   for (const name of ['scripts', 'shared', 'template', 'references', 'package.json']) fs.cpSync(path.join(SKILL, name), path.join(copy, name), { recursive: true });
   fs.symlinkSync(path.join(SKILL, 'node_modules'), path.join(copy, 'node_modules'));
+  for (const [rel, body] of Object.entries(fake)) {
+    const file = path.join(root, 'make-diagram', rel);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, typeof body === 'function' ? body(pathToFileURL(path.join(copy, 'scripts/lib/siblings.mjs')).href) : body);
+  }
   return { root, copy };
 }
 const INSTALL = 'npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram';
@@ -223,4 +233,51 @@ test('a diagram file is loaded relative to the spec folder', async () => {
   const dir = folder({ 'sub/f.diagram.json': flow('From file') });
   const { html } = await buildPage(doc([section('sub/f.diagram.json')]), { dir });
   assert.match(html, /<title id="dg_0-title">From file<\/title>/);
+});
+
+// ---- the sibling contract: api.mjs only -----------------------------------------------------
+
+const FAKE_API = (extra) => (siblings) => `import { SiblingError } from '${siblings}';
+export const viewerRuntime = () => '/* fake */';
+${extra}`;
+
+test('the check loads make-diagram through api.mjs alone, and a make-diagram without validateSpec says so', async () => {
+  const ok = skillWithoutSibling({ 'scripts/lib/api.mjs': FAKE_API('export const validateSpec = async () => ({ ok: true, errors: [] });\nexport const buildDiagram = async () => { throw new Error("unused"); };') });
+  const { validateSpec: validate } = await import(pathToFileURL(path.join(ok.copy, 'scripts/lib/spec.mjs')).href);
+  const r = await validate(doc([section(flow())]), { dir: ok.root });
+  assert.deepEqual(r.errors, [], 'a make-diagram that only has api.mjs is enough');
+
+  const old = skillWithoutSibling({ 'scripts/lib/api.mjs': FAKE_API('export const buildDiagram = async () => ({});') });
+  const { validateSpec: validateOld } = await import(pathToFileURL(path.join(old.copy, 'scripts/lib/spec.mjs')).href);
+  const errors = (await validateOld(doc([section(flow())]), { dir: old.root })).errors;
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].path, 'sections[0].diagram');
+  assert.match(errors[0].message, /make-diagram is too old \(no validateSpec in api\.mjs\)/);
+  assert.ok(errors[0].message.includes(`install it with: ${INSTALL}`));
+});
+
+test('build() turns a SiblingError from the page build into a failure with a path, not a stack', async () => {
+  const { root, copy } = skillWithoutSibling({
+    'scripts/lib/api.mjs': FAKE_API(`export const validateSpec = async () => ({ ok: true, errors: [] });
+export const buildDiagram = async () => { throw new SiblingError('make-diagram vanished; install it with: ${INSTALL}', ${JSON.stringify(INSTALL)}); };`),
+  });
+  const spec = path.join(root, 'd.explainer.json');
+  fs.writeFileSync(spec, JSON.stringify(doc([section(flow())])));
+  const { build } = await import(pathToFileURL(path.join(copy, 'scripts/build.mjs')).href);
+  const result = await build(spec, { out: path.join(root, 'out.html') });
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.errors.map((e) => e.path), ['sections']);
+  assert.ok(result.errors[0].message.includes(`install it with: ${INSTALL}`));
+});
+
+test('the figcaption is the last child of the figure', async () => {
+  const { html } = await build([section(flow(), { caption: 'Cap' })]);
+  assert.match(html, /<figcaption>Cap<\/figcaption>\n<\/figure>/);
+});
+
+test('page.mjs holds no diagram-specific wiring; the section registry carries the page parts', async () => {
+  const { SECTIONS } = await import('../scripts/lib/sections.mjs');
+  assert.equal(typeof SECTIONS.diagram.page, 'function');
+  // (the cards icon loader names the make-diagram skill; that is not diagram-section wiring)
+  assert.ok(!/diagram/i.test(fs.readFileSync(path.join(SKILL, 'scripts/lib/page.mjs'), 'utf8').replaceAll('make-diagram', '')));
 });

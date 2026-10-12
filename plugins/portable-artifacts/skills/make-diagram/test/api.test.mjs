@@ -10,8 +10,8 @@ const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
 const example = (name) => JSON.parse(fs.readFileSync(here(`../references/examples/${name}.diagram.json`), 'utf8'));
 const NAMES = ['architecture', 'flow', 'state', 'sequence'];
 
-test('api.mjs exports buildDiagram and viewerRuntime', () => {
-  assert.deepEqual(Object.keys(api).sort(), ['buildDiagram', 'viewerRuntime']);
+test('api.mjs exports buildDiagram, validateSpec and viewerRuntime', () => {
+  assert.deepEqual(Object.keys(api).sort(), ['buildDiagram', 'validateSpec', 'viewerRuntime']);
 });
 
 for (const name of NAMES) {

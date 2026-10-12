@@ -195,3 +195,139 @@ test('at 390 px the figure fits the page and the overlay fills the screen', asyn
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+// ---- fix round 1: legibility floor, centring, scroll region, tab stops ------------------------
+
+const NAMES = ['Client', 'Gateway', 'Auth service', 'Orders service', 'Orders store', 'Audit log', 'Billing service', 'Billing store', 'Report job', 'Archive'];
+const WIDE = (title = 'Wide', count = 6) => ({
+  title,
+  type: 'flow',
+  direction: 'right',
+  nodes: NAMES.slice(0, count).map((label, i) => ({ id: `n${i}`, label })),
+  edges: NAMES.slice(1, count).map((_, i) => ({ from: `n${i}`, to: `n${i + 1}` })),
+});
+const TALL = () => ({ ...WIDE('Tall'), direction: 'down' });
+const wideDoc = (extra = {}) => doc(extra, [{ type: 'text', title: 'Before', text: 'Intro.' }, { type: 'diagram', title: 'Wide path', diagram: WIDE(), caption: 'Wide.' }]);
+const labelPx = (page) => page.locator(`${FIG} .pa-label`).first().evaluate((el) => {
+  const svg = el.ownerSVGElement;
+  return parseFloat(getComputedStyle(el).fontSize) * svg.getScreenCTM().a;
+});
+const pageOverflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+for (const [width, height] of [[1280, 900], [390, 844]]) {
+  test(`a wide diagram keeps its text at 10 px or more at ${width} px, with no page overflow`, async (t) => {
+    if (await skipUnlessBrowser(t)) return;
+    const { page, problems, context } = await openPage(buildSpec(wideDoc()).url, { width, height });
+    assert.ok(await labelPx(page) >= 10, `label renders at ${await labelPx(page)} px`);
+    assert.ok(await pageOverflow(page) <= 0, 'the page does not scroll sideways');
+    const slot = await page.locator('[data-dg-slot]').evaluate((el) => ({ scrolls: el.scrollWidth > el.clientWidth + 1, client: el.clientWidth, tab: el.tabIndex, role: el.getAttribute('role'), label: el.getAttribute('aria-label') }));
+    // The 6-node flow is about 1000 units: at 1280 it fits the 832 px column above the 0.75 floor, at 390 it cannot.
+    assert.equal(slot.scrolls, width === 390, width === 390 ? 'the slot scrolls sideways inside itself' : 'it fits, so it does not scroll');
+    assert.equal(slot.tab, width === 390 ? 0 : -1, 'a scrolling slot is focusable');
+    assert.equal(slot.role, width === 390 ? 'region' : null);
+    if (width === 390) assert.match(slot.label, /^Diagram: Wide \(scrolls sideways\)$/);
+    assert.deepEqual(problems, []);
+    await context.close();
+  });
+}
+
+test('a 10-node flow scrolls inside its slot at 1280 px and still keeps 10 px text', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(buildSpec(doc({}, [{ type: 'diagram', diagram: WIDE('Very wide', 10) }])).url);
+  assert.ok(await labelPx(page) >= 10, `label ${await labelPx(page)} px`);
+  assert.equal(await page.locator('[data-dg-slot]').evaluate((el) => el.scrollWidth > el.clientWidth + 1), true);
+  assert.ok(await pageOverflow(page) <= 0);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('in a deck, arrows with focus in the scrolling slot scroll it and keep the slide', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(buildSpec(wideDoc({ mode: 'slides' })).url, { width: 390, height: 844 });
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  const slide = () => page.evaluate(() => Number(document.querySelector('[data-deck]').dataset.current));
+  assert.equal(await slide(), 3);
+  await page.locator('#slide-3 [data-dg-slot]').focus();
+  const left = () => page.locator('#slide-3 [data-dg-slot]').evaluate((el) => el.scrollLeft);
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await slide(), 3, 'the deck stayed');
+  await page.waitForFunction(() => document.querySelector('#slide-3 [data-dg-slot]').scrollLeft > 0);
+  assert.ok(await left() > 0, 'the slot scrolled');
+  assert.ok(await labelPx(page) >= 10);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('page mode: the figure is centred, and caption and Present sit with the card', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const tall = doc({}, [{ type: 'diagram', title: 'Tall path', diagram: TALL(), caption: 'A tall figure.' }]);
+  const { page, context } = await openPage(buildSpec(tall).url, { width: 1280, height: 900 });
+  const m = await page.evaluate(() => {
+    const box = (s) => document.querySelector(s).getBoundingClientRect();
+    const col = box('.sections'); const slot = box('[data-dg-slot]'); const btn = box('[data-dg-present]'); const cap = box('figcaption');
+    return { colMid: col.left + col.width / 2, slotMid: slot.left + slot.width / 2, slotRight: slot.right, btnRight: btn.right, capLeft: cap.left, slotLeft: slot.left, capWidth: cap.width };
+  });
+  assert.ok(Math.abs(m.colMid - m.slotMid) <= 2, `card centred: column ${m.colMid}, card ${m.slotMid}`);
+  assert.ok(m.btnRight - m.slotRight <= 120, `Present is ${m.btnRight - m.slotRight} px past the card`);
+  assert.ok(m.slotLeft - m.capLeft <= 120, 'the caption starts near the card');
+  assert.ok(m.capWidth >= 250, `caption has room to read: ${m.capWidth}px`);
+  assert.ok(await labelPx(page) >= 10, `tall label ${await labelPx(page)} px`);
+  await context.close();
+});
+
+test('inline nodes are not tab stops, in Present they are', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(page1().url);
+  const tabs = () => page.locator(`${FIG} .pa-node`).evaluateAll((els) => els.map((e) => e.tabIndex));
+  assert.deepEqual([...new Set(await tabs())], [-1]);
+  assert.equal(await page.locator('[data-dg-slot]').evaluate((el) => [el.tabIndex, el.getAttribute('role')].join()), '-1,', 'a slot that does not scroll is not a tab stop or a region');
+  await page.locator('[data-dg-present]').click();
+  assert.deepEqual([...new Set(await tabs())], [0]);
+  await page.keyboard.press('Escape');
+  assert.deepEqual([...new Set(await tabs())], [-1]);
+  await context.close();
+});
+
+test('Present is hidden when the viewer cannot mount', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { url } = page1();
+  const { page, context } = await openPage(url, { init: () => { Object.defineProperty(window, 'PADiagram', { get() { return undefined; }, set() {} }); } });
+  assert.equal(await page.locator('[data-dg-present]').isHidden(), true);
+  await context.close();
+});
+
+test('a deck on a short viewport keeps the diagram slot visible', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(deck().url, { width: 800, height: 260 });
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  const box = await page.locator('#slide-3 [data-dg-slot]').boundingBox();
+  assert.ok(box.width > 100 && box.height > 40, JSON.stringify(box));
+  await context.close();
+});
+
+test('the overlay steps without a camera tween under reduced motion, and settles with motion on', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const reduced = await openPage(page1().url, { reducedMotion: 'reduce' });
+  await reduced.page.locator('[data-dg-present]').click();
+  await reduced.page.keyboard.press('ArrowRight');
+  const vb = () => viewBox(reduced.page);
+  const first = await vb();
+  await reduced.page.waitForTimeout(500);
+  assert.equal(await vb(), first, 'the camera jumped at once');
+  assert.equal(await reduced.page.locator(`${FIG} .pa-hidden`).first().evaluate((el) => getComputedStyle(el).transitionDuration), '0s');
+  assert.deepEqual(reduced.problems, []);
+  await reduced.context.close();
+
+  const moving = await openPage(page1().url, { reducedMotion: 'no-preference' });
+  await moving.page.locator('[data-dg-present]').click();
+  await moving.page.keyboard.press('ArrowRight');
+  await moving.page.waitForTimeout(700);
+  const a = await viewBox(moving.page);
+  await moving.page.waitForTimeout(300);
+  assert.equal(await viewBox(moving.page), a, 'the camera settled');
+  assert.equal(await moving.page.locator('[data-pa-count]').textContent(), `2 / ${STEPS}`);
+  assert.deepEqual(moving.problems, []);
+  await moving.context.close();
+});

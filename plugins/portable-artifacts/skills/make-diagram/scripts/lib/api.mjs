@@ -11,6 +11,9 @@ import { LIMITS } from './schema.mjs';
 import { revealedBy } from './steps.mjs';
 import { viewerData } from './data.mjs';
 
+// validateSpec(spec, { layout }) -> { ok, errors }: the same checks buildDiagram runs, for callers that only validate.
+export { validateSpec } from './spec.mjs';
+
 const VIEWER_JS = new URL('../../template/viewer.js', import.meta.url);
 const ID_PREFIX = /^[A-Za-z0-9_-]+$/;
 

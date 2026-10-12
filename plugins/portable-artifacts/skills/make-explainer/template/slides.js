@@ -147,7 +147,7 @@
   // ---- keyboard --------------------------------------------------------------
   var TEXT_ENTRY = 'input:not([type=checkbox]):not([type=radio]):not([type=button]), textarea, select, [contenteditable]:not([contenteditable=false])';
   var CONTROL = 'button, input, summary, select, textarea';
-  var REGION = '.tablewrap, pre';
+  var REGION = '.tablewrap, pre, .dg-slot';
   var match = function (el, selector) { return el && el.closest ? el.closest(selector) : null; };
   var scrollsSideways = function (el) { return el.scrollWidth > el.clientWidth + 1; };
   var scrollsDown = function (el) { return el.scrollHeight > el.clientHeight + 1; };

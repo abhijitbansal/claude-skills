@@ -11,7 +11,7 @@ import { SECTIONS } from './sections.mjs';
 import { resolveOutput } from './output.mjs';
 import { slugify } from '../../shared/output.mjs';
 import { loadSibling, SiblingError } from './siblings.mjs';
-import { SectionErrors } from './diagram-source.mjs';
+import { SectionErrors } from './section-errors.mjs';
 import { isSlides, renderDeck } from './slides.mjs';
 import { esc, inline, plain, rawText } from './render/ui.mjs';
 
@@ -20,8 +20,6 @@ const BASE_CSS = new URL('../../template/base.css', import.meta.url);
 const SLIDES_JS = new URL('../../template/slides.js', import.meta.url);
 const PA_LIB = new URL('../../template/pa-lib.js', import.meta.url);
 const RUNTIME = new URL('../../template/runtime.js', import.meta.url);
-const DIAGRAM_CSS = new URL('../../template/diagram.css', import.meta.url);
-const DIAGRAM_JS = new URL('../../template/diagram.js', import.meta.url);
 const TOC_MIN = 4;
 const MAX_ID = 40;
 
@@ -88,7 +86,7 @@ function renderBody(section, i, def, ctx) {
   }
 }
 
-// Async work a section type needs before its synchronous render (diagrams are built here).
+// Async work a section type needs before its synchronous render.
 // A SiblingError (a missing skill) passes through unchanged; section-relative errors get the section's path.
 async function prepareSection(section, i, def, ctx) {
   try {
@@ -101,12 +99,20 @@ async function prepareSection(section, i, def, ctx) {
   }
 }
 
-// make-diagram's stylesheet and viewer plus ours, only when the page has a diagram.
-function diagramParts(diagrams) {
-  if (diagrams.items.size === 0) return { DIAGRAMCSS: '', DIAGRAMJS: '' };
-  const css = `${diagrams.css}\n${fs.readFileSync(DIAGRAM_CSS, 'utf8').replace(/\n$/, '')}`;
-  const scripts = [diagrams.runtime, fs.readFileSync(DIAGRAM_JS, 'utf8')].map((code) => `<script>\n${inlineCode(code)}\n</script>`);
-  return { DIAGRAMCSS: `<style>\n${css}\n</style>`, DIAGRAMJS: scripts.join('\n') };
+// Stylesheets and scripts a section type ships once per page, only when the page has one.
+function sectionPageParts(spec, ctx) {
+  const css = [];
+  const js = [];
+  for (const type of new Set(spec.sections.map((s) => s.type))) {
+    const part = SECTIONS[type].page?.(ctx);
+    if (!part) continue;
+    css.push(part.css);
+    js.push(...part.js);
+  }
+  return {
+    SECTIONCSS: css.length > 0 ? `<style>\n${css.join('\n')}\n</style>` : '',
+    SECTIONJS: js.map((code) => `<script>\n${inlineCode(code)}\n</script>`).join('\n'),
+  };
 }
 
 function renderSection(section, i, id, titleId, def, ctx) {
@@ -205,7 +211,6 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     mode: slides ? 'slides' : 'page',
     idFor: slides ? (_section, i) => `slide-${i + 2}` : (_section, i) => ids[i],
     icons: await loadIcons(spec),
-    diagrams: { items: new Map(), css: '', runtime: '' },
   };
 
   const assets = [];
@@ -222,7 +227,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     THEME: themeCss(themeData),
     BASECSS: fs.readFileSync(BASE_CSS, 'utf8').replace(/\n$/, ''),
     ...layout,
-    ...diagramParts(ctx.diagrams),
+    ...sectionPageParts(spec, ctx),
     PALIB: inlineCode(fs.readFileSync(PA_LIB, 'utf8')),
     SLIDESJS: slides ? inlineCode(fs.readFileSync(SLIDES_JS, 'utf8')) : '',
     RUNTIME: inlineCode(fs.readFileSync(RUNTIME, 'utf8')),

@@ -1,5 +1,6 @@
 // The section registry: type -> { render(section, ctx) -> string, ownHeading?,
-// assets?(section, ctx) -> Promise<{ from, to }[]>, prepare?(section, ctx, i) -> Promise<void>, check? }. A section type
+// assets?(section, ctx) -> Promise<{ from, to }[]>, prepare?(section, ctx, i) -> Promise<void>, page?(ctx) -> { css, js: string[] }, check? }.
+// `page` is called once when the type is present and its css/scripts are shipped once for the whole page. A section type
 // with no entry has no renderer yet; buildPage reports it as an error.
 // ctx = { theme, dir, outDir, assetsDir, slug, mode, idFor(section, i), icons }.
 import * as tldr from './render/tldr.mjs';
@@ -22,5 +23,5 @@ import * as diagram from './render/diagram.mjs';
 const MODULES = { tldr, text, kpis, cards, table, risks, files, steps, timeline, compare, callout, code, details, image, checklist, diagram };
 
 export const SECTIONS = Object.freeze(Object.fromEntries(
-  Object.entries(MODULES).map(([type, m]) => [type, Object.freeze({ render: m.render, ownHeading: m.ownHeading === true, assets: m.assets, prepare: m.prepare, check: m.check })]),
+  Object.entries(MODULES).map(([type, m]) => [type, Object.freeze({ render: m.render, ownHeading: m.ownHeading === true, assets: m.assets, prepare: m.prepare, page: m.page, check: m.check })]),
 ));

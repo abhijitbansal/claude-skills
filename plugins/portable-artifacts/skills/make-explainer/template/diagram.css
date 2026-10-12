@@ -1,9 +1,26 @@
 /* diagram sections: the card, the Present button and the full-screen overlay */
-.dg { --dg-max-h: 70vh; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; align-items: start; }
-.dg-slot { grid-column: 1 / -1; width: min(100%, calc(var(--dg-max-h) * var(--dg-w) / var(--dg-h)), calc((var(--dg-w) + 32) * 1.25px)); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.dg-stage { position: relative; width: 100%; height: 100%; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: pan-y pinch-zoom; }
+.dg {
+  --dg-max-h: 70vh; /* a tall card stops growing here ... */
+  --dg-min-scale: 0.75; /* ... but never below this scale: 14-unit labels stay about 10.5 px */
+  --dg-max-scale: 1.25; /* the viewer never fits a small diagram larger than this */
+  --dg-pad: 32; /* the viewer's fit margin, both sides, in diagram units */
+  --dg-pw: calc(var(--dg-w) + var(--dg-pad));
+  --dg-ph: calc(var(--dg-h) + var(--dg-pad));
+  --dg-floor-w: calc(var(--dg-pw) * var(--dg-min-scale) * 1px);
+  --dg-card: max(var(--dg-floor-w), min(calc(var(--dg-max-h) * var(--dg-pw) / var(--dg-ph)), calc(var(--dg-pw) * var(--dg-max-scale) * 1px)));
+  /* --dg-w and --dg-h (the diagram's size) are set on the figure */
+  width: min(100%, max(var(--dg-card), 22rem));
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 16px;
+  align-items: start;
+}
+/* The slot is the card. Narrower than the diagram at its floor scale, it scrolls sideways inside itself. */
+.dg-slot { grid-column: 1 / -1; grid-row: 1; width: min(100%, var(--dg-card)); margin-inline: auto; overflow-x: auto; overflow-y: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.dg-stage { position: relative; width: max(100%, var(--dg-floor-w)); aspect-ratio: var(--dg-pw) / var(--dg-ph); overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: pan-x pan-y pinch-zoom; }
 .dg-stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.dg figcaption { grid-column: 1; max-width: 68ch; color: var(--text-3); font-size: 0.82rem; }
+.dg figcaption { grid-column: 1; grid-row: 2; max-width: 68ch; color: var(--text-3); font-size: 0.82rem; }
 .dg-present { grid-column: 2; grid-row: 2; padding: 4px 14px; font-size: 0.85rem; }
 .dg > script { display: none; }
 
@@ -14,7 +31,7 @@
 .dg-top-title { min-width: 0; font: 600 1rem/1.3 var(--font-display); overflow-wrap: anywhere; }
 .dg-key { display: inline-block; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-3); font-size: 0.72rem; line-height: 1.5; }
 .dg-body { position: relative; flex: 1 1 0; min-height: 0; }
-.dg-body > .dg-stage { position: absolute; inset: 0; touch-action: none; cursor: grab; }
+.dg-body > .dg-stage { position: absolute; inset: 0; width: auto; aspect-ratio: auto; touch-action: none; cursor: grab; }
 .dg-cap { flex: none; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--line); }
 .dg-cap[hidden] { display: none; }
 .dg-cap-text { min-width: 0; flex: 1 1 260px; }
@@ -26,10 +43,11 @@
 .dg-cap-nav .btn, .dg-top .btn { padding: 4px 14px; font-size: 0.85rem; }
 .dg-cap-nav .btn:disabled { opacity: 0.5; cursor: default; }
 
-.slide-diagram .dg { --dg-max-h: calc(100dvh - 17rem); }
-.slide-diagram .dg-slot { margin-inline: auto; }
+/* in a deck the card is bounded by the viewport, with a floor so a short window never collapses it */
+.slide-diagram .dg { --dg-max-h: max(calc(100dvh - 17rem), 160px); }
 
 @media print {
   .dg-present { display: none; }
-  .dg-slot { break-inside: avoid; }
+  .dg-slot { break-inside: avoid; overflow: visible; }
+  .dg-stage { width: 100%; }
 }

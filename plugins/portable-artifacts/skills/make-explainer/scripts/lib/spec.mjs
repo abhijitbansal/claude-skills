@@ -81,14 +81,19 @@ function lintSpec(spec) {
   return { errors, warnings };
 }
 
-async function registryErrors(spec, dir) {
+// Every check registered for a section's type. A check returns { path, message } errors;
+// an item marked `warning: true` is a warning instead.
+async function registryResults(spec, dir) {
   const errors = [];
+  const warnings = [];
   for (const [i, section] of spec.sections.entries()) {
     for (const check of checksFor(section.type)) {
-      errors.push(...await check({ section, path: pathJoin('sections', i), dir, spec }));
+      for (const { warning, ...item } of await check({ section, path: pathJoin('sections', i), dir, spec })) {
+        (warning === true ? warnings : errors).push(item);
+      }
     }
   }
-  return errors;
+  return { errors, warnings };
 }
 
 /**
@@ -106,6 +111,7 @@ export async function validateSpec(spec, { dir = process.cwd() } = {}) {
   const lint = lintSpec(spec);
   errors.push(...lint.errors);
   if (spec.mode === 'slides' || spec.preset === 'slides') errors.push(...slideBudget(spec));
-  errors.push(...await registryErrors(spec, dir));
-  return { ok: errors.length === 0, errors, warnings: [...lint.warnings, ...warnSections(spec)] };
+  const registry = await registryResults(spec, dir);
+  errors.push(...registry.errors);
+  return { ok: errors.length === 0, errors, warnings: [...lint.warnings, ...warnSections(spec), ...registry.warnings] };
 }

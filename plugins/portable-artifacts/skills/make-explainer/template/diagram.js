@@ -9,7 +9,6 @@
 // and focus goes back to the Present button.
 (function () {
   var PAD = window.PADiagram;
-  if (!PAD) return;
 
   function setup(figure) {
     var stage = figure.querySelector('[data-dg-stage]');
@@ -19,11 +18,16 @@
     var presentButton = figure.querySelector('[data-dg-present]');
     var closeButton = dialog.querySelector('[data-dg-close]');
     var nextButton = dialog.querySelector('[data-pa-next]');
+    // Present does nothing without a mounted viewer, so it is hidden unless mounting succeeds.
+    presentButton.hidden = true;
+    if (!PAD) return;
     var data;
     try { data = JSON.parse(figure.querySelector('script[data-dg-data]').textContent); } catch (e) { return; }
     var isOpen = false;
 
-    // Capture phase on the figure, before the viewer's own listeners on the stage run.
+    // Capture phase on the figure, before the viewer's own listeners on the stage run. This also hides
+    // wheel and pointermove over a figure from any listener further up the page (none exists today; the
+    // viewer's listeners sit on the stage itself, so the hold-back cannot be narrower than a stop here).
     function holdBack(event) { if (!isOpen) event.stopPropagation(); }
     figure.addEventListener('wheel', holdBack, true);
     figure.addEventListener('pointermove', holdBack, true);
@@ -39,12 +43,39 @@
 
     var controller = PAD.mount(stage, data, { keys: dialog, caption: dialog.querySelector('[data-pa-caption]') });
     if (!controller) return;
+    presentButton.hidden = false;
+
+    // Inline, nodes trace on hover and click but are not tab stops (a big diagram would add dozens
+    // before the next section); in Present they are.
+    var nodes = [].slice.call(stage.querySelectorAll('.pa-node'));
+    function tabStops(on) { nodes.forEach(function (n) { n.tabIndex = on ? 0 : -1; }); }
+    tabStops(false);
+
+    // A diagram wider than the column keeps its text size and scrolls inside its slot: then the slot is a
+    // labelled, focusable region (so the arrow keys scroll it, in a deck too).
+    function syncRegion() {
+      var scrolls = slot.scrollWidth > slot.clientWidth + 1;
+      if (scrolls) {
+        slot.setAttribute('role', 'region');
+        slot.setAttribute('aria-label', slot.getAttribute('data-dg-label') + ' (scrolls sideways)');
+        slot.tabIndex = 0;
+      } else {
+        slot.removeAttribute('role');
+        slot.removeAttribute('aria-label');
+        slot.tabIndex = -1;
+      }
+    }
+    syncRegion();
+    if (window.ResizeObserver) new window.ResizeObserver(syncRegion).observe(slot);
+    else window.addEventListener('resize', syncRegion);
 
     function openOverlay() {
       if (isOpen) return;
-      if (dialog.showModal) dialog.showModal(); else dialog.setAttribute('open', '');
+      dialog.showModal();
       isOpen = true;
+      slot.style.height = slot.offsetHeight + 'px'; // the page below does not jump while the stage is away
       body.appendChild(stage);
+      tabStops(true);
       controller.present(0);
       (nextButton.disabled ? closeButton : nextButton).focus();
     }
@@ -53,11 +84,14 @@
       if (!isOpen) return;
       isOpen = false;
       slot.appendChild(stage);
+      slot.style.height = '';
+      tabStops(false);
       controller.exit();
+      syncRegion();
     }
     function closeOverlay() {
       restore();
-      if (dialog.close) { if (dialog.open) dialog.close(); } else dialog.removeAttribute('open');
+      if (dialog.open) dialog.close();
     }
     dialog.addEventListener('close', function () {
       restore();

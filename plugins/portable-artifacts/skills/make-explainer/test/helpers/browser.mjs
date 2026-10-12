@@ -53,7 +53,7 @@ export function buildSpec(spec, { name = 'page', files = [] } = {}) {
 /**
  * Open a built page in a fresh context; resolves { page, problems, context } once the runtime has started.
  * `problems` collects every console error/warning and page error. `blockStorage` makes localStorage throw;
- * `seed` is a { key: value } map written to localStorage before any page script runs.
+ * `seed` is a { key: value } map written to localStorage before any page script runs; `init` is a function run in the page before its scripts.
  */
 let shared;
 /** Closes the browser openPage launched; call it from the test file's `after`. */
@@ -62,7 +62,7 @@ export async function closeSharedBrowser() {
   shared = undefined;
 }
 
-export async function openPage(url, { width = 1280, height = 900, colorScheme = 'light', reducedMotion = 'reduce', blockStorage = false, seed = {}, context: existing } = {}) {
+export async function openPage(url, { width = 1280, height = 900, colorScheme = 'light', reducedMotion = 'reduce', blockStorage = false, seed = {}, init, context: existing } = {}) {
   shared ??= await launchBrowser();
   const context = existing ?? await shared.newContext({ viewport: { width, height }, colorScheme, reducedMotion });
   const page = await context.newPage();
@@ -77,6 +77,7 @@ export async function openPage(url, { width = 1280, height = 900, colorScheme = 
       }
     });
   }
+  if (init) await page.addInitScript(init);
   if (Object.keys(seed).length > 0) {
     await page.addInitScript((entries) => {
       if (!window.name.includes('seeded')) {

@@ -6,7 +6,8 @@
 import { resolveRef } from './paths.mjs';
 import { pathJoin } from '../../shared/errors.mjs';
 import { readImage } from './image.mjs';
-import { loadSibling, SiblingError } from './siblings.mjs';
+import { loadSibling, SiblingError, MISSING_HINT } from './siblings.mjs';
+import { DEFAULT_THEME } from '../../shared/theme.mjs';
 import { itemKey } from './render/checklist.mjs';
 import { readDiagramSpec, reportDiagramErrors, inPageTheme } from './diagram-source.mjs';
 
@@ -86,21 +87,30 @@ registerCheck('checklist', ({ section, path: at }) => {
 
 // diagram: the embedded spec (inline, or a file in the spec folder) must pass
 // make-diagram's own validation, geometry lint included, under the page's
-// theme; its errors are re-pathed under the section's `diagram` field. A blank string is already
-// reported by the section's own check.
+// theme; its errors are re-pathed under the section's `diagram` field. The
+// diagram's own `theme` is ignored (a warning says so). A blank string is
+// already reported by the section's own check.
 registerCheck('diagram', async ({ section, path: at, dir, spec }) => {
   const where = pathJoin(at, 'diagram');
   if (typeof section.diagram === 'string' && section.diagram.trim() === '') return [];
   const source = readDiagramSpec(section.diagram, dir);
   if (source.error) return [{ path: where, message: source.error }];
-  let diagramSpec;
+  let api;
   try {
-    diagramSpec = await loadSibling('make-diagram', 'scripts/lib/spec.mjs');
+    api = await loadSibling('make-diagram', 'scripts/lib/api.mjs');
   } catch (e) {
     if (!(e instanceof SiblingError)) throw e;
     return [{ path: where, message: e.message }];
   }
-  // The build draws it in the page's theme, so validate (and lay out) under that theme too; an embedded theme is overridden.
-  const result = await diagramSpec.validateSpec(inPageTheme(source.spec, spec.theme));
-  return reportDiagramErrors(result.errors, where, source.file);
+  if (typeof api.validateSpec !== 'function') {
+    return [{ path: where, message: `make-diagram is too old (no validateSpec in api.mjs); ${MISSING_HINT(['make-diagram'])}` }];
+  }
+  const pageTheme = spec.theme ?? DEFAULT_THEME;
+  const warnings = source.spec.theme === undefined ? [] : [{
+    path: pathJoin(where, 'theme'),
+    message: `ignored — the page theme (${JSON.stringify(pageTheme)}) is used; remove it or change the explainer's theme${source.file ? ` (in ${source.file})` : ''}`,
+    warning: true,
+  }];
+  const result = await api.validateSpec(inPageTheme(source.spec, spec.theme));
+  return [...reportDiagramErrors(result.errors, where, source.file), ...warnings];
 });

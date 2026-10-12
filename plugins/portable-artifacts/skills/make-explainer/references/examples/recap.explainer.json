@@ -64,18 +64,18 @@
       "type": "files",
       "title": "Where the change lives",
       "items": [
-        { "path": "scripts/lib/render/diagram.mjs", "change": "added", "add": 62, "note": "Builds the figure and its overlay markup." },
-        { "path": "scripts/lib/diagram-source.mjs", "change": "added", "add": 55, "note": "Reads an inline spec or a file; shared path rules." },
-        { "path": "template/diagram.js", "change": "added", "add": 71, "note": "Mounts the viewer and runs the overlay." },
-        { "path": "scripts/lib/page.mjs", "change": "modified", "add": 28, "del": 1, "note": "Builds each diagram before rendering; ships css and viewer once." },
-        { "path": "template/slides.js", "change": "modified", "add": 2, "del": 0, "note": "Ignores keys while the overlay is open." }
+        { "path": "scripts/lib/render/diagram.mjs", "change": "added", "add": 78, "note": "Builds the figure and its overlay markup." },
+        { "path": "scripts/lib/diagram-source.mjs", "change": "added", "add": 46, "note": "Reads an inline spec or a file; shared path rules." },
+        { "path": "template/diagram.js", "change": "added", "add": 105, "note": "Mounts the viewer and runs the overlay." },
+        { "path": "scripts/lib/page.mjs", "change": "modified", "add": 33, "del": 1, "note": "Runs each section's prepare step and ships section css and scripts once." },
+        { "path": "template/slides.js", "change": "modified", "add": 3, "del": 1, "note": "Ignores keys while the overlay is open; a diagram card scrolls with the arrows." }
       ]
     },
     {
       "type": "risks",
       "title": "What could still bite",
       "items": [
-        { "risk": "A wide diagram is small inline at phone width.", "severity": "low", "mitigation": "Present fills the screen and supports zoom." },
+        { "risk": "A wide diagram is wider than a phone screen.", "severity": "low", "mitigation": "The card scrolls sideways at a readable size; Present fills the screen." },
         { "risk": "make-diagram is missing on the machine.", "severity": "medium", "mitigation": "Validation prints the exact install command." }
       ]
     }

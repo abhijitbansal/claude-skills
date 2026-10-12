@@ -9,6 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadSpec, validateSpec } from './lib/spec.mjs';
 import { buildPage, BuildError } from './lib/page.mjs';
 import { resolveOutput } from './lib/output.mjs';
+import { SiblingError } from './lib/siblings.mjs';
 import { UsageError, parseCli, exitUsage, evalLog } from '../shared/cli.mjs';
 
 const USAGE = 'node scripts/build.mjs <explainer.json> [--out <file.html|dir>] [--theme <name>] [--json]';
@@ -32,6 +33,7 @@ export async function build(file, { out, theme, env = process.env } = {}) {
     built = await buildPage(spec, { dir, out: target, env });
   } catch (e) {
     if (e instanceof BuildError) return fail(e.errors);
+    if (e instanceof SiblingError) return fail([{ path: 'sections', message: e.message }]);
     throw e;
   }
   try {

@@ -7,15 +7,6 @@ import { resolveRef } from './paths.mjs';
 export const DIAGRAM_EXTS = ['.json'];
 export const DIAGRAM_MAX_BYTES = 1024 * 1024;
 
-/** Errors whose paths are relative to a section ("diagram.nodes[0].label"); the page builder adds the section's own path. */
-export class SectionErrors extends Error {
-  constructor(errors) {
-    super(errors.map((e) => `${e.path}: ${e.message}`).join('\n'));
-    this.name = 'SectionErrors';
-    this.errors = errors;
-  }
-}
-
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 /**
