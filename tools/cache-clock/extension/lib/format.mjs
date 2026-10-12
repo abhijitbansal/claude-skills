@@ -110,10 +110,8 @@ export const HELP = [
   "What cold sends already cost you, across every saved session:",
   "  node ~/.copilot/extensions/cache-clock/report.mjs --since 7d",
   "",
-  "VS Code Copilot chat: the same ~/.copilot/extensions install works in every workspace. In your VS Code",
-  "User settings (not a workspace's .vscode/settings.json) set \"chat.canvases.enabled\": true and",
-  "\"chat.defaultToCopilotHarness\": true, or pick Copilot (not Local) in each new chat's harness picker:",
-  "the Local harness never loads extensions. Type /cache-clock in full (it is not listed in the / menu).",
-  "The heads-up and price notes reach only VS Code's log there.",
+  "VS Code Copilot chat: install into each repo (install.sh --project: .github/extensions/cache-clock)",
+  "and set \"chat.canvases.enabled\": true in VS Code settings. Type /cache-clock in full",
+  "(it is not listed in the / menu). The heads-up and price notes reach only VS Code's log there.",
   "VS Code's autopilot mode cancels extension questions: a costly cold send is then held, with a note.",
 ].join("\n");

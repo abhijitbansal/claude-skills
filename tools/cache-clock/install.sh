@@ -1,19 +1,20 @@
 #!/bin/sh
-# Cache Clock installer — puts the extension in Copilot's user extensions dir.
+# Cache Clock installer — puts the extension in Copilot's user extensions dir, or a project's.
 # Usage: curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh
+#        curl -fsSL …/install.sh | sh -s -- --project    into this repo's .github/extensions (VS Code)
 #        sh tools/cache-clock/install.sh            from a checkout: link (updates follow git pull)
 #        sh tools/cache-clock/install.sh --copy     copy instead of link
-#        sh tools/cache-clock/install.sh --uninstall
+#        sh tools/cache-clock/install.sh --project [DIR]   copy into DIR's git root (default: here)
+#        sh tools/cache-clock/install.sh --uninstall [--project [DIR]]
 # Env:   COPILOT_HOME (default ~/.copilot), CACHE_CLOCK_BASE_URL (download source)
 set -eu
 
-DEST_DIR="${COPILOT_HOME:-$HOME/.copilot}/extensions"
-DEST="$DEST_DIR/cache-clock"
 BASE_URL="${CACHE_CLOCK_BASE_URL:-https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/extension}"
 # Every file the extension ships; a test keeps this list in step with extension/.
 # extension.mjs comes last, so an interrupted download never looks like an extension.
 FILES="report.mjs lib/clock.mjs lib/config.mjs lib/format.mjs lib/guard.mjs lib/history.mjs lib/usage.mjs lib/wiring.mjs extension.mjs"
 MODE="link"
+PROJECT=""
 
 # A checkout only when this script is a real file next to extension/. Piped (curl | sh),
 # $0 is the shell, and an extension/ folder in the current directory must not count.
@@ -22,13 +23,33 @@ if [ -f "$0" ] && [ -f "$(dirname "$0")/extension/extension.mjs" ]; then
   SRC="$(cd "$(dirname "$0")" && pwd)/extension"
 fi
 
-for arg in "$@"; do
-  case "$arg" in
+while [ $# -gt 0 ]; do
+  case "$1" in
     --copy) MODE="copy" ;;
-    --uninstall) MODE="uninstall" ;;
-    *) printf 'unknown flag: %s\n' "$arg" >&2; exit 2 ;;
+    --uninstall) UNINSTALL=1 ;;
+    --project)
+      PROJECT="$PWD"
+      case "${2-}" in ""|-*) ;; *) PROJECT="$2"; shift ;; esac ;;
+    *) printf 'unknown flag: %s\n' "$1" >&2; exit 2 ;;
   esac
+  shift
 done
+if [ -n "${UNINSTALL-}" ]; then MODE="uninstall"; fi
+
+if [ -n "$PROJECT" ]; then
+  if [ ! -d "$PROJECT" ]; then
+    printf 'cache-clock: no such folder: %s\n' "$PROJECT" >&2
+    exit 1
+  fi
+  # Copilot reads project extensions from the git root's .github/extensions.
+  PROJECT="$(git -C "$PROJECT" rev-parse --show-toplevel 2>/dev/null || (cd "$PROJECT" && pwd))"
+  DEST_DIR="$PROJECT/.github/extensions"
+  # A link into a checkout would break for anyone else using the project: always copy.
+  [ "$MODE" = link ] && MODE="copy"
+else
+  DEST_DIR="${COPILOT_HOME:-$HOME/.copilot}/extensions"
+fi
+DEST="$DEST_DIR/cache-clock"
 
 # Only ever replace our own install: one with cache-clock's own lib files (a link to a
 # checkout or a copy), or a dangling link left by a deleted checkout. Another tool's
@@ -88,7 +109,11 @@ fi
 
 printf 'cache-clock: installed (%s) at %s\n' "$MODE" "$DEST"
 printf 'Copilot CLI: start a new copilot session, allow the extension to register hooks, then run /cache-clock help.\n'
-printf 'VS Code Copilot chat: this same install works in every workspace. In VS Code User settings (not .vscode/settings.json) add\n'
-printf '  "chat.canvases.enabled": true and "chat.defaultToCopilotHarness": true, reload, start a new chat on the Copilot\n'
-printf '  harness (not Local), and type /cache-clock in full: VS Code does not list it in the / menu, but it works.\n'
+if [ -n "$PROJECT" ]; then
+  printf 'VS Code Copilot chat: open %s, add "chat.canvases.enabled": true to your VS Code settings,\n' "$PROJECT"
+  printf '  reload, start a new chat, and type /cache-clock in full: VS Code does not list it in the / menu.\n'
+else
+  printf 'VS Code Copilot chat: loads cache-clock from a project, not from this install. In each repo, run\n'
+  printf '  this installer with --project (curl ... | sh -s -- --project), then see the README.\n'
+fi
 printf 'Report: node %s/report.mjs --since 7d\n' "$DEST"
