@@ -13,9 +13,14 @@ function union(a, b) {
 }
 
 // Who is next to whom: id -> { nodes: neighbour ids, edges: incident edge ids }.
+// Ids are model-provided keys, so the maps are Maps until the end: a plain
+// object would answer for "constructor". Object.fromEntries then makes own properties.
 function adjacencyOf(links) {
-  const adjacency = {};
-  const at = (id) => (adjacency[id] ??= { nodes: [], edges: [] });
+  const adjacency = new Map();
+  const at = (id) => {
+    if (!adjacency.has(id)) adjacency.set(id, { nodes: [], edges: [] });
+    return adjacency.get(id);
+  };
   for (const { id, from, to } of links) {
     for (const [self, other] of [[from, to], [to, from]]) {
       const a = at(self);
@@ -23,25 +28,25 @@ function adjacencyOf(links) {
       if (other !== self && !a.nodes.includes(other)) a.nodes.push(other);
     }
   }
-  return adjacency;
+  return Object.fromEntries(adjacency);
 }
 
 // id -> [x, y, w, h]: what the camera fits when a step focuses the id.
 function boxesOf(geometry) {
-  const boxes = {};
-  for (const g of geometry.groups ?? []) boxes[g.id] = box(g.x, g.y, g.width, g.height);
+  const boxes = new Map();
+  for (const g of geometry.groups ?? []) boxes.set(g.id, box(g.x, g.y, g.width, g.height));
   for (const n of [...(geometry.nodes ?? []), ...(geometry.participants ?? [])]) {
     const whole = n.labelBox ? union(n, n.labelBox) : n; // a dot's label sits beside it
-    boxes[n.id] = box(whole.x, whole.y, whole.width, whole.height);
+    boxes.set(n.id, box(whole.x, whole.y, whole.width, whole.height));
   }
   for (const m of geometry.messages ?? []) {
     const xs = m.points.map((p) => p.x);
     const ys = m.points.map((p) => p.y);
     let shape = { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
     if (m.label) shape = union(shape, m.label);
-    boxes[m.id] = box(shape.x, shape.y, shape.width, shape.height);
+    boxes.set(m.id, box(shape.x, shape.y, shape.width, shape.height));
   }
-  return boxes;
+  return Object.fromEntries(boxes);
 }
 
 /**

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { slugify } from '../scripts/lib/output.mjs';
 import { launchBrowser, haveBrowser, buildPage, scratchDir, EXAMPLES, example } from './helpers/browser.mjs';
+import { PROTOTYPE_NAMED_SPECS } from './helpers/prototype-ids.mjs';
 
 let browser;
 after(() => browser?.close());
@@ -490,6 +491,32 @@ test('the Everything step uses the fit camera, not a padded focus box', async (t
     await context.close();
   }
 });
+
+for (const [name, spec] of Object.entries(PROTOTYPE_NAMED_SPECS)) {
+  test(`${name}: hover, pin and presentation work with no console errors`, async (t) => {
+    if (await skipUnlessBrowser(t)) return;
+    const { page, problems, context } = await open(buildPage(spec, { name: 'proto-ids' }).url);
+    const target = await page.evaluate(() => (document.querySelector('.pa-node') ?? document.querySelector('.pa-edge'))?.dataset.id ?? null);
+    if (target && await page.locator('.pa-node').count()) {
+      await page.hover(`.pa-node[data-id="${target}"]`);
+      const dimmed = await page.evaluate(() => [...document.querySelectorAll('.pa-node.pa-dim')].map((n) => n.dataset.id));
+      assert.deepEqual(dimmed, [], `with two connected nodes, nothing dims`);
+      await page.mouse.move(2, 2);
+      await page.click(`.pa-node[data-id="${target}"]`);
+      await page.keyboard.press('Escape');
+    }
+    await page.keyboard.press('p');
+    const total = Number((await page.textContent('[data-pa-count]')).split(' / ')[1]);
+    for (let i = 1; i < total; i++) await page.keyboard.press('ArrowRight');
+    await settle(page);
+    assert.deepEqual(await hiddenIds(page), [], 'the last step reveals everything');
+    const vb = await viewBox(page);
+    assert.ok(vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0, String(vb));
+    await page.keyboard.press('Escape');
+    assert.deepEqual(problems, []);
+    await context.close();
+  });
+}
 
 test('screenshots: presentation mid-step (light and dark), a hover trace and a phone-width page', async (t) => {
   if (await skipUnlessBrowser(t)) return;

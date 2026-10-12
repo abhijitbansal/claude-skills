@@ -33,6 +33,13 @@
 
   var clamp = function (v, lo, hi) { return Math.min(hi, Math.max(lo, v)); };
   var finite = function (v, fallback) { return typeof v === 'number' && isFinite(v) ? v : fallback; };
+  // Ids are model-provided keys: every id-keyed map has no prototype, so an id
+  // like "constructor" is just a key (a plain {} would answer for it).
+  var dict = function (source) {
+    var d = Object.create(null);
+    Object.keys(source || {}).forEach(function (k) { d[k] = source[k]; });
+    return d;
+  };
   var round = function (v) { return Math.round(v * 100) / 100; };
 
   function mount(stage, data, options) {
@@ -42,19 +49,19 @@
     var W = Math.max(1, finite(data.width, 1));
     var H = Math.max(1, finite(data.height, 1));
     var steps = data.steps || [];
-    var adjacency = data.adjacency || {};
-    var edgeEnds = data.edges || {};
-    var parents = data.parents || {};
-    var boxes = data.boxes || {};
+    var adjacency = dict(data.adjacency);
+    var edgeEnds = dict(data.edges);
+    var parents = dict(data.parents);
+    var boxes = dict(data.boxes);
     var isSequence = data.type === 'sequence';
     var reduceQuery = global.matchMedia ? global.matchMedia('(prefers-reduced-motion: reduce)') : null;
     var reduced = function () { return !!(reduceQuery && reduceQuery.matches); };
 
     // ---- elements, by id -----------------------------------------------------
-    var nodes = {};
-    var groups = {};
-    var edges = {};
-    var labels = {};
+    var nodes = dict();
+    var groups = dict();
+    var edges = dict();
+    var labels = dict();
     svg.querySelectorAll('.pa-node[data-id]').forEach(function (el) { nodes[el.getAttribute('data-id')] = el; });
     svg.querySelectorAll('.pa-group[data-id]').forEach(function (el) { groups[el.getAttribute('data-id')] = el; });
     svg.querySelectorAll('.pa-edge[data-id]').forEach(function (el) { edges[el.getAttribute('data-id')] = el; });
@@ -214,7 +221,7 @@
     // ancestor groups, and the participants of a revealed message. (scripts/lib/steps.mjs
     // applies the same rules when it builds the closing "Everything" step.)
     function revealedThrough(n) {
-      var seen = {};
+      var seen = dict();
       var add = function (id) {
         for (var at = id; at !== undefined && !seen[at]; at = parents[at]) seen[at] = true;
       };
@@ -245,7 +252,7 @@
         var after = el.getAttribute('data-after');
         hide(el, after ? !seen[after] : !words(el, 'data-over').every(function (p) { return seen[p]; }));
       });
-      var hl = {};
+      var hl = dict();
       (step.highlight || []).forEach(function (id) { hl[id] = true; });
       [nodes, groups, edges, labels].forEach(function (group) {
         Object.keys(group).forEach(function (id) { group[id].classList.toggle('pa-hl', !!hl[id]); });

@@ -111,7 +111,7 @@ function checkKind(errors, item, p, type) {
 
 function checkIcon(errors, item, p, type) {
   if (item.icon === undefined) return;
-  if (item.kind !== undefined && KINDS[type].kinds[item.kind] && !canHoldIcon(type, item.kind)) {
+  if (item.kind !== undefined && Object.hasOwn(KINDS[type].kinds, item.kind) && !canHoldIcon(type, item.kind)) {
     errors.push({
       path: pathJoin(p, 'icon'),
       message: `kind ${q(item.kind)} is drawn as a shape without an icon; remove icon or use kind ${q(KINDS[type].default)}`,
