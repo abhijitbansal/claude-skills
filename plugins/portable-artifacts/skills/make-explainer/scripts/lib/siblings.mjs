@@ -29,8 +29,9 @@ export function siblingDir(name) {
 export async function loadSibling(name, relModule) {
   const dir = siblingDir(name);
   const file = path.resolve(dir, relModule);
-  if (path.isAbsolute(relModule) || path.relative(dir, file).startsWith('..')) {
-    throw new TypeError(`module path must stay inside the sibling skill, got ${JSON.stringify(relModule)}`);
+  const rel = path.relative(dir, file);
+  if (!rel || path.isAbsolute(relModule) || path.isAbsolute(rel) || rel === '..' || rel.startsWith(`..${path.sep}`)) {
+    throw new TypeError(`module path must name a file inside the sibling skill, got ${JSON.stringify(relModule)}`);
   }
   if (!fs.existsSync(file)) {
     const where = fs.existsSync(dir) ? `${name}/${relModule} not found in ${dir}` : `${name} skill not found next to make-explainer (looked in ${dir})`;

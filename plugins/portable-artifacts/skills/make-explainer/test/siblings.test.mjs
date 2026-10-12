@@ -81,3 +81,15 @@ test('sibling names must be plain skill names (no path escape)', async () => {
   assert.throws(() => mod.siblingDir('../etc'), /sibling name/);
   await assert.rejects(() => mod.loadSibling('make-diagram', '../../x.mjs'), /module path/);
 });
+
+test('relModule must name a file: empty and "." are rejected', async () => {
+  const { mod } = await layout({ 'make-diagram': { 'SKILL.md': 'x' } });
+  for (const bad of ['', '.', './', 'scripts/..']) {
+    await assert.rejects(() => mod.loadSibling('make-diagram', bad), (e) => e instanceof TypeError && /module path/.test(e.message), JSON.stringify(bad));
+  }
+});
+
+test('a file whose name merely starts with ".." is allowed', async () => {
+  const { mod } = await layout({ 'make-diagram': { '..odd.mjs': 'export const ok = true;\n' } });
+  assert.equal((await mod.loadSibling('make-diagram', '..odd.mjs')).ok, true);
+});

@@ -34,6 +34,8 @@ export function targetsFor(host, scope, { home, proj }) {
 
 export class UsageError extends Error {}
 
+const SKILL_NAME = /^[a-z][a-z0-9-]*$/;
+
 // Skills a skill needs installed beside it: package.json -> portableArtifacts.requires.
 function readRequires(skill, src) {
   const file = path.join(src, skill, 'package.json');
@@ -60,7 +62,7 @@ export function expandRequires(requested, src = SKILLS_SRC) {
   const visit = (skill, requiredBy, chain) => {
     if (done.has(skill)) return;
     if (chain.includes(skill)) throw new UsageError(`dependency cycle: ${[...chain.slice(chain.indexOf(skill)), skill].join(' -> ')}`);
-    if (requiredBy && !fs.existsSync(path.join(src, skill, 'SKILL.md'))) {
+    if (requiredBy && !(SKILL_NAME.test(skill) && fs.existsSync(path.join(src, skill, 'SKILL.md')))) {
       throw new UsageError(`${requiredBy} requires unknown skill "${skill}"`);
     }
     for (const dep of readRequires(skill, src)) visit(dep, skill, [...chain, skill]);
@@ -152,16 +154,35 @@ function parse(argv) {
   return { ...parsed.values, host, skills };
 }
 
+// Check every destination before installing anything, so a refusal leaves no partial install.
+// A skill that was only pulled in as a requirement and is already there is kept (keep: true);
+// a skill the user named, or any skill under --force, is replaced or refused as before.
+function preflight(plan, dstRoot, { force }) {
+  return plan.map((entry) => {
+    const src = path.join(SKILLS_SRC, entry.skill);
+    const dst = path.join(dstRoot, entry.skill);
+    const present = fs.existsSync(dst) || isSymlink(dst);
+    if (present && entry.requiredBy && !force) return { ...entry, keep: true };
+    if (fs.existsSync(dst) && fs.realpathSync(dst) === fs.realpathSync(src)) {
+      throw new Error(`${dst} is the source skill itself (the host dir points into this checkout); refusing to replace it`);
+    }
+    if (present && !force) throw new Error(`${dst} already exists; pass --force to replace it`);
+    return entry;
+  });
+}
+
 function main() {
   const opts = parse(process.argv.slice(2));
-  const plan = expandRequires(opts.skills);
-  for (const { skill, requiredBy } of plan) {
-    if (requiredBy) process.stdout.write(`also installing ${skill} (required by ${requiredBy})\n`);
-  }
   const scope = opts.project ? 'project' : 'user';
   const dirs = targetsFor(opts.host, scope, { home: os.homedir(), proj: path.resolve(opts.project ?? '.') });
   const h = HOSTS[opts.host];
-  for (const { skill } of plan) {
+  const plan = preflight(expandRequires(opts.skills), dirs.skills, { force: opts.force });
+  for (const { skill, requiredBy, keep } of plan) {
+    if (keep) process.stdout.write(`${skill} already installed (required by ${requiredBy})\n`);
+    else if (requiredBy) process.stdout.write(`also installing ${skill} (required by ${requiredBy})\n`);
+  }
+  for (const { skill, keep } of plan) {
+    if (keep) continue;
     const dst = installSkill(skill, dirs.skills, { link: opts.link, force: opts.force, deps: !opts['no-deps'] });
     if (dirs.commands) {
       fs.mkdirSync(dirs.commands, { recursive: true });
@@ -170,7 +191,7 @@ function main() {
     }
     process.stdout.write(`installed ${skill} -> ${dst}\n  invoke: ${h.invoke(skill)} <what to make>\n`);
   }
-  if (opts.skills.includes('make-motion')) {
+  if (plan.some((p) => p.skill === 'make-motion')) {
     process.stdout.write('make-motion also needs ffmpeg on PATH and, once: npx playwright install chromium (run in the skill folder)\n');
   }
 }

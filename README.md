@@ -113,7 +113,7 @@ adapters/install.sh all
 
 Idempotent — re-run after pulling updates; it prunes links for removed skills.
 
-The `portable-artifacts` skills (`make-dashboard`, `make-diagram`, `make-motion`) are Node packages: they also
+The `portable-artifacts` skills (`make-dashboard`, `make-diagram`, `make-explainer`, `make-motion`) are Node packages: they also
 need `npm ci` in each skill folder. Their own installer does that and covers Gemini CLI and
 project-scoped installs too:
 `node plugins/portable-artifacts/bin/install.mjs <claude|codex|copilot|gemini|agents> [--project .]`

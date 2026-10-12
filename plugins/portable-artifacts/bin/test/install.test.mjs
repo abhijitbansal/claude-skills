@@ -285,3 +285,65 @@ test('the real make-explainer pulls in make-diagram and make-dashboard', () => {
   const order = [...r.stdout.matchAll(/^installed (\S+)/gm)].map((m) => m[1]);
   assert.deepEqual(order, ['make-diagram', 'make-dashboard', 'make-explainer']);
 });
+
+// --- already-installed requirements, preflight, strict required names -----
+
+const fakeTree = () => sandboxWith({ 'make-explainer': ['make-diagram', 'make-dashboard'], 'make-diagram': undefined, 'make-dashboard': undefined });
+const skillDir = (home, s) => path.join(home, '.claude/skills', s);
+function preInstall(home, s) {
+  fs.mkdirSync(skillDir(home, s), { recursive: true });
+  fs.writeFileSync(path.join(skillDir(home, s), 'mine.txt'), 'keep me');
+}
+
+test('an already-installed required skill is kept, and the dependent still installs', () => {
+  const home = tmp();
+  preInstall(home, 'make-diagram');
+  const r = runSandbox(fakeTree(), ['claude', '--skills', 'make-explainer'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^make-diagram already installed \(required by make-explainer\)$/m);
+  assert.match(r.stdout, /^also installing make-dashboard \(required by make-explainer\)$/m);
+  assert.doesNotMatch(r.stdout, /installed make-diagram ->/);
+  assert.equal(fs.readFileSync(path.join(skillDir(home, 'make-diagram'), 'mine.txt'), 'utf8'), 'keep me');
+  assert.ok(fs.existsSync(path.join(skillDir(home, 'make-explainer'), 'SKILL.md')));
+  assert.ok(fs.existsSync(path.join(skillDir(home, 'make-dashboard'), 'SKILL.md')));
+});
+
+test('--force reinstalls required skills too', () => {
+  const home = tmp();
+  preInstall(home, 'make-diagram');
+  const r = runSandbox(fakeTree(), ['claude', '--skills', 'make-explainer', '--force'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /already installed/);
+  assert.equal(fs.existsSync(path.join(skillDir(home, 'make-diagram'), 'mine.txt')), false);
+  assert.ok(fs.existsSync(path.join(skillDir(home, 'make-diagram'), 'SKILL.md')));
+});
+
+test('an explicitly requested existing skill still errors, and nothing is installed (no partial install)', () => {
+  const home = tmp();
+  preInstall(home, 'make-explainer');
+  const r = runSandbox(fakeTree(), ['claude', '--skills', 'make-explainer'], home);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /already exists.*--force/);
+  assert.equal(fs.existsSync(skillDir(home, 'make-diagram')), false);
+  assert.equal(fs.existsSync(skillDir(home, 'make-dashboard')), false);
+  assert.equal(fs.readFileSync(path.join(skillDir(home, 'make-explainer'), 'mine.txt'), 'utf8'), 'keep me');
+});
+
+test('malformed or unknown required names are usage errors (exit 2) and install nothing', () => {
+  for (const bad of ['./make-diagram', 'make-diagram/', '../x', 'Make-Diagram', 'ghost']) {
+    const home = tmp();
+    const script = sandboxWith({ a: [bad], 'make-diagram': undefined });
+    const r = runSandbox(script, ['claude', '--skills', 'a'], home);
+    assert.equal(r.status, 2, `${bad}: ${r.stderr}`);
+    assert.match(r.stderr, /a requires unknown skill/, bad);
+    assert.equal(fs.existsSync(path.join(home, '.claude/skills')), false, bad);
+  }
+});
+
+test('the make-motion hint also fires when make-motion is only pulled in as a requirement', () => {
+  const home = tmp();
+  const script = sandboxWith({ a: ['make-motion'], 'make-motion': undefined });
+  const r = runSandbox(script, ['claude', '--skills', 'a'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /make-motion also needs ffmpeg/);
+});
