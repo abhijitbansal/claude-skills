@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="<!--@CSP-->">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title><!--@TITLE--></title>
+<script>
+// Before first paint: apply the saved theme (no flash; storage may throw).
+(function () {
+  try { var t = window.localStorage.getItem('pa-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+})();
+</script>
+<style>
+<!--@THEME-->
+</style>
+<style>
+<!--@BASECSS-->
+</style>
+<style>
+/* deck: one scroll-snap container, one viewport-tall slide per section */
+html, body { height: 100%; overflow: hidden; }
+.deck { position: relative; height: 100vh; height: 100dvh; overflow-y: auto; overflow-x: hidden; scroll-snap-type: y mandatory; overscroll-behavior: contain; }
+.slide { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow-y: auto; overflow-x: hidden; scroll-snap-align: start; scroll-snap-stop: always; padding: 56px 56px 88px; }
+.slide:focus { outline: none; }
+/* margin:auto centres a short slide and collapses on a tall one, so the top is never cut off */
+.slide-inner { width: 100%; max-width: 60rem; margin: auto; min-width: 0; font-size: clamp(1.05rem, 0.9rem + 0.55vw, 1.3rem); }
+.slide-title { margin: 0 0 28px; max-width: 24em; font: 600 clamp(1.7rem, 1.2rem + 2.2vw, 2.7rem)/1.15 var(--font-display); letter-spacing: -0.01em; text-wrap: balance; overflow-wrap: anywhere; }
+.slide .prose > * { max-width: 68ch; }
+.slide .lead { font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.2rem); max-width: 28ch; }
+.slide .points { font-size: 1.05em; }
+.slide-cover h1 { max-width: 14em; font-size: clamp(2.3rem, 1.4rem + 4.2vw, 4.2rem); line-height: 1.05; }
+.slide-cover .subtitle { max-width: 34ch; margin-top: 20px; font-size: clamp(1.15rem, 1rem + 0.8vw, 1.6rem); }
+.slide-cover .meta { margin-top: 32px; font-size: 0.95rem; }
+
+/* controls: a solid bar under the content; slides keep their end clear of it */
+.deck-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; background: var(--page); border-top: 1px solid var(--line); }
+.deck-progress { height: 3px; background: var(--line); }
+.deck-progress > span { display: block; height: 100%; width: 0; background: var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .deck-progress > span { transition: width 0.25s ease; }
+}
+.deck-controls { display: flex; align-items: center; gap: 10px; max-width: 76rem; margin: 0 auto; padding: 8px 24px; }
+.deck-count { margin-left: auto; color: var(--text-2); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.deck-controls .btn, .deck-controls .theme-toggle { padding: 4px 12px; font-size: 0.85rem; }
+.key { display: inline-block; min-width: 1.4em; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-3); font-size: 0.78rem; line-height: 1.5; text-align: center; }
+
+/* outline: a native modal dialog */
+.outline { width: min(32rem, calc(100vw - 32px)); max-height: min(34rem, calc(100dvh - 48px)); padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); overflow: hidden; }
+.outline[open] { display: flex; flex-direction: column; }
+.outline::backdrop { background: rgb(0 0 0 / 0.5); }
+.outline-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.outline-head h2 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.outline-list { margin: 0; padding: 8px 18px 14px 44px; overflow: auto; }
+.outline-list li { padding: 2px 0; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.outline-list a { display: block; padding: 5px 4px; color: var(--text); text-decoration: none; line-height: 1.35; overflow-wrap: anywhere; }
+.outline-list a:hover { text-decoration: underline; }
+.outline-list a[aria-current="location"] { color: var(--accent); font-weight: 600; }
+
+@media (max-width: 640px) {
+  .slide { padding: 28px 16px 80px; }
+  .slide-inner { font-size: 1.05rem; }
+  .slide-title { margin-bottom: 18px; }
+  .deck-controls { padding: 6px 16px; gap: 8px; }
+  .deck-controls .key { display: none; }
+}
+
+@media print {
+  html, body { height: auto; overflow: visible; }
+  .deck { height: auto; overflow: visible; scroll-snap-type: none; }
+  .slide { height: auto; min-height: 0; overflow: visible; padding: 0; scroll-snap-align: none; }
+  .slide + .slide { break-before: page; page-break-before: always; }
+  .slide-inner { max-width: none; margin: 0; font-size: 12pt; }
+  .slide-cover .slide-inner { margin-top: 30vh; }
+  .deck-bar, .outline { display: none !important; }
+}
+</style>
+</head>
+<body>
+<!--@DECK-->
+<script>
+<!--@PALIB-->
+</script>
+<script>
+<!--@SLIDESJS-->
+</script>
+<script>
+<!--@RUNTIME-->
+</script>
+</body>
+</html>

@@ -82,8 +82,69 @@
     return active;
   }
 
+  // ---- slides (1-based slide numbers throughout) -----------------------------------------
+
+  // A whole number in 1..total; junk and NaN read as the first slide.
+  function clampSlide(n, total) {
+    if (typeof n !== 'number' || n !== n) return 1;
+    var last = Math.max(1, total);
+    return Math.min(last, Math.max(1, Math.floor(n)));
+  }
+
+  // "#slide-N" -> the slide to open (clamped), or null when the hash is anything else.
+  function parseSlideHash(hash, total) {
+    var m = typeof hash === 'string' ? /^#slide-(\d+)$/.exec(hash) : null;
+    return m ? clampSlide(Number(m[1]), total) : null;
+  }
+
+  // The stored last position: digits only. A stale number past the end clamps; junk reads as null.
+  function parseResume(raw, total) {
+    return typeof raw === 'string' && /^\d+$/.test(raw) ? clampSlide(Number(raw), total) : null;
+  }
+
+  // Key -> { to, paged } or null. "paged" keys (Space, PageUp, PageDown) scroll a tall slide first.
+  function slideKey(key, shift) {
+    var move = function (to, paged) { return { to: to, paged: paged }; };
+    switch (key) {
+      case 'ArrowRight': return move('next', false);
+      case 'ArrowLeft': return move('prev', false);
+      case ' ': case 'Spacebar': return move(shift ? 'prev' : 'next', true);
+      case 'PageDown': return move('next', true);
+      case 'PageUp': return move('prev', true);
+      case 'Home': return move('first', false);
+      case 'End': return move('last', false);
+      case 'o': case 'O': return move('outline', false);
+      default: return null;
+    }
+  }
+
+  function moveTarget(to, current, total) {
+    switch (to) {
+      case 'next': return clampSlide(current + 1, total);
+      case 'prev': return clampSlide(current - 1, total);
+      case 'first': return 1;
+      case 'last': return Math.max(1, total);
+      default: return current;
+    }
+  }
+
+  // Does a slide taller than the view have more to show in this direction (1 down, -1 up)?
+  // m = { scrollTop, clientHeight, scrollHeight }; a pixel of slack counts as the end.
+  function canScroll(m, dir) {
+    if (dir > 0) return m.scrollTop + m.clientHeight < m.scrollHeight - 1;
+    if (dir < 0) return m.scrollTop > 1;
+    return false;
+  }
+
+  // Which slide a deck of equal-height slides is scrolled to.
+  function slideAtScroll(top, height, total) {
+    return height > 0 ? clampSlide(Math.round(top / height) + 1, total) : 1;
+  }
+
   root.PA = {
     nextTheme: nextTheme, readStore: readStore, writeStore: writeStore, saveStore: saveStore,
     readChecks: readChecks, mergeChecks: mergeChecks, checkProgress: checkProgress, activeIndex: activeIndex,
+    clampSlide: clampSlide, parseSlideHash: parseSlideHash, parseResume: parseResume, slideKey: slideKey,
+    moveTarget: moveTarget, canScroll: canScroll, slideAtScroll: slideAtScroll,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

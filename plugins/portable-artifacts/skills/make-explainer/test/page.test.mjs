@@ -114,13 +114,15 @@ test('sections without a title render no heading and no label', async () => {
   assert.ok(!html.includes('aria-labelledby'));
 });
 
-test('slides mode and sections without a renderer are reported with paths, all at once', async () => {
-  await assert.rejects(build(doc([text(1), { type: 'diagram', diagram: 'x.diagram.json' }, { type: 'chart' }], { mode: 'slides' })), (e) => {
-    assert.ok(e instanceof BuildError);
-    assert.deepEqual(e.errors.map((x) => x.path), ['mode', 'sections[1].type', 'sections[2].type']);
-    assert.match(e.errors[1].message, /"diagram" sections have no renderer yet/);
-    return true;
-  });
+test('sections without a renderer are reported with paths, all at once (in either mode)', async () => {
+  for (const mode of ['page', 'slides']) {
+    await assert.rejects(build(doc([text(1), { type: 'diagram', diagram: 'x.diagram.json' }, { type: 'chart' }], { mode })), (e) => {
+      assert.ok(e instanceof BuildError);
+      assert.deepEqual(e.errors.map((x) => x.path), ['sections[1].type', 'sections[2].type']);
+      assert.match(e.errors[0].message, /"diagram" sections have no renderer yet/);
+      return true;
+    });
+  }
 });
 
 test('a renderer that throws becomes a BuildError at the section path', async () => {

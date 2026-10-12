@@ -11,7 +11,7 @@ import { launchBrowser } from '../../scripts/lib/browser.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const BUILD = path.join(ROOT, 'scripts/build.mjs');
 
-export const EXAMPLES = ['concept', 'checklist'];
+export const EXAMPLES = ['concept', 'checklist', 'slides'];
 export const exampleFile = (name) => path.join(ROOT, `references/examples/${name}.explainer.json`);
 
 export { launchBrowser };

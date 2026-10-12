@@ -3,9 +3,12 @@
 // sections, compare points, checklist items. Words: every prose string of the
 // section except its own title and captions (tables and code have their own
 // limits).
+// The deck: a title slide from the spec head, then one slide per section, plus
+// the progress bar, counter, outline dialog and the live region the runtime uses.
 import { pathJoin } from '../../shared/errors.mjs';
 import { SLIDE_LIMITS } from './schema.mjs';
 import { collectStrings } from './walk.mjs';
+import { esc, inline, plain } from './render/ui.mjs';
 
 const listLines = (text) => (text ?? '').split('\n').filter((l) => l.trimStart().startsWith('- ')).length;
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
@@ -53,4 +56,67 @@ export function slideBudget(spec) {
     }
   });
   return errors;
+}
+
+/** True when the spec renders as a deck. */
+export const isSlides = (spec) => spec.mode === 'slides' || spec.preset === 'slides';
+
+// A section without a title is named after its type ("Text", "Table") in labels and the outline.
+const typeLabel = (type) => `${type[0].toUpperCase()}${type.slice(1)}`;
+export const slideTitle = (section) => (section.title === undefined ? typeLabel(section.type) : plain(section.title));
+
+function slide(n, total, title, classes, inner) {
+  return `<section class="slide ${classes}" id="slide-${n}" aria-label="Slide ${n} of ${total}: ${title}">
+<div class="slide-inner">
+${inner}
+</div>
+</section>`;
+}
+
+function cover(spec, total, metaHtml) {
+  const subtitle = spec.subtitle === undefined ? '' : `\n<p class="subtitle">${inline(spec.subtitle)}</p>`;
+  return slide(1, total, plain(spec.title), 'slide-cover', `<h1>${inline(spec.title)}</h1>${subtitle}${metaHtml ? `\n${metaHtml}` : ''}`);
+}
+
+function sectionSlide({ section, body, ownHeading }, n, total) {
+  const heading = section.title !== undefined && !ownHeading ? `<h2 class="slide-title" id="slide-${n}-title">${inline(section.title)}</h2>\n` : '';
+  return slide(n, total, slideTitle(section), `slide-${section.type}`, `${heading}${body}`);
+}
+
+function outline(titles) {
+  const items = titles.map((t, i) => `<li><a href="#slide-${i + 1}" data-slide="${i + 1}">${t}</a></li>`);
+  return `<dialog class="outline" data-outline aria-labelledby="outline-title">
+<div class="outline-head"><h2 id="outline-title">Outline</h2><button type="button" class="btn" data-outline-close>Close</button></div>
+<ol class="outline-list">
+${items.join('\n')}
+</ol>
+</dialog>`;
+}
+
+function chrome(total) {
+  return `<div class="deck-bar">
+<div class="deck-progress" role="progressbar" aria-label="Slide progress" aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="1" aria-valuetext="Slide 1 of ${total}"><span data-progress></span></div>
+<div class="deck-controls">
+<button type="button" class="btn" data-outline-open aria-haspopup="dialog" aria-keyshortcuts="O">Outline <span class="key" aria-hidden="true">O</span></button>
+<button type="button" class="theme-toggle" data-theme-toggle aria-label="Theme: Auto. Change theme">Theme: Auto</button>
+<span class="deck-count" aria-hidden="true"><span data-count>1</span> / ${total}</span>
+</div>
+</div>`;
+}
+
+/**
+ * The deck markup for the template's DECK marker.
+ * `rendered` = [{ section, body, ownHeading }] in order (bodies already rendered),
+ * `metaHtml` = the title slide's meta list ('' when none), `slug` keys the saved position.
+ */
+export function renderDeck({ spec, rendered, metaHtml, slug }) {
+  const total = rendered.length + 1;
+  const slides = [cover(spec, total, metaHtml), ...rendered.map((r, i) => sectionSlide(r, i + 2, total))];
+  const titles = [plain(spec.title), ...rendered.map((r) => slideTitle(r.section))];
+  return `<main id="content" class="deck" data-deck data-slug="${esc(slug)}" data-total="${total}" data-current="1">
+${slides.join('\n')}
+</main>
+${chrome(total)}
+${outline(titles)}
+<div class="sr-only" role="status" data-live></div>`;
 }

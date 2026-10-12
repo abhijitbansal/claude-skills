@@ -11,9 +11,12 @@ import { SECTIONS } from './sections.mjs';
 import { resolveOutput } from './output.mjs';
 import { slugify } from '../../shared/output.mjs';
 import { loadSibling, SiblingError } from './siblings.mjs';
+import { isSlides, renderDeck } from './slides.mjs';
 import { esc, inline, plain, rawText } from './render/ui.mjs';
 
-const TEMPLATE = new URL('../../template/page.html', import.meta.url);
+const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), slides: new URL('../../template/slides.html', import.meta.url) };
+const BASE_CSS = new URL('../../template/base.css', import.meta.url);
+const SLIDES_JS = new URL('../../template/slides.js', import.meta.url);
 const PA_LIB = new URL('../../template/pa-lib.js', import.meta.url);
 const RUNTIME = new URL('../../template/runtime.js', import.meta.url);
 const TOC_MIN = 4;
@@ -74,13 +77,16 @@ export function headingIds(ids) {
   });
 }
 
-function renderSection(section, i, id, titleId, def, ctx) {
-  let body;
+function renderBody(section, i, def, ctx) {
   try {
-    body = def.render(section, ctx);
+    return def.render(section, ctx);
   } catch (e) {
     throw new BuildError([{ path: pathJoin('sections', i), message: e.message }]);
   }
+}
+
+function renderSection(section, i, id, titleId, def, ctx) {
+  const body = renderBody(section, i, def, ctx);
   const hasHeading = section.title !== undefined && !def.ownHeading;
   const heading = hasHeading
     ? `<h2 class="sec-title" id="${esc(titleId)}">${inline(section.title)}<a class="anchor" href="#${esc(id)}" aria-label="Link to this section: ${plain(section.title)}">#</a></h2>\n`
@@ -115,15 +121,39 @@ async function loadIcons(spec) {
 
 function unsupported(spec) {
   const errors = [];
-  if (spec.mode === 'slides' || spec.preset === 'slides') {
-    errors.push({ path: 'mode', message: 'slides mode has no renderer yet; set mode to "page" (and preset to something else) to build a page' });
-  }
   spec.sections.forEach((s, i) => {
     if (!Object.hasOwn(SECTIONS, s.type)) {
       errors.push({ path: pathJoin(pathJoin('sections', i), 'type'), message: `${JSON.stringify(s.type)} sections have no renderer yet; remove the section or use another type` });
     }
   });
   return errors;
+}
+
+// The page layout: masthead pieces, the contents list and the sections.
+function pageParts(spec, ctx, ids) {
+  const titleIds = headingIds(ids);
+  const rendered = spec.sections.map((section, i) => renderSection(section, i, ids[i], titleIds[i], SECTIONS[section.type], ctx));
+  const tocEntries = spec.sections
+    .map((s, i) => ({ id: ids[i], title: s.title, own: SECTIONS[s.type].ownHeading }))
+    .filter((e) => e.title !== undefined && !e.own);
+  const toc = renderToc(tocEntries);
+  return {
+    BODYCLASS: toc ? 'has-toc' : '',
+    H1: inline(spec.title),
+    SUBTITLE: spec.subtitle === undefined ? '' : `<p class="subtitle">${inline(spec.subtitle)}</p>`,
+    META: renderMeta(spec.meta),
+    TOC: toc,
+    SECTIONS: rendered.join('\n'),
+  };
+}
+
+// The slide layout: the whole deck is one marker.
+function deckParts(spec, ctx) {
+  const rendered = spec.sections.map((section, i) => {
+    const def = SECTIONS[section.type];
+    return { section, ownHeading: def.ownHeading, body: renderBody(section, i, def, ctx) };
+  });
+  return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug }) };
 }
 
 /**
@@ -140,16 +170,16 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
   const themeData = loadTheme(theme ?? spec.theme ?? DEFAULT_THEME);
   const target = resolveOutput({ out, title: spec.title, env });
   const slug = path.basename(target, '.html');
+  const slides = isSlides(spec);
   const ids = sectionIds(spec.sections);
-  const titleIds = headingIds(ids);
   const ctx = {
     theme: themeData,
     dir,
     outDir: path.dirname(target),
     assetsDir: path.join(path.dirname(target), `${slug}.assets`),
     slug,
-    mode: 'page',
-    idFor: (_section, i) => ids[i],
+    mode: slides ? 'slides' : 'page',
+    idFor: slides ? (_section, i) => `slide-${i + 2}` : (_section, i) => ids[i],
     icons: await loadIcons(spec),
   };
 
@@ -158,26 +188,19 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     const def = SECTIONS[section.type];
     if (def.assets) assets.push(...await def.assets(section, ctx));
   }
-  const rendered = spec.sections.map((section, i) => renderSection(section, i, ids[i], titleIds[i], SECTIONS[section.type], ctx));
-  const tocEntries = spec.sections
-    .map((s, i) => ({ id: ids[i], title: s.title, own: SECTIONS[s.type].ownHeading }))
-    .filter((e) => e.title !== undefined && !e.own);
-  const toc = renderToc(tocEntries);
+  const layout = slides ? deckParts(spec, ctx) : pageParts(spec, ctx, ids);
 
   const parts = {
     CSP: esc(contentSecurityPolicy(spec)),
     TITLE: plain(spec.title),
     THEME: themeCss(themeData),
-    BODYCLASS: toc ? 'has-toc' : '',
-    H1: inline(spec.title),
-    SUBTITLE: spec.subtitle === undefined ? '' : `<p class="subtitle">${inline(spec.subtitle)}</p>`,
-    META: renderMeta(spec.meta),
-    TOC: toc,
-    SECTIONS: rendered.join('\n'),
+    BASECSS: fs.readFileSync(BASE_CSS, 'utf8').replace(/\n$/, ''),
+    ...layout,
     PALIB: inlineCode(fs.readFileSync(PA_LIB, 'utf8')),
+    SLIDESJS: slides ? inlineCode(fs.readFileSync(SLIDES_JS, 'utf8')) : '',
     RUNTIME: inlineCode(fs.readFileSync(RUNTIME, 'utf8')),
   };
   // One pass: a value that contains "<!--@X-->" is never substituted again.
-  const html = fs.readFileSync(TEMPLATE, 'utf8').replace(/<!--@(\w+)-->/g, (_, key) => parts[key] ?? '');
+  const html = fs.readFileSync(TEMPLATES[ctx.mode], 'utf8').replace(/<!--@(\w+)-->/g, (_, key) => parts[key] ?? '');
   return { html, assets };
 }

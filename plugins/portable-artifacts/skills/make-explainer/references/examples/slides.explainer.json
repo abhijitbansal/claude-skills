@@ -1,0 +1,104 @@
+{
+  "title": "Four skills, one rule: the model writes JSON, never markup",
+  "subtitle": "What the visual-artifacts work in this repo does and where it stops",
+  "preset": "slides",
+  "theme": "paper",
+  "meta": {
+    "date": "2026-10-12",
+    "repo": "claude-skills",
+    "branch": "feat/visual-artifacts"
+  },
+  "sections": [
+    {
+      "type": "tldr",
+      "title": "A prompt becomes one file you can open anywhere",
+      "text": "Diagrams, dashboards, videos and explainers now share a theme, a checker and a rule: the model fills in JSON and a script renders it.",
+      "points": [
+        "Each output is one local file with no network at build or view time.",
+        "Checks run before the render, so a bad spec fails with a path and a fix.",
+        "One set of themes keeps every artifact in the same family."
+      ],
+      "tone": "good"
+    },
+    {
+      "type": "cards",
+      "title": "Each skill covers one kind of artifact",
+      "columns": 2,
+      "items": [
+        { "title": "make-diagram", "text": "Architecture, flow, sequence and state diagrams with zoom and hover tracing." },
+        { "title": "make-dashboard", "text": "Charts and KPI pages built from local data files." },
+        { "title": "make-motion", "text": "Short animated videos, previewed locally and exported to MP4." },
+        { "title": "make-explainer", "text": "Recaps, checklists, concept pages and slide decks like this one." }
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "Every build follows the same four steps",
+      "items": [
+        { "title": "Write the outline", "text": "Typed sections in one JSON file." },
+        { "title": "Validate it", "text": "Schema, file references and prose rules." },
+        { "title": "Render it", "text": "Themed HTML with fonts and script inlined." },
+        { "title": "Look at it", "text": "A headless check opens the result and reports problems." }
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "An outline stays consistent where a hand-written page drifts",
+      "columns": [
+        {
+          "title": "Hand-written page",
+          "tone": "warn",
+          "points": [
+            "Spacing changes from page to page.",
+            "A font or script may come from a CDN.",
+            "Nothing checks the prose."
+          ]
+        },
+        {
+          "title": "Generated from an outline",
+          "tone": "good",
+          "points": [
+            "One renderer per section type.",
+            "The content security policy blocks the network.",
+            "Banned phrases fail the build."
+          ]
+        }
+      ]
+    },
+    {
+      "type": "code",
+      "title": "A slide is a section with a claim for a title",
+      "language": "json",
+      "code": "{\n  \"title\": \"Short deck\",\n  \"mode\": \"slides\",\n  \"sections\": [\n    {\n      \"type\": \"text\",\n      \"title\": \"One claim per slide\",\n      \"text\": \"- Six points at most\\n- Eighty words at most\"\n    }\n  ]\n}"
+    },
+    {
+      "type": "table",
+      "title": "A slide that is too full is an error, not a warning",
+      "columns": ["Limit", "Per slide"],
+      "rows": [
+        ["Points or bullets", 6],
+        ["Table rows", 8],
+        ["Code lines", 12],
+        ["Words of text", 80]
+      ],
+      "caption": "Over the limit, validation says which slide and how to split it."
+    },
+    {
+      "type": "callout",
+      "tone": "info",
+      "title": "Keys that work in the deck",
+      "text": "Left and right arrows, Space, Page Up and Page Down move between slides. Home and End jump to the first and last. **O** opens the outline. A link such as `#slide-3` opens that slide, and the last slide is remembered."
+    },
+    {
+      "type": "details",
+      "title": "A tall slide scrolls inside itself",
+      "summary": "What a tall slide does",
+      "text": "A slide taller than the screen scrolls inside itself. Space scrolls it first and moves on at the bottom, and a table that scrolls sideways keeps the arrow keys while it has focus."
+    },
+    {
+      "type": "text",
+      "title": "Next, the diagram, chart and video sections land in the deck too",
+      "text": "- Diagram and chart sections reuse the sibling skills.\n- Video sections link a clip made by make-motion.\n- The headless check will open every slide."
+    }
+  ]
+}

@@ -5,8 +5,9 @@
   var root = document.documentElement;
   var safeStorage = function (name) { try { return window[name]; } catch (e) { return undefined; } };
   var local = safeStorage('localStorage');
-    var live = null;
+  var live = null;
   function announce(text) {
+    if (!live) live = document.querySelector('[data-live]'); // slides pages ship their own region
     if (!live) {
       live = document.createElement('div');
       live.className = 'sr-only';
