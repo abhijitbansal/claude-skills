@@ -11,6 +11,8 @@ const LIVE_JS = new URL('../../template/live.js', import.meta.url);
 const LIVE_CSS = '.pa-live{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 16px;background:var(--surface);border-bottom:1px solid var(--line);font-size:.8rem;color:var(--text-2)}.pa-live button{border:1px solid var(--line);background:none;border-radius:6px;padding:2px 8px;cursor:pointer}#pa-live-banner{flex-basis:100%;color:var(--bad)}';
 const KEEPALIVE_MS = 15000;
 export const MIN_INTERVAL_S = 5;
+// setInterval is int32 ms: above ~2147483 s Node clamps to 1 ms (endless reload loop).
+export const MAX_INTERVAL_S = 86400;
 
 // Function replacers throughout: "$&" in the token or the client must stay literal.
 export function liveHtml(html, { token }) {
@@ -21,14 +23,19 @@ export function liveHtml(html, { token }) {
   return at < 0 ? withCsp + tail : withCsp.slice(0, at) + tail + withCsp.slice(at);
 }
 
-export function createRebuilder(run) {
+// onError(e) hears anything run() throws; the queue keeps going afterwards.
+export function createRebuilder(run, { onError } = {}) {
   let running = null;
   let pending = false;
   const loop = async () => {
     try {
       do {
         pending = false;
-        await run();
+        try {
+          await run();
+        } catch (e) {
+          onError?.(e);
+        }
       } while (pending);
     } finally {
       running = null;
@@ -37,7 +44,7 @@ export function createRebuilder(run) {
   return {
     trigger() {
       if (running) { pending = true; return; }
-      running = loop().catch(() => {});
+      running = loop();
     },
     idle: () => running ?? Promise.resolve(),
   };
@@ -45,7 +52,9 @@ export function createRebuilder(run) {
 
 // Watch parent directories (rename-and-replace saves defeat a file watch),
 // filter by file name, debounce bursts into one call.
-export function watchFiles(paths, onChange, { debounceMs = 300 } = {}) {
+// A watcher that errors is closed and reported through onError(e); fs.watch itself
+// throws (ENOENT, EMFILE...) when a directory cannot be watched.
+export function watchFiles(paths, onChange, { debounceMs = 300, onError } = {}) {
   const byDir = new Map();
   for (const p of paths) {
     const dir = path.dirname(p);
@@ -53,15 +62,21 @@ export function watchFiles(paths, onChange, { debounceMs = 300 } = {}) {
     byDir.get(dir).add(path.basename(p));
   }
   let timer = null;
-  const watchers = [...byDir].map(([dir, names]) => {
-    const w = fs.watch(dir, (_event, name) => {
-      if (name && !names.has(String(name))) return;
-      clearTimeout(timer);
-      timer = setTimeout(onChange, debounceMs);
-    });
-    w.on('error', () => {}); // directory removed: stop reloading quietly
-    return w;
-  });
+  const watchers = [];
+  try {
+    for (const [dir, names] of byDir) {
+      const w = fs.watch(dir, (_event, name) => {
+        if (name && !names.has(String(name))) return;
+        clearTimeout(timer);
+        timer = setTimeout(onChange, debounceMs);
+      });
+      w.on('error', (e) => { w.close(); onError?.(e); });
+      watchers.push(w);
+    }
+  } catch (e) {
+    watchers.forEach((w) => w.close());
+    throw e;
+  }
   return { close: () => { clearTimeout(timer); watchers.forEach((w) => w.close()); } };
 }
 
@@ -70,8 +85,31 @@ export function watchFiles(paths, onChange, { debounceMs = 300 } = {}) {
 export async function startLiveServer({ specFile, port = 0, interval, theme, allowOutside = false, timeoutMs, out }) {
   const token = crypto.randomBytes(16).toString('hex');
   const clients = new Set();
-  const state = { html: null, watcher: null, watchKey: '' };
+  const state = { html: null, watcher: null, watchPaths: [] };
   const send = (event, payload) => { for (const c of clients) c.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`); };
+  const watchProblem = (e) => ({ path: 'watch', message: `watcher stopped: ${e.code ?? e.message}; fix the folder and press Rebuild now` });
+
+  // (Re)arm the file watchers on every build, so a deleted and recreated data
+  // folder is picked up again. Returns a problem entry, or null when armed.
+  function arm(paths) {
+    state.watcher?.close();
+    state.watcher = null;
+    state.watchPaths = paths;
+    try {
+      state.watcher = watchFiles(paths, () => rebuilder.trigger(), {
+        onError: (e) => {
+          const problem = watchProblem(e);
+          process.stderr.write(`${problem.path}: ${problem.message}\n`);
+          send('build-error', [problem]);
+        },
+      });
+      return null;
+    } catch (e) {
+      const problem = watchProblem(e);
+      process.stderr.write(`${problem.path}: ${problem.message}\n`);
+      return problem;
+    }
+  }
 
   async function build() {
     let result;
@@ -82,20 +120,22 @@ export async function startLiveServer({ specFile, port = 0, interval, theme, all
       if (state.html === null && e instanceof UsageError) throw e; // first build: report as usage error
       result = { ok: false, errors: [{ path: '', message: String(e.message).split('\n')[0] }] };
     }
+    const problem = arm(result.ok ? result.watch : state.watchPaths);
     if (!result.ok) {
-      send('build-error', result.errors);
+      send('build-error', problem ? [...result.errors, problem] : result.errors);
       return result;
     }
-    const key = result.watch.join('\n');
-    if (key !== state.watchKey) {
-      state.watcher?.close();
-      state.watcher = watchFiles(result.watch, () => rebuilder.trigger());
-      state.watchKey = key;
-    }
-    send('rebuilt', { at: new Date().toISOString() });
+    if (problem) send('build-error', [problem]);
+    else send('rebuilt', { at: new Date().toISOString() });
     return result;
   }
-  const rebuilder = createRebuilder(build);
+  const rebuilder = createRebuilder(build, {
+    onError: (e) => {
+      const message = String(e?.message ?? e).split('\n')[0];
+      process.stderr.write(`rebuild failed: ${message}\n`);
+      send('build-error', [{ path: '', message: `rebuild failed: ${message}` }]);
+    },
+  });
 
   const first = await build();
   if (!first.ok) return { ok: false, errors: first.errors };

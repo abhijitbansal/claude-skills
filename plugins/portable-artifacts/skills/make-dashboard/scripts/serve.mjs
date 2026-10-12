@@ -8,7 +8,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { UsageError, parseCli, parseTimeout, exitUsage } from './lib/cli.mjs';
-import { startLiveServer, MIN_INTERVAL_S } from './lib/live.mjs';
+import { startLiveServer, MIN_INTERVAL_S, MAX_INTERVAL_S } from './lib/live.mjs';
 import { printResult } from '../shared/errors.mjs';
 
 const USAGE = 'node scripts/serve.mjs [dir with index.html] [--port n] [--open]\n   or: node scripts/serve.mjs --watch <spec.json> [--interval <seconds>] [--theme <name>] [--port n] [--open] [--allow-outside] [--timeout <seconds>]';
@@ -85,8 +85,8 @@ try {
   if (values.watch !== undefined) {
     if (positionals.length) throw new UsageError(`--watch takes a spec file, not a directory; usage: ${USAGE}`);
     const interval = values.interval === undefined ? undefined : Number(values.interval);
-    if (interval !== undefined && !(Number.isFinite(interval) && interval >= MIN_INTERVAL_S)) {
-      throw new UsageError(`--interval must be at least ${MIN_INTERVAL_S} seconds; usage: ${USAGE}`);
+    if (interval !== undefined && !(Number.isFinite(interval) && interval >= MIN_INTERVAL_S && interval <= MAX_INTERVAL_S)) {
+      throw new UsageError(`--interval must be between ${MIN_INTERVAL_S} and ${MAX_INTERVAL_S} seconds; usage: ${USAGE}`);
     }
     const live = await startLiveServer({
       specFile: path.resolve(values.watch), port, interval, theme: values.theme,

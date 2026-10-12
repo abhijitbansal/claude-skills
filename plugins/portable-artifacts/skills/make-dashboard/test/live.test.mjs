@@ -37,6 +37,21 @@ test('createRebuilder runs one build at a time and coalesces triggers into one m
   assert.equal(runs, 2);
 });
 
+test('createRebuilder reports a throwing run through onError and keeps going', async () => {
+  const seen = [];
+  let runs = 0;
+  const rb = createRebuilder(async () => { runs++; if (runs === 1) throw new Error('boom'); }, { onError: (e) => seen.push(e.message) });
+  rb.trigger(); await rb.idle();
+  assert.deepEqual(seen, ['boom']);
+  rb.trigger(); await rb.idle();
+  assert.equal(runs, 2, 'a later trigger still runs');
+});
+
+test('watchFiles throws for a directory it cannot watch and leaves no watcher behind', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-watch-'));
+  assert.throws(() => watchFiles([path.join(dir, 'a.csv'), path.join(dir, 'gone/b.csv')], () => {}), /ENOENT/);
+});
+
 test('watchFiles fires once per burst, including rename-and-replace saves', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-watch-'));
   const file = path.join(dir, 'data.csv');
@@ -73,13 +88,15 @@ function project() {
 function serve(args) {
   const child = spawn(process.execPath, [SERVE, ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
   children.push(child);
+  let err = '';
+  child.stderr.on('data', (d) => { err += d; });
   return new Promise((resolve, reject) => {
     let out = '';
     child.stdout.on('data', (d) => {
       out += d;
       const m = out.match(/http:\/\/127\.0\.0\.1:(\d+)\//);
       const tok = out.match(/token: (\w+)/);
-      if (m && tok) resolve({ child, port: Number(m[1]), token: tok[1] });
+      if (m && tok) resolve({ child, port: Number(m[1]), token: tok[1], stderr: () => err });
     });
     child.on('exit', (code) => reject(new Error(`serve exited ${code}: ${out}`)));
   });
@@ -165,5 +182,33 @@ test('--interval rebuilds on a timer; --watch with a directory argument is a usa
   assert.equal(r.status, 2);
   r = spawnSync(process.execPath, [SERVE, '--watch', file, '--interval', '2'], { encoding: 'utf8' });
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /--interval must be at least 5 seconds/);
+  assert.match(r.stderr, /--interval must be between 5 and 86400 seconds/);
+  for (const bad of ['86401', '2147484', '1e10', 'abc']) {
+    r = spawnSync(process.execPath, [SERVE, '--watch', file, '--interval', bad], { encoding: 'utf8' });
+    assert.equal(r.status, 2, `--interval ${bad}`);
+    assert.match(r.stderr, /--interval must be between 5 and 86400 seconds/);
+  }
+});
+
+test('a vanished data folder is reported (event + stderr), then Rebuild now re-arms the watchers', async () => {
+  const { file, dir, csv } = project();
+  const { port, token, stderr } = await serve(['--watch', file]);
+  const es = events(port);
+  await sleep(200);
+  fs.rmSync(path.join(dir, 'data'), { recursive: true });
+  await until(() => es.seen.some((e) => e.event === 'build-error' && e.data.some((x) => x.path === 'watch')));
+  assert.match(stderr(), /watch: watcher stopped: ENOENT; fix the folder and press Rebuild now/);
+  assert.match((await request(port)).body, /class="kpi-value">41</, 'last good page still served');
+  fs.mkdirSync(path.join(dir, 'data'));
+  fs.writeFileSync(csv, 'v\n7\n');
+  const rebuilt = () => es.seen.filter((e) => e.event === 'rebuilt').length;
+  const before = rebuilt();
+  assert.equal((await request(port, { method: 'POST', path: '/rebuild', headers: { 'x-pa-token': token } })).status, 202);
+  await until(() => rebuilt() > before);
+  assert.match((await request(port)).body, /class="kpi-value">7</);
+  const armed = rebuilt();
+  fs.writeFileSync(csv, 'v\n8\n');
+  await until(() => rebuilt() > armed);
+  assert.match((await request(port)).body, /class="kpi-value">8</, 'watching resumed');
+  es.close();
 });
