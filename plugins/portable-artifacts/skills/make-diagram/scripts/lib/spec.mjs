@@ -205,6 +205,28 @@ function checkEdgeEnd(errors, edge, p, field, ctx) {
   errors.push({ path: at, message: notFound(id, ctx.endpoints) });
 }
 
+// Groups that enclose `id` (a node or a group), nearest first. Stops at a cycle
+// (reported separately by checkGroupTree).
+function enclosingGroups(id, ctx) {
+  const chain = [];
+  for (let cur = ctx.container.get(id); cur !== undefined && !chain.includes(cur); cur = ctx.container.get(cur)) chain.push(cur);
+  return chain;
+}
+
+// An edge between a group and something inside it (or the group and itself)
+// has no sensible route: it would cross the group's own contents.
+function checkEnclosedEdge(errors, edge, p, ctx) {
+  if (ctx.type !== 'architecture' || !ctx.endpoints.includes(edge.from) || !ctx.endpoints.includes(edge.to)) return;
+  if (edge.from === edge.to && ctx.groupIds.includes(edge.from)) {
+    errors.push({ path: p, message: `group ${q(edge.from)} cannot connect to itself; connect a node inside it or a different group` });
+    return;
+  }
+  const [inner, outer] = enclosingGroups(edge.from, ctx).includes(edge.to) ? [edge.from, edge.to]
+    : enclosingGroups(edge.to, ctx).includes(edge.from) ? [edge.to, edge.from] : [];
+  if (inner === undefined) return;
+  errors.push({ path: p, message: `${q(inner)} is inside group ${q(outer)}; connect to a node outside it or to the group's sibling` });
+}
+
 function checkGraph(spec, errors) {
   const nodes = spec.nodes ?? [];
   const groups = spec.groups ?? [];
@@ -217,7 +239,8 @@ function checkGraph(spec, errors) {
   registerIds(errors, [['edges', edges]]);
   const groupIds = groups.map((g) => g.id);
   const nodeIds = nodes.map((n) => n.id);
-  const ctx = { type: spec.type, groupIds, nodeIds, endpoints: spec.type === 'architecture' ? [...groupIds, ...nodeIds] : nodeIds };
+  const container = new Map([...groups, ...nodes].map((x) => [x.id, x.parent ?? x.group]).filter(([, c]) => groupIds.includes(c)));
+  const ctx = { type: spec.type, groupIds, nodeIds, container, endpoints: spec.type === 'architecture' ? [...groupIds, ...nodeIds] : nodeIds };
 
   checkGroupTree(errors, groups, groupIds, nodeIds);
   groups.forEach((g, i) => checkLength(errors, g, 'label', pathJoin('groups', i), LIMITS.label));
@@ -230,6 +253,7 @@ function checkGraph(spec, errors) {
     const p = pathJoin('edges', i);
     checkEdgeEnd(errors, e, p, 'from', ctx);
     checkEdgeEnd(errors, e, p, 'to', ctx);
+    checkEnclosedEdge(errors, e, p, ctx);
     checkLength(errors, e, 'label', p, LIMITS.edgeLabel);
   });
   checkSteps(errors, spec, [...seen.keys()]);

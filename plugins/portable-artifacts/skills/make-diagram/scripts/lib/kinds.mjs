@@ -48,7 +48,7 @@ const SHAPES = {
 
 // Shapes with room for an icon. The others (stadium, diamonds, dots) are drawn
 // as a bare shape, so an icon on those kinds would be silently dropped.
-const BOX_SHAPES = new Set([
+export const BOX_SHAPES = new Set([
   'rounded-rect', 'rect', 'cylinder', 'stacked-rect', 'hexagon-rect',
   'dashed-rounded-rect', 'parallelogram', 'double-bar-rect',
 ]);

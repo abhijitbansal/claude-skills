@@ -1,0 +1,351 @@
+{
+  "width": 1152,
+  "height": 180,
+  "nodes": [
+    {
+      "id": "begin",
+      "x": 33,
+      "y": 109,
+      "width": 20,
+      "height": 20,
+      "shape": "filled-dot",
+      "lines": [
+        "Begin"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 0,
+      "labelBox": {
+        "x": 24,
+        "y": 134,
+        "width": 38,
+        "height": 20
+      },
+      "labelSide": "bottom"
+    },
+    {
+      "id": "placed",
+      "x": 138,
+      "y": 99,
+      "width": 80,
+      "height": 40,
+      "shape": "rounded-rect",
+      "lines": [
+        "Placed"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 1
+    },
+    {
+      "id": "paid",
+      "x": 478,
+      "y": 91,
+      "width": 108,
+      "height": 56,
+      "shape": "rounded-rect",
+      "lines": [
+        "Paid"
+      ],
+      "noteLine": "stock reserved",
+      "icon": null,
+      "tone": "good",
+      "group": null,
+      "layer": 2
+    },
+    {
+      "id": "ok",
+      "x": 678,
+      "y": 107,
+      "width": 24,
+      "height": 24,
+      "shape": "small-diamond",
+      "lines": [
+        "Stock ok?"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 3,
+      "labelBox": {
+        "x": 658,
+        "y": 136,
+        "width": 64,
+        "height": 20
+      },
+      "labelSide": "bottom"
+    },
+    {
+      "id": "shipped",
+      "x": 928,
+      "y": 103,
+      "width": 82,
+      "height": 40,
+      "shape": "rounded-rect",
+      "lines": [
+        "Shipped"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 4
+    },
+    {
+      "id": "cancelled",
+      "x": 922,
+      "y": 31,
+      "width": 94,
+      "height": 40,
+      "shape": "rounded-rect",
+      "lines": [
+        "Cancelled"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "tone": "bad",
+      "group": null,
+      "layer": 4
+    },
+    {
+      "id": "finish",
+      "x": 1098,
+      "y": 109.7,
+      "width": 20,
+      "height": 20,
+      "shape": "ringed-dot",
+      "lines": [
+        "Finish"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 5,
+      "labelBox": {
+        "x": 1088,
+        "y": 134.7,
+        "width": 40,
+        "height": 20
+      },
+      "labelSide": "bottom"
+    }
+  ],
+  "groups": [],
+  "edges": [
+    {
+      "id": "e0",
+      "from": "begin",
+      "to": "placed",
+      "points": [
+        {
+          "x": 53,
+          "y": 119
+        },
+        {
+          "x": 138,
+          "y": 119
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "e1",
+      "from": "placed",
+      "to": "paid",
+      "points": [
+        {
+          "x": 218,
+          "y": 119
+        },
+        {
+          "x": 478,
+          "y": 119
+        }
+      ],
+      "style": "solid",
+      "both": false,
+      "label": {
+        "text": "payment captured",
+        "x": 294,
+        "y": 126,
+        "width": 112,
+        "height": 20
+      }
+    },
+    {
+      "id": "e2",
+      "from": "paid",
+      "to": "ok",
+      "points": [
+        {
+          "x": 586,
+          "y": 119
+        },
+        {
+          "x": 678,
+          "y": 119
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "e3",
+      "from": "ok",
+      "to": "shipped",
+      "points": [
+        {
+          "x": 702,
+          "y": 123
+        },
+        {
+          "x": 928,
+          "y": 123
+        }
+      ],
+      "style": "solid",
+      "both": false,
+      "label": {
+        "text": "in stock",
+        "x": 795,
+        "y": 130,
+        "width": 54,
+        "height": 20
+      }
+    },
+    {
+      "id": "e4",
+      "from": "ok",
+      "to": "cancelled",
+      "points": [
+        {
+          "x": 702,
+          "y": 115
+        },
+        {
+          "x": 746,
+          "y": 115
+        },
+        {
+          "x": 746,
+          "y": 51
+        },
+        {
+          "x": 922,
+          "y": 51
+        }
+      ],
+      "style": "dashed",
+      "both": false,
+      "label": {
+        "text": "sold out",
+        "x": 794,
+        "y": 24,
+        "width": 56,
+        "height": 20
+      }
+    },
+    {
+      "id": "e5",
+      "from": "placed",
+      "to": "placed",
+      "points": [
+        {
+          "x": 164.7,
+          "y": 99
+        },
+        {
+          "x": 164.7,
+          "y": 89
+        },
+        {
+          "x": 191.3,
+          "y": 89
+        },
+        {
+          "x": 191.3,
+          "y": 99
+        }
+      ],
+      "style": "solid",
+      "both": false,
+      "label": {
+        "text": "retry payment",
+        "x": 134,
+        "y": 63,
+        "width": 88,
+        "height": 20
+      }
+    },
+    {
+      "id": "e6",
+      "from": "shipped",
+      "to": "finish",
+      "points": [
+        {
+          "x": 1010,
+          "y": 123
+        },
+        {
+          "x": 1098,
+          "y": 123
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "e7",
+      "from": "cancelled",
+      "to": "finish",
+      "points": [
+        {
+          "x": 1016,
+          "y": 51
+        },
+        {
+          "x": 1040,
+          "y": 51
+        },
+        {
+          "x": 1040,
+          "y": 116.3
+        },
+        {
+          "x": 1098,
+          "y": 116.3
+        }
+      ],
+      "style": "solid",
+      "both": false
+    }
+  ],
+  "layers": [
+    [
+      "begin"
+    ],
+    [
+      "placed"
+    ],
+    [
+      "paid"
+    ],
+    [
+      "ok"
+    ],
+    [
+      "cancelled",
+      "shipped"
+    ],
+    [
+      "finish"
+    ]
+  ]
+}

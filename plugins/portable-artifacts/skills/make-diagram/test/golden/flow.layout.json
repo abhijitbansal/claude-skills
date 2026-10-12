@@ -1,0 +1,295 @@
+{
+  "width": 254,
+  "height": 1034,
+  "nodes": [
+    {
+      "id": "begin",
+      "x": 88,
+      "y": 24,
+      "width": 78,
+      "height": 40,
+      "shape": "stadium",
+      "lines": [
+        "Start"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 0
+    },
+    {
+      "id": "ask",
+      "x": 24,
+      "y": 136,
+      "width": 206,
+      "height": 40,
+      "shape": "parallelogram",
+      "lines": [
+        "Enter email address"
+      ],
+      "noteLine": null,
+      "icon": "lucide:arrow-right-left",
+      "tone": "neutral",
+      "group": null,
+      "layer": 1
+    },
+    {
+      "id": "known",
+      "x": 36.7,
+      "y": 340,
+      "width": 168,
+      "height": 56,
+      "shape": "diamond",
+      "lines": [
+        "Account exists?"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 2
+    },
+    {
+      "id": "send",
+      "x": 57.7,
+      "y": 605,
+      "width": 126,
+      "height": 40,
+      "shape": "rect",
+      "lines": [
+        "Send reset link"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "tone": "neutral",
+      "group": "email",
+      "layer": 3
+    },
+    {
+      "id": "wait",
+      "x": 51.7,
+      "y": 717,
+      "width": 138,
+      "height": 40,
+      "shape": "rounded-rect",
+      "lines": [
+        "Wait for click"
+      ],
+      "noteLine": null,
+      "icon": "lucide:clock",
+      "tone": "neutral",
+      "group": "email",
+      "layer": 4
+    },
+    {
+      "id": "check",
+      "x": 46.7,
+      "y": 858,
+      "width": 148,
+      "height": 40,
+      "shape": "double-bar-rect",
+      "lines": [
+        "Verify token"
+      ],
+      "noteLine": null,
+      "icon": "lucide:workflow",
+      "tone": "neutral",
+      "group": null,
+      "layer": 5
+    },
+    {
+      "id": "done",
+      "x": 36.7,
+      "y": 970,
+      "width": 168,
+      "height": 40,
+      "shape": "stadium",
+      "lines": [
+        "Password changed"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 6
+    }
+  ],
+  "groups": [
+    {
+      "id": "email",
+      "x": 27.7,
+      "y": 565,
+      "width": 186,
+      "height": 216,
+      "label": "Email",
+      "depth": 0
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "from": "begin",
+      "to": "ask",
+      "points": [
+        {
+          "x": 127,
+          "y": 64
+        },
+        {
+          "x": 127,
+          "y": 136
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "e1",
+      "from": "ask",
+      "to": "known",
+      "points": [
+        {
+          "x": 161.3,
+          "y": 176
+        },
+        {
+          "x": 161.3,
+          "y": 292
+        },
+        {
+          "x": 148.7,
+          "y": 292
+        },
+        {
+          "x": 148.7,
+          "y": 340
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "e2",
+      "from": "known",
+      "to": "send",
+      "points": [
+        {
+          "x": 120.7,
+          "y": 396
+        },
+        {
+          "x": 120.7,
+          "y": 605
+        }
+      ],
+      "style": "solid",
+      "both": false,
+      "label": {
+        "text": "yes",
+        "x": 82.7,
+        "y": 468,
+        "width": 32,
+        "height": 20
+      }
+    },
+    {
+      "id": "e3",
+      "from": "known",
+      "to": "ask",
+      "points": [
+        {
+          "x": 92.7,
+          "y": 340
+        },
+        {
+          "x": 92.7,
+          "y": 176
+        }
+      ],
+      "style": "dashed",
+      "both": false,
+      "label": {
+        "text": "no",
+        "x": 60.7,
+        "y": 248,
+        "width": 26,
+        "height": 20
+      }
+    },
+    {
+      "id": "e4",
+      "from": "send",
+      "to": "wait",
+      "points": [
+        {
+          "x": 120.7,
+          "y": 645
+        },
+        {
+          "x": 120.7,
+          "y": 717
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "e5",
+      "from": "wait",
+      "to": "check",
+      "points": [
+        {
+          "x": 120.7,
+          "y": 757
+        },
+        {
+          "x": 120.7,
+          "y": 858
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "e6",
+      "from": "check",
+      "to": "done",
+      "points": [
+        {
+          "x": 120.7,
+          "y": 898
+        },
+        {
+          "x": 120.7,
+          "y": 970
+        }
+      ],
+      "style": "solid",
+      "both": false
+    }
+  ],
+  "layers": [
+    [
+      "begin"
+    ],
+    [
+      "ask"
+    ],
+    [
+      "known"
+    ],
+    [
+      "send"
+    ],
+    [
+      "wait"
+    ],
+    [
+      "check"
+    ],
+    [
+      "done"
+    ]
+  ]
+}

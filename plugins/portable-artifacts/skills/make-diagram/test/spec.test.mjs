@@ -465,3 +465,39 @@ test('whitespace-only and empty text fields are rejected', async () => {
   const seq = await mutated('sequence', (s) => { s.notes[0].text = ' '; s.messages[0].label = ' '; });
   assert.deepEqual(seq.map((x) => x.path), ['messages[0].label', 'notes[0].text']);
 });
+
+// ---- edges between a group and its own contents ---------------------------
+
+const ENCLOSED = 'connect to a node outside it or to the group\'s sibling';
+
+test('an architecture edge from a node to its own ancestor group is rejected', async () => {
+  const direct = await mutated('architecture', (s) => { s.edges.push({ from: 'api', to: 'vpc' }); });
+  assert.deepEqual(direct, [{ path: 'edges[4]', message: `"api" is inside group "vpc"; ${ENCLOSED}` }]);
+  const grand = await mutated('architecture', (s) => { s.edges.push({ from: 'api', to: 'aws' }); });
+  assert.deepEqual(grand, [{ path: 'edges[4]', message: `"api" is inside group "aws"; ${ENCLOSED}` }]);
+});
+
+test('an architecture edge from a group to a node or group inside it is rejected', async () => {
+  const node = await mutated('architecture', (s) => { s.edges.push({ from: 'aws', to: 'db' }); });
+  assert.deepEqual(node, [{ path: 'edges[4]', message: `"db" is inside group "aws"; ${ENCLOSED}` }]);
+  const group = await mutated('architecture', (s) => { s.edges.push({ from: 'aws', to: 'vpc' }); });
+  assert.deepEqual(group, [{ path: 'edges[4]', message: `"vpc" is inside group "aws"; ${ENCLOSED}` }]);
+  const up = await mutated('architecture', (s) => { s.edges.push({ from: 'vpc', to: 'aws' }); });
+  assert.deepEqual(up, [{ path: 'edges[4]', message: `"vpc" is inside group "aws"; ${ENCLOSED}` }]);
+});
+
+test('an architecture edge from a group to itself is rejected', async () => {
+  const e = await mutated('architecture', (s) => { s.edges.push({ from: 'vpc', to: 'vpc' }); });
+  assert.deepEqual(e, [{ path: 'edges[4]', message: 'group "vpc" cannot connect to itself; connect a node inside it or a different group' }]);
+});
+
+test('edges that cross group borders without nesting stay valid', async () => {
+  const e = await mutated('architecture', (s) => {
+    s.edges.push({ from: 'web', to: 'aws' }, { from: 'pay', to: 'vpc' }, { from: 'db', to: 'pay' });
+  });
+  assert.deepEqual(e, []);
+});
+
+test('a self-edge on a node inside a group stays valid', async () => {
+  assert.deepEqual(await mutated('architecture', (s) => { s.edges.push({ from: 'api', to: 'api' }); }), []);
+});
