@@ -187,6 +187,9 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 - **Output comes as a question card.** VS Code's chat shows plain extension messages only
   as error boxes, so in VS Code the card, the help and setting changes appear as a card
   with an OK button, and the cold-send question works as in the CLI.
+- **Autopilot holds instead of asking.** VS Code's autopilot mode cancels extension
+  questions (read from VS Code's code, not tested live); Cache Clock treats that as
+  Don't send and says the send was held.
 - **The heads-up and the "sending cold" note reach only VS Code's log**, since VS Code
   has no plain-message channel outside a question.
 - **The report counts VS Code sessions as totals.** They land in the same

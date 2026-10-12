@@ -123,6 +123,29 @@ test("a dismissed question holds the send", async () => {
   assert.equal(h.aborts, 1);
 });
 
+// VS Code cancels every extension question in autopilot mode, which reads as a dismissal.
+test("a dismissed or cancelled question says the send was held", async () => {
+  const h = fakeHost({ answer: null });
+  await goCold(h);
+  await h.prompt("give me a recap");
+  assert.match(h.logs.at(-1).message, /held/);
+  assert.match(h.logs.at(-1).message, /Send it again/);
+});
+
+test("in VS Code the held note for a cancelled question reaches the chat", async () => {
+  const h = fakeHost({ env: { VSCODE_CANVAS_DATA_DIR: "/tmp/x" }, answer: null });
+  await goCold(h);
+  await h.prompt("give me a recap");
+  assert.equal(h.logs.at(-1).level, "error");
+});
+
+test("choosing Don't send needs no extra note", async () => {
+  const h = fakeHost({ answer: "Don't send" });
+  await goCold(h);
+  await h.prompt("give me a recap");
+  assert.equal(h.logs.length, 0);
+});
+
 test("a host that throws on the question falls back to the refuse-once message", async () => {
   const h = fakeHost({ answer: new Error("elicitation not supported") });
   await goCold(h);

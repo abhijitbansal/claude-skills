@@ -88,5 +88,6 @@ fi
 
 printf 'cache-clock: installed (%s) at %s\n' "$MODE" "$DEST"
 printf 'Copilot CLI: start a new copilot session, allow the extension to register hooks, then run /cache-clock help.\n'
-printf 'VS Code Copilot chat: add "chat.canvases.enabled": true to your VS Code settings, reload, start a new chat.\n'
+printf 'VS Code Copilot chat: add "chat.canvases.enabled": true to your VS Code settings, reload, start a new chat,\n'
+printf '  and type /cache-clock in full: VS Code does not list it in the / menu, but it works.\n'
 printf 'Report: node %s/report.mjs --since 7d\n' "$DEST"

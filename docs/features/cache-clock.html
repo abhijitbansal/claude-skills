@@ -48,7 +48,7 @@
     <a class="btn btn-ghost" href="showcase/cache-clock/how-it-works.html">Visual explainer</a>
     <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills/tree/main/tools/cache-clock">View source ↗</a>
   </div>
-  <div class="statband plain cols-4 reveal"><div class="stat"><div class="n" data-count="25">25</div><div class="l">× write vs read, Claude Sonnet 5.5</div></div><div class="stat"><div class="n" data-count="300">300</div><div class="l">s cache TTL on Claude</div></div><div class="stat"><div class="n" data-count="0">0</div><div class="l">AI credits when you don't send</div></div><div class="stat"><div class="n" data-count="101">101</div><div class="l">offline tests</div></div></div>
+  <div class="statband plain cols-4 reveal"><div class="stat"><div class="n" data-count="25">25</div><div class="l">× write vs read, Claude Sonnet 5.5</div></div><div class="stat"><div class="n" data-count="300">300</div><div class="l">s cache TTL on Claude</div></div><div class="stat"><div class="n" data-count="0">0</div><div class="l">AI credits when you don't send</div></div><div class="stat"><div class="n" data-count="104">104</div><div class="l">offline tests</div></div></div>
 </header>
 
 <div class="wrap narrow">
@@ -144,6 +144,7 @@
         <div class="row"><span class="nm">Turn it on</span><span class="dc">VS Code loads Copilot extensions only when <code>"chat.canvases.enabled": true</code> (experimental). It then loads the same <code>~/.copilot/extensions/cache-clock</code> install.</span></div>
         <div class="row"><span class="nm">The command</span><span class="dc"><code>/cache-clock</code> works typed in full; VS Code's <code>/</code> menu does not list it.</span></div>
         <div class="row"><span class="nm">Output</span><span class="dc">VS Code shows plain extension messages only as error boxes, so the card, help and settings appear as a card with an OK button. The cold-send question works as in the CLI.</span></div>
+        <div class="row"><span class="nm">Autopilot</span><span class="dc">VS Code's autopilot mode cancels extension questions, so a costly cold send is held with a note instead of asking (read from VS Code's code, not tested live).</span></div>
         <div class="row"><span class="nm">Heads-up</span><span class="dc">The heads-up and the "sending cold" note reach only VS Code's log.</span></div>
         <div class="row"><span class="nm">Report</span><span class="dc">VS Code sessions persist only <code>session.usage_checkpoint</code> totals, so the report counts them as totals. VS Code's Cache Explorer (Agent Debug Logs) shows per-turn hit rates.</span></div>
       </div>
@@ -191,7 +192,7 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
     <section id="inventory" class="doc-section">
       <h2><span class="ix">10</span> What's inside</h2>
       <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Copilot extension</h4><div class="inv"><div class="row"><span class="nm">/cache-clock</span><span class="dc">Card, plus <code>help</code>, <code>guard</code>, <code>min</code> and <code>headsup</code> subcommands</span></div><div class="row"><span class="nm">onUserPromptSubmitted</span><span class="dc">The cold-send guard: ask (or refuse once), warn, or off</span></div><div class="row"><span class="nm">report.mjs</span><span class="dc">Per-model cold-send report over every persisted session: <code>--since</code>, <code>--dir</code>, <code>--json</code></span></div><div class="row"><span class="nm">lib/</span><span class="dc"><code>wiring</code>, <code>clock</code>, <code>guard</code>, <code>usage</code>, <code>format</code>, <code>config</code>, <code>history</code></span></div></div>
-      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Install and tests</h4><div class="inv"><div class="row"><span class="nm">install.sh</span><span class="dc">Piped: downloads a copy. From a clone: link (default), <code>--copy</code> or <code>--uninstall</code>. Replaces only its own install or a dangling link.</span></div><div class="row"><span class="nm">test/</span><span class="dc">101 node tests through a fake Copilot session and a fake clock; no network. CI runs them on every PR.</span></div></div>
+      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Install and tests</h4><div class="inv"><div class="row"><span class="nm">install.sh</span><span class="dc">Piped: downloads a copy. From a clone: link (default), <code>--copy</code> or <code>--uninstall</code>. Replaces only its own install or a dangling link.</span></div><div class="row"><span class="nm">test/</span><span class="dc">104 node tests through a fake Copilot session and a fake clock; no network. CI runs them on every PR.</span></div></div>
     </section>
 
     <section class="doc-section" style="border-bottom:none">

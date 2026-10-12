@@ -71,6 +71,8 @@ const QUESTION_TIMEOUT_MS = 5 * 60_000;
 const UNASKED = Symbol("unasked");
 const EXPIRED = Symbol("expired");
 const EXPIRED_NOTE = "cache-clock: no answer in 5 minutes, so that send was held. Send it again to send it.";
+// VS Code cancels every extension question in autopilot mode; that arrives as a dismissal.
+const DISMISSED_NOTE = "cache-clock: the question was dismissed or cancelled, so that send was held (0 AI credits). Send it again to send it.";
 
 const canAsk = (session) => Boolean(session?.capabilities?.ui?.elicitation) && typeof session?.ui?.select === "function";
 
@@ -143,6 +145,7 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
     }
     if (answer === UNASKED) say(refusal(snap), warnLevel);
     if (answer === EXPIRED) say(EXPIRED_NOTE, warnLevel);
+    if (answer === null) say(DISMISSED_NOTE, warnLevel);
     return settle(answer);
   }
 

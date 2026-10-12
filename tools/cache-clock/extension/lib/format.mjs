@@ -112,4 +112,5 @@ export const HELP = [
   "",
   "VS Code Copilot chat: set \"chat.canvases.enabled\": true in VS Code settings. Type /cache-clock in full",
   "(it is not listed in the / menu). The heads-up and price notes reach only VS Code's log there.",
+  "VS Code's autopilot mode cancels extension questions: a costly cold send is then held, with a note.",
 ].join("\n");
