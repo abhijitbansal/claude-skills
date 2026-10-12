@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { launchBrowser } from '../../scripts/lib/browser.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const BUILD = path.join(ROOT, 'scripts/build.mjs');
@@ -13,15 +14,7 @@ const BUILD = path.join(ROOT, 'scripts/build.mjs');
 export const EXAMPLES = ['architecture', 'flow', 'state', 'sequence'];
 export const example = (name) => JSON.parse(fs.readFileSync(path.join(ROOT, `references/examples/${name}.diagram.json`), 'utf8'));
 
-export async function launchBrowser() {
-  const { chromium } = await import('playwright');
-  try {
-    return await chromium.launch();
-  } catch (first) {
-    if (!/Executable doesn't exist/i.test(first.message)) throw first;
-    return chromium.launch({ channel: 'chrome' });
-  }
-}
+export { launchBrowser };
 
 let cached;
 export async function haveBrowser() {
