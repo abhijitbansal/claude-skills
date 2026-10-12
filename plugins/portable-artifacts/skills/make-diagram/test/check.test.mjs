@@ -11,7 +11,7 @@ import { haveBrowser, buildPage, example, EXAMPLES } from './helpers/browser.mjs
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CHECK = path.join(ROOT, 'scripts/check.mjs');
-const SKIP_LINE = 'check: skipped (no browser; run: npx playwright install chromium)\n';
+const SKIP_RE = /^check: skipped \(no browser: [^;\n]+; run: npx playwright install chromium\)\n$/;
 const run = (args, env = {}) => spawnSync(process.execPath, [CHECK, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'diagram-check-'));
 
@@ -91,13 +91,59 @@ test('a page wider than the viewport fails', async (t) => {
   assert.match(r.stdout, /the page overflows the viewport/);
 });
 
+test('a page missing its presentation caption fails with a problem line, quickly', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const bad = doctored('flow', (html) => html.replace('data-pa-count', 'data-pa-gone'));
+  const started = Date.now();
+  const r = run([bad]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.equal(r.stderr, '');
+  assert.match(r.stdout, /^1440px: check crashed: .*data-pa-count/m);
+  assert.ok(Date.now() - started < 25000, 'selector reads do not wait for the 30 s Playwright default');
+  const json = run([bad, '--json']);
+  assert.equal(json.status, 1);
+  const body = JSON.parse(json.stdout);
+  assert.equal(body.ok, false);
+  assert.ok(body.problems.some((p) => p.includes('check crashed')));
+  assert.ok(body.errors.length > 0);
+});
+
+test('a missing #pa-data block fails as a crashed check, not a stack trace', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const bad = doctored('flow', (html) => html.replace('id="pa-data"', 'id="pa-other"'));
+  const r = run([bad, '--json']);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.equal(JSON.parse(r.stdout).ok, false);
+});
+
+test('a page stuck in an infinite loop hits the wall-clock cap instead of hanging', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const bad = doctored('flow', (html) => html.replace('</body>', '<script>for(;;){}</script></body>'));
+  const started = Date.now();
+  const r = run([bad], { PA_CHECK_TIMEOUT_MS: '1500' });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.equal(r.stdout, 'check: timed out after 1.5 s\n');
+  assert.ok(Date.now() - started < 20000);
+  const json = JSON.parse(run([bad, '--json'], { PA_CHECK_TIMEOUT_MS: '1500' }).stdout);
+  assert.equal(json.ok, false);
+  assert.deepEqual(json.problems, ['check: timed out after 1.5 s']);
+});
+
+test('a bad PA_CHECK_TIMEOUT_MS is a usage error', () => {
+  const { file } = buildPage(example('flow'), { name: 'flow' });
+  const r = run([file], { PA_CHECK_TIMEOUT_MS: 'soon' });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /PA_CHECK_TIMEOUT_MS/);
+});
+
 // ---- no browser: skip, never fail ----------------------------------------------------------------
 
 test('PA_NO_BROWSER=1 prints the skip line and exits 0', () => {
   const { file } = buildPage(example('flow'), { name: 'flow' });
   const r = run([file], { PA_NO_BROWSER: '1' });
   assert.equal(r.status, 0);
-  assert.equal(r.stdout, SKIP_LINE);
+  assert.match(r.stdout, SKIP_RE);
+  assert.match(r.stdout, /no browser: PA_NO_BROWSER=1;/);
   const json = JSON.parse(run([file, '--json'], { PA_NO_BROWSER: '1' }).stdout);
   assert.equal(json.ok, true);
   assert.equal(json.skipped, true);
@@ -112,7 +158,8 @@ test('without playwright installed the check skips and exits 0', () => {
   const { file } = buildPage(example('flow'), { name: 'flow' });
   const r = spawnSync(process.execPath, [path.join(dir, 'scripts/check.mjs'), file], { encoding: 'utf8', env: { ...process.env, PA_NO_BROWSER: '' } });
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.equal(r.stdout, SKIP_LINE);
+  assert.match(r.stdout, SKIP_RE);
+  assert.match(r.stdout, /no browser: playwright is not installed/);
 });
 
 // ---- CLI rules --------------------------------------------------------------------------------------
