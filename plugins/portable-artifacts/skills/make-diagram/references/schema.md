@@ -30,7 +30,7 @@ Ids are lowercase letters, digits, `-` and `_`, starting with a letter (`^[a-z][
 
 ## groups[] (graph types)
 
-`id`, `label` (required), `parent` (another group id; nesting up to 3 deep, no cycles). A node joins a group with `nodes[].group`. In architecture diagrams an edge may end at a group; an edge between a group and something inside it is an error.
+`id`, `label` (required; up to 48 characters, like a node label), `parent` (another group id; nesting up to 3 deep, no cycles). A node joins a group with `nodes[].group`. In architecture diagrams an edge may end at a group; an edge between a group and something inside it is an error.
 
 ## nodes[]
 
@@ -45,7 +45,7 @@ Ids are lowercase letters, digits, `-` and `_`, starting with a letter (`^[a-z][
 
 ## edges[]
 
-`from`, `to` (node ids; architecture may also use a group id) are required. Optional `id`, `label` (up to 40 characters; a verb phrase: "writes order"), `style` (`solid` default \| `dashed` \| `async`), `both` (true draws an arrowhead at each end). An edge from a node to itself is allowed in flow and state diagrams.
+`from`, `to` (node ids; architecture may also use a group id) are required. Optional `id`, `label` (up to 40 characters; a verb phrase: "writes order"), `style` (`solid` default \| `dashed` \| `async`), `both` (true draws an arrowhead at each end). An edge from a node to itself is allowed in every graph type. An edge between a group and itself is an error.
 
 ## participants[], messages[], frames[], notes[] (sequence)
 
@@ -56,7 +56,7 @@ Ids are lowercase letters, digits, `-` and `_`, starting with a letter (`^[a-z][
 
 ## steps[]
 
-Presentation script for `P`. Each step: `title` (required, up to 60 characters), optional `note` (up to 200), `show` (ids revealed from this step on, cumulative), `focus` (ids the camera fits; default is this step's own `show`), `highlight` (ids emphasised in this step). Ids can be groups, nodes, participants or messages.
+Presentation script for `P`. Each step: `title` (required, up to 60 characters), optional `note` (up to 200), `show` (ids revealed from this step on, cumulative), `focus` (ids the camera fits; default is this step's own `show`), `highlight` (ids emphasised in this step). Ids named in `focus` or `highlight` are also revealed with the step, just like `show`. Ids can be groups, nodes, participants or messages.
 
 - Revealing a node reveals its ancestor groups. Revealing a message reveals both its participants. An edge appears once both of its ends are visible.
 - The viewer hides everything no step has revealed. So when ids are left out of every step, the build appends a final step titled `Everything` that shows the rest and fits the whole diagram (at the 25-step limit the rest joins the last step instead).
@@ -70,7 +70,7 @@ Presentation script for `P`. Each step: `title` (required, up to 60 characters),
 | participants / messages | 12 / 60 |
 | steps | 25 |
 | group nesting | 3 |
-| label | 48 characters (wraps to 2 lines) |
+| node, group or participant label | 48 characters (wraps to 2 lines) |
 | note | 60 characters (1 line) |
 | edge or message label, frame label | 40 characters |
 | step title / note | 60 / 200 characters |

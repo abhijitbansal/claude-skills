@@ -21,7 +21,7 @@ plugin is, read the [README](README.md). For every spec field, see each skill's
 | Codex CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs codex` | `$make-dashboard …`, `$make-diagram …`, `$make-motion …` (or pick from `/skills`) |
 | GitHub Copilot CLI / VS Code | `node <repo>/plugins/portable-artifacts/bin/install.mjs copilot` (add `--project .` for `.github/skills`) | `/make-dashboard …`, `/make-diagram …`, `/make-motion …` |
 | Gemini CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs gemini` | `/make-dashboard …` (a TOML command that activates the skill) |
-| Any agent `npx skills` supports | `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-motion make-diagram` (pick agents interactively, or pass `-a claude-code codex github-copilot -y`) | That agent's skill invocation |
+| Any agent `npx skills` supports | `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-motion` (pick agents interactively, or pass `-a claude-code codex github-copilot -y`) | That agent's skill invocation |
 | Any other agent | Copy `skills/make-dashboard`, `skills/make-diagram` and/or `skills/make-motion` into your project **with each skill's `shared/` folder**, run `npm ci` in each (`npm ci --omit=dev` for make-dashboard and make-diagram), and point `AGENTS.md` at their `SKILL.md` | Ask for a dashboard, a diagram or a video |
 
 `<repo>` is a clone of `https://github.com/abhijitbansal/claude-skills`. The
@@ -122,7 +122,7 @@ your project folder):
    `diagram.json`: nodes and edges, or participants and messages. There are
    no coordinates, colours or CSS in the spec; layout is automatic.
 2. `icons.mjs search postgres` finds an icon ref (`brand:postgresql`) when one
-   helps. Every kind has a default icon.
+   helps. Most kinds have a default icon; start, end, decision and choice are drawn as shapes and take none.
 3. `validate.mjs diagram.json` checks the spec, then lays the diagram out and
    lints the geometry (text that does not fit, overlapping nodes). The agent
    fixes each `path: message` line until it prints `valid`.

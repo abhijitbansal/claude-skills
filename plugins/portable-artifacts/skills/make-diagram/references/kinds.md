@@ -1,6 +1,6 @@
 # Node kinds, shapes and icons
 
-Shape encodes kind, so colour is never the only signal. Each kind has a default icon; set `icon` to override it. The first kind listed for a type is its default.
+Shape encodes kind, so colour is never the only signal. Most kinds have a default icon (the tables below say which); set `icon` to override it. The first kind listed for a type is its default.
 
 ## architecture
 

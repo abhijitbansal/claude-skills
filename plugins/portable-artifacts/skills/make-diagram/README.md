@@ -69,7 +69,7 @@ animation and camera tweening.
 |---|---|---|
 | `architecture` | nodes, edges, nested groups | service, client, user, database, storage, queue, cache, function, gateway, external, other |
 | `flow` | nodes, edges, groups | step, start, end, decision, io, subprocess, wait |
-| `state` | nodes, edges | state, start, end, choice |
+| `state` | nodes, edges, groups | state, start, end, choice |
 | `sequence` | participants, messages, frames, notes | service, actor, database, queue, external |
 
 Full field reference: [`references/schema.md`](references/schema.md). Kinds,
