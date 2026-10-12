@@ -378,3 +378,10 @@ test('build output has no "N rows" note under the chart, only a truncation note'
   build([EXAMPLE, '--out', out]);
   assert.doesNotMatch(readPage(out), /<p class="meta">\d+ rows/);
 });
+
+test('an unknown --theme fails fast with exit 2 and a did-you-mean', () => {
+  const { file } = project();
+  const r = build([file, '--theme', 'papr']);
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /--theme: unknown theme "papr"; did you mean "paper"\?/);
+});

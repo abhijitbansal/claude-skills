@@ -224,3 +224,29 @@ test('PNG, SVG and CSV export download under the strict CSP', async (t) => {
   assert.equal(await page.isVisible('#card-bar [data-export=csv]'), true, 'CSV stays on the Table view');
   assert.deepEqual(problems, []);
 });
+
+test('live page: CSV edit updates the KPI, broken data shows the banner, Rebuild works', async (t) => {
+  if (!(await haveBrowser())) return t.skip('no browser');
+  const { spawn } = await import('node:child_process');
+  const { dir, file } = buildProject({ ...KINDS_SPEC, kpis: [{ id: 'k1', title: 'Rows', query: 'rev', field: 'Total Revenue' }] });
+  const child = spawn(process.execPath, [path.resolve('scripts/serve.mjs'), '--watch', file], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const url = await new Promise((resolve) => { let o = ''; child.stdout.on('data', (d) => { o += d; const m = o.match(/(http:\/\/127\.0\.0\.1:\d+\/)/); if (m && /token:/.test(o)) resolve(m[1]); }); });
+  try {
+    browser ??= await launchBrowser();
+    const page = await browser.newPage();
+    await page.goto(url);
+    await page.waitForFunction(() => window.paReady === true);
+    const csv = path.join(dir, 'data/sales.csv');
+    fs.appendFileSync(csv, '2025-06-01,North,Widget,100000.00,1\n');
+    await page.waitForFunction(() => /\$?1\d\d,\d{3}/.test(document.querySelector('#kpi-k1 .kpi-value').textContent), null, { timeout: 10000 });
+    fs.appendFileSync(csv, '"broken\n');
+    await page.waitForSelector('#pa-live-banner:not([hidden])', { timeout: 10000 });
+    assert.match(await page.textContent('#pa-live-banner'), /queries\.rev|sources/);
+    const lines = fs.readFileSync(csv, 'utf8').split('\n');
+    fs.writeFileSync(csv, lines.slice(0, -2).join('\n') + '\n');
+    await page.waitForSelector('#pa-live-banner[hidden]', { state: 'attached', timeout: 10000 });
+    await Promise.all([page.waitForEvent('load', { timeout: 10000 }), page.click('#pa-live-rebuild')]);
+  } finally {
+    child.kill();
+  }
+});

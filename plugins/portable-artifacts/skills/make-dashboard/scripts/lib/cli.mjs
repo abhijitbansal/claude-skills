@@ -26,9 +26,11 @@ export function parseTimeout(value, fallbackSeconds) {
 }
 
 // Exit 2 with one line: JSON on stdout when asked, plain text on stderr otherwise.
+// Sets exitCode and returns (callers must stop): process.exit() right after a
+// pipe write intermittently SIGSEGVs on Node 24.7.
 export function exitUsage(error, { json = false } = {}) {
   const message = String(error.message).split('\n')[0];
   if (json) process.stdout.write(`${JSON.stringify({ ok: false, errors: [{ path: '', message }] })}\n`);
   else process.stderr.write(`${message}\n`);
-  process.exit(2);
+  process.exitCode = 2;
 }
