@@ -119,6 +119,17 @@ export function nodeSize(node, kindInfo, theme) {
   };
 }
 
+/**
+ * Widest text line a node of this shape and width can hold: the inverse of the
+ * width rule in nodeSize, so the geometry lint and the renderer read one rule.
+ * Not for shapes whose label sits outside them (dots, small diamond).
+ */
+export function textRoom(shape, width, hasIcon) {
+  if (shape === 'diamond') return width / 2 - 2 * DIAMOND_PAD.x;
+  const extra = SHAPE_EXTRA[shape]?.width ?? 0;
+  return width - 2 * PAD_X - (hasIcon ? ICON_SIZE + ICON_GAP : 0) - extra;
+}
+
 /** Size of an edge label's plate: one line, never wrapped. */
 export function edgeLabelSize(text, theme) {
   const font = fonts(theme).edge;

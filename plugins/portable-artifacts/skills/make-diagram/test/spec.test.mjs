@@ -26,9 +26,21 @@ test('every type has one valid fixture', async () => {
   }
 });
 
-test('layout option is accepted and ignored', async () => {
+test('layout: true (the default) also lays out and lints; layout: false skips both', async () => {
   assert.equal((await validateSpec(load('flow'), { layout: false })).ok, true);
   assert.equal((await validateSpec(load('flow'), { layout: true })).ok, true);
+  const spec = load('flow');
+  spec.nodes[1].label = '注文確認サービス🙂'.repeat(4); // within the 48 character limit, wraps to 3 lines
+  assert.deepEqual((await validateSpec(spec, { layout: false })).errors, []);
+  assert.deepEqual((await validateSpec(spec)).errors.map((e) => e.path), ['nodes[1].label']);
+  assert.deepEqual((await validateSpec(spec, { layout: true })).errors.map((e) => e.path), ['nodes[1].label']);
+});
+
+test('layout and lint run only after the semantic checks pass', async () => {
+  const spec = load('flow');
+  spec.nodes[1].label = '注文確認サービス🙂'.repeat(4);
+  spec.edges[0].to = 'nowhere';
+  assert.deepEqual((await validateSpec(spec)).errors.map((e) => e.path), ['edges[0].to']);
 });
 
 test('loadSpec reports unreadable and malformed files as UsageError', () => {
@@ -248,8 +260,12 @@ test('label length limit states the length and the limit', async () => {
 });
 
 test('length counts characters, not UTF-16 units', async () => {
-  const e = await mutated('flow', (s) => { s.nodes[1].label = '😀'.repeat(48); });
-  assert.deepEqual(e, []);
+  // the length rule only: the geometry lint (layout) has its own say about 48 wide glyphs
+  const spec = load('flow');
+  spec.nodes[1].label = '😀'.repeat(48);
+  assert.deepEqual((await validateSpec(spec, { layout: false })).errors, []);
+  spec.nodes[1].label = '😀'.repeat(49);
+  assert.deepEqual((await validateSpec(spec, { layout: false })).errors, [{ path: 'nodes[1].label', message: 'label is 49 characters; the limit is 48 — shorten it' }]);
 });
 
 test('other text limits are pinned', async () => {
@@ -376,6 +392,25 @@ test('frame messages must be consecutive', async () => {
   assert.deepEqual(e, [{ path: 'frames[0].messages', message: 'm2 and m5 are not consecutive; a frame covers one unbroken run of messages' }]);
   const ok = await mutated('sequence', (s) => { s.frames[0].messages = ['m3', 'm2', 'm4']; });
   assert.deepEqual(ok, []);
+});
+
+test('partially overlapping frames are rejected; nested, equal and disjoint ones are fine', async () => {
+  const withFrames = (frames) => mutated('sequence', (s) => {
+    s.messages.push({ id: 'm5', from: 'u', to: 'app' }, { id: 'm6', from: 'app', to: 'u' });
+    s.frames = frames;
+  });
+  const e = await withFrames([{ kind: 'loop', label: 'retry', messages: ['m1', 'm2', 'm3'] }, { kind: 'alt', label: 'declined', messages: ['m3', 'm4'] }]);
+  assert.deepEqual(e, [{
+    path: 'frames[1].messages',
+    message: 'frames[1] (alt "declined") and frames[0] (loop "retry") overlap partly: they share messages but neither contains the other; nest one inside the other or make them disjoint',
+  }]);
+  const unlabelled = await withFrames([{ kind: 'opt', messages: ['m1', 'm2'] }, { kind: 'par', messages: ['m2', 'm3'] }]);
+  assert.equal(unlabelled.length, 1);
+  assert.ok(unlabelled[0].message.startsWith('frames[1] (par) and frames[0] (opt) overlap partly'), unlabelled[0].message);
+  assert.deepEqual(await withFrames([{ kind: 'loop', messages: ['m1', 'm2', 'm3'] }, { kind: 'alt', messages: ['m2', 'm3'] }]), []);
+  assert.deepEqual(await withFrames([{ kind: 'loop', messages: ['m1', 'm2'] }, { kind: 'alt', messages: ['m1', 'm2'] }]), []);
+  assert.deepEqual(await withFrames([{ kind: 'loop', messages: ['m1', 'm2'] }, { kind: 'alt', messages: ['m3', 'm4'] }]), []);
+  assert.deepEqual(await withFrames([{ kind: 'loop', messages: ['m2', 'm3'] }, { kind: 'alt', messages: ['m1', 'm2', 'm3', 'm4'] }]), []);
 });
 
 test('frame messages may not repeat', async () => {

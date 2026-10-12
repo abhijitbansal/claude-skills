@@ -5,10 +5,11 @@ import path from 'node:path';
 import Ajv from 'ajv';
 import { formatAjvErrors, didYouMean, pathJoin } from '../../shared/errors.mjs';
 import { UsageError } from '../../shared/cli.mjs';
-import { listThemes } from '../../shared/theme.mjs';
+import { listThemes, loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
 import { KINDS, canHoldIcon } from './kinds.mjs';
 import { hasIcon, iconSvg, IconError } from './icons.mjs';
 import { SCHEMA, ID_PATTERN, LIMITS, NON_SPACE } from './schema.mjs';
+import { lintGeometry } from './lint.mjs';
 
 export { UsageError };
 
@@ -289,14 +290,35 @@ function checkFrame(errors, frame, p, messageIds) {
       valid.push(id);
     }
   });
-  if (!sound) return;
+  if (!sound) return null;
   const sorted = [...valid].sort((a, b) => messageIds.indexOf(a) - messageIds.indexOf(b));
   for (let i = 1; i < sorted.length; i++) {
     if (messageIds.indexOf(sorted[i]) - messageIds.indexOf(sorted[i - 1]) > 1) {
       errors.push({ path: at, message: `${sorted[i - 1]} and ${sorted[i]} are not consecutive; a frame covers one unbroken run of messages` });
-      return;
+      return null;
     }
   }
+  return { start: messageIds.indexOf(sorted[0]), end: messageIds.indexOf(sorted.at(-1)) };
+}
+
+// Two frames may nest (one run inside the other, equal runs included) or be
+// disjoint; sharing some messages without containing one another has no sane drawing.
+function checkFrameOverlap(errors, frames, runs) {
+  const name = (i) => `frames[${i}] (${frames[i].kind}${frames[i].label === undefined ? '' : ` ${q(frames[i].label)}`})`;
+  runs.forEach((b, j) => {
+    for (let i = 0; i < j; i++) {
+      const a = runs[i];
+      if (!a || !b) continue;
+      const apart = a.end < b.start || b.end < a.start;
+      const nested = (a.start <= b.start && a.end >= b.end) || (b.start <= a.start && b.end >= a.end);
+      if (apart || nested) continue;
+      errors.push({
+        path: pathJoin(pathJoin('frames', j), 'messages'),
+        message: `${name(j)} and ${name(i)} overlap partly: they share messages but neither contains the other; nest one inside the other or make them disjoint`,
+      });
+      return;
+    }
+  });
 }
 
 function checkNote(errors, note, p, participantIds, messageIds) {
@@ -320,7 +342,8 @@ function checkSequence(spec, errors) {
 
   participants.forEach((x, i) => checkEntity(errors, x, pathJoin('participants', i), 'sequence'));
   messages.forEach((m, i) => checkMessage(errors, m, pathJoin('messages', i), participantIds));
-  (spec.frames ?? []).forEach((f, i) => checkFrame(errors, f, pathJoin('frames', i), messageIds));
+  const runs = (spec.frames ?? []).map((f, i) => checkFrame(errors, f, pathJoin('frames', i), messageIds));
+  checkFrameOverlap(errors, spec.frames ?? [], runs);
   (spec.notes ?? []).forEach((n, i) => checkNote(errors, n, pathJoin('notes', i), participantIds, messageIds));
   checkSteps(errors, spec, [...seen.keys()]);
 }
@@ -357,6 +380,18 @@ function wordSchemaError(e) {
   return e;
 }
 
+// Lay the diagram out and lint the geometry: a spec that passes is buildable.
+async function lintLayout(spec) {
+  const { layoutDiagram } = await import('./layout.mjs');
+  const theme = loadTheme(spec.theme ?? DEFAULT_THEME);
+  return lintGeometry(await layoutDiagram(spec, theme), { theme });
+}
+
+/**
+ * Validate a parsed spec: schema, then semantic checks, then (when
+ * `layout` is true and those pass) layout and geometry lint. A failure inside
+ * the layout itself is a bug, not a spec error, and is thrown.
+ */
 export async function validateSpec(spec, { layout = true } = {}) {
   if (!validateSchema(spec)) {
     return { ok: false, errors: formatAjvErrors(validateSchema.errors.map(wordSchemaError)) };
@@ -365,5 +400,6 @@ export async function validateSpec(spec, { layout = true } = {}) {
   checkTheme(errors, spec);
   if (spec.type === 'sequence') checkSequence(spec, errors);
   else checkGraph(spec, errors);
+  if (layout && errors.length === 0) errors.push(...await lintLayout(spec));
   return { ok: errors.length === 0, errors };
 }
