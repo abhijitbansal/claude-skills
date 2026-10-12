@@ -86,7 +86,8 @@ async function inspectSource(values) {
   const valid = await validateSpec(spec, { dir, allowOutside: values['allow-outside'] });
   if (!valid.ok) {
     printResult(valid, { json: values.json, label: values.spec });
-    process.exit(1);
+    process.exitCode = 1; // not process.exit(): it can SIGSEGV after a pipe write on Node 24.7
+    return;
   }
   if (values.table === '') throw new UsageError('--table needs a table name');
   const src = spec.sources?.[values.source];

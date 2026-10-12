@@ -39,7 +39,7 @@ Authoritative schema: `SCHEMA` in `scripts/lib/spec.mjs`. Unknown properties are
 | `x`, `y`, `color`, `size`, `value` | kind charts | Column names of the chart's query. Which are required, optional or unused depends on the kind; each must be a real column of an accepted type (checked at validate) |
 | `format` | kind charts | `number`, `currency`, `percent`, `compact`; formats the numeric axis |
 | `views` | kind charts | Alternate view names for the kind (e.g. `["sorted", "table"]`), at most 6, unique. Narrows and reorders the defaults; `table` is always available and last |
-| `pair` | kind charts | `true` shows the first two views side by side and forces `width: full` |
+| `pair` | kind charts | `true` shows the primary view and the next view side by side and forces `width: full`; the right pane has tabs over the remaining views (Table included) |
 | `vegaLite` | raw charts | A Vega-Lite spec without `data` (next section) |
 
 Exactly one of `kind` / `vegaLite` per chart. `x`, `y`, `color`, `size`, `value`, `views`, `format` and `pair` on a raw `vegaLite` chart are errors

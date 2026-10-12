@@ -8,11 +8,11 @@ Role keys name a column of the chart's query: `x`, `y`, `color`, `size`, `value`
 Write titles that state the finding ("North drives half of revenue"), not the field names.
 
 - `views`: narrows and reorders the alternate views listed per kind below. `"table"` is always last and always there.
-- `pair: true`: shows the first two views side by side and forces full width.
+- `pair: true`: shows the primary view and the next view side by side and forces full width. The left pane stays on the primary view; the right pane has its own tabs over the remaining views, Table included.
 - Order follows the query for text `x` (the build sets `sort: null`), so put `ORDER BY` in the SQL. The `sorted` view sorts descending.
 - More than 8 categories, or a label longer than 12 characters, turns bars horizontal.
 - `color` allows at most 8 distinct values (3 for `scatter` and `bubble`). Fold the rest into "Other" in SQL.
-- A view that the data cannot support (negatives, too many slices) is not offered. If you list it in `views` and the query returns rows, that is an error; with zero rows it is silently dropped.
+- A view that the data cannot support (negative values, or a zero total, for `share`, `normalized` and a coloured `area`) is not offered. If you list it in `views` and the query returns rows, that is an error; with zero rows it is silently dropped. `donut` is different: it is an error on its own when it has more than 6 slices or a negative value.
 
 ## bar
 
@@ -27,7 +27,7 @@ Views: `sorted`, `share` (needs every `y` >= 0 and a positive total), `table`.
 
 Parts of a whole per category. Roles: `x` (text or date), `y` (number), `color` (text, required).
 Gets: legend filter.
-Views: `grouped`, `normalized` (100%; needs every `y` >= 0), `table`.
+Views: `grouped`, `normalized` (100%; needs every `y` >= 0 and a positive total), `table`.
 
     { "id": "c2", "title": "Q4 growth came from the South", "query": "by_quarter_region",
       "kind": "stacked-bar", "x": "quarter", "y": "revenue", "color": "region" }
@@ -36,7 +36,7 @@ Views: `grouped`, `normalized` (100%; needs every `y` >= 0), `table`.
 
 Compare series side by side. Same roles as `stacked-bar`.
 Gets: legend filter.
-Views: `stacked`, `normalized`, `table`.
+Views: `stacked`, `normalized` (needs every `y` >= 0 and a positive total), `table`.
 
     { "id": "c3", "title": "South beats North in three of four quarters", "query": "by_quarter_region",
       "kind": "grouped-bar", "x": "quarter", "y": "revenue", "color": "region", "pair": true }
@@ -45,7 +45,7 @@ Views: `stacked`, `normalized`, `table`.
 
 Change over time. Roles: `x` (date or timestamp, or text in query order), `y` (number), optional `color` (text).
 Gets: crosshair on the nearest point, x zoom and pan (double-click resets), legend filter when `color` is set.
-Views: `area` (needs every `y` >= 0 when `color` is set), `table`.
+Views: `area` (when `color` is set it needs every `y` >= 0 and a positive total), `table`.
 
     { "id": "trend", "title": "Revenue up 18% since March", "query": "monthly",
       "kind": "line", "x": "month", "y": "revenue", "color": "region", "format": "currency" }
@@ -87,7 +87,7 @@ Views: `table`.
 
 ## histogram
 
-Distribution of one number (20 bins). Roles: `value` (number).
+Distribution of one number (up to 20 bins). Roles: `value` (number).
 Gets: hover highlight.
 Views: `boxplot`, `table`.
 
@@ -117,8 +117,8 @@ Views: `bar`, `table`.
 
 Use `vegaLite` (no `kind`) for anything the kinds do not cover: layered or faceted charts, custom marks, annotations.
 Write a Vega-Lite spec without `data`; do not set colours, `config`, `width` or `autosize`. See `schema.md`.
-It still gets the page theme, tooltips on every mark, a legend filter (a unit spec with a nominal `color` and no params of its own),
-zoom (point, circle and square marks with no params), the Table view and the Export menu.
+It still gets the page theme, tooltips on every mark, the Table view and the Export menu. A legend filter is added only to a unit spec
+with a nominal `color`, no `params` of its own and no `opacity` encoding; otherwise zoom is added to a unit spec with point, circle or square marks and no params.
 `kind` keys (`x`, `y`, `color`, `size`, `value`, `views`, `format`, `pair`) are errors on a raw chart.
 
 ## Errors you may see

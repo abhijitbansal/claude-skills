@@ -57,10 +57,12 @@ function dataTable(res) {
   return `<div class="tablewrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
+// On a paired card pane 1 stays on the primary view; the tabs switch pane 2 over views[1..].
 function tabs(c) {
-  if (c.pair || c.views.length < 2) return '';
-  const buttons = c.views.map((v, i) => `<button type="button" role="tab" id="tab-${escapeHtml(c.id)}-${escapeHtml(v.name)}" data-view="${escapeHtml(v.name)}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${escapeHtml(v.label)}</button>`).join('');
-  return `<div class="views" role="tablist" aria-label="${escapeHtml(c.title)} views">${buttons}</div>`;
+  const list = c.pair ? c.views.slice(1) : c.views;
+  if (list.length < 2) return '';
+  const buttons = list.map((v, i) => `<button type="button" role="tab" id="tab-${escapeHtml(c.id)}-${escapeHtml(v.name)}" data-view="${escapeHtml(v.name)}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${escapeHtml(v.label)}</button>`).join('');
+  return `<div class="views" role="tablist" aria-label="${escapeHtml(c.title)}${c.pair ? ' second view' : ' views'}">${buttons}</div>`;
 }
 
 function exportMenu(c) {

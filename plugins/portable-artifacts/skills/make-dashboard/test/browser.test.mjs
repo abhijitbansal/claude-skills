@@ -134,6 +134,7 @@ test('view switcher swaps the chart, Table view sorts, pair shows two, state sur
   const spec = { ...KINDS_SPEC, charts: [
     { ...KINDS_SPEC.charts[0] },
     { id: 'pair', title: 'Pair', query: 'rev', kind: 'bar', x: 'region', y: 'Total Revenue', pair: true, views: ['share'] },
+    { id: 'pair3', title: 'Pair3', query: 'q_region', kind: 'stacked-bar', x: 'quarter', y: 'revenue', color: 'region', pair: true },
   ] };
   const { out } = buildProject(spec);
   const { page, problems } = await open(out);
@@ -149,9 +150,24 @@ test('view switcher swaps the chart, Table view sorts, pair shows two, state sur
   await page.keyboard.press('ArrowLeft');  // keyboard moves between tabs: Table -> Share
   assert.equal(await page.getAttribute('#card-bar [data-view=share]', 'aria-selected'), 'true');
   assert.equal(await page.locator('#card-pair .chart svg').count(), 2, 'pair renders both views');
+  // A paired card: pane 1 is fixed on the primary view, pane 2 has tabs over views[1..], Table included.
+  assert.deepEqual(await page.locator('#card-pair [role=tab]').allTextContents(), ['Share', 'Table']);
+  assert.deepEqual(await page.locator('#card-pair3 [role=tab]').allTextContents(), ['Grouped', '100%', 'Table']);
+  assert.equal(await page.getAttribute('#card-pair [data-view=share]', 'aria-selected'), 'true', 'pane 2 starts on views[1]');
+  await page.click('#card-pair [data-view=table]');
+  await page.waitForFunction(() => document.querySelectorAll('#chart-pair-2 .table-view').length === 1);
+  assert.equal(await page.locator('#chart-pair-2 svg').count(), 0, 'pane 2 shows the table alone');
+  assert.equal(await page.locator('#chart-pair svg').count(), 1, 'pane 1 still shows the primary chart');
+  assert.equal(await page.locator('#chart-pair .table-view').count(), 0);
+  assert.equal(await page.locator('#card-pair [data-export=png]').evaluate((b) => b.hidden), false, 'export uses pane 1, which is still a chart');
+  await page.focus('#card-pair3 [data-view=grouped]');
+  await page.keyboard.press('ArrowRight'); // keyboard works on pane 2 tabs: Grouped -> 100%
+  assert.equal(await page.getAttribute('#card-pair3 [data-view=normalized]', 'aria-selected'), 'true');
   await page.reload();
   await page.waitForFunction(() => window.paReady === true);
   assert.equal(await page.getAttribute('#card-bar [data-view=share]', 'aria-selected'), 'true', 'active view restored');
+  assert.equal(await page.getAttribute('#card-pair [data-view=table]', 'aria-selected'), 'true', 'pane 2 view restored');
+  assert.equal(await page.locator('#chart-pair-2 .table-view').count(), 1);
   assert.deepEqual(problems, []);
 });
 

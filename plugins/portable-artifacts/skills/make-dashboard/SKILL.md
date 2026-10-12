@@ -6,7 +6,7 @@ argument-hint: what to build, e.g. "revenue by region and monthly trend from dat
 
 # make-dashboard
 
-You write one JSON spec (`dashboard.json`: sources, SQL queries, KPIs, Vega-Lite charts).
+You write one JSON spec (`dashboard.json`: sources, SQL queries, KPIs, charts as kinds or raw Vega-Lite).
 Scripts validate it and build a single offline `index.html`. Every chart card shows its SQL,
 row count and refresh time. No network, no LLM at build time.
 
@@ -73,7 +73,7 @@ Queries have a 30 s limit (`--timeout <seconds>` on build).
   Name columns by role (`x`, `y`, `color`, `size`, `value`); the build makes the chart, tooltips, alternate views, a sortable Table view and PNG/SVG/CSV export.
   Raw `vegaLite` (any Vega-Lite spec **without `data`**) still works for anything the kinds don't cover.
 - Chart titles state the finding ("North drives half of revenue"), not the field names.
-- `views` picks alternate views (e.g. `["sorted", "table"]`); `pair: true` shows the first two side by side. Order follows the query, so write `ORDER BY`.
+- `views` picks alternate views (e.g. `["sorted", "table"]`); `pair: true` puts the primary view and a second (switchable) view side by side. Order follows the query, so write `ORDER BY`.
 - `theme`: `paper` (default), `blueprint`, `editorial`, `ink`. Never set colours, `config`, `width` or `autosize` in `vegaLite`.
 - Full kind reference (roles, views, rules, errors): `references/kinds.md`.
 - Raw `vegaLite` dates are UTC strings: use `"type": "temporal"` with `utc…` time units (`utcyearmonth`).

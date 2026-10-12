@@ -138,6 +138,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     main();
   } catch (e) {
     process.stderr.write(`install: ${e.message}\n`);
-    process.exit(e instanceof UsageError ? 2 : 1);
+    // exitCode, not process.exit(): exiting right after a pipe write can SIGSEGV on Node 24.7
+    process.exitCode = e instanceof UsageError ? 2 : 1;
   }
 }

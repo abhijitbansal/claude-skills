@@ -297,5 +297,5 @@ Each commit leaves `npm test` green in both skills.
 - Skill frontmatter `model:` / `effort:` are documented by Claude Code (`code.claude.com/docs/en/skills`): the override applies for the rest of the current turn.
 - Browser tests fall back to system Chrome when Playwright's bundled Chromium is missing (same as make-motion).
 - Interval for --watch is 5..86400 seconds (larger values overflow setInterval).
-- Usage errors set process.exitCode instead of calling process.exit() (process.exit after a pipe write SIGSEGVed on Node 24.7).
+- Scripts that print a usage or validation error set `process.exitCode` and return instead of calling `process.exit()` (`process.exit` right after a pipe write can SIGSEGV on Node 24.7). Applied to `serve.mjs`, `inspect.mjs`, `setup.mjs`, `bin/install.mjs` and `bin/sync-shared.mjs`.
 - Exported PNG/SVG are filled with the theme surface (a transparent dark-theme image is unreadable in light viewers).

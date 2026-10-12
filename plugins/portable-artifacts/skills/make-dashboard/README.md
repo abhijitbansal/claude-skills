@@ -31,7 +31,7 @@ by any agent that can run shell commands.
 ## Quick start
 
 ```bash
-npm ci --omit=dev --prefix make-dashboard   # one-time, inside the skill folder
+npm ci --omit=dev --prefix make-dashboard   # one-time, from the folder that contains make-dashboard
 
 SKILL=path/to/make-dashboard
 node $SKILL/scripts/inspect.mjs data/sales.csv          # columns, types, 5 sample rows

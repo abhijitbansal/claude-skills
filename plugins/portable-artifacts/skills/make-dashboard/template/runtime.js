@@ -118,9 +118,11 @@
   var session = safeStorage('sessionStorage');
   var saved = {};
   try { saved = JSON.parse(PA.readStore(session, 'pa-views') || '{}') || {}; } catch (e) { saved = {}; }
+  // A paired card keeps pane 1 on its primary view; the tabs and `active` drive pane 2 (views[1..]).
+  function switchable(c) { return c.pair ? c.views.slice(1) : c.views; }
   var active = {};
   data.charts.forEach(function (c) {
-    var names = c.views.map(function (v) { return v.name; });
+    var names = switchable(c).map(function (v) { return v.name; });
     active[c.id] = names.indexOf(saved[c.id]) >= 0 ? saved[c.id] : names[0];
   });
   var tableSort = {}; // pane id -> { col, dir }, kept across redraws
@@ -183,10 +185,10 @@
   function renderChart(c, cfg) {
     var first = document.getElementById('chart-' + c.id);
     if (!first) return null;
+    var view = switchable(c).filter(function (v) { return v.name === active[c.id]; })[0] || switchable(c)[0];
     if (c.pair) {
-      return Promise.all([paint(first, c, c.views[0], cfg), paint(document.getElementById('chart-' + c.id + '-2'), c, c.views[1], cfg)]);
+      return Promise.all([paint(first, c, c.views[0], cfg), paint(document.getElementById('chart-' + c.id + '-2'), c, view, cfg)]);
     }
-    var view = c.views.filter(function (v) { return v.name === active[c.id]; })[0] || c.views[0];
     return paint(first, c, view, cfg);
   }
 
