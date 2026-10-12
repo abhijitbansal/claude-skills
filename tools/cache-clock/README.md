@@ -51,6 +51,20 @@ That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` m
 > mode before it loads the extension. Run `/experimental on`, reload Copilot CLI, and accept
 > the permission prompts when it asks.
 
+**If `/cache-clock` goes to the model as plain text in VS Code**, check on that machine:
+
+1. The install is there: `ls ~/.copilot/extensions/cache-clock/extension.mjs`. Installs are
+   per machine (or per `COPILOT_HOME`), not per project.
+2. Both settings sit in **User** settings and VS Code does not grey them out as unknown;
+   if it does, that VS Code build predates them.
+3. The chat's harness picker says **Copilot**, not **Local**, and the chat was started
+   after the reload (sessions pick the setting up only when created).
+4. `cache-clock` is not listed under `extensions.disabledExtensions` in
+   `~/.copilot/settings.json`.
+5. The window is local, not Remote-SSH, WSL or a dev container: there the runtime runs
+   on the remote side, with that side's `~/.copilot`, and `chat.canvases.enabled` covers
+   local Agent Host sessions only (inferred from VS Code's setting text, not tested).
+
 From a clone, `sh tools/cache-clock/install.sh` links the extension instead, so a
 `git pull` updates it; `--copy` copies, `--uninstall` removes it. The installer replaces
 only its own install (one with cache-clock's own files) or a dangling link at that path, and
