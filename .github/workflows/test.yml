@@ -75,6 +75,8 @@ jobs:
           node-version: '24'
       - name: shared/ copies are in sync
         run: node plugins/portable-artifacts/bin/sync-shared.mjs --check
+      - name: shared/ (themes, contrast, errors)
+        run: node --test "plugins/portable-artifacts/shared/test/*.test.mjs"
       - name: cross-host installer
         working-directory: plugins/portable-artifacts/bin
         run: node --test "test/*.test.mjs"
