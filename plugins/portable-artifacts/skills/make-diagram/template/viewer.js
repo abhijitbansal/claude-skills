@@ -6,8 +6,8 @@
 //   const ctl = PADiagram.mount(stageElement, data, { keys, caption, onChange });
 //
 // stageElement  holds the diagram <svg> (from buildDiagram) and sizes it.
-// data          { type, title, animate, width, height, steps, adjacency, edges, parents, boxes }
-//               (see scripts/lib/viewer.mjs); nothing is fetched.
+// data          buildDiagram(spec).data: { type, title, stem, animate, width, height, steps, ids,
+//               adjacency, edges, parents, boxes, frames } (scripts/lib/data.mjs); nothing is fetched.
 // keys          element that receives the keyboard shortcuts (default: stageElement).
 // caption       element with [data-pa-title] [data-pa-note] [data-pa-count] [data-pa-prev]
 //               [data-pa-next] [data-pa-exit] children; every one is optional.
@@ -24,6 +24,8 @@
   var FIT_MARGIN = 16;
   var FOCUS_PAD = 48;
   var MAX_FOCUS_SCALE = 1.6; // px per diagram unit when a step zooms in on a few nodes
+  var MAX_FOCUS_ZOOM = 2; // and never past this multiple of the fit
+  var DOUBLE_CLICK_MS = 300; // a second click this soon after one that stepped is part of a double click
   var CAMERA_MS = 300;
   var DRAG_PX = 4;
   var PAN_PX = 80;
@@ -59,6 +61,7 @@
     svg.querySelectorAll('.pa-edge-label[data-edge]').forEach(function (el) { labels[el.getAttribute('data-edge')] = el; });
     var lifelines = Array.prototype.slice.call(svg.querySelectorAll('.pa-lifeline[data-for]'));
     var frames = Array.prototype.slice.call(svg.querySelectorAll('.pa-frame[data-messages]'));
+    var frameData = data.frames || [];
     var notes = Array.prototype.slice.call(svg.querySelectorAll('.pa-seq-note[data-over]'));
     var words = function (el, name) { var v = el.getAttribute(name); return v ? v.split(' ') : []; };
 
@@ -140,6 +143,12 @@
       });
       return x0 === Infinity ? null : { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
     }
+    function unionBox(a, b) {
+      if (!a) return b;
+      var x0 = Math.min(a.x, b.x);
+      var y0 = Math.min(a.y, b.y);
+      return { x: x0, y: y0, w: Math.max(a.x + a.w, b.x + b.w) - x0, h: Math.max(a.y + a.h, b.y + b.h) - y0 };
+    }
     // Camera showing `box` with FOCUS_PAD around it. A box of zero width or height
     // (one message line, a lone dot) still has the padding, so the scale is finite.
     function cameraFor(box) {
@@ -147,7 +156,7 @@
       var sz = size();
       var fs = fitScale(sz);
       var s = Math.min(sz.w / (box.w + 2 * FOCUS_PAD), sz.h / (box.h + 2 * FOCUS_PAD));
-      s = clamp(isFinite(s) && s > 0 ? s : fs, fs * MIN_ZOOM, Math.max(fs * MIN_ZOOM, Math.min(fs * MAX_ZOOM, MAX_FOCUS_SCALE)));
+      s = clamp(isFinite(s) && s > 0 ? s : fs, fs * MIN_ZOOM, Math.max(fs * MIN_ZOOM, Math.min(fs * MAX_FOCUS_ZOOM, MAX_FOCUS_SCALE)));
       return { cx: box.x + box.w / 2, cy: box.y + box.h / 2, s: s };
     }
     // Keyboard focus on a node scrolled out of view brings it to the middle.
@@ -246,10 +255,28 @@
     function clearReveal() {
       svg.querySelectorAll('.pa-hidden,.pa-hl').forEach(function (el) { el.classList.remove('pa-hidden', 'pa-hl'); });
     }
+    // A step with no focus fits what it shows. In a sequence that also keeps the
+    // headers of every shown message's participants and the frames around the
+    // messages in view, so the reader still knows who is talking.
+    function defaultFocus(step) {
+      var ids = (step.show || []).slice();
+      if (!isSequence) return { ids: ids, boxes: [] };
+      var framed = [];
+      (step.show || []).forEach(function (id) {
+        if (edgeEnds[id]) ids.push(edgeEnds[id][0], edgeEnds[id][1]);
+        frameData.forEach(function (f) { if (f.messages.indexOf(id) >= 0) framed.push(f.box); });
+      });
+      return { ids: ids, boxes: framed };
+    }
     function stepFocusBox(seen) {
       var step = steps[stepIndex];
-      var ids = step.focus && step.focus.length ? step.focus : step.show;
-      var box = boxOf(ids);
+      var box;
+      if (step.focus && step.focus.length) box = boxOf(step.focus);
+      else {
+        var d = defaultFocus(step);
+        box = boxOf(d.ids);
+        d.boxes.forEach(function (b) { box = unionBox(box, { x: b[0], y: b[1], w: b[2], h: b[3] }); });
+      }
       if (!box) box = boxOf(step.highlight);
       return box || boxOf(Object.keys(seen));
     }
@@ -378,8 +405,15 @@
     stage.addEventListener('pointerup', function (e) { release(e, false); });
     stage.addEventListener('pointercancel', function (e) { release(e, true); });
 
+    var lastStepClick = 0;
     function click(target) {
-      if (presenting) { next(); return; }
+      if (presenting) {
+        var now = Date.now();
+        if (now - lastStepClick < DOUBLE_CLICK_MS) return; // the second click of a double click
+        lastStepClick = now;
+        next();
+        return;
+      }
       var id = idAt(target);
       pinId = id && id !== pinId ? id : null;
       refreshTrace();

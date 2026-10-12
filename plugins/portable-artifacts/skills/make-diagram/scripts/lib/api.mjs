@@ -9,6 +9,7 @@ import { renderSvg, diagramCss } from './render.mjs';
 import { DiagramError } from './diagram-error.mjs';
 import { LIMITS } from './schema.mjs';
 import { revealedBy } from './steps.mjs';
+import { viewerData } from './data.mjs';
 
 const VIEWER_JS = new URL('../../template/viewer.js', import.meta.url);
 const ID_PREFIX = /^[A-Za-z0-9_-]+$/;
@@ -76,9 +77,12 @@ function withEverything(spec, steps, ids) {
 }
 
 function stepsOf(spec, geometry, ids) {
-  if (spec.steps?.length) return withEverything(spec, copySteps(spec.steps), ids);
-  if (spec.type === 'sequence') return messageSteps(spec, LIMITS.steps);
-  return layerSteps(spec, geometry);
+  let steps;
+  if (spec.steps?.length) steps = copySteps(spec.steps);
+  else if (spec.type === 'sequence') steps = messageSteps(spec, LIMITS.steps);
+  else steps = layerSteps(spec, geometry);
+  // Built steps too: a group with no nodes is revealed by no layer.
+  return withEverything(spec, steps, ids);
 }
 
 // Ids a step can name: groups and nodes, or participants and messages.
@@ -95,12 +99,13 @@ export function viewerRuntime() {
  * Build a diagram from a spec.
  *
  * `theme` is a theme name or a loaded theme object (default: the spec's theme,
- * else paper). Resolves to { svg, css, width, height, steps, ids, geometry }:
+ * else paper). Resolves to { svg, css, width, height, steps, ids, data, geometry }:
  * `svg` uses classes and CSS variables only (no fonts, no <style>; include
  * `css` once per page), `steps` is the spec's steps (copied; ids it never
  * reveals get a final "Everything" step) or ones built from the layout, `ids`
- * lists every id a step can name, `idPrefix` (^[A-Za-z0-9_-]+$) namespaces the
- * SVG's ids when several diagrams share a page. Throws DiagramError when the
+ * lists every id a step can name, `data` is what `PADiagram.mount`
+ * (viewerRuntime()) takes along with the `svg`, and `idPrefix`
+ * (^[A-Za-z0-9_-]+$) namespaces the SVG's ids when several diagrams share a page. Throws DiagramError when the
  * spec is invalid or the layout fails the geometry lint.
  */
 export async function buildDiagram(spec, { theme, idPrefix } = {}) {
@@ -114,13 +119,17 @@ export async function buildDiagram(spec, { theme, idPrefix } = {}) {
   const lint = lintGeometry(geometry, { theme: resolved });
   if (lint.length > 0) throw new DiagramError(lint);
   const ids = idsOf(spec);
+  const steps = stepsOf(spec, geometry, ids);
+  const width = geometry.width;
+  const height = geometry.height;
   return {
     svg: renderSvg(geometry, spec, { theme: resolved, ...(idPrefix ? { idPrefix } : {}) }),
     css: diagramCss(),
-    width: geometry.width,
-    height: geometry.height,
-    steps: stepsOf(spec, geometry, ids),
+    width,
+    height,
+    steps,
     ids,
+    data: viewerData(spec, { geometry, steps, ids, width, height }),
     geometry,
   };
 }

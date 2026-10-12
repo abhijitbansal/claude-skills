@@ -204,3 +204,28 @@ test('hostile text survives the whole pipeline as text', async () => {
   assert.ok(!svg.includes('<b>') && !svg.includes('<i>'));
   assert.ok(svg.includes('&lt;b&gt;&amp;&quot;x&quot;'));
 });
+
+test('auto steps also reveal an empty group (nothing else would): a closing "Everything" step', async () => {
+  const spec = { title: 't', type: 'architecture', groups: [{ id: 'empty', label: 'Empty' }], nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], edges: [{ from: 'a', to: 'b' }] };
+  const { steps } = await buildDiagram(spec);
+  assert.equal(steps.at(-1).title, 'Everything');
+  assert.deepEqual(steps.at(-1).show, ['empty']);
+  assert.deepEqual(steps.slice(0, -1).flatMap((s) => s.show).sort(), ['a', 'b']);
+  const plain = await buildDiagram({ ...spec, groups: [] });
+  assert.ok(plain.steps.every((s) => s.title !== 'Everything'), 'no extra step when everything is shown');
+});
+
+test('the result carries `data`: what PADiagram.mount needs, and the export filename stem', async () => {
+  const spec = example('sequence');
+  const out = await buildDiagram(spec);
+  assert.deepEqual(Object.keys(out.data).sort(), ['adjacency', 'animate', 'boxes', 'edges', 'frames', 'height', 'ids', 'parents', 'stem', 'steps', 'title', 'type', 'width']);
+  assert.equal(out.data.stem, 'checkout-with-payment-retry');
+  assert.equal(out.data.steps, out.steps);
+  assert.equal(out.data.width, out.width);
+  assert.deepEqual(out.data.edges.m1, ['shopper', 'web']);
+  assert.equal(out.data.frames.length, spec.frames.length);
+  assert.ok(out.data.frames.every((f) => f.messages.length > 0 && f.box.length === 4));
+  const flow = await buildDiagram(example('flow'));
+  assert.deepEqual(flow.data.frames, []);
+  assert.equal((await buildDiagram({ ...spec, title: 'x'.repeat(100) })).data.stem, 'x'.repeat(60));
+});

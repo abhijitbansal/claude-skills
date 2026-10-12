@@ -153,7 +153,7 @@
     errorLine.textContent = message ? 'Export failed: ' + message : '';
     errorLine.hidden = !message;
   }
-  var stem = (data.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'diagram';
+  var stem = data.stem || 'diagram'; // built once, with the .html file name (scripts/lib/output.mjs)
 
   function exportAs(kind) {
     showExportError(null);

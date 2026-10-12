@@ -137,6 +137,7 @@ for (const name of NAMES) {
 
 test('page parts: toolbar, SVG, text alternative, data block and runtime', () => {
   const html = readOut(run([example('architecture')]));
+  assert.ok(html.includes('role="group" aria-label="Diagram controls"') && !html.includes('role="toolbar"'), 'a plain group: no roving-tabindex promise');
   for (const hook of ['data-act="fit"', 'data-act="zoom-in"', 'data-act="zoom-out"', 'data-act="present"', 'data-act="animate"', 'data-export="svg"', 'data-export="png"', 'data-theme-toggle aria-label="Theme: Auto. Change theme">Theme: Auto</button>', 'data-pa-caption', 'id="pa-stage"']) {
     assert.ok(html.includes(hook), hook);
   }
@@ -146,13 +147,31 @@ test('page parts: toolbar, SVG, text alternative, data block and runtime', () =>
   assert.ok(html.includes('window.PADiagram'));
   assert.ok(html.includes('window.paReady = true'));
   const data = JSON.parse(html.match(/<script type="application\/json" id="pa-data">([^<]*)<\/script>/)[1]);
-  assert.deepEqual(Object.keys(data).sort(), ['adjacency', 'animate', 'boxes', 'edges', 'height', 'ids', 'parents', 'steps', 'title', 'type', 'width']);
+  assert.deepEqual(Object.keys(data).sort(), ['adjacency', 'animate', 'boxes', 'edges', 'frames', 'height', 'ids', 'parents', 'stem', 'steps', 'title', 'type', 'width']);
   assert.deepEqual(data.parents, { vpc: 'aws', api: 'vpc', db: 'vpc' });
   assert.deepEqual(data.adjacency.api.nodes.sort(), ['db', 'pay', 'web']);
   assert.deepEqual(data.edges.e0, ['web', 'api']);
   assert.equal(data.boxes.aws.length, 4);
   assert.equal(data.animate, false);
   assert.equal(data.steps.at(-1).title, 'Everything');
+});
+
+test('the data block is exactly buildDiagram().data, and its stem matches the .html slug', async () => {
+  const dir = tmp();
+  const r = run([example('architecture'), '--out', dir]);
+  const html = fs.readFileSync(path.join(dir, 'checkout-request-path.html'), 'utf8');
+  const data = JSON.parse(html.match(/id="pa-data">([^<]*)<\/script>/)[1]);
+  const { buildDiagram } = await import('../scripts/lib/api.mjs');
+  const expected = JSON.parse(JSON.stringify((await buildDiagram(JSON.parse(fs.readFileSync(example('architecture'), 'utf8')))).data));
+  assert.deepEqual(data, expected);
+  assert.equal(r.status, 0);
+  const long = writeSpec({ title: 'A very long title that goes on and on and on and on and on and on past sixty chars', type: 'state', nodes: [{ id: 'a', label: 'A' }] });
+  const d2 = tmp();
+  run([long, '--out', d2]);
+  const [file] = fs.readdirSync(d2);
+  const data2 = JSON.parse(fs.readFileSync(path.join(d2, file), 'utf8').match(/id="pa-data">([^<]*)<\/script>/)[1]);
+  assert.equal(`${data2.stem}.html`, file);
+  assert.ok(data2.stem.length <= 60);
 });
 
 test('the text alternative lists nodes by group, edges as "A -> B: label"', () => {

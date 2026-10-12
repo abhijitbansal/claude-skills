@@ -2,6 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { slugify } from '../scripts/lib/output.mjs';
 import { launchBrowser, haveBrowser, buildPage, scratchDir, EXAMPLES, example } from './helpers/browser.mjs';
 
 let browser;
@@ -53,13 +54,11 @@ for (const name of EXAMPLES) {
       if (await skipUnlessBrowser(t)) return;
       const { page, problems, context } = await open(built(name).url, { width, height: width === 390 ? 780 : 900 });
       const fit = await page.evaluate(() => {
-        const svg = document.querySelector('#pa-stage svg');
-        const [x, y, w, h] = svg.getAttribute('viewBox').split(' ').map(Number);
-        const [, , W, H] = [0, 0, ...[...svg.viewBox.baseVal ? [] : []]];
-        return { x, y, w, h, fits: document.documentElement.scrollWidth <= window.innerWidth && document.documentElement.scrollHeight <= window.innerHeight, W, H };
+        const [x, y, w, h] = document.querySelector('#pa-stage svg').getAttribute('viewBox').split(' ').map(Number);
+        return { x, y, w, h, fits: document.documentElement.scrollWidth <= window.innerWidth && document.documentElement.scrollHeight <= window.innerHeight };
       });
       assert.ok(fit.fits, 'no page overflow');
-      const size = example(name) && await page.evaluate(() => JSON.parse(document.getElementById('pa-data').textContent));
+      const size = await page.evaluate(() => JSON.parse(document.getElementById('pa-data').textContent));
       assert.ok(fit.x <= 0.01 && fit.y <= 0.01 && fit.x + fit.w >= size.width - 0.01 && fit.y + fit.h >= size.height - 0.01, 'the first view shows the whole diagram');
       assert.ok(Math.abs((await zoom(page)) - 1) < 0.001);
       assert.deepEqual(problems, []);
@@ -446,6 +445,85 @@ test('screenshots: presentation mid-step (light and dark), a hover trace and a p
   await shot(phone.page, 'flow-phone-present.png');
   assert.deepEqual(phone.problems, []);
   await phone.context.close();
+});
+
+test('a group with no nodes is revealed by the last auto step', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const spec = { title: 'Empty group', type: 'architecture', groups: [{ id: 'empty', label: 'Empty' }], nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], edges: [{ from: 'a', to: 'b' }] };
+  const { page, problems, context } = await open(buildPage(spec, { name: 'empty-group' }).url);
+  await page.keyboard.press('p');
+  assert.ok((await hiddenIds(page)).includes('empty'), 'hidden at the start');
+  const total = Number((await page.textContent('[data-pa-count]')).split(' / ')[1]);
+  for (let i = 1; i < total; i++) await page.keyboard.press('ArrowRight');
+  assert.equal(await page.textContent('[data-pa-title]'), 'Everything');
+  assert.deepEqual(await hiddenIds(page), []);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('a sequence step with no focus keeps the headers of its messages\' participants and enclosing frames in view', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const spec = example('sequence');
+  const { page, problems, context } = await open(built('sequence').url, { hash: '#step-3' }); // show m5..m8, no focus
+  await settle(page);
+  const vb = await viewBox(page);
+  const boxes = await page.evaluate(() => {
+    const data = JSON.parse(document.getElementById('pa-data').textContent);
+    return { b: data.boxes, frames: data.frames };
+  });
+  const inside = (box, pad = 0) => vb[0] <= box[0] - pad + 0.5 && vb[1] <= box[1] - pad + 0.5 && vb[0] + vb[2] >= box[0] + box[2] + pad - 0.5 && vb[1] + vb[3] >= box[1] + box[3] + pad - 0.5;
+  const shown = ['m5', 'm6', 'm7', 'm8'];
+  const ends = [...new Set(shown.flatMap((id) => { const m = spec.messages.find((x) => x.id === id); return [m.from, m.to]; }))];
+  for (const id of ends) assert.ok(inside(boxes.b[id], 47), `header ${id} is in view`);
+  const enclosing = boxes.frames.filter((f) => f.messages.some((m) => shown.includes(m)));
+  assert.equal(enclosing.length, 2, 'the loop and the alt frame');
+  for (const f of enclosing) assert.ok(inside(f.box, 47), 'frame in view');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('a double click in presentation advances one step, not two', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await open(built('architecture').url);
+  await page.keyboard.press('p');
+  const c = await stageCentre(page);
+  await page.mouse.dblclick(c.x, c.y + 60);
+  assert.equal(await page.textContent('[data-pa-count]'), '2 / 3');
+  await page.waitForTimeout(400);
+  await page.mouse.click(c.x, c.y + 60);
+  assert.equal(await page.textContent('[data-pa-count]'), '3 / 3', 'a later single click still advances');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('presentation never zooms in past 2x of the fit', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const [name, spec] of [['architecture', example('architecture')], ['flow', example('flow')], ['solo', { title: 'Solo', type: 'flow', nodes: [{ id: 'a', label: 'Only node' }] }]]) {
+    for (const width of [1440, 390]) {
+      const { page, problems, context } = await open(buildPage(spec, { name: `zoomcap-${name}` }).url, { width, height: width === 390 ? 780 : 900 });
+      await page.keyboard.press('p');
+      const total = Number((await page.textContent('[data-pa-count]')).split(' / ')[1]);
+      for (let i = 0; i < total; i++) {
+        await settle(page);
+        const z = await zoom(page);
+        assert.ok(z <= 2.001, `${name}@${width} step ${i + 1}: ${z}`);
+        await page.keyboard.press('ArrowRight');
+      }
+      assert.deepEqual(problems, []);
+      await context.close();
+    }
+  }
+});
+
+test('exports are named after the .html slug, even for a title over 60 characters', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const title = 'A very long diagram title that keeps going well past the sixty character slug limit';
+  const { page, problems, context } = await open(buildPage({ title, type: 'state', nodes: [{ id: 'a', label: 'A' }] }, { name: 'long-title' }).url);
+  const stem = slugify(title);
+  assert.ok(stem.length <= 60);
+  for (const kind of ['svg', 'png']) assert.equal((await download(page, kind)).name, `${stem}.${kind}`);
+  assert.deepEqual(problems, []);
+  await context.close();
 });
 
 // ---- animation ------------------------------------------------------------------------------------------
