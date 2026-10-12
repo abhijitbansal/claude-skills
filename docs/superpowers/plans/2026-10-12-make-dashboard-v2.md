@@ -3351,7 +3351,7 @@ End with "Raw Vega-Lite" (when to use it, what it still gets) and "Errors you ma
 - [ ] **Step 8: Run all checks and commit**
 
 ```bash
-cd plugins/portable-artifacts && node bin/sync-shared.mjs --check && node --test shared/test/ && node --test "bin/test/*.test.mjs"
+cd plugins/portable-artifacts && node bin/sync-shared.mjs --check && node --test "shared/test/*.test.mjs" && node --test "bin/test/*.test.mjs"
 (cd skills/make-dashboard && npm test) && (cd skills/make-motion && npm test)
 cd ../.. && python3 scripts/sweep_counts.py --check
 git add -A plugins/portable-artifacts docs
