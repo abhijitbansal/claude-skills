@@ -34,6 +34,11 @@ That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` m
   (experimental) setting is on. Type `/cache-clock` in full: VS Code does not list it in
   the `/` menu.
 
+> [!WARNING]
+> **If `/cache-clock` does nothing after install:** Copilot CLI may still need experimental
+> mode before it loads the extension. Run `/experimental on`, reload Copilot CLI, and accept
+> the permission prompts when it asks.
+
 From a clone, `sh tools/cache-clock/install.sh` links the extension instead, so a
 `git pull` updates it; `--copy` copies, `--uninstall` removes it. The installer replaces
 only its own install (one with cache-clock's own files) or a dangling link at that path, and
