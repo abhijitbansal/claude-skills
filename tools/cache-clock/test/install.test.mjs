@@ -94,6 +94,8 @@ test("piped install downloads every extension file into a plain copy", () => {
     assert.ok(existsSync(join(p.dest, file)), `missing ${file}`);
   }
   assert.match(r.stdout, /chat\.canvases\.enabled/);
+  assert.match(r.stdout, /chat\.defaultToCopilotHarness/);
+  assert.match(r.stdout, /User settings/);
 });
 
 test("the download list names every file the extension ships", () => {

@@ -29,10 +29,22 @@ That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` m
 - **Copilot CLI:** start a new `copilot` session. Copilot asks once whether the extension
   may "register hooks": allow it (option 2 remembers it for that repo). Then run
   `/cache-clock help`.
-- **VS Code Copilot chat:** add `"chat.canvases.enabled": true` to your VS Code settings,
-  reload the window and start a new chat. VS Code loads extensions only when that
-  (experimental) setting is on. Type `/cache-clock` in full: VS Code does not list it in
-  the `/` menu.
+- **VS Code Copilot chat:** nothing more to install. `~/.copilot/extensions` is global:
+  VS Code's Copilot harness reads the same install in every workspace, no per-project copy.
+  Two settings, both in your **User** `settings.json` (Command Palette → "Preferences: Open
+  User Settings (JSON)"), not a workspace's `.vscode/settings.json`, where VS Code ignores
+  `chat.canvases.enabled`:
+
+  ```json
+  "chat.canvases.enabled": true,
+  "chat.defaultToCopilotHarness": true
+  ```
+
+  Then run "Developer: Reload Window" and start a new chat. The chat must run on the
+  **Copilot** harness, not **Local**: VS Code's Local harness is its own agent and never
+  loads Copilot extensions. `chat.defaultToCopilotHarness` makes new chats start on
+  Copilot; without it, pick **Copilot** in the harness picker of each new chat. Type
+  `/cache-clock` in full: VS Code does not list it in the `/` menu.
 
 > [!WARNING]
 > **If `/cache-clock` does nothing after install:** Copilot CLI may still need experimental
@@ -188,6 +200,13 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 - **It loads only with `"chat.canvases.enabled": true`.** VS Code asks its runtime for
   extensions only in canvas-enabled sessions. With the setting on, it loads the same
   `~/.copilot/extensions/cache-clock` install; nothing else to install.
+- **Only on the Copilot harness, from User settings.** Read from VS Code's source, not
+  tested live: extensions come from the Copilot CLI runtime that backs VS Code's **Copilot**
+  harness, so a chat on the **Local** harness never loads them. That runtime scans
+  `~/.copilot/extensions` (user, every workspace) and `.github/extensions` (project, wins on
+  a name clash); VS Code points it at `~/.copilot` unless `COPILOT_HOME` is set.
+  `chat.canvases.enabled` is application-scoped, so a workspace `.vscode/settings.json`
+  cannot turn it on, and throwaway chat surfaces (no saved session) skip extensions.
 - **`/cache-clock` works typed in full**, but VS Code's `/` menu does not list it.
 - **Output comes as a question card.** VS Code's chat shows plain extension messages only
   as error boxes, so in VS Code the card, the help and setting changes appear as a card
@@ -221,8 +240,8 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
   billed cold and the guard stays quiet; the report counts it as a prefix break.
 - **Refusal memory is one shared file.** Two Copilot sessions refusing in the same instant
   can overwrite each other's entry in `refused.json`; the losing session is asked again.
-- **VS Code depends on an experimental setting** (`chat.canvases.enabled`), which VS Code
-  may rename or remove.
+- **VS Code depends on experimental settings** (`chat.canvases.enabled`,
+  `chat.defaultToCopilotHarness`), which VS Code may rename or remove.
 - Claude was measured through `auto` only; the seat used for testing could not pick
   Claude models directly. Each boundary result above is a single run.
 

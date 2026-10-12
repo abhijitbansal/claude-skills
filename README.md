@@ -81,7 +81,8 @@ Full reference: [tools/second-wind/README.md](tools/second-wind/README.md) ·
 A [cache-tax](https://github.com/karanb192/cache-tax)-style guard for GitHub Copilot:
 shows when the prompt cache goes cold, what the next send costs cold vs warm, and asks
 before a costly cold send goes out. Works in Copilot CLI, and in VS Code's Copilot chat
-with `"chat.canvases.enabled": true` in VS Code settings.
+with `"chat.canvases.enabled": true` and `"chat.defaultToCopilotHarness": true` in VS Code
+User settings (chats on the Local harness never load extensions).
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh

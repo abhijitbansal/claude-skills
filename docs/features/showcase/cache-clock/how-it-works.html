@@ -497,7 +497,7 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
 <footer>
   <h3 style="margin-top:0">Install</h3>
   <pre><code>curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh</code></pre>
-  <p>Copilot CLI: start a new <code>copilot</code> session, say yes when Copilot asks to “register hooks”, then run <code>/cache-clock help</code>. VS Code Copilot chat: add <code>"chat.canvases.enabled": true</code> to VS Code settings, reload, and start a new chat.</p>
+  <p>Copilot CLI: start a new <code>copilot</code> session, say yes when Copilot asks to “register hooks”, then run <code>/cache-clock help</code>. VS Code Copilot chat: add <code>"chat.canvases.enabled": true</code> and <code>"chat.defaultToCopilotHarness": true</code> to VS Code User settings (not <code>.vscode/settings.json</code>), reload, and start a new chat on the Copilot harness (not Local).</p>
   <h3>Sources</h3>
   <ul class="plain sources">
     <li><code>tools/cache-clock/README.md</code> — captures, tables, report sample</li>

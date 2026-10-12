@@ -113,5 +113,6 @@ test("help explains what the clock does, what a cold send triggers, every comman
     /\/cache-clock guard refuse/, /\/cache-clock guard warn/, /\/cache-clock guard off/,
     /\/cache-clock min /, /\/cache-clock headsup /, /\/cache-clock help/,
     /report\.mjs --since 7d/, /VS Code/, /chat\.canvases\.enabled/,
+    /chat\.defaultToCopilotHarness/, /User settings/, /not Local/,
   ]) assert.match(HELP, want);
 });
