@@ -247,7 +247,7 @@ test('page carries a restrictive CSP and fixed embed options', () => {
   assert.equal(csp[1], "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:");
   assert.ok(html.indexOf('Content-Security-Policy') < html.indexOf('<style>'), 'CSP comes before any content');
   assert.match(html, /ast: true/);
-  assert.match(html, /opts\.actions = false/);
+  assert.match(html, /actions: false/);
 });
 
 test('build prints each resolved source path and a serve hint', () => {

@@ -12,6 +12,7 @@ import {
   checkSource, envUrl, sourceShapeErrors, policyFor, RESERVED_SOURCE_NAMES, FILE_TYPES, SOURCE_TYPES, URL_TYPES,
 } from './sources.mjs';
 import { UsageError } from './cli.mjs';
+import { listThemes } from '../../shared/theme.mjs';
 
 const NAME = '^[a-z][a-z0-9_]*$';
 const ID = '^[A-Za-z][A-Za-z0-9_-]*$';
@@ -29,6 +30,7 @@ export const SCHEMA = {
     title: { type: 'string', minLength: 1 },
     description: { type: 'string' },
     maxRows: { type: 'integer', minimum: 1, maximum: 100000 },
+    theme: { type: 'string', minLength: 1 },
     sources: {
       type: 'object',
       propertyNames: { pattern: NAME },
@@ -137,6 +139,11 @@ function crossRefs(spec, dir, { allowOutside }) {
       const { error } = envUrl(src);
       if (error) errors.push({ path: `sources.${name}.env`, message: error });
     }
+  }
+  if (spec.theme !== undefined && !listThemes().includes(spec.theme)) {
+    const themes = listThemes();
+    const hint = didYouMean(spec.theme, themes);
+    errors.push({ path: 'theme', message: `unknown theme ${JSON.stringify(spec.theme)}; ${hint ? `did you mean ${JSON.stringify(hint)}?` : `available: ${themes.join(', ')}`}` });
   }
   return errors;
 }

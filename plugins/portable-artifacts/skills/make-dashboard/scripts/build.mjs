@@ -10,15 +10,18 @@ import { renderPage } from './lib/html.mjs';
 import { checkSource, FILE_TYPES } from './lib/sources.mjs';
 import { UsageError, parseCli, parseTimeout, exitUsage } from './lib/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
+import { loadTheme, DEFAULT_THEME, ThemeError } from '../shared/theme.mjs';
+import { checkTheme } from '../shared/contrast.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(HERE, '..');
-const USAGE = 'node scripts/build.mjs <spec.json> [--out <dir>] [--json] [--allow-outside] [--timeout <seconds>]';
+const USAGE = 'node scripts/build.mjs <spec.json> [--out <dir>] [--json] [--allow-outside] [--timeout <seconds>] [--theme <name>]';
 const OPTIONS = {
   out: { type: 'string' },
   json: { type: 'boolean' },
   'allow-outside': { type: 'boolean' },
   timeout: { type: 'string' },
+  theme: { type: 'string' },
 };
 const VENDOR_FILES = {
   vega: 'node_modules/vega/build/vega.min.js',
@@ -79,8 +82,18 @@ try {
   const fieldErrors = checkFields(spec, results);
   if (fieldErrors.length) fail(fieldErrors);
 
+  let theme;
+  try {
+    theme = loadTheme(values.theme ?? spec.theme ?? DEFAULT_THEME);
+  } catch (e) {
+    if (e instanceof ThemeError) throw new UsageError(`--theme: ${e.message}`);
+    throw e;
+  }
+  const themeErrors = checkTheme(theme).map((e) => ({ path: `theme ${theme.name}: ${e.path}`, message: e.message }));
+  if (themeErrors.length) fail(themeErrors);
+
   const outDir = path.resolve(values.out ?? path.join(dir, 'dist'));
-  const target = writePage(outDir, renderPage(spec, results, { vendor }));
+  const target = writePage(outDir, renderPage(spec, results, { vendor, theme }));
 
   const sources = Object.entries(spec.sources).map(([name, src]) => [
     name,

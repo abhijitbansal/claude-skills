@@ -85,7 +85,7 @@ jobs:
         run: node --test "test/**/*.test.mjs"
       - name: make-dashboard
         working-directory: plugins/portable-artifacts/skills/make-dashboard
-        run: npm ci && npm test
+        run: npm ci && npx playwright install --with-deps chromium && npm test
       - name: make-motion
         working-directory: plugins/portable-artifacts/skills/make-motion
         run: npm ci && npm test

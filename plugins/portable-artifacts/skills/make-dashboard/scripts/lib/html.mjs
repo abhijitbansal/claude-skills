@@ -1,8 +1,11 @@
 // Page rendering: escaping helpers and the template fill. No network, no LLM.
 import fs from 'node:fs';
 import { MAX_ROWS_DEFAULT } from './spec.mjs';
+import { themeCss } from '../../shared/theme.mjs';
 
 const TEMPLATE = new URL('../../template/page.html', import.meta.url);
+const PA_LIB = new URL('../../template/pa-lib.js', import.meta.url);
+const RUNTIME = new URL('../../template/runtime.js', import.meta.url);
 const TABLE_ROWS = 25;
 
 export function escapeHtml(s) {
@@ -71,8 +74,8 @@ function card(chart, results, maxRows) {
 </article>`;
 }
 
-// vendor: { vega, vegaLite, vegaEmbed } source strings.
-export function renderPage(spec, results, { vendor }) {
+// vendor: { vega, vegaLite, vegaEmbed } source strings; theme: a loaded shared/ theme.
+export function renderPage(spec, results, { vendor, theme }) {
   const maxRows = spec.maxRows ?? MAX_ROWS_DEFAULT;
   const charted = new Set((spec.charts ?? []).map((c) => c.query));
   const queries = Object.fromEntries(
@@ -98,7 +101,9 @@ export function renderPage(spec, results, { vendor }) {
     KPIS: kpis,
     CARDS: cards,
     DATA: jsonForScript(data),
+    THEME: themeCss(theme),
     VENDOR: [vendor.vega, vendor.vegaLite, vendor.vegaEmbed].map(inlineScript).join('\n'),
+    RUNTIME: [fs.readFileSync(PA_LIB, 'utf8'), fs.readFileSync(RUNTIME, 'utf8')].map(inlineScript).join('\n'),
   };
   return fs.readFileSync(TEMPLATE, 'utf8').replace(/<!--@(\w+)-->/g, (_, key) => parts[key] ?? '');
 }

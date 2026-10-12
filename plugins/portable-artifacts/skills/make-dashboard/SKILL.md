@@ -18,7 +18,7 @@ Run every step yourself, in this same turn, with your shell or file tools. Do no
 (where `dashboard.json` lives), using the full path to the scripts.
 
 First use: if `<skill-dir>/node_modules` is missing, tell the user it is a one-time local install and run
-`npm ci --prefix <skill-dir>`. If the request is empty, ask what to build and from which data file(s).
+`npm ci --omit=dev --prefix <skill-dir>`. If the request is empty, ask what to build and from which data file(s).
 
 1. Look at the data first. Never guess columns:
    `node <skill-dir>/scripts/inspect.mjs data/sales.csv` (column names, types, 5 sample rows; csv, parquet or json).
