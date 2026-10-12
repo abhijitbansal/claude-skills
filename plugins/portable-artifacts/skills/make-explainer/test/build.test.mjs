@@ -84,10 +84,10 @@ test('a valid section type with no renderer yet exits 1 naming the path', () => 
   const { root, done } = sandbox();
   try {
     const spec = path.join(root, 'later.explainer.json');
-    fs.writeFileSync(spec, JSON.stringify({ title: 'T', sections: [{ type: 'checklist', key: 'k', groups: [{ title: 'g', items: [{ text: 'x' }] }] }] }));
+    fs.writeFileSync(spec, JSON.stringify({ title: 'T', sections: [{ type: 'diagram', diagram: 'x.diagram.json' }] }));
     const r = run([spec, '--out', path.join(root, 'later.html')]);
     assert.equal(r.status, 1);
-    assert.match(r.stdout, /sections\[0\]\.type: "checklist" sections have no renderer yet/);
+    assert.match(r.stdout, /sections\[0\]\.type: "diagram" sections have no renderer yet/);
   } finally { done(); }
 });
 

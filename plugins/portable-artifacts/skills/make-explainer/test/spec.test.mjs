@@ -444,7 +444,7 @@ test('slide budget: points', async () => {
   assert.deepEqual(await slideErrors([{ type: 'steps', items: Array(7).fill({ title: 's' }) }]), [msg(7)]);
   assert.deepEqual(await slideErrors([{ type: 'cards', items: Array(8).fill({ title: 'a', text: 'b' }) }]), [msg(8)]);
   assert.deepEqual(await slideErrors([{ type: 'compare', columns: [{ title: 'a', points: ['1', '2', '3', '4'] }, { title: 'b', points: ['1', '2', '3'] }] }]), [msg(7)]);
-  assert.deepEqual(await slideErrors([{ type: 'checklist', key: 'k', groups: [{ title: 'a', items: Array(4).fill({ text: 'x' }) }, { title: 'b', items: Array(3).fill({ text: 'x' }) }] }]), [msg(7)]);
+  assert.deepEqual(await slideErrors([{ type: 'checklist', key: 'k', groups: [{ title: 'a', items: Array.from({ length: 4 }, (_, i) => ({ text: `x${i}` })) }, { title: 'b', items: Array.from({ length: 3 }, (_, i) => ({ text: `x${i}` })) }] }]), [msg(7)]);
 });
 
 test('slide budget: table rows, code lines, words', async () => {

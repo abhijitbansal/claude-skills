@@ -16,8 +16,9 @@ import * as callout from './render/callout.mjs';
 import * as code from './render/code.mjs';
 import * as details from './render/details.mjs';
 import * as image from './render/image.mjs';
+import * as checklist from './render/checklist.mjs';
 
-const MODULES = { tldr, text, kpis, cards, table, risks, files, steps, timeline, compare, callout, code, details, image };
+const MODULES = { tldr, text, kpis, cards, table, risks, files, steps, timeline, compare, callout, code, details, image, checklist };
 
 export const SECTIONS = Object.freeze(Object.fromEntries(
   Object.entries(MODULES).map(([type, m]) => [type, Object.freeze({ render: m.render, ownHeading: m.ownHeading === true, assets: m.assets, check: m.check })]),

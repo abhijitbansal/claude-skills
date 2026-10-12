@@ -18,6 +18,43 @@
     try { if (storage) storage.setItem(key, value); } catch (e) { /* not remembered; fine */ }
   }
 
+  // Like writeStore, but says whether the write held. A null value removes the key.
+  function saveStore(storage, key, value) {
+    try {
+      if (!storage) return false;
+      if (value === null) storage.removeItem(key); else storage.setItem(key, value);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Saved checklist ticks: JSON { [id]: true }. Only ids in `ids` that are exactly true
+  // survive; anything else (junk, arrays, other types, __proto__) reads as nothing ticked.
+  function readChecks(raw, ids) {
+    var out = Object.create(null);
+    if (typeof raw !== 'string' || raw === '') return out;
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { return out; }
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) return out;
+    for (var i = 0; i < ids.length; i++) {
+      if (Object.prototype.hasOwnProperty.call(data, ids[i]) && data[ids[i]] === true) out[ids[i]] = true;
+    }
+    return out;
+  }
+
+  // The string to store for a set of ticks; null when nothing is ticked (remove the key).
+  function serializeChecks(checked) {
+    var keys = Object.keys(checked).filter(function (k) { return checked[k] === true; }).sort();
+    if (!keys.length) return null;
+    var out = {};
+    keys.forEach(function (k) { out[k] = true; });
+    return JSON.stringify(out);
+  }
+
+  // Floored, so 100 appears only when every item is done.
+  function checkProgress(done, total) {
+    return { done: done, total: total, pct: total > 0 ? Math.floor((done * 100) / total) : 0 };
+  }
+
   // Which table-of-contents entry is current. `tops` are the sections' top edges
   // in document order, relative to the viewport; `line` is the reading line
   // (a fraction of the viewport height from the top). The last section whose top
@@ -31,5 +68,8 @@
     return active;
   }
 
-  root.PA = { nextTheme: nextTheme, readStore: readStore, writeStore: writeStore, activeIndex: activeIndex };
+  root.PA = {
+    nextTheme: nextTheme, readStore: readStore, writeStore: writeStore, saveStore: saveStore,
+    readChecks: readChecks, serializeChecks: serializeChecks, checkProgress: checkProgress, activeIndex: activeIndex,
+  };
 })(typeof window !== 'undefined' ? window : globalThis);

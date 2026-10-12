@@ -115,10 +115,10 @@ test('sections without a title render no heading and no label', async () => {
 });
 
 test('slides mode and sections without a renderer are reported with paths, all at once', async () => {
-  await assert.rejects(build(doc([text(1), { type: 'checklist', key: 'k', groups: [] }, { type: 'chart' }], { mode: 'slides' })), (e) => {
+  await assert.rejects(build(doc([text(1), { type: 'diagram', diagram: 'x.diagram.json' }, { type: 'chart' }], { mode: 'slides' })), (e) => {
     assert.ok(e instanceof BuildError);
     assert.deepEqual(e.errors.map((x) => x.path), ['mode', 'sections[1].type', 'sections[2].type']);
-    assert.match(e.errors[1].message, /"checklist" sections have no renderer yet/);
+    assert.match(e.errors[1].message, /"diagram" sections have no renderer yet/);
     return true;
   });
 });
@@ -181,6 +181,45 @@ test('pa-lib: activeIndex follows the reading line, the first section before any
   assert.equal(activeIndex([-500, 50, 400], 100, false), 1);
   assert.equal(activeIndex([-500, -300, 400], 100, false), 1);
   assert.equal(activeIndex([-500, -300, 400], 100, true), 2);
+});
+
+test('pa-lib: readChecks keeps only known ids that are ticked and survives junk', () => {
+  const { readChecks } = loadLib();
+  const ids = ['aaaaaaaaaa', 'bbbbbbbbbb', 'cccccccccc'];
+  assert.deepEqual({ ...readChecks('{"aaaaaaaaaa":true,"bbbbbbbbbb":false,"zzzzzzzzzz":true}', ids) }, { aaaaaaaaaa: true });
+  for (const junk of [null, '', 'not json', '[]', '"x"', '7', 'null', '{"__proto__":true}', '{"constructor":true}']) {
+    assert.deepEqual({ ...readChecks(junk, ids) }, {}, String(junk));
+  }
+  assert.equal(readChecks('{"aaaaaaaaaa":1}', ids).aaaaaaaaaa, undefined, 'only true counts');
+  assert.equal(Object.getPrototypeOf(readChecks('{}', ids)), null, 'no inherited keys to trip over');
+});
+
+test('pa-lib: serializeChecks writes {id:true} sorted, and nothing for an empty set', () => {
+  const { serializeChecks } = loadLib();
+  assert.equal(serializeChecks({ bb: true, aa: true }), '{"aa":true,"bb":true}');
+  assert.equal(serializeChecks({}), null);
+});
+
+test('pa-lib: checkProgress floors the percentage so 100 means finished', () => {
+  const { checkProgress } = loadLib();
+  assert.deepEqual({ ...checkProgress(0, 0) }, { done: 0, total: 0, pct: 0 });
+  assert.deepEqual({ ...checkProgress(1, 3) }, { done: 1, total: 3, pct: 33 });
+  assert.equal(checkProgress(199, 200).pct, 99);
+  assert.equal(checkProgress(200, 200).pct, 100);
+});
+
+test('pa-lib: saveStore reports whether the write held and removes on null', () => {
+  const { saveStore } = loadLib();
+  const data = new Map();
+  const ok = { setItem: (k, v) => data.set(k, v), removeItem: (k) => data.delete(k) };
+  assert.equal(saveStore(ok, 'k', 'v'), true);
+  assert.equal(data.get('k'), 'v');
+  assert.equal(saveStore(ok, 'k', null), true);
+  assert.equal(data.has('k'), false);
+  const thrower = { setItem() { throw new Error('quota'); }, removeItem() { throw new Error('denied'); } };
+  assert.equal(saveStore(thrower, 'k', 'v'), false);
+  assert.equal(saveStore(thrower, 'k', null), false);
+  assert.equal(saveStore(undefined, 'k', 'v'), false);
 });
 
 test('the inlined scripts cannot close their own tag', async () => {

@@ -31,6 +31,7 @@ const HOSTILE = {
   code: { type: 'code', code: P, language: P, caption: P },
   details: { type: 'details', summary: P, text: P },
   image: { type: 'image', src: 'pixel.png', alt: P, caption: P },
+  checklist: { type: 'checklist', key: 'k', intro: P, onFail: P, groups: [{ title: P, items: [{ text: P, note: P, tag: 'visual' }] }] },
 };
 
 function countLeaves(value, target) {

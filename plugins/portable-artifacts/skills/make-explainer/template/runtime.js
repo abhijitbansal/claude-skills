@@ -1,5 +1,5 @@
 // Explainer page behaviour: theme toggle, contents highlight, copy buttons,
-// one rise-in per section, print-friendly details. Nothing is fetched.
+// checklists, one rise-in per section, print-friendly details. Nothing is fetched.
 (function () {
   var PA = window.PA;
   var root = document.documentElement;
@@ -104,6 +104,90 @@
       }
     );
   });
+
+  // ---- checklists -----------------------------------------------------------
+  // Ticks are saved as {id: true} under pa-checklist:<key>. Storage can be missing or
+  // refuse writes; then ticking still works for this visit and a quiet note says so.
+  function setupChecklist(box) {
+    var storeKey = 'pa-checklist:' + box.getAttribute('data-key');
+    var inputs = [].slice.call(box.querySelectorAll('input[data-id]'));
+    var ids = inputs.map(function (input) { return input.getAttribute('data-id'); });
+    var part = function (name) { return box.querySelector('[' + name + ']'); };
+    var groups = [].slice.call(box.querySelectorAll('[data-group]'));
+    var meter = box.querySelector('[role=progressbar]');
+    var reset = part('data-reset');
+    var confirmBox = part('data-confirm');
+    var unsaved = part('data-unsaved');
+    var saved = PA.saveStore(local, 'pa-probe', '1') && PA.saveStore(local, 'pa-probe', null);
+    var checked = saved ? PA.readChecks(PA.readStore(local, storeKey), ids) : PA.readChecks(null, ids);
+
+    function persist() {
+      var ok = PA.saveStore(local, storeKey, PA.serializeChecks(checked));
+      if (!ok) unsaved.hidden = false;
+    }
+    function refresh() {
+      var done = 0;
+      inputs.forEach(function (input) {
+        var on = checked[input.getAttribute('data-id')] === true;
+        input.checked = on;
+        input.closest('.cl-item').classList.toggle('is-done', on);
+        if (on) done++;
+      });
+      groups.forEach(function (group) {
+        var boxes = group.querySelectorAll('input[data-id]');
+        var n = group.querySelectorAll('input[data-id]:checked').length;
+        group.querySelector('[data-group-done]').textContent = n;
+        group.classList.toggle('is-complete', n === boxes.length);
+      });
+      var p = PA.checkProgress(done, inputs.length);
+      part('data-done').textContent = p.done;
+      part('data-pct').textContent = p.pct + '%';
+      part('data-fill').style.width = p.pct + '%';
+      part('data-complete').hidden = !(p.total > 0 && p.done === p.total);
+      meter.setAttribute('aria-valuenow', p.done);
+      meter.setAttribute('aria-valuetext', p.done + ' of ' + p.total + ' done');
+      // aria-disabled, not disabled: focus can rest on the button after a reset empties it.
+      reset.setAttribute('aria-disabled', p.done === 0 ? 'true' : 'false');
+      return p.done;
+    }
+    function closeConfirm(refocus) {
+      confirmBox.hidden = true;
+      reset.hidden = false;
+      if (refocus) reset.focus();
+    }
+
+    if (!saved) unsaved.hidden = false;
+    refresh();
+
+    box.addEventListener('change', function (event) {
+      var input = event.target;
+      if (!input.matches || !input.matches('input[data-id]')) return;
+      var id = input.getAttribute('data-id');
+      if (input.checked) checked[id] = true; else delete checked[id];
+      persist();
+      refresh();
+    });
+    reset.addEventListener('click', function () {
+      var n = refresh();
+      if (n === 0) return;
+      part('data-confirm-text').textContent = 'Reset all ' + n + (n === 1 ? ' tick?' : ' ticks?');
+      reset.hidden = true;
+      confirmBox.hidden = false;
+      part('data-reset-no').focus();
+    });
+    part('data-reset-no').addEventListener('click', function () { closeConfirm(true); });
+    part('data-reset-yes').addEventListener('click', function () {
+      checked = Object.create(null);
+      persist();
+      refresh();
+      closeConfirm(true);
+      announce('Checklist reset');
+    });
+    confirmBox.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') { event.stopPropagation(); closeConfirm(true); }
+    });
+  }
+  [].forEach.call(document.querySelectorAll('[data-checklist]'), setupChecklist);
 
   // ---- one rise-in per section ----------------------------------------------
   // The page head armed it (class rise-ready) when motion is allowed; here sections

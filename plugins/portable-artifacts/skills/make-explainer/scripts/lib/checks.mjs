@@ -7,6 +7,7 @@ import { resolveRef } from './paths.mjs';
 import { pathJoin } from '../../shared/errors.mjs';
 import { readImage } from './image.mjs';
 import { loadSibling, SiblingError } from './siblings.mjs';
+import { itemKey } from './render/checklist.mjs';
 
 const CHECKS = new Map();
 
@@ -60,5 +61,24 @@ registerCheck('cards', async ({ section, path: at }) => {
     }
     errors.push({ path: pathJoin(pathJoin(pathJoin(at, 'items'), i), 'icon'), message: message ?? `unknown icon ${JSON.stringify(item.icon)}` });
   }
+  return errors;
+});
+
+// checklist: an item is identified by its group title and text, so two equal
+// ones (in one group, or in groups sharing a title) would share a tick.
+registerCheck('checklist', ({ section, path: at }) => {
+  const errors = [];
+  const seen = new Map();
+  section.groups.forEach((group, gi) => {
+    group.items.forEach((item, ii) => {
+      const where = pathJoin(pathJoin(pathJoin(pathJoin(pathJoin(at, 'groups'), gi), 'items'), ii), 'text');
+      const key = itemKey(group.title, item.text);
+      if (seen.has(key)) {
+        errors.push({ path: where, message: `duplicate item ${JSON.stringify(item.text)} in group ${JSON.stringify(group.title)}; first at ${seen.get(key)}; reword one so their ticks stay apart` });
+      } else {
+        seen.set(key, where);
+      }
+    });
+  });
   return errors;
 });
