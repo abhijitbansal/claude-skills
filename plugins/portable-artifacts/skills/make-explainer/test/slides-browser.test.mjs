@@ -244,7 +244,7 @@ test('progress bar and counter follow the slide; the current slide is announced 
   if (await skipUnlessBrowser(t)) return;
   const { page, context } = await openPage(deck5().url);
   const state = () => page.evaluate(() => {
-    const bar = document.querySelector('[role=progressbar]');
+    const bar = document.querySelector('.deck-bar [role=progressbar]');
     return {
       count: document.querySelector('.deck-count').textContent.replace(/\s+/g, ' ').trim(),
       now: bar.getAttribute('aria-valuenow'), max: bar.getAttribute('aria-valuemax'), text: bar.getAttribute('aria-valuetext'),
@@ -431,7 +431,6 @@ test('reduced motion: no transition on the progress bar; with motion allowed it 
   const { url } = deck5();
   const calm = await openPage(url, { reducedMotion: 'reduce' });
   assert.equal(await calm.page.evaluate(() => getComputedStyle(document.querySelector('[data-progress]')).transitionDuration), '0s');
-  assert.equal(await calm.page.evaluate(() => getComputedStyle(document.querySelector('[data-deck]')).scrollBehavior), 'auto');
   await calm.context.close();
   const lively = await openPage(url, { reducedMotion: 'no-preference' });
   assert.notEqual(await lively.page.evaluate(() => getComputedStyle(document.querySelector('[data-progress]')).transitionDuration), '0s');
@@ -508,3 +507,135 @@ for (const width of [1280, 390]) {
     }
   });
 }
+
+// ---- fix round 1 ----------------------------------------------------------------------------------
+
+// A key press dispatched and measured in one task: did the deck jump or start to glide?
+const pressAndMeasure = (page) => page.evaluate(() => {
+  const deck = document.querySelector('[data-deck]');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+  return { top: deck.scrollTop, target: document.getElementById('slide-2').offsetTop };
+});
+
+test('reduced motion: the deck jumps to the slide in the same task; with motion allowed it glides', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const calm = await openPage(deck5().url, { reducedMotion: 'reduce' });
+  const jumped = await pressAndMeasure(calm.page);
+  assert.ok(jumped.target > 0);
+  assert.equal(jumped.top, jumped.target, 'reduced motion: no animation');
+  await calm.context.close();
+  const lively = await openPage(deck5().url, { reducedMotion: 'no-preference' });
+  const started = await pressAndMeasure(lively.page);
+  assert.notEqual(started.top, started.target, 'motion allowed: the scroll is animated');
+  await lively.context.close();
+});
+
+test('a checklist slide keeps its own progress meter; the deck bar follows the slide', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const built = buildSpec({
+    title: 'Deck', mode: 'slides',
+    sections: [topic(1), { type: 'checklist', title: 'Do it', key: 'k', groups: [{ title: 'G', items: [{ text: 'one' }, { text: 'two' }] }] }, topic(3)],
+  });
+  const { page, problems, context } = await openPage(built.url);
+  const meters = () => page.evaluate(() => {
+    const read = (el) => [el.getAttribute('aria-valuenow'), el.getAttribute('aria-valuemax'), el.getAttribute('aria-valuetext')];
+    return { deck: read(document.querySelector('.deck-bar [role=progressbar]')), list: read(document.querySelector('.cl-meter')) };
+  });
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+  assert.equal(await current(page), 4);
+  assert.deepEqual(await meters(), { deck: ['4', '4', 'Slide 4 of 4'], list: ['0', '2', '0 of 2 done'] });
+  await page.keyboard.press('ArrowLeft');
+  await page.locator('#slide-3 input').first().check();
+  assert.deepEqual(await meters(), { deck: ['3', '4', 'Slide 3 of 4'], list: ['1', '2', '1 of 2 done'] });
+  assert.equal(await page.locator('.deck-count').textContent().then((x) => x.replace(/\s+/g, ' ').trim()), '3 / 4');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('the current slide takes focus, so the arrow keys scroll a tall slide', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await tallPage();
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'slide-1', 'the first slide is focused on load');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await current(page), 3);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'slide-3');
+  assert.equal(await page.evaluate(() => document.getElementById('slide-3').scrollTop), 0);
+  await page.keyboard.press('ArrowDown');
+  await page.waitForFunction(() => document.getElementById('slide-3').scrollTop > 0);
+  assert.equal(await current(page), 3, 'ArrowDown scrolled the slide, it did not change slide');
+  await page.keyboard.press('ArrowUp');
+  await page.waitForFunction(() => document.getElementById('slide-3').scrollTop === 0);
+  await context.close();
+});
+
+test('focus: wheel scrolling moves focus along; the outline still hands focus back to its button', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(deck5().url);
+  await page.mouse.move(640, 400);
+  await page.mouse.wheel(0, 900);
+  await settled(page, 2);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'slide-2');
+  await page.locator('[data-outline-open]').click();
+  await page.locator('[data-outline] a', { hasText: 'Topic 3' }).click();
+  await settled(page, 4);
+  assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-outline-open')), true);
+  await context.close();
+});
+
+test('Space in a code block that only scrolls sideways moves the deck by the deck\'s own rule', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const long = `const value = ${'"a very long string that does not wrap" + '.repeat(8)}"end";`;
+  const built = buildSpec({ title: 'Deck', mode: 'slides', sections: [topic(1), { type: 'code', title: 'Long line', language: 'js', code: long }, topic(3)] });
+  const { page, context } = await openPage(built.url, { width: 390, height: 844 });
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  const pre = page.locator('#slide-3 pre');
+  assert.equal(await pre.evaluate((el) => el.scrollWidth > el.clientWidth && el.scrollHeight <= el.clientHeight), true, 'precondition: sideways only');
+  await pre.focus();
+  await page.keyboard.press('Space');
+  assert.equal(await current(page), 4, 'the slide changed at once, not after a native scroll settled');
+  assert.equal(await aligned(page, 4), true);
+  await context.close();
+});
+
+test('outline: on a phone it uses the height there is, and a long list opens at the current slide', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const example = buildFile(exampleFile('slides'), { name: 'slides' });
+  const phone = await openPage(example.url, { width: 390, height: 844 });
+  await phone.page.keyboard.press('o');
+  const fit = await phone.page.evaluate(() => {
+    const list = document.querySelector('.outline-list');
+    return { scroll: list.scrollHeight, client: list.clientHeight, dialog: document.querySelector('[data-outline]').getBoundingClientRect().height };
+  });
+  assert.ok(fit.scroll <= fit.client, `ten entries fit without scrolling (${fit.scroll} > ${fit.client})`);
+  assert.ok(fit.dialog > 34 * 16, 'the old 34rem cap is gone');
+  await phone.context.close();
+
+  const many = buildSpec({ title: 'Long', mode: 'slides', sections: Array.from({ length: 40 }, (_, i) => topic(i + 1)) });
+  const { page, context } = await openPage(`${many.url}#slide-33`, { width: 390, height: 500 });
+  await page.keyboard.press('o');
+  const seen = await page.evaluate(() => {
+    const a = document.querySelector('.outline-list a[aria-current]').getBoundingClientRect();
+    const box = document.querySelector('.outline-list').getBoundingClientRect();
+    return { list: document.querySelector('.outline-list').scrollHeight > box.height, inView: a.top >= box.top - 1 && a.bottom <= box.bottom + 1 };
+  });
+  assert.equal(seen.list, true, 'precondition: the list scrolls');
+  assert.equal(seen.inView, true, 'the current entry is in view when the outline opens');
+  await context.close();
+});
+
+test('copying code on a slide still uses the single live region', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const built = buildSpec({ title: 'Deck', mode: 'slides', sections: [{ type: 'code', title: 'Code', language: 'js', code: 'a();' }] });
+  const { page, context } = await openPage(built.url);
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowRight');
+  assert.match(await page.locator('[role=status]').textContent(), /Slide 2 of 2/);
+  await page.evaluate(() => { document.execCommand = () => true; Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true }); });
+  await page.locator('[data-copy]').click();
+  await page.waitForFunction(() => /copied/i.test(document.querySelector('[role=status]').textContent));
+  assert.equal(await page.locator('[role=status]').count(), 1);
+  await context.close();
+});

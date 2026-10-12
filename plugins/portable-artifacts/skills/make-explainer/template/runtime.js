@@ -3,8 +3,7 @@
 (function () {
   var PA = window.PA;
   var root = document.documentElement;
-  var safeStorage = function (name) { try { return window[name]; } catch (e) { return undefined; } };
-  var local = safeStorage('localStorage');
+  var local = PA.safeStorage('localStorage');
   var live = null;
   function announce(text) {
     if (!live) live = document.querySelector('[data-live]'); // slides pages ship their own region
@@ -16,6 +15,7 @@
     }
     live.textContent = text;
   }
+  PA.announce = announce; // slides.js speaks through the same region
 
   // ---- theme ---------------------------------------------------------------
   var LABEL = { auto: 'Auto', light: 'Light', dark: 'Dark' };

@@ -27,7 +27,7 @@ test('an over-budget slide is a validation error with a path and the fix', async
 
 test('slides mode builds: a title slide first, then one numbered slide per section', async () => {
   const { html } = await build(deck([text(1), text(2), text(3)], { subtitle: 'Sub', meta: { date: '2026-10-12' } }));
-  const slides = [...html.matchAll(/<section class="slide[^"]*" id="(slide-\d+)" aria-label="([^"]+)"/g)].map((m) => [m[1], m[2]]);
+  const slides = [...html.matchAll(/<section class="slide[^"]*" id="(slide-\d+)" tabindex="-1" aria-label="([^"]+)"/g)].map((m) => [m[1], m[2]]);
   assert.deepEqual(slides, [
     ['slide-1', 'Slide 1 of 4: Deck'],
     ['slide-2', 'Slide 2 of 4: Claim 1'],
@@ -67,6 +67,12 @@ test('untitled sections get a type-based label; own-heading sections get no seco
   assert.ok(!html.includes('id="slide-2-title"'));
   assert.match(html, /aria-label="Slide 3 of 3: Careful"/);
   assert.ok(!html.includes('id="slide-3-title"'));
+});
+
+test('an untitled section is labelled with a real word, not the raw type name', async () => {
+  const { html } = await build(deck([{ type: 'kpis', items: [{ label: 'a', value: 1 }] }, { type: 'tldr', text: 'x' }]));
+  assert.match(html, /aria-label="Slide 2 of 3: KPIs"/);
+  assert.match(html, /aria-label="Slide 3 of 3: TL;DR"/);
 });
 
 test('the outline dialog lists every slide title as a link to its slide', async () => {
@@ -205,4 +211,17 @@ test('pa-lib: slideAtScroll names the slide the deck is scrolled to', () => {
   assert.equal(PA.slideAtScroll(99999, 800, 5), 5);
   assert.equal(PA.slideAtScroll(-50, 800, 5), 1);
   assert.equal(PA.slideAtScroll(100, 0, 5), 1);
+});
+
+test('pa-lib: safeStorage returns the storage, or undefined when reading it throws', () => {
+  const PA = loadLib();
+  assert.equal(PA.safeStorage('localStorage'), undefined, 'a missing storage reads as undefined');
+});
+
+test('pa-lib: safeStorage survives a getter that throws', () => {
+  const sandbox = { window: undefined };
+  sandbox.globalThis = sandbox;
+  Object.defineProperty(sandbox, 'localStorage', { get() { throw new Error('denied'); } });
+  vm.runInNewContext(fs.readFileSync(new URL('../template/pa-lib.js', import.meta.url), 'utf8'), sandbox);
+  assert.equal(sandbox.PA.safeStorage('localStorage'), undefined);
 });

@@ -9,6 +9,11 @@
     return THEMES[(i + 1) % THEMES.length];
   }
 
+  // window.localStorage / sessionStorage, or undefined when merely reading the property throws.
+  function safeStorage(name) {
+    try { return root[name]; } catch (e) { return undefined; }
+  }
+
   // Storage can be missing or throw (private mode, blocked site data).
   function readStore(storage, key) {
     try { return storage ? storage.getItem(key) : null; } catch (e) { return null; }
@@ -142,7 +147,7 @@
   }
 
   root.PA = {
-    nextTheme: nextTheme, readStore: readStore, writeStore: writeStore, saveStore: saveStore,
+    nextTheme: nextTheme, safeStorage: safeStorage, readStore: readStore, writeStore: writeStore, saveStore: saveStore,
     readChecks: readChecks, mergeChecks: mergeChecks, checkProgress: checkProgress, activeIndex: activeIndex,
     clampSlide: clampSlide, parseSlideHash: parseSlideHash, parseResume: parseResume, slideKey: slideKey,
     moveTarget: moveTarget, canScroll: canScroll, slideAtScroll: slideAtScroll,

@@ -6,15 +6,16 @@
   var deck = document.querySelector('[data-deck]');
   if (!PA || !deck) return;
 
-  var safeStorage = function (name) { try { return window[name]; } catch (e) { return undefined; } };
-  var local = safeStorage('localStorage');
+  var local = PA.safeStorage('localStorage');
   var slides = [].slice.call(deck.querySelectorAll('section.slide'));
   var total = slides.length;
   var storeKey = 'pa-slides:' + deck.getAttribute('data-slug');
-  var live = document.querySelector('[data-live]');
-  var meter = document.querySelector('[role=progressbar]');
-  var fill = document.querySelector('[data-progress]');
-  var count = document.querySelector('[data-count]');
+  // Chrome lookups stay inside the deck bar: a slide's own markup (a checklist's
+  // progressbar, say) must never match them.
+  var bar = document.querySelector('.deck-bar');
+  var meter = bar.querySelector('[role=progressbar]');
+  var fill = bar.querySelector('[data-progress]');
+  var count = bar.querySelector('[data-count]');
   var dialog = document.querySelector('[data-outline]');
   var links = [].slice.call(dialog.querySelectorAll('a[data-slide]'));
   var current = 0;
@@ -36,7 +37,7 @@
     meter.setAttribute('aria-valuetext', 'Slide ' + n + ' of ' + total);
     links.forEach(function (a, i) { if (i + 1 === n) a.setAttribute('aria-current', 'location'); else a.removeAttribute('aria-current'); });
     if (!changed || !options) return;
-    if (options.announce) live.textContent = slides[n - 1].getAttribute('aria-label');
+    if (options.announce && PA.announce) PA.announce(slides[n - 1].getAttribute('aria-label'));
     if (options.persist) {
       setHash(n);
       PA.writeStore(local, storeKey, String(n));
@@ -51,9 +52,15 @@
     deck.scrollTo({ top: slides[n - 1].offsetTop, behavior: smooth ? behavior() : 'auto' });
   }
 
+  // Focus rests on the current slide so the arrow keys scroll it when it is tall.
+  function focusSlide(n) {
+    slides[n - 1].focus({ preventScroll: true });
+  }
+
   function go(n) {
     n = PA.clampSlide(n, total);
     show(n, { announce: true, persist: true });
+    focusSlide(n);
     align(n, true);
   }
 
@@ -63,7 +70,11 @@
     window.clearTimeout(settleTimer);
     settleTimer = window.setTimeout(function () {
       var n = PA.slideAtScroll(deck.scrollTop, deck.clientHeight, total);
-      if (n !== current) show(n, { announce: true, persist: true });
+      if (n === current) return;
+      show(n, { announce: true, persist: true });
+      // Follow focus too, unless it sits on a control outside the slides.
+      var here = document.activeElement;
+      if (!here || here === document.body || (here.closest && here.closest('.slide'))) focusSlide(n);
     }, 90);
   }, { passive: true });
   window.addEventListener('resize', function () { align(current, false); });
@@ -79,6 +90,7 @@
   if (start === null) start = 1;
   show(start, null);
   align(start, false);
+  focusSlide(start); // a screen reader starts at the slide; no scroll, so a deep link keeps its place
   if (linked !== null) setHash(start);
 
   // ---- outline ---------------------------------------------------------------
@@ -88,7 +100,7 @@
     opener = document.activeElement;
     if (dialog.showModal) dialog.showModal(); else dialog.setAttribute('open', '');
     var here = dialog.querySelector('a[aria-current]') || links[0];
-    if (here) here.focus();
+    if (here) { here.focus(); here.scrollIntoView({ block: 'nearest' }); }
   }
   function closeOutline() {
     if (!dialog.open) return;
@@ -125,7 +137,7 @@
   var REGION = '.tablewrap, pre';
   var match = function (el, selector) { return el && el.closest ? el.closest(selector) : null; };
   var scrollsSideways = function (el) { return el.scrollWidth > el.clientWidth + 1; };
-  var scrollsAtAll = function (el) { return scrollsSideways(el) || el.scrollHeight > el.clientHeight + 1; };
+  var scrollsDown = function (el) { return el.scrollHeight > el.clientHeight + 1; };
 
   document.addEventListener('keydown', function (event) {
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
@@ -140,10 +152,11 @@
     }
     if (dialog.open || match(target, TEXT_ENTRY)) return;
 
-    // A focused code block or table that scrolls keeps the keys it can use.
+    // A focused code block or table keeps the keys it can use: the arrows when it
+    // scrolls sideways, every other key when it scrolls vertically.
     var region = match(target, REGION);
     var key = event.key;
-    if (region && ((key === 'ArrowLeft' || key === 'ArrowRight') ? scrollsSideways(region) : scrollsAtAll(region))) return;
+    if (region && ((key === 'ArrowLeft' || key === 'ArrowRight') ? scrollsSideways(region) : scrollsDown(region))) return;
 
     if (act.paged) {
       // Space on a button, checkbox or summary belongs to that control.

@@ -61,12 +61,17 @@ export function slideBudget(spec) {
 /** True when the spec renders as a deck. */
 export const isSlides = (spec) => spec.mode === 'slides' || spec.preset === 'slides';
 
-// A section without a title is named after its type ("Text", "Table") in labels and the outline.
-const typeLabel = (type) => `${type[0].toUpperCase()}${type.slice(1)}`;
+// A section without a title is named after its type in labels and the outline.
+const TYPE_LABELS = {
+  tldr: 'TL;DR', text: 'Text', kpis: 'KPIs', cards: 'Cards', table: 'Table', risks: 'Risks', files: 'Files', steps: 'Steps',
+  timeline: 'Timeline', compare: 'Comparison', callout: 'Note', code: 'Code', details: 'Details', checklist: 'Checklist',
+  diagram: 'Diagram', chart: 'Chart', motion: 'Video', image: 'Image',
+};
+const typeLabel = (type) => TYPE_LABELS[type] ?? `${type[0].toUpperCase()}${type.slice(1)}`;
 export const slideTitle = (section) => (section.title === undefined ? typeLabel(section.type) : plain(section.title));
 
 function slide(n, total, title, classes, inner) {
-  return `<section class="slide ${classes}" id="slide-${n}" aria-label="Slide ${n} of ${total}: ${title}">
+  return `<section class="slide ${classes}" id="slide-${n}" tabindex="-1" aria-label="Slide ${n} of ${total}: ${title}">
 <div class="slide-inner">
 ${inner}
 </div>
