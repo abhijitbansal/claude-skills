@@ -3,16 +3,16 @@
 A chart is either a **kind** (you name columns, the build writes the Vega-Lite) or raw `vegaLite`. Exactly one of the two per chart.
 Kind charts get tooltips, a legend filter or zoom where it makes sense, alternate views, a sortable Table view and an Export menu.
 
-Common keys: `id`, `title`, `query`, `kind`, `width` (`full` | `half`), `format` (`number | currency | percent | compact`, applies to the numeric axis), `views`, `pair`.
+Common keys: `id`, `title`, `query`, `kind`, `width` (`full` | `half`), `format` (`number | currency | percent | compact`, applies to every numeric axis, legend and tooltip), `views`, `pair`.
 Role keys name a column of the chart's query: `x`, `y`, `color`, `size`, `value`. Column types: text = nominal, date or timestamp = temporal, number = quantitative.
 Write titles that state the finding ("North drives half of revenue"), not the field names.
 
-- `views`: narrows and reorders the alternate views listed per kind below. `"table"` is always last and always there.
-- `pair: true`: shows the primary view and the next view side by side and forces full width. The left pane stays on the primary view; the right pane has its own tabs over the remaining views, Table included.
+- `views`: narrows and reorders the alternate views listed per kind below. `"table"` is always last and always there. Naming the kind itself (`"bar"` on a bar) is accepted and ignored.
+- `pair: true`: shows the primary view and the next view side by side and forces full width. The left pane stays on the primary view; the right pane has its own tabs over the remaining views, Table included. On a kind with no alternates (`scatter`, `heatmap`), pane 2 shows the Table.
 - Order follows the query for text `x` (the build sets `sort: null`), so put `ORDER BY` in the SQL. The `sorted` view sorts descending.
 - More than 8 categories, or a label longer than 12 characters, turns bars horizontal.
 - `color` allows at most 8 distinct values (3 for `scatter` and `bubble`). Fold the rest into "Other" in SQL.
-- A view that the data cannot support (negative values, or a zero total, for `share`, `normalized` and a coloured `area`) is not offered. If you list it in `views` and the query returns rows, that is an error; with zero rows it is silently dropped. `donut` is different: it is an error on its own when it has more than 6 slices or a negative value.
+- A view that the data cannot support (negative values, or a zero total, for `share`, `normalized` and a coloured `area`) is not offered. If you list it in `views` and the query returns rows, that is an error; with zero rows it is silently dropped. `donut` is different: it is an error on its own when it has more than 6 slices or a negative value. So is a `kind: "area"` with `color` and a negative `y` (it stacks): use `line`. A NULL in the `color` column counts as one more value toward the cap.
 
 ## bar
 
@@ -44,7 +44,7 @@ Views: `stacked`, `normalized` (needs every `y` >= 0 and a positive total), `tab
 ## line
 
 Change over time. Roles: `x` (date or timestamp, or text in query order), `y` (number), optional `color` (text).
-Gets: crosshair on the nearest point, x zoom and pan (double-click resets), legend filter when `color` is set.
+Gets: crosshair on the nearest point, x zoom and pan (date x only; double-click resets), legend filter when `color` is set.
 Views: `area` (when `color` is set it needs every `y` >= 0 and a positive total), `table`.
 
     { "id": "trend", "title": "Revenue up 18% since March", "query": "monthly",

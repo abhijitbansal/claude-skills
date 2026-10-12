@@ -7,7 +7,7 @@ by any agent that can run shell commands.
 <img src="../../../../docs/features/img/portable-artifacts/dashboard-light.jpg" alt="Dashboard with KPI tiles, bar, line and stacked charts; each card has a Query disclosure" width="100%">
 
 - **One spec, `dashboard.json`**: data sources, named SQL queries, KPI tiles and
-  Vega-Lite charts. The agent writes it; scripts do the rest.
+  charts (kinds or raw Vega-Lite). The agent writes it; scripts do the rest.
 - **One output file, `dist/index.html`**: charts, data and libraries are all
   inlined. It opens from disk, needs no server and loads nothing from the
   network.
@@ -146,4 +146,6 @@ The agent writes the SQL, so it is treated as untrusted:
 ## Requirements and licences
 
 Node.js ≥ 20. The dependencies, pinned by the lockfile, are DuckDB (MIT),
-Vega, Vega-Lite and vega-embed (BSD-3-Clause), and Ajv (MIT).
+Vega, Vega-Lite and vega-embed (BSD-3-Clause), and Ajv (MIT). The page embeds
+latin subsets of IBM Plex Sans, IBM Plex Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible, JetBrains Mono
+(OFL-1.1, via Fontsource); the licence texts ship in `shared/fonts/LICENSES/`.

@@ -9,10 +9,7 @@
       }
     }
   ],
-  "mark": {
-    "type": "bar",
-    "tooltip": true
-  },
+  "mark": "bar",
   "encoding": {
     "x": {
       "field": "region",
@@ -25,6 +22,18 @@
       "type": "quantitative",
       "title": "revenue"
     },
+    "tooltip": [
+      {
+        "field": "region",
+        "type": "nominal",
+        "title": "region"
+      },
+      {
+        "field": "revenue",
+        "type": "quantitative",
+        "title": "revenue"
+      }
+    ],
     "opacity": {
       "condition": {
         "param": "pa_hover",

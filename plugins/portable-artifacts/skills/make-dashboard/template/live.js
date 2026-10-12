@@ -39,9 +39,18 @@
     banner.hidden = false;
     badge.textContent = 'Live · build failed';
   });
+  es.addEventListener('watch-warning', function (e) {
+    var problem = JSON.parse(e.data);
+    badge.textContent = 'Live (watching paused: ' + (problem.code || 'watcher stopped') + ')';
+  });
   document.getElementById('pa-live-rebuild').addEventListener('click', function () {
     badge.textContent = 'Live · rebuilding…';
-    fetch('/rebuild', { method: 'POST', headers: { 'x-pa-token': TOKEN } });
+    fetch('/rebuild', { method: 'POST', headers: { 'x-pa-token': TOKEN } }).catch(function () {
+      badge.textContent = 'Live · server unreachable';
+    });
   });
+  // EventSource retries on its own; say so while the server is gone, and clear it once it is back.
+  es.onerror = function () { badge.textContent = 'Live · disconnected'; };
+  es.onopen = function () { if (badge.textContent === 'Live · disconnected') badge.textContent = 'Live · reconnected'; };
   badge.textContent = 'Live · loaded ' + stamp(new Date().toISOString());
 })();

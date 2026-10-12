@@ -76,6 +76,10 @@ th { color: var(--text-2); font-weight: 600; position: sticky; top: 0; backgroun
 <p class="refreshed">Refreshed <!--@REFRESHED--></p>
 </div>
 <button type="button" class="theme-toggle" data-theme-toggle aria-label="Theme: Auto. Change theme">Theme: Auto</button>
+<script>
+// A stored theme was applied in <head>; label the toggle now, before the large vendor scripts parse.
+(function () { var t = document.documentElement.getAttribute('data-theme'), b = document.querySelector('[data-theme-toggle]'); if (t && b) { var l = 'Theme: ' + t.charAt(0).toUpperCase() + t.slice(1); b.textContent = l; b.setAttribute('aria-label', l + '. Change theme'); } })();
+</script>
 </header>
 <!--@KPIS-->
 <!--@CARDS-->

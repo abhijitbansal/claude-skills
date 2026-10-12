@@ -9,7 +9,7 @@ node <skill-dir>/scripts/serve.mjs --watch dashboard.json --open
 - It builds once, serves the result on `127.0.0.1` and rebuilds when the spec or any file source (csv, parquet, json, duckdb, sqlite) is saved. The open page reloads on its own.
 - Postgres and MySQL sources have no file to watch: add `--interval <seconds>` (5 to 86400), e.g. `--interval 60`, to rebuild on a timer. `--interval` also works for file sources.
 - The page has a **Rebuild now** button for an immediate rebuild.
-- If the first build fails, it prints the errors and exits 1 without starting the server. After that, a failed build (invalid spec, half-written data file) shows an error banner and keeps the last good page. The next good save rebuilds.
+- If the first build fails, it prints the errors and exits 1 without starting the server; a usage or IO problem on that first build (missing `node_modules`, an unwritable `dist`, a busy port) exits 2. After that, a failed build (invalid spec, half-written data file) shows an error banner and keeps the last good page. The next good save rebuilds.
 - `--theme <name>` picks a theme (it wins over the spec's `theme`). `--allow-outside` and `--timeout <seconds>` work as for build; `--port <n>` and `--open` are serve options.
 - Only the served copy is live: it adds `connect-src 'self'` to the CSP for the event stream. `dist/index.html` on disk is the normal static page (`default-src 'none'`), and a page opened from disk (`file://`) is static: it never updates itself.
 

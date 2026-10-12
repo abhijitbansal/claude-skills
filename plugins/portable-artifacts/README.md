@@ -169,7 +169,7 @@ Everything this plugin depends on is open source:
 | [anime.js](https://animejs.com) v4 | MIT |
 | [Playwright](https://playwright.dev) | Apache-2.0 |
 | [Ajv](https://ajv.js.org) | MIT |
-| Inter, JetBrains Mono (via Fontsource) | OFL-1.1 |
+| IBM Plex Sans, IBM Plex Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible, JetBrains Mono (latin subsets, via Fontsource) | OFL-1.1 |
 | ffmpeg (system binary, not vendored) | LGPL/GPL |
 | [Kokoro](https://github.com/hexgrad/kokoro) TTS (`kokoro-js`, installed on demand) | Apache-2.0 |
 

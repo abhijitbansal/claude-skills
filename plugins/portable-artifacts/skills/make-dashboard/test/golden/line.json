@@ -34,10 +34,7 @@
           "bind": "legend"
         }
       ],
-      "mark": {
-        "type": "line",
-        "tooltip": true
-      },
+      "mark": "line",
       "encoding": {
         "y": {
           "field": "revenue",
@@ -92,8 +89,7 @@
     {
       "mark": {
         "type": "point",
-        "filled": true,
-        "tooltip": true
+        "filled": true
       },
       "encoding": {
         "y": {
@@ -106,6 +102,24 @@
           "type": "nominal",
           "title": "region"
         },
+        "tooltip": [
+          {
+            "field": "month",
+            "type": "temporal",
+            "title": "month",
+            "timeUnit": "utcyearmonth"
+          },
+          {
+            "field": "revenue",
+            "type": "quantitative",
+            "title": "revenue"
+          },
+          {
+            "field": "region",
+            "type": "nominal",
+            "title": "region"
+          }
+        ],
         "opacity": {
           "condition": {
             "param": "pa_x",

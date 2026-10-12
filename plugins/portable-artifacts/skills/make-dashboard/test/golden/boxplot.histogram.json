@@ -9,10 +9,7 @@
       }
     }
   ],
-  "mark": {
-    "type": "bar",
-    "tooltip": true
-  },
+  "mark": "bar",
   "encoding": {
     "x": {
       "field": "a",
@@ -27,6 +24,21 @@
       "type": "quantitative",
       "title": "Count"
     },
+    "tooltip": [
+      {
+        "field": "a",
+        "type": "quantitative",
+        "title": "a",
+        "bin": {
+          "maxbins": 20
+        }
+      },
+      {
+        "aggregate": "count",
+        "type": "quantitative",
+        "title": "Count"
+      }
+    ],
     "opacity": {
       "condition": {
         "param": "pa_hover",

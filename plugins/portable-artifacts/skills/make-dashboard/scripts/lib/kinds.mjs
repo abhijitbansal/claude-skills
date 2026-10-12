@@ -73,7 +73,7 @@ function checkChart(chart, p, described) {
   }
   const offered = [...kind.views, 'table'];
   (chart.views ?? []).forEach((v, i) => {
-    if (offered.includes(v)) return;
+    if (offered.includes(v) || v === chart.kind) return; // naming the primary view is harmless
     const hint = didYouMean(v, offered);
     errors.push({ path: pathJoin(pathJoin(p, 'views'), i), message: `kind ${JSON.stringify(chart.kind)} has no view ${JSON.stringify(v)}${hint ? `; did you mean ${JSON.stringify(hint)}?` : ''} (views: ${offered.join(', ')})` });
   });

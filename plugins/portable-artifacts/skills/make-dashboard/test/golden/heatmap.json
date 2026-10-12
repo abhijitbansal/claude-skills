@@ -9,10 +9,7 @@
       }
     }
   ],
-  "mark": {
-    "type": "rect",
-    "tooltip": true
-  },
+  "mark": "rect",
   "encoding": {
     "x": {
       "field": "hour",
@@ -29,6 +26,23 @@
       "type": "quantitative",
       "title": "n"
     },
+    "tooltip": [
+      {
+        "field": "hour",
+        "type": "nominal",
+        "title": "hour"
+      },
+      {
+        "field": "day",
+        "type": "nominal",
+        "title": "day"
+      },
+      {
+        "field": "n",
+        "type": "quantitative",
+        "title": "n"
+      }
+    ],
     "opacity": {
       "condition": {
         "param": "pa_hover",

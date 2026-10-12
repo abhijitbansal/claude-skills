@@ -109,6 +109,15 @@ test('uncoloured area and coloured line keep their dots unstacked', () => {
   assert.equal(line.layer[2].encoding.y.stack, undefined);
 });
 
+test('x zoom is bound only on a temporal x (Vega-Lite drops it, with a warning, on a nominal x)', () => {
+  const zoomNames = (vl) => vl.layer[0].params.map((p) => p.name);
+  for (const kind of ['line', 'area']) {
+    assert.deepEqual(zoomNames(expand1({ kind, query: 'time', x: 'month', y: 'revenue' }).views[0].vegaLite), ['pa_zoom']);
+    assert.deepEqual(zoomNames(expand1({ kind, query: 'catcol', x: 'quarter', y: 'revenue' }).views[0].vegaLite), []);
+    assert.deepEqual(zoomNames(expand1({ kind, query: 'catcol', x: 'quarter', y: 'revenue', color: 'region' }).views[0].vegaLite), ['pa_legend']);
+  }
+});
+
 test('line and area with a nominal x keep the query order (sort: null); temporal x is unchanged', () => {
   for (const kind of ['line', 'area']) {
     const nominal = expand1({ kind, query: 'catcol', x: 'quarter', y: 'revenue', color: 'region' }).views[0].vegaLite;
@@ -197,4 +206,134 @@ test('non-empty data still errors on a requested blocked view (negatives are a r
   assert.equal(out.errors.length, 1);
   const zeroTotal = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'bar', query: 'z', x: 'region', y: 'revenue', views: ['share'] }] }, { z: r([{ region: 'a', revenue: 0 }]) });
   assert.match(zeroTotal.errors[0].message, /positive total/);
+});
+
+test('views naming the primary kind is ignored in the expansion (no error, no duplicate tab)', () => {
+  const out = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'bar', query: 'cat', x: 'region', y: 'revenue', views: ['bar', 'sorted'] }] }, results);
+  assert.deepEqual(out.errors, []);
+  assert.deepEqual(out.charts[0].views.map((v) => v.name), ['bar', 'sorted', 'table']);
+});
+
+test('area with color stacks: a negative y is an error like donut (use line)', () => {
+  const time = (rows) => ({ columns: ['month', 'region', 'revenue'], types: ['DATE', 'VARCHAR', 'DOUBLE'], rows, rowCount: rows.length });
+  const neg = time([{ month: '2025-01-01', region: 'N', revenue: 5 }, { month: '2025-02-01', region: 'N', revenue: -2 }]);
+  const area = { id: 'c', title: 'C', kind: 'area', query: 'q', x: 'month', y: 'revenue', color: 'region' };
+  assert.deepEqual(expandCharts({ charts: [area] }, { q: neg }).errors, [
+    { path: 'charts[0].kind', message: 'area with color stacks; it needs every revenue >= 0 (row 2 has -2); use kind line' },
+  ]);
+  // Uncoloured area, and a coloured line, do not stack: negatives are fine.
+  assert.deepEqual(expandCharts({ charts: [{ ...area, color: undefined }] }, { q: neg }).errors, []);
+  assert.deepEqual(expandCharts({ charts: [{ ...area, kind: 'line' }] }, { q: neg }).errors, []);
+  // Zero rows is a data refresh, not a defect.
+  assert.deepEqual(expandCharts({ charts: [area] }, { q: time([]) }).errors, []);
+});
+
+test('a NULL colour category counts toward the colour cap', () => {
+  const groups = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', null];
+  const rows = groups.map((region, i) => ({ quarter: `Q${i}`, region, revenue: 1 }));
+  const res = { columns: ['quarter', 'region', 'revenue'], types: ['VARCHAR', 'VARCHAR', 'DOUBLE'], rows, rowCount: rows.length };
+  const out = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'stacked-bar', query: 'q', x: 'quarter', y: 'revenue', color: 'region' }] }, { q: res });
+  assert.deepEqual(out.errors, [{ path: 'charts[0].color', message: 'region has 9 values; stacked-bar colour allows at most 8 (fold the rest into "Other" in SQL or drop color)' }]);
+  const eight = { ...res, rows: rows.slice(0, 8) };
+  assert.deepEqual(expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'stacked-bar', query: 'q', x: 'quarter', y: 'revenue', color: 'region' }] }, { q: eight }).errors, []);
+});
+
+test('numeric strings (wide DECIMALs arrive as strings) count as numbers in availability checks', () => {
+  const chart = { kind: 'bar', x: 'region', y: 'revenue' };
+  const str = r([{ region: 'a', revenue: '5.50' }, { region: 'b', revenue: '-1.25' }]);
+  assert.equal(availableViews(chart, str).blocked.share, 'share needs every revenue >= 0 (row 2 has -1.25)');
+  assert.deepEqual(availableViews(chart, r([{ region: 'a', revenue: '5.50' }, { region: 'b', revenue: '2' }])).offered, ['sorted', 'share']);
+  assert.match(availableViews(chart, r([{ region: 'a', revenue: '0' }])).blocked.share, /positive total/);
+  const out = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'donut', query: 'q', x: 'region', y: 'revenue' }] }, { q: str });
+  assert.deepEqual(out.errors, [{ path: 'charts[0].kind', message: 'donut needs every revenue >= 0; use kind "bar"' }]);
+});
+
+test('guardrails: the 8-colour cap holds on a non-scatter kind; negatives block normalized and a coloured area alternate', () => {
+  const nine = Array.from({ length: 9 }, (_, i) => ({ month: '2025-01-01', region: `r${i}`, revenue: 1 }));
+  const res = { columns: ['month', 'region', 'revenue'], types: ['DATE', 'VARCHAR', 'DOUBLE'], rows: nine, rowCount: 9 };
+  const out = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'line', query: 'q', x: 'month', y: 'revenue', color: 'region' }] }, { q: res });
+  assert.match(out.errors[0].message, /region has 9 values; line colour allows at most 8/);
+
+  const neg = { columns: ['quarter', 'region', 'revenue'], types: ['VARCHAR', 'VARCHAR', 'DOUBLE'], rows: [{ quarter: 'Q1', region: 'a', revenue: 3 }, { quarter: 'Q1', region: 'b', revenue: -1 }], rowCount: 2 };
+  const stacked = availableViews({ kind: 'stacked-bar', x: 'quarter', y: 'revenue', color: 'region' }, neg);
+  assert.equal(stacked.blocked.normalized, 'normalized needs every revenue >= 0 (row 2 has -1)');
+  assert.deepEqual(stacked.offered, ['grouped']);
+  const explicit = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'stacked-bar', query: 'q', x: 'quarter', y: 'revenue', color: 'region', views: ['normalized'] }] }, { q: neg });
+  assert.deepEqual(explicit.errors, [{ path: 'charts[0].views[0]', message: 'normalized needs every revenue >= 0 (row 2 has -1)' }]);
+
+  const timeNeg = { columns: ['month', 'region', 'revenue'], types: ['DATE', 'VARCHAR', 'DOUBLE'], rows: [{ month: '2025-01-01', region: 'a', revenue: 3 }, { month: '2025-02-01', region: 'a', revenue: -1 }], rowCount: 2 };
+  const line = { kind: 'line', x: 'month', y: 'revenue', color: 'region' };
+  assert.equal(availableViews(line, timeNeg).blocked.area, 'area needs every revenue >= 0 (row 2 has -1)');
+  assert.deepEqual(availableViews(line, timeNeg).offered, []);
+  assert.deepEqual(availableViews({ ...line, color: undefined }, timeNeg).offered, ['area'], 'uncoloured area does not stack');
+});
+
+// ---- format reaches every quantitative encoding and every tooltip ------------
+const CURRENCY = '$,.2~f';
+const tipByTitle = (vl) => Object.fromEntries((vl.encoding.tooltip ?? vl.layer.at(-1).encoding.tooltip).map((t) => [t.title, t]));
+const withFormat = (kind) => expand1({ kind, format: 'currency', ...KIND_CHARTS[kind] });
+
+test('format: bar-like and line-like tooltips format the number and leave categories alone', () => {
+  for (const kind of ['bar', 'stacked-bar', 'grouped-bar', 'donut']) {
+    const tips = tipByTitle(withFormat(kind).views[0].vegaLite);
+    assert.equal(tips.revenue.format, CURRENCY, kind);
+    assert.equal(tips.region.format, undefined, kind);
+  }
+  for (const kind of ['line', 'area']) {
+    const vl = withFormat(kind).views[0].vegaLite;
+    assert.equal(tipByTitle(vl).revenue.format, CURRENCY, kind);
+    assert.equal(vl.layer[0].mark === 'line' || vl.layer[0].mark === 'area', true, 'the main mark carries no tooltip of its own');
+  }
+});
+
+test('format: heatmap colour and bubble size get a legend format; donut theta has no axis', () => {
+  const heat = withFormat('heatmap').views[0].vegaLite;
+  assert.deepEqual(heat.encoding.color.legend, { format: CURRENCY });
+  assert.equal('axis' in heat.encoding.color, false);
+  assert.equal(tipByTitle(heat).n.format, CURRENCY);
+  const bubble = withFormat('bubble').views[0].vegaLite;
+  assert.deepEqual(bubble.encoding.size.legend, { format: CURRENCY });
+  assert.equal('axis' in bubble.encoding.size, false);
+  assert.equal(tipByTitle(bubble).c.format, CURRENCY);
+  const donut = withFormat('donut').views[0].vegaLite;
+  assert.equal('axis' in donut.encoding.theta, false);
+  assert.equal('legend' in donut.encoding.theta, false);
+});
+
+test('format: histogram formats the bins but not the count; boxplot formats its stats through numberFormat', () => {
+  const hist = withFormat('histogram').views[0].vegaLite;
+  assert.equal(hist.encoding.x.axis.format, CURRENCY);
+  const tips = tipByTitle(hist);
+  assert.equal(tips.a.format, CURRENCY);
+  assert.equal(tips.Count.format, undefined);
+  assert.equal(withFormat('boxplot').views[0].vegaLite.config.numberFormat, CURRENCY);
+  assert.equal('config' in expand1({ kind: 'boxplot', ...KIND_CHARTS.boxplot }).views[0].vegaLite, false, 'no format, no config');
+});
+
+test('share and normalized tooltips: raw value formatted, share titled "Share of <y>" in .1%', () => {
+  const share = expand1({ kind: 'bar', format: 'currency', ...KIND_CHARTS.bar }).views.find((v) => v.name === 'share').vegaLite;
+  assert.deepEqual(share.encoding.tooltip.map((t) => [t.title, t.field, t.format]), [
+    ['region', 'region', undefined], ['revenue', 'revenue', CURRENCY], ['Share of revenue', 'pa_share', '.1%'],
+  ]);
+  const norm = expand1({ kind: 'stacked-bar', format: 'currency', ...KIND_CHARTS['stacked-bar'] }).views.find((v) => v.name === 'normalized').vegaLite;
+  assert.equal(tipByTitle(norm).revenue.format, CURRENCY);
+});
+
+test('every kind and alternate compiles without Vega-Lite warnings, with and without format', () => {
+  for (const format of [undefined, 'currency', 'percent', 'compact', 'number']) {
+    for (const kind of KIND_NAMES) {
+      const c = expand1({ kind, ...(format ? { format } : {}), ...KIND_CHARTS[kind] });
+      for (const v of c.views.filter((x) => x.vegaLite)) {
+        const logs = [];
+        const logger = { level: () => logger, warn: (...a) => logs.push(a.join(' ')), info: () => logger, debug: () => logger, error: (...a) => logs.push(a.join(' ')) };
+        compile({ ...v.vegaLite, data: { values: [] } }, { logger });
+        assert.deepEqual(logs, [], `${kind}/${v.name}/${format}`);
+      }
+    }
+  }
+});
+
+test('raw vegaLite keeps tooltip: true on every mark', () => {
+  const c = expand1({ query: 'cat', vegaLite: { layer: [{ mark: 'bar' }, { mark: { type: 'rule', tooltip: false } }], encoding: { x: { field: 'region', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } } } });
+  assert.deepEqual(c.views[0].vegaLite.layer.map((l) => l.mark), [{ type: 'bar', tooltip: true }, { type: 'rule', tooltip: false }]);
 });

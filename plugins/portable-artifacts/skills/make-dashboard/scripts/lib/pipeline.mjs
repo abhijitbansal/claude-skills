@@ -58,7 +58,7 @@ export async function buildDashboard(specFile, { out, theme: themeName, allowOut
   const valid = await validateSpec(spec, { dir, allowOutside, timeoutMs });
   if (!valid.ok) return { ok: false, errors: valid.errors };
   const vendor = readVendor();
-  // Theme is resolved before any query runs so a bad --theme fails fast.
+  // Theme is resolved before the full queries run (validate already ran LIMIT 0 binds), so a bad --theme fails fast.
   const theme = resolveTheme(themeName ?? spec.theme ?? DEFAULT_THEME);
   const themeErrors = checkTheme(theme).map((e) => ({ path: `theme ${theme.name}: ${e.path}`, message: e.message }));
   if (themeErrors.length) return { ok: false, errors: themeErrors };

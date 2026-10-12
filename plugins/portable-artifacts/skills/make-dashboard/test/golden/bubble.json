@@ -8,10 +8,7 @@
       "bind": "scales"
     }
   ],
-  "mark": {
-    "type": "circle",
-    "tooltip": true
-  },
+  "mark": "circle",
   "encoding": {
     "x": {
       "field": "a",
@@ -27,6 +24,23 @@
       "field": "c",
       "type": "quantitative",
       "title": "c"
-    }
+    },
+    "tooltip": [
+      {
+        "field": "a",
+        "type": "quantitative",
+        "title": "a"
+      },
+      {
+        "field": "b",
+        "type": "quantitative",
+        "title": "b"
+      },
+      {
+        "field": "c",
+        "type": "quantitative",
+        "title": "c"
+      }
+    ]
   }
 }

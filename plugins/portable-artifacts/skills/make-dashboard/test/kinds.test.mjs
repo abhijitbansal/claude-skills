@@ -70,6 +70,11 @@ test('views must be ones the kind offers', () => {
   ]);
 });
 
+test('views may name the kind itself (it is the primary view and is ignored)', () => {
+  assert.deepEqual(errs(chart({ kind: 'bar', x: 'region', y: 'revenue', views: ['bar', 'sorted', 'table'] })), []);
+  assert.deepEqual(errs(chart({ kind: 'line', x: 'month', y: 'revenue', views: ['line', 'area'] })), []);
+});
+
 test('views error without a did-you-mean hint has no stray semicolon', () => {
   assert.deepEqual(errs(chart({ kind: 'bar', x: 'region', y: 'revenue', views: ['zzz'] })), [
     { path: 'charts[0].views[0]', message: 'kind "bar" has no view "zzz" (views: sorted, share, table)' },

@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { liveHtml, createRebuilder, watchFiles } from '../scripts/lib/live.mjs';
+import { liveHtml, createRebuilder, watchFiles, startLiveServer } from '../scripts/lib/live.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SERVE = path.join(ROOT, 'scripts/serve.mjs');
@@ -211,4 +211,33 @@ test('a vanished data folder is reported (event + stderr), then Rebuild now re-a
   await until(() => rebuilt() > armed);
   assert.match((await request(port)).body, /class="kpi-value">8</, 'watching resumed');
   es.close();
+});
+
+test('a watcher problem after a GOOD build sends rebuilt then watch-warning, never build-error; later clients hear it too', async () => {
+  const { file } = project();
+  let armed = 0;
+  // The first arming works; every later one throws, as when the data folder vanishes between build and watch.
+  const watch = (paths, onChange, opts) => {
+    armed += 1;
+    if (armed > 1) throw Object.assign(new Error('gone'), { code: 'EMFILE' });
+    return watchFiles(paths, onChange, opts);
+  };
+  const live = await startLiveServer({ specFile: file, watch });
+  const port = Number(new URL(live.url).port);
+  const es = events(port);
+  try {
+    await sleep(100);
+    assert.equal((await request(port, { method: 'POST', path: '/rebuild', headers: { 'x-pa-token': live.token } })).status, 202);
+    await until(() => es.seen.some((e) => e.event === 'watch-warning'));
+    assert.deepEqual(es.seen.map((e) => e.event), ['rebuilt', 'watch-warning']);
+    assert.equal(es.seen[1].data.code, 'EMFILE');
+    assert.match(es.seen[1].data.message, /watcher stopped: EMFILE/);
+    const later = events(port);
+    await until(() => later.seen.length > 0);
+    assert.equal(later.seen[0].event, 'watch-warning', 'a page that just reloaded still learns the watcher is paused');
+    later.close();
+  } finally {
+    es.close();
+    await live.close();
+  }
 });

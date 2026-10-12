@@ -18,10 +18,7 @@
       "bind": "legend"
     }
   ],
-  "mark": {
-    "type": "point",
-    "tooltip": true
-  },
+  "mark": "point",
   "encoding": {
     "x": {
       "field": "a",
@@ -38,6 +35,23 @@
       "type": "nominal",
       "title": "g"
     },
+    "tooltip": [
+      {
+        "field": "a",
+        "type": "quantitative",
+        "title": "a"
+      },
+      {
+        "field": "b",
+        "type": "quantitative",
+        "title": "b"
+      },
+      {
+        "field": "g",
+        "type": "nominal",
+        "title": "g"
+      }
+    ],
     "opacity": {
       "condition": {
         "param": "pa_legend",

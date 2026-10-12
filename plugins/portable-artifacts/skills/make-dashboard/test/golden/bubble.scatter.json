@@ -8,10 +8,7 @@
       "bind": "scales"
     }
   ],
-  "mark": {
-    "type": "point",
-    "tooltip": true
-  },
+  "mark": "point",
   "encoding": {
     "x": {
       "field": "a",
@@ -22,6 +19,18 @@
       "field": "b",
       "type": "quantitative",
       "title": "b"
-    }
+    },
+    "tooltip": [
+      {
+        "field": "a",
+        "type": "quantitative",
+        "title": "a"
+      },
+      {
+        "field": "b",
+        "type": "quantitative",
+        "title": "b"
+      }
+    ]
   }
 }

@@ -1,7 +1,7 @@
 // Expand kind charts into Vega-Lite views at build time, from the query rows
 // and their DuckDB column types. The page renders exactly what this returns.
 import { KINDS, classOf, fieldRef } from './kinds.mjs';
-import { addTooltips, enhanceRaw, interactionsFor, NEAREST_X, ZOOM_X, legendParam } from './interact.mjs';
+import { enhanceRaw, interactionsFor, NEAREST_X, ZOOM_X, legendParam } from './interact.mjs';
 
 const AXIS_FORMAT = { number: ',.2~f', currency: '$,.2~f', percent: '.1~%', compact: '.3~s' };
 const HORIZONTAL_LABEL = 12;
@@ -22,10 +22,22 @@ export function temporalUnit(values) {
   return 'utcyearmonthdate';
 }
 
+// A field def reduced to what a tooltip row needs; a quantitative one gets the chart's format.
+function tooltipRow(d, format) {
+  const { field, type, title, timeUnit, bin, aggregate } = d;
+  return {
+    field, type, title,
+    ...(timeUnit ? { timeUnit } : {}), ...(bin ? { bin } : {}), ...(aggregate ? { aggregate } : {}),
+    ...(type === 'quantitative' && format ? { format } : {}),
+  };
+}
+
 // Per-chart context the builders share: field defs for every role in use.
 function context(chart, result) {
   const cls = (col) => classOf(result.types[result.columns.indexOf(col)]);
-  const def = (role, extra = {}) => {
+  const format = chart.format ? AXIS_FORMAT[chart.format] : undefined;
+  // `where` is how the channel shows the number: an axis, a legend, or only the tooltip (theta).
+  const def = (role, extra = {}, where = 'axis') => {
     const col = chart[role];
     if (col === undefined) return undefined;
     const type = cls(col);
@@ -34,9 +46,10 @@ function context(chart, result) {
       const unit = temporalUnit(result.rows.map((r) => r[col]));
       Object.assign(base, unit ? { timeUnit: unit } : {}, { scale: { type: 'utc' } });
     }
-    if (type === 'quantitative' && chart.format) base.axis = { format: AXIS_FORMAT[chart.format] };
+    if (type === 'quantitative' && format && where !== 'tooltip') base[where] = { format };
     return { ...base, ...extra };
   };
+  const tooltip = (...defs) => defs.filter(Boolean).map((d) => tooltipRow(d, format));
   const labels = chart.x !== undefined ? result.rows.map((r) => String(r[chart.x] ?? '')) : [];
   const distinct = new Set(labels);
   const horizontal = chart.x !== undefined && cls(chart.x) === 'nominal'
@@ -44,7 +57,7 @@ function context(chart, result) {
   // The legend field: donut colours by x; every other kind by its color role.
   const legend = chart.kind === 'donut' ? chart.x : chart.color;
   const xNominal = chart.x !== undefined && cls(chart.x) === 'nominal';
-  return { def, horizontal, xNominal, colorField: legend === undefined ? undefined : fieldRef(legend) };
+  return { def, tooltip, format, horizontal, xNominal, colorField: legend === undefined ? undefined : fieldRef(legend) };
 }
 
 // Bars on a time axis read better as ordinal bands.
@@ -59,6 +72,7 @@ function bar(ctx, { color, stack, offset, sort } = {}) {
   const y = ctx.def('y', stack ? { stack } : {});
   const enc = ctx.horizontal ? { y: x, x: y } : { x, y };
   if (color) enc.color = ctx.def('color');
+  enc.tooltip = ctx.tooltip(x, y, enc.color);
   if (offset) enc[ctx.horizontal ? 'yOffset' : 'xOffset'] = { field: ctx.colorField };
   return { mark: 'bar', encoding: enc, ...(ctx.horizontal ? { height: { step: 24 } } : {}) };
 }
@@ -69,9 +83,10 @@ function lineLike(ctx, mark) {
   const color = ctx.def('color');
   // A coloured area is stacked by Vega-Lite; the hover dots must sit on their band.
   const dotsY = mark === 'area' && color ? { ...y, stack: 'zero' } : y;
-  const main = { params: [ZOOM_X, ...(color ? [legendParam(ctx.colorField)] : [])], mark, encoding: { y, ...(color ? { color, opacity: { condition: { param: 'pa_legend', empty: true, value: 1 }, value: 0.2 } } : {}) } };
+  // Zoom binds scales, which Vega-Lite supports only on continuous (temporal) x.
+  const main = { params: [...(ctx.xNominal ? [] : [ZOOM_X]), ...(color ? [legendParam(ctx.colorField)] : [])], mark, encoding: { y, ...(color ? { color, opacity: { condition: { param: 'pa_legend', empty: true, value: 1 }, value: 0.2 } } : {}) } };
   const rule = { params: [NEAREST_X], mark: { type: 'rule', tooltip: false }, encoding: { opacity: { condition: { param: 'pa_x', empty: false, value: 0.5 }, value: 0 } } };
-  const dots = { mark: { type: 'point', filled: true }, encoding: { y: dotsY, ...(color ? { color } : {}), opacity: { condition: { param: 'pa_x', empty: false, value: 1 }, value: 0 } } };
+  const dots = { mark: { type: 'point', filled: true }, encoding: { y: dotsY, ...(color ? { color } : {}), tooltip: ctx.tooltip(x, y, color), opacity: { condition: { param: 'pa_x', empty: false, value: 1 }, value: 0 } } };
   return { encoding: { x }, layer: [main, rule, dots] };
 }
 
@@ -81,12 +96,44 @@ export const BUILDERS = {
   'grouped-bar': (ctx) => bar(ctx, { color: true, offset: true }),
   line: (ctx) => lineLike(ctx, 'line'),
   area: (ctx) => lineLike(ctx, 'area'),
-  scatter: (ctx) => ({ mark: 'point', encoding: { x: ctx.def('x'), y: ctx.def('y'), ...(ctx.colorField ? { color: ctx.def('color') } : {}) } }),
-  bubble: (ctx) => ({ mark: 'circle', encoding: { x: ctx.def('x'), y: ctx.def('y'), size: ctx.def('size'), ...(ctx.colorField ? { color: ctx.def('color') } : {}) } }),
-  heatmap: (ctx) => ({ mark: 'rect', encoding: { x: banded(ctx.def('x')), y: banded(ctx.def('y')), color: ctx.def('value') } }),
-  histogram: (ctx) => ({ mark: 'bar', encoding: { x: ctx.def('value', { bin: { maxbins: 20 } }), y: { aggregate: 'count', type: 'quantitative', title: 'Count' } } }),
-  boxplot: (ctx) => ({ mark: { type: 'boxplot', extent: 1.5 }, encoding: { y: ctx.def('value'), ...(ctx.def('x') ? { x: ctx.def('x') } : {}) } }),
-  donut: (ctx) => ({ mark: { type: 'arc', innerRadius: 60 }, encoding: { theta: ctx.def('y', { stack: true }), color: ctx.def('x') } }),
+  scatter: (ctx) => {
+    const x = ctx.def('x');
+    const y = ctx.def('y');
+    const color = ctx.colorField ? ctx.def('color') : undefined;
+    return { mark: 'point', encoding: { x, y, ...(color ? { color } : {}), tooltip: ctx.tooltip(x, y, color) } };
+  },
+  bubble: (ctx) => {
+    const x = ctx.def('x');
+    const y = ctx.def('y');
+    const size = ctx.def('size', {}, 'legend');
+    const color = ctx.colorField ? ctx.def('color') : undefined;
+    return { mark: 'circle', encoding: { x, y, size, ...(color ? { color } : {}), tooltip: ctx.tooltip(x, y, size, color) } };
+  },
+  heatmap: (ctx) => {
+    const x = banded(ctx.def('x'));
+    const y = banded(ctx.def('y'));
+    const color = ctx.def('value', {}, 'legend');
+    return { mark: 'rect', encoding: { x, y, color, tooltip: ctx.tooltip(x, y, color) } };
+  },
+  histogram: (ctx) => {
+    const x = ctx.def('value', { bin: { maxbins: 20 } });
+    const count = { aggregate: 'count', type: 'quantitative', title: 'Count' };
+    return { mark: 'bar', encoding: { x, y: count, tooltip: [...ctx.tooltip(x), count] } };
+  },
+  // VL builds the box-part tooltips itself and formats them with the config number format.
+  boxplot: (ctx) => {
+    const x = ctx.def('x');
+    return {
+      mark: { type: 'boxplot', extent: 1.5, tooltip: true },
+      encoding: { y: ctx.def('value'), ...(x ? { x } : {}) },
+      ...(ctx.format ? { config: { numberFormat: ctx.format } } : {}),
+    };
+  },
+  donut: (ctx) => {
+    const theta = ctx.def('y', { stack: true }, 'tooltip');
+    const color = ctx.def('x');
+    return { mark: { type: 'arc', innerRadius: 60 }, encoding: { theta, color, tooltip: ctx.tooltip(color, theta) } };
+  },
   // Alternates reuse the primary helpers; share and normalized add transforms.
   sorted: (ctx) => bar(ctx, { sort: ctx.horizontal ? '-x' : '-y' }),
   share: (ctx, chart) => {
@@ -98,7 +145,9 @@ export const BUILDERS = {
       { joinaggregate: [{ op: 'sum', field: fieldRef(chart.y), as: total }] },
       { calculate: `datum[${JSON.stringify(chart.y)}] / datum.${total}`, as: share },
     ];
-    v.encoding[valueKey] = { field: share, type: 'quantitative', title: `Share of ${chart.y}`, axis: { format: '.0%' } };
+    const title = `Share of ${chart.y}`;
+    v.encoding[valueKey] = { field: share, type: 'quantitative', title, axis: { format: '.0%' } };
+    v.encoding.tooltip.push({ field: share, type: 'quantitative', title, format: '.1%' }); // after the raw value
     return v;
   },
   stacked: (ctx) => bar(ctx, { color: true }),
@@ -114,8 +163,7 @@ export const BUILDERS = {
 function interactive(kind, vl, ctx) {
   const { params, opacity } = interactionsFor(kind, ctx);
   const withParams = params.length ? { params, ...vl } : vl;
-  const withOpacity = opacity && !vl.layer ? { ...withParams, encoding: { ...withParams.encoding, opacity } } : withParams;
-  return addTooltips(withOpacity);
+  return opacity && !vl.layer ? { ...withParams, encoding: { ...withParams.encoding, opacity } } : withParams;
 }
 
 // Alternates share their primary's interaction family.
@@ -124,13 +172,21 @@ export function buildView(name, chart, ctx) {
   return interactive(FAMILY[name] ?? name, BUILDERS[name](ctx, chart), ctx);
 }
 
+// A cell as a number, or null: wide DECIMALs arrive as numeric strings, NULLs as null.
+function numeric(v) {
+  if (typeof v === 'number' || typeof v === 'bigint') return Number(v);
+  if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v);
+  return null;
+}
+
 // First row (1-based) whose value in `col` is negative, ignoring NULLs.
 function firstNegative(rows, col) {
-  const i = rows.findIndex((r) => typeof r[col] === 'number' && r[col] < 0);
+  const i = rows.findIndex((r) => numeric(r[col]) < 0);
   return i < 0 ? null : { row: i + 1, value: rows[i][col] };
 }
-const total = (rows, col) => rows.reduce((n, r) => n + (typeof r[col] === 'number' ? r[col] : 0), 0);
-const distinct = (rows, col) => new Set(rows.map((r) => r[col]).filter((v) => v !== null && v !== undefined)).size;
+const total = (rows, col) => rows.reduce((n, r) => n + (numeric(r[col]) ?? 0), 0);
+// NULL counts as a category: it gets a colour and a legend entry like any other.
+const distinct = (rows, col) => new Set(rows.map((r) => r[col] ?? null)).size;
 
 // Which of the kind's alternate views these rows can support, and why not.
 export function availableViews(chart, result) {
@@ -166,6 +222,11 @@ function expandKind(chart, result, p) {
     const n = distinct(result.rows, chart.x);
     if (n > MAX_DONUT) errors.push({ path: `${p}.kind`, message: `donut needs <= ${MAX_DONUT} slices (${chart.x} has ${n}); use kind "bar"` });
     else if (firstNegative(result.rows, chart.y)) errors.push({ path: `${p}.kind`, message: `donut needs every ${chart.y} >= 0; use kind "bar"` });
+  }
+  if (chart.kind === 'area' && chart.color !== undefined) {
+    // A coloured area stacks, so it cannot draw negatives (an uncoloured area or a line can).
+    const neg = firstNegative(result.rows, chart.y);
+    if (neg) errors.push({ path: `${p}.kind`, message: `area with color stacks; it needs every ${chart.y} >= 0 (row ${neg.row} has ${neg.value}); use kind line` });
   }
   if (errors.length) return { views: [], errors };
   const ctx = context(chart, result);

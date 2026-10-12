@@ -82,12 +82,16 @@ export function watchFiles(paths, onChange, { debounceMs = 300, onError } = {}) 
 
 // Resolves { ok: true, url, token, close } or { ok: false, errors } when the first build fails.
 // Throws UsageError for usage/IO problems (also on the first build) and when the port is busy.
-export async function startLiveServer({ specFile, port = 0, interval, theme, allowOutside = false, timeoutMs, out }) {
+// `watch` replaces watchFiles in tests, to make arming fail after a good build.
+export async function startLiveServer({ specFile, port = 0, interval, theme, allowOutside = false, timeoutMs, out, watch = watchFiles }) {
   const token = crypto.randomBytes(16).toString('hex');
   const clients = new Set();
-  const state = { html: null, watcher: null, watchPaths: [] };
-  const send = (event, payload) => { for (const c of clients) c.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`); };
-  const watchProblem = (e) => ({ path: 'watch', message: `watcher stopped: ${e.code ?? e.message}; fix the folder and press Rebuild now` });
+  const state = { html: null, watcher: null, watchPaths: [], warning: null };
+  const frame = (event, payload) => `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+  const send = (event, payload) => { for (const c of clients) c.write(frame(event, payload)); };
+  // The watcher note outlives the reload that follows a good build: new clients hear it on connect.
+  const warn = (problem) => { state.warning = problem; send('watch-warning', problem); };
+  const watchProblem = (e) => ({ path: 'watch', code: e.code ?? e.message, message: `watcher stopped: ${e.code ?? e.message}; fix the folder and press Rebuild now` });
 
   // (Re)arm the file watchers on every build, so a deleted and recreated data
   // folder is picked up again. Returns a problem entry, or null when armed.
@@ -95,12 +99,13 @@ export async function startLiveServer({ specFile, port = 0, interval, theme, all
     state.watcher?.close();
     state.watcher = null;
     state.watchPaths = paths;
+    state.warning = null;
     try {
-      state.watcher = watchFiles(paths, () => rebuilder.trigger(), {
+      state.watcher = watch(paths, () => rebuilder.trigger(), {
         onError: (e) => {
           const problem = watchProblem(e);
           process.stderr.write(`${problem.path}: ${problem.message}\n`);
-          send('build-error', [problem]);
+          warn(problem); // the page itself is fine: not a build failure
         },
       });
       return null;
@@ -125,8 +130,9 @@ export async function startLiveServer({ specFile, port = 0, interval, theme, all
       send('build-error', problem ? [...result.errors, problem] : result.errors);
       return result;
     }
-    if (problem) send('build-error', [problem]);
-    else send('rebuilt', { at: new Date().toISOString() });
+    // The build was good, so the page reloads; a watcher problem is a separate, non-error note.
+    send('rebuilt', { at: new Date().toISOString() });
+    if (problem) warn(problem);
     return result;
   }
   const rebuilder = createRebuilder(build, {
@@ -154,6 +160,7 @@ export async function startLiveServer({ specFile, port = 0, interval, theme, all
     if (pathname === '/events') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
       res.write(': connected\n\n');
+      if (state.warning) res.write(frame('watch-warning', state.warning));
       clients.add(res);
       const ping = setInterval(() => res.write(': ping\n\n'), KEEPALIVE_MS);
       req.on('close', () => { clearInterval(ping); clients.delete(res); });

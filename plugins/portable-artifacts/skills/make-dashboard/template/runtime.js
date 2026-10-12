@@ -79,7 +79,10 @@
 
   function embed(el, vl, rows, cfg) {
     var unit = !('hconcat' in vl || 'vconcat' in vl || 'concat' in vl || 'repeat' in vl || 'facet' in vl);
-    var spec = Object.assign({ height: 260 }, vl, { data: { values: rows }, config: cfg });
+    // The theme config wins over a view's own; only a number format may come from the view
+    // (it is how a boxplot formats its summary tooltips).
+    var own = vl.config && vl.config.numberFormat ? { numberFormat: vl.config.numberFormat } : {};
+    var spec = Object.assign({ height: 260 }, vl, { data: { values: rows }, config: Object.assign({}, cfg, own) });
     if (unit) {
       spec.width = 'container';
       spec.autosize = { type: typeof spec.height === 'object' ? 'fit-x' : 'fit', contains: 'padding' };
@@ -247,6 +250,21 @@
     });
   }
 
+  // A failed image export would otherwise be a dead click: say so in the card (text only).
+  function showExportError(c, message) {
+    var card = document.getElementById('card-' + c.id);
+    var line = card && card.querySelector('.export-error');
+    if (!message) { if (line) line.remove(); return; }
+    if (!line) {
+      line = document.createElement('p');
+      line.className = 'chart-error export-error';
+      line.setAttribute('role', 'alert');
+      var head = card.querySelector('.card-head');
+      head.parentNode.insertBefore(line, head.nextSibling);
+    }
+    line.textContent = 'Export failed: ' + message;
+  }
+
   function download(href, name) {
     var a = document.createElement('a');
     a.href = href;
@@ -265,6 +283,7 @@
       if (!kind) return;
       var stem = PA.fileStem(c.title);
       menu.open = false;
+      showExportError(c, null);
       if (kind === 'csv') {
         var q = data.queries[c.query];
         var url = URL.createObjectURL(new Blob([PA.toCsv(q.columns, q.rows)], { type: 'text/csv;charset=utf-8' }));
@@ -275,7 +294,9 @@
       var first = document.getElementById('chart-' + c.id);
       var result = first && pane(first).result;
       if (!result) return; // Table view, or the chart has not landed yet
-      imageHref(result.view, kind).then(function (href) { download(href, stem + '.' + kind); });
+      imageHref(result.view, kind).then(function (href) { download(href, stem + '.' + kind); }).catch(function (err) {
+        showExportError(c, err && err.message ? err.message : String(err));
+      });
     });
   });
 
