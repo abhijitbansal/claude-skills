@@ -5,8 +5,9 @@ import { measure, wrap, lineHeight, fontFor } from '../../shared/text.mjs';
 import { BOX_SHAPES } from './kinds.mjs';
 
 export const MAX_TEXT_WIDTH = 180; // wrap labels here first
+export const MAX_WIDENED_TEXT_WIDTH = 240; // a label that needs a third line widens the wrap, up to here
 export const MAX_LABEL_LINES = 2;
-const WIDEN_STEP = 10; // widen the wrap until a long label fits two lines
+const WIDEN_STEP = 10;
 
 export const LABEL_SIZE = 14;
 export const NOTE_SIZE = 12;
@@ -24,15 +25,21 @@ export const GROUP_MIN_HEIGHT = 64;
 const MIN_BOX = { width: 80, height: 40 };
 const MIN_STADIUM = { width: 72, height: 36 };
 const MIN_DIAMOND = { width: 88, height: 56 };
-const DIAMOND_PAD = { x: 8, y: 4 }; // padded text box that the diamond circumscribes
+// The padded text box must sit inside the rhombus: a w x h box fits a W x H
+// rhombus only while w/W + h/H <= 1, so both axes are sized to twice the padded box.
+export const DIAMOND_PAD = { x: 8, y: 4 };
+// Corner cut of hexagon-rect and slant of parallelogram, shared with the renderer.
+export const HEXAGON_CUT = 10;
+export const PARALLELOGRAM_SLANT = 12;
+export const CYLINDER_CAP = 6; // ry of the top and bottom ellipse (together the +12 px)
 const DOT = { width: 20, height: 20 };
 const SMALL_DIAMOND = { width: 24, height: 24 };
 
 // Extra width/height a shape needs beyond its padded text box.
 const SHAPE_EXTRA = {
-  cylinder: { width: 0, height: 12 },
-  'hexagon-rect': { width: 20, height: 0 },
-  parallelogram: { width: 24, height: 0 },
+  cylinder: { width: 0, height: 2 * CYLINDER_CAP },
+  'hexagon-rect': { width: 2 * HEXAGON_CUT, height: 0 },
+  parallelogram: { width: 2 * PARALLELOGRAM_SLANT, height: 0 },
   'double-bar-rect': { width: 16, height: 0 },
   stadium: { width: 16, height: 0 },
 };
@@ -55,13 +62,17 @@ const oneLine = (text) => text.replace(/\s+/g, ' ').trim();
 const widest = (lines, font) => Math.max(0, ...lines.map((l) => measure(l, font)));
 
 // Wrap to at most two lines. 180 px first; a label that still needs a third
-// line gets a wider box instead of being cut.
+// line widens the wrap, up to 240 px. A 48-character Latin label always fits
+// by then; text of unusually wide glyphs may still wrap to a third line (never
+// cut), which the geometry lint reports.
 function wrapLabel(text, font) {
   const clean = oneLine(text);
-  for (let width = MAX_TEXT_WIDTH; ; width += WIDEN_STEP) {
-    const lines = wrap(clean, width, font);
-    if (lines.length <= MAX_LABEL_LINES) return lines;
+  let lines = [];
+  for (let width = MAX_TEXT_WIDTH; width <= MAX_WIDENED_TEXT_WIDTH; width += WIDEN_STEP) {
+    lines = wrap(clean, width, font);
+    if (lines.length <= MAX_LABEL_LINES) break;
   }
+  return lines;
 }
 
 function textBlock(node, f) {
@@ -94,8 +105,8 @@ export function nodeSize(node, kindInfo, theme) {
     return { ...base, ...EXTERNAL_SHAPES[shape], labelBox: { width: evenUp(block.width), height: evenUp(block.height) } };
   }
   if (shape === 'diamond') {
-    const w = (block.width + 2 * DIAMOND_PAD.x) * Math.SQRT2;
-    const h = (block.height + 2 * DIAMOND_PAD.y) * Math.SQRT2;
+    const w = 2 * (block.width + 2 * DIAMOND_PAD.x);
+    const h = 2 * (block.height + 2 * DIAMOND_PAD.y);
     return { ...base, width: evenUp(Math.max(w, MIN_DIAMOND.width)), height: evenUp(Math.max(h, MIN_DIAMOND.height)) };
   }
   const extra = SHAPE_EXTRA[shape] ?? { width: 0, height: 0 };

@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { layoutGraph } from '../scripts/lib/layout-graph.mjs';
-import { nodeSize, edgeLabelSize, groupMinSize, MAX_TEXT_WIDTH } from '../scripts/lib/sizes.mjs';
+import {
+  nodeSize, edgeLabelSize, groupMinSize, fonts, MAX_TEXT_WIDTH, MAX_WIDENED_TEXT_WIDTH, DIAMOND_PAD, HEXAGON_CUT,
+  PARALLELOGRAM_SLANT, CYLINDER_CAP, ICON_SIZE, ICON_GAP, NOTE_GAP,
+} from '../scripts/lib/sizes.mjs';
 import { KINDS } from '../scripts/lib/kinds.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
 import { loadTheme } from '../shared/theme.mjs';
-import { measure, fontFor } from '../shared/text.mjs';
+import { measure, fontFor, lineHeight } from '../shared/text.mjs';
 
 const theme = loadTheme('paper');
 const EXAMPLES = ['architecture', 'flow', 'state'];
@@ -55,7 +58,7 @@ function assertSound(g, spec, name) {
   }
   g.nodes.forEach((a, i) => g.nodes.slice(i + 1).forEach((b) => assert.ok(!overlaps(a, b), `${name}: nodes ${a.id} and ${b.id} overlap`)));
   for (const n of g.nodes.filter((x) => x.group)) {
-    for (let id = n.group; id; id = g.groups.find((x) => x.id === id).parent) {
+    for (let id = n.group; id !== null; id = g.groups.find((x) => x.id === id).parent) {
       assert.ok(within(n, byId.get(id)), `${name}: node ${n.id} lies inside group ${id}`);
     }
   }
@@ -75,7 +78,11 @@ function assertSound(g, spec, name) {
         assert.ok(!crosses(a, b, n), `${name}: edge ${e.id} runs through node ${n.id}`);
       }
     }
+    for (const p of e.points) {
+      assert.ok(p.x >= 0 && p.x <= g.width && p.y >= 0 && p.y <= g.height, `${name}: edge ${e.id} point ${JSON.stringify(p)} lies inside the canvas`);
+    }
     if (e.label) {
+      assert.ok(within(e.label, rect), `${name}: label of edge ${e.id} lies inside the canvas`);
       for (const n of g.nodes) assert.ok(!overlaps(e.label, n), `${name}: label of edge ${e.id} overlaps node ${n.id}`);
     }
   });
@@ -139,27 +146,33 @@ test('every size is an even number of px', () => {
   }
 });
 
-test('labels wrap to two lines at 180 px; longer ones widen the box instead of adding a line', () => {
+test('labels wrap to two lines at 180 px; longer ones widen the wrap, never past 240 px', () => {
   const info = kind('architecture', 'service');
   const label = { ...fontFor(theme, 'body'), weight: 600, size: 14 };
   const medium = nodeSize({ id: 'x', label: 'Customer notification dispatch service' }, info, theme);
   assert.equal(medium.lines.length, 2);
   for (const l of medium.lines) assert.ok(measure(l, label) <= MAX_TEXT_WIDTH, l);
-  const long = nodeSize({ id: 'x', label: 'Authentication and authorization gateway for internal admin tools' }, info, theme);
-  assert.equal(long.lines.length, 2);
-  assert.ok(long.width >= Math.max(...long.lines.map((l) => measure(l, label))) + 28, 'box holds the widest line');
-  const unbroken = nodeSize({ id: 'x', label: 'x'.repeat(48) }, info, theme);
-  assert.ok(unbroken.lines.length <= 2);
+  // 48 characters, the longest label the spec allows: still two lines, never wider than 240 px.
+  for (const text of ['Authentication and authorization gateway service', 'x'.repeat(48), 'Wide Wiring Window Wizard Worker Widget Warden Wh'.slice(0, 48), 'Mixed Media Marketing Management Mobile Mapping']) {
+    const s = nodeSize({ id: 'x', label: text }, info, theme);
+    assert.ok(s.lines.length <= 2, `${text}: ${s.lines.length} lines`);
+    for (const l of s.lines) assert.ok(measure(l, label) <= MAX_WIDENED_TEXT_WIDTH, `${text}: "${l}" is wider than ${MAX_WIDENED_TEXT_WIDTH}`);
+    assert.ok(s.width >= Math.max(...s.lines.map((l) => measure(l, label))) + 28, 'box holds the widest line');
+  }
+  const widened = nodeSize({ id: 'x', label: 'Authentication and authorization gateway service' }, info, theme);
+  assert.ok(Math.max(...widened.lines.map((l) => measure(l, label))) > MAX_TEXT_WIDTH, 'this label needed the wider wrap');
   assert.equal(nodeSize({ id: 'x', label: 'a\n\nb\tc' }, info, theme).lines.join('|'), 'a b c');
 });
 
-test('CJK and emoji labels still size to a finite, non-empty box', () => {
-  const s = nodeSize({ id: 'x', label: '注文確認サービス🙂'.repeat(4) }, kind('architecture', 'service'), theme);
+test('text of unusually wide glyphs (CJK, emoji) sizes to a finite box and is never cut', () => {
+  const label = '注文確認サービス🙂'.repeat(4);
+  const s = nodeSize({ id: 'x', label }, kind('architecture', 'service'), theme);
   assert.ok(Number.isFinite(s.width) && s.width > 80);
-  assert.ok(s.lines.length >= 1 && s.lines.length <= 2);
+  assert.ok(s.lines.length >= 1);
+  assert.equal(s.lines.join(''), label, 'every character is still there; the geometry lint reports the third line');
 });
 
-test('shape minimums: dots 20x20, small diamond 24x24, cylinder +12 px, diamond is the text box times sqrt 2', () => {
+test('shape minimums: dots 20x20, small diamond 24x24, cylinder +12 px', () => {
   const dot = nodeSize({ id: 'x', label: 'Begin' }, kind('state', 'start'), theme);
   assert.deepEqual([dot.width, dot.height], [20, 20]);
   assert.deepEqual(Object.keys(dot.labelBox).sort(), ['height', 'width']);
@@ -173,10 +186,65 @@ test('shape minimums: dots 20x20, small diamond 24x24, cylinder +12 px, diamond 
   const cyl = nodeSize(text, kind('architecture', 'database'), theme);
   assert.ok(cyl.height - box.height >= 10 && cyl.height - box.height <= 14, `cylinder ${cyl.height} vs box ${box.height}`);
 
-  const decision = nodeSize({ id: 'x', label: 'Account exists?' }, kind('flow', 'decision'), theme);
-  const font = { ...fontFor(theme, 'body'), weight: 600, size: 14 };
-  assert.ok(decision.width >= Math.ceil(measure('Account exists?', font) * Math.SQRT2), 'diamond width covers text x sqrt 2');
-  assert.equal(decision.labelBox, undefined);
+  assert.equal(nodeSize({ id: 'x', label: 'Account exists?' }, kind('flow', 'decision'), theme).labelBox, undefined);
+});
+
+// ---- text fits inside the drawn outline, not just the bounding box ----------
+
+// The icon + text block (centred in the node box) as local coordinates.
+function textBlock(node, size, shape) {
+  const f = fonts(theme);
+  const text = Math.max(...size.lines.map((l) => measure(l, f.label)), size.noteLine ? measure(size.noteLine, f.note) : 0);
+  const width = text + (size.icon ? ICON_SIZE + ICON_GAP : 0);
+  const height = size.lines.length * lineHeight(f.label) + (size.noteLine ? NOTE_GAP + lineHeight(f.note) : 0);
+  const x0 = (size.width - width) / 2;
+  const y0 = (size.height - height) / 2;
+  return { x0, y0, x1: x0 + width, y1: y0 + height, text, height, shape };
+}
+
+const corners = (r) => [[r.x0, r.y0], [r.x1, r.y0], [r.x0, r.y1], [r.x1, r.y1]];
+
+// Is the block inside the outline of the shape as the renderer draws it?
+const CONTAINS = {
+  diamond: (r, { width: W, height: H }) => corners(r).every(([x, y]) => Math.abs(x - W / 2) / (W / 2) + Math.abs(y - H / 2) / (H / 2) <= 1 + 1e-9),
+  'hexagon-rect': (r, { width: W, height: H }) => corners(r).every(([x, y]) => Math.min(x, W - x) + Math.min(y, H - y) >= HEXAGON_CUT),
+  parallelogram: (r, { width: W, height: H }) => corners(r).every(([x, y]) => x >= PARALLELOGRAM_SLANT * (1 - y / H) && x <= W - PARALLELOGRAM_SLANT * (y / H)),
+  stadium: (r, { width: W, height: H }) => corners(r).every(([x, y]) => {
+    const R = H / 2;
+    const cx = x < R ? R : x > W - R ? W - R : x;
+    return Math.hypot(x - cx, y - R) <= R;
+  }),
+  cylinder: (r, { height: H }) => r.y0 >= 2 * CYLINDER_CAP && r.y1 <= H - CYLINDER_CAP,
+  'rounded-rect': (r, { width: W, height: H }) => r.x0 >= 0 && r.y0 >= 0 && r.x1 <= W && r.y1 <= H,
+};
+
+const LABELS = ['Ok', 'Account exists?', 'Is the customer account verified and active?', 'Authentication and authorization gateway service'];
+
+test('the label (1 or 2 lines, with or without a note and icon) fits inside every text-bearing shape', () => {
+  const cases = [['flow', 'decision'], ['architecture', 'gateway'], ['flow', 'io'], ['flow', 'start'], ['flow', 'end'], ['architecture', 'database'], ['architecture', 'service'], ['architecture', 'queue']];
+  for (const [type, k] of cases) {
+    const info = kind(type, k);
+    for (const label of LABELS) {
+      for (const note of [undefined, 'a short note line']) {
+        const node = { id: 'x', label, ...(note ? { note } : {}) };
+        const size = nodeSize(node, info, theme);
+        const block = textBlock(node, size, info.shape);
+        const contains = CONTAINS[info.shape] ?? CONTAINS['rounded-rect'];
+        assert.ok(contains(block, size), `${type}.${k} "${label}"${note ? ' + note' : ''} (${size.lines.length} lines) in ${size.width}x${size.height} ${info.shape}`);
+      }
+    }
+  }
+});
+
+test('the diamond satisfies the fit inequality (w/W + h/H <= 1) for 1 and 2 line labels', () => {
+  const f = fonts(theme);
+  for (const label of LABELS) {
+    const size = nodeSize({ id: 'x', label }, kind('flow', 'decision'), theme);
+    const tw = Math.max(...size.lines.map((l) => measure(l, f.label))) + 2 * DIAMOND_PAD.x;
+    const th = size.lines.length * lineHeight(f.label) + 2 * DIAMOND_PAD.y;
+    assert.ok(tw / size.width + th / size.height <= 1 + 1e-9, `${label}: ${tw / size.width + th / size.height}`);
+  }
+  assert.equal(nodeSize({ id: 'x', label: LABELS[2] }, kind('flow', 'decision'), theme).lines.length, 2);
 });
 
 test('an icon widens the box only for shapes that have an icon slot', () => {
@@ -261,7 +329,7 @@ test('geometry carries the contract fields', async () => {
   assert.deepEqual(g.nodes.find((n) => n.id === 'db').noteLine, 'primary + replica');
   assert.equal(g.nodes.find((n) => n.id === 'pay').tone, 'warn');
   assert.equal(g.nodes.find((n) => n.id === 'web').group, null);
-  assert.deepEqual(g.groups.map((x) => [x.id, x.depth, x.label]), [['aws', 0, 'AWS us-east-1'], ['vpc', 1, 'Private VPC']]);
+  assert.deepEqual(g.groups.map((x) => [x.id, x.depth, x.label, x.parent]), [['aws', 0, 'AWS us-east-1', null], ['vpc', 1, 'Private VPC', 'aws']]);
   const [e0, , , e3] = g.edges;
   assert.deepEqual([e0.id, e0.from, e0.to, e0.style, e0.both], ['e0', 'web', 'api', 'solid', false]);
   assert.equal(e0.label.text, 'POST /checkout');
@@ -366,6 +434,36 @@ test('a lone group holding one node lays out', async () => {
   const g = await layout(spec);
   assertSound(g, spec, 'lone-group');
   assert.equal(g.groups[0].depth, 0);
+});
+
+// ---- dots and choices inside nested groups (probe spec) --------------------
+
+test('state: start and choice nested two groups deep keep absolute label boxes and border-true edges', async () => {
+  for (const direction of ['right', 'down']) {
+    const spec = {
+      title: 'Probe', type: 'state', direction,
+      groups: [{ id: 'g', label: 'Outer' }, { id: 'h', label: 'Inner', parent: 'g' }],
+      nodes: [
+        node('begin', { kind: 'start', group: 'h' }), node('work', { group: 'h' }), node('pick', { kind: 'choice', group: 'h' }),
+        node('yes', { group: 'g' }), node('no'), node('stop', { kind: 'end' }),
+      ],
+      edges: [
+        { from: 'begin', to: 'work' }, { from: 'work', to: 'pick' }, { from: 'pick', to: 'yes', label: 'ok' },
+        { from: 'pick', to: 'no', label: 'fail', style: 'dashed' }, { from: 'yes', to: 'stop' }, { from: 'no', to: 'stop' },
+      ],
+    };
+    assert.deepEqual((await validateSpec(spec)).errors, []);
+    const g = await layout(spec);
+    assertSound(g, spec, `probe-${direction}`);
+    const h = g.groups.find((x) => x.id === 'h');
+    for (const id of ['begin', 'pick']) {
+      const n = g.nodes.find((x) => x.id === id);
+      assert.ok(n.labelBox, `${id} has a labelBox`);
+      assert.ok(within(n, h), `${id} lies inside group h`);
+      assert.ok(within(n.labelBox, h), `${id} label lies inside group h (absolute coordinates)`);
+    }
+    assert.deepEqual(g.groups.map((x) => [x.id, x.parent, x.depth]), [['g', null, 0], ['h', 'g', 1]]);
+  }
 });
 
 // ---- direction -------------------------------------------------------------

@@ -75,7 +75,8 @@
       "width": 614,
       "height": 207,
       "label": "AWS us-east-1",
-      "depth": 0
+      "depth": 0,
+      "parent": null
     },
     {
       "id": "vpc",
@@ -84,7 +85,8 @@
       "width": 556,
       "height": 143,
       "label": "Private VPC",
-      "depth": 1
+      "depth": 1,
+      "parent": "aws"
     }
   ],
   "edges": [

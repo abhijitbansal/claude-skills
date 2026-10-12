@@ -236,6 +236,7 @@ export async function layoutGraph(spec, theme) {
       ...box(laidNodes.get(elkGroupId(g.id))),
       label: g.label,
       depth: depths.get(g.id),
+      parent: g.parent ?? null,
     })),
     edges: (spec.edges ?? []).map((e, i) => readEdge(e, i, laidEdges.get(elkEdgeId(i)))),
     layers: clustered.map((layer) => layer.map((n) => n.id)),
