@@ -10,8 +10,8 @@ const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
 const example = (name) => JSON.parse(fs.readFileSync(here(`../references/examples/${name}.diagram.json`), 'utf8'));
 const NAMES = ['architecture', 'flow', 'state', 'sequence'];
 
-test('api.mjs exports buildDiagram and nothing else in this task', () => {
-  assert.deepEqual(Object.keys(api), ['buildDiagram']);
+test('api.mjs exports buildDiagram and viewerRuntime', () => {
+  assert.deepEqual(Object.keys(api).sort(), ['buildDiagram', 'viewerRuntime']);
 });
 
 for (const name of NAMES) {
@@ -37,11 +37,89 @@ test('ids: groups then nodes for graphs, participants then messages for sequence
   assert.deepEqual((await buildDiagram(example('sequence'))).ids.slice(0, 7), ['shopper', 'web', 'orders', 'db', 'psp', 'm1', 'm2']);
 });
 
-test('steps from the spec are passed through', async () => {
+test('steps from the spec are passed through, then a final "Everything" step for what no step shows', async () => {
   const spec = example('architecture');
-  const { steps } = await buildDiagram(spec);
-  assert.deepEqual(steps, spec.steps);
+  const { steps, ids } = await buildDiagram(spec);
+  assert.deepEqual(steps.slice(0, spec.steps.length), spec.steps);
   assert.notEqual(steps[0], spec.steps[0], 'copies, not the spec objects');
+  assert.equal(steps.length, spec.steps.length + 1);
+  assert.deepEqual(steps.at(-1), { title: 'Everything', show: ['pay'], focus: ids });
+});
+
+test('steps share no arrays with the caller\'s spec', async () => {
+  const spec = example('architecture');
+  const before = JSON.stringify(spec);
+  const { steps } = await buildDiagram(spec);
+  for (const s of steps) for (const key of ['show', 'focus', 'highlight']) s[key]?.push('zzz');
+  assert.equal(JSON.stringify(spec), before);
+  for (const [i, s] of spec.steps.entries()) for (const key of ['show', 'focus', 'highlight']) if (s[key]) assert.notEqual(steps[i][key], s[key], key);
+});
+
+const trio = (steps) => ({ title: 't', type: 'architecture', nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }], edges: [{ from: 'a', to: 'b' }], steps });
+
+test('ids named only by focus or highlight count as shown (no "Everything" step)', async () => {
+  const { steps } = await buildDiagram(trio([{ title: 'one', show: ['a'], focus: ['b'], highlight: ['c'] }]));
+  assert.deepEqual(steps.map((s) => s.title), ['one']);
+});
+
+test('a node left out of every step appears in a final "Everything" step', async () => {
+  const { steps } = await buildDiagram(trio([{ title: 'one', show: ['a'] }, { title: 'two', show: ['b'], focus: ['b'] }]));
+  assert.deepEqual(steps.map((s) => s.title), ['one', 'two', 'Everything']);
+  assert.deepEqual(steps[2].show, ['c']);
+  assert.deepEqual(steps[2].focus, ['a', 'b', 'c']);
+});
+
+test('showing a node counts its ancestor groups as shown', async () => {
+  const spec = { title: 't', type: 'architecture', groups: [{ id: 'g1', label: 'G1' }, { id: 'g2', label: 'G2', parent: 'g1' }], nodes: [{ id: 'n', label: 'N', group: 'g2' }], steps: [{ title: 'only', show: ['n'] }] };
+  const { steps } = await buildDiagram(spec);
+  assert.deepEqual(steps.map((s) => s.title), ['only']);
+});
+
+test('an empty group nobody shows is listed in the "Everything" step', async () => {
+  const spec = { title: 't', type: 'architecture', groups: [{ id: 'g1', label: 'G1' }], nodes: [{ id: 'n', label: 'N' }], steps: [{ title: 'only', show: ['n'] }] };
+  const { steps } = await buildDiagram(spec);
+  assert.deepEqual(steps.at(-1).show, ['g1']);
+});
+
+test('at the step limit, leftovers join the last step instead of adding a 26th', async () => {
+  const nodes = Array.from({ length: 26 }, (_, i) => ({ id: `n${i}`, label: `N${i}` }));
+  const steps = nodes.slice(0, 25).map((n) => ({ title: n.label, show: [n.id] }));
+  const out = await buildDiagram({ title: 't', type: 'architecture', nodes, steps });
+  assert.equal(out.steps.length, 25);
+  assert.deepEqual(out.steps[24].show, ['n24', 'n25']);
+});
+
+test('a sequence whose steps skip messages gets an "Everything" step with them and the unseen participants', async () => {
+  const spec = example('sequence');
+  spec.steps = [{ title: 'first', show: ['m1'] }];
+  const { steps } = await buildDiagram(spec);
+  assert.deepEqual(steps.map((s) => s.title), ['first', 'Everything']);
+  assert.ok(steps[1].show.includes('m2') && steps[1].show.includes('psp'));
+  assert.ok(!steps[1].show.includes('m1') && !steps[1].show.includes('shopper'), 'm1 and its ends were shown');
+});
+
+test('a sequence with no messages still gets one step showing the participants', async () => {
+  const { steps } = await buildDiagram({ title: 't', type: 'sequence', participants: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] });
+  assert.equal(steps.length, 1);
+  assert.deepEqual(steps[0].show, ['a', 'b']);
+  assert.deepEqual(steps[0].focus, ['a', 'b']);
+});
+
+test('idPrefix must match ^[A-Za-z0-9_-]+$', async () => {
+  for (const bad of ['a b', 'a"b', '<x>', '', 'ü']) {
+    await assert.rejects(buildDiagram(example('flow'), { idPrefix: bad }), /idPrefix must match \/\^\[A-Za-z0-9_-\]\+\$\//, JSON.stringify(bad));
+  }
+  const ok = await buildDiagram(example('flow'), { idPrefix: 'My_diagram-2' });
+  assert.ok(ok.svg.includes('id="My_diagram-2-title"'));
+});
+
+test('viewerRuntime is the page script without toolbar chrome', () => {
+  const src = api.viewerRuntime();
+  assert.equal(typeof src, 'string');
+  assert.ok(src.length > 2000);
+  assert.doesNotThrow(() => new Function(src), 'valid JavaScript');
+  for (const chrome of ['data-theme-toggle', 'data-export', 'data-act', 'pa-theme', 'paReady', 'localStorage']) assert.ok(!src.includes(chrome), chrome);
+  assert.ok(src.includes('PADiagram'));
 });
 
 test('without steps a graph gets one step per layer, titled by the layer\'s first node', async () => {

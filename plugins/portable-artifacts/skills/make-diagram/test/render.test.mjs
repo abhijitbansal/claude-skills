@@ -67,7 +67,7 @@ test('the root is one accessible <svg> with title, description and the canvas vi
     assert.equal(svg.match(/<svg /g).length, 1);
     const root = svg.match(/^<svg [^>]*>/)[0];
     assert.equal(attr(root, 'viewBox'), `0 0 ${geometry.width} ${geometry.height}`);
-    assert.equal(attr(root, 'role'), 'img');
+    assert.equal(attr(root, 'role'), 'graphics-document', 'no role="img" on the root: nodes inside are focusable, and an img role hides them');
     const [t, d] = attr(root, 'aria-labelledby').split(' ');
     assert.ok(svg.includes(`<title id="${t}">${spec.title}</title>`), name);
     assert.match(svg, new RegExp(`<desc id="${d}">[^<]+</desc>`));
@@ -95,13 +95,22 @@ test('every node is a focusable group with classes, data-id and an accessible na
     const { svg } = await draw(spec);
     const opens = tagsOf(svg, /<g class="pa-node [^>]*>/g);
     assert.equal(opens.length, spec.nodes.length, name);
-    spec.nodes.forEach((n, i) => {
-      const tag = opens[i];
+    spec.nodes.forEach((n) => {
+      const tag = opens.find((o) => attr(o, 'data-id') === n.id);
+      assert.equal(attr(tag, 'role'), 'graphics-symbol');
       assert.match(attr(tag, 'class'), new RegExp(`^pa-node pa-kind-${n.kind ?? (spec.type === 'flow' ? 'step' : spec.type === 'state' ? 'state' : 'service')} pa-tone-${n.tone ?? 'neutral'}$`), `${name}.${n.id}`);
       assert.equal(attr(tag, 'data-id'), n.id);
       assert.equal(attr(tag, 'tabindex'), '0');
       assert.equal(attr(tag, 'aria-label'), `${n.label}: ${n.kind ?? (spec.type === 'flow' ? 'step' : spec.type === 'state' ? 'state' : 'service')}`);
     });
+  }
+});
+
+test('graph nodes are emitted in layer order, so Tab follows the layers', async () => {
+  for (const name of ['architecture', 'flow', 'state']) {
+    const { svg, geometry } = await draw(example(name));
+    const domOrder = tagsOf(svg, /<g class="pa-node [^>]*>/g).map((t) => attr(t, 'data-id'));
+    assert.deepEqual(domOrder, geometry.layers.flat(), name);
   }
 });
 
@@ -216,6 +225,20 @@ test('sequence: every header has the uniform height, a cylinder included, with i
   assert.equal(opens.length, spec.participants.length);
   assert.equal(tagsOf(svg, /<g class="pa-icon /g).length, spec.participants.length, 'every participant draws its icon');
   assert.equal(attr(opens[0], 'aria-label'), 'Shopper: actor');
+  assert.equal(attr(opens[0], 'role'), 'graphics-symbol');
+});
+
+test('sequence: lifelines, frames and notes name what they belong to, for the presentation', async () => {
+  const spec = example('sequence');
+  const { svg } = await draw(spec);
+  assert.deepEqual(tagsOf(svg, /<line class="pa-lifeline"[^>]*>/g).map((t) => attr(t, 'data-for')), spec.participants.map((p) => p.id));
+  const frames = tagsOf(svg, /<g class="pa-frame [^>]*>/g).map((t) => attr(t, 'data-messages')).sort();
+  assert.deepEqual(frames, spec.frames.map((f) => f.messages.join(' ')).sort());
+  const notes = tagsOf(svg, /<g class="pa-seq-note"[^>]*>/g);
+  const pair = (over, after) => `${over}|${after}`;
+  assert.deepEqual(notes.map((t) => pair(attr(t, 'data-over'), attr(t, 'data-after'))).sort(), spec.notes.map((n) => pair(n.over.join(' '), n.after)).sort());
+  const loose = tagsOf((await draw({ ...spec, notes: [{ over: ['web'], text: 'no anchor' }] })).svg, /<g class="pa-seq-note"[^>]*>/g);
+  assert.equal(attr(loose[0], 'data-after'), undefined, 'a note with no after has no data-after');
 });
 
 test('sequence: messages carry kind classes, endpoints and open/filled heads', async () => {
@@ -293,6 +316,32 @@ test('diagramCss uses theme variables only and animates inside the reduced-motio
   const media = css.slice(css.indexOf('@media'));
   assert.match(media, /^@media \(prefers-reduced-motion: no-preference\)\{[^]*\.pa-animate \.pa-edge path[^]*@keyframes pa-flow[^]*\}$/);
   assert.ok(!css.slice(0, css.indexOf('@media')).includes('animation'));
+});
+
+test('animation moves dashes without replacing an edge style\'s dash pattern', () => {
+  const css = diagramCss();
+  const media = css.slice(css.indexOf('@media'));
+  // the animated rule sets the animation only; no dasharray on dashed or async edges
+  const animated = media.match(/\.pa-animate \.pa-edge path\{([^}]*)\}/)[1];
+  assert.match(animated, /animation:pa-flow/);
+  assert.ok(!/dasharray/.test(animated), animated);
+  assert.ok(!/\.pa-animate \.pa-edge-(dashed|async)[^{]*\{[^}]*dasharray/.test(media));
+  // solid edges have no pattern of their own, so animating gives them one
+  assert.match(media, /\.pa-animate \.pa-edge-solid path\{stroke-dasharray:6 6\}/);
+  // each pattern's loop length is a whole period, so the loop never jumps
+  assert.match(css, /\.pa-edge-dashed path\{[^}]*stroke-dasharray:6 4/);
+  assert.match(media, /\.pa-edge-dashed path\{--pa-period:10px\}/);
+  assert.match(media, /\.pa-edge-async path\{--pa-period:5\.5px\}/);
+  assert.match(media, /\.pa-edge-solid path\{--pa-period:12px\}/);
+  assert.match(media, /@keyframes pa-flow\{to\{stroke-dashoffset:calc\(var\(--pa-period\) \* -1\)\}\}/);
+});
+
+test('diagramCss holds the viewer state rules: dim, hidden, highlight', () => {
+  const css = diagramCss();
+  assert.match(css, /\.pa-dim\{opacity:/);
+  assert.match(css, /\.pa-hidden\{[^}]*visibility:hidden/);
+  assert.ok(!/\.pa-hidden\{[^}]*display:none/.test(css), 'hidden elements still measure');
+  assert.match(css, /\.pa-hl /);
 });
 
 test('every non-dynamic class the renderers emit has a rule', async () => {

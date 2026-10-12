@@ -70,5 +70,5 @@ export function edgeSvg({ id, from, to, style, both, d, heads, extra = '' }, pre
 
 /** Attributes every node <g> carries: classes, id, focus and an accessible name. */
 export function nodeOpen(node, kind, label) {
-  return `<g class="pa-node pa-kind-${esc(kind)} pa-tone-${esc(node.tone)}" data-id="${esc(node.id)}" tabindex="0" role="img" aria-label="${esc(`${label}: ${kind}`)}">`;
+  return `<g class="pa-node pa-kind-${esc(kind)} pa-tone-${esc(node.tone)}" data-id="${esc(node.id)}" tabindex="0" role="graphics-symbol" aria-label="${esc(`${label}: ${kind}`)}">`;
 }

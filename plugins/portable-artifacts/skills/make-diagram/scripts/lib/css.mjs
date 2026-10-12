@@ -49,14 +49,34 @@ const toneRules = Object.entries(TONES).flatMap(([tone, variable]) => [
   `.pa-tone-${tone} .pa-icon{color:var(--${variable})}`,
 ]);
 
+// Viewer state, set by the runtime: dim what a trace leaves out, hide what a
+// presentation has not revealed yet (visibility, not display: hidden elements
+// still measure), emphasise what a step highlights or a trace follows.
+const state = [
+  '.pa-dim{opacity:.22}',
+  '.pa-hidden{opacity:0;visibility:hidden}',
+  '.pa-hl .pa-shape,.pa-on .pa-shape{stroke:var(--accent);stroke-width:2}',
+  '.pa-edge.pa-hl path,.pa-edge.pa-on path{stroke:var(--accent);stroke-width:2}',
+  '.pa-edge.pa-hl .pa-arrow-fill,.pa-edge.pa-on .pa-arrow-fill{fill:var(--accent)}',
+];
+
+// Flow animation moves the dashes along an edge and keeps each style's own
+// pattern: only stroke-dashoffset animates. A solid edge has no pattern, so it
+// gets one while animating. --pa-period is the pattern's length, so the loop
+// restarts on a whole period instead of jumping.
 const animation = [
   '@media (prefers-reduced-motion: no-preference){',
-  '.pa-animate .pa-edge path{stroke-dasharray:6 6;animation:pa-flow 1.2s linear infinite}',
-  '@keyframes pa-flow{to{stroke-dashoffset:-12}}',
+  '.pa-edge-solid path{--pa-period:12px}',
+  '.pa-edge-dashed path{--pa-period:10px}',
+  '.pa-edge-async path{--pa-period:5.5px}',
+  '.pa-animate .pa-edge-solid path{stroke-dasharray:6 6}',
+  '.pa-animate .pa-edge path{animation:pa-flow 1.2s linear infinite}',
+  '@keyframes pa-flow{to{stroke-dashoffset:calc(var(--pa-period) * -1)}}',
+  '.pa-node,.pa-edge,.pa-edge-label,.pa-group,.pa-lifeline,.pa-frame,.pa-seq-note{transition:opacity .25s ease,visibility .25s}',
   '}',
 ];
 
 /** The stylesheet for rendered diagrams. */
 export function diagramCss() {
-  return [...rules, ...toneRules, ...animation].join('\n');
+  return [...rules, ...toneRules, ...state, ...animation].join('\n');
 }

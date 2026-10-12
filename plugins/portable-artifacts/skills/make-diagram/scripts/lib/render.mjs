@@ -34,7 +34,10 @@ function renderGraph(raw, spec, theme, prefix) {
   const f = fonts(theme);
   const groups = [...g.groups].sort((a, b) => a.depth - b.depth).map((x) => groupSvg(x, f));
   const edges = g.edges.map((e) => edgeSvg({ ...e, d: roundedPath(e.points), heads: EDGE_ARROW[e.style] }, prefix));
-  const nodes = g.nodes.map((n, i) => graphNodeSvg(n, spec.nodes[i], spec.type, f));
+  // Nodes are emitted in layer order: the DOM order is the Tab order.
+  const rank = new Map(raw.layers.flat().map((id, i) => [id, i]));
+  const nodes = g.nodes.map((n, i) => ({ id: n.id, svg: graphNodeSvg(n, spec.nodes[i], spec.type, f) }))
+    .sort((a, b) => rank.get(a.id) - rank.get(b.id)).map((n) => n.svg);
   const labels = g.edges.filter((e) => e.label).map((e) => plateSvg(e.id, e.label, f));
   return { width: g.width, height: g.height, body: [...groups, ...edges, ...nodes, ...labels].join(''), counts: `${g.nodes.length} nodes and ${g.edges.length} edges` };
 }
@@ -49,7 +52,7 @@ export function renderSvg(geometry, spec, { theme, idPrefix = 'd' } = {}) {
   const desc = `${spec.subtitle ? `${spec.subtitle}. ` : ''}${spec.type} diagram with ${drawn.counts}.`;
   const root = `pa-diagram pa-type-${spec.type}${spec.animate ? ' pa-animate' : ''}`;
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" class="${root}" viewBox="0 0 ${num(drawn.width)} ${num(drawn.height)}" role="img" aria-labelledby="${esc(idPrefix)}-title ${esc(idPrefix)}-desc">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" class="${root}" viewBox="0 0 ${num(drawn.width)} ${num(drawn.height)}" role="graphics-document" aria-labelledby="${esc(idPrefix)}-title ${esc(idPrefix)}-desc">`,
     `<title id="${esc(idPrefix)}-title">${esc(spec.title)}</title>`,
     `<desc id="${esc(idPrefix)}-desc">${esc(desc)}</desc>`,
     markerDefs(idPrefix),

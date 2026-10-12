@@ -30,13 +30,14 @@ function frameSvg(fr, f) {
     const lh = lineHeight(f.edge);
     label = textLines('pa-frame-label', [fr.label], { x: fr.labelBox.x, top: fr.labelBox.y + (fr.labelBox.height - lh) / 2, lh, size: f.edge.size, anchor: 'start' });
   }
-  return `<g class="pa-frame pa-frame-${esc(fr.kind)}"><rect class="pa-frame-box" x="${num(x)}" y="${num(y)}" width="${num(width)}" height="${num(height)}" rx="${FRAME_RADIUS}"/><path class="pa-frame-tab" d="${tabPath}"/>${kind}${label}</g>`;
+  return `<g class="pa-frame pa-frame-${esc(fr.kind)}" data-messages="${esc(fr.messages.join(' '))}"><rect class="pa-frame-box" x="${num(x)}" y="${num(y)}" width="${num(width)}" height="${num(height)}" rx="${FRAME_RADIUS}"/><path class="pa-frame-tab" d="${tabPath}"/>${kind}${label}</g>`;
 }
 
 function noteSvg(n, f) {
   const lh = lineHeight(f.note);
   const text = textLines('pa-seq-note-text', n.lines, { x: n.x + n.width / 2, top: n.y + (n.height - n.lines.length * lh) / 2, lh, size: f.note.size });
-  return `<g class="pa-seq-note"><rect class="pa-seq-note-box" x="${num(n.x)}" y="${num(n.y)}" width="${num(n.width)}" height="${num(n.height)}" rx="${NOTE_RADIUS}"/>${text}</g>`;
+  const after = n.after == null ? '' : ` data-after="${esc(n.after)}"`;
+  return `<g class="pa-seq-note" data-over="${esc(n.over.join(' '))}"${after}><rect class="pa-seq-note-box" x="${num(n.x)}" y="${num(n.y)}" width="${num(n.width)}" height="${num(n.height)}" rx="${NOTE_RADIUS}"/>${text}</g>`;
 }
 
 function participantSvg(p, label, f) {
@@ -44,7 +45,7 @@ function participantSvg(p, label, f) {
   return `${nodeOpen({ id: p.id, tone: 'neutral' }, p.kind, label)}${shapeSvg(p.shape, p)}${boxContent(box, f)}</g>`;
 }
 
-const lifelineSvg = (p) => `<line class="pa-lifeline" x1="${num(p.lifeline.x)}" y1="${num(p.lifeline.y1)}" x2="${num(p.lifeline.x)}" y2="${num(p.lifeline.y2)}"/>`;
+const lifelineSvg = (p) => `<line class="pa-lifeline" data-for="${esc(p.id)}" x1="${num(p.lifeline.x)}" y1="${num(p.lifeline.y1)}" x2="${num(p.lifeline.x)}" y2="${num(p.lifeline.y2)}"/>`;
 
 /** Draw a SeqGeometry: returns { width, height, body, counts } for renderSvg to wrap. */
 export function renderSequence(g, spec, theme, prefix) {

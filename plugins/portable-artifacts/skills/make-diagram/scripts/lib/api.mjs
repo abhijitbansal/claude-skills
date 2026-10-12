@@ -1,11 +1,17 @@
 // Embedding API: spec -> drawable diagram, for make-diagram's own builder and
 // for other skills (make-explainer). Stable contract; see test/api.test.mjs.
+import fs from 'node:fs';
 import { loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
 import { validateSpec } from './spec.mjs';
 import { layoutDiagram } from './layout.mjs';
 import { lintGeometry } from './lint.mjs';
 import { renderSvg, diagramCss } from './render.mjs';
 import { DiagramError } from './diagram-error.mjs';
+import { LIMITS } from './schema.mjs';
+import { revealedBy } from './steps.mjs';
+
+const VIEWER_JS = new URL('../../template/viewer.js', import.meta.url);
+const ID_PREFIX = /^[A-Za-z0-9_-]+$/;
 
 const first = (items, fallback) => items[0] ?? fallback;
 
@@ -24,6 +30,10 @@ function layerSteps(spec, geometry) {
 function messageSteps(spec, limit) {
   const messages = spec.messages ?? [];
   const per = Math.max(1, Math.ceil(messages.length / limit));
+  if (messages.length === 0) {
+    const ids = spec.participants.map((p) => p.id);
+    return [{ title: 'Participants', show: ids, focus: [...ids] }];
+  }
   const label = new Map(spec.participants.map((p) => [p.id, p.label.replace(/\s+/g, ' ').trim()]));
   const steps = [];
   for (let i = 0; i < messages.length; i += per) {
@@ -40,11 +50,34 @@ function messageSteps(spec, limit) {
   return steps;
 }
 
-const MAX_STEPS = 25;
+const copyList = (list) => (list ? [...list] : undefined);
 
-function stepsOf(spec, geometry) {
-  if (spec.steps?.length) return spec.steps.map((s) => ({ ...s }));
-  if (spec.type === 'sequence') return messageSteps(spec, MAX_STEPS);
+// A spec's steps as fresh objects and arrays (nothing shared with the caller).
+function copySteps(steps) {
+  return steps.map((s) => {
+    const copy = { ...s };
+    for (const key of ['show', 'focus', 'highlight']) if (s[key]) copy[key] = copyList(s[key]);
+    return copy;
+  });
+}
+
+// Authored steps may leave ids out. The viewer hides what no step has revealed,
+// so a final step ("Everything") shows the rest and fits the whole diagram.
+// At the step limit the rest joins the last step instead of adding a 26th.
+function withEverything(spec, steps, ids) {
+  const revealed = revealedBy(spec, steps);
+  const rest = ids.filter((id) => !revealed.has(id));
+  if (rest.length === 0) return steps;
+  if (steps.length >= LIMITS.steps) {
+    const last = steps.at(-1);
+    return [...steps.slice(0, -1), { ...last, show: [...(last.show ?? []), ...rest] }];
+  }
+  return [...steps, { title: 'Everything', show: rest, focus: [...ids] }];
+}
+
+function stepsOf(spec, geometry, ids) {
+  if (spec.steps?.length) return withEverything(spec, copySteps(spec.steps), ids);
+  if (spec.type === 'sequence') return messageSteps(spec, LIMITS.steps);
   return layerSteps(spec, geometry);
 }
 
@@ -53,30 +86,41 @@ const idsOf = (spec) => (spec.type === 'sequence'
   ? [...spec.participants.map((p) => p.id), ...(spec.messages ?? []).map((m) => m.id)]
   : [...(spec.groups ?? []).map((g) => g.id), ...spec.nodes.map((n) => n.id)]);
 
+/** The viewer's core script (zoom, pan, hover, presentation, animation) without toolbar chrome, for embedding. */
+export function viewerRuntime() {
+  return fs.readFileSync(VIEWER_JS, 'utf8');
+}
+
 /**
  * Build a diagram from a spec.
  *
  * `theme` is a theme name or a loaded theme object (default: the spec's theme,
  * else paper). Resolves to { svg, css, width, height, steps, ids, geometry }:
  * `svg` uses classes and CSS variables only (no fonts, no <style>; include
- * `css` once per page), `steps` is the spec's steps or ones built from the
- * layout, `ids` lists every id a step can name. Throws DiagramError when the
+ * `css` once per page), `steps` is the spec's steps (copied; ids it never
+ * reveals get a final "Everything" step) or ones built from the layout, `ids`
+ * lists every id a step can name, `idPrefix` (^[A-Za-z0-9_-]+$) namespaces the
+ * SVG's ids when several diagrams share a page. Throws DiagramError when the
  * spec is invalid or the layout fails the geometry lint.
  */
 export async function buildDiagram(spec, { theme, idPrefix } = {}) {
+  if (idPrefix !== undefined && !ID_PREFIX.test(idPrefix)) {
+    throw new TypeError(`idPrefix must match ${ID_PREFIX} (letters, digits, "_" and "-"), got ${JSON.stringify(idPrefix)}`);
+  }
   const semantic = await validateSpec(spec, { layout: false });
   if (!semantic.ok) throw new DiagramError(semantic.errors);
   const resolved = typeof theme === 'object' && theme !== null ? theme : loadTheme(theme ?? spec.theme ?? DEFAULT_THEME);
   const geometry = await layoutDiagram(spec, resolved);
   const lint = lintGeometry(geometry, { theme: resolved });
   if (lint.length > 0) throw new DiagramError(lint);
+  const ids = idsOf(spec);
   return {
     svg: renderSvg(geometry, spec, { theme: resolved, ...(idPrefix ? { idPrefix } : {}) }),
     css: diagramCss(),
     width: geometry.width,
     height: geometry.height,
-    steps: stepsOf(spec, geometry),
-    ids: idsOf(spec),
+    steps: stepsOf(spec, geometry, ids),
+    ids,
     geometry,
   };
 }
