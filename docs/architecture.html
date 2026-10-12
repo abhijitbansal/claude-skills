@@ -81,7 +81,7 @@
   <div class="crumbs"><a href="../site/index.html">Home</a><span class="sep">/</span>Architecture</div>
   <span class="kicker" style="margin-top:14px"><span class="pulse"></span>Repository architecture</span>
   <h1>One repo, every agent</h1>
-  <p class="lead"><code>claude-skills</code> is a Claude Code <b>plugin marketplace</b>, a home for standalone <b>CLI tools</b>, and a set of <b>adapters</b> that wire the same skills into Codex, Copilot CLI, and any AGENTS.md-aware agent — plus private seed machinery that rebuilds a full dev environment on a fresh machine.</p>
+  <p class="lead"><code>claude-skills</code> is a Claude Code <b>plugin marketplace</b>, a home for standalone <b>tools</b> (the Second Wind CLI and the Cache Clock extension for Copilot CLI), and a set of <b>adapters</b> that wire the same skills into Codex, Copilot CLI, and any AGENTS.md-aware agent — plus private seed machinery that rebuilds a full dev environment on a fresh machine.</p>
 </header>
 
 <main id="main" class="wrap">
@@ -108,6 +108,7 @@ flowchart TD
   TB["test-board<br/><small>test-run band</small>"]
   SC["session-compass<br/><small>compass band · /compass pane</small>"]
   WIND[("tools/second-wind<br/>wind.py")]
+  CCLK[("tools/cache-clock<br/><small>Copilot CLI extension</small>")]
   AD["adapters/install.sh"]
   SEED["setup/<br/><small>setup.sh · capture.sh · contribute.sh</small>"]
   CC(("Claude Code"))
@@ -119,6 +120,7 @@ flowchart TD
   SEED -->|"local_plugins step"| CC
   SEED -->|"wind → ~/.local/bin"| WIND
   AD -->|"symlink skills"| OTHER
+  CCLK -->|"install.sh → ~/.copilot/extensions"| OTHER
   IOS & LIN & CW & SW & PC & PA -->|"skills/"| AD
 
   classDef plugin fill:#3b6a7a1a,stroke:#3b6a7a,stroke-width:2px
@@ -261,6 +263,7 @@ flowchart TD
       <div>
         <b>Features</b>
         <a href="features/second-wind.html">Second Wind</a>
+        <a href="features/cache-clock.html">Cache Clock</a>
         <a href="features/prompt-craft.html">prompt-craft</a>
         <a href="features/portable-artifacts.html">portable-artifacts</a>
         <a href="features/mods.html">Session mods</a>
@@ -284,7 +287,7 @@ flowchart TD
     </div>
     <div class="foot-meta">
       <span class="lic">MIT licensed</span>
-      <span>8 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI</span>
+      <span>8 plugins · 88 skills · 17 commands · 2 agents · 7 hooks · 1 CLI · 1 Copilot extension</span>
       <span>Tested on macOS &amp; Ubuntu</span>
     </div>
   </div>

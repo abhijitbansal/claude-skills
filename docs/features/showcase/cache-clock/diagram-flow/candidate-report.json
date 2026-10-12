@@ -1,0 +1,353 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "How Cache Clock warns and reports: heads-up, report, VS Code",
+    "quality_profile": "showcase",
+    "output": "docs/features/showcase/cache-clock/diagram-flow/cache-clock-flow-report.html",
+    "repository": {
+      "url": "https://github.com/abhijitbansal/claude-skills",
+      "provider": "github",
+      "revision": "c2c7e5d8410ec563693ead55a473cdac86d90404"
+    }
+  },
+  "lanes": [
+    {
+      "id": "headsup",
+      "label": "Heads-up timer"
+    },
+    {
+      "id": "report",
+      "label": "Report (extension/report.mjs)"
+    },
+    {
+      "id": "vscode",
+      "label": "VS Code (measured 11-12 Oct 2026)",
+      "variant": "exception"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "sched",
+      "lane": "headsup",
+      "col": 0,
+      "type": "backend",
+      "label": "Schedule",
+      "sublabel": "warm snapshot only",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 152,
+          "end_line": 158
+        }
+      ]
+    },
+    {
+      "id": "timer",
+      "lane": "headsup",
+      "col": 1,
+      "type": "messagebus",
+      "label": "Timer",
+      "sublabel": "expiry - lead",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 12,
+          "end_line": 13
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 159,
+          "end_line": 167
+        }
+      ]
+    },
+    {
+      "id": "fireq",
+      "lane": "headsup",
+      "col": 2,
+      "type": "security",
+      "label": "Still worth it?",
+      "sublabel": "idle, warm, >= min",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 162,
+          "end_line": 165
+        }
+      ]
+    },
+    {
+      "id": "say",
+      "lane": "headsup",
+      "col": 3,
+      "type": "frontend",
+      "label": "Heads-up line",
+      "sublabel": "ephemeral, goes cold in",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 165
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/format.mjs",
+          "line": 56,
+          "end_line": 61
+        }
+      ]
+    },
+    {
+      "id": "quiet",
+      "lane": "headsup",
+      "col": 4,
+      "type": "external",
+      "label": "Stay silent",
+      "sublabel": "headsup off: no timer",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 157
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 91,
+          "end_line": 94
+        }
+      ]
+    },
+    {
+      "id": "logs",
+      "lane": "report",
+      "col": 0,
+      "type": "database",
+      "label": "Session logs",
+      "sublabel": "every events.jsonl",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/report.mjs",
+          "line": 37,
+          "end_line": 51
+        }
+      ]
+    },
+    {
+      "id": "parse",
+      "lane": "report",
+      "col": 1,
+      "type": "backend",
+      "label": "Parse per call",
+      "sublabel": "epochs split at compact",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/history.mjs",
+          "line": 11,
+          "end_line": 41
+        }
+      ]
+    },
+    {
+      "id": "classify",
+      "lane": "report",
+      "col": 2,
+      "type": "security",
+      "label": "Cold after idle?",
+      "sublabel": "else prefix break",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/usage.mjs",
+          "line": 79,
+          "end_line": 85
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/usage.mjs",
+          "line": 97,
+          "end_line": 103,
+          "label": "extraUsd"
+        }
+      ]
+    },
+    {
+      "id": "table",
+      "lane": "report",
+      "col": 3,
+      "type": "frontend",
+      "label": "Report table",
+      "sublabel": "counts, extra paid",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/history.mjs",
+          "line": 122,
+          "end_line": 141
+        }
+      ]
+    },
+    {
+      "id": "vsc",
+      "lane": "vscode",
+      "col": 0,
+      "type": "external",
+      "label": "VS Code Copilot chat",
+      "sublabel": "chat.canvases.enabled",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 61,
+          "end_line": 64
+        },
+        {
+          "path": "tools/cache-clock/install.sh",
+          "line": 70
+        }
+      ]
+    },
+    {
+      "id": "vsshow",
+      "lane": "vscode",
+      "col": 1,
+      "type": "frontend",
+      "label": "Command output",
+      "sublabel": "question card, OK button",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 94,
+          "end_line": 98
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/format.mjs",
+          "line": 117,
+          "end_line": 118
+        }
+      ]
+    },
+    {
+      "id": "vslog",
+      "lane": "vscode",
+      "col": 2,
+      "type": "external",
+      "label": "Heads-up, notes",
+      "sublabel": "reach VS Code's log only",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 61,
+          "end_line": 64
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 165
+        }
+      ]
+    },
+    {
+      "id": "ckpt",
+      "lane": "vscode",
+      "col": 3,
+      "type": "database",
+      "label": "usage_checkpoint",
+      "sublabel": "totals only",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/history.mjs",
+          "line": 33
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-sched-timer",
+      "from": "sched",
+      "to": "timer",
+      "label": "warm only"
+    },
+    {
+      "id": "e-timer-fire",
+      "from": "timer",
+      "to": "fireq",
+      "label": "fires"
+    },
+    {
+      "id": "e-fire-say",
+      "from": "fireq",
+      "to": "say",
+      "label": "yes",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-fire-quiet",
+      "from": "fireq",
+      "to": "quiet",
+      "label": "no",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-logs-parse",
+      "from": "logs",
+      "to": "parse"
+    },
+    {
+      "id": "e-parse-classify",
+      "from": "parse",
+      "to": "classify"
+    },
+    {
+      "id": "e-classify-table",
+      "from": "classify",
+      "to": "table",
+      "label": "per model"
+    },
+    {
+      "id": "e-vsc-no",
+      "from": "vsc",
+      "to": "vsshow",
+      "label": "/cache-clock, typed in full"
+    },
+    {
+      "id": "e-show-log",
+      "from": "vsshow",
+      "to": "vslog",
+      "label": "other lines"
+    },
+    {
+      "id": "e-vsc-ckpt",
+      "from": "vslog",
+      "to": "ckpt",
+      "label": "sessions persist",
+      "variant": "dashed"
+    },
+    {
+      "id": "e-ckpt-table",
+      "from": "ckpt",
+      "to": "table",
+      "label": "totals only",
+      "variant": "dashed",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "VS Code, measured 11-12 Oct 2026",
+      "items": [
+        "The extension loads in VS Code's Copilot chat only with the setting \"chat.canvases.enabled\": true, from the same ~/.copilot/extensions install.",
+        "Typed in full, /cache-clock works but is not listed in the / menu. Its card, help and settings appear as a question with an OK button, because plain session messages show there only as error boxes.",
+        "The heads-up and the sending-cold note reach only VS Code's log. Sessions keep usage checkpoints only, so the report counts them as totals."
+      ]
+    }
+  ]
+}

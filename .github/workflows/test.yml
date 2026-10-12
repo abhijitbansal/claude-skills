@@ -53,7 +53,7 @@ jobs:
         run: uv tool install pytest
 
       - name: shellcheck
-        run: shellcheck setup/*.sh plugins/ios-dev/skills/_lib/*.sh adapters/*.sh plugins/prompt-craft/hooks/*.sh
+        run: shellcheck setup/*.sh plugins/ios-dev/skills/_lib/*.sh adapters/*.sh plugins/prompt-craft/hooks/*.sh tools/cache-clock/install.sh
 
       - name: bats
         run: bats tests/bats/
@@ -87,6 +87,9 @@ jobs:
       - name: make-motion
         working-directory: plugins/portable-artifacts/skills/make-motion
         run: npm ci && npm test
+      - name: cache-clock (Copilot CLI extension, fake session)
+        working-directory: tools/cache-clock
+        run: node --test "test/*.test.mjs"
 
   # A plugin's plugin.json `version` is the ONLY update trigger — Claude Code
   # skips a plugin whose version string is unchanged, even when its code moved.

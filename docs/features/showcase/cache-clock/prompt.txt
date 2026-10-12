@@ -1,0 +1,1 @@
+/portable-artifacts:make-motion — a short silent explainer for Cache Clock: why a cold Copilot prompt cache costs 25× per token, the TTL countdown, the in-chat question before a costly cold send (Don't send costs 0 AI credits), and the one-line install.
