@@ -6,7 +6,7 @@ import Ajv from 'ajv';
 import { formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { ROOT_SCHEMA, SECTION_SCHEMAS, TYPE_SCHEMA, NON_SPACE } from './schema.mjs';
-import { checkTop, checkIds, checkSections } from './semantic.mjs';
+import { checkTop, checkIds, checkSections, warnSections } from './semantic.mjs';
 import { collectStrings } from './walk.mjs';
 import { lintText, lintPlaceholders } from './lint.mjs';
 import { slideBudget } from './slides.mjs';
@@ -107,5 +107,5 @@ export async function validateSpec(spec, { dir = process.cwd() } = {}) {
   errors.push(...lint.errors);
   if (spec.mode === 'slides' || spec.preset === 'slides') errors.push(...slideBudget(spec));
   errors.push(...await registryErrors(spec, dir));
-  return { ok: errors.length === 0, errors, warnings: lint.warnings };
+  return { ok: errors.length === 0, errors, warnings: [...lint.warnings, ...warnSections(spec)] };
 }

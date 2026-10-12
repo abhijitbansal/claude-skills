@@ -109,14 +109,86 @@ test('editing one item resets only that item; renaming a group resets only that 
   await context.close();
 });
 
-test('stale ids in storage are ignored and dropped on the next write', async (t) => {
+test('an id this page does not know is ignored in the tally but survives every write, reset included', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const stale = JSON.stringify({ deadbeef00: true, [itemId('Install', 'one')]: true });
   const { page, problems, context } = await openPage(page5().url, { seed: { [KEY]: stale } });
   assert.deepEqual(await summary(page), { done: '1', pct: '20%', now: '1', groups: ['1', '0'], ticked: ['one'] });
   await tick(page, 'two');
-  assert.deepEqual(JSON.parse(await stored(page)), { [itemId('Install', 'one')]: true, [itemId('Install', 'two')]: true });
+  assert.deepEqual(JSON.parse(await stored(page)), { deadbeef00: true, [itemId('Install', 'one')]: true, [itemId('Install', 'two')]: true });
+  await untick(page, 'one');
+  assert.deepEqual(JSON.parse(await stored(page)), { deadbeef00: true, [itemId('Install', 'two')]: true });
+  await pressReset(page);
+  await page.locator('[data-reset-yes]').click();
+  assert.deepEqual(JSON.parse(await stored(page)), { deadbeef00: true }, 'reset clears this page\'s ticks only');
   assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('two pages on one key: both ticks survive, and each page follows the other through the storage event', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const url = page5().url;
+  const a = await openPage(url);
+  const b = await openPage(url, { context: a.context });
+  await tick(a.page, 'one');
+  await b.page.waitForFunction(() => document.querySelector('[data-done]').textContent === '1');
+  assert.deepEqual((await summary(b.page)).ticked, ['one'], 'B reflects A after the event');
+  assert.deepEqual((await summary(b.page)).groups, ['1', '0']);
+  assert.equal(await b.page.locator('[role=progressbar]').getAttribute('aria-valuenow'), '1');
+  await tick(b.page, 'four');
+  await a.page.waitForFunction(() => document.querySelector('[data-done]').textContent === '2');
+  assert.deepEqual((await summary(a.page)).ticked.sort(), ['four', 'one']);
+  assert.deepEqual(JSON.parse(await stored(a.page)), { [itemId('Install', 'one')]: true, [itemId('Themes', 'four')]: true });
+  await untick(a.page, 'one');
+  await b.page.waitForFunction(() => document.querySelector('[data-done]').textContent === '1');
+  assert.deepEqual((await summary(b.page)).ticked, ['four']);
+  assert.deepEqual(a.problems, []);
+  assert.deepEqual(b.problems, []);
+  await a.context.close();
+});
+
+test('a write from a page that never saw the other tab\'s tick still keeps it (merge, not replace)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const url = page5().url;
+  const a = await openPage(url);
+  const b = await openPage(url, { context: a.context });
+  // B ignores the event, as a tab that was asleep would.
+  await b.page.evaluate(() => { window.addEventListener('storage', (e) => e.stopImmediatePropagation(), true); });
+  await tick(a.page, 'one');
+  await tick(b.page, 'five');
+  assert.deepEqual(JSON.parse(await stored(b.page)), { [itemId('Install', 'one')]: true, [itemId('Themes', 'five')]: true });
+  await a.context.close();
+});
+
+test('the reset count follows ticks made while the confirm is open, and the confirm closes when none are left', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(page5().url);
+  await tick(page, 'one');
+  await pressReset(page);
+  assert.equal((await page.locator('[data-confirm-text]').textContent()).trim(), 'Reset all 1 tick?');
+  await tick(page, 'two');
+  assert.equal((await page.locator('[data-confirm-text]').textContent()).trim(), 'Reset all 2 ticks?');
+  await untick(page, 'one');
+  assert.equal((await page.locator('[data-confirm-text]').textContent()).trim(), 'Reset all 1 tick?');
+  await untick(page, 'two');
+  assert.equal(await page.locator('[data-confirm]').isHidden(), true, 'nothing left to reset');
+  assert.equal(await page.locator('[data-reset]').isVisible(), true);
+  await context.close();
+});
+
+test('a tag chip that wraps to its own line starts at the text edge, not indented', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const long = 'A manual step with enough words that the tag chip no longer fits beside it on a phone screen';
+  const built = buildSpec(spec([{ title: 'G', items: [{ text: long, tag: 'regression' }] }]));
+  const { page, context } = await openPage(built.url, { width: 390, height: 844 });
+  const edges = await page.evaluate(() => ({
+    text: document.querySelector('.cl-text').getBoundingClientRect().left,
+    chipTop: document.querySelector('.cl-item-chip').getBoundingClientRect().top,
+    textBottom: document.querySelector('.cl-text').getBoundingClientRect().bottom,
+    chip: document.querySelector('.cl-item-chip').getBoundingClientRect().left,
+  }));
+  assert.ok(edges.chipTop >= edges.textBottom - 1, 'the chip wrapped below the text at 390');
+  assert.ok(Math.abs(edges.chip - edges.text) <= 1, `chip left ${edges.chip} vs text left ${edges.text}`);
   await context.close();
 });
 

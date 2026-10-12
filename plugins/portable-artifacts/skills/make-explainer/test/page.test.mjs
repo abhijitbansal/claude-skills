@@ -194,10 +194,15 @@ test('pa-lib: readChecks keeps only known ids that are ticked and survives junk'
   assert.equal(Object.getPrototypeOf(readChecks('{}', ids)), null, 'no inherited keys to trip over');
 });
 
-test('pa-lib: serializeChecks writes {id:true} sorted, and nothing for an empty set', () => {
-  const { serializeChecks } = loadLib();
-  assert.equal(serializeChecks({ bb: true, aa: true }), '{"aa":true,"bb":true}');
-  assert.equal(serializeChecks({}), null);
+test('pa-lib: mergeChecks changes only this page\'s ids and keeps everything else stored', () => {
+  const { mergeChecks } = loadLib();
+  const ids = ['aaaaaaaaaa', 'bbbbbbbbbb'];
+  assert.equal(mergeChecks('{"zzzzzzzzzz":true,"aaaaaaaaaa":true}', ids, { bbbbbbbbbb: true }), '{"bbbbbbbbbb":true,"zzzzzzzzzz":true}');
+  assert.equal(mergeChecks('{"zzzzzzzzzz":true}', ids, {}), '{"zzzzzzzzzz":true}');
+  assert.equal(mergeChecks('{"aaaaaaaaaa":true}', ids, {}), null, 'nothing left: remove the key');
+  assert.equal(mergeChecks(null, ids, { aaaaaaaaaa: true }), '{"aaaaaaaaaa":true}');
+  for (const junk of ['not json', '[1]', 'null', '"x"', '']) assert.equal(mergeChecks(junk, ids, { aaaaaaaaaa: true }), '{"aaaaaaaaaa":true}', junk);
+  assert.equal(mergeChecks('{"__proto__":true,"zzzzzzzzzz":1}', ids, {}), '{"zzzzzzzzzz":1}', 'unknown entries are kept as they were, except __proto__');
 });
 
 test('pa-lib: checkProgress floors the percentage so 100 means finished', () => {

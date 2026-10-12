@@ -168,3 +168,15 @@ export function checkSections(spec, errors) {
   const state = { checklistKeys: new Map() };
   spec.sections.forEach((s, i) => checkSection(s, i, errors, state));
 }
+
+/** Advice that never blocks a build: -> [{ path, message }]. */
+export function warnSections(spec) {
+  const warnings = [];
+  if (spec.preset !== 'checklist') return warnings;
+  spec.sections.forEach((s, i) => {
+    if (s.type === 'checklist' && s.intro === undefined) {
+      warnings.push({ path: pathJoin(pathJoin('sections', i), 'intro'), message: 'add a "What\'s in this branch" summary (features and review-cycle fixes) — testers need the context' });
+    }
+  });
+  return warnings;
+}

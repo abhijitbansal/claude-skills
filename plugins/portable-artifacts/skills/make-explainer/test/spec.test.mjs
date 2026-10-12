@@ -548,3 +548,13 @@ test('unregisterCheck removes one check and tolerates unknown ones', () => {
   unregisterCheck('table', fn);
   unregisterCheck('nothing-here', fn);
 });
+
+test('a checklist preset warns, never errors, when a checklist section has no intro', async () => {
+  const bare = (patch = {}) => doc([{ type: 'text', text: 'x' }, { type: 'checklist', key: 'k', groups: [{ title: 'g', items: [{ text: 'a' }] }], ...patch }], { preset: 'checklist' });
+  const r = await validateSpec(bare(), { dir: FIXTURES });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.warnings, [{ path: 'sections[1].intro', message: 'add a "What\'s in this branch" summary (features and review-cycle fixes) — testers need the context' }]);
+  assert.deepEqual((await validateSpec(bare({ intro: 'Covers two features.' }), { dir: FIXTURES })).warnings, []);
+  const other = doc([{ type: 'checklist', key: 'k', groups: [{ title: 'g', items: [{ text: 'a' }] }] }], { preset: 'recap' });
+  assert.deepEqual((await validateSpec(other, { dir: FIXTURES })).warnings, [], 'only the checklist preset asks for it');
+});

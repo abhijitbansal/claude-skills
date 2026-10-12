@@ -41,12 +41,26 @@
     return out;
   }
 
-  // The string to store for a set of ticks; null when nothing is ticked (remove the key).
-  function serializeChecks(checked) {
-    var keys = Object.keys(checked).filter(function (k) { return checked[k] === true; }).sort();
+  // The string to store after this page changed its own ticks. `raw` is what is stored now
+  // (another tab or page on the same key may have written since this page read it): only
+  // this page's `ids` are set or removed, every other stored entry is kept as it was.
+  // Returns null when nothing is left (remove the key).
+  function mergeChecks(raw, ids, checked) {
+    var data = {};
+    var stored = null;
+    if (typeof raw === 'string' && raw !== '') {
+      try { stored = JSON.parse(raw); } catch (e) { stored = null; }
+    }
+    if (stored !== null && typeof stored === 'object' && !Array.isArray(stored)) {
+      Object.keys(stored).forEach(function (k) { if (k !== '__proto__') data[k] = stored[k]; });
+    }
+    ids.forEach(function (id) {
+      if (checked[id] === true) data[id] = true; else delete data[id];
+    });
+    var keys = Object.keys(data).sort();
     if (!keys.length) return null;
     var out = {};
-    keys.forEach(function (k) { out[k] = true; });
+    keys.forEach(function (k) { out[k] = data[k]; });
     return JSON.stringify(out);
   }
 
@@ -70,6 +84,6 @@
 
   root.PA = {
     nextTheme: nextTheme, readStore: readStore, writeStore: writeStore, saveStore: saveStore,
-    readChecks: readChecks, serializeChecks: serializeChecks, checkProgress: checkProgress, activeIndex: activeIndex,
+    readChecks: readChecks, mergeChecks: mergeChecks, checkProgress: checkProgress, activeIndex: activeIndex,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

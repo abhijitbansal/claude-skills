@@ -18,9 +18,9 @@ export const itemKey = (groupTitle, itemText) => `${groupTitle}\u0000${itemText}
 export const itemId = (groupTitle, itemText) => crypto.createHash('sha256').update(itemKey(groupTitle, itemText)).digest('hex').slice(0, ID_HEX);
 
 function item(group, it) {
-  const tag = Object.hasOwn(TAGS, it.tag) ? ` <span class="cl-item-chip">${chip(TAGS[it.tag])}</span>` : '';
+  const tag = Object.hasOwn(TAGS, it.tag) ? `<span class="cl-item-chip">${chip(TAGS[it.tag])}</span>` : '';
   const note = it.note === undefined ? '' : `<span class="cl-note">${inline(it.note)}</span>`;
-  return `<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="${itemId(group.title, it.text)}"><span class="cl-main"><span class="cl-text">${inline(it.text)}</span>${tag}${note}</span></label></li>`;
+  return `<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="${itemId(group.title, it.text)}"><span class="cl-main"><span class="cl-line"><span class="cl-text">${inline(it.text)}</span>${tag}</span>${note}</span></label></li>`;
 }
 
 function renderGroup(group) {

@@ -121,8 +121,9 @@
     var saved = PA.saveStore(local, 'pa-probe', '1') && PA.saveStore(local, 'pa-probe', null);
     var checked = saved ? PA.readChecks(PA.readStore(local, storeKey), ids) : PA.readChecks(null, ids);
 
+    // Merge into what is stored now, so another tab's (or page's) ticks are never lost.
     function persist() {
-      var ok = PA.saveStore(local, storeKey, PA.serializeChecks(checked));
+      var ok = PA.saveStore(local, storeKey, PA.mergeChecks(PA.readStore(local, storeKey), ids, checked));
       if (!ok) unsaved.hidden = false;
     }
     function refresh() {
@@ -148,7 +149,13 @@
       meter.setAttribute('aria-valuetext', p.done + ' of ' + p.total + ' done');
       // aria-disabled, not disabled: focus can rest on the button after a reset empties it.
       reset.setAttribute('aria-disabled', p.done === 0 ? 'true' : 'false');
+      if (!confirmBox.hidden) {
+        if (p.done === 0) closeConfirm(false); else showCount(p.done);
+      }
       return p.done;
+    }
+    function showCount(n) {
+      part('data-confirm-text').textContent = 'Reset all ' + n + (n === 1 ? ' tick?' : ' ticks?');
     }
     function closeConfirm(refocus) {
       confirmBox.hidden = true;
@@ -170,7 +177,7 @@
     reset.addEventListener('click', function () {
       var n = refresh();
       if (n === 0) return;
-      part('data-confirm-text').textContent = 'Reset all ' + n + (n === 1 ? ' tick?' : ' ticks?');
+      showCount(n);
       reset.hidden = true;
       confirmBox.hidden = false;
       part('data-reset-no').focus();
@@ -182,6 +189,12 @@
       refresh();
       closeConfirm(true);
       announce('Checklist reset');
+    });
+    // Another tab or page changed this key: take its ticks, keep showing ours consistent.
+    window.addEventListener('storage', function (event) {
+      if (event.storageArea !== local || (event.key !== null && event.key !== storeKey)) return;
+      checked = PA.readChecks(PA.readStore(local, storeKey), ids);
+      refresh();
     });
     confirmBox.addEventListener('keydown', function (event) {
       if (event.key === 'Escape') { event.stopPropagation(); closeConfirm(true); }
