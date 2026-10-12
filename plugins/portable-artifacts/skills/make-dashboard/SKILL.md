@@ -2,6 +2,8 @@
 name: make-dashboard
 description: Use when the user wants a dashboard, KPI page or charts built from local data files (CSV, Parquet, JSON, DuckDB, SQLite) or Postgres/MySQL as a self-contained static HTML page whose charts show their SQL and refresh time; works offline with any agent that can run shell commands.
 argument-hint: what to build, e.g. "revenue by region and monthly trend from data/sales.csv"
+model: haiku
+effort: low
 ---
 
 # make-dashboard
