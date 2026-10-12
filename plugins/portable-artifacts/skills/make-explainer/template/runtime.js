@@ -5,8 +5,7 @@
   var root = document.documentElement;
   var safeStorage = function (name) { try { return window[name]; } catch (e) { return undefined; } };
   var local = safeStorage('localStorage');
-  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var live = null;
+    var live = null;
   function announce(text) {
     if (!live) {
       live = document.createElement('div');
@@ -87,7 +86,9 @@
   document.addEventListener('click', function (event) {
     var button = event.target.closest ? event.target.closest('[data-copy]') : null;
     if (!button) return;
-    var code = button.closest('figure').querySelector('pre code');
+    var figure = button.closest('figure');
+    var code = figure ? figure.querySelector('pre code') : null;
+    if (!code) return;
     var done = function (label, message) {
       button.textContent = label;
       announce(message);
@@ -105,20 +106,25 @@
   });
 
   // ---- one rise-in per section ----------------------------------------------
+  // The page head armed it (class rise-ready) when motion is allowed; here sections
+  // are revealed as they come into view.
   var sections = [].slice.call(document.querySelectorAll('.sec'));
-  if (!reduced && 'IntersectionObserver' in window && sections.length) {
-    root.classList.add('rise-ready');
-    var rise = new IntersectionObserver(function (entries) {
-      // The furthest section now on screen: it and everything above it counts as
-      // seen, so a deep link or a jump to the end leaves nothing hidden behind it.
-      var furthest = -1;
-      entries.forEach(function (e) { if (e.isIntersecting) furthest = Math.max(furthest, sections.indexOf(e.target)); });
-      for (var i = 0; i <= furthest; i++) {
-        sections[i].classList.add('in');
-        rise.unobserve(sections[i]);
-      }
-    }, { rootMargin: '0px 0px -4% 0px', threshold: 0.01 });
-    sections.forEach(function (el) { rise.observe(el); });
+  if (root.classList.contains('rise-ready')) {
+    if ('IntersectionObserver' in window && sections.length) {
+      var rise = new IntersectionObserver(function (entries) {
+        // The furthest section now on screen: it and everything above it counts as
+        // seen, so a deep link or a jump to the end leaves nothing hidden behind it.
+        var furthest = -1;
+        entries.forEach(function (e) { if (e.isIntersecting) furthest = Math.max(furthest, sections.indexOf(e.target)); });
+        for (var i = 0; i <= furthest; i++) {
+          sections[i].classList.add('in');
+          rise.unobserve(sections[i]);
+        }
+      }, { rootMargin: '0px 0px -4% 0px', threshold: 0.01 });
+      sections.forEach(function (el) { rise.observe(el); });
+    } else {
+      root.classList.remove('rise-ready');
+    }
   }
 
   // ---- print: show everything -----------------------------------------------

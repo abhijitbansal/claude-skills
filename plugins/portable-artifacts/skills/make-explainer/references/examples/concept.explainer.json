@@ -4,12 +4,16 @@
   "preset": "concept",
   "mode": "page",
   "theme": "paper",
-  "meta": { "date": "2026-10-12", "status": "Draft for review", "author": "Abhijit Bansal" },
+  "meta": {
+    "date": "2026-10-12",
+    "status": "Draft for review",
+    "author": "Abhijit Bansal"
+  },
   "sections": [
     {
       "type": "tldr",
       "id": "verdict",
-      "title": "The short version",
+      "title": "Writing the outline, not the page, keeps every explainer consistent",
       "text": "You write the facts; the tool owns the layout. The page is always well formed, offline and the same family as every other one.",
       "points": [
         "The model fills typed sections in JSON and never writes HTML, CSS or script.",
@@ -27,48 +31,122 @@
       "type": "kpis",
       "title": "What one build produces",
       "items": [
-        { "label": "Network requests", "value": 0, "note": "fonts and script are inlined" },
-        { "label": "Section types", "value": 18, "delta": "4 need a sibling skill", "tone": "accent" },
-        { "label": "Themes", "value": 4, "note": "light and dark each" }
+        {
+          "label": "Network requests",
+          "value": 0,
+          "note": "fonts and script are inlined"
+        },
+        {
+          "label": "Section types",
+          "value": 18,
+          "delta": "4 need a sibling skill",
+          "tone": "accent"
+        },
+        {
+          "label": "Themes",
+          "value": 4,
+          "note": "light and dark each"
+        }
       ]
     },
     {
       "type": "image",
       "title": "Three steps from facts to a finished page",
       "src": "pipeline.svg",
-      "alt": "Three boxes joined by arrows: Outline (typed JSON sections), Checks (schema, links, prose) and Page (one offline HTML file).",
-      "caption": "Validation sits between the outline and the build, so a bad outline never produces a half-made page."
+      "alt": "Three boxes joined by arrows, top to bottom: Outline, Checks, Page.",
+      "caption": "The outline is typed JSON sections, the checks cover schema, links and prose, and the page is one offline HTML file. A bad outline never reaches the build."
     },
     {
       "type": "cards",
       "title": "Four rules keep the output trustworthy",
       "columns": 2,
       "items": [
-        { "title": "Closed vocabulary", "text": "Tones, severities and changes come from fixed lists. A typo gets a did-you-mean hint instead of a silent default.", "icon": "lucide:list-checks", "tag": "schema" },
-        { "title": "Files stay local", "text": "Images and diagrams resolve inside the spec folder. Absolute paths, parent folders and symlinks are refused.", "icon": "lucide:file-lock", "tag": "paths" },
-        { "title": "Plain prose", "text": "A lint rejects emoji, filler phrases and placeholder text before the page exists.", "icon": "lucide:pen", "tag": "lint" },
-        { "title": "Status needs a word", "text": "Severity, change type and step status each show a shape and a label, never colour alone.", "icon": "lucide:eye", "tag": "a11y", "tone": "accent" }
+        {
+          "title": "Closed vocabulary",
+          "text": "Tones, severities and changes come from fixed lists. A typo gets a did-you-mean hint instead of a silent default.",
+          "icon": "lucide:list-checks",
+          "tag": "schema"
+        },
+        {
+          "title": "Files stay local",
+          "text": "Images and diagrams resolve inside the spec folder. Absolute paths, parent folders and symlinks are refused.",
+          "icon": "lucide:file-lock",
+          "tag": "paths"
+        },
+        {
+          "title": "Plain prose",
+          "text": "A lint rejects emoji, filler phrases and placeholder text before the page exists.",
+          "icon": "lucide:pen",
+          "tag": "lint"
+        },
+        {
+          "title": "Status needs a word",
+          "text": "Severity, change type and step status each show a shape and a label, never colour alone.",
+          "icon": "lucide:eye",
+          "tag": "a11y",
+          "tone": "accent"
+        }
       ]
     },
     {
       "type": "compare",
       "title": "Typed sections win on consistency and lose on freedom",
       "columns": [
-        { "title": "Freehand HTML", "points": ["Any layout you can imagine", "Every page needs a design pass", "Easy to ship a broken or networked page"], "tone": "warn" },
-        { "title": "Typed outline", "points": ["Eighteen section types, all themed", "Checked before it is built", "Cannot load anything from the network"], "tone": "good" }
+        {
+          "title": "Freehand HTML",
+          "points": [
+            "Any layout you can imagine",
+            "Every page needs a design pass",
+            "Easy to ship a broken or networked page"
+          ],
+          "tone": "warn"
+        },
+        {
+          "title": "Typed outline",
+          "points": [
+            "Eighteen section types, all themed",
+            "Checked before it is built",
+            "Cannot load anything from the network"
+          ],
+          "tone": "good"
+        }
       ],
       "verdict": "Use the outline for recaps, checklists and concept pages. Reach for a bespoke page only when the layout itself is the point."
     },
     {
       "type": "table",
       "title": "Each section type answers a different question",
-      "columns": ["Section", "Use it to show", "Typical size"],
+      "columns": [
+        "Section",
+        "Use it to show",
+        "Typical size"
+      ],
       "rows": [
-        ["tldr", "The verdict and its few supporting points", "1 per page"],
-        ["kpis", "Headline numbers", "3 to 6 tiles"],
-        ["table", "Rows that compare across the same columns", "up to 60 rows"],
-        ["files", "What changed, grouped by folder", "up to 200 files"],
-        ["steps", "An ordered procedure with a status", "3 to 10 steps"]
+        [
+          "tldr",
+          "The verdict and its few supporting points",
+          "1 per page"
+        ],
+        [
+          "kpis",
+          "Headline numbers",
+          "3 to 6 tiles"
+        ],
+        [
+          "table",
+          "Rows that compare across the same columns",
+          "up to 60 rows"
+        ],
+        [
+          "files",
+          "What changed, grouped by folder",
+          "up to 200 files"
+        ],
+        [
+          "steps",
+          "An ordered procedure with a status",
+          "3 to 10 steps"
+        ]
       ],
       "caption": "A short extract of the full list"
     },
@@ -76,10 +154,25 @@
       "type": "steps",
       "title": "Building a page takes four moves",
       "items": [
-        { "title": "Pick a preset", "text": "Recap, checklist, concept or slides gives you a section skeleton.", "status": "done" },
-        { "title": "Fill the sections", "text": "Replace every placeholder with a real sentence.", "status": "doing" },
-        { "title": "Validate", "text": "Fix each error; every one names the JSON path and the repair.", "status": "todo" },
-        { "title": "Build and open", "status": "todo" }
+        {
+          "title": "Pick a preset",
+          "text": "Recap, checklist, concept or slides gives you a section skeleton.",
+          "status": "done"
+        },
+        {
+          "title": "Fill the sections",
+          "text": "Replace every placeholder with a real sentence.",
+          "status": "doing"
+        },
+        {
+          "title": "Validate",
+          "text": "Fix each error; every one names the JSON path and the repair.",
+          "status": "todo"
+        },
+        {
+          "title": "Build and open",
+          "status": "todo"
+        }
       ]
     },
     {
@@ -93,29 +186,90 @@
       "type": "risks",
       "title": "Three limits you should know about",
       "items": [
-        { "risk": "A layout the section types cannot express", "severity": "medium", "mitigation": "Split the content across sections, or build a bespoke page for that one case.", "owner": "Author" },
-        { "risk": "A diagram or chart needs a sibling skill", "severity": "low", "mitigation": "The installer adds make-diagram and make-dashboard next to this skill." },
-        { "risk": "A very large inline image bloats the page", "severity": "high", "mitigation": "Images over 1.5 MB are rejected; resize or link a smaller export." }
+        {
+          "risk": "A layout the section types cannot express",
+          "severity": "medium",
+          "mitigation": "Split the content across sections, or build a bespoke page for that one case.",
+          "owner": "Author"
+        },
+        {
+          "risk": "A diagram or chart needs a sibling skill",
+          "severity": "low",
+          "mitigation": "The installer adds make-diagram and make-dashboard next to this skill."
+        },
+        {
+          "risk": "A very large inline image bloats the page",
+          "severity": "high",
+          "mitigation": "Images over 1.5 MB are rejected; resize or link a smaller export."
+        }
       ]
     },
     {
       "type": "files",
-      "title": "Where the pieces live in the skill",
+      "title": "Each section type is one small renderer module",
       "items": [
-        { "path": "scripts/lib/schema.mjs", "change": "added", "note": "closed section vocabulary", "add": 143 },
-        { "path": "scripts/lib/render/table.mjs", "change": "added", "note": "numeric columns right-align" },
-        { "path": "scripts/lib/render/cards.mjs", "change": "added" },
-        { "path": "template/page.html", "change": "modified", "note": "styles and print rules", "add": 210, "del": 12 },
-        { "path": "template/old-viewer.html", "change": "deleted", "del": 90 }
+        {
+          "path": "scripts/lib/page.mjs",
+          "change": "added",
+          "note": "page assembly; line counts are from commit b113ada",
+          "add": 160,
+          "del": 0
+        },
+        {
+          "path": "scripts/lib/image.mjs",
+          "change": "added",
+          "note": "size cap and SVG safety rule",
+          "add": 53,
+          "del": 0
+        },
+        {
+          "path": "scripts/lib/render/table.mjs",
+          "change": "added",
+          "note": "numeric columns right-align",
+          "add": 38,
+          "del": 0
+        },
+        {
+          "path": "scripts/lib/render/cards.mjs",
+          "change": "added",
+          "add": 21,
+          "del": 0
+        },
+        {
+          "path": "scripts/lib/checks.mjs",
+          "change": "modified",
+          "note": "image and icon checks",
+          "add": 33,
+          "del": 2
+        },
+        {
+          "path": "template/page.html",
+          "change": "added",
+          "note": "styles and print rules",
+          "add": 266,
+          "del": 0
+        }
       ]
     },
     {
       "type": "timeline",
       "title": "The design settled in three passes",
       "items": [
-        { "date": "Pass 1", "title": "Schema first", "text": "Closed section types, limits and did-you-mean errors." },
-        { "date": "Pass 2", "title": "Renderers", "text": "One module per type, each with an escaping test." },
-        { "date": "Pass 3", "title": "Runtime", "text": "Theme toggle, contents highlight and copy buttons." }
+        {
+          "date": "Pass 1",
+          "title": "Schema first",
+          "text": "Closed section types, limits and did-you-mean errors."
+        },
+        {
+          "date": "Pass 2",
+          "title": "Renderers",
+          "text": "One module per type, each with an escaping test."
+        },
+        {
+          "date": "Pass 3",
+          "title": "Runtime",
+          "text": "Theme toggle, contents highlight and copy buttons."
+        }
       ]
     },
     {

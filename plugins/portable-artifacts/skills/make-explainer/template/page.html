@@ -7,8 +7,18 @@
 <meta name="color-scheme" content="light dark">
 <title><!--@TITLE--></title>
 <script>
-// Apply the saved theme before first paint (no flash). Storage may throw.
-(function () { try { var t = window.localStorage.getItem('pa-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {} })();
+// Before first paint: apply the saved theme (no flash; storage may throw) and, when motion
+// is allowed, arm the one-time rise-in so sections never paint visible and then drop to
+// hidden. If the runtime has not started after 2 s, disarm it so content is never stuck hidden.
+(function () {
+  var root = document.documentElement;
+  try { var t = window.localStorage.getItem('pa-theme'); if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t); } catch (e) {}
+  var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!calm && 'IntersectionObserver' in window) {
+    root.classList.add('rise-ready');
+    window.setTimeout(function () { if (!window.paReady) root.classList.remove('rise-ready'); }, 2000);
+  }
+})();
 </script>
 <style>
 <!--@THEME-->

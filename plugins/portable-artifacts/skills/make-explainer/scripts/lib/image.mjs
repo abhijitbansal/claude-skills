@@ -15,17 +15,26 @@ const SNIFF = {
   'image/svg+xml': (b) => /<svg[\s>]/i.test(b.toString('utf8', 0, Math.min(b.length, 4096))),
 };
 
-// Every tag is inspected on its own so text content such as "onclick = x" is not a false hit.
+// Whole-text scan, on purpose: a tag-by-tag scan can be hidden by a ">" inside a
+// quoted attribute value. Strict means a few harmless files are refused (for
+// example text that mentions "onclick ="); export a png for those.
+const HREF = /(?:xlink:)?href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+const CSS_URL = /url\(\s*(["']?)\s*([^)]*)/gi;
+
 export function svgProblem(svg) {
   if (/<script/i.test(svg)) return 'contains <script';
   if (/<foreignObject/i.test(svg)) return 'contains <foreignObject';
   if (/<!ENTITY/i.test(svg)) return 'declares an entity';
-  for (const tag of svg.match(/<[^>]+>/g) ?? []) {
-    if (/[\s"'/]on[a-z]+\s*=/i.test(tag)) return 'contains an event handler attribute (on…=)';
-    for (const m of tag.matchAll(/(?:xlink:)?href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)) {
-      const value = (m[1] ?? m[2] ?? m[3] ?? '').trim();
-      if (!value.startsWith('#')) return `has an href that is not a #fragment (${JSON.stringify(value.slice(0, 40))})`;
-    }
+  if (/javascript\s*:/i.test(svg)) return 'contains a javascript: URL';
+  if (/[\s"'/]on[a-z]+\s*=/i.test(svg)) return 'contains an event handler attribute (on…=)';
+  if (/@import/i.test(svg)) return 'contains an @import';
+  if (/attributeName\s*=\s*["']?\s*(?:xlink:)?href/i.test(svg)) return 'animates an href';
+  for (const m of svg.matchAll(HREF)) {
+    const value = (m[1] ?? m[2] ?? m[3] ?? '').trim();
+    if (!value.startsWith('#')) return `has an href that is not a #fragment (${JSON.stringify(value.slice(0, 40))})`;
+  }
+  for (const m of svg.matchAll(CSS_URL)) {
+    if (!m[2].trim().startsWith('#')) return `has a url() that is not a #fragment (${JSON.stringify(m[2].trim().slice(0, 40))})`;
   }
   return null;
 }

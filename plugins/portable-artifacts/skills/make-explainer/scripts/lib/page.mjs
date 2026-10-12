@@ -38,21 +38,43 @@ const inlineCode = (code) => code.replace(/<\/(script)/gi, '<\\/$1').replaceAll(
 
 const slugOf = (title) => slugify(rawText(title), '').slice(0, MAX_ID).replace(/-+$/, '');
 
-// Explicit ids are kept; the rest come from the title (or "section-N") and are
-// made unique with a numeric suffix.
+// Explicit ids are kept; the rest come from the title (or "section-N"), get the
+// "s-" prefix when they would start with a digit, and are made unique with a
+// numeric suffix applied to that final id. A generated id also avoids every
+// "<id>-title" heading id already taken.
 export function sectionIds(sections) {
-  const taken = new Set(sections.map((s) => s.id).filter((id) => id !== undefined));
+  const taken = new Set();
+  for (const s of sections) {
+    if (s.id !== undefined) {
+      taken.add(s.id);
+      taken.add(`${s.id}-title`);
+    }
+  }
   return sections.map((s, i) => {
     if (s.id !== undefined) return s.id;
-    const base = (s.title !== undefined && slugOf(s.title)) || `section-${i + 1}`;
-    let id = /^[a-z]/.test(base) ? base : `s-${base}`;
-    for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
+    const slug = (s.title !== undefined && slugOf(s.title)) || `section-${i + 1}`;
+    const base = /^[a-z]/.test(slug) ? slug : `s-${slug}`;
+    let id = base;
+    for (let n = 2; taken.has(id) || taken.has(`${id}-title`); n++) id = `${base}-${n}`;
     taken.add(id);
+    taken.add(`${id}-title`);
     return id;
   });
 }
 
-function renderSection(section, i, id, def, ctx) {
+// Heading ids: "<id>-title", numbered when an explicit section id already
+// claims that name, so no two elements on the page share an id.
+export function headingIds(ids) {
+  const taken = new Set(ids);
+  return ids.map((id) => {
+    let h = `${id}-title`;
+    for (let n = 2; taken.has(h); n++) h = `${id}-title-${n}`;
+    taken.add(h);
+    return h;
+  });
+}
+
+function renderSection(section, i, id, titleId, def, ctx) {
   let body;
   try {
     body = def.render(section, ctx);
@@ -61,9 +83,9 @@ function renderSection(section, i, id, def, ctx) {
   }
   const hasHeading = section.title !== undefined && !def.ownHeading;
   const heading = hasHeading
-    ? `<h2 class="sec-title" id="${esc(id)}-title">${inline(section.title)}<a class="anchor" href="#${esc(id)}" aria-label="Link to this section: ${plain(section.title)}">#</a></h2>\n`
+    ? `<h2 class="sec-title" id="${esc(titleId)}">${inline(section.title)}<a class="anchor" href="#${esc(id)}" aria-label="Link to this section: ${plain(section.title)}">#</a></h2>\n`
     : '';
-  const labelled = hasHeading ? ` aria-labelledby="${esc(id)}-title"` : '';
+  const labelled = hasHeading ? ` aria-labelledby="${esc(titleId)}"` : '';
   return `<section class="sec sec-${section.type}" id="${esc(id)}"${labelled}>\n${heading}${body}\n</section>`;
 }
 
@@ -119,6 +141,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
   const target = resolveOutput({ out, title: spec.title, env });
   const slug = path.basename(target, '.html');
   const ids = sectionIds(spec.sections);
+  const titleIds = headingIds(ids);
   const ctx = {
     theme: themeData,
     dir,
@@ -135,7 +158,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     const def = SECTIONS[section.type];
     if (def.assets) assets.push(...await def.assets(section, ctx));
   }
-  const rendered = spec.sections.map((section, i) => renderSection(section, i, ids[i], SECTIONS[section.type], ctx));
+  const rendered = spec.sections.map((section, i) => renderSection(section, i, ids[i], titleIds[i], SECTIONS[section.type], ctx));
   const tocEntries = spec.sections
     .map((s, i) => ({ id: ids[i], title: s.title, own: SECTIONS[s.type].ownHeading }))
     .filter((e) => e.title !== undefined && !e.own);

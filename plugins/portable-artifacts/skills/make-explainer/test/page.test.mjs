@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
-import { buildPage, BuildError, contentSecurityPolicy, sectionIds } from '../scripts/lib/page.mjs';
+import { buildPage, BuildError, contentSecurityPolicy, sectionIds, headingIds } from '../scripts/lib/page.mjs';
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 const CORE = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'core.explainer.json'), 'utf8'));
@@ -68,6 +68,33 @@ test('headings: id from the title, own ids kept, duplicates numbered, untitled g
   assert.equal(ids[4], 's-2024-plan-code');
   assert.equal(ids[5], 'section-6');
   assert.equal(new Set(ids).size, ids.length);
+});
+
+test('generated ids: the suffix goes on the prefixed id, never leaving a digit-leading id', () => {
+  const same = { type: 'text', title: '2024 plan', text: 'x' };
+  const ids = sectionIds([same, same, same]);
+  assert.deepEqual(ids, ['s-2024-plan', 's-2024-plan-2', 's-2024-plan-3']);
+  assert.ok(ids.every((id) => /^[a-z][a-z0-9-]*$/.test(id)));
+  assert.deepEqual(sectionIds([{ type: 'text', text: 'x' }, { type: 'text', id: 'section-1', text: 'x' }]), ['section-1-2', 'section-1']);
+});
+
+test('no two elements on a built page share an id, including heading ids', async () => {
+  // "a" gets heading id "a-title"; an explicit section called "a-title" would collide with it.
+  const spec = doc([
+    { type: 'text', title: 'A', text: 'x' },
+    { type: 'text', id: 'a-title', title: 'B', text: 'x' },
+    { type: 'text', title: 'A title', text: 'x' },
+    { type: 'text', title: 'A', text: 'x' },
+    { type: 'text', id: 'b-title', title: 'B', text: 'x' },
+    { type: 'text', id: 'b', title: 'B', text: 'x' },
+  ]);
+  const ids = sectionIds(spec.sections);
+  assert.equal(new Set(ids).size, ids.length);
+  const titles = headingIds(ids);
+  assert.equal(new Set([...ids, ...titles]).size, ids.length * 2, 'section ids and heading ids are all distinct');
+  const { html } = await build(spec);
+  const found = [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(new Set(found).size, found.length, `duplicate ids: ${found.filter((x, i) => found.indexOf(x) !== i)}`);
 });
 
 test('contents: absent below four titled sections, present from four, callouts excluded', async () => {

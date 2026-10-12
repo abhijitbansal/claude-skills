@@ -49,6 +49,15 @@ test('svg: script, handlers, external hrefs, foreignObject and entities are reje
     'xlink.svg': SVG('<use xlink:href="data:image/svg+xml;base64,AAAA"/>'),
     'fo.svg': SVG('<foreignObject><div/></foreignObject>'),
     'entity.svg': `<!DOCTYPE svg [<!ENTITY x "y">]>${SVG('<text>&x;</text>')}`,
+    // a ">" inside a quoted attribute must not hide what follows
+    'gt-handler.svg': SVG('<rect title="a>b" onload="alert(1)" width="4" height="4"/>'),
+    'gt-href.svg': SVG('<image title=">" href="https://evil.example/x.png"/>'),
+    'animate-href.svg': SVG('<a href="#x"><animate attributeName="href" values="javascript:alert(1)"/></a>'),
+    'animate-xlink.svg': SVG('<a><set attributeName="xlink:href" to="https://evil.example"/></a>'),
+    'import.svg': SVG('<style>@import url(https://evil.example/a.css);</style>'),
+    'css-url.svg': SVG('<rect style="fill:url(https://evil.example/p)" width="4" height="4"/>'),
+    'css-data-url.svg': SVG('<style>rect{fill:url("data:image/png;base64,AAAA")}</style>'),
+    'js-url.svg': SVG('<text>javascript:alert(1)</text>'),
   };
   const { dir, done } = folder(bad);
   try {
@@ -60,8 +69,8 @@ test('svg: script, handlers, external hrefs, foreignObject and entities are reje
   } finally { done(); }
 });
 
-test('svg: a clean file with a #fragment href and text that mentions onclick passes', async () => {
-  const good = SVG('<defs><path id="p" d="M0 0L4 4"/></defs><use href="#p"/><text>onclick = nothing</text>');
+test('svg: a clean file with #fragment references and a style block passes', async () => {
+  const good = SVG('<defs><path id="p" d="M0 0L4 4"/><linearGradient id="g"/></defs><style>.a{fill:url(#g)}</style><use href="#p" class="a"/><animate attributeName="opacity" values="0;1"/><text>one session</text>');
   assert.equal(svgProblem(good), null);
   const { dir, done } = folder({ 'ok.svg': good });
   try { assert.equal((await validateSpec(image('ok.svg'), { dir })).ok, true); } finally { done(); }

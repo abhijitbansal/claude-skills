@@ -1,6 +1,8 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { launchBrowser, haveBrowser, buildFile, buildSpec, exampleFile, scratchDir, EXAMPLES } from './helpers/browser.mjs';
 
 let browser;
@@ -265,6 +267,66 @@ test('contents: a short final section is still reachable at the end of the page'
   const geometry = await page.evaluate(() => ({ top: document.querySelector('#last-claim').getBoundingClientRect().top, line: innerHeight * 0.3 }));
   assert.ok(geometry.top > geometry.line, 'the last section never reaches the reading line, so only the end-of-page rule can select it');
   await page.waitForFunction(() => document.querySelector('.toc a[aria-current]')?.getAttribute('href') === '#last-claim');
+  await context.close();
+});
+
+// The runtime is the last inline script; a copy of the page without it shows what the head alone does.
+function withoutRuntime(name) {
+  const html = fs.readFileSync(built(name).file, 'utf8');
+  const at = html.lastIndexOf('<script>');
+  assert.ok(html.slice(at).includes('window.paReady = true'), 'the last script is the runtime');
+  const file = path.join(scratchDir(), `${name}-no-runtime.html`);
+  fs.writeFileSync(file, html.slice(0, at) + html.slice(html.indexOf('</script>', at) + '</script>'.length));
+  return pathToFileURL(file).href;
+}
+
+async function openRaw(url, { reducedMotion }) {
+  browser ??= await launchBrowser();
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion });
+  const page = await context.newPage();
+  await page.goto(url);
+  return { page, context };
+}
+
+const opacities = (page) => page.evaluate(() => [...document.querySelectorAll('.sec')].map((s) => getComputedStyle(s).opacity));
+
+test('rise-in is armed before first paint: with motion allowed every section starts hidden, even with no runtime', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openRaw(withoutRuntime('concept'), { reducedMotion: 'no-preference' });
+  assert.equal(await page.evaluate(() => document.documentElement.classList.contains('rise-ready')), true);
+  assert.ok((await opacities(page)).every((o) => o === '0'), 'nothing paints visible before the runtime reveals it');
+  // ...and a runtime that never starts must not leave the page blank.
+  await page.waitForFunction(() => !document.documentElement.classList.contains('rise-ready'), null, { timeout: 5000 });
+  assert.ok((await opacities(page)).every((o) => o === '1'));
+  await context.close();
+});
+
+test('rise-in is never armed under reduced motion', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openRaw(withoutRuntime('concept'), { reducedMotion: 'reduce' });
+  assert.equal(await page.evaluate(() => document.documentElement.classList.contains('rise-ready')), false);
+  assert.ok((await opacities(page)).every((o) => o === '1'));
+  await context.close();
+});
+
+test('copy: a stray copy button outside a code block does nothing and raises no error', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await open(built('concept').url);
+  await page.evaluate(() => {
+    const loose = document.createElement('button');
+    loose.id = 'loose';
+    loose.setAttribute('data-copy', '');
+    loose.textContent = 'Copy';
+    document.querySelector('main').appendChild(loose);
+    const fig = document.createElement('figure');
+    fig.innerHTML = '<button id="empty" data-copy>Copy</button><p>no code here</p>';
+    document.querySelector('main').appendChild(fig);
+  });
+  await page.click('#loose');
+  await page.click('#empty');
+  assert.equal(await page.locator('#loose').textContent(), 'Copy');
+  assert.equal(await page.locator('#empty').textContent(), 'Copy');
+  assert.deepEqual(problems, []);
   await context.close();
 });
 
