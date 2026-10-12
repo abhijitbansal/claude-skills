@@ -4,6 +4,7 @@ export const MAX_RUNS = 10
 export const MAX_LATEST = 3
 export const MAX_FAILURES = 20
 export const STORE_SOFT_CAP_BYTES = 2 * 1024 * 1024
+export const BAND_TTL_MS = 60 * 60_000
 
 export type KeySize = { key: string; bytes: number }
 
@@ -18,6 +19,11 @@ export function appendRun(history: TestRun[], run: TestRun): TestRun[] {
 
 export function previousRun(history: TestRun[], run: TestRun): TestRun | undefined {
   return history.find(r => r.at < run.at)
+}
+
+/** Runs the band still shows: under an hour old, and not dated after `now` (a clock stepped back). */
+export function visibleRuns(latest: TestRun[], now: number): TestRun[] {
+  return latest.filter(r => now - r.at >= 0 && now - r.at < BAND_TTL_MS)
 }
 
 export function touchIndex(index: string[], key: string): string[] {

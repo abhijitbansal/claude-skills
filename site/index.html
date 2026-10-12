@@ -97,14 +97,14 @@
 
     <article class="spot flip">
       <div class="spot-media">
-        <div class="term" role="img" aria-label="A terminal after a pytest run. Two bands sit above the prompt: the session-compass band with the goal, the current step and the artifact count, and the test-board band with 40 passed, 3 failed, 1 skipped, three more failures than the previous run five minutes ago.">
+        <div class="term" role="img" aria-label="A terminal after a pytest run. Two bands sit above the prompt: the session-compass band with the goal, the current step and the artifact count, and the test-board band with 40 passed, 3 failed, 1 skipped, three more failures than the previous run five minutes ago, the time it finished and a close button.">
           <div class="term-bar"><i></i><i></i><i></i><span>claude — claude-skills</span></div>
           <div class="term-body">
             <div class="ln">⏺ Ran pytest -q</div>
             <div class="ln dim">  44 tests collected · 40 passed, 3 failed, 1 skipped</div>
             <div class="sep"></div>
             <div class="ln band sc">claude-skills · worktrees/claude-mods (feat/session-mods) · Goal: barcode fallback · Now: fixing 3 failing tests · 4 artifacts · tests 40 <span class="ok">✓</span> 3 <span class="bad">✗</span></div>
-            <div class="ln band tb">claude-skills · pytest -q   40 <span class="ok">✓</span>  3 <span class="bad">✗</span>  1 skip   <span class="bad">▲</span>3 <span class="bad">✗</span>   1s   prev 43 <span class="ok">✓</span> 0 <span class="bad">✗</span> · 5m ago</div>
+            <div class="ln band tb">claude-skills · pytest -q   40 <span class="ok">✓</span>  3 <span class="bad">✗</span>  1 skip   <span class="bad">▲</span>3 <span class="bad">✗</span>   1s   done 14:32   prev 43 <span class="ok">✓</span> 0 <span class="bad">✗</span> · 5m ago  <span class="dim">✕</span></div>
             <div class="sep"></div>
             <div class="ln"><span class="prompt">❯</span> </div>
           </div>
@@ -116,7 +116,7 @@
         <h3>Two lines above the prompt</h3>
         <p><b>test-board</b> shows passed, failed and skipped counts after every test run, next to the previous run of the same suite in the same worktree. <b>session-compass</b> shows what a session is building, where it stands and what it has produced when you come back to it, and <code>/compass</code> opens the full list.</p>
         <ol class="howlist" aria-label="How the mods work">
-          <li><b>What you see.</b> One line per mod above the prompt. test-board: the counts of the last run, the change in failures against the run before, and <code>via</code> which subagent ran it. session-compass: repo, branch, goal, current step and what the session has produced, always up and updated as the session moves.</li>
+          <li><b>What you see.</b> One line per mod above the prompt. test-board: the counts of the last run, the change in failures against the run before, the time it finished, and <code>via</code> which subagent ran it. It closes itself an hour after the run, or sooner with <code>✕</code>. session-compass: repo, branch, goal, current step and what the session has produced, always up and updated as the session moves.</li>
           <li><b>Where it comes from.</b> Nothing is asked of the model. test-board reads the output of test commands it recognises (<code>pytest</code>, <code>jest</code>, <code>xcodebuild … test</code>, <code>cargo test</code> and more) and keeps the last 10 runs per suite. session-compass records commits, pushes, pull requests and published files as tool calls succeed, and the model sets the goal through one small tool.</li>
           <li><b>How it is built.</b> A mod is a plugin written as TypeScript hooks that wrap Claude Code's own behaviour: each hook sees a tool call before it runs and the result after, and passes both through unchanged. Each band draws its line and then whatever the next hook drew, so mods stack. Everything stays on your machine; neither mod makes a model call.</li>
         </ol>
