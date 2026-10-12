@@ -4,8 +4,9 @@
 import fs from 'node:fs';
 
 const METRICS = JSON.parse(fs.readFileSync(new URL('./fonts/metrics.json', import.meta.url), 'utf8'));
-const CJK_START = 0x2e80; // codepoints from here up are full-width-ish: fallback x 1.6
-const CJK_FACTOR = 1.6;
+const WIDE_START = 0x2e80; // CJK and wide symbols from here up
+const WIDE_FACTOR = 1.6;
+const WIDE_GLYPH = /\p{Extended_Pictographic}/u; // emoji and pictographs below U+2E80 too
 const MIN_LINE_RATIO = 1.3;
 const ROLES = ['display', 'body', 'mono'];
 
@@ -27,6 +28,14 @@ function metricsFor({ family, weight = 400 }) {
   return best.m;
 }
 
+// Width in font units of a codepoint the font lacks. System fallback fonts draw
+// CJK and emoji at ~1 em, so wide ones never measure under 1 em (labels must not
+// look narrower than they render).
+function unknownAdvance(m, cp, ch) {
+  if (cp >= WIDE_START || WIDE_GLYPH.test(ch)) return Math.max(m.fallback * WIDE_FACTOR, m.unitsPerEm);
+  return m.fallback;
+}
+
 const sizeOf = (font) => font.size ?? 14;
 
 /** Width in px of `text` on one line. */
@@ -35,7 +44,7 @@ export function measure(text, font) {
   let units = 0;
   for (const ch of text) {
     const cp = ch.codePointAt(0);
-    units += m.advance[cp] ?? (cp >= CJK_START ? m.fallback * CJK_FACTOR : m.fallback);
+    units += m.advance[cp] ?? unknownAdvance(m, cp, ch);
   }
   return (units / m.unitsPerEm) * sizeOf(font);
 }

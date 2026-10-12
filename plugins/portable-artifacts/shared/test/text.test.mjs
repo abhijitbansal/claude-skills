@@ -106,14 +106,31 @@ test('a long word mid-sentence breaks on its own lines, later words rejoin the t
   for (const l of lines) assert.ok(measure(l, PLEX) <= 80, `"${l}"`);
 });
 
-test('CJK falls back to a safe non-zero width: at least 8 glyphs x fallback', () => {
-  const fallback = METRICS['IBM Plex Sans|400'].fallback;
-  const unitsPerEm = METRICS['IBM Plex Sans|400'].unitsPerEm;
+test('CJK falls back to a safe non-zero width of at least 1 em per glyph', () => {
+  const { fallback, unitsPerEm } = METRICS['IBM Plex Sans|400'];
   const w = measure('注文データベース', PLEX);
   assert.ok(w > 0);
   assert.ok(w >= (8 * fallback / unitsPerEm) * 14, `${w}`);
-  // CJK is wider than the Latin fallback (x1.6) for codepoints >= U+2E80.
-  assert.ok(Math.abs(w - 8 * 1.6 * fallback / unitsPerEm * 14) < 1e-9, `${w}`);
+  // fallback x 1.6 is 0.91 em for Plex Sans, so the 1 em floor applies.
+  assert.ok(Math.abs(w - 8 * 14) < 1e-9, `${w}`);
+});
+
+test('wide glyphs (CJK, emoji) measure at least 1 em in every shipped font', () => {
+  for (const key of Object.keys(METRICS)) {
+    const [family, weight] = key.split('|');
+    const font = { family, weight: Number(weight), size: 14 };
+    assert.ok(measure('注', font) >= 14, `${key} single CJK glyph`);
+    assert.ok(measure('注文データ'.slice(0, 4), font) >= 4 * 14, `${key} 4 CJK glyphs`);
+    assert.ok(measure('\u{1F680}', font) >= 14, `${key} rocket emoji`);
+    assert.ok(measure('\u2600', font) >= 14, `${key} U+2600 pictograph below U+2E80`);
+  }
+});
+
+test('wide glyphs hard-break consistently with measure()', () => {
+  const lines = wrap('注文データベースの設計', 50, PLEX);
+  assert.ok(lines.length >= 3, JSON.stringify(lines));
+  for (const l of lines) assert.ok(measure(l, PLEX) <= 50, `"${l}"`);
+  assert.equal(lines.join(''), '注文データベースの設計');
 });
 
 test('unknown non-CJK codepoints use plain fallback; emoji never measure 0', () => {
