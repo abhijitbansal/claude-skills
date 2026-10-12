@@ -68,7 +68,7 @@ function stateLine(snap) {
 }
 
 function guardLine(config) {
-  const guard = config.mode === "off" ? "off" : `${config.mode === "refuse" ? "refuse once" : "warn"} above ${usd(config.minUsd)}`;
+  const guard = config.mode === "off" ? "off" : `${config.mode === "refuse" ? "ask before a cold send" : "warn"} above ${usd(config.minUsd)}`;
   const heads = config.headsUpMin > 0 ? `heads-up ${config.headsUpMin}m before expiry` : "no heads-up";
   return `${guard} · ${heads}`;
 }
@@ -88,11 +88,32 @@ export function card(snap, tally, config) {
 }
 
 export const HELP = [
-  `${NAME} commands:`,
-  "  /cache-clock                 the card: cache state, next-send prices, session tally",
-  "  /cache-clock guard refuse    drop a costly cold send once; the resend goes through (default)",
+  `${NAME}: a clock for Copilot's prompt cache.`,
+  "",
+  "How it works",
+  "  Every model call reports when its prompt cache expires and what a cache read and write cost.",
+  "  On Claude a write costs 25x a read and the cache lives 5 minutes; on GPT-6 Luna 12.5x and 30 minutes.",
+  "  After the cache expires, your next message rewrites the whole conversation at the write price.",
+  "",
+  "What happens on a costly cold send (guard refuse, the default)",
+  "  If the cache has expired and the rewrite costs at least the threshold more than a warm send,",
+  "  Cache Clock asks before sending: Send anyway, or Don't send (no model call, 0 AI credits).",
+  "  It asks once per cold cache; after that your sends go through with a price note.",
+  "  Where it cannot ask (copilot -p), it refuses the send once instead; send it again to pay.",
+  "  It never stops slash commands, ! shell commands, or a message typed while a turn is running.",
+  "",
+  "Commands",
+  "  /cache-clock                 the card: cache state, time left, next-send prices, session tally",
+  "  /cache-clock guard refuse    ask (or refuse once) before a costly cold send (default)",
   "  /cache-clock guard warn      send it and print the price",
   "  /cache-clock guard off       no guard",
-  "  /cache-clock min 0.25        only guard cold sends whose extra cost is at least $0.25",
+  "  /cache-clock min 0.25        only guard cold sends whose extra cost is at least $0.25 (default $0.10)",
   "  /cache-clock headsup 5       warn 5 minutes before the cache expires (off to disable)",
+  "  /cache-clock help            this text",
+  "",
+  "What cold sends already cost you, across every saved session:",
+  "  node ~/.copilot/extensions/cache-clock/report.mjs --since 7d",
+  "",
+  "VS Code Copilot chat: set \"chat.canvases.enabled\": true in VS Code settings. Type /cache-clock in full",
+  "(it is not listed in the / menu). The heads-up and price notes reach only VS Code's log there.",
 ].join("\n");

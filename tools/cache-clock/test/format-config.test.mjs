@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { usd, perM, duration, tokens, card, refusal, coldWarn, headsUp } from "../extension/lib/format.mjs";
+import { HELP, usd, perM, duration, tokens, card, refusal, coldWarn, headsUp } from "../extension/lib/format.mjs";
 import { DEFAULTS, configDir, loadConfig, saveConfig, parseCommand } from "../extension/lib/config.mjs";
 import { T0, MIN } from "./fixtures.mjs";
 
@@ -62,7 +62,7 @@ test("card covers state, context, prices, tally and guard", () => {
   assert.match(warmCard, /200\.0k tokens/);
   assert.match(warmCard, /warm \$0\.02 · cold \$0\.50 \(25× per token\)/);
   assert.match(warmCard, /3 model calls · 1 cold after idle · 0 prefix breaks · \$0\.12 extra paid/);
-  assert.match(warmCard, /refuse once above \$0\.10 · heads-up 5m before expiry/);
+  assert.match(warmCard, /ask before a cold send above \$0\.10 · heads-up 5m before expiry/);
   assert.match(card(snap, tally, DEFAULTS), /cold for 2m10s/);
   assert.match(card({ ...snap, state: "unknown" }, tally, DEFAULTS), /unknown/);
   assert.match(card(null, tally, DEFAULTS), /no model call yet/);
@@ -105,4 +105,13 @@ test("parseCommand understands status, guard, min, headsup and help", () => {
   assert.equal(parseCommand("min -3").kind, "error");
   assert.equal(parseCommand("headsup soon").kind, "error");
   assert.equal(parseCommand("explode").kind, "error");
+});
+
+test("help explains what the clock does, what a cold send triggers, every command and the report", () => {
+  for (const want of [
+    /prompt cache/i, /Send anyway/, /Don't send/, /refuse/i,
+    /\/cache-clock guard refuse/, /\/cache-clock guard warn/, /\/cache-clock guard off/,
+    /\/cache-clock min /, /\/cache-clock headsup /, /\/cache-clock help/,
+    /report\.mjs --since 7d/, /VS Code/, /chat\.canvases\.enabled/,
+  ]) assert.match(HELP, want);
 });

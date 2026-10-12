@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
@@ -51,4 +51,41 @@ test("install refuses to replace a directory that is not a cache-clock install",
 
 test("install rejects unknown flags", () => {
   assert.equal(sandbox().run("--force").status, 2);
+});
+
+// `curl … | sh` runs the script with no checkout next to it: it downloads a copy instead.
+function piped(baseUrl) {
+  const base = mkdtempSync(join(tmpdir(), "cc-curl-"));
+  const home = join(base, "copilot");
+  const script = readFileSync(join(ROOT, "install.sh"), "utf8");
+  const run = (...args) => spawnSync("sh", ["-s", "--", ...args], {
+    input: script, cwd: base, encoding: "utf8", env: { ...process.env, COPILOT_HOME: home, CACHE_CLOCK_BASE_URL: baseUrl },
+  });
+  return { home, dest: join(home, "extensions", "cache-clock"), run };
+}
+
+test("piped install downloads every extension file into a plain copy", () => {
+  const p = piped(pathToFileURL(join(ROOT, "extension")).href);
+  const r = p.run();
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!lstatSync(p.dest).isSymbolicLink());
+  for (const file of ["extension.mjs", "report.mjs", ...readdirSync(join(ROOT, "extension", "lib")).map((f) => `lib/${f}`)]) {
+    assert.ok(existsSync(join(p.dest, file)), `missing ${file}`);
+  }
+  assert.match(r.stdout, /chat\.canvases\.enabled/);
+});
+
+test("the download list names every file the extension ships", () => {
+  const script = readFileSync(join(ROOT, "install.sh"), "utf8");
+  const listed = script.match(/^FILES="([^"]+)"/m)[1].split(/\s+/).filter(Boolean).sort();
+  const onDisk = ["extension.mjs", "report.mjs", ...readdirSync(join(ROOT, "extension", "lib")).map((f) => `lib/${f}`)].sort();
+  assert.deepEqual(listed, onDisk);
+});
+
+test("a failed download leaves no partial install", () => {
+  const p = piped(pathToFileURL(join(tmpdir(), "cc-no-such-dir")).href);
+  const r = p.run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /download failed/);
+  assert.ok(!existsSync(p.dest));
 });
