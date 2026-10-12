@@ -1,0 +1,452 @@
+{
+  "width": 956,
+  "height": 836,
+  "participants": [
+    {
+      "id": "shopper",
+      "x": 24,
+      "y": 24,
+      "width": 108,
+      "height": 52,
+      "lines": [
+        "Shopper"
+      ],
+      "icon": "lucide:user",
+      "kind": "actor",
+      "shape": "rounded-rect",
+      "lifeline": {
+        "x": 78,
+        "y1": 76,
+        "y2": 812
+      }
+    },
+    {
+      "id": "web",
+      "x": 196,
+      "y": 24,
+      "width": 110,
+      "height": 52,
+      "lines": [
+        "Web app"
+      ],
+      "icon": "lucide:server",
+      "kind": "service",
+      "shape": "rounded-rect",
+      "lifeline": {
+        "x": 251,
+        "y1": 76,
+        "y2": 812
+      }
+    },
+    {
+      "id": "orders",
+      "x": 370,
+      "y": 24,
+      "width": 146,
+      "height": 52,
+      "lines": [
+        "Orders service"
+      ],
+      "icon": "lucide:server",
+      "kind": "service",
+      "shape": "rounded-rect",
+      "lifeline": {
+        "x": 443,
+        "y1": 76,
+        "y2": 812
+      }
+    },
+    {
+      "id": "db",
+      "x": 580,
+      "y": 24,
+      "width": 120,
+      "height": 52,
+      "lines": [
+        "Orders DB"
+      ],
+      "icon": "lucide:database",
+      "kind": "database",
+      "shape": "cylinder",
+      "lifeline": {
+        "x": 640,
+        "y1": 76,
+        "y2": 812
+      }
+    },
+    {
+      "id": "psp",
+      "x": 764,
+      "y": 24,
+      "width": 168,
+      "height": 52,
+      "lines": [
+        "Payment provider"
+      ],
+      "icon": "lucide:cloud",
+      "kind": "external",
+      "shape": "dashed-rounded-rect",
+      "lifeline": {
+        "x": 848,
+        "y1": 76,
+        "y2": 812
+      }
+    }
+  ],
+  "messages": [
+    {
+      "id": "m1",
+      "from": "shopper",
+      "to": "web",
+      "kind": "sync",
+      "row": 0,
+      "label": {
+        "text": "press Pay",
+        "x": 131.5,
+        "y": 92,
+        "width": 66,
+        "height": 20
+      },
+      "points": [
+        {
+          "x": 78,
+          "y": 120
+        },
+        {
+          "x": 251,
+          "y": 120
+        }
+      ]
+    },
+    {
+      "id": "m2",
+      "from": "web",
+      "to": "orders",
+      "kind": "sync",
+      "row": 1,
+      "label": {
+        "text": "POST /orders",
+        "x": 305,
+        "y": 136,
+        "width": 84,
+        "height": 20
+      },
+      "points": [
+        {
+          "x": 251,
+          "y": 164
+        },
+        {
+          "x": 443,
+          "y": 164
+        }
+      ]
+    },
+    {
+      "id": "m3",
+      "from": "orders",
+      "to": "db",
+      "kind": "sync",
+      "row": 2,
+      "label": {
+        "text": "insert order (pending)",
+        "x": 476.5,
+        "y": 180,
+        "width": 130,
+        "height": 20
+      },
+      "points": [
+        {
+          "x": 443,
+          "y": 208
+        },
+        {
+          "x": 640,
+          "y": 208
+        }
+      ]
+    },
+    {
+      "id": "m4",
+      "from": "orders",
+      "to": "psp",
+      "kind": "async",
+      "row": 4,
+      "label": {
+        "text": "charge card",
+        "x": 607.5,
+        "y": 292,
+        "width": 76,
+        "height": 20
+      },
+      "points": [
+        {
+          "x": 443,
+          "y": 320
+        },
+        {
+          "x": 848,
+          "y": 320
+        }
+      ]
+    },
+    {
+      "id": "m5",
+      "from": "psp",
+      "to": "orders",
+      "kind": "reply",
+      "row": 6,
+      "label": {
+        "text": "declined",
+        "x": 615.5,
+        "y": 404,
+        "width": 60,
+        "height": 20
+      },
+      "points": [
+        {
+          "x": 848,
+          "y": 432
+        },
+        {
+          "x": 443,
+          "y": 432
+        }
+      ]
+    },
+    {
+      "id": "m6",
+      "from": "orders",
+      "to": "orders",
+      "kind": "self",
+      "row": 7,
+      "label": {
+        "text": "schedule retry in 5 min",
+        "x": 483,
+        "y": 478,
+        "width": 136,
+        "height": 20
+      },
+      "points": [
+        {
+          "x": 443,
+          "y": 472
+        },
+        {
+          "x": 475,
+          "y": 472
+        },
+        {
+          "x": 475,
+          "y": 504
+        },
+        {
+          "x": 443,
+          "y": 504
+        }
+      ]
+    },
+    {
+      "id": "m7",
+      "from": "orders",
+      "to": "psp",
+      "kind": "sync",
+      "row": 9,
+      "label": {
+        "text": "charge card again",
+        "x": 591.5,
+        "y": 536,
+        "width": 108,
+        "height": 20
+      },
+      "points": [
+        {
+          "x": 443,
+          "y": 564
+        },
+        {
+          "x": 848,
+          "y": 564
+        }
+      ]
+    },
+    {
+      "id": "m8",
+      "from": "psp",
+      "to": "orders",
+      "kind": "reply",
+      "row": 10,
+      "label": {
+        "text": "approved",
+        "x": 613.5,
+        "y": 600,
+        "width": 64,
+        "height": 20
+      },
+      "points": [
+        {
+          "x": 848,
+          "y": 628
+        },
+        {
+          "x": 443,
+          "y": 628
+        }
+      ]
+    },
+    {
+      "id": "m9",
+      "from": "orders",
+      "to": "db",
+      "kind": "sync",
+      "row": 11,
+      "label": {
+        "text": "mark order paid",
+        "x": 492.5,
+        "y": 664,
+        "width": 98,
+        "height": 20
+      },
+      "points": [
+        {
+          "x": 443,
+          "y": 692
+        },
+        {
+          "x": 640,
+          "y": 692
+        }
+      ]
+    },
+    {
+      "id": "m10",
+      "from": "orders",
+      "to": "web",
+      "kind": "reply",
+      "row": 12,
+      "label": {
+        "text": "201 Created",
+        "x": 307,
+        "y": 708,
+        "width": 80,
+        "height": 20
+      },
+      "points": [
+        {
+          "x": 443,
+          "y": 736
+        },
+        {
+          "x": 251,
+          "y": 736
+        }
+      ]
+    },
+    {
+      "id": "m11",
+      "from": "web",
+      "to": "shopper",
+      "kind": "reply",
+      "row": 13,
+      "label": {
+        "text": "show receipt",
+        "x": 123.5,
+        "y": 752,
+        "width": 82,
+        "height": 20
+      },
+      "points": [
+        {
+          "x": 251,
+          "y": 780
+        },
+        {
+          "x": 78,
+          "y": 780
+        }
+      ]
+    }
+  ],
+  "frames": [
+    {
+      "kind": "loop",
+      "label": "until approved",
+      "messages": [
+        "m4",
+        "m5",
+        "m6",
+        "m7",
+        "m8"
+      ],
+      "x": 399,
+      "y": 264,
+      "width": 493,
+      "height": 388,
+      "tab": {
+        "width": 42,
+        "height": 20
+      },
+      "labelBox": {
+        "x": 449,
+        "y": 264,
+        "width": 77.8,
+        "height": 20
+      }
+    },
+    {
+      "kind": "alt",
+      "label": "card declined",
+      "messages": [
+        "m5",
+        "m6",
+        "m7"
+      ],
+      "x": 431,
+      "y": 376,
+      "width": 429,
+      "height": 212,
+      "tab": {
+        "width": 32,
+        "height": 20
+      },
+      "labelBox": {
+        "x": 471,
+        "y": 376,
+        "width": 72.9,
+        "height": 20
+      }
+    }
+  ],
+  "notes": [
+    {
+      "text": "order stays pending until the provider answers",
+      "lines": [
+        "order stays pending until the provider answers"
+      ],
+      "over": [
+        "db"
+      ],
+      "after": "m3",
+      "x": 505.2,
+      "y": 228,
+      "width": 269.6,
+      "height": 28
+    },
+    {
+      "text": "idempotency key sent on every charge",
+      "lines": [
+        "idempotency key sent on every charge"
+      ],
+      "over": [
+        "orders",
+        "psp"
+      ],
+      "after": "m4",
+      "x": 423,
+      "y": 340,
+      "width": 445,
+      "height": 28
+    }
+  ],
+  "rows": 14
+}
