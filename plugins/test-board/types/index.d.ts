@@ -16,6 +16,7 @@ export type TestRun = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'test-board': { latest: TestRun[]; expanded: boolean; closed: boolean }
+    // dismissed: the newest run shown when ✕ was pressed; null when the band is open
+    'test-board': { latest: TestRun[]; expanded: boolean; dismissed: { key: string; at: number } | null }
   }
 }

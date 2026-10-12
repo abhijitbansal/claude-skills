@@ -21,9 +21,9 @@ export function previousRun(history: TestRun[], run: TestRun): TestRun | undefin
   return history.find(r => r.at < run.at)
 }
 
-/** Runs the band still shows: under an hour old. */
+/** Runs the band still shows: under an hour old, and not dated after `now` (a clock stepped back). */
 export function visibleRuns(latest: TestRun[], now: number): TestRun[] {
-  return latest.filter(r => now - r.at < BAND_TTL_MS)
+  return latest.filter(r => now - r.at >= 0 && now - r.at < BAND_TTL_MS)
 }
 
 export function touchIndex(index: string[], key: string): string[] {

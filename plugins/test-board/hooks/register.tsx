@@ -2,18 +2,20 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { TestRun } from '../types'
-import { lineParts, MAX_SHOWN_FAILURES } from './format'
+import { GAP, lineParts, MAX_SHOWN_FAILURES, tail } from './format'
 import {
-  appendRun, keysToDrop, MAX_LATEST, oldestQuarter, previousRun, STORE_SOFT_CAP_BYTES, touchIndex, visibleRuns,
+  appendRun, BAND_TTL_MS, keysToDrop, MAX_LATEST, oldestQuarter, previousRun, STORE_SOFT_CAP_BYTES, touchIndex, visibleRuns,
 } from './history'
 import { parseTestOutput } from './parse'
 import { resolveDir, splitCommand, suiteKey, suiteLabel } from './suite'
 
 const latest = atom({ plugin: 'test-board', key: 'latest' } as const, [] as TestRun[])
 const expanded = atom({ plugin: 'test-board', key: 'expanded' } as const, false)
-const closed = atom({ plugin: 'test-board', key: 'closed' } as const, false)
+const dismissed = atom({ plugin: 'test-board', key: 'dismissed' } as const, null as { key: string; at: number } | null)
 
-const CLOSE_LABEL = '  ✕'
+// The ✕ and the two cells of gap before it.
+const CLOSE_GAP = '  '
+const CLOSE_RESERVE = CLOSE_GAP.length + 1
 
 type Loop = { description: string; cwd?: string; isWorkflow: boolean }
 type Ran = { deny?: string; isError?: true; result?: unknown; text?: string }
@@ -97,15 +99,34 @@ async function trySaveRun($: EngineInterface, run: TestRun): Promise<void> {
   }
 }
 
-async function partsFor($: EngineInterface, run: TestRun, now: number, columns: number) {
+async function partsFor($: EngineInterface, run: TestRun, now: number, columns: number, reserve: number) {
   let history: TestRun[] = []
   try {
     history = asRuns(await $.store.get(`runs:${run.key}`))
   } catch {
     // history unreadable: the run still draws, as a first run
   }
-  return { run, parts: lineParts(run, previousRun(history, run), now, columns) }
+  return { run, parts: lineParts(run, previousRun(history, run), now, columns, reserve) }
 }
+
+// Drops runs past the hour from latest: the write redraws every band that reads it (this one, session-compass).
+async function prune($: EngineInterface): Promise<void> {
+  try {
+    const now = await $.clock.now()
+    const kept = await update($, latest, list => visibleRuns(list, now))
+    if (kept.length === 0) await update($, expanded, () => false)
+  } catch (err) {
+    $.ui.log(`test-board: expired runs not cleared: ${String(err).slice(0, 120)}`)
+  }
+}
+
+// A draw is cached until something it read changes, so the hour has to end in a state write.
+function expireAt($: EngineInterface, run: TestRun, now: number): void {
+  $.clock.after(Math.max(0, run.at + BAND_TTL_MS - now), () => void prune($))
+}
+
+const isDismissed = (d: { key: string; at: number } | null, run: TestRun | undefined): boolean =>
+  d !== null && run !== undefined && d.key === run.key && d.at === run.at
 
 async function record(
   $: EngineInterface, state: State,
@@ -131,9 +152,12 @@ async function record(
   await saveRun($, run)
   const isFresh = state.turn.isNew
   state.turn.isNew = false
+  // A run after ✕ starts the band afresh: the rows the person closed stay closed.
+  const wasDismissed = (await read($, dismissed)) !== null
   await update($, latest, list =>
-    [run, ...(isFresh ? [] : list.filter(r => r.key !== run.key && r.stale !== true))].slice(0, MAX_LATEST))
-  await update($, closed, () => false)
+    [run, ...(isFresh || wasDismissed ? [] : list.filter(r => r.key !== run.key && r.stale !== true))].slice(0, MAX_LATEST))
+  if (wasDismissed) await update($, dismissed, () => null)
+  expireAt($, run, run.at)
 }
 
 export const register: Register = on => {
@@ -184,9 +208,11 @@ export const register: Register = on => {
       const root = await worktreeRoot($, state.roots, e.cwd)
       const key = asKeys(await $.store.get('index')).find(k => k.startsWith(`${root}::`))
       const newest = key === undefined ? undefined : asRuns(await $.store.get(`runs:${key}`))[0]
-      if (newest !== undefined) {
+      const now = await $.clock.now()
+      // A reload fires session.start too: a run past the hour stays off the band (a closed one, the render hides).
+      if (newest !== undefined && visibleRuns([newest], now).length > 0) {
         await update($, latest, () => [{ ...newest, stale: true }])
-        await update($, closed, () => false)
+        expireAt($, newest, now)
       }
     } catch (err) {
       $.ui.log(`test-board: history not loaded: ${String(err).slice(0, 120)}`)
@@ -194,36 +220,41 @@ export const register: Register = on => {
     return result
   })
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey || await read($, closed)) return next(e)
+    if (e.props.hasSurvey) return next(e)
+    const held = await read($, latest)
+    if (held.length === 0) return next(e)
     const now = await $.clock.now()
-    const runs = visibleRuns(await read($, latest), now)
-    if (runs.length === 0) return next(e)
+    // The filter backs up the expiry timer, which a hot reload cancels.
+    const runs = visibleRuns(held, now)
+    if (runs.length === 0 || isDismissed(await read($, dismissed), runs[0])) return next(e)
     const isOpen = await read($, expanded)
     const { Box, Button, Text } = $.ui.resolve(e)
     const columns = e.props.bodyColumns
-    const rows = await Promise.all(runs.map((run, i) => partsFor($, run, now, i === 0 ? columns - CLOSE_LABEL.length : columns)))
+    const rows = await Promise.all(runs.map((run, i) => partsFor($, run, now, columns, i === 0 ? CLOSE_RESERVE : 0)))
+    const shown = runs[0] as TestRun
+    const close = async (): Promise<void> => {
+      await update($, dismissed, () => ({ key: shown.key, at: shown.at }))
+      await update($, expanded, () => false)
+    }
     return (
       <Box flexDirection="column">
         {rows.map(({ run, parts }, i) => (
           <Box flexDirection="column">
             <Box flexDirection="row">
               <Button key={`run-${run.key}`} plain onPress={() => update($, expanded, v => !v)}>
-                <Text dimColor={run.stale === true}>{parts.label}   </Text>
+                <Text dimColor={run.stale === true}>{parts.label}{GAP}</Text>
                 {parts.split === undefined && <Text dimColor={run.stale === true}>{parts.counts}</Text>}
                 {parts.split !== undefined && <Text dimColor={run.stale === true}>{parts.split.head}</Text>}
                 {parts.split !== undefined && (
                   <Text color={parts.isFailing ? 'error' : undefined} dimColor={run.stale === true}>{parts.split.failed}</Text>
                 )}
                 {parts.split !== undefined && <Text dimColor={run.stale === true}>{parts.split.tail}</Text>}
-                <Text dimColor={run.stale === true}>
-                  {[parts.trend, parts.duration].filter(Boolean).map(s => `   ${s}`).join('')}
-                </Text>
-                <Text dimColor>{[parts.ranAt, parts.prev, parts.via].filter(Boolean).map(s => `   ${s}`).join('')}</Text>
+                <Text dimColor={run.stale === true}>{tail(parts.trend, parts.duration)}</Text>
+                <Text dimColor>{tail(parts.doneAt, parts.prev, parts.via)}</Text>
               </Button>
+              {i === 0 && <Text>{CLOSE_GAP}</Text>}
               {i === 0 && (
-                <Button key="close" plain onPress={() => update($, closed, () => true)}>
-                  <Text dimColor>{CLOSE_LABEL}</Text>
-                </Button>
+                <Button key="close" plain dimColor role="dismiss" label="Close test results" onPress={close}>✕</Button>
               )}
             </Box>
             {isOpen && run.failures.slice(0, MAX_SHOWN_FAILURES).map(f => (

@@ -36,6 +36,9 @@ describe('visibleRuns', () => {
     expect(visibleRuns([mk(now - BAND_TTL_MS + 1), mk(now - BAND_TTL_MS)], now).map(r => r.at))
       .toEqual([now - BAND_TTL_MS + 1])
   })
+  test('hides a run dated in the future (the clock stepped back)', () => {
+    expect(visibleRuns([mk(1_000), mk(1_001)], 1_000).map(r => r.at)).toEqual([1_000])
+  })
 })
 
 describe('index and trimming', () => {

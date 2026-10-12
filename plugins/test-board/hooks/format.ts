@@ -2,13 +2,29 @@ import type { TestRun } from '../types'
 
 export const NARROW_COLUMNS = 80
 export const MAX_SHOWN_FAILURES = 10
-const GAP = '   '
+export const GAP = '   '
+
+// East Asian Wide/Fullwidth blocks and emoji: two terminal cells each.
+const WIDE = /[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6\u{1f300}-\u{1f64f}\u{1f900}-\u{1f9ff}\u{20000}-\u{3fffd}]/u
+const segmenter = new Intl.Segmenter()
+
+/** Terminal cells a string takes: a grapheme is one cell, two when wide. */
+export function cellWidth(s: string): number {
+  let cells = 0
+  for (const { segment } of segmenter.segment(s)) cells += WIDE.test(segment) ? 2 : 1
+  return cells
+}
+
+/** Each present part with the gap before it, as the band draws the end of a line. */
+export function tail(...parts: (string | undefined)[]): string {
+  return parts.filter(Boolean).map(s => `${GAP}${s}`).join('')
+}
 
 export type LineParts = {
   label: string; counts: string; isFailing: boolean
   /** `counts` cut around its failed segment so the UI can color only that part; absent when unparsed. */
   split?: { head: string; failed: string; tail: string }
-  trend?: string; duration?: string; ranAt?: string; prev?: string; via?: string
+  trend?: string; duration?: string; doneAt?: string; prev?: string; via?: string
 }
 
 export function formatDuration(seconds: number): string {
@@ -47,10 +63,15 @@ function counts(run: TestRun): string {
 }
 
 export function joinParts(p: LineParts): string {
-  return [p.label, p.counts, p.trend, p.duration, p.ranAt, p.prev, p.via].filter(Boolean).join(GAP)
+  return [p.label, p.counts, p.trend, p.duration, p.doneAt, p.prev, p.via].filter(Boolean).join(GAP)
 }
 
-export function lineParts(run: TestRun, prev: TestRun | undefined, now: number, columns: number): LineParts {
+/**
+ * The line's parts, dropping fields until it fits `columns - reserve` cells.
+ * `reserve` is width another control takes on the row; `via` drops on a
+ * narrow terminal by `columns` alone.
+ */
+export function lineParts(run: TestRun, prev: TestRun | undefined, now: number, columns: number, reserve = 0): LineParts {
   const delta = prev?.parsed && run.parsed ? run.failed - prev.failed : 0
   let parts: LineParts = {
     label: `${repoName(run.key)} · ${run.suite}`,
@@ -59,15 +80,15 @@ export function lineParts(run: TestRun, prev: TestRun | undefined, now: number, 
     isFailing: run.parsed ? run.failed > 0 : run.exitCode !== 0,
     ...(delta > 0 ? { trend: `▲${delta} ✗` } : delta < 0 ? { trend: `▼${-delta} ✗` } : {}),
     ...(run.durationS === undefined ? {} : { duration: formatDuration(run.durationS) }),
-    ranAt: `ran ${formatClock(run.at)}`,
+    doneAt: `done ${formatClock(run.at)}`,
     prev: prev === undefined
       ? 'first run'
       : `prev ${prev.parsed ? `${prev.passed} ✓ ${prev.failed} ✗` : `ran · exit ${prev.exitCode}`} · ${formatAgo(now - prev.at)}`,
     ...(run.via === undefined ? {} : { via: `via ${run.via}` }),
   }
   if (columns < NARROW_COLUMNS) parts = { ...parts, via: undefined }
-  for (const field of ['via', 'prev', 'duration', 'ranAt'] as const) {
-    if (joinParts(parts).length <= columns) break
+  for (const field of ['via', 'prev', 'duration', 'doneAt'] as const) {
+    if (cellWidth(joinParts(parts)) <= columns - reserve) break
     parts = { ...parts, [field]: undefined }
   }
   return parts
