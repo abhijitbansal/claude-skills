@@ -46,6 +46,17 @@ const SHAPES = {
   },
 };
 
+// Shapes with room for an icon. The others (stadium, diamonds, dots) are drawn
+// as a bare shape, so an icon on those kinds would be silently dropped.
+const BOX_SHAPES = new Set([
+  'rounded-rect', 'rect', 'cylinder', 'stacked-rect', 'hexagon-rect',
+  'dashed-rounded-rect', 'parallelogram', 'double-bar-rect',
+]);
+
+export function canHoldIcon(type, kind) {
+  return BOX_SHAPES.has(KINDS[type].kinds[kind].shape);
+}
+
 function build(shapes) {
   const kinds = {};
   for (const [kind, shape] of Object.entries(shapes)) {

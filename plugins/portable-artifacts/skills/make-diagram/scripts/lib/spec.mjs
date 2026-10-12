@@ -6,9 +6,9 @@ import Ajv from 'ajv';
 import { formatAjvErrors, didYouMean, pathJoin } from '../../shared/errors.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { listThemes } from '../../shared/theme.mjs';
-import { KINDS } from './kinds.mjs';
+import { KINDS, canHoldIcon } from './kinds.mjs';
 import { hasIcon, iconSvg, IconError } from './icons.mjs';
-import { SCHEMA, ID_PATTERN, LIMITS } from './schema.mjs';
+import { SCHEMA, ID_PATTERN, LIMITS, NON_SPACE } from './schema.mjs';
 
 export { UsageError };
 
@@ -77,7 +77,7 @@ function registerIds(errors, lists, seen = new Map()) {
       if (!ID_PATTERN.test(item.id)) {
         errors.push({ path: p, message: `id ${q(item.id)} is invalid; use lowercase letters, digits, - and _, starting with a letter` });
       }
-      if (seen.has(item.id)) errors.push({ path: p, message: `duplicate id ${q(item.id)}; first used at ${seen.get(item.id)}` });
+      if (seen.has(item.id)) errors.push({ path: p, message: `duplicate id ${q(item.id)}; first used at ${seen.get(item.id)}; rename one` });
       else seen.set(item.id, p);
     });
   }
@@ -96,8 +96,16 @@ function checkKind(errors, item, p, type) {
   });
 }
 
-function checkIcon(errors, item, p) {
-  if (item.icon === undefined || hasIcon(item.icon)) return;
+function checkIcon(errors, item, p, type) {
+  if (item.icon === undefined) return;
+  if (item.kind !== undefined && KINDS[type].kinds[item.kind] && !canHoldIcon(type, item.kind)) {
+    errors.push({
+      path: pathJoin(p, 'icon'),
+      message: `kind ${q(item.kind)} is drawn as a shape without an icon; remove icon or use kind ${q(KINDS[type].default)}`,
+    });
+    return;
+  }
+  if (hasIcon(item.icon)) return;
   try {
     iconSvg(item.icon);
   } catch (e) {
@@ -117,7 +125,7 @@ function checkTheme(errors, spec) {
 // Kind + icon + the label/note limits shared by nodes and participants.
 function checkEntity(errors, item, p, type, noteField) {
   checkKind(errors, item, p, type);
-  checkIcon(errors, item, p);
+  checkIcon(errors, item, p, type);
   checkLength(errors, item, 'label', p, LIMITS.label);
   if (noteField) checkLength(errors, item, noteField, p, LIMITS.note);
 }
@@ -127,7 +135,7 @@ function checkEntity(errors, item, p, type, noteField) {
 // A reference that must name a group: say so when it names a node instead.
 function checkGroupRef(errors, id, p, groupIds, nodeIds) {
   if (groupIds.includes(id)) return;
-  const message = nodeIds.includes(id) ? `${q(id)} is a node, not a group` : notFound(id, groupIds, 'groups');
+  const message = nodeIds.includes(id) ? `${q(id)} is a node, not a group; use a group id or remove group` : notFound(id, groupIds, 'groups');
   errors.push({ path: p, message });
 }
 
@@ -162,10 +170,10 @@ function checkGroupTree(errors, groups, groupIds, nodeIds) {
       const first = groups.findIndex((x) => x.id === cycle[0]);
       errors.push({
         path: pathJoin(pathJoin('groups', first), 'parent'),
-        message: `group parents form a cycle: ${[...cycle, cycle[0]].join(' -> ')}`,
+        message: `group parents form a cycle: ${[...cycle, cycle[0]].join(' -> ')}; remove parent from one of them`,
       });
     } else if (depth === LIMITS.groupDepth + 1) {
-      errors.push({ path: p, message: `group ${q(g.id)} nests ${depth} deep; the limit is ${LIMITS.groupDepth}` });
+      errors.push({ path: p, message: `group ${q(g.id)} nests ${depth} deep; the limit is ${LIMITS.groupDepth} — move it up a level` });
     }
   });
 }
@@ -235,7 +243,7 @@ function checkMessage(errors, m, p, participantIds) {
   }
   checkLength(errors, m, 'label', p, LIMITS.edgeLabel);
   if (m.kind === 'self' && m.from !== m.to) {
-    errors.push({ path: pathJoin(p, 'kind'), message: 'kind "self" needs from and to to be the same participant' });
+    errors.push({ path: pathJoin(p, 'kind'), message: 'kind "self" needs from and to to be the same participant; set to equal from or use kind "sync"' });
   } else if (m.kind !== 'self' && m.from === m.to) {
     errors.push({ path: pathJoin(p, 'kind'), message: `from and to are both ${q(m.from)}; set kind to "self"` });
   }
@@ -252,7 +260,7 @@ function checkFrame(errors, frame, p, messageIds) {
       errors.push({ path: pathJoin(at, i), message: notFound(id, messageIds) });
     } else if (valid.includes(id)) {
       sound = false;
-      errors.push({ path: pathJoin(at, i), message: `${id} is listed twice` });
+      errors.push({ path: pathJoin(at, i), message: `${id} is listed twice; list it once` });
     } else {
       valid.push(id);
     }
@@ -261,7 +269,7 @@ function checkFrame(errors, frame, p, messageIds) {
   const sorted = [...valid].sort((a, b) => messageIds.indexOf(a) - messageIds.indexOf(b));
   for (let i = 1; i < sorted.length; i++) {
     if (messageIds.indexOf(sorted[i]) - messageIds.indexOf(sorted[i - 1]) > 1) {
-      errors.push({ path: at, message: `${sorted[i - 1]} and ${sorted[i]} are not consecutive` });
+      errors.push({ path: at, message: `${sorted[i - 1]} and ${sorted[i]} are not consecutive; a frame covers one unbroken run of messages` });
       return;
     }
   }
@@ -317,9 +325,17 @@ function wrongFamilyFields(spec) {
     .map(([field, fix]) => ({ path: field, message: `${where}; ${fix}` }));
 }
 
+// Ajv's pattern message would print the raw regex; ours says what to fix.
+function wordSchemaError(e) {
+  if (e.keyword === 'pattern' && e.params.pattern === NON_SPACE) {
+    return { ...e, message: 'must contain at least one non-space character' };
+  }
+  return e;
+}
+
 export async function validateSpec(spec, { layout = true } = {}) {
   if (!validateSchema(spec)) {
-    return { ok: false, errors: formatAjvErrors(validateSchema.errors ?? []) };
+    return { ok: false, errors: formatAjvErrors(validateSchema.errors.map(wordSchemaError)) };
   }
   const errors = [...wrongFamilyFields(spec)];
   checkTheme(errors, spec);

@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec } from '../scripts/lib/spec.mjs';
 import { UsageError } from '../shared/cli.mjs';
@@ -31,12 +33,13 @@ test('layout option is accepted and ignored', async () => {
 
 test('loadSpec reports unreadable and malformed files as UsageError', () => {
   assert.throws(() => loadSpec('/nonexistent/x.diagram.json'), UsageError);
-  const bad = fileURLToPath(new URL('./fixtures/.bad.tmp', import.meta.url));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'diagram-spec-'));
+  const bad = path.join(dir, 'bad.diagram.json');
   fs.writeFileSync(bad, '{ not json');
   try {
     assert.throws(() => loadSpec(bad), /is not valid JSON/);
   } finally {
-    fs.rmSync(bad);
+    fs.rmSync(dir, { recursive: true });
   }
 });
 
@@ -103,20 +106,20 @@ test('invalid id spelling is explained', async () => {
 test('duplicate ids across nodes and groups point to the first use', async () => {
   const e = await mutated('architecture', (s) => { s.nodes[1].id = 'web'; s.nodes[3].id = 'aws'; });
   assert.deepEqual(e.filter((x) => x.message.startsWith('duplicate')), [
-    { path: 'nodes[1].id', message: 'duplicate id "web"; first used at nodes[0].id' },
-    { path: 'nodes[3].id', message: 'duplicate id "aws"; first used at groups[0].id' },
+    { path: 'nodes[1].id', message: 'duplicate id "web"; first used at nodes[0].id; rename one' },
+    { path: 'nodes[3].id', message: 'duplicate id "aws"; first used at groups[0].id; rename one' },
   ]);
 });
 
 test('duplicate ids across participants and messages', async () => {
   const e = await mutated('sequence', (s) => { s.messages[0].id = 'app'; });
   assert.ok(e.some((x) => x.path === 'messages[0].id'
-    && x.message === 'duplicate id "app"; first used at participants[1].id'));
+    && x.message === 'duplicate id "app"; first used at participants[1].id; rename one'));
 });
 
 test('duplicate edge ids are rejected', async () => {
   const e = await mutated('flow', (s) => { s.edges[0].id = 'same'; s.edges[1].id = 'same'; });
-  assert.deepEqual(e, [{ path: 'edges[1].id', message: 'duplicate id "same"; first used at edges[0].id' }]);
+  assert.deepEqual(e, [{ path: 'edges[1].id', message: 'duplicate id "same"; first used at edges[0].id; rename one' }]);
 });
 
 // ---- references ---------------------------------------------------------
@@ -150,7 +153,7 @@ test('node group must be a group id', async () => {
   const typo = await mutated('architecture', (s) => { s.nodes[1].group = 'vcp'; });
   assert.deepEqual(typo, [{ path: 'nodes[1].group', message: '"vcp" not found; did you mean "vpc"?' }]);
   const isNode = await mutated('architecture', (s) => { s.nodes[1].group = 'web'; });
-  assert.deepEqual(isNode, [{ path: 'nodes[1].group', message: '"web" is a node, not a group' }]);
+  assert.deepEqual(isNode, [{ path: 'nodes[1].group', message: '"web" is a node, not a group; use a group id or remove group' }]);
   const noGroups = await mutated('state', (s) => { s.nodes[1].group = 'g'; });
   assert.deepEqual(noGroups, [{ path: 'nodes[1].group', message: '"g" not found; no groups are defined' }]);
 });
@@ -183,16 +186,16 @@ test('group parent must exist', async () => {
 
 test('group parent cycle is reported once with its path', async () => {
   const e = await mutated('architecture', (s) => { s.groups[0].parent = 'vpc'; });
-  assert.deepEqual(e, [{ path: 'groups[0].parent', message: 'group parents form a cycle: aws -> vpc -> aws' }]);
+  assert.deepEqual(e, [{ path: 'groups[0].parent', message: 'group parents form a cycle: aws -> vpc -> aws; remove parent from one of them' }]);
   const self = await mutated('architecture', (s) => { s.groups[0].parent = 'aws'; });
-  assert.deepEqual(self, [{ path: 'groups[0].parent', message: 'group parents form a cycle: aws -> aws' }]);
+  assert.deepEqual(self, [{ path: 'groups[0].parent', message: 'group parents form a cycle: aws -> aws; remove parent from one of them' }]);
 });
 
 test('group nesting deeper than 3 is rejected', async () => {
   const e = await mutated('architecture', (s) => {
     s.groups.push({ id: 'g3', label: 'Third', parent: 'vpc' }, { id: 'g4', label: 'Fourth', parent: 'g3' });
   });
-  assert.deepEqual(e, [{ path: 'groups[3].parent', message: 'group "g4" nests 4 deep; the limit is 3' }]);
+  assert.deepEqual(e, [{ path: 'groups[3].parent', message: 'group "g4" nests 4 deep; the limit is 3 — move it up a level' }]);
   const ok = await mutated('architecture', (s) => { s.groups.push({ id: 'g3', label: 'Third', parent: 'vpc' }); });
   assert.deepEqual(ok, []);
 });
@@ -356,7 +359,7 @@ test('self messages need matching endpoints, and vice versa', async () => {
   const e = await mutated('sequence', (s) => { s.messages[3].to = 'auth'; s.messages[0].to = 'u'; });
   assert.deepEqual(e, [
     { path: 'messages[0].kind', message: 'from and to are both "u"; set kind to "self"' },
-    { path: 'messages[3].kind', message: 'kind "self" needs from and to to be the same participant' },
+    { path: 'messages[3].kind', message: 'kind "self" needs from and to to be the same participant; set to equal from or use kind "sync"' },
   ]);
 });
 
@@ -370,14 +373,14 @@ test('frame messages must be consecutive', async () => {
     s.messages.push({ id: 'm5', from: 'u', to: 'app' });
     s.frames[0].messages = ['m2', 'm5'];
   });
-  assert.deepEqual(e, [{ path: 'frames[0].messages', message: 'm2 and m5 are not consecutive' }]);
+  assert.deepEqual(e, [{ path: 'frames[0].messages', message: 'm2 and m5 are not consecutive; a frame covers one unbroken run of messages' }]);
   const ok = await mutated('sequence', (s) => { s.frames[0].messages = ['m3', 'm2', 'm4']; });
   assert.deepEqual(ok, []);
 });
 
 test('frame messages may not repeat', async () => {
   const e = await mutated('sequence', (s) => { s.frames[0].messages = ['m2', 'm2']; });
-  assert.deepEqual(e, [{ path: 'frames[0].messages[1]', message: 'm2 is listed twice' }]);
+  assert.deepEqual(e, [{ path: 'frames[0].messages[1]', message: 'm2 is listed twice; list it once' }]);
 });
 
 test('note references must exist', async () => {
@@ -398,4 +401,67 @@ test('message and frame kinds are closed sets', async () => {
 test('schema errors stop before cross-reference checks', async () => {
   const e = await mutated('architecture', (s) => { s.titel = 'x'; s.edges[0].to = 'apii'; });
   assert.deepEqual(e.map((x) => x.path), ['titel']);
+});
+
+// ---- icons on shape-only kinds ---------------------------------------------
+
+test('an icon on a shape-only kind is rejected, not dropped', async () => {
+  const flow = (kind) => mutated('flow', (s) => { s.nodes[1].kind = kind; s.nodes[1].icon = 'lucide:lock'; });
+  for (const kind of ['start', 'end', 'decision']) {
+    assert.deepEqual(await flow(kind), [{
+      path: 'nodes[1].icon',
+      message: `kind "${kind}" is drawn as a shape without an icon; remove icon or use kind "step"`,
+    }], `flow ${kind}`);
+  }
+  const state = (kind) => mutated('state', (s) => { s.nodes[1].kind = kind; s.nodes[1].icon = 'lucide:lock'; });
+  for (const kind of ['start', 'end', 'choice']) {
+    assert.deepEqual(await state(kind), [{
+      path: 'nodes[1].icon',
+      message: `kind "${kind}" is drawn as a shape without an icon; remove icon or use kind "state"`,
+    }], `state ${kind}`);
+  }
+});
+
+test('box kinds still accept icons', async () => {
+  const flow = ['step', 'io', 'subprocess', 'wait'];
+  for (const kind of flow) {
+    assert.deepEqual(await mutated('flow', (s) => { s.nodes[1].kind = kind; s.nodes[1].icon = 'lucide:lock'; }), [], kind);
+  }
+  assert.deepEqual(await mutated('flow', (s) => { s.nodes[1].icon = 'lucide:lock'; }), [], 'default kind');
+  assert.deepEqual(await mutated('state', (s) => { s.nodes[1].kind = 'state'; s.nodes[1].icon = 'lucide:lock'; }), []);
+  const arch = ['service', 'client', 'user', 'database', 'storage', 'queue', 'cache', 'function', 'gateway', 'external', 'other'];
+  for (const kind of arch) {
+    assert.deepEqual(await mutated('architecture', (s) => { s.nodes[0].kind = kind; s.nodes[0].icon = 'lucide:lock'; }), [], kind);
+  }
+  for (const kind of ['actor', 'service', 'database', 'queue', 'external']) {
+    assert.deepEqual(await mutated('sequence', (s) => { s.participants[0].kind = kind; s.participants[0].icon = 'lucide:lock'; }), [], kind);
+  }
+});
+
+test('an unknown icon on a shape-only kind reports the shape problem once', async () => {
+  const e = await mutated('flow', (s) => { s.nodes[1].kind = 'decision'; s.nodes[1].icon = 'lucide:nope'; });
+  assert.equal(e.length, 1);
+  assert.match(e[0].message, /^kind "decision" is drawn as a shape without an icon/);
+});
+
+// ---- blank text ---------------------------------------------------------------
+
+test('whitespace-only and empty text fields are rejected', async () => {
+  const msg = 'must contain at least one non-space character';
+  const e = await mutated('architecture', (s) => {
+    s.title = '   ';
+    s.nodes[0].label = '';
+    s.nodes[2].note = ' \t';
+    s.edges[0].label = '  ';
+    s.steps[0].title = '\n';
+  });
+  assert.deepEqual(e, [
+    { path: 'title', message: msg },
+    { path: 'nodes[0].label', message: msg },
+    { path: 'nodes[2].note', message: msg },
+    { path: 'edges[0].label', message: msg },
+    { path: 'steps[0].title', message: msg },
+  ]);
+  const seq = await mutated('sequence', (s) => { s.notes[0].text = ' '; s.messages[0].label = ' '; });
+  assert.deepEqual(seq.map((x) => x.path), ['messages[0].label', 'notes[0].text']);
 });

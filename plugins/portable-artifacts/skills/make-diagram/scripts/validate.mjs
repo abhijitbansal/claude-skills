@@ -1,23 +1,12 @@
 #!/usr/bin/env node
 // node scripts/validate.mjs <spec.diagram.json> [--json]
 // exit 0 valid, 1 spec errors, 2 usage/IO
-import fs from 'node:fs';
 import { loadSpec, validateSpec } from './lib/spec.mjs';
-import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
+import { UsageError, parseCli, exitUsage, evalLog } from '../shared/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
 
 const USAGE = 'node scripts/validate.mjs <spec.diagram.json> [--json]';
 const OPTIONS = { json: { type: 'boolean' } };
-
-// Best effort: a broken log path must never change the validation outcome.
-function evalLog(ok, errors) {
-  if (!process.env.EVAL_LOG) return;
-  try {
-    fs.appendFileSync(process.env.EVAL_LOG, `${JSON.stringify({ ts: new Date().toISOString(), ok, errors })}\n`);
-  } catch {
-    // ignored on purpose
-  }
-}
 
 const argv = process.argv.slice(2);
 const json = argv.includes('--json');

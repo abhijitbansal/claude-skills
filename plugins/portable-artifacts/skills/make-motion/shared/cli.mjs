@@ -1,4 +1,5 @@
 // Shared CLI plumbing: strict argument parsing and the exit-2 (usage/IO) path.
+import fs from 'node:fs';
 import { parseArgs } from 'node:util';
 
 export class UsageError extends Error {
@@ -33,4 +34,15 @@ export function exitUsage(error, { json = false } = {}) {
   if (json) process.stdout.write(`${JSON.stringify({ ok: false, errors: [{ path: '', message }] })}\n`);
   else process.stderr.write(`${message}\n`);
   process.exitCode = 2;
+}
+
+// Append one { ts, ok, errors } JSON line to $EVAL_LOG when it is set. Best
+// effort: a broken log path must never change the validation outcome.
+export function evalLog(ok, errorCount) {
+  if (!process.env.EVAL_LOG) return;
+  try {
+    fs.appendFileSync(process.env.EVAL_LOG, `${JSON.stringify({ ts: new Date().toISOString(), ok, errors: errorCount })}\n`);
+  } catch {
+    // ignored on purpose
+  }
 }

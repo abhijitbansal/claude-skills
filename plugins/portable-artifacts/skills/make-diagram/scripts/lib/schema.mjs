@@ -24,7 +24,9 @@ export const LIMITS = Object.freeze({
   groupDepth: 3,
 });
 
-const text = { type: 'string', minLength: 1 };
+// \S: at least one non-space character (also rejects ""). spec.mjs words the error.
+export const NON_SPACE = '\\S';
+const text = { type: 'string', pattern: NON_SPACE };
 const ids = { type: 'array', items: text };
 const someIds = { type: 'array', minItems: 1, items: text };
 
