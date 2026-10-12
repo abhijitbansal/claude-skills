@@ -106,7 +106,7 @@ To build a dashboard or an animated explainer, read and follow skills/make-dashb
 |---|---|---|
 | Node.js ≥ 20 | ✓ | ✓ |
 | `npm ci` in the skill folder (once) | ✓ | ✓ |
-| Chromium for frame capture (once, ≈150 MB) | — | `npx playwright install chromium` (falls back to installed Google Chrome) |
+| Chromium for frame capture (once, ≈150 MB) | — | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) |
 | ffmpeg on `PATH` | — | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 4.4 for audio tracks) |
 | kokoro-js (voiceover only, on demand) | — | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (≈250 MB) plus a one-time 90 MB voice model download; the agent asks first |
 
@@ -119,7 +119,8 @@ make-motion skill folder, so it matches the Playwright version `npm ci` installe
 | ffmpeg | `brew install ffmpeg` | `winget install Gyan.FFmpeg` (or `choco install ffmpeg` / `scoop install ffmpeg`) | `sudo apt-get install ffmpeg` |
 | Chromium | `npx playwright install chromium` | `npx playwright install chromium` | `npx playwright install --with-deps chromium` (adds the system libraries; asks for sudo) |
 
-On Windows, open a new terminal after `winget` so `node` and `ffmpeg` are on `PATH`.
+On Windows, open a new terminal after `winget` so `node` and `ffmpeg` are on `PATH`. If
+PowerShell refuses `npx.ps1` (scripts disabled), run `npx.cmd playwright install chromium`.
 
 ## Usage
 

@@ -36,16 +36,8 @@ For **make-motion**, also run the one-time `npx playwright install chromium`
 inside the skill folder (about 150 MB), and make sure `ffmpeg` is on your
 `PATH`. Agents ask before downloading Chromium.
 
-Install make-motion's tools per OS (run the Chromium download inside the
-make-motion skill folder, so it matches the Playwright version `npm ci` installed):
-
-| | macOS (Homebrew) | Windows (PowerShell) | Linux (Debian/Ubuntu) |
-|---|---|---|---|
-| Node.js ≥ 20 | `brew install node` | `winget install OpenJS.NodeJS.LTS` | nodejs.org or a version manager (distro packages are often older) |
-| ffmpeg | `brew install ffmpeg` | `winget install Gyan.FFmpeg` (or `choco install ffmpeg` / `scoop install ffmpeg`) | `sudo apt-get install ffmpeg` |
-| Chromium | `npx playwright install chromium` | `npx playwright install chromium` | `npx playwright install --with-deps chromium` (adds the system libraries; asks for sudo) |
-
-On Windows, open a new terminal after `winget` so `node` and `ffmpeg` are on `PATH`.
+Per-OS commands for Node, ffmpeg and Chromium (macOS, Windows, Linux) are in
+the [README requirements](README.md#requirements).
 
 ## 2. Dashboards with make-dashboard
 
