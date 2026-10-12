@@ -21,7 +21,7 @@ plugin is, read the [README](README.md). For every spec field, see each skill's
 | GitHub Copilot CLI / VS Code | `node <repo>/plugins/portable-artifacts/bin/install.mjs copilot` (add `--project .` for `.github/skills`) | `/make-dashboard …`, `/make-motion …` |
 | Gemini CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs gemini` | `/make-dashboard …` (a TOML command that activates the skill) |
 | Any agent `npx skills` supports | `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-motion` (pick agents interactively, or pass `-a claude-code codex github-copilot -y`) | That agent's skill invocation |
-| Any other agent | Copy `skills/make-dashboard` and/or `skills/make-motion` into your project, run `npm ci` in each, and point `AGENTS.md` at their `SKILL.md` | Ask for a dashboard or a video |
+| Any other agent | Copy `skills/make-dashboard` and/or `skills/make-motion` into your project **with each skill's `shared/` folder**, run `npm ci` in each (`npm ci --omit=dev` for make-dashboard), and point `AGENTS.md` at their `SKILL.md` | Ask for a dashboard or a video |
 
 `<repo>` is a clone of `https://github.com/abhijitbansal/claude-skills`. The
 installer runs `npm ci` for you. Pass `--link` to symlink to the clone (then
@@ -59,10 +59,26 @@ from your project folder):
    `serve:` command.
 5. Gives you the page path and URL, with one line per chart.
 
+**What the page can do:**
+
+- **Chart kinds:** bar, stacked-bar, grouped-bar, line, area, scatter, bubble, heatmap, histogram, boxplot and donut. The agent names the columns and the build writes the chart. Raw Vega-Lite still works for anything else. Reference: `make-dashboard/references/kinds.md`.
+- **Views:** each card can switch between alternate views (sorted, share, 100%, area, boxplot, …) and a sortable Table view; `pair: true` shows two side by side.
+- **Export:** every card has an Export menu for PNG, SVG and CSV.
+- **Themes:** `paper` (default), `blueprint`, `editorial`, `ink`. Ask for one, or pass `--theme <name>` to `build.mjs`. The page also has a Theme: Auto / Light / Dark toggle.
+- **Live reload:** see below.
+
 **Open the result:** double-click `dist/index.html` (it is one
 self-contained file), or run the printed `serve:` command. Every chart card
 has a *Query* disclosure with the SQL, the row count, the refresh time and
 the first rows of the result.
+
+**Live reload while you edit:**
+
+```bash
+node <skill-dir>/scripts/serve.mjs --watch dashboard.json --open
+```
+
+It rebuilds when you save the spec or a file source (csv, parquet, json, duckdb, sqlite) and reloads the page. Postgres and MySQL have no file to watch: add `--interval 60` (5 to 86400 seconds). The page has a *Rebuild now* button. A failed build shows a banner and keeps the last good page. A page opened from disk (`file://`) is static.
 
 **Refresh the data:** rerun `node <skill-dir>/scripts/build.mjs
 dashboard.json`. No agent is needed. For a schedule, copy the cron or launchd
@@ -138,7 +154,7 @@ same:
 
 | Ask | What changes |
 |---|---|
-| "Make the region chart a line chart" | `charts[0].vegaLite.mark` |
+| "Make the region chart a line chart" | `charts[0].kind` |
 | "Add a KPI for total units" | one new entry in `kpis` (+ one query) |
 | "Slow scene 2 down" | `scenes[1].duration` (+ that scene's keyframe times) |
 | "Change the counter to 25" | `elements[n].to` |
@@ -155,7 +171,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 
 | Symptom | Fix |
 |---|---|
-| `Cannot find package 'ajv'` (or duckdb, playwright) | Run `npm ci` inside the skill folder |
+| `Cannot find package 'ajv'` (or duckdb, playwright) | Run `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboard) |
 | `run: node …/scripts/setup.mjs` | A sqlite, postgres or mysql source needs its DuckDB extension. Run that command once, online |
 | `sources.x.path: resolves outside the spec folder` | Move the data under the spec's folder, or add `--allow-outside` yourself |
 | `queries.q: …` with a DuckDB message | The SQL doesn't bind (wrong table or column). Run `inspect.mjs` on the file and compare |

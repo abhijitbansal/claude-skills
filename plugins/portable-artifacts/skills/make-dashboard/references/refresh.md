@@ -1,3 +1,20 @@
+# Live while you edit
+
+For a page that updates itself while you change the spec or the data, serve it in watch mode:
+
+```
+node <skill-dir>/scripts/serve.mjs --watch dashboard.json --open
+```
+
+- It builds once, serves the result on `127.0.0.1` and rebuilds when the spec or any file source (csv, parquet, json, duckdb, sqlite) is saved. The open page reloads on its own.
+- Postgres and MySQL sources have no file to watch: add `--interval <seconds>` (5 to 86400), e.g. `--interval 60`, to rebuild on a timer. `--interval` also works for file sources.
+- The page has a **Rebuild now** button for an immediate rebuild.
+- A failed build (invalid spec, half-written data file) shows an error banner and keeps the last good page. The next good save rebuilds.
+- `--theme <name>` picks a theme (it wins over the spec's `theme`); `--port`, `--allow-outside` and `--timeout` work as for build.
+- Only the served copy is live: it adds `connect-src 'self'` to the CSP for the event stream. `dist/index.html` on disk is the normal static page (`default-src 'none'`), and a page opened from disk (`file://`) is static: it never updates itself.
+
+For scheduled rebuilds of the file on disk, use the sections below.
+
 # Scheduled rebuilds
 
 A refresh is `build.mjs` again: it re-runs every query and rewrites `dist/index.html`. No LLM, no network

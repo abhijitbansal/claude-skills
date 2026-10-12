@@ -7,13 +7,12 @@ Authoritative schema: `SCHEMA` in `scripts/lib/spec.mjs`. Unknown properties are
   "title": "Revenue by region",
   "description": "optional subtitle",
   "maxRows": 5000,
+  "theme": "paper",
   "sources": { "sales": { "type": "parquet", "path": "data/sales.parquet" } },
   "queries": { "rev_by_region": "SELECT region, SUM(amount) AS revenue FROM sales GROUP BY 1" },
   "kpis":   [ { "id": "k1", "title": "Total", "query": "total", "field": "revenue", "format": "currency" } ],
-  "charts": [ { "id": "c1", "title": "Revenue by region", "query": "rev_by_region", "width": "half",
-                "vegaLite": { "mark": "bar", "encoding": {
-                  "x": { "field": "region", "type": "nominal" },
-                  "y": { "field": "revenue", "type": "quantitative" } } } } ]
+  "charts": [ { "id": "c1", "title": "North drives half of revenue", "query": "rev_by_region", "width": "half",
+                "kind": "bar", "x": "region", "y": "revenue", "format": "currency" } ]
 }
 ```
 
@@ -23,13 +22,30 @@ Authoritative schema: `SCHEMA` in `scripts/lib/spec.mjs`. Unknown properties are
 |---|---|
 | `title` | required string |
 | `description` | optional subtitle |
+| `theme` | optional: `paper` (default), `blueprint`, `editorial`, `ink`. `build.mjs --theme <name>` and `serve.mjs --watch --theme <name>` override it. An unknown name fails with did-you-mean. The page also has a "Theme: Auto / Light / Dark" toggle |
 | `maxRows` | integer 1–100000, default 5000; applied to every query. Longer results are cut and the card says "truncated at N" |
 | `sources.<name>` | `name` matches `^[a-z][a-z0-9_]*$` and is not `main`, `temp` or `system` (DuckDB catalogs). `type`: `csv`, `parquet`, `json`, `duckdb`, `sqlite` (take `path`) or `postgres`, `mysql` (take `env`, never `path`). `path` is relative to the **spec file**, not the cwd, and must resolve (symlinks followed) to a regular file inside the spec's folder. Only `--allow-outside` on validate/build lifts the folder rule; it is deliberately not a spec field |
 | `queries.<name>` | one SQL `SELECT` (CTEs and UNIONs fine). Each source name is a table/view in the query. No other statement types |
 | `kpis[]` | `id`, `title`, `query`, `field` required. Shows the first row's `field`. `format`: `number`, `currency` (USD), `percent` (value is a fraction: 0.25 → 25%), `compact` |
-| `charts[]` | `id`, `title`, `query`, `vegaLite` required. `width`: `full` (default) or `half` (two columns from 900px) |
+| `charts[]` | `id`, `title`, `query` required, plus **exactly one of `kind` or `vegaLite`**. `width`: `full` (default) or `half` (two columns from 900px). See "Chart fields" below |
 
 `id` values are unique across charts and KPIs and match `^[A-Za-z][A-Za-z0-9_-]*$`.
+
+## Chart fields
+
+| Field | Applies to | Rule |
+|---|---|---|
+| `kind` | kind charts | `bar`, `stacked-bar`, `grouped-bar`, `line`, `area`, `scatter`, `bubble`, `heatmap`, `histogram`, `boxplot`, `donut`. Roles, views and rules per kind: `kinds.md` |
+| `x`, `y`, `color`, `size`, `value` | kind charts | Column names of the chart's query. Which are required, optional or unused depends on the kind; each must be a real column of an accepted type (checked at validate) |
+| `format` | kind charts | `number`, `currency`, `percent`, `compact`; formats the numeric axis |
+| `views` | kind charts | Alternate view names for the kind (e.g. `["sorted", "table"]`), at most 6, unique. Narrows and reorders the defaults; `table` is always available and last |
+| `pair` | kind charts | `true` shows the first two views side by side and forces `width: full` |
+| `vegaLite` | raw charts | A Vega-Lite spec without `data` (next section) |
+
+Exactly one of `kind` / `vegaLite` per chart. `x`, `y`, `color`, `size`, `value`, `views`, `format` and `pair` on a raw `vegaLite` chart are errors
+(`<key> needs kind (raw vegaLite charts ignore it)`). Every kind chart also gets tooltips, a sortable Table view (first 500 rows shown)
+and an Export menu: PNG and SVG (filled with the theme surface) and CSV (all embedded rows; formula-like text, starting with `=`, `+`, `-`, `@`, tab or CR, is prefixed with `'`).
+A query with zero rows shows "No rows returned" and still offers the Table view.
 
 ## Source types
 
@@ -60,9 +76,9 @@ a guarantee about what the server executes for the statements DuckDB passes thro
 An attached `duckdb` file may not define views or macros (they would run outside the allowlist); the source is refused
 with their names. Export plain tables instead.
 
-## vegaLite
+## vegaLite (raw charts)
 
-Any Vega-Lite 6 unit, layer or concat spec **without `data`**. The build injects the query rows. Rules:
+Any Vega-Lite 6 unit, layer or concat spec **without `data`**. Use it for what the kinds do not cover. The build injects the query rows. Rules:
 
 - Every `encoding.*.field` must be a column of the chart's query, or a field produced by a `transform` (`as`).
   Column names come from the SQL, so alias aggregates: `SUM(amount) AS revenue`.
@@ -80,7 +96,7 @@ Any Vega-Lite 6 unit, layer or concat spec **without `data`**. The build injects
 
 1. Schema (did-you-mean on typos). 2. Cross-references: unique ids, queries exist, source files exist, inside the spec folder, regular files.
 3. SQL parses as exactly one SELECT. 4. Vega-Lite compiles. 5. Each query is bound against the real sources on the locked-down
-database (`LIMIT 0`), so unknown tables or columns are reported at `queries.<name>` with DuckDB's cause lines. Then at build:
+database (`LIMIT 0`), so unknown tables or columns are reported at `queries.<name>` with DuckDB's cause lines. The same column types check the kind roles, view names and `vegaLite` fields, so a typo in `x` or `field` fails at validate. Value-based rules (negatives, slice and colour counts) run at build, where rows exist. Then at build:
 queries run (30 s limit, `--timeout <seconds>`), and fields are checked against the result columns.
 
 ## SQL rules

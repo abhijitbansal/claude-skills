@@ -8,7 +8,7 @@ an account or a particular model:
 
 | Skill | You say | You get |
 |---|---|---|
-| [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + Vega-Lite charts. Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh — no LLM involved. |
+| [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + charts (11 kinds, alternate views, a sortable Table, PNG/SVG/CSV export, four themes). Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh, or `serve.mjs --watch` for live reload — no LLM involved. |
 | [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. Silent unless you ask for sound: `audio` tracks (music, voiceover, SFX) are added only when the prompt asks, and narration is synthesised locally with Kokoro. "Slow scene 2" changes one field, not the whole video. |
 
 [**See them in action**](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#showcase): a real dashboard and video an agent generated from one prompt each, with the prompts and specs.
@@ -51,7 +51,7 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
 
 Then ask for a dashboard or a video, or call the skill directly:
 `/make-dashboard …` or `/make-motion …`. On first use the agent runs the
-one-time `npm ci` inside the skill folder.
+one-time `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboard).
 
 ### Any agent, with `npx skills`
 
@@ -66,7 +66,7 @@ npx skills add abhijitbansal/claude-skills --skill make-dashboard make-motion -a
 
 It copies the folders but doesn't install their dependencies, so the agent
 runs `npm ci` inside each skill folder on first use (the SKILL.md tells it
-to).
+to; make-dashboard needs only `npm ci --omit=dev`).
 
 ### Codex, GitHub Copilot, Gemini CLI (or Claude Code without the marketplace)
 
@@ -93,7 +93,9 @@ so `git pull` updates it), `--force` (replace an existing install),
 `--no-deps` (skip `npm ci`).
 
 **Any other agent** that can read files and run shell commands: copy a skill
-folder into your project, run `npm ci` inside it, and add one line to your
+folder into your project **together with its `shared/` folder** (it sits inside
+the skill folder, so copy the folder whole), run `npm ci` inside it
+(`npm ci --omit=dev` for make-dashboard), and add one line to your
 `AGENTS.md` (or `.github/copilot-instructions.md`):
 
 ```markdown
@@ -105,7 +107,7 @@ To build a dashboard or an animated explainer, read and follow skills/make-dashb
 | | make-dashboard | make-motion |
 |---|---|---|
 | Node.js ≥ 20 | ✓ | ✓ |
-| `npm ci` in the skill folder (once) | ✓ | ✓ |
+| `npm ci` in the skill folder (once; `--omit=dev` is enough for make-dashboard) | ✓ | ✓ |
 | Chromium for frame capture (once, ≈150 MB) | — | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) |
 | ffmpeg on `PATH` | — | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 4.4 for audio tracks) |
 | kokoro-js (voiceover only, on demand) | — | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (≈250 MB) plus a one-time 90 MB voice model download; the agent asks first |

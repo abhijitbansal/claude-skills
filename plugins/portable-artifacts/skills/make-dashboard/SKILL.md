@@ -30,10 +30,11 @@ First use: if `<skill-dir>/node_modules` is missing, tell the user it is a one-t
 3. Validate and fix until it prints `valid` (it also runs every query, so valid means buildable):
    `node <skill-dir>/scripts/validate.mjs dashboard.json`
 4. Build: `node <skill-dir>/scripts/build.mjs dashboard.json` (writes `dist/index.html`, `--out <dir>` to change).
-   An error such as `charts[0].vegaLite.encoding.y.field: "revnue" is not a column of query ...`
+   An error such as `charts[0].y: "revnue" is not a column of query "by_region" (columns: region, revenue); did you mean "revenue"?`
    names the exact path and fix.
-5. Show it: run the `serve:` line that build printed (it already has the right paths).
-   Or open `dist/index.html` directly: it is one file.
+5. Show it. For live updates while editing the spec or data:
+   `node <skill-dir>/scripts/serve.mjs --watch dashboard.json --open` (rebuilds on save; Postgres/MySQL: add `--interval 60`).
+   Or run the `serve:` line that build printed, or open `dist/index.html` directly: it is one file.
 6. To change anything, edit **only `dashboard.json`**, then rerun steps 3 and 4. Never edit `dist/`.
    A refresh is just a rebuild; for scheduled rebuilds see `references/refresh.md`.
 
@@ -49,13 +50,16 @@ Queries have a 30 s limit (`--timeout <seconds>` on build).
   "sources": { "sales": { "type": "parquet", "path": "data/sales.parquet" } },
   "queries": {
     "total": "SELECT SUM(amount) AS revenue FROM sales",
-    "by_region": "SELECT region, SUM(amount) AS revenue FROM sales GROUP BY 1 ORDER BY 2 DESC"
+    "by_region": "SELECT region, SUM(amount) AS revenue FROM sales GROUP BY 1 ORDER BY 2 DESC",
+    "by_month": "SELECT date_trunc('month', date) AS month, region, SUM(amount) AS revenue FROM sales GROUP BY 1, 2 ORDER BY 1"
   },
   "kpis": [ { "id": "k1", "title": "Revenue", "query": "total", "field": "revenue", "format": "currency" } ],
-  "charts": [ { "id": "c1", "title": "Revenue by region", "query": "by_region", "width": "half",
-    "vegaLite": { "mark": "bar", "encoding": {
-      "x": { "field": "region", "type": "nominal", "sort": null },
-      "y": { "field": "revenue", "type": "quantitative" } } } } ]
+  "charts": [
+    { "id": "c1", "title": "North drives half of revenue", "query": "by_region", "width": "half",
+      "kind": "bar", "x": "region", "y": "revenue", "format": "currency" },
+    { "id": "c2", "title": "Revenue up 18% since March", "query": "by_month",
+      "kind": "line", "x": "month", "y": "revenue", "color": "region" }
+  ]
 }
 ```
 
@@ -64,11 +68,17 @@ Queries have a 30 s limit (`--timeout <seconds>` on build).
   sqlite/postgres/mysql need a one-time `node <skill-dir>/scripts/setup.mjs dashboard.json` (online; builds stay offline).
 - `queries`: one SELECT each, names `[a-z][a-z0-9_]*`. Alias every aggregate (`AS revenue`); chart fields are those aliases.
 - `kpis[].format`: `number | currency | percent | compact` (percent expects a fraction).
-- `charts[].width`: `full` (default) or `half`. `vegaLite`: any Vega-Lite spec **without `data`**.
-- Do not set colours, `config`, `width` or `autosize` in `vegaLite`: the page applies the palette and light/dark theme.
-- Dates are UTC strings: use `"type": "temporal"` with `utc…` time units (`utcyearmonth`).
+- `charts[].width`: `full` (default) or `half`. Each chart has exactly one of `kind` or `vegaLite`.
+- `kind`: `bar | stacked-bar | grouped-bar | line | area | scatter | bubble | heatmap | histogram | boxplot | donut`.
+  Name columns by role (`x`, `y`, `color`, `size`, `value`); the build makes the chart, tooltips, alternate views, a sortable Table view and PNG/SVG/CSV export.
+  Raw `vegaLite` (any Vega-Lite spec **without `data`**) still works for anything the kinds don't cover.
+- Chart titles state the finding ("North drives half of revenue"), not the field names.
+- `views` picks alternate views (e.g. `["sorted", "table"]`); `pair: true` shows the first two side by side. Order follows the query, so write `ORDER BY`.
+- `theme`: `paper` (default), `blueprint`, `editorial`, `ink`. Never set colours, `config`, `width` or `autosize` in `vegaLite`.
+- Full kind reference (roles, views, rules, errors): `references/kinds.md`.
+- Raw `vegaLite` dates are UTC strings: use `"type": "temporal"` with `utc…` time units (`utcyearmonth`).
 - Aim for few, clear charts: bar for magnitude, line for change over time, colour only for a real category (max 8).
-- Full field list and rules: `references/schema.md`. Working examples: `references/examples/`.
+- Field list and rules: `references/schema.md`. Working examples: `references/examples/`.
 
 ## Degraded mode
 
@@ -92,4 +102,5 @@ Each known bypass vector and the test that pins it is in `references/sql-sandbox
 The allowlist is the query control; offline is guaranteed by the locked DuckDB
 connection and the page's `default-src 'none'` CSP, not by the validator.
 `serve.mjs` binds 127.0.0.1 and refuses non-local Host headers (403).
+Watch mode serves a copy with `connect-src 'self'` for the event stream; the built file on disk keeps `default-src 'none'`.
 For postgres/mysql, `READ_ONLY` on the attach only limits DuckDB: the real guard is a read-only database role.

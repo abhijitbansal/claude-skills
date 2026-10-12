@@ -144,6 +144,29 @@ test('a failed npm ci removes the half-installed copy and says so', () => {
   assert.equal(fs.existsSync(path.join(home, '.claude/skills/make-motion')), false);
 });
 
+// Fake npm that records its argv, so the exact `npm ci` flags can be pinned.
+function npmArgsFor(extraArgs) {
+  const home = tmp();
+  const bin = tmp();
+  const log = path.join(bin, 'npm-args.txt');
+  fs.writeFileSync(path.join(bin, 'npm'), `#!/bin/sh\necho "$@" >> "${log}"\nexit 0\n`, { mode: 0o755 });
+  const r = spawnSync(process.execPath, [installer, 'claude', '--skills', 'make-motion', ...extraArgs], {
+    encoding: 'utf8', env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  return fs.readFileSync(log, 'utf8').trim();
+}
+
+test('a copied install runs npm ci --omit=dev', () => {
+  assert.match(npmArgsFor([]), /^ci --omit=dev\b/);
+});
+
+test('a --link install runs npm ci without --omit=dev (it would wipe the checkout dev deps)', () => {
+  const args = npmArgsFor(['--link']);
+  assert.match(args, /^ci\b/);
+  assert.doesNotMatch(args, /--omit/);
+});
+
 test('usage errors exit 2', () => {
   const home = tmp();
   assert.equal(runInstall([], home).status, 2);

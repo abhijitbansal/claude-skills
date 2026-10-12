@@ -287,3 +287,15 @@ Each commit leaves `npm test` green in both skills.
 - `sync-shared --check`, unit tests and the browser test pass in CI.
 - `npx skills add` of make-dashboard works from a clean temp dir (manual check).
 - Eval acceptance above is met, with the result file committed.
+
+## Errata (from planning, 2026-10-12)
+
+- The sync script lives at `plugins/portable-artifacts/bin/sync-shared.mjs` (CI already runs `bin/test`), not `scripts/`.
+- Contrast: categorical colours are not gated by `contrast.mjs`. Three light-mode reference colours sit below 3:1; the dataviz relief rule applies (legend + Table view on every card). UI colours (`accent`, `warn`, `good`, `bad`) are gated at 3:1; text at 4.5:1; the sequential ramp must strengthen at every step.
+- `color` on `scatter`/`bubble` allows at most 3 values (dataviz all-pairs cap); other kinds 8.
+- Role, type, view-name and vegaLite field checks run at validate (from `LIMIT 0` column types); value-based availability (negatives, totals, slice and colour counts) runs at build, where rows exist.
+- Skill frontmatter `model:` / `effort:` are documented by Claude Code (`code.claude.com/docs/en/skills`): the override applies for the rest of the current turn.
+- Browser tests fall back to system Chrome when Playwright's bundled Chromium is missing (same as make-motion).
+- Interval for --watch is 5..86400 seconds (larger values overflow setInterval).
+- Usage errors set process.exitCode instead of calling process.exit() (process.exit after a pipe write SIGSEGVed on Node 24.7).
+- Exported PNG/SVG are filled with the theme surface (a transparent dark-theme image is unreadable in light viewers).

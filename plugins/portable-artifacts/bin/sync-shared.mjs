@@ -74,7 +74,8 @@ function main() {
     ({ values } = parseArgs({ args: process.argv.slice(2), options: { check: { type: 'boolean' }, plugin: { type: 'string' } }, strict: true }));
   } catch (e) {
     process.stderr.write(`sync-shared: ${e.message.split('. ')[0]}; accepted: --check, --plugin <dir>\n`);
-    process.exit(2);
+    process.exitCode = 2; // not process.exit(): it can SIGSEGV after a pipe write on Node 24.7
+    return;
   }
   const dir = path.resolve(values.plugin ?? PLUGIN);
   if (values.check) {
@@ -82,7 +83,8 @@ function main() {
     for (const p of problems) process.stderr.write(`skills/${p.skill}/shared/${p.file}: ${p.problem}\n`);
     if (problems.length) {
       process.stderr.write('shared/ copies are out of date; run: node bin/sync-shared.mjs (from plugins/portable-artifacts)\n');
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     process.stdout.write('shared/ copies are in sync\n');
     return;

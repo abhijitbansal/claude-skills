@@ -12,4 +12,4 @@ including `npx skills add … --skill <name>`, so each skill must carry its own
 copy. CI runs `node bin/sync-shared.mjs --check` and fails on any drift.
 
 Rules: no npm dependencies (skills have separate lockfiles); tests live in
-`shared/test/` and run with `node --test plugins/portable-artifacts/shared/test/`.
+`shared/test/` and run with `node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` (quote the glob; the directory form fails on Node 24.7).

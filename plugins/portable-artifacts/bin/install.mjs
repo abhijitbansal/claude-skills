@@ -72,7 +72,9 @@ function installSkill(skill, dstRoot, { link, force, deps }) {
   if (deps) {
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     const where = link ? src : dst;
-    const r = spawnSync(npm, ['ci', '--omit=dev', '--no-audit', '--no-fund'], { cwd: where, stdio: 'inherit' });
+    // A linked install runs inside the source checkout: --omit=dev there would delete the developer's dev deps.
+    const args = ['ci', ...(link ? [] : ['--omit=dev']), '--no-audit', '--no-fund'];
+    const r = spawnSync(npm, args, { cwd: where, stdio: 'inherit' });
     if (r.status !== 0) {
       fs.rmSync(dst, { recursive: true, force: true }); // a link is removed, never its target
       throw new Error(`npm ci failed in ${where}${r.error ? ` (${r.error.message})` : ''}; removed the partial install at ${dst}`);
