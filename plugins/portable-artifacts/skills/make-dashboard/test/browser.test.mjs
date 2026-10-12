@@ -162,3 +162,42 @@ test('blocked storage: switching views still works', async (t) => {
   assert.equal(await page.getAttribute('#card-bar [data-view=sorted]', 'aria-selected'), 'true');
   assert.deepEqual(problems, []);
 });
+
+// A pane must show what its selected tab says, however fast the user switches:
+// vegaEmbed resolves late while the Table view paints at once.
+const paneMatchesTab = (page, id) => page.evaluate((cid) => {
+  const card = document.getElementById(`card-${cid}`);
+  const selected = card.querySelector('[role=tab][aria-selected=true]').getAttribute('data-view');
+  const pane = card.querySelector('.chart');
+  return { selected, tables: pane.querySelectorAll('.table-view').length, svgs: pane.querySelectorAll('svg').length };
+}, id);
+
+test('rapid ArrowRight presses end on Table with the table alone in the pane', async (t) => {
+  if (!(await haveBrowser())) return t.skip('no browser');
+  const { out } = buildProject(KINDS_SPEC);
+  const { page, problems } = await open(out);
+  await page.focus('#card-bar [data-view=bar]');
+  for (let i = 0; i < 3; i += 1) await page.keyboard.press('ArrowRight'); // Sorted, Share, Table; no waits
+  await page.waitForTimeout(500);
+  assert.deepEqual(await paneMatchesTab(page, 'bar'), { selected: 'table', tables: 1, svgs: 0 });
+  assert.deepEqual(problems, []);
+});
+
+test('clicking a chart view and then Table in the same tick leaves only the table', async (t) => {
+  if (!(await haveBrowser())) return t.skip('no browser');
+  const { out } = buildProject(KINDS_SPEC);
+  const { page, problems } = await open(out);
+  await page.evaluate(() => {
+    for (const v of ['sorted', 'share', 'table']) document.querySelector(`#card-bar [data-view=${v}]`).click();
+  });
+  await page.waitForTimeout(500);
+  assert.deepEqual(await paneMatchesTab(page, 'bar'), { selected: 'table', tables: 1, svgs: 0 });
+  await page.evaluate(() => { // and back to a chart view: exactly one svg, no table
+    document.querySelector('#card-bar [data-view=table]').click();
+    document.querySelector('#card-bar [data-view=sorted]').click();
+    document.querySelector('#card-bar [data-view=share]').click();
+  });
+  await page.waitForTimeout(500);
+  assert.deepEqual(await paneMatchesTab(page, 'bar'), { selected: 'share', tables: 0, svgs: 1 });
+  assert.deepEqual(problems, []);
+});

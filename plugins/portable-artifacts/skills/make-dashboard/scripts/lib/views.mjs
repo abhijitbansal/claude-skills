@@ -171,7 +171,8 @@ function expandKind(chart, result, p) {
   const ctx = context(chart, result);
   const { offered, blocked } = availableViews(chart, result);
   (chart.views ?? []).forEach((v, i) => {
-    if (v !== 'table' && blocked[v]) errors.push({ path: `${p}.views[${i}]`, message: blocked[v] });
+    // An empty result blocks share/normalized by definition; that is a data refresh, not a spec defect.
+    if (v !== 'table' && blocked[v] && result.rowCount > 0) errors.push({ path: `${p}.views[${i}]`, message: blocked[v] });
   });
   // `views` narrows and reorders the defaults; the table always comes last.
   const names = chart.views?.filter((v) => v !== 'table') ?? offered;

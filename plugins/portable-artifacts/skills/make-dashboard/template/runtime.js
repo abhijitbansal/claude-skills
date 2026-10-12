@@ -68,6 +68,15 @@
     };
   }
 
+  // Each pane has a render token. Every paint takes a fresh one, and an async
+  // embed only lands if its token is still current; a stale embed is
+  // finalized and discarded, so a slow chart never overwrites a later Table.
+  var paneState = {}; // pane id -> { token, result }
+  function pane(el) { return paneState[el.id] || (paneState[el.id] = { token: 0, result: null }); }
+  function release(p) {
+    if (p.result) { try { p.result.finalize(); } catch (e) { /* already gone */ } p.result = null; }
+  }
+
   function embed(el, vl, rows, cfg) {
     var unit = !('hconcat' in vl || 'vconcat' in vl || 'concat' in vl || 'repeat' in vl || 'facet' in vl);
     var spec = Object.assign({ height: 260 }, vl, { data: { values: rows }, config: cfg });
@@ -75,15 +84,31 @@
       spec.width = 'container';
       spec.autosize = { type: typeof spec.height === 'object' ? 'fit-x' : 'fit', contains: 'padding' };
     }
-    el.textContent = '';
+    var p = pane(el);
+    var token = ++p.token;
+    // Render into a hidden sibling (still laid out, so 'container' width works);
+    // the previous content stays until the new chart is ready.
+    var box = document.createElement('div');
+    box.className = 'pa-pending';
+    el.appendChild(box);
+    function land(content) {
+      release(p);
+      while (el.firstChild && el.firstChild !== box) el.removeChild(el.firstChild);
+      box.className = '';
+      if (content) { box.textContent = ''; box.appendChild(content); }
+    }
     // ast: true uses the bundled expression interpreter, so the strict CSP
     // needs no 'unsafe-eval'. Actions (export, editor links) stay off.
-    return window.vegaEmbed(el, spec, { renderer: 'svg', ast: true, actions: false }).catch(function (err) {
-      el.innerHTML = '';
-      var p = document.createElement('p');
-      p.className = 'chart-error';
-      p.textContent = 'Chart failed to render: ' + (err && err.message ? err.message : err);
-      el.appendChild(p);
+    return window.vegaEmbed(box, spec, { renderer: 'svg', ast: true, actions: false }).then(function (result) {
+      if (token !== p.token) { result.finalize(); if (box.parentNode) box.parentNode.removeChild(box); return; }
+      land(null);
+      p.result = result;
+    }, function (err) {
+      if (token !== p.token) { if (box.parentNode) box.parentNode.removeChild(box); return; }
+      var msg = document.createElement('p');
+      msg.className = 'chart-error';
+      msg.textContent = 'Chart failed to render: ' + (err && err.message ? err.message : err);
+      land(msg);
     });
   }
 
@@ -102,6 +127,9 @@
 
   function tableView(el, c) {
     var q = data.queries[c.query];
+    var p = pane(el);
+    p.token += 1; // cancels any chart embed still in flight for this pane
+    release(p);
     var state = tableSort[el.id] || (tableSort[el.id] = { col: null, dir: 'asc' });
     var rows = state.col ? PA.sortRows(q.rows, state.col, state.dir) : q.rows;
     var shown = rows.slice(0, PA.TABLE_LIMIT);

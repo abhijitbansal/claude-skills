@@ -183,3 +183,18 @@ for (const [kind, view, chart] of [
     assert.deepEqual(JSON.parse(JSON.stringify(v.vegaLite)), JSON.parse(fs.readFileSync(file, 'utf8')));
   });
 }
+
+test('zero rows: a requested view blocked only by the empty result is dropped, not an error (data refreshes must not fail a build)', () => {
+  const out = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'bar', query: 'none', x: 'region', y: 'revenue', views: ['share'] }] }, results);
+  assert.deepEqual(out.errors, []);
+  assert.deepEqual(out.charts[0].views.map((v) => v.name), ['bar', 'table']);
+  assert.equal(out.charts[0].empty, true);
+});
+
+test('non-empty data still errors on a requested blocked view (negatives are a real defect)', () => {
+  const res = { neg: r([{ region: 'a', revenue: 5 }, { region: 'b', revenue: -1 }]) };
+  const out = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'bar', query: 'neg', x: 'region', y: 'revenue', views: ['share'] }] }, res);
+  assert.equal(out.errors.length, 1);
+  const zeroTotal = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'bar', query: 'z', x: 'region', y: 'revenue', views: ['share'] }] }, { z: r([{ region: 'a', revenue: 0 }]) });
+  assert.match(zeroTotal.errors[0].message, /positive total/);
+});
