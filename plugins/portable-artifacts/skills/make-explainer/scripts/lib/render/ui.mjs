@@ -2,10 +2,12 @@
 // text goes through renderInline / escapeHtml; enum-like values (tone,
 // severity, ...) never reach the markup directly, only through the closed
 // tables below, so an unexpected value falls back to neutral.
-import { escapeHtml, renderInline } from '../markdown.mjs';
+import { escapeHtml, renderInline, renderHeadingInline } from '../markdown.mjs';
 
 export const esc = escapeHtml;
 export const inline = renderInline;
+/** Like inline(), but a link becomes its label: for section titles, which are headings. */
+export const headingInline = renderHeadingInline;
 
 /**
  * Markdown-lite -> HTML-escaped text with every tag removed. Safe to place in

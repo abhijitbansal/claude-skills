@@ -22,6 +22,30 @@ const TABLE_ROWS = 25;
 // Per-page state: built charts by section, and each interactive dashboard built once (by its file).
 const state = (ctx) => (ctx.charts ??= { items: new Map(), dashboards: new Map() });
 
+// The dashboard page stamps "refreshed <time>" from the `now` it is built with. The wall clock would make
+// every build of the same spec differ, so the stamp is the newest modification time among the dashboard
+// spec and its file sources: it changes when an input does, and never otherwise. An input that cannot be
+// read is skipped here; the build reports it.
+function inputsTime(dashboardFile) {
+  const files = [dashboardFile];
+  try {
+    const { sources } = JSON.parse(fs.readFileSync(dashboardFile, 'utf8'));
+    for (const src of Object.values(sources ?? {})) {
+      if (typeof src?.path === 'string') files.push(path.resolve(path.dirname(dashboardFile), src.path));
+    }
+  } catch {
+    // a dashboard that does not parse is reported by the build
+  }
+  const times = files.flatMap((f) => {
+    try {
+      return [fs.statSync(f).mtimeMs];
+    } catch {
+      return [];
+    }
+  });
+  return new Date(Math.max(0, ...times));
+}
+
 // The dashboard is built in a temporary folder that is gone before this returns; its page is kept in memory
 // and written next to the explainer by the build (an asset with `content`).
 async function buildInteractive(source, section, ctx) {
@@ -30,7 +54,7 @@ async function buildInteractive(source, section, ctx) {
     const pipeline = await loadSibling('make-dashboard', 'scripts/lib/pipeline.mjs');
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-dashboard-'));
     try {
-      const built = await pipeline.buildDashboard(source.abs, { out, theme: ctx.theme.name });
+      const built = await pipeline.buildDashboard(source.abs, { out, theme: ctx.theme.name, now: inputsTime(source.abs) });
       if (!built.ok) {
         throw new SectionErrors(built.errors.map((e) => ({ path: repath('dashboard', e.path), message: `${e.message} (in ${section.dashboard})` })));
       }

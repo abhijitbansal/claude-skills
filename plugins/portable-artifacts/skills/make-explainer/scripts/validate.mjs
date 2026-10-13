@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // node scripts/validate.mjs <explainer.json> [--json]
 // exit 0 valid (warnings are printed), 1 spec errors, 2 usage/IO
-import { loadSpec, validateSpec } from './lib/spec.mjs';
-import { UsageError, parseCli, exitUsage, evalLog } from '../shared/cli.mjs';
+import { loadSpec, validateSpec, exitSpecUsage } from './lib/spec.mjs';
+import { UsageError, parseCli, evalLog } from '../shared/cli.mjs';
 
 const USAGE = 'node scripts/validate.mjs <explainer.json> [--json]';
 const OPTIONS = { json: { type: 'boolean' } };
@@ -32,5 +32,5 @@ try {
 } catch (e) {
   if (!(e instanceof UsageError)) throw e;
   evalLog(false, 1);
-  exitUsage(e, { json });
+  exitSpecUsage(e, { json });
 }

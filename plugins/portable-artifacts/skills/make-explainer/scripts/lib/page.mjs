@@ -13,7 +13,7 @@ import { slugify } from '../../shared/output.mjs';
 import { loadSibling, SiblingError } from './siblings.mjs';
 import { SectionErrors } from './section-errors.mjs';
 import { isSlides, renderDeck } from './slides.mjs';
-import { esc, inline, plain, rawText } from './render/ui.mjs';
+import { esc, inline, headingInline, plain, rawText } from './render/ui.mjs';
 
 const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), slides: new URL('../../template/slides.html', import.meta.url) };
 const BASE_CSS = new URL('../../template/base.css', import.meta.url);
@@ -119,7 +119,7 @@ function renderSection(section, i, id, titleId, def, ctx) {
   const body = renderBody(section, i, def, ctx);
   const hasHeading = section.title !== undefined && !def.ownHeading;
   const heading = hasHeading
-    ? `<h2 class="sec-title" id="${esc(titleId)}">${inline(section.title)}<a class="anchor" href="#${esc(id)}" aria-label="Link to this section: ${plain(section.title)}">#</a></h2>\n`
+    ? `<h2 class="sec-title" id="${esc(titleId)}">${headingInline(section.title)}<a class="anchor" href="#${esc(id)}" aria-label="Link to this section: ${plain(section.title)}">#</a></h2>\n`
     : '';
   const labelled = hasHeading ? ` aria-labelledby="${esc(titleId)}"` : '';
   return `<section class="sec sec-${section.type}" id="${esc(id)}"${labelled}>\n${heading}${body}\n</section>`;

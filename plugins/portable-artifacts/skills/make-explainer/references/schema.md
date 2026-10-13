@@ -14,7 +14,7 @@ Every section type and its fields: [sections.md](sections.md). Banned phrases: [
 | `meta` | object | Keys `date`, `branch`, `repo`, `author`, `version`, `status`; each value at most 60 characters. Shown as chips under the title. |
 | `sections` | array, required | 1 to 40 sections, see below. |
 
-Every section has `type` (required), an optional `id` (`^[a-z][a-z0-9-]*$`, unique; used for deep links) and an optional `title` (at most 90 characters).
+Every section has `type` (required), an optional `id` (`^[a-z][a-z0-9-]*$`, unique; used for deep links; not `content`, `outline-title`, `slide-<n>`, `slide-<n>-title` or anything starting `ch<n>-`, which the page uses itself) and an optional `title` (at most 90 characters).
 
 ## Limits
 

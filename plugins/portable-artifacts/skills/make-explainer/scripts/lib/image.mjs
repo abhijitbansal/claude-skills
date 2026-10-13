@@ -18,22 +18,47 @@ const SNIFF = {
 // Whole-text scan, on purpose: a tag-by-tag scan can be hidden by a ">" inside a
 // quoted attribute value. Strict means a few harmless files are refused (for
 // example text that mentions "onclick ="); export a png for those.
+// The scan runs on the text as a consumer reads it: XML character references decoded (an XML parser
+// decodes them before CSS sees a <style> body), and, for the CSS rules, CSS escapes too (u\72l( is url().
 const HREF = /(?:xlink:)?href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
 const CSS_URL = /url\(\s*(["']?)\s*([^)]*)/gi;
+const XML_ENTITIES = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
+const REFERENCE = /&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|(lt|gt|amp|quot|apos));/g;
+const CSS_ESCAPE = /\\([0-9a-fA-F]{1,6})[ \t\n\r\f]?|\\([^\n\r\f0-9a-fA-F])/g;
+const MAX_DECODE_PASSES = 4;
+const MAX_CODE_POINT = 0x10ffff;
 
-export function svgProblem(svg) {
-  if (/<script/i.test(svg)) return 'contains <script';
-  if (/<foreignObject/i.test(svg)) return 'contains <foreignObject';
+const fromCodePoint = (cp, fallback) => (cp > 0 && cp <= MAX_CODE_POINT ? String.fromCodePoint(cp) : fallback);
+
+// Decoded until nothing changes (a reference to a reference is decoded too), so no spelling hides a pattern.
+function decodeReferences(text) {
+  let out = text;
+  for (let pass = 0; pass < MAX_DECODE_PASSES; pass++) {
+    const next = out.replace(REFERENCE, (m, dec, hex, name) => (name ? XML_ENTITIES[name] : fromCodePoint(Number.parseInt(dec ?? hex, dec === undefined ? 16 : 10), m)));
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+}
+
+const decodeCssEscapes = (text) => text.replace(CSS_ESCAPE, (m, hex, char) => (char ?? fromCodePoint(Number.parseInt(hex, 16), '�')));
+
+export function svgProblem(raw) {
+  const svg = decodeReferences(raw);
+  const css = decodeCssEscapes(svg);
+  // An optional namespace prefix on the element name: <x:script>, <svg:foreignObject>.
+  if (/<(?:[\w.-]+:)*script/i.test(svg)) return 'contains <script';
+  if (/<(?:[\w.-]+:)*foreignObject/i.test(svg)) return 'contains <foreignObject';
   if (/<!ENTITY/i.test(svg)) return 'declares an entity';
-  if (/javascript\s*:/i.test(svg)) return 'contains a javascript: URL';
+  if (/javascript\s*:/i.test(css)) return 'contains a javascript: URL';
   if (/[\s"'/]on[a-z]+\s*=/i.test(svg)) return 'contains an event handler attribute (on…=)';
-  if (/@import/i.test(svg)) return 'contains an @import';
-  if (/attributeName\s*=\s*["']?\s*(?:xlink:)?href/i.test(svg)) return 'animates an href';
+  if (/@import/i.test(css)) return 'contains an @import';
+  if (/attributeName\s*=\s*["']?\s*(?:[\w.-]+:)?href/i.test(svg)) return 'animates an href';
   for (const m of svg.matchAll(HREF)) {
     const value = (m[1] ?? m[2] ?? m[3] ?? '').trim();
     if (!value.startsWith('#')) return `has an href that is not a #fragment (${JSON.stringify(value.slice(0, 40))})`;
   }
-  for (const m of svg.matchAll(CSS_URL)) {
+  for (const m of css.matchAll(CSS_URL)) {
     if (!m[2].trim().startsWith('#')) return `has a url() that is not a #fragment (${JSON.stringify(m[2].trim().slice(0, 40))})`;
   }
   return null;

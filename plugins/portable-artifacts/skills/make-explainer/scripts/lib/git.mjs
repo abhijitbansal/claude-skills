@@ -14,9 +14,13 @@ const SHOWN_BRANCHES = 10;
 const SHORT_SHA = 7;
 // A copy (C) is a new file that remembers its source; scaffold notes it like a rename.
 const CHANGES = { A: 'added', M: 'modified', D: 'deleted', R: 'renamed', C: 'added', T: 'modified' };
-// Every GIT_* variable can redirect git away from --repo (GIT_DIR, GIT_CEILING_DIRECTORIES, GIT_OBJECT_DIRECTORY,
-// GIT_CONFIG_PARAMETERS, ...). The child gets none of them except the one that locates git's own helpers.
-const KEPT_ENV = new Set(['GIT_EXEC_PATH']);
+// These GIT_* variables point git at a different repository, object store, index or discovery root than
+// --repo names, so the child gets none of them. Everything else (GIT_CONFIG_*, GIT_EXEC_PATH, identity,
+// GIT_EXTERNAL_DIFF, ...) passes through: --no-ext-diff and --no-pager keep the output free of helpers.
+const REDIRECTING_ENV = new Set([
+  'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_COMMON_DIR', 'GIT_NAMESPACE', 'GIT_CEILING_DIRECTORIES', 'GIT_DISCOVERY_ACROSS_FILESYSTEM',
+]);
 
 // A test file is code that lives in a test folder or has a test-shaped name. Fixtures, goldens,
 // helpers and snapshots inside a test folder support the tests; data and docs are not tests.
@@ -27,10 +31,16 @@ const TEST_NAME = /(^|\/)test_[^/]*$|[._-]tests?\.[A-Za-z0-9]+$|[._-]spec\.[A-Za
 
 const byCodeUnit = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
-function run(cwd, args) {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_') || KEPT_ENV.has(k)));
+/** The environment git runs in: `source` without the repo-redirecting variables, and no prompts or optional locks. */
+export function gitEnv(source) {
+  const env = Object.fromEntries(Object.entries(source).filter(([k]) => !REDIRECTING_ENV.has(k)));
   env.GIT_OPTIONAL_LOCKS = '0';
   env.GIT_TERMINAL_PROMPT = '0';
+  return env;
+}
+
+function run(cwd, args) {
+  const env = gitEnv(process.env);
   const r = spawnSync('git', ['--no-pager', '-c', 'core.quotepath=off', '-c', 'log.showSignature=false', ...args], {
     cwd, encoding: 'utf8', env, maxBuffer: MAX_BUFFER,
   });

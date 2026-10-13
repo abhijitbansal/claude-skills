@@ -100,6 +100,15 @@ export async function posterFrame(video, tmp, seconds, { timeoutMs = POSTER_TIME
 }
 
 /**
+ * The environment make-motion runs in: ours, without EVAL_LOG. That variable counts validate runs for the
+ * evals; a make-motion CLI that ever logged to it would inflate the count.
+ */
+export function childEnv(env) {
+  const { EVAL_LOG: _evalLog, ...rest } = env;
+  return rest;
+}
+
+/**
  * Render `specAbs` (a validated motion.json) -> { video: Buffer, poster?: Buffer }. `pageTheme` is the theme
  * of the page the video is for. Throws SectionErrors (at `spec`) when make-motion cannot render it here or the
  * video is over `maxBytes`, SiblingError when it is not installed.
@@ -113,7 +122,7 @@ export async function renderMotion(specAbs, spec, env = process.env, { maxBytes 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-motion-render-'));
   try {
     const file = path.join(tmp, 'video.mp4');
-    const r = await runChild(process.execPath, [script, ...motionArgs(specAbs, file, spec, pageTheme)], { cwd: tmp, env, timeoutMs });
+    const r = await runChild(process.execPath, [script, ...motionArgs(specAbs, file, spec, pageTheme)], { cwd: tmp, env: childEnv(env), timeoutMs });
     if (r.error || r.timedOut || r.status !== 0) throw new SectionErrors([{ path: 'spec', message: renderFailure(r, { timeoutMs }) }]);
     const size = fs.statSync(file).size;
     if (size > maxBytes) {

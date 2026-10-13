@@ -52,9 +52,9 @@ function closeItalic(s, from) {
 // One pass over `s`; each construct either matches completely or its opening
 // character is emitted as literal text. Nesting is structural (recursion on the
 // inner text), so the output is always well-formed.
-function inline(s, { links, depth }) {
+function inline(s, { links, depth, unlink = false }) {
   if (depth > MAX_DEPTH) return escapeHtml(s);
-  const next = { links, depth: depth + 1 };
+  const next = { links, depth: depth + 1, unlink };
   let out = '';
   let i = 0;
   while (i < s.length) {
@@ -73,7 +73,7 @@ function inline(s, { links, depth }) {
         const url = end > 0 ? s.slice(close + 2, end) : '';
         if (end > 0 && safeUrl(url)) {
           const label = inline(s.slice(i + 1, close), { links: false, depth: depth + 1 });
-          out += `<a href="${escapeHtml(url)}" rel="noopener noreferrer">${label}</a>`;
+          out += unlink ? label : `<a href="${escapeHtml(url)}" rel="noopener noreferrer">${label}</a>`;
           i = end + 1;
           continue;
         }
@@ -99,9 +99,57 @@ function inline(s, { links, depth }) {
   return out;
 }
 
+const blank = (text) => ' '.repeat(text.length);
+
+// Same scan as inline(), but the output is the source text with the parts that are not prose
+// (the inside of `code`, the (url) of a link that renders as a link) replaced by spaces, so
+// a lint can read the words a reader reads. Same length as the input.
+function maskNonProse(s, depth) {
+  if (depth > MAX_DEPTH) return s;
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (c === '`') {
+      const end = s.indexOf('`', i + 1);
+      if (end > i + 1) {
+        out += `\`${blank(s.slice(i + 1, end))}\``;
+        i = end + 1;
+        continue;
+      }
+    } else if (c === '[') {
+      const close = s.indexOf(']', i + 1);
+      if (close > i + 1 && s[close + 1] === '(') {
+        const end = urlEnd(s, close + 2);
+        if (end > 0 && safeUrl(s.slice(close + 2, end))) {
+          out += `[${maskNonProse(s.slice(i + 1, close), depth + 1)}](${blank(s.slice(close + 2, end))})`;
+          i = end + 1;
+          continue;
+        }
+      }
+    }
+    out += c;
+    i += 1;
+  }
+  return out;
+}
+
+const BARE_URL = /\bhttps?:\/\/\S+/gi;
+
+/** The text with code spans, link URLs and bare http(s) URLs blanked out; what is left is prose. */
+export function proseOnly(text) {
+  return maskNonProse(String(text), 0).replace(BARE_URL, blank);
+}
+
 export function renderInline(text) {
   if (typeof text !== 'string') throw new TypeError('markdown text must be a string');
   return inline(text, { links: true, depth: 0 });
+}
+
+/** Inline markup for a heading: the same, except a link is just its label (a heading is a claim, not navigation). */
+export function renderHeadingInline(text) {
+  if (typeof text !== 'string') throw new TypeError('markdown text must be a string');
+  return inline(text, { links: true, depth: 0, unlink: true });
 }
 
 const isItem = (line) => line.startsWith('- ') && line.slice(2).trim() !== '';

@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
 import { formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
-import { UsageError } from '../../shared/cli.mjs';
+import { UsageError, exitUsage } from '../../shared/cli.mjs';
+import { jsonSyntaxError, JsonSyntaxError } from './json-error.mjs';
 import { ROOT_SCHEMA, SECTION_SCHEMAS, TYPE_SCHEMA, NON_SPACE } from './schema.mjs';
 import { checkTop, checkIds, checkSections, warnSections } from './semantic.mjs';
 import { collectStrings } from './walk.mjs';
@@ -12,7 +13,7 @@ import { lintText, lintPlaceholders } from './lint.mjs';
 import { slideBudget } from './slides.mjs';
 import { checksFor } from './checks.mjs';
 
-export { UsageError };
+export { UsageError, JsonSyntaxError };
 
 const ajv = new Ajv({ allErrors: true, strict: true, verbose: true, allowUnionTypes: true });
 const validateRoot = ajv.compile(ROOT_SCHEMA);
@@ -30,8 +31,21 @@ export function loadSpec(file) {
   try {
     return { spec: JSON.parse(text), dir: path.dirname(abs) };
   } catch (e) {
-    throw new UsageError(`${file} is not valid JSON: ${e.message}`);
+    throw jsonSyntaxError(file, text, e);
   }
+}
+
+/**
+ * Report a UsageError the way exitUsage does (exit 2; JSON on stdout when asked, text on stderr), except that a
+ * JSON syntax error also shows its offending line and caret: the shared helper prints only a message's first line.
+ */
+export function exitSpecUsage(error, { json = false } = {}) {
+  if (!(error instanceof JsonSyntaxError)) return exitUsage(error, { json });
+  const message = `${error.message}\n${error.snippet}`;
+  if (json) process.stdout.write(`${JSON.stringify({ ok: false, errors: [{ path: '', message }] })}\n`);
+  else process.stderr.write(`${message}\n`);
+  process.exitCode = 2;
+  return undefined;
 }
 
 // Ajv's pattern message would print the raw regex; ours says what to fix.
@@ -68,13 +82,14 @@ function schemaErrors(spec) {
 function lintSpec(spec) {
   const errors = [];
   const warnings = [];
-  for (const { path: at, text, prose, heading } of collectStrings(spec)) {
+  for (const { path: at, text, prose, heading, key } of collectStrings(spec)) {
     if (!prose) {
       errors.push(...lintPlaceholders(text, at));
       continue;
     }
     const sectionTitle = /^sections\[\d+\]\.title$/.test(at);
-    const r = lintText(text, at, { heading, sectionTitle });
+    // Table cells are data (commands, identifiers, quoted values), not sentences: no banned-phrase rule there.
+    const r = lintText(text, at, { heading, sectionTitle, banned: key !== 'rows' });
     errors.push(...r.errors);
     warnings.push(...r.warnings);
   }

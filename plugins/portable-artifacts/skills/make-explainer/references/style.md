@@ -30,6 +30,8 @@ synergy → (say what combines)
 paradigm shift → change
 unlock the power of → use
 
-Other lint rules, enforced in code rather than by this list: no emoji or pictographs anywhere, no heading ending in `!`, no section title numbered like `01` or `07` (a leading zero digit; "3 files changed" is fine), and no `TODO:` or lorem ipsum text. A paragraph over 120 words is a warning. A section `title` states the finding ("Search now ignores case"), not a label ("Overview").
+The banned-phrase rule reads prose only: text inside `backticks`, a link's URL, a bare `https://` URL and table cells (`rows`) are not checked, since they hold identifiers, commands and quoted values that must stay as written. Link labels, captions and table column headers are prose and are checked.
+
+Other lint rules, enforced in code rather than by this list: no emoji (emoji-presentation characters, anything followed by the emoji selector U+FE0F, flags and keycaps; plain symbols such as → ↔ ▶ ℹ ✓ are fine) anywhere, no heading ending in `!`, no section title numbered like `01` or `07` (a leading zero digit; "3 files changed" is fine), and no `TODO:` or lorem ipsum text. A paragraph over 120 words is a warning. A section `title` states the finding ("Search now ignores case"), not a label ("Overview").
 
 Also avoided, though not enforced: filler openers ("In conclusion"), stacked adjectives, and exclamation marks.

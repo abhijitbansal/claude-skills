@@ -8,7 +8,7 @@
 import { pathJoin } from '../../shared/errors.mjs';
 import { SLIDE_LIMITS } from './schema.mjs';
 import { collectStrings } from './walk.mjs';
-import { esc, inline, plain } from './render/ui.mjs';
+import { esc, inline, headingInline, plain } from './render/ui.mjs';
 
 const listLines = (text) => (text ?? '').split('\n').filter((l) => l.trimStart().startsWith('- ')).length;
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
@@ -84,7 +84,7 @@ function cover(spec, total, metaHtml) {
 }
 
 function sectionSlide({ section, body, ownHeading }, n, total) {
-  const heading = section.title !== undefined && !ownHeading ? `<h2 class="slide-title" id="slide-${n}-title">${inline(section.title)}</h2>\n` : '';
+  const heading = section.title !== undefined && !ownHeading ? `<h2 class="slide-title" id="slide-${n}-title">${headingInline(section.title)}</h2>\n` : '';
   return slide(n, total, slideTitle(section), `slide-${section.type}`, `${heading}${body}`);
 }
 

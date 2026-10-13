@@ -2,6 +2,7 @@
 // banned phrases (references/style.md), headings ending in "!", numbered
 // section titles. Warning: paragraphs over PARAGRAPH_WORDS words.
 import fs from 'node:fs';
+import { proseOnly } from './markdown.mjs';
 
 export const PARAGRAPH_WORDS = 120;
 const STYLE_FILE = new URL('../../references/style.md', import.meta.url);
@@ -18,9 +19,11 @@ export function lintPlaceholders(text, path) {
 
 // ---- emoji ------------------------------------------------------------
 
-// Extended_Pictographic, flags (regional indicators) and keycaps. (c) (r) and
-// the trade mark sign are in Extended_Pictographic but are ordinary text.
-export const EMOJI = /(?![©®™])\p{Extended_Pictographic}|\p{Regional_Indicator}+|⃣/gu;
+// Emoji only. Characters that default to emoji presentation (rockets, check-mark buttons, flags, skin-tone
+// modifiers), any pictograph the author forced into emoji form with VS16 (U+FE0F), astral pictographs, tag
+// characters and keycaps. Symbols that default to text presentation (arrows, play, info, hearts, check marks)
+// are ordinary typography and pass, as do the copyright, registered and trade mark signs.
+export const EMOJI = /\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F|(?=[\u{10000}-\u{10FFFF}])\p{Extended_Pictographic}|[\u{E0020}-\u{E007F}]|\u20E3/gu;
 
 function lintEmoji(text, path) {
   const found = [...new Set(text.match(EMOJI) ?? [])];
@@ -56,11 +59,14 @@ export function loadBannedPhrases() {
   return banned;
 }
 
+// Only the words a reader reads count: an identifier in `backticks`, a link's URL or a bare URL is
+// not prose, and the fix the message gives ("replace it with ...") would corrupt it.
 function lintBanned(text, path) {
   const errors = [];
+  const prose = proseOnly(text);
   for (const { regexp, advice } of loadBannedPhrases()) {
     regexp.lastIndex = 0;
-    const m = regexp.exec(text);
+    const m = regexp.exec(prose);
     if (m) errors.push({ path, message: `banned phrase ${q(m[0])}; ${advice}` });
   }
   return errors;
@@ -101,13 +107,15 @@ function lintLength(text, path) {
 /**
  * Lint one prose string. `heading`: the string is a heading (title, summary).
  * `sectionTitle`: it is a section's title (also rejects "01 ..." numbering).
+ * `banned: false`: the string is data written as the reader should see it (a table cell), so the
+ * banned-phrase rule is skipped; placeholders, emoji and length still apply.
  * -> { errors, warnings }, each [{ path, message }].
  */
-export function lintText(text, path, { heading = false, sectionTitle = false } = {}) {
+export function lintText(text, path, { heading = false, sectionTitle = false, banned: checkBanned = true } = {}) {
   const errors = [
     ...lintPlaceholders(text, path),
     ...lintEmoji(text, path),
-    ...lintBanned(text, path),
+    ...(checkBanned ? lintBanned(text, path) : []),
     ...(heading ? lintHeading(text, path, sectionTitle) : []),
   ];
   return { errors, warnings: lintLength(text, path) };

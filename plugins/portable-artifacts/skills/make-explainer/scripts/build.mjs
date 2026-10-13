@@ -6,11 +6,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { loadSpec, validateSpec } from './lib/spec.mjs';
+import { loadSpec, validateSpec, exitSpecUsage } from './lib/spec.mjs';
 import { buildPage, BuildError } from './lib/page.mjs';
 import { resolveOutput } from './lib/output.mjs';
+import { pruneAssets } from './lib/assets.mjs';
 import { SiblingError } from './lib/siblings.mjs';
-import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
+import { UsageError, parseCli } from '../shared/cli.mjs';
 
 const USAGE = 'node scripts/build.mjs <explainer.json> [--out <file.html|dir>] [--theme <name>] [--json]';
 const OPTIONS = { out: { type: 'string' }, theme: { type: 'string' }, json: { type: 'boolean' } };
@@ -44,6 +45,8 @@ export async function build(file, { out, theme, env = process.env } = {}) {
       if (asset.content === undefined) fs.copyFileSync(asset.from, asset.to);
       else fs.writeFileSync(asset.to, asset.content);
     }
+    // Last, so a failed write leaves the previous build's files in place.
+    pruneAssets(path.join(path.dirname(target), `${path.basename(target, '.html')}.assets`), built.assets.map((a) => a.to));
   } catch (e) {
     throw new UsageError(`cannot write ${target}: ${e.code ?? e.message}`);
   }
@@ -78,6 +81,6 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     }
   } catch (e) {
     if (!(e instanceof UsageError)) throw e;
-    exitUsage(e, { json });
+    exitSpecUsage(e, { json });
   }
 }

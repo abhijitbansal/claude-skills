@@ -10,7 +10,7 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 |---|---|---|
 | `tldr` | `text`*, `points[]`, `tone` | The verdict block. Put it first. `text` is one or two sentences, each point one fact. |
 | `text` | `text`* | Markdown-lite prose. Several short paragraphs beat one long one. |
-| `kpis` | `items[]`* (1-6): `label`*, `value`* (string or number), `delta`, `tone`, `note` | Stat tiles. Use `delta` for a change ("+12 vs last week"). |
+| `kpis` | `items[]`* (1-6): `label`*, `value`* (string or number), `delta`, `tone`, `note` | Stat tiles. A number value prints with thousands separators (51301 shows as 51,301); a string shows as written, so use a string for years, versions and "12k". Use `delta` for a change ("+12 vs last week"). |
 | `cards` | `items[]`* (1-12): `title`*, `text`*, `icon`, `tone`, `tag`; `columns` (2, 3 or 4) | Parallel items. `icon` is a make-diagram catalog ref (`lucide:<name>` or `brand:<slug>`); find one with `node <skill-dir>/../make-diagram/scripts/icons.mjs search <word>`. An unknown icon is an error. |
 | `table` | `columns[]`* (1-8 strings), `rows[][]`* (1-60 rows of strings or numbers, one cell per column), `caption`, `align[]` (`left` `center` `right`, one per column) | Sticky header; numbers align right. |
 | `callout` | `tone`* (`info` `warn` `good` `bad`), `title`*, `text`* | A boxed note with an icon and a label. |
@@ -54,7 +54,7 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 - Inline `data` is an array of up to 500 row objects. `kind` is one of `bar`, `stacked-bar`, `grouped-bar`, `line`, `area`, `scatter`, `bubble`, `heatmap`, `histogram`, `boxplot`, `donut`; each takes the roles make-dashboard defines (a `bar` needs `x` and `y`; a `histogram` needs `value`). `format` is `number`, `currency`, `percent` or `compact`.
 - A dashboard chart must exist in a dashboard that validates. Its query result must be at most 500 rows; aggregate in SQL.
 - The page draws a static SVG for light and dark and for wide and narrow screens, and a collapsed "Data table" of the plotted rows (first 25 shown), so no value is only a colour.
-- `interactive: true` (dashboard form only) also builds the dashboard to `<slug>.assets/<chart id>/index.html` and links it. Two different dashboards cannot offer the same chart id when interactive.
+- `interactive: true` (dashboard form only) also builds the dashboard to `<slug>.assets/<chart id>/index.html` and links it. Two different dashboards cannot offer the same chart id when interactive. The dashboard's "refreshed" time is the newest modification time of the dashboard file and its data files, so rebuilding unchanged inputs gives the same bytes (give every query a total `ORDER BY`; DuckDB returns tied rows in any order). A rebuild also deletes files in `<slug>.assets/` that the build no longer writes.
 - Local files only: a dashboard with a `postgres` or `mysql` source is refused because a build never uses the network. Export the data to CSV or Parquet first.
 - Needs the `make-dashboard` skill next to this one.
 

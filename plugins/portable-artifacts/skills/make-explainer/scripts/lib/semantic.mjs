@@ -49,6 +49,11 @@ export function checkTop(spec, errors) {
 
 // ---- ids --------------------------------------------------------------
 
+// Ids the page itself emits, so a section id must not equal one: <main id="content"> (page.html and
+// slides.mjs), the deck's "outline-title" and "slide-N" / "slide-N-title", and the chart SVGs' "chN-..." ids.
+// Diagram ids ("dg_N-...") hold an underscore, which ID_PATTERN already refuses.
+const RESERVED_IDS = [/^content$/, /^outline-title$/, /^slide-\d+(?:-title)?$/, /^ch\d+-/];
+
 export function checkIds(spec, errors) {
   const seen = new Map();
   spec.sections.forEach((s, i) => {
@@ -56,6 +61,9 @@ export function checkIds(spec, errors) {
     const at = pathJoin(pathJoin('sections', i), 'id');
     if (!ID_PATTERN.test(s.id)) {
       errors.push({ path: at, message: `id ${q(s.id)} is invalid; use lowercase letters, digits and -, starting with a letter` });
+    }
+    if (RESERVED_IDS.some((re) => re.test(s.id))) {
+      errors.push({ path: at, message: `id ${q(s.id)} is reserved by the page; pick another id, such as "overview"` });
     }
     if (seen.has(s.id)) errors.push({ path: at, message: `duplicate id ${q(s.id)}; first used at ${seen.get(s.id)}; rename one` });
     else seen.set(s.id, at);
