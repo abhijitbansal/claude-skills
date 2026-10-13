@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SKILLS, buildPrompt, expandCmd, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules, createFixtureRepo, prepareWorkdir } from '../lib.mjs';
+import { SKILLS, buildPrompt, expandCmd, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules, createFixtureRepo, prepareWorkdir, copySkill } from '../lib.mjs';
 
 const made = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-eval-test-')); made.push(d); return d; };
@@ -272,6 +272,7 @@ test('prepareWorkdir (explainer): the skill and both siblings sit side by side w
   for (const name of ['make-explainer', 'make-diagram', 'make-dashboard']) {
     const dir = path.join(work, 'skills', name);
     assert.ok(fs.existsSync(path.join(dir, 'SKILL.md')), `${name} was copied`);
+    if (!fs.existsSync(path.join(skillsRoot, name, 'node_modules'))) continue; // deps not installed (CI before npm ci): copySkill links nothing
     assert.ok(fs.lstatSync(path.join(dir, 'node_modules')).isDirectory() && !fs.lstatSync(path.join(dir, 'node_modules')).isSymbolicLink(), `${name} has a real node_modules folder`);
     assert.ok(fs.lstatSync(path.join(dir, 'node_modules/ajv')).isSymbolicLink(), `${name} node_modules entries are links to the source`);
   }
@@ -291,6 +292,16 @@ test('prepareWorkdir: a repo prompt gets ./repo that make-explainer can gather, 
   const seeded = prepare({ id: 'edit', seed: 'seeds/explainer.json', prompt: 'x' }, SKILLS.explainer);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(seeded.work, 'explainer.json'), 'utf8')), seeded.seedSpec);
   assert.equal(seeded.seedSpec.preset, 'concept');
+});
+
+test('copySkill: a skill whose deps are not installed is copied without node_modules (CI runs this before npm ci)', () => {
+  const src = path.join(tmp(), 'make-bare');
+  fs.mkdirSync(path.join(src, 'scripts'), { recursive: true });
+  fs.writeFileSync(path.join(src, 'SKILL.md'), '# bare\n');
+  const work = tmp();
+  copySkill(src, work);
+  assert.ok(fs.existsSync(path.join(work, 'skills/make-bare/SKILL.md')));
+  assert.equal(fs.existsSync(path.join(work, 'skills/make-bare/node_modules')), false);
 });
 
 test('prepareWorkdir: a skill without siblings gets only itself', () => {

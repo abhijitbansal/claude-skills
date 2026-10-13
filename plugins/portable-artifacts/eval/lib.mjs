@@ -91,7 +91,8 @@ export function copySkill(src, work) {
     recursive: true,
     filter: (from) => !path.relative(src, from).split(path.sep).some((seg) => SKIP_DIRS.has(seg)),
   });
-  linkNodeModules(path.join(src, 'node_modules'), path.join(dst, 'node_modules'));
+  // Deps not installed (CI runs these tests before npm ci): nothing to link; a real run fails later with npm's own error.
+  if (fs.existsSync(path.join(src, 'node_modules'))) linkNodeModules(path.join(src, 'node_modules'), path.join(dst, 'node_modules'));
 }
 
 // A fresh work directory for one prompt: the skill and its sibling skills under skills/, the data fixtures
