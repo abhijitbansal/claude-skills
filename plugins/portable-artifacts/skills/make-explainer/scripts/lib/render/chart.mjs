@@ -46,10 +46,9 @@ export async function prepare(section, ctx, i) {
   const source = await loadChartSource(section, ctx.dir);
   if (source.errors.length > 0) throw new SectionErrors(source.errors);
   const lib = await loadSibling('make-dashboard', 'scripts/lib/static-chart.mjs');
-  const { formatValue } = await loadSibling('make-dashboard', 'scripts/lib/format.mjs');
   const svgs = await lib.renderThemedSvgs(source.vegaLite, source.plotRows, ctx.theme, { idPrefix: `ch${i}-` });
   const dashboard = section.interactive === true && source.abs ? await buildInteractive(source, section, ctx) : undefined;
-  state(ctx).items.set(section, { source, svgs, dashboard, formatValue });
+  state(ctx).items.set(section, { source, svgs, dashboard, axisFormat: lib.axisFormat });
 }
 
 /** The chart stylesheet; the page includes it once. */
@@ -74,14 +73,18 @@ function describe(source) {
   return cols.length > 0 ? `${label} of ${cols.join(', ')}` : label;
 }
 
-// A number takes the chart's format (the same as its axis); text and missing values are shown as they are.
-const cellText = (v, format, formatValue) => (v === null || v === undefined ? '—' : esc(typeof v === 'number' && format !== undefined ? formatValue(v, format) : String(v)));
+// A number in a measure column prints as the axis prints it, so the table and the labels agree;
+// text, missing values and other columns are shown as they are.
+function cellText(v, column, source, axisFormat) {
+  if (v === null || v === undefined) return '—';
+  return esc(typeof v === 'number' && source.format !== undefined && source.measures.includes(column) ? axisFormat(v, source.format) : String(v));
+}
 
-function dataTable(source, name, formatValue) {
+function dataTable(source, name, axisFormat) {
   const { columns, rows } = source;
   const shown = rows.slice(0, TABLE_ROWS);
   const head = columns.map((c) => `<th scope="col">${esc(c)}</th>`).join('');
-  const body = shown.map((r) => `<tr>${columns.map((c, i) => (i === 0 ? `<th scope="row">${cellText(r[c], source.format, formatValue)}</th>` : `<td>${cellText(r[c], source.format, formatValue)}</td>`)).join('')}</tr>`);
+  const body = shown.map((r) => `<tr>${columns.map((c, i) => (i === 0 ? `<th scope="row">${cellText(r[c], c, source, axisFormat)}</th>` : `<td>${cellText(r[c], c, source, axisFormat)}</td>`)).join('')}</tr>`);
   const note = rows.length > shown.length ? `\n<p class="ch-note">Showing the first ${shown.length} of ${rows.length} rows.</p>` : '';
   return `<details class="ch-data">
 <summary>Data table (${rows.length} ${rows.length === 1 ? 'row' : 'rows'})</summary>
@@ -99,7 +102,7 @@ ${body.join('\n')}
 export function render(section, ctx) {
   const entry = state(ctx).items.get(section);
   if (!entry) throw new Error('chart was not prepared; build the page with buildPage');
-  const { source, svgs, dashboard, formatValue } = entry;
+  const { source, svgs, dashboard, axisFormat } = entry;
   // The figure's name: the section title, else its caption, else the dashboard chart's title, else the kind.
   const name = section.title !== undefined ? plain(section.title)
     : section.caption !== undefined ? plain(section.caption)
@@ -111,13 +114,14 @@ export function render(section, ctx) {
 <div class="ch-svg ch-wide">${svgs[scheme].wide}</div>
 <div class="ch-svg ch-narrow">${svgs[scheme].narrow}</div>
 </div>`;
-  // A titled chart is named by its section heading; the figure only names an untitled one, and the image label never repeats the name.
-  const figureName = section.title === undefined ? ` aria-label="${name}"` : '';
+  // A titled chart is named by its section heading and a captioned one by its figcaption; only a chart with neither
+  // is named by the figure's label, and the image label never repeats a name.
+  const figureName = section.title === undefined && section.caption === undefined ? ` aria-label="${name}"` : '';
   return `<figure class="ch"${figureName}>
 <div class="ch-card" role="img" aria-label="${esc(describe(source))}. The plotted values are in the data table below.">
 ${variants('light')}
 ${variants('dark')}
 </div>${caption}
-${dataTable(source, name, formatValue)}${open}
+${dataTable(source, name, axisFormat)}${open}
 </figure>`;
 }

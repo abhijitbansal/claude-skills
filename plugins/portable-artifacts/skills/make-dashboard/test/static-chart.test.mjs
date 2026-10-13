@@ -9,7 +9,7 @@ import { vegaConfig } from '../scripts/lib/vega-config.mjs';
 import { vegaConfigScript } from '../scripts/lib/html.mjs';
 import { formatValue } from '../scripts/lib/format.mjs';
 import { inferTypes, columnsOf, inlineChart } from '../scripts/lib/inline-chart.mjs';
-import { staticView, coloursOf, fontOf, renderThemedSvgs } from '../scripts/lib/static-chart.mjs';
+import { staticView, coloursOf, fontOf, renderThemedSvgs, axisFormat } from '../scripts/lib/static-chart.mjs';
 import { FORMAT_NAMES, expandCharts } from '../scripts/lib/views.mjs';
 import { FORMATS } from '../scripts/lib/spec.mjs';
 import { chartData, validateChart } from '../scripts/lib/pipeline.mjs';
@@ -210,33 +210,85 @@ test('a dashboard spec that does not validate is reported with its own paths', a
 
 // ---- tick labels --------------------------------------------------------------------------
 
-// The text of every axis label in an SVG, with whether it is drawn (opacity) and where it sits.
+// Every axis label in an SVG, with whether it is drawn (opacity) and where it sits.
 function labels(svg) {
   return [...svg.matchAll(/<text text-anchor="(\w+)" transform="translate\(([-\d.]+),([-\d.]+)\)[^"]*"[^>]*font-size="(\d+)px"[^>]*opacity="([\d.]+)">([^<]*)<\/text>/g)]
     .map((m) => ({ anchor: m[1], x: Number(m[2]), y: Number(m[3]), size: Number(m[4]), shown: Number(m[5]) > 0, text: m[6] }));
 }
-// A horizontal axis row: the labels sharing a y; boxes use the same width estimate Vega does (0.8 em per character).
-function overlaps(row) {
-  const boxes = row.filter((l) => l.shown).map((l) => {
+// A value-axis label reads as a number ("$1,200", "1.2k", "−5", "45%"); category and date labels do not.
+const isValueLabel = (l) => /^[−-]?\$?[\d,]+(\.\d+)?[a-zA-Zµ%]?$/.test(l.text) && l.size === 12;
+const valueOf = (text) => {
+  const m = /^([−-]?)\$?([\d,.]+)([kMGTµm%]?)$/.exec(text);
+  const scale = { '': 1, k: 1e3, M: 1e6, G: 1e9, T: 1e12, '%': 0.01, m: 1e-3, 'µ': 1e-6 }[m[3]];
+  return Number(m[1] === '' ? 1 : -1) * Number(m[2].replaceAll(',', '')) * scale;
+};
+// Boxes by Vega's own width estimate (0.8 em per character); two drawn labels must not touch.
+function overlaps(list) {
+  const boxes = list.filter((l) => l.shown).map((l) => {
     const w = l.text.length * l.size * 0.8;
     const left = l.anchor === 'end' ? l.x - w : l.anchor === 'middle' ? l.x - w / 2 : l.x;
-    return [left, left + w, l.text];
-  }).sort((a, b) => a[0] - b[0]);
-  return boxes.slice(1).filter((b, i) => b[0] < boxes[i][1]).map((b) => b[2]);
+    return { text: l.text, x0: left, x1: left + w, y0: l.y - l.size, y1: l.y };
+  });
+  const clash = [];
+  boxes.forEach((a, i) => boxes.slice(i + 1).forEach((b) => {
+    if (a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1) clash.push(`${a.text} / ${b.text}`);
+  }));
+  return clash;
 }
+const NAMES = ['Core platform', 'Web', 'Infrastructure', 'Mobile'];
+const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
+const weekly = (n) => Array.from({ length: n }, (_, i) => `2025-${String(1 + Math.floor(i / 4)).padStart(2, '0')}-${String(1 + (i % 4) * 7).padStart(2, '0')}`);
+const spread = (scale) => [1, 0.58, 0.33, 0.21];
+// One chart per kind and orientation; `scale` sets the magnitude so the labels run from "6" to "1.2M".
+const CASES = {
+  'bar, horizontal': (k) => ({ chart: { kind: 'bar', x: 'team', y: 'v' }, rows: NAMES.map((team, i) => ({ team, v: k * spread()[i] })) }),
+  'bar, vertical': (k) => ({ chart: { kind: 'bar', x: 'q', y: 'v' }, rows: QUARTERS.map((q, i) => ({ q, v: k * spread()[i] })) }),
+  histogram: (k) => ({ chart: { kind: 'histogram', value: 'v' }, rows: Array.from({ length: 60 }, (_, i) => ({ v: (k / 12) * (1 + ((i * 7) % 11)) })) }),
+  scatter: (k) => ({ chart: { kind: 'scatter', x: 'a', y: 'v' }, rows: Array.from({ length: 12 }, (_, i) => ({ a: (k / 3) * (i + 1), v: k * spread()[i % 4] })) }),
+  line: (k) => ({ chart: { kind: 'line', x: 'd', y: 'v' }, rows: weekly(6).map((d, i) => ({ d, v: k * (0.2 + i / 8) })) }),
+  area: (k) => ({ chart: { kind: 'area', x: 'd', y: 'v' }, rows: weekly(6).map((d, i) => ({ d, v: k * (0.2 + i / 8) })) }),
+  'stacked bar': (k) => ({ chart: { kind: 'stacked-bar', x: 'q', y: 'v', color: 'g' }, rows: QUARTERS.flatMap((q, i) => ['a', 'b'].map((g, j) => ({ q, g, v: k * spread()[i] * (1 + j) }))) }),
+};
 
-const BUGS = [{ team: 'Core platform', bugs: 1200 }, { team: 'Web', bugs: 700 }, { team: 'Infrastructure', bugs: 400 }, { team: 'Mobile', bugs: 260 }];
+test('no value-axis label is ever hidden or overlapped: every kind, both sizes, plain, compact and currency, small to huge', async () => {
+  const problems = [];
+  for (const [name, make] of Object.entries(CASES)) {
+    for (const format of [undefined, 'compact', 'currency']) {
+      for (const magnitude of [6, 1200, 1234567]) {
+        const { chart, rows } = make(magnitude);
+        const c = inlineChart({ ...chart, ...(format ? { format } : {}) }, rows);
+        assert.deepEqual(c.errors, [], name);
+        const svgs = await renderThemedSvgs(c.vegaLite, c.plotRows, theme);
+        for (const [size, svg] of Object.entries(svgs.light)) {
+          const ticks = labels(svg).filter(isValueLabel);
+          const tag = `${name} / ${format ?? 'plain'} / ${magnitude} / ${size}`;
+          if (ticks.length < 2) problems.push(`${tag}: only ${ticks.length} value labels`);
+          if (ticks.some((l) => !l.shown)) problems.push(`${tag}: hidden ${ticks.filter((l) => !l.shown).map((l) => l.text)} of ${ticks.map((l) => l.text)}`);
+          const clash = overlaps(ticks);
+          if (clash.length > 0) problems.push(`${tag}: overlap ${clash}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(problems, []);
+});
 
-test('the end tick of a value axis is drawn, and no drawn tick labels overlap', async () => {
-  const { vegaLite } = inlineChart({ kind: 'bar', x: 'team', y: 'bugs', format: 'compact' }, BUGS);
-  const svgs = await renderThemedSvgs(vegaLite, BUGS, theme);
-  for (const [size, svg] of Object.entries(svgs.light)) {
-    const ticks = labels(svg).filter((l) => /^[\d.]+k?$/.test(l.text) && l.y < 40);
-    assert.ok(ticks.length >= 3, `${size}: ${ticks.length} tick labels`);
-    assert.ok(ticks.every((l) => l.shown), `${size}: no tick label is hidden`);
-    const value = (t) => Number.parseFloat(t) * (t.endsWith('k') ? 1000 : 1);
-    assert.ok(Math.max(...ticks.map((l) => value(l.text))) >= 1200, `${size}: the last tick reaches the longest bar (1200)`);
-    assert.deepEqual(overlaps(ticks), [], `${size}: no two drawn tick labels overlap`);
+test('the value domain ends within one tick step of the data', async () => {
+  const check = async (data, format, size, which, ceiling) => {
+    const c = inlineChart({ kind: 'bar', x: 'team', y: 'v', ...(format ? { format } : {}) }, data);
+    const svg = (await renderThemedSvgs(c.vegaLite, data, theme)).light[size];
+    const ticks = labels(svg).filter(isValueLabel).map((l) => valueOf(l.text)).sort((a, b) => a - b);
+    const step = ticks.at(-1) - ticks.at(-2);
+    const max = Math.max(...data.map((r) => r.v));
+    assert.ok(ticks.at(-1) >= max, `${which}: last tick ${ticks.at(-1)} reaches ${max}`);
+    assert.ok(ticks.at(-1) - max < step, `${which}: last tick ${ticks.at(-1)} is within one step (${step}) of ${max}`);
+    assert.ok(ticks.at(-1) <= ceiling, `${which}: the domain ends at ${ticks.at(-1)}, not past ${ceiling}`);
+  };
+  const rows = (v) => [{ team: 'Core platform', v }, { team: 'Web', v: v * 0.5 }, { team: 'Mobile', v: v * 0.2 }];
+  for (const size of ['wide', 'narrow']) {
+    await check(rows(1200), undefined, size, `1200 ${size}`, 1500);
+    await check(rows(1234567), 'compact', size, `1.23M ${size}`, 1500000);
+    await check(rows(87), 'currency', size, `87 ${size}`, 100);
   }
 });
 
@@ -297,4 +349,56 @@ test('formatValue applies a dashboard format to a number and leaves text alone',
   assert.equal(formatValue(0.1 + 0.2), '0.3');
   assert.equal(formatValue(null), '—');
   assert.equal(formatValue('West', 'currency'), 'West');
+});
+
+// ---- date axes -----------------------------------------------------------------------------
+
+const dateLabels = (svg) => labels(svg).filter((l) => /^[A-Z][a-z]{2} \d\d/.test(l.text) || /^\d{4}$/.test(l.text) || /^[A-Z][a-z]{2} \d{4}$/.test(l.text));
+
+test('a raw vegaLite chart keeps the axis values it set', async () => {
+  const rows = ['2025-01-06', '2025-01-13', '2025-01-20'].map((d, i) => ({ d, v: i + 1 }));
+  const raw = { mark: 'line', encoding: { x: { field: 'd', type: 'temporal', timeUnit: 'utcyearmonthdate', axis: { values: [Date.UTC(2025, 0, 13)] } }, y: { field: 'v', type: 'quantitative' } } };
+  const svgs = await renderThemedSvgs(raw, rows, theme);
+  for (const [size, svg] of Object.entries(svgs.light)) {
+    assert.deepEqual(dateLabels(svg).map((l) => l.text), ['Jan 13, 2025'], `${size}: only the date the chart named`);
+  }
+});
+
+test('hourly data gets 24-hour labels that step evenly; a single date shows the date', async () => {
+  const hours = Array.from({ length: 24 }, (_, i) => ({ t: `2025-01-06T${String(i).padStart(2, '0')}:30:00Z`, v: i }));
+  const { vegaLite } = inlineChart({ kind: 'line', x: 't', y: 'v' }, hours);
+  const svgs = await renderThemedSvgs(vegaLite, hours, theme);
+  for (const [size, svg] of Object.entries(svgs.light)) {
+    const times = dateLabels(svg);
+    assert.ok(times.length >= 2 && times.every((l) => /^Jan 06 \d\d:\d\d$/.test(l.text)), `${size}: ${times.map((l) => l.text)}`);
+    const minutes = times.map((l) => Number(l.text.slice(7, 9)) * 60 + Number(l.text.slice(10)));
+    const gaps = new Set(minutes.slice(1).map((m, i) => m - minutes[i]));
+    assert.equal(gaps.size, 1, `${size}: even steps, got ${[...gaps]}`);
+    assert.equal(minutes[0], 30, `${size}: starts at the first reading`);
+    assert.equal(minutes.at(-1), 23 * 60 + 30, `${size}: ends at the last reading`);
+  }
+  const one = [{ d: '2025-01-06', v: 3 }];
+  const single = inlineChart({ kind: 'line', x: 'd', y: 'v' }, one).vegaLite;
+  assert.deepEqual(dateLabels((await renderThemedSvgs(single, one, theme)).light.wide).map((l) => l.text), ['Jan 06, 2025']);
+});
+
+test('axisFormat formats a number the way the axis does', () => {
+  assert.equal(axisFormat(1200, 'compact'), '1.2k');
+  assert.equal(axisFormat(1234.5, 'currency'), '$1,234.5');
+  assert.equal(axisFormat(0.1 + 0.2, 'number'), '0.3');
+  assert.equal(axisFormat(0.456, 'percent'), '45.6%');
+  assert.equal(axisFormat(7, undefined), '7');
+});
+
+test('tickLayout: the smallest 1-2-5 step whose labels fit, a domain that ends on a tick', async () => {
+  const { tickLayout, niceStep } = await import('../scripts/lib/axis-ticks.mjs');
+  const label = (v) => String(v);
+  assert.deepEqual([0.9, 1, 1.1, 2.1, 5.1, 7].map(niceStep), [1, 1, 2, 5, 10, 10]);
+  const roomy = tickLayout({ domain: [0, 1200], pixels: 600, label, fontSize: 12, horizontal: true, max: 7 });
+  assert.deepEqual(roomy, { values: [0, 200, 400, 600, 800, 1000, 1200], domain: [0, 1200] });
+  const tight = tickLayout({ domain: [0, 1200], pixels: 120, label, fontSize: 12, horizontal: true, max: 4 });
+  assert.ok(tight.domain[1] >= 1200 && tight.domain[1] < 1200 + (tight.values[1] - tight.values[0]));
+  assert.equal(tickLayout({ domain: [5, 5], pixels: 300, label, fontSize: 12, horizontal: true, max: 5 }), null, 'an empty extent keeps the default axis');
+  const negative = tickLayout({ domain: [-3, 8], pixels: 300, label, fontSize: 12, horizontal: false, max: 6 });
+  assert.ok(negative.values.includes(0) && negative.domain[0] <= -3 && negative.domain[1] >= 8);
 });

@@ -328,19 +328,22 @@ test('the accessible name is announced once: a titled chart is named by its head
   assert.ok(!titled.includes('aria-label="Open bugs'), 'title not repeated in any label but the data table');
   assert.equal((titled.match(/Open bugs/g) ?? []).length, 3, 'heading, the anchor label and the data table region');
   const captioned = (await make([inline({ title: undefined, caption: 'Bugs by **team**' })])).html;
-  assert.match(captioned, /<figure class="ch" aria-label="Bugs by team">/);
+  assert.match(captioned, /<figure class="ch">/, 'the figcaption names it; the caption is not repeated as a label');
+  assert.match(captioned, /<figcaption>Bugs by <strong>team<\/strong><\/figcaption>/);
+  assert.ok(!captioned.includes('aria-label="Bugs by team"'));
+  assert.match((await make([dashboard()])).html, /<figure class="ch" aria-label="Revenue by region">/, 'no title and no caption: the dashboard chart title names it');
   assert.match(captioned, /role="img" aria-label="Bar chart of bugs by team\./);
 });
 
 test('the data table applies the chart format to numbers and leaves text alone', async () => {
   const money = (await make([inline({ data: [{ team: 'Core', bugs: 1234.5 }, { team: 'Web', bugs: 0.1 + 0.2 }], format: 'currency' })])).html;
-  assert.match(money, /<th scope="row">Core<\/th><td>\$1,235<\/td>/);
-  assert.match(money, /<td>\$0\.30<\/td>/);
+  assert.match(money, /<th scope="row">Core<\/th><td>\$1,234\.5<\/td>/, 'the axis format, so the table agrees with the labels');
+  assert.match(money, /<td>\$0\.3<\/td>/);
   const compact = (await make([inline({ data: [{ team: 'Core', bugs: 1200 }, { team: 'Web', bugs: 700 }], format: 'compact' })])).html;
-  assert.match(compact, /<td>1\.2K<\/td>/);
+  assert.match(compact, /<td>1\.2k<\/td>/, 'compact reads 1.2k in the table, as on the axis');
   assert.match((await make([inline()])).html, /<td>12<\/td>/, 'no format, no change');
   const fromDashboard = (await make([dashboard()])).html;
-  assert.match(fromDashboard, /<td>\$\d[\d,]*(\.\d\d)?<\/td>/, 'the dashboard chart format reaches its table');
+  assert.match(fromDashboard, /<td>\$\d[\d,]*(\.\d+)?<\/td>/, 'the dashboard chart format reaches its table');
 });
 
 test('ISO date-times plot on a time axis', async () => {
@@ -395,8 +398,22 @@ test('a dashboard that is not valid JSON is reported by its path in the spec fol
   const dir = folder({ 'broken.dashboard.json': '{ nope' });
   const errors = await errorsOf(doc([dashboard({ dashboard: 'broken.dashboard.json' })]), dir);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /^sections\[0\]\.dashboard: broken\.dashboard\.json is not valid JSON: /);
+  assert.match(errors[0], /^sections\[0\]\.dashboard: broken\.dashboard\.json is not valid JSON: .*\(in broken\.dashboard\.json\)$/);
   assert.ok(!errors[0].includes(dir), errors[0]);
+});
+
+test('absolute paths inside the spec folder become relative in every error from the dashboard', async () => {
+  const dir = folder();
+  const spec = JSON.parse(fs.readFileSync(path.join(dir, 'sales.dashboard.json'), 'utf8'));
+  spec.queries.by_region = `SELECT * FROM read_csv_auto('${path.join(dir, 'sales.csv')}')`;
+  fs.writeFileSync(path.join(dir, 'sales.dashboard.json'), JSON.stringify(spec));
+  fs.rmSync(path.join(dir, 'sales.csv'));
+  const errors = await errorsOf(doc([dashboard()]), dir);
+  assert.ok(errors.length > 0);
+  for (const e of errors) {
+    assert.ok(!e.includes(dir), `absolute path left in: ${e}`);
+    assert.match(e, /\(in sales\.dashboard\.json\)$/);
+  }
 });
 
 test('interactive: the dashboard is not left in the temp folder, on success or on failure', async () => {
