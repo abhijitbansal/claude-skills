@@ -24,6 +24,34 @@
       "tone": "good"
     },
     {
+      "type": "kpis",
+      "id": "in-numbers",
+      "title": "Two commits added about 1,100 lines, more than half of them tests",
+      "items": [
+        {
+          "label": "Commits",
+          "value": 2
+        },
+        {
+          "label": "Files changed",
+          "value": 25
+        },
+        {
+          "label": "Lines added",
+          "value": 1107
+        },
+        {
+          "label": "Lines removed",
+          "value": 27
+        },
+        {
+          "label": "Test files touched",
+          "value": 10,
+          "note": "two new, eight edited"
+        }
+      ]
+    },
+    {
       "type": "diagram",
       "id": "build-path",
       "title": "A spec becomes a figure in four steps",
@@ -33,24 +61,95 @@
         "type": "flow",
         "direction": "down",
         "nodes": [
-          { "id": "spec", "label": "Explainer JSON", "kind": "io", "note": "diagram: object or path" },
-          { "id": "check", "label": "Validate", "note": "make-diagram rules" },
-          { "id": "build", "label": "buildDiagram", "kind": "subprocess", "note": "SVG and step data" },
-          { "id": "page", "label": "Page builder", "note": "css and viewer once" },
-          { "id": "file", "label": "One HTML file", "kind": "end" }
+          {
+            "id": "spec",
+            "label": "Explainer JSON",
+            "kind": "io",
+            "note": "diagram: object or path"
+          },
+          {
+            "id": "check",
+            "label": "Validate",
+            "note": "make-diagram rules"
+          },
+          {
+            "id": "build",
+            "label": "buildDiagram",
+            "kind": "subprocess",
+            "note": "SVG and step data"
+          },
+          {
+            "id": "page",
+            "label": "Page builder",
+            "note": "css and viewer once"
+          },
+          {
+            "id": "file",
+            "label": "One HTML file",
+            "kind": "end"
+          }
         ],
         "edges": [
-          { "from": "spec", "to": "check" },
-          { "from": "check", "to": "build" },
-          { "from": "build", "to": "page" },
-          { "from": "page", "to": "file" },
-          { "from": "check", "to": "spec", "label": "errors with paths", "style": "dashed" }
+          {
+            "from": "spec",
+            "to": "check"
+          },
+          {
+            "from": "check",
+            "to": "build"
+          },
+          {
+            "from": "build",
+            "to": "page"
+          },
+          {
+            "from": "page",
+            "to": "file"
+          },
+          {
+            "from": "check",
+            "to": "spec",
+            "label": "errors with paths",
+            "style": "dashed"
+          }
         ],
         "steps": [
-          { "title": "The section holds the spec", "note": "Either an inline object or a .json file next to the explainer.", "show": ["spec"] },
-          { "title": "Validation runs first", "note": "Errors come back as sections[i].diagram… so the fix is easy to find.", "show": ["check"], "highlight": ["check"] },
-          { "title": "make-diagram draws the SVG", "note": "Ids are prefixed per diagram, so two figures never clash.", "show": ["build"], "focus": ["check", "build"] },
-          { "title": "The page builder embeds it", "note": "The stylesheet and the viewer script are included once.", "show": ["page", "file"] }
+          {
+            "title": "The section holds the spec",
+            "note": "Either an inline object or a .json file next to the explainer.",
+            "show": [
+              "spec"
+            ]
+          },
+          {
+            "title": "Validation runs first",
+            "note": "Errors come back as sections[i].diagram… so the fix is easy to find.",
+            "show": [
+              "check"
+            ],
+            "highlight": [
+              "check"
+            ]
+          },
+          {
+            "title": "make-diagram draws the SVG",
+            "note": "Ids are prefixed per diagram, so two figures never clash.",
+            "show": [
+              "build"
+            ],
+            "focus": [
+              "check",
+              "build"
+            ]
+          },
+          {
+            "title": "The page builder embeds it",
+            "note": "The stylesheet and the viewer script are included once.",
+            "show": [
+              "page",
+              "file"
+            ]
+          }
         ]
       },
       "caption": "Hover a box to trace its links. Present walks through the four steps."
@@ -58,41 +157,164 @@
     {
       "type": "text",
       "title": "Present is the only place the keyboard shortcuts live",
-      "text": "Inline, a figure traces links on hover or focus and never captures the mouse wheel, so the page keeps scrolling. **Present** opens a full-screen overlay with Back, Next and Close.\n\nInside it the viewer's shortcuts apply: arrows or Space step forward and back, `Esc` closes and focus returns to the Present button. In a deck, the slide keys stay quiet until the overlay is closed."
+      "text": "Inline, a figure traces links on hover or focus and never captures the mouse wheel, so the page keeps scrolling. **Present** opens a full-screen overlay with Back, Next and Close.\n\nInside it the viewer's shortcuts apply: arrows or Space step forward and back, `Esc` closes and focus returns to the Present button. In a deck, the slide keys stay quiet until the overlay is closed.\n\nThe file list below leaves out the 10 test files and this example. Numbers come from `git diff --numstat 9a8769e^ 665ce40`."
     },
     {
       "type": "files",
-      "title": "Where the change lives",
+      "id": "changed-files",
+      "title": "Most of the change is the viewer, its styles and the section renderer",
       "items": [
-        { "path": "scripts/lib/render/diagram.mjs", "change": "added", "add": 78, "note": "Builds the figure and its overlay markup." },
-        { "path": "scripts/lib/diagram-source.mjs", "change": "added", "add": 46, "note": "Reads an inline spec or a file; shared path rules." },
-        { "path": "template/diagram.js", "change": "added", "add": 105, "note": "Mounts the viewer and runs the overlay." },
-        { "path": "scripts/lib/page.mjs", "change": "modified", "add": 33, "del": 1, "note": "Runs each section's prepare step and ships section css and scripts once." },
-        { "path": "template/slides.js", "change": "modified", "add": 3, "del": 1, "note": "Ignores keys while the overlay is open; a diagram card scrolls with the arrows." }
+        {
+          "path": "plugins/portable-artifacts/skills/make-explainer/template/diagram.js",
+          "change": "added",
+          "add": 105,
+          "note": "Mounts the viewer and runs the Present overlay."
+        },
+        {
+          "path": "plugins/portable-artifacts/skills/make-explainer/scripts/lib/render/diagram.mjs",
+          "change": "added",
+          "add": 78,
+          "note": "Builds the figure and its overlay markup."
+        },
+        {
+          "path": "plugins/portable-artifacts/skills/make-explainer/template/diagram.css",
+          "change": "added",
+          "add": 53,
+          "note": "Figure, hover tracing and overlay styles."
+        },
+        {
+          "path": "plugins/portable-artifacts/skills/make-explainer/scripts/lib/diagram-source.mjs",
+          "change": "added",
+          "add": 46,
+          "note": "Reads an inline spec or a file; shared path rules."
+        },
+        {
+          "path": "plugins/portable-artifacts/skills/make-explainer/scripts/lib/page.mjs",
+          "change": "modified",
+          "add": 33,
+          "del": 1,
+          "note": "Runs each section prepare step; ships section css and scripts once."
+        },
+        {
+          "path": "plugins/portable-artifacts/skills/make-explainer/scripts/lib/checks.mjs",
+          "change": "modified",
+          "add": 33,
+          "del": 1,
+          "note": "Reports spec mistakes under the section that holds the diagram."
+        },
+        {
+          "path": "plugins/portable-artifacts/skills/make-explainer/scripts/lib/spec.mjs",
+          "change": "modified",
+          "add": 11,
+          "del": 5
+        },
+        {
+          "path": "plugins/portable-artifacts/skills/make-explainer/scripts/lib/section-errors.mjs",
+          "change": "added",
+          "add": 9
+        },
+        {
+          "path": "plugins/portable-artifacts/skills/make-explainer/scripts/lib/sections.mjs",
+          "change": "modified",
+          "add": 5,
+          "del": 3
+        },
+        {
+          "path": "plugins/portable-artifacts/skills/make-explainer/template/slides.js",
+          "change": "modified",
+          "add": 3,
+          "del": 1,
+          "note": "Ignores keys while the overlay is open."
+        },
+        {
+          "path": "plugins/portable-artifacts/skills/make-diagram/scripts/lib/api.mjs",
+          "change": "modified",
+          "add": 3,
+          "note": "Exports what the explainer needs to draw a figure."
+        },
+        {
+          "path": "plugins/portable-artifacts/skills/make-explainer/scripts/build.mjs",
+          "change": "modified",
+          "add": 2
+        },
+        {
+          "path": "plugins/portable-artifacts/skills/make-explainer/template/page.html",
+          "change": "modified",
+          "add": 2
+        },
+        {
+          "path": "plugins/portable-artifacts/skills/make-explainer/template/slides.html",
+          "change": "modified",
+          "add": 2
+        }
       ]
     },
     {
       "type": "chart",
       "id": "added-lines",
       "title": "The viewer script is the largest addition",
-      "caption": "Lines added per file, from the table above.",
+      "caption": "Lines added per file, the six largest in the list above.",
       "data": [
-        { "file": "template/diagram.js", "added": 105 },
-        { "file": "render/diagram.mjs", "added": 78 },
-        { "file": "diagram-source.mjs", "added": 46 },
-        { "file": "page.mjs", "added": 33 },
-        { "file": "slides.js", "added": 3 }
+        {
+          "file": "diagram.js",
+          "added": 105
+        },
+        {
+          "file": "diagram.mjs",
+          "added": 78
+        },
+        {
+          "file": "diagram.css",
+          "added": 53
+        },
+        {
+          "file": "diagram-source.mjs",
+          "added": 46
+        },
+        {
+          "file": "page.mjs",
+          "added": 33
+        },
+        {
+          "file": "checks.mjs",
+          "added": 33
+        }
       ],
       "kind": "bar",
       "x": "file",
       "y": "added"
     },
     {
+      "type": "timeline",
+      "id": "commits",
+      "title": "The fix followed the feature the same day",
+      "items": [
+        {
+          "date": "2026-10-12",
+          "title": "feat(make-explainer): diagram section",
+          "text": "Section type, validation, renderer, viewer script and styles."
+        },
+        {
+          "date": "2026-10-12",
+          "title": "fix(make-explainer): diagrams stay legible inline; generic page parts",
+          "text": "Inline figures scroll at a readable size; the page builder ships section assets once."
+        }
+      ]
+    },
+    {
       "type": "risks",
       "title": "What could still bite",
       "items": [
-        { "risk": "A wide diagram is wider than a phone screen.", "severity": "low", "mitigation": "The card scrolls sideways at a readable size; Present fills the screen." },
-        { "risk": "make-diagram is missing on the machine.", "severity": "medium", "mitigation": "Validation prints the exact install command." }
+        {
+          "risk": "A wide diagram is wider than a phone screen.",
+          "severity": "low",
+          "mitigation": "The card scrolls sideways at a readable size; Present fills the screen."
+        },
+        {
+          "risk": "make-diagram is missing on the machine.",
+          "severity": "medium",
+          "mitigation": "Validation prints the exact install command."
+        }
       ]
     }
   ]

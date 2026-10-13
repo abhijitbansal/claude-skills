@@ -1,0 +1,131 @@
+<body class="">
+<a class="skip" href="#content">Skip to content</a>
+<header class="masthead">
+<div class="mast-text">
+<h1>feat/visual-artifacts: manual test checklist</h1>
+<p class="subtitle">What automated tests and the headless browser could not cover</p>
+<dl class="meta">
+<div class="m-branch"><dt>Branch</dt><dd>feat/visual-artifacts</dd></div>
+<div class="m-repo"><dt>Repo</dt><dd>abhijitbansal/claude-skills</dd></div>
+<div class="m-status"><dt>Status</dt><dd>Ready to test</dd></div>
+</dl>
+</div>
+<button type="button" class="theme-toggle" data-theme-toggle aria-label="Theme: Auto. Change theme">Theme: Auto</button>
+<script>
+// A stored theme was applied in <head>; label the toggle now, before the large scripts parse.
+(function () { var t = document.documentElement.getAttribute('data-theme'), b = document.querySelector('[data-theme-toggle]'); if (t && b) { var l = 'Theme: ' + t.charAt(0).toUpperCase() + t.slice(1); b.textContent = l; b.setAttribute('aria-label', l + '. Change theme'); } })();
+</script>
+</header>
+<div class="layout">
+
+<main id="content" class="sections">
+<section class="sec sec-checklist" id="manual-tests" aria-labelledby="manual-tests-title">
+<h2 class="sec-title" id="manual-tests-title">Manual tests for the visual artifact skills<a class="anchor" href="#manual-tests" aria-label="Link to this section: Manual tests for the visual artifact skills">#</a></h2>
+<div class="checklist" data-checklist data-key="feat-visual-artifacts" data-total="28">
+<details class="det cl-context" open>
+<summary>What&#39;s in this branch</summary>
+<div class="det-body prose">
+<p>This branch adds three skills to the <code>portable-artifacts</code> plugin:</p>
+<ul>
+<li><strong>make-dashboard</strong> builds an interactive dashboard from data files, with live reload.</li>
+<li><strong>make-diagram</strong> draws architecture, flow, sequence and state diagrams as one HTML file.</li>
+<li><strong>make-explainer</strong> turns a small JSON outline into a recap, concept page, slide deck or this checklist.</li>
+</ul>
+<p>Unit tests, the schema checks and a headless Chromium run already cover rendering, validation and storage. Only the items below need a person: a fresh machine, a real window, a print dialog. Items tagged <strong>Regression</strong> guard bugs fixed during review.</p>
+<p><strong>Fixed during review</strong></p>
+<ul>
+<li>make-diagram: edge ids can no longer collide, a group highlight stays visible, and self-loops are easier to read.</li>
+<li>make-dashboard: stacked-area crosshair dots sit on the coloured areas, nominal x keeps query order, and a paired card keeps its tab row.</li>
+<li>make-explainer: an SVG check scans the whole file, and section ids stay unique.</li>
+</ul>
+</div>
+</details>
+<div class="cl-bar">
+<div class="cl-bar-row">
+<span class="cl-count"><strong><span data-done>0</span> / 28</strong> done</span>
+<span class="cl-pct" data-pct>0%</span>
+<span class="cl-flag" data-complete hidden><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg><span>Complete</span></span></span>
+<button type="button" class="btn cl-reset" data-reset aria-disabled="true">Reset</button>
+</div>
+<div class="cl-meter" role="progressbar" aria-label="Progress: Manual tests for the visual artifact skills" aria-valuemin="0" aria-valuemax="28" aria-valuenow="0" aria-valuetext="0 of 28 done"><span data-fill></span></div>
+<div class="cl-confirm" data-confirm hidden>
+<span class="cl-confirm-q" data-confirm-text>Reset all ticks?</span>
+<button type="button" class="btn" data-reset-yes>Yes, reset</button>
+<button type="button" class="btn" data-reset-no>No</button>
+</div>
+<span class="cl-flag" data-unsaved hidden><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M8 7.3v3.7M8 5v.1"/></svg><span>Progress won&#39;t be saved in this browser</span></span></span>
+</div>
+<div class="cl-group" role="group" aria-label="Install paths" data-group>
+<div class="cl-group-head"><h3>Install paths</h3><span class="cl-tally"><span data-group-done>0</span> / 4<span class="sr-only"> done</span></span></div>
+<ul class="cl-items">
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="85b1f0145c"><span class="cl-main"><span class="cl-line"><span class="cl-text"><code>npx skills add abhijitbansal/claude-skills --skill make-explainer</code> installs the skill and both sibling skills it needs</span><span class="cl-item-chip"><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg><span>Device</span></span></span></span><span class="cl-note">run it on a machine that has none of the three</span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="b6166dff05"><span class="cl-main"><span class="cl-line"><span class="cl-text">Installing <code>make-diagram</code> alone leaves <code>make-explainer</code> absent, and <code>make-explainer</code> names the exact install command</span><span class="cl-item-chip"><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none"/></svg><span>Manual</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="5eccc78e05"><span class="cl-main"><span class="cl-line"><span class="cl-text"><code>/make-explainer</code> appears in a new Claude Code session after installing</span><span class="cl-item-chip"><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg><span>Device</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="f76ea5a702"><span class="cl-main"><span class="cl-line"><span class="cl-text">Removing the skill from <code>~/.claude/skills</code> leaves no stray files behind</span><span class="cl-item-chip"><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none"/></svg><span>Manual</span></span></span></span></span></label></li>
+</ul>
+</div>
+<div class="cl-group" role="group" aria-label="Themes" data-group>
+<div class="cl-group-head"><h3>Themes</h3><span class="cl-tally"><span data-group-done>0</span> / 4<span class="sr-only"> done</span></span></div>
+<ul class="cl-items">
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="39f37a9211"><span class="cl-main"><span class="cl-line"><span class="cl-text">Paper, Ink, Blueprint and Editorial each build a page with readable body text</span><span class="cl-item-chip"><span class="chip tone-accent"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 1.8l6.2 6.2L8 14.2 1.8 8z" fill="currentColor"/></svg><span>Visual</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="5b5deb1918"><span class="cl-main"><span class="cl-line"><span class="cl-text">The theme toggle cycles Auto, Light and Dark, and the choice survives a reload</span><span class="cl-item-chip"><span class="chip tone-accent"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 1.8l6.2 6.2L8 14.2 1.8 8z" fill="currentColor"/></svg><span>Visual</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="e65372bc8a"><span class="cl-main"><span class="cl-line"><span class="cl-text">Dark mode follows the system setting with no flash of the light page on load</span><span class="cl-item-chip"><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg><span>Device</span></span></span></span><span class="cl-note">switch macOS appearance while the page is open</span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="a399a6b058"><span class="cl-main"><span class="cl-line"><span class="cl-text">Status chips stay legible in all four themes without relying on colour</span><span class="cl-item-chip"><span class="chip tone-accent"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 1.8l6.2 6.2L8 14.2 1.8 8z" fill="currentColor"/></svg><span>Visual</span></span></span></span></span></label></li>
+</ul>
+</div>
+<div class="cl-group" role="group" aria-label="Kinds and views" data-group>
+<div class="cl-group-head"><h3>Kinds and views</h3><span class="cl-tally"><span data-group-done>0</span> / 4<span class="sr-only"> done</span></span></div>
+<ul class="cl-items">
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="a6e03a2782"><span class="cl-main"><span class="cl-line"><span class="cl-text">Each dashboard kind renders its chart, and the Table view sorts by clicking a header</span><span class="cl-item-chip"><span class="chip tone-accent"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 1.8l6.2 6.2L8 14.2 1.8 8z" fill="currentColor"/></svg><span>Visual</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="70351e27f9"><span class="cl-main"><span class="cl-line"><span class="cl-text">The view switcher moves with the arrow keys and announces the selected view</span><span class="cl-item-chip"><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none"/></svg><span>Manual</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="eeb92ab68e"><span class="cl-main"><span class="cl-line"><span class="cl-text">A paired card keeps its tab row when only one pane has data</span><span class="cl-item-chip"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Regression</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="f97d50dcdf"><span class="cl-main"><span class="cl-line"><span class="cl-text">A chart with zero rows shows an empty state and the other views still open</span><span class="cl-item-chip"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Regression</span></span></span></span></span></label></li>
+</ul>
+</div>
+<div class="cl-group" role="group" aria-label="Export" data-group>
+<div class="cl-group-head"><h3>Export</h3><span class="cl-tally"><span data-group-done>0</span> / 3<span class="sr-only"> done</span></span></div>
+<ul class="cl-items">
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="884007886c"><span class="cl-main"><span class="cl-line"><span class="cl-text">A card exports to PNG, SVG and CSV, and each file opens in its own app</span><span class="cl-item-chip"><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg><span>Device</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="6a85a1fbf0"><span class="cl-main"><span class="cl-line"><span class="cl-text">The exported SVG keeps the card&#39;s fonts and colours when opened in a browser</span><span class="cl-item-chip"><span class="chip tone-accent"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 1.8l6.2 6.2L8 14.2 1.8 8z" fill="currentColor"/></svg><span>Visual</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="c374f72ff6"><span class="cl-main"><span class="cl-line"><span class="cl-text">Printing the explainer to PDF opens every collapsed section and drops the contents list</span><span class="cl-item-chip"><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg><span>Device</span></span></span></span><span class="cl-note">use the system print dialog, not a screenshot</span></span></label></li>
+</ul>
+</div>
+<div class="cl-group" role="group" aria-label="Live reload" data-group>
+<div class="cl-group-head"><h3>Live reload</h3><span class="cl-tally"><span data-group-done>0</span> / 4<span class="sr-only"> done</span></span></div>
+<ul class="cl-items">
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="9c253eb1af"><span class="cl-main"><span class="cl-line"><span class="cl-text"><code>serve.mjs --watch</code> rebuilds the dashboard after saving a data file</span><span class="cl-item-chip"><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none"/></svg><span>Manual</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="23cf12b5ac"><span class="cl-main"><span class="cl-line"><span class="cl-text">Rebuild now refreshes the data without losing the selected view</span><span class="cl-item-chip"><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none"/></svg><span>Manual</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="ed6661278f"><span class="cl-main"><span class="cl-line"><span class="cl-text">A broken data file shows the error on the page and the last good chart stays</span><span class="cl-item-chip"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Regression</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="294f3e16a3"><span class="cl-main"><span class="cl-line"><span class="cl-text"><code>--interval</code> above 86400 seconds is refused with a clear message</span><span class="cl-item-chip"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Regression</span></span></span></span></span></label></li>
+</ul>
+</div>
+<div class="cl-group" role="group" aria-label="Diagrams" data-group>
+<div class="cl-group-head"><h3>Diagrams</h3><span class="cl-tally"><span data-group-done>0</span> / 4<span class="sr-only"> done</span></span></div>
+<ul class="cl-items">
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="cd7da14b79"><span class="cl-main"><span class="cl-line"><span class="cl-text">Hovering a node traces its edges and dims everything else</span><span class="cl-item-chip"><span class="chip tone-accent"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 1.8l6.2 6.2L8 14.2 1.8 8z" fill="currentColor"/></svg><span>Visual</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="e5af917075"><span class="cl-main"><span class="cl-line"><span class="cl-text">The Present overlay opens full screen, steps through reveals and closes with Escape</span><span class="cl-item-chip"><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none"/></svg><span>Manual</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="69218b95ae"><span class="cl-main"><span class="cl-line"><span class="cl-text">A self-loop edge is readable and does not overlap its own node</span><span class="cl-item-chip"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Regression</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="8b8978cc27"><span class="cl-main"><span class="cl-line"><span class="cl-text">A group highlight stays visible against the page in dark mode</span><span class="cl-item-chip"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Regression</span></span></span></span></span></label></li>
+</ul>
+</div>
+<div class="cl-group" role="group" aria-label="Regression checks" data-group>
+<div class="cl-group-head"><h3>Regression checks</h3><span class="cl-tally"><span data-group-done>0</span> / 5<span class="sr-only"> done</span></span></div>
+<ul class="cl-items">
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="b3c303adc6"><span class="cl-main"><span class="cl-line"><span class="cl-text">Ticks survive a reload, and reordering the items in the JSON keeps them</span><span class="cl-item-chip"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Regression</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="590ce62ebd"><span class="cl-main"><span class="cl-line"><span class="cl-text">Editing one item&#39;s text clears that tick only</span><span class="cl-item-chip"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Regression</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="b77bc0d792"><span class="cl-main"><span class="cl-line"><span class="cl-text">A page opened with storage blocked shows the unsaved note and still lets you tick items</span><span class="cl-item-chip"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Regression</span></span></span></span><span class="cl-note">private window with site data blocked</span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="e4e5712d15"><span class="cl-main"><span class="cl-line"><span class="cl-text">Reset asks inline and never opens a browser dialog</span><span class="cl-item-chip"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Regression</span></span></span></span></span></label></li>
+<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="3d566944ba"><span class="cl-main"><span class="cl-line"><span class="cl-text">A heading ending in an exclamation mark or an emoji in any text is rejected by <code>validate.mjs</code></span><span class="cl-item-chip"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Regression</span></span></span></span></span></label></li>
+</ul>
+</div>
+<div class="cl-fail">
+<h3 class="cl-fail-title">If something fails</h3>
+<ul>
+<li>Leave the box unticked and write down the step, what you saw and what you expected.</li>
+<li>Check the <a href="https://github.com/abhijitbansal/claude-skills/issues" rel="noopener noreferrer">open issues</a> for the same symptom before filing a new one.</li>
+<li>After the fix, re-run the failed item and every <strong>Regression</strong> item in its group.</li>
+</ul>
+</div>
+</div>
+</section>
+</main>
