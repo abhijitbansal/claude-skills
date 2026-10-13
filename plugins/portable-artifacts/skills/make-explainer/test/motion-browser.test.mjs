@@ -144,3 +144,27 @@ test('slides: a clip fits the slide at 390px and at desktop size', async (t) => 
     await context.close();
   }
 });
+
+// ---- print -----------------------------------------------------------------------------------
+
+test('print: the poster stands in for the video, with its caption; with no poster the video drops out', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const withPoster = page();
+  const { page: p, context } = await openPage(withPoster.url);
+  await p.emulateMedia({ media: 'print' });
+  const shown = await p.evaluate(() => {
+    const visible = (el) => !!el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+    return { video: visible(document.querySelector('.mo video')), still: visible(document.querySelector('.mo .mo-still')), caption: visible(document.querySelector('.mo figcaption')), src: document.querySelector('.mo .mo-still')?.getAttribute('src').slice(0, 22) };
+  });
+  assert.deepEqual(shown, { video: false, still: true, caption: true, src: 'data:image/png;base64,' });
+  await p.emulateMedia({ media: 'screen' });
+  assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('.mo .mo-still')).display), 'none', 'the still is for print only');
+  await context.close();
+
+  const bare = buildSpec({ title: 'Doc', sections: [{ type: 'motion', title: 'Clip', video: 'demo.mp4', caption: 'Cap' }] }, { files: FILES });
+  const second = await openPage(bare.url);
+  await second.page.emulateMedia({ media: 'print' });
+  assert.equal(await second.page.evaluate(() => document.querySelector('.mo .mo-still')), null, 'no poster, no still');
+  assert.equal(await second.page.evaluate(() => getComputedStyle(document.querySelector('.mo video')).display), 'none');
+  await second.context.close();
+});

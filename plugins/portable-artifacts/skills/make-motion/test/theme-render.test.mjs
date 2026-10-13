@@ -1,8 +1,8 @@
 // A spec with `theme` draws with the shared theme's fonts and dark colours; one without it is untouched.
 // Render-smoke style: needs a browser, skips without one.
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -12,7 +12,9 @@ import { startServer } from '../scripts/lib/server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER = path.join(root, 'scripts/render.mjs');
-const tmp = (p) => mkdtempSync(path.join(tmpdir(), p));
+const made = [];
+after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
+const tmp = (p) => { const d = mkdtempSync(path.join(tmpdir(), p)); made.push(d); return d; };
 async function haveBrowser() {
   try { await (await launchBrowser({ quiet: true })).close(); return true; } catch { return false; }
 }
@@ -50,7 +52,7 @@ async function drawn(motion) {
     await page.waitForFunction(() => window.__motion);
     await page.evaluate(() => window.__motion.ready);
     const look = await page.evaluate(() => {
-      const css = (sel) => getComputedStyle(document.querySelector(sel));
+      const css = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el) : {}; };
       const family = css('.el.text:not(.mono)').fontFamily;
       const mono = css('.el.text.mono').fontFamily;
       return {
@@ -59,7 +61,8 @@ async function drawn(motion) {
         stage: css('#stage').backgroundColor,
         page: getComputedStyle(document.documentElement).backgroundColor,
         loaded: [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family.replaceAll('"', '')),
-        shape: document.querySelector('.el.shape rect').getAttribute('fill'),
+        firstWeight: document.querySelector('.el.text').style.fontWeight,
+        shape: document.querySelector('.el.shape rect')?.getAttribute('fill'),
         chartFont: document.querySelector('.el.chart svg text')?.getAttribute('font-family'),
         chartMarks: document.querySelector('.el.chart svg').outerHTML.toLowerCase(),
       };
@@ -122,4 +125,62 @@ test('themed contact sheet: renders, differs from the unthemed one, and is not b
   assert.ok(sheets.themed.length > 2000, 'not blank');
   assert.notDeepEqual(sheets.themed, sheets.plain);
   return undefined;
+});
+
+// ---- fixed fonts: no synthetic bold -----------------------------------------------------------
+
+test('themed: a requested weight maps to the nearest weight the theme font ships, mono default included', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  // blueprint ships IBM Plex Sans 400 and 600, and IBM Plex Mono 400 only.
+  const weights = { sans: [[undefined, '600'], [800, '600'], [700, '600'], [300, '400'], [400, '400']], mono: [[undefined, '400'], [700, '400']] };
+  for (const [font, cases] of Object.entries(weights)) {
+    for (const [asked, shipped] of cases) {
+      const el = { id: 'w', type: 'text', text: 'x', x: 10, y: 10, ...(asked === undefined ? {} : { fontWeight: asked }), ...(font === 'mono' ? { font: 'mono' } : {}) };
+      const { look } = await drawn({ theme: 'blueprint', size: [64, 64], scenes: [{ id: 's', duration: 1, elements: [el, { id: 'b', type: 'shape', shape: 'rect', x: 1, y: 1 }, { id: 'c', type: 'text', text: 'c', x: 1, y: 1, font: 'mono' }, { id: 'd', type: 'chart', x: 1, y: 1, width: 20, height: 20, vegaLite: { data: { values: [{ a: 'x', b: 2 }] }, mark: 'bar', encoding: { x: { field: 'a', type: 'nominal' }, y: { field: 'b', type: 'quantitative' } } } }] }] });
+      assert.equal(look.firstWeight, shipped, `${font} weight ${asked ?? 'default'}`);
+    }
+  }
+  return undefined;
+});
+
+test('unthemed: weights are used as asked (Inter ships them all)', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const { look } = await drawn({ size: [64, 64], scenes: [{ id: 's', duration: 1, elements: [{ id: 'w', type: 'text', text: 'x', x: 10, y: 10, fontWeight: 800 }, { id: 'b', type: 'shape', shape: 'rect', x: 1, y: 1 }, { id: 'c', type: 'text', text: 'c', x: 1, y: 1, font: 'mono' }, { id: 'd', type: 'chart', x: 1, y: 1, width: 20, height: 20, vegaLite: { data: { values: [{ a: 'x', b: 2 }] }, mark: 'bar', encoding: { x: { field: 'a', type: 'nominal' }, y: { field: 'b', type: 'quantitative' } } } }] }] });
+  assert.equal(look.firstWeight, '800');
+  return undefined;
+});
+
+// ---- --theme on the render CLI (the page theme an embedding tool passes down) -------------------
+
+const sheetOf = (dir, name, motion, extra = []) => {
+  writeFileSync(path.join(dir, `${name}.json`), JSON.stringify(motion));
+  const out = path.join(dir, name);
+  const r = spawnSync(process.execPath, [RENDER, path.join(dir, `${name}.json`), '--contact-sheet', '--out', out, '--size', '480x270', ...extra], { encoding: 'utf8' });
+  return { r, png: r.status === 0 ? readFileSync(path.join(out, 'contact/one.png')) : null };
+};
+
+test('render --theme gives a spec without a theme that theme; a spec with its own keeps it', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const dir = tmp('theme-flag-');
+  const plain = sheetOf(dir, 'plain', spec());
+  const flagged = sheetOf(dir, 'flagged', spec(), ['--theme', 'blueprint']);
+  const embedded = sheetOf(dir, 'embedded', spec({ theme: 'blueprint' }));
+  assert.equal(flagged.r.status, 0, flagged.r.stderr);
+  assert.deepEqual(flagged.png, embedded.png, '--theme blueprint draws what "theme": "blueprint" draws');
+  assert.notDeepEqual(flagged.png, plain.png);
+  const own = sheetOf(dir, 'own', spec({ theme: 'ink' }), ['--theme', 'blueprint']);
+  const ink = sheetOf(dir, 'ink', spec({ theme: 'ink' }));
+  assert.deepEqual(own.png, ink.png, "the spec's own theme wins over --theme");
+  return undefined;
+});
+
+test('render --theme with an unknown name is a usage error (exit 2) with a did-you-mean', () => {
+  const dir = tmp('theme-bad-');
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify(spec()));
+  const r = spawnSync(process.execPath, [RENDER, path.join(dir, 'm.json'), '--contact-sheet', '--out', dir, '--theme', 'blueprnt'], { encoding: 'utf8' });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /--theme: unknown theme "blueprnt"; did you mean "blueprint"\?/);
+  const missing = spawnSync(process.execPath, [RENDER, path.join(dir, 'm.json'), '--theme'], { encoding: 'utf8' });
+  assert.equal(missing.status, 2);
+  assert.match(missing.stderr, /--theme needs a value/);
 });

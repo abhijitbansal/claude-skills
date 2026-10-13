@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSpec } from '../scripts/lib/spec.mjs';
 import { buildPage, BuildError, contentSecurityPolicy } from '../scripts/lib/page.mjs';
 import { build } from '../scripts/build.mjs';
-import { renderFailure } from '../scripts/lib/motion-render.mjs';
+import { renderFailure, runChild, posterFrame, renderMotion, motionArgs } from '../scripts/lib/motion-render.mjs';
 import { findFfmpeg } from '../../make-motion/scripts/lib/ffmpeg.mjs';
 import { haveBrowser } from './helpers/browser.mjs';
 
@@ -242,7 +242,7 @@ test('slides mode embeds the video too, named after the slide', async () => {
 
 test('CSP: media-src is on the page exactly when a motion section is', async () => {
   const dir = folder();
-  assert.match((await make([text, video()], dir)).html, /media-src &#39;self&#39; file: blob:|media-src 'self' file: blob:/);
+  assert.match((await make([text, video()], dir)).html, /; media-src &#39;self&#39; file: blob:"/);
   assert.ok(!(await make([text], dir)).html.includes('media-src'));
   assert.ok(contentSecurityPolicy(doc([video()])).endsWith("; media-src 'self' file: blob:"));
   assert.ok(!contentSecurityPolicy(doc([text])).includes('media-src'));
@@ -251,7 +251,7 @@ test('CSP: media-src is on the page exactly when a motion section is', async () 
 test('the motion stylesheet ships once, and only on a page with a motion section', async () => {
   const dir = folder();
   const withTwo = (await make([video(), video()], dir)).html;
-  assert.equal(withTwo.split('.mo video').length - 1 > 0, true);
+  assert.ok(withTwo.includes('.mo video'));
   assert.equal((withTwo.match(/\/\* motion \*\//g) ?? []).length, 1);
   assert.ok(!(await make([text], dir)).html.includes('/* motion */'));
 });
@@ -359,8 +359,115 @@ test('renderFailure names ffmpeg, the browser or both, and passes any other fail
   assert.match(ffmpeg, /brew install ffmpeg/);
   const browser = renderFailure({ status: 1, stderr: 'No browser available. Run: npx playwright install chromium\n(bundled Chromium: x)\n' });
   assert.match(browser, /needs ffmpeg and a Chromium browser\. No browser available\. Run: npx playwright install chromium/);
-  const other = renderFailure({ status: 1, stderr: 'page error: boom\nffmpeg failed (exit 1): bad input\n' });
-  assert.equal(other, 'make-motion failed (exit 1): ffmpeg failed (exit 1): bad input');
   assert.equal(renderFailure({ status: null, signal: 'SIGKILL', stderr: '' }), 'make-motion was stopped by SIGKILL');
   assert.match(renderFailure({ error: Object.assign(new Error('spawn x ENOENT'), { code: 'ENOENT' }), stderr: '' }), /^make-motion could not start: spawn x ENOENT/);
+  assert.match(renderFailure({ timedOut: true, signal: 'SIGKILL' }, { timeoutMs: 5 }), /^make-motion did not finish within 5 ms; .*PA_MOTION_TIMEOUT_MS/);
 });
+
+test('renderFailure shows a bounded tail of the output, not just the last line', () => {
+  const stderr = `${Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join('\n')}\n`;
+  const text = renderFailure({ status: 1, stderr });
+  assert.match(text, /^make-motion failed \(exit 1\); the end of its output:\n/);
+  assert.ok(text.includes('line 30') && text.includes('line 25'), text);
+  assert.ok(!text.includes('line 20\n') && !text.includes('line 1\n'), 'older lines are cut');
+  assert.ok(text.split('\n').length <= 10);
+  const spec = renderFailure({ status: 1, stderr: '', stdout: 'sections\nscenes[0].duration: required\nm.json: 1 error\n' });
+  assert.match(spec, /scenes\[0\]\.duration: required\n.*m\.json: 1 error$/s, 'the output of a failed validation is shown whole, not just its summary line');
+  const long = renderFailure({ status: 1, stderr: `${'x'.repeat(2000)}\n` });
+  assert.ok(long.length < 600, 'a very long line is cut');
+});
+
+test('renderFailure says an overflowing output is that, not a failure to start', () => {
+  assert.match(renderFailure({ error: Object.assign(new Error('stdout maxBuffer length exceeded'), { code: 'ENOBUFS' }) }), /^make-motion wrote more output than can be kept; /);
+});
+
+// ---- child processes: a time limit that holds ------------------------------------------------------
+
+const stub = (body) => {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-stub-')));
+  made.push(dir);
+  const file = path.join(dir, 'stub.mjs');
+  fs.writeFileSync(file, body);
+  return { file, dir };
+};
+const IGNORES_SIGTERM = "process.on('SIGTERM', () => {}); process.stderr.write('started\\n'); setInterval(() => {}, 1000);";
+
+test('runChild: SIGTERM first, then SIGKILL after the grace period, so a child that ignores SIGTERM cannot hang the build', async () => {
+  const { file, dir } = stub(IGNORES_SIGTERM);
+  const t0 = Date.now();
+  const r = await runChild(process.execPath, [file], { cwd: dir, timeoutMs: 300, graceMs: 300 });
+  const took = Date.now() - t0;
+  assert.equal(r.timedOut, true);
+  assert.equal(r.signal, 'SIGKILL');
+  assert.ok(took >= 550 && took < 4000, `took ${took} ms`);
+  assert.match(r.stderr, /started/);
+});
+
+test('runChild: a child that exits on SIGTERM is not killed harder', async () => {
+  const { file, dir } = stub("process.on('SIGTERM', () => process.exit(7)); setInterval(() => {}, 1000);");
+  const r = await runChild(process.execPath, [file], { cwd: dir, timeoutMs: 200, graceMs: 5000 });
+  assert.equal(r.timedOut, true);
+  assert.equal(r.status, 7);
+});
+
+test('runChild: success, failure and a spawn error are reported, and lots of output is kept only as a bounded tail', async () => {
+  const { file, dir } = stub("process.stdout.write('a'.repeat(20 * 1024 * 1024)); process.stdout.write('\\nEND\\n'); process.stderr.write('warn\\n'); process.exitCode = process.argv[2] === 'fail' ? 3 : 0;");
+  const ok = await runChild(process.execPath, [file], { cwd: dir, timeoutMs: 20000 });
+  assert.equal(ok.status, 0);
+  assert.equal(ok.timedOut, false);
+  assert.ok(ok.stdout.endsWith('END\n') && ok.stdout.length < 200 * 1024, `kept ${ok.stdout.length} bytes`);
+  assert.equal(ok.stderr, 'warn\n');
+  assert.equal((await runChild(process.execPath, [file, 'fail'], { cwd: dir, timeoutMs: 20000 })).status, 3);
+  const missing = await runChild(path.join(dir, 'no-such-program'), [], { cwd: dir, timeoutMs: 1000 });
+  assert.equal(missing.error.code, 'ENOENT');
+});
+
+test('posterFrame: an ffmpeg that hangs and ignores SIGTERM is stopped, and there is no poster instead of a hung build', async () => {
+  const { file, dir } = stub(`#!${process.execPath}\n${IGNORES_SIGTERM}`);
+  fs.chmodSync(file, 0o755);
+  const saved = process.env.FFMPEG_PATH;
+  process.env.FFMPEG_PATH = file;
+  try {
+    const t0 = Date.now();
+    assert.equal(await posterFrame(path.join(dir, 'v.mp4'), dir, 1, { timeoutMs: 300, graceMs: 300 }), undefined);
+    assert.ok(Date.now() - t0 < 4000);
+  } finally {
+    if (saved === undefined) delete process.env.FFMPEG_PATH; else process.env.FFMPEG_PATH = saved;
+  }
+});
+
+test('a rendered video gets the same size cap as a user video', async (t) => {
+  const why = await canRender();
+  if (why) return t.skip(why);
+  const dir = folder();
+  await assert.rejects(renderMotion(path.join(dir, 'motion.json'), { scenes: [{ duration: 1 }] }, process.env, { maxBytes: 100 }), (e) => {
+    assert.equal(e.errors[0].path, 'spec');
+    assert.match(e.errors[0].message, /^rendered video is \d+\.\d+ MB; the limit is \S+ MB — shorten it or lower the size in the spec/);
+    return true;
+  });
+  return undefined;
+});
+
+// ---- the page theme reaches the embedded motion spec -------------------------------------------------
+
+test('motionArgs: a motion spec without a theme is rendered with the page theme, one with its own keeps it', () => {
+  assert.deepEqual(motionArgs('/s/m.json', '/t/v.mp4', {}, 'ink'), ['/s/m.json', '--out', '/t/v.mp4', '--theme', 'ink']);
+  assert.deepEqual(motionArgs('/s/m.json', '/t/v.mp4', { theme: 'paper' }, 'ink'), ['/s/m.json', '--out', '/t/v.mp4']);
+  assert.deepEqual(motionArgs('/s/m.json', '/t/v.mp4', {}, undefined), ['/s/m.json', '--out', '/t/v.mp4']);
+});
+
+test('end to end: the poster frame follows the page theme, and a motion spec with its own theme ignores it', async (t) => {
+  const why = await canRender();
+  if (why) return t.skip(why);
+  const frame = async (motion, theme) => {
+    const dir = folder({ 'm.json': motion });
+    const { html } = await buildPage(doc([{ type: 'motion', spec: 'm.json' }], { theme }), { dir, out: out(dir) });
+    return /poster="([^"]+)"/.exec(html)[1];
+  };
+  const base = { size: [160, 90], scenes: [{ id: 's', duration: 1, elements: [] }] };
+  assert.notEqual(await frame(base, 'blueprint'), await frame(base, 'paper'), 'no theme in the spec: the page theme paints the video');
+  const own = { ...base, theme: 'ink' };
+  assert.equal(await frame(own, 'blueprint'), await frame(own, 'paper'), 'a theme in the spec wins');
+  return undefined;
+});
+

@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--contact-sheet]
+// node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--contact-sheet]
+// --theme: a shared theme for a spec that names none (a spec's own `theme` wins).
 // With --contact-sheet, --out is a directory; PNGs go to <out>/contact/<scene-id>.png.
 import { spawn } from 'node:child_process';
 import { mkdirSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { loadSpec, validateSpec, withDefaults, UsageError } from './lib/spec.mjs';
-import { printResult } from '../shared/errors.mjs';
+import { printResult, didYouMean } from '../shared/errors.mjs';
+import { listThemes } from '../shared/theme.mjs';
 import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
 import { findFfmpeg, encodeArgs, probeAudio, probeGraph } from './lib/ffmpeg.mjs';
@@ -20,7 +22,7 @@ const MAX_SIDE = 3840;
 const FFMPEG_GRACE_MS = 2000;
 const EXIT_SIGINT = 130;
 const EXIT_SIGTERM = 143;
-const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--contact-sheet]';
+const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--contact-sheet]';
 
 function takeValue(argv, i, flag) {
   const value = argv[i + 1];
@@ -37,13 +39,20 @@ function parseSize(text) {
   return size;
 }
 
+function checkTheme(name) {
+  const themes = listThemes();
+  if (themes.includes(name)) return;
+  const near = didYouMean(name, themes);
+  throw new UsageError(`--theme: unknown theme ${JSON.stringify(name)}; ${near ? `did you mean ${JSON.stringify(near)}?` : `available: ${themes.join(', ')}`}`);
+}
+
 function parseArgs(argv) {
   const opts = { contact: false };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--contact-sheet') opts.contact = true;
-    else if (a === '--out' || a === '--fps' || a === '--size') opts[a.slice(2)] = takeValue(argv, i++, a);
+    else if (a === '--out' || a === '--fps' || a === '--size' || a === '--theme') opts[a.slice(2)] = takeValue(argv, i++, a);
     else if (a.startsWith('--')) throw new UsageError(`unknown option ${a}`);
     else rest.push(a);
   }
@@ -54,6 +63,7 @@ function parseArgs(argv) {
     if (!Number.isInteger(opts.fps) || opts.fps < 1 || opts.fps > MAX_FPS) throw new UsageError(`--fps must be an integer from 1 to ${MAX_FPS}`);
   }
   if (opts.size !== undefined) opts.size = parseSize(opts.size);
+  if (opts.theme !== undefined) checkTheme(opts.theme);
   return opts;
 }
 
@@ -95,7 +105,7 @@ async function plan(opts) {
   const defaultOut = opts.contact ? path.join(dir, 'out') : path.join(dir, 'out', `${name}.mp4`);
   const ffmpeg = opts.contact ? null : await findFfmpeg();
   return {
-    spec, specPath, fps, frames, total, contact: opts.contact, size: opts.size ?? spec.size,
+    theme: opts.theme, spec, specPath, fps, frames, total, contact: opts.contact, size: opts.size ?? spec.size,
     out: path.resolve(opts.out ?? defaultOut), ffmpeg,
     audio: opts.contact ? [] : planAudio(spec, dir, ffmpeg, fps),
   };
@@ -188,7 +198,7 @@ async function main() {
   if (!p) return 1;
   const state = { encoder: null, browser: null, partial: null, exiting: false };
   installSignalHandlers(state);
-  const server = await startServer({ specPath: p.specPath, mode: 'render' });
+  const server = await startServer({ specPath: p.specPath, mode: 'render', theme: p.theme });
   try {
     const page = await openPage(p, server, state);
     const info = await page.evaluate(() => ({ sceneStarts: window.__motion.sceneStarts }));

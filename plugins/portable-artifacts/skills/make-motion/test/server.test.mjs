@@ -249,7 +249,25 @@ test('/theme/<name>.json and .css serve a shared theme, fonts come from the sync
 
 test('theme routes refuse unknown names, traversal and anything but a woff2', () => withServer(async (srv) => {
   for (const p of ['/theme/nope.json', '/theme/nope.css', '/theme/..%2Fserver.json', '/theme/fonts/metrics.json',
-    '/theme/fonts/LICENSES/ibm-plex-sans.txt', '/theme/fonts/..%2Fthemes%2Fink.json', '/theme/fonts/%2e%2e/theme.mjs', '/theme/ink.js']) {
+    '/theme/fonts/LICENSES/ibm-plex-sans.txt', '/theme/fonts/..%2Fthemes%2Fink.json', '/theme/fonts/%2e%2e/theme.mjs', '/theme/ink.js',
+    // encoded twice: one decode must not leave a slash or a dot-segment for a second decode to find
+    '/theme/fonts/%252e%252e%252fthemes%252fink.json', '/theme/fonts/sub%252Fibm-plex-sans-latin-600-normal.woff2',
+    '/theme/fonts/%2e%2e', '/theme/fonts/%2e%2e%2fibm-plex-sans-latin-600-normal.woff2', '/theme/fonts/%2fibm-plex-sans-latin-600-normal.woff2',
+    '/theme/fonts/ibm-plex-sans-latin-600-normal.woff2%00', '/theme/fonts/.woff2', '/theme/fonts/%5cibm-plex-sans-latin-600-normal.woff2']) {
     assert.equal((await get(srv.url, p)).status, 404, p);
   }
 }));
+
+test('/spec.json gets the render theme only when the server was given one and the spec has none', async () => {
+  const f = fixture();
+  const read = async (opts, doc) => {
+    writeFileSync(f.specPath, doc);
+    const srv = await startServer({ specPath: f.specPath, mode: 'render', ...opts });
+    try { return (await get(srv.url, '/spec.json')).body; } finally { await srv.close(); }
+  };
+  const plain = JSON.stringify(spec('a'));
+  assert.equal(await read({}, plain), plain, 'no theme given: the file is served as it is, byte for byte');
+  assert.equal(JSON.parse(await read({ theme: 'ink' }, plain)).theme, 'ink');
+  assert.equal(JSON.parse(await read({ theme: 'ink' }, JSON.stringify({ ...spec('a'), theme: 'paper' }))).theme, 'paper');
+  assert.equal(await read({ theme: 'ink' }, '{ not json'), '{ not json', 'an unreadable spec is passed through for the page to report');
+});

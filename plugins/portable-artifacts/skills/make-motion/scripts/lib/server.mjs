@@ -127,9 +127,14 @@ function serveTheme(res, name, kind) {
   return sendBody(res, MIME['.css'], themeCss(theme));
 }
 
-// Only the font files themselves: not the metrics, licences or anything else in the folder.
-function serveThemeFont(res, name) {
-  return name.endsWith('.woff2') && !name.includes('/') ? serveUnder(res, FONTS_DIR, name) : notFound(res);
+// Only the font files themselves: a plain "<name>.woff2" after one decode. Anything left holding a
+// slash, a backslash, a percent sign or a leading dot (an encoded slash or dot-segment, or a name
+// that was encoded twice) is not a font name, so there is no second decode for it to hide in.
+const FONT_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.woff2$/;
+function serveThemeFont(res, rawName) {
+  const name = safeDecode(rawName);
+  const { file } = FONT_FILE.test(name) && !name.includes('..') ? resolveAsset(FONTS_DIR, name) : {};
+  return file ? sendFile(res, file) : notFound(res);
 }
 
 function sendBody(res, type, body) {
@@ -157,7 +162,7 @@ function route(ctx, req, res) {
   if (pathname === '/events') return serveEvents(ctx, req, res);
   if (pathname.startsWith('/template/')) return serveUnder(res, TEMPLATE_DIR, pathname.slice('/template/'.length));
   if (pathname.startsWith('/assets/')) return serveAsset(ctx, req, res, pathname.slice('/assets/'.length));
-  if (pathname.startsWith('/theme/fonts/')) return serveThemeFont(res, safeDecode(pathname.slice('/theme/fonts/'.length)));
+  if (pathname.startsWith('/theme/fonts/')) return serveThemeFont(res, pathname.slice('/theme/fonts/'.length));
   const themeRoute = /^\/theme\/([^/]+)\.(json|css)$/.exec(pathname);
   if (themeRoute) return serveTheme(res, safeDecode(themeRoute[1]), themeRoute[2]);
   if (pathname.startsWith('/vendor/fonts/')) return serveFont(res, pathname.slice('/vendor/fonts/'.length));
@@ -166,9 +171,19 @@ function route(ctx, req, res) {
   return notFound(res);
 }
 
+// The spec as written; an embedding tool may give the server a theme for specs that name none.
+function specBody(ctx) {
+  const body = readFileSync(ctx.specFile);
+  if (ctx.theme === undefined) return body;
+  try {
+    const spec = JSON.parse(body.toString('utf8'));
+    return spec !== null && typeof spec === 'object' && !Array.isArray(spec) && spec.theme === undefined ? JSON.stringify({ ...spec, theme: ctx.theme }) : body;
+  } catch { return body; }
+}
+
 function serveSpec(ctx, res) {
   try {
-    const body = readFileSync(ctx.specFile);
+    const body = specBody(ctx);
     res.writeHead(200, { 'content-type': MIME['.json'], 'cache-control': 'no-store' });
     return res.end(body);
   } catch { return notFound(res); }
@@ -216,9 +231,10 @@ function watchSpec(ctx) {
   return { stop: () => { clearTimeout(timer); watcher.close(); } };
 }
 
-export async function startServer({ specPath, mode = 'preview' }) {
+// `theme`: a shared theme name for specs that set none (render --theme).
+export async function startServer({ specPath, mode = 'preview', theme }) {
   const specFile = path.resolve(specPath);
-  const ctx = { specFile, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
+  const ctx = { specFile, theme, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
   const watcher = watchSpec(ctx);
   const server = http.createServer((req, res) => handle(ctx, req, res));
   await new Promise((resolve, reject) => {

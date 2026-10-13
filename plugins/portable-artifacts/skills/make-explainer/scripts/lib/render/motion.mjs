@@ -31,7 +31,7 @@ export async function prepare(section, ctx, i) {
     source = { from: valid('video', readVideo(section.video, ctx.dir)).abs };
   } else {
     const motion = valid('spec', readMotionSpec(section.spec, ctx.dir));
-    rendered = await renderMotion(motion.abs, motion.spec, ctx.env);
+    rendered = await renderMotion(motion.abs, motion.spec, ctx.env, { pageTheme: ctx.theme.name });
     source = { content: rendered.video };
   }
   let poster;
@@ -59,10 +59,12 @@ export function render(section, ctx) {
   // A titled video is named by its title and a captioned one by its caption; otherwise just "Video".
   const name = section.title !== undefined ? plain(section.title) : section.caption !== undefined ? plain(section.caption) : 'Video';
   const poster = entry.poster === undefined ? '' : ` poster="${entry.poster}"`;
+  // Print has no player: the poster stands in for the video there (see motion.css).
+  const still = entry.poster === undefined ? '' : `\n<img class="mo-still" src="${entry.poster}" alt="">`;
   const caption = section.caption === undefined ? '' : `\n<figcaption>${inline(section.caption)}</figcaption>`;
   return `<figure class="mo">
 <video controls preload="metadata" playsinline${poster} src="${url(entry.file)}" aria-label="${name}">
 <p>Your browser cannot play this video. <a href="${url(entry.file)}">Download the video</a>.</p>
-</video>${caption}
+</video>${still}${caption}
 </figure>`;
 }

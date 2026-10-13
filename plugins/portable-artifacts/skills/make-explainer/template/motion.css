@@ -7,6 +7,9 @@
 /* in a deck the video is bounded by the viewport, with a floor so a short window never collapses it */
 .slide-motion .mo video { max-height: max(calc(100dvh - 20rem), 12rem); margin-inline: auto; object-fit: contain; }
 
+.mo-still { display: none; }
+
 @media print {
   .mo video { display: none; }
+  .mo-still { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; }
 }
