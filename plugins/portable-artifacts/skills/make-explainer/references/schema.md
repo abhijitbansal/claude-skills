@@ -42,7 +42,7 @@ Slides mode adds a budget to each section (errors): at most 6 points (tldr point
 
 Markdown-lite in every prose field: paragraphs split by a blank line, `**bold**`, `*italic*`, `` `code` ``, `[text](https://…)` (http and https only), and `- ` lists. Everything else, including `<tags>`, is shown as text. No emoji anywhere. A string must contain a non-space character.
 
-Validate also fails on a `TODO:` or lorem ipsum anywhere, on headings ending in `!`, and on section titles that start with a number such as `01`.
+Validate also fails on a `TODO:` or lorem ipsum anywhere, on headings ending in `!`, and on section titles numbered like `01` (a leading zero digit; "3 files changed" is fine).
 
 ## File references
 
@@ -58,13 +58,14 @@ Environment: `PA_OUTPUT_DIR` (default output folder), `PA_MOTION_TIMEOUT_MS` (ho
 
 ## Exit codes
 
-`validate.mjs` and `build.mjs`: 0 ok, 1 spec errors (printed as `path: message`), 2 usage or IO error. `--json` prints `{ ok, errors, warnings }` instead. `gather.mjs` and `scaffold.mjs`: 0 ok, 2 usage error.
+`validate.mjs` and `build.mjs`: 0 ok, 1 spec errors (printed as `path: message`), 2 usage or IO error. `--json` prints `{ ok, errors, warnings }` instead. `gather.mjs` and `scaffold.mjs`: 0 ok, 2 usage error. `check.mjs`: 0 ok or skipped, 1 problems, 2 usage error.
 
 ## Scripts
 
 | Script | Use |
 |---|---|
-| `gather.mjs git [--base <branch>] [--repo <folder>] [--json]` | Facts about the checked-out branch as JSON: branch, base, commits, changed files with line counts and renames, test files, date. Committed work only. |
+| `gather.mjs git [--base <branch>] [--repo <folder>] [--json]` | Without `--base`: `main`, then `master`, preferring origin's copy when it is ahead. Facts about the checked-out branch as JSON: branch, base, commits, changed files with line counts and renames, test files, date. Committed work only. |
 | `scaffold.mjs <recap\|checklist\|concept\|slides> [--facts facts.json] [--title <text>]` | A starter `explainer.json` on stdout. Facts fill numbers, files, commits and folders; every sentence is a `TODO:` string. |
 | `validate.mjs <explainer.json> [--json]` | Schema, limits, prose lint, slide budget, file references and the embedded diagram, chart and motion checks. |
 | `build.mjs <explainer.json> [--out <file.html\|dir>] [--theme <name>] [--json]` | Validates, then writes the page. |
+| `check.mjs <page.html> [--json]` | Optional headless check of a built page at 1280 and 390 px: console errors and warnings, sideways scrolling, elements wider than the page, a deck's last slide reachable by arrow keys with the counter reading N / N, and each diagram's Present overlay opening and closing on Esc. Exit 0 ok or skipped (no browser), 1 problems, 2 usage. Needs Playwright and a browser (full `npm ci`); `PA_CHECK_TIMEOUT_MS` shortens the 60 s cap. |

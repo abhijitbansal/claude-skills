@@ -51,8 +51,9 @@ export function createFixtureRepo(dir) {
   };
   for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) delete env[k];
   const git = (...args) => {
-    const r = spawnSync('git', ['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: dir, encoding: 'utf8', env });
-    if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr}`);
+    const r = spawnSync('git', ['-c', 'commit.gpgsign=false', '-c', `core.hooksPath=${os.devNull}`, ...args], { cwd: dir, encoding: 'utf8', env });
+    if (r.error) throw new Error(`git ${args.join(' ')} could not run: ${r.error.code ?? r.error.message}`);
+    if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr.trim()}${args[0] === 'init' ? ' (git 2.28 or newer is needed for init -b)' : ''}`);
   };
   const write = (rel, content) => {
     fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
@@ -79,6 +80,35 @@ export function createFixtureRepo(dir) {
   commit('fix: make search case-insensitive');
   write('test/search.test.js', 'import test from "node:test";\nimport assert from "node:assert/strict";\nimport { search } from "../src/search.js";\ntest("empty store", () => assert.deepEqual(search("x"), []));\n');
   commit('test: cover search on an empty store');
+}
+
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', 'test']);
+
+// Copy a skill into <work>/skills/<name> without node_modules, which is linked back to the original.
+export function copySkill(src, work) {
+  const dst = path.join(work, 'skills', path.basename(src));
+  fs.cpSync(src, dst, {
+    recursive: true,
+    filter: (from) => !path.relative(src, from).split(path.sep).some((seg) => SKIP_DIRS.has(seg)),
+  });
+  linkNodeModules(path.join(src, 'node_modules'), path.join(dst, 'node_modules'));
+}
+
+// A fresh work directory for one prompt: the skill and its sibling skills under skills/, the data fixtures
+// under data/, ./repo for a `"repo": true` prompt, and the seed spec for an edit prompt.
+// `skillsRoot` holds the skill folders, `evalDir` the fixtures. -> { work, seedSpec }.
+export function prepareWorkdir(p, { skillCfg, skillsRoot, evalDir, tmpDir = os.tmpdir() }) {
+  const work = fs.mkdtempSync(path.join(tmpDir, `pa-eval-${p.id}-`));
+  for (const name of [skillCfg.dir, ...(skillCfg.siblings ?? [])]) copySkill(path.join(skillsRoot, name), work);
+  if (p.repo) createFixtureRepo(path.join(work, 'repo'));
+  fs.cpSync(path.join(evalDir, 'fixtures', 'data'), path.join(work, 'data'), { recursive: true });
+  let seedSpec = null;
+  if (p.seed) {
+    const seedPath = path.join(evalDir, 'fixtures', p.seed);
+    fs.copyFileSync(seedPath, path.join(work, skillCfg.spec));
+    seedSpec = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+  }
+  return { work, seedSpec };
 }
 
 export function buildPrompt(skillCfg, task) {

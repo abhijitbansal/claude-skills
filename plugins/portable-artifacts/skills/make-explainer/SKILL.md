@@ -17,14 +17,15 @@ First use: if `<skill-dir>/node_modules` is missing, say it is a one-time local 
 ## Workflow
 
 1. Pick the shape. A **preset** gives a starter file, a **section list** you write yourself gives full control.
-   - `recap` (branch recap or diff review): `node <skill-dir>/scripts/gather.mjs git --base main > facts.json`, then `node <skill-dir>/scripts/scaffold.mjs recap --facts facts.json > explainer.json`. Gather reads committed work only. `--base` defaults to `main` or `master`; `--repo <folder>` points at another checkout. A missing base or a folder that is not a repository is an error that names the fix.
+   - `recap` (branch recap or diff review): `node <skill-dir>/scripts/gather.mjs git > facts.json`, then `node <skill-dir>/scripts/scaffold.mjs recap --facts facts.json > explainer.json`. Gather reads committed work only. Omit `--base` to auto-detect the base (`main`, then `master`, preferring origin's copy when it is ahead); add `--base <branch>` when the branch started elsewhere, and `--repo <folder>` to read another checkout. A missing base or a folder that is not a repository is an error that names the fix.
    - `checklist` (manual test list): the same two steps with `scaffold.mjs checklist`.
    - `concept` (idea or plan explainer) and `slides` (deck): `node <skill-dir>/scripts/scaffold.mjs concept > explainer.json` (or `slides`). Add `--title "…"` to set the title.
    - No preset fits: write `explainer.json` from the section list below. Details of every field: `<skill-dir>/references/schema.md` and `sections.md`; ready-made files in `<skill-dir>/references/examples/`.
 2. Fill the file. A scaffold marks every sentence for you with `TODO: …`; replace each one with real prose from the facts and from reading the changed files. Facts (numbers, files, commits) are already correct: do not retype them. Delete a section you cannot fill.
 3. `node <skill-dir>/scripts/validate.mjs explainer.json`. Fix every line it prints (a JSON path, the problem, the fix) and rerun until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage error. Warnings do not block, but read them.
 4. `node <skill-dir>/scripts/build.mjs explainer.json` prints the HTML path. Default folder is `~/.agent/diagrams/` (or `$PA_OUTPUT_DIR`); `--out <file.html|dir>` picks another; `--theme paper|blueprint|ink|editorial` overrides the theme; `--json` prints machine-readable results. Sections with files (video, interactive chart) add a `<name>.assets/` folder next to the page: keep the two together.
-5. Report: the HTML path, one line on what it shows, and the validate warnings you left.
+5. Optional check: `node <skill-dir>/scripts/check.mjs <printed path>` opens the page at desktop and phone width and fails on console errors, sideways scrolling, a deck that cannot reach its last slide, or a diagram Present overlay that will not close. It needs Playwright and a browser (a full `npm ci`, not `--omit=dev`); without them it prints `check: skipped` and exits 0. Do not install either for it.
+6. Report: the HTML path, one line on what it shows, and the validate warnings you left.
 
 For a change ("rename the card", "add a risk"), edit only those fields, then validate and build again.
 
@@ -57,7 +58,7 @@ For a change ("rename the card", "add a risk"), edit only those fields, then val
 - `motion`: a `.mp4` `video`, or a make-motion `spec` rendered at build.
 - `image`: a local `src` with required `alt`.
 
-File paths (diagram, chart dashboard, video, image) are relative to `explainer.json`, must stay inside its folder and cannot be symlinks. Charts read local files only; a dashboard with a Postgres or MySQL source is refused.
+File paths (`diagram`, `chart.dashboard`, `motion.video`, `motion.spec`, `motion.poster`, `image.src`) are relative to `explainer.json`, must stay inside its folder and cannot be symlinks. Charts read local files only; a dashboard with a Postgres or MySQL source is refused.
 
 ## Example
 

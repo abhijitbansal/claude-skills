@@ -39,11 +39,12 @@ any agent that can run shell commands. Nothing leaves your machine.
 
 ```bash
 cd make-explainer && npm ci --omit=dev && cd -        # one-time
-node make-explainer/scripts/gather.mjs git --base main > facts.json
+node make-explainer/scripts/gather.mjs git > facts.json
 node make-explainer/scripts/scaffold.mjs recap --facts facts.json > explainer.json
 # replace every "TODO: ..." in explainer.json with real prose, then:
 node make-explainer/scripts/validate.mjs explainer.json
 node make-explainer/scripts/build.mjs    explainer.json
+node make-explainer/scripts/check.mjs    ~/.agent/diagrams/<name>.html   # optional; skips when no browser is installed
 ```
 
 Or just ask your agent: *"Recap this branch with a manual test checklist."* It
@@ -68,8 +69,11 @@ page, so keep the two together.
 - `motion` sections that point at an existing `.mp4` need nothing more. Rendering
   a make-motion `spec` also needs the optional **`make-motion`** skill beside it,
   ffmpeg and Chromium; `PA_MOTION_TIMEOUT_MS` bounds the render.
-- A headless browser is only used by this skill's own tests (Playwright is a
-  dev dependency).
+- No browser is needed to validate or build. Only `scripts/check.mjs` (an optional
+  headless check of the built page at 1280 and 390 px) and this skill's browser
+  tests use one. Playwright is a dev dependency, so `check.mjs` needs a full
+  `npm ci` plus a Chromium or Chrome (`npx playwright install chromium`); without
+  either it skips cleanly and says so.
 
 ## Sections
 

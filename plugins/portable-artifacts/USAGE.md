@@ -23,7 +23,7 @@ plugin is, read the [README](README.md). For every spec field, see each skill's
 | GitHub Copilot CLI / VS Code | `node <repo>/plugins/portable-artifacts/bin/install.mjs copilot` (add `--project .` for `.github/skills`) | `/make-dashboard …`, `/make-diagram …`, `/make-explainer …`, `/make-motion …` |
 | Gemini CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs gemini` | `/make-dashboard …` (a TOML command that activates the skill) |
 | Any agent `npx skills` supports | `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion` (pick agents interactively, or pass `-a claude-code codex github-copilot -y`). It does not resolve dependencies: to get just the explainer, name its two required skills too, `--skill make-explainer make-diagram make-dashboard` | That agent's skill invocation |
-| Any other agent | Copy `skills/make-dashboard`, `skills/make-diagram`, `skills/make-explainer` and/or `skills/make-motion` into your project (**make-explainer needs make-diagram and make-dashboard beside it**) **with each skill's `shared/` folder**, run `npm ci` in each (`npm ci --omit=dev` for make-dashboard, make-diagram and make-explainer), and point `AGENTS.md` at their `SKILL.md` | Ask for a dashboard, a diagram or a video |
+| Any other agent | Copy `skills/make-dashboard`, `skills/make-diagram`, `skills/make-explainer` and/or `skills/make-motion` into your project (**make-explainer needs make-diagram and make-dashboard beside it**) **with each skill's `shared/` folder**, run `npm ci` in each (`npm ci --omit=dev` for make-dashboard, make-diagram and make-explainer), and point `AGENTS.md` at their `SKILL.md` | Ask for a dashboard, a diagram, an explainer or a video |
 
 `<repo>` is a clone of `https://github.com/abhijitbansal/claude-skills`. The
 installer runs `npm ci` for you. Pass `--link` to symlink to the clone (then
@@ -175,12 +175,12 @@ for the login change", "turn this plan into a one-page explainer")
 **What the agent does** (commands are `node <skill-dir>/scripts/…`, run from
 your project folder):
 
-1. For a branch, `gather.mjs git --base main > facts.json` reads the committed
+1. For a branch, `gather.mjs git > facts.json` reads the committed
    work: commits, files changed with line counts and renames, test files and
    the date. `--repo <folder>` reads another checkout; `--base` defaults to
-   `main` or `master`.
+   `main`, then `master`, preferring origin's copy when it is ahead.
 2. `scaffold.mjs recap --facts facts.json > explainer.json` writes a starter
-   file (also `checklist`, `concept` and `slides`; the last two need no facts).
+   file (also `checklist`, `concept` and `slides`). `concept` and `slides` take no facts. Without `--facts`, `recap` is a shorter skeleton (tl;dr, how it works, risks: no numbers, files or timeline) and `checklist` has one TODO area group plus the regression group.
    The numbers, file list, timeline and checklist groups are filled in; every
    sentence is a `TODO: …` string. With no preset, the agent writes the file
    from the section list.
@@ -189,7 +189,7 @@ your project folder):
 4. `validate.mjs explainer.json` checks the schema and limits, file references,
    the embedded diagrams and charts, and the prose rules. It fails on leftover
    `TODO:` text, emoji, filler phrases ("leverage", "seamless", "delve"), titles
-   that start with a number or end in `!`, and (for slides) a slide with more
+   numbered like `01` or ending in `!`, and (for slides) a slide with more
    than 6 points, 8 table rows, 12 code lines or 80 words. Each line is a JSON
    path, the problem and the fix; paragraphs over 120 words only warn.
 5. `build.mjs explainer.json` writes one HTML file and prints its path. The
@@ -197,7 +197,13 @@ your project folder):
    `--out file.html` or `--out dir`). `--theme paper|blueprint|ink|editorial`
    overrides the spec's theme. A video or an interactive chart adds a
    `<name>.assets/` folder beside the page: keep them together.
-6. Tells you the path and what the page shows.
+6. Optionally runs `check.mjs <page>`, which opens the page at 1280 and 390 px and
+   fails on console errors or warnings, sideways scrolling, a deck that cannot
+   reach its last slide with the arrow keys, or a diagram Present overlay that
+   will not close on Esc. It needs Playwright and a browser (a full `npm ci` plus
+   `npx playwright install chromium` in the skill folder); without them it prints
+   `check: skipped` and exits 0.
+7. Tells you the path and what the page shows.
 
 **Presets:** `recap` (tl;dr, numbers, how it works, files changed, timeline,
 risks), `checklist` (a group per area of changed files, a regression group, an
@@ -322,7 +328,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `dashboard: source "x" is postgres, a network source; explainer charts read local files only` | A build never uses the network. Export the query to CSV or Parquet and point a file source at it |
 | `gather.mjs` prints `… is not a git repository` or `base "x" does not exist` (with the branches that do) | Pass `--repo <folder inside the repository>` and a real `--base <branch>` |
 | `make-motion cannot render this spec: it needs ffmpeg and a Chromium browser` | Install both (see the README requirements), or render the clip first and use `video` with the `.mp4` |
-| `check: skipped (no browser: …)` from make-diagram | Expected without Playwright or Chromium; the page is still built. To run the check: `npm ci` then `npx playwright install chromium` inside the skill folder |
+| `check: skipped (no browser: …)` from make-diagram or make-explainer | Expected without Playwright or Chromium; the page is still built. To run the check: `npm ci` then `npx playwright install chromium` inside the skill folder |
 | `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |
 | `kokoro-js is not installed` | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (voiceover only; `npm ci` removes it) |
 | `audio[0].src: ffmpeg cannot decode …` | The file is not a valid audio file. Re-export it as mp3 or wav |

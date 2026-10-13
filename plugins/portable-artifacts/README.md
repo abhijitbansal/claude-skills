@@ -127,7 +127,7 @@ To build a dashboard, a diagram, an explainer page or an animated video, read an
 |---|---|---|---|---|
 | Node.js ≥ 20 | ✓ | ✓ | ✓ | ✓ |
 | `npm ci` in the skill folder (once; `--omit=dev` is enough for make-dashboard, make-diagram and make-explainer) | ✓ | ✓ | ✓ | ✓ |
-| Other skills beside it | — | — | make-diagram and make-dashboard (required for diagram, chart and icon sections); make-motion only to render a motion spec | — |
+| Other skills beside it | — | — | make-diagram and make-dashboard (required for diagram and chart sections and for card icons); make-motion only to render a motion spec | — |
 | `git` on `PATH` | — | — | only for `gather.mjs` | — |
 | Chromium for frame capture (once, ≈150 MB) | — | optional: only `check.mjs` (needs a full `npm ci`, not `--omit=dev`, plus `npx playwright install chromium` in the skill folder); build needs no browser, and `check.mjs` skips cleanly without one | none to build; only a motion section that renders a spec needs make-motion's Chromium | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) |
 | ffmpeg on `PATH` | — | — | only to render a motion spec | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 4.4 for audio tracks) |

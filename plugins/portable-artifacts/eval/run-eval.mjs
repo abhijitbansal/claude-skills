@@ -3,11 +3,10 @@
 // workdir, then score the result (spec written, valid, validate retries,
 // build/contact-sheet ok, time). See eval/README.md.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { SKILLS, buildPrompt, expandCmd, run, scoreRun, summarize, linkNodeModules, createFixtureRepo } from './lib.mjs';
+import { SKILLS, buildPrompt, expandCmd, run, scoreRun, summarize, prepareWorkdir } from './lib.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { values: opts } = parseArgs({
@@ -68,35 +67,9 @@ const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const resultsDir = path.resolve(opts.out ?? path.join(here, 'results', stamp), `${opts.host}-${opts.skill}`);
 fs.mkdirSync(resultsDir, { recursive: true });
 
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', 'test']);
-
-// Copy a skill into <work>/skills/<name> without node_modules, which is linked back to the original.
-function copySkill(src, work) {
-  const dst = path.join(work, 'skills', path.basename(src));
-  fs.cpSync(src, dst, {
-    recursive: true,
-    filter: (from) => !path.relative(src, from).split(path.sep).some((seg) => SKIP_DIRS.has(seg)),
-  });
-  linkNodeModules(path.join(src, 'node_modules'), path.join(dst, 'node_modules'));
-}
-
-function prepareWorkdir(p) {
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), `pa-eval-${p.id}-`));
-  for (const src of [skillSrc, ...siblingDirs]) copySkill(src, work);
-  if (p.repo) createFixtureRepo(path.join(work, 'repo'));
-  fs.cpSync(path.join(here, 'fixtures', 'data'), path.join(work, 'data'), { recursive: true });
-  let seedSpec = null;
-  if (p.seed) {
-    const seedPath = path.join(here, 'fixtures', p.seed);
-    fs.copyFileSync(seedPath, path.join(work, skillCfg.spec));
-    seedSpec = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
-  }
-  return { work, seedSpec };
-}
-
 const rows = [];
 for (const p of prompts) {
-  const { work, seedSpec } = prepareWorkdir(p);
+  const { work, seedSpec } = prepareWorkdir(p, { skillCfg, skillsRoot: path.resolve(here, '../skills'), evalDir: here });
   const prompt = buildPrompt(skillCfg, p.prompt);
   const argv = expandCmd(host, { prompt, cwd: work, model: opts.model });
   process.stdout.write(`▶ ${p.id} (${work})\n`);

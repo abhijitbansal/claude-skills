@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SKILLS, buildPrompt, expandCmd, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules, createFixtureRepo } from '../lib.mjs';
+import { SKILLS, buildPrompt, expandCmd, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules, createFixtureRepo, prepareWorkdir } from '../lib.mjs';
 
 const made = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-eval-test-')); made.push(d); return d; };
@@ -261,4 +261,50 @@ test('createFixtureRepo builds a branch the gather script can read: commits, fil
   assert.equal(facts.commits.length, 3);
   assert.deepEqual(facts.files.map((f) => f.path).sort(), ['docs/search.md', 'src/search.js', 'test/search.test.js']);
   assert.deepEqual(facts.tests, ['test/search.test.js']);
+});
+
+const prepare = (p, skillCfg) => prepareWorkdir(p, { skillCfg, skillsRoot, evalDir, tmpDir: tmp() });
+const skillsRoot = skillsDir;
+
+test('prepareWorkdir (explainer): the skill and both siblings sit side by side with linked node_modules', () => {
+  const { work, seedSpec } = prepare({ id: 'plain', prompt: 'x' }, SKILLS.explainer);
+  assert.equal(seedSpec, null);
+  for (const name of ['make-explainer', 'make-diagram', 'make-dashboard']) {
+    const dir = path.join(work, 'skills', name);
+    assert.ok(fs.existsSync(path.join(dir, 'SKILL.md')), `${name} was copied`);
+    assert.ok(fs.lstatSync(path.join(dir, 'node_modules')).isDirectory() && !fs.lstatSync(path.join(dir, 'node_modules')).isSymbolicLink(), `${name} has a real node_modules folder`);
+    assert.ok(fs.lstatSync(path.join(dir, 'node_modules/ajv')).isSymbolicLink(), `${name} node_modules entries are links to the source`);
+  }
+  assert.equal(fs.existsSync(path.join(work, 'skills/make-motion')), false, 'make-motion is not part of the explainer eval');
+  assert.equal(fs.existsSync(path.join(work, 'skills/make-explainer/test')), false, 'the skill\'s tests are not copied');
+  assert.ok(fs.existsSync(path.join(work, 'data/sales.csv')));
+  assert.equal(fs.existsSync(path.join(work, 'repo')), false, 'no repo unless the prompt asks');
+  assert.equal(fs.existsSync(path.join(work, 'explainer.json')), false, 'no seed unless the prompt has one');
+});
+
+test('prepareWorkdir: a repo prompt gets ./repo that make-explainer can gather, a seed prompt gets the seed spec', async () => {
+  const { work } = prepare({ id: 'recap', repo: true, prompt: 'x' }, SKILLS.explainer);
+  assert.ok(fs.existsSync(path.join(work, 'repo/.git')));
+  const r = await run(['node', path.join(work, 'skills/make-explainer/scripts/gather.mjs'), 'git', '--repo', path.join(work, 'repo'), '--json'], { env: { EVAL_LOG: '' } });
+  assert.equal(r.code, 0, r.out);
+  assert.equal(JSON.parse(r.out.trim().split('\n').pop()).commits.length, 3);
+  const seeded = prepare({ id: 'edit', seed: 'seeds/explainer.json', prompt: 'x' }, SKILLS.explainer);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(seeded.work, 'explainer.json'), 'utf8')), seeded.seedSpec);
+  assert.equal(seeded.seedSpec.preset, 'concept');
+});
+
+test('prepareWorkdir: a skill without siblings gets only itself', () => {
+  const { work } = prepare({ id: 'dash', prompt: 'x' }, SKILLS.diagram);
+  assert.deepEqual(fs.readdirSync(path.join(work, 'skills')), ['make-diagram']);
+});
+
+test('createFixtureRepo says what to upgrade when git cannot init a branch name', () => {
+  const dir = path.join(tmp(), 'repo');
+  const bogus = tmp();
+  fs.writeFileSync(path.join(bogus, 'git'), '#!/bin/sh\necho "unknown switch b" >&2\nexit 129\n', { mode: 0o755 });
+  const prev = process.env.PATH;
+  process.env.PATH = `${bogus}${path.delimiter}${prev}`;
+  try {
+    assert.throws(() => createFixtureRepo(dir), /git init .*failed: unknown switch b \(git 2\.28 or newer is needed for init -b\)/);
+  } finally { process.env.PATH = prev; }
 });
