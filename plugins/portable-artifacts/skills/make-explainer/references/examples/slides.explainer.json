@@ -44,7 +44,7 @@
         { "title": "Write the outline", "text": "Typed sections in one JSON file." },
         { "title": "Validate it", "text": "Schema, file references and prose rules." },
         { "title": "Render it", "text": "Themed HTML with fonts and script inlined." },
-        { "title": "Look at it", "text": "A headless check opens the result and reports problems." }
+        { "title": "Open it", "text": "One file: open it in a browser, or print it to PDF." }
       ]
     },
     {
@@ -103,8 +103,8 @@
     },
     {
       "type": "text",
-      "title": "Next, the diagram, chart and video sections land in the deck too",
-      "text": "- Diagram and chart sections reuse the sibling skills.\n- Video sections link a clip made by make-motion.\n- The headless check will open every slide."
+      "title": "Diagrams, charts and videos fit on a slide too",
+      "text": "- A diagram section draws a make-diagram figure with hover tracing and a Present mode.\n- A chart section draws a make-dashboard chart as a static image with a data table.\n- A motion section plays a clip, like the one on slide 4, and never autoplays."
     }
   ]
 }

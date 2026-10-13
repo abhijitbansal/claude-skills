@@ -1,15 +1,16 @@
 # portable-artifacts
 
-**Dashboards, diagrams and animated explainers from a prompt — built locally, offline,
+**Dashboards, diagrams, explainer pages and animated videos from a prompt — built locally, offline,
 from open-source parts, by any coding agent.**
 
-Three agent skills that do what hosted "artifact" features do, without a cloud,
+Four agent skills that do what hosted "artifact" features do, without a cloud,
 an account or a particular model:
 
 | Skill | You say | You get |
 |---|---|---|
 | [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + charts (11 kinds, alternate views, a sortable Table, PNG/SVG/CSV export, four themes). Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh, or `serve.mjs --watch` for live reload — no LLM involved. |
 | [`make-diagram`](skills/make-diagram/) | "Draw the checkout request path from the browser to the orders DB" | One self-contained HTML diagram (architecture, flowchart, sequence or state) laid out with ELK: zoom, hover tracing, a step-by-step presentation mode and export. The agent writes a small JSON topology; scripts do the rest. |
+| [`make-explainer`](skills/make-explainer/) | "Recap this branch with a manual test checklist" | One self-contained HTML page or slide deck made of typed sections (verdict, numbers, files changed, timeline, risks, comparisons, tick-and-remember checklists, slides), with make-diagram figures, make-dashboard charts and make-motion clips embedded when asked. A script reads the git branch for the facts; the agent writes the prose; a linter rejects emoji, filler phrases and leftover placeholders before the page is built. |
 | [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. Silent unless you ask for sound: `audio` tracks (music, voiceover, SFX) are added only when the prompt asks, and narration is synthesised locally with Kokoro. "Slow scene 2" changes one field, not the whole video. |
 
 [**See them in action**](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#showcase): a real dashboard and video an agent generated from one prompt each, with the prompts and specs.
@@ -50,9 +51,9 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
 /plugin install portable-artifacts@claude-skills
 ```
 
-Then ask for a dashboard, a diagram or a video, or call the skill directly:
-`/make-dashboard …`, `/make-diagram …` or `/make-motion …`. On first use the agent runs the
-one-time `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboard and make-diagram).
+Then ask for a dashboard, a diagram, an explainer or a video, or call the skill directly:
+`/make-dashboard …`, `/make-diagram …`, `/make-explainer …` or `/make-motion …`. On first use the agent runs the
+one-time `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboard, make-diagram and make-explainer).
 
 ### Any agent, with `npx skills`
 
@@ -67,7 +68,22 @@ npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram m
 
 It copies the folders but doesn't install their dependencies, so the agent
 runs `npm ci` inside each skill folder on first use (the SKILL.md tells it
-to; make-dashboard and make-diagram need only `npm ci --omit=dev`).
+to; make-dashboard, make-diagram and make-explainer need only `npm ci --omit=dev`).
+
+**`make-explainer` needs `make-diagram` and `make-dashboard` next to it** to
+draw diagrams, charts and card icons (and `make-motion` to render a motion spec;
+an existing `.mp4` needs nothing). `npx skills add` does not resolve
+dependencies, so name them:
+
+```bash
+npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram make-dashboard
+```
+
+If you forget, the first section that needs a missing skill fails validation
+with that exact command. `bin/install.mjs` (below) does resolve them: it reads
+`portableArtifacts.requires` from the skill's `package.json` and installs
+`make-diagram` and `make-dashboard` before `make-explainer`, whether or not you
+named them. `make-motion` is optional and is installed only if you ask for it.
 
 ### Codex, GitHub Copilot, Gemini CLI (or Claude Code without the marketplace)
 
@@ -91,27 +107,31 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs copilot --project 
 
 Flags: `--skills make-motion` (just one), `--link` (symlink to this checkout
 so `git pull` updates it), `--force` (replace an existing install),
-`--no-deps` (skip `npm ci`).
+`--no-deps` (skip `npm ci`). Asking for `--skills make-explainer` installs its
+required skills too.
 
 **Any other agent** that can read files and run shell commands: copy a skill
 folder into your project **together with its `shared/` folder** (it sits inside
 the skill folder, so copy the folder whole), run `npm ci` inside it
-(`npm ci --omit=dev` for make-dashboard and make-diagram), and add one line to your
+(`npm ci --omit=dev` for make-dashboard, make-diagram and make-explainer; copy
+`make-diagram` and `make-dashboard` too if you use make-explainer), and add one line to your
 `AGENTS.md` (or `.github/copilot-instructions.md`):
 
 ```markdown
-To build a dashboard, a diagram or an animated explainer, read and follow skills/make-dashboard/SKILL.md, skills/make-diagram/SKILL.md or skills/make-motion/SKILL.md.
+To build a dashboard, a diagram, an explainer page or an animated video, read and follow skills/make-dashboard/SKILL.md, skills/make-diagram/SKILL.md, skills/make-explainer/SKILL.md or skills/make-motion/SKILL.md.
 ```
 
 ### Requirements
 
-| | make-dashboard | make-diagram | make-motion |
-|---|---|---|---|
-| Node.js ≥ 20 | ✓ | ✓ | ✓ |
-| `npm ci` in the skill folder (once; `--omit=dev` is enough for make-dashboard and make-diagram) | ✓ | ✓ | ✓ |
-| Chromium for frame capture (once, ≈150 MB) | — | optional: only `check.mjs` (needs a full `npm ci`, not `--omit=dev`, plus `npx playwright install chromium` in the skill folder); build needs no browser, and `check.mjs` skips cleanly without one | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) |
-| ffmpeg on `PATH` | — | — | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 4.4 for audio tracks) |
-| kokoro-js (voiceover only, on demand) | — | — | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (≈250 MB) plus a one-time 90 MB voice model download; the agent asks first |
+| | make-dashboard | make-diagram | make-explainer | make-motion |
+|---|---|---|---|---|
+| Node.js ≥ 20 | ✓ | ✓ | ✓ | ✓ |
+| `npm ci` in the skill folder (once; `--omit=dev` is enough for make-dashboard, make-diagram and make-explainer) | ✓ | ✓ | ✓ | ✓ |
+| Other skills beside it | — | — | make-diagram and make-dashboard (required for diagram, chart and icon sections); make-motion only to render a motion spec | — |
+| `git` on `PATH` | — | — | only for `gather.mjs` | — |
+| Chromium for frame capture (once, ≈150 MB) | — | optional: only `check.mjs` (needs a full `npm ci`, not `--omit=dev`, plus `npx playwright install chromium` in the skill folder); build needs no browser, and `check.mjs` skips cleanly without one | none to build; only a motion section that renders a spec needs make-motion's Chromium | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) |
+| ffmpeg on `PATH` | — | — | only to render a motion spec | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 4.4 for audio tracks) |
+| kokoro-js (voiceover only, on demand) | — | — | — | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (≈250 MB) plus a one-time 90 MB voice model download; the agent asks first |
 
 Install make-motion's tools per OS (run the Chromium download inside the
 make-motion skill folder, so it matches the Playwright version `npm ci` installed):

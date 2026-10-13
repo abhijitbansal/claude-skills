@@ -18,7 +18,7 @@ auto-resume** orchestrator that keeps overnight runs alive (`second-wind`),
 | `linear-pm` | Linear PM conventions + 6 `/linear-*` commands, including `/linear-pick` autonomous issue pickup |
 | `core-workflow` | commit flow, skill contribution, image-parser + web-researcher agents, shellcheck-on-edit hook |
 | `second-wind` | usage-limit-aware overnight orchestrator (`wind` CLI + skill wrapper) |
-| `portable-artifacts` | `/make-dashboard` (data file → offline HTML dashboard, per-chart SQL), `/make-diagram` (prompt → offline HTML diagram with zoom and a presentation mode) and `/make-motion` (prompt → preview + MP4, silent unless you ask for sound, then music from your file or a locally synthesised voiceover); cross-host installer for Codex, Copilot, Gemini |
+| `portable-artifacts` | `/make-dashboard` (data file → offline HTML dashboard, per-chart SQL), `/make-diagram` (prompt → offline HTML diagram with zoom and a presentation mode), `/make-explainer` (branch recap, concept page, test checklist or slide deck as one offline HTML file) and `/make-motion` (prompt → preview + MP4, silent unless you ask for sound, then music from your file or a locally synthesised voiceover); cross-host installer for Codex, Copilot, Gemini |
 | `prompt-craft` | rough ask → deterministic spec (`/improve-prompt`, `/plan`), debug/refactor/review lenses, git-aware Stop hook + opt-in secret/format guardrails |
 | `test-board` | band above the prompt: passed/failed/skipped after every test run, next to the previous run of the same suite in the same worktree |
 | `session-compass` | what each session is building, where it stands and what it produced: compass band, `/compass` pane, `compass_status` tool |
@@ -118,7 +118,7 @@ need `npm ci` in each skill folder. Their own installer does that and covers Gem
 project-scoped installs too:
 `node plugins/portable-artifacts/bin/install.mjs <claude|codex|copilot|gemini|agents> [--project .]`
 — see [plugins/portable-artifacts/USAGE.md](plugins/portable-artifacts/USAGE.md).
-With [`npx skills`](https://github.com/vercel-labs/skills): `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion`.
+With [`npx skills`](https://github.com/vercel-labs/skills): `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion`. That does not resolve dependencies: `make-explainer` needs `make-diagram` and `make-dashboard` installed beside it, so name them as shown.
 
 ### Cartoon (token-optimized CLI output)
 

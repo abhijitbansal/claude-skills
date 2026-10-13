@@ -1,7 +1,8 @@
 // Pure-ish helpers for the cross-host eval runner. Kept separate from the CLI
 // so scoring can be tested with a fake host and no LLM.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 export const SKILLS = {
@@ -26,7 +27,59 @@ export const SKILLS = {
     outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/build.mjs'), spec, '--out', path.join(work, 'out/diagram.html')],
     artifacts: ['out/diagram.html'],
   },
+  explainer: {
+    dir: 'make-explainer',
+    spec: 'explainer.json',
+    // Sibling skills are copied next to it: make-explainer resolves them as ../<name> and loads them lazily.
+    // make-motion is left out: motion sections need ffmpeg and Chromium, and no prompt asks for one.
+    siblings: ['make-diagram', 'make-dashboard'],
+    // Build into <work>/out; success = out/explainer.html exists.
+    outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/build.mjs'), spec, '--out', path.join(work, 'out/explainer.html')],
+    artifacts: ['out/explainer.html'],
+  },
 };
+
+// A prompt with `"repo": true` gets a small git repository at <work>/repo: `main`, then the branch
+// feat/search with three commits (one adds a test file). Git runs with argument arrays and a scrubbed
+// environment, so the developer's own git config (signing, hooks, templates) cannot change the result.
+export function createFixtureRepo(dir) {
+  const env = {
+    ...process.env,
+    GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_SYSTEM: os.devNull,
+    GIT_AUTHOR_NAME: 'Eval Author', GIT_AUTHOR_EMAIL: 'author@example.com',
+    GIT_COMMITTER_NAME: 'Eval Author', GIT_COMMITTER_EMAIL: 'author@example.com',
+  };
+  for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) delete env[k];
+  const git = (...args) => {
+    const r = spawnSync('git', ['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: dir, encoding: 'utf8', env });
+    if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr}`);
+  };
+  const write = (rel, content) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), content);
+  };
+  let day = 1;
+  const commit = (message) => {
+    const when = `2026-10-${String(day++).padStart(2, '0')}T12:00:00Z`;
+    git('add', '-A');
+    env.GIT_AUTHOR_DATE = when;
+    env.GIT_COMMITTER_DATE = when;
+    git('commit', '-q', '-m', message);
+  };
+  fs.mkdirSync(dir, { recursive: true });
+  git('init', '-q', '-b', 'main');
+  write('README.md', '# notes-app\n\nA small notes service.\n');
+  write('src/notes.js', 'export const notes = [];\nexport const add = (text) => notes.push(text);\n');
+  commit('chore: start the notes app');
+  git('checkout', '-q', '-b', 'feat/search');
+  write('src/search.js', 'import { notes } from "./notes.js";\nexport const search = (q) => notes.filter((n) => n.includes(q));\n');
+  commit('feat: search notes by text');
+  write('src/search.js', 'import { notes } from "./notes.js";\nexport const search = (q) => notes.filter((n) => n.toLowerCase().includes(q.toLowerCase()));\n');
+  write('docs/search.md', 'Search is case-insensitive.\n');
+  commit('fix: make search case-insensitive');
+  write('test/search.test.js', 'import test from "node:test";\nimport assert from "node:assert/strict";\nimport { search } from "../src/search.js";\ntest("empty store", () => assert.deepEqual(search("x"), []));\n');
+  commit('test: cover search on an empty store');
+}
 
 export function buildPrompt(skillCfg, task) {
   return [

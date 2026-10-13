@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { SKILLS, buildPrompt, expandCmd, run, scoreRun, summarize, linkNodeModules } from './lib.mjs';
+import { SKILLS, buildPrompt, expandCmd, run, scoreRun, summarize, linkNodeModules, createFixtureRepo } from './lib.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { values: opts } = parseArgs({
@@ -23,7 +23,7 @@ const { values: opts } = parseArgs({
 });
 
 function usage(msg) {
-  process.stderr.write(`${msg}\nusage: node eval/run-eval.mjs --skill dashboard|motion|diagram --host <${Object.keys(JSON.parse(fs.readFileSync(path.join(here, 'hosts.json'), 'utf8'))).join('|')}> [--model m] [--limit n] [--only id,id] [--timeout sec] [--out dir]\n`);
+  process.stderr.write(`${msg}\nusage: node eval/run-eval.mjs --skill ${Object.keys(SKILLS).join('|')} --host <${Object.keys(JSON.parse(fs.readFileSync(path.join(here, 'hosts.json'), 'utf8'))).join('|')}> [--model m] [--limit n] [--only id,id] [--timeout sec] [--out dir]\n`);
   process.exit(2);
 }
 
@@ -40,9 +40,12 @@ if (check.code !== 0) {
 }
 
 const skillSrc = path.resolve(here, '../skills', skillCfg.dir);
-if (!fs.existsSync(path.join(skillSrc, 'node_modules'))) {
-  process.stderr.write(`run "npm ci" in ${skillSrc} first\n`);
-  process.exit(2);
+const siblingDirs = (skillCfg.siblings ?? []).map((name) => path.resolve(here, '../skills', name));
+for (const src of [skillSrc, ...siblingDirs]) {
+  if (!fs.existsSync(path.join(src, 'node_modules'))) {
+    process.stderr.write(`run "npm ci" in ${src} first\n`);
+    process.exit(2);
+  }
 }
 
 let prompts = JSON.parse(fs.readFileSync(path.join(here, 'prompts', `${opts.skill}.json`), 'utf8'));
@@ -67,14 +70,20 @@ fs.mkdirSync(resultsDir, { recursive: true });
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', 'test']);
 
+// Copy a skill into <work>/skills/<name> without node_modules, which is linked back to the original.
+function copySkill(src, work) {
+  const dst = path.join(work, 'skills', path.basename(src));
+  fs.cpSync(src, dst, {
+    recursive: true,
+    filter: (from) => !path.relative(src, from).split(path.sep).some((seg) => SKIP_DIRS.has(seg)),
+  });
+  linkNodeModules(path.join(src, 'node_modules'), path.join(dst, 'node_modules'));
+}
+
 function prepareWorkdir(p) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), `pa-eval-${p.id}-`));
-  const skillDst = path.join(work, 'skills', skillCfg.dir);
-  fs.cpSync(skillSrc, skillDst, {
-    recursive: true,
-    filter: (src) => !path.relative(skillSrc, src).split(path.sep).some((seg) => SKIP_DIRS.has(seg)),
-  });
-  linkNodeModules(path.join(skillSrc, 'node_modules'), path.join(skillDst, 'node_modules'));
+  for (const src of [skillSrc, ...siblingDirs]) copySkill(src, work);
+  if (p.repo) createFixtureRepo(path.join(work, 'repo'));
   fs.cpSync(path.join(here, 'fixtures', 'data'), path.join(work, 'data'), { recursive: true });
   let seedSpec = null;
   if (p.seed) {

@@ -141,7 +141,7 @@ diagram.json --validate.mjs--> errors (path, message, did-you-mean)
   - **Export:** SVG and PNG, filled with the theme surface (same rule as make-dashboard).
   - **Theme:** the shared theme CSS and fonts, plus the `Theme:` toggle stored in `localStorage` (blocked storage tolerated).
 - **Output:** `--out <file.html | dir>`; default `${PA_OUTPUT_DIR:-~/.agent/diagrams}/<slug-of-title>.html`. The build prints the absolute path and a `file://` URL.
-- **Embedding API (for make-explainer):** `scripts/lib/api.mjs` exports `buildDiagram(spec, { theme }) -> { svg, width, height, steps, ids }` (SVG uses CSS variables and classes, no fonts) and `viewerRuntime() -> string` (the hover/present/animate script without toolbar chrome). Stable contract; tested.
+- **Embedding API (for make-explainer):** `scripts/lib/api.mjs` exports `buildDiagram(spec, { theme }) -> { svg, width, height, steps, ids }` (SVG uses CSS variables and classes, no fonts) `viewerRuntime() -> string` (the hover/present/animate script without toolbar chrome) and `validateSpec(spec, { layout }) -> { ok, errors }` (re-exported from `spec.mjs`: the same checks `buildDiagram` runs, for callers that only validate, such as make-explainer's `validate`). Stable contract; tested.
 
 ## Skill files
 

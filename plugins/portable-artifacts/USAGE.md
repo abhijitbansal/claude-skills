@@ -7,30 +7,34 @@ plugin is, read the [README](README.md). For every spec field, see each skill's
 - [1. Install](#1-install)
 - [2. Dashboards with make-dashboard](#2-dashboards-with-make-dashboard)
 - [3. Diagrams with make-diagram](#3-diagrams-with-make-diagram)
-- [4. Videos with make-motion](#4-videos-with-make-motion)
-- [5. Asking for changes](#5-asking-for-changes)
-- [6. Hosts that can't run commands](#6-hosts-that-cant-run-commands)
-- [7. Troubleshooting](#7-troubleshooting)
-- [8. Checking a new host or model](#8-checking-a-new-host-or-model)
+- [4. Explainers with make-explainer](#4-explainers-with-make-explainer)
+- [5. Videos with make-motion](#5-videos-with-make-motion)
+- [6. Asking for changes](#6-asking-for-changes)
+- [7. Hosts that can't run commands](#7-hosts-that-cant-run-commands)
+- [8. Troubleshooting](#8-troubleshooting)
+- [9. Checking a new host or model](#9-checking-a-new-host-or-model)
 
 ## 1. Install
 
 | You use | Do this | Then call |
 |---|---|---|
-| Claude Code | `/plugin marketplace add abhijitbansal/claude-skills` then `/plugin install portable-artifacts@claude-skills` | `/make-dashboard …`, `/make-diagram …`, `/make-motion …`, or just ask |
-| Codex CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs codex` | `$make-dashboard …`, `$make-diagram …`, `$make-motion …` (or pick from `/skills`) |
-| GitHub Copilot CLI / VS Code | `node <repo>/plugins/portable-artifacts/bin/install.mjs copilot` (add `--project .` for `.github/skills`) | `/make-dashboard …`, `/make-diagram …`, `/make-motion …` |
+| Claude Code | `/plugin marketplace add abhijitbansal/claude-skills` then `/plugin install portable-artifacts@claude-skills` | `/make-dashboard …`, `/make-diagram …`, `/make-explainer …`, `/make-motion …`, or just ask |
+| Codex CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs codex` | `$make-dashboard …`, `$make-diagram …`, `$make-explainer …`, `$make-motion …` (or pick from `/skills`) |
+| GitHub Copilot CLI / VS Code | `node <repo>/plugins/portable-artifacts/bin/install.mjs copilot` (add `--project .` for `.github/skills`) | `/make-dashboard …`, `/make-diagram …`, `/make-explainer …`, `/make-motion …` |
 | Gemini CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs gemini` | `/make-dashboard …` (a TOML command that activates the skill) |
-| Any agent `npx skills` supports | `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion` (pick agents interactively, or pass `-a claude-code codex github-copilot -y`) | That agent's skill invocation |
-| Any other agent | Copy `skills/make-dashboard`, `skills/make-diagram` and/or `skills/make-motion` into your project **with each skill's `shared/` folder**, run `npm ci` in each (`npm ci --omit=dev` for make-dashboard and make-diagram), and point `AGENTS.md` at their `SKILL.md` | Ask for a dashboard, a diagram or a video |
+| Any agent `npx skills` supports | `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion` (pick agents interactively, or pass `-a claude-code codex github-copilot -y`). It does not resolve dependencies: to get just the explainer, name its two required skills too, `--skill make-explainer make-diagram make-dashboard` | That agent's skill invocation |
+| Any other agent | Copy `skills/make-dashboard`, `skills/make-diagram`, `skills/make-explainer` and/or `skills/make-motion` into your project (**make-explainer needs make-diagram and make-dashboard beside it**) **with each skill's `shared/` folder**, run `npm ci` in each (`npm ci --omit=dev` for make-dashboard, make-diagram and make-explainer), and point `AGENTS.md` at their `SKILL.md` | Ask for a dashboard, a diagram or a video |
 
 `<repo>` is a clone of `https://github.com/abhijitbansal/claude-skills`. The
 installer runs `npm ci` for you. Pass `--link` to symlink to the clone (then
 `git pull` updates the skills), `--skills make-motion` to install just one, or
-`--force` to replace an existing install.
+`--force` to replace an existing install. A skill's required skills come with it:
+`--skills make-explainer` also installs make-diagram and make-dashboard (the
+`portableArtifacts.requires` list in its `package.json`). make-motion is
+optional for the explainer and is only installed if you name it.
 
 The repo-wide `adapters/install.sh codex|copilot` symlinks *every* skill in
-this repo, these three included. Only `install.mjs` also runs `npm ci`, supports
+this repo, these four included. Only `install.mjs` also runs `npm ci`, supports
 project scope and writes the Gemini commands.
 
 For **make-motion**, also run the one-time `npx playwright install chromium`
@@ -158,7 +162,81 @@ nodes per diagram reads best. Past that, ask for two diagrams. Hard limits are
 kinds and icons in `references/kinds.md`, and one working file per type in
 `references/examples/`.
 
-## 4. Videos with make-motion
+## 4. Explainers with make-explainer
+
+**Ask:**
+
+> Recap this branch for review, with a manual test checklist for the parts a
+> person still has to try.
+
+(or "explain how our cache works as a five-slide deck", "make a test checklist
+for the login change", "turn this plan into a one-page explainer")
+
+**What the agent does** (commands are `node <skill-dir>/scripts/…`, run from
+your project folder):
+
+1. For a branch, `gather.mjs git --base main > facts.json` reads the committed
+   work: commits, files changed with line counts and renames, test files and
+   the date. `--repo <folder>` reads another checkout; `--base` defaults to
+   `main` or `master`.
+2. `scaffold.mjs recap --facts facts.json > explainer.json` writes a starter
+   file (also `checklist`, `concept` and `slides`; the last two need no facts).
+   The numbers, file list, timeline and checklist groups are filled in; every
+   sentence is a `TODO: …` string. With no preset, the agent writes the file
+   from the section list.
+3. The agent reads the changed files and replaces each `TODO:` with prose.
+   Section titles state the finding ("Search now ignores case"), not a label.
+4. `validate.mjs explainer.json` checks the schema and limits, file references,
+   the embedded diagrams and charts, and the prose rules. It fails on leftover
+   `TODO:` text, emoji, filler phrases ("leverage", "seamless", "delve"), titles
+   that start with a number or end in `!`, and (for slides) a slide with more
+   than 6 points, 8 table rows, 12 code lines or 80 words. Each line is a JSON
+   path, the problem and the fix; paragraphs over 120 words only warn.
+5. `build.mjs explainer.json` writes one HTML file and prints its path. The
+   default folder is `~/.agent/diagrams/` (set `PA_OUTPUT_DIR`, or pass
+   `--out file.html` or `--out dir`). `--theme paper|blueprint|ink|editorial`
+   overrides the spec's theme. A video or an interactive chart adds a
+   `<name>.assets/` folder beside the page: keep them together.
+6. Tells you the path and what the page shows.
+
+**Presets:** `recap` (tl;dr, numbers, how it works, files changed, timeline,
+risks), `checklist` (a group per area of changed files, a regression group, an
+intro and "If something fails"), `concept` (tl;dr, explanation, cards, steps),
+`slides` (a deck). **Sections** (18): `tldr`, `text`, `kpis`, `cards`,
+`table`, `risks`, `files`, `steps`, `timeline`, `compare`, `callout`, `code`,
+`details`, `checklist`, `diagram`, `chart`, `motion`, `image`.
+
+**Embedding other skills:**
+
+- `diagram`: an inline make-diagram spec, or the path to a `*.diagram.json` in
+  the same folder. It gets hover tracing and a Present button. The page's
+  theme wins over a theme in the diagram (a warning says so).
+- `chart`: either rows written inline (up to 500) with a `kind`, `x` and `y`,
+  or a make-dashboard `dashboard.json` plus a chart id. The page draws a
+  static SVG, light and dark, with a data table. `interactive: true` also
+  builds the dashboard next to the page and links it. Local files only: a
+  dashboard with a Postgres or MySQL source is refused.
+- `motion`: an `.mp4` (up to 50 MB), or a make-motion `motion.json` rendered
+  during the build (needs make-motion, ffmpeg and Chromium; set
+  `PA_MOTION_TIMEOUT_MS` for a long render). The video never autoplays.
+- These need `make-diagram` and `make-dashboard` installed beside
+  `make-explainer` (the installer adds them; see the install table).
+
+**In the page:** a contents list from four sections up, copy buttons on code,
+a Theme toggle, print styles. **Checklists** save their ticks in your browser
+(per `key`), show a progress bar and per-group counts, and Reset asks before it
+clears. A tick follows its item if the list is reordered; editing an item's
+text clears that item. The `intro` ("What's in this branch") lists every
+feature and every fix from review, so a tester needs no PR. **Slides** use the
+arrow keys, Space, Page Up and Page Down, Home and End; `O` opens an outline,
+`#slide-3` opens slide 3, the last slide is remembered, and printing gives one
+slide per page.
+
+**Reference:** every field is in `make-explainer/references/schema.md` and
+`sections.md`, the banned phrases in `style.md`, and one working file per
+preset in `references/examples/`.
+
+## 5. Videos with make-motion
 
 **Ask:**
 
@@ -199,9 +277,9 @@ file you supply. For narration the agent runs
 `--voice af_heart` by default) after asking once to install `kokoro-js`
 (about 250 MB plus a 90 MB model downloaded a single time).
 
-## 5. Asking for changes
+## 6. Asking for changes
 
-All three skills edit **a few fields of the spec**, so everything else stays the
+All four skills edit **a few fields of the spec**, so everything else stays the
 same:
 
 | Ask | What changes |
@@ -212,20 +290,22 @@ same:
 | "Change the counter to 25" | `elements[n].to` |
 | "Add a cache between the API and the DB" | one node and two edges in `diagram.json` |
 | "Rename Orders DB to Ledger" | `nodes[n].label` |
+| "Add a risk about the migration" | one new entry in a `risks` section's `items` |
+| "Add a rollback step to the plan" | one new entry in a `steps` section's `items` |
 
-Never hand-edit `dist/`, the diagram HTML or the MP4. Change the spec and rebuild.
+Never hand-edit `dist/`, the diagram or explainer HTML, or the MP4. Change the spec and rebuild.
 
-## 6. Hosts that can't run commands
+## 7. Hosts that can't run commands
 
 If an agent can write files but can't run shell commands, it still writes and
 explains the spec, then prints the exact `validate`, `build` / `render` and
 `serve` / `preview` commands for you to run.
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| `Cannot find package 'ajv'` (or duckdb, playwright) | Run `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboard and make-diagram) |
+| `Cannot find package 'ajv'` (or duckdb, playwright) | Run `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboard, make-diagram and make-explainer) |
 | `node` exits with code 139 / `SecItemCopyMatching failed -50` when an agent runs the scripts inside the Codex sandbox | `NODE_USE_SYSTEM_CA` is set (often via `launchctl setenv`); unset it for that session (`env -u NODE_USE_SYSTEM_CA codex …`) — Node 24 reads the keychain at startup and the sandbox denies it |
 | `run: node …/scripts/setup.mjs` | A sqlite, postgres or mysql source needs its DuckDB extension. Run that command once, online |
 | `sources.x.path: resolves outside the spec folder` | Move the data under the spec's folder, or add `--allow-outside` yourself |
@@ -234,6 +314,14 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | Query stopped after 30 s | Make it cheaper, or pass `--timeout 120` to `build` |
 | `nodes[0].kind: kind "databse" is not valid for architecture diagrams; did you mean "database"?` (and similar `path: message` lines from make-diagram) | The path is the field to fix and the message names the fix. The agent edits that field and reruns `validate` |
 | `text is … px wide; the box fits … px — shorten the label` or `node "b" overlaps node "a"` | make-diagram's geometry lint: shorten the label or note, or split the diagram |
+| `sections[3].text: still has a TODO placeholder` | A scaffold sentence was left in. Replace every `TODO: …` with real prose, or delete the section |
+| `banned phrase "leverage"; replace it with "use"` (or `contains emoji`, `heading ends with "!"`) | Reword as the message says. The full list is `make-explainer/references/style.md` |
+| `slide has 7 points; the limit is 6 — split this section into two slides` | In a deck each section is one slide: at most 6 points, 8 table rows, 12 code lines and 80 words. Split it |
+| `make-diagram skill not found next to make-explainer (looked in …); install it with: npx skills add …` (or make-dashboard, make-motion) | The embedded diagram, chart, icon or motion spec needs that sibling skill in the folder next to `make-explainer`. Run the printed command, or `node plugins/portable-artifacts/bin/install.mjs <host> --skills make-explainer` |
+| `… is installed but its dependencies are missing` | Run `npm ci --omit=dev` inside the named sibling skill's folder |
+| `dashboard: source "x" is postgres, a network source; explainer charts read local files only` | A build never uses the network. Export the query to CSV or Parquet and point a file source at it |
+| `gather.mjs` prints `… is not a git repository` or `base "x" does not exist` (with the branches that do) | Pass `--repo <folder inside the repository>` and a real `--base <branch>` |
+| `make-motion cannot render this spec: it needs ffmpeg and a Chromium browser` | Install both (see the README requirements), or render the clip first and use `video` with the `.mp4` |
 | `check: skipped (no browser: …)` from make-diagram | Expected without Playwright or Chromium; the page is still built. To run the check: `npm ci` then `npx playwright install chromium` inside the skill folder |
 | `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |
 | `kokoro-js is not installed` | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (voiceover only; `npm ci` removes it) |
@@ -242,7 +330,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `remote data is not allowed` / `not allowed — external URLs are never fetched` | Charts must carry their data inline (motion) or come from a SQL query (dashboard) |
 | A final counter value or keyframe never shows | Frame *i* samples `t = i/fps`. End keyframes at least one frame before the scene ends |
 
-## 8. Checking a new host or model
+## 9. Checking a new host or model
 
 `eval/run-eval.mjs` runs a fixed set of prompts through a host and scores the
 results:
@@ -250,6 +338,7 @@ results:
 ```bash
 node plugins/portable-artifacts/eval/run-eval.mjs --skill dashboard --host codex-oss --model gemma4
 node plugins/portable-artifacts/eval/run-eval.mjs --skill diagram --host claude --limit 3
+node plugins/portable-artifacts/eval/run-eval.mjs --skill explainer --host claude --only recap-from-repo,edit-existing
 ```
 
 It records: spec written, valid, validate retries, build or contact sheet ok,

@@ -30,4 +30,6 @@ synergy → (say what combines)
 paradigm shift → change
 unlock the power of → use
 
+Other lint rules, enforced in code rather than by this list: no emoji or pictographs anywhere, no heading ending in `!`, no section title starting with a number such as `01`, and no `TODO:` or lorem ipsum text. A paragraph over 120 words is a warning. A section `title` states the finding ("Search now ignores case"), not a label ("Overview").
+
 Also avoided, though not enforced: filler openers ("In conclusion"), stacked adjectives, and exclamation marks.

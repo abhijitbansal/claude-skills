@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SKILLS, buildPrompt, expandCmd, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules } from '../lib.mjs';
+import { SKILLS, buildPrompt, expandCmd, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules, createFixtureRepo } from '../lib.mjs';
 
 const made = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-eval-test-')); made.push(d); return d; };
@@ -207,4 +207,58 @@ test('the edit prompt asks for a change the scorer can see in the spec', () => {
   changed.nodes[0].label = 'Storefront';
   assert.deepEqual(diffPaths(seed, changed), ['nodes[0].label']);
   assert.match(readJson('prompts', 'diagram.json').find((p) => p.seed).prompt, /Storefront/);
+});
+
+const skillsDir = path.resolve(evalDir, '../skills');
+
+test('SKILLS.explainer builds into <work>/out/explainer.html and needs the diagram and dashboard siblings', () => {
+  const cfg = SKILLS.explainer;
+  assert.equal(cfg.dir, 'make-explainer');
+  assert.equal(cfg.spec, 'explainer.json');
+  assert.deepEqual(cfg.outputCmd('/s', '/w/explainer.json', '/w'), ['/s/scripts/build.mjs', '/w/explainer.json', '--out', '/w/out/explainer.html']);
+  assert.deepEqual(cfg.artifacts, ['out/explainer.html']);
+  assert.match(buildPrompt(cfg, 'Explain X.'), /skills\/make-explainer\/SKILL\.md.*\.\/explainer\.json/);
+  assert.deepEqual(cfg.siblings, ['make-diagram', 'make-dashboard']);
+  const pkg = readJson('..', 'skills', 'make-explainer', 'package.json');
+  assert.deepEqual(cfg.siblings, pkg.portableArtifacts.requires, 'the eval copies exactly the skills make-explainer requires');
+  for (const name of cfg.siblings) assert.ok(fs.existsSync(path.join(skillsDir, name, 'SKILL.md')), `${name} exists`);
+});
+
+test('explainer prompts: eight unique ids, one repo recap, one edit prompt with a seed, a diagram and a chart case', () => {
+  const prompts = readJson('prompts', 'explainer.json');
+  assert.equal(prompts.length, 8);
+  assert.equal(new Set(prompts.map((p) => p.id)).size, 8);
+  assert.deepEqual(prompts.filter((p) => p.repo).map((p) => p.id), ['recap-from-repo']);
+  assert.deepEqual(prompts.filter((p) => p.seed).map((p) => p.seed), ['seeds/explainer.json']);
+  assert.ok(prompts.some((p) => /diagram/i.test(p.prompt)), 'a prompt asks for a diagram');
+  assert.ok(prompts.some((p) => /\bchart\b/i.test(p.prompt) && /month,signups/.test(p.prompt)), 'a prompt asks for a chart from a CSV pasted in the prompt');
+  assert.ok(prompts.some((p) => /slides/i.test(p.prompt)) && prompts.some((p) => /checklist/i.test(p.prompt)));
+  assert.match(prompts.find((p) => p.repo).prompt, /\.\/repo/);
+});
+
+test('the explainer seed validates and the edit prompt asks for changes the scorer can see', async () => {
+  const seedFile = path.join(evalDir, 'fixtures', 'seeds', 'explainer.json');
+  const r = await run(['node', path.join(skillsDir, 'make-explainer/scripts/validate.mjs'), seedFile, '--json'], { env: { EVAL_LOG: '' } });
+  assert.equal(r.code, 0, r.out);
+  const seed = readJson('fixtures', 'seeds', 'explainer.json');
+  const changed = structuredClone(seed);
+  changed.sections[0].tone = 'warn';
+  changed.sections[2].items.find((c) => c.title === 'Cache').title = 'Edge cache';
+  assert.deepEqual(diffPaths(seed, changed), ['sections[0].tone', 'sections[2].items[1].title']);
+  const prompt = readJson('prompts', 'explainer.json').find((p) => p.seed).prompt;
+  assert.match(prompt, /'Cache'.*'Edge cache'/);
+  assert.match(prompt, /tl;dr.*'warn'/);
+});
+
+test('createFixtureRepo builds a branch the gather script can read: commits, files and a test file', async () => {
+  const dir = path.join(tmp(), 'repo');
+  createFixtureRepo(dir);
+  const r = await run(['node', path.join(skillsDir, 'make-explainer/scripts/gather.mjs'), 'git', '--repo', dir, '--base', 'main', '--json'], { env: { EVAL_LOG: '' } });
+  assert.equal(r.code, 0, r.out);
+  const facts = JSON.parse(r.out.trim().split('\n').pop());
+  assert.equal(facts.branch, 'feat/search');
+  assert.equal(facts.base, 'main');
+  assert.equal(facts.commits.length, 3);
+  assert.deepEqual(facts.files.map((f) => f.path).sort(), ['docs/search.md', 'src/search.js', 'test/search.test.js']);
+  assert.deepEqual(facts.tests, ['test/search.test.js']);
 });

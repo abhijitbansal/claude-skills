@@ -81,6 +81,7 @@ explainer.json --validate.mjs--> schema + refs + files exist + text lint + slide
                                  views + vega toSVG, motion assets copied) -> theme CSS + fonts + runtime
                                  -> <out>/<slug>.html (+ <slug>.assets/)
                --check.mjs-----> optional headless check (overflow at 1280/390, console errors, slides navigate)
+                                 NOT BUILT in v1: the browser tests cover the same ground (see Testing)
 ```
 
 - **Evidence scripts (cheap-model affordance).** `scripts/gather.mjs git [--base main] [--repo .]` prints JSON facts:
@@ -101,7 +102,7 @@ explainer.json --validate.mjs--> schema + refs + files exist + text lint + slide
   - `01/02/03` numbering in titles of unordered sections.
   - Placeholder text (`TODO:`, `lorem ipsum`).
   - Paragraphs > 120 words, which are a warning.
-- **Sibling skills:** `scripts/lib/siblings.mjs` resolves `make-diagram`, `make-dashboard` and `make-motion` as directories next to `make-explainer` (all install paths place skills side by side). It loads them lazily, only when a section needs one. A missing sibling gives the error: `diagram sections need the make-diagram skill next to make-explainer; install it with: npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram`.
+- **Sibling skills:** `scripts/lib/siblings.mjs` resolves `make-diagram`, `make-dashboard` and `make-motion` as directories next to `make-explainer` (all install paths place skills side by side). It loads them lazily, only when a section needs one. `validate` calls make-diagram's `validateSpec` (re-exported from `api.mjs`) on each embedded diagram, and make-dashboard's and make-motion's own validators for charts and motion specs. A missing sibling gives the error: `diagram sections need the make-diagram skill next to make-explainer; install it with: npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram`.
 - **Installer:** `bin/install.mjs` reads `"portableArtifacts": { "requires": [...] }` from each skill's `package.json` and installs required skills too (deduplicated, before the dependent). make-explainer requires `make-diagram` and `make-dashboard`. make-motion is optional (motion sections with an existing MP4 do not need it).
 - **Page (single file):**
   - CSP: `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src 'self' file: blob:` (the `media-src` part is added only when a motion section exists).
@@ -124,6 +125,7 @@ explainer.json --validate.mjs--> schema + refs + files exist + text lint + slide
   - **Code:** copy buttons via the clipboard API.
   - **Checklist:** state is saved in `localStorage` under `pa-checklist:<key>`, and blocked storage is tolerated. The page shows a sticky progress bar with done/total, per-group tallies, and a reset button that asks for confirmation inline (never `window.confirm`).
   - **Diagrams:** hover tracing, and an overlay presenter using `viewerRuntime()` from make-diagram.
+  - **Section registry:** `scripts/lib/sections.mjs` maps each type to `{ render, assets?, prepare?, page?, check? }`. `page(ctx)` returns the css and scripts a type ships once for the whole page (diagram, chart and motion use it), so ten diagrams do not repeat the viewer.
   - **Video:** native controls; the video never autoplays.
 - **make-motion theming (SP3 scope):** make-motion specs gain an optional `theme` (shared theme name). Text defaults to the theme's body/display fonts and colours instead of Inter, served from make-motion's synced `shared/fonts`. Specs without `theme` render exactly as today (backward compatible; render-smoke unchanged).
 
