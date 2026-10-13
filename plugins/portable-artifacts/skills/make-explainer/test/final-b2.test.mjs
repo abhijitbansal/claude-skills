@@ -164,7 +164,7 @@ test('check: a covered Present button is one clear line per viewport, not a cras
   for (const label of ['1280px', '390px']) {
     const lines = result.problems.filter((p) => p.startsWith(`${label}: `) && /Present button/.test(p));
     assert.equal(lines.length, 1, result.problems.join('\n'));
-    assert.match(lines[0], /^\d+px: the Present button of diagram 1 is covered or cannot be clicked$/);
+    assert.match(lines[0], /^\d+px: the Present button of diagram 1 is covered by another element$/);
   }
   assert.ok(Date.now() - t0 < 9000, `took ${Date.now() - t0} ms`);
 });

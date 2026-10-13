@@ -8,7 +8,7 @@ import { themeCss, loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
 import { pathJoin } from '../../shared/errors.mjs';
 import { META_KEYS } from './schema.mjs';
 import { SECTIONS } from './sections.mjs';
-import { resolveOutput } from './output.mjs';
+import { resolveOutput, pageSlug, assetsFolder } from './output.mjs';
 import { slugify } from '../../shared/output.mjs';
 import { loadSibling, SiblingError } from './siblings.mjs';
 import { SectionErrors } from './section-errors.mjs';
@@ -199,14 +199,14 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
   if (problems.length > 0) throw new BuildError(problems);
   const themeData = loadTheme(theme ?? spec.theme ?? DEFAULT_THEME);
   const target = resolveOutput({ out, title: spec.title, env });
-  const slug = path.basename(target, '.html');
+  const slug = pageSlug(target);
   const slides = isSlides(spec);
   const ids = sectionIds(spec.sections);
   const ctx = {
     theme: themeData,
     dir,
     outDir: path.dirname(target),
-    assetsDir: path.join(path.dirname(target), `${slug}.assets`),
+    assetsDir: assetsFolder(target),
     slug,
     mode: slides ? 'slides' : 'page',
     idFor: slides ? (_section, i) => `slide-${i + 2}` : (_section, i) => ids[i],

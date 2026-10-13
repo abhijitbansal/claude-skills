@@ -56,21 +56,28 @@ const release = () => {
   process.removeListener('exit', stopAll);
   for (const sig of STOP_SIGNALS) process.removeListener(sig, onStopSignal);
 };
+const killAll = () => { for (const child of running.keys()) signalGroup(child, 'SIGKILL'); };
 // Node restores the default action for the signal on the next loop turn, so the re-raise waits for it.
 function dieOfStopSignal() {
   if (stopping === null) return;
   const { signal, timer } = stopping;
   stopping = null;
   clearTimeout(timer);
+  release();
   setImmediate(() => process.kill(process.pid, signal));
 }
+// The listeners stay through the grace wait: a second stop signal during it is "kill them now" (SIGKILL, then die),
+// not the parent's death with the children still running, and an exit in the meantime still signals the groups.
 function onStopSignal(signal) {
+  if (stopping !== null) {
+    killAll();
+    return dieOfStopSignal();
+  }
   stopAll();
-  release();
   stopping = { signal, timer: undefined };
   if (running.size === 0) return dieOfStopSignal();
   stopping.timer = setTimeout(() => {
-    for (const child of running.keys()) signalGroup(child, 'SIGKILL');
+    killAll();
     dieOfStopSignal();
   }, Math.max(...running.values()));
   return undefined;
@@ -147,12 +154,12 @@ export function motionArgs(specAbs, outFile, spec, pageTheme) {
 }
 
 /** A still from the rendered video, for the poster. Best effort: no poster is not an error, and not a hang. */
-export async function posterFrame(video, tmp, seconds, { timeoutMs = POSTER_TIMEOUT_MS, graceMs = POSTER_GRACE_MS } = {}) {
+export async function posterFrame(video, tmp, seconds, { timeoutMs = POSTER_TIMEOUT_MS, graceMs = POSTER_GRACE_MS, env = process.env } = {}) {
   try {
     const { findFfmpeg } = await loadSibling('make-motion', 'scripts/lib/ffmpeg.mjs');
     const out = path.join(tmp, 'poster.png');
     const args = ['-v', 'error', '-y', '-ss', String(seconds), '-i', video, '-frames:v', '1', '-vf', `scale='min(${POSTER_WIDTH},iw)':-2`, out];
-    const r = await runChild(await findFfmpeg(), args, { cwd: tmp, env: process.env, timeoutMs, graceMs });
+    const r = await runChild(await findFfmpeg(), args, { cwd: tmp, env: childEnv(env), timeoutMs, graceMs });
     return r.status === 0 && fs.existsSync(out) ? fs.readFileSync(out) : undefined;
   } catch {
     return undefined;
@@ -191,7 +198,7 @@ export async function renderMotion(specAbs, spec, env = process.env, { maxBytes 
     if (size > maxBytes) {
       throw new SectionErrors([{ path: 'spec', message: `rendered video is ${(size / MB).toFixed(1)} MB; the limit is ${maxBytes / MB} MB — shorten it or lower the size in the spec` }]);
     }
-    return { video: fs.readFileSync(file), poster: await posterFrame(file, tmp, (spec.scenes?.[0]?.duration ?? 0) * POSTER_POINT) };
+    return { video: fs.readFileSync(file), poster: await posterFrame(file, tmp, (spec.scenes?.[0]?.duration ?? 0) * POSTER_POINT, { env }) };
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

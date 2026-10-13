@@ -259,8 +259,9 @@ test('close() cancels a rebuild that was queued behind the one in flight: nothin
   const closing = live.close();
   gate.release();
   await closing;
+  // close() resolved only after the rebuilder's whole loop ended (it awaits idle()), so a leaked queued build
+  // would already have run: the state below is final, with nothing to wait out.
   fs.rmSync(page);
-  await sleep(500);
   assert.equal(gate.calls, 2, 'the queued build never ran');
   assert.equal(fs.existsSync(page), false, 'and nothing was written to the output after close()');
 });

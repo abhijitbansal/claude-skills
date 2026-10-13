@@ -19,7 +19,8 @@ const VIEWPORTS = [{ width: 1280, height: 900 }, { width: 390, height: 780 }];
 const READY_MS = 5000;
 const ACTION_MS = 5000; // default timeout for every page action and navigation
 const SETTLE_MS = 2000; // a state change the runtime makes at once (slide, overlay)
-const CLICK_MS = 1500; // a button that is not clickable by now is covered or disabled
+const CLICK_MS = 1500; // a button that something else covers is not going to uncover itself
+const PRESENT_CLICK_MS = 5000; // a button that nothing covers may just be slow (a loaded CI machine); inside the watchdog
 const WATCHDOG_MS = 60000; // wall-clock cap for the whole check
 const OVERFLOW_TOLERANCE_PX = 1;
 const MAX_WIDE_ELEMENTS = 3;
@@ -95,9 +96,18 @@ async function checkDeck(page, label, problems, tally) {
   if (counter !== `${total} / ${total}`) problems.push(`${label}: on the last slide the counter reads "${counter}", expected "${total} / ${total}"`);
 }
 
+// Is the centre of this element's box taken by something that is not the element or part of it?
+const isCovered = (locator) => locator.evaluate((el) => {
+  el.scrollIntoView({ block: 'center', inline: 'center' });
+  const r = el.getBoundingClientRect();
+  const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return top !== null && top !== el && !el.contains(top);
+}).catch(() => false);
+
 // Open each inline diagram's Present overlay and close it with Esc. A figure is judged on its own button and
 // dialog. In a deck the figure's slide is made current first.
 async function checkOverlays(page, label, problems, tally) {
+  const patient = { left: true };
   const figures = page.locator('[data-diagram]');
   const count = Math.min(await figures.count(), MAX_OVERLAYS);
   for (let i = 0; i < count; i++) {
@@ -114,10 +124,17 @@ async function checkOverlays(page, label, problems, tally) {
       await page.waitForFunction((id) => document.getElementById(id) && document.querySelector('[data-deck]').dataset.current === id.replace('slide-', ''), slide, { timeout: SETTLE_MS });
     }
     const dialog = figure.locator('[data-dg-dialog]');
+    // Something else at the button's centre: waiting longer will not help, so that wait is short. Nothing there:
+    // the button may only be slow to become actionable, so it gets the longer wait, once per viewport (a page
+    // where every button is stuck must still end well inside the watchdog).
+    const waitMs = patient.left && !await isCovered(button) ? PRESENT_CLICK_MS : CLICK_MS;
     try {
-      await button.click({ timeout: CLICK_MS });
+      await button.click({ timeout: waitMs });
     } catch {
-      problems.push(`${label}: the Present button of diagram ${n} is covered or cannot be clicked`);
+      patient.left = false;
+      problems.push(await isCovered(button)
+        ? `${label}: the Present button of diagram ${n} is covered by another element`
+        : `${label}: the Present button of diagram ${n} did not become clickable within ${waitMs / 1000} s (disabled, hidden or very slow)`);
       continue;
     }
     if (!await dialog.evaluate((d) => d.open)) {

@@ -8,8 +8,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadSpec, validateSpec, exitSpecUsage } from './lib/spec.mjs';
 import { buildPage, BuildError } from './lib/page.mjs';
-import { resolveOutput } from './lib/output.mjs';
-import { syncAssets, assetConflicts, specInputs } from './lib/assets.mjs';
+import { resolveOutput, assetsFolder } from './lib/output.mjs';
+import { syncAssets, assetConflicts, specInputs, WriteError } from './lib/assets.mjs';
 import { SiblingError } from './lib/siblings.mjs';
 import { UsageError, parseCli } from '../shared/cli.mjs';
 
@@ -37,20 +37,43 @@ export async function build(file, { out, theme, env = process.env } = {}) {
     if (e instanceof SiblingError) return fail([{ path: 'sections', message: e.message }]);
     throw e;
   }
-  const assetsDir = path.join(path.dirname(target), `${path.basename(target, '.html')}.assets`);
+  const assetsDir = assetsFolder(target);
   // Before anything is written: a file in the folder that no build wrote is never overwritten.
   const conflicts = assetConflicts(assetsDir, built.assets);
   if (conflicts.length > 0) return fail(conflicts);
-  try {
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, built.html);
-    // Last, so a failed write leaves the previous build's files in place. Files in the folder that this
-    // build reads, or that no earlier build wrote, are never removed (see assets.mjs).
-    syncAssets(assetsDir, built.assets, { protect: specInputs(spec, dir) });
-  } catch (e) {
-    throw new UsageError(`cannot write ${target}: ${e.code ?? e.message}`);
-  }
+  // Assets and their manifest first, then the page (atomically), then the tidy-up of files this build no longer
+  // writes (see assets.mjs): a failure anywhere names its path and leaves the previous page and files in place.
+  syncAssets(assetsDir, built.assets, { protect: specInputs(spec, dir), publish: () => writePage(target, built.html) });
   return { ok: true, out: target, assets: built.assets.map((a) => a.to), bytes: Buffer.byteLength(built.html), warnings: checked.warnings };
+}
+
+// Temp file + rename, so an interrupted build leaves the old page or the new one. A symlinked page is written through.
+function writePage(target, html) {
+  const folder = path.dirname(target);
+  try {
+    fs.mkdirSync(folder, { recursive: true });
+  } catch (e) {
+    throw new WriteError(folder, e);
+  }
+  let dest = target;
+  try {
+    dest = fs.realpathSync(target);
+  } catch {
+    // no page yet
+  }
+  const tmp = `${dest}.tmp`;
+  try {
+    fs.writeFileSync(tmp, html);
+  } catch (e) {
+    fs.rmSync(tmp, { force: true });
+    throw new WriteError(tmp, e);
+  }
+  try {
+    fs.renameSync(tmp, dest);
+  } catch (e) {
+    fs.rmSync(tmp, { force: true });
+    throw new WriteError(dest, e);
+  }
 }
 
 function printFailure(result, { json, label }) {
