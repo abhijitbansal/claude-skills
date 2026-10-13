@@ -10,7 +10,7 @@ import { AXIS_FORMAT } from './views.mjs';
 // Two widths per scheme: a phone shows the narrow one at about its natural size instead of shrinking the wide one.
 // labelX/labelY cap an axis label's width (long names end in an ellipsis instead of squeezing the plot);
 // ticks is the most ticks on a horizontal value axis (a vertical one takes VERTICAL_TICKS), dates the most date ticks;
-// si: an axis with no format of its own prints thousands as 1.5k (a phone has no room for 1,500).
+// si: an axis in the thousands prints 1.5k, $1.5M (a phone has no room for 1,500 or $1,500,000).
 export const STATIC_SIZES = {
   wide: { width: 600, labelX: 240, labelY: 240, ticks: 7, dates: 4 },
   narrow: { width: 320, labelX: 130, labelY: 110, ticks: 4, dates: 2, si: true },
@@ -19,6 +19,10 @@ export const STATIC_HEIGHT = 280;
 const VERTICAL_TICKS = 6;
 const LABEL_SIZE = 12;
 const SI_FORMAT = '.3~s';
+// Digits grouped by thousands with just enough decimals for the step, none trailing: 1,500, 0.2.
+const plainFormat = (step) => `,.${Math.min(6, Math.max(0, -Math.floor(Math.log10(step) + 1e-9)))}~f`;
+// The same formats without grouping digits, for a phone: 1.5M, $500k. Percent and compact are short already.
+const SHORT_FORMAT = { [AXIS_FORMAT.number]: SI_FORMAT, [AXIS_FORMAT.currency]: '$.3~s' };
 // Static charts are scaled down on a phone, so type is a point larger than on the dashboard page.
 const staticType = ({ labelX, labelY }) => ({
   axis: { labelFontSize: LABEL_SIZE, titleFontSize: 13 },
@@ -90,8 +94,8 @@ function dateFormat(times) {
   return '%b %d, %Y';
 }
 
-// At most `max` of the sorted times, evenly spread, first and last included: every k-th data time when the count
-// divides evenly, else evenly spaced in time (so the steps never differ).
+// At most `max` of the sorted times, always readings: first and last when the count divides evenly into `max`
+// or fewer ticks, else every k-th reading from the first. Steps never differ, and no tick falls between readings.
 function thin(times, max) {
   if (times.length <= max) return times;
   for (let m = max; m >= 3; m--) {
@@ -100,9 +104,8 @@ function thin(times, max) {
       return Array.from({ length: m }, (_, i) => times[i * k]);
     }
   }
-  const first = times[0];
-  const last = times.at(-1);
-  return Array.from({ length: max }, (_, i) => Math.round(first + ((last - first) * i) / (max - 1)));
+  const k = Math.ceil((times.length - 1) / (max - 1));
+  return times.filter((_, i) => i % k === 0);
 }
 
 /**
@@ -151,9 +154,31 @@ const runView = async (vegaSpec) => {
   return view;
 };
 
+// Scale and axis settings that say a chart's author chose the axis; those axes are left exactly as written.
+const OWN_SCALE = ['domain', 'domainMin', 'domainMax', 'domainMid', 'domainRaw', 'zero', 'nice', 'type', 'clamp'];
+const OWN_AXIS = ['values', 'tickCount', 'tickMinStep'];
+
+/** The x/y scales (by Vega name) whose encoding sets its own scale or ticks, anywhere in the view. */
+export function ownAxes(node, found = new Set()) {
+  if (Array.isArray(node)) node.forEach((n) => ownAxes(n, found));
+  else if (isObject(node)) {
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'data') continue;
+      if (key === 'encoding' && isObject(value)) {
+        for (const channel of ['x', 'y']) {
+          const def = value[channel];
+          if (isObject(def) && (OWN_SCALE.some((k) => def.scale?.[k] !== undefined) || OWN_AXIS.some((k) => def.axis?.[k] !== undefined))) found.add(channel);
+        }
+      }
+      ownAxes(value, found);
+    }
+  }
+  return found;
+}
+
 // A linear scale with a visible axis: where tick planning applies.
-function valueScales(vegaSpec) {
-  return (vegaSpec.scales ?? []).filter((sc) => sc.type === 'linear' && (vegaSpec.axes ?? []).some((a) => a.scale === sc.name && !a.grid));
+function valueScales(vegaSpec, own) {
+  return (vegaSpec.scales ?? []).filter((sc) => sc.type === 'linear' && !own.has(sc.name) && (vegaSpec.axes ?? []).some((a) => a.scale === sc.name && !a.grid));
 }
 
 /**
@@ -161,49 +186,73 @@ function valueScales(vegaSpec) {
  * domain that ends on a tick, so no tick label is hidden for overlap and the scale never runs far past the data.
  * One extra layout pass reads each scale's raw extent and pixel length. Facets and concats are left to Vega.
  */
-async function planValueAxes(vegaSpec, sizing) {
-  const scales = valueScales(vegaSpec);
+async function planValueAxes(vegaSpec, sizing, own) {
+  const scales = valueScales(vegaSpec, own);
   if (scales.length === 0 || vegaSpec.scales.some((sc) => sc.name.includes('child__'))) return vegaSpec;
   const raw = structuredClone(vegaSpec);
   for (const sc of raw.scales) if (scales.some((v) => v.name === sc.name)) sc.nice = false;
-  const view = await runView(raw);
-  try {
-    const plan = new Map();
-    const siFormatted = new Set();
-    for (const sc of scales) {
-      const axis = vegaSpec.axes.find((a) => a.scale === sc.name && !a.grid);
-      if (axis.formatType !== undefined && axis.formatType !== 'number') continue;
-      const horizontal = axis.orient === 'bottom' || axis.orient === 'top';
-      const scale = view.scale(sc.name);
-      const [r0, r1] = scale.range();
-      const [d0, d1] = scale.domain();
-      const spec = axis.format ?? (sizing.si && Math.max(Math.abs(d0), Math.abs(d1)) >= 1000 ? SI_FORMAT : undefined);
-      if (spec && !axis.format) siFormatted.add(sc.name);
-      const format = spec ? locale.format(spec) : null;
-      const label = (v, step) => (format ? format(v) : locale.format(`,.${Math.min(6, Math.max(0, -Math.floor(Math.log10(step))))}f`)(v));
-      const layout = tickLayout({ domain: scale.domain(), pixels: Math.abs(r1 - r0), label, fontSize: LABEL_SIZE, horizontal, max: horizontal ? sizing.ticks : VERTICAL_TICKS });
-      if (layout) plan.set(sc.name, layout);
+  const measure = async (spec) => {
+    const view = await runView(spec);
+    try {
+      return new Map(scales.map(({ name }) => {
+        const scale = view.scale(name);
+        const [r0, r1] = scale.range();
+        return [name, { domain: scale.domain(), pixels: Math.abs(r1 - r0) }];
+      }));
+    } finally {
+      view.finalize();
     }
-    if (plan.size === 0) return vegaSpec;
-    const planned = structuredClone(vegaSpec);
-    for (const sc of planned.scales) {
-      const layout = plan.get(sc.name);
-      if (!layout) continue;
-      for (const key of ['nice', 'zero', 'domainMin', 'domainMax', 'domainMid', 'domainRaw']) delete sc[key];
-      sc.domain = layout.domain;
-    }
-    for (const axis of planned.axes) {
-      const layout = plan.get(axis.scale);
-      if (!layout) continue;
-      axis.values = layout.values;
-      if (siFormatted.has(axis.scale) && axis.format === undefined) axis.format = SI_FORMAT;
-      delete axis.tickCount;
-      delete axis.tickMinStep;
-    }
-    return planned;
-  } finally {
-    view.finalize();
+  };
+  const first = await measure(raw);
+  const extents = new Map([...first].map(([name, m]) => [name, m.domain]));
+  let pixels = new Map([...first].map(([name, m]) => [name, m.pixels]));
+  let planned = layOut(vegaSpec, scales, extents, pixels, sizing);
+  if (planned === vegaSpec) return planned;
+  // The plot is a little shorter or longer once the real labels are in place; lay out again with what it came to.
+  const actual = await measure(planned);
+  if ([...actual].some(([name, m]) => Math.abs(m.pixels - pixels.get(name)) > 1)) {
+    pixels = new Map([...actual].map(([name, m]) => [name, m.pixels]));
+    planned = layOut(vegaSpec, scales, extents, pixels, sizing);
   }
+  return planned;
+}
+
+// The spec with each value axis's ticks, labels and domain planned for `pixels` of room.
+function layOut(vegaSpec, scales, extents, pixels, sizing) {
+  const plan = new Map();
+  const shortened = new Map();
+  for (const sc of scales) {
+    const axis = vegaSpec.axes.find((a) => a.scale === sc.name && !a.grid);
+    if (axis.formatType !== undefined && axis.formatType !== 'number') continue;
+    const horizontal = axis.orient === 'bottom' || axis.orient === 'top';
+    const domain = extents.get(sc.name);
+    const big = sizing.si && Math.max(Math.abs(domain[0]), Math.abs(domain[1])) >= 1000;
+    const spec = big ? (SHORT_FORMAT[axis.format] ?? axis.format ?? SI_FORMAT) : axis.format;
+    if (spec !== axis.format) shortened.set(sc.name, spec);
+    const format = spec ? locale.format(spec) : null;
+    const label = (v, step) => (format ? format(v) : locale.format(plainFormat(step))(v));
+    const layout = tickLayout({ domain, pixels: pixels.get(sc.name), label, fontSize: LABEL_SIZE, horizontal, max: horizontal ? sizing.ticks : VERTICAL_TICKS });
+    if (layout) plan.set(sc.name, layout);
+  }
+  if (plan.size === 0) return vegaSpec;
+  const planned = structuredClone(vegaSpec);
+  for (const sc of planned.scales) {
+    const layout = plan.get(sc.name);
+    if (!layout) continue;
+    for (const key of ['nice', 'zero', 'domainMin', 'domainMax', 'domainMid', 'domainRaw']) delete sc[key];
+    sc.domain = layout.domain;
+  }
+  for (const axis of planned.axes) {
+    const layout = plan.get(axis.scale);
+    if (!layout) continue;
+    axis.values = layout.values;
+    if (!axis.grid) axis.labelOverlap = false; // the layout already keeps the labels apart, by their real width
+    if (shortened.has(axis.scale)) axis.format = shortened.get(axis.scale);
+    if (!axis.grid && axis.format === undefined) axis.format = plainFormat(layout.values[1] - layout.values[0]);
+    delete axis.tickCount;
+    delete axis.tickMinStep;
+  }
+  return planned;
 }
 
 /**
@@ -222,7 +271,7 @@ export async function renderSvg(vegaLite, rows, { colours, font, size = 'wide', 
     spec.width = sizing.width;
     spec.autosize = { type: typeof spec.height === 'object' ? 'fit-x' : 'fit', contains: 'padding' };
   }
-  const vegaSpec = await planValueAxes(compile(spec, { logger: QUIET }).spec, sizing);
+  const vegaSpec = await planValueAxes(compile(spec, { logger: QUIET }).spec, sizing, ownAxes(base));
   const view = await runView(vegaSpec);
   try {
     const svg = stripAria(await view.toSVG());

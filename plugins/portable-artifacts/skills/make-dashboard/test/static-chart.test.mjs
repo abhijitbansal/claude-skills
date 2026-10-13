@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { vegaConfig } from '../scripts/lib/vega-config.mjs';
 import { vegaConfigScript } from '../scripts/lib/html.mjs';
 import { formatValue } from '../scripts/lib/format.mjs';
+import { labelWidth } from '../scripts/lib/axis-ticks.mjs';
 import { inferTypes, columnsOf, inlineChart } from '../scripts/lib/inline-chart.mjs';
 import { staticView, coloursOf, fontOf, renderThemedSvgs, axisFormat } from '../scripts/lib/static-chart.mjs';
 import { FORMAT_NAMES, expandCharts } from '../scripts/lib/views.mjs';
@@ -222,10 +223,10 @@ const valueOf = (text) => {
   const scale = { '': 1, k: 1e3, M: 1e6, G: 1e9, T: 1e12, '%': 0.01, m: 1e-3, 'µ': 1e-6 }[m[3]];
   return Number(m[1] === '' ? 1 : -1) * Number(m[2].replaceAll(',', '')) * scale;
 };
-// Boxes by Vega's own width estimate (0.8 em per character); two drawn labels must not touch.
+// Boxes by the planner's per-character widths; two drawn labels must not touch.
 function overlaps(list) {
   const boxes = list.filter((l) => l.shown).map((l) => {
-    const w = l.text.length * l.size * 0.8;
+    const w = labelWidth(l.text, l.size);
     const left = l.anchor === 'end' ? l.x - w : l.anchor === 'middle' ? l.x - w / 2 : l.x;
     return { text: l.text, x0: left, x1: left + w, y0: l.y - l.size, y1: l.y };
   });
@@ -304,15 +305,13 @@ test('date ticks sit on the data dates, the last one included; a phone has room 
   }
 });
 
-test('many dates are thinned to evenly spread data dates that include the first and the last', async () => {
+test('many dates are thinned to every k-th data date, starting at the first', async () => {
   const data = Array.from({ length: 24 }, (_, i) => ({ d: `2024-${String(Math.floor(i / 2) + 1).padStart(2, '0')}-${i % 2 ? '15' : '01'}`, v: i }));
   const { vegaLite } = inlineChart({ kind: 'line', x: 'd', y: 'v' }, data);
   const svgs = await renderThemedSvgs(vegaLite, data, theme);
   for (const [size, svg] of Object.entries(svgs.light)) {
     const dates = labels(svg).filter((l) => /^[A-Z][a-z]{2} \d\d, \d{4}$/.test(l.text));
-    assert.equal(dates.length, size === 'wide' ? 4 : 2, `${size}: ${dates.length} date labels`);
-    assert.equal(dates[0].text, 'Jan 01, 2024');
-    assert.equal(dates.at(-1).text, 'Dec 15, 2024');
+    assert.deepEqual(dates.map((l) => l.text), size === 'wide' ? ['Jan 01, 2024', 'May 01, 2024', 'Sep 01, 2024'] : ['Jan 01, 2024', 'Dec 15, 2024'], `${size}: data dates`);
     assert.deepEqual(overlaps(dates), []);
   }
 });
@@ -364,7 +363,7 @@ test('a raw vegaLite chart keeps the axis values it set', async () => {
   }
 });
 
-test('hourly data gets 24-hour labels that step evenly; a single date shows the date', async () => {
+test('hourly data gets 24-hour labels on the readings, stepping evenly; a single date shows the date', async () => {
   const hours = Array.from({ length: 24 }, (_, i) => ({ t: `2025-01-06T${String(i).padStart(2, '0')}:30:00Z`, v: i }));
   const { vegaLite } = inlineChart({ kind: 'line', x: 't', y: 'v' }, hours);
   const svgs = await renderThemedSvgs(vegaLite, hours, theme);
@@ -374,8 +373,9 @@ test('hourly data gets 24-hour labels that step evenly; a single date shows the 
     const minutes = times.map((l) => Number(l.text.slice(7, 9)) * 60 + Number(l.text.slice(10)));
     const gaps = new Set(minutes.slice(1).map((m, i) => m - minutes[i]));
     assert.equal(gaps.size, 1, `${size}: even steps, got ${[...gaps]}`);
+    assert.ok(minutes.every((m) => m % 60 === 30), `${size}: every label is a reading (:30), not an interpolated time`);
     assert.equal(minutes[0], 30, `${size}: starts at the first reading`);
-    assert.equal(minutes.at(-1), 23 * 60 + 30, `${size}: ends at the last reading`);
+    if (size === 'narrow') assert.equal(minutes.at(-1), 23 * 60 + 30, 'narrow: first and last');
   }
   const one = [{ d: '2025-01-06', v: 3 }];
   const single = inlineChart({ kind: 'line', x: 'd', y: 'v' }, one).vegaLite;
@@ -398,7 +398,73 @@ test('tickLayout: the smallest 1-2-5 step whose labels fit, a domain that ends o
   assert.deepEqual(roomy, { values: [0, 200, 400, 600, 800, 1000, 1200], domain: [0, 1200] });
   const tight = tickLayout({ domain: [0, 1200], pixels: 120, label, fontSize: 12, horizontal: true, max: 4 });
   assert.ok(tight.domain[1] >= 1200 && tight.domain[1] < 1200 + (tight.values[1] - tight.values[0]));
-  assert.equal(tickLayout({ domain: [5, 5], pixels: 300, label, fontSize: 12, horizontal: true, max: 5 }), null, 'an empty extent keeps the default axis');
+  const flat = tickLayout({ domain: [5, 5], pixels: 300, label, fontSize: 12, horizontal: true, max: 5 });
+  assert.ok(flat.domain[0] < 5 && flat.domain[1] > 5, 'a zero range gets a window round the value');
+  assert.deepEqual(tickLayout({ domain: [0, 0], pixels: 100, label, fontSize: 12, horizontal: true, max: 4 }).domain, [0, 1]);
+  assert.equal(tickLayout({ domain: [Number.NaN, 1], pixels: 300, label, fontSize: 12, horizontal: true, max: 5 }), null, 'no extent keeps the default axis');
   const negative = tickLayout({ domain: [-3, 8], pixels: 300, label, fontSize: 12, horizontal: false, max: 6 });
   assert.ok(negative.values.includes(0) && negative.domain[0] <= -3 && negative.domain[1] >= 8);
+});
+
+test('thinned time ticks are every k-th reading: six hourly readings', async () => {
+  const six = Array.from({ length: 6 }, (_, i) => ({ t: `2025-01-06T0${i}:10:00Z`, v: i }));
+  const { vegaLite } = inlineChart({ kind: 'line', x: 't', y: 'v' }, six);
+  const svgs = await renderThemedSvgs(vegaLite, six, theme);
+  assert.deepEqual(dateLabels(svgs.light.wide).map((l) => l.text), ['Jan 06 00:10', 'Jan 06 02:10', 'Jan 06 04:10']);
+  assert.deepEqual(dateLabels(svgs.light.narrow).map((l) => l.text), ['Jan 06 00:10', 'Jan 06 05:10']);
+});
+
+// ---- axes a raw vegaLite chart set itself ---------------------------------------------------
+
+test('a raw vegaLite chart keeps its own scale and tick settings', async () => {
+  const rows = [{ k: 'a', v: 40 }, { k: 'b', v: 87 }];
+  const view = (y) => ({ mark: 'bar', encoding: { x: { field: 'k', type: 'nominal' }, y: { field: 'v', type: 'quantitative', ...y } } });
+  const ticks = async (y, size = 'wide') => labels((await renderThemedSvgs(view(y), rows, theme)).light[size]).filter(isValueLabel).map((l) => valueOf(l.text));
+  const fixed = await ticks({ scale: { domain: [0, 87] } });
+  assert.ok(fixed.length >= 3 && Math.max(...fixed) <= 87, `fixed domain [0, 87] stays: ${fixed}`);
+  assert.ok(Math.max(...(await ticks({ scale: { domain: [0, 87] } }, 'narrow'))) <= 87, 'narrow too');
+  const loose = await ticks({ scale: { domainMax: 87, nice: false } });
+  assert.ok(Math.max(...loose) <= 87, `domainMax and nice:false stay: ${loose}`);
+  const own = await ticks({ axis: { values: [0, 87] } });
+  assert.deepEqual(own, [0, 87], 'axis.values stay');
+  assert.deepEqual(await ticks({ axis: { tickCount: 2 } }), [0, 50], 'axis.tickCount stays');
+});
+
+// ---- zero-range axes ------------------------------------------------------------------------
+
+test('a value axis with no range is a clean axis, never 0.000000', async () => {
+  const zeros = [{ k: 'a', v: 0 }, { k: 'b', v: 0 }];
+  const flat = [{ x: 4, y: 4 }, { x: 4, y: 4 }];
+  const cases = [
+    [inlineChart({ kind: 'bar', x: 'k', y: 'v' }, zeros), zeros, 'all-zero bars'],
+    [inlineChart({ kind: 'scatter', x: 'x', y: 'y' }, flat), flat, 'equal-value scatter'],
+  ];
+  for (const [c, data, name] of cases) {
+    assert.deepEqual(c.errors, [], name);
+    for (const [size, svg] of Object.entries((await renderThemedSvgs(c.vegaLite, data, theme)).light)) {
+      const ticks = labels(svg).filter(isValueLabel);
+      assert.ok(ticks.length >= 2, `${name} ${size}: ${ticks.map((l) => l.text)}`);
+      assert.ok(ticks.every((l) => l.shown && !/\.\d{3,}/.test(l.text)), `${name} ${size}: clean labels ${ticks.map((l) => l.text)}`);
+      assert.deepEqual(overlaps(ticks), [], `${name} ${size}`);
+    }
+  }
+  const zeroBars = labels((await renderThemedSvgs(cases[0][0].vegaLite, zeros, theme)).light.narrow).filter(isValueLabel).map((l) => l.text);
+  assert.ok(zeroBars[0] === '0' && zeroBars.at(-1) === '1' && zeroBars.every((t) => !t.endsWith('.0')), `all-zero bars run 0 to 1: ${zeroBars}`);
+});
+
+// ---- explicit formats on a phone ------------------------------------------------------------
+
+test('on a phone, currency and number axes shorten like plain ones so three ticks fit', async () => {
+  const rows = [{ team: 'Core platform', v: 1234567 }, { team: 'Web', v: 617283 }, { team: 'Mobile', v: 246913 }];
+  for (const [format, prefix] of [['currency', '$'], ['number', '']]) {
+    const c = inlineChart({ kind: 'bar', x: 'team', y: 'v', format }, rows);
+    const svgs = await renderThemedSvgs(c.vegaLite, rows, theme);
+    const narrow = labels(svgs.light.narrow).filter(isValueLabel);
+    assert.ok(narrow.length >= 3, `${format}: ${narrow.map((l) => l.text)}`);
+    assert.ok(narrow.every((l) => l.shown && l.text.startsWith(prefix)), `${format}: ${narrow.map((l) => l.text)}`);
+    assert.ok(Math.max(...narrow.map((l) => valueOf(l.text))) <= 1500000, `${format}: domain ends at ${narrow.at(-1).text}`);
+    assert.ok(narrow.some((l) => /M$/.test(l.text)), `${format}: millions are shortened (${narrow.map((l) => l.text)})`);
+  }
+  const wide = labels((await renderThemedSvgs(inlineChart({ kind: 'bar', x: 'team', y: 'v', format: 'currency' }, rows).vegaLite, rows, theme)).light.wide);
+  assert.ok(wide.some((l) => l.text === '$1,000,000'), 'wide stays $1,000,000');
 });
