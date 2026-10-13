@@ -166,7 +166,8 @@ test('check: a covered Present button is one clear line per viewport, not a cras
     assert.equal(lines.length, 1, result.problems.join('\n'));
     assert.match(lines[0], /^\d+px: the Present button of diagram 1 is covered by another element$/);
   }
-  assert.ok(Date.now() - t0 < 9000, `took ${Date.now() - t0} ms`);
+  // Generous bound (idle ~4 s): it only has to prove the check gives up well before its 60 s watchdog, even on a loaded CI runner.
+  assert.ok(Date.now() - t0 < 30000, `took ${Date.now() - t0} ms`);
 });
 
 test('check: a crash in one probe keeps the rest of that viewport and its counts', async (t) => {
