@@ -282,6 +282,13 @@ test('reserved DuckDB catalog names cannot be source names', async () => {
   assert.deepEqual(r.errors, [{ path: 'sources.main', message: '"main" is reserved by DuckDB; choose another source name' }]);
 });
 
+test('CLI: a misspelt flag suggests the real one and keeps the usage line', () => {
+  const r = cli([path.join(EXAMPLES, 'minimal.json'), '--allow-outsde']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /Unknown option '--allow-outsde'; did you mean '--allow-outside'; usage: node scripts\/validate\.mjs/);
+  assert.equal(r.stderr.trim().split('\n').length, 1);
+});
+
 test('CLI: unknown flag exits 2, --json reports it, --allow-outside is accepted', () => {
   const r = cli([path.join(EXAMPLES, 'minimal.json'), '--bogus']);
   assert.equal(r.status, 2);

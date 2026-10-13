@@ -1,13 +1,25 @@
 // Value-axis ticks chosen up front, from the pixels the axis has and the width of the labels it would
 // print, so no label is ever hidden for overlap. Pure: no Vega, no DOM.
 
-// Advance widths in ems for the characters a number label is made of (a typical sans-serif; digits are tabular).
-// Vega's own estimate is 0.8 em for every character, which is too wide for "$1.5M" and hides labels that fit.
-const EM = { ',': 0.3, '.': 0.3, k: 0.5, M: 0.9, m: 0.9, G: 0.75, T: 0.6, 'µ': 0.6, '%': 0.85 };
-const DIGIT_EM = 0.6;
+import { measure } from '../../shared/text.mjs';
 
-/** The width in px of a number label at `fontSize`. */
-export const labelWidth = (text, fontSize) => [...text].reduce((w, ch) => w + (EM[ch] ?? DIGIT_EM), 0) * fontSize;
+// Vega's own estimate of a label's width, 0.8 em per character: kept for a family the repo has no metrics for.
+const VEGA_EM = 0.8;
+
+/**
+ * The width in px of a tick label at `fontSize`: the real advances of `family` (shared/text.mjs, the font the page
+ * ships), else Vega's 0.8 em per character when the family is unknown (measure throws) or none is given.
+ */
+export function labelWidth(text, fontSize, family) {
+  if (family !== undefined) {
+    try {
+      return measure(text, { family, size: fontSize, weight: 400 });
+    } catch {
+      // not a family with committed metrics
+    }
+  }
+  return [...text].length * VEGA_EM * fontSize;
+}
 const MAX_STEPS = 60;
 
 /** The 1-2-5 step (x 10^k) that is at least `raw`. */
@@ -34,12 +46,13 @@ function fits(positions, widths, { pixels, fontSize, horizontal, gap }) {
 /**
  * Ticks for a linear axis over the data extent [d0, d1].
  * `pixels` is the axis length, `label(value, step)` the text printed for a tick, `fontSize` its size,
- * `horizontal` whether labels sit side by side (else one above the other), `max` the most ticks wanted.
+ * `horizontal` whether labels sit side by side (else one above the other), `max` the most ticks wanted,
+ * `family` the label font (its real metrics size the labels), `gap` the clear px kept between two labels.
  * -> { values, domain: [lo, hi] } where the domain ends on a tick and overshoots the data by less than one step,
  * or null when there is no extent to lay out (the caller keeps Vega's own axis); a zero range gets a window around the value.
  * The step is the smallest 1-2-5 step whose labels, side by side, fit in the space between ticks.
  */
-export function tickLayout({ domain, pixels, label, fontSize, horizontal, max, gap = 4 }) {
+export function tickLayout({ domain, pixels, label, fontSize, horizontal, max, family, gap = 4 }) {
   let [d0, d1] = domain;
   // No range (all zeros, equal values): a small window round the value, 0 to 1 for zero.
   if (d0 === d1 && Number.isFinite(d0)) [d0, d1] = d0 === 0 ? [0, 1] : [d0 - Math.abs(d0) * 0.5, d0 + Math.abs(d0) * 0.5];
@@ -52,7 +65,7 @@ export function tickLayout({ domain, pixels, label, fontSize, horizontal, max, g
     const count = Math.round((hi - lo) / step) + 1;
     if (count > max && count > 2) continue;
     const values = Array.from({ length: count }, (_, k) => round(lo + k * step, step));
-    const widths = values.map((v) => labelWidth(label(v, step), fontSize));
+    const widths = values.map((v) => labelWidth(label(v, step), fontSize, family));
     if (count <= 2 || fits(values.map((v) => ((v - lo) / (hi - lo)) * pixels), widths, { pixels, fontSize, horizontal, gap })) return { values, domain: [lo, hi] };
   }
   return null;

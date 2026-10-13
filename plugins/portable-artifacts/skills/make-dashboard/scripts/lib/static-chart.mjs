@@ -40,6 +40,8 @@ const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 
 /** `"Family", fallback` for a theme's body font (the page's --font value). */
 export const fontOf = (fonts) => `"${fonts.body.family}", ${fonts.body.fallback}`;
+// The first family of a CSS font-family string, unquoted: the one the axis labels are set in.
+const familyOf = (font) => /^\s*(?:"([^"]+)"|'([^']+)'|([^,]+))/.exec(font ?? '')?.slice(1).find((g) => g !== undefined)?.trim();
 
 /** A theme's light or dark token set -> the colours vegaConfig takes. */
 export function coloursOf(tokens) {
@@ -94,18 +96,24 @@ function dateFormat(times) {
   return '%b %d, %Y';
 }
 
-// At most `max` of the sorted times, always readings: first and last when the count divides evenly into `max`
-// or fewer ticks, else every k-th reading from the first. Steps never differ, and no tick falls between readings.
-function thin(times, max) {
+// At most `max` of the sorted times, always readings, always the first and the last. When the readings divide
+// evenly into `max` or fewer ticks, the steps are all the same. Otherwise every k-th reading from the first, then
+// the last: with room (at least 3/5 of a step of time) it is one more tick, without it the last k-th tick gives
+// way, so two labels never crowd each other.
+export function thin(times, max) {
   if (times.length <= max) return times;
+  const last = times.length - 1;
   for (let m = max; m >= 3; m--) {
-    if ((times.length - 1) % (m - 1) === 0) {
-      const k = (times.length - 1) / (m - 1);
+    if (last % (m - 1) === 0) {
+      const k = last / (m - 1);
       return Array.from({ length: m }, (_, i) => times[i * k]);
     }
   }
-  const k = Math.ceil((times.length - 1) / (max - 1));
-  return times.filter((_, i) => i % k === 0);
+  const k = Math.ceil(last / (max - 1));
+  const ticks = times.filter((_, i) => i % k === 0);
+  if (ticks.at(-1) === times[last]) return ticks;
+  const roomy = (times[last] - ticks.at(-1)) * (max - 1) * 5 >= (times[last] - times[0]) * 3;
+  return roomy ? [...ticks, times[last]] : [...ticks.slice(0, -1), times[last]];
 }
 
 /**
@@ -186,7 +194,7 @@ function valueScales(vegaSpec, own) {
  * domain that ends on a tick, so no tick label is hidden for overlap and the scale never runs far past the data.
  * One extra layout pass reads each scale's raw extent and pixel length. Facets and concats are left to Vega.
  */
-async function planValueAxes(vegaSpec, sizing, own) {
+async function planValueAxes(vegaSpec, sizing, own, family) {
   const scales = valueScales(vegaSpec, own);
   if (scales.length === 0 || vegaSpec.scales.some((sc) => sc.name.includes('child__'))) return vegaSpec;
   const raw = structuredClone(vegaSpec);
@@ -206,19 +214,19 @@ async function planValueAxes(vegaSpec, sizing, own) {
   const first = await measure(raw);
   const extents = new Map([...first].map(([name, m]) => [name, m.domain]));
   let pixels = new Map([...first].map(([name, m]) => [name, m.pixels]));
-  let planned = layOut(vegaSpec, scales, extents, pixels, sizing);
+  let planned = layOut(vegaSpec, scales, extents, pixels, sizing, family);
   if (planned === vegaSpec) return planned;
   // The plot is a little shorter or longer once the real labels are in place; lay out again with what it came to.
   const actual = await measure(planned);
   if ([...actual].some(([name, m]) => Math.abs(m.pixels - pixels.get(name)) > 1)) {
     pixels = new Map([...actual].map(([name, m]) => [name, m.pixels]));
-    planned = layOut(vegaSpec, scales, extents, pixels, sizing);
+    planned = layOut(vegaSpec, scales, extents, pixels, sizing, family);
   }
   return planned;
 }
 
 // The spec with each value axis's ticks, labels and domain planned for `pixels` of room.
-function layOut(vegaSpec, scales, extents, pixels, sizing) {
+function layOut(vegaSpec, scales, extents, pixels, sizing, family) {
   const plan = new Map();
   const shortened = new Map();
   for (const sc of scales) {
@@ -231,7 +239,7 @@ function layOut(vegaSpec, scales, extents, pixels, sizing) {
     if (spec !== axis.format) shortened.set(sc.name, spec);
     const format = spec ? locale.format(spec) : null;
     const label = (v, step) => (format ? format(v) : locale.format(plainFormat(step))(v));
-    const layout = tickLayout({ domain, pixels: pixels.get(sc.name), label, fontSize: LABEL_SIZE, horizontal, max: horizontal ? sizing.ticks : VERTICAL_TICKS });
+    const layout = tickLayout({ domain, pixels: pixels.get(sc.name), label, fontSize: LABEL_SIZE, horizontal, max: horizontal ? sizing.ticks : VERTICAL_TICKS, family });
     if (layout) plan.set(sc.name, layout);
   }
   if (plan.size === 0) return vegaSpec;
@@ -271,7 +279,7 @@ export async function renderSvg(vegaLite, rows, { colours, font, size = 'wide', 
     spec.width = sizing.width;
     spec.autosize = { type: typeof spec.height === 'object' ? 'fit-x' : 'fit', contains: 'padding' };
   }
-  const vegaSpec = await planValueAxes(compile(spec, { logger: QUIET }).spec, sizing, ownAxes(base));
+  const vegaSpec = await planValueAxes(compile(spec, { logger: QUIET }).spec, sizing, ownAxes(base), familyOf(font));
   const view = await runView(vegaSpec);
   try {
     const svg = stripAria(await view.toSVG());

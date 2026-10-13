@@ -1,6 +1,7 @@
 // Shared CLI plumbing: strict argument parsing and the exit-2 (usage/IO) path.
 import fs from 'node:fs';
 import { parseArgs } from 'node:util';
+import { didYouMean } from './errors.mjs';
 
 export class UsageError extends Error {
   constructor(message) {
@@ -9,13 +10,21 @@ export class UsageError extends Error {
   }
 }
 
+// An unknown --flag close to a real one: "; did you mean '--facts'". Short flags and far-off words get none.
+function flagHint(message, options) {
+  const flag = /^Unknown option '--([^']+)'/.exec(message)?.[1];
+  const hint = flag === undefined ? null : didYouMean(flag, Object.keys(options));
+  return hint === null ? '' : `; did you mean '--${hint}'`;
+}
+
 // Strict parseArgs; any problem becomes a one-line UsageError.
 export function parseCli(argv, options, usage) {
   try {
     const { values, positionals } = parseArgs({ args: argv, options, allowPositionals: true, strict: true });
     return { values, positionals };
   } catch (e) {
-    throw new UsageError(`${String(e.message).split('. ')[0].replace(/\.$/, '')}; usage: ${usage}`);
+    const message = String(e.message).split('. ')[0].replace(/\.$/, '');
+    throw new UsageError(`${message}${flagHint(message, options)}; usage: ${usage}`);
   }
 }
 

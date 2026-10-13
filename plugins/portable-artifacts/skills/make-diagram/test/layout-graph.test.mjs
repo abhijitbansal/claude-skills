@@ -385,6 +385,44 @@ for (const [type, nodeKind, direction] of [['state', 'state', 'right'], ['state'
   });
 }
 
+// Two collinear stretches that share more than a point.
+function shareStretch([a, b], [c, d]) {
+  const horizontal = a.y === b.y && c.y === d.y && a.y === c.y;
+  const vertical = a.x === b.x && c.x === d.x && a.x === c.x;
+  if (!horizontal && !vertical) return false;
+  const axis = horizontal ? 'x' : 'y';
+  const lo = Math.max(Math.min(a[axis], b[axis]), Math.min(c[axis], d[axis]));
+  const hi = Math.min(Math.max(a[axis], b[axis]), Math.max(c[axis], d[axis]));
+  return hi - lo > 0.05;
+}
+
+for (const [type, nodeKind, direction] of [['state', 'state', 'right'], ['state', 'state', 'down'], ['flow', 'step', 'down'], ['flow', 'step', 'right'], ['architecture', 'service', 'right']]) {
+  test(`two self loops on one ${type} ${nodeKind} (${direction}) do not run over each other and keep their own labels`, async () => {
+    const spec = {
+      title: 't', type, direction,
+      nodes: [node('a', { kind: nodeKind }), node('b')],
+      edges: [{ from: 'a', to: 'b' }, { from: 'a', to: 'a', label: 'again' }, { from: 'a', to: 'a', label: 'retry later' }],
+    };
+    const g = await layout(spec);
+    const a = g.nodes[0];
+    const [first, second] = g.edges.slice(1);
+    for (const loop of [first, second]) {
+      assert.ok(onBorder(loop.points[0], a) && onBorder(loop.points.at(-1), a), `${loop.label.text}: both ends sit on the node box`);
+    }
+    for (const s1 of segments(first.points)) {
+      for (const s2 of segments(second.points)) assert.ok(!shareStretch(s1, s2), `the loops share a stretch: ${JSON.stringify(s1)} and ${JSON.stringify(s2)}`);
+    }
+    for (const [loop, other] of [[first, second], [second, first]]) {
+      const box = extent(loop.points);
+      assert.ok(!overlaps(loop.label, box), `${loop.label.text}: the plate does not sit on its own loop`);
+      assert.ok(!segments(other.points).some(([p, q]) => crosses(p, q, loop.label, 0)), `${loop.label.text}: the plate is not crossed by the other loop`);
+      const gap = Math.max(box.x - right(loop.label), loop.label.x - right(box), box.y - bottom(loop.label), loop.label.y - bottom(box));
+      assert.ok(gap >= 0 && gap <= 40, `${loop.label.text}: label gap to its loop ${gap}`);
+    }
+    assertSound(g, spec, 'two-self-loops');
+  });
+}
+
 test('a self loop on a tiny diamond still leaves the node and returns to it', async () => {
   const spec = { title: 't', type: 'state', nodes: [node('c', { kind: 'choice' }), node('d')], edges: [{ from: 'c', to: 'd' }, { from: 'c', to: 'c' }] };
   const g = await layout(spec);

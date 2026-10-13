@@ -86,9 +86,9 @@ export function watchFiles(paths, onChange, { debounceMs = 300, onError } = {}) 
 export async function startLiveServer({ specFile, port = 0, interval, theme, allowOutside = false, timeoutMs, out, watch = watchFiles }) {
   const token = crypto.randomBytes(16).toString('hex');
   const clients = new Set();
-  const state = { html: null, watcher: null, watchPaths: [], warning: null };
+  const state = { html: null, watcher: null, watchPaths: [], warning: null, closed: false };
   const frame = (event, payload) => `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
-  const send = (event, payload) => { for (const c of clients) c.write(frame(event, payload)); };
+  const send = (event, payload) => { if (!state.closed) for (const c of clients) c.write(frame(event, payload)); };
   // The watcher note outlives the reload that follows a good build: new clients hear it on connect.
   const warn = (problem) => { state.warning = problem; send('watch-warning', problem); };
   const watchProblem = (e) => ({ path: 'watch', code: e.code ?? e.message, message: `watcher stopped: ${e.code ?? e.message}; fix the folder and press Rebuild now` });
@@ -98,6 +98,7 @@ export async function startLiveServer({ specFile, port = 0, interval, theme, all
   function arm(paths) {
     state.watcher?.close();
     state.watcher = null;
+    if (state.closed) return null; // a build that outlived close() must not leave a watcher behind
     state.watchPaths = paths;
     state.warning = null;
     try {
@@ -183,12 +184,18 @@ export async function startLiveServer({ specFile, port = 0, interval, theme, all
     ok: true,
     url: `http://127.0.0.1:${server.address().port}/`,
     token,
-    close: () => new Promise((resolve) => {
+    close: async () => {
+      state.closed = true;
       clearInterval(timer);
       state.watcher?.close();
+      state.watcher = null;
       for (const c of clients) c.end();
-      server.close(() => resolve());
-      server.closeAllConnections();
-    }),
+      clients.clear();
+      await new Promise((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      });
+      await rebuilder.idle(); // a build still running finishes against a closed server; arm() sees state.closed
+    },
   };
 }

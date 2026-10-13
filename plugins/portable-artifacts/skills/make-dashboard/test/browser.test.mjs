@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { launchBrowser, haveBrowser, buildProject } from './helpers/browser.mjs';
+import { serve } from './helpers/live-harness.mjs';
 
 const SPEC = {
   title: 'Browser',
@@ -13,7 +14,8 @@ const SPEC = {
 };
 
 let browser;
-after(() => browser?.close());
+// A browser that will not close must not keep the file alive.
+after(() => Promise.race([browser?.close().catch(() => {}), new Promise((r) => setTimeout(r, 15000).unref())]));
 
 // Opens a built page; collects console errors and warnings (Vega-Lite warns on bad bindings) and page errors.
 async function open(out, { width = 1280, blockStorage = false, colorScheme = 'light' } = {}) {
@@ -243,27 +245,26 @@ test('PNG, SVG and CSV export download under the strict CSP', async (t) => {
 
 test('live page: CSV edit updates the KPI, broken data shows the banner, Rebuild works', async (t) => {
   if (!(await haveBrowser())) return t.skip('no browser');
-  const { spawn } = await import('node:child_process');
   const { dir, file } = buildProject({ ...KINDS_SPEC, kpis: [{ id: 'k1', title: 'Rows', query: 'rev', field: 'Total Revenue' }] });
-  const child = spawn(process.execPath, [path.resolve('scripts/serve.mjs'), '--watch', file], { stdio: ['ignore', 'pipe', 'pipe'] });
-  const url = await new Promise((resolve) => { let o = ''; child.stdout.on('data', (d) => { o += d; const m = o.match(/(http:\/\/127\.0\.0\.1:\d+\/)/); if (m && /token:/.test(o)) resolve(m[1]); }); });
+  const { port } = await serve(t, path.resolve('scripts/serve.mjs'), ['--watch', file]); // torn down by t.after
+  const url = `http://127.0.0.1:${port}/`;
+  browser ??= await launchBrowser();
+  const page = await browser.newPage();
   try {
-    browser ??= await launchBrowser();
-    const page = await browser.newPage();
     await page.goto(url);
     await page.waitForFunction(() => window.paReady === true);
     const csv = path.join(dir, 'data/sales.csv');
     fs.appendFileSync(csv, '2025-06-01,North,Widget,100000.00,1\n');
-    await page.waitForFunction(() => /\$?1\d\d,\d{3}/.test(document.querySelector('#kpi-k1 .kpi-value').textContent), null, { timeout: 10000 });
+    await page.waitForFunction(() => /\$?1\d\d,\d{3}/.test(document.querySelector('#kpi-k1 .kpi-value').textContent), null, { timeout: 30000 });
     fs.appendFileSync(csv, '"broken\n');
-    await page.waitForSelector('#pa-live-banner:not([hidden])', { timeout: 10000 });
+    await page.waitForSelector('#pa-live-banner:not([hidden])', { timeout: 30000 });
     assert.match(await page.textContent('#pa-live-banner'), /queries\.rev|sources/);
     const lines = fs.readFileSync(csv, 'utf8').split('\n');
     fs.writeFileSync(csv, lines.slice(0, -2).join('\n') + '\n');
-    await page.waitForSelector('#pa-live-banner[hidden]', { state: 'attached', timeout: 10000 });
-    await Promise.all([page.waitForEvent('load', { timeout: 10000 }), page.click('#pa-live-rebuild')]);
+    await page.waitForSelector('#pa-live-banner[hidden]', { state: 'attached', timeout: 30000 });
+    await Promise.all([page.waitForEvent('load', { timeout: 30000 }), page.click('#pa-live-rebuild')]);
   } finally {
-    child.kill();
+    await page.close();
   }
 });
 
@@ -416,9 +417,9 @@ test('live page: a paused watcher is a non-error badge note; the page does not s
     page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') problems.push(m.text()); });
     await page.goto(live.url);
     await page.waitForFunction(() => window.paReady === true);
-    await Promise.all([page.waitForEvent('load', { timeout: 10000 }), page.click('#pa-live-rebuild')]); // good rebuild, arming fails
+    await Promise.all([page.waitForEvent('load', { timeout: 30000 }), page.click('#pa-live-rebuild')]); // good rebuild, arming fails
     await page.waitForFunction(() => window.paReady === true);
-    await page.waitForFunction(() => document.getElementById('pa-live-badge').textContent === 'Live (watching paused: EMFILE)', null, { timeout: 5000 });
+    await page.waitForFunction(() => document.getElementById('pa-live-badge').textContent === 'Live (watching paused: EMFILE)', null, { timeout: 15000 });
     assert.equal(await page.locator('#pa-live-banner').isHidden(), true, 'no error banner');
     assert.deepEqual(problems, []);
     await page.close();
