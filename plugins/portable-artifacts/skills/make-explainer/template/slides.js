@@ -32,6 +32,7 @@
     current = n;
     deck.setAttribute('data-current', String(n));
     slides.forEach(function (slide, i) { slide.inert = i + 1 !== n; });
+    if (changed) pauseVideos();
     count.textContent = String(n);
     fill.style.width = Math.round((n * 1000) / total) / 10 + '%';
     meter.setAttribute('aria-valuenow', String(n));
@@ -43,6 +44,13 @@
       setHash(n);
       PA.writeStore(local, storeKey, String(n));
     }
+  }
+
+  // A slide that is left must not keep playing: its video is hidden and out of reach, but not silent.
+  function pauseVideos() {
+    [].forEach.call(deck.querySelectorAll('video'), function (video) {
+      if (!video.paused && video.closest('[inert]')) video.pause();
+    });
   }
 
   // runtime.js owns the live region's behaviour; if its hook is missing, write to the region directly.
@@ -165,7 +173,8 @@
       if (dialog.open) closeOutline(); else openOutline();
       return;
     }
-    if (dialog.open || match(target, TEXT_ENTRY)) return;
+    // A focused video is a player: Space, the arrows, Home and End are its own.
+    if (dialog.open || match(target, TEXT_ENTRY) || match(target, 'video')) return;
 
     // A focused code block or table keeps the keys it can use: the arrows when it
     // scrolls sideways, every other key when it scrolls vertically.

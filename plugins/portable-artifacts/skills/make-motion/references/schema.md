@@ -7,8 +7,12 @@ Validate with `node scripts/validate.mjs motion.json`. Unknown properties are er
 |---|---|---|---|
 | `size` | `[w, h]` ints 16–3840 | `[1920, 1080]` | logical canvas; `render --size` rescales output |
 | `fps` | 24 \| 25 \| 30 \| 60 | 30 | |
-| `background` | CSS colour | `#0b0d12` | |
+| `background` | CSS colour | `#0b0d12` (the theme's page colour with `theme`) | |
+| `theme` | shared theme name (`paper`, `ink`, `blueprint`, `editorial`) | none | optional; see below |
 | `scenes` | array, 1–50 | required | total duration ≤ 120 s |
+
+### theme
+Without `theme` the look is the default one (dark background, Inter, JetBrains Mono). With it, the theme's **dark** colours and fonts become the defaults: `background` is its page colour, text is its text colour, shapes without a `fill` or `stroke` use its accent, charts take its palette and axis colours, `sans` text uses its body font and `"font": "mono"` its mono font (display fonts are not used). Anything the spec sets itself (`background`, `color`, `fill`, a chart `config`) still wins. Fonts come from the skill's bundled `shared/fonts`, no network. An unknown name is an error with a did-you-mean.
 
 ## Scene
 `id` (string, globally unique), `duration` (0.2–60 s), `elements` (array), optional `background`, `transition` (`none` default | `fade`: scene opacity 0→1 over min(0.4 s, duration)).

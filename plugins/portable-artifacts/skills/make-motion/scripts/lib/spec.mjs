@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
 import { compile as compileVegaLite } from 'vega-lite';
-import { formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
+import { formatAjvErrors, pathJoin, didYouMean } from '../../shared/errors.mjs';
+import { listThemes } from '../../shared/theme.mjs';
 import { resolveAsset } from './paths.mjs';
 import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, trackStart } from '../../template/audio.mjs';
 
@@ -113,6 +114,7 @@ export const SCHEMA = {
     },
     fps: { enum: [24, 25, 30, 60] },
     background: color,
+    theme: { type: 'string', minLength: 1 },
     scenes: {
       type: 'array', minItems: 1, maxItems: 50,
       items: {
@@ -311,10 +313,20 @@ function checkElement(el, base, scene, dir, errors) {
   if (el.type === 'chart' && el.vegaLite) checkChart(el, base, errors);
 }
 
+// A theme is a name from the shared themes; its dark colours and body/mono fonts become the defaults.
+function checkTheme(spec, errors) {
+  if (spec.theme === undefined) return;
+  const themes = listThemes();
+  if (themes.includes(spec.theme)) return;
+  const near = didYouMean(spec.theme, themes);
+  errors.push({ path: 'theme', message: `unknown theme ${JSON.stringify(spec.theme)}; ${near ? `did you mean ${JSON.stringify(near)}?` : `available: ${themes.join(', ')}`}` });
+}
+
 export function validateSpec(spec, { dir = process.cwd() } = {}) {
   if (!schemaCheck(spec)) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
   const errors = [];
   checkIds(spec, errors);
+  checkTheme(spec, errors);
   checkColor(spec, 'background', '', errors);
   spec.scenes.forEach((scene, si) => {
     checkColor(scene, 'background', `scenes[${si}]`, errors);

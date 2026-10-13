@@ -5,6 +5,8 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { buildPage, BuildError, contentSecurityPolicy, sectionIds, headingIds } from '../scripts/lib/page.mjs';
+import { SECTIONS } from '../scripts/lib/sections.mjs';
+import { TYPES } from '../scripts/lib/schema.mjs';
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 const CORE = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'core.explainer.json'), 'utf8'));
@@ -114,12 +116,17 @@ test('sections without a title render no heading and no label', async () => {
   assert.ok(!html.includes('aria-labelledby'));
 });
 
-test('sections without a renderer are reported with paths, all at once (in either mode)', async () => {
+test('every section type the schema accepts has a renderer', () => {
+  assert.deepEqual(TYPES.filter((type) => !Object.hasOwn(SECTIONS, type)), []);
+});
+
+// The guard is for a spec that skipped validation (buildPage is exported), so it is driven with a type no schema has.
+test('a section type without a renderer is reported with paths, all at once (in either mode)', async () => {
   for (const mode of ['page', 'slides']) {
-    await assert.rejects(build(doc([text(1), { type: 'motion', video: 'x.mp4' }, { type: 'motion', video: 'y.mp4' }], { mode })), (e) => {
+    await assert.rejects(build(doc([text(1), { type: 'bogus' }, { type: 'bogus' }], { mode })), (e) => {
       assert.ok(e instanceof BuildError);
       assert.deepEqual(e.errors.map((x) => x.path), ['sections[1].type', 'sections[2].type']);
-      assert.match(e.errors[0].message, /"motion" sections have no renderer yet/);
+      assert.match(e.errors[0].message, /^no renderer for section type "bogus"; remove the section or use another type$/);
       return true;
     });
   }

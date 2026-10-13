@@ -1,0 +1,33 @@
+{
+  "theme": "paper",
+  "size": [480, 270],
+  "fps": 24,
+  "scenes": [
+    {
+      "id": "title",
+      "duration": 2,
+      "elements": [
+        {
+          "id": "heading", "type": "text", "text": "One JSON file, one video", "x": 240, "y": 112, "fontSize": 32,
+          "keyframes": [{ "t": 0, "opacity": 0, "y": 126 }, { "t": 0.6, "opacity": 1, "y": 112, "ease": "outCubic" }]
+        },
+        {
+          "id": "rule", "type": "shape", "shape": "line", "x": 240, "y": 150, "width": 120, "strokeWidth": 3,
+          "keyframes": [{ "t": 0.3, "draw": 0 }, { "t": 1, "draw": 1, "ease": "outCubic" }]
+        }
+      ]
+    },
+    {
+      "id": "count",
+      "duration": 2,
+      "transition": "fade",
+      "elements": [
+        { "id": "number", "type": "counter", "to": 18, "x": 240, "y": 120, "fontSize": 72 },
+        {
+          "id": "label", "type": "text", "text": "section types, one renderer each", "x": 240, "y": 188, "fontSize": 20, "fontWeight": 400,
+          "keyframes": [{ "t": 0.2, "opacity": 0 }, { "t": 0.7, "opacity": 1 }]
+        }
+      ]
+    }
+  ]
+}

@@ -14,7 +14,7 @@ const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 const P = '<i>X</i>"\'';
 const ESCAPED_P = '&lt;i&gt;X&lt;/i&gt;&quot;&#39;';
 
-const ctx = { dir: FIXTURES, icons: null, theme: loadTheme('paper'), mode: 'page' };
+const ctx = { dir: FIXTURES, icons: null, theme: loadTheme('paper'), mode: 'page', slug: 'page', assetsDir: path.join(FIXTURES, 'page.assets'), idFor: () => 'sec' };
 
 // One section per type with the hostile string in every free-text field.
 const HOSTILE = {
@@ -32,6 +32,7 @@ const HOSTILE = {
   code: { type: 'code', code: P, language: P, caption: P },
   details: { type: 'details', summary: P, text: P },
   image: { type: 'image', src: 'pixel.png', alt: P, caption: P },
+  motion: { type: 'motion', video: 'demo.mp4', poster: 'poster.png', caption: P },
   diagram: { type: 'diagram', caption: P, diagram: { title: P, type: 'flow', nodes: [{ id: 'a', label: P }, { id: 'b', label: P, note: P }], edges: [{ from: 'a', to: 'b', label: P }] } },
   chart: { type: 'chart', title: P, caption: P, kind: 'bar', x: 'cat', y: 'n', data: [{ cat: P, n: 1 }, { cat: 'b', n: 2 }] },
   checklist: { type: 'checklist', key: 'k', intro: P, onFail: P, groups: [{ title: P, items: [{ text: P, note: P, tag: 'visual' }] }] },

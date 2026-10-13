@@ -153,7 +153,7 @@ function unsupported(spec) {
   const errors = [];
   spec.sections.forEach((s, i) => {
     if (!Object.hasOwn(SECTIONS, s.type)) {
-      errors.push({ path: pathJoin(pathJoin('sections', i), 'type'), message: `${JSON.stringify(s.type)} sections have no renderer yet; remove the section or use another type` });
+      errors.push({ path: pathJoin(pathJoin('sections', i), 'type'), message: `no renderer for section type ${JSON.stringify(s.type)}; remove the section or use another type` });
     }
   });
   return errors;
@@ -211,6 +211,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     mode: slides ? 'slides' : 'page',
     idFor: slides ? (_section, i) => `slide-${i + 2}` : (_section, i) => ids[i],
     icons: await loadIcons(spec),
+    env,
   };
 
   const assets = [];

@@ -13,6 +13,7 @@ import { itemKey } from './render/checklist.mjs';
 import { readDiagramSpec, reportDiagramErrors, inPageTheme } from './diagram-source.mjs';
 import { chartMode, loadChartSource, INLINE_CHART_FIELDS } from './chart-source.mjs';
 import { LIMITS } from './schema.mjs';
+import { readVideo, readPoster, readMotionSpec, reportMotionErrors } from './motion-source.mjs';
 
 const CHECKS = new Map();
 
@@ -155,4 +156,40 @@ function interactiveClash(section, at, dir, spec) {
     }];
   }
   return [];
+}
+
+// motion: the video and poster are usable files in the spec folder; a spec (used when there is no
+// video) must pass make-motion's own validation, with its errors re-pathed under the section's `spec`
+// field. make-motion is only loaded for a spec that will be rendered. Nothing is rendered here.
+registerCheck('motion', async ({ section, path: at, dir }) => {
+  const errors = [];
+  const warnings = [];
+  const fail = (field, message) => errors.push({ path: pathJoin(at, field), message });
+  if (section.video !== undefined) {
+    const video = readVideo(section.video, dir);
+    if (video.error) fail('video', video.error);
+    if (section.spec !== undefined) {
+      warnings.push({ path: pathJoin(at, 'spec'), message: 'not used: the video is shown; remove one of them', warning: true });
+    }
+  }
+  if (section.poster !== undefined) {
+    const poster = readPoster(section.poster, dir);
+    if (poster.error) fail('poster', poster.error);
+  }
+  if (section.spec !== undefined && section.video === undefined) errors.push(...await motionSpecErrors(section.spec, at, dir));
+  return [...errors, ...warnings];
+});
+
+async function motionSpecErrors(ref, at, dir) {
+  const where = pathJoin(at, 'spec');
+  const source = readMotionSpec(ref, dir);
+  if (source.error) return [{ path: where, message: source.error }];
+  let api;
+  try {
+    api = await loadSibling('make-motion', 'scripts/lib/spec.mjs');
+  } catch (e) {
+    if (!(e instanceof SiblingError)) throw e;
+    return [{ path: where, message: e.message }];
+  }
+  return reportMotionErrors(api.validateSpec(source.spec, { dir: source.dir }).errors, where, source.file);
 }

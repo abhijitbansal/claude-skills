@@ -80,14 +80,32 @@ test('a spec with errors exits 1, lists every error with its path and writes not
   } finally { done(); }
 });
 
-test('a valid section type with no renderer yet exits 1 naming the path', () => {
+test('a motion section with a missing video exits 1 naming the path, and writes nothing', () => {
   const { root, done } = sandbox();
   try {
     const spec = path.join(root, 'later.explainer.json');
     fs.writeFileSync(spec, JSON.stringify({ title: 'T', sections: [{ type: 'motion', video: 'v.mp4' }] }));
-    const r = run([spec, '--out', path.join(root, 'later.html')]);
+    const out = path.join(root, 'later.html');
+    const r = run([spec, '--out', out]);
     assert.equal(r.status, 1);
-    assert.match(r.stdout, /sections\[0\]\.type: "motion" sections have no renderer yet/);
+    assert.match(r.stdout, /sections\[0\]\.video: file not found: "v\.mp4"/);
+    assert.ok(!fs.existsSync(out));
+    assert.ok(!fs.existsSync(path.join(root, 'later.assets')));
+  } finally { done(); }
+});
+
+test('a motion section builds the page and copies the video next to it', () => {
+  const { root, done } = sandbox();
+  try {
+    fs.copyFileSync(path.join(FIXTURES, 'demo.mp4'), path.join(root, 'v.mp4'));
+    const spec = path.join(root, 'ok.explainer.json');
+    fs.writeFileSync(spec, JSON.stringify({ title: 'T', sections: [{ type: 'motion', title: 'Tour', video: 'v.mp4' }] }));
+    const out = path.join(root, 'dist', 'ok.html');
+    const r = run([spec, '--out', out, '--json']);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout).assets, [path.join(root, 'dist', 'ok.assets', 'tour.mp4')]);
+    assert.ok(fs.readFileSync(out, 'utf8').includes('src="ok.assets/tour.mp4"'));
+    assert.deepEqual(fs.readFileSync(path.join(root, 'dist', 'ok.assets', 'tour.mp4')), fs.readFileSync(path.join(root, 'v.mp4')));
   } finally { done(); }
 });
 

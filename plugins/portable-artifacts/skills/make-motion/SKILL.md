@@ -53,7 +53,7 @@ When done, report the spec path, the MP4 path with its duration and size, and on
 }
 ```
 
-- Root: `size` (default 1920x1080), `fps` (24, 25, 30, 60), `background`, `scenes` (1–50, total ≤ 120 s). Only `scenes` is required.
+- Root: `size` (default 1920x1080), `fps` (24, 25, 30, 60), `background`, optional `theme` (a shared theme name: `paper`, `ink`, `blueprint`, `editorial` — its dark colours and body/mono fonts become the defaults; omit it for the default look), `scenes` (1–50, total ≤ 120 s). Only `scenes` is required.
 - Audio track (optional root `audio` array, up to 20): `src` (relative to the spec, inside the spec folder; mp3, wav, m4a, aac, ogg or flac), `at` (seconds from the video start, default 0), `scene` (a scene `id`; `at` is then relative to that scene's start, so lengthening an earlier scene keeps a voiceover aligned), `duration` (trim, seconds), `volume` (0–1, default 1), `fadeIn` / `fadeOut` (seconds). `fadeOut` anchors to the `duration` trim or the video end; a clip that ends earlier gets no fade. No `loop`: a short music file just stops.
 - Scene: `id`, `duration` (0.2–60 s), `elements`, optional `background`, `transition` (`none` or `fade`, a 0.4 s fade-in). Only one scene is visible at a time; scenes play back to back.
 - Every element: `id` (unique in the whole spec), `type`, `x`, `y` (canvas pixels; the anchor is the element centre), optional `opacity`, `scale`, `rotate` (degrees), `keyframes`.

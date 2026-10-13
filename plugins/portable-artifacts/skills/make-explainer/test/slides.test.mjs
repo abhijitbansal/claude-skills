@@ -109,13 +109,13 @@ test('the runtime is still the last inline script, and the scripts cannot close 
   assert.equal((html.match(/<\/script>/g) ?? []).length, (html.match(/<script>/g) ?? []).length);
 });
 
-test('a renderer that throws, and a type with no renderer yet, are BuildErrors at their paths in slides mode', async () => {
+test('a renderer that throws, and a type with no renderer, are BuildErrors at their paths in slides mode', async () => {
   await assert.rejects(build(deck([text(1), { type: 'image', src: 'missing.png', alt: 'x' }])), (e) => {
     assert.ok(e instanceof BuildError);
     assert.equal(e.errors[0].path, 'sections[1]');
     return true;
   });
-  await assert.rejects(build(deck([text(1), { type: 'motion', video: 'x.mp4' }])), (e) => {
+  await assert.rejects(build(deck([text(1), { type: 'bogus' }])), (e) => {
     assert.deepEqual(e.errors.map((x) => x.path), ['sections[1].type']);
     return true;
   });

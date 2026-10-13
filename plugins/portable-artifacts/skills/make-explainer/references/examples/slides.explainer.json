@@ -32,6 +32,12 @@
       ]
     },
     {
+      "type": "motion",
+      "title": "A clip rendered by make-motion plays on its slide",
+      "video": "clip.mp4",
+      "caption": "Drawn from clip.motion.json, which names the paper theme. Space and the arrow keys belong to the player while it has focus."
+    },
+    {
       "type": "steps",
       "title": "Every build follows the same four steps",
       "items": [
