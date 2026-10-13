@@ -73,7 +73,8 @@ export function spawnReady(t, args, { ready, startupMs = STARTUP_MS, onSpawn } =
       const result = ready(out, err);
       if (result) settle(resolve, { child, stderr: () => err, ...result });
     });
-    child.once('exit', (code, signal) => fail(new Error(`exited ${code ?? signal} before it was ready: ${out}${err}`)));
+    // 'close', not 'exit': it fires after stdout and stderr have drained, so the message carries the child's last output.
+    child.once('close', (code, signal) => fail(new Error(`exited ${code ?? signal} before it was ready: ${out}${err}`)));
     child.once('error', fail);
   });
 }
