@@ -33,6 +33,7 @@ const HOSTILE = {
   details: { type: 'details', summary: P, text: P },
   image: { type: 'image', src: 'pixel.png', alt: P, caption: P },
   diagram: { type: 'diagram', caption: P, diagram: { title: P, type: 'flow', nodes: [{ id: 'a', label: P }, { id: 'b', label: P, note: P }], edges: [{ from: 'a', to: 'b', label: P }] } },
+  chart: { type: 'chart', title: P, caption: P, kind: 'bar', x: 'cat', y: 'n', data: [{ cat: P, n: 1 }, { cat: 'b', n: 2 }] },
   checklist: { type: 'checklist', key: 'k', intro: P, onFail: P, groups: [{ title: P, items: [{ text: P, note: P, tag: 'visual' }] }] },
 };
 

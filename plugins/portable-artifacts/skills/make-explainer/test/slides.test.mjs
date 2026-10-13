@@ -115,7 +115,7 @@ test('a renderer that throws, and a type with no renderer yet, are BuildErrors a
     assert.equal(e.errors[0].path, 'sections[1]');
     return true;
   });
-  await assert.rejects(build(deck([text(1), { type: 'chart' }])), (e) => {
+  await assert.rejects(build(deck([text(1), { type: 'motion', video: 'x.mp4' }])), (e) => {
     assert.deepEqual(e.errors.map((x) => x.path), ['sections[1].type']);
     return true;
   });

@@ -3,6 +3,7 @@
 // ctx = { section, path, dir, spec } and path is the section's JSON path
 // ("sections[3]"). validateSpec runs every check registered for the section's
 // type. Later tasks add theirs with registerCheck(type, fn).
+import path from 'node:path';
 import { resolveRef } from './paths.mjs';
 import { pathJoin } from '../../shared/errors.mjs';
 import { readImage } from './image.mjs';
@@ -10,6 +11,8 @@ import { loadSibling, SiblingError, MISSING_HINT } from './siblings.mjs';
 import { DEFAULT_THEME } from '../../shared/theme.mjs';
 import { itemKey } from './render/checklist.mjs';
 import { readDiagramSpec, reportDiagramErrors, inPageTheme } from './diagram-source.mjs';
+import { chartMode, loadChartSource, INLINE_CHART_FIELDS } from './chart-source.mjs';
+import { LIMITS } from './schema.mjs';
 
 const CHECKS = new Map();
 
@@ -114,3 +117,42 @@ registerCheck('diagram', async ({ section, path: at, dir, spec }) => {
   const result = await api.validateSpec(inPageTheme(source.spec, spec.theme));
   return [...reportDiagramErrors(result.errors, where, source.file), ...warnings];
 });
+
+// chart: the chart a section describes must be one make-dashboard can draw. Inline rows are
+// checked against the chart kinds (roles, column types, format); a dashboard chart must
+// exist in a dashboard that validates, with errors under the section's `dashboard` field.
+// Shapes the section check already reports (no kind, mixed fields, too many rows) are left to it.
+registerCheck('chart', async ({ section, path: at, dir, spec }) => {
+  const mode = chartMode(section);
+  const complete = mode === 'inline'
+    ? section.kind !== undefined && section.data.length >= 1 && section.data.length <= LIMITS.chartRows
+    : mode === 'dashboard' && section.dashboard !== undefined && section.chart !== undefined
+      && INLINE_CHART_FIELDS.every((f) => section[f] === undefined);
+  if (!complete) return [];
+  let source;
+  try {
+    source = await loadChartSource(section, dir, { rows: false });
+  } catch (e) {
+    if (!(e instanceof SiblingError)) throw e;
+    return [{ path: mode === 'dashboard' ? pathJoin(at, 'dashboard') : at, message: e.message }];
+  }
+  const errors = source.errors.map((e) => ({ path: e.path ? `${at}.${e.path}` : at, message: e.message }));
+  if (errors.length === 0 && mode === 'dashboard' && section.interactive === true) errors.push(...interactiveClash(section, at, dir, spec));
+  return errors;
+});
+
+// Interactive dashboards are written to <name>.assets/<chart id>/, so two different dashboards
+// must not offer the same chart id; the same dashboard and chart share one build.
+function interactiveClash(section, at, dir, spec) {
+  const mine = path.resolve(dir, section.dashboard);
+  const index = spec.sections.indexOf(section);
+  for (const [j, other] of spec.sections.entries()) {
+    if (j >= index || other.type !== 'chart' || other.interactive !== true || other.chart !== section.chart || other.dashboard === undefined) continue;
+    if (path.resolve(dir, other.dashboard) === mine) continue;
+    return [{
+      path: pathJoin(at, 'interactive'),
+      message: `chart ${JSON.stringify(section.chart)} is already used by ${pathJoin('sections', j)} from another dashboard; interactive dashboards are written to <name>.assets/<chart id>/ — give the charts different ids`,
+    }];
+  }
+  return [];
+}

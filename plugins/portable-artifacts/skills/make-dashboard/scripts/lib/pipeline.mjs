@@ -82,3 +82,53 @@ export async function buildDashboard(specFile, { out, theme: themeName, allowOut
   const watch = [path.resolve(specFile), ...sources.map(([, abs]) => abs).filter((p) => path.isAbsolute(p))];
   return { ok: true, spec, target, outDir, results, sources, watch };
 }
+
+// ---- one chart, for callers that embed it (make-explainer) --------------------
+
+function findChart(spec, chartId) {
+  const ids = (spec.charts ?? []).map((c) => c.id);
+  const index = ids.indexOf(chartId);
+  if (index >= 0) return { chart: spec.charts[index], index };
+  const hint = didYouMean(chartId, ids);
+  const known = ids.length > 0 ? `available: ${ids.join(', ')}` : 'that dashboard has no charts';
+  return { error: { path: 'chart', message: `chart ${JSON.stringify(chartId)} not found in the dashboard; ${hint ? `did you mean ${JSON.stringify(hint)}?` : known}` } };
+}
+
+/**
+ * Check a dashboard spec and that it has chart `chartId`, without running its queries' full results.
+ * -> { ok: true, spec, dir, chart } or { ok: false, errors }. Dashboard errors keep the dashboard's own
+ * paths ("charts[0].x"); an unknown chart id is reported at path "chart".
+ */
+export async function validateChart(specFile, chartId, { allowOutside = false, timeoutMs } = {}) {
+  const { spec, dir } = loadSpec(specFile);
+  const valid = await validateSpec(spec, { dir, allowOutside, timeoutMs });
+  if (!valid.ok) return { ok: false, errors: valid.errors };
+  const found = findChart(spec, chartId);
+  if (found.error) return { ok: false, errors: [found.error] };
+  return { ok: true, spec, dir, chart: found.chart };
+}
+
+/**
+ * One chart of a dashboard with its rows: validate, run the queries, expand the chart. Writes nothing.
+ * -> { ok: true, chart: the spec chart, view: the primary Vega-Lite view, result: { rows, columns, types, rowCount, truncated } }
+ * or { ok: false, errors } (see validateChart).
+ */
+export async function chartData(specFile, chartId, { allowOutside = false, timeoutMs, now = new Date() } = {}) {
+  const checked = await validateChart(specFile, chartId, { allowOutside, timeoutMs });
+  if (!checked.ok) return checked;
+  const { spec, dir, chart } = checked;
+  let results;
+  try {
+    results = await runQueries(spec, dir, { now, allowOutside, timeoutMs });
+  } catch (e) {
+    if (e instanceof QueryError) return { ok: false, errors: e.errors };
+    throw e;
+  }
+  const fieldErrors = checkFields(spec, results);
+  if (fieldErrors.length) return { ok: false, errors: fieldErrors };
+  const expanded = expandCharts(spec, results);
+  if (expanded.errors.length) return { ok: false, errors: expanded.errors };
+  const view = expanded.charts.find((c) => c.id === chart.id).views[0].vegaLite;
+  const { rows, columns, types, rowCount, truncated } = results[chart.query];
+  return { ok: true, chart, view, result: { rows, columns, types, rowCount, truncated } };
+}

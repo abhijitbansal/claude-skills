@@ -37,35 +37,13 @@
 
   // ---- charts --------------------------------------------------------------
   // Vega config built from the CSS tokens, so charts follow the theme.
+  // PAVegaConfig is scripts/lib/vega-config.mjs, inlined by html.mjs.
   function config() {
-    var surface = css('--surface'), ink2 = css('--text-2'), ink3 = css('--text-3'), grid = css('--grid');
-    var font = css('--font');
     var cat = [1, 2, 3, 4, 5, 6, 7, 8].map(function (i) { return css('--s' + i); });
     var seq = [1, 2, 3, 4, 5, 6, 7].map(function (i) { return css('--seq' + i); });
-    return {
-      background: null,
-      font: font,
-      view: { stroke: null },
-      range: { category: cat, ordinal: seq, ramp: seq, heatmap: seq },
-      axis: {
-        labelColor: ink3, titleColor: ink2, labelFont: font, titleFont: font,
-        labelFontSize: 11, titleFontSize: 12, titleFontWeight: 'normal', labelPadding: 6,
-        gridColor: grid, gridWidth: 1, domainColor: grid, tickColor: grid
-      },
-      axisX: { grid: false, labelAngle: 0, labelOverlap: 'greedy' },
-      legend: {
-        labelColor: ink2, titleColor: ink2, labelFont: font, titleFont: font,
-        labelFontSize: 12, titleFontSize: 12, titleFontWeight: 'normal', symbolType: 'circle', orient: 'top', direction: 'horizontal', padding: 0
-      },
-      title: { color: ink2, font: font },
-      bar: { cornerRadiusEnd: 4, stroke: surface, strokeWidth: 2, fill: cat[0] },
-      line: { strokeWidth: 2, strokeCap: 'round', strokeJoin: 'round', stroke: cat[0] },
-      point: { size: 64, filled: true, stroke: surface, strokeWidth: 2, fill: cat[0] },
-      area: { opacity: 0.85, line: { strokeWidth: 2 }, fill: cat[0] },
-      rect: { stroke: surface, strokeWidth: 2 },
-      arc: { stroke: surface, strokeWidth: 2 },
-      text: { color: ink2, font: font, fontSize: 11 }
-    };
+    return window.PAVegaConfig({
+      surface: css('--surface'), text2: css('--text-2'), text3: css('--text-3'), grid: css('--grid'), cat: cat, seq: seq
+    }, css('--font'));
   }
 
   // Each pane has a render token. Every paint takes a fresh one, and an async

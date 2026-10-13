@@ -4,6 +4,7 @@ import { KINDS, classOf, fieldRef } from './kinds.mjs';
 import { enhanceRaw, interactionsFor, NEAREST_X, ZOOM_X, legendParam } from './interact.mjs';
 
 const AXIS_FORMAT = { number: ',.2~f', currency: '$,.2~f', percent: '.1~%', compact: '.3~s' };
+export const FORMAT_NAMES = Object.keys(AXIS_FORMAT);
 const HORIZONTAL_LABEL = 12;
 const HORIZONTAL_COUNT = 8;
 const TABLE = { name: 'table', label: 'Table' };

@@ -100,6 +100,9 @@ function checkChart(s, at, errors) {
     }
     return;
   }
+  if (s.interactive === true) {
+    errors.push({ path: pathJoin(at, 'interactive'), message: 'interactive needs dashboard + chart (the dashboard is what opens); set dashboard and chart, or remove interactive' });
+  }
   count(errors, s.data, at, 'data', [1, LIMITS.chartRows], 'chart a summary or use a dashboard instead');
   if (s.kind === undefined) {
     errors.push({ path: pathJoin(at, 'kind'), message: 'required for inline data charts; set kind to a chart kind such as "bar"' });

@@ -277,7 +277,7 @@ test('chart: exactly one of inline data or dashboard + chart', async () => {
 test('chart: dashboard mode needs dashboard + chart and rejects inline-chart fields', async () => {
   assert.deepEqual(await errorsOf(doc([{ type: 'chart', dashboard: 'd.json' }])), [{ path: 'sections[0].chart', message: 'required when dashboard is set' }]);
   assert.deepEqual(await errorsOf(doc([{ type: 'chart', chart: 'c1' }])), [{ path: 'sections[0].dashboard', message: 'required when chart is set' }]);
-  assert.deepEqual(await errorsOf(doc([{ type: 'chart', dashboard: 'd.json', chart: 'c1', caption: 'c', interactive: true }])), []);
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart', dashboard: 'sales.dashboard.json', chart: 'by-region', caption: 'c', interactive: true }]), { dir: path.join(FIXTURES, 'chart') }), []);
   for (const field of ['kind', 'x', 'y', 'color', 'size', 'value', 'format']) {
     assert.deepEqual(await errorsOf(doc([{ type: 'chart', dashboard: 'd.json', chart: 'c1', [field]: 'f' }])), [
       { path: `sections[0].${field}`, message: `"${field}" applies to inline data charts; remove it or drop dashboard` },
@@ -297,8 +297,8 @@ test('chart: inline data needs kind and at least one row', async () => {
   assert.deepEqual(await errorsOf(doc([{ type: 'chart', kind: 'bar', data: [] }])), [
     { path: 'sections[0].data', message: 'data has 0 entries; at least 1 required — add more' },
   ]);
-  assert.deepEqual(await errorsOf(doc([{ type: 'chart', kind: 'bubble', x: 'a', y: 'b', size: 's', color: 'c', value: 'v', format: 'f', data: [{ a: 1 }] }])), []);
-  assert.deepEqual(await errorsOf(doc([{ type: 'chart', kind: 'bar', data: Array(500).fill({ a: 1 }) }])), []);
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart', kind: 'bubble', x: 'a', y: 'b', size: 's', color: 'c', format: 'currency', data: [{ a: 1, b: 2, s: 3, c: 'p' }] }])), []);
+  assert.deepEqual(await errorsOf(doc([{ type: 'chart', kind: 'bar', x: 'a', y: 'n', data: Array(500).fill({ a: 'q', n: 1 }) }])), []);
   assert.deepEqual(await errorsOf(doc([{ type: 'chart', kind: 'bar', data: Array(501).fill({ a: 1 }) }])), [
     { path: 'sections[0].data', message: 'data has 501 entries; the limit is 500 — chart a summary or use a dashboard instead' },
   ]);
@@ -364,7 +364,7 @@ test('TODO markers are reported anywhere, with the path and the fix', async () =
     { type: 'tldr', title: 'TODO: claim', text: 't', points: ['TODO: one'] },
     { type: 'code', code: '// TODO: later\n' },
     { type: 'diagram', diagram: { title: 'TODO: name', ...ONE_NODE } },
-    { type: 'chart', kind: 'bar', data: [{ a: 'TODO: x' }] },
+    { type: 'chart', kind: 'bar', x: 'a', y: 'n', data: [{ a: 'TODO: x', n: 1 }] },
     { type: 'checklist', key: 'k', groups: [{ title: 'g', items: [{ text: 'TODO: step' }] }] },
     { type: 'files', items: [{ path: 'TODO: path', change: 'added' }] },
   ], { subtitle: 'TODO: sub', meta: { author: 'TODO: me' } });
@@ -401,7 +401,7 @@ test('lint skips non-prose: code, paths, ids, data, inline diagrams', async () =
     { type: 'code', code: '// we leverage 🚀 here\nutilize()\n' },
     { type: 'files', items: [{ path: 'src/leverage/seamless.mjs', change: 'added' }] },
     { type: 'diagram', diagram: { title: 'Seamless', ...ONE_NODE } },
-    { type: 'chart', kind: 'bar', data: [{ a: 'leverage' }], x: 'leverage' },
+    { type: 'chart', kind: 'bar', x: 'leverage', y: 'n', data: [{ leverage: 'leverage', n: 1 }] },
   ], { meta: { branch: 'feat/leverage-cache' } });
   assert.deepEqual(await errorsOf(spec), []);
 });

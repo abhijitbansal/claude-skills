@@ -72,6 +72,22 @@
       ]
     },
     {
+      "type": "chart",
+      "id": "added-lines",
+      "title": "The viewer script is the largest addition",
+      "caption": "Lines added per file, from the table above.",
+      "data": [
+        { "file": "template/diagram.js", "added": 105 },
+        { "file": "render/diagram.mjs", "added": 78 },
+        { "file": "diagram-source.mjs", "added": 46 },
+        { "file": "page.mjs", "added": 33 },
+        { "file": "slides.js", "added": 3 }
+      ],
+      "kind": "bar",
+      "x": "file",
+      "y": "added"
+    },
+    {
       "type": "risks",
       "title": "What could still bite",
       "items": [

@@ -6,6 +6,7 @@ import { themeCss } from '../../shared/theme.mjs';
 const TEMPLATE = new URL('../../template/page.html', import.meta.url);
 const PA_LIB = new URL('../../template/pa-lib.js', import.meta.url);
 const RUNTIME = new URL('../../template/runtime.js', import.meta.url);
+const VEGA_CONFIG = new URL('./vega-config.mjs', import.meta.url);
 const TABLE_ROWS = 25;
 
 export function escapeHtml(s) {
@@ -25,6 +26,15 @@ export function jsonForScript(obj) {
     .replaceAll('&', '\\u0026')
     .replaceAll(' ', '\\u2028')
     .replaceAll(' ', '\\u2029');
+}
+
+// vega-config.mjs is an ES module with one exported function; the page gets it as window.PAVegaConfig.
+export function vegaConfigScript() {
+  const source = fs.readFileSync(VEGA_CONFIG, 'utf8');
+  if ((source.match(/^export /gm) ?? []).length !== 1 || /^import /m.test(source)) {
+    throw new Error('vega-config.mjs must have exactly one export and no imports to be inlined');
+  }
+  return `window.PAVegaConfig = (function () {\n${source.replace(/^export /m, '')}\nreturn vegaConfig;\n})();`;
 }
 
 const inlineScript = (code) => `<script>${code.replace(/<\/(script)/gi, '<\\/$1')}</script>`;
@@ -121,7 +131,7 @@ export function renderPage(spec, results, { vendor, theme, charts }) {
     DATA: jsonForScript(data),
     THEME: themeCss(theme),
     VENDOR: [vendor.vega, vendor.vegaLite, vendor.vegaEmbed].map(inlineScript).join('\n'),
-    RUNTIME: [fs.readFileSync(PA_LIB, 'utf8'), fs.readFileSync(RUNTIME, 'utf8')].map(inlineScript).join('\n'),
+    RUNTIME: [fs.readFileSync(PA_LIB, 'utf8'), vegaConfigScript(), fs.readFileSync(RUNTIME, 'utf8')].map(inlineScript).join('\n'),
   };
   return fs.readFileSync(TEMPLATE, 'utf8').replace(/<!--@(\w+)-->/g, (_, key) => parts[key] ?? '');
 }
