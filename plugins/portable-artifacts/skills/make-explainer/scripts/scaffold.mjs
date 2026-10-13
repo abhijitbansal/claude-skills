@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import { scaffold, PRESET_NAMES } from './lib/presets.mjs';
 import { CHANGES } from './lib/schema.mjs';
 import { didYouMean } from '../shared/errors.mjs';
-import { UsageError, parseCli, exitUsage, evalLog } from '../shared/cli.mjs';
+import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 
 const USAGE = `node scripts/scaffold.mjs <${PRESET_NAMES.join('|')}> [--facts facts.json] [--title <text>]`;
 const OPTIONS = { facts: { type: 'string' }, title: { type: 'string' } };
@@ -82,9 +82,7 @@ try {
   if (values.title !== undefined && values.title.trim() === '') throw new UsageError(`--title must not be empty; pass --title <text> or leave it out for a TODO title; usage: ${USAGE}`);
   const facts = values.facts === undefined ? null : readFacts(values.facts);
   process.stdout.write(`${JSON.stringify(scaffold(preset, { facts, title: values.title }), null, 2)}\n`);
-  evalLog(true, 0);
 } catch (e) {
   if (!(e instanceof UsageError)) throw e;
-  evalLog(false, 1);
   exitUsage(e);
 }

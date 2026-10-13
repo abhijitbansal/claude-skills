@@ -128,6 +128,21 @@ test('EVAL_LOG gets one line per run', () => {
   }
 });
 
+test('only validate writes EVAL_LOG: build, scaffold and gather leave it alone', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-evallog-'));
+  const log = path.join(dir, 'log.jsonl');
+  const script = (name) => fileURLToPath(new URL(`../scripts/${name}.mjs`, import.meta.url));
+  const env = { ...process.env, EVAL_LOG: log, PA_OUTPUT_DIR: dir };
+  try {
+    spawnSync(process.execPath, [script('build'), FIXTURE, '--out', path.join(dir, 'x.html')], { encoding: 'utf8', env });
+    spawnSync(process.execPath, [script('scaffold'), 'concept'], { encoding: 'utf8', env });
+    spawnSync(process.execPath, [script('gather'), 'git', '--repo', dir], { encoding: 'utf8', env });
+    assert.equal(fs.existsSync(log), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true });
+  }
+});
+
 test('a broken EVAL_LOG path never changes the outcome', () => {
   assert.equal(run([FIXTURE], { EVAL_LOG: '/nonexistent-dir/x/log.jsonl' }).status, 0);
 });

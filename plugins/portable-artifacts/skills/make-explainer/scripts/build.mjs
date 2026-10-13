@@ -10,7 +10,7 @@ import { loadSpec, validateSpec } from './lib/spec.mjs';
 import { buildPage, BuildError } from './lib/page.mjs';
 import { resolveOutput } from './lib/output.mjs';
 import { SiblingError } from './lib/siblings.mjs';
-import { UsageError, parseCli, exitUsage, evalLog } from '../shared/cli.mjs';
+import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 
 const USAGE = 'node scripts/build.mjs <explainer.json> [--out <file.html|dir>] [--theme <name>] [--json]';
 const OPTIONS = { out: { type: 'string' }, theme: { type: 'string' }, json: { type: 'boolean' } };
@@ -67,7 +67,6 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     json = values.json === true;
     if (positionals.length !== 1) throw new UsageError(`expected one spec file; usage: ${USAGE}`);
     const result = await build(positionals[0], { out: values.out, theme: values.theme });
-    evalLog(result.ok, result.ok ? 0 : result.errors.length);
     if (!result.ok) {
       printFailure(result, { json, label: positionals[0] });
       process.exitCode = 1;
@@ -79,7 +78,6 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     }
   } catch (e) {
     if (!(e instanceof UsageError)) throw e;
-    evalLog(false, 1);
     exitUsage(e, { json });
   }
 }

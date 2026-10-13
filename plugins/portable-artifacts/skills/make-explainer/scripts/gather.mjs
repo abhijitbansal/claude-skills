@@ -5,7 +5,7 @@
 // only; nothing is written. Feed the output to scaffold.mjs --facts.
 // exit 0 ok, 2 usage / not a repository / no such base
 import { gatherGit } from './lib/git.mjs';
-import { UsageError, parseCli, exitUsage, evalLog } from '../shared/cli.mjs';
+import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 
 const USAGE = 'node scripts/gather.mjs git [--base <branch>] [--repo <folder>] [--json]';
 const OPTIONS = { base: { type: 'string' }, repo: { type: 'string' }, json: { type: 'boolean' } };
@@ -21,9 +21,7 @@ try {
   if (extra.length > 0) throw new UsageError(`unexpected argument "${extra[0]}"; usage: ${USAGE}`);
   const facts = gatherGit({ repo: values.repo, base: values.base });
   process.stdout.write(`${JSON.stringify(facts, null, values.json ? 0 : 2)}\n`);
-  evalLog(true, 0);
 } catch (e) {
   if (!(e instanceof UsageError)) throw e;
-  evalLog(false, 1);
   exitUsage(e, { json });
 }
