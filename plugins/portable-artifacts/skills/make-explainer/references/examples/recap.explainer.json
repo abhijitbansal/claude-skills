@@ -46,8 +46,8 @@
         },
         {
           "label": "Test files touched",
-          "value": 10,
-          "note": "two new, eight edited"
+          "value": 8,
+          "note": "two new, six edited"
         }
       ]
     },
@@ -157,7 +157,7 @@
     {
       "type": "text",
       "title": "Present is the only place the keyboard shortcuts live",
-      "text": "Inline, a figure traces links on hover or focus and never captures the mouse wheel, so the page keeps scrolling. **Present** opens a full-screen overlay with Back, Next and Close.\n\nInside it the viewer's shortcuts apply: arrows or Space step forward and back, `Esc` closes and focus returns to the Present button. In a deck, the slide keys stay quiet until the overlay is closed.\n\nThe file list below leaves out the 10 test files and this example. Numbers come from `git diff --numstat 9a8769e^ 665ce40`."
+      "text": "Inline, a figure traces links on hover or focus and never captures the mouse wheel, so the page keeps scrolling. **Present** opens a full-screen overlay with Back, Next and Close.\n\nInside it the viewer's shortcuts apply: arrows or Space step forward and back, `Esc` closes and focus returns to the Present button. In a deck, the slide keys stay quiet until the overlay is closed.\n\nThe file list below leaves out the 10 files under test folders (8 tests, a helper and a fixture) and this example. Numbers come from `git diff --numstat 9a8769e^ 665ce40`."
     },
     {
       "type": "files",

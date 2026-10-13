@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { git, makeRepo, featureRepo } from './helpers/repo.mjs';
+import { git, makeRepo, featureRepo, cloneRepo } from './helpers/repo.mjs';
 
 const GATHER = fileURLToPath(new URL('../scripts/gather.mjs', import.meta.url));
 const run = (args, env = {}) => spawnSync(process.execPath, [GATHER, ...args], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '', ...env } });
@@ -298,18 +298,23 @@ test('gather leaves the repository exactly as it found it', () => {
   });
 });
 
-test('test files are found by folder and by name, deleted ones are not', () => {
+test('test files are real tests only: no fixtures, goldens, helpers, data or docs; deleted ones are not', () => {
   withRepo(() => {
     const repo = makeRepo();
     repo.write('old.test.js', 'x\n');
     repo.commit('base');
     git(repo.dir, 'checkout', '-q', '-b', 'topic');
-    for (const p of ['tests/a.js', 'src/__tests__/b.js', 'src/c.spec.ts', 'pkg/d_test.go', 'tests_py/test_e.py', 'App/FooTests.swift', 'src/contest.js', 'src/latest.js']) repo.write(p, 'x\n');
+    for (const p of [
+      'tests/a.js', 'src/__tests__/b.js', 'src/c.spec.ts', 'pkg/d_test.go', 'tests_py/test_e.py', 'App/FooTests.swift', 'src/helpers/fmt.test.js',
+      // not tests: lookalike names, design specs, data, and what supports tests
+      'src/contest.js', 'src/latest.js', 'contests/a.js', 'docs/specs/plan.md', 'test_data.csv', 'tests/fixtures/f.json', 'tests/fixtures/make.js',
+      'test/golden/page.html', 'test/helpers/browser.mjs', 'tests/__snapshots__/a.snap.js', 'tests/README.md',
+    ]) repo.write(p, 'x\n');
     repo.remove('old.test.js');
     repo.commit('tests');
     return repo;
   }, (repo) => {
-    assert.deepEqual(gather(repo).tests, ['App/FooTests.swift', 'pkg/d_test.go', 'src/__tests__/b.js', 'src/c.spec.ts', 'tests/a.js', 'tests_py/test_e.py']);
+    assert.deepEqual(gather(repo).tests, ['App/FooTests.swift', 'pkg/d_test.go', 'src/__tests__/b.js', 'src/c.spec.ts', 'src/helpers/fmt.test.js', 'tests/a.js', 'tests_py/test_e.py']);
   });
 });
 
@@ -329,5 +334,135 @@ test('unknown and misspelled flags, a missing subcommand and an unknown one are 
     assert.match(other.stderr, /unknown source "svn".*git/);
     const extra = run(['git', 'extra', '--repo', repo.dir]);
     assert.equal(extra.status, 2);
+  });
+});
+
+// ---- fix round 1 ------------------------------------------------------------------------------
+
+// A clone whose local main is stale: upstream has 2 newer commits, we branched from origin/main.
+function staleMainClone() {
+  const origin = makeRepo();
+  origin.write('a.txt', 'a\n');
+  origin.commit('base');
+  const clone = cloneRepo(origin);
+  origin.write('b.txt', 'b\n');
+  origin.commit('upstream 1');
+  origin.write('c.txt', 'c\n');
+  origin.commit('upstream 2');
+  git(clone.dir, 'fetch', '-q', 'origin');
+  git(clone.dir, 'checkout', '-q', '-b', 'feat', 'origin/main');
+  clone.write('mine.txt', 'x\n');
+  clone.commit('my work');
+  return { origin, clone, cleanup: () => { clone.cleanup(); origin.cleanup(); } };
+}
+
+test('a stale local main: the default base is origin/main, so upstream commits are not this branch\'s work', () => {
+  const s = staleMainClone();
+  try {
+    const facts = gather(s.clone);
+    assert.equal(facts.base, 'origin/main');
+    assert.deepEqual(facts.commits.map((c) => c.subject), ['my work']);
+    assert.deepEqual(facts.files.map((f) => f.path), ['mine.txt']);
+    // an explicit --base is taken as given
+    const local = gather(s.clone, '--base', 'main');
+    assert.equal(local.base, 'main');
+    assert.equal(local.commits.length, 3);
+  } finally { s.cleanup(); }
+});
+
+test('origin/main only (no local main): the default base is origin/main', () => {
+  const s = staleMainClone();
+  try {
+    git(s.clone.dir, 'branch', '-D', 'main');
+    assert.equal(gather(s.clone).base, 'origin/main');
+  } finally { s.cleanup(); }
+});
+
+test('local main level with, ahead of, or diverged from origin/main: the local branch is the base', () => {
+  const s = staleMainClone();
+  try {
+    git(s.clone.dir, 'branch', '-f', 'main', 'origin/main');
+    assert.equal(gather(s.clone).base, 'main', 'level');
+    git(s.clone.dir, 'checkout', '-q', 'main');
+    s.clone.write('local.txt', 'l\n');
+    s.clone.commit('local only');
+    git(s.clone.dir, 'checkout', '-q', 'feat');
+    assert.equal(gather(s.clone).base, 'main', 'diverged');
+    git(s.clone.dir, 'branch', '-f', 'main', 'feat');
+    git(s.clone.dir, 'checkout', '-q', '-b', 'topic', 'feat');
+    s.clone.write('t.txt', 't\n');
+    s.clone.commit('topic work');
+    assert.equal(gather(s.clone).base, 'main', 'ahead');
+  } finally { s.cleanup(); }
+});
+
+test('a shallow clone says so and how to fix it', () => {
+  const origin = makeRepo();
+  origin.write('a.txt', 'a\n');
+  origin.commit('base');
+  git(origin.dir, 'checkout', '-q', '-b', 'feat');
+  origin.write('b.txt', 'b\n');
+  origin.commit('feature work');
+  const clone = cloneRepo(origin, '--depth', '1', '--no-single-branch');
+  try {
+    const r = run(['git', '--repo', clone.dir, '--base', 'origin/main']);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /shallow clone/);
+    assert.match(r.stderr, /git fetch --unshallow/);
+    assert.doesNotMatch(r.stderr, /no common history/);
+    const missing = run(['git', '--repo', clone.dir, '--base', 'release']);
+    assert.match(missing.stderr, /does not exist/);
+    assert.match(missing.stderr, /--unshallow/);
+  } finally { clone.cleanup(); origin.cleanup(); }
+});
+
+test('GIT_* variables that redirect discovery or storage are ignored (--repo is honoured)', () => {
+  withRepo(featureRepo, (repo) => {
+    const other = makeRepo();
+    try {
+      const env = {
+        GIT_CEILING_DIRECTORIES: repo.dir,
+        GIT_OBJECT_DIRECTORY: path.join(other.dir, '.git', 'objects'),
+        GIT_INDEX_FILE: path.join(other.dir, '.git', 'index'),
+        GIT_WORK_TREE: other.dir,
+        GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'diff.noprefix', GIT_CONFIG_VALUE_0: 'true',
+      };
+      const r = run(['git', '--repo', path.join(repo.dir, 'src'), '--json'], env);
+      assert.equal(r.status, 0, r.stderr);
+      const facts = JSON.parse(r.stdout);
+      assert.equal(facts.branch, 'feat/login');
+      assert.equal(facts.commits.length, 2);
+    } finally { other.cleanup(); }
+  });
+});
+
+test('the branch list in the missing-base error drops every remote\'s HEAD alias', () => {
+  const s = staleMainClone();
+  const upstream = makeRepo({ branch: 'trunk' });
+  try {
+    upstream.write('u.txt', 'u\n');
+    upstream.commit('u');
+    git(s.clone.dir, 'remote', 'add', 'upstream', `file://${upstream.dir}`);
+    git(s.clone.dir, 'fetch', '-q', 'upstream');
+    git(s.clone.dir, 'remote', 'set-head', 'upstream', 'trunk');
+    git(s.clone.dir, 'remote', 'set-head', 'origin', 'main');
+    const r = run(['git', '--repo', s.clone.dir, '--base', 'develop']);
+    const list = r.stderr.split('branches that do: ')[1].split('; pass')[0].split(', ');
+    assert.deepEqual(list.sort(), ['feat', 'main', 'origin/main', 'upstream/trunk']);
+  } finally { upstream.cleanup(); s.cleanup(); }
+});
+
+test('a bare repository or the inside of .git says there is no work tree', () => {
+  withRepo(featureRepo, (repo) => {
+    const bare = cloneRepo(repo, '--bare');
+    try {
+      const r = run(['git', '--repo', bare.dir]);
+      assert.equal(r.status, 2);
+      assert.match(r.stderr, /no work tree/);
+      assert.doesNotMatch(r.stderr, /not a git repository/);
+      const inside = run(['git', '--repo', path.join(repo.dir, '.git')]);
+      assert.equal(inside.status, 2);
+      assert.match(inside.stderr, /no work tree/);
+    } finally { bare.cleanup(); }
   });
 });

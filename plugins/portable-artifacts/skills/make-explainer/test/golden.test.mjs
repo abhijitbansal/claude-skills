@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { normalisedBody, emptySiblingSvgs } from './helpers/golden.mjs';
 
 // One golden per preset: the normalised body markup of its reference example.
 // Baselines change only on purpose: UPDATE_GOLDEN=1 node --test test/golden.test.mjs
@@ -12,15 +13,6 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const BUILD = path.join(ROOT, 'scripts/build.mjs');
 const PRESETS = ['recap', 'checklist', 'concept', 'slides'];
-
-// The body only (head and runtime scripts are covered elsewhere); embedded images shortened.
-function normalisedBody(html) {
-  const start = html.indexOf('<body');
-  const main = html.indexOf('</main>');
-  assert.ok(start > 0 && main > start, 'page has a <body> and a closing </main>');
-  const body = html.slice(start, main + '</main>'.length);
-  return `${body.replace(/data:image\/([a-z+]+);base64,[A-Za-z0-9+/=]+/g, 'data:image/$1;base64,…')}\n`;
-}
 
 for (const preset of PRESETS) {
   test(`golden: body markup of the ${preset} example is unchanged`, () => {
@@ -40,3 +32,12 @@ for (const preset of PRESETS) {
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 }
+
+test('normalisation empties sibling svgs (nested ones too), keeps wrappers and the explainer\'s own glyphs', () => {
+  const html = '<figure class="dg"><svg class="pa-diagram" viewBox="0 0 1 1"><svg class="icon"><path d="M0"/></svg><rect fill="#2a78d6"/></svg></figure>'
+    + '<span><svg class="gl" viewBox="0 0 16 16"><path d="M1"/></svg></span><div class="ch-svg"><svg width="600"><g/></svg></div>';
+  assert.equal(
+    emptySiblingSvgs(html),
+    '<figure class="dg"><svg data-sibling-svg></svg></figure><span><svg class="gl" viewBox="0 0 16 16"><path d="M1"/></svg></span><div class="ch-svg"><svg data-sibling-svg></svg></div>',
+  );
+});

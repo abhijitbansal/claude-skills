@@ -31,6 +31,19 @@ export function git(cwd, ...args) {
 export function makeRepo({ branch = 'main' } = {}) {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-repo-')));
   git(dir, 'init', '-q', '-b', branch);
+  return repoAt(dir, dir);
+}
+
+/** A clone of `source` (a repo from makeRepo) in its own temp folder; `flags` go to `git clone` (e.g. '--depth', '1', '--bare'). */
+export function cloneRepo(source, ...flags) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-clone-')));
+  const dir = path.join(root, 'clone');
+  git(root, 'clone', '-q', ...flags, `file://${source.dir}`, dir);
+  return repoAt(dir, root);
+}
+
+// `removeDir` is what cleanup() deletes (the repo itself, or the folder a clone lives in).
+function repoAt(dir, removeDir) {
   let tick = 0;
   return {
     dir,
@@ -54,7 +67,7 @@ export function makeRepo({ branch = 'main' } = {}) {
       return git(dir, 'rev-parse', 'HEAD');
     },
     cleanup() {
-      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(removeDir, { recursive: true, force: true });
     },
   };
 }

@@ -7,6 +7,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { featureRepo, makeRepo, git } from './helpers/repo.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
+import { LIMITS, KEY_PATTERN } from '../scripts/lib/schema.mjs';
+import { fit, cleanText } from '../scripts/lib/fit.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const node = (script, args, env = {}) => spawnSync(process.execPath, [path.join(ROOT, 'scripts', script), ...args], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '', ...env } });
@@ -222,14 +224,19 @@ test('checklist without facts: one TODO group and a plain key', () => {
   } finally { done(); }
 });
 
-test('checklist: a detached HEAD still gets a valid key', async () => {
+test('checklist: a detached HEAD gets a valid key that stays the same across commits', async () => {
   const { dir, done } = sandbox();
   const repo = featureRepo();
   try {
     git(repo.dir, 'checkout', '-q', '--detach');
-    const spec = scaffold('checklist', { facts: factsOf(repo), dir });
-    assert.match(section(spec, 'checklist')[0].key, /^detached-[0-9a-f]{7}$/);
-    assert.deepEqual((await validateSpec(fillTodos(spec), { dir })).errors, []);
+    const first = scaffold('checklist', { facts: factsOf(repo), dir });
+    const key = section(first, 'checklist')[0].key;
+    assert.equal(key, `${path.basename(repo.dir).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}-detached`);
+    repo.write('later.txt', 'x\n');
+    repo.commit('another commit while detached');
+    const second = scaffold('checklist', { facts: factsOf(repo), dir });
+    assert.equal(section(second, 'checklist')[0].key, key, 'new commit, same ticks');
+    assert.deepEqual((await validateSpec(fillTodos(second), { dir })).errors, []);
   } finally { repo.cleanup(); done(); }
 });
 
@@ -324,4 +331,134 @@ test('bad --facts: a missing file, invalid JSON and the wrong shape each name th
       assert.match(r.stderr, pattern);
     }
   } finally { done(); }
+});
+
+// ---- fix round 1: facts fit the schema and the lint ------------------------------------------
+
+const LONG_BRANCH = 'feature/this-is-a-very-long-branch-name-describing-the-entire-work-item-1234';
+const only = (result) => result.errors.filter((e) => !/TODO placeholder/.test(e.message));
+
+test('a long branch, a long title, an emoji subject and a TODO subject: only real placeholders fail, and filling them validates', async () => {
+  const { dir, done } = sandbox();
+  const facts = {
+    repo: 'a-repository-with-a-name-that-is-longer-than-sixty-characters-for-the-chip',
+    branch: LONG_BRANCH,
+    date: '2026-10-12',
+    base: 'main',
+    commits: [
+      { sha: 'a'.repeat(40), date: '2026-10-11', subject: '\u2728 add the cache \ud83d\ude80\u2728' },
+      { sha: 'b'.repeat(40), date: '2026-10-12', subject: 'TODO: clean this up later' },
+      { sha: 'c'.repeat(40), date: '2026-10-12', subject: 'refactor: leverage the cache to utilize fewer reads!' },
+      { sha: 'd'.repeat(40), date: '2026-10-12', subject: '\ud83c\udf89' },
+    ],
+    files: [
+      { path: 'src/a.js', change: 'added', add: 1, del: 0, binary: false },
+      { path: '\ud83c\udf89 party/b.js', change: 'added', add: 1, del: 0, binary: false },
+      { path: 'docs/TODO: notes.md', change: 'added', add: 1, del: 0, binary: false },
+    ],
+    tests: [],
+  };
+  try {
+    for (const preset of ['recap', 'checklist', 'concept', 'slides']) {
+      const spec = scaffold(preset, { facts, dir });
+      const first = await validateSpec(spec, { dir });
+      assert.deepEqual(only(first), [], `${preset}: only TODO errors may remain`);
+      const filled = await validateSpec(fillTodos(spec), { dir });
+      assert.deepEqual(filled.errors, [], preset);
+    }
+    const recap = scaffold('recap', { facts, dir });
+    assert.ok(recap.meta.branch.length <= LIMITS.meta && recap.meta.branch.endsWith('…'));
+    assert.ok(recap.meta.repo.length <= LIMITS.meta);
+    const titles = section(recap, 'timeline')[0].items.map((i) => i.title);
+    assert.equal(titles[0], 'add the cache');
+    assert.equal(titles[1], 'To do: clean this up later', 'a real subject starting with TODO: is not a placeholder');
+    assert.equal(titles[2], 'refactor: use the cache to use fewer reads');
+    assert.equal(titles[3], 'Commit ddddddd', 'a subject that was only emoji falls back to the sha');
+    assert.ok(!section(recap, 'files')[0].items.some((f) => f.path.includes('TODO:')));
+    const checklist = scaffold('checklist', { facts, dir });
+    assert.ok(checklist.title.length <= LIMITS.title && checklist.title.endsWith(': manual test checklist'));
+  } finally { done(); }
+});
+
+test('fit: cuts at a word boundary to the limit with an ellipsis, never over, and leaves short text alone', () => {
+  assert.equal(fit('short', 60), 'short');
+  const cut = fit('add the cache and then rewrite the whole reader for good measure', 30);
+  assert.equal(cut, 'add the cache and then…');
+  assert.ok(cut.length <= 30);
+  assert.equal(fit('feature/this-is-a-very-long-name', 20), 'feature/this-is-a…');
+  assert.ok(fit('x'.repeat(100), 40).length === 40);
+  assert.ok(fit('a'.repeat(5) + ' ' + 'b'.repeat(80), 20).length <= 20);
+});
+
+test('cleanText: emoji, banned phrases, placeholders and a trailing ! in a heading', () => {
+  assert.equal(cleanText('\u2728 shiny \ud83d\udc68\u200d\ud83d\udcbb fix'), 'shiny fix');
+  assert.equal(cleanText('leverage and utilize it'), 'use and use it');
+  assert.equal(cleanText('TODO: x lorem ipsum'), 'To do: x sample text');
+  assert.equal(cleanText('stop the crash!!', { heading: true }), 'stop the crash');
+  assert.equal(cleanText('stop the crash!'), 'stop the crash!');
+});
+
+test('a truncated recap says so inside the spec: a note after the files and after the timeline', async () => {
+  const { dir, done } = sandbox();
+  const files = Array.from({ length: 230 }, (_, i) => ({ path: `src/f${i}.js`, change: 'added', add: i, del: 0, binary: false }));
+  const commits = Array.from({ length: 45 }, (_, i) => ({ sha: String(i).padStart(40, '0'), subject: `commit ${i}`, date: '2026-10-01' }));
+  try {
+    const spec = scaffold('recap', { facts: { branch: 'big', commits, files, tests: [] }, dir });
+    const types = spec.sections.map((s) => s.type);
+    assert.deepEqual(types, ['tldr', 'kpis', 'text', 'files', 'callout', 'timeline', 'callout', 'risks']);
+    const [fileNote, commitNote] = section(spec, 'callout');
+    assert.match(fileNote.text, /30 of the 230 changed files are not listed/);
+    assert.match(commitNote.text, /25 earliest of the 45 commits/);
+    assert.deepEqual(only(await validateSpec(spec, { dir })), []);
+    const small = scaffold('recap', { facts: { branch: 'b', commits: commits.slice(0, 3), files: files.slice(0, 3), tests: [] }, dir });
+    assert.equal(section(small, 'callout').length, 0, 'nothing dropped, nothing to say');
+  } finally { done(); }
+});
+
+test('checklist: the "Other areas" group names the folders it folds in', () => {
+  const { dir, done } = sandbox();
+  const files = Array.from({ length: 12 }, (_, i) => ({ path: `dir${String(i).padStart(2, '0')}/f.js`, change: 'added', add: 1, del: 0, binary: false }));
+  try {
+    const groups = section(scaffold('checklist', { facts: { branch: 'wide', commits: [], files, tests: [] }, dir }), 'checklist')[0].groups;
+    const other = groups.find((g) => g.title === 'Other areas');
+    assert.equal(other.items[0].note, 'covers dir10, dir11');
+  } finally { done(); }
+});
+
+test('checklist keys: valid, never shared by different branches, and stable for the same one', () => {
+  const { dir, done } = sandbox();
+  const key = (branch, extra = {}) => section(scaffold('checklist', { facts: { branch, commits: [], files: [], tests: [], ...extra }, dir }), 'checklist')[0].key;
+  try {
+    const long1 = key(`${'a'.repeat(70)}-one`);
+    const long2 = key(`${'a'.repeat(70)}-two`);
+    assert.notEqual(long1, long2, 'a shared prefix must not share ticks');
+    const jp = key('機能/ログイン');
+    const jp2 = key('機能/ログアウト');
+    assert.notEqual(jp, jp2);
+    assert.equal(jp, key('機能/ログイン'));
+    for (const k of [long1, long2, jp, jp2, key('feat/login')]) {
+      assert.match(k, KEY_PATTERN);
+      assert.ok(k.length <= LIMITS.checklistKey, k);
+    }
+    assert.equal(key('feat/login'), 'feat-login');
+  } finally { done(); }
+});
+
+test('a copied file is noted like a rename', () => {
+  const { dir, done } = sandbox();
+  try {
+    const facts = { branch: 'b', commits: [], tests: [], files: [{ path: 'b.js', oldPath: 'a.js', change: 'added', add: 3, del: 0, binary: false }, { path: 'd.js', oldPath: 'c.js', change: 'renamed', add: 0, del: 0, binary: false }] };
+    const items = section(scaffold('recap', { facts, dir }), 'files')[0].items;
+    assert.equal(items.find((f) => f.path === 'b.js').note, 'copied from `a.js`');
+    assert.equal(items.find((f) => f.path === 'd.js').note, 'renamed from `c.js`');
+  } finally { done(); }
+});
+
+test('--title "" is refused instead of producing an empty title', () => {
+  for (const title of ['', '   ']) {
+    const r = node('scaffold.mjs', ['recap', '--title', title]);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /--title must not be empty/);
+    assert.equal(r.stdout, '');
+  }
 });

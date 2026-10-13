@@ -20,7 +20,7 @@ export function lintPlaceholders(text, path) {
 
 // Extended_Pictographic, flags (regional indicators) and keycaps. (c) (r) and
 // the trade mark sign are in Extended_Pictographic but are ordinary text.
-const EMOJI = /(?![©®™])\p{Extended_Pictographic}|\p{Regional_Indicator}+|⃣/gu;
+export const EMOJI = /(?![©®™])\p{Extended_Pictographic}|\p{Regional_Indicator}+|⃣/gu;
 
 function lintEmoji(text, path) {
   const found = [...new Set(text.match(EMOJI) ?? [])];

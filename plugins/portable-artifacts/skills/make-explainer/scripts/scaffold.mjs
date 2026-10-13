@@ -79,6 +79,7 @@ const argv = process.argv.slice(2);
 try {
   const { values, positionals } = parseCli(argv, OPTIONS, USAGE);
   const preset = presetFrom(positionals);
+  if (values.title !== undefined && values.title.trim() === '') throw new UsageError(`--title must not be empty; pass --title <text> or leave it out for a TODO title; usage: ${USAGE}`);
   const facts = values.facts === undefined ? null : readFacts(values.facts);
   process.stdout.write(`${JSON.stringify(scaffold(preset, { facts, title: values.title }), null, 2)}\n`);
   evalLog(true, 0);

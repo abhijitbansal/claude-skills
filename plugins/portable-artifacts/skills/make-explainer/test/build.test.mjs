@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { normalisedBody } from './helpers/golden.mjs';
 
 const BUILD = fileURLToPath(new URL('../scripts/build.mjs', import.meta.url));
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
@@ -153,11 +154,6 @@ test('rebuilding the same spec gives byte-identical output', () => {
 
 // ---- golden: the body markup of the core fixture ---------------------------------------
 // Baselines change only on purpose: UPDATE_GOLDEN=1 node --test test/build.test.mjs
-
-function normalisedBody(html) {
-  const body = html.slice(html.indexOf('<body'), html.indexOf('</main>') + '</main>'.length);
-  return `${body.replace(/data:image\/([a-z+]+);base64,[A-Za-z0-9+/=]+/g, 'data:image/$1;base64,…')}\n`;
-}
 
 test('golden: body markup of the core fixture is unchanged', () => {
   const { root, done } = sandbox();
