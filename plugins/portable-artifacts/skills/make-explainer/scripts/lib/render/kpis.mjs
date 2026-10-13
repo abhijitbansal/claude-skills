@@ -1,8 +1,9 @@
 import { esc, inline, toneChip, toneClass } from './ui.mjs';
 
-// A number prints with thousands separators (always en-US, so a build never depends on the machine's locale)
-// and every digit it has; a string is shown as written.
-const NUMBER_FORMAT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 20 });
+// A number prints with every digit it has and, from 10,000 up, thousands separators ("min2": 2026 and 1107 stay
+// as written, 51301 shows as 51,301). Always en-US, so a build never depends on the machine's locale.
+// A string is shown as written.
+const NUMBER_FORMAT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 20, useGrouping: 'min2' });
 const valueText = (value) => (typeof value === 'number' ? NUMBER_FORMAT.format(value) : String(value));
 
 export function render(section) {

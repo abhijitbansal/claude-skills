@@ -44,19 +44,36 @@ function signalGroup(child, signal) {
 }
 
 // A detached group does not get the terminal's Ctrl-C, so while any child is running a signal or an exit
-// of this process takes the groups down too (SIGTERM: make-motion cleans up on it), then dies as it would have.
-const running = new Set();
+// of this process takes the groups down too (SIGTERM: make-motion cleans up on it). A signal then waits for the
+// children to go, up to the longest grace of the running ones, sends SIGKILL to the groups still there, and only
+// then dies as it would have, so a Chromium or ffmpeg that ignores SIGTERM is not orphaned. An exit cannot wait,
+// so it sends SIGTERM only.
+const running = new Map(); // child -> its grace period
 const STOP_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
-const stopAll = () => { for (const child of running) signalGroup(child, 'SIGTERM'); };
+let stopping = null; // { signal, timer } once a stop signal has arrived
+const stopAll = () => { for (const child of running.keys()) signalGroup(child, 'SIGTERM'); };
 const release = () => {
   process.removeListener('exit', stopAll);
   for (const sig of STOP_SIGNALS) process.removeListener(sig, onStopSignal);
 };
+// Node restores the default action for the signal on the next loop turn, so the re-raise waits for it.
+function dieOfStopSignal() {
+  if (stopping === null) return;
+  const { signal, timer } = stopping;
+  stopping = null;
+  clearTimeout(timer);
+  setImmediate(() => process.kill(process.pid, signal));
+}
 function onStopSignal(signal) {
   stopAll();
   release();
-  // Node restores the default action for the signal on the next loop turn, so the re-raise waits for it.
-  setImmediate(() => process.kill(process.pid, signal));
+  stopping = { signal, timer: undefined };
+  if (running.size === 0) return dieOfStopSignal();
+  stopping.timer = setTimeout(() => {
+    for (const child of running.keys()) signalGroup(child, 'SIGKILL');
+    dieOfStopSignal();
+  }, Math.max(...running.values()));
+  return undefined;
 }
 function arm() {
   if (running.size !== 1) return;
@@ -64,7 +81,10 @@ function arm() {
   for (const sig of STOP_SIGNALS) process.on(sig, onStopSignal);
 }
 function disarm() {
-  if (running.size === 0) release();
+  if (running.size === 0) {
+    release();
+    dieOfStopSignal();
+  }
 }
 
 /**
@@ -80,7 +100,7 @@ export function runChild(command, args, { cwd, env, timeoutMs, graceMs = KILL_GR
     let killTimer;
     const child = spawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: GROUPS });
     if (child.pid !== undefined) {
-      running.add(child);
+      running.set(child, graceMs);
       arm();
     }
     const finish = (result) => {

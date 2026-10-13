@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadSpec, validateSpec, exitSpecUsage } from './lib/spec.mjs';
 import { buildPage, BuildError } from './lib/page.mjs';
 import { resolveOutput } from './lib/output.mjs';
-import { pruneAssets } from './lib/assets.mjs';
+import { syncAssets, assetConflicts, specInputs } from './lib/assets.mjs';
 import { SiblingError } from './lib/siblings.mjs';
 import { UsageError, parseCli } from '../shared/cli.mjs';
 
@@ -37,16 +37,16 @@ export async function build(file, { out, theme, env = process.env } = {}) {
     if (e instanceof SiblingError) return fail([{ path: 'sections', message: e.message }]);
     throw e;
   }
+  const assetsDir = path.join(path.dirname(target), `${path.basename(target, '.html')}.assets`);
+  // Before anything is written: a file in the folder that no build wrote is never overwritten.
+  const conflicts = assetConflicts(assetsDir, built.assets);
+  if (conflicts.length > 0) return fail(conflicts);
   try {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, built.html);
-    for (const asset of built.assets) {
-      fs.mkdirSync(path.dirname(asset.to), { recursive: true });
-      if (asset.content === undefined) fs.copyFileSync(asset.from, asset.to);
-      else fs.writeFileSync(asset.to, asset.content);
-    }
-    // Last, so a failed write leaves the previous build's files in place.
-    pruneAssets(path.join(path.dirname(target), `${path.basename(target, '.html')}.assets`), built.assets.map((a) => a.to));
+    // Last, so a failed write leaves the previous build's files in place. Files in the folder that this
+    // build reads, or that no earlier build wrote, are never removed (see assets.mjs).
+    syncAssets(assetsDir, built.assets, { protect: specInputs(spec, dir) });
   } catch (e) {
     throw new UsageError(`cannot write ${target}: ${e.code ?? e.message}`);
   }

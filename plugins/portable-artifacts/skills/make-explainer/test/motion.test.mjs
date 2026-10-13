@@ -262,7 +262,7 @@ test('build() copies the video next to the page', async () => {
   const target = path.join(dir, 'dist', 'a.html');
   const r = await build(path.join(dir, 'a.explainer.json'), { out: target });
   assert.equal(r.ok, true, JSON.stringify(r.errors));
-  const copied = fs.readdirSync(path.join(dir, 'dist', 'a.assets')).sort();
+  const copied = fs.readdirSync(path.join(dir, 'dist', 'a.assets')).filter((n) => n !== '.pa-assets.json').sort(); // the manifest is not an asset
   assert.equal(copied.length, 1);
   const [mp4] = copied;
   assert.deepEqual(fs.readFileSync(path.join(dir, 'dist', 'a.assets', mp4)), fs.readFileSync(path.join(dir, 'demo.mp4')));

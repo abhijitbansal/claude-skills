@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { liveHtml, createRebuilder, watchFiles, startLiveServer } from '../scripts/lib/live.mjs';
+import { buildDashboard } from '../scripts/lib/pipeline.mjs';
 import { sleep, until, request, events, serve as serveProcess } from './helpers/live-harness.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -201,8 +202,20 @@ test('a watcher problem after a GOOD build sends rebuilt then watch-warning, nev
   }
 });
 
-test('close() during a rebuild waits for it and leaves no watcher armed', async (t) => {
-  const { file } = project();
+// A stand-in for the build that counts its calls and holds every call after the first until released,
+// so a test knows a build is in flight (and how many started) instead of hoping the timing works out.
+function gatedBuilder() {
+  const gate = { calls: 0, release: null, held: null };
+  gate.held = new Promise((resolve) => { gate.release = resolve; });
+  const build = async (...args) => {
+    gate.calls += 1;
+    if (gate.calls > 1) await gate.held;
+    return buildDashboard(...args);
+  };
+  return { gate, build };
+}
+const post = (live) => request(Number(new URL(live.url).port), { method: 'POST', path: '/rebuild', headers: { 'x-pa-token': live.token } });
+const armedWatch = () => {
   const armed = new Set();
   const watch = (paths, onChange, opts) => {
     const real = watchFiles(paths, onChange, opts);
@@ -210,12 +223,57 @@ test('close() during a rebuild waits for it and leaves no watcher armed', async 
     armed.add(handle);
     return handle;
   };
-  const live = await startLiveServer({ specFile: file, watch });
-  t.after(() => { live.close(); armed.forEach((w) => w.close()); });
-  const port = Number(new URL(live.url).port);
+  return { armed, watch };
+};
+
+test('close() during a rebuild waits for it and leaves no watcher armed', async (t) => {
+  const { file } = project();
+  const { armed, watch } = armedWatch();
+  const { gate, build } = gatedBuilder();
+  const live = await startLiveServer({ specFile: file, watch, buildFn: build });
+  t.after(() => { gate.release(); live.close(); armed.forEach((w) => w.close()); });
   assert.equal(armed.size, 1);
-  assert.equal((await request(port, { method: 'POST', path: '/rebuild', headers: { 'x-pa-token': live.token } })).status, 202);
-  await live.close(); // the rebuild above is still running
-  await sleep(1500);  // long enough for a leaked build to re-arm
+  assert.equal((await post(live)).status, 202);
+  await until(() => gate.calls === 2, { label: 'the POST-triggered build to be in flight' });
+  let closed = false;
+  const closing = live.close().then(() => { closed = true; });
+  await sleep(200);
+  assert.equal(closed, false, 'close() waits for the build that is in flight');
+  gate.release();
+  await closing;
+  await sleep(300); // long enough for a leaked build to re-arm
+  assert.equal(gate.calls, 2);
   assert.equal(armed.size, 0, 'a build that finished after close() armed a watcher nobody will close');
+});
+
+test('close() cancels a rebuild that was queued behind the one in flight: nothing builds or writes after close', async (t) => {
+  const { file, dir } = project();
+  const out = path.join(dir, 'dist');
+  const page = path.join(out, 'index.html');
+  const { gate, build } = gatedBuilder();
+  const live = await startLiveServer({ specFile: file, out, buildFn: build });
+  t.after(() => { gate.release(); live.close(); });
+  assert.equal((await post(live)).status, 202);
+  await until(() => gate.calls === 2, { label: 'the POST-triggered build to be in flight' });
+  assert.equal((await post(live)).status, 202); // queued behind it
+  const closing = live.close();
+  gate.release();
+  await closing;
+  fs.rmSync(page);
+  await sleep(500);
+  assert.equal(gate.calls, 2, 'the queued build never ran');
+  assert.equal(fs.existsSync(page), false, 'and nothing was written to the output after close()');
+});
+
+test('createRebuilder.cancel() drops a queued run and keeps later triggers from running', async () => {
+  let runs = 0;
+  let release;
+  const rb = createRebuilder(async () => { runs++; await new Promise((r) => { release = r; }); });
+  rb.trigger(); rb.trigger();
+  await sleep(10);
+  rb.cancel();
+  release(); await rb.idle();
+  assert.equal(runs, 1, 'the queued run was dropped');
+  rb.trigger(); await sleep(20);
+  assert.equal(runs, 1, 'a cancelled rebuilder stays cancelled');
 });

@@ -27,6 +27,7 @@ export function liveHtml(html, { token }) {
 export function createRebuilder(run, { onError } = {}) {
   let running = null;
   let pending = false;
+  let cancelled = false;
   const loop = async () => {
     try {
       do {
@@ -36,15 +37,21 @@ export function createRebuilder(run, { onError } = {}) {
         } catch (e) {
           onError?.(e);
         }
-      } while (pending);
+      } while (pending && !cancelled);
     } finally {
       running = null;
     }
   };
   return {
     trigger() {
+      if (cancelled) return;
       if (running) { pending = true; return; }
       running = loop();
+    },
+    // Drops a queued run and ignores later triggers; the run in flight finishes.
+    cancel() {
+      cancelled = true;
+      pending = false;
     },
     idle: () => running ?? Promise.resolve(),
   };
@@ -82,8 +89,9 @@ export function watchFiles(paths, onChange, { debounceMs = 300, onError } = {}) 
 
 // Resolves { ok: true, url, token, close } or { ok: false, errors } when the first build fails.
 // Throws UsageError for usage/IO problems (also on the first build) and when the port is busy.
-// `watch` replaces watchFiles in tests, to make arming fail after a good build.
-export async function startLiveServer({ specFile, port = 0, interval, theme, allowOutside = false, timeoutMs, out, watch = watchFiles }) {
+// `watch` replaces watchFiles and `buildFn` replaces buildDashboard in tests (to make arming fail after a good
+// build, or to hold a build in flight).
+export async function startLiveServer({ specFile, port = 0, interval, theme, allowOutside = false, timeoutMs, out, watch = watchFiles, buildFn = buildDashboard }) {
   const token = crypto.randomBytes(16).toString('hex');
   const clients = new Set();
   const state = { html: null, watcher: null, watchPaths: [], warning: null, closed: false };
@@ -120,7 +128,7 @@ export async function startLiveServer({ specFile, port = 0, interval, theme, all
   async function build() {
     let result;
     try {
-      result = await buildDashboard(specFile, { out, theme, allowOutside, timeoutMs });
+      result = await buildFn(specFile, { out, theme, allowOutside, timeoutMs });
       if (result.ok) state.html = liveHtml(fs.readFileSync(result.target, 'utf8'), { token });
     } catch (e) {
       if (state.html === null && e instanceof UsageError) throw e; // first build: report as usage error
@@ -186,6 +194,7 @@ export async function startLiveServer({ specFile, port = 0, interval, theme, all
     token,
     close: async () => {
       state.closed = true;
+      rebuilder.cancel(); // a build queued behind the one in flight must not run (and write dist/) after close
       clearInterval(timer);
       state.watcher?.close();
       state.watcher = null;
@@ -195,7 +204,7 @@ export async function startLiveServer({ specFile, port = 0, interval, theme, all
         server.close(() => resolve());
         server.closeAllConnections();
       });
-      await rebuilder.idle(); // a build still running finishes against a closed server; arm() sees state.closed
+      await rebuilder.idle(); // the build in flight finishes against a closed server; arm() sees state.closed
     },
   };
 }

@@ -108,34 +108,45 @@ function describe(text, { pos, expected }) {
   return [`unexpected ${shown}`, trailing ? 'remove the trailing comma before it' : `expected ${expected}`];
 }
 
-// The line holding `pos`, without its indentation, cut to MAX_LINE characters around the column.
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+const graphemesOf = (text) => Array.from(GRAPHEMES.segment(text), (g) => g.segment);
+
+// Terminal cells in the East Asian wide and fullwidth blocks, and emoji, take two columns.
+const WIDE = /^[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE6F\uFF00-\uFF60\uFFE0-\uFFE6\u{1F300}-\u{1F64F}\u{1F900}-\u{1F9FF}\u{20000}-\u{3FFFD}]|\p{Emoji_Presentation}/u;
+const cells = (grapheme) => (WIDE.test(grapheme) ? 2 : 1);
+
+// The line holding `pos`, without its indentation, cut to MAX_LINE characters around the column. The column and the
+// caret are in characters as a reader sees them (grapheme clusters), and the caret is padded by terminal cells.
 function snippetAt(text, pos) {
   const lineStart = text.lastIndexOf('\n', pos - 1) + 1;
   const newline = text.indexOf('\n', pos);
-  let line = text.slice(lineStart, newline === -1 ? text.length : newline).replace(/\r$/, '').replaceAll('\t', ' ');
-  let offset = Math.min(pos - lineStart, line.length);
-  const indent = Math.min(/^\s*/.exec(line)[0].length, offset);
-  line = line.slice(indent);
+  const raw = text.slice(lineStart, newline === -1 ? text.length : newline).replace(/\r$/, '').replaceAll('\t', ' ');
+  let chars = graphemesOf(raw);
+  let offset = Math.min(graphemesOf(text.slice(lineStart, pos)).length, chars.length);
+  const indent = Math.min(chars.findIndex((c) => !/^\s$/.test(c)) === -1 ? chars.length : chars.findIndex((c) => !/^\s$/.test(c)), offset);
+  chars = chars.slice(indent);
   offset -= indent;
-  if (line.length > MAX_LINE) {
-    const start = Math.max(0, Math.min(offset - CONTEXT_BEFORE, line.length - MAX_LINE));
-    const end = Math.min(line.length, start + MAX_LINE);
-    const head = start > 0 ? '…' : '';
-    const tail = end < line.length ? '…' : '';
+  if (chars.length > MAX_LINE) {
+    const start = Math.max(0, Math.min(offset - CONTEXT_BEFORE, chars.length - MAX_LINE));
+    const end = Math.min(chars.length, start + MAX_LINE);
+    const head = start > 0 ? ['…'] : [];
+    const tail = end < chars.length ? ['…'] : [];
     offset = offset - start + head.length;
-    line = `${head}${line.slice(start, end)}${tail}`;
+    chars = [...head, ...chars.slice(start, end), ...tail];
   }
-  return `  ${line}\n  ${' '.repeat(offset)}^`;
+  const pad = chars.slice(0, offset).reduce((n, c) => n + cells(c), 0);
+  return `  ${chars.join('')}\n  ${' '.repeat(pad)}^`;
 }
 
 /** The error for `file`, whose `text` JSON.parse refused. */
 export function jsonSyntaxError(file, text, parseError) {
   const found = scan(text);
   const refusal = found ?? new Refusal(text.length, 'more input');
-  const { pos } = refusal;
+  // Running out of input points at the end of the last line that has anything on it, not at the blank lines after.
+  const pos = refusal.pos >= text.length ? text.trimEnd().length : refusal.pos;
   const before = text.slice(0, pos);
   const line = (before.match(/\n/g)?.length ?? 0) + 1;
-  const column = pos - (before.lastIndexOf('\n') + 1) + 1;
+  const column = graphemesOf(before.slice(before.lastIndexOf('\n') + 1)).length + 1;
   // The scanner found nothing (the engine is stricter than the grammar): fall back to the engine's words.
   const [what, advice] = found ? describe(text, refusal) : [parseError.message.split('\n')[0], ''];
   const where = found ? ` at line ${line}, column ${column}` : ` (line ${line}, column ${column})`;

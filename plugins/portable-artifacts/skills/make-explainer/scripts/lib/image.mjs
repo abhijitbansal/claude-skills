@@ -46,9 +46,10 @@ const decodeCssEscapes = (text) => text.replace(CSS_ESCAPE, (m, hex, char) => (c
 export function svgProblem(raw) {
   const svg = decodeReferences(raw);
   const css = decodeCssEscapes(svg);
-  // An optional namespace prefix on the element name: <x:script>, <svg:foreignObject>.
-  if (/<(?:[\w.-]+:)*script/i.test(svg)) return 'contains <script';
-  if (/<(?:[\w.-]+:)*foreignObject/i.test(svg)) return 'contains <foreignObject';
+  // An optional namespace prefix on the element name: <x:script>, <svg:foreignObject>, <é:script>.
+  // XML allows almost any character in a name, so a prefix is anything but a delimiter.
+  if (/<(?:[^\s<>/=:"']+:)*script/i.test(svg)) return 'contains <script';
+  if (/<(?:[^\s<>/=:"']+:)*foreignObject/i.test(svg)) return 'contains <foreignObject';
   if (/<!ENTITY/i.test(svg)) return 'declares an entity';
   if (/javascript\s*:/i.test(css)) return 'contains a javascript: URL';
   if (/[\s"'/]on[a-z]+\s*=/i.test(svg)) return 'contains an event handler attribute (on…=)';

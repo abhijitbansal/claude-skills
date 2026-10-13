@@ -78,18 +78,25 @@ function schemaErrors(spec) {
   return formatAjvErrors(raw.map(wordSchemaError));
 }
 
+// A table section's cells (sections[i].rows...): the one place the banned-phrase rule does not apply.
+const TABLE_CELL = /^sections\[(\d+)\]\.rows(?:\[|$)/;
+const isTableCell = (spec, at) => {
+  const m = TABLE_CELL.exec(at);
+  return m !== null && spec.sections?.[Number(m[1])]?.type === 'table';
+};
+
 // Every string: placeholders everywhere, the style lint on prose only.
-function lintSpec(spec) {
+export function lintSpec(spec) {
   const errors = [];
   const warnings = [];
-  for (const { path: at, text, prose, heading, key } of collectStrings(spec)) {
+  for (const { path: at, text, prose, heading } of collectStrings(spec)) {
     if (!prose) {
       errors.push(...lintPlaceholders(text, at));
       continue;
     }
     const sectionTitle = /^sections\[\d+\]\.title$/.test(at);
     // Table cells are data (commands, identifiers, quoted values), not sentences: no banned-phrase rule there.
-    const r = lintText(text, at, { heading, sectionTitle, banned: key !== 'rows' });
+    const r = lintText(text, at, { heading, sectionTitle, banned: !isTableCell(spec, at) });
     errors.push(...r.errors);
     warnings.push(...r.warnings);
   }

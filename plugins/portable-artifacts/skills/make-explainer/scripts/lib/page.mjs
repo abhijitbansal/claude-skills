@@ -218,7 +218,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
   for (const [i, section] of spec.sections.entries()) {
     const def = SECTIONS[section.type];
     if (def.prepare) await prepareSection(section, i, def, ctx);
-    if (def.assets) assets.push(...await def.assets(section, ctx));
+    if (def.assets) assets.push(...(await def.assets(section, ctx)).map((a) => ({ ...a, at: `sections[${i}]` })));
   }
   const layout = slides ? deckParts(spec, ctx) : pageParts(spec, ctx, ids);
 

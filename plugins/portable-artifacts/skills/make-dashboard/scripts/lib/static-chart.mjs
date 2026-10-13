@@ -96,11 +96,12 @@ function dateFormat(times) {
   return '%b %d, %Y';
 }
 
-// At most `max` of the sorted times, always readings, always the first and the last. When the readings divide
+// At most `max` of the sorted times, always readings, always the first and the last (with max 1, only the last). When the readings divide
 // evenly into `max` or fewer ticks, the steps are all the same. Otherwise every k-th reading from the first, then
 // the last: with room (at least 3/5 of a step of time) it is one more tick, without it the last k-th tick gives
 // way, so two labels never crowd each other.
 export function thin(times, max) {
+  if (max <= 1) return times.slice(-1); // one tick: the last reading (the k-th-step arithmetic below needs max >= 2)
   if (times.length <= max) return times;
   const last = times.length - 1;
   for (let m = max; m >= 3; m--) {

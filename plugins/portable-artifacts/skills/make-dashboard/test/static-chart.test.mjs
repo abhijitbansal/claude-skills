@@ -407,6 +407,9 @@ test('thin: the last reading is added when there is room, else it takes the plac
   assert.deepEqual(idx(thin(at(13), 4)), [0, 4, 8, 12], 'divides evenly: unchanged');
   assert.deepEqual(idx(thin(at(24), 2)), [0, 23], 'two ticks are the first and the last');
   assert.deepEqual(idx(thin(at(3), 4)), [0, 1, 2], 'few readings: all of them');
+  assert.deepEqual(idx(thin(at(5), 1)), [4], 'one tick is the last reading');
+  assert.deepEqual(idx(thin(at(1), 1)), [0], 'a single reading is itself');
+  assert.deepEqual(thin([], 1), [], 'no readings: none');
   for (let n = 2; n <= 80; n++) for (const max of [2, 3, 4, 7]) {
     const ticks = thin(at(n), max);
     assert.ok(ticks.length <= Math.max(max, Math.min(n, max)), `n=${n} max=${max}: ${ticks.length} ticks`);

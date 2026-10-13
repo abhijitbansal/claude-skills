@@ -17,7 +17,6 @@ import { SECTIONS } from '../scripts/lib/sections.mjs';
 import { fit, cleanText } from '../scripts/lib/fit.mjs';
 import { childEnv } from '../scripts/lib/motion-render.mjs';
 import { gitEnv } from '../scripts/lib/git.mjs';
-import { pruneAssets } from '../scripts/lib/assets.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIXTURES = path.join(SKILL, 'test/fixtures');
@@ -108,52 +107,7 @@ test('captions and table headers are prose: a banned phrase there is still an er
 
 const put = (file, content = 'x') => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, content); };
 
-test('pruneAssets removes files the build no longer writes, keeps the ones it does, and drops emptied folders', () => {
-  const root = tmp();
-  const dir = path.join(root, 'page.assets');
-  put(path.join(dir, 'keep.mp4'));
-  put(path.join(dir, 'old.mp4'));
-  put(path.join(dir, 'chart-a', 'index.html'));
-  put(path.join(dir, 'chart-a', 'extra', 'deep.txt'));
-  const removed = pruneAssets(dir, [path.join(dir, 'keep.mp4')]);
-  assert.deepEqual(fs.readdirSync(dir), ['keep.mp4']);
-  assert.deepEqual(removed.sort(), [path.join(dir, 'chart-a', 'extra', 'deep.txt'), path.join(dir, 'chart-a', 'index.html'), path.join(dir, 'old.mp4')].sort());
-});
-
-test('pruneAssets removes the assets folder itself when nothing is written any more, never touches siblings', () => {
-  const root = tmp();
-  const dir = path.join(root, 'page.assets');
-  put(path.join(dir, 'old.mp4'));
-  put(path.join(root, 'page.html'));
-  put(path.join(root, 'other.assets', 'keep.txt'));
-  pruneAssets(dir, []);
-  assert.ok(!fs.existsSync(dir));
-  assert.ok(fs.existsSync(path.join(root, 'page.html')));
-  assert.ok(fs.existsSync(path.join(root, 'other.assets', 'keep.txt')));
-});
-
-test('pruneAssets never follows or deletes symlinks, and leaves a symlinked assets folder alone', () => {
-  const root = tmp();
-  const outside = path.join(root, 'outside');
-  put(path.join(outside, 'precious.txt'), 'keep me');
-  const dir = path.join(root, 'page.assets');
-  put(path.join(dir, 'old.mp4'));
-  fs.symlinkSync(outside, path.join(dir, 'linked-dir'));
-  fs.symlinkSync(path.join(outside, 'precious.txt'), path.join(dir, 'linked-file'));
-  pruneAssets(dir, []);
-  assert.equal(fs.readFileSync(path.join(outside, 'precious.txt'), 'utf8'), 'keep me');
-  assert.ok(fs.lstatSync(path.join(dir, 'linked-dir')).isSymbolicLink(), 'symlinks stay');
-  assert.ok(fs.lstatSync(path.join(dir, 'linked-file')).isSymbolicLink());
-  assert.ok(!fs.existsSync(path.join(dir, 'old.mp4')));
-
-  const real = path.join(root, 'real.assets');
-  put(path.join(real, 'a.txt'));
-  const link = path.join(root, 'link.assets');
-  fs.symlinkSync(real, link);
-  pruneAssets(link, []);
-  assert.ok(fs.existsSync(path.join(real, 'a.txt')), 'a symlinked assets folder is not entered');
-  assert.equal(pruneAssets(path.join(root, 'missing.assets'), []).length, 0, 'a missing folder is fine');
-});
+// Pruning is manifest-based; its data-loss cases (user files, inputs, symlinks, ../ entries) are in final-c.test.mjs.
 
 function chartFolder(files = {}) {
   const dir = tmp('explainer-assets-');
@@ -201,10 +155,10 @@ test('a failed build removes nothing', async () => {
 const ctx = { dir: FIXTURES, icons: null, theme: null, mode: 'page', slug: 'page', assetsDir: FIXTURES, idFor: () => 'sec' };
 const kpiValues = (items) => [...SECTIONS.kpis.render({ type: 'kpis', items }, ctx).matchAll(/<dd class="kpi-value">([^<]*)<\/dd>/g)].map((m) => m[1]);
 
-test('KPI numbers render with thousands separators; strings are shown as written', () => {
+test('KPI numbers render with thousands separators from 10,000; strings are shown as written', () => {
   assert.deepEqual(
-    kpiValues([{ label: 'a', value: 51301 }, { label: 'b', value: 7 }, { label: 'c', value: 1234567 }, { label: 'd', value: -2500 }, { label: 'e', value: 1234.5 }, { label: 'f', value: 0 }]),
-    ['51,301', '7', '1,234,567', '-2,500', '1,234.5', '0'],
+    kpiValues([{ label: 'a', value: 51301 }, { label: 'b', value: 7 }, { label: 'c', value: 1234567 }, { label: 'd', value: -25000 }, { label: 'e', value: 12345.5 }, { label: 'f', value: 0 }]),
+    ['51,301', '7', '1,234,567', '-25,000', '12,345.5', '0'],
   );
   assert.deepEqual(kpiValues([{ label: 'a', value: '51301' }, { label: 'b', value: '12k' }, { label: 'c', value: '2026' }]), ['51301', '12k', '2026']);
 });
