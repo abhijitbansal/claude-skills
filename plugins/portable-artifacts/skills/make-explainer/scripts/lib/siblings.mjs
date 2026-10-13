@@ -37,5 +37,12 @@ export async function loadSibling(name, relModule) {
     const where = fs.existsSync(dir) ? `${name}/${relModule} not found in ${dir}` : `${name} skill not found next to make-explainer (looked in ${dir})`;
     throw new SiblingError(`${where}; ${MISSING_HINT([name])}`, installCommand([name]));
   }
-  return import(pathToFileURL(file).href);
+  try {
+    return await import(pathToFileURL(file).href);
+  } catch (e) {
+    // The folder is there but its npm dependencies are not: say so, with the fix, instead of a raw module error.
+    const missing = e?.code === 'ERR_MODULE_NOT_FOUND' ? /Cannot find package '([^']+)' imported from (.+)$/.exec(e.message) : null;
+    if (!missing || !path.resolve(missing[2]).startsWith(`${dir}${path.sep}`)) throw e;
+    throw new SiblingError(`${name} is installed but its dependencies are missing (${missing[1]}); run "npm ci" in ${dir}, or ${MISSING_HINT([name])}`, installCommand([name]));
+  }
 }

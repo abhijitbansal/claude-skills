@@ -172,8 +172,8 @@ test('an inline chart renders a light and a dark SVG with marks, axis titles and
     assert.match(svg, />Core</);
     assert.ok((svg.match(/<path[^>]*d="M[^"]*"[^>]*fill="#/g) ?? []).length >= 3, 'one bar per row');
   }
-  assert.match(html, /<figure class="ch" aria-label="Open bugs">/);
-  assert.match(html, /<div class="ch-card" role="img" aria-label="Open bugs: Bar chart of bugs by team\. The plotted values are in the data table below\.">/);
+  assert.match(html, /<figure class="ch">/, 'the section heading already names a titled chart; the figure does not repeat it');
+  assert.match(html, /<div class="ch-card" role="img" aria-label="Bar chart of bugs by team\. The plotted values are in the data table below\.">/);
   assert.match(html, /<figcaption>Bugs by <strong>team<\/strong><\/figcaption>/);
   assert.deepEqual([...html.matchAll(/<div class="(?:ch-svg )?ch-(light|dark|wide|narrow)"/g)].map((m) => m[1]), ['light', 'wide', 'narrow', 'dark', 'wide', 'narrow'], 'a scheme holds its wide and narrow drawing');
   assert.match(lightNarrow, /<svg [^>]*\swidth="320"/);
@@ -227,12 +227,14 @@ test('a dashboard chart renders from the dashboard rows; its title names the fig
   assert.match(light, />region</);
   assert.match(light, />\$\d/, 'the dashboard chart format applies');
   assert.match(html, /<figure class="ch" aria-label="Revenue by region">/);
+  assert.match(html, /role="img" aria-label="Bar chart of revenue by region\./, 'the name is not repeated in the image label');
   assert.match(html, /<summary>Data table \(3 rows\)<\/summary>/);
   assert.deepEqual(assets, [], 'no interactive link, no assets');
   assert.ok(!html.includes('Open interactive dashboard'));
   const line = await make([dashboard({ chart: 'weekly', title: 'Weekly' })]);
-  assert.match(svgs(line.html)[0], /class="mark-group role-scope[^"]*"|<path[^>]*stroke="#/, 'a line chart draws strokes');
-  assert.match(line.html, /<figure class="ch" aria-label="Weekly">/);
+  assert.match(svgs(line.html)[0], /<path d="M[^"]*" stroke="#[0-9a-f]{6}" stroke-width="2"/, 'a line chart draws stroked lines');
+  assert.match(svgs(line.html)[0], /class="mark-line role-mark/);
+  assert.match(line.html, /<figure class="ch">/);
 });
 
 test('a dashboard query over the 500-row limit is a BuildError at the chart field', async () => {
@@ -317,4 +319,132 @@ test('the recap example, with its diagram and chart, builds under the 600 KB bud
   const html = fs.readFileSync(out, 'utf8');
   assert.equal(svgs(html).length, PER_CHART, 'the example has one chart');
   assert.ok(html.includes('data-diagram'), 'and one diagram');
+});
+
+// ---- fix round 1 ----------------------------------------------------------------------------
+
+test('the accessible name is announced once: a titled chart is named by its heading, an untitled one by its figure', async () => {
+  const titled = (await make([inline({ caption: 'Bugs by team' })])).html;
+  assert.ok(!titled.includes('aria-label="Open bugs'), 'title not repeated in any label but the data table');
+  assert.equal((titled.match(/Open bugs/g) ?? []).length, 3, 'heading, the anchor label and the data table region');
+  const captioned = (await make([inline({ title: undefined, caption: 'Bugs by **team**' })])).html;
+  assert.match(captioned, /<figure class="ch" aria-label="Bugs by team">/);
+  assert.match(captioned, /role="img" aria-label="Bar chart of bugs by team\./);
+});
+
+test('the data table applies the chart format to numbers and leaves text alone', async () => {
+  const money = (await make([inline({ data: [{ team: 'Core', bugs: 1234.5 }, { team: 'Web', bugs: 0.1 + 0.2 }], format: 'currency' })])).html;
+  assert.match(money, /<th scope="row">Core<\/th><td>\$1,235<\/td>/);
+  assert.match(money, /<td>\$0\.30<\/td>/);
+  const compact = (await make([inline({ data: [{ team: 'Core', bugs: 1200 }, { team: 'Web', bugs: 700 }], format: 'compact' })])).html;
+  assert.match(compact, /<td>1\.2K<\/td>/);
+  assert.match((await make([inline()])).html, /<td>12<\/td>/, 'no format, no change');
+  const fromDashboard = (await make([dashboard()])).html;
+  assert.match(fromDashboard, /<td>\$\d[\d,]*(\.\d\d)?<\/td>/, 'the dashboard chart format reaches its table');
+});
+
+test('ISO date-times plot on a time axis', async () => {
+  const data = [{ at: '2025-01-01T10:00:00Z', n: 1 }, { at: '2025-01-01T12:00:00Z', n: 3 }];
+  const section = { type: 'chart', title: 'Load', kind: 'line', x: 'at', y: 'n', data };
+  assert.deepEqual(await errorsOf(doc([section]), folder()), []);
+  assert.match(svgs((await make([section])).html)[0], /class="mark-line role-mark/);
+});
+
+test('a raw vegaLite dashboard chart renders, names its figure from the chart title and lists every column', async () => {
+  const dir = folder();
+  const spec = JSON.parse(fs.readFileSync(path.join(dir, 'sales.dashboard.json'), 'utf8'));
+  spec.charts.push({ id: 'raw', title: 'Raw view', query: 'by_region', vegaLite: { width: 300, autosize: { type: 'pad' }, mark: 'bar', encoding: { x: { field: 'region', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } } } });
+  fs.writeFileSync(path.join(dir, 'sales.dashboard.json'), JSON.stringify(spec));
+  assert.deepEqual(await errorsOf(doc([dashboard({ chart: 'raw' })]), dir), []);
+  const { html } = await make([dashboard({ chart: 'raw' })], dir);
+  assert.equal(svgs(html).length, PER_CHART);
+  assert.match(svgs(html)[0], />region</);
+  assert.match(svgs(html)[0], /width="600"/, 'the static width replaces a width in the view');
+  assert.match(html, /<figure class="ch" aria-label="Raw view">/);
+  assert.match(html, /role="img" aria-label="Chart\. The plotted values/);
+  assert.match(html, /<th scope="col">region<\/th><th scope="col">revenue<\/th>/);
+});
+
+// A dashboard with a database source reads the network when it runs; explainer charts read local files only.
+function dashboardWith(source) {
+  const dir = folder();
+  const spec = JSON.parse(fs.readFileSync(path.join(dir, 'sales.dashboard.json'), 'utf8'));
+  spec.sources.warehouse = source;
+  fs.writeFileSync(path.join(dir, 'sales.dashboard.json'), JSON.stringify(spec));
+  return dir;
+}
+
+test('a dashboard with a postgres or mysql source is refused at sections[i].dashboard, before anything runs', async () => {
+  for (const type of ['postgres', 'mysql']) {
+    const dir = dashboardWith({ type, env: 'DATABASE_URL' });
+    for (const section of [dashboard(), dashboard({ interactive: true })]) {
+      const errors = await errorsOf(doc([text, section]), dir);
+      assert.deepEqual(errors, [`sections[1].dashboard: source "warehouse" is ${type}, a network source; explainer charts read local files only (no network at build or view time) — export the query to CSV or Parquet and point a file source at it (in sales.dashboard.json)`]);
+      await assert.rejects(buildPage(doc([text, section]), { dir }), (e) => {
+        assert.ok(e instanceof BuildError);
+        assert.equal(e.errors[0].path, 'sections[1].dashboard');
+        assert.match(e.errors[0].message, /explainer charts read local files only/);
+        return true;
+      });
+    }
+  }
+  assert.deepEqual(await errorsOf(doc([dashboard()]), dashboardWith({ type: 'csv', path: 'sales.csv' })), [], 'local file sources stay allowed');
+});
+
+test('a dashboard that is not valid JSON is reported by its path in the spec folder, not an absolute path', async () => {
+  const dir = folder({ 'broken.dashboard.json': '{ nope' });
+  const errors = await errorsOf(doc([dashboard({ dashboard: 'broken.dashboard.json' })]), dir);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /^sections\[0\]\.dashboard: broken\.dashboard\.json is not valid JSON: /);
+  assert.ok(!errors[0].includes(dir), errors[0]);
+});
+
+test('interactive: the dashboard is not left in the temp folder, on success or on failure', async () => {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-tmpcheck-')));
+  made.push(tmp);
+  const dir = folder();
+  const before = process.env.TMPDIR;
+  process.env.TMPDIR = tmp;
+  try {
+    await make([dashboard({ interactive: true })], dir);
+    assert.deepEqual(fs.readdirSync(tmp), [], 'success leaves nothing behind');
+    // A later section that fails the build must not strand the dashboard already built for an earlier one.
+    await assert.rejects(make([dashboard({ interactive: true }), dashboard({ chart: 'nope' })], dir));
+    assert.deepEqual(fs.readdirSync(tmp), [], 'failure leaves nothing behind');
+  } finally {
+    if (before === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = before;
+  }
+});
+
+test('the interactive link is URL-encoded as well as HTML-escaped when the output name needs it', async () => {
+  const dir = folder();
+  const out = path.join(dir, 'out', 'my doc #1.html');
+  fs.writeFileSync(path.join(dir, 'doc.explainer.json'), JSON.stringify(doc([dashboard({ interactive: true })])));
+  const result = await build(path.join(dir, 'doc.explainer.json'), { out });
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  const html = fs.readFileSync(out, 'utf8');
+  assert.ok(html.includes('href="my%20doc%20%231.assets/by-region/index.html"'), html.match(/href="[^"]*assets[^"]*"/)?.[0]);
+  assert.ok(fs.existsSync(path.join(dir, 'out', 'my doc #1.assets', 'by-region', 'index.html')));
+});
+
+// A make-dashboard folder that is present but has no node_modules: the first import of vega fails.
+function dashboardWithoutModules() {
+  const { root, copy } = skillWithoutSibling();
+  const dash = path.join(root, 'make-dashboard');
+  fs.mkdirSync(dash);
+  const real = path.join(SKILL, '..', 'make-dashboard');
+  for (const name of ['scripts', 'shared', 'template', 'package.json']) fs.cpSync(path.join(real, name), path.join(dash, name), { recursive: true });
+  return { root, copy, dash };
+}
+
+test('make-dashboard without its node_modules is a SiblingError with the install hint, not a raw module error', async () => {
+  const { root, copy, dash } = dashboardWithoutModules();
+  const page = await import(pathToFileURL(path.join(copy, 'scripts/lib/page.mjs')).href);
+  await assert.rejects(page.buildPage(doc([inline()]), { dir: root }), (e) => {
+    assert.equal(e.name, 'SiblingError');
+    assert.ok(e.message.includes(`make-dashboard is installed but its dependencies are missing (vega)`), e.message);
+    assert.ok(e.message.includes(`run "npm ci" in ${dash}`), e.message);
+    assert.ok(e.message.includes(`install it with: ${INSTALL}`), e.message);
+    return true;
+  });
 });

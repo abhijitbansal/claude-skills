@@ -7,6 +7,7 @@ import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { vegaConfig } from '../scripts/lib/vega-config.mjs';
 import { vegaConfigScript } from '../scripts/lib/html.mjs';
+import { formatValue } from '../scripts/lib/format.mjs';
 import { inferTypes, columnsOf, inlineChart } from '../scripts/lib/inline-chart.mjs';
 import { staticView, coloursOf, fontOf, renderThemedSvgs } from '../scripts/lib/static-chart.mjs';
 import { FORMAT_NAMES, expandCharts } from '../scripts/lib/views.mjs';
@@ -36,6 +37,8 @@ test('vegaConfig maps colours to axes, marks and ranges', () => {
   assert.equal(cfg.background, null);
 });
 
+// The page's copy is the function's own source (Function.prototype.toString), so it cannot drift from the Node copy
+// or silently break: a helper outside the function would throw here, in the page's sandbox.
 test('the page gets vegaConfig as window.PAVegaConfig, the same function the static render uses', () => {
   const sandbox = { window: {} };
   vm.runInNewContext(vegaConfigScript(), sandbox);
@@ -203,4 +206,95 @@ test('a dashboard spec that does not validate is reported with its own paths', a
   const out = await validateChart(file, 'by-region');
   assert.equal(out.ok, false);
   assert.equal(out.errors[0].path, 'charts[0].x');
+});
+
+// ---- tick labels --------------------------------------------------------------------------
+
+// The text of every axis label in an SVG, with whether it is drawn (opacity) and where it sits.
+function labels(svg) {
+  return [...svg.matchAll(/<text text-anchor="(\w+)" transform="translate\(([-\d.]+),([-\d.]+)\)[^"]*"[^>]*font-size="(\d+)px"[^>]*opacity="([\d.]+)">([^<]*)<\/text>/g)]
+    .map((m) => ({ anchor: m[1], x: Number(m[2]), y: Number(m[3]), size: Number(m[4]), shown: Number(m[5]) > 0, text: m[6] }));
+}
+// A horizontal axis row: the labels sharing a y; boxes use the same width estimate Vega does (0.8 em per character).
+function overlaps(row) {
+  const boxes = row.filter((l) => l.shown).map((l) => {
+    const w = l.text.length * l.size * 0.8;
+    const left = l.anchor === 'end' ? l.x - w : l.anchor === 'middle' ? l.x - w / 2 : l.x;
+    return [left, left + w, l.text];
+  }).sort((a, b) => a[0] - b[0]);
+  return boxes.slice(1).filter((b, i) => b[0] < boxes[i][1]).map((b) => b[2]);
+}
+
+const BUGS = [{ team: 'Core platform', bugs: 1200 }, { team: 'Web', bugs: 700 }, { team: 'Infrastructure', bugs: 400 }, { team: 'Mobile', bugs: 260 }];
+
+test('the end tick of a value axis is drawn, and no drawn tick labels overlap', async () => {
+  const { vegaLite } = inlineChart({ kind: 'bar', x: 'team', y: 'bugs', format: 'compact' }, BUGS);
+  const svgs = await renderThemedSvgs(vegaLite, BUGS, theme);
+  for (const [size, svg] of Object.entries(svgs.light)) {
+    const ticks = labels(svg).filter((l) => /^[\d.]+k?$/.test(l.text) && l.y < 40);
+    assert.ok(ticks.length >= 3, `${size}: ${ticks.length} tick labels`);
+    assert.ok(ticks.every((l) => l.shown), `${size}: no tick label is hidden`);
+    const value = (t) => Number.parseFloat(t) * (t.endsWith('k') ? 1000 : 1);
+    assert.ok(Math.max(...ticks.map((l) => value(l.text))) >= 1200, `${size}: the last tick reaches the longest bar (1200)`);
+    assert.deepEqual(overlaps(ticks), [], `${size}: no two drawn tick labels overlap`);
+  }
+});
+
+test('date ticks sit on the data dates, the last one included; a phone has room for the first and the last', async () => {
+  const data = ['2025-01-06', '2025-01-13', '2025-01-20'].flatMap((day, i) => ['North', 'South'].map((region, j) => ({ day, region, revenue: 10 + i * 5 + j })));
+  const { vegaLite } = inlineChart({ kind: 'line', x: 'day', y: 'revenue', color: 'region' }, data);
+  const svgs = await renderThemedSvgs(vegaLite, data, theme);
+  for (const [size, svg] of Object.entries(svgs.light)) {
+    const dates = labels(svg).filter((l) => /^[A-Z][a-z]{2} \d\d, \d{4}$/.test(l.text));
+    const expected = size === 'wide' ? ['Jan 06, 2025', 'Jan 13, 2025', 'Jan 20, 2025'] : ['Jan 06, 2025', 'Jan 20, 2025'];
+    assert.deepEqual(dates.map((l) => l.text), expected, `${size}: data dates`);
+    assert.ok(dates.every((l) => l.shown), `${size}: every date label is drawn`);
+  }
+});
+
+test('many dates are thinned to evenly spread data dates that include the first and the last', async () => {
+  const data = Array.from({ length: 24 }, (_, i) => ({ d: `2024-${String(Math.floor(i / 2) + 1).padStart(2, '0')}-${i % 2 ? '15' : '01'}`, v: i }));
+  const { vegaLite } = inlineChart({ kind: 'line', x: 'd', y: 'v' }, data);
+  const svgs = await renderThemedSvgs(vegaLite, data, theme);
+  for (const [size, svg] of Object.entries(svgs.light)) {
+    const dates = labels(svg).filter((l) => /^[A-Z][a-z]{2} \d\d, \d{4}$/.test(l.text));
+    assert.equal(dates.length, size === 'wide' ? 4 : 2, `${size}: ${dates.length} date labels`);
+    assert.equal(dates[0].text, 'Jan 01, 2024');
+    assert.equal(dates.at(-1).text, 'Dec 15, 2024');
+    assert.deepEqual(overlaps(dates), []);
+  }
+});
+
+test('date labels are not cut short on a phone; long category labels are', async () => {
+  const data = ['2025-01-06', '2025-01-13'].map((day, i) => ({ day, v: i + 1 }));
+  const { vegaLite } = inlineChart({ kind: 'line', x: 'day', y: 'v' }, data);
+  const narrow = (await renderThemedSvgs(vegaLite, data, theme)).light.narrow;
+  assert.ok(labels(narrow).some((l) => l.text === 'Jan 13, 2025'), 'whole date label');
+  const grid = [{ a: 'abcdefghijklmnop', b: 'p', n: 1 }, { a: 'short', b: 'p', n: 2 }];
+  const heat = inlineChart({ kind: 'heatmap', x: 'a', y: 'b', value: 'n' }, grid).vegaLite;
+  const drawn = await renderThemedSvgs(heat, grid, theme);
+  assert.ok(labels(drawn.light.narrow).some((l) => l.text.endsWith('…')), 'x labels honour the narrow labelLimit');
+  assert.ok(labels(drawn.light.wide).some((l) => l.text === 'abcdefghijklmnop'), 'the wide drawing has room for the whole label');
+});
+
+// ---- inline types and formatting ------------------------------------------------------------
+
+test('ISO date-times infer as TIMESTAMP, plain dates stay DATE, and zone-less times are read as UTC for drawing', () => {
+  const data = [{ t: '2025-01-01T10:30:00Z', d: '2025-01-01', z: '2025-01-01 10:30', m: '2025-01-01' }, { t: '2025-01-02T11:00:00.250+02:00', d: '2025-01-02', z: '2025-01-02T11:00', m: '2025-01-02T00:00:00Z' }];
+  const columns = columnsOf(data);
+  assert.deepEqual(inferTypes(data, columns), ['TIMESTAMP', 'DATE', 'TIMESTAMP', 'TIMESTAMP']);
+  assert.deepEqual(inferTypes([{ t: '2025-01-01T25:00:00Z' }], ['t']), ['VARCHAR'], 'not a real time');
+  const line = inlineChart({ kind: 'line', x: 't', y: 'n' }, data.map((r, i) => ({ t: r.z, n: i })));
+  assert.deepEqual(line.errors, []);
+  assert.deepEqual(line.plotRows.map((r) => r.t), ['2025-01-01T10:30:00.000Z', '2025-01-02T11:00:00.000Z']);
+  assert.equal(line.vegaLite.encoding.x.type, 'temporal');
+});
+
+test('formatValue applies a dashboard format to a number and leaves text alone', () => {
+  assert.equal(formatValue(336.25, 'currency'), '$336.25');
+  assert.equal(formatValue(1200, 'compact'), '1.2K');
+  assert.equal(formatValue(0.456, 'percent'), '45.6%');
+  assert.equal(formatValue(0.1 + 0.2), '0.3');
+  assert.equal(formatValue(null), '—');
+  assert.equal(formatValue('West', 'currency'), 'West');
 });

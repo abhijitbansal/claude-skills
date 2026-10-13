@@ -191,7 +191,7 @@ function deckParts(spec, ctx) {
  * `dir` is the spec's folder (file references resolve against it), `theme`
  * overrides spec.theme, `out` is the destination (file.html or directory; the
  * default output rules apply when omitted).
- * -> { html, assets: [{ from, to }] } with absolute paths; nothing is written.
+ * -> { html, assets: [{ from, to } or { content, to }] } with absolute paths; nothing is written.
  * Throws BuildError (path + message list) when a section cannot be rendered.
  */
 export async function buildPage(spec, { dir = process.cwd(), theme, out, env = process.env } = {}) {

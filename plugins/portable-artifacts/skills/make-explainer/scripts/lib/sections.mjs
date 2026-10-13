@@ -1,5 +1,5 @@
 // The section registry: type -> { render(section, ctx) -> string, ownHeading?,
-// assets?(section, ctx) -> Promise<{ from, to }[]>, prepare?(section, ctx, i) -> Promise<void>, page?(ctx) -> { css, js: string[] }, check? }.
+// assets?(section, ctx) -> Promise<({ from, to } | { content, to })[]>, prepare?(section, ctx, i) -> Promise<void>, page?(ctx) -> { css, js: string[] }, check? }.
 // `page` is called once when the type is present and its css/scripts are shipped once for the whole page. A section type
 // with no entry has no renderer yet; buildPage reports it as an error.
 // ctx = { theme, dir, outDir, assetsDir, slug, mode, idFor(section, i), icons }.

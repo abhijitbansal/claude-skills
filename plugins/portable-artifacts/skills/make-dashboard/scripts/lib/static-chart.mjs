@@ -6,12 +6,19 @@ import { compile } from 'vega-lite';
 import { vegaConfig } from './vega-config.mjs';
 
 // Two widths per scheme: a phone shows the narrow one at about its natural size instead of shrinking the wide one.
-export const STATIC_SIZES = { wide: { width: 600, labelLimit: 240 }, narrow: { width: 320, labelLimit: 110 } };
+// labelX/labelY cap an axis label's width (long names end in an ellipsis instead of squeezing the plot);
+// ticks is the most ticks on a horizontal value axis (fewer when its labels would not fit side by side),
+// dates the most date ticks.
+export const STATIC_SIZES = {
+  wide: { width: 600, labelX: 240, labelY: 240, ticks: 7, dates: 4 },
+  narrow: { width: 320, labelX: 130, labelY: 110, ticks: 3, dates: 2 },
+};
 export const STATIC_HEIGHT = 280;
 // Static charts are scaled down on a phone, so type is a point larger than on the dashboard page.
-const staticType = (labelLimit) => ({
+const staticType = ({ labelX, labelY }) => ({
   axis: { labelFontSize: 12, titleFontSize: 13 },
-  axisY: { labelLimit }, // long category names truncate here instead of squeezing the plot; the data table has them whole
+  axisX: { labelLimit: labelX },
+  axisY: { labelLimit: labelY, tickCount: 6 },
   legend: { labelFontSize: 13, titleFontSize: 13 },
   text: { fontSize: 12 },
 });
@@ -65,6 +72,54 @@ const merge = (a, b) => {
   return out;
 };
 
+const unescapeField = (field) => String(field).replace(/\\(.)/g, '$1');
+const toTime = (v) => Date.parse(typeof v === 'string' && v.length === 10 ? `${v}T00:00:00Z` : v);
+
+// At most `max` of the sorted values, evenly spread, always including the first and the last.
+function spread(values, max) {
+  if (values.length <= max) return values;
+  const picked = Array.from({ length: max }, (_, k) => values[Math.round((k * (values.length - 1)) / (max - 1))]);
+  return [...new Set(picked)];
+}
+
+/**
+ * Temporal x/y axes tick on the data's own dates (thinned to `max`), so the ticks line up with the points
+ * and the last date is labelled; a default time axis picks round dates that match no point.
+ */
+export function alignDateTicks(node, rows, max) {
+  if (Array.isArray(node)) return node.map((n) => alignDateTicks(n, rows, max));
+  if (!isObject(node)) return node;
+  const out = Object.fromEntries(Object.entries(node).map(([k, v]) => [k, k === 'data' ? v : alignDateTicks(v, rows, max)]));
+  if (isObject(out.encoding)) {
+    for (const channel of ['x', 'y']) {
+      const def = out.encoding[channel];
+      if (!isObject(def) || def.type !== 'temporal' || typeof def.field !== 'string' || def.axis === null) continue;
+      const times = rows.map((r) => toTime(r[unescapeField(def.field)])).filter(Number.isFinite);
+      const values = spread([...new Set(times)].sort((a, b) => a - b), max);
+      if (values.length > 0) out.encoding = { ...out.encoding, [channel]: { ...def, axis: { ...def.axis, values } } };
+    }
+  }
+  return out;
+}
+
+/**
+ * A horizontal value axis with `count` ticks whose scale is niced to the same count: the domain ends on a tick,
+ * so the longest bar never runs past the last label.
+ */
+export function fitValueTicks(node, count) {
+  if (Array.isArray(node)) return node.map((n) => fitValueTicks(n, count));
+  if (!isObject(node)) return node;
+  const out = Object.fromEntries(Object.entries(node).map(([k, v]) => [k, k === 'data' ? v : fitValueTicks(v, count)]));
+  const x = out.encoding?.x;
+  if (isObject(x) && x.type === 'quantitative' && x.axis !== null && x.scale?.type === undefined) {
+    out.encoding = { ...out.encoding, x: { ...x, scale: { ...x.scale, nice: count }, axis: { ...x.axis, tickCount: count } } };
+  }
+  return out;
+}
+
+const hasValueX = (node) => (Array.isArray(node) ? node.some(hasValueX) : isObject(node) && ((isObject(node.encoding?.x) && node.encoding.x.type === 'quantitative') || Object.entries(node).some(([k, v]) => k !== 'data' && hasValueX(v))));
+const MIN_TICKS = 2;
+
 // Vega writes aria attributes per mark; the whole figure is one labelled image, so they are dropped.
 const stripAria = (svg) => svg.replace(/ (?:aria-[a-z]+|role)="[^"]*"/g, '');
 
@@ -88,22 +143,31 @@ function prefixIds(svg, prefix) {
  * gets a fixed width and "fit" autosize.
  */
 export async function renderSvg(vegaLite, rows, { colours, font, size = 'wide', idPrefix = '' }) {
-  const { width, labelLimit } = STATIC_SIZES[size];
-  const base = staticView(vegaLite);
+  const sizing = STATIC_SIZES[size];
+  const base = alignDateTicks(staticView(vegaLite), rows, sizing.dates);
   const unit = !('hconcat' in base || 'vconcat' in base || 'concat' in base || 'repeat' in base || 'facet' in base);
   const own = base.config?.numberFormat ? { numberFormat: base.config.numberFormat } : {};
-  const spec = { height: STATIC_HEIGHT, ...base, data: { values: rows }, config: { ...merge(vegaConfig(colours, font), staticType(labelLimit)), ...own } };
-  if (unit) {
-    spec.width = width;
-    spec.autosize = { type: typeof spec.height === 'object' ? 'fit-x' : 'fit', contains: 'padding' };
+  const config = { ...merge(vegaConfig(colours, font), staticType(sizing)), ...own };
+  const draw = async (view) => {
+    const spec = { height: STATIC_HEIGHT, ...view, data: { values: rows }, config };
+    if (unit) {
+      spec.width = sizing.width;
+      spec.autosize = { type: typeof spec.height === 'object' ? 'fit-x' : 'fit', contains: 'padding' };
+    }
+    const v = new vega.View(vega.parse(compile(spec, { logger: QUIET }).spec), { renderer: 'none', logLevel: vega.Error });
+    try {
+      return stripAria(await v.toSVG());
+    } finally {
+      v.finalize();
+    }
+  };
+  // Vega hides a tick label that would overlap its neighbour (opacity 0); on a value axis, retry with fewer ticks.
+  let svg;
+  for (let ticks = sizing.ticks; ; ticks--) {
+    svg = await draw(hasValueX(base) ? fitValueTicks(base, ticks) : base);
+    if (ticks <= MIN_TICKS || !hasValueX(base) || !svg.includes(' opacity="0"')) break;
   }
-  const view = new vega.View(vega.parse(compile(spec, { logger: QUIET }).spec), { renderer: 'none', logLevel: vega.Error });
-  try {
-    const svg = stripAria(await view.toSVG());
-    return prefixIds(svg.replace('<svg ', '<svg aria-hidden="true" focusable="false" '), idPrefix);
-  } finally {
-    view.finalize();
-  }
+  return prefixIds(svg.replace('<svg ', '<svg aria-hidden="true" focusable="false" '), idPrefix);
 }
 
 /**

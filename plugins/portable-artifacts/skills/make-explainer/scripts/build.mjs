@@ -41,7 +41,8 @@ export async function build(file, { out, theme, env = process.env } = {}) {
     fs.writeFileSync(target, built.html);
     for (const asset of built.assets) {
       fs.mkdirSync(path.dirname(asset.to), { recursive: true });
-      fs.copyFileSync(asset.from, asset.to);
+      if (asset.content === undefined) fs.copyFileSync(asset.from, asset.to);
+      else fs.writeFileSync(asset.to, asset.content);
     }
   } catch (e) {
     throw new UsageError(`cannot write ${target}: ${e.code ?? e.message}`);

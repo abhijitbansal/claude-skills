@@ -1,6 +1,5 @@
-// Theme colours -> Vega config. Pure and import-free, so one source serves both
-// the page runtime (html.mjs inlines this file with `export ` removed; keep to a
-// single exported function and no imports) and static renders in Node.
+// Theme colours -> Vega config. One pure function, used by the page runtime (html.mjs ships its
+// source as window.PAVegaConfig) and by static renders in Node. It must not use anything outside itself.
 // colours = { surface, text2, text3, grid, cat: [8 colours], seq: [7 colours] }, font = a CSS font-family string.
 export function vegaConfig(colours, font) {
   const { surface, text2: ink2, text3: ink3, grid, cat, seq } = colours;

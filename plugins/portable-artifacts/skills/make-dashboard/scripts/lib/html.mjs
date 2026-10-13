@@ -2,11 +2,12 @@
 import fs from 'node:fs';
 import { MAX_ROWS_DEFAULT } from './spec.mjs';
 import { themeCss } from '../../shared/theme.mjs';
+import { formatValue } from './format.mjs';
+import { vegaConfig } from './vega-config.mjs';
 
 const TEMPLATE = new URL('../../template/page.html', import.meta.url);
 const PA_LIB = new URL('../../template/pa-lib.js', import.meta.url);
 const RUNTIME = new URL('../../template/runtime.js', import.meta.url);
-const VEGA_CONFIG = new URL('./vega-config.mjs', import.meta.url);
 const TABLE_ROWS = 25;
 
 export function escapeHtml(s) {
@@ -28,28 +29,13 @@ export function jsonForScript(obj) {
     .replaceAll(' ', '\\u2029');
 }
 
-// vega-config.mjs is an ES module with one exported function; the page gets it as window.PAVegaConfig.
+// The page gets vegaConfig as window.PAVegaConfig: the function's own source, so the page and the Node
+// render can never differ. It must stay self-contained (a helper outside it would throw in the page; a test calls it in a bare sandbox).
 export function vegaConfigScript() {
-  const source = fs.readFileSync(VEGA_CONFIG, 'utf8');
-  if ((source.match(/^export /gm) ?? []).length !== 1 || /^import /m.test(source)) {
-    throw new Error('vega-config.mjs must have exactly one export and no imports to be inlined');
-  }
-  return `window.PAVegaConfig = (function () {\n${source.replace(/^export /m, '')}\nreturn vegaConfig;\n})();`;
+  return `window.PAVegaConfig = ${vegaConfig.toString()};`;
 }
 
 const inlineScript = (code) => `<script>${code.replace(/<\/(script)/gi, '<\\/$1')}</script>`;
-
-function formatValue(value, format) {
-  if (value === null || value === undefined) return '—';
-  if (typeof value !== 'number') return String(value);
-  const abs = Math.abs(value);
-  const opts = {
-    currency: { style: 'currency', currency: 'USD', maximumFractionDigits: abs >= 1000 ? 0 : 2 },
-    percent: { style: 'percent', maximumFractionDigits: 1 },
-    compact: { notation: 'compact', maximumFractionDigits: 1 },
-  }[format] ?? { maximumFractionDigits: 2 };
-  return new Intl.NumberFormat('en-US', opts).format(value);
-}
 
 const utc = (iso) => iso.slice(0, 16).replace('T', ' ');
 const timeTag = (iso, text) => `<time datetime="${escapeHtml(iso)}" data-t="${text}">${escapeHtml(text === 'hm' ? iso.slice(11, 16) + ' UTC' : `${utc(iso)} UTC`)}</time>`;

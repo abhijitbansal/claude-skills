@@ -32,5 +32,4 @@
   .ch-dark { display: none !important; }
   .ch-wide { display: block !important; }
   .ch-narrow { display: none !important; }
-  .ch-data:not([open]) > :not(summary) { display: none; }
 }

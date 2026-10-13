@@ -98,7 +98,8 @@ test('the data table opens and holds every plotted row; the figure has an access
   if (await skipUnlessBrowser(t)) return;
   const built = buildSpec(doc());
   const { page, problems, context } = await openPage(built.url);
-  assert.equal(await page.locator('figure.ch').getAttribute('aria-label'), 'Open bugs');
+  assert.equal(await page.locator('figure.ch').getAttribute('aria-label'), null, 'the heading names a titled chart');
+  assert.match(await page.locator('.ch-card').getAttribute('aria-label'), /^Bar chart of bugs by team\./);
   assert.equal(await page.locator('.ch-data tbody tr').first().isVisible(), false, 'closed until asked');
   await page.locator('.ch-data summary').click();
   assert.equal(await page.locator('.ch-data tbody tr').count(), 3);
