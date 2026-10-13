@@ -32,7 +32,7 @@ test('a child that never gets ready is rejected at the deadline and killed', asy
 
 test('a child that exits before it is ready is rejected with its output', async (t) => {
   await assert.rejects(
-    spawnReady(t, ['-e', 'console.log("boot failure"); process.exit(3)'], { startupMs: 5000, ready: () => null }),
+    spawnReady(t, ['-e', 'console.log("boot failure"); process.exitCode = 3'], { startupMs: 5000, ready: () => null }),
     /exited 3 before it was ready.*boot failure/s,
   );
 });
@@ -51,7 +51,7 @@ test('a child that ignores SIGTERM is SIGKILLed after the grace period', async (
 
 test('stopChild on a child that already exited resolves at once', async (t) => {
   let child;
-  await spawnReady(t, ['-e', 'console.log("up"); setTimeout(() => process.exit(0), 50)'], {
+  await spawnReady(t, ['-e', 'console.log("up"); setTimeout(() => {}, 50)'], {
     startupMs: 5000, ready: (out) => (out.includes('up') ? {} : null), onSpawn: (c) => { child = c; },
   });
   await until(() => dead(child), { ms: 5000, label: 'the child to exit' });
