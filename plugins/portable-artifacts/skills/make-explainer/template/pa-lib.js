@@ -96,10 +96,14 @@
     return Math.min(last, Math.max(1, Math.floor(n)));
   }
 
-  // "#slide-N" -> the slide to open (clamped), or null when the hash is anything else.
-  function parseSlideHash(hash, total) {
-    var m = typeof hash === 'string' ? /^#slide-(\d+)$/.exec(hash) : null;
-    return m ? clampSlide(Number(m[1]), total) : null;
+  // "#slide-N" -> the slide to open (clamped); "#<id>" -> the slide whose section has that id (ids[n - 1], '' for
+  // none); null when the hash is anything else.
+  function parseSlideHash(hash, total, ids) {
+    if (typeof hash !== 'string') return null;
+    var m = /^#slide-(\d+)$/.exec(hash);
+    if (m) return clampSlide(Number(m[1]), total);
+    var at = ids && hash.length > 1 ? ids.indexOf(hash.slice(1)) : -1;
+    return at >= 0 ? clampSlide(at + 1, total) : null;
   }
 
   // The stored last position: digits only. A stale number past the end clamps; junk reads as null.

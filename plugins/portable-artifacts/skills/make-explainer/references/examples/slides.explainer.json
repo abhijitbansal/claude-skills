@@ -35,6 +35,7 @@
       "type": "motion",
       "title": "A clip rendered by make-motion plays on its slide",
       "video": "clip.mp4",
+      "poster": "clip-poster.png",
       "caption": "Drawn from clip.motion.json, which names the paper theme. Space and the arrow keys belong to the player while it has focus."
     },
     {

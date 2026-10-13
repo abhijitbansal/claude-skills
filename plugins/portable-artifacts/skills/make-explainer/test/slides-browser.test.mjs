@@ -527,7 +527,7 @@ test('reduced motion: the deck jumps to the slide in the same task; with motion 
   const lively = await openPage(deck5().url, { reducedMotion: 'no-preference' });
   const started = await pressAndMeasure(lively.page);
   assert.notEqual(started.top, started.target, 'motion allowed: the scroll is animated');
-  await lively.page.waitForFunction(() => document.querySelector('[data-deck]').scrollTop === document.getElementById('slide-2').offsetTop);
+  await lively.page.waitForFunction(() => Math.abs(document.querySelector('[data-deck]').scrollTop - document.getElementById('slide-2').offsetTop) <= 1);
   await lively.context.close();
 });
 

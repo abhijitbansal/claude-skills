@@ -70,8 +70,10 @@ const TYPE_LABELS = {
 const typeLabel = (type) => TYPE_LABELS[type] ?? `${type[0].toUpperCase()}${type.slice(1)}`;
 export const slideTitle = (section) => (section.title === undefined ? typeLabel(section.type) : plain(section.title));
 
-function slide(n, total, title, classes, inner) {
-  return `<section class="slide ${classes}" id="slide-${n}" tabindex="-1" aria-label="Slide ${n} of ${total}: ${title}">
+// A section's own id is a deep link (#<id>), kept in data-sid: the element id stays slide-N.
+function slide(n, total, title, classes, inner, sid) {
+  const link = sid === undefined ? '' : ` data-sid="${esc(sid)}"`;
+  return `<section class="slide ${classes}" id="slide-${n}"${link} tabindex="-1" aria-label="Slide ${n} of ${total}: ${title}">
 <div class="slide-inner">
 ${inner}
 </div>
@@ -85,11 +87,11 @@ function cover(spec, total, metaHtml) {
 
 function sectionSlide({ section, body, ownHeading }, n, total) {
   const heading = section.title !== undefined && !ownHeading ? `<h2 class="slide-title" id="slide-${n}-title">${headingInline(section.title)}</h2>\n` : '';
-  return slide(n, total, slideTitle(section), `slide-${section.type}`, `${heading}${body}`);
+  return slide(n, total, slideTitle(section), `slide-${section.type}`, `${heading}${body}`, section.id);
 }
 
-function outline(titles) {
-  const items = titles.map((t, i) => `<li><a href="#slide-${i + 1}" data-slide="${i + 1}">${t}</a></li>`);
+function outline(titles, sids) {
+  const items = titles.map((t, i) => `<li><a href="#${esc(sids[i] ?? `slide-${i + 1}`)}" data-slide="${i + 1}">${t}</a></li>`);
   return `<dialog class="outline" data-outline aria-labelledby="outline-title">
 <div class="outline-head"><h2 id="outline-title">Outline</h2><button type="button" class="btn" data-outline-close>Close</button></div>
 <ol class="outline-list">
@@ -119,9 +121,10 @@ export function renderDeck({ spec, rendered, metaHtml, slug }) {
   const total = rendered.length + 1;
   const slides = [cover(spec, total, metaHtml), ...rendered.map((r, i) => sectionSlide(r, i + 2, total))];
   const titles = [plain(spec.title), ...rendered.map((r) => slideTitle(r.section))];
+  const sids = [undefined, ...rendered.map((r) => r.section.id)];
   return `<main id="content" class="deck" data-deck data-slug="${esc(slug)}" data-total="${total}" data-current="1">
 ${slides.join('\n')}
 </main>
 ${chrome(total)}
-${outline(titles)}`;
+${outline(titles, sids)}`;
 }

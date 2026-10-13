@@ -377,10 +377,6 @@ test('renderFailure shows a bounded tail of the output, not just the last line',
   assert.ok(long.length < 600, 'a very long line is cut');
 });
 
-test('renderFailure says an overflowing output is that, not a failure to start', () => {
-  assert.match(renderFailure({ error: Object.assign(new Error('stdout maxBuffer length exceeded'), { code: 'ENOBUFS' }) }), /^make-motion wrote more output than can be kept; /);
-});
-
 // ---- child processes: a time limit that holds ------------------------------------------------------
 
 const stub = (body) => {

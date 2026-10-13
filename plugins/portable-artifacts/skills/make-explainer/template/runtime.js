@@ -205,11 +205,19 @@
 
   // ---- one rise-in per section ----------------------------------------------
   // The page head armed it (class rise-ready) when motion is allowed; here sections
-  // are revealed as they come into view.
+  // are revealed as they come into view. Safety net: a capture or reader that never
+  // scrolls would see blank space below the fold, so once the page has been loaded for
+  // RISE_IDLE_MS every section still hidden is revealed (print does it at once, below).
+  var RISE_IDLE_MS = 2500;
   var sections = [].slice.call(document.querySelectorAll('.sec'));
+  function revealAll() {
+    sections.forEach(function (el) { el.classList.add('in'); });
+    if (rise) rise.disconnect();
+  }
+  var rise = null;
   if (root.classList.contains('rise-ready')) {
     if ('IntersectionObserver' in window && sections.length) {
-      var rise = new IntersectionObserver(function (entries) {
+      rise = new IntersectionObserver(function (entries) {
         // The furthest section now on screen: it and everything above it counts as
         // seen, so a deep link or a jump to the end leaves nothing hidden behind it.
         var furthest = -1;
@@ -220,6 +228,8 @@
         }
       }, { rootMargin: '0px 0px -4% 0px', threshold: 0.01 });
       sections.forEach(function (el) { rise.observe(el); });
+      if (document.readyState === 'complete') window.setTimeout(revealAll, RISE_IDLE_MS);
+      else window.addEventListener('load', function () { window.setTimeout(revealAll, RISE_IDLE_MS); });
     } else {
       root.classList.remove('rise-ready');
     }
@@ -230,7 +240,7 @@
   window.addEventListener('beforeprint', function () {
     reopened = [].slice.call(document.querySelectorAll('details:not([open])'));
     reopened.forEach(function (d) { d.open = true; });
-    sections.forEach(function (el) { el.classList.add('in'); });
+    revealAll();
   });
   window.addEventListener('afterprint', function () {
     reopened.forEach(function (d) { d.open = false; });

@@ -48,11 +48,12 @@ test('preset "slides" alone selects slides mode, and a page build has no deck', 
   assert.ok(!page.includes('class="slide'));
 });
 
-test('no duplicate ids; spec ids are not emitted and no page-only classes leak in', async () => {
+test('no duplicate ids; spec ids are not emitted as element ids (they are data-sid links) and no page-only classes leak in', async () => {
   const { html } = await build(deck([text(1, { id: 'slide-3' }), text(2, { id: 'claim-1' }), text(3)]));
   const found = ids(html);
   assert.equal(new Set(found).size, found.length, `duplicate ids: ${found.filter((x, i) => found.indexOf(x) !== i)}`);
-  assert.ok(!html.includes('id="claim-1"'));
+  assert.ok(!/\sid="claim-1"/.test(html));
+  assert.match(html, /\sdata-sid="claim-1"/);
   assert.ok(!/class="sec[ "-]/.test(html), 'no .sec / .sec-<type> on slides');
   assert.ok(!html.includes("classList.add('rise-ready')"), 'the rise-in is never armed on a deck');
   assert.ok(!html.includes('class="toc'));

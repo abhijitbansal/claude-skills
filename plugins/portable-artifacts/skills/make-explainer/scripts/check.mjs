@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // node scripts/check.mjs <page.html> [--json]
 // Opens a built page at 1280 and 390 px and fails on console errors or warnings, a page that scrolls
-// sideways, elements wider than the page (outside a scrolling region), a deck that cannot reach its last
-// slide with the arrow keys or whose counter disagrees, and a diagram Present overlay that will not open
-// or will not close on Esc.
+// sideways, elements wider than the page (outside a scrolling region), content clipped sideways inside a
+// slide (a slide hides what overflows it, so the page-level checks cannot see that), a deck that cannot
+// reach its last slide with the arrow keys or whose counter disagrees, a diagram whose viewer did not mount,
+// and a Present overlay that cannot be clicked, will not open or will not close on Esc. One probe that
+// crashes is reported as such and the rest of the viewport still runs.
 // exit 0 ok or skipped (no browser), 1 problems, 2 usage/IO
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,34 +19,56 @@ const VIEWPORTS = [{ width: 1280, height: 900 }, { width: 390, height: 780 }];
 const READY_MS = 5000;
 const ACTION_MS = 5000; // default timeout for every page action and navigation
 const SETTLE_MS = 2000; // a state change the runtime makes at once (slide, overlay)
+const CLICK_MS = 1500; // a button that is not clickable by now is covered or disabled
 const WATCHDOG_MS = 60000; // wall-clock cap for the whole check
 const OVERFLOW_TOLERANCE_PX = 1;
 const MAX_WIDE_ELEMENTS = 3;
+const MAX_CLIPPED = 3;
 const MAX_OVERLAYS = 5;
 const TIMED_OUT = Symbol('timed out');
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
+const article = (word) => (/^[aeiou]/i.test(word) ? 'an' : 'a');
 
-// Runs in the page. Elements whose right edge is past the page, outside any scrolling or clipping ancestor
-// (a table wrapper, a code block, a diagram slot scrolls on its own and is by design).
-const wideElements = ({ tol, max }) => {
-  const limit = window.innerWidth + tol;
-  const found = [];
+// Runs in the page. Two lists of elements that stick out sideways:
+// wide: right edge past the page, outside any scrolling or clipping ancestor (a table wrapper, a code block,
+//   a diagram slot scrolls on its own and is by design). <body> does not count as such an ancestor: an
+//   overflow-x on it hides the overflow instead of containing it.
+// clipped: in a deck, right edge past its slide, outside a region that scrolls on its own. The slide itself
+//   clips sideways, so the page-level probe takes everything in a slide for contained.
+const overflowProbe = ({ tol, max, maxClipped }) => {
   const describe = (el) => (el.id ? `#${el.id}` : `<${el.tagName.toLowerCase()}${el.classList.length ? `.${el.classList[0]}` : ''}>`);
-  const contained = (el) => {
-    for (let a = el.parentElement; a && a !== document.documentElement; a = a.parentElement) {
-      const x = getComputedStyle(a).overflowX;
-      if (x === 'auto' || x === 'scroll' || x === 'hidden' || x === 'clip') return true;
-    }
+  const scrolls = (el) => ['auto', 'scroll', 'hidden', 'clip'].includes(getComputedStyle(el).overflowX);
+  const unseen = (el) => el.closest('[hidden], dialog:not([open])'); // a slide that is not current is inert but laid out
+  const containedBelow = (el, top) => {
+    for (let a = el.parentElement; a && a !== top; a = a.parentElement) if (scrolls(a)) return true;
     return false;
   };
+  const wide = [];
+  const limit = window.innerWidth + tol;
   for (const el of document.body.querySelectorAll('*')) {
-    if (found.length >= max) break;
+    if (wide.length >= max) break;
     const r = el.getBoundingClientRect();
     if (r.width === 0 || r.right <= limit || el.closest('[hidden], [inert], dialog:not([open])')) continue;
-    if (getComputedStyle(el).position === 'fixed' || contained(el)) continue;
-    found.push({ what: describe(el), width: Math.round(r.width) });
+    if (getComputedStyle(el).position === 'fixed') continue;
+    let contained = false;
+    for (let a = el.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) {
+      if (scrolls(a)) { contained = true; break; }
+    }
+    if (!contained) wide.push({ what: describe(el), width: Math.round(r.width) });
   }
-  return found;
+  const clipped = [];
+  [...document.querySelectorAll('[data-deck] .slide')].forEach((slide, i) => {
+    const edge = slide.getBoundingClientRect().right + tol;
+    for (const el of slide.querySelectorAll('*')) {
+      if (clipped.length >= maxClipped) return;
+      if (el.ownerSVGElement) continue; // an svg is judged as a whole; its parts clip to it
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.right <= edge || unseen(el)) continue;
+      if (getComputedStyle(el).position === 'fixed' || containedBelow(el, slide)) continue;
+      clipped.push({ slide: i + 1, what: describe(el), width: Math.round(r.width) });
+    }
+  });
+  return { wide, clipped };
 };
 
 const pageFits = () => ({ scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth });
@@ -56,50 +80,72 @@ const deckState = () => {
 };
 
 // Press next to the end; the last slide must be current and the counter must read "N / N".
-async function checkDeck(page, label, problems) {
+async function checkDeck(page, label, problems, tally) {
   const { total } = await page.evaluate(deckState);
+  tally.slides = total;
   for (let i = 1; i < total; i++) await page.keyboard.press('ArrowRight');
   try {
     await page.waitForFunction((n) => Number(document.querySelector('[data-deck]').dataset.current) === n, total, { timeout: SETTLE_MS });
   } catch {
     const { current } = await page.evaluate(deckState);
     problems.push(`${label}: the deck stopped at slide ${current} of ${total} after the arrow keys; expected slide ${total} of ${total}`);
-    return total;
+    return;
   }
   const counter = await page.evaluate(() => document.querySelector('.deck-count').textContent.replace(/\s+/g, ' ').trim());
   if (counter !== `${total} / ${total}`) problems.push(`${label}: on the last slide the counter reads "${counter}", expected "${total} / ${total}"`);
-  return total;
 }
 
-// Open each inline diagram's Present overlay and close it with Esc. In a deck the figure's slide is made current first.
-async function checkOverlays(page, label, problems) {
-  const buttons = page.locator('[data-dg-present]:not([hidden])');
-  const count = Math.min(await buttons.count(), MAX_OVERLAYS);
-  let presented = 0;
+// Open each inline diagram's Present overlay and close it with Esc. A figure is judged on its own button and
+// dialog. In a deck the figure's slide is made current first.
+async function checkOverlays(page, label, problems, tally) {
+  const figures = page.locator('[data-diagram]');
+  const count = Math.min(await figures.count(), MAX_OVERLAYS);
   for (let i = 0; i < count; i++) {
-    const button = buttons.nth(i);
-    const slide = await button.evaluate((el) => el.closest('.slide')?.id ?? null);
+    const n = i + 1;
+    const figure = figures.nth(i);
+    const button = figure.locator('[data-dg-present]');
+    if (await button.count() === 0 || await button.evaluate((el) => el.hidden)) {
+      problems.push(`${label}: the diagram ${n} viewer did not mount (its Present button is hidden)`);
+      continue;
+    }
+    const slide = await figure.evaluate((el) => el.closest('.slide')?.id ?? null);
     if (slide) {
       await page.evaluate((id) => { window.location.hash = `#${id}`; }, slide);
       await page.waitForFunction((id) => document.getElementById(id) && document.querySelector('[data-deck]').dataset.current === id.replace('slide-', ''), slide, { timeout: SETTLE_MS });
     }
-    const dialog = page.locator('[data-dg-dialog]').nth(i);
-    await button.click();
+    const dialog = figure.locator('[data-dg-dialog]');
+    try {
+      await button.click({ timeout: CLICK_MS });
+    } catch {
+      problems.push(`${label}: the Present button of diagram ${n} is covered or cannot be clicked`);
+      continue;
+    }
     if (!await dialog.evaluate((d) => d.open)) {
-      problems.push(`${label}: the Present overlay did not open for diagram ${i + 1}`);
+      problems.push(`${label}: the Present overlay did not open for diagram ${n}`);
       continue;
     }
     await page.keyboard.press('Escape');
-    const closed = await page.waitForFunction((n) => !document.querySelectorAll('[data-dg-dialog]')[n].open, i, { timeout: SETTLE_MS }).then(() => true, () => false);
-    if (closed) presented += 1;
-    else problems.push(`${label}: the Present overlay did not close on Esc for diagram ${i + 1}`);
+    const closed = await page.waitForFunction((d) => !d.open, await dialog.elementHandle(), { timeout: SETTLE_MS }).then(() => true, () => false);
+    if (closed) tally.presented += 1;
+    else problems.push(`${label}: the Present overlay did not close on Esc for diagram ${n}`);
   }
-  return presented;
+}
+
+// One probe. If it throws it is a problem of its own and the viewport carries on, unless the page itself is gone.
+async function probe(page, label, problems, name, run) {
+  try {
+    await run();
+  } catch (e) {
+    problems.push(`${label}: ${name} check crashed: ${firstLine(e)}`);
+  }
+  return !page.isClosed();
 }
 
 async function checkViewport(browser, url, viewport) {
   const label = `${viewport.width}px`;
   const problems = [];
+  const tally = { slides: 0, presented: 0 };
+  const result = () => ({ problems, slides: tally.slides, presented: tally.presented });
   const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
   try {
     const page = await context.newPage();
@@ -109,27 +155,29 @@ async function checkViewport(browser, url, viewport) {
       if (m.type() === 'error' || m.type() === 'warning') problems.push(`${label}: console ${m.type()}: ${m.text()}`);
     });
     page.on('pageerror', (e) => problems.push(`${label}: page error: ${e.message}`));
-    page.on('dialog', (d) => { problems.push(`${label}: the page opened a ${d.type()} dialog`); d.dismiss(); });
+    page.on('dialog', (d) => { problems.push(`${label}: the page opened ${article(d.type())} ${d.type()} dialog`); d.dismiss(); });
     await page.goto(url);
     try {
       await page.waitForFunction(() => window.paReady === true, null, { timeout: READY_MS });
     } catch {
       problems.push(`${label}: the page never became ready (window.paReady)`);
-      return { problems, slides: 0, presented: 0 };
+      return result();
     }
-    const fit = await page.evaluate(pageFits);
-    if (fit.scrollW > fit.innerW + OVERFLOW_TOLERANCE_PX) {
-      problems.push(`${label}: the page scrolls sideways (${fit.scrollW}px wide in ${fit.innerW}px)`);
-    }
-    for (const { what, width } of await page.evaluate(wideElements, { tol: OVERFLOW_TOLERANCE_PX, max: MAX_WIDE_ELEMENTS })) {
-      problems.push(`${label}: ${what} is ${width}px wide, wider than the ${fit.innerW}px page`);
-    }
-    const slides = (await page.evaluate(deckState)) ? await checkDeck(page, label, problems) : 0;
-    const presented = await checkOverlays(page, label, problems);
-    return { problems, slides, presented };
+    let ok = await probe(page, label, problems, 'layout', async () => {
+      const fit = await page.evaluate(pageFits);
+      if (fit.scrollW > fit.innerW + OVERFLOW_TOLERANCE_PX) {
+        problems.push(`${label}: the page scrolls sideways (${fit.scrollW}px wide in ${fit.innerW}px)`);
+      }
+      const found = await page.evaluate(overflowProbe, { tol: OVERFLOW_TOLERANCE_PX, max: MAX_WIDE_ELEMENTS, maxClipped: MAX_CLIPPED });
+      for (const { what, width } of found.wide) problems.push(`${label}: ${what} is ${width}px wide, wider than the ${fit.innerW}px page`);
+      for (const { slide, what, width } of found.clipped) problems.push(`${label}: slide ${slide}: ${what} is ${width}px wide and is clipped by the slide`);
+    });
+    if (ok && await page.evaluate(deckState).catch(() => null)) ok = await probe(page, label, problems, 'deck', () => checkDeck(page, label, problems, tally));
+    if (ok) await probe(page, label, problems, 'diagram overlay', () => checkOverlays(page, label, problems, tally));
+    return result();
   } catch (e) {
     problems.push(`${label}: check crashed: ${firstLine(e)}`);
-    return { problems, slides: 0, presented: 0 };
+    return result();
   } finally {
     await context.close().catch(() => {});
   }

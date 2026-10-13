@@ -20,6 +20,8 @@
   var dialog = document.querySelector('[data-outline]');
   var links = [].slice.call(dialog.querySelectorAll('a[data-slide]'));
   var current = 0;
+  // A section's own id is a deep link too: ids[n - 1] is slide n's id, '' for none.
+  var ids = slides.map(function (slide) { return slide.getAttribute('data-sid') || ''; });
 
   var calm = function () { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); };
   var behavior = function () { return calm() ? 'auto' : 'smooth'; };
@@ -59,7 +61,7 @@
   }
 
   function setHash(n) {
-    try { window.history.replaceState(null, '', '#slide-' + n); } catch (e) { /* the address bar stays as it was */ }
+    try { window.history.replaceState(null, '', '#' + (ids[n - 1] || 'slide-' + n)); } catch (e) { /* the address bar stays as it was */ }
   }
 
   function align(n, smooth) {
@@ -99,12 +101,12 @@
   window.addEventListener('resize', function () { align(current, false); });
 
   window.addEventListener('hashchange', function () {
-    var n = PA.parseSlideHash(window.location.hash, total);
+    var n = PA.parseSlideHash(window.location.hash, total, ids);
     if (n !== null && n !== current) go(n);
   });
 
   // A deep link beats the saved position, which beats the first slide.
-  var linked = PA.parseSlideHash(window.location.hash, total);
+  var linked = PA.parseSlideHash(window.location.hash, total, ids);
   var start = linked !== null ? linked : PA.parseResume(PA.readStore(local, storeKey), total);
   if (start === null) start = 1;
   show(start, null);
@@ -128,8 +130,9 @@
   dialog.addEventListener('close', function () {
     var back = opener;
     opener = null;
-    // Back to where focus was; if that is gone or inert (a slide we jumped away from), to the current slide.
-    if (back && back.focus && document.contains(back) && !back.closest('[inert]')) back.focus();
+    // Back to where focus was; if that is gone, inert (a slide we jumped away from) or only the page body, to the current slide.
+    // Body is not a place to return to: with nothing focused before, the slide is.
+    if (back && back !== document.body && back.focus && document.contains(back) && !back.closest('[inert]')) back.focus();
     else focusSlide(current);
   });
   dialog.addEventListener('click', function (event) {

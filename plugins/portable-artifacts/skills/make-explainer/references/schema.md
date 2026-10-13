@@ -14,7 +14,7 @@ Every section type and its fields: [sections.md](sections.md). Banned phrases: [
 | `meta` | object | Keys `date`, `branch`, `repo`, `author`, `version`, `status`; each value at most 60 characters. Shown as chips under the title. |
 | `sections` | array, required | 1 to 40 sections, see below. |
 
-Every section has `type` (required), an optional `id` (`^[a-z][a-z0-9-]*$`, unique; used for deep links; not `content`, `outline-title`, `slide-<n>`, `slide-<n>-title` or anything starting `ch<n>-`, which the page uses itself) and an optional `title` (at most 90 characters).
+Every section has `type` (required), an optional `id` (`^[a-z][a-z0-9-]*$`, unique; the deep link `#<id>` on a page, and on a deck it opens that slide (the outline links use it; `#slide-<n>` keeps working); not `content`, `outline-title`, `slide-<n>`, `slide-<n>-title` or anything starting `ch<n>-`, which the page uses itself) and an optional `title` (at most 90 characters).
 
 ## Limits
 
@@ -68,4 +68,4 @@ Environment: `PA_OUTPUT_DIR` (default output folder), `PA_MOTION_TIMEOUT_MS` (ho
 | `scaffold.mjs <recap\|checklist\|concept\|slides> [--facts facts.json] [--title <text>]` | A starter `explainer.json` on stdout. Facts fill numbers, files, commits and folders; every sentence is a `TODO:` string. |
 | `validate.mjs <explainer.json> [--json]` | Schema, limits, prose lint, slide budget, file references and the embedded diagram, chart and motion checks. |
 | `build.mjs <explainer.json> [--out <file.html\|dir>] [--theme <name>] [--json]` | Validates, then writes the page. |
-| `check.mjs <page.html> [--json]` | Optional headless check of a built page at 1280 and 390 px: console errors and warnings, sideways scrolling, elements wider than the page, a deck's last slide reachable by arrow keys with the counter reading N / N, and each diagram's Present overlay opening and closing on Esc. Exit 0 ok or skipped (no browser), 1 problems, 2 usage. Needs Playwright and a browser (full `npm ci`); `PA_CHECK_TIMEOUT_MS` shortens the 60 s cap. |
+| `check.mjs <page.html> [--json]` | Optional headless check of a built page at 1280 and 390 px: console errors and warnings, sideways scrolling, elements wider than the page, content clipped sideways inside a slide, a deck's last slide reachable by arrow keys with the counter reading N / N, and each diagram's viewer mounting and its Present overlay opening and closing on Esc. Exit 0 ok or skipped (no browser), 1 problems, 2 usage. Needs Playwright and a browser (full `npm ci`); `PA_CHECK_TIMEOUT_MS` shortens the 60 s cap. |

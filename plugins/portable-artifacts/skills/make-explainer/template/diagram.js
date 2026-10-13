@@ -69,10 +69,12 @@
     if (window.ResizeObserver) new window.ResizeObserver(syncRegion).observe(slot);
     else window.addEventListener('resize', syncRegion);
 
+    var sideways = 0; // the slot's scrollLeft while the stage is away
     function openOverlay() {
       if (isOpen) return;
       dialog.showModal();
       isOpen = true;
+      sideways = slot.scrollLeft;
       slot.style.height = slot.offsetHeight + 'px'; // the page below does not jump while the stage is away
       body.appendChild(stage);
       tabStops(true);
@@ -88,6 +90,7 @@
       tabStops(false);
       controller.exit();
       syncRegion();
+      slot.scrollLeft = sideways; // an empty slot scrolled back to 0; the reader's place is restored
     }
     function closeOverlay() {
       restore();
