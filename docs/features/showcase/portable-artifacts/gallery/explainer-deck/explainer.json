@@ -1,0 +1,193 @@
+{
+  "title": "Portable Artifacts Deck",
+  "subtitle": "What the portable-artifacts plugin builds, how to use it, and where it stops",
+  "preset": "slides",
+  "theme": "blueprint",
+  "meta": {
+    "date": "2026-10-13",
+    "repo": "claude-skills",
+    "branch": "feat/visual-artifacts"
+  },
+  "sections": [
+    {
+      "type": "tldr",
+      "title": "The model writes JSON and a script builds the page",
+      "text": "Diagrams, dashboards, videos and explainers share the same themes. Each page opens offline in any browser.",
+      "points": [
+        "Every page makes no network requests when it is viewed.",
+        "Validation runs before the render and names the JSON path and the fix.",
+        "Claude Haiku passes the eval gates for all three skills."
+      ],
+      "tone": "good"
+    },
+    {
+      "type": "cards",
+      "title": "Each skill covers one kind of artifact",
+      "columns": 2,
+      "items": [
+        {
+          "title": "make-diagram",
+          "text": "Architecture, flow, sequence and state diagrams with zoom and hover tracing.",
+          "icon": "lucide:network"
+        },
+        {
+          "title": "make-dashboard",
+          "text": "Charts and KPI pages built from local CSV, Parquet, JSON, DuckDB or SQLite files.",
+          "icon": "lucide:chart-bar"
+        },
+        {
+          "title": "make-motion",
+          "text": "Short animated MP4 videos rendered from a JSON scene list.",
+          "icon": "lucide:film"
+        },
+        {
+          "title": "make-explainer",
+          "text": "Recaps, checklists, concept pages and slide decks like this one.",
+          "icon": "lucide:book-open"
+        }
+      ]
+    },
+    {
+      "type": "motion",
+      "title": "A make-motion clip plays on its own slide",
+      "video": "clip.mp4",
+      "poster": "clip-poster.png",
+      "caption": "Rendered from a JSON spec. The clip never autoplays, so press play when you want it."
+    },
+    {
+      "type": "steps",
+      "title": "Every skill follows the same four steps",
+      "items": [
+        {
+          "title": "Write the spec",
+          "text": "The agent writes one JSON file."
+        },
+        {
+          "title": "Validate it",
+          "text": "Each problem prints a JSON path, the problem and the fix."
+        },
+        {
+          "title": "Build it",
+          "text": "The build writes one themed HTML page."
+        },
+        {
+          "title": "Check it",
+          "text": "An optional headless check opens the page at two widths."
+        }
+      ]
+    },
+    {
+      "type": "code",
+      "title": "One command installs all three skills together",
+      "language": "bash",
+      "caption": "Name all three skills. Installing make-explainer alone fails on its first diagram or chart section.",
+      "code": "npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram make-dashboard"
+    },
+    {
+      "type": "kpis",
+      "title": "Claude Haiku built every eval prompt",
+      "items": [
+        {
+          "label": "Dashboard builds",
+          "value": "14 of 14",
+          "note": "Claude Haiku, measured"
+        },
+        {
+          "label": "Diagram builds",
+          "value": "8 of 8",
+          "note": "Claude Haiku, measured"
+        },
+        {
+          "label": "Explainer builds",
+          "value": "8 of 8",
+          "note": "Claude Haiku, measured"
+        },
+        {
+          "label": "Median validate runs",
+          "value": "1",
+          "note": "Median for each of the three skills"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Haiku passes as many builds as Sonnet on every skill",
+      "columns": [
+        "Skill",
+        "Model",
+        "Valid builds",
+        "Median seconds"
+      ],
+      "rows": [
+        [
+          "make-dashboard v2",
+          "Claude Haiku",
+          "14 of 14",
+          23
+        ],
+        [
+          "make-dashboard v2",
+          "Claude Sonnet",
+          "14 of 14",
+          22
+        ],
+        [
+          "make-diagram",
+          "Claude Haiku",
+          "8 of 8",
+          21
+        ],
+        [
+          "make-diagram",
+          "Claude Sonnet",
+          "8 of 8",
+          24
+        ],
+        [
+          "make-explainer",
+          "Claude Haiku",
+          "8 of 8",
+          36
+        ],
+        [
+          "make-explainer",
+          "Claude Sonnet",
+          "8 of 8",
+          34
+        ]
+      ],
+      "caption": "Measured with node eval/run-eval.mjs. A local gemma4 model passed fewer builds and is kept for reference only."
+    },
+    {
+      "type": "risks",
+      "title": "Four limits to plan around before you ship",
+      "items": [
+        {
+          "risk": "A local gemma4 model fails most explainer builds",
+          "severity": "medium",
+          "mitigation": "Run the explainer on Claude Haiku or Claude Sonnet."
+        },
+        {
+          "risk": "make-motion was not re-evaluated on this branch",
+          "severity": "medium",
+          "mitigation": "Check its output by hand before a release."
+        },
+        {
+          "risk": "Browser find searches only the current slide in a deck",
+          "severity": "low",
+          "mitigation": "Use the O key to open the outline and jump to a slide."
+        },
+        {
+          "risk": "Each static chart ships four drawings, which adds page weight",
+          "severity": "low",
+          "mitigation": "Keep long pages to a few charts."
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "title": "Install all three skills before you ask for a deck",
+      "text": "The explainer embeds diagrams and charts from its sibling skills. Each page works offline; keep a page and its assets folder together when you share it."
+    }
+  ]
+}

@@ -1,0 +1,356 @@
+{
+  "title": "Portable Artifacts",
+  "subtitle": "What this branch builds, how to use it, and what it is worth, with working samples.",
+  "meta": {
+    "branch": "feat/visual-artifacts",
+    "repo": "claude-skills",
+    "status": "PR #38"
+  },
+  "sections": [
+    {
+      "type": "tldr",
+      "title": "Four skills turn one JSON file into a finished page or video",
+      "text": "This branch adds four agent skills that build offline dashboards, diagrams, explainer pages and short videos. The model writes only a small JSON file, and scripts validate, lay out and render it.",
+      "points": [
+        "make-dashboard v2 builds live, offline dashboards from local data files.",
+        "make-diagram, make-explainer and make-motion add diagrams, pages and videos from JSON.",
+        "Every page makes no network requests and carries a strict Content Security Policy."
+      ]
+    },
+    {
+      "type": "kpis",
+      "title": "Haiku built all 30 eval prompts",
+      "items": [
+        {
+          "label": "Haiku valid builds",
+          "value": "30 of 30",
+          "note": "14 dashboard, 8 diagram and 8 explainer runs"
+        },
+        {
+          "label": "make-explainer tests",
+          "value": 593,
+          "note": "Measured on the branch head with node --test"
+        },
+        {
+          "label": "Skills shipped",
+          "value": 4,
+          "note": "make-dashboard v2, make-diagram, make-explainer and make-motion"
+        },
+        {
+          "label": "CI checks passing",
+          "value": "5 of 5",
+          "note": "Measured on PR #38"
+        }
+      ]
+    },
+    {
+      "type": "cards",
+      "title": "Four skills share one loop from JSON to page",
+      "columns": 2,
+      "items": [
+        {
+          "title": "make-dashboard v2",
+          "text": "Builds one offline dashboard from CSV, Parquet, JSON, DuckDB or SQLite files. Its charts sort, compare and export, and the page reloads when the spec changes.",
+          "icon": "lucide:chart-bar"
+        },
+        {
+          "title": "make-diagram",
+          "text": "Draws architecture, flow, sequence and state diagrams from a small JSON topology. Layout is computed at build time, so the model never writes coordinates.",
+          "icon": "lucide:git-branch"
+        },
+        {
+          "title": "make-explainer",
+          "text": "Builds one themed page or slide deck from typed sections. It can embed diagrams, charts and videos made by the other skills.",
+          "icon": "lucide:file-text"
+        },
+        {
+          "title": "make-motion",
+          "text": "Renders a short MP4 video from a JSON list of scenes. Text, shapes, counters and transitions are all set in the file.",
+          "icon": "lucide:film"
+        }
+      ]
+    },
+    {
+      "type": "diagram",
+      "title": "One request passes through validate and build before it becomes a page",
+      "caption": "The agent fills in the JSON spec, and scripts check and render it. The embedded skills supply figures, charts and videos.",
+      "diagram": {
+        "title": "From request to page",
+        "type": "flow",
+        "nodes": [
+          {
+            "id": "req",
+            "label": "Your request",
+            "kind": "start"
+          },
+          {
+            "id": "agent",
+            "label": "Claude Haiku agent",
+            "icon": "lucide:bot"
+          },
+          {
+            "id": "spec",
+            "label": "explainer.json spec",
+            "icon": "lucide:file-code"
+          },
+          {
+            "id": "val",
+            "label": "validate.mjs",
+            "icon": "lucide:shield-check"
+          },
+          {
+            "id": "build",
+            "label": "build.mjs",
+            "icon": "lucide:package"
+          },
+          {
+            "id": "dash",
+            "label": "make-dashboard charts",
+            "icon": "lucide:chart-bar"
+          },
+          {
+            "id": "diag",
+            "label": "make-diagram figures",
+            "icon": "lucide:git-branch"
+          },
+          {
+            "id": "mot",
+            "label": "make-motion videos",
+            "icon": "lucide:film"
+          },
+          {
+            "id": "page",
+            "label": "Offline HTML page",
+            "kind": "end"
+          }
+        ],
+        "edges": [
+          {
+            "from": "req",
+            "to": "agent"
+          },
+          {
+            "from": "agent",
+            "to": "spec"
+          },
+          {
+            "from": "spec",
+            "to": "val"
+          },
+          {
+            "from": "val",
+            "to": "spec",
+            "label": "fix and rerun"
+          },
+          {
+            "from": "val",
+            "to": "build"
+          },
+          {
+            "from": "build",
+            "to": "dash"
+          },
+          {
+            "from": "build",
+            "to": "diag"
+          },
+          {
+            "from": "build",
+            "to": "mot"
+          },
+          {
+            "from": "dash",
+            "to": "page"
+          },
+          {
+            "from": "diag",
+            "to": "page"
+          },
+          {
+            "from": "mot",
+            "to": "page"
+          }
+        ]
+      }
+    },
+    {
+      "type": "steps",
+      "title": "Install once, then ask in plain words",
+      "items": [
+        {
+          "title": "Install the skills",
+          "text": "Run one of the install commands in the next section. The skills are added to your agent."
+        },
+        {
+          "title": "Ask for a page",
+          "text": "Describe what to explain in plain words, or call the skill directly with a slash command."
+        },
+        {
+          "title": "Validate the JSON",
+          "text": "The skill runs validate.mjs. Each problem prints a JSON path, the problem and the fix. The agent reruns it until the output says valid."
+        },
+        {
+          "title": "Build the page",
+          "text": "The skill runs build.mjs, which writes one offline HTML page and prints its path. Open that file in any browser."
+        },
+        {
+          "title": "Check the page (optional)",
+          "text": "Run check.mjs on the page. It looks for console errors and sideways scrolling at desktop and phone width."
+        }
+      ]
+    },
+    {
+      "type": "code",
+      "title": "Two install routes cover Claude Code and every other agent",
+      "language": "text",
+      "caption": "The first two lines install in Claude Code. The third line installs with npx for any agent. The last two lines use the bundled installer.",
+      "code": "/plugin marketplace add abhijitbansal/claude-skills\n/plugin install portable-artifacts@claude-skills\nnpx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram make-dashboard\ngit clone https://github.com/abhijitbansal/claude-skills\nnode claude-skills/plugins/portable-artifacts/bin/install.mjs codex"
+    },
+    {
+      "type": "table",
+      "title": "Four slash commands each produce a different page",
+      "columns": [
+        "Request",
+        "What it produces"
+      ],
+      "rows": [
+        [
+          "/make-explainer recap of this branch with a test checklist",
+          "One offline page that recaps the branch and lists the manual tests."
+        ],
+        [
+          "/make-diagram architecture of the checkout service with its database and queue",
+          "One offline diagram of the services, with icons and zoom."
+        ],
+        [
+          "/make-dashboard revenue by region and monthly trend from data/sales.csv",
+          "One offline dashboard built from the CSV file, with sortable tables and export."
+        ],
+        [
+          "/make-motion a 6 second title card that counts up to 18",
+          "One short MP4 video with a title card that counts up to 18."
+        ]
+      ],
+      "caption": "Each request is one sentence. The skill fills in its own JSON file and builds the output."
+    },
+    {
+      "type": "chart",
+      "title": "Haiku and Sonnet pass all 30 runs, gemma4 passes 15",
+      "kind": "bar",
+      "x": "model",
+      "y": "builds",
+      "data": [
+        {
+          "model": "Claude Haiku",
+          "builds": 30
+        },
+        {
+          "model": "Claude Sonnet",
+          "builds": 30
+        },
+        {
+          "model": "gemma4 (local)",
+          "builds": 15
+        }
+      ],
+      "caption": "Valid builds out of 30 eval prompts per model: 14 make-dashboard, 8 make-diagram and 8 make-explainer prompts. gemma4 built 10, 5 and 0 of them. gemma4 is a small local model, shown for information only."
+    },
+    {
+      "type": "motion",
+      "title": "A make-motion video renders from a JSON scene list",
+      "video": "clip.mp4",
+      "poster": "clip-poster.png",
+      "caption": "A 4 second make-motion video rendered from a JSON spec. The first scene shows the heading One JSON file, one video, and the second counts up to 18."
+    },
+    {
+      "type": "motion",
+      "title": "A narrated 15 second explainer walks from prompt to dashboard",
+      "video": "media/prompt-to-dashboard.mp4",
+      "poster": "media/prompt-to-dashboard-poster.jpg",
+      "caption": "Made with make-motion from one prompt at 1920x1080. The follow-up \"Add a voiceover that reads each scene aloud\" added a Kokoro voiceover, synthesised locally."
+    },
+    {
+      "type": "motion",
+      "title": "A 10 second launch announcement counts up to 3x faster",
+      "video": "media/launch-announcement.mp4",
+      "poster": "media/launch-announcement-poster.jpg",
+      "caption": "The product name scales in, a counter runs from 1 to 3, and three feature labels appear one after another. Voiceover by Kokoro."
+    },
+    {
+      "type": "motion",
+      "title": "A 12 second clip explains the make-dashboard SQL guard",
+      "video": "media/sql-guard-explainer.mp4",
+      "poster": "media/sql-guard-explainer-poster.jpg",
+      "caption": "A rejected query card, then three stacked boxes drawn in order: parse with DuckDB, allowlist the tables, locked connection. Voiceover by Kokoro."
+    },
+    {
+      "type": "motion",
+      "title": "A square 1080x1080 clip shows quarterly highlights",
+      "video": "media/quarterly-highlights-square.mp4",
+      "poster": "media/quarterly-highlights-square-poster.jpg",
+      "caption": "A revenue counter to $42.1M and a bar chart of signups by quarter, sized for social feeds. Voiceover by Kokoro."
+    },
+    {
+      "type": "compare",
+      "title": "Spec-driven pages are cheaper and more consistent than hand-written ones",
+      "columns": [
+        {
+          "title": "Hand-written AI pages",
+          "points": [
+            "The model writes the HTML, CSS and script for every page, which costs more output.",
+            "Each run can produce a different look, and it often has the generic look of an AI page.",
+            "A small change can disturb the rest of the page."
+          ],
+          "tone": "warn"
+        },
+        {
+          "title": "Spec-driven pages",
+          "points": [
+            "The model writes only JSON, so the cheapest model passes the eval gates.",
+            "The same spec always gives the same page, and a change is one edited field.",
+            "Validation names the JSON path and the fix, so most errors are repaired in one or two runs."
+          ],
+          "tone": "good"
+        }
+      ],
+      "verdict": "A spec keeps the cost low and the output the same from run to run."
+    },
+    {
+      "type": "risks",
+      "title": "Five known limits each have a clear workaround",
+      "items": [
+        {
+          "risk": "An interactive chart needs a make-dashboard spec. Inline rows give a static chart only.",
+          "severity": "low",
+          "mitigation": "Use a make-dashboard spec when the reader needs the interactive views."
+        },
+        {
+          "risk": "Explainer charts refuse Postgres and MySQL sources, so builds never reach the network.",
+          "severity": "medium",
+          "mitigation": "Export the data to CSV or Parquet first."
+        },
+        {
+          "risk": "In a slide deck, browser find (Ctrl-F) searches only the current slide.",
+          "severity": "low",
+          "mitigation": "Use page mode when the reader needs to search the whole text."
+        },
+        {
+          "risk": "Each static chart ships four drawings, which adds weight to long pages.",
+          "severity": "low",
+          "mitigation": "Keep long pages to a few charts."
+        },
+        {
+          "risk": "make-motion was not re-evaluated on this branch, so it is not pinned to a model.",
+          "severity": "medium",
+          "mitigation": "Check each video by hand before sharing it."
+        }
+      ]
+    },
+    {
+      "type": "callout",
+      "tone": "good",
+      "title": "CI is green and the eval-gated skills pass with Haiku",
+      "text": "CI on PR #38 passes 5 of 5 checks. make-dashboard v2, make-diagram and make-explainer each passed their Haiku eval gate. make-motion has no eval gate yet."
+    }
+  ]
+}

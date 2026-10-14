@@ -1,0 +1,229 @@
+{
+  "title": "How a request becomes a finished page",
+  "subtitle": "The portable-artifacts pipeline, from one request to one offline HTML page",
+  "type": "architecture",
+  "direction": "down",
+  "animate": false,
+  "groups": [
+    {
+      "id": "buildtime",
+      "label": "Build-time pieces"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "request",
+      "label": "Person's request",
+      "kind": "user"
+    },
+    {
+      "id": "agent",
+      "label": "Claude Haiku agent",
+      "kind": "service",
+      "icon": "lucide:cpu",
+      "note": "Writes JSON only"
+    },
+    {
+      "id": "spec",
+      "label": "JSON spec file",
+      "kind": "other",
+      "note": "diagram.json"
+    },
+    {
+      "id": "validate",
+      "label": "validate.mjs",
+      "kind": "service",
+      "group": "buildtime",
+      "note": "Names the exact fix"
+    },
+    {
+      "id": "build",
+      "label": "build.mjs",
+      "kind": "service",
+      "group": "buildtime"
+    },
+    {
+      "id": "elk",
+      "label": "ELK layout engine",
+      "kind": "service",
+      "group": "buildtime",
+      "note": "Runs locally, computes every position",
+      "icon": "lucide:network"
+    },
+    {
+      "id": "dashboard",
+      "label": "make-dashboard renderer",
+      "kind": "service",
+      "group": "buildtime",
+      "note": "Draws chart cards"
+    },
+    {
+      "id": "motion",
+      "label": "make-motion renderer",
+      "kind": "service",
+      "group": "buildtime",
+      "note": "Renders MP4 video"
+    },
+    {
+      "id": "themes",
+      "label": "Shared themes",
+      "kind": "storage",
+      "group": "buildtime",
+      "note": "paper, blueprint, ink, editorial"
+    },
+    {
+      "id": "page",
+      "label": "Offline HTML page",
+      "kind": "client",
+      "tone": "good",
+      "note": "No network requests"
+    }
+  ],
+  "edges": [
+    {
+      "from": "request",
+      "to": "agent",
+      "label": "asks for a diagram"
+    },
+    {
+      "from": "agent",
+      "to": "spec",
+      "label": "writes one file"
+    },
+    {
+      "from": "spec",
+      "to": "validate",
+      "label": "is checked"
+    },
+    {
+      "from": "validate",
+      "to": "agent",
+      "label": "returns the exact fix",
+      "style": "dashed"
+    },
+    {
+      "from": "validate",
+      "to": "build",
+      "label": "passes the spec on"
+    },
+    {
+      "from": "build",
+      "to": "elk",
+      "label": "asks for layout"
+    },
+    {
+      "from": "build",
+      "to": "dashboard",
+      "label": "renders chart cards",
+      "style": "dashed"
+    },
+    {
+      "from": "build",
+      "to": "motion",
+      "label": "renders video scenes",
+      "style": "dashed"
+    },
+    {
+      "from": "themes",
+      "to": "build",
+      "label": "supplies colours"
+    },
+    {
+      "from": "build",
+      "to": "page",
+      "label": "writes one HTML file"
+    }
+  ],
+  "steps": [
+    {
+      "title": "The request starts with the agent",
+      "show": [
+        "request",
+        "agent"
+      ],
+      "focus": [
+        "request",
+        "agent"
+      ],
+      "highlight": [
+        "agent"
+      ],
+      "note": "The agent reads the request and plans the spec."
+    },
+    {
+      "title": "The agent writes one JSON file",
+      "show": [
+        "spec"
+      ],
+      "focus": [
+        "agent",
+        "spec"
+      ],
+      "highlight": [
+        "spec"
+      ],
+      "note": "The model never writes coordinates or HTML."
+    },
+    {
+      "title": "Validate names the exact fix",
+      "show": [
+        "validate"
+      ],
+      "focus": [
+        "spec",
+        "validate"
+      ],
+      "highlight": [
+        "validate"
+      ],
+      "note": "Each problem gives a JSON path and a fix."
+    },
+    {
+      "title": "Build turns the spec into a page",
+      "show": [
+        "build",
+        "elk",
+        "themes"
+      ],
+      "focus": [
+        "build",
+        "elk",
+        "themes"
+      ],
+      "highlight": [
+        "elk"
+      ],
+      "note": "ELK lays out the nodes before the page is built."
+    },
+    {
+      "title": "Charts and video come from their own renderers",
+      "show": [
+        "dashboard",
+        "motion"
+      ],
+      "focus": [
+        "build",
+        "dashboard",
+        "motion"
+      ],
+      "highlight": [
+        "dashboard"
+      ],
+      "note": "Explainers embed these renderers when a spec asks."
+    },
+    {
+      "title": "The result is one offline page",
+      "show": [
+        "page"
+      ],
+      "focus": [
+        "build",
+        "page"
+      ],
+      "highlight": [
+        "page"
+      ],
+      "note": "The page opens in any browser with no network."
+    }
+  ]
+}
