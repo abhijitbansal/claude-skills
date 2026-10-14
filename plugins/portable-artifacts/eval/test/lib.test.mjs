@@ -187,10 +187,10 @@ test('SKILLS.diagram builds into <work>/out/diagram.html and expects that file',
   assert.match(buildPrompt(cfg, 'Draw X.'), /skills\/make-diagram\/SKILL\.md.*\.\/diagram\.json/);
 });
 
-test('diagram prompts: two per type and one edit prompt whose seed exists', () => {
+test('diagram prompts: two per type, a story prompt, an emoji prompt, and one edit prompt whose seed exists', () => {
   const prompts = readJson('prompts', 'diagram.json');
-  assert.equal(prompts.length, 8);
-  assert.equal(new Set(prompts.map((p) => p.id)).size, 8);
+  assert.equal(prompts.length, 10);
+  assert.equal(new Set(prompts.map((p) => p.id)).size, 10);
   const seeded = prompts.filter((p) => p.seed);
   assert.deepEqual(seeded.map((p) => p.seed), ['seeds/diagram.json']);
   const seed = readJson('fixtures', seeded[0].seed);
@@ -198,7 +198,13 @@ test('diagram prompts: two per type and one edit prompt whose seed exists', () =
   const typeOf = (p) => (p.seed ? seed.type : ['architecture', 'flowchart', 'sequence', 'state'].find((t) => new RegExp(t, 'i').test(p.prompt)));
   const counts = {};
   for (const p of prompts) counts[typeOf(p)] = (counts[typeOf(p)] ?? 0) + 1;
-  assert.deepEqual(counts, { architecture: 2, flowchart: 2, sequence: 2, state: 2 });
+  assert.deepEqual(counts, { architecture: 3, flowchart: 2, sequence: 3, state: 2 });
+  const story = prompts.find((p) => p.id === 'order-story');
+  assert.match(story.prompt, /story/i);
+  assert.match(story.prompt, /caption/i);
+  const emoji = prompts.find((p) => p.id === 'emoji-map');
+  assert.match(emoji.prompt, /emoji/i);
+  assert.match(emoji.prompt, /detail/i);
 });
 
 test('the edit prompt asks for a change the scorer can see in the spec', () => {
