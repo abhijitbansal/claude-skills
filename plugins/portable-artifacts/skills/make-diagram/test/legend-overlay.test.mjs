@@ -132,3 +132,46 @@ test('a tall diagram on a wide stage fits the full height beside the overlay, cl
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+// A fit beside the overlay must stay inside the range pan and zoom clamp to, or the first
+// interaction after it snaps the view; and it shifts the drawing only as far as clearing the overlay needs.
+test('after a fit beside the overlay, the first pan and zoom move the view smoothly from it', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const [w, h] of [[1440, 500], [1280, 720], [1440, 900]]) {
+    const { page, problems, context } = await openPage(buildPage(example('flow'), { name: `beside-${w}x${h}` }).url, { width: w, height: h });
+    await page.keyboard.press('e');
+    await page.waitForTimeout(400);
+    const view = () => page.evaluate(() => {
+      const vb = document.querySelector('#pa-stage svg').getAttribute('viewBox').split(' ').map(Number);
+      return { cx: vb[0] + vb[2] / 2, cy: vb[1] + vb[3] / 2, s: document.getElementById('pa-stage').getBoundingClientRect().width / vb[2] };
+    });
+    const fit = await view();
+    await page.focus('#pa-stage');
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(100);
+    const panned = await view();
+    assert.ok(Math.abs(panned.cx - fit.cx - 80 / fit.s) < 0.5, `${w}x${h}: ArrowRight moves ${panned.cx - fit.cx} units, expected ${80 / fit.s}`);
+    await page.keyboard.press('0');
+    await page.waitForTimeout(500);
+    const refit = await view();
+    await page.keyboard.press('=');
+    await page.waitForTimeout(500);
+    const zoomed = await view();
+    assert.ok(Math.abs(zoomed.cx - refit.cx) < 0.5 && Math.abs(zoomed.cy - refit.cy) < 0.5, `${w}x${h}: zoom kept the centre (${refit.cx},${refit.cy} -> ${zoomed.cx},${zoomed.cy})`);
+    assert.deepEqual(problems, []);
+    await context.close();
+  }
+});
+
+test('a fit that already clears the overlay when centred keeps the drawing centred', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(buildPage(example('flow'), { name: 'centred' }).url, { width: 1440, height: 900 });
+  const gap = await page.evaluate(() => {
+    const s = document.getElementById('pa-stage').getBoundingClientRect();
+    const rs = [...document.querySelectorAll('.pa-node')].map((n) => n.getBoundingClientRect());
+    return { left: Math.min(...rs.map((r) => r.left)) - s.left, right: s.right - Math.max(...rs.map((r) => r.right)) };
+  });
+  assert.ok(Math.abs(gap.left - gap.right) < 4, `left gap ${gap.left} px, right gap ${gap.right} px`);
+  assert.deepEqual(problems, []);
+  await context.close();
+});

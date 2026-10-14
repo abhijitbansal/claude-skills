@@ -71,18 +71,29 @@
       return s > 0 && isFinite(s) ? Math.min(s, MAX_FIT_SCALE) : 1;
     }
     // The overlay holds only the top-right corner, so the drawing fits either in
-    // the band below it or the column beside it, whichever draws it larger (below on a tie).
+    // the band below it or the column beside it, whichever draws it larger (below
+    // on a tie). dx and dy are how many screen px the centred drawing must move
+    // (left, or down) to clear the overlay: 0 when centring already clears it.
     function fitPlace(sz) {
       var below = scaleIn(sz.w, sz.h - sz.top);
       var beside = sz.right ? scaleIn(sz.w - sz.right, sz.h) : 0;
-      return beside > below ? { s: beside, dx: sz.right, dy: 0 } : { s: below, dx: 0, dy: sz.top };
+      if (beside > below) {
+        var halfW = (fitBox.w / 2 + FIT_MARGIN) * beside;
+        return { s: beside, dx: Math.max(0, sz.w / 2 + halfW - (sz.w - sz.right)), dy: 0 };
+      }
+      var halfH = (fitBox.h / 2 + FIT_MARGIN) * below;
+      return { s: below, dx: 0, dy: Math.max(0, sz.top - (sz.h / 2 - halfH)) };
     }
     function fitScale(sz) { return fitPlace(sz).s; }
-    // The drawing's middle sits in the middle of the free space: the camera centre
-    // is half the reserved reach (up, or right) from it.
     function fitCamera() {
       var p = fitPlace(size());
-      return { cx: fitBox.x + fitBox.w / 2 + p.dx / (2 * p.s), cy: fitBox.y + fitBox.h / 2 - p.dy / (2 * p.s), s: p.s };
+      return { cx: fitBox.x + fitBox.w / 2 + p.dx / p.s, cy: fitBox.y + fitBox.h / 2 - p.dy / p.s, s: p.s };
+    }
+    // Pan and zoom keep the centre on the canvas, widened to take in the fit
+    // centre, so the first move after a fit never snaps the view.
+    function clampCentre(cx, cy) {
+      var f = fitCamera();
+      return { cx: clamp(cx, Math.min(0, f.cx), Math.max(W, f.cx)), cy: clamp(cy, Math.min(0, f.cy), Math.max(H, f.cy)) };
     }
 
     function apply() {
@@ -129,14 +140,16 @@
       var ns = clamp(cam.s * factor, fs * MIN_ZOOM, fs * MAX_ZOOM);
       var wx = cam.cx + (px - sz.w / 2) / cam.s;
       var wy = cam.cy + (py - sz.h / 2) / cam.s;
-      cam = { cx: clamp(wx - (px - sz.w / 2) / ns, 0, W), cy: clamp(wy - (py - sz.h / 2) / ns, 0, H), s: ns };
+      var c = clampCentre(wx - (px - sz.w / 2) / ns, wy - (py - sz.h / 2) / ns);
+      cam = { cx: c.cx, cy: c.cy, s: ns };
       apply();
     }
     function zoomBy(factor) { var sz = size(); zoomAt(factor, sz.w / 2, sz.h / 2); }
     function panBy(dx, dy) {
       cancelTween();
       fitted = false;
-      cam = { cx: clamp(cam.cx + dx / cam.s, 0, W), cy: clamp(cam.cy + dy / cam.s, 0, H), s: cam.s };
+      var c = clampCentre(cam.cx + dx / cam.s, cam.cy + dy / cam.s);
+      cam = { cx: c.cx, cy: c.cy, s: cam.s };
       apply();
     }
 
