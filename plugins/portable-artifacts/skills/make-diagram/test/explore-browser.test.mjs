@@ -551,6 +551,9 @@ test('typing in Find with a node selected drops the selection so the filter show
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
   await page.click('.pa-node[data-id="app"]');
+  // Off the stage: a hovered node or edge outranks the Find filter, and after the camera
+  // glides to the selection the resting pointer can sit in an edge's hit band.
+  await page.mouse.move(1, 1);
   await page.fill('[data-pa-find]', 'or');
   assert.deepEqual(await selectedIds(page), [], 'the selection is gone');
   assert.equal(await title(page), 'Map');
