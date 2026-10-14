@@ -354,6 +354,33 @@ test('the dot travels along the hop edge from its start, and backwards for a rev
   await context.close();
 });
 
+test('the dot appears on the start of the new edge, never where the previous beat left it (real DOM)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.keyboard.press('p');
+  for (let i = 0; i < 3; i++) await page.click('[data-pa-speed]'); // 0.5×
+  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight'); // beat 6: app -> shopper, reversed along edge-0
+  assert.equal(await count(page), '6 / 9');
+  await waitDotOn(page);
+  await waitDotMoved(page, await dotAt(page)); // the dot now sits somewhere along edge-0
+  // Record where the dot is the moment it becomes visible again. The observer runs
+  // as a microtask after classList.add, before the first animation frame.
+  await page.evaluate(() => {
+    window.__dotShows = [];
+    const dot = document.querySelector('.pa-dot');
+    new MutationObserver(() => {
+      if (dot.classList.contains('pa-dot-on')) window.__dotShows.push([Number(dot.getAttribute('cx')), Number(dot.getAttribute('cy'))]);
+    }).observe(dot, { attributes: true, attributeFilter: ['class'] });
+  });
+  await page.keyboard.press('ArrowRight'); // beat 7: orders -> bus along edge-4
+  await page.waitForFunction(() => window.__dotShows.length > 0, null, { timeout: 5000 });
+  const [shown] = await page.evaluate(() => window.__dotShows);
+  const start = await page.evaluate(() => { const p = document.querySelector('.pa-edge[data-id="edge-4"] path').getPointAtLength(0); return [p.x, p.y]; });
+  assert.ok(Math.hypot(shown[0] - start[0], shown[1] - start[1]) < 1, `first shown at ${shown}; edge-4 starts at ${start}`);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
 test('a pointer on the canvas pauses: click, wheel and drag; the beat stays', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
@@ -499,8 +526,13 @@ test('a one-beat story plays to its end at once and loops when asked', async (t)
   assert.equal(await count(page), '1 / 1');
   await page.click('[data-pa-loop]');
   await page.evaluate(() => document.activeElement.blur());
+  await page.evaluate(() => {
+    window.__dotRuns = 0;
+    const dot = document.querySelector('.pa-dot'); // created by the first play above
+    new MutationObserver(() => { if (dot.classList.contains('pa-dot-on')) window.__dotRuns += 1; }).observe(dot, { attributes: true, attributeFilter: ['class'] });
+  });
   await page.keyboard.press('Space');
-  await page.waitForTimeout(5000); // two full cycles at 2×: still looping (the one fixed wait in this suite; it asserts persistence, not arrival)
+  await page.waitForFunction(() => window.__dotRuns >= 2, null, { timeout: 10000 }); // the one beat ran twice: it looped
   assert.equal(await playing(page), true);
   await page.keyboard.press('Space');
   assert.deepEqual(problems, []);

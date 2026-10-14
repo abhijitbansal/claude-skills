@@ -162,6 +162,7 @@
       isFitted: function () { return fitted; },
       unfit: function () { fitted = false; },
       onResize: onResize,
+      glideMs: function () { return CAMERA_MS; },
     };
   };
 })(window);

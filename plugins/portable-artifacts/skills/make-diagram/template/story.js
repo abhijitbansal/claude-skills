@@ -3,8 +3,9 @@
 // edge and lights the edge; a focus beat fits and lights its ids (a group
 // lights its members); everything else dims. A step beat (from the older
 // steps[] form) reveals what it shows and hides the rest, as before, with no
-// dimming. Playing runs each beat as glide, then (a hop, motion allowed) the
-// dot, then a hold, and moves on; every duration divides by the speed; reduced
+// dimming. Playing runs each beat as glide (600 ms for a story beat, the
+// camera's own glide for a step beat), then (a hop, motion allowed) the dot,
+// then a hold, and moves on; every duration divides by the speed; reduced
 // motion drops the dot and the glide. Registered as PADiagram.story and
 // composed by viewer.js.
 //
@@ -15,7 +16,7 @@
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
 
-  var GLIDE_MS = 600; // the camera's glide to a beat
+  var GLIDE_MS = 600; // the camera's glide to a story (hop or focus) beat
   var DOT_MS = 1200; // the dot along a hop's edge
   var HOLD_MS = 2500; // then the caption holds...
   var HOLD_PER_CHAR_MS = 40; // ...longer for a longer caption...
@@ -175,6 +176,11 @@
       if (!path || !path.getTotalLength || !global.requestAnimationFrame) { done(); return; }
       var length = path.getTotalLength();
       var el = dotEl();
+      // Park the dot on the edge's first point before it shows: left where the
+      // last beat ended, it would flash there for one frame.
+      var start = path.getPointAtLength(beat.reverse ? length : 0);
+      el.setAttribute('cx', String(start.x));
+      el.setAttribute('cy', String(start.y));
       el.classList.add('pa-dot-on');
       var t0 = null;
       var tick = function (now) {
@@ -218,8 +224,10 @@
     function show(beat, seen) {
       var token = run;
       var instant = camera.reduced();
+      // A story beat glides GLIDE_MS; a step beat (the older steps[] form) keeps the camera's own pace.
+      var glide = (beat.kind === 'step' ? camera.glideMs() : GLIDE_MS) / speed;
       camera.unfit();
-      camera.moveTo(targetOf(beat, seen), { ms: GLIDE_MS / speed });
+      camera.moveTo(targetOf(beat, seen), { ms: glide });
       var hold = function () {
         later(token, holdMs(beat), function () {
           if (!playing) return;
@@ -228,7 +236,7 @@
           else pause();
         });
       };
-      later(token, instant ? 0 : GLIDE_MS / speed, function () {
+      later(token, instant ? 0 : glide, function () {
         if (beat.kind === 'hop' && !instant) travel(beat, DOT_MS / speed, hold); else hold();
       });
     }
@@ -260,11 +268,13 @@
       var c = chapterAt(stepIndex);
       goTo(c + 1 < chapters.length ? chapters[c + 1].start : beats.length - 1);
     }
-    // From inside a chapter, back to its first beat; from its first beat, to the chapter before.
+    // From inside a chapter, back to its first beat; from its first beat, to the
+    // chapter before. A timeline with no chapters acts as one chapter.
     function prevChapter() {
       if (!presenting) return;
       var c = chapterAt(stepIndex);
-      goTo(stepIndex > chapters[c].start || c === 0 ? chapters[c].start : chapters[c - 1].start);
+      var start = chapters[c] ? chapters[c].start : 0;
+      goTo(stepIndex > start || c === 0 ? start : chapters[c - 1].start);
     }
     function exit() {
       if (!presenting) return;
