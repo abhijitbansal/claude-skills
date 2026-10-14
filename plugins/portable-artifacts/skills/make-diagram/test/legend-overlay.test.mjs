@@ -96,16 +96,28 @@ const DOWN_FLOW = {
   edges: [{ from: 'a', to: 'b', style: 'solid' }, { from: 'b', to: 'c', style: 'dashed' }, { from: 'a', to: 'c', style: 'async' }],
 };
 
-test('a narrow diagram fits the phone by its own width: the fit reaches the 1.25 cap and a node is not drawn small', async (t) => {
+test('a narrow diagram fits the phone by its own width, not the legend-padded canvas, and a node is not drawn small', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(buildPage(DOWN_FLOW, { name: 'narrow' }).url, { width: 390, height: 780 });
+  // The expected fit comes from this stage and overlay (font metrics move the overlay's
+  // height between machines): the drawing's own box below or beside the overlay, capped at 1.25.
   const seen = await page.evaluate(() => {
     const stage = document.getElementById('pa-stage').getBoundingClientRect();
+    const o = document.querySelector('[data-pa-legend]').getBoundingClientRect();
     const vb = document.querySelector('#pa-stage svg').getAttribute('viewBox').split(' ').map(Number);
-    return { scale: stage.width / vb[2], aWidth: document.querySelector('.pa-node[data-id="a"] .pa-shape').getBoundingClientRect().width };
+    const data = JSON.parse(document.getElementById('pa-data').textContent);
+    const [, , dw, dh] = data.drawing;
+    const scaleIn = (w, h) => Math.min(1.25, w / (dw + 32), h / (dh + 32));
+    const top = Math.ceil(o.bottom - stage.top);
+    const right = Math.ceil(stage.right - o.left);
+    return {
+      scale: stage.width / vb[2],
+      expected: Math.max(scaleIn(stage.width, stage.height - top), scaleIn(stage.width - right, stage.height)),
+      aWidth: document.querySelector('.pa-node[data-id="a"] .pa-shape').getBoundingClientRect().width,
+    };
   });
-  assert.ok(seen.scale >= 1.249, `fit scale ${seen.scale}`);
-  assert.ok(seen.aWidth >= 190, `node a is ${seen.aWidth} px wide`);
+  assert.ok(Math.abs(seen.scale - seen.expected) < 0.01, `fit scale ${seen.scale}, the drawing's own fit is ${seen.expected}`);
+  assert.ok(seen.aWidth >= 170, `node a is ${seen.aWidth} px wide`);
   assert.deepEqual(problems, []);
   await context.close();
 });
