@@ -186,7 +186,8 @@
       var tick = function (now) {
         if (t0 === null) t0 = now;
         var k = Math.min(1, (now - t0) / ms);
-        var p = path.getPointAtLength((beat.reverse ? 1 - k : k) * length);
+        var e = k * k * (3 - 2 * k); // smoothstep: the dot leaves and arrives softly
+        var p = path.getPointAtLength((beat.reverse ? 1 - e : e) * length);
         el.setAttribute('cx', String(p.x));
         el.setAttribute('cy', String(p.y));
         if (k < 1) { dotFrame = global.requestAnimationFrame(tick); return; }

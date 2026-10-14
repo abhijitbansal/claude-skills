@@ -117,7 +117,7 @@ const animation = [
   '.pa-animate .pa-edge.pa-edge-solid .pa-wire{stroke-dasharray:6 6}',
   '.pa-animate .pa-edge .pa-wire{animation:pa-flow 1.2s linear infinite}',
   '@keyframes pa-flow{to{stroke-dashoffset:calc(var(--pa-period) * -1)}}',
-  '.pa-node,.pa-edge,.pa-edge-label,.pa-group,.pa-lifeline,.pa-frame,.pa-seq-note{transition:opacity .25s ease,visibility .25s}',
+  '.pa-node,.pa-edge,.pa-edge-label,.pa-group,.pa-lifeline,.pa-frame,.pa-seq-note{transition:opacity .2s cubic-bezier(.23,1,.32,1),visibility .2s}',
   '}',
 ];
 

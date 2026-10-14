@@ -6,6 +6,8 @@ import fs from 'node:fs';
 import { themeCss } from '../../shared/theme.mjs';
 import { esc } from './svg.mjs';
 import { runtimeSource } from './runtime.mjs';
+import { legendItems } from './legend.mjs';
+import { FAMILIES } from './kinds.mjs';
 
 const TEMPLATE = new URL('../../template/viewer.html', import.meta.url);
 const CHROME = new URL('../../template/toolbar.js', import.meta.url);
@@ -70,6 +72,29 @@ function textAlternative(spec) {
   return `<section class="sr-only" aria-label="Diagram as text"><h2>${esc(spec.title)}</h2>${subtitle}${body}</section>`;
 }
 
+// ---- legend overlay ---------------------------------------------------------------------
+// The key as HTML in the stage's corner: the in-SVG legend scales with the camera and
+// is unreadable at fit on a wide diagram. Same items as the drawn one (legend.mjs).
+
+const LEGEND_TINT = 10; // % of the kind hue in a swatch: the card tint (css.mjs CARD_TINT)
+const WIRE_LOOK = { solid: 'solid', dashed: 'dashed', async: 'dotted' };
+
+const legendWord = (it) => (it.kind === 'kind' ? `${it.count} ${it.name}` : it.label);
+
+function legendMark(it) {
+  if (it.kind === 'style') return `<i class="lg-wire lg-wire-${WIRE_LOOK[it.style]}"></i>`;
+  return `<i class="lg-sw lg-sw-${esc(it.family)}"></i>`;
+}
+
+function legendHtml(spec) {
+  const items = legendItems(spec).map((it) => `<span class="lg">${legendMark(it)}${esc(legendWord(it))}</span>`);
+  return `<div class="legend" data-pa-legend aria-hidden="true">${items.join('')}</div>`;
+}
+
+const legendCss = () => [
+  ...FAMILIES.map((f) => `.lg-sw-${f}{background:color-mix(in srgb,var(--k-${f}) ${LEGEND_TINT}%,var(--surface));border-color:var(--k-${f})}`),
+].join('\n');
+
 // ---- page ---------------------------------------------------------------------------------
 
 /**
@@ -82,6 +107,8 @@ export function renderViewer(spec, built, { theme }) {
     SUBTITLE: spec.subtitle ? `<p class="sub">${esc(spec.subtitle)}</p>` : '',
     THEME: themeCss(theme),
     DIAGRAM_CSS: built.css,
+    LEGEND_CSS: legendCss(),
+    LEGEND: legendHtml(spec),
     SVG: built.svg,
     TEXT: textAlternative(spec),
     DATA: jsonForScript(built.data),
