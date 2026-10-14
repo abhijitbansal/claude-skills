@@ -55,23 +55,34 @@
 
     // A stage with no size (hidden, not laid out yet) is treated as the
     // diagram's own size, so nothing divides by zero. `top` is how far the
-    // legend overlay reaches down the stage (0 when it is absent or hidden):
-    // the fit keeps the drawing below it.
+    // legend overlay reaches down the stage and `right` how far it reaches in
+    // from the right edge (both 0 when it is absent or hidden): the fit keeps
+    // the drawing below it or beside it.
     function size() {
       var r = stage.getBoundingClientRect();
       var o = overlay ? overlay.getBoundingClientRect() : null;
-      var top = r.height > 0 && o && o.height > 0 ? Math.min(r.height - 1, Math.max(0, Math.ceil(o.bottom - r.top))) : 0;
-      return { w: r.width > 0 ? r.width : W, h: r.height > 0 ? r.height : H, top: top };
+      var shown = r.height > 0 && r.width > 0 && o && o.height > 0;
+      var top = shown ? Math.min(r.height - 1, Math.max(0, Math.ceil(o.bottom - r.top))) : 0;
+      var right = shown ? Math.min(r.width - 1, Math.max(0, Math.ceil(r.right - o.left))) : 0;
+      return { w: r.width > 0 ? r.width : W, h: r.height > 0 ? r.height : H, top: top, right: right };
     }
-    function fitScale(sz) {
-      var s = Math.min(sz.w / (fitBox.w + 2 * FIT_MARGIN), (sz.h - sz.top) / (fitBox.h + 2 * FIT_MARGIN));
+    function scaleIn(w, h) {
+      var s = Math.min(w / (fitBox.w + 2 * FIT_MARGIN), h / (fitBox.h + 2 * FIT_MARGIN));
       return s > 0 && isFinite(s) ? Math.min(s, MAX_FIT_SCALE) : 1;
     }
-    // The drawing's middle sits in the middle of the stage below the overlay: the camera centre is half the overlay's reach up from it.
+    // The overlay holds only the top-right corner, so the drawing fits either in
+    // the band below it or the column beside it, whichever draws it larger (below on a tie).
+    function fitPlace(sz) {
+      var below = scaleIn(sz.w, sz.h - sz.top);
+      var beside = sz.right ? scaleIn(sz.w - sz.right, sz.h) : 0;
+      return beside > below ? { s: beside, dx: sz.right, dy: 0 } : { s: below, dx: 0, dy: sz.top };
+    }
+    function fitScale(sz) { return fitPlace(sz).s; }
+    // The drawing's middle sits in the middle of the free space: the camera centre
+    // is half the reserved reach (up, or right) from it.
     function fitCamera() {
-      var sz = size();
-      var s = fitScale(sz);
-      return { cx: fitBox.x + fitBox.w / 2, cy: fitBox.y + fitBox.h / 2 - sz.top / (2 * s), s: s };
+      var p = fitPlace(size());
+      return { cx: fitBox.x + fitBox.w / 2 + p.dx / (2 * p.s), cy: fitBox.y + fitBox.h / 2 - p.dy / (2 * p.s), s: p.s };
     }
 
     function apply() {

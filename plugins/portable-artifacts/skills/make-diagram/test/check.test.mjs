@@ -91,10 +91,18 @@ test('a page wider than the viewport fails', async (t) => {
   assert.match(r.stdout, /the page overflows the viewport/);
 });
 
+// A doctored page must really differ: a replace whose target drifted would leave a good page.
+const swap = (html, from, to) => {
+  assert.ok(html.includes(from), `the page still contains ${JSON.stringify(from)}`);
+  return html.replace(from, to);
+};
+// Makes the camera's fit ignore the legend overlay.
+const IGNORE_OVERLAY = ['var shown = r.height > 0 && r.width > 0 && o && o.height > 0;', 'var shown = false;'];
+
 test('a legend overlay sitting on a node fails and names the node', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   // The camera is told to ignore the overlay too, or it would fit the drawing into the sliver the stage-sized overlay leaves.
-  const bad = doctored('flow', (html) => html.replace('.legend { position: absolute; top: 10px; right: 12px; z-index: 1; max-width: min(60%, 400px);', '.legend { position: absolute; inset: 0; z-index: 1; max-width: none;').replace('o && o.height > 0 ?', 'false ?'));
+  const bad = doctored('flow', (html) => swap(swap(html, '.legend { position: absolute; top: 10px; right: 12px; z-index: 1; max-width: min(60%, 400px);', '.legend { position: absolute; inset: 0; z-index: 1; max-width: none;'), IGNORE_OVERLAY[0], IGNORE_OVERLAY[1]));
   const r = run([bad]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /^1440px: node "[a-z-]+" is \d+% under the legend overlay$/m);
@@ -104,7 +112,7 @@ test('a legend overlay sitting on a node fails and names the node', async (t) =>
 
 test('a camera that ignores the legend overlay (fits the whole padded canvas) fails at 390 px, where it covers the first node', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const bad = doctored('flow', (html) => html.replace('var fitBox = overlay &&', 'var fitBox = false && overlay &&').replace('o && o.height > 0 ?', 'false ?'));
+  const bad = doctored('flow', (html) => swap(swap(html, 'var fitBox = overlay &&', 'var fitBox = false && overlay &&'), IGNORE_OVERLAY[0], IGNORE_OVERLAY[1]));
   const r = run([bad]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /^390px: node "begin" is \d+% under the legend overlay$/m);

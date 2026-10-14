@@ -100,3 +100,26 @@ test('a narrow diagram fits the phone by its own width: the fit reaches the 1.25
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+// The overlay holds only the top-right corner: a tall drawing on a wide stage fits to the full
+// height beside it rather than shrinking under a full-width band as tall as the overlay.
+test('a tall diagram on a wide stage fits the full height beside the overlay, clear of it', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(buildPage(example('flow'), { name: 'tall-wide' }).url, { width: 1440, height: 900 });
+  const seen = await page.evaluate(() => {
+    const stage = document.getElementById('pa-stage').getBoundingClientRect();
+    const o = document.querySelector('[data-pa-legend]').getBoundingClientRect();
+    const vb = document.querySelector('#pa-stage svg').getAttribute('viewBox').split(' ').map(Number);
+    const d = JSON.parse(document.getElementById('pa-data').textContent).drawing;
+    const covered = [...document.querySelectorAll('.pa-node')].filter((n) => {
+      const r = n.getBoundingClientRect();
+      return r.right > o.left + 1 && r.left < o.right - 1 && r.bottom > o.top + 1 && r.top < o.bottom - 1;
+    }).map((n) => n.dataset.id);
+    return { scale: stage.width / vb[2], full: Math.min(1.25, stage.height / (d[3] + 32)), band: Math.min(1.25, (stage.height - (o.bottom - stage.top)) / (d[3] + 32)), covered };
+  });
+  assert.ok(seen.full > seen.band + 0.01, `precondition: the band would cost scale (${seen.full} vs ${seen.band})`);
+  assert.ok(Math.abs(seen.scale - seen.full) < 0.01, `fit scale ${seen.scale}, full height gives ${seen.full}`);
+  assert.deepEqual(seen.covered, [], 'no node under the overlay');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
