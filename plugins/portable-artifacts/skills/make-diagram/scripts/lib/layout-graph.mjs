@@ -4,6 +4,7 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { KINDS } from './kinds.mjs';
 import { nodeSize, edgeLabelSize, groupMinSize } from './sizes.mjs';
+import { edgeIds } from './edge-ids.mjs';
 
 export const OUTER_MARGIN = 24;
 const GROUP_PADDING = `[top=40,left=${OUTER_MARGIN},bottom=${OUTER_MARGIN},right=${OUTER_MARGIN}]`;
@@ -186,20 +187,6 @@ function readNode(node, size, kindInfo, laid, layerOf, direction) {
     out.labelSide = LABEL_PLACEMENT[direction].side;
   }
   return out;
-}
-
-// Every edge's id: the authored one, else `edge-<index>`, extended with `_` while
-// it would reuse a node, group or other edge id (the viewer's id space is flat).
-function edgeIds(spec) {
-  const edges = spec.edges ?? [];
-  const taken = new Set([...(spec.groups ?? []), ...(spec.nodes ?? []), ...edges].map((x) => x.id).filter((id) => id !== undefined));
-  return edges.map((e, i) => {
-    if (e.id !== undefined) return e.id;
-    let id = `edge-${i}`;
-    while (taken.has(id)) id += '_';
-    taken.add(id);
-    return id;
-  });
 }
 
 // ELK spaces a self loop's two ports a third of the node side apart and draws

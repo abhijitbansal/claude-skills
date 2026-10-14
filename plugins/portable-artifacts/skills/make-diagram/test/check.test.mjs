@@ -39,7 +39,7 @@ for (const name of EXAMPLES) {
     const { file } = buildPage(example(name), { name });
     const r = run([file]);
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.match(r.stdout, /^check: ok \(2 viewports, \d+ steps\)\n$/);
+    assert.match(r.stdout, /^check: ok \(2 viewports, \d+ beats\)\n$/);
   });
 }
 
@@ -51,7 +51,7 @@ test('--json mirrors the passing result', async (t) => {
   const body = JSON.parse(r.stdout);
   assert.equal(body.ok, true);
   assert.equal(body.viewports, 2);
-  assert.ok(body.steps > 0);
+  assert.ok(body.beats > 0);
 });
 
 test('a label doctored too wide for its box fails and names the node id', async (t) => {

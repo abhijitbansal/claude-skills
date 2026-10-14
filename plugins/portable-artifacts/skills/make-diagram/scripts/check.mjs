@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // node scripts/check.mjs <page.html> [--json]
 // Opens a built page at 1440 and 390 px and fails on console errors, page overflow,
-// text overflowing its node box (> 2 px) or a presentation that cannot reach its last step.
+// text overflowing its node box (> 2 px) or a story that cannot reach its last beat.
 // exit 0 ok or skipped (no browser), 1 problems, 2 usage/IO
 import fs from 'node:fs';
 import path from 'node:path';
@@ -59,7 +59,7 @@ async function checkViewport(browser, url, viewport) {
       await page.waitForFunction(() => window.paReady === true, null, { timeout: READY_MS });
     } catch {
       problems.push(`${label}: the page never became ready (window.paReady)`);
-      return { problems, steps: 0 };
+      return { problems, beats: 0 };
     }
     const fit = await page.evaluate(pageFits);
     if (fit.scrollW > fit.innerW || fit.scrollH > fit.innerH) {
@@ -68,27 +68,27 @@ async function checkViewport(browser, url, viewport) {
     for (const { id, by } of await page.evaluate(overflowingText, TEXT_TOLERANCE_PX)) {
       problems.push(`${label}: node "${id}": text overflows its box by ${by.toFixed(1)} px`);
     }
-    const steps = await page.evaluate(() => (JSON.parse(document.getElementById('pa-data').textContent).steps || []).length);
-    if (steps > 0) await checkPresentation(page, steps, label, problems);
-    return { problems, steps };
+    const beats = await page.evaluate(() => (JSON.parse(document.getElementById('pa-data').textContent).beats || []).length);
+    if (beats > 0) await checkPresentation(page, beats, label, problems);
+    return { problems, beats };
   } catch (e) {
     problems.push(`${label}: check crashed: ${firstLine(e)}`);
-    return { problems, steps: 0 };
+    return { problems, beats: 0 };
   } finally {
     await context.close().catch(() => {});
   }
 }
 
-// Present, press next to the end, and require the caption to read "N / N".
-async function checkPresentation(page, steps, label, problems) {
+// Enter the story, step to the end with the arrow key, and require the count to read "N / N".
+async function checkPresentation(page, beats, label, problems) {
   await page.keyboard.press('p');
-  for (let i = 1; i < steps; i++) await page.keyboard.press('ArrowRight');
+  for (let i = 1; i < beats; i++) await page.keyboard.press('ArrowRight');
   const count = (await page.textContent('[data-pa-count]', { timeout: SELECTOR_MS }).catch(() => null))?.trim();
   if (count === undefined) {
     problems.push(`${label}: check crashed: the presentation caption [data-pa-count] is missing`);
     return;
   }
-  if (count !== `${steps} / ${steps}`) problems.push(`${label}: presentation stopped at "${count}", expected "${steps} / ${steps}"`);
+  if (count !== `${beats} / ${beats}`) problems.push(`${label}: presentation stopped at "${count}", expected "${beats} / ${beats}"`);
   await page.waitForSelector('#pa-stage svg', { timeout: SELECTOR_MS });
   const view = await page.evaluate(() => document.querySelector('#pa-stage svg').getAttribute('viewBox').split(' ').map(Number));
   if (!view.every(Number.isFinite)) problems.push(`${label}: the presentation camera has a non-finite view (${view.join(' ')})`);
@@ -96,7 +96,7 @@ async function checkPresentation(page, steps, label, problems) {
 }
 
 /**
- * Check one built page. Returns { status: 'ok' | 'failed' | 'skipped', viewports, steps, problems, reason? }.
+ * Check one built page. Returns { status: 'ok' | 'failed' | 'skipped', viewports, beats, problems, reason? }.
  * `timeoutMs` is a wall-clock cap: past it the browser is closed and the result is a failure.
  */
 export async function checkPage(file, { env = process.env, timeoutMs = WATCHDOG_MS } = {}) {
@@ -106,13 +106,13 @@ export async function checkPage(file, { env = process.env, timeoutMs = WATCHDOG_
       browser = await launchBrowser(env);
     } catch (e) {
       if (!(e instanceof BrowserUnavailable)) throw e;
-      return { status: 'skipped', viewports: 0, steps: 0, problems: [], reason: firstLine(e) };
+      return { status: 'skipped', viewports: 0, beats: 0, problems: [], reason: firstLine(e) };
     }
     const url = pathToFileURL(file).href;
     const results = [];
     for (const viewport of VIEWPORTS) results.push(await checkViewport(browser, url, viewport));
     const problems = results.flatMap((r) => r.problems);
-    return { status: problems.length ? 'failed' : 'ok', viewports: VIEWPORTS.length, steps: Math.max(...results.map((r) => r.steps)), problems };
+    return { status: problems.length ? 'failed' : 'ok', viewports: VIEWPORTS.length, beats: Math.max(...results.map((r) => r.beats)), problems };
   })();
   let timer;
   const watchdog = new Promise((resolve) => { timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs); });
@@ -121,7 +121,7 @@ export async function checkPage(file, { env = process.env, timeoutMs = WATCHDOG_
     if (result !== TIMED_OUT) return result;
     work.catch(() => {}); // the closed browser rejects whatever was in flight
     const seconds = Number((timeoutMs / 1000).toFixed(1));
-    return { status: 'failed', viewports: 0, steps: 0, problems: [`check: timed out after ${seconds} s`], timedOut: true };
+    return { status: 'failed', viewports: 0, beats: 0, problems: [`check: timed out after ${seconds} s`], timedOut: true };
   } finally {
     clearTimeout(timer);
     await browser?.close().catch(() => {});
@@ -133,11 +133,11 @@ function report(result, json) {
     const errors = result.problems.map((message) => ({ path: '', message }));
     const base = { ok: result.status !== 'failed' };
     const body = result.status === 'skipped' ? { ...base, skipped: true, reason: result.reason, hint: SKIP_HINT }
-      : result.status === 'ok' ? { ...base, viewports: result.viewports, steps: result.steps }
+      : result.status === 'ok' ? { ...base, viewports: result.viewports, beats: result.beats }
         : { ...base, errors, problems: result.problems };
     process.stdout.write(`${JSON.stringify(body)}\n`);
   } else if (result.status === 'skipped') process.stdout.write(`check: skipped (no browser: ${result.reason}; run: npx playwright install chromium)\n`);
-  else if (result.status === 'ok') process.stdout.write(`check: ok (${result.viewports} viewports, ${result.steps} steps)\n`);
+  else if (result.status === 'ok') process.stdout.write(`check: ok (${result.viewports} viewports, ${result.beats} beats)\n`);
   else {
     // The timeout line already reads as a verdict; every other failure gets a tally.
     for (const p of result.problems) process.stdout.write(`${p}\n`);

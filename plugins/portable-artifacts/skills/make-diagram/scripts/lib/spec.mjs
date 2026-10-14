@@ -3,12 +3,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
-import { formatAjvErrors, didYouMean, pathJoin } from '../../shared/errors.mjs';
+import { formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { listThemes, loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
 import { KINDS, canHoldIcon } from './kinds.mjs';
 import { hasIcon, iconSvg, IconError } from './icons.mjs';
-import { SCHEMA, ID_PATTERN, LIMITS, NON_SPACE } from './schema.mjs';
+import { SCHEMA, LIMITS, NON_SPACE } from './schema.mjs';
+import { suggestion, notFound, checkLength, checkCount, checkRefs, registerIds } from './checks.mjs';
+import { isOneEmoji, graphemeCount } from './emoji.mjs';
+import { checkStories } from './stories.mjs';
 import { lintGeometry } from './lint.mjs';
 
 export { UsageError };
@@ -16,7 +19,6 @@ export { UsageError };
 const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
 const validateSchema = ajv.compile(SCHEMA);
 
-const MAX_LISTED = 12;
 const q = (v) => JSON.stringify(v);
 
 export function loadSpec(file) {
@@ -34,56 +36,7 @@ export function loadSpec(file) {
   }
 }
 
-// ---- small helpers ----------------------------------------------------
-
-function suggestion(value, candidates, label = 'available') {
-  const hint = didYouMean(value, candidates);
-  if (hint) return `did you mean ${q(hint)}?`;
-  const shown = candidates.slice(0, MAX_LISTED).join(', ');
-  return `${label}: ${shown}${candidates.length > MAX_LISTED ? `, … (${candidates.length - MAX_LISTED} more)` : ''}`;
-}
-
-function notFound(id, candidates, what = 'ids') {
-  if (candidates.length === 0) return `${q(id)} not found; no ${what} are defined`;
-  return `${q(id)} not found; ${suggestion(id, candidates)}`;
-}
-
-function checkLength(errors, item, field, base, limit) {
-  const value = item[field];
-  if (typeof value !== 'string') return;
-  const n = [...value].length;
-  if (n > limit) errors.push({ path: pathJoin(base, field), message: `${field} is ${n} characters; the limit is ${limit} — shorten it` });
-}
-
-function checkCount(errors, spec, field, limit) {
-  const n = spec[field]?.length ?? 0;
-  if (n > limit) errors.push({ path: field, message: `${field} has ${n} entries; the limit is ${limit} — split the diagram` });
-}
-
-function checkRefs(errors, ids, base, candidates) {
-  (ids ?? []).forEach((id, i) => {
-    if (!candidates.includes(id)) errors.push({ path: pathJoin(base, i), message: notFound(id, candidates) });
-  });
-}
-
 // ---- ids --------------------------------------------------------------
-
-// Registers ids from [listName, items] pairs into `seen` (id -> path of first
-// use) and reports bad spelling and duplicates. Items without an id are skipped.
-function registerIds(errors, lists, seen = new Map()) {
-  for (const [list, items] of lists) {
-    (items ?? []).forEach((item, i) => {
-      if (item.id === undefined) return;
-      const p = pathJoin(pathJoin(list, i), 'id');
-      if (!ID_PATTERN.test(item.id)) {
-        errors.push({ path: p, message: `id ${q(item.id)} is invalid; use lowercase letters, digits, - and _, starting with a letter` });
-      }
-      if (seen.has(item.id)) errors.push({ path: p, message: `duplicate id ${q(item.id)}; first used at ${seen.get(item.id)}; rename one` });
-      else seen.set(item.id, p);
-    });
-  }
-  return seen;
-}
 
 // Edge ids share the flat id space of nodes and groups (the viewer finds an
 // element by bare id), so one may not reuse another's. Edge-to-edge duplicates
@@ -135,12 +88,29 @@ function checkTheme(errors, spec) {
   }
 }
 
-// Kind + icon + the label/note limits shared by nodes and participants.
+// One emoji in the icon tile. The grapheme rule lives in emoji.mjs; here the
+// kind must have a tile at all (the same rule as checkIcon).
+function checkEmoji(errors, item, p, type) {
+  if (item.emoji === undefined) return;
+  const at = pathJoin(p, 'emoji');
+  if (item.kind !== undefined && Object.hasOwn(KINDS[type].kinds, item.kind) && !canHoldIcon(type, item.kind)) {
+    errors.push({ path: at, message: `kind ${q(item.kind)} is drawn as a shape without an icon; remove emoji or use kind ${q(KINDS[type].default)}` });
+    return;
+  }
+  if (isOneEmoji(item.emoji)) return;
+  const n = graphemeCount(item.emoji);
+  const problem = n === 1 ? `${q(item.emoji)} is not an emoji` : `${q(item.emoji)} is ${n} characters`;
+  errors.push({ path: at, message: `${problem}; use exactly one emoji, like "🛒"` });
+}
+
+// Kind, icon, emoji and the text limits shared by nodes and participants.
 function checkEntity(errors, item, p, type, noteField) {
   checkKind(errors, item, p, type);
   checkIcon(errors, item, p, type);
+  checkEmoji(errors, item, p, type);
   checkLength(errors, item, 'label', p, LIMITS.label);
   if (noteField) checkLength(errors, item, noteField, p, LIMITS.note);
+  checkLength(errors, item, 'detail', p, LIMITS.detail);
 }
 
 // ---- groups -----------------------------------------------------------
@@ -270,6 +240,7 @@ function checkGraph(spec, errors) {
     checkLength(errors, e, 'label', p, LIMITS.edgeLabel);
   });
   checkSteps(errors, spec, [...seen.keys()]);
+  checkStories(errors, spec, { endpoints: ctx.endpoints, known: [...seen.keys()] });
 }
 
 // ---- sequence ---------------------------------------------------------
@@ -358,6 +329,7 @@ function checkSequence(spec, errors) {
   checkFrameOverlap(errors, spec.frames ?? [], runs);
   (spec.notes ?? []).forEach((n, i) => checkNote(errors, n, pathJoin('notes', i), participantIds, messageIds));
   checkSteps(errors, spec, [...seen.keys()]);
+  checkStories(errors, spec, { endpoints: participantIds, known: [...seen.keys()] });
 }
 
 // ---- fields that belong to the other family of types -------------------
@@ -384,6 +356,11 @@ function wrongFamilyFields(spec) {
     .map(([field, fix]) => ({ path: field, message: `${where}; ${fix}` }));
 }
 
+// stories replaced steps: a spec with both would describe two timelines.
+function olderSteps(spec) {
+  return spec.stories !== undefined && spec.steps !== undefined ? [{ path: 'steps', message: 'use stories; steps is the older form' }] : [];
+}
+
 // Ajv's pattern message would print the raw regex; ours says what to fix.
 function wordSchemaError(e) {
   if (e.keyword === 'pattern' && e.params.pattern === NON_SPACE) {
@@ -408,7 +385,7 @@ export async function validateSpec(spec, { layout = true } = {}) {
   if (!validateSchema(spec)) {
     return { ok: false, errors: formatAjvErrors(validateSchema.errors.map(wordSchemaError)) };
   }
-  const errors = [...wrongFamilyFields(spec)];
+  const errors = [...wrongFamilyFields(spec), ...olderSteps(spec)];
   checkTheme(errors, spec);
   checkLength(errors, spec, 'title', '', LIMITS.title);
   checkLength(errors, spec, 'subtitle', '', LIMITS.subtitle);

@@ -218,7 +218,7 @@ test('auto steps also reveal an empty group (nothing else would): a closing "Eve
 test('the result carries `data`: what PADiagram.mount needs, and the export filename stem', async () => {
   const spec = example('sequence');
   const out = await buildDiagram(spec);
-  assert.deepEqual(Object.keys(out.data).sort(), ['adjacency', 'animate', 'boxes', 'edges', 'frames', 'height', 'ids', 'parents', 'stem', 'steps', 'title', 'type', 'width']);
+  assert.deepEqual(Object.keys(out.data).sort(), ['adjacency', 'animate', 'autoplay', 'beats', 'boxes', 'chapters', 'directed', 'edges', 'frames', 'height', 'ids', 'info', 'parents', 'stem', 'steps', 'title', 'type', 'width']);
   assert.equal(out.data.stem, 'checkout-with-payment-retry');
   assert.equal(out.data.steps, out.steps);
   assert.equal(out.data.width, out.width);

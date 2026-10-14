@@ -10,6 +10,7 @@ import { DiagramError } from './diagram-error.mjs';
 import { LIMITS } from './schema.mjs';
 import { revealedBy } from './steps.mjs';
 import { viewerData } from './data.mjs';
+import { beatsOf } from './stories.mjs';
 
 // validateSpec(spec, { layout }) -> { ok, errors }: the same checks buildDiagram runs, for callers that only validate.
 export { validateSpec } from './spec.mjs';
@@ -107,7 +108,8 @@ export function viewerRuntime() {
  * `css` once per page), `steps` is the spec's steps (copied; ids it never
  * reveals get a final "Everything" step) or ones built from the layout, `ids`
  * lists every id a step can name, `data` is what `PADiagram.mount`
- * (viewerRuntime()) takes along with the `svg`, and `idPrefix`
+ * (viewerRuntime()) takes along with the `svg` (it also carries the story timeline
+ * `beats` and `chapters`, per-id `info`, `directed` out-edges and `autoplay`), and `idPrefix`
  * (^[A-Za-z0-9_-]+$) namespaces the SVG's ids when several diagrams share a page. Throws DiagramError when the
  * spec is invalid or the layout fails the geometry lint.
  */
@@ -123,6 +125,7 @@ export async function buildDiagram(spec, { theme, idPrefix } = {}) {
   if (lint.length > 0) throw new DiagramError(lint);
   const ids = idsOf(spec);
   const steps = stepsOf(spec, geometry, ids);
+  const { beats, chapters } = beatsOf(spec, steps);
   const width = geometry.width;
   const height = geometry.height;
   return {
@@ -132,7 +135,7 @@ export async function buildDiagram(spec, { theme, idPrefix } = {}) {
     height,
     steps,
     ids,
-    data: viewerData(spec, { geometry, steps, ids, width, height }),
+    data: viewerData(spec, { geometry, steps, ids, width, height, beats, chapters }),
     geometry,
   };
 }
