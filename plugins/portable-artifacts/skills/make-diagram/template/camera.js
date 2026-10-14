@@ -17,7 +17,8 @@
   var FIT_MARGIN = 16;
   var FOCUS_PAD = 48;
   var MAX_FOCUS_SCALE = 1.6; // px per diagram unit when a beat zooms in on a few nodes
-  var MAX_FOCUS_ZOOM = 2; // and never past this multiple of the fit
+  var MAX_FOCUS_ZOOM = 2; // and never past this multiple of the fit, unless the fit is tiny: a beat may always reach 100%
+  var MIN_FOCUS_CAP = 1; // so on a narrow stage a hop is readable when its box fits at 100%
   var CAMERA_MS = 300;
 
   var clamp = function (v, lo, hi) { return Math.min(hi, Math.max(lo, v)); };
@@ -134,7 +135,7 @@
       var sz = size();
       var fs = fitScale(sz);
       var s = Math.min(sz.w / (box.w + 2 * FOCUS_PAD), sz.h / (box.h + 2 * FOCUS_PAD));
-      s = clamp(isFinite(s) && s > 0 ? s : fs, fs * MIN_ZOOM, Math.max(fs * MIN_ZOOM, Math.min(fs * MAX_FOCUS_ZOOM, MAX_FOCUS_SCALE)));
+      s = clamp(isFinite(s) && s > 0 ? s : fs, fs * MIN_ZOOM, Math.max(fs * MIN_ZOOM, Math.min(Math.max(fs * MAX_FOCUS_ZOOM, MIN_FOCUS_CAP), MAX_FOCUS_SCALE)));
       return { cx: box.x + box.w / 2, cy: box.y + box.h / 2, s: s };
     }
     // Keyboard focus on a node scrolled out of view brings it to the middle.

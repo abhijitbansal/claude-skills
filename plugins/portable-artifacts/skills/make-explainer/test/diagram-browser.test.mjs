@@ -211,6 +211,33 @@ test('at 390 px the figure fits the page and the overlay fills the screen', asyn
   await context.close();
 });
 
+test('at 390 px the overlay title keeps whole words on at most two lines', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(storyPage().url, { width: 390, height: 844 });
+  await page.locator('[data-dg-present]').click();
+  const m = await page.evaluate(() => {
+    const el = document.querySelector('[data-dg-dialog] .dg-top-title');
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight);
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const split = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      for (const w of n.data.matchAll(/\S+/g)) {
+        const r = document.createRange();
+        r.setStart(n, w.index); r.setEnd(n, w.index + w[0].length);
+        const tops = new Set([...r.getClientRects()].map((q) => Math.round(q.top)));
+        if (tops.size > 1) split.push(w[0]);
+      }
+    }
+    return { text: el.textContent.trim(), height: el.getBoundingClientRect().height, lineHeight, split, overflows: el.scrollWidth > el.clientWidth };
+  });
+  assert.ok(m.text.length > 0);
+  assert.deepEqual(m.split, [], `words split across lines in "${m.text}"`);
+  assert.ok(m.height <= 2 * m.lineHeight + 1, `title is ${m.height}px tall (line ${m.lineHeight}px)`);
+  assert.equal(m.overflows, false);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
 // ---- fix round 1: legibility floor, centring, scroll region, tab stops ------------------------
 
 const NAMES = ['Client', 'Gateway', 'Auth service', 'Orders service', 'Orders store', 'Audit log', 'Billing service', 'Billing store', 'Report job', 'Archive'];

@@ -592,7 +592,7 @@ test('a double click on the canvas in Play neither steps nor leaves', async (t) 
   await context.close();
 });
 
-test('presentation never zooms in past 2x of the fit', async (t) => {
+test('presentation never zooms in past 2x of the fit, or 100% when the fit is tiny', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   for (const [name, spec] of [['architecture', example('architecture')], ['flow', example('flow')], ['solo', { title: 'Solo', type: 'flow', nodes: [{ id: 'a', label: 'Only node' }] }]]) {
     for (const width of [1440, 390]) {
@@ -602,13 +602,62 @@ test('presentation never zooms in past 2x of the fit', async (t) => {
       for (let i = 0; i < total; i++) {
         await settle(page);
         const z = await zoom(page);
-        assert.ok(z <= 2.001, `${name}@${width} step ${i + 1}: ${z}`);
+        const px = await page.evaluate(() => document.querySelector('#pa-stage svg').getScreenCTM().a);
+        // 2x of the fit, except that a tiny fit may still reach 100% (a narrow stage keeps a beat readable)
+        assert.ok(z <= Math.max(2, 1 / (px / z)) + 0.001, `${name}@${width} step ${i + 1}: ${z}`);
         await page.keyboard.press('ArrowRight');
       }
       assert.deepEqual(problems, []);
       await context.close();
     }
   }
+});
+
+test('at 390 px a hop beat is drawn at 100% or its own fit, never smaller than readable', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await open(built('story').url, { width: 390, height: 844 });
+  await page.keyboard.press('p');
+  await settle(page);
+  const m = await page.evaluate(() => {
+    const stage = document.getElementById('pa-stage');
+    const sr = stage.getBoundingClientRect();
+    const svg = stage.querySelector('svg');
+    const px = svg.getScreenCTM().a; // screen px per diagram unit
+    const ends = ['shopper', 'app'].map((id) => {
+      const r = svg.querySelector(`.pa-node[data-id="${id}"]`).getBoundingClientRect();
+      return { l: r.left - sr.left, r: sr.right - r.right, t: r.top - sr.top, b: sr.bottom - r.bottom, w: r.width };
+    });
+    return { px, ends };
+  });
+  for (const e of m.ends) assert.ok(e.l >= 0 && e.r >= 0 && e.t >= 0 && e.b >= 0, `end node fully inside the stage: ${JSON.stringify(e)}`);
+  // The two-node box plus padding is a little wider than 390 px at 100%, so the box's own fit (about 0.66) wins; the old cap (2x of a tiny fit) left it at 0.35.
+  assert.ok(m.px >= 0.6, `hop beat scale ${m.px}`);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('at 390 px a beat whose box fits at 100% is shown at 100%, not at 2x of a tiny fit', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const spec = {
+    title: 'Chain', type: 'flow', direction: 'right',
+    nodes: ids.map((id) => ({ id, label: `Node ${id}` })),
+    edges: ids.slice(1).map((id, i) => ({ from: ids[i], to: id })),
+    stories: [{ id: 's', title: 'S', beats: [{ title: 'Look at c', focus: ['c'] }] }],
+  };
+  const { page, problems, context } = await open(buildPage(spec, { name: 'focus-100' }).url, { width: 390, height: 844 });
+  await page.keyboard.press('p');
+  await settle(page);
+  const m = await page.evaluate(() => {
+    const svg = document.querySelector('#pa-stage svg');
+    const fit = Number(document.getElementById('pa-stage').dataset.zoom);
+    return { px: svg.getScreenCTM().a, fit };
+  });
+  const fs = m.px / m.fit;
+  assert.ok(fs < 0.5, `precondition: the fit-all scale is tiny (${fs})`);
+  assert.ok(Math.abs(m.px - 1) < 0.01, `focus beat scale ${m.px}`);
+  assert.deepEqual(problems, []);
+  await context.close();
 });
 
 test('exports are named after the .html slug, even for a title over 60 characters', async (t) => {

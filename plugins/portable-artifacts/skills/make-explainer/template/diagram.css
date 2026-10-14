@@ -29,8 +29,10 @@
 /* the viewer's root: the element full screen is asked for (never the dialog itself); real full screen sizes it, the dialog sizes it otherwise */
 .dg-fs { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; background: var(--page); color: var(--text); }
 .dg-overlay::backdrop { background: var(--page); }
-.dg-top { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
-.dg-top-title { min-width: 0; font: 600 1rem/1.3 var(--font-display); overflow-wrap: anywhere; }
+.dg-top { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.dg-top-title { min-width: 0; font: 600 1rem/1.3 var(--font-display); overflow-wrap: break-word; }
+/* narrow: the title takes its own row so the controls never squeeze it into mid-word breaks */
+@media (max-width: 719px) { .dg-top-title { flex: 1 1 100%; } }
 .dg-key { display: inline-block; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-3); font-size: 0.72rem; line-height: 1.5; }
 .dg-body > .dg-stage { position: absolute; inset: 0; width: auto; aspect-ratio: auto; touch-action: none; cursor: grab; }
 
