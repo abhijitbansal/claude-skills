@@ -701,3 +701,21 @@ for (const [width, height] of [[1440, 900], [390, 780]]) {
     await context.close();
   });
 }
+
+test('a hidden edge (a Play reveal not reached yet) does not catch the pointer through its hit path', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('architecture').url, { width: 1440, height: 900 });
+  await page.evaluate(() => document.querySelector('.pa-edge[data-from="web"][data-to="vpc"]').classList.add('pa-hidden'));
+  await page.waitForTimeout(400); // visibility transitions over .2s
+  const hit = await page.evaluate(() => {
+    const edge = document.querySelector('.pa-edge[data-from="web"][data-to="vpc"]');
+    const r = edge.querySelector('.pa-wire');
+    const p = r.getPointAtLength(r.getTotalLength() / 2);
+    const m = r.getScreenCTM();
+    const at = document.elementFromPoint(p.x * m.a + p.y * m.c + m.e, p.x * m.b + p.y * m.d + m.f);
+    return { inEdge: edge.contains(at), tag: at && at.getAttribute('class') };
+  });
+  assert.equal(hit.inEdge, false, `the hidden edge still caught the pointer (${hit.tag})`);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
