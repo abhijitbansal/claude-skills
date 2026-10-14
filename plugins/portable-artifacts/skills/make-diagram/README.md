@@ -15,9 +15,7 @@ any agent that can run shell commands. Nothing leaves your machine.
   top of nodes), so a spec that validates is buildable.
 - **Deterministic**: the same spec and versions give byte-identical
   pages (there is no build timestamp).
-- **A page worth opening**: zoom and pan, hover tracing of a node's edges,
-  edge-flow animation, light and dark, SVG and PNG export, and a
-  step-by-step presentation mode (`P`).
+- **A page worth opening**: a story player (named chapters of beats, a travelling dot along each hop, a transport bar with speed and loop), an Explore panel (what a node sends and receives, the shortest route between two nodes, Find), kind-coloured cards with emoji tiles, lanes and a legend, light and dark, full screen, SVG and PNG export.
 
 > Agents: the instructions you follow are in [`SKILL.md`](SKILL.md). This
 > README is for people.
@@ -51,17 +49,18 @@ you where the page is. Default output folder is `~/.agent/diagrams/`
 
 | Key | Does |
 |---|---|
-| `F`, double-click | fit the diagram |
+| `P` / `E` | Play story (opens beat 1) / Explore |
+| Space | play or pause the story |
+| arrows, Page Up/Down, Home/End | in Play: step the beats (left/up back, right/down forward); first and last beat |
+| `F` | full screen (`Esc` leaves; a sandboxed page fills its window instead) |
+| `0`, double-click | fit the diagram |
 | `+` / `-`, wheel, pinch | zoom |
-| arrows, drag | pan |
-| hover, focus, click | trace a node's edges; click pins; `Esc` clears |
-| `P` | present: arrows, Space or Page Up/Down step; `Esc` exits |
+| arrows (Explore), drag | pan |
+| hover, click, shift-click | tooltip; the side panel; the shortest route; `Esc` closes the panel |
+| `/` | Find a node |
 | `A` | toggle edge-flow animation (off under reduced motion) |
 
-Presentation steps come from the spec's `steps`, or are built from the
-layout (one per layer, one per message in a sequence). The presentation
-camera never zooms past twice the fit. Reduced-motion settings turn off
-animation and camera tweening.
+Beats come from the spec's stories, or, with none, from the layout (one per layer, one per message in a sequence). The camera never zooms past twice the fit. Reduced-motion settings turn off the travelling dot, camera glides and autoplay.
 
 ## Types
 
