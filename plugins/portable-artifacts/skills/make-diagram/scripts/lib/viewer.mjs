@@ -92,7 +92,7 @@ function legendHtml(spec) {
 }
 
 const legendCss = () => [
-  ...FAMILIES.map((f) => `.lg-sw-${f}{background:color-mix(in srgb,var(--k-${f}) ${LEGEND_TINT}%,var(--surface));border-color:var(--k-${f})}`),
+  ...FAMILIES.map((f) => `.lg-sw-${f}{background:var(--surface);background:color-mix(in srgb,var(--k-${f}) ${LEGEND_TINT}%,var(--surface));border-color:var(--k-${f})}`),
 ].join('\n');
 
 // ---- page ---------------------------------------------------------------------------------

@@ -14,15 +14,16 @@ const rules = [
   // frame
   '.pa-diagram{display:block;font-family:var(--font);font-size:14px;color:var(--text)}',
   // groups: a lane with a coloured bar (top-level) or a nested box; labels in spaced capitals
-  '.pa-group-box{fill:color-mix(in srgb,var(--text-3) 7%,transparent);stroke:var(--line);stroke-width:1}',
+  '.pa-group-box{fill:var(--surface);fill:color-mix(in srgb,var(--text-3) 7%,transparent);stroke:var(--line);stroke-width:1}',
   '.pa-lane{stroke:none}',
   `.pa-group-label{fill:var(--text-2);font-size:${GROUP_LABEL_SIZE}px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}`,
-  // edges: one path.pa-wire per edge; the arrow heads take the wire's stroke
+  // edges: one path.pa-wire per edge; the arrow heads take the wire's stroke (an engine without context-stroke or
+  // color-mix() drops that declaration, so each one follows a plain fallback for the same property)
   '.pa-wire{fill:none;stroke:var(--text-3);stroke-width:1.25;stroke-linejoin:round}',
   '.pa-edge-dashed .pa-wire{stroke-dasharray:6 4}',
   '.pa-edge-async .pa-wire{stroke-dasharray:1.5 4;stroke-linecap:round}',
-  '.pa-arrow-fill{fill:context-stroke;stroke:none}',
-  '.pa-arrow-open{fill:none;stroke:context-stroke;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}',
+  '.pa-arrow-fill{fill:var(--text-3);fill:context-stroke;stroke:none}',
+  '.pa-arrow-open{fill:none;stroke:var(--text-3);stroke:context-stroke;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}',
   '.pa-edge-plate{fill:var(--surface);stroke:var(--line);stroke-width:1}', // a pill: surface fill (the export and make-explainer draw on the surface), hairline border
   `.pa-edge-text{fill:var(--text-2);font-size:${EDGE_LABEL_SIZE}px;font-weight:400}`,
   // nodes: a card tinted by its kind family (familyRules below); the shape still encodes the kind
@@ -56,9 +57,9 @@ const rules = [
 const familyRules = FAMILIES.flatMap((f) => {
   const hue = `var(--k-${f})`;
   return [
-    `.pa-family-${f} .pa-shape{fill:color-mix(in srgb,${hue} ${CARD_TINT}%,var(--surface));stroke:${hue}}`,
+    `.pa-family-${f} .pa-shape{fill:var(--surface);fill:color-mix(in srgb,${hue} ${CARD_TINT}%,var(--surface));stroke:${hue}}`,
     `.pa-family-${f} .pa-decor{stroke:${hue}}`,
-    `.pa-family-${f} .pa-tile{fill:color-mix(in srgb,${hue} ${TILE_TINT}%,var(--surface))}`,
+    `.pa-family-${f} .pa-tile{fill:var(--surface);fill:color-mix(in srgb,${hue} ${TILE_TINT}%,var(--surface))}`,
     `.pa-family-${f} .pa-icon{color:${hue}}`,
     `.pa-family-${f} .pa-type{fill:${hue}}`,
     `.pa-edge[data-family="${f}"] .pa-wire{stroke:${hue}}`,
@@ -126,7 +127,7 @@ const laneRules = Array.from({ length: 8 }, (_, i) => `.pa-group[data-lane="${i}
 const legendRules = [
   '.pa-legend-text{fill:var(--text-2);font-size:11px}',
   '.pa-swatch{stroke-width:1}',
-  ...FAMILIES.map((f) => `.pa-swatch.pa-family-${f}{fill:color-mix(in srgb,var(--k-${f}) ${CARD_TINT}%,var(--surface));stroke:var(--k-${f})}`),
+  ...FAMILIES.map((f) => `.pa-swatch.pa-family-${f}{fill:var(--surface);fill:color-mix(in srgb,var(--k-${f}) ${CARD_TINT}%,var(--surface));stroke:var(--k-${f})}`),
   '.pa-swatch.pa-family-bare{fill:var(--surface);stroke:var(--line)}',
   '.pa-legend-sample .pa-wire{stroke-width:1.5}',
 ];
@@ -141,7 +142,7 @@ const legendRules = [
 const DARK = [
   '.pa-edge.pa-active .pa-wire{stroke-width:2.5;filter:drop-shadow(0 0 6px var(--glow))}',
   '.pa-dot{fill:var(--glow);filter:drop-shadow(0 0 6px var(--glow))}',
-  '.pa-group-box{fill:color-mix(in srgb,var(--text-3) 12%,transparent)}',
+  '.pa-group-box{fill:var(--surface);fill:color-mix(in srgb,var(--text-3) 12%,transparent)}',
 ];
 const dark = [
   `@media (prefers-color-scheme: dark){${DARK.map((r) => `:root:not([data-theme="light"]) ${r}`).join('')}}`,

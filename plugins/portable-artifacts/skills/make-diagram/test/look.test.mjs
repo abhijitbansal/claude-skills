@@ -127,8 +127,8 @@ test('an edge carries its from-node family and one path.pa-wire; an edge leaving
 test('diagramCss: family rules tint the card and colour the tile, icon, type line and outgoing wires; tones come after and win; heads follow the wire', () => {
   const css = diagramCss();
   for (const f of FAMILIES) {
-    assert.ok(css.includes(`.pa-family-${f} .pa-shape{fill:color-mix(in srgb,var(--k-${f}) 10%,var(--surface));stroke:var(--k-${f})}`), f);
-    assert.ok(css.includes(`.pa-family-${f} .pa-tile{fill:color-mix(in srgb,var(--k-${f}) `), `${f} tile`);
+    assert.ok(css.includes(`.pa-family-${f} .pa-shape{fill:var(--surface);fill:color-mix(in srgb,var(--k-${f}) 10%,var(--surface));stroke:var(--k-${f})}`), f);
+    assert.ok(css.includes(`.pa-family-${f} .pa-tile{fill:var(--surface);fill:color-mix(in srgb,var(--k-${f}) `), `${f} tile`);
     assert.ok(css.includes(`.pa-family-${f} .pa-icon{color:var(--k-${f})}`), `${f} icon`);
     assert.ok(css.includes(`.pa-family-${f} .pa-type{fill:var(--k-${f})}`), `${f} type line`);
     assert.ok(css.includes(`.pa-edge[data-family="${f}"] .pa-wire{stroke:var(--k-${f})}`), `${f} wire`);
@@ -140,10 +140,10 @@ test('diagramCss: family rules tint the card and colour the tile, icon, type lin
   after('.pa-tone-good .pa-shape-filled-dot{', '.pa-node .pa-shape-filled-dot{');
   after('.pa-hl .pa-shape,', '.pa-tone-bad .pa-shape{');
   assert.ok(css.includes('.pa-tone-warn .pa-type{fill:var(--warn)}'));
-  assert.match(css, /\.pa-arrow-fill\{fill:context-stroke;stroke:none\}/);
-  assert.match(css, /\.pa-arrow-open\{fill:none;stroke:context-stroke;/);
+  assert.match(css, /\.pa-arrow-fill\{fill:var\(--text-3\);fill:context-stroke;stroke:none\}/);
+  assert.match(css, /\.pa-arrow-open\{fill:none;stroke:var\(--text-3\);stroke:context-stroke;/);
   assert.ok(!/\.pa-edge[^{]* path\{/.test(css), 'no rule strokes a bare path inside an edge group');
-  assert.ok(!/\.pa-arrow-fill\{fill:var/.test(css) && !/\.pa-edge\.pa-[a-z]+ \.pa-arrow/.test(css), 'no dead marker rules: markers are not descendants of the edge');
+  assert.ok(!/\.pa-arrow-fill\{fill:var\([^)]*\);stroke/.test(css) && !/\.pa-edge\.pa-[a-z]+ \.pa-arrow/.test(css), 'no dead marker rules: markers are not descendants of the edge');
   assert.match(css, /\.pa-wire\{fill:none;stroke:var\(--text-3\);stroke-width:1\.25;stroke-linejoin:round\}/);
   assert.match(css, /\.pa-edge\.pa-active \.pa-wire\{stroke:var\(--accent\);stroke-width:3\}/);
   assert.match(css, /\.pa-emoji\{font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;font-size:18px\}/);
@@ -182,13 +182,13 @@ test('diagramCss: lane, pill and legend rules', () => {
   const css = diagramCss();
   for (let i = 0; i < 8; i++) assert.ok(css.includes(`.pa-group[data-lane="${i}"] .pa-lane{fill:var(--s${i + 1})}`), `lane ${i}`);
   assert.match(css, /\.pa-lane\{stroke:none\}/);
-  assert.match(css, /\.pa-group-box\{fill:color-mix\(in srgb,var\(--text-3\) 7%,transparent\);stroke:var\(--line\);stroke-width:1\}/);
+  assert.match(css, /\.pa-group-box\{fill:var\(--surface\);fill:color-mix\(in srgb,var\(--text-3\) 7%,transparent\);stroke:var\(--line\);stroke-width:1\}/);
   assert.match(css, /\.pa-group-label\{fill:var\(--text-2\);font-size:11px;font-weight:600;letter-spacing:\.08em;text-transform:uppercase\}/);
   assert.match(css, /\.pa-edge-plate\{fill:var\(--surface\);stroke:var\(--line\);stroke-width:1\}/);
   assert.match(css, /\.pa-frame-kind\{fill:var\(--text-2\);font-size:11px;font-weight:600\}/, 'the frame tab word is measured with f.group: plain, no tracking');
   assert.match(css, /\.pa-legend-text\{fill:var\(--text-2\);font-size:11px\}/);
   assert.match(css, /\.pa-swatch\{stroke-width:1\}/);
-  for (const f of FAMILIES) assert.ok(css.includes(`.pa-swatch.pa-family-${f}{fill:color-mix(in srgb,var(--k-${f}) 10%,var(--surface));stroke:var(--k-${f})}`), f);
+  for (const f of FAMILIES) assert.ok(css.includes(`.pa-swatch.pa-family-${f}{fill:var(--surface);fill:color-mix(in srgb,var(--k-${f}) 10%,var(--surface));stroke:var(--k-${f})}`), f);
   assert.match(css, /\.pa-swatch\.pa-family-bare\{fill:var\(--surface\);stroke:var\(--line\)\}/);
   assert.match(css, /\.pa-legend-sample \.pa-wire\{stroke-width:1\.5\}/);
 });

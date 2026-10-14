@@ -40,7 +40,7 @@
 .dg-top .btn, .dg-transport .btn { padding: 4px 14px; font-size: 0.85rem; }
 .dg-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .dg-modes { display: inline-flex; gap: 4px; }
-.dg-overlay .btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.dg-overlay .btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
 .dg-overlay .btn:disabled { opacity: 0.6; cursor: default; }
 .dg-find { font: inherit; color: inherit; width: 10em; padding: 2px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
 .dg-chapters, .dg-found { flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
