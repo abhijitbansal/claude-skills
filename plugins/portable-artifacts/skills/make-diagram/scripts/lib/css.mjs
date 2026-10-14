@@ -22,6 +22,7 @@ const rules = [
   '.pa-wire{fill:none;stroke:var(--text-3);stroke-width:1.25;stroke-linejoin:round}',
   '.pa-edge-dashed .pa-wire{stroke-dasharray:6 4}',
   '.pa-edge-async .pa-wire{stroke-dasharray:1.5 4;stroke-linecap:round}',
+  '.pa-hit{fill:none;stroke:transparent;stroke-width:12px;vector-effect:non-scaling-stroke;pointer-events:stroke}', // the viewer's invisible mouse target along a wire
   '.pa-arrow-fill{fill:var(--text-3);fill:context-stroke;stroke:none}',
   '.pa-arrow-open{fill:none;stroke:var(--text-3);stroke:context-stroke;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}',
   '.pa-edge-plate{fill:var(--surface);stroke:var(--line);stroke-width:1}', // a pill: surface fill (the export and make-explainer draw on the surface), hairline border

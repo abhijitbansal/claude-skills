@@ -107,7 +107,7 @@
   function standaloneSvg() {
     var clone = ctl.svg.cloneNode(true);
     clone.querySelectorAll('.pa-hidden,.pa-dim,.pa-on,.pa-hl,.pa-active,.pa-selected,.pa-route').forEach(function (el) { el.classList.remove('pa-hidden', 'pa-dim', 'pa-on', 'pa-hl', 'pa-active', 'pa-selected', 'pa-route'); });
-    clone.querySelectorAll('.pa-dot').forEach(function (el) { el.remove(); });
+    clone.querySelectorAll('.pa-dot,.pa-hit').forEach(function (el) { el.remove(); });
     clone.classList.remove('pa-animate', 'pa-tracing');
     clone.querySelectorAll('[tabindex]').forEach(function (el) { el.removeAttribute('tabindex'); });
     clone.setAttribute('viewBox', '0 0 ' + data.width + ' ' + data.height);

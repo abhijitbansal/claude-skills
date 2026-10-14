@@ -643,3 +643,32 @@ test('arrow keys still pan from inside the panel when it has nothing to scroll, 
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+// The screen point `off` px beside the midpoint of the edge `from` -> `to` (perpendicular to the wire there).
+const besideEdge = (page, from, to, off) => page.evaluate(([f, t, d]) => {
+  const wire = document.querySelector(`.pa-edge[data-from="${f}"][data-to="${t}"] .pa-wire`);
+  const m = wire.getScreenCTM();
+  const at = (len) => { const p = wire.getPointAtLength(len); return new DOMPoint(p.x, p.y).matrixTransform(m); };
+  const mid = wire.getTotalLength() / 2;
+  const [a, b, c] = [at(mid - 1), at(mid), at(mid + 1)];
+  const len = Math.hypot(c.x - a.x, c.y - a.y);
+  return { x: b.x + (-(c.y - a.y) / len) * d, y: b.y + ((c.x - a.x) / len) * d };
+}, [from, to, off]);
+
+for (const [width, height] of [[1440, 900], [390, 780]]) {
+  test(`${width}x${height}: a real mouse 4 px off an unlabelled edge opens its panel and shows its tooltip`, async (t) => {
+    if (await skipUnlessBrowser(t)) return;
+    const { page, problems, context } = await openPage(built('architecture').url, { width, height });
+    await settle(page);
+    const spot = await besideEdge(page, 'web', 'vpc', 4); // the unlabelled dashed two-headed edge
+    await page.mouse.move(spot.x, spot.y);
+    assert.equal(await page.isVisible('[data-pa-tip]'), true, 'hover shows a tooltip');
+    assert.equal(await page.textContent('[data-pa-tip]'), 'Web app → Private VPC');
+    await page.mouse.down();
+    await page.mouse.up();
+    assert.equal(await title(page), 'Edge');
+    assert.deepEqual(await selectedIds(page), [await page.getAttribute('.pa-edge[data-from="web"][data-to="vpc"]', 'data-id')]);
+    assert.deepEqual(problems, []);
+    await context.close();
+  });
+}

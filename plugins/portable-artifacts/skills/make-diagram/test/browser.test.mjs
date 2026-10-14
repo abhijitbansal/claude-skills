@@ -749,6 +749,8 @@ test('SVG and PNG export download under the strict CSP, filled with the theme su
     const svg = await download(page, 'svg');
     assert.equal(svg.name, 'checkout-request-path.svg');
     const text = fs.readFileSync(svg.file, 'utf8');
+    assert.ok(await page.locator('.pa-edge .pa-hit').count() > 0, 'precondition: the page draws edge hit paths');
+    assert.ok(!/class="pa-hit"/.test(text), 'the hit paths stay out of the file');
     assert.match(text, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
     assert.ok(text.includes(`fill="${surface}"`), 'surface background rect');
     assert.ok(text.includes('<style>') && text.includes('.pa-node') && text.includes('--surface:'), 'self-contained styles');

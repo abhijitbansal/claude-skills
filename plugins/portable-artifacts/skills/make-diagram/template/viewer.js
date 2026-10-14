@@ -32,12 +32,23 @@
   var PAN_PX = 80;
   var KEY_ZOOM = 1.25;
 
+  // A wide, invisible copy of the wire right after it (css.mjs .pa-hit: a fixed screen width),
+  // so a real mouse can land on a 1 px edge. Added here, not drawn: the export drops it anyway.
+  function addHitPath(edge) {
+    var wire = edge.querySelector('.pa-wire');
+    if (!wire || edge.querySelector('.pa-hit')) return;
+    var hit = wire.cloneNode(false);
+    hit.setAttribute('class', 'pa-hit');
+    ['marker-end', 'marker-start'].forEach(function (a) { hit.removeAttribute(a); });
+    wire.parentNode.insertBefore(hit, wire.nextSibling);
+  }
+
   // The drawn elements by id (nodes, groups, edges, labels) and in lists (lifelines, frames, notes).
   function elementsOf(svg) {
     var els = { nodes: PADiagram.dict(), groups: PADiagram.dict(), edges: PADiagram.dict(), labels: PADiagram.dict() };
     svg.querySelectorAll('.pa-node[data-id]').forEach(function (el) { els.nodes[el.getAttribute('data-id')] = el; });
     svg.querySelectorAll('.pa-group[data-id]').forEach(function (el) { els.groups[el.getAttribute('data-id')] = el; });
-    svg.querySelectorAll('.pa-edge[data-id]').forEach(function (el) { els.edges[el.getAttribute('data-id')] = el; });
+    svg.querySelectorAll('.pa-edge[data-id]').forEach(function (el) { els.edges[el.getAttribute('data-id')] = el; addHitPath(el); });
     svg.querySelectorAll('.pa-edge-label[data-edge]').forEach(function (el) { els.labels[el.getAttribute('data-edge')] = el; });
     els.lifelines = Array.prototype.slice.call(svg.querySelectorAll('.pa-lifeline[data-for]'));
     els.frames = Array.prototype.slice.call(svg.querySelectorAll('.pa-frame[data-messages]'));
