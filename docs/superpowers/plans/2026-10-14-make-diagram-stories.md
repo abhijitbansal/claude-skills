@@ -316,3 +316,33 @@ Per-file checks the plan relies on: `wc -l plugins/portable-artifacts/skills/mak
 13. A focus beat that names a group lights the group's members too; a hop lights only its own edge (not a second edge between the same ends). Everything else outside the beat dims (`pa-dim`).
 14. Pausing hides the dot; resuming replays the current beat from its glide.
 15. The Play story tab (and `P`) enters Play paused on beat 1; the transport's Play button (or Space, or `autoplay`) starts the timer.
+
+## Deferred review findings (from phase 1)
+
+Phase-gate reviewers reported these as MEDIUM or LOW; none blocked a commit. Each later phase plan must either fix the items tagged for it or say why not.
+
+**Phase 2 (Explore)**
+- `data.directed` can key a group id (a `both` edge on a group end) while `data.info` has no group entries: BFS and the panel must handle a route through a group.
+- Space on a focused transport button activates that button natively instead of play/pause; scrubber arrow keys move the beat while play continues.
+
+**Phase 3 (look)**
+- `.pa-edge.pa-active path` strokes every path in the edge group; restyle with the new look.
+- The dot shows for one frame at its previous position before the first animation frame sets it.
+- Step-derived beats now glide 600 ms instead of the camera's 300 ms default.
+
+**Phase 4 (full screen, embed)**
+- make-explainer overlay: End disables Next, focus falls to `<body>`, and the dialog stops receiving keys (its test was reordered around this in e5d54e3). Space now plays in the overlay, which has no Play control. Both go away when the overlay mounts the full transport; restore the stronger test then.
+- A window resize while playing restarts the current beat (`onResize` calls `goTo`).
+- `history.replaceState` runs on every camera frame during glides; throttle it to beat changes.
+- `scrollIntoView` on the active chip can scroll the document; scroll only the chip row.
+
+**Low, fix when touching the file**
+- `emoji.mjs`: no structural cap (a 50-emoji ZWJ chain or repeated skin tones pass as one grapheme); invisible literal U+200D/U+FE0F/U+20E3 in the source should be escapes.
+- `stories.mjs`: `focus` accepts authored edge and message ids (spec says node, group, participant); a `both` edge is not counted when judging `from`/`to` ambiguity; "required with from" has no fix clause.
+- `data.mjs` `infoOf` pairs spec edges with geometry links by index; key by id instead.
+- Step notes (200 chars) become captions (160-char contract for stories).
+- `prevChapter` reads `chapters[c].start` without a guard for data with beats but no chapters.
+- Scrubber has no `aria-valuetext` (announces 0 for beat 1); the Play button toggles both its label and `aria-pressed`.
+- `loop` is on when `autoplay` is set even if a deep link or reduced motion suppressed autoplay.
+- Tests: `ids.test.mjs` prototype assertion cannot fail; `stories.test.mjs` does not pin the story-level unknown-property message; the one-beat loop test waits a fixed 5 s.
+- Each template module merges into an existing `window.PADiagram` instead of replacing it.
