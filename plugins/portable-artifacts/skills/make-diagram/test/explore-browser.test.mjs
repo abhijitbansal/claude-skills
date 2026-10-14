@@ -644,6 +644,35 @@ test('arrow keys still pan from inside the panel when it has nothing to scroll, 
   await context.close();
 });
 
+test('selecting a group lights what it holds: members and the edges inside stay lit; an outsider still dims', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const spec = {
+    title: 'Group selection',
+    type: 'architecture',
+    groups: [{ id: 'g', label: 'G' }],
+    nodes: [
+      { id: 'u', label: 'U', kind: 'client' },
+      { id: 'x', label: 'X', kind: 'service', group: 'g' },
+      { id: 'y', label: 'Y', kind: 'service', group: 'g' },
+      { id: 'z', label: 'Z', kind: 'service' },
+    ],
+    edges: [{ from: 'u', to: 'g' }, { from: 'x', to: 'y' }, { from: 'z', to: 'u' }],
+  };
+  const { page, problems, context } = await openPage(buildPage(spec, { name: 'explore-group' }).url);
+  await page.click('.pa-node[data-id="u"]');
+  await page.click('[data-pa-go="g"]');
+  assert.equal(await title(page), 'G');
+  const dimmed = () => page.evaluate(() => [...document.querySelectorAll('.pa-node.pa-dim,.pa-edge.pa-dim')].map((e) => (e.dataset.from ? `${e.dataset.from}>${e.dataset.to}` : e.dataset.id)).sort());
+  const state = await page.evaluate(() => ({
+    group: document.querySelector('.pa-group[data-id="g"]').classList.contains('pa-selected'),
+    e1: document.querySelector('.pa-edge[data-from="u"][data-to="g"]').classList.contains('pa-dim'),
+  }));
+  assert.deepEqual(state, { group: true, e1: false }, 'the group is selected and the edge into it is lit');
+  assert.deepEqual(await dimmed(), ['z', 'z>u'], 'members x, y and the edge between them stay lit; the outsider and its edge dim');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
 // The screen point `off` px beside the midpoint of the edge `from` -> `to` (perpendicular to the wire there).
 const besideEdge = (page, from, to, off) => page.evaluate(([f, t, d]) => {
   const wire = document.querySelector(`.pa-edge[data-from="${f}"][data-to="${t}"] .pa-wire`);

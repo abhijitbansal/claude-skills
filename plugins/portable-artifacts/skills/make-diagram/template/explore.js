@@ -21,6 +21,7 @@
     var adjacency = PADiagram.dict(data.adjacency);
     var edgeEnds = PADiagram.dict(data.edges);
     var directed = PADiagram.dict(data.directed);
+    var parents = PADiagram.dict(data.parents);
     var info = PADiagram.dict(data.info);
     var hoverId = null;
     var focusId = null;
@@ -35,7 +36,13 @@
     function relation(id) {
       if (edgeEnds[id]) return { nodes: edgeEnds[id].slice(), edges: [id], on: [] };
       var a = adjacency[id] || { nodes: [], edges: [] };
-      return { nodes: [id].concat(a.nodes), edges: a.edges, on: [id] };
+      var rel = { nodes: [id].concat(a.nodes), edges: a.edges, on: [id] };
+      if (!els.groups[id]) return rel;
+      // a group also keeps what it holds lit (story.js light() walks parents the same way)
+      var inside = function (at) { for (at = parents[at]; at !== undefined; at = parents[at]) if (at === id) return true; return false; };
+      rel.nodes = rel.nodes.concat(Object.keys(els.nodes).filter(inside));
+      rel.edges = rel.edges.concat(Object.keys(edgeEnds).filter(function (e) { return inside(edgeEnds[e][0]) && inside(edgeEnds[e][1]); }));
+      return rel;
     }
     function paint(el, dim, on, cls) {
       el.classList.toggle('pa-dim', dim);
