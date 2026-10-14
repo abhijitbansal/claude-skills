@@ -11,13 +11,13 @@
     "line": "#e3e1db", "grid": "#ebe9e4", "accent": "#0f766e", "accentSoft": "#e0f0ee",
     "warn": "#b45309", "good": "#15803d", "bad": "#b91c1c",
     "cat1": "#2a78d6", "cat2": "#eb6834", "cat3": "#1baf7a", "cat4": "#eda100", "cat5": "#e87ba4", "cat6": "#008300", "cat7": "#4a3aa7", "cat8": "#e34948",
-    "seq1": "#cde2fb", "seq2": "#9ec5f4", "seq3": "#6da7ec", "seq4": "#3987e5", "seq5": "#256abf", "seq6": "#184f95", "seq7": "#0d366b"
+    "seq1": "#cde2fb", "seq2": "#9ec5f4", "seq3": "#6da7ec", "seq4": "#3987e5", "seq5": "#256abf", "seq6": "#184f95", "seq7": "#0d366b", "kindPerson": "#a3480a", "kindService": "#0e7490", "kindData": "#6d28d9", "kindQueue": "#0f766e", "kindExternal": "#56677b", "kindDecision": "#4338ca", "glow": "#0f766e"
   },
   "dark": {
     "page": "#0f1110", "surface": "#171a19", "text": "#f1f0ec", "text2": "#c4c2bb", "text3": "#a29f97",
     "line": "#2c302e", "grid": "#262a28", "accent": "#2dd4bf", "accentSoft": "#12332f",
     "warn": "#f59e0b", "good": "#4ade80", "bad": "#f87171",
     "cat1": "#3987e5", "cat2": "#d95926", "cat3": "#199e70", "cat4": "#c98500", "cat5": "#d55181", "cat6": "#008300", "cat7": "#9085e9", "cat8": "#e66767",
-    "seq1": "#184f95", "seq2": "#1c5cab", "seq3": "#256abf", "seq4": "#2a78d6", "seq5": "#3987e5", "seq6": "#6da7ec", "seq7": "#9ec5f4"
+    "seq1": "#184f95", "seq2": "#1c5cab", "seq3": "#256abf", "seq4": "#2a78d6", "seq5": "#3987e5", "seq6": "#6da7ec", "seq7": "#9ec5f4", "kindPerson": "#f5a524", "kindService": "#38bdf8", "kindData": "#a78bfa", "kindQueue": "#2dd4bf", "kindExternal": "#94a3b8", "kindDecision": "#818cf8", "glow": "#5eead4"
   }
 }

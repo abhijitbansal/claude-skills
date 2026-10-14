@@ -32,3 +32,12 @@ test('every theme defines every token in both modes and stays within the font bu
     assert.ok(fontPayloadBytes(t) <= 200 * 1024, `${name} fonts ${fontPayloadBytes(t)} bytes`);
   }
 });
+
+test('kind hues and the glow are tokens with their own CSS variables', () => {
+  for (const k of ['kindPerson', 'kindService', 'kindData', 'kindQueue', 'kindExternal', 'kindDecision', 'glow']) assert.ok(TOKENS.includes(k), k);
+  const css = themeCss(loadTheme('blueprint'));
+  assert.ok(css.includes('--k-person:#a3480a'), 'light person hue on :root');
+  assert.ok(css.includes('--k-service:#38bdf8'), 'dark service hue');
+  assert.ok(css.includes('--glow:#8fd0ff'), 'dark glow');
+  for (const v of ['--k-data', '--k-queue', '--k-external', '--k-decision']) assert.ok(css.includes(`${v}:`), v);
+});
