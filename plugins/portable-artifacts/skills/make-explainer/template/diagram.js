@@ -132,17 +132,16 @@
       focusEntry();
     }
     // The stage goes home before the presentation ends, so the final fit is measured inline. Full
-    // screen and the Find text go too, so the next Present starts clean (entering Play drops the
-    // selection by itself).
+    // screen goes too, and the viewer is reset (out of Play or Explore, selection, Find text, panel,
+    // zoom), whichever tab the overlay closed from, so the inline figure and the next Present start clean.
     function restore() {
       if (!isOpen) return;
       isOpen = false;
       controller.exitFullscreen();
-      if (findBox) { findBox.value = ''; findBox.dispatchEvent(new Event('input')); }
       slot.appendChild(stage);
       slot.style.height = '';
       tabStops(false);
-      controller.exit();
+      controller.reset();
       syncRegion();
       slot.scrollLeft = sideways; // an empty slot scrolled back to 0; the reader's place is restored
     }

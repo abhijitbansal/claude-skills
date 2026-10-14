@@ -535,3 +535,24 @@ test('a diagram with no beats focuses Close on open, not the hidden Play', async
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+test('closing Present from Explore returns the inline figure to its resting state: fitted, nothing selected, nothing dimmed', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(page1().url);
+  const before = await viewBox(page);
+  await page.locator('[data-dg-present]').click();
+  await page.locator(`${DLG} [data-pa-mode="explore"]`).click();
+  await page.locator(node('b')).click();
+  assert.equal(await page.locator(`${FIG} .pa-selected`).count(), 1, 'precondition: a node is selected');
+  await page.keyboard.press('+');
+  await page.keyboard.press('+');
+  assert.notEqual(await viewBox(page), before, 'precondition: the camera moved');
+  await page.locator('[data-dg-close]').click();
+  assert.equal(await open(page), false);
+  await page.waitForFunction((vb) => document.querySelector('[data-diagram] svg').getAttribute('viewBox') === vb, before, { timeout: 3000 }).catch(() => {});
+  assert.equal(await viewBox(page), before, 'the inline figure is fitted again');
+  assert.equal(await page.locator(`${FIG} .pa-selected`).count(), 0, 'no selection left');
+  assert.equal(await page.locator(`${FIG} .pa-dim`).count(), 0, 'nothing left dimmed');
+  assert.deepEqual(problems, []);
+  await context.close();
+});

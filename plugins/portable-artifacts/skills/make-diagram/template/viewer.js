@@ -143,6 +143,17 @@
       emit();
     }
 
+    // Back to the resting view an embedder starts from: out of Play, nothing selected, traced or found, the
+    // panel closed, the camera fitted.
+    function reset() {
+      story.exit();
+      trace.clear();
+      clearFind();
+      panel.paint();
+      camera.fit();
+      emit();
+    }
+
     // Typing a query drops the selection and route, or their painting would hide the filter.
     function applyFind() {
       if (findEl.value.trim() && (trace.selected() || trace.routed())) { trace.clear(); panel.paint(); }
@@ -332,7 +343,7 @@
     return {
       svg: svg, stage: stage, state: state,
       fit: camera.fit, zoomBy: camera.zoomBy, panBy: camera.panBy,
-      select: pick, closePanel: function () { closeSelection(null, false); },
+      select: pick, closePanel: function () { closeSelection(null, false); }, reset: reset,
       present: story.present, goTo: story.goTo, next: story.next, prev: story.prev, first: story.first, last: story.last,
       nextChapter: story.nextChapter, prevChapter: story.prevChapter, exit: story.exit, togglePresent: story.togglePresent,
       play: story.play, pause: story.pause, togglePlay: story.togglePlay, setSpeed: story.setSpeed, cycleSpeed: story.cycleSpeed,
