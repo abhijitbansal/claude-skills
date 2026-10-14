@@ -11,7 +11,7 @@
 // Fit: a page that shows its own legend over the stage (an element with
 // data-pa-legend inside it; the drawn legend is hidden there) fits the drawing
 // (data.drawing, the canvas without the legend band and the widening for a wide
-// legend row). Any other stage fits the whole canvas.
+// legend row) into the stage below that overlay. Any other stage fits the whole canvas.
 (function (global) {
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
@@ -54,16 +54,25 @@
     var tween = 0;
 
     // A stage with no size (hidden, not laid out yet) is treated as the
-    // diagram's own size, so nothing divides by zero.
+    // diagram's own size, so nothing divides by zero. `top` is how far the
+    // legend overlay reaches down the stage (0 when it is absent or hidden):
+    // the fit keeps the drawing below it.
     function size() {
       var r = stage.getBoundingClientRect();
-      return { w: r.width > 0 ? r.width : W, h: r.height > 0 ? r.height : H };
+      var o = overlay ? overlay.getBoundingClientRect() : null;
+      var top = r.height > 0 && o && o.height > 0 ? Math.min(r.height - 1, Math.max(0, Math.ceil(o.bottom - r.top))) : 0;
+      return { w: r.width > 0 ? r.width : W, h: r.height > 0 ? r.height : H, top: top };
     }
     function fitScale(sz) {
-      var s = Math.min(sz.w / (fitBox.w + 2 * FIT_MARGIN), sz.h / (fitBox.h + 2 * FIT_MARGIN));
+      var s = Math.min(sz.w / (fitBox.w + 2 * FIT_MARGIN), (sz.h - sz.top) / (fitBox.h + 2 * FIT_MARGIN));
       return s > 0 && isFinite(s) ? Math.min(s, MAX_FIT_SCALE) : 1;
     }
-    function fitCamera() { return { cx: fitBox.x + fitBox.w / 2, cy: fitBox.y + fitBox.h / 2, s: fitScale(size()) }; }
+    // The drawing's middle sits in the middle of the stage below the overlay: the camera centre is half the overlay's reach up from it.
+    function fitCamera() {
+      var sz = size();
+      var s = fitScale(sz);
+      return { cx: fitBox.x + fitBox.w / 2, cy: fitBox.y + fitBox.h / 2 - sz.top / (2 * s), s: s };
+    }
 
     function apply() {
       var sz = size();

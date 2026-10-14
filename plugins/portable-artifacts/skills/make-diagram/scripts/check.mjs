@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // node scripts/check.mjs <page.html> [--json]
 // Opens a built page at 1440 and 390 px and fails on console errors, page overflow,
-// text overflowing its node box (> 2 px) or a story that cannot reach its last beat.
+// text overflowing its node box (> 2 px), a node or participant under the legend
+// overlay at first paint, or a story that cannot reach its last beat.
 // exit 0 ok or skipped (no browser), 1 problems, 2 usage/IO
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,6 +15,7 @@ const OPTIONS = { json: { type: 'boolean' } };
 const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 390, height: 780 }];
 const READY_MS = 5000;
 const TEXT_TOLERANCE_PX = 2;
+const COVER_TOLERANCE_PX = 1; // overlap narrower than this on either side is a shared border, not a cover
 const ACTION_MS = 5000; // default timeout for every page action and navigation
 const SELECTOR_MS = 2000; // reads of elements the runtime should already have drawn
 const WATCHDOG_MS = 60000; // wall-clock cap for the whole check
@@ -33,6 +35,22 @@ const overflowingText = (tol) => {
       worst = Math.max(worst, box.x - b.x, box.y - b.y, b.x + b.width - (box.x + box.width), b.y + b.height - (box.y + box.height));
     }
     if (worst > tol) bad.push({ id: node.dataset.id, by: worst });
+  }
+  return bad;
+};
+
+// Runs in the page. Every node (or participant) the HTML legend overlay sits over by more than tol px on both axes, with how much of it.
+const coveredByLegend = (tol) => {
+  const overlay = document.querySelector('[data-pa-legend]');
+  if (!overlay) return [];
+  const l = overlay.getBoundingClientRect();
+  if (l.width === 0 || l.height === 0) return [];
+  const bad = [];
+  for (const node of document.querySelectorAll('.pa-node')) {
+    const b = node.getBoundingClientRect();
+    const w = Math.min(b.right, l.right) - Math.max(b.left, l.left);
+    const h = Math.min(b.bottom, l.bottom) - Math.max(b.top, l.top);
+    if (w > tol && h > tol) bad.push({ id: node.dataset.id, share: (w * h) / (b.width * b.height) });
   }
   return bad;
 };
@@ -67,6 +85,9 @@ async function checkViewport(browser, url, viewport) {
     }
     for (const { id, by } of await page.evaluate(overflowingText, TEXT_TOLERANCE_PX)) {
       problems.push(`${label}: node "${id}": text overflows its box by ${by.toFixed(1)} px`);
+    }
+    for (const { id, share } of await page.evaluate(coveredByLegend, COVER_TOLERANCE_PX)) {
+      problems.push(`${label}: node "${id}" is ${Math.round(share * 100)}% under the legend overlay`);
     }
     const beats = await page.evaluate(() => (JSON.parse(document.getElementById('pa-data').textContent).beats || []).length);
     if (beats > 0) await checkPresentation(page, beats, label, problems);

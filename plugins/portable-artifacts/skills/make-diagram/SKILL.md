@@ -22,7 +22,7 @@ First use: if `<skill-dir>/node_modules` is missing, say it is a one-time local 
 2. Icons and emoji are optional. Find an icon: `node <skill-dir>/scripts/icons.mjs search <word>` prints refs like `lucide:database` or `brand:postgresql`. Use a ref exactly as printed. Skip icons if unsure: most kinds have a default icon (see `<skill-dir>/references/kinds.md`); flow `start`, `end`, `decision` and state `start`, `end`, `choice` are drawn as shapes and take no icon or emoji.
 3. `node <skill-dir>/scripts/validate.mjs diagram.json`. Fix every line it prints (a JSON path, the problem, the fix) and rerun until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage error.
 4. `node <skill-dir>/scripts/build.mjs diagram.json` prints the HTML path. Default folder is `~/.agent/diagrams/` (or `$PA_OUTPUT_DIR`); `--out <file.html|dir>` picks another; `--theme paper|blueprint|ink|editorial` overrides the theme (default `blueprint`).
-5. `node <skill-dir>/scripts/check.mjs <printed path>` opens the page at desktop and phone width and fails on overflow or console errors. It skips cleanly (exit 0) when Playwright or a browser is missing; do not install either for it.
+5. `node <skill-dir>/scripts/check.mjs <printed path>` opens the page at desktop and phone width and fails on overflow, console errors or a node under the legend overlay. It skips cleanly (exit 0) when Playwright or a browser is missing; do not install either for it.
 6. Report: the HTML path, one line on what the diagram shows, and "Play story (or `P`) opens beat 1, Space plays it, `E` explores, `F` is full screen".
 
 For a change ("rename the cache", "add a beat for the retry"), edit only those fields of `diagram.json`, then validate and build again.

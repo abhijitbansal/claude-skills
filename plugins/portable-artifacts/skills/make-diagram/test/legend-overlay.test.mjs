@@ -5,7 +5,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { legendItems } from '../scripts/lib/legend.mjs';
-import { launchBrowser, haveBrowser, buildPage, example } from './helpers/browser.mjs';
+import { launchBrowser, haveBrowser, buildPage, example, EXAMPLES } from './helpers/browser.mjs';
 import { openPage, closeBrowser, skipUnlessBrowser } from './helpers/page.mjs';
 
 let browser;
@@ -52,6 +52,28 @@ test('overlay: fixed size at fit and zoom, top right, in-SVG copy hidden on scre
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+// ---- the camera fits the drawing below the overlay: nothing sits under it at first paint ------------------------
+
+const rectsAtFirstPaint = (page) => page.evaluate(() => {
+  const r = (el) => { const b = el.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom }; };
+  return { legend: r(document.querySelector('[data-pa-legend]')), stage: r(document.getElementById('pa-stage')), nodes: [...document.querySelectorAll('.pa-node')].map((n) => ({ id: n.dataset.id, ...r(n) })) };
+});
+const overlap = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+
+for (const name of EXAMPLES) {
+  for (const [width, height] of [[1024, 768], [390, 780]]) {
+    test(`${name} at ${width}x${height}, first paint: no node or participant sits under the legend overlay`, async (t) => {
+      if (await skipUnlessBrowser(t)) return;
+      const { page, problems, context } = await openPage(buildPage(example(name), { name: `overlap-${name}` }).url, { width, height });
+      const { legend, nodes } = await rectsAtFirstPaint(page);
+      const covered = nodes.filter((n) => overlap(n, legend) > 0).map((n) => `${n.id} ${Math.round(100 * overlap(n, legend) / ((n.right - n.left) * (n.bottom - n.top)))}%`);
+      assert.deepEqual(covered, []);
+      assert.deepEqual(problems, []);
+      await context.close();
+    });
+  }
+}
 
 // ---- the page fits the drawing, not the canvas widened for the legend row it hides ----------------------------
 
