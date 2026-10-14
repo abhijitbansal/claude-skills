@@ -5,7 +5,7 @@
 // page chrome in here: the page's own script (toolbar.js) and make-explainer
 // drive it through the controller that mount returns.
 //
-//   var ctl = PADiagram.mount(stageElement, data, { keys, caption, chapters, panel, tip, onChange });
+//   var ctl = PADiagram.mount(stageElement, data, { keys, caption, chapters, panel, tip, find, found, onChange });
 //
 // stageElement  holds the diagram <svg> (from buildDiagram) and sizes it.
 // data          buildDiagram(spec).data (scripts/lib/data.mjs); nothing is fetched.
@@ -14,10 +14,11 @@
 // chapters      element the chapter chips are appended to (optional).
 // panel         the Explore side panel (see panel.js; optional).
 // tip           the hover tooltip element, inside the stage (optional).
+// find          the Find <input> (optional); found: the row its matches go in (optional).
 // onChange      called with ctl.state() after any change.
 //
 // Keys: Space plays and pauses, arrows step the beats, P enters Play, E leaves
-// it, Escape closes the panel, else leaves Play, else clears the trace.
+// it, / focuses Find, Escape closes the panel, else leaves Play, else clears.
 // Every state class (pa-dim, pa-on, pa-hl, pa-hidden, pa-active, pa-selected,
 // pa-route, pa-animate, and pa-playing on the stage) is styled by diagramCss()
 // or the page; the modules only toggle them.
@@ -51,13 +52,14 @@
     if (!svg) return null;
     var doc = global.document;
     var els = elementsOf(svg);
+    var findEl = options.find || null;
     var edgeEnds = PADiagram.dict(data.edges);
     var camera = PADiagram.camera(stage, svg, data, { onApply: emit });
     var trace = PADiagram.trace(svg, data, els, { isOff: function () { return story.isPresenting(); } });
     // Entering Play drops the selection and the route (the panel hides with them); each beat repaints the chrome.
     var story = PADiagram.story(stage, svg, data, els, camera, { onStep: function () { if (story.isPresenting()) trace.clear(); transport.paint(); trace.refresh(); panel.paint(); emit(); } });
     var transport = PADiagram.transport({ caption: options.caption || null, chapters: options.chapters || null }, data, story);
-    var panel = PADiagram.panel({ panel: options.panel || null, tip: options.tip || null, found: null }, data, els, trace, {
+    var panel = PADiagram.panel({ panel: options.panel || null, tip: options.tip || null, found: options.found || null }, data, els, trace, {
       isOff: function () { return story.isPresenting(); },
       onPick: pick,
       onBeat: function (i) { story.present(i); },
@@ -135,11 +137,37 @@
       emit();
     }
 
+    // Typing a query drops the selection and route, or their painting would hide the filter.
+    function applyFind() {
+      if (findEl.value.trim() && (trace.selected() || trace.routed())) { trace.clear(); panel.paint(); }
+      var hits = trace.find(findEl.value);
+      panel.found(hits, findEl.value, trace.findCount() - hits.length);
+      emit();
+    }
+    function clearFind() {
+      if (findEl) findEl.value = '';
+      trace.find('');
+      panel.found([], '');
+      emit();
+    }
+    if (findEl) {
+      findEl.addEventListener('input', applyFind);
+      // The field keeps its own keys: onKey below steps aside for form fields.
+      findEl.addEventListener('keydown', function (e) {
+        if (e.isComposing) return;
+        if (e.key === 'Enter') {
+          var hits = trace.find(findEl.value);
+          if (hits.length) { e.preventDefault(); pick(hits[0].id); }
+        } else if (e.key === 'Escape') { e.preventDefault(); story.pause(); clearFind(); findEl.blur(); }
+      });
+    }
+
     // ---- pointer: pan, pinch, click, hover ------------------------------------------------
     var pointers = {};
     var dragging = false;
     var downAt = null;
     var downTarget = null;
+    var downShift = false;
     var lastPinch = 0;
 
     function pointerCount() { return Object.keys(pointers).length; }
@@ -148,7 +176,7 @@
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
       story.pause(); // a hand on the canvas stops the story (nothing happens when it is not running)
-      if (pointerCount() === 1) { downAt = { x: e.clientX, y: e.clientY }; downTarget = e.target; dragging = false; }
+      if (pointerCount() === 1) { downAt = { x: e.clientX, y: e.clientY }; downTarget = e.target; downShift = e.shiftKey; dragging = false; }
       lastPinch = 0;
     });
     stage.addEventListener('pointermove', function (e) {
@@ -184,7 +212,7 @@
       var wasDrag = dragging;
       dragging = false;
       stage.classList.remove('pa-grabbing');
-      if (!wasDrag && !cancelled) click(downTarget);
+      if (!wasDrag && !cancelled) click(downTarget, downShift);
       downAt = null;
       downTarget = null;
     }
@@ -193,10 +221,14 @@
 
     // In Play a click on the canvas selects nothing (its pointerdown paused the
     // story). In Explore it selects the node or edge under it (again: deselects;
-    // empty canvas: deselects).
-    function click(target) {
+    // empty canvas: deselects); with Shift and a node already selected, it asks
+    // for the route from that node to this one.
+    function click(target, shift) {
       if (story.isPresenting()) return;
-      trace.toggle(trace.idAt(target));
+      var id = trace.idAt(target);
+      var from = trace.selected() || (trace.routed() && trace.routed().from);
+      if (shift && id && from && id !== from && els.nodes[id] && els.nodes[from]) trace.route(from, id);
+      else trace.toggle(id);
       panel.paint();
       emit();
     }
@@ -230,8 +262,9 @@
     // Space plays and pauses (on the canvas and on every transport control; a
     // button elsewhere keeps Space for itself); arrows, PageUp/PageDown, Home
     // and End move between beats; P enters Play, E leaves it; F fits; A toggles
-    // the edge animation; Escape closes the panel, else leaves Play, else clears
-    // the trace. In Play any key but Space pauses, in a form field too.
+    // the edge animation; / focuses Find; Escape closes the panel, else leaves
+    // Play, else clears the Find filter, else clears the trace. In Play any key
+    // but Space pauses, in a form field too.
     var KEEPS_PLAYING = { ' ': true, Tab: true, Shift: true, CapsLock: true };
     function onKey(e) {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -250,9 +283,11 @@
       else if (k === 'p' || k === 'P') { if (!inPlay) story.present(0); }
       else if (k === 'e' || k === 'E') story.exit();
       else if (k === 'a' || k === 'A') { if (!camera.reduced()) toggleAnimate(); }
+      else if (k === '/' && findEl) findEl.focus();
       else if (k === 'Escape') {
         if (trace.selected() || trace.routed()) closeSelection(t, true);
         else if (inPlay) story.exit();
+        else if (findEl && findEl.value.trim()) clearFind();
         else if (trace.active()) {
           var hadFocus = trace.hasFocus();
           trace.clear();
@@ -268,7 +303,7 @@
       else if (k === 'ArrowRight') camera.panBy(PAN_PX, 0);
       else if (k === 'ArrowUp') camera.panBy(0, -PAN_PX);
       else if (k === 'ArrowDown') camera.panBy(0, PAN_PX);
-      else if ((k === 'Enter' || k === ' ') && t && t.classList && t.classList.contains('pa-node')) click(t);
+      else if ((k === 'Enter' || k === ' ') && t && t.classList && t.classList.contains('pa-node')) click(t, e.shiftKey);
       else handled = false;
       if (handled) e.preventDefault();
     }

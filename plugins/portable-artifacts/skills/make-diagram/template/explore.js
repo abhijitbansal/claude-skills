@@ -126,6 +126,7 @@
       refresh();
       return hits.slice(0, FIND_MAX);
     }
+    function findCount() { return findIds ? findIds.length : 0; }
     // What leaves `id` along the arrows and what arrives, as [{ edge, other }]
     // (a two-headed or self edge appears in both lists).
     function links(id) {
@@ -163,11 +164,11 @@
       toggle: toggle,
       route: route,
       find: find,
+      findCount: findCount,
       links: links,
       counts: counts,
       selected: function () { return selectId; },
       routed: function () { return routeState; },
-      finding: function () { return !!findIds; },
       active: function () { return selectId || hoverId || focusId; },
       hasFocus: function () { return !!focusId; },
       clear: function () { selectId = null; routeState = null; hoverId = null; refresh(); },

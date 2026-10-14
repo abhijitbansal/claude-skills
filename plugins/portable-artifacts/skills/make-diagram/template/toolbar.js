@@ -67,7 +67,7 @@
     setHash(state);
   }
 
-  var ctl = window.PADiagram.mount(stage, data, { keys: document, caption: one('[data-pa-caption]'), chapters: one('[data-pa-chapters]'), panel: one('[data-pa-panel]'), tip: one('[data-pa-tip]'), onChange: sync });
+  var ctl = window.PADiagram.mount(stage, data, { keys: document, caption: one('[data-pa-caption]'), chapters: one('[data-pa-chapters]'), panel: one('[data-pa-panel]'), tip: one('[data-pa-tip]'), find: one('[data-pa-find]'), found: one('[data-pa-found]'), onChange: sync });
   var act = {
     fit: function () { ctl.fit(); },
     'zoom-in': function () { ctl.zoomBy(1.25); },

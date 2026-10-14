@@ -183,7 +183,7 @@
     }
 
     // ---- the Find matches -----------------------------------------------------------------------
-    function found(hits, query) {
+    function found(hits, query, more) {
       if (!foundEl) return;
       empty(foundEl);
       foundEl.hidden = !String(query || '').trim();
@@ -196,6 +196,7 @@
         b.addEventListener('click', function () { hooks.onPick(h.id); });
         foundEl.appendChild(b);
       });
+      if (more > 0) foundEl.appendChild(el('span', 'panel-none', '+' + more + ' more'));
     }
 
     paint();

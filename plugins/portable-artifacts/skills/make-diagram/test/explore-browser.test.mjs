@@ -339,3 +339,263 @@ test('the panel title announces itself politely and is a focus fallback', async 
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+// ---- routes (Task 5) --------------------------------------------------------------------------
+
+const routeIds = (page) => page.evaluate(() => [...document.querySelectorAll('.pa-route')].map((e) => e.dataset.id).sort());
+
+test('shift-click traces the shortest route along the arrows: hops listed in order, both ends and the hops lit, the rest dim', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('architecture').url);
+  await page.click('.pa-node[data-id="web"]');
+  await page.click('.pa-node[data-id="db"]', { modifiers: ['Shift'] });
+  assert.equal(await title(page), 'Route');
+  assert.equal(await page.textContent('.panel-kind'), 'Web app → Orders DB');
+  assert.deepEqual(await texts(page, '[data-pa-hops] li'), ['Web app → Checkout API · POST /checkout', 'Checkout API → Orders DB · writes order']);
+  assert.equal(await page.locator('.panel-note').count(), 0, 'along the arrows: no caveat');
+  assert.deepEqual(await routeIds(page), ['api', 'db', 'edge-0', 'edge-1', 'web']);
+  assert.deepEqual(await dimmedNodes(page), ['pay']);
+  assert.deepEqual(await selectedIds(page), [], 'a route replaces the selection');
+  await page.click('.pa-node[data-id="pay"]');
+  assert.equal(await title(page), 'Payments', 'a plain click ends the route and selects');
+  assert.deepEqual(await routeIds(page), []);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('against the arrows the route ignores direction and says so; Shift+Enter on a focused node routes too', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('architecture').url);
+  await page.click('.pa-node[data-id="pay"]');
+  await page.click('.pa-node[data-id="web"]', { modifiers: ['Shift'] });
+  assert.equal(await title(page), 'Route');
+  assert.equal(await page.textContent('.panel-note'), 'ignores arrow direction');
+  assert.deepEqual(await texts(page, '[data-pa-hops] li'), ['Payments → Checkout API · charges card', 'Checkout API → Web app · POST /checkout']);
+  await page.click('.pa-node[data-id="web"]');
+  await page.focus('.pa-node[data-id="db"]');
+  await page.keyboard.press('Shift+Enter');
+  assert.equal(await title(page), 'Route');
+  assert.equal(await page.textContent('.panel-kind'), 'Web app → Orders DB');
+  await page.keyboard.press('Escape');
+  assert.equal(await title(page), 'Map', 'Escape closes the route');
+  assert.deepEqual(await routeIds(page), []);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('a route through a group names the group and lights it; two nodes nothing joins say so', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const spec = {
+    title: 'Via a group', type: 'architecture',
+    groups: [{ id: 'g', label: 'The group' }],
+    nodes: [{ id: 'a', label: 'A' }, { id: 'c', label: 'C', group: 'g' }, { id: 'b', label: 'B' }, { id: 'd', label: 'D' }],
+    edges: [{ from: 'a', to: 'g', label: 'in' }, { from: 'g', to: 'b', label: 'out' }],
+  };
+  const { page, problems, context } = await openPage(buildPage(spec, { name: 'via-group' }).url);
+  await page.click('.pa-node[data-id="a"]');
+  await page.click('.pa-node[data-id="b"]', { modifiers: ['Shift'] });
+  assert.deepEqual(await texts(page, '[data-pa-hops] li'), ['A → The group · in', 'The group → B · out']);
+  assert.deepEqual(await routeIds(page), ['a', 'b', 'edge-0', 'edge-1', 'g']);
+  assert.ok(await page.evaluate(() => document.querySelector('.pa-group[data-id="g"]').classList.contains('pa-route')));
+  await page.click('.pa-node[data-id="a"]');
+  await page.click('.pa-node[data-id="d"]', { modifiers: ['Shift'] });
+  assert.equal(await title(page), 'Route');
+  assert.equal(await page.textContent('.panel-note'), 'No route between A and D.');
+  assert.equal(await page.locator('[data-pa-hops]').count(), 0);
+  assert.deepEqual(await routeIds(page), ['a', 'd'], 'both ends stay lit');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('shift-click with nothing selected, on the selected node itself, or on an edge selects instead of routing', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.click('.pa-node[data-id="app"]', { modifiers: ['Shift'] });
+  assert.equal(await title(page), 'Mobile app', 'nothing was selected: a plain select');
+  await page.click('.pa-node[data-id="app"]', { modifiers: ['Shift'] });
+  assert.equal(await title(page), 'Map', 'the same node: toggled off');
+  await page.click('.pa-node[data-id="app"]');
+  await page.click('.pa-edge-label[data-edge="place"]', { modifiers: ['Shift'] });
+  assert.equal(await title(page), 'POST /orders', 'an edge is selected, never routed to');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('a route export carries no pa-route', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('architecture').url);
+  await page.click('.pa-node[data-id="web"]');
+  await page.click('.pa-node[data-id="db"]', { modifiers: ['Shift'] });
+  assert.equal(await title(page), 'Route', 'a route is showing before the export');
+  assert.ok((await routeIds(page)).length > 0, 'and it is drawn');
+  const [d] = await Promise.all([page.waitForEvent('download'), page.click('[data-export="svg"]')]);
+  const text = fs.readFileSync(await d.path(), 'utf8');
+  assert.ok(!/class="[^"]*\bpa-(selected|route|dim|on)\b/.test(text));
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+// ---- Find and the count chips (Task 6) --------------------------------------------------------
+
+const chips = (page) => texts(page, '[data-pa-tally] .pa-chip');
+const foundTexts = (page) => texts(page, '[data-pa-found] .pa-chip');
+
+test('nothing selected: count chips by kind, the stories and the beats, and the hint; a walkthrough has no stories chip', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const story = await openPage(built('story').url);
+  assert.deepEqual(await chips(story.page), ['1 user', '1 client', '1 gateway', '1 service', '1 database', '1 queue', '1 external', '2 stories', '9 beats']);
+  assert.equal(await story.page.textContent('[data-pa-empty] .hint'), 'Click a node or edge. Shift-click a second node to trace a path.');
+  await story.page.click('.pa-node[data-id="orders"]');
+  assert.equal(await story.page.isHidden('[data-pa-empty]'), true, 'the empty state gives way to the selection');
+  await story.page.click('[data-pa-panel-close]');
+  assert.equal(await story.page.isVisible('[data-pa-empty]'), true);
+  assert.deepEqual(story.problems, []);
+  await story.context.close();
+
+  const arch = await openPage(built('architecture').url);
+  assert.deepEqual(await chips(arch.page), ['1 client', '1 service', '1 database', '1 external', '3 beats'], 'groups are not a kind; a step-derived timeline is not a story');
+  await arch.context.close();
+});
+
+test('/ focuses Find; typing filters the canvas and lists matches; Enter selects the first and fits the camera; a chip picks; Escape clears', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  assert.equal(await page.isHidden('[data-pa-found]'), true);
+  assert.equal(await page.getAttribute('[data-pa-found]', 'aria-live'), 'polite');
+  assert.equal(await page.getAttribute('[data-pa-find]', 'aria-keyshortcuts'), '/');
+  assert.equal(await page.getAttribute('[data-pa-find]', 'aria-label'), 'Find a node');
+  await page.keyboard.press('/');
+  assert.ok(await page.evaluate(() => document.activeElement === document.querySelector('[data-pa-find]')), '/ focuses the box');
+  assert.equal(await page.inputValue('[data-pa-find]'), '', 'and is not typed into it');
+  await page.keyboard.type('or');
+  assert.deepEqual(await foundTexts(page), ['Orders service', 'Orders DB']);
+  assert.deepEqual(await dimmedNodes(page), ['app', 'bus', 'gateway', 'shopper', 'warehouse']);
+  const litEdges = await page.evaluate(() => [...document.querySelectorAll('.pa-edge:not(.pa-dim)')].map((e) => e.dataset.id));
+  assert.deepEqual(litEdges, ['edge-3'], 'only the edge between two matches stays lit');
+  await page.keyboard.press('Enter');
+  assert.equal(await title(page), 'Orders service', 'Enter selects the first match');
+  assert.deepEqual(await selectedIds(page), ['orders']);
+  await settle(page);
+  assert.ok(holds(await viewBox(page), await boxOf(page, ['orders'])), 'and fits the camera on it');
+  await page.focus('[data-pa-find]');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.inputValue('[data-pa-find]'), '', 'Escape in the box clears it');
+  assert.equal(await page.isHidden('[data-pa-found]'), true);
+  assert.ok(await page.evaluate(() => document.activeElement !== document.querySelector('[data-pa-find]')), 'and leaves it');
+  assert.equal(await title(page), 'Orders service', 'the selection stays');
+  await page.fill('[data-pa-find]', 'bus');
+  await page.click('[data-pa-pick="bus"]');
+  assert.equal(await title(page), 'Event bus', 'a result chip picks its node');
+  await page.fill('[data-pa-find]', 'zz');
+  assert.deepEqual(await texts(page, '[data-pa-found] .panel-none'), ['No node matches']);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('Find matches regex characters literally; a match found while in Play leaves Play; Escape on the stage clears a lingering filter', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const spec = {
+    title: 'Caches', type: 'architecture',
+    nodes: [{ id: 'hot', label: 'Cache [hot]', kind: 'cache' }, { id: 'cold', label: 'Cache (cold)', kind: 'cache' }, { id: 'api', label: 'API' }],
+    edges: [{ from: 'api', to: 'hot' }, { from: 'api', to: 'cold' }],
+    stories: [{ id: 's', title: 'S', beats: [{ title: 'Warm', from: 'api', to: 'hot' }] }],
+  };
+  const { page, problems, context } = await openPage(buildPage(spec, { name: 'find-regex' }).url);
+  await page.fill('[data-pa-find]', '[h');
+  assert.deepEqual(await foundTexts(page), ['Cache [hot]']);
+  await page.fill('[data-pa-find]', '(c');
+  assert.deepEqual(await foundTexts(page), ['Cache (cold)']);
+  await page.fill('[data-pa-find]', 'CACHE');
+  assert.deepEqual(await foundTexts(page), ['Cache [hot]', 'Cache (cold)'], 'case does not matter');
+  assert.deepEqual(await dimmedNodes(page), ['api']);
+  await page.evaluate(() => document.activeElement.blur());
+  await page.keyboard.press('Escape');
+  assert.deepEqual(await dimmedNodes(page), [], 'Escape on the stage clears the filter');
+  assert.equal(await page.inputValue('[data-pa-find]'), '');
+  await page.keyboard.press('p');
+  assert.equal(await page.isVisible('[data-pa-caption]'), true);
+  await page.fill('[data-pa-find]', 'cold');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.isVisible('[data-pa-caption]'), false, 'picking a match leaves Play');
+  assert.equal(await title(page), 'Cache (cold)');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('Tab still reaches the nodes after the Find box', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('flow').url);
+  let reached = false;
+  for (let i = 0; i < 24 && !reached; i++) {
+    await page.keyboard.press('Tab');
+    reached = await page.evaluate(() => !!document.activeElement?.classList?.contains('pa-node'));
+  }
+  assert.ok(reached, 'a node takes focus within 24 Tabs');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('a Find that matches nothing: Escape on the stage still clears the field and hides the row', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.fill('[data-pa-find]', 'zz');
+  await page.evaluate(() => document.activeElement.blur());
+  await page.keyboard.press('Escape');
+  assert.equal(await page.inputValue('[data-pa-find]'), '');
+  assert.equal(await page.isHidden('[data-pa-found]'), true);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('typing in Find with a node selected drops the selection so the filter shows', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.click('.pa-node[data-id="app"]');
+  await page.fill('[data-pa-find]', 'or');
+  assert.deepEqual(await selectedIds(page), [], 'the selection is gone');
+  assert.equal(await title(page), 'Map');
+  assert.deepEqual(await dimmedNodes(page), ['app', 'bus', 'gateway', 'shopper', 'warehouse']);
+  assert.deepEqual(await foundTexts(page), ['Orders service', 'Orders DB']);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('a further shift-click while a route shows re-targets from the route start', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.click('.pa-node[data-id="app"]');
+  await page.click('.pa-node[data-id="orders"]', { modifiers: ['Shift'] });
+  assert.equal(await title(page), 'Route');
+  await page.click('.pa-node[data-id="db"]', { modifiers: ['Shift'] });
+  assert.equal(await title(page), 'Route', 'still a route, not a plain select');
+  const ids = await routeIds(page);
+  assert.ok(ids.includes('app') && ids.includes('db'), 'from the first start to the new end');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('Escape in the Find field during Play pauses the story', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.keyboard.press('p');
+  await page.click('[data-pa-play]');
+  assert.equal(await playing(page), true, 'precondition: playing');
+  await page.focus('[data-pa-find]');
+  await page.keyboard.press('Escape');
+  assert.equal(await playing(page), false);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('more matches than the list holds: the rest is a plain "+N more" text, not a button', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const nodes = Array.from({ length: 11 }, (_, i) => ({ id: `n${i}`, label: `Worker ${i}` }));
+  const spec = { title: 'Pool', type: 'architecture', nodes, edges: [{ from: 'n0', to: 'n1' }] };
+  const { page, problems, context } = await openPage(buildPage(spec, { name: 'find-many' }).url);
+  await page.fill('[data-pa-find]', 'worker');
+  assert.equal((await foundTexts(page)).length, 8);
+  assert.deepEqual(await texts(page, '[data-pa-found] .panel-none'), ['+3 more']);
+  assert.equal(await page.locator('[data-pa-found] button:has-text("more")').count(), 0);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
