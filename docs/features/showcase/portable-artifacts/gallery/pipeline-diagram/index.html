@@ -22,14 +22,16 @@
 </style>
 <style id="pa-diagram-css">
 .pa-diagram{display:block;font-family:var(--font);font-size:14px;color:var(--text)}
-.pa-group-box{fill:color-mix(in srgb,var(--text-3) 7%,transparent);stroke:var(--line);stroke-width:1}
+.pa-group-box{fill:var(--surface);stroke:var(--line);stroke-width:1}
+@supports (color: color-mix(in srgb, red, red)){.pa-group-box{fill:color-mix(in srgb,var(--text-3) 7%,transparent)}}
 .pa-lane{stroke:none}
 .pa-group-label{fill:var(--text-2);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
 .pa-wire{fill:none;stroke:var(--text-3);stroke-width:1.25;stroke-linejoin:round}
 .pa-edge-dashed .pa-wire{stroke-dasharray:6 4}
 .pa-edge-async .pa-wire{stroke-dasharray:1.5 4;stroke-linecap:round}
-.pa-arrow-fill{fill:context-stroke;stroke:none}
-.pa-arrow-open{fill:none;stroke:context-stroke;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}
+.pa-hit{fill:none;stroke:transparent;stroke-width:12px;vector-effect:non-scaling-stroke;pointer-events:visibleStroke}
+.pa-arrow-fill{fill:var(--text-3);fill:context-stroke;stroke:none}
+.pa-arrow-open{fill:none;stroke:var(--text-3);stroke:context-stroke;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}
 .pa-edge-plate{fill:var(--surface);stroke:var(--line);stroke-width:1}
 .pa-edge-text{fill:var(--text-2);font-size:12px;font-weight:400}
 .pa-node{outline:none}
@@ -52,43 +54,44 @@
 .pa-frame-label{fill:var(--text-2);font-size:12px;font-weight:400}
 .pa-seq-note-box{fill:var(--surface);stroke:var(--text-3);stroke-width:1}
 .pa-seq-note-text{fill:var(--text-2);font-family:var(--mono);font-size:11px;font-weight:400}
-.pa-family-person .pa-shape{fill:color-mix(in srgb,var(--k-person) 10%,var(--surface));stroke:var(--k-person)}
+.pa-family-person .pa-shape{fill:var(--surface);stroke:var(--k-person)}
 .pa-family-person .pa-decor{stroke:var(--k-person)}
-.pa-family-person .pa-tile{fill:color-mix(in srgb,var(--k-person) 18%,var(--surface))}
+.pa-family-person .pa-tile{fill:var(--surface)}
 .pa-family-person .pa-icon{color:var(--k-person)}
 .pa-family-person .pa-type{fill:var(--k-person)}
 .pa-edge[data-family="person"] .pa-wire{stroke:var(--k-person)}
-.pa-family-service .pa-shape{fill:color-mix(in srgb,var(--k-service) 10%,var(--surface));stroke:var(--k-service)}
+.pa-family-service .pa-shape{fill:var(--surface);stroke:var(--k-service)}
 .pa-family-service .pa-decor{stroke:var(--k-service)}
-.pa-family-service .pa-tile{fill:color-mix(in srgb,var(--k-service) 18%,var(--surface))}
+.pa-family-service .pa-tile{fill:var(--surface)}
 .pa-family-service .pa-icon{color:var(--k-service)}
 .pa-family-service .pa-type{fill:var(--k-service)}
 .pa-edge[data-family="service"] .pa-wire{stroke:var(--k-service)}
-.pa-family-data .pa-shape{fill:color-mix(in srgb,var(--k-data) 10%,var(--surface));stroke:var(--k-data)}
+.pa-family-data .pa-shape{fill:var(--surface);stroke:var(--k-data)}
 .pa-family-data .pa-decor{stroke:var(--k-data)}
-.pa-family-data .pa-tile{fill:color-mix(in srgb,var(--k-data) 18%,var(--surface))}
+.pa-family-data .pa-tile{fill:var(--surface)}
 .pa-family-data .pa-icon{color:var(--k-data)}
 .pa-family-data .pa-type{fill:var(--k-data)}
 .pa-edge[data-family="data"] .pa-wire{stroke:var(--k-data)}
-.pa-family-queue .pa-shape{fill:color-mix(in srgb,var(--k-queue) 10%,var(--surface));stroke:var(--k-queue)}
+.pa-family-queue .pa-shape{fill:var(--surface);stroke:var(--k-queue)}
 .pa-family-queue .pa-decor{stroke:var(--k-queue)}
-.pa-family-queue .pa-tile{fill:color-mix(in srgb,var(--k-queue) 18%,var(--surface))}
+.pa-family-queue .pa-tile{fill:var(--surface)}
 .pa-family-queue .pa-icon{color:var(--k-queue)}
 .pa-family-queue .pa-type{fill:var(--k-queue)}
 .pa-edge[data-family="queue"] .pa-wire{stroke:var(--k-queue)}
-.pa-family-external .pa-shape{fill:color-mix(in srgb,var(--k-external) 10%,var(--surface));stroke:var(--k-external)}
+.pa-family-external .pa-shape{fill:var(--surface);stroke:var(--k-external)}
 .pa-family-external .pa-decor{stroke:var(--k-external)}
-.pa-family-external .pa-tile{fill:color-mix(in srgb,var(--k-external) 18%,var(--surface))}
+.pa-family-external .pa-tile{fill:var(--surface)}
 .pa-family-external .pa-icon{color:var(--k-external)}
 .pa-family-external .pa-type{fill:var(--k-external)}
 .pa-edge[data-family="external"] .pa-wire{stroke:var(--k-external)}
-.pa-family-decision .pa-shape{fill:color-mix(in srgb,var(--k-decision) 10%,var(--surface));stroke:var(--k-decision)}
+.pa-family-decision .pa-shape{fill:var(--surface);stroke:var(--k-decision)}
 .pa-family-decision .pa-decor{stroke:var(--k-decision)}
-.pa-family-decision .pa-tile{fill:color-mix(in srgb,var(--k-decision) 18%,var(--surface))}
+.pa-family-decision .pa-tile{fill:var(--surface)}
 .pa-family-decision .pa-icon{color:var(--k-decision)}
 .pa-family-decision .pa-type{fill:var(--k-decision)}
 .pa-edge[data-family="decision"] .pa-wire{stroke:var(--k-decision)}
 .pa-family-bare .pa-shape{fill:var(--surface);stroke:var(--line)}
+@supports (color: color-mix(in srgb, red, red)){.pa-family-person .pa-shape{fill:color-mix(in srgb,var(--k-person) 10%,var(--surface))}.pa-family-person .pa-tile{fill:color-mix(in srgb,var(--k-person) 18%,var(--surface))}.pa-family-service .pa-shape{fill:color-mix(in srgb,var(--k-service) 10%,var(--surface))}.pa-family-service .pa-tile{fill:color-mix(in srgb,var(--k-service) 18%,var(--surface))}.pa-family-data .pa-shape{fill:color-mix(in srgb,var(--k-data) 10%,var(--surface))}.pa-family-data .pa-tile{fill:color-mix(in srgb,var(--k-data) 18%,var(--surface))}.pa-family-queue .pa-shape{fill:color-mix(in srgb,var(--k-queue) 10%,var(--surface))}.pa-family-queue .pa-tile{fill:color-mix(in srgb,var(--k-queue) 18%,var(--surface))}.pa-family-external .pa-shape{fill:color-mix(in srgb,var(--k-external) 10%,var(--surface))}.pa-family-external .pa-tile{fill:color-mix(in srgb,var(--k-external) 18%,var(--surface))}.pa-family-decision .pa-shape{fill:color-mix(in srgb,var(--k-decision) 10%,var(--surface))}.pa-family-decision .pa-tile{fill:color-mix(in srgb,var(--k-decision) 18%,var(--surface))}}
 .pa-node .pa-shape-filled-dot{fill:var(--text-2);stroke:var(--text-2)}
 .pa-node .pa-shape-ringed-dot{stroke:var(--text-2);stroke-width:1.5}
 .pa-node .pa-decor-dot{fill:var(--text-2);stroke:none}
@@ -96,19 +99,15 @@
 .pa-tone-accent .pa-shape{stroke:var(--accent);stroke-width:2}
 .pa-tone-accent .pa-shape-filled-dot{fill:var(--accent)}
 .pa-tone-accent .pa-icon{color:var(--accent)}
-.pa-tone-accent .pa-type{fill:var(--accent)}
 .pa-tone-good .pa-shape{stroke:var(--good);stroke-width:2}
 .pa-tone-good .pa-shape-filled-dot{fill:var(--good)}
 .pa-tone-good .pa-icon{color:var(--good)}
-.pa-tone-good .pa-type{fill:var(--good)}
 .pa-tone-warn .pa-shape{stroke:var(--warn);stroke-width:2}
 .pa-tone-warn .pa-shape-filled-dot{fill:var(--warn)}
 .pa-tone-warn .pa-icon{color:var(--warn)}
-.pa-tone-warn .pa-type{fill:var(--warn)}
 .pa-tone-bad .pa-shape{stroke:var(--bad);stroke-width:2}
 .pa-tone-bad .pa-shape-filled-dot{fill:var(--bad)}
 .pa-tone-bad .pa-icon{color:var(--bad)}
-.pa-tone-bad .pa-type{fill:var(--bad)}
 .pa-group[data-lane="0"] .pa-lane{fill:var(--s1)}
 .pa-group[data-lane="1"] .pa-lane{fill:var(--s2)}
 .pa-group[data-lane="2"] .pa-lane{fill:var(--s3)}
@@ -119,13 +118,14 @@
 .pa-group[data-lane="7"] .pa-lane{fill:var(--s8)}
 .pa-legend-text{fill:var(--text-2);font-size:11px}
 .pa-swatch{stroke-width:1}
-.pa-swatch.pa-family-person{fill:color-mix(in srgb,var(--k-person) 10%,var(--surface));stroke:var(--k-person)}
-.pa-swatch.pa-family-service{fill:color-mix(in srgb,var(--k-service) 10%,var(--surface));stroke:var(--k-service)}
-.pa-swatch.pa-family-data{fill:color-mix(in srgb,var(--k-data) 10%,var(--surface));stroke:var(--k-data)}
-.pa-swatch.pa-family-queue{fill:color-mix(in srgb,var(--k-queue) 10%,var(--surface));stroke:var(--k-queue)}
-.pa-swatch.pa-family-external{fill:color-mix(in srgb,var(--k-external) 10%,var(--surface));stroke:var(--k-external)}
-.pa-swatch.pa-family-decision{fill:color-mix(in srgb,var(--k-decision) 10%,var(--surface));stroke:var(--k-decision)}
+.pa-swatch.pa-family-person{fill:var(--surface);stroke:var(--k-person)}
+.pa-swatch.pa-family-service{fill:var(--surface);stroke:var(--k-service)}
+.pa-swatch.pa-family-data{fill:var(--surface);stroke:var(--k-data)}
+.pa-swatch.pa-family-queue{fill:var(--surface);stroke:var(--k-queue)}
+.pa-swatch.pa-family-external{fill:var(--surface);stroke:var(--k-external)}
+.pa-swatch.pa-family-decision{fill:var(--surface);stroke:var(--k-decision)}
 .pa-swatch.pa-family-bare{fill:var(--surface);stroke:var(--line)}
+@supports (color: color-mix(in srgb, red, red)){.pa-swatch.pa-family-person{fill:color-mix(in srgb,var(--k-person) 10%,var(--surface))}.pa-swatch.pa-family-service{fill:color-mix(in srgb,var(--k-service) 10%,var(--surface))}.pa-swatch.pa-family-data{fill:color-mix(in srgb,var(--k-data) 10%,var(--surface))}.pa-swatch.pa-family-queue{fill:color-mix(in srgb,var(--k-queue) 10%,var(--surface))}.pa-swatch.pa-family-external{fill:color-mix(in srgb,var(--k-external) 10%,var(--surface))}.pa-swatch.pa-family-decision{fill:color-mix(in srgb,var(--k-decision) 10%,var(--surface))}}
 .pa-legend-sample .pa-wire{stroke-width:1.5}
 .pa-dim{opacity:.25}
 .pa-hidden{opacity:0;visibility:hidden}
@@ -150,15 +150,16 @@
 @keyframes pa-flow{to{stroke-dashoffset:calc(var(--pa-period) * -1)}}
 .pa-node,.pa-edge,.pa-edge-label,.pa-group,.pa-lifeline,.pa-frame,.pa-seq-note{transition:opacity .2s cubic-bezier(.23,1,.32,1),visibility .2s}
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pa-edge.pa-active .pa-wire{stroke-width:2.5;filter:drop-shadow(0 0 6px var(--glow))}:root:not([data-theme="light"]) .pa-dot{fill:var(--glow);filter:drop-shadow(0 0 6px var(--glow))}:root:not([data-theme="light"]) .pa-group-box{fill:color-mix(in srgb,var(--text-3) 12%,transparent)}}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pa-edge.pa-active .pa-wire{stroke-width:2.5;filter:drop-shadow(0 0 6px var(--glow))}:root:not([data-theme="light"]) .pa-dot{fill:var(--glow);filter:drop-shadow(0 0 6px var(--glow))}@supports (color: color-mix(in srgb, red, red)){:root:not([data-theme="light"]) .pa-group-box{fill:color-mix(in srgb,var(--text-3) 12%,transparent)}}}
 :root[data-theme="dark"] .pa-edge.pa-active .pa-wire{stroke-width:2.5;filter:drop-shadow(0 0 6px var(--glow))}
 :root[data-theme="dark"] .pa-dot{fill:var(--glow);filter:drop-shadow(0 0 6px var(--glow))}
-:root[data-theme="dark"] .pa-group-box{fill:color-mix(in srgb,var(--text-3) 12%,transparent)}
+@supports (color: color-mix(in srgb, red, red)){:root[data-theme="dark"] .pa-group-box{fill:color-mix(in srgb,var(--text-3) 12%,transparent)}}
 </style>
 <style>
 * { box-sizing: border-box; }
 /* The canvas: a dotted grid on the page colour; in dark, a wash of the glow at the top and faint grid lines. Mirrors the theme's own dark selectors. */
-:root { --stage-bg: radial-gradient(circle, var(--grid) 1px, transparent 1.5px) 0 0 / 18px 18px, var(--page); --stage-dark: radial-gradient(ellipse 70% 55% at 50% 38%, color-mix(in srgb, var(--glow) 13%, transparent), transparent 75%), linear-gradient(color-mix(in srgb, var(--grid) 42%, transparent) 1px, transparent 1px) 0 0 / 56px 56px, linear-gradient(90deg, color-mix(in srgb, var(--grid) 42%, transparent) 1px, transparent 1px) 0 0 / 56px 56px, var(--page); }
+:root { --stage-light: radial-gradient(circle, var(--grid) 1px, transparent 1.5px) 0 0 / 18px 18px, var(--page); --stage-bg: var(--stage-light); --stage-dark: var(--stage-light); }
+@supports (color: color-mix(in srgb, red, red)) { :root { --stage-dark: radial-gradient(ellipse 70% 55% at 50% 38%, color-mix(in srgb, var(--glow) 13%, transparent), transparent 75%), linear-gradient(color-mix(in srgb, var(--grid) 42%, transparent) 1px, transparent 1px) 0 0 / 56px 56px, linear-gradient(90deg, color-mix(in srgb, var(--grid) 42%, transparent) 1px, transparent 1px) 0 0 / 56px 56px, var(--page); } }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --stage-bg: var(--stage-dark); } }
 :root[data-theme="dark"] { --stage-bg: var(--stage-dark); }
 html, body { height: 100%; }
@@ -174,7 +175,8 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 .tool { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; cursor: pointer; color: var(--text-2); font-size: 0.85rem; line-height: 1.3; transition: color .16s ease, background-color .16s ease, transform .16s cubic-bezier(.23,1,.32,1); }
 @media (hover: hover) and (pointer: fine) { .tool:hover:not(:disabled) { color: var(--text); background: var(--accent-soft); } }
 .tool:active:not(:disabled), .pa-chip:active { transform: scale(0.97); }
-.tool[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.tool[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
+@supports (color: color-mix(in srgb, red, red)) { .tool[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); } }
 .tool:disabled { opacity: 0.6; cursor: default; }
 /* Full screen, real (the root element is :fullscreen) or the window-filling fallback (.pa-fill on the root, when the browser refused, as inside a sandboxed iframe): the same chrome goes, the canvas takes the room; the tabs, Fit, Find, the chapters and the way out stay. Any root works, the page's or a dialog's (fullscreen.js marks it data-pa-full-root). */
 .pa-fill .titles, [data-pa-full-root]:fullscreen .titles, .pa-fill [data-act]:not([data-act="fit"]), [data-pa-full-root]:fullscreen [data-act]:not([data-act="fit"]), .pa-fill .zoom-label, [data-pa-full-root]:fullscreen .zoom-label, .pa-fill .grp-export, [data-pa-full-root]:fullscreen .grp-export, .pa-fill [data-export], [data-pa-full-root]:fullscreen [data-export], .pa-fill [data-theme-toggle], [data-pa-full-root]:fullscreen [data-theme-toggle] { display: none; }
@@ -186,9 +188,12 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 .stage.pa-grabbing { cursor: grabbing; }
 .stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .stage > svg .pa-legend { display: none; }
-.legend { position: absolute; top: 10px; right: 12px; z-index: 1; max-width: min(60%, 400px); display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 6px 12px; background: color-mix(in srgb, var(--surface) 80%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line)); border-radius: 10px; color: var(--text-2); font-size: 11px; line-height: 16px; pointer-events: none; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
-:root[data-theme="dark"] .legend { box-shadow: 0 0 16px color-mix(in srgb, var(--glow) 16%, transparent); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .legend { box-shadow: 0 0 16px color-mix(in srgb, var(--glow) 16%, transparent); } }
+.legend { position: absolute; top: 10px; right: 12px; z-index: 1; max-width: min(60%, 400px); display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 6px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--text-2); font-size: 11px; line-height: 16px; pointer-events: none; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+@supports (color: color-mix(in srgb, red, red)) { .legend { background: color-mix(in srgb, var(--surface) 80%, transparent); border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); } }
+:root[data-theme="dark"] .legend { box-shadow: none; }
+@supports (color: color-mix(in srgb, red, red)) { :root[data-theme="dark"] .legend { box-shadow: 0 0 16px color-mix(in srgb, var(--glow) 16%, transparent); } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .legend { box-shadow: none; } }
+@supports (color: color-mix(in srgb, red, red)) { @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .legend { box-shadow: 0 0 16px color-mix(in srgb, var(--glow) 16%, transparent); } } }
 .lg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .lg-sw { width: 12px; height: 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); }
 .lg-wire { width: 22px; height: 0; border-top: 1.5px solid var(--text-3); }
@@ -213,7 +218,7 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 .pa-row { display: block; width: 100%; margin: 0; padding: 4px 6px; background: none; border: 0; border-radius: 6px; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .pa-row:hover { background: var(--accent-soft); }
 .panel-arrow, .panel-none { color: var(--text-3); }
-.bar .chapters { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 6px; }
+.bar .chapters { flex: 1 0 100%; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; }
 .chapters[hidden] { display: none; }
 .pa-chip { transition: color .16s ease, transform .16s cubic-bezier(.23,1,.32,1); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; cursor: pointer; color: var(--text-2); font-size: 0.8rem; line-height: 1.4; white-space: nowrap; }
 @media (hover: hover) and (pointer: fine) { .pa-chip:hover { color: var(--text); } }
@@ -225,20 +230,32 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 .hint { margin: 8px 0 0; color: var(--text-2); }
 .caption { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 16px; background: var(--surface); border-top: 1px solid var(--line); }
 .caption[hidden] { display: none; }
-.cap-line { margin: 0; font-size: 0.95rem; line-height: 1.4; overflow-wrap: anywhere; }
+.cap-line { margin: 0; font-size: 0.95rem; line-height: 1.4; overflow-wrap: anywhere; max-height: 15vh; max-height: 15dvh; overflow-y: auto; }
 .beats { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
 .transport { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .scrub { flex: 1 1 160px; min-width: 120px; margin: 0; }
 .cap-count { color: var(--text-3); font-size: 0.8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Play on a phone, portrait or landscape (narrow, or short): the tool row and the transport scroll sideways instead of wrapping, and the legend overlay steps aside, so the stage keeps about half the screen. */
+@media (max-width: 719px), (max-height: 500px) {
+  body.pa-presenting .tools, body.pa-presenting .transport { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+  body.pa-presenting .tools > *, body.pa-presenting .transport > * { flex-shrink: 0; }
+  body.pa-presenting .legend { display: none; }
+}
+/* Short (a landscape phone): the title block and the beat chips go too (the chapter chips, the scrubber and Prev / Next stay), and the caption line keeps two lines. */
+@media (max-height: 500px) {
+  body.pa-presenting .titles, body.pa-presenting .beats { display: none; }
+  body.pa-presenting .cap-line { max-height: 2.8em; }
+}
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 </style>
 <style id="pa-legend-css">
-.lg-sw-person{background:color-mix(in srgb,var(--k-person) 10%,var(--surface));border-color:var(--k-person)}
-.lg-sw-service{background:color-mix(in srgb,var(--k-service) 10%,var(--surface));border-color:var(--k-service)}
-.lg-sw-data{background:color-mix(in srgb,var(--k-data) 10%,var(--surface));border-color:var(--k-data)}
-.lg-sw-queue{background:color-mix(in srgb,var(--k-queue) 10%,var(--surface));border-color:var(--k-queue)}
-.lg-sw-external{background:color-mix(in srgb,var(--k-external) 10%,var(--surface));border-color:var(--k-external)}
-.lg-sw-decision{background:color-mix(in srgb,var(--k-decision) 10%,var(--surface));border-color:var(--k-decision)}
+.lg-sw-person{background:var(--surface);border-color:var(--k-person)}
+.lg-sw-service{background:var(--surface);border-color:var(--k-service)}
+.lg-sw-data{background:var(--surface);border-color:var(--k-data)}
+.lg-sw-queue{background:var(--surface);border-color:var(--k-queue)}
+.lg-sw-external{background:var(--surface);border-color:var(--k-external)}
+.lg-sw-decision{background:var(--surface);border-color:var(--k-decision)}
+@supports (color: color-mix(in srgb, red, red)){.lg-sw-person{background:color-mix(in srgb,var(--k-person) 10%,var(--surface))}.lg-sw-service{background:color-mix(in srgb,var(--k-service) 10%,var(--surface))}.lg-sw-data{background:color-mix(in srgb,var(--k-data) 10%,var(--surface))}.lg-sw-queue{background:color-mix(in srgb,var(--k-queue) 10%,var(--surface))}.lg-sw-external{background:color-mix(in srgb,var(--k-external) 10%,var(--surface))}.lg-sw-decision{background:color-mix(in srgb,var(--k-decision) 10%,var(--surface))}}
 </style>
 </head>
 <body>
@@ -277,8 +294,8 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 <p class="export-error" data-export-error role="alert" hidden></p>
 <div class="body">
 <main class="stage" id="pa-stage">
-<svg xmlns="http://www.w3.org/2000/svg" class="pa-diagram pa-type-architecture" viewBox="0 0 1095 1606" role="graphics-document" aria-labelledby="d-title d-desc"><title id="d-title">How a request becomes a finished page</title><desc id="d-desc">The portable-artifacts pipeline, from one request to one offline HTML page. architecture diagram with 10 nodes and 10 edges.</desc><defs><marker id="d-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-fill" d="M0 0.5L8 4L0 7.5Z"/></marker><marker id="d-arrow-open" viewBox="0 0 8 8" refX="7.4" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-open" d="M0.8 0.8L7.4 4L0.8 7.2"/></marker></defs><g class="pa-group" data-id="buildtime" data-depth="0" data-lane="0"><rect class="pa-group-box" x="164" y="745" width="907" height="598" rx="6"/><rect class="pa-lane" x="164" y="751" width="4" height="586" rx="2"/><text class="pa-group-label" text-anchor="start"><tspan x="176" y="768.85">Build-time pieces</tspan></text></g><g class="pa-edge pa-edge-solid" data-id="edge-0" data-from="request" data-to="agent" data-family="person"><path class="pa-wire" d="M186.3 108L186.3 272" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-1" data-from="agent" data-to="spec" data-family="service"><path class="pa-wire" d="M218.7 342L218.7 360Q218.7 366 224.7 366L526.5 366Q532.5 366 532.5 372L532.5 506" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-2" data-from="spec" data-to="validate" data-family="service"><path class="pa-wire" d="M532.5 576L532.5 793" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="edge-3" data-from="validate" data-to="agent" data-family="service"><path class="pa-wire" d="M500.5 863L500.5 885Q500.5 891 494.5 891L194 891Q188 891 188 897L188 1366Q188 1372 182 1372L160 1372Q154 1372 154 1366L154 342" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-4" data-from="validate" data-to="build" data-family="service"><path class="pa-wire" d="M564.5 863L564.5 977Q564.5 983 570.5 983L750.9 983Q756.9 983 756.9 989L756.9 1031" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-5" data-from="build" data-to="elk" data-family="service"><path class="pa-wire" d="M739.8 1085L739.8 1103Q739.8 1109 733.8 1109L361 1109Q355 1109 355 1115L355 1249" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="edge-6" data-from="build" data-to="dashboard" data-family="service"><path class="pa-wire" d="M765.4 1085L765.4 1113Q765.4 1119 759.4 1119L668 1119Q662 1119 662 1125L662 1249" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="edge-7" data-from="build" data-to="motion" data-family="service"><path class="pa-wire" d="M816.6 1085L816.6 1103Q816.6 1109 822.6 1109L934 1109Q940 1109 940 1115L940 1249" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-8" data-from="themes" data-to="build" data-family="data"><path class="pa-wire" d="M799.5 867L799.5 1031" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-9" data-from="build" data-to="page" data-family="service"><path class="pa-wire" d="M791 1085L791 1512" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-node pa-kind-user pa-family-person pa-tone-neutral" data-id="request" tabindex="0" role="graphics-symbol" aria-label="Person&#39;s request: user"><path class="pa-shape pa-shape-rounded-rect" d="M106.3 54L266.3 54A8 8 0 0 1 274.3 62L274.3 100A8 8 0 0 1 266.3 108L106.3 108A8 8 0 0 1 98.3 100L98.3 62A8 8 0 0 1 106.3 54Z"/><rect class="pa-tile" x="112.65" y="67" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="126.65" y="87.3">🙋</text><text class="pa-type" text-anchor="middle"><tspan x="205.3" y="74.4">USER</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="205.3" y="93.4">Person&#39;s request</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="agent" tabindex="0" role="graphics-symbol" aria-label="Claude Haiku agent: service"><path class="pa-shape pa-shape-rounded-rect" d="M97.3 272L275.3 272A8 8 0 0 1 283.3 280L283.3 334A8 8 0 0 1 275.3 342L97.3 342A8 8 0 0 1 89.3 334L89.3 280A8 8 0 0 1 97.3 272Z"/><rect class="pa-tile" x="104.02" y="293" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="118.02" y="313.3">🤖</text><text class="pa-type" text-anchor="middle"><tspan x="205.3" y="292.14">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="205.3" y="311.14">Claude Haiku agent</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="205.3" y="328.45">Writes JSON only</tspan></text></g><g class="pa-node pa-kind-other pa-family-service pa-tone-neutral" data-id="spec" tabindex="0" role="graphics-symbol" aria-label="JSON spec file: other"><path class="pa-shape pa-shape-rounded-rect" d="M460.5 506L604.5 506A8 8 0 0 1 612.5 514L612.5 568A8 8 0 0 1 604.5 576L460.5 576A8 8 0 0 1 452.5 568L452.5 514A8 8 0 0 1 460.5 506Z"/><rect class="pa-tile" x="466.56" y="527" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="480.56" y="547.3">📄</text><text class="pa-type" text-anchor="middle"><tspan x="551.5" y="526.14">OTHER</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="551.5" y="545.14">JSON spec file</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="551.5" y="562.45">diagram.json</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="validate" tabindex="0" role="graphics-symbol" aria-label="validate.mjs: service"><path class="pa-shape pa-shape-rounded-rect" d="M444.5 793L620.5 793A8 8 0 0 1 628.5 801L628.5 855A8 8 0 0 1 620.5 863L444.5 863A8 8 0 0 1 436.5 855L436.5 801A8 8 0 0 1 444.5 793Z"/><rect class="pa-tile" x="450.8" y="814" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="464.8" y="834.3">✅</text><text class="pa-type" text-anchor="middle"><tspan x="551.5" y="813.14">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="551.5" y="832.14">validate.mjs</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="551.5" y="849.45">Names the exact fix</tspan></text></g><g class="pa-node pa-kind-storage pa-family-data pa-tone-neutral" data-id="themes" tabindex="0" role="graphics-symbol" aria-label="Shared themes: storage"><path class="pa-shape pa-shape-cylinder" d="M660.5 791A139 6 0 0 1 938.5 791L938.5 861A139 6 0 0 1 660.5 861Z"/><path class="pa-decor" d="M660.5 791A139 6 0 0 0 938.5 791"/><rect class="pa-tile" x="674.9" y="812" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="688.9" y="832.3">🎨</text><text class="pa-type" text-anchor="middle"><tspan x="818.5" y="811.14">STORAGE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="818.5" y="830.14">Shared themes</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="818.5" y="847.45">paper, blueprint, ink, editorial</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="build" tabindex="0" role="graphics-symbol" aria-label="build.mjs: service"><path class="pa-shape pa-shape-rounded-rect" d="M722.2 1031L834.2 1031A8 8 0 0 1 842.2 1039L842.2 1077A8 8 0 0 1 834.2 1085L722.2 1085A8 8 0 0 1 714.2 1077L714.2 1039A8 8 0 0 1 722.2 1031Z"/><rect class="pa-tile" x="728.97" y="1044" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="742.97" y="1064.3">🏗️</text><text class="pa-type" text-anchor="middle"><tspan x="797.2" y="1051.4">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="797.2" y="1070.4">build.mjs</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="elk" tabindex="0" role="graphics-symbol" aria-label="ELK layout engine: service"><path class="pa-shape pa-shape-rounded-rect" d="M207 1249L503 1249A8 8 0 0 1 511 1257L511 1311A8 8 0 0 1 503 1319L207 1319A8 8 0 0 1 199 1311L199 1257A8 8 0 0 1 207 1249Z"/><rect class="pa-tile" x="213.9" y="1270" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="227.9" y="1290.3">🧭</text><text class="pa-type" text-anchor="middle"><tspan x="374" y="1269.14">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="374" y="1288.14">ELK layout engine</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="374" y="1305.45">Runs locally, computes every position</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="dashboard" tabindex="0" role="graphics-symbol" aria-label="make-dashboard renderer: service"><path class="pa-shape pa-shape-rounded-rect" d="M551 1249L773 1249A8 8 0 0 1 781 1257L781 1311A8 8 0 0 1 773 1319L551 1319A8 8 0 0 1 543 1311L543 1257A8 8 0 0 1 551 1249Z"/><rect class="pa-tile" x="557.55" y="1270" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="571.55" y="1290.3">📊</text><text class="pa-type" text-anchor="middle"><tspan x="681" y="1269.14">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="681" y="1288.14">make-dashboard renderer</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="681" y="1305.45">Draws chart cards</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="motion" tabindex="0" role="graphics-symbol" aria-label="make-motion renderer: service"><path class="pa-shape pa-shape-rounded-rect" d="M841 1249L1039 1249A8 8 0 0 1 1047 1257L1047 1311A8 8 0 0 1 1039 1319L841 1319A8 8 0 0 1 833 1311L833 1257A8 8 0 0 1 841 1249Z"/><rect class="pa-tile" x="847.52" y="1270" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="861.52" y="1290.3">🎬</text><text class="pa-type" text-anchor="middle"><tspan x="959" y="1269.14">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="959" y="1288.14">make-motion renderer</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="959" y="1305.45">Renders MP4 video</tspan></text></g><g class="pa-node pa-kind-client pa-family-service pa-tone-good" data-id="page" tabindex="0" role="graphics-symbol" aria-label="Offline HTML page: client"><path class="pa-shape pa-shape-rounded-rect" d="M703 1512L879 1512A8 8 0 0 1 887 1520L887 1574A8 8 0 0 1 879 1582L703 1582A8 8 0 0 1 695 1574L695 1520A8 8 0 0 1 703 1512Z"/><rect class="pa-tile" x="709.3" y="1533" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="723.3" y="1553.3">🌐</text><text class="pa-type" text-anchor="middle"><tspan x="810" y="1532.14">CLIENT</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="810" y="1551.14">Offline HTML page</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="810" y="1568.45">No network requests</tspan></text></g><g class="pa-edge-label" data-edge="edge-0"><rect class="pa-edge-plate" x="64.3" y="180" width="116" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="122.3" y="194.2">asks for a diagram</tspan></text></g><g class="pa-edge-label" data-edge="edge-1"><rect class="pa-edge-plate" x="539.5" y="414" width="92" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="585.5" y="428.2">writes one file</tspan></text></g><g class="pa-edge-label" data-edge="edge-2"><rect class="pa-edge-plate" x="539.5" y="648" width="74" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="576.5" y="662.2">is checked</tspan></text></g><g class="pa-edge-label" data-edge="edge-3"><rect class="pa-edge-plate" x="24" y="531" width="124" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="86" y="545.2">returns the exact fix</tspan></text></g><g class="pa-edge-label" data-edge="edge-4"><rect class="pa-edge-plate" x="438.5" y="939" width="120" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="498.5" y="953.2">passes the spec on</tspan></text></g><g class="pa-edge-label" data-edge="edge-5"><rect class="pa-edge-plate" x="253" y="1157" width="96" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="301" y="1171.2">asks for layout</tspan></text></g><g class="pa-edge-label" data-edge="edge-6"><rect class="pa-edge-plate" x="534" y="1157" width="122" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="595" y="1171.2">renders chart cards</tspan></text></g><g class="pa-edge-label" data-edge="edge-7"><rect class="pa-edge-plate" x="802" y="1157" width="132" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="868" y="1171.2">renders video scenes</tspan></text></g><g class="pa-edge-label" data-edge="edge-8"><rect class="pa-edge-plate" x="689.5" y="939" width="104" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="741.5" y="953.2">supplies colours</tspan></text></g><g class="pa-edge-label" data-edge="edge-9"><rect class="pa-edge-plate" x="659" y="1420" width="126" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="722" y="1434.2">writes one HTML file</tspan></text></g><g class="pa-legend" aria-hidden="true"><rect class="pa-swatch pa-family-person" x="573.5" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="591.5" y="37.85">1 user</tspan></text><rect class="pa-swatch pa-family-service" x="638.4" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="656.4" y="37.85">6 service</tspan></text><rect class="pa-swatch pa-family-service" x="716.8" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="734.8" y="37.85">1 other</tspan></text><rect class="pa-swatch pa-family-data" x="786.3" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="804.3" y="37.85">1 storage</tspan></text><rect class="pa-swatch pa-family-service" x="866.6" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="884.6" y="37.85">1 client</tspan></text><g class="pa-legend-sample pa-edge-solid"><path class="pa-wire" d="M937.2 34L961.2 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="967.2" y="37.85">call</tspan></text><g class="pa-legend-sample pa-edge-dashed"><path class="pa-wire" d="M1000.6 34L1024.6 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="1030.6" y="37.85">optional</tspan></text></g></svg>
-<div class="legend" data-pa-legend aria-hidden="true"><span class="lg"><i class="lg-sw lg-sw-person"></i>1 user</span><span class="lg"><i class="lg-sw lg-sw-service"></i>6 service</span><span class="lg"><i class="lg-sw lg-sw-service"></i>1 other</span><span class="lg"><i class="lg-sw lg-sw-data"></i>1 storage</span><span class="lg"><i class="lg-sw lg-sw-service"></i>1 client</span><span class="lg"><i class="lg-wire lg-wire-solid"></i>call</span><span class="lg"><i class="lg-wire lg-wire-dashed"></i>optional</span></div>
+<svg xmlns="http://www.w3.org/2000/svg" class="pa-diagram pa-type-architecture" viewBox="0 0 1095 1606" role="graphics-document" aria-labelledby="d-title d-desc"><title id="d-title">How a request becomes a finished page</title><desc id="d-desc">The portable-artifacts pipeline, from one request to one offline HTML page. architecture diagram with 10 nodes and 10 edges.</desc><defs><marker id="d-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-fill" d="M0 0.5L8 4L0 7.5Z"/></marker><marker id="d-arrow-open" viewBox="0 0 8 8" refX="7.4" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-open" d="M0.8 0.8L7.4 4L0.8 7.2"/></marker></defs><g class="pa-group" data-id="buildtime" data-depth="0" data-lane="0"><rect class="pa-group-box" x="164" y="745" width="907" height="598" rx="6"/><rect class="pa-lane" x="164" y="751" width="4" height="586" rx="2"/><text class="pa-group-label" text-anchor="start"><tspan x="176" y="768.85">Build-time pieces</tspan></text></g><g class="pa-edge pa-edge-solid" data-id="edge-0" data-from="request" data-to="agent" data-family="person"><path class="pa-wire" d="M186.3 108L186.3 272" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-1" data-from="agent" data-to="spec" data-family="service"><path class="pa-wire" d="M218.7 342L218.7 360Q218.7 366 224.7 366L526.5 366Q532.5 366 532.5 372L532.5 506" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-2" data-from="spec" data-to="validate" data-family="service"><path class="pa-wire" d="M532.5 576L532.5 793" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="edge-3" data-from="validate" data-to="agent" data-family="service"><path class="pa-wire" d="M500.5 863L500.5 885Q500.5 891 494.5 891L194 891Q188 891 188 897L188 1366Q188 1372 182 1372L160 1372Q154 1372 154 1366L154 342" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-4" data-from="validate" data-to="build" data-family="service"><path class="pa-wire" d="M564.5 863L564.5 977Q564.5 983 570.5 983L750.9 983Q756.9 983 756.9 989L756.9 1031" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-5" data-from="build" data-to="elk" data-family="service"><path class="pa-wire" d="M739.8 1085L739.8 1103Q739.8 1109 733.8 1109L361 1109Q355 1109 355 1115L355 1249" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="edge-6" data-from="build" data-to="dashboard" data-family="service"><path class="pa-wire" d="M765.4 1085L765.4 1113Q765.4 1119 759.4 1119L668 1119Q662 1119 662 1125L662 1249" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="edge-7" data-from="build" data-to="motion" data-family="service"><path class="pa-wire" d="M816.6 1085L816.6 1103Q816.6 1109 822.6 1109L934 1109Q940 1109 940 1115L940 1249" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-8" data-from="themes" data-to="build" data-family="data"><path class="pa-wire" d="M799.5 867L799.5 1031" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-9" data-from="build" data-to="page" data-family="service"><path class="pa-wire" d="M791 1085L791 1512" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-node pa-kind-user pa-family-person pa-tone-neutral" data-id="request" tabindex="0" role="graphics-symbol" aria-label="Person&#39;s request: user"><path class="pa-shape pa-shape-rounded-rect" d="M106.3 54L266.3 54A8 8 0 0 1 274.3 62L274.3 100A8 8 0 0 1 266.3 108L106.3 108A8 8 0 0 1 98.3 100L98.3 62A8 8 0 0 1 106.3 54Z"/><rect class="pa-tile" x="112.65" y="67" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="126.65" y="87.3">🙋</text><text class="pa-type" text-anchor="middle"><tspan x="205.3" y="74.4">USER</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="205.3" y="93.4">Person&#39;s request</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="agent" tabindex="0" role="graphics-symbol" aria-label="Claude Haiku agent: service"><path class="pa-shape pa-shape-rounded-rect" d="M97.3 272L275.3 272A8 8 0 0 1 283.3 280L283.3 334A8 8 0 0 1 275.3 342L97.3 342A8 8 0 0 1 89.3 334L89.3 280A8 8 0 0 1 97.3 272Z"/><rect class="pa-tile" x="104.02" y="293" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="118.02" y="313.3">🤖</text><text class="pa-type" text-anchor="middle"><tspan x="205.3" y="292.14">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="205.3" y="311.14">Claude Haiku agent</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="205.3" y="328.45">Writes JSON only</tspan></text></g><g class="pa-node pa-kind-other pa-family-service pa-tone-neutral" data-id="spec" tabindex="0" role="graphics-symbol" aria-label="JSON spec file: other"><path class="pa-shape pa-shape-rounded-rect" d="M460.5 506L604.5 506A8 8 0 0 1 612.5 514L612.5 568A8 8 0 0 1 604.5 576L460.5 576A8 8 0 0 1 452.5 568L452.5 514A8 8 0 0 1 460.5 506Z"/><rect class="pa-tile" x="466.56" y="527" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="480.56" y="547.3">📄</text><text class="pa-type" text-anchor="middle"><tspan x="551.5" y="526.14">OTHER</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="551.5" y="545.14">JSON spec file</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="551.5" y="562.45">diagram.json</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="validate" tabindex="0" role="graphics-symbol" aria-label="validate.mjs: service"><path class="pa-shape pa-shape-rounded-rect" d="M444.5 793L620.5 793A8 8 0 0 1 628.5 801L628.5 855A8 8 0 0 1 620.5 863L444.5 863A8 8 0 0 1 436.5 855L436.5 801A8 8 0 0 1 444.5 793Z"/><rect class="pa-tile" x="450.8" y="814" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="464.8" y="834.3">✅</text><text class="pa-type" text-anchor="middle"><tspan x="551.5" y="813.14">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="551.5" y="832.14">validate.mjs</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="551.5" y="849.45">Names the exact fix</tspan></text></g><g class="pa-node pa-kind-storage pa-family-data pa-tone-neutral" data-id="themes" tabindex="0" role="graphics-symbol" aria-label="Shared themes: storage"><path class="pa-shape pa-shape-cylinder" d="M660.5 791A139 6 0 0 1 938.5 791L938.5 861A139 6 0 0 1 660.5 861Z"/><path class="pa-decor" d="M660.5 791A139 6 0 0 0 938.5 791"/><rect class="pa-tile" x="674.9" y="812" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="688.9" y="832.3">🎨</text><text class="pa-type" text-anchor="middle"><tspan x="818.5" y="811.14">STORAGE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="818.5" y="830.14">Shared themes</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="818.5" y="847.45">paper, blueprint, ink, editorial</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="build" tabindex="0" role="graphics-symbol" aria-label="build.mjs: service"><path class="pa-shape pa-shape-rounded-rect" d="M722.2 1031L834.2 1031A8 8 0 0 1 842.2 1039L842.2 1077A8 8 0 0 1 834.2 1085L722.2 1085A8 8 0 0 1 714.2 1077L714.2 1039A8 8 0 0 1 722.2 1031Z"/><rect class="pa-tile" x="728.97" y="1044" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="742.97" y="1064.3">🏗️</text><text class="pa-type" text-anchor="middle"><tspan x="797.2" y="1051.4">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="797.2" y="1070.4">build.mjs</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="elk" tabindex="0" role="graphics-symbol" aria-label="ELK layout engine: service"><path class="pa-shape pa-shape-rounded-rect" d="M207 1249L503 1249A8 8 0 0 1 511 1257L511 1311A8 8 0 0 1 503 1319L207 1319A8 8 0 0 1 199 1311L199 1257A8 8 0 0 1 207 1249Z"/><rect class="pa-tile" x="213.9" y="1270" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="227.9" y="1290.3">🧭</text><text class="pa-type" text-anchor="middle"><tspan x="374" y="1269.14">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="374" y="1288.14">ELK layout engine</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="374" y="1305.45">Runs locally, computes every position</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="dashboard" tabindex="0" role="graphics-symbol" aria-label="make-dashboard renderer: service"><path class="pa-shape pa-shape-rounded-rect" d="M551 1249L773 1249A8 8 0 0 1 781 1257L781 1311A8 8 0 0 1 773 1319L551 1319A8 8 0 0 1 543 1311L543 1257A8 8 0 0 1 551 1249Z"/><rect class="pa-tile" x="557.55" y="1270" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="571.55" y="1290.3">📊</text><text class="pa-type" text-anchor="middle"><tspan x="681" y="1269.14">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="681" y="1288.14">make-dashboard renderer</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="681" y="1305.45">Draws chart cards</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="motion" tabindex="0" role="graphics-symbol" aria-label="make-motion renderer: service"><path class="pa-shape pa-shape-rounded-rect" d="M841 1249L1039 1249A8 8 0 0 1 1047 1257L1047 1311A8 8 0 0 1 1039 1319L841 1319A8 8 0 0 1 833 1311L833 1257A8 8 0 0 1 841 1249Z"/><rect class="pa-tile" x="847.52" y="1270" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="861.52" y="1290.3">🎬</text><text class="pa-type" text-anchor="middle"><tspan x="959" y="1269.14">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="959" y="1288.14">make-motion renderer</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="959" y="1305.45">Renders MP4 video</tspan></text></g><g class="pa-node pa-kind-client pa-family-service pa-tone-good" data-id="page" tabindex="0" role="graphics-symbol" aria-label="Offline HTML page: client"><path class="pa-shape pa-shape-rounded-rect" d="M703 1512L879 1512A8 8 0 0 1 887 1520L887 1574A8 8 0 0 1 879 1582L703 1582A8 8 0 0 1 695 1574L695 1520A8 8 0 0 1 703 1512Z"/><rect class="pa-tile" x="709.3" y="1533" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="723.3" y="1553.3">🌐</text><text class="pa-type" text-anchor="middle"><tspan x="810" y="1532.14">CLIENT</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="810" y="1551.14">Offline HTML page</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="810" y="1568.45">No network requests</tspan></text></g><g class="pa-edge-label" data-edge="edge-0"><rect class="pa-edge-plate" x="64.3" y="180" width="116" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="122.3" y="194.2">asks for a diagram</tspan></text></g><g class="pa-edge-label" data-edge="edge-1"><rect class="pa-edge-plate" x="539.5" y="414" width="92" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="585.5" y="428.2">writes one file</tspan></text></g><g class="pa-edge-label" data-edge="edge-2"><rect class="pa-edge-plate" x="539.5" y="648" width="74" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="576.5" y="662.2">is checked</tspan></text></g><g class="pa-edge-label" data-edge="edge-3"><rect class="pa-edge-plate" x="24" y="531" width="124" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="86" y="545.2">returns the exact fix</tspan></text></g><g class="pa-edge-label" data-edge="edge-4"><rect class="pa-edge-plate" x="438.5" y="939" width="120" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="498.5" y="953.2">passes the spec on</tspan></text></g><g class="pa-edge-label" data-edge="edge-5"><rect class="pa-edge-plate" x="253" y="1157" width="96" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="301" y="1171.2">asks for layout</tspan></text></g><g class="pa-edge-label" data-edge="edge-6"><rect class="pa-edge-plate" x="534" y="1157" width="122" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="595" y="1171.2">renders chart cards</tspan></text></g><g class="pa-edge-label" data-edge="edge-7"><rect class="pa-edge-plate" x="802" y="1157" width="132" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="868" y="1171.2">renders video scenes</tspan></text></g><g class="pa-edge-label" data-edge="edge-8"><rect class="pa-edge-plate" x="689.5" y="939" width="104" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="741.5" y="953.2">supplies colours</tspan></text></g><g class="pa-edge-label" data-edge="edge-9"><rect class="pa-edge-plate" x="659" y="1420" width="126" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="722" y="1434.2">writes one HTML file</tspan></text></g><g class="pa-legend" aria-hidden="true"><rect class="pa-swatch pa-family-person" x="562.8" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="580.8" y="37.85">1 user</tspan></text><rect class="pa-swatch pa-family-service" x="627.7" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="645.7" y="37.85">6 service</tspan></text><rect class="pa-swatch pa-family-service" x="706.1" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="724.1" y="37.85">1 other</tspan></text><rect class="pa-swatch pa-family-data" x="775.6" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="793.6" y="37.85">1 storage</tspan></text><rect class="pa-swatch pa-family-service" x="855.9" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="873.9" y="37.85">1 client</tspan></text><g class="pa-legend-sample pa-edge-solid"><path class="pa-wire" d="M926.5 34L950.5 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="956.5" y="37.85">call</tspan></text><g class="pa-legend-sample pa-edge-dashed"><path class="pa-wire" d="M989.9 34L1013.9 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="1019.9" y="37.85">secondary</tspan></text></g></svg>
+<div class="legend" data-pa-legend aria-hidden="true"><span class="lg"><i class="lg-sw lg-sw-person"></i>1 user</span><span class="lg"><i class="lg-sw lg-sw-service"></i>6 service</span><span class="lg"><i class="lg-sw lg-sw-service"></i>1 other</span><span class="lg"><i class="lg-sw lg-sw-data"></i>1 storage</span><span class="lg"><i class="lg-sw lg-sw-service"></i>1 client</span><span class="lg"><i class="lg-wire lg-wire-solid"></i>call</span><span class="lg"><i class="lg-wire lg-wire-dashed"></i>secondary</span></div>
 <div class="tip" data-pa-tip role="tooltip" hidden></div>
 </main>
 <aside class="panel" data-pa-panel aria-label="Details">
@@ -311,7 +328,7 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 </div>
 </aside>
 <section class="sr-only" aria-label="Diagram as text"><h2>How a request becomes a finished page</h2><p>The portable-artifacts pipeline, from one request to one offline HTML page</p><h3>Nodes</h3><ul><li>Person&#39;s request (user)</li><li>Claude Haiku agent (service): Writes JSON only</li><li>JSON spec file (other): diagram.json</li><li>Offline HTML page (client): No network requests</li><li>Group Build-time pieces<ul><li>validate.mjs (service): Names the exact fix</li><li>build.mjs (service)</li><li>ELK layout engine (service): Runs locally, computes every position</li><li>make-dashboard renderer (service): Draws chart cards</li><li>make-motion renderer (service): Renders MP4 video</li><li>Shared themes (storage): paper, blueprint, ink, editorial</li></ul></li></ul><h3>Connections</h3><ul><li>Person&#39;s request → Claude Haiku agent: asks for a diagram</li><li>Claude Haiku agent → JSON spec file: writes one file</li><li>JSON spec file → validate.mjs: is checked</li><li>validate.mjs → Claude Haiku agent: returns the exact fix</li><li>validate.mjs → build.mjs: passes the spec on</li><li>build.mjs → ELK layout engine: asks for layout</li><li>build.mjs → make-dashboard renderer: renders chart cards</li><li>build.mjs → make-motion renderer: renders video scenes</li><li>Shared themes → build.mjs: supplies colours</li><li>build.mjs → Offline HTML page: writes one HTML file</li></ul></section>
-<script type="application/json" id="pa-data">{"type":"architecture","title":"How a request becomes a finished page","stem":"how-a-request-becomes-a-finished-page","animate":false,"width":1095,"height":1606,"steps":[{"title":"Person's request","show":["request"],"focus":["request"]},{"title":"Claude Haiku agent","show":["agent"],"focus":["agent"]},{"title":"JSON spec file","show":["spec"],"focus":["spec"]},{"title":"validate.mjs and 1 more","show":["validate","themes"],"focus":["validate","themes"]},{"title":"build.mjs","show":["build"],"focus":["build"]},{"title":"ELK layout engine and 2 more","show":["elk","dashboard","motion"],"focus":["elk","dashboard","motion"]},{"title":"Offline HTML page","show":["page"],"focus":["page"]}],"ids":["buildtime","request","agent","spec","validate","build","elk","dashboard","motion","themes","page"],"adjacency":{"request":{"nodes":["agent"],"edges":["edge-0"]},"agent":{"nodes":["request","spec","validate"],"edges":["edge-0","edge-1","edge-3"]},"spec":{"nodes":["agent","validate"],"edges":["edge-1","edge-2"]},"validate":{"nodes":["spec","agent","build"],"edges":["edge-2","edge-3","edge-4"]},"build":{"nodes":["validate","elk","dashboard","motion","themes","page"],"edges":["edge-4","edge-5","edge-6","edge-7","edge-8","edge-9"]},"elk":{"nodes":["build"],"edges":["edge-5"]},"dashboard":{"nodes":["build"],"edges":["edge-6"]},"motion":{"nodes":["build"],"edges":["edge-7"]},"themes":{"nodes":["build"],"edges":["edge-8"]},"page":{"nodes":["build"],"edges":["edge-9"]}},"edges":{"edge-0":["request","agent"],"edge-1":["agent","spec"],"edge-2":["spec","validate"],"edge-3":["validate","agent"],"edge-4":["validate","build"],"edge-5":["build","elk"],"edge-6":["build","dashboard"],"edge-7":["build","motion"],"edge-8":["themes","build"],"edge-9":["build","page"]},"parents":{"validate":"buildtime","build":"buildtime","elk":"buildtime","dashboard":"buildtime","motion":"buildtime","themes":"buildtime"},"boxes":{"buildtime":[164,745,907,598],"request":[98.3,54,176,54],"agent":[89.3,272,194,70],"spec":[452.5,506,160,70],"validate":[436.5,793,192,70],"build":[714.2,1031,128,54],"elk":[199,1249,312,70],"dashboard":[543,1249,238,70],"motion":[833,1249,214,70],"themes":[660.5,785,278,82],"page":[695,1512,192,70]},"frames":[],"autoplay":false,"beats":[{"kind":"hop","chapter":0,"title":"Someone asks for a diagram","edge":"edge-0","reverse":false,"ids":["request","agent"],"reveal":[],"highlight":[],"caption":"One sentence is enough; the agent plans the spec from it."},{"kind":"hop","chapter":0,"title":"The agent writes one JSON file","edge":"edge-1","reverse":false,"ids":["agent","spec"],"reveal":[],"highlight":[],"caption":"A title, a type, nodes and edges. No coordinates, CSS, SVG or HTML."},{"kind":"hop","chapter":0,"title":"Validate reads the spec","edge":"edge-2","reverse":false,"ids":["spec","validate"],"reveal":[],"highlight":[],"caption":"Schema and limits, then a full layout and a geometry lint."},{"kind":"hop","chapter":0,"title":"Validate names the exact fix","edge":"edge-3","reverse":false,"ids":["validate","agent"],"reveal":[],"highlight":[],"caption":"A JSON path, the problem and the fix; the agent edits one field and runs it again."},{"kind":"hop","chapter":1,"title":"The spec passes to build","edge":"edge-4","reverse":false,"ids":["validate","build"],"reveal":[],"highlight":[]},{"kind":"hop","chapter":1,"title":"ELK lays everything out","edge":"edge-5","reverse":false,"ids":["build","elk"],"reveal":[],"highlight":[],"caption":"Every position comes from the layout engine, on this machine."},{"kind":"hop","chapter":1,"title":"Themes supply the colours","edge":"edge-8","reverse":false,"ids":["themes","build"],"reveal":[],"highlight":[],"caption":"paper, blueprint, ink or editorial: one spec, four looks."},{"kind":"focus","chapter":1,"title":"Charts and video have their own renderers","edge":null,"reverse":false,"ids":["dashboard","motion"],"reveal":[],"highlight":[],"caption":"An explainer asks for them; a plain diagram never does."},{"kind":"hop","chapter":1,"title":"One offline HTML page","edge":"edge-9","reverse":false,"ids":["build","page"],"reveal":[],"highlight":[],"caption":"Opens in any browser with no network; the CSP blocks requests."}],"chapters":[{"id":"write","title":"Write and check","start":0,"end":4},{"id":"build","title":"Build the page","start":4,"end":9}],"info":{"request":{"label":"Person's request","kind":"user","emoji":"🙋","detail":"One sentence in chat: what to draw, for whom."},"agent":{"label":"Claude Haiku agent","kind":"service","emoji":"🤖","note":"Writes JSON only","detail":"Reads SKILL.md, writes diagram.json, then runs validate, build and check in the same turn. Never writes coordinates, CSS, SVG or HTML."},"spec":{"label":"JSON spec file","kind":"other","emoji":"📄","note":"diagram.json"},"validate":{"label":"validate.mjs","kind":"service","emoji":"✅","note":"Names the exact fix","detail":"Schema and limits first, then a full layout and a geometry lint, so a spec that validates is buildable. Every error is a JSON path, the problem and the fix."},"build":{"label":"build.mjs","kind":"service","emoji":"🏗️"},"elk":{"label":"ELK layout engine","kind":"service","emoji":"🧭","note":"Runs locally, computes every position"},"dashboard":{"label":"make-dashboard renderer","kind":"service","emoji":"📊","note":"Draws chart cards"},"motion":{"label":"make-motion renderer","kind":"service","emoji":"🎬","note":"Renders MP4 video"},"themes":{"label":"Shared themes","kind":"storage","emoji":"🎨","note":"paper, blueprint, ink, editorial"},"page":{"label":"Offline HTML page","kind":"client","emoji":"🌐","note":"No network requests","detail":"Inline CSS, fonts and icons behind a strict CSP. The same spec and versions give the same bytes."},"buildtime":{"label":"Build-time pieces","kind":"group"},"edge-0":{"style":"solid","label":"asks for a diagram"},"edge-1":{"style":"solid","label":"writes one file"},"edge-2":{"style":"solid","label":"is checked"},"edge-3":{"style":"dashed","label":"returns the exact fix"},"edge-4":{"style":"solid","label":"passes the spec on"},"edge-5":{"style":"solid","label":"asks for layout"},"edge-6":{"style":"dashed","label":"renders chart cards"},"edge-7":{"style":"dashed","label":"renders video scenes"},"edge-8":{"style":"solid","label":"supplies colours"},"edge-9":{"style":"solid","label":"writes one HTML file"}},"directed":{"request":["edge-0"],"agent":["edge-1"],"spec":["edge-2"],"validate":["edge-3","edge-4"],"build":["edge-5","edge-6","edge-7","edge-9"],"themes":["edge-8"]}}</script>
+<script type="application/json" id="pa-data">{"type":"architecture","title":"How a request becomes a finished page","stem":"how-a-request-becomes-a-finished-page","animate":false,"width":1095,"height":1606,"drawing":[0,30,1095,1576],"steps":[{"title":"Person's request","show":["request"],"focus":["request"]},{"title":"Claude Haiku agent","show":["agent"],"focus":["agent"]},{"title":"JSON spec file","show":["spec"],"focus":["spec"]},{"title":"validate.mjs and 1 more","show":["validate","themes"],"focus":["validate","themes"]},{"title":"build.mjs","show":["build"],"focus":["build"]},{"title":"ELK layout engine and 2 more","show":["elk","dashboard","motion"],"focus":["elk","dashboard","motion"]},{"title":"Offline HTML page","show":["page"],"focus":["page"]}],"ids":["buildtime","request","agent","spec","validate","build","elk","dashboard","motion","themes","page"],"adjacency":{"request":{"nodes":["agent"],"edges":["edge-0"]},"agent":{"nodes":["request","spec","validate"],"edges":["edge-0","edge-1","edge-3"]},"spec":{"nodes":["agent","validate"],"edges":["edge-1","edge-2"]},"validate":{"nodes":["spec","agent","build"],"edges":["edge-2","edge-3","edge-4"]},"build":{"nodes":["validate","elk","dashboard","motion","themes","page"],"edges":["edge-4","edge-5","edge-6","edge-7","edge-8","edge-9"]},"elk":{"nodes":["build"],"edges":["edge-5"]},"dashboard":{"nodes":["build"],"edges":["edge-6"]},"motion":{"nodes":["build"],"edges":["edge-7"]},"themes":{"nodes":["build"],"edges":["edge-8"]},"page":{"nodes":["build"],"edges":["edge-9"]}},"edges":{"edge-0":["request","agent"],"edge-1":["agent","spec"],"edge-2":["spec","validate"],"edge-3":["validate","agent"],"edge-4":["validate","build"],"edge-5":["build","elk"],"edge-6":["build","dashboard"],"edge-7":["build","motion"],"edge-8":["themes","build"],"edge-9":["build","page"]},"parents":{"validate":"buildtime","build":"buildtime","elk":"buildtime","dashboard":"buildtime","motion":"buildtime","themes":"buildtime"},"boxes":{"buildtime":[164,745,907,598],"request":[98.3,54,176,54],"agent":[89.3,272,194,70],"spec":[452.5,506,160,70],"validate":[436.5,793,192,70],"build":[714.2,1031,128,54],"elk":[199,1249,312,70],"dashboard":[543,1249,238,70],"motion":[833,1249,214,70],"themes":[660.5,785,278,82],"page":[695,1512,192,70]},"frames":[],"autoplay":false,"beats":[{"kind":"hop","chapter":0,"title":"Someone asks for a diagram","edge":"edge-0","reverse":false,"ids":["request","agent"],"reveal":[],"highlight":[],"caption":"One sentence is enough; the agent plans the spec from it."},{"kind":"hop","chapter":0,"title":"The agent writes one JSON file","edge":"edge-1","reverse":false,"ids":["agent","spec"],"reveal":[],"highlight":[],"caption":"A title, a type, nodes and edges. No coordinates, CSS, SVG or HTML."},{"kind":"hop","chapter":0,"title":"Validate reads the spec","edge":"edge-2","reverse":false,"ids":["spec","validate"],"reveal":[],"highlight":[],"caption":"Schema and limits, then a full layout and a geometry lint."},{"kind":"hop","chapter":0,"title":"Validate names the exact fix","edge":"edge-3","reverse":false,"ids":["validate","agent"],"reveal":[],"highlight":[],"caption":"A JSON path, the problem and the fix; the agent edits one field and runs it again."},{"kind":"hop","chapter":1,"title":"The spec passes to build","edge":"edge-4","reverse":false,"ids":["validate","build"],"reveal":[],"highlight":[]},{"kind":"hop","chapter":1,"title":"ELK lays everything out","edge":"edge-5","reverse":false,"ids":["build","elk"],"reveal":[],"highlight":[],"caption":"Every position comes from the layout engine, on this machine."},{"kind":"hop","chapter":1,"title":"Themes supply the colours","edge":"edge-8","reverse":false,"ids":["themes","build"],"reveal":[],"highlight":[],"caption":"paper, blueprint, ink or editorial: one spec, four looks."},{"kind":"focus","chapter":1,"title":"Charts and video have their own renderers","edge":null,"reverse":false,"ids":["dashboard","motion"],"reveal":[],"highlight":[],"caption":"An explainer asks for them; a plain diagram never does."},{"kind":"hop","chapter":1,"title":"One offline HTML page","edge":"edge-9","reverse":false,"ids":["build","page"],"reveal":[],"highlight":[],"caption":"Opens in any browser with no network; the CSP blocks requests."}],"chapters":[{"id":"write","title":"Write and check","start":0,"end":4},{"id":"build","title":"Build the page","start":4,"end":9}],"info":{"request":{"label":"Person's request","kind":"user","emoji":"🙋","detail":"One sentence in chat: what to draw, for whom."},"agent":{"label":"Claude Haiku agent","kind":"service","emoji":"🤖","note":"Writes JSON only","detail":"Reads SKILL.md, writes diagram.json, then runs validate, build and check in the same turn. Never writes coordinates, CSS, SVG or HTML."},"spec":{"label":"JSON spec file","kind":"other","emoji":"📄","note":"diagram.json"},"validate":{"label":"validate.mjs","kind":"service","emoji":"✅","note":"Names the exact fix","detail":"Schema and limits first, then a full layout and a geometry lint, so a spec that validates is buildable. Every error is a JSON path, the problem and the fix."},"build":{"label":"build.mjs","kind":"service","emoji":"🏗️"},"elk":{"label":"ELK layout engine","kind":"service","emoji":"🧭","note":"Runs locally, computes every position"},"dashboard":{"label":"make-dashboard renderer","kind":"service","emoji":"📊","note":"Draws chart cards"},"motion":{"label":"make-motion renderer","kind":"service","emoji":"🎬","note":"Renders MP4 video"},"themes":{"label":"Shared themes","kind":"storage","emoji":"🎨","note":"paper, blueprint, ink, editorial"},"page":{"label":"Offline HTML page","kind":"client","emoji":"🌐","note":"No network requests","detail":"Inline CSS, fonts and icons behind a strict CSP. The same spec and versions give the same bytes."},"buildtime":{"label":"Build-time pieces","kind":"group"},"edge-0":{"style":"solid","label":"asks for a diagram"},"edge-1":{"style":"solid","label":"writes one file"},"edge-2":{"style":"solid","label":"is checked"},"edge-3":{"style":"dashed","label":"returns the exact fix"},"edge-4":{"style":"solid","label":"passes the spec on"},"edge-5":{"style":"solid","label":"asks for layout"},"edge-6":{"style":"dashed","label":"renders chart cards"},"edge-7":{"style":"dashed","label":"renders video scenes"},"edge-8":{"style":"solid","label":"supplies colours"},"edge-9":{"style":"solid","label":"writes one HTML file"}},"directed":{"request":["edge-0"],"agent":["edge-1"],"spec":["edge-2"],"validate":["edge-3","edge-4"],"build":["edge-5","edge-6","edge-7","edge-9"],"themes":["edge-8"]}}</script>
 <script>// make-diagram viewer, camera: zoom, pan, fit and the glide between views for
 // one diagram <svg>. The camera is a centre in diagram units and a scale in px
 // per unit; the viewBox is derived from it and the stage size. Registered as
@@ -321,6 +338,11 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 //   var camera = PADiagram.camera(stage, svg, data, { onApply });
 //
 // onApply runs after every viewBox change (viewer.js emits its state from it).
+//
+// Fit: a page that shows its own legend over the stage (an element with
+// data-pa-legend inside it; the drawn legend is hidden there) fits the drawing
+// (data.drawing, the canvas without the legend band and the widening for a wide
+// legend row) into the stage below that overlay. Any other stage fits the whole canvas.
 (function (global) {
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
@@ -354,21 +376,56 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
     var boxes = PADiagram.dict(data.boxes);
     var reduceQuery = global.matchMedia ? global.matchMedia('(prefers-reduced-motion: reduce)') : null;
     var reduced = function () { return !!(reduceQuery && reduceQuery.matches); };
+    var overlay = stage.querySelector('[data-pa-legend]');
+    var d = data.drawing;
+    // What the fit shows: the drawing when the page covers the drawn legend with its own, else the canvas.
+    var fitBox = overlay && d && d.length === 4 && d.every(function (v) { return finite(v, NaN) === v; }) && d[2] > 0 && d[3] > 0 ? { x: d[0], y: d[1], w: d[2], h: d[3] } : { x: 0, y: 0, w: W, h: H };
     var cam = { cx: W / 2, cy: H / 2, s: 1 };
     var fitted = true;
     var tween = 0;
 
     // A stage with no size (hidden, not laid out yet) is treated as the
-    // diagram's own size, so nothing divides by zero.
+    // diagram's own size, so nothing divides by zero. `top` is how far the
+    // legend overlay reaches down the stage and `right` how far it reaches in
+    // from the right edge (both 0 when it is absent or hidden): the fit keeps
+    // the drawing below it or beside it.
     function size() {
       var r = stage.getBoundingClientRect();
-      return { w: r.width > 0 ? r.width : W, h: r.height > 0 ? r.height : H };
+      var o = overlay ? overlay.getBoundingClientRect() : null;
+      var shown = r.height > 0 && r.width > 0 && o && o.height > 0;
+      var top = shown ? Math.min(r.height - 1, Math.max(0, Math.ceil(o.bottom - r.top))) : 0;
+      var right = shown ? Math.min(r.width - 1, Math.max(0, Math.ceil(r.right - o.left))) : 0;
+      return { w: r.width > 0 ? r.width : W, h: r.height > 0 ? r.height : H, top: top, right: right };
     }
-    function fitScale(sz) {
-      var s = Math.min(sz.w / (W + 2 * FIT_MARGIN), sz.h / (H + 2 * FIT_MARGIN));
+    function scaleIn(w, h) {
+      var s = Math.min(w / (fitBox.w + 2 * FIT_MARGIN), h / (fitBox.h + 2 * FIT_MARGIN));
       return s > 0 && isFinite(s) ? Math.min(s, MAX_FIT_SCALE) : 1;
     }
-    function fitCamera() { return { cx: W / 2, cy: H / 2, s: fitScale(size()) }; }
+    // The overlay holds only the top-right corner, so the drawing fits either in
+    // the band below it or the column beside it, whichever draws it larger (below
+    // on a tie). dx and dy are how many screen px the centred drawing must move
+    // (left, or down) to clear the overlay: 0 when centring already clears it.
+    function fitPlace(sz) {
+      var below = scaleIn(sz.w, sz.h - sz.top);
+      var beside = sz.right ? scaleIn(sz.w - sz.right, sz.h) : 0;
+      if (beside > below) {
+        var halfW = (fitBox.w / 2 + FIT_MARGIN) * beside;
+        return { s: beside, dx: Math.max(0, sz.w / 2 + halfW - (sz.w - sz.right)), dy: 0 };
+      }
+      var halfH = (fitBox.h / 2 + FIT_MARGIN) * below;
+      return { s: below, dx: 0, dy: Math.max(0, sz.top - (sz.h / 2 - halfH)) };
+    }
+    function fitScale(sz) { return fitPlace(sz).s; }
+    function fitCamera() {
+      var p = fitPlace(size());
+      return { cx: fitBox.x + fitBox.w / 2 + p.dx / p.s, cy: fitBox.y + fitBox.h / 2 - p.dy / p.s, s: p.s };
+    }
+    // Pan and zoom keep the centre on the canvas, widened to take in the fit
+    // centre, so the first move after a fit never snaps the view.
+    function clampCentre(cx, cy) {
+      var f = fitCamera();
+      return { cx: clamp(cx, Math.min(0, f.cx), Math.max(W, f.cx)), cy: clamp(cy, Math.min(0, f.cy), Math.max(H, f.cy)) };
+    }
 
     function apply() {
       var sz = size();
@@ -414,14 +471,16 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
       var ns = clamp(cam.s * factor, fs * MIN_ZOOM, fs * MAX_ZOOM);
       var wx = cam.cx + (px - sz.w / 2) / cam.s;
       var wy = cam.cy + (py - sz.h / 2) / cam.s;
-      cam = { cx: clamp(wx - (px - sz.w / 2) / ns, 0, W), cy: clamp(wy - (py - sz.h / 2) / ns, 0, H), s: ns };
+      var c = clampCentre(wx - (px - sz.w / 2) / ns, wy - (py - sz.h / 2) / ns);
+      cam = { cx: c.cx, cy: c.cy, s: ns };
       apply();
     }
     function zoomBy(factor) { var sz = size(); zoomAt(factor, sz.w / 2, sz.h / 2); }
     function panBy(dx, dy) {
       cancelTween();
       fitted = false;
-      cam = { cx: clamp(cam.cx + dx / cam.s, 0, W), cy: clamp(cam.cy + dy / cam.s, 0, H), s: cam.s };
+      var c = clampCentre(cam.cx + dx / cam.s, cam.cy + dy / cam.s);
+      cam = { cx: c.cx, cy: c.cy, s: cam.s };
       apply();
     }
 
@@ -562,6 +621,7 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
     var adjacency = PADiagram.dict(data.adjacency);
     var edgeEnds = PADiagram.dict(data.edges);
     var directed = PADiagram.dict(data.directed);
+    var parents = PADiagram.dict(data.parents);
     var info = PADiagram.dict(data.info);
     var hoverId = null;
     var focusId = null;
@@ -576,7 +636,13 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
     function relation(id) {
       if (edgeEnds[id]) return { nodes: edgeEnds[id].slice(), edges: [id], on: [] };
       var a = adjacency[id] || { nodes: [], edges: [] };
-      return { nodes: [id].concat(a.nodes), edges: a.edges, on: [id] };
+      var rel = { nodes: [id].concat(a.nodes), edges: a.edges, on: [id] };
+      if (!els.groups[id]) return rel;
+      // a group also keeps what it holds lit (story.js light() walks parents the same way)
+      var inside = function (at) { for (at = parents[at]; at !== undefined; at = parents[at]) if (at === id) return true; return false; };
+      rel.nodes = rel.nodes.concat(Object.keys(els.nodes).filter(inside));
+      rel.edges = rel.edges.concat(Object.keys(edgeEnds).filter(function (e) { return inside(edgeEnds[e][0]) && inside(edgeEnds[e][1]); }));
+      return rel;
     }
     function paint(el, dim, on, cls) {
       el.classList.toggle('pa-dim', dim);
@@ -853,8 +919,9 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
     if (closeEl) closeEl.addEventListener('click', function (e) { e.stopPropagation(); if (hooks.onClose) hooks.onClose(e.detail === 0); });
 
     // Repaint from the trace: a route, a selected edge or node, or the empty
-    // state. Focus inside the panel moves to the close button, so a repaint
-    // under the keyboard never drops focus to the page.
+    // state. Focus inside the panel moves to the close button, or to the title
+    // when Close hides with nothing left to close, so a repaint never drops
+    // focus to the page.
     function paint() {
       if (!panelEl) return;
       panelEl.hidden = off();
@@ -873,6 +940,7 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
       else if (id) paintNode(id);
       else titleEl.textContent = 'Map';
       if (hadFocus && something && closeEl) closeEl.focus();
+      else if (hadFocus && !something && !off() && titleEl) titleEl.focus();
     }
 
     // ---- the tooltip ----------------------------------------------------------------------------
@@ -1497,12 +1565,23 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
   var PAN_PX = 80;
   var KEY_ZOOM = 1.25;
 
+  // A wide, invisible copy of the wire right after it (css.mjs .pa-hit: a fixed screen width),
+  // so a real mouse can land on a 1 px edge. Added here, not drawn: the export drops it anyway.
+  function addHitPath(edge) {
+    var wire = edge.querySelector('.pa-wire');
+    if (!wire || edge.querySelector('.pa-hit')) return;
+    var hit = wire.cloneNode(false);
+    hit.setAttribute('class', 'pa-hit');
+    ['marker-end', 'marker-start'].forEach(function (a) { hit.removeAttribute(a); });
+    wire.parentNode.insertBefore(hit, wire.nextSibling);
+  }
+
   // The drawn elements by id (nodes, groups, edges, labels) and in lists (lifelines, frames, notes).
   function elementsOf(svg) {
     var els = { nodes: PADiagram.dict(), groups: PADiagram.dict(), edges: PADiagram.dict(), labels: PADiagram.dict() };
     svg.querySelectorAll('.pa-node[data-id]').forEach(function (el) { els.nodes[el.getAttribute('data-id')] = el; });
     svg.querySelectorAll('.pa-group[data-id]').forEach(function (el) { els.groups[el.getAttribute('data-id')] = el; });
-    svg.querySelectorAll('.pa-edge[data-id]').forEach(function (el) { els.edges[el.getAttribute('data-id')] = el; });
+    svg.querySelectorAll('.pa-edge[data-id]').forEach(function (el) { els.edges[el.getAttribute('data-id')] = el; addHitPath(el); });
     svg.querySelectorAll('.pa-edge-label[data-edge]').forEach(function (el) { els.labels[el.getAttribute('data-edge')] = el; });
     els.lifelines = Array.prototype.slice.call(svg.querySelectorAll('.pa-lifeline[data-for]'));
     els.frames = Array.prototype.slice.call(svg.querySelectorAll('.pa-frame[data-messages]'));
@@ -1511,6 +1590,11 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
   }
 
   var within = function (el, holder) { return !!(holder && el && holder.contains(el)); };
+  // Arrows inside the panel scroll it only along an axis it overflows; otherwise they still pan.
+  var panelScrolls = function (p, k) {
+    if (!p) return false;
+    return (k === 'ArrowUp' || k === 'ArrowDown') ? p.scrollHeight > p.clientHeight : p.scrollWidth > p.clientWidth;
+  };
   var isField = function (el) { return !!(el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)); };
 
   function mount(stage, data, options) {
@@ -1526,7 +1610,10 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
     var camera = PADiagram.camera(stage, svg, data, { onApply: emit });
     var trace = PADiagram.trace(svg, data, els, { isOff: function () { return story.isPresenting(); } });
     // Entering Play drops the selection and the route (the panel hides with them); each beat repaints the chrome.
-    var story = PADiagram.story(stage, svg, data, els, camera, { onStep: function () { if (story.isPresenting()) trace.clear(); transport.paint(); trace.refresh(); panel.paint(); emit(); } });
+    var story = PADiagram.story(stage, svg, data, els, camera, { onStep: function () {
+      if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
+      transport.paint(); trace.refresh(); panel.paint(); emit();
+    } });
     var transport = PADiagram.transport({ caption: options.caption || null, chapters: options.chapters || null }, data, story);
     var panel = PADiagram.panel({ panel: options.panel || null, tip: options.tip || null, found: options.found || null }, data, els, trace, {
       isOff: function () { return story.isPresenting(); },
@@ -1534,6 +1621,16 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
       onBeat: function (i) { story.present(i); },
       onClose: function (byKeyboard) { closeSelection(null, byKeyboard); },
     });
+
+    // A control that holds focus must not hide with it: focus would drop to the page, outside the element
+    // that takes the keys in an embedder's dialog, and every shortcut would go dead. Before the holders
+    // hide, focus moves to the tab of the mode being entered (found under `root`).
+    function keepFocus(holders, mode) {
+      var active = doc.activeElement;
+      if (!holders.some(function (h) { return within(active, h); })) return;
+      var tab = root.querySelector('[data-pa-mode="' + mode + '"]');
+      if (tab && !tab.disabled) tab.focus();
+    }
 
     // ---- animation ----------------------------------------------------------------------
     var animateOn = !!data.animate && !camera.reduced();
@@ -1605,6 +1702,17 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
       if (keyboard && inPanel && back && back.focus) back.focus();
       else if (hadFocus && target && target.blur) target.blur(); // focusout clears the focus trace
       panel.paint();
+      emit();
+    }
+
+    // Back to the resting view an embedder starts from: out of Play, nothing selected, traced or found, the
+    // panel closed, the camera fitted.
+    function reset() {
+      story.exit();
+      trace.clear();
+      clearFind();
+      panel.paint();
+      camera.fit();
       emit();
     }
 
@@ -1737,6 +1845,7 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
     // panel, else leaves full screen, else leaves Play, else clears the Find
     // filter, else clears the trace. In Play any key but Space and F (full screen moves no camera) pauses, in a form
     // field too.
+    var ARROWS = { ArrowLeft: true, ArrowRight: true, ArrowUp: true, ArrowDown: true };
     var KEEPS_PLAYING = { ' ': true, Tab: true, Shift: true, CapsLock: true, f: true, F: true };
     function onKey(e) {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1773,6 +1882,7 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
       else if (inPlay && (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp')) story.prev();
       else if (inPlay && k === 'Home') story.first();
       else if (inPlay && k === 'End') story.last();
+      else if (ARROWS[k] && within(t, options.panel) && panelScrolls(options.panel, k)) handled = false; // the details panel scrolls with them
       else if (k === 'ArrowLeft') camera.panBy(-PAN_PX, 0);
       else if (k === 'ArrowRight') camera.panBy(PAN_PX, 0);
       else if (k === 'ArrowUp') camera.panBy(0, -PAN_PX);
@@ -1797,7 +1907,7 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
     return {
       svg: svg, stage: stage, state: state,
       fit: camera.fit, zoomBy: camera.zoomBy, panBy: camera.panBy,
-      select: pick, closePanel: function () { closeSelection(null, false); },
+      select: pick, closePanel: function () { closeSelection(null, false); }, reset: reset,
       present: story.present, goTo: story.goTo, next: story.next, prev: story.prev, first: story.first, last: story.last,
       nextChapter: story.nextChapter, prevChapter: story.prevChapter, exit: story.exit, togglePresent: story.togglePresent,
       play: story.play, pause: story.pause, togglePlay: story.togglePlay, setSpeed: story.setSpeed, cycleSpeed: story.cycleSpeed,
@@ -1919,7 +2029,7 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
   function standaloneSvg() {
     var clone = ctl.svg.cloneNode(true);
     clone.querySelectorAll('.pa-hidden,.pa-dim,.pa-on,.pa-hl,.pa-active,.pa-selected,.pa-route').forEach(function (el) { el.classList.remove('pa-hidden', 'pa-dim', 'pa-on', 'pa-hl', 'pa-active', 'pa-selected', 'pa-route'); });
-    clone.querySelectorAll('.pa-dot').forEach(function (el) { el.remove(); });
+    clone.querySelectorAll('.pa-dot,.pa-hit').forEach(function (el) { el.remove(); });
     clone.classList.remove('pa-animate', 'pa-tracing');
     clone.querySelectorAll('[tabindex]').forEach(function (el) { el.removeAttribute('tabindex'); });
     clone.setAttribute('viewBox', '0 0 ' + data.width + ' ' + data.height);
