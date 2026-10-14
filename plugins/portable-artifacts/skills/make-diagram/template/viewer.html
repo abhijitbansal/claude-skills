@@ -92,11 +92,16 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 .transport { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .scrub { flex: 1 1 160px; min-width: 120px; margin: 0; }
 .cap-count { color: var(--text-3); font-size: 0.8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* Play on a phone: the tool row and the transport scroll sideways instead of wrapping, and the legend overlay steps aside, so the stage keeps about half the screen. */
-@media (max-width: 719px) {
+/* Play on a phone, portrait or landscape (narrow, or short): the tool row and the transport scroll sideways instead of wrapping, and the legend overlay steps aside, so the stage keeps about half the screen. */
+@media (max-width: 719px), (max-height: 500px) {
   body.pa-presenting .tools, body.pa-presenting .transport { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
   body.pa-presenting .tools > *, body.pa-presenting .transport > * { flex-shrink: 0; }
   body.pa-presenting .legend { display: none; }
+}
+/* Short (a landscape phone): the title block and the beat chips go too (the chapter chips, the scrubber and Prev / Next stay), and the caption line keeps two lines. */
+@media (max-height: 500px) {
+  body.pa-presenting .titles, body.pa-presenting .beats { display: none; }
+  body.pa-presenting .cap-line { max-height: 2.8em; }
 }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 </style>

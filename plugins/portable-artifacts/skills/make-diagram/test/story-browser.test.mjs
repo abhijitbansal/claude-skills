@@ -619,6 +619,7 @@ test('End with focus on Next hands focus to Play, so Home still works from the k
 
 // ---- Play on a phone: the chrome leaves the stage most of the screen ------------------------------
 
+// Phone sizes are portrait (390 wide) and landscape (844x390, 720x500, 664x390: short, so wide enough not to match max-width: 719px).
 // Four chapters of three beats, 36-character chapter titles and 150-character captions: the longest a story gets.
 function longStory() {
   const nodes = ['n1', 'n2', 'n3', 'n4', 'n5'].map((id, i) => ({ id, label: `Node ${i + 1}` }));
@@ -645,7 +646,7 @@ const playRects = (page) => page.evaluate(() => {
 });
 const intersects = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 
-for (const [label, spec, sizes] of [['a 4 x 3 story with long titles and captions', longStory(), [[390, 664], [390, 780]]], ['the shipped story example', example('story'), [[390, 780]]]]) {
+for (const [label, spec, sizes] of [['a 4 x 3 story with long titles and captions', longStory(), [[390, 664], [390, 780], [844, 390], [720, 500], [664, 390]]], ['the shipped story example', example('story'), [[390, 780], [844, 390], [720, 500], [664, 390]]]]) {
   for (const [width, height] of sizes) {
     test(`Play at ${width}x${height} (${label}): the stage keeps half the screen, the chapter chips stay on one line, the legend does not cover the stage`, async (t) => {
       if (await skipUnlessBrowser(t)) return;
