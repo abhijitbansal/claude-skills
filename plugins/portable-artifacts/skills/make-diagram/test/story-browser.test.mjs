@@ -407,7 +407,7 @@ test('a pointer on the canvas pauses: click, wheel and drag; the beat stays', as
     await page.keyboard.press(k);
     assert.equal(await playing(page), true, `${k} moves focus or modifies; it does not pause`);
   }
-  await page.keyboard.press('f');
+  await page.keyboard.press('x');
   assert.equal(await playing(page), false, 'any other key but Space pauses');
   assert.equal(await page.locator('.pa-dot.pa-dot-on').count(), 0, 'pausing hides the dot');
   assert.deepEqual(problems, []);
@@ -553,6 +553,66 @@ test('a sequence hop low in the diagram frames its message, not just the partici
   await settle(page);
   assert.deepEqual(await activeEdges(page), ['m13']);
   assert.ok(holds(await viewBox(page), await boxOf(page, ['m13'])), 'the camera holds the lit message');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+// ---- phase 4: deferred findings ------------------------------------------------------------------
+
+test('a resize while the dot travels keeps the beat playing: the dot stays on and the count does not move', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.keyboard.press('p');
+  for (let i = 0; i < 3; i++) await page.click('[data-pa-speed]'); // 0.5×: glide 1200 ms, dot 2400 ms
+  await page.evaluate(() => document.activeElement.blur());
+  await page.keyboard.press('Space');
+  await waitDotOn(page);
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await page.waitForTimeout(300); // the ResizeObserver has fired; a restarted beat would be mid-glide with the dot hidden
+  assert.equal(await playing(page), true, 'still playing');
+  assert.equal(await count(page), '1 / 9', 'the same beat');
+  assert.equal(await page.locator('.pa-dot.pa-dot-on').count(), 1, 'the dot never went away');
+  assert.ok((await viewBox(page)).every(Number.isFinite));
+  await page.keyboard.press('Space');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('the #step-N hash is written once per beat, not on every camera frame', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url, {
+    init: () => {
+      window.__replaced = 0;
+      const original = history.replaceState.bind(history);
+      history.replaceState = function () { window.__replaced += 1; return original.apply(history, arguments); };
+    },
+  });
+  await page.keyboard.press('p');
+  await settle(page);
+  assert.equal(await page.evaluate(() => window.__replaced), 1, 'entering Play writes #step-1 once');
+  await page.keyboard.press('ArrowRight');
+  await settle(page);
+  assert.equal(await page.evaluate(() => window.__replaced), 2, 'one beat, one write, however many frames the glide took');
+  assert.equal(await page.evaluate(() => location.hash), '#step-2');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => window.__replaced), 3, 'leaving clears the hash once');
+  assert.equal(await page.evaluate(() => location.hash), '');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('End with focus on Next hands focus to Play, so Home still works from the keyboard', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.keyboard.press('p');
+  await page.focus('[data-pa-next]');
+  await page.keyboard.press('End');
+  assert.equal(await count(page), '9 / 9');
+  assert.equal(await page.isDisabled('[data-pa-next]'), true);
+  assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-pa-play')), true, 'focus is on Play, not on the page');
+  await page.keyboard.press('Home');
+  assert.equal(await count(page), '1 / 9');
+  assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-pa-play')), true);
   assert.deepEqual(problems, []);
   await context.close();
 });

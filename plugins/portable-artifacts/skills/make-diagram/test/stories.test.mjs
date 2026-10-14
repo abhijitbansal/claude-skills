@@ -49,6 +49,47 @@ test('resolveEnds: the direction given wins; the other way plays in reverse; non
   assert.equal(resolveEnds('x', 'x', [], 'message').error, 'no message between "x" and "x"; add one, or name a message with "edge"');
 });
 
+test('a two-headed edge named against its authored order plays backwards; exact direction wins; ties ask for edge', () => {
+  const ba = { id: 'ba', from: 'b', to: 'a', both: true };
+  assert.deepEqual(resolveEnds('b', 'a', [ba]), { link: ba, reverse: false }, 'named as authored: forward');
+  assert.deepEqual(resolveEnds('a', 'b', [ba]), { link: ba, reverse: true }, 'named against the authored order: the dot travels to -> from');
+  const ab = { id: 'ab', from: 'a', to: 'b', both: false };
+  assert.deepEqual(resolveEnds('a', 'b', [ab, ba]), { link: ab, reverse: false }, 'the exact direction beats a two-headed edge named the other way');
+  const plain = { id: 'plain', from: 'b', to: 'a', both: false };
+  const both = { id: 'both', from: 'a', to: 'b', both: true };
+  assert.deepEqual(resolveEnds('b', 'a', [plain, both]), { link: plain, reverse: false }, 'plain b->a beats both a->b for b -> a');
+  assert.deepEqual(resolveEnds('a', 'b', [plain, both]), { link: both, reverse: false });
+  assert.deepEqual(resolveEnds('a', 'b', [ba, { ...ba, id: 'ba2' }]), { error: '2 edges connect "a" and "b" (ba, ba2); name one with "edge"' }, 'two two-headed edges the other way tie');
+  assert.deepEqual(resolveEnds('a', 'b', [{ ...ab, id: 'x' }, { ...both, id: 'y' }]), { error: '2 edges connect "a" and "b" (x, y); name one with "edge"' }, 'two exact matches tie');
+  assert.deepEqual(resolveEnds('a', 'b', [ba, plain]), { link: ba, reverse: true }, 'a two-headed edge reversed beats a plain reverse edge');
+});
+
+test('a two-headed edge named both ways gets reverse in beatsOf', () => {
+  const spec = { title: 'T', type: 'flow', nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], edges: [{ from: 'b', to: 'a', both: true }], stories: [story([beat({ from: 'b', to: 'a' }), beat({ from: 'a', to: 'b' })])] };
+  const { beats } = beatsOf(spec, []);
+  assert.deepEqual(beats.map((b) => [b.edge, b.reverse]), [['edge-0', false], ['edge-0', true]]);
+});
+
+test('focus names nodes and groups (participants in a sequence), not edges or messages', async () => {
+  const e = await errorsOf(graph([story([beat({ focus: ['ab'] })])]));
+  assert.equal(e.length, 1);
+  assert.equal(e[0].path, 'stories[0].beats[0].focus[0]');
+  assert.equal(e[0].message, '"ab" is an edge; focus names nodes and groups — target it with "edge"');
+  const seq = { title: 'S', type: 'sequence', participants: [{ id: 'x', label: 'X' }, { id: 'y', label: 'Y' }], messages: [{ id: 'm1', from: 'x', to: 'y' }], stories: [story([beat({ focus: ['m1'] })])] };
+  const s = await errorsOf(seq);
+  assert.equal(s.length, 1);
+  assert.equal(s[0].path, 'stories[0].beats[0].focus[0]');
+  assert.equal(s[0].message, '"m1" is a message; focus names participants — target it with "edge"');
+  assert.deepEqual(await errorsOf({ ...seq, stories: [story([beat({ focus: ['x', 'y'] })])] }), []);
+});
+
+test('unknown properties on a story and on a beat name the allowed ones', async () => {
+  const s = await errorsOf(graph([{ id: 's1', title: 'S', beats: [beat({ edge: 'ab' })], bogus: 1 }]));
+  assert.deepEqual(s, [{ path: 'stories[0].bogus', message: 'unknown property; allowed: id, title, beats' }]);
+  const b = await errorsOf(graph([story([{ ...beat({ edge: 'ab' }), note: 'x' }])]));
+  assert.deepEqual(b, [{ path: 'stories[0].beats[0].note', message: 'unknown property; allowed: title, caption, edge, from, to, focus' }]);
+});
+
 test('a valid story: hops by edge, by from/to forwards and backwards, and a focus shot', async () => {
   const spec = graph([story([beat({ edge: 'ab' }), beat({ from: 'b', to: 'c' }), beat({ from: 'b', to: 'a' }), beat({ focus: ['g', 'd'] })])]);
   assert.deepEqual(await errorsOf(spec), []);
@@ -58,8 +99,8 @@ test('a beat needs exactly one target', async () => {
   assert.deepEqual(await errorsOf(graph([story([beat({})])])), [{ path: 'stories[0].beats[0]', message: 'a beat needs one target: "edge", "from" and "to", or "focus"' }]);
   assert.deepEqual(await errorsOf(graph([story([beat({ edge: 'ab', focus: ['a'] })])])), [{ path: 'stories[0].beats[0]', message: 'a beat takes one target; this one has "edge" and "focus" — keep one' }]);
   assert.deepEqual(await errorsOf(graph([story([beat({ edge: 'ab', from: 'a', to: 'b', focus: ['a'] })])])), [{ path: 'stories[0].beats[0]', message: 'a beat takes one target; this one has "edge", "from and to" and "focus" — keep one' }]);
-  assert.deepEqual(await errorsOf(graph([story([beat({ from: 'a' })])])), [{ path: 'stories[0].beats[0].to', message: 'required with from' }]);
-  assert.deepEqual(await errorsOf(graph([story([beat({ to: 'a' })])])), [{ path: 'stories[0].beats[0].from', message: 'required with to' }]);
+  assert.deepEqual(await errorsOf(graph([story([beat({ from: 'a' })])])), [{ path: 'stories[0].beats[0].to', message: 'required with from — name the other end, or target the edge with "edge"' }]);
+  assert.deepEqual(await errorsOf(graph([story([beat({ to: 'a' })])])), [{ path: 'stories[0].beats[0].from', message: 'required with to — name the other end, or target the edge with "edge"' }]);
 });
 
 test('edge must name an edge: did-you-mean over authored and generated ids', async () => {

@@ -111,3 +111,23 @@ test('a timeline with beats but no chapters: prev chapter goes to the first beat
   assert.equal(story.index(), 1);
   assert.equal(story.chapter(), 0);
 });
+
+test('reframe keeps the running beat: the camera glides to the same target again and no timer restarts', () => {
+  const { story, moves, timers } = load(HOPS);
+  story.play(); // goTo(0): one glide move, one timer waiting for the glide
+  const before = timers.length;
+  story.reframe();
+  assert.equal(timers.length, before, 'no new timer: the beat under way keeps its clock');
+  assert.equal(moves.length, 2, 'one more camera move');
+  assert.deepEqual(moves.at(-1), { ms: 600 }, 'a story beat re-glides at its own pace (a jump would cut the entry glide short)');
+  assert.equal(story.isPlaying(), true);
+  assert.equal(story.index(), 0);
+  const steps = load(STEPS);
+  steps.story.setSpeed(2);
+  steps.story.present(1);
+  steps.story.reframe();
+  assert.deepEqual(steps.moves.at(-1), { ms: 150 }, 'a step beat re-glides at the camera pace over the speed');
+  const idle = load(HOPS);
+  idle.story.reframe();
+  assert.deepEqual(idle.moves, [], 'outside Play there is nothing to reframe');
+});

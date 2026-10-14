@@ -198,6 +198,7 @@
     }
 
     // ---- running a beat --------------------------------------------------------------------
+    var seenNow = null; // what the current step beat reveals, for reframe
     var run = 0; // bumps on every goTo, pause and exit, so a stale timer or frame does nothing
     var timer = 0;
     function cancelRun() {
@@ -220,13 +221,14 @@
       // a hop also frames its own edge: a sequence message sits below its participants' headers
       return camera.cameraFor(camera.boxOf(beat.edge ? beat.ids.concat(beat.edge) : beat.ids));
     }
+    // A story beat glides GLIDE_MS; a step beat (the older steps[] form) keeps the camera's own pace.
+    function glideFor(beat) { return (beat.kind === 'step' ? camera.glideMs() : GLIDE_MS) / speed; }
     // Show the beat: glide, then (a hop, motion allowed) the dot, then hold. While
     // playing, the hold ends in the next beat, the first again on loop, or a pause.
     function show(beat, seen) {
       var token = run;
       var instant = camera.reduced();
-      // A story beat glides GLIDE_MS; a step beat (the older steps[] form) keeps the camera's own pace.
-      var glide = (beat.kind === 'step' ? camera.glideMs() : GLIDE_MS) / speed;
+      var glide = glideFor(beat);
       camera.unfit();
       camera.moveTo(targetOf(beat, seen), { ms: glide });
       var hold = function () {
@@ -252,6 +254,7 @@
       var beat = beats[stepIndex];
       if (hooks.onStep) hooks.onStep();
       var seen = stepMode ? applyReveal() : null;
+      seenNow = seen;
       if (!stepMode) light(beat);
       show(beat, seen);
     }
@@ -289,6 +292,16 @@
       camera.fit();
     }
     function togglePresent() { if (presenting) exit(); else present(0); }
+    // A resize reframes the beat where it stands: the camera glides to the beat's
+    // target for the new stage size while the glide, dot or hold under way keep
+    // their clocks. goTo would start the beat over and hide the dot for a glide;
+    // an instant jump would cut short the glide into a beat (the panel hides on
+    // entering Play, which resizes the stage at once).
+    function reframe() {
+      if (!presenting) return;
+      camera.unfit();
+      camera.moveTo(targetOf(beats[stepIndex], seenNow), { ms: glideFor(beats[stepIndex]) });
+    }
 
     // ---- play, pause, speed, loop ---------------------------------------------------------------
     function play() {
@@ -324,6 +337,7 @@
       setSpeed: setSpeed, cycleSpeed: cycleSpeed, setLoop: setLoop, toggleLoop: toggleLoop,
       goTo: goTo, present: present, next: next, prev: prev, first: first, last: last,
       nextChapter: nextChapter, prevChapter: prevChapter, exit: exit, togglePresent: togglePresent,
+      reframe: reframe,
     };
   };
 })(window);

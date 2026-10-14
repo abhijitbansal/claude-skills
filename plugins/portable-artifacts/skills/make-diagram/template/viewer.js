@@ -310,8 +310,9 @@
     (options.keys || stage).addEventListener('keydown', onKey);
 
     // ---- resize ----------------------------------------------------------------------------
+    // A resize reframes a running beat where it stands; outside Play a fitted view refits.
     function onResize() {
-      if (story.isPresenting()) story.goTo(story.index()); else camera.onResize();
+      if (story.isPresenting()) story.reframe(); else camera.onResize();
     }
     if (global.ResizeObserver) new global.ResizeObserver(onResize).observe(stage);
     else global.addEventListener('resize', onResize);

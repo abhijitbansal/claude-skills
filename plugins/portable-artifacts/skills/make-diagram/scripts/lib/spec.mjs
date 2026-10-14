@@ -241,7 +241,7 @@ function checkGraph(spec, errors) {
     checkLength(errors, e, 'label', p, LIMITS.edgeLabel);
   });
   checkSteps(errors, spec, [...seen.keys()]);
-  checkStories(errors, spec, { endpoints: ctx.endpoints, known: [...seen.keys()] });
+  checkStories(errors, spec, { endpoints: ctx.endpoints, focusable: [...groupIds, ...nodeIds], known: [...seen.keys()] });
 }
 
 // ---- sequence ---------------------------------------------------------
@@ -330,7 +330,7 @@ function checkSequence(spec, errors) {
   checkFrameOverlap(errors, spec.frames ?? [], runs);
   (spec.notes ?? []).forEach((n, i) => checkNote(errors, n, pathJoin('notes', i), participantIds, messageIds));
   checkSteps(errors, spec, [...seen.keys()]);
-  checkStories(errors, spec, { endpoints: participantIds, known: [...seen.keys()] });
+  checkStories(errors, spec, { endpoints: participantIds, focusable: participantIds, known: [...seen.keys()] });
 }
 
 // ---- fields that belong to the other family of types -------------------

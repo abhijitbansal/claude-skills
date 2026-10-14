@@ -21,15 +21,18 @@ export function linksOf(spec) {
 }
 
 /**
- * The edge a beat's from/to names. The direction given wins: one edge from
- * `from` to `to` plays forward; failing that, one edge the other way plays in
- * reverse (the dot runs to -> from, for replies). Returns { link, reverse } or
- * { error } (the message; the caller adds the path). `what` is "edge" or "message".
+ * The edge a beat's from/to names. The direction given wins: edges from `from`
+ * to `to` (plain or two-headed) are tried first and play forward. Failing
+ * that, two-headed edges authored the other way, then plain ones, play in
+ * reverse (the dot runs to -> from, for replies). More than one edge in the
+ * winning tier is ambiguous. Returns { link, reverse } or { error } (the
+ * message; the caller adds the path). `what` is "edge" or "message".
  */
 export function resolveEnds(from, to, links, what = 'edge') {
-  const forward = links.filter((l) => l.from === from && l.to === to);
-  const found = forward.length ? forward : links.filter((l) => l.from === to && l.to === from);
-  if (found.length === 1) return { link: found[0], reverse: forward.length === 0 };
+  const other = links.filter((l) => l.from === to && l.to === from);
+  const tiers = [links.filter((l) => l.from === from && l.to === to), other.filter((l) => l.both), other];
+  const found = tiers.find((t) => t.length > 0) ?? [];
+  if (found.length === 1) return { link: found[0], reverse: found[0].from !== from };
   if (found.length === 0) return { error: `no ${what} between ${q(from)} and ${q(to)}; add one, or name ${what === 'edge' ? 'an' : 'a'} ${what} with "edge"` };
   return { error: `${found.length} ${what}s connect ${q(from)} and ${q(to)} (${found.map((l) => l.id).join(', ')}); name one with "edge"` };
 }
@@ -54,12 +57,19 @@ function checkTarget(errors, beat, p, spec, links, ctx) {
   }
   if (beat.focus !== undefined) {
     if (beat.focus.length === 0) errors.push({ path: pathJoin(p, 'focus'), message: 'at least one id is required' });
-    checkRefs(errors, beat.focus, pathJoin(p, 'focus'), ctx.known);
+    const focusPath = pathJoin(p, 'focus');
+    const word = spec.type === 'sequence' ? 'a message; focus names participants' : 'an edge; focus names nodes and groups';
+    beat.focus.forEach((id, k) => {
+      if (ctx.focusable.includes(id)) return;
+      const isLink = ctx.known.includes(id) || links.some((l) => l.id === id);
+      const message = isLink ? `${q(id)} is ${word} — target it with "edge"` : notFound(id, ctx.focusable);
+      errors.push({ path: pathJoin(focusPath, k), message });
+    });
     return;
   }
   if (pair.length === 1) {
     const missing = pair[0] === 'from' ? 'to' : 'from';
-    errors.push({ path: pathJoin(p, missing), message: `required with ${pair[0]}` });
+    errors.push({ path: pathJoin(p, missing), message: `required with ${pair[0]} — name the other end, or target the edge with "edge"` });
     return;
   }
   let sound = true;
@@ -76,8 +86,9 @@ function checkTarget(errors, beat, p, spec, links, ctx) {
 /**
  * Validate `stories`: counts and lengths, story ids (their own id space), and
  * every beat's target. `ctx.endpoints` are the ids from/to may name (nodes, plus
- * groups in architecture; participants in a sequence); `ctx.known` the ids
- * focus may name (what steps may name).
+ * groups in architecture; participants in a sequence); `ctx.focusable` the ids
+ * focus may name (groups and nodes; participants in a sequence). `ctx.known`
+ * (every id a step may name) (ids registered so far; edge ids are added from the links) tells an edge or message id from a stranger.
  */
 export function checkStories(errors, spec, ctx) {
   const stories = spec.stories;

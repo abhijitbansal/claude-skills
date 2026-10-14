@@ -11,14 +11,15 @@ export async function skipUnlessBrowser(t) {
   return true;
 }
 
-/** Opens `url`; collects every console error and warning and every page error in `problems`. */
-export async function openPage(url, { width = 1440, height = 900, colorScheme = 'light', reducedMotion = 'no-preference', hash = '' } = {}) {
+/** Opens `url`; collects every console error and warning and every page error in `problems`. `init` runs in the page before its scripts. */
+export async function openPage(url, { width = 1440, height = 900, colorScheme = 'light', reducedMotion = 'no-preference', hash = '', init } = {}) {
   browser ??= await launchBrowser();
   const context = await browser.newContext({ viewport: { width, height }, colorScheme, reducedMotion, acceptDownloads: true });
   const page = await context.newPage();
   const problems = [];
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') problems.push(m.text()); });
   page.on('pageerror', (e) => problems.push(e.message));
+  if (init) await page.addInitScript(init);
   await page.goto(url + hash);
   await page.waitForFunction(() => window.paReady === true, null, { timeout: 15000 });
   return { page, problems, context };

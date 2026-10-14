@@ -36,13 +36,15 @@
   var zoomLabel = one('[data-zoom-label]');
   var stepRe = /^#step-(\d+)$/;
 
-  var wasPresenting = false;
+  var hashAt = null; // the beat the hash names (null outside Play): a camera frame does not rewrite it
   function setHash(state) {
+    var want = state.presenting ? state.step : null;
+    if (want === hashAt) return;
     try {
-      if (state.presenting) history.replaceState(null, '', '#step-' + (state.step + 1));
-      else if (wasPresenting) history.replaceState(null, '', location.pathname + location.search);
+      if (want !== null) history.replaceState(null, '', '#step-' + (want + 1));
+      else history.replaceState(null, '', location.pathname + location.search);
     } catch (e) { /* file:// without history: the deep link just is not updated */ }
-    wasPresenting = state.presenting;
+    hashAt = want;
   }
 
   function sync(state) {

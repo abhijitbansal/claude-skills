@@ -52,11 +52,32 @@
       var head = pad2(i + 1) + ' / ' + pad2(n) + (ch ? ' · ' + ch.title.toUpperCase() : '') + ' · ' + beat.title;
       return beat.caption ? head + ' — ' + beat.caption : head;
     }
-    function mark(chips, active) {
+    // Scroll the chip's row so the chip sits in the middle. Only the row moves:
+    // scrollIntoView would scroll every ancestor, the page included.
+    function reveal(row, chip) {
+      if (!row || !chip || !row.getBoundingClientRect) return;
+      var r = row.getBoundingClientRect();
+      var c = chip.getBoundingClientRect();
+      row.scrollLeft = Math.max(0, row.scrollLeft + (c.left + c.width / 2) - (r.left + r.width / 2));
+    }
+    // `row` is the element the chips were appended to (the Node harness has no parentNode).
+    function mark(chips, row, active) {
       chips.forEach(function (c, i) {
         if (i === active) c.setAttribute('aria-current', 'true'); else c.removeAttribute('aria-current');
       });
-      if (chips[active] && chips[active].scrollIntoView) chips[active].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      if (chips[active]) reveal(row, chips[active]);
+    }
+
+    // A button disabled while it has focus drops focus to the page (and, in
+    // make-explainer's overlay, out of the element that takes the keys): focus
+    // goes to Play first, else to the scrubber.
+    function disable(button, off) {
+      if (!button) return;
+      if (off && !button.disabled && doc.activeElement === button) {
+        var to = part('data-pa-play') || scrub;
+        if (to && to.focus) to.focus();
+      }
+      button.disabled = off;
     }
 
     function paint() {
@@ -72,10 +93,8 @@
       var note = part('data-pa-note');
       if (note) { note.textContent = beat.caption || ''; note.hidden = !beat.caption; }
       text(part('data-pa-line'), line(beat, i, n));
-      var prev = part('data-pa-prev');
-      if (prev) prev.disabled = i === 0;
-      var next = part('data-pa-next');
-      if (next) next.disabled = i === n - 1;
+      disable(part('data-pa-prev'), i === 0);
+      disable(part('data-pa-next'), i === n - 1);
       var play = part('data-pa-play');
       if (play) play.textContent = story.isPlaying() ? 'Pause' : 'Play';
       var speed = part('data-pa-speed');
@@ -89,8 +108,8 @@
         if (scrub.value !== String(i)) scrub.value = String(i);
         scrub.setAttribute('aria-valuetext', 'Beat ' + (i + 1) + ' of ' + n);
       }
-      mark(beatChips, i);
-      mark(chapterChips, story.chapter());
+      mark(beatChips, beatRow, i);
+      mark(chapterChips, chaptersEl, story.chapter());
     }
     function wire(name, fn) {
       var b = part(name);
