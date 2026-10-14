@@ -274,22 +274,20 @@ test('Tab walks the toolbar, then the nodes in layer order; focus traces like ho
 
 const hiddenIds = (page) => page.evaluate(() => [...document.querySelectorAll('.pa-hidden')].map((e) => e.dataset.id ?? `label:${e.dataset.edge}`));
 
-test('presentation: P toggles, caption shows title, note and n / N, arrows, Space and click step', async (t) => {
+test('Play: P enters, the caption line and count show the beat, arrows and the buttons step, a canvas click does not, Escape leaves', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('architecture').url);
-  const steps = example('architecture').steps;
   assert.equal(await page.locator('[data-pa-caption]').isVisible(), false);
   await page.keyboard.press('p');
   assert.equal(await page.locator('[data-pa-caption]').isVisible(), true);
-  assert.equal(await page.textContent('[data-pa-title]'), steps[0].title);
-  assert.equal(await page.textContent('[data-pa-note]'), steps[0].note);
+  assert.equal(await page.textContent('[data-pa-line]'), '01 / 03 · WALKTHROUGH · The browser calls the API — TLS ends at the load balancer.');
   assert.equal(await page.textContent('[data-pa-count]'), '1 / 3');
-  assert.equal(await page.getAttribute('[data-act="present"]', 'aria-pressed'), 'true');
+  assert.equal(await page.getAttribute('[data-pa-mode="play"]', 'aria-pressed'), 'true');
   await page.keyboard.press('ArrowRight');
   assert.equal(await page.textContent('[data-pa-count]'), '2 / 3');
-  assert.equal(await page.isVisible('[data-pa-note]'), false, 'a step with no note shows none');
-  await page.keyboard.press('Space');
-  assert.equal(await page.textContent('[data-pa-title]'), 'Everything');
+  assert.equal(await page.textContent('[data-pa-line]'), '02 / 03 · WALKTHROUGH · The API writes the order', 'a beat with no caption shows none');
+  await page.keyboard.press('ArrowRight');
+  assert.ok((await page.textContent('[data-pa-line]')).endsWith('· Everything'));
   await page.keyboard.press('ArrowLeft');
   assert.equal(await page.textContent('[data-pa-count]'), '2 / 3');
   await page.click('[data-pa-next]');
@@ -298,9 +296,10 @@ test('presentation: P toggles, caption shows title, note and n / N, arrows, Spac
   await page.click('[data-pa-prev]');
   const c = await stageCentre(page);
   await page.mouse.click(c.x, c.y + 60);
-  assert.equal(await page.textContent('[data-pa-count]'), '3 / 3', 'a click on the canvas steps forward');
+  assert.equal(await page.textContent('[data-pa-count]'), '2 / 3', 'a click on the canvas no longer steps');
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('[data-pa-caption]').isVisible(), false);
+  assert.equal(await page.getAttribute('[data-pa-mode="play"]', 'aria-pressed'), 'false');
   assert.equal(await page.locator('.pa-hidden').count(), 0, 'leaving shows everything again');
   assert.deepEqual(problems, []);
   await context.close();
@@ -389,7 +388,7 @@ test('#step-N deep link opens the presentation at that step and follows the step
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('architecture').url, { hash: '#step-2' });
   assert.equal(await page.textContent('[data-pa-count]'), '2 / 3');
-  assert.equal(await page.textContent('[data-pa-title]'), example('architecture').steps[1].title);
+  assert.ok((await page.textContent('[data-pa-line]')).includes(example('architecture').steps[1].title));
   await page.keyboard.press('ArrowRight');
   assert.equal(await page.evaluate(() => location.hash), '#step-3');
   await page.keyboard.press('Escape');
@@ -481,7 +480,7 @@ test('the Everything step uses the fit camera, not a padded focus box', async (t
     const total = example(name).steps.length + 1;
     await page.keyboard.press('p');
     for (let i = 1; i < total; i++) await page.keyboard.press('ArrowRight');
-    assert.equal(await page.textContent('[data-pa-title]'), 'Everything', name);
+    assert.ok((await page.textContent('[data-pa-line]')).endsWith('· Everything'), name);
     await settle(page);
     assert.ok(Math.abs((await zoom(page)) - 1) < 0.001, `${name}: ${await zoom(page)}`);
     const [x, y, w, h] = await viewBox(page); // the caption shrinks the stage, so compare the centre, not the box
@@ -554,7 +553,7 @@ test('a group with no nodes is revealed by the last auto step', async (t) => {
   assert.ok((await hiddenIds(page)).includes('empty'), 'hidden at the start');
   const total = Number((await page.textContent('[data-pa-count]')).split(' / ')[1]);
   for (let i = 1; i < total; i++) await page.keyboard.press('ArrowRight');
-  assert.equal(await page.textContent('[data-pa-title]'), 'Everything');
+  assert.ok((await page.textContent('[data-pa-line]')).endsWith('· Everything'));
   assert.deepEqual(await hiddenIds(page), []);
   assert.deepEqual(problems, []);
   await context.close();
@@ -581,16 +580,14 @@ test('a sequence step with no focus keeps the headers of its messages\' particip
   await context.close();
 });
 
-test('a double click in presentation advances one step, not two', async (t) => {
+test('a double click on the canvas in Play neither steps nor leaves', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('architecture').url);
   await page.keyboard.press('p');
   const c = await stageCentre(page);
   await page.mouse.dblclick(c.x, c.y + 60);
-  assert.equal(await page.textContent('[data-pa-count]'), '2 / 3');
-  await page.waitForTimeout(400);
-  await page.mouse.click(c.x, c.y + 60);
-  assert.equal(await page.textContent('[data-pa-count]'), '3 / 3', 'a later single click still advances');
+  assert.equal(await page.textContent('[data-pa-count]'), '1 / 3');
+  assert.equal(await page.locator('[data-pa-caption]').isVisible(), true);
   assert.deepEqual(problems, []);
   await context.close();
 });
@@ -825,7 +822,7 @@ test('hostile text in labels renders as text in the page (Review Focus 1)', asyn
   assert.ok((await page.textContent('.pa-node .pa-label')).includes(evil));
   assert.equal(await page.title(), `T ${evil}`);
   await page.keyboard.press('p');
-  assert.equal(await page.textContent('[data-pa-title]'), evil);
+  assert.ok((await page.textContent('[data-pa-line]')).includes(evil));
   assert.equal(await page.locator('b').count(), 0);
   assert.deepEqual(problems, []);
   await context.close();

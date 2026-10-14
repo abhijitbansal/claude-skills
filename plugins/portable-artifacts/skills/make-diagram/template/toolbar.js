@@ -31,6 +31,8 @@
   // ---- diagram ---------------------------------------------------------------------
   var buttons = {};
   document.querySelectorAll('[data-act]').forEach(function (b) { buttons[b.getAttribute('data-act')] = b; });
+  var modes = {};
+  document.querySelectorAll('[data-pa-mode]').forEach(function (b) { modes[b.getAttribute('data-pa-mode')] = b; });
   var zoomLabel = one('[data-zoom-label]');
   var stepRe = /^#step-(\d+)$/;
 
@@ -46,11 +48,11 @@
   function sync(state) {
     document.body.classList.toggle('pa-presenting', state.presenting);
     if (zoomLabel) zoomLabel.textContent = Math.round(state.zoom * 100) + '%';
-    if (buttons.present) {
-      buttons.present.textContent = state.presenting ? 'Exit' : 'Present';
-      buttons.present.setAttribute('aria-pressed', String(state.presenting));
-      buttons.present.disabled = state.steps === 0;
+    if (modes.play) {
+      modes.play.setAttribute('aria-pressed', String(state.presenting));
+      modes.play.disabled = state.steps === 0;
     }
+    if (modes.explore) modes.explore.setAttribute('aria-pressed', String(!state.presenting));
     if (buttons.animate) {
       if (state.reducedMotion) {
         buttons.animate.textContent = 'Reduced motion';
@@ -65,15 +67,17 @@
     setHash(state);
   }
 
-  var ctl = window.PADiagram.mount(stage, data, { keys: document, caption: one('[data-pa-caption]'), onChange: sync });
+  var ctl = window.PADiagram.mount(stage, data, { keys: document, caption: one('[data-pa-caption]'), chapters: one('[data-pa-chapters]'), onChange: sync });
   var act = {
     fit: function () { ctl.fit(); },
     'zoom-in': function () { ctl.zoomBy(1.25); },
     'zoom-out': function () { ctl.zoomBy(0.8); },
-    present: function () { ctl.togglePresent(); },
     animate: function () { ctl.toggleAnimate(); },
   };
   Object.keys(act).forEach(function (name) { if (buttons[name]) buttons[name].addEventListener('click', act[name]); });
+  // The tabs: Play story enters the player on its first beat (the transport's Play starts it); Explore leaves it.
+  if (modes.play) modes.play.addEventListener('click', function () { if (!ctl.state().presenting) ctl.present(0); });
+  if (modes.explore) modes.explore.addEventListener('click', function () { ctl.exit(); });
 
   function fromHash() {
     var m = stepRe.exec(location.hash);
@@ -93,7 +97,8 @@
   // background (dark-theme text vanishes on a transparent one).
   function standaloneSvg() {
     var clone = ctl.svg.cloneNode(true);
-    clone.querySelectorAll('.pa-hidden,.pa-dim,.pa-on,.pa-hl').forEach(function (el) { el.classList.remove('pa-hidden', 'pa-dim', 'pa-on', 'pa-hl'); });
+    clone.querySelectorAll('.pa-hidden,.pa-dim,.pa-on,.pa-hl,.pa-active').forEach(function (el) { el.classList.remove('pa-hidden', 'pa-dim', 'pa-on', 'pa-hl', 'pa-active'); });
+    clone.querySelectorAll('.pa-dot').forEach(function (el) { el.remove(); });
     clone.classList.remove('pa-animate', 'pa-tracing');
     clone.querySelectorAll('[tabindex]').forEach(function (el) { el.removeAttribute('tabindex'); });
     clone.setAttribute('viewBox', '0 0 ' + data.width + ' ' + data.height);
@@ -180,6 +185,8 @@
     .catch(function () {})
     .then(function () {
       fromHash();
+      // autoplay starts the story by itself, unless a deep link picked a beat or motion is reduced.
+      if (data.autoplay && !stepRe.test(location.hash) && !ctl.state().reducedMotion) ctl.play();
       window.paReady = true;
     });
 })();

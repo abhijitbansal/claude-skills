@@ -28,4 +28,10 @@ export const PROTOTYPE_NAMED_SPECS = {
     participants: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
     messages: [{ id: 'constructor', from: 'a', to: 'b', label: 'hi' }],
   },
+  'a story named constructor hopping from a node named constructor': {
+    title: 'St', type: 'flow',
+    nodes: [{ id: 'constructor', label: 'Ctor' }, { id: 'b', label: 'B' }],
+    edges: [{ id: 'hop', from: 'constructor', to: 'b' }],
+    stories: [{ id: 'constructor', title: 'Ctor', beats: [{ title: 'go', from: 'constructor', to: 'b' }, { title: 'look', focus: ['constructor'] }] }],
+  },
 };

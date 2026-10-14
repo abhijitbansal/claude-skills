@@ -138,7 +138,7 @@ for (const name of NAMES) {
 test('page parts: toolbar, SVG, text alternative, data block and runtime', () => {
   const html = readOut(run([example('architecture')]));
   assert.ok(html.includes('role="group" aria-label="Diagram controls"') && !html.includes('role="toolbar"'), 'a plain group: no roving-tabindex promise');
-  for (const hook of ['data-act="fit"', 'data-act="zoom-in"', 'data-act="zoom-out"', 'data-act="present"', 'data-act="animate"', 'data-export="svg"', 'data-export="png"', 'data-theme-toggle aria-label="Theme: Auto. Change theme">Theme: Auto</button>', 'data-pa-caption', 'id="pa-stage"']) {
+  for (const hook of ['data-act="fit"', 'data-act="zoom-in"', 'data-act="zoom-out"', 'data-pa-mode="play"', 'data-pa-mode="explore"', 'data-pa-chapters', 'data-pa-line', 'data-pa-scrub', 'data-act="animate"', 'data-export="svg"', 'data-export="png"', 'data-theme-toggle aria-label="Theme: Auto. Change theme">Theme: Auto</button>', 'data-pa-caption', 'id="pa-stage"']) {
     assert.ok(html.includes(hook), hook);
   }
   assert.match(html, /<svg [^>]*role="graphics-document"/);

@@ -59,6 +59,11 @@ const state = [
   '.pa-hl > .pa-group-box{stroke:var(--accent);stroke-width:2}',
   '.pa-edge.pa-hl path,.pa-edge.pa-on path{stroke:var(--accent);stroke-width:2}',
   '.pa-edge.pa-hl .pa-arrow-fill,.pa-edge.pa-on .pa-arrow-fill{fill:var(--accent)}',
+  '.pa-edge.pa-active path{stroke:var(--accent);stroke-width:2.5}',
+  '.pa-edge.pa-active .pa-arrow-fill{fill:var(--accent)}',
+  '.pa-edge.pa-active .pa-arrow-open{stroke:var(--accent)}',
+  '.pa-dot{fill:var(--accent);stroke:none;pointer-events:none;visibility:hidden}',
+  '.pa-dot.pa-dot-on{visibility:visible}',
 ];
 
 // Flow animation moves the dashes along an edge and keeps each style's own
