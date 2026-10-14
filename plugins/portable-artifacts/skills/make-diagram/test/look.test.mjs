@@ -127,8 +127,12 @@ test('an edge carries its from-node family and one path.pa-wire; an edge leaving
 test('diagramCss: family rules tint the card and colour the tile, icon, type line and outgoing wires; tones come after and win; heads follow the wire', () => {
   const css = diagramCss();
   for (const f of FAMILIES) {
-    assert.ok(css.includes(`.pa-family-${f} .pa-shape{fill:var(--surface);fill:color-mix(in srgb,var(--k-${f}) 10%,var(--surface));stroke:var(--k-${f})}`), f);
-    assert.ok(css.includes(`.pa-family-${f} .pa-tile{fill:var(--surface);fill:color-mix(in srgb,var(--k-${f}) `), `${f} tile`);
+    const plain = `.pa-family-${f} .pa-shape{fill:var(--surface);stroke:var(--k-${f})}`;
+    const tint = `@supports (color: color-mix(in srgb, red, red)){`;
+    assert.ok(css.includes(plain), f);
+    assert.ok(css.includes(`.pa-family-${f} .pa-tile{fill:var(--surface)}`), `${f} plain tile`);
+    assert.ok(css.indexOf(`.pa-family-${f} .pa-shape{fill:color-mix(in srgb,var(--k-${f}) 10%,var(--surface))}`) > css.indexOf(tint), `${f} tint is inside @supports`);
+    assert.ok(css.indexOf(`.pa-family-${f} .pa-tile{fill:color-mix(in srgb,var(--k-${f}) `) > css.indexOf(plain), `${f} tile tint after the plain rules`);
     assert.ok(css.includes(`.pa-family-${f} .pa-icon{color:var(--k-${f})}`), `${f} icon`);
     assert.ok(css.includes(`.pa-family-${f} .pa-type{fill:var(--k-${f})}`), `${f} type line`);
     assert.ok(css.includes(`.pa-edge[data-family="${f}"] .pa-wire{stroke:var(--k-${f})}`), `${f} wire`);
@@ -182,13 +186,16 @@ test('diagramCss: lane, pill and legend rules', () => {
   const css = diagramCss();
   for (let i = 0; i < 8; i++) assert.ok(css.includes(`.pa-group[data-lane="${i}"] .pa-lane{fill:var(--s${i + 1})}`), `lane ${i}`);
   assert.match(css, /\.pa-lane\{stroke:none\}/);
-  assert.match(css, /\.pa-group-box\{fill:var\(--surface\);fill:color-mix\(in srgb,var\(--text-3\) 7%,transparent\);stroke:var\(--line\);stroke-width:1\}/);
+  assert.match(css, /\.pa-group-box\{fill:var\(--surface\);stroke:var\(--line\);stroke-width:1\}\n@supports \(color: color-mix\(in srgb, red, red\)\)\{\.pa-group-box\{fill:color-mix\(in srgb,var\(--text-3\) 7%,transparent\)\}\}/);
   assert.match(css, /\.pa-group-label\{fill:var\(--text-2\);font-size:11px;font-weight:600;letter-spacing:\.08em;text-transform:uppercase\}/);
   assert.match(css, /\.pa-edge-plate\{fill:var\(--surface\);stroke:var\(--line\);stroke-width:1\}/);
   assert.match(css, /\.pa-frame-kind\{fill:var\(--text-2\);font-size:11px;font-weight:600\}/, 'the frame tab word is measured with f.group: plain, no tracking');
   assert.match(css, /\.pa-legend-text\{fill:var\(--text-2\);font-size:11px\}/);
   assert.match(css, /\.pa-swatch\{stroke-width:1\}/);
-  for (const f of FAMILIES) assert.ok(css.includes(`.pa-swatch.pa-family-${f}{fill:var(--surface);fill:color-mix(in srgb,var(--k-${f}) 10%,var(--surface));stroke:var(--k-${f})}`), f);
+  for (const f of FAMILIES) {
+    assert.ok(css.includes(`.pa-swatch.pa-family-${f}{fill:var(--surface);stroke:var(--k-${f})}`), f);
+    assert.ok(css.includes(`.pa-swatch.pa-family-${f}{fill:color-mix(in srgb,var(--k-${f}) 10%,var(--surface))}`), `${f} tint`);
+  }
   assert.match(css, /\.pa-swatch\.pa-family-bare\{fill:var\(--surface\);stroke:var\(--line\)\}/);
   assert.match(css, /\.pa-legend-sample \.pa-wire\{stroke-width:1\.5\}/);
 });

@@ -10,15 +10,22 @@ const EMOJI_FONTS = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",san
 export const CARD_TINT = 10; // % of the kind hue in a card's fill; shared/contrast.mjs TINT gates the hue as text on it
 const TILE_TINT = 18; // the tile is a stronger tint of the same hue
 
+// Every color-mix() here wraps var(), so an engine without it still accepts the declaration at parse time, fails it at
+// computed-value time and draws the property's initial value (black). An earlier plain declaration cannot save that, so
+// each color-mix() rule sits in an @supports block, which such an engine skips whole, and a plain rule before it (same
+// selector, same specificity) holds the colour. context-stroke has no var(): an engine without it drops the declaration
+// at parse time and keeps the plain one directly before it.
+const supportsMix = (rs) => `@supports (color: color-mix(in srgb, red, red)){${rs.join('')}}`;
+
 const rules = [
   // frame
   '.pa-diagram{display:block;font-family:var(--font);font-size:14px;color:var(--text)}',
   // groups: a lane with a coloured bar (top-level) or a nested box; labels in spaced capitals
-  '.pa-group-box{fill:var(--surface);fill:color-mix(in srgb,var(--text-3) 7%,transparent);stroke:var(--line);stroke-width:1}',
+  '.pa-group-box{fill:var(--surface);stroke:var(--line);stroke-width:1}',
+  supportsMix(['.pa-group-box{fill:color-mix(in srgb,var(--text-3) 7%,transparent)}']),
   '.pa-lane{stroke:none}',
   `.pa-group-label{fill:var(--text-2);font-size:${GROUP_LABEL_SIZE}px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}`,
-  // edges: one path.pa-wire per edge; the arrow heads take the wire's stroke (an engine without context-stroke or
-  // color-mix() drops that declaration, so each one follows a plain fallback for the same property)
+  // edges: one path.pa-wire per edge; the arrow heads take the wire's stroke (a plain declaration precedes context-stroke)
   '.pa-wire{fill:none;stroke:var(--text-3);stroke-width:1.25;stroke-linejoin:round}',
   '.pa-edge-dashed .pa-wire{stroke-dasharray:6 4}',
   '.pa-edge-async .pa-wire{stroke-dasharray:1.5 4;stroke-linecap:round}',
@@ -58,14 +65,17 @@ const rules = [
 const familyRules = FAMILIES.flatMap((f) => {
   const hue = `var(--k-${f})`;
   return [
-    `.pa-family-${f} .pa-shape{fill:var(--surface);fill:color-mix(in srgb,${hue} ${CARD_TINT}%,var(--surface));stroke:${hue}}`,
+    `.pa-family-${f} .pa-shape{fill:var(--surface);stroke:${hue}}`,
     `.pa-family-${f} .pa-decor{stroke:${hue}}`,
-    `.pa-family-${f} .pa-tile{fill:var(--surface);fill:color-mix(in srgb,${hue} ${TILE_TINT}%,var(--surface))}`,
+    `.pa-family-${f} .pa-tile{fill:var(--surface)}`,
     `.pa-family-${f} .pa-icon{color:${hue}}`,
     `.pa-family-${f} .pa-type{fill:${hue}}`,
     `.pa-edge[data-family="${f}"] .pa-wire{stroke:${hue}}`,
   ];
-}).concat(['.pa-family-bare .pa-shape{fill:var(--surface);stroke:var(--line)}']);
+}).concat(['.pa-family-bare .pa-shape{fill:var(--surface);stroke:var(--line)}', supportsMix(FAMILIES.flatMap((f) => [
+  `.pa-family-${f} .pa-shape{fill:color-mix(in srgb,var(--k-${f}) ${CARD_TINT}%,var(--surface))}`,
+  `.pa-family-${f} .pa-tile{fill:color-mix(in srgb,var(--k-${f}) ${TILE_TINT}%,var(--surface))}`,
+]))]);
 
 // Dots and the small diamond are drawn as marks, not cards: after the family
 // rules (same specificity), so a bare family cannot wash them out.
@@ -128,8 +138,9 @@ const laneRules = Array.from({ length: 8 }, (_, i) => `.pa-group[data-lane="${i}
 const legendRules = [
   '.pa-legend-text{fill:var(--text-2);font-size:11px}',
   '.pa-swatch{stroke-width:1}',
-  ...FAMILIES.map((f) => `.pa-swatch.pa-family-${f}{fill:var(--surface);fill:color-mix(in srgb,var(--k-${f}) ${CARD_TINT}%,var(--surface));stroke:var(--k-${f})}`),
+  ...FAMILIES.map((f) => `.pa-swatch.pa-family-${f}{fill:var(--surface);stroke:var(--k-${f})}`),
   '.pa-swatch.pa-family-bare{fill:var(--surface);stroke:var(--line)}',
+  supportsMix(FAMILIES.map((f) => `.pa-swatch.pa-family-${f}{fill:color-mix(in srgb,var(--k-${f}) ${CARD_TINT}%,var(--surface))}`)),
   '.pa-legend-sample .pa-wire{stroke-width:1.5}',
 ];
 
@@ -143,11 +154,12 @@ const legendRules = [
 const DARK = [
   '.pa-edge.pa-active .pa-wire{stroke-width:2.5;filter:drop-shadow(0 0 6px var(--glow))}',
   '.pa-dot{fill:var(--glow);filter:drop-shadow(0 0 6px var(--glow))}',
-  '.pa-group-box{fill:var(--surface);fill:color-mix(in srgb,var(--text-3) 12%,transparent)}',
 ];
+const DARK_MIX = ['.pa-group-box{fill:color-mix(in srgb,var(--text-3) 12%,transparent)}'];
 const dark = [
-  `@media (prefers-color-scheme: dark){${DARK.map((r) => `:root:not([data-theme="light"]) ${r}`).join('')}}`,
+  `@media (prefers-color-scheme: dark){${DARK.map((r) => `:root:not([data-theme="light"]) ${r}`).join('')}${supportsMix(DARK_MIX.map((r) => `:root:not([data-theme="light"]) ${r}`))}}`,
   ...DARK.map((r) => `:root[data-theme="dark"] ${r}`),
+  supportsMix(DARK_MIX.map((r) => `:root[data-theme="dark"] ${r}`)),
 ];
 
 /** The stylesheet for rendered diagrams. */

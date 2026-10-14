@@ -91,8 +91,10 @@ function legendHtml(spec) {
   return `<div class="legend" data-pa-legend aria-hidden="true">${items.join('')}</div>`;
 }
 
+// color-mix() wraps var(), so it sits in @supports (see css.mjs): an engine without it keeps the plain swatch.
 const legendCss = () => [
-  ...FAMILIES.map((f) => `.lg-sw-${f}{background:var(--surface);background:color-mix(in srgb,var(--k-${f}) ${LEGEND_TINT}%,var(--surface));border-color:var(--k-${f})}`),
+  ...FAMILIES.map((f) => `.lg-sw-${f}{background:var(--surface);border-color:var(--k-${f})}`),
+  `@supports (color: color-mix(in srgb, red, red)){${FAMILIES.map((f) => `.lg-sw-${f}{background:color-mix(in srgb,var(--k-${f}) ${LEGEND_TINT}%,var(--surface))}`).join('')}}`,
 ].join('\n');
 
 // ---- page ---------------------------------------------------------------------------------
