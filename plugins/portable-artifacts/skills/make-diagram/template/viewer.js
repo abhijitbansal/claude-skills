@@ -46,6 +46,11 @@
   }
 
   var within = function (el, holder) { return !!(holder && el && holder.contains(el)); };
+  // Arrows inside the panel scroll it only along an axis it overflows; otherwise they still pan.
+  var panelScrolls = function (p, k) {
+    if (!p) return false;
+    return (k === 'ArrowUp' || k === 'ArrowDown') ? p.scrollHeight > p.clientHeight : p.scrollWidth > p.clientWidth;
+  };
   var isField = function (el) { return !!(el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)); };
 
   function mount(stage, data, options) {
@@ -333,7 +338,7 @@
       else if (inPlay && (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp')) story.prev();
       else if (inPlay && k === 'Home') story.first();
       else if (inPlay && k === 'End') story.last();
-      else if (ARROWS[k] && within(t, options.panel)) handled = false; // the details panel scrolls with them
+      else if (ARROWS[k] && within(t, options.panel) && panelScrolls(options.panel, k)) handled = false; // the details panel scrolls with them
       else if (k === 'ArrowLeft') camera.panBy(-PAN_PX, 0);
       else if (k === 'ArrowRight') camera.panBy(PAN_PX, 0);
       else if (k === 'ArrowUp') camera.panBy(0, -PAN_PX);

@@ -624,3 +624,22 @@ test('arrow keys with focus in the details panel scroll it and leave the camera 
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+test('arrow keys still pan from inside the panel when it has nothing to scroll, as after a mouse Close', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('flow').url, { width: 1440, height: 900 });
+  await page.click('.pa-node[data-id="ask"]');
+  await settle(page);
+  await page.click('[data-pa-panel-close]');
+  await settle(page);
+  const inPanel = await page.evaluate(() => document.querySelector('[data-pa-panel]').contains(document.activeElement));
+  assert.ok(inPanel, 'precondition: Close hands focus to the panel');
+  for (const key of ['ArrowRight', 'ArrowDown']) {
+    const box = await viewBox(page);
+    await page.keyboard.press(key);
+    await settle(page);
+    assert.notDeepEqual(await viewBox(page), box, `${key} pans`);
+  }
+  assert.deepEqual(problems, []);
+  await context.close();
+});
