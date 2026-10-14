@@ -13,6 +13,12 @@ export const PROTOTYPE_NAMED_SPECS = {
     edges: [{ from: 'a', to: 'b' }],
     steps: [{ title: 'group', focus: ['constructor'], highlight: ['constructor'] }],
   },
+  'a group named constructor at a two-headed edge end': {
+    title: 'GE', type: 'architecture',
+    groups: [{ id: 'constructor', label: 'Group' }],
+    nodes: [{ id: 'a', label: 'A', group: 'constructor' }, { id: 'b', label: 'B' }],
+    edges: [{ from: 'a', to: 'b' }, { from: 'b', to: 'constructor', both: true }],
+  },
   'an edge named constructor': {
     title: 'E', type: 'state',
     nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],

@@ -67,7 +67,7 @@
     setHash(state);
   }
 
-  var ctl = window.PADiagram.mount(stage, data, { keys: document, caption: one('[data-pa-caption]'), chapters: one('[data-pa-chapters]'), onChange: sync });
+  var ctl = window.PADiagram.mount(stage, data, { keys: document, caption: one('[data-pa-caption]'), chapters: one('[data-pa-chapters]'), panel: one('[data-pa-panel]'), tip: one('[data-pa-tip]'), onChange: sync });
   var act = {
     fit: function () { ctl.fit(); },
     'zoom-in': function () { ctl.zoomBy(1.25); },
@@ -97,7 +97,7 @@
   // background (dark-theme text vanishes on a transparent one).
   function standaloneSvg() {
     var clone = ctl.svg.cloneNode(true);
-    clone.querySelectorAll('.pa-hidden,.pa-dim,.pa-on,.pa-hl,.pa-active').forEach(function (el) { el.classList.remove('pa-hidden', 'pa-dim', 'pa-on', 'pa-hl', 'pa-active'); });
+    clone.querySelectorAll('.pa-hidden,.pa-dim,.pa-on,.pa-hl,.pa-active,.pa-selected,.pa-route').forEach(function (el) { el.classList.remove('pa-hidden', 'pa-dim', 'pa-on', 'pa-hl', 'pa-active', 'pa-selected', 'pa-route'); });
     clone.querySelectorAll('.pa-dot').forEach(function (el) { el.remove(); });
     clone.classList.remove('pa-animate', 'pa-tracing');
     clone.querySelectorAll('[tabindex]').forEach(function (el) { el.removeAttribute('tabindex'); });

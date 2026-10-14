@@ -8,8 +8,8 @@ import { viewerRuntime } from '../scripts/lib/api.mjs';
 const template = (name) => fileURLToPath(new URL(`../template/${name}`, import.meta.url));
 const lines = (name) => fs.readFileSync(template(name), 'utf8').split('\n').length;
 
-test('the runtime is camera, explore, story, transport, then viewer, joined in that order', () => {
-  assert.deepEqual(RUNTIME_FILES, ['camera.js', 'explore.js', 'story.js', 'transport.js', 'viewer.js']);
+test('the runtime is camera, route, explore, panel, story, transport, then viewer, joined in that order', () => {
+  assert.deepEqual(RUNTIME_FILES, ['camera.js', 'route.js', 'explore.js', 'panel.js', 'story.js', 'transport.js', 'viewer.js']);
   const src = runtimeSource();
   let at = -1;
   for (const f of RUNTIME_FILES) {
@@ -26,7 +26,7 @@ test('every template file stays under 400 lines', () => {
 });
 
 test('each module registers a factory on window.PADiagram and viewer.js composes mount', () => {
-  const factories = { 'camera.js': 'camera', 'explore.js': 'trace', 'story.js': 'story', 'transport.js': 'transport' };
+  const factories = { 'camera.js': 'camera', 'route.js': 'route', 'explore.js': 'trace', 'panel.js': 'panel', 'story.js': 'story', 'transport.js': 'transport' };
   for (const f of RUNTIME_FILES.slice(0, -1)) assert.ok(fs.readFileSync(template(f), 'utf8').includes(`PADiagram.${factories[f]} = function`), `${f} registers PADiagram.${factories[f]}`);
   assert.ok(fs.readFileSync(template('viewer.js'), 'utf8').includes('PADiagram.mount = mount;'));
 });

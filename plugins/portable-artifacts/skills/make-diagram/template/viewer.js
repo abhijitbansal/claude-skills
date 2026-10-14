@@ -1,23 +1,26 @@
 // make-diagram viewer core: PADiagram.mount wires the camera (camera.js), the
-// trace (explore.js), the story (story.js) and the transport (transport.js)
-// around one rendered diagram, and owns pointer and keyboard handling, edge
-// animation and the controller's state. No toolbar or page chrome in here: the
-// page's own script (toolbar.js) and make-explainer drive it through the
-// controller that mount returns.
+// trace (explore.js), the panel (panel.js), the story (story.js) and the
+// transport (transport.js) around one rendered diagram, and owns pointer and
+// keyboard handling, edge animation and the controller's state. No toolbar or
+// page chrome in here: the page's own script (toolbar.js) and make-explainer
+// drive it through the controller that mount returns.
 //
-//   var ctl = PADiagram.mount(stageElement, data, { keys, caption, chapters, onChange });
+//   var ctl = PADiagram.mount(stageElement, data, { keys, caption, chapters, panel, tip, onChange });
 //
 // stageElement  holds the diagram <svg> (from buildDiagram) and sizes it.
 // data          buildDiagram(spec).data (scripts/lib/data.mjs); nothing is fetched.
 // keys          element that receives the keyboard shortcuts (default: stageElement).
 // caption       the transport element (see transport.js for its data-pa-* children; every one optional).
 // chapters      element the chapter chips are appended to (optional).
+// panel         the Explore side panel (see panel.js; optional).
+// tip           the hover tooltip element, inside the stage (optional).
 // onChange      called with ctl.state() after any change.
 //
-// Keys: Space plays and pauses, arrows step the beats, P enters Play, E leaves it.
-// Every state class (pa-dim, pa-on, pa-hl, pa-hidden, pa-active, pa-animate, and
-// pa-playing on the stage) is styled by diagramCss() or the page; the modules
-// only toggle them.
+// Keys: Space plays and pauses, arrows step the beats, P enters Play, E leaves
+// it, Escape closes the panel, else leaves Play, else clears the trace.
+// Every state class (pa-dim, pa-on, pa-hl, pa-hidden, pa-active, pa-selected,
+// pa-route, pa-animate, and pa-playing on the stage) is styled by diagramCss()
+// or the page; the modules only toggle them.
 (function (global) {
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
@@ -46,11 +49,20 @@
     options = options || {};
     var svg = stage.querySelector('svg');
     if (!svg) return null;
+    var doc = global.document;
     var els = elementsOf(svg);
+    var edgeEnds = PADiagram.dict(data.edges);
     var camera = PADiagram.camera(stage, svg, data, { onApply: emit });
     var trace = PADiagram.trace(svg, data, els, { isOff: function () { return story.isPresenting(); } });
-    var story = PADiagram.story(stage, svg, data, els, camera, { onStep: function () { transport.paint(); trace.refresh(); emit(); } });
+    // Entering Play drops the selection and the route (the panel hides with them); each beat repaints the chrome.
+    var story = PADiagram.story(stage, svg, data, els, camera, { onStep: function () { if (story.isPresenting()) trace.clear(); transport.paint(); trace.refresh(); panel.paint(); emit(); } });
     var transport = PADiagram.transport({ caption: options.caption || null, chapters: options.chapters || null }, data, story);
+    var panel = PADiagram.panel({ panel: options.panel || null, tip: options.tip || null, found: null }, data, els, trace, {
+      isOff: function () { return story.isPresenting(); },
+      onPick: pick,
+      onBeat: function (i) { story.present(i); },
+      onClose: function (byKeyboard) { closeSelection(null, byKeyboard); },
+    });
 
     // ---- animation ----------------------------------------------------------------------
     var animateOn = !!data.animate && !camera.reduced();
@@ -66,6 +78,11 @@
     }
 
     // ---- state -----------------------------------------------------------------------------
+    // The route as plain values, so a caller cannot change what the trace holds.
+    function routeCopy(r) {
+      if (!r) return null;
+      return { from: r.from, to: r.to, directed: r.directed, hops: r.hops.map(function (h) { return { from: h.from, to: h.to, edge: h.edge }; }) };
+    }
     function state() {
       return {
         zoom: camera.zoom(),
@@ -78,10 +95,45 @@
         loop: story.loop(),
         animate: animateOn,
         reducedMotion: camera.reduced(),
-        pinned: trace.pinned(),
+        selected: trace.selected(),
+        route: routeCopy(trace.routed()),
       };
     }
     function emit() { if (options.onChange) options.onChange(state()); }
+
+    // ---- explore: select, close ---------------------------------------------------------------
+    // Select `id` (a node, or a group named in a panel row) and bring the camera to it; leaves Play first.
+    function pick(id) {
+      if (story.isPresenting()) story.exit();
+      trace.select(id);
+      camera.unfit();
+      camera.moveTo(camera.cameraFor(camera.boxOf([id])));
+      panel.paint();
+      emit();
+    }
+    // Drop the selection or route. Closed from the keyboard while focus is in the
+    // panel, focus goes back to the node it described (a mouse click on Close does
+    // not move focus); a focused node under the keyboard blurs, as before, so its
+    // focus trace ends too.
+    // Where focus lands when the panel's subject goes: a node itself, an edge's first end, else (a
+    // group has no focus stop) the panel title, which the page makes focusable.
+    function focusTarget(id) {
+      var ends = edgeEnds[id];
+      var title = options.panel ? options.panel.querySelector('[data-pa-panel-title]') : null;
+      return els.nodes[id] || (ends ? els.nodes[ends[0]] : null) || title;
+    }
+    function closeSelection(target, keyboard) {
+      var id = trace.selected();
+      var r = trace.routed();
+      var back = id ? focusTarget(id) : (r ? els.nodes[r.from] : null);
+      var inPanel = within(doc.activeElement, options.panel);
+      var hadFocus = trace.hasFocus();
+      trace.clear();
+      if (keyboard && inPanel && back && back.focus) back.focus();
+      else if (hadFocus && target && target.blur) target.blur(); // focusout clears the focus trace
+      panel.paint();
+      emit();
+    }
 
     // ---- pointer: pan, pinch, click, hover ------------------------------------------------
     var pointers = {};
@@ -91,6 +143,7 @@
     var lastPinch = 0;
 
     function pointerCount() { return Object.keys(pointers).length; }
+    var stagePoint = function (e) { var r = stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
     stage.addEventListener('pointerdown', function (e) {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
@@ -120,6 +173,7 @@
         stage.classList.add('pa-grabbing');
         try { stage.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer: no capture */ }
         trace.hover(null);
+        panel.tipFor(null);
       }
       if (dragging) camera.panBy(-dx, -dy);
     });
@@ -137,10 +191,13 @@
     stage.addEventListener('pointerup', function (e) { release(e, false); });
     stage.addEventListener('pointercancel', function (e) { release(e, true); });
 
-    // In Play a click on the canvas selects nothing (its pointerdown paused the story); in Explore it pins the trace.
+    // In Play a click on the canvas selects nothing (its pointerdown paused the
+    // story). In Explore it selects the node or edge under it (again: deselects;
+    // empty canvas: deselects).
     function click(target) {
       if (story.isPresenting()) return;
-      trace.pin(trace.idAt(target));
+      trace.toggle(trace.idAt(target));
+      panel.paint();
       emit();
     }
     stage.addEventListener('dblclick', function () { if (!story.isPresenting()) camera.fit(); });
@@ -152,8 +209,15 @@
       camera.zoomAt(Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);
     }, { passive: false });
 
-    svg.addEventListener('pointerover', function (e) { if (!dragging) trace.hover(trace.idAt(e.target)); });
-    svg.addEventListener('pointerleave', function () { trace.hover(null); });
+    svg.addEventListener('pointerover', function (e) {
+      if (dragging) return;
+      var id = trace.idAt(e.target);
+      var p = stagePoint(e);
+      trace.hover(id);
+      panel.tipFor(id, p.x, p.y);
+    });
+    svg.addEventListener('pointermove', function (e) { if (!dragging) { var p = stagePoint(e); panel.tipMove(p.x, p.y); } });
+    svg.addEventListener('pointerleave', function () { trace.hover(null); panel.tipFor(null); });
     svg.addEventListener('focusin', function (e) {
       var id = trace.idAt(e.target);
       if (!id) return;
@@ -166,8 +230,8 @@
     // Space plays and pauses (on the canvas and on every transport control; a
     // button elsewhere keeps Space for itself); arrows, PageUp/PageDown, Home
     // and End move between beats; P enters Play, E leaves it; F fits; A toggles
-    // the edge animation; Escape leaves Play, else clears the trace. In Play any
-    // key but Space pauses, in a form field too.
+    // the edge animation; Escape closes the panel, else leaves Play, else clears
+    // the trace. In Play any key but Space pauses, in a form field too.
     var KEEPS_PLAYING = { ' ': true, Tab: true, Shift: true, CapsLock: true };
     function onKey(e) {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -187,7 +251,8 @@
       else if (k === 'e' || k === 'E') story.exit();
       else if (k === 'a' || k === 'A') { if (!camera.reduced()) toggleAnimate(); }
       else if (k === 'Escape') {
-        if (inPlay) story.exit();
+        if (trace.selected() || trace.routed()) closeSelection(t, true);
+        else if (inPlay) story.exit();
         else if (trace.active()) {
           var hadFocus = trace.hasFocus();
           trace.clear();
@@ -222,6 +287,7 @@
     return {
       svg: svg, stage: stage, state: state,
       fit: camera.fit, zoomBy: camera.zoomBy, panBy: camera.panBy,
+      select: pick, closePanel: function () { closeSelection(null, false); },
       present: story.present, goTo: story.goTo, next: story.next, prev: story.prev, first: story.first, last: story.last,
       nextChapter: story.nextChapter, prevChapter: story.prevChapter, exit: story.exit, togglePresent: story.togglePresent,
       play: story.play, pause: story.pause, togglePlay: story.togglePlay, setSpeed: story.setSpeed, cycleSpeed: story.cycleSpeed,

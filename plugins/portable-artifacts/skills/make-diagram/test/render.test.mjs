@@ -343,6 +343,11 @@ test('diagramCss holds the viewer state rules: dim, hidden, highlight', () => {
   assert.ok(!/\.pa-hidden\{[^}]*display:none/.test(css), 'hidden elements still measure');
   assert.match(css, /\.pa-hl /);
   assert.match(css, /\.pa-hl > \.pa-group-box\{[^}]*stroke:var\(--accent\)/, 'a highlighted group draws an accent frame');
+  assert.match(css, /\.pa-selected \.pa-shape\{[^}]*stroke:var\(--accent\)/, 'a selected node outlines in the accent');
+  assert.match(css, /\.pa-selected > \.pa-group-box\{[^}]*stroke:var\(--accent\)/, 'a selected group too');
+  assert.match(css, /\.pa-edge\.pa-selected path\{[^}]*stroke-width:2\.5/, 'a selected edge is thicker, not only coloured');
+  assert.match(css, /\.pa-route \.pa-shape\{[^}]*stroke:var\(--accent\)/);
+  assert.match(css, /\.pa-edge\.pa-route path\{[^}]*stroke-width:2\.5/);
 });
 
 test('every non-dynamic class the renderers emit has a rule', async () => {

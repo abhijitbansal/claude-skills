@@ -3,6 +3,7 @@
 import { parentMap } from './steps.mjs';
 import { slugify } from './output.mjs';
 import { KINDS } from './kinds.mjs';
+import { linksOf } from './stories.mjs';
 
 const round = (v) => Math.round(v * 10) / 10;
 const box = (x, y, w, h) => [round(x), round(y), round(w), round(h)];
@@ -53,9 +54,11 @@ function boxesOf(geometry) {
 const oneLine = (text) => String(text).replace(/\s+/g, ' ').trim();
 
 // id -> what the panel, the chips and the legend read: label and kind (plus
-// emoji, note and detail when set) for a node or participant; style and label
-// (when set) for an edge or message. `links` run in spec order, like the spec arrays.
-function infoOf(spec, links) {
+// emoji, note and detail when set) for a node or participant; label and kind
+// "group" for a group (an edge may end at one); style and label (when set) for
+// an edge or message. Edges are keyed through linksOf, so an unnamed edge gets
+// the same `edge-<i>` id the layout draws it with, whatever order the geometry lists.
+function infoOf(spec) {
   const info = new Map();
   const sequence = spec.type === 'sequence';
   for (const n of sequence ? spec.participants : spec.nodes) {
@@ -65,6 +68,8 @@ function infoOf(spec, links) {
     if (n.detail !== undefined) entry.detail = String(n.detail).trim();
     info.set(n.id, entry);
   }
+  for (const g of sequence ? [] : spec.groups ?? []) info.set(g.id, { label: oneLine(g.label), kind: 'group' });
+  const links = linksOf(spec);
   (sequence ? spec.messages ?? [] : spec.edges ?? []).forEach((e, i) => {
     const entry = { style: sequence ? e.kind ?? 'sync' : e.style ?? 'solid' };
     if (e.label !== undefined) entry.label = oneLine(e.label);
@@ -112,7 +117,7 @@ export function viewerData(spec, built) {
     autoplay: spec.autoplay === true,
     beats: built.beats,
     chapters: built.chapters,
-    info: infoOf(spec, links),
+    info: infoOf(spec),
     directed: directedOf(links),
   };
 }

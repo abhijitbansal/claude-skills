@@ -62,6 +62,17 @@ const state = [
   '.pa-edge.pa-active path{stroke:var(--accent);stroke-width:2.5}',
   '.pa-edge.pa-active .pa-arrow-fill{fill:var(--accent)}',
   '.pa-edge.pa-active .pa-arrow-open{stroke:var(--accent)}',
+  // Explore: the selected node, group or edge, and a traced route (plain accent; phase 3 styles them)
+  '.pa-selected .pa-shape{stroke:var(--accent);stroke-width:2.5}',
+  '.pa-selected > .pa-group-box{stroke:var(--accent);stroke-width:2}',
+  '.pa-edge.pa-selected path{stroke:var(--accent);stroke-width:2.5}',
+  '.pa-edge.pa-selected .pa-arrow-fill{fill:var(--accent)}',
+  '.pa-edge.pa-selected .pa-arrow-open{stroke:var(--accent)}',
+  '.pa-route .pa-shape{stroke:var(--accent);stroke-width:2}',
+  '.pa-route > .pa-group-box{stroke:var(--accent);stroke-width:2}',
+  '.pa-edge.pa-route path{stroke:var(--accent);stroke-width:2.5}',
+  '.pa-edge.pa-route .pa-arrow-fill{fill:var(--accent)}',
+  '.pa-edge.pa-route .pa-arrow-open{stroke:var(--accent)}',
   '.pa-dot{fill:var(--accent);stroke:none;pointer-events:none;visibility:hidden}',
   '.pa-dot.pa-dot-on{visibility:visible}',
 ];

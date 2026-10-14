@@ -12,7 +12,8 @@ for (const [name, spec] of Object.entries(PROTOTYPE_NAMED_SPECS)) {
     assert.deepEqual((await validateSpec(spec)).errors, []);
     const built = await buildDiagram(spec);
     const { data } = built;
-    for (const map of [data.adjacency, data.edges, data.parents, data.boxes, data.info, data.directed]) assert.equal(Object.getPrototypeOf(map), Object.prototype, 'plain JSON-shaped objects');
+    assert.deepEqual(JSON.parse(JSON.stringify(data)), data, 'plain JSON-shaped data: nothing lost on the way into the page');
+    assert.ok(Object.hasOwn(data.info, 'constructor'), 'info has an own entry for the id named constructor');
     for (const id of built.ids) assert.ok(Object.hasOwn(data.boxes, id), `a box for ${id}`);
     assert.deepEqual(Object.keys(JSON.parse(JSON.stringify(data)).boxes).sort(), [...built.ids].sort());
   });
