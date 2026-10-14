@@ -8,10 +8,11 @@ import { anchorEdges } from '../scripts/lib/edges.mjs';
 import { shapeParts, pathD } from '../scripts/lib/shapes.mjs';
 import { ICON_DRAW } from '../scripts/lib/svg.mjs';
 import { CYLINDER_CAP } from '../scripts/lib/sizes.mjs';
+import { KINDS, family } from '../scripts/lib/kinds.mjs';
 import { loadTheme } from '../shared/theme.mjs';
 
 const theme = loadTheme('paper');
-const NAMES = ['architecture', 'flow', 'state', 'sequence'];
+const NAMES = ['architecture', 'flow', 'state', 'sequence', 'story'];
 const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
 const example = (name) => JSON.parse(fs.readFileSync(here(`../references/examples/${name}.diagram.json`), 'utf8'));
 const draw = async (spec, opts = {}) => {
@@ -98,7 +99,8 @@ test('every node is a focusable group with classes, data-id and an accessible na
     spec.nodes.forEach((n) => {
       const tag = opens.find((o) => attr(o, 'data-id') === n.id);
       assert.equal(attr(tag, 'role'), 'graphics-symbol');
-      assert.match(attr(tag, 'class'), new RegExp(`^pa-node pa-kind-${n.kind ?? (spec.type === 'flow' ? 'step' : spec.type === 'state' ? 'state' : 'service')} pa-tone-${n.tone ?? 'neutral'}$`), `${name}.${n.id}`);
+      const k = n.kind ?? KINDS[spec.type].default;
+      assert.equal(attr(tag, 'class'), `pa-node pa-kind-${k} pa-family-${family(spec.type, n.kind)} pa-tone-${n.tone ?? 'neutral'}`, `${name}.${n.id}`);
       assert.equal(attr(tag, 'data-id'), n.id);
       assert.equal(attr(tag, 'tabindex'), '0');
       assert.equal(attr(tag, 'aria-label'), `${n.label}: ${n.kind ?? (spec.type === 'flow' ? 'step' : spec.type === 'state' ? 'state' : 'service')}`);
@@ -151,7 +153,7 @@ test('an edge path ends where the anchored route ends, on the drawn outline', as
   const spec = example('flow');
   const { svg, geometry } = await draw(spec);
   const anchored = anchorEdges(geometry);
-  const paths = tagsOf(svg, /<g class="pa-edge [^>]*><path d="[^"]*"/g).map((t) => t.match(/ d="([^"]*)"/)[1]);
+  const paths = tagsOf(svg, /<g class="pa-edge [^>]*><path class="pa-wire" d="[^"]*"/g).map((t) => t.match(/ d="([^"]*)"/)[1]);
   assert.equal(paths.length, anchored.edges.length);
   paths.forEach((d, i) => {
     const pts = pathPoints(d);
@@ -308,31 +310,33 @@ test('ids and idPrefix cannot break out of an attribute; control characters are 
 
 // ---- CSS ------------------------------------------------------------------------
 
-test('diagramCss uses theme variables only and animates inside the reduced-motion guard', () => {
+test('diagramCss uses theme variables only (mixed or shadowed, never literal) and animates inside the reduced-motion guard', () => {
   const css = diagramCss();
   assert.ok(!/#[0-9a-fA-F]{3,8}\b|rgb\(|hsl\(/.test(css), 'no literal colours');
-  assert.ok(!/gradient|shadow|blur|filter|drop-shadow/.test(css));
-  for (const v of ['--page', '--surface', '--text', '--text-2', '--text-3', '--line', '--accent', '--warn', '--good', '--bad', '--font']) assert.ok(css.includes(`var(${v})`), v);
-  const media = css.slice(css.indexOf('@media'));
-  assert.match(media, /^@media \(prefers-reduced-motion: no-preference\)\{[^]*\.pa-animate \.pa-edge path[^]*@keyframes pa-flow[^]*\}$/);
-  assert.ok(!css.slice(0, css.indexOf('@media')).includes('animation'));
+  assert.ok(!/gradient|url\(/.test(css));
+  for (const v of ['--surface', '--text', '--text-2', '--text-3', '--line', '--accent', '--warn', '--good', '--bad', '--font', '--mono', '--k-service']) assert.ok(css.includes(`var(${v})`), v);
+  const motion = css.match(/@media \(prefers-reduced-motion: no-preference\)\{[^]*?\n\}/)?.[0]; // every rule inside is one line; the block's own } stands alone
+  assert.ok(motion, 'one reduced-motion block holding the animation and its keyframes');
+  assert.match(motion, /\.pa-animate \.pa-edge \.pa-wire\{animation:pa-flow/);
+  assert.match(motion, /@keyframes pa-flow\{to\{stroke-dashoffset:calc\(var\(--pa-period\) \* -1\)\}\}/);
+  assert.ok(!css.replace(motion, '').includes('animation'), 'no animation outside the guard');
 });
 
 test('animation moves dashes without replacing an edge style\'s dash pattern', () => {
   const css = diagramCss();
   const media = css.slice(css.indexOf('@media'));
   // the animated rule sets the animation only; no dasharray on dashed or async edges
-  const animated = media.match(/\.pa-animate \.pa-edge path\{([^}]*)\}/)[1];
+  const animated = media.match(/\.pa-animate \.pa-edge \.pa-wire\{([^}]*)\}/)[1];
   assert.match(animated, /animation:pa-flow/);
   assert.ok(!/dasharray/.test(animated), animated);
   assert.ok(!/\.pa-animate \.pa-edge-(dashed|async)[^{]*\{[^}]*dasharray/.test(media));
   // solid edges have no pattern of their own, so animating gives them one
-  assert.match(media, /\.pa-animate \.pa-edge-solid path\{stroke-dasharray:6 6\}/);
+  assert.match(media, /\.pa-animate \.pa-edge\.pa-edge-solid \.pa-wire\{stroke-dasharray:6 6\}/);
   // each pattern's loop length is a whole period, so the loop never jumps
-  assert.match(css, /\.pa-edge-dashed path\{[^}]*stroke-dasharray:6 4/);
-  assert.match(media, /\.pa-edge-dashed path\{--pa-period:10px\}/);
-  assert.match(media, /\.pa-edge-async path\{--pa-period:5\.5px\}/);
-  assert.match(media, /\.pa-edge-solid path\{--pa-period:12px\}/);
+  assert.match(css, /\.pa-edge-dashed \.pa-wire\{[^}]*stroke-dasharray:6 4/);
+  assert.match(media, /\.pa-edge-dashed \.pa-wire\{--pa-period:10px\}/);
+  assert.match(media, /\.pa-edge-async \.pa-wire\{--pa-period:5\.5px\}/);
+  assert.match(media, /\.pa-edge-solid \.pa-wire\{--pa-period:12px\}/);
   assert.match(media, /@keyframes pa-flow\{to\{stroke-dashoffset:calc\(var\(--pa-period\) \* -1\)\}\}/);
 });
 
@@ -345,14 +349,14 @@ test('diagramCss holds the viewer state rules: dim, hidden, highlight', () => {
   assert.match(css, /\.pa-hl > \.pa-group-box\{[^}]*stroke:var\(--accent\)/, 'a highlighted group draws an accent frame');
   assert.match(css, /\.pa-selected \.pa-shape\{[^}]*stroke:var\(--accent\)/, 'a selected node outlines in the accent');
   assert.match(css, /\.pa-selected > \.pa-group-box\{[^}]*stroke:var\(--accent\)/, 'a selected group too');
-  assert.match(css, /\.pa-edge\.pa-selected path\{[^}]*stroke-width:2\.5/, 'a selected edge is thicker, not only coloured');
+  assert.match(css, /\.pa-edge\.pa-selected \.pa-wire\{[^}]*stroke-width:2\.5/, 'a selected edge is thicker, not only coloured');
   assert.match(css, /\.pa-route \.pa-shape\{[^}]*stroke:var\(--accent\)/);
-  assert.match(css, /\.pa-edge\.pa-route path\{[^}]*stroke-width:2\.5/);
+  assert.match(css, /\.pa-edge\.pa-route \.pa-wire\{[^}]*stroke-width:2\.5/);
 });
 
 test('every non-dynamic class the renderers emit has a rule', async () => {
   const css = diagramCss();
-  const dynamic = /^pa-(kind|tone|shape|edge-(solid|dashed|async)|msg|frame-(loop|alt|opt|par)|type|animate)/;
+  const dynamic = /^pa-(kind-|tone-|shape-|edge-(solid|dashed|async)$|msg-|frame-(loop|alt|opt|par)$|type-|animate$)/;
   const hooks = new Set(['pa-edge', 'pa-edge-label', 'pa-group', 'pa-frame', 'pa-seq-note']); // structure for the viewer, nothing to style
   for (const name of NAMES) {
     const { svg } = await draw(example(name));
@@ -361,7 +365,7 @@ test('every non-dynamic class the renderers emit has a rule', async () => {
       assert.ok(css.includes(`.${cls}`), `${name}: .${cls} has a rule`);
     }
   }
-  for (const tone of ['accent', 'good', 'warn', 'bad']) assert.ok(css.includes(`.pa-tone-${tone} .pa-shape{stroke:var(--${tone});stroke-width:1.5}`));
+  for (const tone of ['accent', 'good', 'warn', 'bad']) assert.ok(css.includes(`.pa-tone-${tone} .pa-shape{stroke:var(--${tone});stroke-width:2}`));
   for (const shape of ['stadium', 'diamond', 'cylinder']) assert.ok(css.includes('.pa-shape{'), shape);
 });
 

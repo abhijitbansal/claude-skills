@@ -1,67 +1,139 @@
 {
-  "width": 1370,
-  "height": 255,
+  "width": 1460,
+  "height": 299,
+  "legend": {
+    "x": 906.9,
+    "y": 24,
+    "width": 529.1,
+    "height": 20,
+    "items": [
+      {
+        "kind": "kind",
+        "name": "client",
+        "family": "service",
+        "count": 1,
+        "dx": 0,
+        "width": 54.6
+      },
+      {
+        "kind": "kind",
+        "name": "service",
+        "family": "service",
+        "count": 1,
+        "dx": 70.6,
+        "width": 62.4
+      },
+      {
+        "kind": "kind",
+        "name": "database",
+        "family": "data",
+        "count": 1,
+        "dx": 149,
+        "width": 72.8
+      },
+      {
+        "kind": "kind",
+        "name": "external",
+        "family": "external",
+        "count": 1,
+        "dx": 237.8,
+        "width": 67.9
+      },
+      {
+        "kind": "style",
+        "name": "solid",
+        "style": "solid",
+        "label": "call",
+        "dx": 321.7,
+        "width": 47.4
+      },
+      {
+        "kind": "style",
+        "name": "async",
+        "style": "async",
+        "label": "event",
+        "dx": 385.1,
+        "width": 57.6
+      },
+      {
+        "kind": "style",
+        "name": "dashed",
+        "style": "dashed",
+        "label": "optional",
+        "dx": 458.7,
+        "width": 70.4
+      }
+    ]
+  },
   "nodes": [
     {
       "id": "web",
       "x": 24,
-      "y": 131.3,
-      "width": 110,
-      "height": 40,
+      "y": 166,
+      "width": 124,
+      "height": 54,
       "shape": "rounded-rect",
       "lines": [
         "Web app"
       ],
       "noteLine": null,
       "icon": "lucide:monitor",
+      "emoji": null,
+      "typeLine": "CLIENT",
       "tone": "neutral",
       "group": null,
       "layer": 0
     },
     {
       "id": "api",
-      "x": 436,
-      "y": 124.7,
-      "width": 142,
-      "height": 40,
+      "x": 454,
+      "y": 157,
+      "width": 156,
+      "height": 54,
       "shape": "rounded-rect",
       "lines": [
         "Checkout API"
       ],
       "noteLine": null,
       "icon": "brand:nodedotjs",
+      "emoji": null,
+      "typeLine": "SERVICE",
       "tone": "neutral",
       "group": "vpc",
       "layer": 1
     },
     {
       "id": "db",
-      "x": 800,
-      "y": 104,
-      "width": 144,
-      "height": 68,
+      "x": 836,
+      "y": 134,
+      "width": 180,
+      "height": 82,
       "shape": "cylinder",
       "lines": [
         "Orders DB"
       ],
       "noteLine": "primary + replica",
       "icon": "brand:postgresql",
+      "emoji": null,
+      "typeLine": "DATABASE",
       "tone": "neutral",
       "group": "vpc",
       "layer": 2
     },
     {
       "id": "pay",
-      "x": 1228,
-      "y": 162,
-      "width": 118,
-      "height": 40,
+      "x": 1304,
+      "y": 199,
+      "width": 132,
+      "height": 54,
       "shape": "dashed-rounded-rect",
       "lines": [
         "Payments"
       ],
       "noteLine": null,
       "icon": "lucide:cloud",
+      "emoji": null,
+      "typeLine": "EXTERNAL",
       "tone": "warn",
       "group": null,
       "layer": 3
@@ -70,20 +142,20 @@
   "groups": [
     {
       "id": "aws",
-      "x": 383,
-      "y": 24,
-      "width": 614,
-      "height": 207,
+      "x": 401,
+      "y": 54,
+      "width": 668,
+      "height": 221,
       "label": "AWS us-east-1",
       "depth": 0,
       "parent": null
     },
     {
       "id": "vpc",
-      "x": 412,
-      "y": 64,
-      "width": 556,
-      "height": 143,
+      "x": 430,
+      "y": 94,
+      "width": 610,
+      "height": 157,
       "label": "Private VPC",
       "depth": 1,
       "parent": "aws"
@@ -96,21 +168,21 @@
       "to": "api",
       "points": [
         {
-          "x": 134,
-          "y": 144.7
+          "x": 148,
+          "y": 184
         },
         {
-          "x": 436,
-          "y": 144.7
+          "x": 454,
+          "y": 184
         }
       ],
       "style": "solid",
       "both": false,
       "label": {
         "text": "POST /checkout",
-        "x": 206,
-        "y": 117.7,
-        "width": 100,
+        "x": 220,
+        "y": 157,
+        "width": 104,
         "height": 20
       }
     },
@@ -120,21 +192,21 @@
       "to": "db",
       "points": [
         {
-          "x": 578,
-          "y": 138
+          "x": 610,
+          "y": 175
         },
         {
-          "x": 800,
-          "y": 138
+          "x": 836,
+          "y": 175
         }
       ],
       "style": "solid",
       "both": false,
       "label": {
         "text": "writes order",
-        "x": 650,
-        "y": 111,
-        "width": 78,
+        "x": 682,
+        "y": 148,
+        "width": 82,
         "height": 20
       }
     },
@@ -144,29 +216,29 @@
       "to": "pay",
       "points": [
         {
-          "x": 578,
-          "y": 151.3
+          "x": 610,
+          "y": 193
         },
         {
-          "x": 602,
-          "y": 151.3
+          "x": 634,
+          "y": 193
         },
         {
-          "x": 602,
-          "y": 182
+          "x": 634,
+          "y": 226
         },
         {
-          "x": 1228,
-          "y": 182
+          "x": 1304,
+          "y": 226
         }
       ],
       "style": "async",
       "both": false,
       "label": {
         "text": "charges card",
-        "x": 1074,
-        "y": 189,
-        "width": 82,
+        "x": 1146,
+        "y": 233,
+        "width": 86,
         "height": 20
       }
     },
@@ -176,20 +248,20 @@
       "to": "vpc",
       "points": [
         {
-          "x": 134,
-          "y": 158
+          "x": 148,
+          "y": 202
         },
         {
-          "x": 330,
-          "y": 158
+          "x": 348,
+          "y": 202
         },
         {
-          "x": 330,
-          "y": 154.7
+          "x": 348,
+          "y": 194
         },
         {
-          "x": 412,
-          "y": 154.7
+          "x": 430,
+          "y": 194
         }
       ],
       "style": "dashed",

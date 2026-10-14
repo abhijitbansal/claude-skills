@@ -11,7 +11,7 @@ import { buildDiagram } from './lib/api.mjs';
 import { DiagramError } from './lib/diagram-error.mjs';
 import { renderViewer, MAX_PAGE_BYTES } from './lib/viewer.mjs';
 import { resolveOutput } from './lib/output.mjs';
-import { loadTheme, DEFAULT_THEME } from '../shared/theme.mjs';
+import { themeFor } from './lib/theme.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
 import { exitInternal } from './lib/internal-error.mjs';
@@ -31,7 +31,7 @@ export async function build(file, { out, theme, env = process.env, maxBytes = MA
     if (e instanceof DiagramError) return { ok: false, errors: e.errors };
     throw e;
   }
-  const html = renderViewer(spec, built, { theme: loadTheme(spec.theme ?? DEFAULT_THEME) });
+  const html = renderViewer(spec, built, { theme: themeFor(spec) });
   const bytes = Buffer.byteLength(html);
   if (bytes > maxBytes) {
     const message = `the page is ${Math.round(bytes / KB)} KB; the limit is ${Math.round(maxBytes / KB)} KB - split the diagram`;

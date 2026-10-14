@@ -1,6 +1,6 @@
 // Embedding API: spec -> drawable diagram, for make-diagram's own builder and
 // for other skills (make-explainer). Stable contract; see test/api.test.mjs.
-import { loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
+import { themeFor } from './theme.mjs';
 import { validateSpec } from './spec.mjs';
 import { layoutDiagram } from './layout.mjs';
 import { lintGeometry } from './lint.mjs';
@@ -102,7 +102,7 @@ export function viewerRuntime() {
  * Build a diagram from a spec.
  *
  * `theme` is a theme name or a loaded theme object (default: the spec's theme,
- * else paper). Resolves to { svg, css, width, height, steps, ids, data, geometry }:
+ * else blueprint). Resolves to { svg, css, width, height, steps, ids, data, geometry }:
  * `svg` uses classes and CSS variables only (no fonts, no <style>; include
  * `css` once per page), `steps` is the spec's steps (copied; ids it never
  * reveals get a final "Everything" step) or ones built from the layout, `ids`
@@ -118,7 +118,7 @@ export async function buildDiagram(spec, { theme, idPrefix } = {}) {
   }
   const semantic = await validateSpec(spec, { layout: false });
   if (!semantic.ok) throw new DiagramError(semantic.errors);
-  const resolved = typeof theme === 'object' && theme !== null ? theme : loadTheme(theme ?? spec.theme ?? DEFAULT_THEME);
+  const resolved = themeFor(spec, theme);
   const geometry = await layoutDiagram(spec, resolved);
   const lint = lintGeometry(geometry, { theme: resolved });
   if (lint.length > 0) throw new DiagramError(lint);

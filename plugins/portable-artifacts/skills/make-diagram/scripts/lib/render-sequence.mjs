@@ -4,6 +4,8 @@
 // lifeline it crosses).
 import { lineHeight } from '../../shared/text.mjs';
 import { fonts } from './sizes.mjs';
+import { family } from './kinds.mjs';
+import { legendSvg } from './legend.mjs';
 import { roundedPath } from './edges.mjs';
 import { esc, num, textLines } from './svg.mjs';
 import { shapeSvg, boxContent, plateSvg, edgeSvg, nodeOpen } from './parts.mjs';
@@ -42,7 +44,7 @@ function noteSvg(n, f) {
 
 function participantSvg(p, label, f) {
   const box = { ...p, noteLine: null };
-  return `${nodeOpen({ id: p.id, tone: 'neutral' }, p.kind, label)}${shapeSvg(p.shape, p)}${boxContent(box, f)}</g>`;
+  return `${nodeOpen({ id: p.id, tone: 'neutral' }, p.kind, label, family('sequence', p.kind))}${shapeSvg(p.shape, p)}${boxContent(box, f)}</g>`;
 }
 
 const lifelineSvg = (p) => `<line class="pa-lifeline" data-for="${esc(p.id)}" x1="${num(p.lifeline.x)}" y1="${num(p.lifeline.y1)}" x2="${num(p.lifeline.x)}" y2="${num(p.lifeline.y2)}"/>`;
@@ -51,9 +53,10 @@ const lifelineSvg = (p) => `<line class="pa-lifeline" data-for="${esc(p.id)}" x1
 export function renderSequence(g, spec, theme, prefix) {
   const f = fonts(theme);
   const frames = [...g.frames].sort((a, b) => b.width * b.height - a.width * a.height).map((fr) => frameSvg(fr, f));
+  const famOf = new Map(spec.participants.map((p) => [p.id, family('sequence', p.kind)]));
   const messages = g.messages.map((m) => {
     const { style, heads } = MESSAGE[m.kind];
-    return edgeSvg({ id: m.id, from: m.from, to: m.to, style, both: false, d: roundedPath(m.points), heads, extra: ` pa-msg-${m.kind}` }, prefix);
+    return edgeSvg({ id: m.id, from: m.from, to: m.to, style, both: false, d: roundedPath(m.points), heads, extra: ` pa-msg-${m.kind}`, family: famOf.get(m.from) }, prefix);
   });
   const plates = g.messages.filter((m) => m.label).map((m) => plateSvg(m.id, m.label, f));
   const body = [
@@ -63,6 +66,7 @@ export function renderSequence(g, spec, theme, prefix) {
     ...g.notes.map((n) => noteSvg(n, f)),
     ...messages,
     ...plates,
+    legendSvg(g.legend, f),
   ].join('');
   return { width: g.width, height: g.height, body, counts: `${g.participants.length} participants and ${g.messages.length} messages` };
 }

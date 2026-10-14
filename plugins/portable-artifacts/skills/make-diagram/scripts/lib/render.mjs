@@ -3,8 +3,9 @@
 // theme (diagramCss() holds the rules). Text is measured with the theme fonts,
 // never in a browser, so what the layout reserved is what is drawn.
 import { lineHeight } from '../../shared/text.mjs';
-import { KINDS } from './kinds.mjs';
+import { KINDS, family } from './kinds.mjs';
 import { fonts, GROUP_LABEL_INSET } from './sizes.mjs';
+import { legendSvg } from './legend.mjs';
 import { anchorEdges, roundedPath } from './edges.mjs';
 import { esc, num, textLines, markerDefs } from './svg.mjs';
 import { shapeSvg, boxContent, outsideContent, plateSvg, edgeSvg, nodeOpen } from './parts.mjs';
@@ -13,33 +14,42 @@ import { diagramCss } from './css.mjs';
 
 export { diagramCss };
 
-const GROUP_RADIUS = 10;
+const GROUP_RADIUS = 6;
 const GROUP_LABEL_MIDDLE = 20; // group label centre, below the group's top edge
+const LANE_BAR = 4; // the accent bar on a top-level group's left edge
+const LANE_COLOURS = 8; // --s1 … --s8 cycle
 const EDGE_ARROW = { solid: 'solid', dashed: 'solid', async: 'open' };
 
-function groupSvg(group, f) {
+// A group box with its label in spaced capitals (CSS uppercases it; sizes.mjs
+// measured the capitals). A top-level group is a lane: data-lane picks its bar colour.
+function groupSvg(group, f, lane) {
   const lh = lineHeight(f.group);
   const label = textLines('pa-group-label', [group.label], { x: group.x + GROUP_LABEL_INSET, top: group.y + GROUP_LABEL_MIDDLE - lh / 2, lh, size: f.group.size, anchor: 'start' });
-  return `<g class="pa-group" data-id="${esc(group.id)}" data-depth="${group.depth}"><rect class="pa-group-box" x="${num(group.x)}" y="${num(group.y)}" width="${num(group.width)}" height="${num(group.height)}" rx="${GROUP_RADIUS}"/>${label}</g>`;
+  const laneAttr = lane === null ? '' : ` data-lane="${lane}"`;
+  const bar = lane === null ? '' : `<rect class="pa-lane" x="${num(group.x)}" y="${num(group.y + GROUP_RADIUS)}" width="${LANE_BAR}" height="${num(group.height - 2 * GROUP_RADIUS)}" rx="2"/>`;
+  return `<g class="pa-group" data-id="${esc(group.id)}" data-depth="${group.depth}"${laneAttr}><rect class="pa-group-box" x="${num(group.x)}" y="${num(group.y)}" width="${num(group.width)}" height="${num(group.height)}" rx="${GROUP_RADIUS}"/>${bar}${label}</g>`;
 }
 
 function graphNodeSvg(n, specNode, type, f) {
   const kind = specNode.kind ?? KINDS[type].default;
   const content = n.labelBox ? outsideContent(n, f) : boxContent(n, f);
-  return `${nodeOpen(n, kind, specNode.label)}${shapeSvg(n.shape, n)}${content}</g>`;
+  return `${nodeOpen(n, kind, specNode.label, family(type, kind))}${shapeSvg(n.shape, n)}${content}</g>`;
 }
 
 function renderGraph(raw, spec, theme, prefix) {
   const g = anchorEdges(raw);
   const f = fonts(theme);
-  const groups = [...g.groups].sort((a, b) => a.depth - b.depth).map((x) => groupSvg(x, f));
-  const edges = g.edges.map((e) => edgeSvg({ ...e, d: roundedPath(e.points), heads: EDGE_ARROW[e.style] }, prefix));
+  const laneOf = new Map(g.groups.filter((x) => x.depth === 0).map((x, i) => [x.id, i % LANE_COLOURS]));
+  const groups = [...g.groups].sort((a, b) => a.depth - b.depth).map((x) => groupSvg(x, f, laneOf.has(x.id) ? laneOf.get(x.id) : null));
+  // An edge takes its from-node's colour family (none when it leaves a group).
+  const famOf = new Map(spec.nodes.map((n) => [n.id, family(spec.type, n.kind)]));
+  const edges = g.edges.map((e) => edgeSvg({ ...e, d: roundedPath(e.points), heads: EDGE_ARROW[e.style], family: famOf.get(e.from) }, prefix));
   // Nodes are emitted in layer order: the DOM order is the Tab order.
   const rank = new Map(raw.layers.flat().map((id, i) => [id, i]));
   const nodes = g.nodes.map((n, i) => ({ id: n.id, svg: graphNodeSvg(n, spec.nodes[i], spec.type, f) }))
     .sort((a, b) => rank.get(a.id) - rank.get(b.id)).map((n) => n.svg);
   const labels = g.edges.filter((e) => e.label).map((e) => plateSvg(e.id, e.label, f));
-  return { width: g.width, height: g.height, body: [...groups, ...edges, ...nodes, ...labels].join(''), counts: `${g.nodes.length} nodes and ${g.edges.length} edges` };
+  return { width: g.width, height: g.height, body: [...groups, ...edges, ...nodes, ...labels, legendSvg(g.legend, f)].join(''), counts: `${g.nodes.length} nodes and ${g.edges.length} edges` };
 }
 
 /**

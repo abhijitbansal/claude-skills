@@ -644,6 +644,11 @@ test('animate toggles flow on edges and keeps each style\'s dash pattern', async
   assert.equal((await edgeStyle(page, '.pa-edge-dashed path')).dash, dashedBefore, 'dashed keeps 6 4');
   assert.equal((await edgeStyle(page, '.pa-edge-async path')).dash, asyncBefore, 'async keeps its dots');
   assert.match((await edgeStyle(page, '.pa-edge-solid path')).dash, /^6px, 6px$|^6, 6$/, 'solid gets a pattern to animate');
+  for (const style of ['solid', 'dashed', 'async']) {
+    const sample = await edgeStyle(page, `.pa-legend-sample.pa-edge-${style} path`);
+    assert.equal(sample.name, 'none', `the legend's ${style} sample does not flow`);
+  }
+  assert.equal((await edgeStyle(page, '.pa-legend-sample.pa-edge-solid path')).dash, 'none', 'and the solid sample stays solid');
   await page.keyboard.press('a');
   assert.equal(await page.textContent('[data-act="animate"]'), 'Animate: Off');
   assert.deepEqual(problems, []);
@@ -696,7 +701,10 @@ test('SVG and PNG export download under the strict CSP, filled with the theme su
     assert.ok(text.includes(`fill="${surface}"`), 'surface background rect');
     assert.ok(text.includes('<style>') && text.includes('.pa-node') && text.includes('--surface:'), 'self-contained styles');
     assert.ok(text.includes('@font-face'), 'fonts travel with the file');
-    assert.match(text, /viewBox="0 0 1370 255"/);
+    const data = JSON.parse(built('architecture').html.match(/id="pa-data">([^<]*)<\/script>/)[1]);
+    assert.match(text, new RegExp(`viewBox="0 0 ${data.width} ${data.height}"`));
+    assert.ok(text.includes('--k-service:') && text.includes('--s1:') && text.includes('--mono:'), 'the kind hues, lane colours and mono font travel with the file');
+    assert.ok(text.includes('class="pa-legend"'), 'the legend is part of the drawing');
     assert.ok(!/class="[^"]*\bpa-(hidden|dim|on|hl|animate)\b|tabindex=/.test(text), 'no viewer state in the file');
     const png = await download(page, 'png');
     assert.equal(png.name, 'checkout-request-path.png');
@@ -704,7 +712,7 @@ test('SVG and PNG export download under the strict CSP, filled with the theme su
     assert.deepEqual([...bytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], 'PNG signature');
     const width = bytes.readUInt32BE(16);
     const height = bytes.readUInt32BE(20);
-    assert.ok(width >= 1370 && height >= 255, `${width}x${height}`);
+    assert.ok(width >= data.width && height >= data.height, `${width}x${height}`);
     assert.equal(await page.locator('[data-export-error]').isVisible(), false);
     assert.deepEqual(problems, []);
     await context.close();
@@ -728,7 +736,9 @@ test('the PNG is surface-filled and shows the drawing (not blank), in dark too',
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
     const data = ctx.getImageData(0, 0, img.width, img.height).data;
-    const corner = [...data.slice(0, 4)];
+    // 4 px in from the corner: a canvas of fractional width (the legend can set it) resamples the very first pixel by one level.
+    const at = 4 * (4 * img.width + 4);
+    const corner = [...data.slice(at, at + 4)];
     let different = 0;
     for (let i = 0; i < data.length; i += 4) if (data[i] !== corner[0] || data[i + 1] !== corner[1] || data[i + 2] !== corner[2]) different++;
     return { corner, different, total: data.length / 4, surface: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() };
@@ -761,16 +771,16 @@ test('theme toggle cycles Auto, Light, Dark and survives a reload', async (t) =>
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('flow').url);
   assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Auto');
-  assert.equal(await token(page, '--page'), '#f7f6f3');
+  assert.equal(await token(page, '--page'), '#f4f6f8');
   await page.click('[data-theme-toggle]');
   assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Light');
   await page.click('[data-theme-toggle]');
   assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Dark');
   assert.equal(await page.getAttribute('html', 'data-theme'), 'dark');
-  assert.equal(await token(page, '--page'), '#0f1110');
+  assert.equal(await token(page, '--page'), '#0e1319');
   await page.reload();
   await page.waitForFunction(() => window.paReady === true);
-  assert.equal(await token(page, '--page'), '#0f1110', 'the choice persisted');
+  assert.equal(await token(page, '--page'), '#0e1319', 'the choice persisted');
   assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Dark');
   assert.equal(await page.getAttribute('[data-theme-toggle]', 'aria-label'), 'Theme: Dark. Change theme');
   await page.click('[data-theme-toggle]');
@@ -785,7 +795,7 @@ test('blocked storage: the page renders and the toggle still works for the visit
   assert.ok((await page.locator('.pa-node').count()) > 0);
   await page.click('[data-theme-toggle]');
   await page.click('[data-theme-toggle]');
-  assert.equal(await token(page, '--page'), '#0f1110');
+  assert.equal(await token(page, '--page'), '#0e1319');
   assert.deepEqual(problems, []);
   await context.close();
 });

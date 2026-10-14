@@ -9,6 +9,7 @@
 import { measure, lineHeight, wrap } from '../../shared/text.mjs';
 import { KINDS } from './kinds.mjs';
 import { nodeSize, edgeLabelSize, fonts, evenUp } from './sizes.mjs';
+import { legendLayout, placeLegend, LEGEND_BAND } from './legend.mjs';
 
 const OUTER_MARGIN = 24; // same outer margin as layout-graph.mjs (which pulls in ELK, so not imported)
 export const ROW_HEIGHT = 44;
@@ -163,7 +164,7 @@ export function layoutSequence(spec, theme) {
   const startsAt = (i) => frames.filter((fr) => fr.start === i).sort((a, b) => (b.end - b.start) - (a.end - a.start) || a.order - b.order);
   const endsAt = (i) => frames.filter((fr) => fr.end === i).sort((a, b) => (a.end - a.start) - (b.end - b.start) || b.order - a.order);
 
-  const headerTop = OUTER_MARGIN;
+  const headerTop = OUTER_MARGIN + LEGEND_BAND; // the legend row sits above the headers (legend.mjs)
   const lifelineTop = headerTop + headerHeight;
   let cursor = lifelineTop + FIRST_ROW_GAP;
   let row = 0;
@@ -248,13 +249,17 @@ export function layoutSequence(spec, theme) {
   const all = [...headerBoxes, ...framesOut.values(), ...notes, ...extents];
   const minX = Math.min(...all.map((b) => b.left ?? b.lo));
   const maxX = Math.max(...all.map((b) => b.right ?? b.hi));
-  const dx = OUTER_MARGIN - minX;
+  const legend = legendLayout(spec, theme);
+  const drawingWidth = round(maxX - minX + 2 * OUTER_MARGIN);
+  const needed = Math.ceil(legend.width + 2 * OUTER_MARGIN);
+  const width = Math.max(drawingWidth, needed); // a narrow drawing widens to hold its legend, to a whole pixel
+  const dx = OUTER_MARGIN - minX + (needed > drawingWidth ? round((needed - drawingWidth) / 2) : 0); // and sits centred in it
   const sx = (v) => round(v + dx);
   const pt = (p) => ({ x: sx(p.x), y: round(p.y) });
-
   return {
-    width: round(maxX - minX + 2 * OUTER_MARGIN),
+    width,
     height: round(lifelineBottom + OUTER_MARGIN),
+    legend: placeLegend(legend, width, OUTER_MARGIN),
     participants: sized.map((s, i) => ({
       id: s.p.id,
       x: sx(headerBoxes[i].left),
@@ -263,6 +268,8 @@ export function layoutSequence(spec, theme) {
       height: headerHeight,
       lines: s.size.lines,
       icon: s.size.icon,
+      emoji: s.size.emoji,
+      typeLine: s.size.typeLine,
       kind: s.kind,
       shape: s.shape,
       lifeline: { x: sx(cx[i]), y1: lifelineTop, y2: round(lifelineBottom) },

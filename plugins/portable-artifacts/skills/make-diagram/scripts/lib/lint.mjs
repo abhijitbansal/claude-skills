@@ -47,7 +47,7 @@ const extents = (n) => (n.labelBox ? [n, n.labelBox] : [n]);
 
 function nodeTextErrors(g, f) {
   return g.nodes.flatMap((n, i) => {
-    const room = n.labelBox ? n.labelBox.width : textRoom(n.shape, n.width, n.icon !== null);
+    const room = n.labelBox ? n.labelBox.width : textRoom(n.shape, n.width, n.icon !== null || n.emoji !== null);
     return [...labelErrors(`nodes[${i}].label`, n.lines, room, f.label), ...noteErrors(`nodes[${i}].note`, n.noteLine, room, f.note)];
   });
 }
@@ -88,6 +88,12 @@ function groupErrors(g) {
         break;
       }
     }
+    const members = new Set();
+    for (let id = n.group; id !== null; id = byId.get(id).parent) members.add(id);
+    const intruded = g.groups.find((grp) => !members.has(grp.id) && overlaps(n, grp));
+    if (intruded) {
+      errors.push({ path: `nodes[${i}]`, message: `node ${q(n.id)} lies inside group ${q(intruded.id)} but is not in group ${q(intruded.id)}; give it that group or move the groups apart` });
+    }
   });
   g.groups.forEach((grp, i) => {
     if (grp.parent !== null && !within(grp, byId.get(grp.parent))) {
@@ -106,7 +112,7 @@ function lintGraph(g, f) {
 function lintSequence(g, f) {
   const errors = [];
   g.participants.forEach((p, i) => {
-    errors.push(...labelErrors(`participants[${i}].label`, p.lines, textRoom(p.shape, p.width, p.icon !== null), f.label));
+    errors.push(...labelErrors(`participants[${i}].label`, p.lines, textRoom(p.shape, p.width, p.icon !== null || p.emoji !== null), f.label));
     for (let k = 0; k < i; k++) {
       if (overlaps(g.participants[k], p)) {
         errors.push({ path: `participants[${i}]`, message: `participant ${q(p.id)} overlaps ${q(g.participants[k].id)} (participants[${k}]); shorten the labels` });

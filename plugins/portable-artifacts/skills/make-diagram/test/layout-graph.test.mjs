@@ -5,15 +5,16 @@ import { fileURLToPath } from 'node:url';
 import { layoutGraph } from '../scripts/lib/layout-graph.mjs';
 import {
   nodeSize, edgeLabelSize, groupMinSize, fonts, MAX_TEXT_WIDTH, MAX_WIDENED_TEXT_WIDTH, DIAMOND_PAD, HEXAGON_CUT,
-  PARALLELOGRAM_SLANT, CYLINDER_CAP, ICON_SIZE, ICON_GAP, NOTE_GAP,
+  PARALLELOGRAM_SLANT, CYLINDER_CAP, TILE_SIZE, TILE_GAP, TYPE_GAP, TYPE_TRACK, trackedWidth, NOTE_GAP,
 } from '../scripts/lib/sizes.mjs';
 import { KINDS } from '../scripts/lib/kinds.mjs';
+import { LEGEND_BAND } from '../scripts/lib/legend.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
 import { loadTheme } from '../shared/theme.mjs';
 import { measure, fontFor, lineHeight } from '../shared/text.mjs';
 
 const theme = loadTheme('paper');
-const EXAMPLES = ['architecture', 'flow', 'state'];
+const EXAMPLES = ['architecture', 'flow', 'state', 'story'];
 const TOL = 1; // px: edge ends on a box border
 const MARGIN = 24;
 const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
@@ -191,12 +192,16 @@ test('shape minimums: dots 20x20, small diamond 24x24, cylinder +12 px', () => {
 
 // ---- text fits inside the drawn outline, not just the bounding box ----------
 
-// The icon + text block (centred in the node box) as local coordinates.
+// The tile + text block (centred in the node box) as local coordinates.
 function textBlock(node, size, shape) {
   const f = fonts(theme);
-  const text = Math.max(...size.lines.map((l) => measure(l, f.label)), size.noteLine ? measure(size.noteLine, f.note) : 0);
-  const width = text + (size.icon ? ICON_SIZE + ICON_GAP : 0);
-  const height = size.lines.length * lineHeight(f.label) + (size.noteLine ? NOTE_GAP + lineHeight(f.note) : 0);
+  const text = Math.max(
+    ...size.lines.map((l) => measure(l, f.label)),
+    size.noteLine ? measure(size.noteLine, f.note) : 0,
+    size.typeLine ? trackedWidth(size.typeLine, f.type, TYPE_TRACK) : 0,
+  );
+  const width = text + (size.icon || size.emoji ? TILE_SIZE + TILE_GAP : 0);
+  const height = (size.typeLine ? lineHeight(f.type) + TYPE_GAP : 0) + size.lines.length * lineHeight(f.label) + (size.noteLine ? NOTE_GAP + lineHeight(f.note) : 0);
   const x0 = (size.width - width) / 2;
   const y0 = (size.height - height) / 2;
   return { x0, y0, x1: x0 + width, y1: y0 + height, text, height, shape };
@@ -318,11 +323,13 @@ test('coordinates are rounded to 0.1 px', async () => {
 
 test('geometry carries the contract fields', async () => {
   const g = await layout(example('architecture'));
-  assert.deepEqual(Object.keys(g).sort(), ['edges', 'groups', 'height', 'layers', 'nodes', 'width']);
+  assert.deepEqual(Object.keys(g).sort(), ['edges', 'groups', 'height', 'layers', 'legend', 'nodes', 'width']);
   const api = g.nodes.find((n) => n.id === 'api');
-  assert.deepEqual(Object.keys(api).sort(), ['group', 'height', 'icon', 'id', 'layer', 'lines', 'noteLine', 'shape', 'tone', 'width', 'x', 'y']);
+  assert.deepEqual(Object.keys(api).sort(), ['emoji', 'group', 'height', 'icon', 'id', 'layer', 'lines', 'noteLine', 'shape', 'tone', 'typeLine', 'width', 'x', 'y']);
   assert.equal(api.shape, 'rounded-rect');
   assert.equal(api.icon, 'brand:nodedotjs');
+  assert.equal(api.emoji, null);
+  assert.equal(api.typeLine, 'SERVICE');
   assert.equal(api.group, 'vpc');
   assert.equal(api.tone, 'neutral');
   assert.equal(api.noteLine, null);
@@ -485,7 +492,7 @@ for (const type of ['architecture', 'flow', 'state']) {
     assert.deepEqual(g.layers, [['solo']]);
     assert.ok(g.width > 0 && g.height > 0 && Number.isFinite(g.width + g.height));
     assert.equal(g.nodes[0].x, MARGIN);
-    assert.equal(g.nodes[0].y, MARGIN);
+    assert.equal(g.nodes[0].y, MARGIN + LEGEND_BAND, 'below the legend band');
     assertSound(g, spec, `${type}-lone`);
   });
 

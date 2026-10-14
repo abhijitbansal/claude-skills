@@ -1,0 +1,473 @@
+{
+  "width": 2190,
+  "height": 321,
+  "legend": {
+    "x": 1413.2,
+    "y": 24,
+    "width": 752.8,
+    "height": 20,
+    "items": [
+      {
+        "kind": "kind",
+        "name": "user",
+        "family": "person",
+        "count": 1,
+        "dx": 0,
+        "width": 48.9
+      },
+      {
+        "kind": "kind",
+        "name": "client",
+        "family": "service",
+        "count": 1,
+        "dx": 64.9,
+        "width": 54.6
+      },
+      {
+        "kind": "kind",
+        "name": "gateway",
+        "family": "service",
+        "count": 1,
+        "dx": 135.5,
+        "width": 68.6
+      },
+      {
+        "kind": "kind",
+        "name": "service",
+        "family": "service",
+        "count": 1,
+        "dx": 220.1,
+        "width": 62.4
+      },
+      {
+        "kind": "kind",
+        "name": "database",
+        "family": "data",
+        "count": 1,
+        "dx": 298.5,
+        "width": 72.8
+      },
+      {
+        "kind": "kind",
+        "name": "queue",
+        "family": "queue",
+        "count": 1,
+        "dx": 387.3,
+        "width": 58.2
+      },
+      {
+        "kind": "kind",
+        "name": "external",
+        "family": "external",
+        "count": 1,
+        "dx": 461.5,
+        "width": 67.9
+      },
+      {
+        "kind": "style",
+        "name": "solid",
+        "style": "solid",
+        "label": "call",
+        "dx": 545.4,
+        "width": 47.4
+      },
+      {
+        "kind": "style",
+        "name": "async",
+        "style": "async",
+        "label": "event",
+        "dx": 608.8,
+        "width": 57.6
+      },
+      {
+        "kind": "style",
+        "name": "dashed",
+        "style": "dashed",
+        "label": "optional",
+        "dx": 682.4,
+        "width": 70.4
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "shopper",
+      "x": 24,
+      "y": 162.2,
+      "width": 122,
+      "height": 54,
+      "shape": "rounded-rect",
+      "lines": [
+        "Shopper"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": "🧑‍💻",
+      "typeLine": "USER",
+      "tone": "neutral",
+      "group": null,
+      "layer": 0
+    },
+    {
+      "id": "app",
+      "x": 383,
+      "y": 162.2,
+      "width": 138,
+      "height": 54,
+      "shape": "rounded-rect",
+      "lines": [
+        "Mobile app"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": "📱",
+      "typeLine": "CLIENT",
+      "tone": "neutral",
+      "group": "edge",
+      "layer": 1
+    },
+    {
+      "id": "gateway",
+      "x": 753,
+      "y": 142.5,
+      "width": 200,
+      "height": 70,
+      "shape": "hexagon-rect",
+      "lines": [
+        "API gateway"
+      ],
+      "noteLine": "auth, rate limits",
+      "icon": "lucide:door-open",
+      "emoji": null,
+      "typeLine": "GATEWAY",
+      "tone": "neutral",
+      "group": "edge",
+      "layer": 2
+    },
+    {
+      "id": "orders",
+      "x": 1239,
+      "y": 150.5,
+      "width": 160,
+      "height": 54,
+      "shape": "rounded-rect",
+      "lines": [
+        "Orders service"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": "📦",
+      "typeLine": "SERVICE",
+      "tone": "neutral",
+      "group": "core",
+      "layer": 3
+    },
+    {
+      "id": "db",
+      "x": 1629,
+      "y": 131,
+      "width": 134,
+      "height": 66,
+      "shape": "cylinder",
+      "lines": [
+        "Orders DB"
+      ],
+      "noteLine": null,
+      "icon": "brand:postgresql",
+      "emoji": null,
+      "typeLine": "DATABASE",
+      "tone": "neutral",
+      "group": "core",
+      "layer": 4
+    },
+    {
+      "id": "bus",
+      "x": 1631,
+      "y": 218,
+      "width": 130,
+      "height": 54,
+      "shape": "stacked-rect",
+      "lines": [
+        "Event bus"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": "🚌",
+      "typeLine": "QUEUE",
+      "tone": "neutral",
+      "group": "core",
+      "layer": 4
+    },
+    {
+      "id": "warehouse",
+      "x": 2026,
+      "y": 218,
+      "width": 140,
+      "height": 54,
+      "shape": "dashed-rounded-rect",
+      "lines": [
+        "Warehouse"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": "🏭",
+      "typeLine": "EXTERNAL",
+      "tone": "warn",
+      "group": null,
+      "layer": 5
+    }
+  ],
+  "groups": [
+    {
+      "id": "edge",
+      "x": 359,
+      "y": 102.5,
+      "width": 618,
+      "height": 138.7,
+      "label": "Edge",
+      "depth": 0,
+      "parent": null
+    },
+    {
+      "id": "core",
+      "x": 1215,
+      "y": 91,
+      "width": 572,
+      "height": 206,
+      "label": "Core services",
+      "depth": 0,
+      "parent": null
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-0",
+      "from": "shopper",
+      "to": "app",
+      "points": [
+        {
+          "x": 146,
+          "y": 189.2
+        },
+        {
+          "x": 383,
+          "y": 189.2
+        }
+      ],
+      "style": "solid",
+      "both": false,
+      "label": {
+        "text": "taps Buy",
+        "x": 218,
+        "y": 196.2,
+        "width": 64,
+        "height": 20
+      }
+    },
+    {
+      "id": "place",
+      "from": "app",
+      "to": "gateway",
+      "points": [
+        {
+          "x": 521,
+          "y": 189.2
+        },
+        {
+          "x": 753,
+          "y": 189.2
+        }
+      ],
+      "style": "solid",
+      "both": false,
+      "label": {
+        "text": "POST /orders",
+        "x": 593,
+        "y": 196.2,
+        "width": 88,
+        "height": 20
+      }
+    },
+    {
+      "id": "edge-2",
+      "from": "gateway",
+      "to": "orders",
+      "points": [
+        {
+          "x": 953,
+          "y": 177.5
+        },
+        {
+          "x": 1239,
+          "y": 177.5
+        }
+      ],
+      "style": "solid",
+      "both": false,
+      "label": {
+        "text": "forwards",
+        "x": 1064,
+        "y": 184.5,
+        "width": 64,
+        "height": 20
+      }
+    },
+    {
+      "id": "edge-3",
+      "from": "orders",
+      "to": "db",
+      "points": [
+        {
+          "x": 1399,
+          "y": 164
+        },
+        {
+          "x": 1629,
+          "y": 164
+        }
+      ],
+      "style": "solid",
+      "both": false,
+      "label": {
+        "text": "writes order",
+        "x": 1473,
+        "y": 171,
+        "width": 82,
+        "height": 20
+      }
+    },
+    {
+      "id": "edge-4",
+      "from": "orders",
+      "to": "bus",
+      "points": [
+        {
+          "x": 1399,
+          "y": 191
+        },
+        {
+          "x": 1423,
+          "y": 191
+        },
+        {
+          "x": 1423,
+          "y": 245
+        },
+        {
+          "x": 1631,
+          "y": 245
+        }
+      ],
+      "style": "async",
+      "both": false,
+      "label": {
+        "text": "order.placed",
+        "x": 1471,
+        "y": 252,
+        "width": 86,
+        "height": 20
+      }
+    },
+    {
+      "id": "edge-5",
+      "from": "bus",
+      "to": "warehouse",
+      "points": [
+        {
+          "x": 1761,
+          "y": 245
+        },
+        {
+          "x": 2026,
+          "y": 245
+        }
+      ],
+      "style": "async",
+      "both": false,
+      "label": {
+        "text": "pick and pack",
+        "x": 1864,
+        "y": 252,
+        "width": 90,
+        "height": 20
+      }
+    },
+    {
+      "id": "edge-6",
+      "from": "orders",
+      "to": "gateway",
+      "points": [
+        {
+          "x": 1399,
+          "y": 177.5
+        },
+        {
+          "x": 1433,
+          "y": 177.5
+        },
+        {
+          "x": 1433,
+          "y": 207
+        },
+        {
+          "x": 1816,
+          "y": 207
+        },
+        {
+          "x": 1816,
+          "y": 81
+        },
+        {
+          "x": 306,
+          "y": 81
+        },
+        {
+          "x": 306,
+          "y": 151.2
+        },
+        {
+          "x": 705,
+          "y": 151.2
+        },
+        {
+          "x": 705,
+          "y": 165.8
+        },
+        {
+          "x": 753,
+          "y": 165.8
+        }
+      ],
+      "style": "dashed",
+      "both": false,
+      "label": {
+        "text": "201 Created",
+        "x": 1054,
+        "y": 54,
+        "width": 84,
+        "height": 20
+      }
+    }
+  ],
+  "layers": [
+    [
+      "shopper"
+    ],
+    [
+      "app"
+    ],
+    [
+      "gateway"
+    ],
+    [
+      "orders"
+    ],
+    [
+      "db",
+      "bus"
+    ],
+    [
+      "warehouse"
+    ]
+  ]
+}

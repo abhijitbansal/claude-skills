@@ -162,7 +162,9 @@ test('messages run strictly down the page, one row each, self messages two', () 
   const next = msg(g, 'm7');
   assert.equal(next.row - self.row, 2, 'a self message takes two rows');
   assert.equal(msg(g, 'm1').row, 0);
-  const rowsUsed = g.messages.length + 1 /* the self message's second row */ + g.notes.length;
+  // A note takes as many rows as its box needs: its height plus 6 px of slot padding above and below (layout-sequence.mjs NOTE_SLOT_PAD).
+  const noteRows = g.notes.reduce((sum, n) => sum + Math.ceil((n.height + 12) / ROW_HEIGHT), 0);
+  const rowsUsed = g.messages.length + 1 /* the self message's second row */ + noteRows;
   assert.equal(g.rows, rowsUsed);
 });
 

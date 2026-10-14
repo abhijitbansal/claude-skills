@@ -19,6 +19,10 @@
 </style>
 <style>
 * { box-sizing: border-box; }
+/* The canvas: a dotted grid on the page colour; in dark, a wash of the glow at the top and faint grid lines. Mirrors the theme's own dark selectors. */
+:root { --stage-bg: radial-gradient(circle, var(--grid) 1px, transparent 1.5px) 0 0 / 18px 18px, var(--page); --stage-dark: radial-gradient(ellipse 80% 60% at 50% -10%, color-mix(in srgb, var(--glow) 16%, transparent), transparent 70%), linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 48px 48px, linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 48px 48px, var(--page); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --stage-bg: var(--stage-dark); } }
+:root[data-theme="dark"] { --stage-bg: var(--stage-dark); }
 html, body { height: 100%; }
 body { margin: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; background: var(--page); color: var(--text); font: 14px/1.4 var(--font); -webkit-text-size-adjust: 100%; }
 button { font: inherit; color: inherit; }
@@ -37,7 +41,7 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 .export-error { flex: none; margin: 0; padding: 6px 16px; color: var(--bad); font-size: 0.85rem; border-bottom: 1px solid var(--line); background: var(--surface); }
 .export-error[hidden] { display: none; }
 .body { flex: 1 1 0; min-height: 0; display: flex; }
-.stage { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.stage { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; background: var(--stage-bg); }
 .stage.pa-grabbing { cursor: grabbing; }
 .stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .tip { position: absolute; z-index: 2; max-width: 260px; padding: 4px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--text); font-size: 0.8rem; pointer-events: none; overflow-wrap: anywhere; }
@@ -63,7 +67,7 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 .chapters[hidden] { display: none; }
 .pa-chip { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; cursor: pointer; color: var(--text-2); font-size: 0.8rem; line-height: 1.4; white-space: nowrap; }
 .pa-chip:hover { color: var(--text); }
-.pa-chip[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.pa-chip[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
 .find { font: inherit; color: inherit; width: 11em; padding: 4px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
 .bar .found { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 6px; }
 .found[hidden] { display: none; }

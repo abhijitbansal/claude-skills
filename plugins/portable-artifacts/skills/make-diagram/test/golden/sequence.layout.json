@@ -1,95 +1,177 @@
 {
-  "width": 956,
-  "height": 836,
+  "width": 1026,
+  "height": 924,
+  "legend": {
+    "x": 426.3,
+    "y": 24,
+    "width": 575.7,
+    "height": 20,
+    "items": [
+      {
+        "kind": "kind",
+        "name": "actor",
+        "family": "person",
+        "count": 1,
+        "dx": 0,
+        "width": 52.7
+      },
+      {
+        "kind": "kind",
+        "name": "service",
+        "family": "service",
+        "count": 2,
+        "dx": 68.7,
+        "width": 62.4
+      },
+      {
+        "kind": "kind",
+        "name": "database",
+        "family": "data",
+        "count": 1,
+        "dx": 147.1,
+        "width": 72.8
+      },
+      {
+        "kind": "kind",
+        "name": "external",
+        "family": "external",
+        "count": 1,
+        "dx": 235.9,
+        "width": 67.9
+      },
+      {
+        "kind": "style",
+        "name": "sync",
+        "style": "solid",
+        "label": "call",
+        "dx": 319.8,
+        "width": 47.4
+      },
+      {
+        "kind": "style",
+        "name": "async",
+        "style": "async",
+        "label": "event",
+        "dx": 383.2,
+        "width": 57.6
+      },
+      {
+        "kind": "style",
+        "name": "reply",
+        "style": "dashed",
+        "label": "reply",
+        "dx": 456.8,
+        "width": 54.9
+      },
+      {
+        "kind": "style",
+        "name": "self",
+        "style": "solid",
+        "label": "self",
+        "dx": 527.7,
+        "width": 48
+      }
+    ]
+  },
   "participants": [
     {
       "id": "shopper",
       "x": 24,
-      "y": 24,
-      "width": 108,
-      "height": 52,
+      "y": 54,
+      "width": 122,
+      "height": 66,
       "lines": [
         "Shopper"
       ],
       "icon": "lucide:user",
+      "emoji": null,
+      "typeLine": "ACTOR",
       "kind": "actor",
       "shape": "rounded-rect",
       "lifeline": {
-        "x": 78,
-        "y1": 76,
-        "y2": 812
+        "x": 85,
+        "y1": 120,
+        "y2": 900
       }
     },
     {
       "id": "web",
-      "x": 196,
-      "y": 24,
-      "width": 110,
-      "height": 52,
+      "x": 210,
+      "y": 54,
+      "width": 124,
+      "height": 66,
       "lines": [
         "Web app"
       ],
       "icon": "lucide:server",
+      "emoji": null,
+      "typeLine": "SERVICE",
       "kind": "service",
       "shape": "rounded-rect",
       "lifeline": {
-        "x": 251,
-        "y1": 76,
-        "y2": 812
+        "x": 272,
+        "y1": 120,
+        "y2": 900
       }
     },
     {
       "id": "orders",
-      "x": 370,
-      "y": 24,
-      "width": 146,
-      "height": 52,
+      "x": 398,
+      "y": 54,
+      "width": 160,
+      "height": 66,
       "lines": [
         "Orders service"
       ],
       "icon": "lucide:server",
+      "emoji": null,
+      "typeLine": "SERVICE",
       "kind": "service",
       "shape": "rounded-rect",
       "lifeline": {
-        "x": 443,
-        "y1": 76,
-        "y2": 812
+        "x": 478,
+        "y1": 120,
+        "y2": 900
       }
     },
     {
       "id": "db",
-      "x": 580,
-      "y": 24,
-      "width": 120,
-      "height": 52,
+      "x": 622,
+      "y": 54,
+      "width": 134,
+      "height": 66,
       "lines": [
         "Orders DB"
       ],
       "icon": "lucide:database",
+      "emoji": null,
+      "typeLine": "DATABASE",
       "kind": "database",
       "shape": "cylinder",
       "lifeline": {
-        "x": 640,
-        "y1": 76,
-        "y2": 812
+        "x": 689,
+        "y1": 120,
+        "y2": 900
       }
     },
     {
       "id": "psp",
-      "x": 764,
-      "y": 24,
-      "width": 168,
-      "height": 52,
+      "x": 820,
+      "y": 54,
+      "width": 182,
+      "height": 66,
       "lines": [
         "Payment provider"
       ],
       "icon": "lucide:cloud",
+      "emoji": null,
+      "typeLine": "EXTERNAL",
       "kind": "external",
       "shape": "dashed-rounded-rect",
       "lifeline": {
-        "x": 848,
-        "y1": 76,
-        "y2": 812
+        "x": 911,
+        "y1": 120,
+        "y2": 900
       }
     }
   ],
@@ -102,19 +184,19 @@
       "row": 0,
       "label": {
         "text": "press Pay",
-        "x": 131.5,
-        "y": 92,
-        "width": 66,
+        "x": 143.5,
+        "y": 136,
+        "width": 70,
         "height": 20
       },
       "points": [
         {
-          "x": 78,
-          "y": 120
+          "x": 85,
+          "y": 164
         },
         {
-          "x": 251,
-          "y": 120
+          "x": 272,
+          "y": 164
         }
       ]
     },
@@ -126,19 +208,19 @@
       "row": 1,
       "label": {
         "text": "POST /orders",
-        "x": 305,
-        "y": 136,
-        "width": 84,
+        "x": 331,
+        "y": 180,
+        "width": 88,
         "height": 20
       },
       "points": [
         {
-          "x": 251,
-          "y": 164
+          "x": 272,
+          "y": 208
         },
         {
-          "x": 443,
-          "y": 164
+          "x": 478,
+          "y": 208
         }
       ]
     },
@@ -150,19 +232,19 @@
       "row": 2,
       "label": {
         "text": "insert order (pending)",
-        "x": 476.5,
-        "y": 180,
-        "width": 130,
+        "x": 516.5,
+        "y": 224,
+        "width": 134,
         "height": 20
       },
       "points": [
         {
-          "x": 443,
-          "y": 208
+          "x": 478,
+          "y": 252
         },
         {
-          "x": 640,
-          "y": 208
+          "x": 689,
+          "y": 252
         }
       ]
     },
@@ -171,22 +253,22 @@
       "from": "orders",
       "to": "psp",
       "kind": "async",
-      "row": 4,
+      "row": 5,
       "label": {
         "text": "charge card",
-        "x": 607.5,
-        "y": 292,
-        "width": 76,
+        "x": 654.5,
+        "y": 380,
+        "width": 80,
         "height": 20
       },
       "points": [
         {
-          "x": 443,
-          "y": 320
+          "x": 478,
+          "y": 408
         },
         {
-          "x": 848,
-          "y": 320
+          "x": 911,
+          "y": 408
         }
       ]
     },
@@ -195,22 +277,22 @@
       "from": "psp",
       "to": "orders",
       "kind": "reply",
-      "row": 6,
+      "row": 7,
       "label": {
         "text": "declined",
-        "x": 615.5,
-        "y": 404,
-        "width": 60,
+        "x": 662.5,
+        "y": 492,
+        "width": 64,
         "height": 20
       },
       "points": [
         {
-          "x": 848,
-          "y": 432
+          "x": 911,
+          "y": 520
         },
         {
-          "x": 443,
-          "y": 432
+          "x": 478,
+          "y": 520
         }
       ]
     },
@@ -219,30 +301,30 @@
       "from": "orders",
       "to": "orders",
       "kind": "self",
-      "row": 7,
+      "row": 8,
       "label": {
         "text": "schedule retry in 5 min",
-        "x": 483,
-        "y": 478,
-        "width": 136,
+        "x": 518,
+        "y": 566,
+        "width": 140,
         "height": 20
       },
       "points": [
         {
-          "x": 443,
-          "y": 472
+          "x": 478,
+          "y": 560
         },
         {
-          "x": 475,
-          "y": 472
+          "x": 510,
+          "y": 560
         },
         {
-          "x": 475,
-          "y": 504
+          "x": 510,
+          "y": 592
         },
         {
-          "x": 443,
-          "y": 504
+          "x": 478,
+          "y": 592
         }
       ]
     },
@@ -251,22 +333,22 @@
       "from": "orders",
       "to": "psp",
       "kind": "sync",
-      "row": 9,
+      "row": 10,
       "label": {
         "text": "charge card again",
-        "x": 591.5,
-        "y": 536,
-        "width": 108,
+        "x": 638.5,
+        "y": 624,
+        "width": 112,
         "height": 20
       },
       "points": [
         {
-          "x": 443,
-          "y": 564
+          "x": 478,
+          "y": 652
         },
         {
-          "x": 848,
-          "y": 564
+          "x": 911,
+          "y": 652
         }
       ]
     },
@@ -275,22 +357,22 @@
       "from": "psp",
       "to": "orders",
       "kind": "reply",
-      "row": 10,
+      "row": 11,
       "label": {
         "text": "approved",
-        "x": 613.5,
-        "y": 600,
-        "width": 64,
+        "x": 660.5,
+        "y": 688,
+        "width": 68,
         "height": 20
       },
       "points": [
         {
-          "x": 848,
-          "y": 628
+          "x": 911,
+          "y": 716
         },
         {
-          "x": 443,
-          "y": 628
+          "x": 478,
+          "y": 716
         }
       ]
     },
@@ -299,22 +381,22 @@
       "from": "orders",
       "to": "db",
       "kind": "sync",
-      "row": 11,
+      "row": 12,
       "label": {
         "text": "mark order paid",
-        "x": 492.5,
-        "y": 664,
-        "width": 98,
+        "x": 532.5,
+        "y": 752,
+        "width": 102,
         "height": 20
       },
       "points": [
         {
-          "x": 443,
-          "y": 692
+          "x": 478,
+          "y": 780
         },
         {
-          "x": 640,
-          "y": 692
+          "x": 689,
+          "y": 780
         }
       ]
     },
@@ -323,22 +405,22 @@
       "from": "orders",
       "to": "web",
       "kind": "reply",
-      "row": 12,
+      "row": 13,
       "label": {
         "text": "201 Created",
-        "x": 307,
-        "y": 708,
-        "width": 80,
+        "x": 333,
+        "y": 796,
+        "width": 84,
         "height": 20
       },
       "points": [
         {
-          "x": 443,
-          "y": 736
+          "x": 478,
+          "y": 824
         },
         {
-          "x": 251,
-          "y": 736
+          "x": 272,
+          "y": 824
         }
       ]
     },
@@ -347,22 +429,22 @@
       "from": "web",
       "to": "shopper",
       "kind": "reply",
-      "row": 13,
+      "row": 14,
       "label": {
         "text": "show receipt",
-        "x": 123.5,
-        "y": 752,
-        "width": 82,
+        "x": 135.5,
+        "y": 840,
+        "width": 86,
         "height": 20
       },
       "points": [
         {
-          "x": 251,
-          "y": 780
+          "x": 272,
+          "y": 868
         },
         {
-          "x": 78,
-          "y": 780
+          "x": 85,
+          "y": 868
         }
       ]
     }
@@ -378,17 +460,17 @@
         "m7",
         "m8"
       ],
-      "x": 399,
-      "y": 264,
-      "width": 493,
+      "x": 434,
+      "y": 352,
+      "width": 521,
       "height": 388,
       "tab": {
-        "width": 42,
+        "width": 40,
         "height": 20
       },
       "labelBox": {
-        "x": 449,
-        "y": 264,
+        "x": 482,
+        "y": 352,
         "width": 77.8,
         "height": 20
       }
@@ -401,17 +483,17 @@
         "m6",
         "m7"
       ],
-      "x": 431,
-      "y": 376,
-      "width": 429,
+      "x": 466,
+      "y": 464,
+      "width": 457,
       "height": 212,
       "tab": {
-        "width": 32,
+        "width": 30,
         "height": 20
       },
       "labelBox": {
-        "x": 471,
-        "y": 376,
+        "x": 504,
+        "y": 464,
         "width": 72.9,
         "height": 20
       }
@@ -421,16 +503,17 @@
     {
       "text": "order stays pending until the provider answers",
       "lines": [
-        "order stays pending until the provider answers"
+        "order stays pending until the provider",
+        "answers"
       ],
       "over": [
         "db"
       ],
       "after": "m3",
-      "x": 505.2,
-      "y": 228,
-      "width": 269.6,
-      "height": 28
+      "x": 527.2,
+      "y": 287,
+      "width": 323.6,
+      "height": 42
     },
     {
       "text": "idempotency key sent on every charge",
@@ -442,11 +525,11 @@
         "psp"
       ],
       "after": "m4",
-      "x": 423,
-      "y": 340,
-      "width": 445,
+      "x": 458,
+      "y": 428,
+      "width": 473,
       "height": 28
     }
   ],
-  "rows": 14
+  "rows": 15
 }

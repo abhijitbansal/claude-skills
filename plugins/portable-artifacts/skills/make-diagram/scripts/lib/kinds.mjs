@@ -1,7 +1,8 @@
 // Per-type node kinds. Shape encodes kind (colour is never the only signal);
 // `icon` is the default icon ref (null = drawn as a pure shape), read from
-// icons.mjs so the two tables cannot drift apart. The first kind of each type
-// is its default.
+// icons.mjs so the two tables cannot drift apart; `family` is the colour family
+// css.mjs paints (one hue each; `bare` has none); `name` is the kind itself,
+// drawn on the card in spaced capitals. The first kind of each type is its default.
 import { DEFAULT_ICON } from './icons.mjs';
 
 export const TYPES = Object.freeze(['architecture', 'flow', 'sequence', 'state']);
@@ -46,6 +47,22 @@ const SHAPES = {
   },
 };
 
+// kind -> colour family (spec §3). Anything not listed is service-like (cyan).
+const FAMILY = {
+  user: 'person', actor: 'person',
+  database: 'data', storage: 'data',
+  queue: 'queue',
+  external: 'external',
+  decision: 'decision', choice: 'decision', state: 'decision',
+  start: 'bare', end: 'bare',
+};
+export const FAMILIES = Object.freeze(['person', 'service', 'data', 'queue', 'external', 'decision']);
+
+/** The colour family of a kind of this type (the type's default kind when `kind` is undefined). */
+export function family(type, kind) {
+  return FAMILY[kind ?? KINDS[type].default] ?? 'service';
+}
+
 // Shapes with room for an icon. The others (stadium, diamonds, dots) are drawn
 // as a bare shape, so an icon on those kinds would be silently dropped.
 export const BOX_SHAPES = new Set([
@@ -60,7 +77,7 @@ export function canHoldIcon(type, kind) {
 function build(shapes) {
   const kinds = {};
   for (const [kind, shape] of Object.entries(shapes)) {
-    kinds[kind] = Object.freeze({ shape, icon: DEFAULT_ICON[kind] ?? null });
+    kinds[kind] = Object.freeze({ name: kind, shape, icon: DEFAULT_ICON[kind] ?? null, family: FAMILY[kind] ?? 'service' });
   }
   return Object.freeze({ default: Object.keys(shapes)[0], kinds: Object.freeze(kinds) });
 }

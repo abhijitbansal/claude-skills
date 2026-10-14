@@ -86,7 +86,9 @@
   window.addEventListener('hashchange', fromHash);
 
   // ---- export ----------------------------------------------------------------------
-  var VARS = ['--page', '--surface', '--text', '--text-2', '--text-3', '--line', '--accent', '--accent-soft', '--warn', '--good', '--bad', '--font'];
+  // Every variable the diagram stylesheet reads, so an exported file carries its colours.
+  var VARS = ['--page', '--surface', '--text', '--text-2', '--text-3', '--line', '--grid', '--accent', '--accent-soft', '--warn', '--good', '--bad', '--glow',
+    '--k-person', '--k-service', '--k-data', '--k-queue', '--k-external', '--k-decision', '--s1', '--s2', '--s3', '--s4', '--s5', '--s6', '--s7', '--s8', '--font', '--mono'];
   var MAX_PX = 8192;
   var PNG_SCALE = 2;
   var surface = function () { return getComputedStyle(root).getPropertyValue('--surface').trim(); };

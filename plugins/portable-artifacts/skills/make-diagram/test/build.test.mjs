@@ -81,6 +81,17 @@ test('--theme overrides the spec theme', () => {
   assert.match(fs.readFileSync(path.join(dir, 'e.html'), 'utf8'), /--font-display:"Bricolage Grotesque"/);
 });
 
+test('the default theme is blueprint: IBM Plex Sans display and the kind hues on :root; --theme paper brings Newsreader back', () => {
+  const html = readOut(run([example('flow')]));
+  assert.match(html, /--font-display:"IBM Plex Sans"/);
+  assert.ok(!html.includes('Newsreader'));
+  assert.match(html, /--k-service:#0e7490/);
+  const dir = tmp();
+  const r = run([example('flow'), '--out', path.join(dir, 'p.html'), '--theme', 'paper']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(fs.readFileSync(path.join(dir, 'p.html'), 'utf8'), /--font-display:"Newsreader"/);
+});
+
 test('an unknown --theme is a spec error (exit 1) with a did-you-mean', () => {
   const r = run([example('flow'), '--theme', 'papr']);
   assert.equal(r.status, 1);

@@ -5,7 +5,8 @@ import path from 'node:path';
 import Ajv from 'ajv';
 import { formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
 import { UsageError } from '../../shared/cli.mjs';
-import { listThemes, loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
+import { listThemes } from '../../shared/theme.mjs';
+import { themeFor } from './theme.mjs';
 import { KINDS, canHoldIcon } from './kinds.mjs';
 import { hasIcon, iconSvg, IconError } from './icons.mjs';
 import { SCHEMA, LIMITS, NON_SPACE } from './schema.mjs';
@@ -372,7 +373,7 @@ function wordSchemaError(e) {
 // Lay the diagram out and lint the geometry: a spec that passes is buildable.
 async function lintLayout(spec) {
   const { layoutDiagram } = await import('./layout.mjs');
-  const theme = loadTheme(spec.theme ?? DEFAULT_THEME);
+  const theme = themeFor(spec);
   return lintGeometry(await layoutDiagram(spec, theme), { theme });
 }
 

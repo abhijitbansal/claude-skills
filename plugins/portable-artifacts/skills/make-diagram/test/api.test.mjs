@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import * as api from '../scripts/lib/api.mjs';
 import { buildDiagram } from '../scripts/lib/api.mjs';
 import { loadTheme } from '../shared/theme.mjs';
+import { themeFor } from '../scripts/lib/theme.mjs';
 
 const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
 const example = (name) => JSON.parse(fs.readFileSync(here(`../references/examples/${name}.diagram.json`), 'utf8'));
@@ -162,11 +163,14 @@ test('a sequence with more messages than the step limit is chunked to at most 25
   assert.match(steps[0].title, /^A to B and 2 more$/);
 });
 
-test('theme: a name, a loaded theme, the spec theme, or the default', async () => {
+test('theme: a name, a loaded theme, the spec theme, or the default (blueprint)', async () => {
   const spec = example('flow');
-  const byName = await buildDiagram(spec, { theme: 'paper' });
-  assert.deepEqual(await buildDiagram(spec, { theme: loadTheme('paper') }), byName);
-  assert.deepEqual(await buildDiagram(spec), byName);
+  const byName = await buildDiagram(spec, { theme: 'blueprint' });
+  assert.deepEqual(await buildDiagram(spec, { theme: loadTheme('blueprint') }), byName);
+  assert.deepEqual(await buildDiagram(spec), byName, 'the default is blueprint (paper shares its body and mono fonts, so the SVG would match either; build.test pins the page)');
+  assert.equal(themeFor(spec).name, 'blueprint', 'the build resolves the default to blueprint');
+  assert.notDeepEqual(themeFor(spec), loadTheme('paper'), 'and blueprint is not paper');
+  assert.equal(themeFor({ ...spec, theme: 'paper' }).name, 'paper', 'the spec theme beats the default');
   const editorial = await buildDiagram({ ...spec, theme: 'editorial' });
   assert.notEqual(editorial.width, undefined);
   await assert.rejects(buildDiagram(spec, { theme: 'nope' }), /unknown theme "nope"/);
