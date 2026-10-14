@@ -8,9 +8,9 @@
     "height": 269
   },
   "legend": {
-    "x": 906.9,
+    "x": 896.2,
     "y": 24,
-    "width": 529.1,
+    "width": 539.8,
     "height": 20,
     "items": [
       {
@@ -65,9 +65,9 @@
         "kind": "style",
         "name": "dashed",
         "style": "dashed",
-        "label": "optional",
+        "label": "secondary",
         "dx": 458.7,
-        "width": 70.4
+        "width": 81.1
       }
     ]
   },

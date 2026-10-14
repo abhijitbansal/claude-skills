@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { SCHEMA, LIMITS } from '../scripts/lib/schema.mjs';
 import { FAMILIES } from '../scripts/lib/kinds.mjs';
+import { STYLE_WORD } from '../scripts/lib/legend.mjs';
 
 const read = (rel) => fs.readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
 const schemaDoc = read('references/schema.md');
@@ -45,4 +46,14 @@ test('README says F is full screen and 0 fits; kinds.md describes every colour f
   assert.ok(!/\| `F`, double-click \| fit/.test(readme), 'the old row is gone');
   assert.ok(!featurePage.includes('F</code> to fit'), 'the feature page no longer says F fits');
   for (const f of FAMILIES) assert.match(kinds, new RegExp(`^\\| \`${f}\` \\|`, 'm'), `kinds.md has a row for ${f}`);
+});
+
+test('SKILL.md and schema.md name the words the legend prints for each edge style', () => {
+  assert.deepEqual(STYLE_WORD, { solid: 'call', dashed: 'secondary', async: 'event' });
+  for (const [style, word] of Object.entries(STYLE_WORD)) {
+    for (const [name, doc] of [['SKILL.md', skill], ['schema.md', schemaDoc]]) {
+      assert.match(doc, new RegExp(`\`${style}\`[^\\n]{0,60}key "${word}"`), `${name} says the legend keys \`${style}\` as "${word}"`);
+    }
+  }
+  assert.ok(!/legend[^\n]*optional/i.test(skill + schemaDoc), 'no doc calls dashed "optional"');
 });

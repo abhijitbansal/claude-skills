@@ -49,7 +49,8 @@ for (const name of EXAMPLES) {
       const fit = await page.evaluate(() => {
         const limit = document.documentElement.clientWidth;
         const wide = [...document.querySelectorAll('body *')]
-          .filter((el) => !el.closest('.tablewrap, pre, .sr-only, .skip, svg') && el.getBoundingClientRect().right > limit + 1)
+          // .dg-slot scrolls sideways inside itself by design (diagram.css), so what it holds may pass the edge; the slot itself may not.
+          .filter((el) => !el.closest('.tablewrap, pre, .sr-only, .skip, svg, .dg-slot *') && el.getBoundingClientRect().right > limit + 1)
           .map((el) => `${el.tagName}.${el.className}`);
         return { scroll: document.documentElement.scrollWidth, limit, wide };
       });

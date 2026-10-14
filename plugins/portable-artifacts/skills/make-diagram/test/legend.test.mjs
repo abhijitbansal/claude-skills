@@ -13,7 +13,7 @@ import { loadTheme } from '../shared/theme.mjs';
 const theme = loadTheme('blueprint');
 const example = (name) => JSON.parse(fs.readFileSync(fileURLToPath(new URL(`../references/examples/${name}.diagram.json`, import.meta.url)), 'utf8'));
 const kind = (name, family, count) => ({ kind: 'kind', name, family, count });
-const WORD = { solid: 'call', dashed: 'optional', async: 'event', sync: 'call', reply: 'reply', self: 'self' };
+const WORD = { solid: 'call', dashed: 'secondary', async: 'event', sync: 'call', reply: 'reply', self: 'self' };
 const style = (name, s = name, seq = false) => ({ kind: 'style', name, style: s, label: seq && name === 'async' ? 'event' : WORD[name] });
 
 test('legendItems: kinds in order of first use with counts, then the edge styles used', () => {
@@ -78,10 +78,17 @@ test('a drawing narrower than its legend is centred in the widened canvas', asyn
   assert.ok(Math.abs(sl - sr) <= 1, `sequence margins ${sl} / ${sr}`);
 });
 
-test('the legend names edge styles as words: call, optional, event (sequence: call, event, reply, self)', () => {
+test('the legend names edge styles as words: call, secondary, event (sequence: call, event, reply, self)', () => {
   const words = (spec) => legendLayout(spec, theme).items.filter((i) => i.kind === 'style').map((i) => i.label);
-  assert.deepEqual(words(example('architecture')), ['call', 'event', 'optional']);
+  assert.deepEqual(words(example('architecture')), ['call', 'event', 'secondary']);
   assert.deepEqual(words(example('sequence')), ['call', 'event', 'reply', 'self']);
+});
+
+test('a graph spec with a dashed edge keys it "secondary", never "optional" (replies, "no" branches and transitions are dashed too)', () => {
+  const spec = { title: 't', type: 'flow', nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], edges: [{ from: 'a', to: 'b', style: 'dashed', label: 'no' }] };
+  const dashed = legendItems(spec).find((i) => i.kind === 'style');
+  assert.equal(dashed.label, 'secondary');
+  assert.deepEqual(legendItems(spec).filter((i) => i.kind === 'style').map((i) => i.label), ['secondary']);
 });
 
 test('legendSvg: a swatch per kind in its family, a wire sample per style, drawn last', async () => {
@@ -90,7 +97,7 @@ test('legendSvg: a swatch per kind in its family, a wire sample per style, drawn
   assert.match(svg, /^<g class="pa-legend" aria-hidden="true">/);
   assert.equal((svg.match(/<rect class="pa-swatch pa-family-/g) ?? []).length, 4);
   assert.match(svg, /<rect class="pa-swatch pa-family-data" x="[\d.]+" y="[\d.]+" width="12" height="12" rx="3"\/><text class="pa-legend-text" text-anchor="start"><tspan x="[\d.]+" y="[\d.]+">1 database<\/tspan><\/text>/);
-  assert.match(svg, /<g class="pa-legend-sample pa-edge-dashed"><path class="pa-wire" d="M[\d.]+ [\d.]+L[\d.]+ [\d.]+"\/><\/g><text class="pa-legend-text" text-anchor="start"><tspan x="[\d.]+" y="[\d.]+">optional<\/tspan><\/text>/);
+  assert.match(svg, /<g class="pa-legend-sample pa-edge-dashed"><path class="pa-wire" d="M[\d.]+ [\d.]+L[\d.]+ [\d.]+"\/><\/g><text class="pa-legend-text" text-anchor="start"><tspan x="[\d.]+" y="[\d.]+">secondary<\/tspan><\/text>/);
   const page = renderSvg(g, example('architecture'), { theme });
   assert.ok(page.endsWith(`${svg}</svg>`), 'the legend is the last thing drawn');
   const seq = await layoutDiagram(example('sequence'), theme);

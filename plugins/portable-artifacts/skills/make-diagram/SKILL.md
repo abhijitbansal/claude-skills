@@ -64,7 +64,7 @@ Writing rules: labels are nouns ("Orders DB"), edge and message labels are verbs
 }
 ```
 
-Edge `style`: `solid` (default), `dashed`, `async`; `"both": true` draws arrows at both ends.
+Edge `style`: `solid` (default; legend key "call"), `dashed` (legend key "secondary": use it for a reply, a "no" branch or a lesser path), `async` (legend key "event"); `"both": true` draws arrows at both ends. A sequence message prints "call", "event", "reply" or "self".
 
 ## Stories
 

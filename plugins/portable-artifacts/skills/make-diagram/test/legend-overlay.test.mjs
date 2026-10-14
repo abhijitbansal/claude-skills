@@ -21,6 +21,15 @@ test('the page carries one overlay entry per legend item, text escaped', () => {
   assert.ok(html.indexOf('data-pa-legend') > html.indexOf('id="pa-stage"'), 'inside the stage');
 });
 
+test('a dashed edge is keyed "secondary" in the overlay and in the drawn legend of the built page', () => {
+  const spec = { title: 't', type: 'flow', nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], edges: [{ from: 'a', to: 'b', style: 'dashed' }] };
+  const { html } = buildPage(spec, { name: 'legend-dashed' });
+  const overlay = html.match(/<div class="legend" data-pa-legend[^>]*>([\s\S]*?)<\/div>/)[1];
+  assert.match(overlay, /<i class="lg-wire lg-wire-dashed"><\/i>secondary<\/span>/);
+  assert.match(html, /<g class="pa-legend-sample pa-edge-dashed">[\s\S]*?<tspan [^>]*>secondary<\/tspan>/);
+  assert.ok(!/>optional</.test(overlay) && !/<tspan [^>]*>optional</.test(html), 'no "optional" key anywhere');
+});
+
 test('overlay: fixed size at fit and zoom, top right, in-SVG copy hidden on screen but exported', async (t) => {
   if (!(await haveBrowser())) return t.skip('no browser');
   browser ??= await launchBrowser();

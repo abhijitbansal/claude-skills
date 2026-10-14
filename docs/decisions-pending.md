@@ -33,3 +33,21 @@ corner (the drawn legend is hidden there).
   height on a phone; the overlay's blurred-glass look goes.
 - **C:** collapse the key behind a "Key" button on phones. Smallest footprint,
   one more control; the key is no longer visible at a glance.
+
+## make-diagram legend word for a dashed graph edge (PR #39, 2026-10-14)
+
+The key prints one word per edge style. The word for `dashed` was "optional", a
+meaning no author doc gives a dashed line (the shipped examples use it for a
+reply, a "no" branch, a transition and a two-way link). Sequence diagrams print
+"reply" and are unaffected.
+
+- **A (default, shipped):** "secondary". Neutral: it says the line matters less
+  than the solid ones without claiming a meaning. SKILL.md and schema.md now
+  state the words (`call`, `secondary`, `event`) so authors pick a style knowing
+  the key. The word is about 11 px wider than "optional" in the legend row.
+- **B:** "alternate". Fits a "no" branch or a fallback, less so a reply.
+- **C:** "dashed". Describes the line, not a meaning; the most literal and the
+  least informative.
+
+Change `STYLE_WORD` in `scripts/lib/legend.mjs`, the pinned legend tests, the
+goldens and the two docs if you pick another.

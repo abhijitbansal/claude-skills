@@ -17,7 +17,8 @@ const SWATCH_RADIUS = 3;
 const MESSAGE_STYLE = { sync: 'solid', async: 'async', reply: 'dashed', self: 'solid' };
 
 // The words the key prints (spec §3): an edge style or message kind in plain terms.
-const STYLE_WORD = { solid: 'call', dashed: 'optional', async: 'event' };
+// Dashed is only a line style to authors (replies, "no" branches, transitions), so the key says "secondary".
+export const STYLE_WORD = { solid: 'call', dashed: 'secondary', async: 'event' };
 const MESSAGE_WORD = { sync: 'call', async: 'event', reply: 'reply', self: 'self' };
 
 const round = (v) => Math.round(v * 10) / 10;

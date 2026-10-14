@@ -49,7 +49,7 @@ Ids are lowercase letters, digits, `-` and `_`, starting with a letter (`^[a-z][
 
 ## edges[]
 
-`from`, `to` (node ids; architecture may also use a group id) are required. Optional `id`, `label` (up to 40 characters; a verb phrase: "writes order"), `style` (`solid` default \| `dashed` \| `async`), `both` (true draws an arrowhead at each end). An edge from a node to itself is allowed in every graph type. An edge between a group and itself is an error.
+`from`, `to` (node ids; architecture may also use a group id) are required. Optional `id`, `label` (up to 40 characters; a verb phrase: "writes order"), `style` (`solid` default, legend key "call" \| `dashed`, legend key "secondary" \| `async`, legend key "event"), `both` (true draws an arrowhead at each end). An edge from a node to itself is allowed in every graph type. An edge between a group and itself is an error.
 
 ## participants[], messages[], frames[], notes[] (sequence)
 
