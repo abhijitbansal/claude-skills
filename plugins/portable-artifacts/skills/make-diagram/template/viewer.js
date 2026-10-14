@@ -296,6 +296,7 @@
     // panel, else leaves full screen, else leaves Play, else clears the Find
     // filter, else clears the trace. In Play any key but Space and F (full screen moves no camera) pauses, in a form
     // field too.
+    var ARROWS = { ArrowLeft: true, ArrowRight: true, ArrowUp: true, ArrowDown: true };
     var KEEPS_PLAYING = { ' ': true, Tab: true, Shift: true, CapsLock: true, f: true, F: true };
     function onKey(e) {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -332,6 +333,7 @@
       else if (inPlay && (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp')) story.prev();
       else if (inPlay && k === 'Home') story.first();
       else if (inPlay && k === 'End') story.last();
+      else if (ARROWS[k] && within(t, options.panel)) handled = false; // the details panel scrolls with them
       else if (k === 'ArrowLeft') camera.panBy(-PAN_PX, 0);
       else if (k === 'ArrowRight') camera.panBy(PAN_PX, 0);
       else if (k === 'ArrowUp') camera.panBy(0, -PAN_PX);

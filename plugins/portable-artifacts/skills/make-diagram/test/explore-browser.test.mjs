@@ -599,3 +599,28 @@ test('more matches than the list holds: the rest is a plain "+N more" text, not 
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+test('arrow keys with focus in the details panel scroll it and leave the camera alone; on the stage they still pan', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('flow').url, { width: 390, height: 480 });
+  await page.click('.pa-node[data-id="ask"]');
+  await settle(page);
+  const scrolls = await page.evaluate(() => { const p = document.querySelector('[data-pa-panel]'); return p.scrollHeight - p.clientHeight; });
+  assert.ok(scrolls > 20, `precondition: the panel overflows (${scrolls} px)`);
+  const scrollTop = () => page.evaluate(() => document.querySelector('[data-pa-panel]').scrollTop);
+  await page.focus('[data-pa-panel] .pa-row'); // focusing scrolls the row into view; measure after
+  const top = await scrollTop();
+  const box = await viewBox(page);
+  await page.keyboard.press('ArrowDown');
+  // Keyboard scrolling can animate: wait for it rather than read at once.
+  const scrolled = await page.waitForFunction((from) => document.querySelector('[data-pa-panel]').scrollTop > from, top, { timeout: 2000 }).then(() => true, () => false);
+  assert.ok(scrolled, 'ArrowDown scrolls the panel');
+  assert.deepEqual(await viewBox(page), box, 'the camera did not pan');
+
+  await page.focus('.pa-node[data-id="ask"]');
+  await page.keyboard.press('ArrowDown');
+  await settle(page);
+  assert.notDeepEqual(await viewBox(page), box, 'on the stage ArrowDown pans');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
