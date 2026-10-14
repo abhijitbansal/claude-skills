@@ -188,7 +188,7 @@ test('two diagrams on one page share no ids, and the css and runtime ship once',
   const ids = idsOf(html);
   assert.equal(new Set(ids).size, ids.length, `duplicate ids: ${ids.filter((x, i) => ids.indexOf(x) !== i)}`);
   assert.equal((html.match(/\.pa-dim\{/g) ?? []).length, 1, 'diagram css once');
-  assert.equal((html.match(/global\.PADiagram = /g) ?? []).length, 1, 'viewer runtime once');
+  assert.equal((html.match(/PADiagram\.mount = mount;/g) ?? []).length, 1, 'viewer runtime once');
   assert.equal((html.match(/<svg[^>]*class="pa-diagram/g) ?? []).length, 2);
   assert.equal((html.match(/<button[^>]*data-dg-present/g) ?? []).length, 2);
 });
@@ -226,7 +226,7 @@ test('slides mode renders the same figure inside its slide', async () => {
   const { html } = await build([section(flow('Request path'), { title: 'The path' })], { mode: 'slides' });
   assert.match(html, /<section class="slide slide-diagram" id="slide-2"/);
   assert.match(html, /data-dg-present/);
-  assert.equal((html.match(/global\.PADiagram = /g) ?? []).length, 1);
+  assert.equal((html.match(/PADiagram\.mount = mount;/g) ?? []).length, 1);
 });
 
 test('a diagram file is loaded relative to the spec folder', async () => {

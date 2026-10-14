@@ -1,5 +1,5 @@
 // Which ids a presentation reveals. The viewer runtime applies the same rules
-// (template/viewer.js): a step reveals its show, focus and highlight ids;
+// (template/story.js): a step reveals its show, focus and highlight ids;
 // revealing a node reveals its ancestor groups; revealing a message reveals
 // both of its participants.
 

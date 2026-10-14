@@ -1,13 +1,13 @@
 // Page assembly: one self-contained HTML file around a built diagram. Theme CSS
 // and fonts, diagram CSS, the SVG, a hidden text alternative, a JSON data block
-// and the inlined runtime (template/viewer.js core + template/toolbar.js chrome).
+// and the inlined runtime (template/*.js in the order scripts/lib/runtime.mjs fixes, then template/toolbar.js chrome).
 // No network, no LLM. Every string from the spec goes through esc().
 import fs from 'node:fs';
 import { themeCss } from '../../shared/theme.mjs';
 import { esc } from './svg.mjs';
+import { runtimeSource } from './runtime.mjs';
 
 const TEMPLATE = new URL('../../template/viewer.html', import.meta.url);
-const CORE = new URL('../../template/viewer.js', import.meta.url);
 const CHROME = new URL('../../template/toolbar.js', import.meta.url);
 
 export const MAX_PAGE_BYTES = 400 * 1024;
@@ -85,7 +85,7 @@ export function renderViewer(spec, built, { theme }) {
     SVG: built.svg,
     TEXT: textAlternative(spec),
     DATA: jsonForScript(built.data),
-    CORE: inlineCode(fs.readFileSync(CORE, 'utf8')),
+    CORE: inlineCode(runtimeSource()),
     CHROME: inlineCode(fs.readFileSync(CHROME, 'utf8')),
   };
   return fs.readFileSync(TEMPLATE, 'utf8').replace(/<!--@(\w+)-->/g, (_, key) => parts[key] ?? '');

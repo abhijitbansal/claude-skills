@@ -1,6 +1,5 @@
 // Embedding API: spec -> drawable diagram, for make-diagram's own builder and
 // for other skills (make-explainer). Stable contract; see test/api.test.mjs.
-import fs from 'node:fs';
 import { loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
 import { validateSpec } from './spec.mjs';
 import { layoutDiagram } from './layout.mjs';
@@ -11,11 +10,11 @@ import { LIMITS } from './schema.mjs';
 import { revealedBy } from './steps.mjs';
 import { viewerData } from './data.mjs';
 import { beatsOf } from './stories.mjs';
+import { runtimeSource } from './runtime.mjs';
 
 // validateSpec(spec, { layout }) -> { ok, errors }: the same checks buildDiagram runs, for callers that only validate.
 export { validateSpec } from './spec.mjs';
 
-const VIEWER_JS = new URL('../../template/viewer.js', import.meta.url);
 const ID_PREFIX = /^[A-Za-z0-9_-]+$/;
 
 const first = (items, fallback) => items[0] ?? fallback;
@@ -94,9 +93,9 @@ const idsOf = (spec) => (spec.type === 'sequence'
   ? [...spec.participants.map((p) => p.id), ...(spec.messages ?? []).map((m) => m.id)]
   : [...(spec.groups ?? []).map((g) => g.id), ...spec.nodes.map((n) => n.id)]);
 
-/** The viewer's core script (zoom, pan, hover, presentation, animation) without toolbar chrome, for embedding. */
+/** The viewer's core script (camera, trace, story, transport and the mount that wires them) without toolbar chrome, for embedding. */
 export function viewerRuntime() {
-  return fs.readFileSync(VIEWER_JS, 'utf8');
+  return runtimeSource();
 }
 
 /**
