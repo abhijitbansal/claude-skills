@@ -39,6 +39,9 @@
     return els;
   }
 
+  var within = function (el, holder) { return !!(holder && el && holder.contains(el)); };
+  var isField = function (el) { return !!(el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)); };
+
   function mount(stage, data, options) {
     options = options || {};
     var svg = stage.querySelector('svg');
@@ -160,17 +163,22 @@
     svg.addEventListener('focusout', function () { trace.focus(null); });
 
     // ---- keyboard --------------------------------------------------------------------------
-    // Space plays and pauses; arrows, PageUp/PageDown, Home and End move
-    // between beats; P enters Play, E leaves it; F fits; A toggles the edge
-    // animation; Escape leaves Play, else clears the trace.
+    // Space plays and pauses (on the canvas and on every transport control; a
+    // button elsewhere keeps Space for itself); arrows, PageUp/PageDown, Home
+    // and End move between beats; P enters Play, E leaves it; F fits; A toggles
+    // the edge animation; Escape leaves Play, else clears the trace. In Play any
+    // key but Space pauses, in a form field too.
     var KEEPS_PLAYING = { ' ': true, Tab: true, Shift: true, CapsLock: true };
     function onKey(e) {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
       var t = e.target;
-      if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
       var k = e.key;
       var inPlay = story.isPresenting();
-      if (inPlay && !KEEPS_PLAYING[k]) story.pause(); // Space is the play/pause key itself; Tab and lone modifiers act on nothing
+      var inTransport = within(t, options.caption) || within(t, options.chapters);
+      var onPlay = k === 'Enter' && t && t.hasAttribute && t.hasAttribute('data-pa-play'); // its own click toggles
+      // Space is the play/pause key itself; Tab and lone modifiers act on nothing; a form field pauses too
+      if (inPlay && !KEEPS_PLAYING[k] && !onPlay) story.pause();
+      if (isField(t) && !(k === ' ' && inTransport && t.type === 'range')) return; // a range has no Space action
       var handled = true;
       if (k === 'f' || k === 'F') camera.fit();
       else if (k === '+' || k === '=') camera.zoomBy(KEY_ZOOM);
@@ -186,7 +194,7 @@
           if (hadFocus && t && t.blur) t.blur(); // focusout clears the focus trace
           emit();
         } else handled = false;
-      } else if (inPlay && k === ' ' && !(t && t.tagName === 'BUTTON')) story.togglePlay();
+      } else if (inPlay && k === ' ' && (!(t && t.tagName === 'BUTTON') || inTransport)) story.togglePlay();
       else if (inPlay && (k === 'ArrowRight' || k === 'ArrowDown' || k === 'PageDown')) story.next();
       else if (inPlay && (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp')) story.prev();
       else if (inPlay && k === 'Home') story.first();

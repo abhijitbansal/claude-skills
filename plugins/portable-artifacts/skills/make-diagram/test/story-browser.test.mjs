@@ -273,10 +273,10 @@ test('Space plays and pauses, the Play button mirrors it, speed cycles 1Ã—, 1.5Ã
   const { page, problems, context } = await openPage(built('story').url);
   await page.keyboard.press('p');
   assert.equal(await playing(page), false);
-  assert.equal(await pressed(page, '[data-pa-play]'), 'false');
+  assert.equal(await page.getAttribute('[data-pa-play]', 'aria-pressed'), null, 'a button whose label says Play or Pause carries no aria-pressed');
+  assert.equal(await page.textContent('[data-pa-play]'), 'Play');
   await page.keyboard.press('Space');
   assert.equal(await playing(page), true);
-  assert.equal(await pressed(page, '[data-pa-play]'), 'true');
   assert.equal(await page.textContent('[data-pa-play]'), 'Pause');
   await page.keyboard.press('Space');
   assert.equal(await playing(page), false);
@@ -383,6 +383,63 @@ test('a pointer on the canvas pauses: click, wheel and drag; the beat stays', as
   await page.keyboard.press('f');
   assert.equal(await playing(page), false, 'any other key but Space pauses');
   assert.equal(await page.locator('.pa-dot.pa-dot-on').count(), 0, 'pausing hides the dot');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('Space on a focused transport control is play/pause, not the control; Enter still activates it; a toolbar button keeps Space', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.keyboard.press('p');
+  await page.focus('[data-pa-next]');
+  await page.keyboard.press('Space');
+  assert.equal(await playing(page), true, 'Space on Next plays');
+  assert.equal(await count(page), '1 / 9', 'and does not step');
+  await page.keyboard.press('Space');
+  assert.equal(await playing(page), false);
+  assert.equal(await count(page), '1 / 9');
+  await page.focus('[data-pa-play]');
+  await page.keyboard.press('Space');
+  assert.equal(await playing(page), true, 'Space on Play toggles once, not twice');
+  assert.equal(await page.textContent('[data-pa-play]'), 'Pause');
+  await page.keyboard.press('Space');
+  assert.equal(await playing(page), false);
+  await page.keyboard.press('Enter');
+  assert.equal(await playing(page), true, 'Enter on Play plays');
+  await page.keyboard.press('Enter');
+  assert.equal(await playing(page), false, 'and Enter on Pause pauses, not pause-then-play');
+  assert.equal(await page.textContent('[data-pa-play]'), 'Play');
+  await page.focus('[data-pa-beat="2"]');
+  await page.keyboard.press('Space');
+  assert.equal(await playing(page), true, 'Space on a beat chip plays');
+  assert.equal(await count(page), '1 / 9');
+  await page.keyboard.press('Enter');
+  assert.equal(await count(page), '3 / 9', 'Enter activates the chip');
+  assert.equal(await playing(page), false, 'and, as any key but Space, pauses');
+  await page.focus('[data-pa-mode="explore"]');
+  await page.keyboard.press('Space');
+  assert.equal(await page.isVisible('[data-pa-caption]'), false, 'outside the transport the button wins: the Explore tab leaves Play');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('arrow keys on the scrubber move the beat and pause; the scrubber announces the beat', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.keyboard.press('p');
+  assert.equal(await page.getAttribute('[data-pa-scrub]', 'aria-valuetext'), 'Beat 1 of 9');
+  await page.keyboard.press('Space');
+  assert.equal(await playing(page), true);
+  await page.focus('[data-pa-scrub]');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await count(page), '2 / 9', 'the arrow moved the beat');
+  assert.equal(await playing(page), false, 'and paused');
+  assert.equal(await page.getAttribute('[data-pa-scrub]', 'aria-valuetext'), 'Beat 2 of 9');
+  await page.keyboard.press('Space');
+  assert.equal(await playing(page), true, 'Space on the focused scrubber plays: a range has no Space action of its own');
+  await page.evaluate(() => { const r = document.querySelector('[data-pa-scrub]'); r.value = '4'; r.dispatchEvent(new Event('input', { bubbles: true })); }); // a pointer drag fires input with no key
+  assert.equal(await count(page), '5 / 9', 'a scrub by pointer jumps');
+  assert.equal(await playing(page), false, 'and pauses');
   assert.deepEqual(problems, []);
   await context.close();
 });

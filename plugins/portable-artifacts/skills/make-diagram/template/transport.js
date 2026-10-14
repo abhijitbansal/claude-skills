@@ -8,9 +8,10 @@
 // Hooks: data-pa-line ("06 / 13 · CHAPTER · Title — caption"), data-pa-count
 // ("n / N"), data-pa-title and data-pa-note (the older caption parts),
 // data-pa-beats and data-pa-chapters (chip rows, filled here with buttons that
-// jump), data-pa-scrub (an <input type="range">) and data-pa-ticks (its
-// <datalist>), data-pa-prev, data-pa-next, data-pa-prev-chapter,
-// data-pa-next-chapter, data-pa-exit, data-pa-play (aria-pressed; Play / Pause),
+// jump), data-pa-scrub (an <input type="range"> with aria-valuetext
+// "Beat n of N") and data-pa-ticks (its <datalist>), data-pa-prev,
+// data-pa-next, data-pa-prev-chapter, data-pa-next-chapter, data-pa-exit,
+// data-pa-play (its label reads Play or Pause),
 // data-pa-speed (0.5× ... 2×), data-pa-loop (aria-pressed). Text goes in as
 // textContent, never markup.
 (function (global) {
@@ -76,10 +77,7 @@
       var next = part('data-pa-next');
       if (next) next.disabled = i === n - 1;
       var play = part('data-pa-play');
-      if (play) {
-        play.setAttribute('aria-pressed', String(story.isPlaying()));
-        play.textContent = story.isPlaying() ? 'Pause' : 'Play';
-      }
+      if (play) play.textContent = story.isPlaying() ? 'Pause' : 'Play';
       var speed = part('data-pa-speed');
       if (speed) {
         speed.textContent = story.speed() + '×';
@@ -87,7 +85,10 @@
       }
       var loopButton = part('data-pa-loop');
       if (loopButton) loopButton.setAttribute('aria-pressed', String(story.loop()));
-      if (scrub && scrub.value !== String(i)) scrub.value = String(i);
+      if (scrub) {
+        if (scrub.value !== String(i)) scrub.value = String(i);
+        scrub.setAttribute('aria-valuetext', 'Beat ' + (i + 1) + ' of ' + n);
+      }
       mark(beatChips, i);
       mark(chapterChips, story.chapter());
     }
@@ -103,7 +104,15 @@
     wire('data-pa-play', story.togglePlay);
     wire('data-pa-speed', story.cycleSpeed);
     wire('data-pa-loop', story.toggleLoop);
-    if (scrub) scrub.addEventListener('input', function () { story.goTo(Number(scrub.value)); });
+    // A scrub, by pointer or arrow key, lands on a beat and holds there: it pauses
+    // first. Pausing repaints the scrubber at the old beat, so read the target before.
+    if (scrub) {
+      scrub.addEventListener('input', function () {
+        var target = Number(scrub.value);
+        story.pause();
+        story.goTo(target);
+      });
+    }
     paint();
     return { paint: paint };
   };
