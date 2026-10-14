@@ -616,3 +616,67 @@ test('End with focus on Next hands focus to Play, so Home still works from the k
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+// ---- Play on a phone: the chrome leaves the stage most of the screen ------------------------------
+
+// Four chapters of three beats, 36-character chapter titles and 150-character captions: the longest a story gets.
+function longStory() {
+  const nodes = ['n1', 'n2', 'n3', 'n4', 'n5'].map((id, i) => ({ id, label: `Node ${i + 1}` }));
+  const chapter = (c) => ({
+    id: `c${c}`,
+    title: `Chapter ${c} of the long story`.padEnd(36, 'x'),
+    beats: [0, 1, 2].map((b) => ({ title: `Beat ${c}.${b}`, from: nodes[(c + b) % 4].id, to: nodes[(c + b) % 4 + 1].id, caption: `Caption ${c}.${b} `.padEnd(150, 'lorem ipsum dolor ') })),
+  });
+  return { title: 'Long story', type: 'flow', nodes, edges: [['n1', 'n2'], ['n2', 'n3'], ['n3', 'n4'], ['n4', 'n5']].map(([from, to]) => ({ from, to })), stories: [0, 1, 2, 3].map(chapter) };
+}
+
+// The rects Play is judged by, in px: the stage, the chapter row and its first chip, and the legend overlay when it shows.
+const playRects = (page) => page.evaluate(() => {
+  const rect = (el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, height: r.height }; };
+  const legend = document.querySelector('[data-pa-legend]');
+  return {
+    viewport: window.innerHeight,
+    stage: rect(document.getElementById('pa-stage')),
+    chapters: rect(document.querySelector('[data-pa-chapters]')),
+    chip: rect(document.querySelector('[data-pa-chapter]')),
+    legend: getComputedStyle(legend).display === 'none' ? null : rect(legend),
+    pageScroll: [document.documentElement.scrollWidth, document.documentElement.scrollHeight],
+  };
+});
+const intersects = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+
+for (const [label, spec, sizes] of [['a 4 x 3 story with long titles and captions', longStory(), [[390, 664], [390, 780]]], ['the shipped story example', example('story'), [[390, 780]]]]) {
+  for (const [width, height] of sizes) {
+    test(`Play at ${width}x${height} (${label}): the stage keeps half the screen, the chapter chips stay on one line, the legend does not cover the stage`, async (t) => {
+      if (await skipUnlessBrowser(t)) return;
+      const { url } = buildPage(spec, { name: `phone-${width}x${height}-${spec.title.replace(/\W+/g, '-')}` });
+      const { page, problems, context } = await openPage(url, { width, height });
+      await page.keyboard.press('p');
+      await settle(page);
+      const r = await playRects(page);
+      assert.ok(r.stage.height >= r.viewport * 0.5, `the stage is ${r.stage.height} px of ${r.viewport}`);
+      assert.ok(r.chapters.height <= r.chip.height + 4, `the chapter row is one chip tall (${r.chapters.height} px for chips of ${r.chip.height} px)`);
+      assert.ok(r.legend === null || !intersects(r.legend, r.stage), 'a visible legend overlay does not sit on the stage');
+      assert.ok(r.pageScroll[0] <= width && r.pageScroll[1] <= height, 'the page does not scroll');
+      assert.deepEqual(problems, []);
+      await context.close();
+    });
+  }
+}
+
+test('Play: stepping to a later chapter scrolls its chip into view in the chapter row, and the page stays put', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { url } = buildPage(longStory(), { name: 'phone-chapters' });
+  const { page, problems, context } = await openPage(url, { width: 390, height: 780 });
+  await page.keyboard.press('p');
+  await page.keyboard.press('End');
+  await settle(page);
+  const seen = await page.evaluate(() => {
+    const row = document.querySelector('[data-pa-chapters]').getBoundingClientRect();
+    const chip = document.querySelector('[data-pa-chapter][aria-current="true"]').getBoundingClientRect();
+    return { chipIn: chip.left >= row.left - 1 && chip.right <= row.right + 1, scrolled: document.querySelector('[data-pa-chapters]').scrollLeft > 0, pageTop: document.scrollingElement.scrollTop, pageLeft: document.scrollingElement.scrollLeft };
+  });
+  assert.deepEqual(seen, { chipIn: true, scrolled: true, pageTop: 0, pageLeft: 0 });
+  assert.deepEqual(problems, []);
+  await context.close();
+});
