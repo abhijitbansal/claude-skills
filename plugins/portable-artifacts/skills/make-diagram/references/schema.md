@@ -96,7 +96,7 @@ Prefer stories. A spec with both is an error (use stories; steps is the older fo
 | stories / beats in all | 8 / 60 |
 | story title / beat title / caption | 40 / 48 / 160 characters |
 | detail | 400 characters |
-| built page | 400 KB |
+| built page | 600 KB |
 
 A diagram reads best with 12 nodes or fewer. Past that, split it.
 

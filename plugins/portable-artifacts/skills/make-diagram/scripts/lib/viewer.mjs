@@ -12,7 +12,10 @@ import { FAMILIES } from './kinds.mjs';
 const TEMPLATE = new URL('../../template/viewer.html', import.meta.url);
 const CHROME = new URL('../../template/toolbar.js', import.meta.url);
 
-export const MAX_PAGE_BYTES = 400 * 1024;
+// Covers the worst page a spec that passes validation can make (test/helpers/limit-specs.mjs:
+// 60 nodes with brand icons, 400-char details and 8 stories builds about 520 KB), plus ~15%.
+// make-explainer's DIAGRAM_MAX_BYTES bounds the spec file, not this page, so the two stay independent.
+export const MAX_PAGE_BYTES = 600 * 1024;
 
 // JSON that is safe inside <script type="application/json">.
 export function jsonForScript(obj) {

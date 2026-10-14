@@ -6,12 +6,15 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from '../scripts/build.mjs';
+import { MAX_PAGE_BYTES } from '../scripts/lib/viewer.mjs';
+import { validateSpec } from '../scripts/lib/spec.mjs';
+import { nearLimitGraph, nearLimitStories } from './helpers/limit-specs.mjs';
 
 const BUILD = fileURLToPath(new URL('../scripts/build.mjs', import.meta.url));
 const example = (name) => fileURLToPath(new URL(`../references/examples/${name}.diagram.json`, import.meta.url));
 const NAMES = ['architecture', 'flow', 'state', 'sequence'];
 const CSP = `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:`;
-const MAX = 400 * 1024;
+const MAX = MAX_PAGE_BYTES;
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'diagram-build-'));
 // Every run gets its own PA_OUTPUT_DIR and HOME, so nothing is ever written to the real home.
@@ -121,6 +124,21 @@ test('usage problems exit 2: no spec, extra spec, unknown flag, missing file, ba
   assert.equal(JSON.parse(run(['--json']).stdout).ok, false);
 });
 
+// "A spec that passes is buildable" (schema.md): validateSpec lays out and lints, so a spec
+// at every validation limit must also fit the page budget. Two worst cases: 60 nodes with
+// brand icons and 25 long steps; and 60 nodes with emoji or icons, 400-char details and 8 stories.
+for (const [name, make] of [['steps', nearLimitGraph], ['stories', nearLimitStories]]) {
+  test(`a ${name} spec at its validation limits builds within the page budget`, async () => {
+    const spec = make();
+    assert.deepEqual((await validateSpec(spec, { layout: true })).errors, [], 'the spec passes validation');
+    const file = writeSpec(spec);
+    const out = path.join(tmp(), 'near-limit.html');
+    const result = await build(file, { out });
+    assert.equal(result.ok, true, JSON.stringify(result.errors));
+    assert.ok(Buffer.byteLength(fs.readFileSync(out)) <= MAX, 'within the budget');
+  });
+}
+
 test('a page over the size limit is an error and writes nothing', async () => {
   const dir = tmp();
   const result = await build(example('flow'), { out: path.join(dir, 'big.html'), maxBytes: 1000 });
@@ -130,7 +148,7 @@ test('a page over the size limit is an error and writes nothing', async () => {
 });
 
 for (const name of NAMES) {
-  test(`${name}: the page has the exact CSP, stays under 400 KB and loads nothing from the network`, () => {
+  test(`${name}: the page has the exact CSP, stays under the page limit and loads nothing from the network`, () => {
     const r = run([example(name)]);
     assert.equal(r.status, 0, r.stderr);
     const html = readOut(r);

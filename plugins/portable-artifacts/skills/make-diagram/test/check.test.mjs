@@ -204,17 +204,17 @@ test('usage errors exit 2', () => {
   assert.equal(json.ok, false);
 });
 
-// ---- size budget: <= 400 KB per built example ------------------------------------------------------------
+// ---- size budget: <= the page limit per built example ------------------------------------------------------------
 
 for (const name of EXAMPLES) {
-  test(`${name}: the built example is within the 400 KB budget`, () => {
+  test(`${name}: the built example is within the page budget`, () => {
     const { html } = buildPage(example(name), { name });
-    assert.ok(Buffer.byteLength(html) <= 400 * 1024, `${Buffer.byteLength(html)} bytes`);
+    assert.ok(Buffer.byteLength(html) <= MAX_PAGE_BYTES, `${Buffer.byteLength(html)} bytes`);
   });
 }
 
-test('the page limit is 400 KB and an oversized page is refused without writing', async () => {
-  assert.equal(MAX_PAGE_BYTES, 400 * 1024);
+test('the page limit is 600 KB and an oversized page is refused without writing', async () => {
+  assert.equal(MAX_PAGE_BYTES, 600 * 1024);
   const dir = tmp();
   const spec = path.join(dir, 'flow.diagram.json');
   fs.writeFileSync(spec, JSON.stringify(example('flow')));
