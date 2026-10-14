@@ -346,3 +346,35 @@ Phase-gate reviewers reported these as MEDIUM or LOW; none blocked a commit. Eac
 - `loop` is on when `autoplay` is set even if a deep link or reduced motion suppressed autoplay.
 - Tests: `ids.test.mjs` prototype assertion cannot fail; `stories.test.mjs` does not pin the story-level unknown-property message; the one-beat loop test waits a fixed 5 s.
 - Each template module merges into an existing `window.PADiagram` instead of replacing it.
+
+## Status (2026-10-14): all four phases built
+
+Phases 1–4 are committed on `feat/diagram-stories`. Every suite passes: make-diagram 564, make-explainer 602, make-dashboard 325, make-motion 134 (3 skipped), shared 40, eval 27, bin 36, pytest 417. The Haiku eval passed the spec §4 gate at 10/10 (`eval/results/summary-diagram-stories-2026-10-14.md`).
+
+Deviations from the spec, accepted during review:
+
+- **Keys:** `F` is full screen and `0` fits, because the spec named no fit key. `F` does not pause a playing story.
+- **Legend:** on screen, a fixed-size HTML overlay in the stage's top-right corner. The in-SVG legend appears only in exports and in make-explainer's still figure. A 30 px legend band is still reserved above every drawing.
+- **Look:**
+  - The glow uses CSS `drop-shadow` rather than a `<defs>` filter.
+  - Pills are filled with `--surface`, not the canvas colour.
+  - Only cards with an icon tile carry a type label.
+  - Card borders are 1.5 px in both modes.
+  - Kind hues are identical across the four themes.
+- **`from`/`to` resolution has three tiers:**
+  1. Edges running exact from→to.
+  2. A two-headed edge authored the other way, which plays backwards.
+  3. A plain reverse edge, which also plays backwards.
+
+  Ambiguity applies only within the winning tier, so a request and its reply resolve without error.
+- **Overlay:** make-explainer's full-screen root is a wrapper inside the `<dialog>`, because Chromium refuses full screen on a dialog.
+- **Beat zoom:** capped at max(2× the fit-all scale, 100%), so beats stay readable on phones.
+
+Known gaps:
+
+- Selecting a node lights its direct neighbours only, not the transitive upstream and downstream that spec §2 describes.
+- Edges are not keyboard-focusable, so the edge panel needs a pointer.
+- The tooltip has no `aria-describedby`.
+- `loop` stays on when `autoplay` is set but suppressed. This matches spec §2.
+- Template modules merge into an existing `window.PADiagram`.
+- Browser assertions ran in headless Chromium only. Real full screen, Space on buttons in Safari and Firefox, the SVG `drop-shadow` in Safari, and emoji rendering on each OS are on the manual checklist.
