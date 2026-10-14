@@ -536,6 +536,13 @@ test('a diagram with no beats focuses Close on open, not the hidden Play', async
   await context.close();
 });
 
+// Chrome's focus fix-up (a hidden element that held focus drops it to the body) runs at a later rendering update, not in the keypress: wait it out.
+const inDialog = (page) => page.evaluate(async () => {
+  await new Promise((r) => setTimeout(r, 150));
+  const d = document.querySelector('[data-dg-dialog]');
+  return d.contains(document.activeElement) && document.activeElement !== d;
+});
+
 test('closing Present from Explore returns the inline figure to its resting state: fitted, nothing selected, nothing dimmed', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(page1().url);
@@ -553,6 +560,49 @@ test('closing Present from Explore returns the inline figure to its resting stat
   assert.equal(await viewBox(page), before, 'the inline figure is fitted again');
   assert.equal(await page.locator(`${FIG} .pa-selected`).count(), 0, 'no selection left');
   assert.equal(await page.locator(`${FIG} .pa-dim`).count(), 0, 'nothing left dimmed');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('Present: pressing E with Play focused keeps focus in the dialog, and the keys still work', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(page1().url);
+  await page.locator('[data-dg-present]').click();
+  assert.equal(await activeIs(page, '[data-pa-play]'), true, 'precondition: focus on Play');
+  await page.keyboard.press('e'); // the caption, with the focused Play button, hides
+  assert.equal(await inDialog(page), true, 'focus stays inside the dialog');
+  await page.keyboard.press('p');
+  assert.equal(await page.locator(`${DLG} [data-pa-caption]`).isVisible(), true, 'P still starts the story');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('Present: closing the details panel with the mouse keeps focus in the dialog, and the keys still work', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(page1().url);
+  await page.locator('[data-dg-present]').click();
+  await page.locator(`${DLG} [data-pa-mode="explore"]`).click();
+  await page.locator(node('b')).click();
+  await page.locator(`${DLG} [data-pa-panel-close]`).click(); // nothing stays selected, so Close hides
+  assert.equal(await inDialog(page), true, 'focus stays inside the dialog');
+  const before = await viewBox(page);
+  await page.keyboard.press('+');
+  assert.notEqual(await viewBox(page), before, '+ still zooms');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('Present: Esc out of Find in Explore hands focus to a visible control, not the hidden Play, and does not close the overlay', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(page1().url);
+  await page.locator('[data-dg-present]').click();
+  await page.keyboard.press('e');
+  await page.keyboard.press('/');
+  await page.keyboard.press('Escape');
+  assert.equal(await open(page), true, 'the first Esc after Find does not close the overlay');
+  assert.equal(await inDialog(page), true, 'focus returns inside the dialog');
+  await page.keyboard.press('p');
+  assert.equal(await page.locator(`${DLG} [data-pa-caption]`).isVisible(), true, 'P still starts the story');
   assert.deepEqual(problems, []);
   await context.close();
 });

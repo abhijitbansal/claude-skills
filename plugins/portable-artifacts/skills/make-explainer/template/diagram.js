@@ -108,10 +108,13 @@
     if (window.ResizeObserver) new window.ResizeObserver(syncRegion).observe(slot);
     else window.addEventListener('resize', syncRegion);
 
-    // Play when there is a story to play, else Close; keys work at once either way.
+    // Play when it is showing, the Explore tab when there is a story but Play is not on (its transport
+    // is hidden), else Close; keys work at once either way.
     function focusEntry() {
-      var hasStory = controller.state().steps > 0 && playButton;
-      (hasStory ? playButton : closeButton).focus();
+      var s = controller.state();
+      if (s.presenting && playButton) playButton.focus();
+      else if (s.steps > 0 && modes.explore) modes.explore.focus();
+      else closeButton.focus();
     }
     // Find's Esc blurs the box to the body, outside the dialog: the dialog's keys go dead and the next
     // Esc arrives as a cancel. Hand focus back to the dialog.

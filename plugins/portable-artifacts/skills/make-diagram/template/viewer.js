@@ -61,7 +61,10 @@
     var camera = PADiagram.camera(stage, svg, data, { onApply: emit });
     var trace = PADiagram.trace(svg, data, els, { isOff: function () { return story.isPresenting(); } });
     // Entering Play drops the selection and the route (the panel hides with them); each beat repaints the chrome.
-    var story = PADiagram.story(stage, svg, data, els, camera, { onStep: function () { if (story.isPresenting()) trace.clear(); transport.paint(); trace.refresh(); panel.paint(); emit(); } });
+    var story = PADiagram.story(stage, svg, data, els, camera, { onStep: function () {
+      if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
+      transport.paint(); trace.refresh(); panel.paint(); emit();
+    } });
     var transport = PADiagram.transport({ caption: options.caption || null, chapters: options.chapters || null }, data, story);
     var panel = PADiagram.panel({ panel: options.panel || null, tip: options.tip || null, found: options.found || null }, data, els, trace, {
       isOff: function () { return story.isPresenting(); },
@@ -69,6 +72,16 @@
       onBeat: function (i) { story.present(i); },
       onClose: function (byKeyboard) { closeSelection(null, byKeyboard); },
     });
+
+    // A control that holds focus must not hide with it: focus would drop to the page, outside the element
+    // that takes the keys in an embedder's dialog, and every shortcut would go dead. Before the holders
+    // hide, focus moves to the tab of the mode being entered (found under `root`).
+    function keepFocus(holders, mode) {
+      var active = doc.activeElement;
+      if (!holders.some(function (h) { return within(active, h); })) return;
+      var tab = root.querySelector('[data-pa-mode="' + mode + '"]');
+      if (tab && !tab.disabled) tab.focus();
+    }
 
     // ---- animation ----------------------------------------------------------------------
     var animateOn = !!data.animate && !camera.reduced();

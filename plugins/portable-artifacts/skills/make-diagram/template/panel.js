@@ -134,8 +134,9 @@
     if (closeEl) closeEl.addEventListener('click', function (e) { e.stopPropagation(); if (hooks.onClose) hooks.onClose(e.detail === 0); });
 
     // Repaint from the trace: a route, a selected edge or node, or the empty
-    // state. Focus inside the panel moves to the close button, so a repaint
-    // under the keyboard never drops focus to the page.
+    // state. Focus inside the panel moves to the close button, or to the title
+    // when Close hides with nothing left to close, so a repaint never drops
+    // focus to the page.
     function paint() {
       if (!panelEl) return;
       panelEl.hidden = off();
@@ -154,6 +155,7 @@
       else if (id) paintNode(id);
       else titleEl.textContent = 'Map';
       if (hadFocus && something && closeEl) closeEl.focus();
+      else if (hadFocus && !something && !off() && titleEl) titleEl.focus();
     }
 
     // ---- the tooltip ----------------------------------------------------------------------------
