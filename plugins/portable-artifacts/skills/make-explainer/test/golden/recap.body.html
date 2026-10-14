@@ -64,15 +64,42 @@
 </div>
 <button type="button" class="btn dg-present" data-dg-present aria-haspopup="dialog" aria-label="Present diagram: From spec to page">Present</button>
 <dialog class="dg-overlay" data-dg-dialog aria-label="Diagram presentation: From spec to page">
-<div class="dg-top"><span class="dg-top-title">From spec to page</span><button type="button" class="btn" data-dg-close>Close <span class="dg-key" aria-hidden="true">Esc</span></button></div>
-<div class="dg-body" data-dg-body></div>
-<div class="dg-cap" data-pa-caption hidden>
-<div class="dg-cap-text" aria-live="polite">
-<p class="dg-cap-count" data-pa-count></p>
-<p class="dg-cap-title" data-pa-title></p>
-<p class="dg-cap-note" data-pa-note hidden></p>
+<div class="dg-fs" data-dg-root>
+<div class="dg-top">
+<span class="dg-top-title">From spec to page</span>
+<span class="dg-tools">
+<span class="dg-modes" role="group" aria-label="Mode"><button type="button" class="btn" data-pa-mode="play" aria-pressed="true" title="Play the story (P)">Play story</button><button type="button" class="btn" data-pa-mode="explore" aria-pressed="false" title="Explore the diagram (E)">Explore</button></span>
+<input type="search" class="dg-find" data-pa-find placeholder="Find a node" aria-label="Find a node" aria-keyshortcuts="/" autocomplete="off" spellcheck="false">
+<button type="button" class="btn" data-pa-full aria-pressed="false" title="Full screen (F)">Full screen</button>
+<button type="button" class="btn" data-dg-close>Close <span class="dg-key" aria-hidden="true">Esc</span></button>
+</span>
 </div>
-<div class="dg-cap-nav"><button type="button" class="btn" data-pa-prev>Back</button><button type="button" class="btn" data-pa-next>Next</button></div>
+<div class="dg-chapters" data-pa-chapters role="group" aria-label="Chapters" hidden></div>
+<div class="dg-found" data-pa-found role="group" aria-label="Matching nodes" aria-live="polite" hidden></div>
+<div class="dg-main">
+<div class="dg-body" data-dg-body><div class="dg-tip" data-pa-tip role="tooltip" hidden></div></div>
+<aside class="dg-panel" data-pa-panel aria-label="Details">
+<div class="dg-panel-head"><h2 class="dg-panel-title" data-pa-panel-title tabindex="-1" aria-live="polite">Map</h2><button type="button" class="btn" data-pa-panel-close aria-label="Close details (Esc)" hidden>Close</button></div>
+<div class="dg-panel-empty" data-pa-empty><div class="dg-counts" data-pa-tally role="list" aria-label="What the map holds"></div><p class="dg-hint">Click a node or edge. Shift-click a second node to trace a path.</p></div>
+<div class="dg-panel-body" data-pa-panel-body hidden></div>
+</aside>
+</div>
+<div class="dg-cap" data-pa-caption aria-label="Story player" hidden>
+<p class="dg-cap-line" data-pa-line aria-live="polite"></p>
+<div class="dg-beats" data-pa-beats role="group" aria-label="Beats"></div>
+<div class="dg-transport" role="group" aria-label="Transport">
+<button type="button" class="btn" data-pa-prev-chapter title="Previous chapter">Prev chapter</button>
+<button type="button" class="btn" data-pa-prev title="Previous beat (Left)">Prev</button>
+<button type="button" class="btn" data-pa-play title="Play or pause (Space)">Play</button>
+<button type="button" class="btn" data-pa-next title="Next beat (Right)">Next</button>
+<button type="button" class="btn" data-pa-next-chapter title="Next chapter">Next chapter</button>
+<input type="range" class="dg-scrub" data-pa-scrub min="0" max="0" step="1" value="0" aria-label="Beat" list="dg_2-ticks">
+<datalist id="dg_2-ticks" data-pa-ticks></datalist>
+<span class="dg-cap-count">Beat <span data-pa-count></span></span>
+<button type="button" class="btn" data-pa-speed aria-label="Speed 1×; change speed" title="Playback speed">1×</button>
+<button type="button" class="btn" data-pa-loop aria-pressed="false" title="Loop the story">Loop</button>
+</div>
+</div>
 </div>
 </dialog>
 <script type="application/json" data-dg-data>{"type":"flow","title":"From spec to page","stem":"from-spec-to-page","animate":false,"width":461,"height":750,"steps":[{"title":"The section holds the spec","note":"Either an inline object or a .json file next to the explainer.","show":["spec"]},{"title":"Validation runs first","note":"Errors come back as sections[i].diagram… so the fix is easy to find.","show":["check"],"highlight":["check"]},{"title":"make-diagram draws the SVG","note":"Ids are prefixed per diagram, so two figures never clash.","show":["build"],"focus":["check","build"]},{"title":"The page builder embeds it","note":"The stylesheet and the viewer script are included once.","show":["page","file"]}],"ids":["spec","check","build","page","file"],"adjacency":{"spec":{"nodes":["check"],"edges":["edge-0","edge-4"]},"check":{"nodes":["spec","build"],"edges":["edge-0","edge-1","edge-4"]},"build":{"nodes":["check","page"],"edges":["edge-1","edge-2"]},"page":{"nodes":["build","file"],"edges":["edge-2","edge-3"]},"file":{"nodes":["page"],"edges":["edge-3"]}},"edges":{"edge-0":["spec","check"],"edge-1":["check","build"],"edge-2":["build","page"],"edge-3":["page","file"],"edge-4":["check","spec"]},"parents":{},"boxes":{"spec":[110.5,54,242,70],"check":[173.2,288,148,56],"build":[149.2,416,196,70],"page":[170.2,558,154,56],"file":[179.2,686,136,40]},"frames":[],"autoplay":false,"beats":[{"kind":"step","chapter":0,"title":"The section holds the spec","edge":null,"reverse":false,"ids":[],"reveal":["spec"],"highlight":[],"caption":"Either an inline object or a .json file next to the explainer."},{"kind":"step","chapter":0,"title":"Validation runs first","edge":null,"reverse":false,"ids":[],"reveal":["check"],"highlight":["check"],"caption":"Errors come back as sections[i].diagram… so the fix is easy to find."},{"kind":"step","chapter":0,"title":"make-diagram draws the SVG","edge":null,"reverse":false,"ids":["check","build"],"reveal":["build"],"highlight":[],"caption":"Ids are prefixed per diagram, so two figures never clash."},{"kind":"step","chapter":0,"title":"The page builder embeds it","edge":null,"reverse":false,"ids":[],"reveal":["page","file"],"highlight":[],"caption":"The stylesheet and the viewer script are included once."}],"chapters":[{"id":"walkthrough","title":"Walkthrough","start":0,"end":4}],"info":{"spec":{"label":"Explainer JSON","kind":"io","note":"diagram: object or path"},"check":{"label":"Validate","kind":"step","note":"make-diagram rules"},"build":{"label":"buildDiagram","kind":"subprocess","note":"SVG and step data"},"page":{"label":"Page builder","kind":"step","note":"css and viewer once"},"file":{"label":"One HTML file","kind":"end"},"edge-0":{"style":"solid"},"edge-1":{"style":"solid"},"edge-2":{"style":"solid"},"edge-3":{"style":"solid"},"edge-4":{"style":"dashed","label":"errors with paths"}},"directed":{"spec":["edge-0"],"check":["edge-1","edge-4"],"build":["edge-2"],"page":["edge-3"]}}</script>

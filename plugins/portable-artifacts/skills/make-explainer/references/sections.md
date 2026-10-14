@@ -44,7 +44,7 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 `diagram`: `diagram`* and `caption`. `diagram` is either a make-diagram spec written inline as an object, or a path to a `.json` file in the explainer's folder (at most 1 MB). The full make-diagram rules apply, geometry lint included, and its errors are reported under the section (`sections[2].diagram.nodes[0].label: …`).
 
 - The page theme wins: a `theme` inside the diagram is ignored, with a warning.
-- Hover traces edges. A Present button opens a full-screen step-by-step walkthrough; in a deck the arrow keys belong to it while it is open.
+- Hover traces edges. A Present button opens make-diagram's whole viewer in an overlay: Play story (the transport, chapter and beat chips, the travelling dot), Explore (a side panel for a node or edge, Find, shift-click routes) and full screen. In a deck the keys belong to the overlay while it is open; Esc closes the panel, then leaves full screen, then closes the overlay.
 - Needs the `make-diagram` skill next to this one.
 
 ## Chart

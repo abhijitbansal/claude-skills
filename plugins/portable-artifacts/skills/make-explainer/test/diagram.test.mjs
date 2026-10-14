@@ -200,12 +200,25 @@ test('a page without a diagram ships no diagram css, runtime or markup', async (
   assert.ok(!html.includes('data-diagram'));
 });
 
-test('the diagram figure carries its caption, a Present button and the dialog', async () => {
+test('the diagram figure carries its caption, a Present button and a dialog holding the whole viewer', async () => {
   const { html } = await build([section(flow('Request path'), { caption: 'How a **request** flows' })]);
   assert.match(html, /<figcaption>How a <strong>request<\/strong> flows<\/figcaption>/);
   assert.match(html, /<button type="button" class="btn dg-present" data-dg-present aria-haspopup="dialog"[^>]*>Present/);
   assert.match(html, /<dialog class="dg-overlay" data-dg-dialog aria-label="Diagram presentation: Request path"/);
-  for (const part of ['data-pa-title', 'data-pa-note', 'data-pa-count', 'data-pa-prev', 'data-pa-next', 'data-dg-close']) assert.ok(html.includes(part), part);
+  // Only the dialog's markup: the inlined viewer runtime mentions these hooks too.
+  const dialog = html.match(/<dialog class="dg-overlay"[\s\S]*?<\/dialog>/)[0];
+  for (const part of ['data-pa-mode="play"', 'data-pa-mode="explore"', 'data-pa-find', 'data-pa-full', 'data-dg-close', 'data-pa-chapters', 'data-pa-found', 'data-pa-tip', 'data-pa-panel', 'data-pa-panel-title', 'data-pa-panel-close', 'data-pa-tally', 'data-pa-panel-body',
+    'data-pa-caption', 'data-pa-line', 'data-pa-beats', 'data-pa-prev-chapter', 'data-pa-prev', 'data-pa-play', 'data-pa-next', 'data-pa-next-chapter', 'data-pa-scrub', 'data-pa-ticks', 'data-pa-count', 'data-pa-speed', 'data-pa-loop']) assert.ok(dialog.includes(part), part);
+  assert.ok(!dialog.includes('data-pa-title') && !dialog.includes('data-pa-note'), 'the caption line replaces the older title and note parts');
+  assert.match(html, /<input type="range" class="dg-scrub" data-pa-scrub[^>]* list="dg_0-ticks">/);
+  assert.match(html, /<datalist id="dg_0-ticks" data-pa-ticks><\/datalist>/);
+});
+
+test('each figure prefixes its scrubber datalist id, so two overlays share no id', async () => {
+  const { html } = await build([section(flow('First')), text, section(flow('Second'))]);
+  assert.match(html, /id="dg_0-ticks"/);
+  assert.match(html, /id="dg_2-ticks"/);
+  assert.equal((html.match(/<datalist[^>]*data-pa-ticks/g) ?? []).length, 2);
 });
 
 test('diagram text from the spec is escaped, in the svg and in the data block', async () => {
