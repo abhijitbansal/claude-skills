@@ -7,6 +7,7 @@ import { renderSvg, diagramCss } from '../scripts/lib/render.mjs';
 import { anchorEdges } from '../scripts/lib/edges.mjs';
 import { shapeParts, pathD } from '../scripts/lib/shapes.mjs';
 import { ICON_DRAW } from '../scripts/lib/svg.mjs';
+import { iconSvg } from '../scripts/lib/icons.mjs';
 import { CYLINDER_CAP } from '../scripts/lib/sizes.mjs';
 import { KINDS, family } from '../scripts/lib/kinds.mjs';
 import { loadTheme } from '../shared/theme.mjs';
@@ -171,6 +172,18 @@ test('node outlines are the shared shape primitives', async () => {
   for (const shape of new Set(geometry.nodes.map((n) => n.shape))) assert.ok(svg.includes(`pa-shape-${shape}"`), shape);
 });
 
+test('a brand icon shared by several nodes is one path in <defs> and a <use> in each node', async () => {
+  const d = iconSvg('brand:postgresql').markup.match(/d="([^"]*)"/)[1];
+  const nodes = ['a', 'b', 'c'].map((id) => ({ id, label: id, icon: 'brand:postgresql' }));
+  const { svg } = await draw({ title: 't', type: 'architecture', nodes: [...nodes, { id: 'e', label: 'e', icon: 'brand:redis' }], edges: [{ from: 'a', to: 'b' }, { from: 'b', to: 'c' }, { from: 'c', to: 'e' }] }, { idPrefix: 'x' });
+  assert.equal(svg.split(d).length - 1, 1, 'the path data appears once');
+  assert.ok(svg.includes(`<path id="x-icon-1" d="${d}"/>`), 'in <defs>');
+  assert.equal(tagsOf(svg, /<use href="#x-icon-1"\/>/g).length, 3, 'one <use> per node');
+  assert.equal(tagsOf(svg, /<g class="pa-icon pa-icon-brand"[^>]*><use href="#x-icon-\d"\/><\/g>/g).length, 4, 'the icon group keeps its class and transform');
+  const known = new Set(ids(svg));
+  for (const [, ref] of svg.matchAll(/<use href="#([^"]*)"/g)) assert.ok(known.has(ref), `${ref} resolves`);
+});
+
 test('icons are drawn 18 px wide and a two-line label has two lines', async () => {
   const { svg } = await draw(example('architecture'));
   assert.ok(svg.includes(`scale(${ICON_DRAW / 24})`));
@@ -259,7 +272,7 @@ test('sequence: messages carry kind classes, endpoints and open/filled heads', a
 
 const EVIL = '<b>&"x"';
 const EVIL_ESCAPED = '&lt;b&gt;&amp;&quot;x&quot;';
-const ALLOWED_TAGS = new Set(['svg', 'title', 'desc', 'defs', 'marker', 'path', 'g', 'rect', 'text', 'tspan', 'line']);
+const ALLOWED_TAGS = new Set(['svg', 'title', 'desc', 'defs', 'marker', 'path', 'use', 'g', 'rect', 'text', 'tspan', 'line']);
 
 function assertNoMarkupFromText(svg, name) {
   const tags = new Set([...svg.matchAll(/<\/?([a-zA-Z][\w-]*)/g)].map((m) => m[1]));
@@ -372,7 +385,7 @@ test('every non-dynamic class the renderers emit has a rule', async () => {
 test('the SVG carries no literal colours, styles, gradients or filters', async () => {
   for (const name of NAMES) {
     const { svg } = await draw(example(name));
-    assert.ok(!/#[0-9a-fA-F]{3,8}\b|rgb\(|style=|<style|gradient|filter|<image|<foreignObject|href=/.test(svg), name);
+    assert.ok(!/#[0-9a-fA-F]{3,8}\b|rgb\(|style=|<style|gradient|filter|<image|<foreignObject|href=(?!"#)/.test(svg), name);
   }
 });
 

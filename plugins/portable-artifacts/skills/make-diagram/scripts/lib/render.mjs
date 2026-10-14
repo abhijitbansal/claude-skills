@@ -7,7 +7,7 @@ import { KINDS, family } from './kinds.mjs';
 import { fonts, GROUP_LABEL_INSET } from './sizes.mjs';
 import { legendSvg } from './legend.mjs';
 import { anchorEdges, roundedPath } from './edges.mjs';
-import { esc, num, textLines, markerDefs } from './svg.mjs';
+import { esc, num, textLines, markerDefs, shareBrandIcons } from './svg.mjs';
 import { shapeSvg, boxContent, outsideContent, plateSvg, edgeSvg, nodeOpen } from './parts.mjs';
 import { renderSequence } from './render-sequence.mjs';
 import { diagramCss } from './css.mjs';
@@ -60,13 +60,14 @@ export function renderSvg(geometry, spec, { theme, idPrefix = 'd' } = {}) {
   if (!theme) throw new TypeError('renderSvg needs { theme }: text is measured with the theme fonts');
   const drawn = spec.type === 'sequence' ? renderSequence(geometry, spec, theme, idPrefix) : renderGraph(geometry, spec, theme, idPrefix);
   const desc = `${spec.subtitle ? `${spec.subtitle}. ` : ''}${spec.type} diagram with ${drawn.counts}.`;
+  const { body, defs } = shareBrandIcons(drawn.body, idPrefix);
   const root = `pa-diagram pa-type-${spec.type}${spec.animate ? ' pa-animate' : ''}`;
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" class="${root}" viewBox="0 0 ${num(drawn.width)} ${num(drawn.height)}" role="graphics-document" aria-labelledby="${esc(idPrefix)}-title ${esc(idPrefix)}-desc">`,
     `<title id="${esc(idPrefix)}-title">${esc(spec.title)}</title>`,
     `<desc id="${esc(idPrefix)}-desc">${esc(desc)}</desc>`,
-    markerDefs(idPrefix),
-    drawn.body,
+    markerDefs(idPrefix, defs),
+    body,
     '</svg>',
   ].join('');
 }

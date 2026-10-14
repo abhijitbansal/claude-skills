@@ -8,7 +8,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from '../scripts/build.mjs';
 import { MAX_PAGE_BYTES } from '../scripts/lib/viewer.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
-import { nearLimitGraph, nearLimitStories } from './helpers/limit-specs.mjs';
+import { LIMITS } from '../scripts/lib/schema.mjs';
+import { nearLimitGraph, nearLimitStories, withIcons, withText, largestBrands } from './helpers/limit-specs.mjs';
 
 const BUILD = fileURLToPath(new URL('../scripts/build.mjs', import.meta.url));
 const example = (name) => fileURLToPath(new URL(`../references/examples/${name}.diagram.json`, import.meta.url));
@@ -125,9 +126,23 @@ test('usage problems exit 2: no spec, extra spec, unknown flag, missing file, ba
 });
 
 // "A spec that passes is buildable" (schema.md): validateSpec lays out and lints, so a spec
-// at every validation limit must also fit the page budget. Two worst cases: 60 nodes with
-// brand icons and 25 long steps; and 60 nodes with emoji or icons, 400-char details and 8 stories.
-for (const [name, make] of [['steps', nearLimitGraph], ['stories', nearLimitStories]]) {
+// at every validation limit must also fit the page budget. The worst cases: 60 nodes with
+// brand icons and 25 long steps; 60 nodes with emoji or icons, 400-char details and 8 stories;
+// the largest icons on every node; and the costliest text characters everywhere.
+const [LARGEST] = largestBrands();
+const NEAR_LIMIT = [
+  ['steps', nearLimitGraph],
+  ['stories', nearLimitStories],
+  // Brand icons are the page's biggest per-node cost: one icon repeated on every node, and the 60 largest distinct ones.
+  ['steps with the largest brand icon on every node', () => withIcons(nearLimitGraph(), [LARGEST])],
+  ['stories with the largest brand icon on every node', () => withIcons(nearLimitStories(), [LARGEST])],
+  ['steps with the 60 largest distinct brand icons', () => withIcons(nearLimitGraph(), largestBrands().slice(0, LIMITS.nodes))],
+  ['stories with the 60 largest distinct brand icons', () => withIcons(nearLimitStories(), largestBrands().slice(0, LIMITS.nodes))],
+  // The costliest text: "&" is 5 bytes escaped in the markup and 6 in the data block.
+  ['steps with "&" in every text field', () => withText(withIcons(nearLimitGraph(), largestBrands().slice(0, LIMITS.nodes)), '&')],
+  ['stories with "&" in every text field', () => withText(withIcons(nearLimitStories(), largestBrands().slice(0, LIMITS.nodes)), '&')],
+];
+for (const [name, make] of NEAR_LIMIT) {
   test(`a ${name} spec at its validation limits builds within the page budget`, async () => {
     const spec = make();
     assert.deepEqual((await validateSpec(spec, { layout: true })).errors, [], 'the spec passes validation');

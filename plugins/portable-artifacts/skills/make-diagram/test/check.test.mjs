@@ -213,8 +213,8 @@ for (const name of EXAMPLES) {
   });
 }
 
-test('the page limit is 600 KB and an oversized page is refused without writing', async () => {
-  assert.equal(MAX_PAGE_BYTES, 600 * 1024);
+test('the page limit is 1024 KB and an oversized page is refused without writing', async () => {
+  assert.equal(MAX_PAGE_BYTES, 1024 * 1024);
   const dir = tmp();
   const spec = path.join(dir, 'flow.diagram.json');
   fs.writeFileSync(spec, JSON.stringify(example('flow')));

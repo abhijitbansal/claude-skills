@@ -12,10 +12,12 @@ import { FAMILIES } from './kinds.mjs';
 const TEMPLATE = new URL('../../template/viewer.html', import.meta.url);
 const CHROME = new URL('../../template/toolbar.js', import.meta.url);
 
-// Covers the worst page a spec that passes validation can make (test/helpers/limit-specs.mjs:
-// 60 nodes with brand icons, 400-char details and 8 stories builds about 520 KB), plus ~15%.
+// Covers the worst page a spec that passes validation can make (test/helpers/limit-specs.mjs):
+// 60 nodes with the 60 largest brand icons, 400-char details, 8 stories and "&" in every text
+// field builds about 920 KB (ordinary text, about 540 KB); the limit adds ~10%. Brand icons are
+// drawn once per page (svg.mjs shareBrandIcons), so they cost at most the 60 largest paths, ~120 KB.
 // make-explainer's DIAGRAM_MAX_BYTES bounds the spec file, not this page, so the two stay independent.
-export const MAX_PAGE_BYTES = 600 * 1024;
+export const MAX_PAGE_BYTES = 1024 * 1024;
 
 // JSON that is safe inside <script type="application/json">.
 export function jsonForScript(obj) {

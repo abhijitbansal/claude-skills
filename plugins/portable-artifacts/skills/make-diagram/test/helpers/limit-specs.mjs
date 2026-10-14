@@ -1,5 +1,6 @@
 // Specs that sit at the validation limits, to prove "a spec that passes is buildable":
 // the page budget (viewer.mjs MAX_PAGE_BYTES) must cover the worst page they make.
+import fs from 'node:fs';
 import { LIMITS } from '../../scripts/lib/schema.mjs';
 
 const BRANDS = ['postgresql', 'redis', 'docker', 'ansible', 'anthropic', 'apple', 'argo', 'auth0', 'babel', 'bitbucket'];
@@ -51,4 +52,30 @@ export function nearLimitStories() {
     stories.push({ id: `story${s}`, title: fill(`Story ${s} `, LIMITS.storyTitle), beats });
   }
   return { ...graph, nodes, stories };
+}
+
+/** `spec` with each node's icon replaced (an emoji dropped), so the page carries icons only: `refs[i % refs.length]` for node i. */
+export function withIcons(spec, refs) {
+  return { ...spec, nodes: spec.nodes.map(({ emoji: _emoji, ...n }, i) => ({ ...n, icon: refs[i % refs.length] })) };
+}
+
+/** Brand refs, the largest drawing first: the icons that cost a page the most when a diagram uses them. */
+export function largestBrands() {
+  const { icons } = JSON.parse(fs.readFileSync(new URL('../../icons/brands.json', import.meta.url), 'utf8'));
+  return Object.entries(icons).sort((a, b) => b[1].path.length - a[1].path.length).map(([slug]) => `brand:${slug}`);
+}
+
+/** `spec` with every free-text field at its cap filled with `ch` (labels, titles, notes, details, edge labels, captions). `&` and `<` are the costliest: escaped to 5-6 bytes each in the markup and the data block. */
+export function withText(spec, ch) {
+  const full = (limit) => ch.repeat(limit);
+  const like = (text) => ch.repeat(text.length);
+  return {
+    ...spec,
+    title: full(LIMITS.title),
+    subtitle: full(LIMITS.subtitle),
+    nodes: spec.nodes.map((n) => ({ ...n, label: full(LIMITS.label), note: like(n.note), ...(n.detail ? { detail: like(n.detail) } : {}) })),
+    edges: spec.edges.map((e) => ({ ...e, label: full(LIMITS.edgeLabel) })),
+    ...(spec.stories ? { stories: spec.stories.map((st) => ({ ...st, title: full(LIMITS.storyTitle), beats: st.beats.map((b) => ({ ...b, title: full(LIMITS.beatTitle), caption: like(b.caption) })) })) } : {}),
+    ...(spec.steps ? { steps: spec.steps.map((st) => ({ ...st, title: full(LIMITS.stepTitle), note: like(st.note) })) } : {}),
+  };
 }
