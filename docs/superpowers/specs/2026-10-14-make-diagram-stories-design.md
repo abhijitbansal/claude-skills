@@ -154,6 +154,6 @@ Each phase: an executor builds it test-first; a fresh reviewer reports findings 
 ## Risks
 
 - **Eval regression.** More fields widen the contract a small model must follow. Mitigation: all optional; SKILL.md teaches one walkthrough mechanism; the eval decides the pin.
-- **Page weight.** Viewer JS grows. Budget: every built example stays under the existing 400 KB limit (`test/check.test.mjs`); the pipeline sample is about 180 KB today. Amended after review: the limit is now 600 KB, sized to the worst page a spec that passes validation can build (`test/build.test.mjs`, `test/helpers/limit-specs.mjs`).
+- **Page weight.** Viewer JS grows. Budget: every built example stays under the existing 400 KB limit (`test/check.test.mjs`); the pipeline sample is about 180 KB today. Amended after review: the limit is now 1024 KB (brand icons drawn once per page), sized to the worst page a spec that passes validation can build (`test/build.test.mjs`, `test/helpers/limit-specs.mjs`).
 - **Emoji rendering** differs by OS; documented, not fixed.
 - **Golden churn** in phase 3 hides nothing only if the regeneration is isolated to that commit.
