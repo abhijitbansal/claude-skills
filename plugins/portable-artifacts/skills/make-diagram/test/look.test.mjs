@@ -143,7 +143,7 @@ test('diagramCss: family rules tint the card and colour the tile, icon, type lin
   after('.pa-node .pa-shape-filled-dot{', '.pa-family-bare .pa-shape{');
   after('.pa-tone-good .pa-shape-filled-dot{', '.pa-node .pa-shape-filled-dot{');
   after('.pa-hl .pa-shape,', '.pa-tone-bad .pa-shape{');
-  assert.ok(css.includes('.pa-tone-warn .pa-type{fill:var(--warn)}'));
+  assert.ok(!/\.pa-tone-[a-z]+ \.pa-type\b/.test(css), 'a tone does not repaint the kind label: its colour is not gated against the card tint');
   assert.match(css, /\.pa-arrow-fill\{fill:var\(--text-3\);fill:context-stroke;stroke:none\}/);
   assert.match(css, /\.pa-arrow-open\{fill:none;stroke:var\(--text-3\);stroke:context-stroke;/);
   assert.ok(!/\.pa-edge[^{]* path\{/.test(css), 'no rule strokes a bare path inside an edge group');

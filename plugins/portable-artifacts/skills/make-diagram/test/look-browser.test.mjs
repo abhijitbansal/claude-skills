@@ -5,6 +5,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { buildPage, example, scratchDir } from './helpers/browser.mjs';
+import { contrastRatio } from '../shared/contrast.mjs';
 import { openPage, closeBrowser, skipUnlessBrowser } from './helpers/page.mjs';
 
 after(closeBrowser);
@@ -75,12 +76,34 @@ test('cards: tinted by family, the tile inside the card and the emoji inside the
   assert.equal((await styleOf(page, '.pa-node[data-id="orders"] .pa-type', ['fill'])).fill, await varColour(page, '--k-service'));
   const warn = await varColour(page, '--warn');
   assert.deepEqual(await styleOf(page, '.pa-node[data-id="warehouse"] .pa-shape', ['stroke', 'strokeWidth']), { stroke: warn, strokeWidth: '2px' }, 'the tone border wins over the external hue');
-  assert.equal((await styleOf(page, '.pa-node[data-id="warehouse"] .pa-type', ['fill'])).fill, warn);
+  assert.equal((await styleOf(page, '.pa-node[data-id="warehouse"] .pa-type', ['fill'])).fill, await varColour(page, '--k-external'), 'a tone leaves the type line in the kind hue');
   assert.equal((await styleOf(page, '.pa-edge[data-id="edge-5"] .pa-wire', ['stroke'])).stroke, await varColour(page, '--k-queue'), 'bus -> warehouse takes the queue hue');
   assert.match((await styleOf(page, '.pa-node[data-id="gateway"] .pa-note', ['fontFamily'])).fontFamily, /Mono/);
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+// A computed colour (rgb(r, g, b) or color(srgb r g b)) as #rrggbb.
+const toHex = (c) => {
+  const m = c.match(/^rgba?\(([^)]+)\)$/);
+  const [r, g, b] = m ? m[1].split(/[ ,/]+/).slice(0, 3).map(Number) : c.match(/^color\(srgb ([^)]+)\)$/)[1].split(' ').slice(0, 3).map((v) => Math.round(Number(v) * 255));
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+};
+
+for (const colorScheme of ['light', 'dark']) {
+  test(`${colorScheme}: a tone leaves the kind label as readable as an untoned card's (paper, >= 4.5:1 on the card)`, async (t) => {
+    if (await skipUnlessBrowser(t)) return;
+    const spec = example('architecture');
+    const withTwin = { ...spec, nodes: [...spec.nodes, { id: 'twin', label: 'Untoned twin', kind: 'external' }] };
+    const { page, problems, context } = await openPage(buildPage(withTwin, { name: `tone-${colorScheme}` }).url, { colorScheme });
+    const fillOf = async (id, part) => (await styleOf(page, `.pa-node[data-id="${id}"] .${part}`, ['fill'])).fill;
+    assert.equal(await fillOf('pay', 'pa-type'), await fillOf('twin', 'pa-type'), 'the toned node keeps the kind label colour of an untoned one');
+    const ratio = contrastRatio(toHex(await fillOf('pay', 'pa-type')), toHex(await fillOf('pay', 'pa-shape')));
+    assert.ok(ratio >= 4.5, `kind label on the toned card is ${ratio.toFixed(2)}:1`);
+    assert.deepEqual(problems, []);
+    await context.close();
+  });
+}
 
 test('the canvas is a dotted grid in light and a glow with faint lines in dark; lanes and the legend are drawn; nothing overflows at 390 px', async (t) => {
   if (await skipUnlessBrowser(t)) return;

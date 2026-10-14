@@ -86,13 +86,13 @@ const markRules = [
   '.pa-node .pa-shape-small-diamond{stroke-width:1.25}',
 ];
 
-// A tone colours the border (2 px), the filled dot, the icon and the type line,
-// over the family hue (these rules come later, so they win at equal specificity).
+// A tone colours the border (2 px), the filled dot and the icon, over the family
+// hue (these rules come later, so they win at equal specificity). The kind label
+// keeps its family hue: that is the colour checkTheme gates against the card tint.
 const toneRules = Object.entries(TONES).flatMap(([tone, variable]) => [
   `.pa-tone-${tone} .pa-shape{stroke:var(--${variable});stroke-width:2}`,
   `.pa-tone-${tone} .pa-shape-filled-dot{fill:var(--${variable})}`,
   `.pa-tone-${tone} .pa-icon{color:var(--${variable})}`,
-  `.pa-tone-${tone} .pa-type{fill:var(--${variable})}`,
 ]);
 
 // Viewer state, set by the runtime: dim what a trace or a beat leaves out, hide
