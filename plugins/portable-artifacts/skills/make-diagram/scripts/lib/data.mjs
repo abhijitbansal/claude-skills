@@ -107,6 +107,7 @@ export function viewerData(spec, built) {
     animate: spec.animate === true,
     width: built.width,
     height: built.height,
+    drawing: box(built.geometry.drawing.x, built.geometry.drawing.y, built.geometry.drawing.width, built.geometry.drawing.height), // the diagram without the legend band: what a page that hides the drawn legend fits
     steps: built.steps,
     ids: built.ids,
     adjacency: adjacencyOf(links),

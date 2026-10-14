@@ -72,7 +72,8 @@ for (const name of EXAMPLES) {
       });
       assert.ok(fit.fits, 'no page overflow');
       const size = await page.evaluate(() => JSON.parse(document.getElementById('pa-data').textContent));
-      assert.ok(fit.x <= 0.01 && fit.y <= 0.01 && fit.x + fit.w >= size.width - 0.01 && fit.y + fit.h >= size.height - 0.01, 'the first view shows the whole diagram');
+      const [dx, dy, dw, dh] = size.drawing; // the page hides the drawn legend, so the fit holds the drawing, not the canvas widened and banded for it
+      assert.ok(fit.x <= dx + 0.01 && fit.y <= dy + 0.01 && fit.x + fit.w >= dx + dw - 0.01 && fit.y + fit.h >= dy + dh - 0.01, 'the first view shows the whole diagram');
       assert.ok(Math.abs((await zoom(page)) - 1) < 0.001);
       assert.deepEqual(problems, []);
       await context.close();
@@ -484,8 +485,10 @@ test('the Everything step uses the fit camera, not a padded focus box', async (t
     await settle(page);
     assert.ok(Math.abs((await zoom(page)) - 1) < 0.001, `${name}: ${await zoom(page)}`);
     const [x, y, w, h] = await viewBox(page); // the caption shrinks the stage, so compare the centre, not the box
-    const size = await page.evaluate(() => JSON.parse(document.getElementById('pa-data').textContent));
-    assert.ok(Math.abs(x + w / 2 - size.width / 2) < 1 && Math.abs(y + h / 2 - size.height / 2) < 1, `${name}: centred on the diagram`);
+    const { drawing: [dx, dy, dw, dh] } = await page.evaluate(() => JSON.parse(document.getElementById('pa-data').textContent));
+    // the page fits the drawing (not the canvas padded for the legend row), below its legend overlay: centred across, the whole drawing in view
+    assert.ok(Math.abs(x + w / 2 - (dx + dw / 2)) < 1, `${name}: centred on the drawing`);
+    assert.ok(x <= dx + 1 && x + w >= dx + dw - 1 && y <= dy + 1 && y + h >= dy + dh - 1, `${name}: the whole drawing in view`);
     assert.deepEqual(problems, []);
     await context.close();
   }

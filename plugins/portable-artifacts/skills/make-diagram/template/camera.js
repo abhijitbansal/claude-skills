@@ -7,6 +7,11 @@
 //   var camera = PADiagram.camera(stage, svg, data, { onApply });
 //
 // onApply runs after every viewBox change (viewer.js emits its state from it).
+//
+// Fit: a page that shows its own legend over the stage (an element with
+// data-pa-legend inside it; the drawn legend is hidden there) fits the drawing
+// (data.drawing, the canvas without the legend band and the widening for a wide
+// legend row). Any other stage fits the whole canvas.
 (function (global) {
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
@@ -40,6 +45,10 @@
     var boxes = PADiagram.dict(data.boxes);
     var reduceQuery = global.matchMedia ? global.matchMedia('(prefers-reduced-motion: reduce)') : null;
     var reduced = function () { return !!(reduceQuery && reduceQuery.matches); };
+    var overlay = stage.querySelector('[data-pa-legend]');
+    var d = data.drawing;
+    // What the fit shows: the drawing when the page covers the drawn legend with its own, else the canvas.
+    var fitBox = overlay && d && d.length === 4 && d.every(function (v) { return finite(v, NaN) === v; }) && d[2] > 0 && d[3] > 0 ? { x: d[0], y: d[1], w: d[2], h: d[3] } : { x: 0, y: 0, w: W, h: H };
     var cam = { cx: W / 2, cy: H / 2, s: 1 };
     var fitted = true;
     var tween = 0;
@@ -51,10 +60,10 @@
       return { w: r.width > 0 ? r.width : W, h: r.height > 0 ? r.height : H };
     }
     function fitScale(sz) {
-      var s = Math.min(sz.w / (W + 2 * FIT_MARGIN), sz.h / (H + 2 * FIT_MARGIN));
+      var s = Math.min(sz.w / (fitBox.w + 2 * FIT_MARGIN), sz.h / (fitBox.h + 2 * FIT_MARGIN));
       return s > 0 && isFinite(s) ? Math.min(s, MAX_FIT_SCALE) : 1;
     }
-    function fitCamera() { return { cx: W / 2, cy: H / 2, s: fitScale(size()) }; }
+    function fitCamera() { return { cx: fitBox.x + fitBox.w / 2, cy: fitBox.y + fitBox.h / 2, s: fitScale(size()) }; }
 
     function apply() {
       var sz = size();

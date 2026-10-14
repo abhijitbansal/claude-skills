@@ -9,7 +9,7 @@
 import { measure, lineHeight, wrap } from '../../shared/text.mjs';
 import { KINDS } from './kinds.mjs';
 import { nodeSize, edgeLabelSize, fonts, evenUp } from './sizes.mjs';
-import { legendLayout, placeLegend, LEGEND_BAND } from './legend.mjs';
+import { legendLayout, placeLegend, drawingBounds, LEGEND_BAND } from './legend.mjs';
 
 const OUTER_MARGIN = 24; // same outer margin as layout-graph.mjs (which pulls in ELK, so not imported)
 export const ROW_HEIGHT = 44;
@@ -256,9 +256,11 @@ export function layoutSequence(spec, theme) {
   const dx = OUTER_MARGIN - minX + (needed > drawingWidth ? round((needed - drawingWidth) / 2) : 0); // and sits centred in it
   const sx = (v) => round(v + dx);
   const pt = (p) => ({ x: sx(p.x), y: round(p.y) });
+  const height = round(lifelineBottom + OUTER_MARGIN);
   return {
     width,
-    height: round(lifelineBottom + OUTER_MARGIN),
+    height,
+    drawing: drawingBounds(needed > drawingWidth ? (needed - drawingWidth) / 2 : 0, drawingWidth, height),
     legend: placeLegend(legend, width, OUTER_MARGIN),
     participants: sized.map((s, i) => ({
       id: s.p.id,

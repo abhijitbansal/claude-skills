@@ -606,3 +606,31 @@ test('Present: Esc out of Find in Explore hands focus to a visible control, not 
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+// A figure keeps its drawn legend (the legend overlay is make-diagram's own page only), so its camera
+// fits the whole canvas, widened for a legend row wider than the drawing, not the drawing alone.
+test('an inline figure of a narrow diagram still shows its whole legend at rest', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const narrow = {
+    title: 'Narrow',
+    type: 'flow',
+    direction: 'down',
+    nodes: ['a', 'b', 'c'].map((id) => ({ id, label: `Checkout service ${id.toUpperCase()}` })),
+    edges: [{ from: 'a', to: 'b', style: 'solid' }, { from: 'b', to: 'c', style: 'dashed' }, { from: 'a', to: 'c', style: 'async' }],
+  };
+  const { page, problems, context } = await openPage(buildSpec(doc({}, [{ type: 'diagram', title: 'Narrow', diagram: narrow, caption: 'Narrow.' }])).url, { width: 1280, height: 900 });
+  const seen = await page.evaluate(() => {
+    const fig = document.querySelector('[data-diagram]');
+    const svg = fig.querySelector('svg').getBoundingClientRect();
+    const legend = fig.querySelector('.pa-legend').getBoundingClientRect();
+    const view = fig.querySelector('svg').getAttribute('viewBox').split(' ').map(Number);
+    const data = JSON.parse(fig.querySelector('script[data-dg-data]').textContent);
+    return { inside: legend.left >= svg.left - 1 && legend.right <= svg.right + 1 && legend.top >= svg.top - 1 && legend.width > 100, view, canvas: [data.width, data.height], drawing: data.drawing };
+  });
+  assert.equal(seen.inside, true, 'the drawn legend sits inside the figure');
+  const FIT_MARGIN = 16; // make-diagram's camera: the whole canvas and this much around it
+  const expected = [-FIT_MARGIN, -FIT_MARGIN, seen.canvas[0] + 2 * FIT_MARGIN, seen.canvas[1] + 2 * FIT_MARGIN];
+  seen.view.forEach((v, i) => assert.ok(Math.abs(v - expected[i]) <= 1, `the view ${seen.view.join(' ')} is the whole canvas (${expected.join(' ')}), not the ${seen.drawing.join('x')} drawing`));
+  assert.deepEqual(problems, []);
+  await context.close();
+});

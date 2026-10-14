@@ -6,9 +6,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { legendItems } from '../scripts/lib/legend.mjs';
 import { launchBrowser, haveBrowser, buildPage, example } from './helpers/browser.mjs';
+import { openPage, closeBrowser, skipUnlessBrowser } from './helpers/page.mjs';
 
 let browser;
-after(() => browser?.close());
+after(async () => { await browser?.close(); await closeBrowser(); });
 
 test('the page carries one overlay entry per legend item, text escaped', () => {
   const spec = example('architecture');
@@ -48,6 +49,32 @@ test('overlay: fixed size at fit and zoom, top right, in-SVG copy hidden on scre
   const text = fs.readFileSync(await d.path(), 'utf8');
   assert.ok(text.includes('class="pa-legend"'), 'the export keeps the drawn legend');
   assert.ok(!text.includes('data-pa-legend') && !/\.legend\b/.test(text), 'and not the overlay or its rules');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+// ---- the page fits the drawing, not the canvas widened for the legend row it hides ----------------------------
+
+// A drawing narrower than its legend row is laid out on a wider canvas (exports keep the drawn legend);
+// the page hides that legend, so its camera fits the drawing alone.
+const DOWN_FLOW = {
+  title: 'Three nodes',
+  type: 'flow',
+  direction: 'down',
+  nodes: ['a', 'b', 'c'].map((id) => ({ id, label: `Checkout service ${id.toUpperCase()}` })),
+  edges: [{ from: 'a', to: 'b', style: 'solid' }, { from: 'b', to: 'c', style: 'dashed' }, { from: 'a', to: 'c', style: 'async' }],
+};
+
+test('a narrow diagram fits the phone by its own width: the fit reaches the 1.25 cap and a node is not drawn small', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(buildPage(DOWN_FLOW, { name: 'narrow' }).url, { width: 390, height: 780 });
+  const seen = await page.evaluate(() => {
+    const stage = document.getElementById('pa-stage').getBoundingClientRect();
+    const vb = document.querySelector('#pa-stage svg').getAttribute('viewBox').split(' ').map(Number);
+    return { scale: stage.width / vb[2], aWidth: document.querySelector('.pa-node[data-id="a"] .pa-shape').getBoundingClientRect().width };
+  });
+  assert.ok(seen.scale >= 1.249, `fit scale ${seen.scale}`);
+  assert.ok(seen.aWidth >= 190, `node a is ${seen.aWidth} px wide`);
   assert.deepEqual(problems, []);
   await context.close();
 });

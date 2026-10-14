@@ -158,7 +158,7 @@ test('page parts: toolbar, SVG, text alternative, data block and runtime', () =>
   assert.ok(html.includes('window.PADiagram'));
   assert.ok(html.includes('window.paReady = true'));
   const data = JSON.parse(html.match(/<script type="application\/json" id="pa-data">([^<]*)<\/script>/)[1]);
-  assert.deepEqual(Object.keys(data).sort(), ['adjacency', 'animate', 'autoplay', 'beats', 'boxes', 'chapters', 'directed', 'edges', 'frames', 'height', 'ids', 'info', 'parents', 'stem', 'steps', 'title', 'type', 'width']);
+  assert.deepEqual(Object.keys(data).sort(), ['adjacency', 'animate', 'autoplay', 'beats', 'boxes', 'chapters', 'directed', 'drawing', 'edges', 'frames', 'height', 'ids', 'info', 'parents', 'stem', 'steps', 'title', 'type', 'width']);
   assert.deepEqual(data.parents, { vpc: 'aws', api: 'vpc', db: 'vpc' });
   assert.deepEqual(data.adjacency.api.nodes.sort(), ['db', 'pay', 'web']);
   assert.deepEqual(data.edges['edge-0'], ['web', 'api']);

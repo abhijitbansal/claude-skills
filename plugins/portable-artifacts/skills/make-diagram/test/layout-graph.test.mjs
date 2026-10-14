@@ -323,7 +323,7 @@ test('coordinates are rounded to 0.1 px', async () => {
 
 test('geometry carries the contract fields', async () => {
   const g = await layout(example('architecture'));
-  assert.deepEqual(Object.keys(g).sort(), ['edges', 'groups', 'height', 'layers', 'legend', 'nodes', 'width']);
+  assert.deepEqual(Object.keys(g).sort(), ['drawing', 'edges', 'groups', 'height', 'layers', 'legend', 'nodes', 'width']);
   const api = g.nodes.find((n) => n.id === 'api');
   assert.deepEqual(Object.keys(api).sort(), ['emoji', 'group', 'height', 'icon', 'id', 'layer', 'lines', 'noteLine', 'shape', 'tone', 'typeLine', 'width', 'x', 'y']);
   assert.equal(api.shape, 'rounded-rect');

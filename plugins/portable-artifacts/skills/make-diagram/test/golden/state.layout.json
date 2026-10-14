@@ -1,6 +1,12 @@
 {
   "width": 1178,
   "height": 210,
+  "drawing": {
+    "x": 0,
+    "y": 30,
+    "width": 1178,
+    "height": 180
+  },
   "legend": {
     "x": 748.4,
     "y": 24,

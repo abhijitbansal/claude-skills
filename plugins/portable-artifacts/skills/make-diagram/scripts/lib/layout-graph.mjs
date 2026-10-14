@@ -5,7 +5,7 @@ import ELK from 'elkjs/lib/elk.bundled.js';
 import { KINDS } from './kinds.mjs';
 import { nodeSize, edgeLabelSize, groupMinSize } from './sizes.mjs';
 import { edgeIds } from './edge-ids.mjs';
-import { legendLayout, placeLegend, LEGEND_BAND } from './legend.mjs';
+import { legendLayout, placeLegend, drawingBounds, LEGEND_BAND } from './legend.mjs';
 
 export const OUTER_MARGIN = 24;
 const GROUP_PADDING = `[top=40,left=${OUTER_MARGIN},bottom=${OUTER_MARGIN},right=${OUTER_MARGIN}]`;
@@ -284,6 +284,7 @@ export async function layoutGraph(spec, theme) {
   const geometry = {
     width,
     height: round(result.height),
+    drawing: drawingBounds(dx, result.width, result.height),
     legend: placeLegend(legend, width, OUTER_MARGIN),
     nodes: nodes.map((n) => readNode(n, sizes.get(n.id), kindOf.get(n.id), laidNodes.get(elkNodeId(n.id)), layerOf, direction)),
     groups: (spec.groups ?? []).map((g) => ({

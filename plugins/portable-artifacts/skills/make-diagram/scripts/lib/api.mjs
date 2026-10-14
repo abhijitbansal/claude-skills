@@ -108,7 +108,7 @@ export function viewerRuntime() {
  * reveals get a final "Everything" step) or ones built from the layout, `ids`
  * lists every id a step can name, `data` is what `PADiagram.mount`
  * (viewerRuntime()) takes along with the `svg` (it also carries the story timeline
- * `beats` and `chapters`, per-id `info`, `directed` out-edges and `autoplay`), and `idPrefix`
+ * `beats` and `chapters`, per-id `info`, `directed` out-edges, `autoplay`, and `drawing`, the [x, y, w, h] of the diagram without the legend band and the widening for a wide legend row: a page that hides the drawn legend fits that), and `idPrefix`
  * (^[A-Za-z0-9_-]+$) namespaces the SVG's ids when several diagrams share a page. Throws DiagramError when the
  * spec is invalid or the layout fails the geometry lint.
  */

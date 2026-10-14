@@ -58,6 +58,11 @@ export function placeLegend(row, canvasWidth, margin) {
   return { x: round(canvasWidth - margin - row.width), y: margin, width: row.width, height: row.height, items: row.items };
 }
 
+/** geometry.drawing: the diagram's own bounds in a canvas `height` tall, below the legend band and without the widening for a wide legend row. A page that hides the drawn legend fits the camera to this. */
+export function drawingBounds(x, width, height) {
+  return { x: round(x), y: LEGEND_BAND, width: round(width), height: round(height - LEGEND_BAND) };
+}
+
 /** geometry.legend as SVG: swatches in their family, wire samples in their style, the text beside each. */
 export function legendSvg(legend, f) {
   const lh = lineHeight(f.legend);
