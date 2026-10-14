@@ -5,7 +5,7 @@
 // page chrome in here: the page's own script (toolbar.js) and make-explainer
 // drive it through the controller that mount returns.
 //
-//   var ctl = PADiagram.mount(stageElement, data, { keys, caption, chapters, panel, tip, find, found, onChange });
+//   var ctl = PADiagram.mount(stageElement, data, { keys, caption, chapters, panel, tip, find, found, root, onChange });
 //
 // stageElement  holds the diagram <svg> (from buildDiagram) and sizes it.
 // data          buildDiagram(spec).data (scripts/lib/data.mjs); nothing is fetched.
@@ -15,10 +15,12 @@
 // panel         the Explore side panel (see panel.js; optional).
 // tip           the hover tooltip element, inside the stage (optional).
 // find          the Find <input> (optional); found: the row its matches go in (optional).
+// root          element full screen is asked for, and that carries pa-fill when the browser refuses (default: the document element).
 // onChange      called with ctl.state() after any change.
 //
 // Keys: Space plays and pauses, arrows step the beats, P enters Play, E leaves
-// it, / focuses Find, Escape closes the panel, else leaves Play, else clears.
+// it, F is full screen, 0 fits, / focuses Find, Escape closes the panel, else
+// leaves full screen, else leaves Play, else clears.
 // Every state class (pa-dim, pa-on, pa-hl, pa-hidden, pa-active, pa-selected,
 // pa-route, pa-animate, and pa-playing on the stage) is styled by diagramCss()
 // or the page; the modules only toggle them.
@@ -51,6 +53,8 @@
     var svg = stage.querySelector('svg');
     if (!svg) return null;
     var doc = global.document;
+    var root = options.root || doc.documentElement;
+    var fs = PADiagram.fullscreen(root, { onChange: emit });
     var els = elementsOf(svg);
     var findEl = options.find || null;
     var edgeEnds = PADiagram.dict(data.edges);
@@ -97,6 +101,8 @@
         loop: story.loop(),
         animate: animateOn,
         reducedMotion: camera.reduced(),
+        fullscreen: fs.isOn(),
+        fill: fs.isFill(),
         selected: trace.selected(),
         route: routeCopy(trace.routed()),
       };
@@ -261,11 +267,12 @@
     // ---- keyboard --------------------------------------------------------------------------
     // Space plays and pauses (on the canvas and on every transport control; a
     // button elsewhere keeps Space for itself); arrows, PageUp/PageDown, Home
-    // and End move between beats; P enters Play, E leaves it; F fits; A toggles
-    // the edge animation; / focuses Find; Escape closes the panel, else leaves
-    // Play, else clears the Find filter, else clears the trace. In Play any key
-    // but Space pauses, in a form field too.
-    var KEEPS_PLAYING = { ' ': true, Tab: true, Shift: true, CapsLock: true };
+    // and End move between beats; P enters Play, E leaves it; F is full screen;
+    // 0 fits; A toggles the edge animation; / focuses Find; Escape closes the
+    // panel, else leaves full screen, else leaves Play, else clears the Find
+    // filter, else clears the trace. In Play any key but Space and F (full screen moves no camera) pauses, in a form
+    // field too.
+    var KEEPS_PLAYING = { ' ': true, Tab: true, Shift: true, CapsLock: true, f: true, F: true };
     function onKey(e) {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
       var t = e.target;
@@ -277,7 +284,8 @@
       if (inPlay && !KEEPS_PLAYING[k] && !onPlay) story.pause();
       if (isField(t) && !(k === ' ' && inTransport && t.type === 'range')) return; // a range has no Space action
       var handled = true;
-      if (k === 'f' || k === 'F') camera.fit();
+      if (k === '0') camera.fit();
+      else if (k === 'f' || k === 'F') fs.toggle();
       else if (k === '+' || k === '=') camera.zoomBy(KEY_ZOOM);
       else if (k === '-' || k === '_') camera.zoomBy(1 / KEY_ZOOM);
       else if (k === 'p' || k === 'P') { if (!inPlay) story.present(0); }
@@ -286,6 +294,7 @@
       else if (k === '/' && findEl) findEl.focus();
       else if (k === 'Escape') {
         if (trace.selected() || trace.routed()) closeSelection(t, true);
+        else if (fs.isOn()) fs.exit();
         else if (inPlay) story.exit();
         else if (findEl && findEl.value.trim()) clearFind();
         else if (trace.active()) {
@@ -329,6 +338,7 @@
       play: story.play, pause: story.pause, togglePlay: story.togglePlay, setSpeed: story.setSpeed, cycleSpeed: story.cycleSpeed,
       setLoop: story.setLoop, toggleLoop: story.toggleLoop,
       setAnimate: setAnimate, toggleAnimate: toggleAnimate,
+      enterFullscreen: fs.enter, exitFullscreen: fs.exit, toggleFullscreen: fs.toggle,
     };
   }
 

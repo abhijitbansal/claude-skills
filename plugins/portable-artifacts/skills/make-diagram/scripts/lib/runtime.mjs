@@ -4,7 +4,7 @@
 // embedding API (api.mjs viewerRuntime), so embedders get the same bundle.
 import fs from 'node:fs';
 
-export const RUNTIME_FILES = ['camera.js', 'route.js', 'explore.js', 'panel.js', 'story.js', 'transport.js', 'viewer.js'];
+export const RUNTIME_FILES = ['camera.js', 'route.js', 'explore.js', 'panel.js', 'story.js', 'transport.js', 'fullscreen.js', 'viewer.js'];
 const TEMPLATE = new URL('../../template/', import.meta.url);
 
 /** The concatenated runtime source. */

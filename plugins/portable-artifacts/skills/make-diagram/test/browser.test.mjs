@@ -125,7 +125,7 @@ test('a single node with no edges fits, presents and zooms without NaN', async (
   const vb = await viewBox(page);
   assert.ok(vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0, String(vb));
   await page.keyboard.press('Escape');
-  await page.keyboard.press('f');
+  await page.keyboard.press('0');
   await page.keyboard.press('+');
   await page.keyboard.press('-');
   assert.ok((await viewBox(page)).every(Number.isFinite));
@@ -138,7 +138,7 @@ test('a stage with no size (display: none) refits without NaN or errors', async 
   const { page, problems, context } = await open(built('flow').url);
   await page.evaluate(() => { document.getElementById('pa-stage').style.display = 'none'; });
   await settle(page);
-  await page.keyboard.press('f');
+  await page.keyboard.press('0');
   await page.keyboard.press('p');
   await page.keyboard.press('+');
   const hiddenView = await viewBox(page);
@@ -175,7 +175,7 @@ test('zoom: wheel, +/- keys and buttons, clamped to 0.25x..4x of the fit', async
   await context.close();
 });
 
-test('pan: drag and arrow keys move the view; F, the Fit button and a double click restore it', async (t) => {
+test('pan: drag and arrow keys move the view; 0, the Fit button and a double click restore it', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('architecture').url);
   await page.keyboard.press('+');
@@ -193,7 +193,7 @@ test('pan: drag and arrow keys move the view; F, the Fit button and a double cli
   await page.mouse.up();
   const dragged = await viewBox(page);
   assert.ok(dragged[0] < afterKey[0], 'dragging right moves the content right (view left)');
-  for (const restore of [() => page.keyboard.press('f'), () => page.click('[data-act="fit"]'), () => page.mouse.dblclick(c.x, c.y + 200)]) {
+  for (const restore of [() => page.keyboard.press('0'), () => page.click('[data-act="fit"]'), () => page.mouse.dblclick(c.x, c.y + 200)]) {
     await page.keyboard.press('+');
     await restore();
     await settle(page);

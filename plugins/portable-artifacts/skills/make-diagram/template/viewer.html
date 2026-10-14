@@ -38,6 +38,8 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 .tool:active:not(:disabled), .pa-chip:active { transform: scale(0.97); }
 .tool[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
 .tool:disabled { opacity: 0.6; cursor: default; }
+/* Full screen, real (the root element is :fullscreen) or the window-filling fallback (.pa-fill on the root, when the browser refused, as inside a sandboxed iframe): the same chrome goes, the canvas takes the room; the tabs, Fit, Find, the chapters and the way out stay. Any root works, the page's or a dialog's (fullscreen.js marks it data-pa-full-root). */
+.pa-fill .titles, [data-pa-full-root]:fullscreen .titles, .pa-fill [data-act]:not([data-act="fit"]), [data-pa-full-root]:fullscreen [data-act]:not([data-act="fit"]), .pa-fill .zoom-label, [data-pa-full-root]:fullscreen .zoom-label, .pa-fill .grp-export, [data-pa-full-root]:fullscreen .grp-export, .pa-fill [data-export], [data-pa-full-root]:fullscreen [data-export], .pa-fill [data-theme-toggle], [data-pa-full-root]:fullscreen [data-theme-toggle] { display: none; }
 .zoom-label { min-width: 3.2em; text-align: center; color: var(--text-3); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .export-error { flex: none; margin: 0; padding: 6px 16px; color: var(--bad); font-size: 0.85rem; border-bottom: 1px solid var(--line); background: var(--surface); }
 .export-error[hidden] { display: none; }
@@ -108,14 +110,15 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 <button type="button" class="tool" data-pa-mode="explore" aria-pressed="true" title="Explore the diagram (E)">Explore</button>
 </span>
 <span class="group" role="group" aria-label="View">
-<button type="button" class="tool" data-act="fit" title="Fit to screen (F)">Fit</button>
+<button type="button" class="tool" data-act="fit" aria-keyshortcuts="0" title="Fit to screen (0)">Fit</button>
 <button type="button" class="tool" data-act="zoom-out" aria-label="Zoom out" title="Zoom out (-)">&minus;</button>
 <span class="zoom-label" data-zoom-label aria-hidden="true">100%</span>
 <button type="button" class="tool" data-act="zoom-in" aria-label="Zoom in" title="Zoom in (+)">+</button>
 </span>
 <button type="button" class="tool" data-act="animate" aria-pressed="false" title="Animate edges (A)">Animate: Off</button>
+<button type="button" class="tool" data-pa-full aria-pressed="false" aria-keyshortcuts="F" title="Full screen (F)">Full screen</button>
 <input type="search" class="find" data-pa-find placeholder="Find a node" aria-label="Find a node" aria-keyshortcuts="/" autocomplete="off" spellcheck="false">
-<span class="group" role="group" aria-label="Export">
+<span class="group grp-export" role="group" aria-label="Export">
 <button type="button" class="tool" data-export="svg" title="Download as SVG">SVG</button>
 <button type="button" class="tool" data-export="png" title="Download as PNG">PNG</button>
 </span>

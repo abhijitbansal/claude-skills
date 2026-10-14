@@ -34,6 +34,7 @@
   var modes = {};
   document.querySelectorAll('[data-pa-mode]').forEach(function (b) { modes[b.getAttribute('data-pa-mode')] = b; });
   var zoomLabel = one('[data-zoom-label]');
+  var fullButton = one('[data-pa-full]');
   var stepRe = /^#step-(\d+)$/;
 
   var hashAt = null; // the beat the hash names (null outside Play): a camera frame does not rewrite it
@@ -66,6 +67,9 @@
         buttons.animate.setAttribute('aria-pressed', String(state.animate));
       }
     }
+    if (fullButton) {
+      fullButton.setAttribute('aria-pressed', String(state.fullscreen));
+    }
     setHash(state);
   }
 
@@ -80,6 +84,7 @@
   // The tabs: Play story enters the player on its first beat (the transport's Play starts it); Explore leaves it.
   if (modes.play) modes.play.addEventListener('click', function () { if (!ctl.state().presenting) ctl.present(0); });
   if (modes.explore) modes.explore.addEventListener('click', function () { ctl.exit(); });
+  if (fullButton) fullButton.addEventListener('click', function () { ctl.toggleFullscreen(); });
 
   function fromHash() {
     var m = stepRe.exec(location.hash);
