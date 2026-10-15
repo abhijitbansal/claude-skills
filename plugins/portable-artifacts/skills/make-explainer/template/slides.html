@@ -31,10 +31,12 @@ html, body { height: 100%; overflow: hidden; }
 .slide { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow-y: auto; overflow-x: hidden; scroll-snap-align: start; scroll-snap-stop: always; padding: 56px 56px 88px; }
 .slide:focus { outline: none; }
 /* margin:auto centres a short slide and collapses on a tall one, so the top is never cut off */
-/* projection scale: slide body and headline grow with the screen between type tokens; the headline cap is the one size above the page scale */
 .slide-inner { width: 100%; max-width: 60rem; margin: auto; min-width: 0; font-size: clamp(var(--fs-base), 0.85rem + 0.4vw, var(--fs-md)); }
 .slide-eyebrow { margin: 0 0 14px; }
 .slide-eyebrow.pa-label { color: var(--accent); }
+/* Projection scale: slide type grows with the screen. Body and headline run between type tokens; the headline's
+   3.5rem cap, the lead's clamp and the cover title and subtitle clamps are slide-only sizes above the page scale,
+   because a deck is read from across a room. */
 .slide-title { margin: 0 0 32px; max-width: 20em; font: 600 clamp(var(--fs-lg), 1.2rem + 2.6vw, 3.5rem)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); text-wrap: balance; overflow-wrap: anywhere; }
 .slide .prose > * { max-width: 66ch; }
 .slide .lead { font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.2rem); max-width: 28ch; }

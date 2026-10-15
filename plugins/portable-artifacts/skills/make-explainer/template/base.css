@@ -19,7 +19,7 @@ code, pre, .path, .tl-date, .code-lang { font-family: var(--mono); }
 /* layout measures: the section column, the contents column and its gap, and how far a band reaches past the
    column into each gutter. 16px fits the narrowest gutter (24px); 32px needs the contents gap on the left and,
    on the right, a column track wider than the column, which holds from 1200px. */
-:root { --col: 52rem; --toc-w: 13.5rem; --toc-gap: 56px; --band-x: 16px; --band-y: 32px; }
+:root { --col: 52rem; --toc-w: 13.5rem; --toc-gap: 56px; --band-x: 16px; --band-y: 32px; --card-rule: 3px; }
 @media (min-width: 1200px) {
   .has-toc { --band-x: 32px; }
 }
@@ -41,11 +41,12 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 .pa-footer { max-width: 76rem; margin: 64px auto 32px; padding: 16px 24px 0; border-top: 1px solid var(--line); }
 .pa-provenance { margin: 0; color: var(--text-3); font-size: var(--fs-xs); }
 
-/* The card starts at the text edge and ends where a band ends: the section column plus the band's reach (beside
-   a contents list it spans the list too). The left rule takes the tldr tone (accent when it has none). */
-.hero-tldr { grid-column: 1 / -1; margin: 28px calc(-1 * var(--band-x)) 0 0; max-width: calc(var(--col) + var(--band-x)); scroll-margin-top: 24px; background: var(--surface); border-left: 3px solid var(--tc, var(--accent)); border-radius: 0 14px 14px 0; padding: 22px 28px; }
+/* In one column the card's box matches a band's (the column plus --band-x on each side) and its text keeps the
+   column edge. Beside a contents list it starts at the text edge, spans the list, and ends where a band ends.
+   The left rule takes the tldr tone (accent when it has none). */
+.hero-tldr { grid-column: 1 / -1; margin: 28px calc(-1 * var(--band-x)) 0; max-width: calc(var(--col) + 2 * var(--band-x)); scroll-margin-top: 24px; background: var(--surface); border-left: var(--card-rule) solid var(--tc, var(--accent)); border-radius: 0 14px 14px 0; padding: 22px 28px 22px calc(var(--band-x) - var(--card-rule)); }
 @media (min-width: 1100px) {
-  .has-toc .hero-tldr { max-width: calc(var(--toc-w) + var(--toc-gap) + var(--col) + var(--band-x)); }
+  .has-toc .hero-tldr { margin-left: 0; padding-left: 28px; max-width: calc(var(--toc-w) + var(--toc-gap) + var(--col) + var(--band-x)); }
 }
 .hero-tldr-title { margin: 0 0 12px; max-width: 40em; font: 600 var(--fs-base)/var(--lh-head) var(--font); color: var(--text-2); text-wrap: balance; overflow-wrap: anywhere; }
 .hero-tldr .tldr { background: none; border: 0; border-radius: 0; padding: 0; }
@@ -277,13 +278,22 @@ tbody th { font-weight: 600; }
 }
 
 @media (max-width: 640px) {
-  /* The toggle sits beside the first line of the title only; subtitle and meta take the full width.
-     The title steps down between the two type tokens with the screen. */
-  .hero { display: block; position: relative; padding: 28px 16px 4px; }
-  .hero > .theme-toggle { position: absolute; top: 26px; right: 16px; }
-  h1 { font-size: clamp(var(--fs-lg), 8vw, var(--fs-xl)); }
-  h1::before { content: ""; float: right; width: 48px; height: 1em; }
-  .hero-tldr { margin: 24px 0 0; padding: 18px; }
+  /* The title steps down between the two type tokens with the screen (--fs-hero-phone). The toggle sits beside
+     the first title line only: its box ends above the second line's glyphs (a line box is --title-line tall and
+     glyph boxes reach --glyph-overhang beyond it; 0.12em covers Geist, Bricolage and Newsreader), so it rises
+     into the hero's top padding instead, and a float one line tall keeps the first line clear of it. Later title
+     lines, the subtitle and the meta take the full width. The card is full-bleed like the bands. */
+  :root {
+    --hero-top: 28px; --toggle-size: 36px; --toggle-gap: 12px;
+    --fs-hero-phone: clamp(var(--fs-lg), 8vw, var(--fs-xl));
+    --title-line: calc(var(--fs-hero-phone) * var(--lh-hero));
+    --glyph-overhang: calc(var(--fs-hero-phone) * 0.12);
+  }
+  .hero { display: block; position: relative; padding: var(--hero-top) 16px 4px; }
+  .hero > .theme-toggle { position: absolute; top: calc(var(--hero-top) + var(--title-line) - var(--glyph-overhang) - var(--toggle-size)); right: 16px; width: var(--toggle-size); height: var(--toggle-size); }
+  h1 { font-size: var(--fs-hero-phone); }
+  h1::before { content: ""; float: right; width: calc(var(--toggle-size) + var(--toggle-gap)); height: calc(var(--title-line) - 1px); }
+  .hero-tldr { margin: 24px calc(-1 * var(--band-x)) 0; border-radius: 0; padding: 18px var(--band-x) 18px calc(var(--band-x) - var(--card-rule)); }
   .meta { gap: 4px 16px; }
   .meta div { padding: 0; border: 0; background: none; }
   .layout { padding: 4px 16px 72px; }
@@ -303,6 +313,8 @@ tbody th { font-weight: 600; }
   .rise-ready .sec { opacity: 1; transform: none; transition: none; }
   .sec, .sec + .sec { break-inside: auto; margin-top: 24px; }
   .sec-alt { margin-inline: 0; padding: 0; background: none; }
+  /* the card stays inside the page; its rule prints in ink (the tone still reads from the chip's word) */
+  .hero .hero-tldr { margin: 16px 0 0; max-width: none; padding-left: 16px; border-left-color: var(--accent); }
   .sec-title, .kpi, .card, .cmp-col, .step, .tl-item, .callout, .code, .file, tr, .cl-item { break-inside: avoid; }
   .cl-bar { position: static; }
   .cl-meter { border: 1px solid #555; }

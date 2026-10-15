@@ -379,3 +379,64 @@ test('a page built from a hostile spec runs no script and shows the text', async
   assert.equal(await page.evaluate(() => document.querySelectorAll('main a[href^="javascript"]').length), 0);
   await context.close();
 });
+
+// ---- hero card and phone hero (Task 10 review) ----------------------------------------------------
+
+const LONG_TITLE = {
+  title: 'Interoperability considerations for internationalisation pipelines',
+  sections: [
+    { type: 'tldr', label: 'Verdict', text: 'Lead sentence.', points: ['One.', 'Two.'] },
+    { type: 'kpis', title: 'Numbers', items: [{ label: 'n', value: 1 }] },
+  ],
+};
+
+test('phone hero: no line of the title runs under the theme toggle', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  // ink and editorial: Bricolage's glyph boxes overhang the line box most, Newsreader's least
+  const long = (theme) => buildSpec({ ...LONG_TITLE, theme }, { name: `long-${theme}` }).url;
+  for (const [name, url] of [['recap', built('recap').url], ['concept', built('concept').url], ['long', long('paper')], ['long ink', long('ink')], ['long editorial', long('editorial')]]) {
+    for (const width of [320, 340, 360, 390]) {
+      const { page, context } = await open(url, { width, height: 800, reducedMotion: 'reduce' });
+      const hits = await page.evaluate(() => {
+        const toggle = document.querySelector('.hero .theme-toggle').getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(document.querySelector('h1'));
+        return [...range.getClientRects()].filter((r) => r.width > 0 && r.left < toggle.right && r.right > toggle.left && r.top < toggle.bottom && r.bottom > toggle.top)
+          .map((r) => `${Math.round(r.right - toggle.left)}x${Math.round(Math.min(r.bottom, toggle.bottom) - Math.max(r.top, toggle.top))}`);
+      });
+      assert.deepEqual(hits, [], `${name} at ${width}px: title overlaps the toggle`);
+      await context.close();
+    }
+  }
+});
+
+test('single column: the hero card reaches as far left as the bands and its text keeps the column edge', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const [url, width] of [[built('recap').url, 1024], [buildSpec(LONG_TITLE, { name: 'long-title' }).url, 1280], [built('recap').url, 390]]) {
+    const { page, context } = await open(url, { width, height: 900, reducedMotion: 'reduce' });
+    const m = await page.evaluate(() => {
+      const card = document.querySelector('.hero-tldr');
+      const band = document.querySelector('.sec-alt').getBoundingClientRect();
+      const text = document.querySelector('.hero-tldr .lead').getBoundingClientRect();
+      const col = document.querySelector('.sections').getBoundingClientRect();
+      return { card: Math.round(card.getBoundingClientRect().left), cardRight: Math.round(card.getBoundingClientRect().right), band: Math.round(band.left), bandRight: Math.round(band.right), text: Math.round(text.left), col: Math.round(col.left) };
+    });
+    assert.equal(m.card, m.band, `${width}px: card starts at ${m.card}, bands at ${m.band}`);
+    assert.equal(m.cardRight, m.bandRight, `${width}px: card ends at ${m.cardRight}, bands at ${m.bandRight}`);
+    assert.equal(m.text, m.col, `${width}px: card text at ${m.text}, column at ${m.col}`);
+    await context.close();
+  }
+});
+
+test('print: the hero card stays inside the page and its rule prints in ink', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await open(built('recap').url, { width: 720, height: 1000 });
+  await page.emulateMedia({ media: 'print' });
+  const m = await page.evaluate(() => {
+    const card = document.querySelector('.hero-tldr');
+    return { right: card.getBoundingClientRect().right, left: card.getBoundingClientRect().left, width: document.documentElement.clientWidth, rule: getComputedStyle(card).borderLeftColor };
+  });
+  assert.ok(m.left >= 0 && m.right <= m.width, `card spans ${m.left}-${m.right} on a ${m.width}px page`);
+  assert.equal(m.rule, 'rgb(0, 0, 0)');
+  await context.close();
+});
