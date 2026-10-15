@@ -408,7 +408,7 @@ test('N5: fix order is by rank regardless of wrapper order; failed node_modules 
 
 test('N5: chromium failure says to install playwright (dev_deps) first', async () => {
   const res = await runFixes(['chromium'], [browser()], ctx(), () => ({ status: 1 }));
-  assert.match(res[0].manual, /playwright is not installed: run doctor --fix dev_deps/);
+  assert.match(res[0].manual, /playwright is not installed: run doctor --fix dev_deps first \(check\.mjs needs playwright\); in make-motion, run --fix node_modules/);
 });
 
 test('N6: installed elsewhere names where it landed and what to do', async () => {
@@ -579,4 +579,28 @@ test('quoteArg: POSIX single quotes, cmd.exe double quotes, safe words bare', ()
   assert.equal(quoteArg('/a/b', 'darwin'), '/a/b');
   assert.equal(quoteArg('/a b/c', 'linux'), "'/a b/c'");
   assert.equal(quoteArg('C:\\a b\\c', 'win32'), '"C:\\a b\\c"');
+});
+
+test('browser({ dir }): checks and installs into the other skill, quoted; not skipped by this skill\'s node_modules', async () => {
+  const dir = (c) => '/s/make motion';
+  const b = browser({ required: true, dir });
+  assert.equal(b.needsNodeModules, false);
+  const { missing } = await diagnose([b], ctx({ skillDir: '/s/make-explainer' }));
+  assert.equal(missing[0].required, true);
+  assert.equal(missing[0].fix.auto, "npx --no --prefix '/s/make motion' playwright install chromium");
+  assert.match(missing[0].why, /make-motion/);
+  assert.match(missing[0].notes, /make-motion/);
+  assert.match(b.fix(ctx({ skillDir: '/s/make-explainer' })).failManual, /make-motion's node_modules first/);
+});
+
+test('devDeps size option is disclosed', async () => {
+  const { missing } = await diagnose([devDeps({ size: '≈118 MB' })], ctx());
+  assert.equal(missing[0].size, '≈118 MB');
+  assert.match(missing[0].notes, /measured on macOS, approximate/);
+});
+
+test('KOKORO_PIN is exported and used by the kokoro fix', async () => {
+  const { KOKORO_PIN } = await import('../doctor.mjs');
+  const { missing } = await diagnose([kokoro()], ctx());
+  assert.ok(missing[0].fix.auto.includes(KOKORO_PIN));
 });

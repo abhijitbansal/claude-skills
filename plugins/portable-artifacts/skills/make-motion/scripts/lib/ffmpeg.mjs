@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
-import { doctorCommand } from './doctor-hint.mjs';
+import { doctorCommand, npmInstallFfmpegStatic } from './doctor-hint.mjs';
 
 const HINT = 'ffmpeg not found. Install it (macOS: brew install ffmpeg; Windows: winget install Gyan.FFmpeg; Debian/Ubuntu: sudo apt-get install ffmpeg), '
-  + 'or set FFMPEG_PATH, or run: npm i ffmpeg-static '
+  + `or set FFMPEG_PATH, or run: ${npmInstallFfmpegStatic()} `
   + `(doctor: ${doctorCommand()}, id ffmpeg)`;
 
 const isExecutable = (p) => {

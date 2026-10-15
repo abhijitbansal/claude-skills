@@ -6,9 +6,10 @@ import { ALL, nodeVersion, nodeModules, devDeps, sisterSkill, ffmpeg, browser } 
 const SECTION_SISTERS = { diagram: 'make-diagram', chart: 'make-dashboard', motion: 'make-motion' };
 
 // make-motion renders the video: ffmpeg may be make-motion's own ffmpeg-static, and the browser is required.
-const motionFfmpeg = () => ffmpeg({ staticDir: (ctx) => path.join(path.dirname(ctx.skillDir), 'make-motion', 'node_modules') });
-// The browser is installed with this skill's own playwright (shared browser cache), hence dev_deps.
-const motionNeeds = () => [devDeps(), motionFfmpeg(), browser({ required: true })];
+const motionDir = (ctx) => path.join(path.dirname(ctx.skillDir), 'make-motion');
+const motionFfmpeg = () => ffmpeg({ staticDir: (ctx) => path.join(motionDir(ctx), 'node_modules') });
+// make-motion's own browser and node_modules do the rendering, so this skill's dev dependencies are not involved.
+const motionNeeds = () => [motionFfmpeg(), browser({ required: true, dir: motionDir })];
 
 // Requirements a spec adds: its sister skills, plus ffmpeg and a browser when it has a motion section.
 function specNeeds(specFile) {
@@ -27,8 +28,8 @@ export const targets = ['check'];
 export function requirementsFor(target) {
   const base = [nodeVersion(20), nodeModules()];
   // check.mjs needs playwright (a devDependency) and a browser.
-  if (target === ALL) return [...base, ...Object.values(SECTION_SISTERS).map(sisterSkill), ...motionNeeds()];
-  if (target === 'check') return [...base, devDeps(), browser()];
+  if (target === ALL) return [...base, devDeps({ size: '≈19 MB' }), ...Object.values(SECTION_SISTERS).map(sisterSkill), ...motionNeeds()];
+  if (target === 'check') return [...base, devDeps({ size: '≈19 MB' }), browser()];
   if (typeof target === 'string' && target.endsWith('.json')) return [...base, ...specNeeds(target)];
   return base;
 }

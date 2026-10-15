@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { parseCli, UsageError, exitUsage } from './cli.mjs';
 
 const REPO = 'abhijitbansal/claude-skills';
-const KOKORO_PIN = 'kokoro-js@1.2.1';
+export const KOKORO_PIN = 'kokoro-js@1.2.1';
 const SKILLS_CLI = 'skills@1.7.2';
 const USER_SCOPE_DIRS = ['.claude', '.agents', '.copilot', '.gemini'];
 const PROJECT_SCOPE_DIRS = [...USER_SCOPE_DIRS, '.github'];
@@ -117,18 +117,19 @@ export function nodeModules({ omitDev = true } = {}) {
 }
 
 // check.mjs and the browser steps need playwright, a devDependency: reinstalls node_modules with dev packages.
-export function devDeps() {
+// size: disclosed per skill (measured with du on macOS, approximate).
+export function devDeps({ size = '≈20–120 MB more than node_modules alone, depending on the skill' } = {}) {
   return {
     id: 'dev_deps',
     rank: RANK.devDeps,
     needsNodeModules: true,
     why: 'check.mjs needs the dev tools (playwright)',
     required: false,
-    size: '≈10–40 MB more than node_modules alone',
+    size,
     check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'playwright')),
     fix: (ctx) => {
       const argv = ['npm', 'ci', '--prefix', ctx.skillDir];
-      return { auto: [argv], manual: manualAll(render([argv], ctx.platform)), notes: 'reinstalls node_modules with the dev dependencies included' };
+      return { auto: [argv], manual: manualAll(render([argv], ctx.platform)), notes: `reinstalls node_modules with the dev dependencies included; size measured on macOS, approximate` };
     },
     needsSudo: () => false,
   };
@@ -144,9 +145,9 @@ function systemChromePaths(ctx) {
 }
 
 // Playwright's bundled chromium, resolved from the skill's own node_modules.
-async function playwrightChromiumPresent(ctx) {
-  if (!ctx.exists(path.join(ctx.skillDir, 'node_modules', 'playwright-core'))) return false;
-  const req = createRequire(path.join(ctx.skillDir, 'package.json'));
+async function playwrightChromiumPresent(ctx, dir = ctx.skillDir) {
+  if (!ctx.exists(path.join(dir, 'node_modules', 'playwright-core'))) return false;
+  const req = createRequire(path.join(dir, 'package.json'));
   for (const pkg of ['playwright', 'playwright-core']) {
     try {
       const mod = await import(pathToFileURL(req.resolve(pkg)).href);
@@ -276,34 +277,40 @@ export function ffmpeg({ staticDir } = {}) {
 }
 
 // install-deps (system libraries only), pinned to the skill's own playwright: never an unpinned download as root.
-const libsHint = (ctx) => `sudo npx --no --prefix ${quoteFor(ctx.platform)(ctx.skillDir)} playwright install-deps chromium`;
+const libsHint = (ctx, dir = ctx.skillDir) => `sudo npx --no --prefix ${quoteFor(ctx.platform)(dir)} playwright install-deps chromium`;
 
-export function browser({ required = false } = {}) {
+// dir: (ctx) => folder whose playwright is used (default: this skill). make-explainer points it at make-motion,
+// whose browser renders the video.
+export function browser({ required = false, dir } = {}) {
+  const where = (ctx) => (dir ? dir(ctx) : ctx.skillDir);
   return {
     id: 'chromium',
     rank: RANK.chromium,
-    needsNodeModules: true,
-    why: 'renders pages to image and video (Playwright Chromium or installed Chrome)',
+    needsNodeModules: dir === undefined,
+    why: dir ? "renders make-motion's video (Playwright Chromium from make-motion, or installed Chrome)" : 'renders pages to image and video (Playwright Chromium or installed Chrome)',
     required,
     size: '≈150 MB',
-    check: async (ctx) => systemChromePaths(ctx).some((p) => ctx.exists(p)) || playwrightChromiumPresent(ctx),
+    check: async (ctx) => systemChromePaths(ctx).some((p) => ctx.exists(p)) || playwrightChromiumPresent(ctx, where(ctx)),
     // Platform hint for a chromium that is already present.
-    presentInfo: (ctx) => (ctx.platform === 'linux' ? { note: `launching may need system libraries: ${libsHint(ctx)}`, sudoHint: libsHint(ctx) } : null),
+    presentInfo: (ctx) => (ctx.platform === 'linux' ? { note: `launching may need system libraries: ${libsHint(ctx, where(ctx))}`, sudoHint: libsHint(ctx, where(ctx)) } : null),
     fix: (ctx) => {
-      // --no: never let npx fetch a different playwright; needs node_modules first.
-      const argv = ['npx', '--no', '--prefix', ctx.skillDir, 'playwright', 'install', 'chromium'];
+      // --no: never let npx fetch a different playwright; needs that folder's node_modules first.
+      const argv = ['npx', '--no', '--prefix', where(ctx), 'playwright', 'install', 'chromium'];
       const manual = render([argv], ctx.platform);
+      const first = dir ? "install make-motion's node_modules first (make-motion doctor --fix node_modules)" : 'run doctor --fix dev_deps first (check.mjs needs playwright); in make-motion, run --fix node_modules';
       const out = {
         auto: [argv],
         manual: manualAll(manual),
-        notes: 'downloads ≈150 MB of Chromium; run after node_modules is installed',
-        failManual: ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'playwright'))
+        notes: dir
+          ? `downloads ≈150 MB of Chromium for make-motion (into ${where(ctx)}'s playwright cache); make-motion's node_modules must already be installed`
+          : 'downloads ≈150 MB of Chromium; run after node_modules is installed',
+        failManual: ctx.exists(pp(ctx).join(where(ctx), 'node_modules', 'playwright'))
           ? manual
-          : `playwright is not installed: run doctor --fix dev_deps (or node_modules for make-motion) first, then run: ${manual}`,
+          : `playwright is not installed: ${first}, then run: ${manual}`,
       };
       if (ctx.platform === 'linux') {
-        out.notes += `; launching may need system libraries: ${libsHint(ctx)}`;
-        out.sudoHint = libsHint(ctx);
+        out.notes += `; launching may need system libraries: ${libsHint(ctx, where(ctx))}`;
+        out.sudoHint = libsHint(ctx, where(ctx));
       }
       return out;
     },

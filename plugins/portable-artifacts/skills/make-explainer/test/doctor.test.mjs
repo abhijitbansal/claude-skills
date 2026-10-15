@@ -92,8 +92,25 @@ test('requirementsFor: check adds dev_deps and the browser; ALL has every sister
   assert.deepEqual(idsOf(requirementsFor(undefined)), ['node', 'node_modules']);
   assert.deepEqual(idsOf(requirementsFor('check')), ['node', 'node_modules', 'dev_deps', 'chromium']);
   const all = idsOf(requirementsFor(ALL));
-  for (const id of ['make-diagram', 'make-dashboard', 'make-motion', 'ffmpeg', 'chromium', 'dev_deps']) assert.ok(all.includes(id), id);
+  for (const id of ['make-diagram', 'make-dashboard', 'make-motion', 'ffmpeg', 'chromium']) assert.ok(all.includes(id), id);
+  assert.ok(all.includes('dev_deps'), 'ALL accepts --fix dev_deps');
+  assert.equal(requirementsFor('check')[2].size, '≈19 MB');
   assert.equal(new Set(all).size, all.length, 'no duplicate ids');
+});
+
+test('a motion section does not ask for dev_deps; its browser is make-motion\'s', async () => {
+  const requirementsFor = await loadRequirements();
+  const reqs = requirementsFor(specFile([{ type: 'motion' }]));
+  assert.equal(reqs.some((r) => r.id === 'dev_deps'), false);
+  const b = reqs.find((r) => r.id === 'chromium');
+  assert.match(b.why, /make-motion/);
+  assert.equal(b.fix({ platform: 'darwin', skillDir: '/s/make-explainer', exists: () => false, which: () => false }).auto[0][3], '/s/make-motion');
+});
+
+test('a fresh --omit=dev copy with a motion spec reports no dev_deps', () => {
+  const ids = JSON.parse(run(freshCopy(), ['--json', '--for', specFile([{ type: 'motion' }])]).stdout).missing.map((m) => m.id);
+  assert.equal(ids.includes('dev_deps'), false);
+  assert.ok(ids.includes('make-motion'));
 });
 
 test('a motion section needs a required browser and counts make-motion\'s ffmpeg-static', async () => {

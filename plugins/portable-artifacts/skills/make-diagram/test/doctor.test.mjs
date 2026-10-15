@@ -67,4 +67,5 @@ test('--for check on a fresh copy asks for dev_deps; node_modules keeps --omit=d
   const dev = missing.find((m) => m.id === 'dev_deps');
   assert.doesNotMatch(dev.fix.auto, /--omit=dev/);
   assert.match(dev.notes, /dev dependencies/);
+  assert.equal(dev.size, '≈118 MB');
 });

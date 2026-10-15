@@ -1,10 +1,13 @@
 // The command that runs this skill's doctor, for error hints. Real path, quoted for this platform.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { quoteArg } from '../../shared/doctor.mjs';
+import { quoteArg, KOKORO_PIN } from '../../shared/doctor.mjs';
 
 export const SKILL_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const DOCTOR = path.join(SKILL_DIR, 'scripts/doctor.mjs');
+const PREFIX = quoteArg(SKILL_DIR);
 
 export const doctorCommand = (...args) => ['node', quoteArg(DOCTOR), ...args].join(' ');
-export const npmInstallKokoro = () => `npm install kokoro-js@1.2.1 --no-save --prefix ${quoteArg(SKILL_DIR)}`;
+export const npmInstallKokoro = () => `npm install ${KOKORO_PIN} --no-save --prefix ${PREFIX}`;
+export const npmInstallFfmpegStatic = () => `npm i ffmpeg-static --prefix ${PREFIX}`;
+export const npxInstallChromium = () => `npx --no --prefix ${PREFIX} playwright install chromium`;

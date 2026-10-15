@@ -106,13 +106,34 @@ test('install hints name the doctor with its real path and the missing item id',
   }
 });
 
-test('the browser hint names the doctor id (run in a child where chromium and chrome cannot launch)', () => {
-  const code = `import { launchBrowser } from ${JSON.stringify(pathToFileURL(path.join(SKILL, 'scripts/lib/browser.mjs')).href)};
-    try { const b = await launchBrowser({ quiet: true }); await b.close(); console.log('LAUNCHED'); } catch (e) { console.log(e.message); }`;
-  const env = { ...process.env, PLAYWRIGHT_BROWSERS_PATH: tmp('doctor-pw-') };
-  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', env });
-  if (r.stdout.includes('LAUNCHED')) return; // system Chrome launched: no failure to observe on this machine
-  assert.ok(r.stdout.includes(`node ${quoteArg(path.join(SKILL, 'scripts/doctor.mjs'))}, id chromium)`), r.stdout + r.stderr);
+test('the browser hint names the doctor id and the make-motion prefix (playwright stubbed so both launches fail)', () => {
+  // A copy of the lib files with a stub `playwright`: no real browser is ever launched.
+  const dir = path.join(tmp('doctor-stub-'), 'make-motion');
+  fs.mkdirSync(path.join(dir, 'scripts/lib'), { recursive: true });
+  for (const f of ['browser.mjs', 'doctor-hint.mjs']) fs.copyFileSync(path.join(SKILL, 'scripts/lib', f), path.join(dir, 'scripts/lib', f));
+  fs.cpSync(path.join(SKILL, 'shared'), path.join(dir, 'shared'), { recursive: true });
+  const pw = path.join(dir, 'node_modules/playwright');
+  fs.mkdirSync(pw, { recursive: true });
+  fs.writeFileSync(path.join(pw, 'package.json'), '{"name":"playwright","type":"module","main":"index.mjs"}');
+  fs.writeFileSync(path.join(pw, 'index.mjs'), "export const chromium = { launch: async (o = {}) => { throw new Error(o.channel ? 'channel chrome not found' : \"Executable doesn't exist at /x\"); } };\n");
+  const code = `import { launchBrowser } from ${JSON.stringify(pathToFileURL(path.join(dir, 'scripts/lib/browser.mjs')).href)};
+    try { await launchBrowser({ quiet: true }); console.log('LAUNCHED'); } catch (e) { console.log(e.message); }`;
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', timeout: 20000 });
+  assert.equal(r.status, 0, r.stderr);
+  const real = fs.realpathSync(dir);
+  assert.ok(r.stdout.includes(`No browser available. Run: npx --no --prefix ${quoteArg(real)} playwright install chromium (doctor: node ${quoteArg(path.join(real, 'scripts/doctor.mjs'))}, id chromium)`), r.stdout);
+});
+
+test('the ffmpeg hint installs into make-motion', async () => {
+  const { findFfmpeg } = await import(pathToFileURL(path.join(SKILL, 'scripts/lib/ffmpeg.mjs')).href);
+  const saved = { p: process.env.PATH, f: process.env.FFMPEG_PATH };
+  process.env.PATH = tmp('doctor-nopath-'); delete process.env.FFMPEG_PATH;
+  try {
+    await assert.rejects(() => findFfmpeg({ skipStatic: true }), (e) => e.message.includes(`npm i ffmpeg-static --prefix ${quoteArg(SKILL.replace(/[\\/]$/, ''))}`));
+  } finally {
+    process.env.PATH = saved.p;
+    if (saved.f !== undefined) process.env.FFMPEG_PATH = saved.f;
+  }
 });
 
 test('the doctor command in hints quotes a path with spaces, as the shared helper does', async () => {

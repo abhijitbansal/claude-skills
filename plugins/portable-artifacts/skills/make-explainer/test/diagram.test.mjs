@@ -266,8 +266,7 @@ test('the check loads make-diagram through api.mjs alone, and a make-diagram wit
   assert.equal(errors.length, 1);
   assert.equal(errors[0].path, 'sections[0].diagram');
   assert.match(errors[0].message, /make-diagram is too old \(no validateSpec in api\.mjs\)/);
-  assert.ok(errors[0].message.includes(`install it with: ${INSTALL}`));
-  assert.match(errors[0].message, /update it: install it with: /);
+  assert.match(errors[0].message, /reinstall with npx --yes skills@1\.7\.2 add abhijitbansal\/claude-skills --skill make-diagram -y, then run npm ci --omit=dev --prefix /);
   assert.doesNotMatch(errors[0].message, /doctor/);
 });
 
