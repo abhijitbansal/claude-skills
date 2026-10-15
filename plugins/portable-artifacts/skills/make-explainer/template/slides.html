@@ -31,6 +31,7 @@ html, body { height: 100%; overflow: hidden; }
 .slide { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow-y: auto; overflow-x: hidden; scroll-snap-align: start; scroll-snap-stop: always; padding: 56px 56px 88px; }
 .slide:focus { outline: none; }
 /* margin:auto centres a short slide and collapses on a tall one, so the top is never cut off */
+/* projection scale: slide body and headline grow with the screen between type tokens; the headline cap is the one size above the page scale */
 .slide-inner { width: 100%; max-width: 60rem; margin: auto; min-width: 0; font-size: clamp(var(--fs-base), 0.85rem + 0.4vw, var(--fs-md)); }
 .slide-eyebrow { margin: 0 0 14px; }
 .slide-eyebrow.pa-label { color: var(--accent); }

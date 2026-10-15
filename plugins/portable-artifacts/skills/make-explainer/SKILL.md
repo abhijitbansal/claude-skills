@@ -34,7 +34,7 @@ For a change ("rename the card", "add a risk"), edit only those fields, then val
 ## Writing rules
 
 - A section `title` states the finding ("Search now ignores case"), never a label ("Overview", "Changes"). Same for the page title.
-- `label` ≤ 4 words for the contents list; `title` states the finding in ≤ 8 words.
+- `label` ≤ 4 words for the contents list; `title` states the finding in ≤ 8 words. A label shows only where the section draws its heading (and on the leading tldr's hero card); a `callout` or a section without a `title` ignores it.
 - Plain words. Validate rejects emoji, filler such as "leverage", "seamless" and "delve" (full list in `<skill-dir>/references/style.md`), titles ending in `!`, titles numbered "01", and any leftover `TODO:` or lorem ipsum. Paragraphs over 120 words warn.
 - Use the section that fits the content: numbers as `kpis`, a list of files as `files`, a sequence as `steps`, options as `compare`. A wall of `text` is the last resort.
 - Checklist: always supply `intro` (validate only warns when it is missing). Fill it with the "What's in this branch" summary that lists every feature and every review-cycle fix the branch delivers, and what automated tests already cover, so the tester needs no PR. Tag the review-cycle fixes `regression`, device-only items `device`.

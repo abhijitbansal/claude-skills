@@ -1,7 +1,8 @@
 // Page assembly: one self-contained HTML file around the rendered sections.
 // Theme CSS and fonts, the hero (with a leading tldr as its card), a contents
-// list (4+ titled sections), the sections, and the inlined runtime. No network, no LLM. Every string from
-// the spec goes through the markdown-lite renderer or escapeHtml.
+// list (4+ titled sections), the sections, and the inlined runtime. No network,
+// no LLM. Every string from the spec goes through the markdown-lite renderer or
+// escapeHtml.
 import fs from 'node:fs';
 import path from 'node:path';
 import { themeCss, loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
@@ -16,7 +17,7 @@ import { isSlides, renderDeck } from './slides.mjs';
 import { faviconLink } from '../../shared/icons.mjs';
 import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
 import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mjs';
-import { esc, inline, headingInline, plain, rawText } from './render/ui.mjs';
+import { esc, inline, headingInline, plain, rawText, toneClass } from './render/ui.mjs';
 
 const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), slides: new URL('../../template/slides.html', import.meta.url) };
 const BASE_CSS = new URL('../../template/base.css', import.meta.url);
@@ -132,12 +133,17 @@ function renderSection(section, i, id, titleId, def, ctx, alt = false) {
   return `<section class="sec sec-${section.type}${alt ? ' sec-alt' : ''}" id="${esc(id)}"${labelled}>\n${heading}${body}\n</section>`;
 }
 
-// A leading tldr is the hero's card: same body, its own heading, the section id kept for deep links.
+// A leading tldr is the hero's card: same body, the section id kept for deep links, the tone on the card.
+// The label is the card's visible heading; with a label the title stays for screen readers only (it names
+// the region), because the lead sentence already states the verdict. Without a label the title shows.
 function renderHeroTldr(section, id, titleId, ctx) {
   const body = renderBody(section, 0, SECTIONS.tldr, ctx);
-  const heading = section.title === undefined ? '' : `${eyebrow(section)}<h2 class="hero-tldr-title" id="${esc(titleId)}">${headingInline(section.title)}</h2>\n`;
-  const labelled = section.title === undefined ? ' aria-label="Summary"' : ` aria-labelledby="${esc(titleId)}"`;
-  return `<div class="hero-tldr" id="${esc(id)}" role="region"${labelled}>\n${heading}${body}\n</div>`;
+  const hidden = section.label === undefined ? '' : ' sr-only';
+  const title = section.title === undefined ? '' : `<h2 class="hero-tldr-title${hidden}" id="${esc(titleId)}">${headingInline(section.title)}</h2>\n`;
+  const name = section.label === undefined ? 'Summary' : plain(section.label);
+  const labelled = section.title === undefined ? ` aria-label="${name}"` : ` aria-labelledby="${esc(titleId)}"`;
+  const tone = section.tone === undefined ? '' : ` ${toneClass(section.tone)}`;
+  return `<div class="hero-tldr${tone}" id="${esc(id)}" role="region"${labelled}>\n${eyebrow(section)}${title}${body}\n</div>`;
 }
 
 function renderMeta(meta) {
@@ -174,16 +180,17 @@ function unsupported(spec) {
   return errors;
 }
 
-// Visual sections (a registry `band` flag) alternate onto a surface band: every second one gets it.
+// Visual sections (a registry `band` flag) alternate onto a surface band, starting with the first: 1st, 3rd, ...
 function altFlags(sections) {
   let visual = 0;
-  return sections.map((s) => SECTIONS[s.type].band && visual++ % 2 === 1);
+  return sections.map((s) => SECTIONS[s.type].band && visual++ % 2 === 0);
 }
 
 // The page layout: hero pieces, the contents list and the sections.
 function pageParts(spec, ctx, ids) {
   const titleIds = headingIds(ids);
-  const heroTldr = spec.sections[0].type === 'tldr';
+  // A tldr that is the only section stays in <main>: the skip link then still lands on content.
+  const heroTldr = spec.sections[0].type === 'tldr' && spec.sections.length > 1;
   const alt = altFlags(spec.sections);
   const rendered = spec.sections.map((section, i) => (heroTldr && i === 0
     ? ''
