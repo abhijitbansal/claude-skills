@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nodeVersion, nodeModules, sisterSkill, ffmpeg, browser, kokoro, diagnose, runFixes, doctorMain } from '../doctor.mjs';
+import { nodeVersion, nodeModules, sisterSkill, ffmpeg, browser, kokoro, diagnose, runFixes, doctorMain, ALL, cmdQuote } from '../doctor.mjs';
 
 const ctx = (over = {}) => ({
   platform: 'darwin', env: {}, skillDir: '/s/make-motion', nodeVersion: '24.7.0',
@@ -32,7 +32,7 @@ test('ffmpeg missing, brew present: auto is brew install ffmpeg', async () => {
 
 test('Windows: winget is the auto fix', async () => {
   const { missing } = await diagnose([ffmpeg()], ctx({ platform: 'win32' }));
-  assert.equal(missing[0].fix.auto, 'winget install Gyan.FFmpeg');
+  assert.equal(missing[0].fix.auto, 'winget install -e --id Gyan.FFmpeg --accept-source-agreements --accept-package-agreements');
 });
 
 test('Linux: ffmpeg needs sudo and has no auto fix', async () => {
@@ -48,9 +48,9 @@ test('FFMPEG_PATH that exists counts as present', async () => {
 });
 
 test('sister skill: missing folder is reported with its install command', async () => {
-  const { missing } = await diagnose([sisterSkill('make-diagram')], ctx({ skillDir: '/p/.agents/skills/make-explainer' }));
+  const { missing } = await diagnose([sisterSkill('make-diagram')], ctx({ skillDir: '/p/.agents/skills/make-explainer', cwd: '/p', homedir: '/h' }));
   assert.equal(missing[0].id, 'make-diagram');
-  assert.match(missing[0].fix.auto, /npx skills add abhijitbansal\/claude-skills --skill make-diagram -y/);
+  assert.match(missing[0].fix.auto, /npx --yes skills@1\.7\.2 add abhijitbansal\/claude-skills --skill make-diagram -y/);
 });
 
 test('optional misses do not flip ok', async () => {
@@ -86,15 +86,54 @@ test('nodeModules: omitDev false drops --omit=dev; present dir is fine', async (
   assert.equal(c.ok, true);
 });
 
-test('sister skill: present when sibling dir has SKILL.md; fix chains npm ci and honours -g', async () => {
+test('sister skill: present when sibling dir has SKILL.md; fix chains npm ci, project scope has no -g', async () => {
   const dir = '/p/.agents/skills/make-explainer';
-  const here = await diagnose([sisterSkill('make-diagram')], ctx({ skillDir: dir, exists: (p) => p === '/p/.agents/skills/make-diagram/SKILL.md' }));
+  const base = { skillDir: dir, cwd: '/p', homedir: '/h' };
+  const here = await diagnose([sisterSkill('make-diagram')], ctx({ ...base, exists: (p) => p === '/p/.agents/skills/make-diagram/SKILL.md' }));
   assert.equal(here.ok, true);
-  const { missing } = await diagnose([sisterSkill('make-diagram')], ctx({ skillDir: dir }));
+  const { missing } = await diagnose([sisterSkill('make-diagram')], ctx(base));
   assert.match(missing[0].fix.auto, / && npm ci --omit=dev --prefix \/p\/\.agents\/skills\/make-diagram$/);
   assert.doesNotMatch(missing[0].fix.auto, / -g/);
-  const g = await diagnose([sisterSkill('make-diagram')], ctx({ skillDir: `${process.env.HOME || '/h'}/.agents/skills/make-explainer`, cwd: '/elsewhere', homedir: process.env.HOME || '/h' }));
-  assert.match(g.missing[0].fix.auto, /-y -g/);
+  assert.match(missing[0].notes, /skills-lock\.json/);
+});
+
+test('sister skill: user-scope skill dir installs globally from home', async () => {
+  for (const d of ['.claude', '.agents', '.copilot', '.gemini']) {
+    const { missing } = await diagnose([sisterSkill('make-diagram')], ctx({ skillDir: `/h/${d}/skills/make-explainer`, cwd: '/elsewhere', homedir: '/h' }));
+    assert.match(missing[0].fix.auto, /-y -g && npm ci/, d);
+  }
+  const calls = [];
+  const exists = (p) => calls.length > 0 && p === '/h/.claude/skills/make-diagram/SKILL.md';
+  await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ skillDir: '/h/.claude/skills/make-explainer', homedir: '/h', exists }), (c, a, o) => { calls.push({ c, a, cwd: o.cwd }); return { status: 0 }; });
+  assert.equal(calls[0].cwd, '/h');
+  assert.equal(calls[1].cwd, undefined);
+});
+
+test('sister skill: project scope runs skills add with cwd=<root>', async () => {
+  const calls = [];
+  await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ skillDir: '/p/.agents/skills/make-explainer', cwd: '/elsewhere', homedir: '/h' }), (c, a, o) => { calls.push({ c, a, cwd: o.cwd }); return { status: 0 }; });
+  assert.equal(calls[0].cwd, '/p');
+  assert.deepEqual(calls[0].a.slice(0, 2), ['--yes', 'skills@1.7.2']);
+});
+
+test('sister skill: plugin cache or custom path has no auto fix', async () => {
+  for (const skillDir of ['/h/.claude/plugins/cache/x/portable-artifacts/skills/make-explainer', '/opt/stuff/make-explainer', '/h/.other/skills/make-explainer']) {
+    const { missing } = await diagnose([sisterSkill('make-diagram')], ctx({ skillDir, cwd: '/p', homedir: '/h' }));
+    assert.equal(missing[0].fix.auto, null, skillDir);
+    assert.match(missing[0].fix.manual.darwin, /host's installer/);
+  }
+});
+
+test('sister skill: installed elsewhere stops before npm ci', async () => {
+  const calls = [];
+  const res = await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ skillDir: '/p/.agents/skills/make-explainer', cwd: '/p', homedir: '/h' }), (c) => { calls.push(c); return { status: 0 }; });
+  assert.deepEqual(calls, ['npx']);
+  assert.equal(res[0].ok, false);
+  assert.match(res[0].manual, /^installed elsewhere/);
+});
+
+test('sister skill: hostile names are rejected', () => {
+  for (const n of ['../../evil&calc', 'Make-Diagram', '', 'a b', undefined]) assert.throws(() => sisterSkill(n), TypeError);
 });
 
 test('browser: system Chrome counts; optional by default, required when asked', async () => {
@@ -106,7 +145,7 @@ test('browser: system Chrome counts; optional by default, required when asked', 
   assert.equal(opt.missing[0].required, false);
   const req = await diagnose([browser({ required: true })], ctx());
   assert.equal(req.ok, false);
-  assert.equal(req.missing[0].fix.auto, 'npx --prefix /s/make-motion playwright install chromium');
+  assert.equal(req.missing[0].fix.auto, 'npx --no --prefix /s/make-motion playwright install chromium');
 });
 
 test('runFixes: win32 uses a shell, others do not; multi-step stops at first failure', async () => {
@@ -116,7 +155,7 @@ test('runFixes: win32 uses a shell, others do not; multi-step stops at first fai
   await runFixes(['kokoro'], [kokoro()], ctx(), run);
   assert.deepEqual(opts, [true, false]);
   let n = 0;
-  const res = await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ skillDir: '/p/x/make-explainer' }), () => { n++; return { status: 1 }; });
+  const res = await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h' }), () => { n++; return { status: 1 }; });
   assert.equal(n, 1);
   assert.equal(res[0].ok, false);
 });
@@ -146,7 +185,7 @@ async function runMain(argv, opts) {
 
 const mainOpts = (over = {}) => ({
   skill: 'make-motion', skillDir: '/nonexistent/make-motion', targets: ['check', 'voiceover'],
-  requirementsFor: (t) => [nodeVersion(20), kokoro()].concat(t === 'check' ? [] : []), ...over,
+  requirementsFor: () => [nodeVersion(20), kokoro()], ...over,
 });
 
 test('doctorMain: unknown flag exits 2 and lists accepted ones', async () => {
@@ -182,4 +221,112 @@ test('doctorMain: --fix refuses an unknown id with exit 1', async () => {
   const r = await runMain(['--fix', 'nope'], mainOpts());
   assert.equal(r.code, 1);
   assert.match(r.out + r.err, /unknown id/);
+});
+
+// --- fix round 1 ---
+
+test('cmdQuote: whitespace and cmd metacharacters stay one quoted token', () => {
+  assert.equal(cmdQuote('plain'), 'plain');
+  assert.equal(cmdQuote('C:\\Users\\John Doe\\s'), '"C:\\Users\\John Doe\\s"');
+  assert.equal(cmdQuote('a&b'), '"a&b"');
+  assert.equal(cmdQuote('50%off'), '"50"^%"off"');
+  assert.equal(cmdQuote('say "hi"'), '"say ""hi"""');
+  assert.equal(cmdQuote(''), '""');
+});
+
+test('win32: one quoted command line, empty args, spaced path stays one argument', async () => {
+  const rec = [];
+  const run = (c, a, o) => { rec.push({ c, a, shell: o.shell }); return { status: 0 }; };
+  await runFixes(['node_modules'], [nodeModules()], ctx({ platform: 'win32', skillDir: 'C:\\Users\\John Doe\\skills\\x' }), run);
+  assert.deepEqual(rec, [{ c: 'npm ci --omit=dev --prefix "C:\\Users\\John Doe\\skills\\x"', a: [], shell: true }]);
+  rec.length = 0;
+  await runFixes(['node_modules'], [nodeModules()], ctx({ platform: 'win32', skillDir: 'C:\\a&b\\100%\\x' }), run);
+  assert.equal(rec[0].c, 'npm ci --omit=dev --prefix "C:\\a&b\\100"^%"\\x"');
+});
+
+test('non-win32: argv arrays, no shell, spaces untouched', async () => {
+  const rec = [];
+  await runFixes(['node_modules'], [nodeModules()], ctx({ skillDir: '/a b/x' }), (c, a, o) => { rec.push({ c, a, shell: o.shell }); return { status: 0 }; });
+  assert.deepEqual(rec, [{ c: 'npm', a: ['ci', '--omit=dev', '--prefix', '/a b/x'], shell: false }]);
+});
+
+test('runFixes: requirement order, deduped; unknown ids last', async () => {
+  const ran = [];
+  const reqs = [nodeModules(), ffmpeg(), kokoro()];
+  const res = await runFixes(['kokoro', 'nope', 'node_modules', 'kokoro', 'ffmpeg'], reqs, ctx({ which: (c) => c === 'brew' }), (c) => { ran.push(c); return { status: 0 }; });
+  assert.deepEqual(ran, ['npm', 'brew', 'npm']);
+  assert.deepEqual(res.map((r) => r.id), ['node_modules', 'ffmpeg', 'kokoro', 'nope']);
+});
+
+test('runFixes: re-checks after the fix and reports stillMissing', async () => {
+  const res = await runFixes(['kokoro'], [kokoro()], ctx(), () => ({ status: 0 }));
+  assert.equal(res[0].ok, false);
+  assert.equal(res[0].stillMissing, true);
+  const done = await runFixes(['kokoro'], [kokoro()], ctx({ exists: () => true }), () => ({ status: 0 }));
+  assert.equal(done[0].ok, true);
+  const win = await runFixes(['ffmpeg'], [ffmpeg()], ctx({ platform: 'win32' }), () => ({ status: 0 }));
+  assert.match(win[0].manual, /open a new terminal/);
+});
+
+test('linux chromium carries a sudo hint; optional notes exist', async () => {
+  const { missing } = await diagnose([browser(), kokoro()], ctx({ platform: 'linux' }));
+  assert.match(missing[0].sudoHint, /sudo npx playwright install --with-deps chromium/);
+  assert.match(missing[0].notes, /150 MB/);
+  assert.match(missing[1].notes, /90 MB/);
+  const mac = await diagnose([browser()], ctx());
+  assert.equal(mac.missing[0].sudoHint, undefined);
+});
+
+test('ffmpeg: FFMPEG_PATH must be executable; ffmpeg-static binary counts only if executable', async () => {
+  const base = { exists: () => true, isExecutable: () => false };
+  assert.equal((await diagnose([ffmpeg()], ctx({ ...base, env: { FFMPEG_PATH: '/x/ffmpeg' } }))).ok, false);
+  assert.equal((await diagnose([ffmpeg()], ctx({ ...base, isExecutable: (p) => p === '/x/ffmpeg', env: { FFMPEG_PATH: '/x/ffmpeg' } }))).ok, true);
+  const staticOk = ctx({ ...base, isExecutable: (p) => p === '/s/make-motion/node_modules/ffmpeg-static/ffmpeg' });
+  assert.equal((await diagnose([ffmpeg()], staticOk)).ok, true);
+});
+
+test('ffmpeg darwin without brew: manual says install Homebrew', async () => {
+  const { missing } = await diagnose([ffmpeg()], ctx());
+  assert.match(missing[0].fix.manual.darwin, /Homebrew \(https:\/\/brew\.sh\)/);
+});
+
+const sisterOpts = () => ({
+  skill: 'make-explainer', skillDir: '/nonexistent/p/.agents/skills/make-explainer',
+  requirementsFor: (t) => (t === ALL ? [sisterSkill('make-diagram'), kokoro()] : t === 'spec.json' ? [sisterSkill('make-diagram')] : []),
+});
+
+test('doctorMain: plain diagnosis passes undefined to requirementsFor', async () => {
+  const seen = [];
+  await runMain(['--json'], { ...mainOpts(), requirementsFor: (t) => { seen.push(t); return []; } });
+  assert.deepEqual(seen, [undefined]);
+});
+
+test('doctorMain: --fix resolves ids against ALL (sister works without --for)', async () => {
+  const seen = [];
+  const r = await runMain(['--fix', 'make-diagram', '--json'], { ...sisterOpts(), requirementsFor: (t) => { seen.push(t); return sisterOpts().requirementsFor(t); } });
+  assert.deepEqual(seen, [ALL]);
+  assert.doesNotMatch(r.out, /unknown id/);
+});
+
+test('doctorMain: empty --fix is a usage error (exit 2)', async () => {
+  for (const v of ['', ',']) assert.equal((await runMain(['--fix', v], mainOpts())).code, 2);
+});
+
+test('doctorMain: a throwing requirementsFor or check is a one-line exit 2', async () => {
+  const r = await runMain([], mainOpts({ requirementsFor: () => { throw new Error('bad spec\n  at stack'); } }));
+  assert.equal(r.code, 2);
+  assert.equal(r.err.trim(), 'bad spec');
+  const c = await runMain([], mainOpts({ requirementsFor: () => [{ ...kokoro(), check: () => { throw new Error('boom'); } }] }));
+  assert.equal(c.code, 2);
+});
+
+test('doctorMain: targets defaults to check and must be strings', async () => {
+  const ok = await runMain(['--for', 'check'], { skill: 's', skillDir: '/x', requirementsFor: () => [] });
+  assert.equal(ok.code, 0);
+  await assert.rejects(() => doctorMain([], { skill: 's', skillDir: '/x', targets: [1], requirementsFor: () => [] }), TypeError);
+});
+
+test('doctorMain: text output prints notes', async () => {
+  const r = await runMain([], { ...sisterOpts(), requirementsFor: () => [kokoro()] });
+  assert.match(r.out, /Note: the 90 MB voice model/);
 });
