@@ -8,6 +8,9 @@ import { esc } from './svg.mjs';
 import { runtimeSource } from './runtime.mjs';
 import { legendItems } from './legend.mjs';
 import { FAMILIES } from './kinds.mjs';
+import { faviconLink } from '../../shared/icons.mjs';
+import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
+import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mjs';
 
 const TEMPLATE = new URL('../../template/viewer.html', import.meta.url);
 const CHROME = new URL('../../template/toolbar.js', import.meta.url);
@@ -108,10 +111,16 @@ const legendCss = () => [
  * The finished page for `spec`. `built` is buildDiagram's result and `theme`
  * the loaded theme it was built with.
  */
-export function renderViewer(spec, built, { theme }) {
+export function renderViewer(spec, built, { theme, env = process.env }) {
   const parts = {
     TITLE: esc(spec.title),
     SUBTITLE: spec.subtitle ? `<p class="sub">${esc(spec.subtitle)}</p>` : '',
+    PROVENANCE: provenanceHtml('make-diagram', spec.generatedBy, buildDate(env)),
+    FAVICON: faviconLink('make-diagram', theme),
+    GENERATOR: generatorMeta('make-diagram', spec.generatedBy),
+    TOGGLE_ICONS: toggleIcons(),
+    TOGGLE_CSS,
+    TOGGLE_JS: inlineCode(TOGGLE_JS),
     THEME: themeCss(theme),
     DIAGRAM_CSS: built.css,
     LEGEND_CSS: legendCss(),

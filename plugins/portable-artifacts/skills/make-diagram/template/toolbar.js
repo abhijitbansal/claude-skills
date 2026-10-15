@@ -1,4 +1,4 @@
-// make-diagram page chrome: toolbar buttons, theme toggle, export and the
+// make-diagram page chrome: toolbar buttons, export and the
 // #step-N deep link. The diagram itself is driven by PADiagram (viewer.js).
 // Data comes from the JSON block with id pa-data; nothing is fetched.
 (function () {
@@ -9,24 +9,6 @@
   var one = function (sel) { return document.querySelector(sel); };
   var safeStorage = function () { try { return window.localStorage; } catch (e) { return undefined; } };
   var local = safeStorage();
-
-  // ---- theme ---------------------------------------------------------------------
-  var ORDER = ['auto', 'light', 'dark'];
-  var LABEL = { auto: 'Auto', light: 'Light', dark: 'Dark' };
-  var themeButton = one('[data-theme-toggle]');
-  function currentTheme() { return root.getAttribute('data-theme') || 'auto'; }
-  function applyTheme(mode) {
-    if (mode === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', mode);
-    if (themeButton) { themeButton.textContent = 'Theme: ' + LABEL[mode]; themeButton.setAttribute('aria-label', 'Theme: ' + LABEL[mode] + '. Change theme'); }
-  }
-  applyTheme(currentTheme());
-  if (themeButton) {
-    themeButton.addEventListener('click', function () {
-      var next = ORDER[(ORDER.indexOf(currentTheme()) + 1) % ORDER.length];
-      try { if (local) local.setItem('pa-theme', next); } catch (e) { /* not remembered; fine */ }
-      applyTheme(next);
-    });
-  }
 
   // ---- diagram ---------------------------------------------------------------------
   var buttons = {};

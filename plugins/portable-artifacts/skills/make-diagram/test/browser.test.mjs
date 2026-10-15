@@ -824,21 +824,22 @@ const token = (page, name) => page.evaluate((n) => getComputedStyle(document.doc
 test('theme toggle cycles Auto, Light, Dark and survives a reload', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('flow').url);
-  assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Auto');
+  const mode = () => page.getAttribute('[data-theme-toggle]', 'data-mode');
+  assert.equal(await mode(), 'auto');
   assert.equal(await token(page, '--page'), '#f4f6f8');
   await page.click('[data-theme-toggle]');
-  assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Light');
+  assert.equal(await mode(), 'light');
   await page.click('[data-theme-toggle]');
-  assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Dark');
+  assert.equal(await mode(), 'dark');
   assert.equal(await page.getAttribute('html', 'data-theme'), 'dark');
   assert.equal(await token(page, '--page'), '#0e1319');
   await page.reload();
   await page.waitForFunction(() => window.paReady === true);
   assert.equal(await token(page, '--page'), '#0e1319', 'the choice persisted');
-  assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Dark');
-  assert.equal(await page.getAttribute('[data-theme-toggle]', 'aria-label'), 'Theme: Dark. Change theme');
+  assert.equal(await mode(), 'dark');
+  assert.equal(await page.getAttribute('[data-theme-toggle]', 'aria-label'), 'Theme: Dark. Switch to Auto');
   await page.click('[data-theme-toggle]');
-  assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Auto');
+  assert.equal(await mode(), 'auto');
   assert.deepEqual(problems, []);
   await context.close();
 });
@@ -863,7 +864,7 @@ test('accessibility: one graphics-document root, graphics-symbol nodes with name
     roots: document.querySelectorAll('[role="graphics-document"]').length,
     imgs: document.querySelectorAll('svg [role="img"]').length,
     names: [...document.querySelectorAll('.pa-node')].map((n) => `${n.getAttribute('role')}|${n.getAttribute('aria-label')}`),
-    labelled: document.querySelector('svg').getAttribute('aria-labelledby').split(' ').every((id) => document.getElementById(id)?.textContent),
+    labelled: document.querySelector('#pa-stage svg').getAttribute('aria-labelledby').split(' ').every((id) => document.getElementById(id)?.textContent),
     text: document.querySelector('section[aria-label="Diagram as text"]').textContent,
     visible: document.querySelector('section[aria-label="Diagram as text"]').getBoundingClientRect().width,
   }));

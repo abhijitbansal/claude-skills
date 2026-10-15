@@ -2,6 +2,7 @@
 // semantic checks in spec.mjs enforce. Lengths, counts and id spelling are
 // checked there instead, so their messages can state the value and the limit.
 import { TYPES } from './kinds.mjs';
+import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 
 export const ID_PATTERN = /^[a-z][a-z0-9_-]*$/;
 export const TONES = ['neutral', 'accent', 'good', 'warn', 'bad'];
@@ -47,6 +48,7 @@ export const SCHEMA = object(['title', 'type'], {
   subtitle: text,
   type: { enum: TYPES },
   theme: text,
+  generatedBy: GENERATED_BY_SCHEMA,
   direction: { enum: DIRECTIONS },
   animate: { type: 'boolean' },
   autoplay: { type: 'boolean' },

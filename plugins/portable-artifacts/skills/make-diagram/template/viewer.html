@@ -5,7 +5,8 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="generator" content="make-diagram">
+<!--@GENERATOR-->
+<!--@FAVICON-->
 <title><!--@TITLE--></title>
 <script>
 // Apply the saved theme before first paint (no flash). Storage may throw.
@@ -32,6 +33,8 @@ button { font: inherit; color: inherit; }
 .titles { min-width: 0; }
 h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .sub { margin: 2px 0 0; color: var(--text-2); font-size: 0.85rem; overflow-wrap: anywhere; }
+.pa-provenance { margin: 2px 0 0; color: var(--text-3); font-size: 11px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tools .tool[data-theme-toggle] { min-width: 30px; min-height: 0; padding: 4px 6px; }
 .tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .tools .group { display: inline-flex; gap: 4px; align-items: center; }
 .tool { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; cursor: pointer; color: var(--text-2); font-size: 0.85rem; line-height: 1.3; transition: color .16s ease, background-color .16s ease, transform .16s cubic-bezier(.23,1,.32,1); }
@@ -110,6 +113,7 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 </style>
+<style><!--@TOGGLE_CSS--></style>
 <style id="pa-legend-css">
 <!--@LEGEND_CSS-->
 </style>
@@ -119,6 +123,7 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 <div class="titles">
 <h1><!--@TITLE--></h1>
 <!--@SUBTITLE-->
+<!--@PROVENANCE-->
 </div>
 <div class="tools" role="group" aria-label="Diagram controls">
 <span class="group" role="group" aria-label="Mode">
@@ -138,11 +143,8 @@ h1 { margin: 0; font: 600 1.15rem/1.2 var(--font-display); letter-spacing: -0.01
 <button type="button" class="tool" data-export="svg" title="Download as SVG">SVG</button>
 <button type="button" class="tool" data-export="png" title="Download as PNG">PNG</button>
 </span>
-<button type="button" class="tool" data-theme-toggle aria-label="Theme: Auto. Change theme">Theme: Auto</button>
-<script>
-// A stored theme was applied in <head>; label the toggle now, before the script below runs.
-(function () { var t = document.documentElement.getAttribute('data-theme'), b = document.querySelector('[data-theme-toggle]'); if (t && b) { var l = 'Theme: ' + t.charAt(0).toUpperCase() + t.slice(1); b.textContent = l; b.setAttribute('aria-label', l + '. Change theme'); } })();
-</script>
+<button type="button" class="tool" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><!--@TOGGLE_ICONS--></button>
+<script><!--@TOGGLE_JS--></script>
 </div>
 <div class="chapters" data-pa-chapters role="group" aria-label="Chapters" hidden></div>
 <div class="found" data-pa-found role="group" aria-label="Matching nodes" aria-live="polite" hidden></div>

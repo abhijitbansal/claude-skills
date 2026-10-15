@@ -169,8 +169,8 @@ for (const name of NAMES) {
     const html = readOut(r);
     assert.ok(html.includes(`<meta http-equiv="Content-Security-Policy" content="${CSP}">`));
     assert.ok(Buffer.byteLength(html) <= MAX, `${Buffer.byteLength(html)} bytes`);
-    assert.ok(!/https?:\/\//.test(html.replace('xmlns="http://www.w3.org/2000/svg"', '')), 'the SVG namespace is the only URL');
-    assert.ok(!/<link |<img |<iframe|src=|@import|url\((?!data:|#)/.test(html));
+    assert.ok(!/https?:\/\//.test(html.replaceAll('xmlns="http://www.w3.org/2000/svg"', '')), 'the SVG namespace is the only URL');
+    assert.ok(!/<link (?!rel="icon" type="image\/svg\+xml" href="data:)|<img |<iframe|src=|@import|url\((?!data:|#)/.test(html));
   });
 
   test(`${name}: two builds are byte-identical`, () => {
@@ -182,7 +182,7 @@ for (const name of NAMES) {
 test('page parts: toolbar, SVG, text alternative, data block and runtime', () => {
   const html = readOut(run([example('architecture')]));
   assert.ok(html.includes('role="group" aria-label="Diagram controls"') && !html.includes('role="toolbar"'), 'a plain group: no roving-tabindex promise');
-  for (const hook of ['data-act="fit"', 'data-act="zoom-in"', 'data-act="zoom-out"', 'data-pa-mode="play"', 'data-pa-mode="explore"', 'data-pa-chapters', 'data-pa-line', 'data-pa-scrub', 'data-act="animate"', 'data-export="svg"', 'data-export="png"', 'data-theme-toggle aria-label="Theme: Auto. Change theme">Theme: Auto</button>', 'data-pa-caption', 'id="pa-stage"', /data-pa-panel[\s>]/, 'data-pa-panel-title', 'data-pa-panel-close', 'data-pa-panel-body', 'data-pa-tip', 'data-pa-find', 'data-pa-found', 'data-pa-empty', 'data-pa-tally']) {
+  for (const hook of ['data-act="fit"', 'data-act="zoom-in"', 'data-act="zoom-out"', 'data-pa-mode="play"', 'data-pa-mode="explore"', 'data-pa-chapters', 'data-pa-line', 'data-pa-scrub', 'data-act="animate"', 'data-export="svg"', 'data-export="png"', 'data-theme-toggle data-mode="auto"', 'data-pa-caption', 'id="pa-stage"', /data-pa-panel[\s>]/, 'data-pa-panel-title', 'data-pa-panel-close', 'data-pa-panel-body', 'data-pa-tip', 'data-pa-find', 'data-pa-found', 'data-pa-empty', 'data-pa-tally']) {
     assert.ok(typeof hook === 'string' ? html.includes(hook) : hook.test(html), String(hook));
   }
   assert.match(html, /<svg [^>]*role="graphics-document"/);
