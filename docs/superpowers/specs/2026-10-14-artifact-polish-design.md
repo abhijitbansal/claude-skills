@@ -41,7 +41,8 @@ Assumptions (confirmed by section approval):
 ## Success criteria
 
 - Every HTML page from all four skills has a `rel="icon"`, a
-  `<meta name="generator">`, an icon theme toggle and a visible provenance line.
+  `<meta name="generator">` and a visible provenance line; every page except
+  the dark-only make-motion preview has the icon theme toggle.
 - Fonts are Geist / Geist Mono by default; no template names an unbundled font.
 - Explainer pages lead with a hero (title, one-line subtitle, TL;DR card) and
   KPIs; the TOC shows short labels; the validator warns on over-long text.
@@ -97,7 +98,7 @@ Assumptions (confirmed by section approval):
 | make-explainer slides (`template/slides.html`) | top-right corner | last slide footer and the print footer |
 | make-diagram (`template/viewer.html`) | toolbar; still hidden in fill / full screen | small line under the title |
 | make-dashboard (`template/page.html`) | header | footer, beside the refresh time |
-| make-motion preview (`template/index.html`) | top bar | footer; the MP4 gets `-metadata comment=<footer>` and `-metadata artist=<model>` |
+| make-motion preview (`template/index.html`) | none — the preview is a dark-only local tool and the video follows the spec theme (owner decision, 2026-10-14) | footer; the MP4 gets `-metadata comment=<footer>` and `-metadata artist=<model>` |
 
 ### SKILL.md
 
