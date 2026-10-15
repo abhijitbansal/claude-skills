@@ -27,7 +27,7 @@ const NO_TITLE_CAP = new Set(['diagram', 'chart', 'motion']);
 const SECTION_CAP_TYPES = new Set(['text', 'details', 'callout']);
 const CARD_TYPES = new Set(['cards', 'steps']);
 const LIST_KEYS = new Set(['points', 'items', 'risk', 'mitigation']);
-const ABBREVIATION = /\b(?:Mr|Mrs|Ms|Dr|Jr|Sr|St|vs|approx)\.|\b(?:[A-Za-z]\.){2,}|\betc\.(?=\s+[a-z])/g;
+const ABBREVIATION = /\b(?:Mr|Mrs|Ms|Dr|Jr|Sr|St|vs|approx)\.|\b[A-Z]\.(?=\s+[A-Z][a-z])|\b(?:[A-Za-z]\.){2,}|\betc\.(?=\s+[a-z])/g;
 
 export const words = (s) => (s.match(/\S+/g) ?? []).length;
 
@@ -39,12 +39,20 @@ export function sentences(s) {
 }
 
 // A blank line separates paragraphs; "- " lines are each their own list item.
+// Each block carries `name`: "paragraph 2 of 3" or "list item 1 of 2" (numbered apart; plain when only one).
 function blocks(text) {
-  return text.split(/\n\s*\n/).flatMap((block) => {
+  const raw = text.split(/\n\s*\n/).flatMap((block) => {
     const lines = block.split('\n').filter((l) => l.trim() !== '');
     return lines.length > 0 && lines.every((l) => l.trimStart().startsWith('- '))
       ? lines.map((t) => ({ text: t.trimStart().slice(2), bullet: true }))
       : [{ text: block, bullet: false }];
+  });
+  const total = { true: raw.filter((b) => b.bullet).length, false: raw.filter((b) => !b.bullet).length };
+  const seen = { true: 0, false: 0 };
+  return raw.map((b) => {
+    const noun = b.bullet ? 'list item' : 'paragraph';
+    const n = ++seen[b.bullet];
+    return { ...b, name: total[b.bullet] > 1 ? `${noun} ${n} of ${total[b.bullet]}` : noun };
   });
 }
 
@@ -79,32 +87,36 @@ const warn = (path, message) => ({ path, message });
 // Titles at any depth (section, card, step, compare column ...) and the section label.
 function titleWarnings(section, at) {
   const out = [];
-  const visit = (v, path, top) => {
-    if (Array.isArray(v)) v.forEach((x, i) => visit(x, pathJoin(path, i), false));
+  const visit = (v, path) => {
+    if (Array.isArray(v)) v.forEach((x, i) => visit(x, pathJoin(path, i)));
     else if (v && typeof v === 'object') {
       for (const [k, x] of Object.entries(v)) {
         if (typeof x === 'string' && k === 'title' && words(x) > SOFT_CAPS.titleWords) {
           out.push(warn(pathJoin(path, k), `title is ${words(x)} words; keep it to ${SOFT_CAPS.titleWords} — state the finding, move detail into the text`));
-        } else if (typeof x === 'object') visit(x, pathJoin(path, k), false);
+        } else if (typeof x === 'object') visit(x, pathJoin(path, k));
       }
     }
-    return top;
   };
-  if (!NO_TITLE_CAP.has(section.type)) visit(section, at, true);
+  // An embedded diagram, chart or motion spec has its own title; only the section's own title is capped.
+  if (NO_TITLE_CAP.has(section.type)) {
+    if (typeof section.title === 'string' && words(section.title) > SOFT_CAPS.titleWords) {
+      out.push(warn(pathJoin(at, 'title'), `title is ${words(section.title)} words; keep it to ${SOFT_CAPS.titleWords} — state the finding, move detail into the text`));
+    }
+  } else visit(section, at);
   if (typeof section.label === 'string' && words(section.label) > SOFT_CAPS.labelWords) {
     out.push(warn(pathJoin(at, 'label'), `label is ${words(section.label)} words; keep it to ${SOFT_CAPS.labelWords} — name the topic, put the claim in the title`));
   }
   return out;
 }
 
-const listItemWarning = (path, n) => warn(path, `list item is ${n} words; keep it to ${SOFT_CAPS.itemWords} → cut it, or move the detail into a text section`);
+const listItemWarning = (path, n, name = 'list item') => warn(path, `${name} is ${n} words; keep it to ${SOFT_CAPS.itemWords} → cut it, or move the detail into a text section`);
 
 function backstopWarnings(s) {
   const parts = blocks(s.text);
-  return parts.flatMap((p, i) => {
+  return parts.flatMap((p) => {
     const n = words(p.text);
     if (n <= BACKSTOP_WORDS) return [];
-    return [warn(s.path, `${parts.length > 1 ? `paragraph ${i + 1} of ${parts.length}` : 'paragraph'} is ${n} words; keep it to ${BACKSTOP_WORDS} → split it, or cut it`)];
+    return [warn(s.path, `${p.name} is ${n} words; keep it to ${BACKSTOP_WORDS} → split it, or cut it`)];
   });
 }
 
@@ -118,10 +130,10 @@ function stringWarnings(s) {
       : [];
   }
   const parts = blocks(s.text);
-  return parts.flatMap((p, i) => {
+  return parts.flatMap((p) => {
     const pw = words(p.text);
-    const which = parts.length > 1 ? `paragraph ${i + 1} of ${parts.length}` : 'paragraph';
-    if (p.bullet) return pw > SOFT_CAPS.itemWords ? [listItemWarning(s.path, pw)] : [];
+    const which = p.name;
+    if (p.bullet) return pw > SOFT_CAPS.itemWords ? [listItemWarning(s.path, pw, which)] : [];
     if (pw > SOFT_CAPS.paragraphWords) return [warn(s.path, `${which} is ${pw} words; keep it to ${SOFT_CAPS.paragraphWords} → split it, or turn it into cards or steps`)];
     const sc = sentences(p.text);
     return sc > SOFT_CAPS.paragraphSentences

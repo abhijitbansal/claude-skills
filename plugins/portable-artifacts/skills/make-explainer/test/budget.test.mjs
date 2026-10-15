@@ -123,7 +123,7 @@ test('M-1: details and callout get the 120-word section cap', () => {
 });
 
 test('M-2: a bullet is measured against the list-item cap', () => {
-  assert.deepEqual(msgs([{ type: 'text', title: 'T', text: `- ${w(25)}\n- short` }]), [`list item is 25 words; keep it to 20 → cut it, or move the detail into a text section`]);
+  assert.deepEqual(msgs([{ type: 'text', title: 'T', text: `- ${w(25)}\n- short` }]), [`list item 1 of 2 is 25 words; keep it to 20 → cut it, or move the detail into a text section`]);
 });
 
 test('M-3: sentence counting', () => {
@@ -145,4 +145,24 @@ test('M-4: caps are inclusive in the wording; exactly 120 words is silent', () =
 
 test('M-5: several paragraphs in one field are named', () => {
   assert.match(msgs([{ type: 'text', title: 'T', text: `short.\n\n${w(61)}` }])[0], /^paragraph 2 of 2 is 61 words/);
+});
+
+test('NI-1: diagram, chart and motion sections still cap their own title', () => {
+  const secs = [
+    { type: 'diagram', title: w(12), diagram: 'd.json' },
+    { type: 'chart', title: w(12), chart: 'c.json' },
+    { type: 'motion', title: w(12), video: 'v.mp4' },
+  ];
+  assert.deepEqual(paths(spec(secs)), ['sections[0].title', 'sections[1].title', 'sections[2].title']);
+  assert.deepEqual(paths(spec([{ type: 'diagram', title: 'T', diagram: { title: w(12), nodes: [] } }])), []);
+});
+
+test('NI-3: single-letter initials are not sentence ends', () => {
+  assert.equal(sentences('See J. Smith. Then go.'), 2);
+  assert.equal(sentences('A. B. C. D.'), 4);
+});
+
+test('NI-4: paragraphs and list items are numbered apart', () => {
+  const text = `- ${w(25)}\n- ${w(25)}\n\n${w(61)}`;
+  assert.deepEqual(msgs([{ type: 'text', title: 'T', text }]).map((m) => m.split(' is ')[0]), ['list item 1 of 2', 'list item 2 of 2', 'paragraph']);
 });
