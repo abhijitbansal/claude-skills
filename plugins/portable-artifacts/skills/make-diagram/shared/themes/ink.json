@@ -10,18 +10,18 @@
       }
     },
     "body": {
-      "family": "IBM Plex Sans",
+      "family": "Geist",
       "fallback": "-apple-system, 'Segoe UI', sans-serif",
       "weights": {
-        "400": "ibm-plex-sans-latin-400-normal.woff2",
-        "600": "ibm-plex-sans-latin-600-normal.woff2"
+        "400": "geist-sans-latin-400-normal.woff2",
+        "600": "geist-sans-latin-600-normal.woff2"
       }
     },
     "mono": {
-      "family": "JetBrains Mono",
+      "family": "Geist Mono",
       "fallback": "ui-monospace, Menlo, Consolas, monospace",
       "weights": {
-        "400": "jetbrains-mono-latin-400-normal.woff2"
+        "400": "geist-mono-latin-400-normal.woff2"
       }
     }
   },

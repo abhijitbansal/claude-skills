@@ -1,16 +1,16 @@
 {
-  "width": 2190,
+  "width": 2230,
   "height": 321,
   "drawing": {
     "x": 0,
     "y": 30,
-    "width": 2190,
+    "width": 2230,
     "height": 291
   },
   "legend": {
-    "x": 1402.5,
+    "x": 1437.9,
     "y": 24,
-    "width": 763.5,
+    "width": 768.1,
     "height": 20,
     "items": [
       {
@@ -19,79 +19,79 @@
         "family": "person",
         "count": 1,
         "dx": 0,
-        "width": 48.9
+        "width": 47.6
       },
       {
         "kind": "kind",
         "name": "client",
         "family": "service",
         "count": 1,
-        "dx": 64.9,
-        "width": 54.6
+        "dx": 63.6,
+        "width": 53.9
       },
       {
         "kind": "kind",
         "name": "gateway",
         "family": "service",
         "count": 1,
-        "dx": 135.5,
-        "width": 68.6
+        "dx": 133.5,
+        "width": 69.8
       },
       {
         "kind": "kind",
         "name": "service",
         "family": "service",
         "count": 1,
-        "dx": 220.1,
-        "width": 62.4
+        "dx": 219.3,
+        "width": 62.2
       },
       {
         "kind": "kind",
         "name": "database",
         "family": "data",
         "count": 1,
-        "dx": 298.5,
-        "width": 72.8
+        "dx": 297.5,
+        "width": 73.6
       },
       {
         "kind": "kind",
         "name": "queue",
         "family": "queue",
         "count": 1,
-        "dx": 387.3,
-        "width": 58.2
+        "dx": 387.1,
+        "width": 56.7
       },
       {
         "kind": "kind",
         "name": "external",
         "family": "external",
         "count": 1,
-        "dx": 461.5,
-        "width": 67.9
+        "dx": 459.8,
+        "width": 68.4
       },
       {
         "kind": "style",
         "name": "solid",
         "style": "solid",
         "label": "call",
-        "dx": 545.4,
-        "width": 47.4
+        "dx": 544.2,
+        "width": 48.7
       },
       {
         "kind": "style",
         "name": "async",
         "style": "async",
         "label": "event",
-        "dx": 608.8,
-        "width": 57.6
+        "dx": 608.9,
+        "width": 59.2
       },
       {
         "kind": "style",
         "name": "dashed",
         "style": "dashed",
         "label": "secondary",
-        "dx": 682.4,
-        "width": 81.1
+        "dx": 684.1,
+        "width": 84
       }
     ]
   },
@@ -100,7 +100,7 @@
       "id": "shopper",
       "x": 24,
       "y": 162.2,
-      "width": 122,
+      "width": 124,
       "height": 54,
       "shape": "rounded-rect",
       "lines": [
@@ -116,9 +116,9 @@
     },
     {
       "id": "app",
-      "x": 383,
+      "x": 387,
       "y": 162.2,
-      "width": 138,
+      "width": 142,
       "height": 54,
       "shape": "rounded-rect",
       "lines": [
@@ -134,7 +134,7 @@
     },
     {
       "id": "gateway",
-      "x": 753,
+      "x": 767,
       "y": 142.5,
       "width": 200,
       "height": 70,
@@ -152,9 +152,9 @@
     },
     {
       "id": "orders",
-      "x": 1239,
+      "x": 1255,
       "y": 150.5,
-      "width": 160,
+      "width": 168,
       "height": 54,
       "shape": "rounded-rect",
       "lines": [
@@ -170,9 +170,9 @@
     },
     {
       "id": "db",
-      "x": 1629,
+      "x": 1655,
       "y": 131,
-      "width": 134,
+      "width": 138,
       "height": 66,
       "shape": "cylinder",
       "lines": [
@@ -188,9 +188,9 @@
     },
     {
       "id": "bus",
-      "x": 1631,
+      "x": 1657,
       "y": 218,
-      "width": 130,
+      "width": 134,
       "height": 54,
       "shape": "stacked-rect",
       "lines": [
@@ -206,9 +206,9 @@
     },
     {
       "id": "warehouse",
-      "x": 2026,
+      "x": 2062,
       "y": 218,
-      "width": 140,
+      "width": 144,
       "height": 54,
       "shape": "dashed-rounded-rect",
       "lines": [
@@ -226,9 +226,9 @@
   "groups": [
     {
       "id": "edge",
-      "x": 359,
+      "x": 363,
       "y": 102.5,
-      "width": 618,
+      "width": 628,
       "height": 138.7,
       "label": "Edge",
       "depth": 0,
@@ -236,9 +236,9 @@
     },
     {
       "id": "core",
-      "x": 1215,
+      "x": 1231,
       "y": 91,
-      "width": 572,
+      "width": 586,
       "height": 206,
       "label": "Core services",
       "depth": 0,
@@ -252,11 +252,11 @@
       "to": "app",
       "points": [
         {
-          "x": 146,
+          "x": 148,
           "y": 189.2
         },
         {
-          "x": 383,
+          "x": 387,
           "y": 189.2
         }
       ],
@@ -264,9 +264,9 @@
       "both": false,
       "label": {
         "text": "taps Buy",
-        "x": 218,
+        "x": 220,
         "y": 196.2,
-        "width": 64,
+        "width": 66,
         "height": 20
       }
     },
@@ -276,11 +276,11 @@
       "to": "gateway",
       "points": [
         {
-          "x": 521,
+          "x": 529,
           "y": 189.2
         },
         {
-          "x": 753,
+          "x": 767,
           "y": 189.2
         }
       ],
@@ -288,9 +288,9 @@
       "both": false,
       "label": {
         "text": "POST /orders",
-        "x": 593,
+        "x": 601,
         "y": 196.2,
-        "width": 88,
+        "width": 94,
         "height": 20
       }
     },
@@ -300,11 +300,11 @@
       "to": "orders",
       "points": [
         {
-          "x": 953,
+          "x": 967,
           "y": 177.5
         },
         {
-          "x": 1239,
+          "x": 1255,
           "y": 177.5
         }
       ],
@@ -312,9 +312,9 @@
       "both": false,
       "label": {
         "text": "forwards",
-        "x": 1064,
+        "x": 1077,
         "y": 184.5,
-        "width": 64,
+        "width": 68,
         "height": 20
       }
     },
@@ -324,11 +324,11 @@
       "to": "db",
       "points": [
         {
-          "x": 1399,
+          "x": 1423,
           "y": 164
         },
         {
-          "x": 1629,
+          "x": 1655,
           "y": 164
         }
       ],
@@ -336,9 +336,9 @@
       "both": false,
       "label": {
         "text": "writes order",
-        "x": 1473,
+        "x": 1496,
         "y": 171,
-        "width": 82,
+        "width": 86,
         "height": 20
       }
     },
@@ -348,19 +348,19 @@
       "to": "bus",
       "points": [
         {
-          "x": 1399,
-          "y": 191
-        },
-        {
           "x": 1423,
           "y": 191
         },
         {
-          "x": 1423,
+          "x": 1447,
+          "y": 191
+        },
+        {
+          "x": 1447,
           "y": 245
         },
         {
-          "x": 1631,
+          "x": 1657,
           "y": 245
         }
       ],
@@ -368,9 +368,9 @@
       "both": false,
       "label": {
         "text": "order.placed",
-        "x": 1471,
+        "x": 1495,
         "y": 252,
-        "width": 86,
+        "width": 88,
         "height": 20
       }
     },
@@ -380,11 +380,11 @@
       "to": "warehouse",
       "points": [
         {
-          "x": 1761,
+          "x": 1791,
           "y": 245
         },
         {
-          "x": 2026,
+          "x": 2062,
           "y": 245
         }
       ],
@@ -392,9 +392,9 @@
       "both": false,
       "label": {
         "text": "pick and pack",
-        "x": 1864,
+        "x": 1894,
         "y": 252,
-        "width": 90,
+        "width": 96,
         "height": 20
       }
     },
@@ -404,43 +404,43 @@
       "to": "gateway",
       "points": [
         {
-          "x": 1399,
+          "x": 1423,
           "y": 177.5
         },
         {
-          "x": 1433,
+          "x": 1457,
           "y": 177.5
         },
         {
-          "x": 1433,
+          "x": 1457,
           "y": 207
         },
         {
-          "x": 1816,
+          "x": 1846,
           "y": 207
         },
         {
-          "x": 1816,
+          "x": 1846,
           "y": 81
         },
         {
-          "x": 306,
+          "x": 310,
           "y": 81
         },
         {
-          "x": 306,
+          "x": 310,
           "y": 151.2
         },
         {
-          "x": 705,
+          "x": 719,
           "y": 151.2
         },
         {
-          "x": 705,
+          "x": 719,
           "y": 165.8
         },
         {
-          "x": 753,
+          "x": 767,
           "y": 165.8
         }
       ],
@@ -448,9 +448,9 @@
       "both": false,
       "label": {
         "text": "201 Created",
-        "x": 1054,
+        "x": 1068,
         "y": 54,
-        "width": 84,
+        "width": 86,
         "height": 20
       }
     }

@@ -1,16 +1,16 @@
 {
-  "width": 1178,
+  "width": 1202,
   "height": 210,
   "drawing": {
     "x": 0,
     "y": 30,
-    "width": 1178,
+    "width": 1202,
     "height": 180
   },
   "legend": {
-    "x": 737.7,
+    "x": 757.2,
     "y": 24,
-    "width": 416.3,
+    "width": 420.8,
     "height": 20,
     "items": [
       {
@@ -19,54 +19,54 @@
         "family": "bare",
         "count": 1,
         "dx": 0,
-        "width": 50.2
+        "width": 50.1
       },
       {
         "kind": "kind",
         "name": "state",
         "family": "decision",
         "count": 4,
-        "dx": 66.2,
-        "width": 52.2
+        "dx": 66.1,
+        "width": 54.9
       },
       {
         "kind": "kind",
         "name": "choice",
         "family": "decision",
         "count": 1,
-        "dx": 134.4,
-        "width": 59.5
+        "dx": 137,
+        "width": 58.9
       },
       {
         "kind": "kind",
         "name": "end",
         "family": "bare",
         "count": 1,
-        "dx": 209.9,
-        "width": 45.9
+        "dx": 211.9,
+        "width": 44.2
       },
       {
         "kind": "style",
         "name": "solid",
         "style": "solid",
         "label": "call",
-        "dx": 271.8,
-        "width": 47.4
+        "dx": 272.1,
+        "width": 48.7
       },
       {
         "kind": "style",
         "name": "dashed",
         "style": "dashed",
         "label": "secondary",
-        "dx": 335.2,
-        "width": 81.1
+        "dx": 336.8,
+        "width": 84
       }
     ]
   },
   "nodes": [
     {
       "id": "begin",
-      "x": 33,
+      "x": 34,
       "y": 139,
       "width": 20,
       "height": 20,
@@ -84,14 +84,14 @@
       "labelBox": {
         "x": 24,
         "y": 164,
-        "width": 38,
+        "width": 40,
         "height": 20
       },
       "labelSide": "bottom"
     },
     {
       "id": "placed",
-      "x": 140,
+      "x": 144,
       "y": 129,
       "width": 80,
       "height": 40,
@@ -109,7 +109,7 @@
     },
     {
       "id": "paid",
-      "x": 486,
+      "x": 496,
       "y": 121,
       "width": 122,
       "height": 56,
@@ -127,7 +127,7 @@
     },
     {
       "id": "ok",
-      "x": 700,
+      "x": 713,
       "y": 137,
       "width": 24,
       "height": 24,
@@ -143,18 +143,18 @@
       "group": null,
       "layer": 3,
       "labelBox": {
-        "x": 680,
+        "x": 690,
         "y": 166,
-        "width": 64,
+        "width": 70,
         "height": 20
       },
       "labelSide": "bottom"
     },
     {
       "id": "shipped",
-      "x": 954,
+      "x": 972,
       "y": 133,
-      "width": 82,
+      "width": 86,
       "height": 40,
       "shape": "rounded-rect",
       "lines": [
@@ -170,9 +170,9 @@
     },
     {
       "id": "cancelled",
-      "x": 948,
+      "x": 966,
       "y": 61,
-      "width": 94,
+      "width": 98,
       "height": 40,
       "shape": "rounded-rect",
       "lines": [
@@ -188,7 +188,7 @@
     },
     {
       "id": "finish",
-      "x": 1124,
+      "x": 1147,
       "y": 139.7,
       "width": 20,
       "height": 20,
@@ -204,9 +204,9 @@
       "group": null,
       "layer": 5,
       "labelBox": {
-        "x": 1114,
+        "x": 1136,
         "y": 164.7,
-        "width": 40,
+        "width": 42,
         "height": 20
       },
       "labelSide": "bottom"
@@ -220,11 +220,11 @@
       "to": "placed",
       "points": [
         {
-          "x": 53,
+          "x": 54,
           "y": 149
         },
         {
-          "x": 140,
+          "x": 144,
           "y": 149
         }
       ],
@@ -237,11 +237,11 @@
       "to": "paid",
       "points": [
         {
-          "x": 220,
+          "x": 224,
           "y": 149
         },
         {
-          "x": 486,
+          "x": 496,
           "y": 149
         }
       ],
@@ -249,9 +249,9 @@
       "both": false,
       "label": {
         "text": "payment captured",
-        "x": 298,
+        "x": 304,
         "y": 156,
-        "width": 116,
+        "width": 120,
         "height": 20
       }
     },
@@ -261,11 +261,11 @@
       "to": "ok",
       "points": [
         {
-          "x": 608,
+          "x": 618,
           "y": 149
         },
         {
-          "x": 700,
+          "x": 713,
           "y": 149
         }
       ],
@@ -278,11 +278,11 @@
       "to": "shipped",
       "points": [
         {
-          "x": 724,
+          "x": 737,
           "y": 153
         },
         {
-          "x": 954,
+          "x": 972,
           "y": 153
         }
       ],
@@ -290,9 +290,9 @@
       "both": false,
       "label": {
         "text": "in stock",
-        "x": 817,
+        "x": 832,
         "y": 160,
-        "width": 58,
+        "width": 62,
         "height": 20
       }
     },
@@ -302,19 +302,19 @@
       "to": "cancelled",
       "points": [
         {
-          "x": 724,
+          "x": 737,
           "y": 145
         },
         {
-          "x": 768,
+          "x": 784,
           "y": 145
         },
         {
-          "x": 768,
+          "x": 784,
           "y": 81
         },
         {
-          "x": 948,
+          "x": 966,
           "y": 81
         }
       ],
@@ -322,9 +322,9 @@
       "both": false,
       "label": {
         "text": "sold out",
-        "x": 816,
+        "x": 832,
         "y": 54,
-        "width": 60,
+        "width": 62,
         "height": 20
       }
     },
@@ -334,19 +334,19 @@
       "to": "placed",
       "points": [
         {
-          "x": 166.7,
+          "x": 170.7,
           "y": 129
         },
         {
-          "x": 166.7,
+          "x": 170.7,
           "y": 105
         },
         {
-          "x": 193.3,
+          "x": 197.3,
           "y": 105
         },
         {
-          "x": 193.3,
+          "x": 197.3,
           "y": 129
         }
       ],
@@ -354,9 +354,9 @@
       "both": false,
       "label": {
         "text": "retry payment",
-        "x": 134,
+        "x": 136,
         "y": 79,
-        "width": 92,
+        "width": 96,
         "height": 20
       }
     },
@@ -366,11 +366,11 @@
       "to": "finish",
       "points": [
         {
-          "x": 1036,
+          "x": 1058,
           "y": 153
         },
         {
-          "x": 1124,
+          "x": 1147,
           "y": 153
         }
       ],
@@ -383,19 +383,19 @@
       "to": "finish",
       "points": [
         {
-          "x": 1042,
+          "x": 1064,
           "y": 81
         },
         {
-          "x": 1066,
+          "x": 1088,
           "y": 81
         },
         {
-          "x": 1066,
+          "x": 1088,
           "y": 146.3
         },
         {
-          "x": 1124,
+          "x": 1147,
           "y": 146.3
         }
       ],

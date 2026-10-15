@@ -19,8 +19,8 @@ const base = {
 test('default build embeds the paper theme, its fonts and keeps the strict CSP', () => {
   const { html } = buildProject(base);
   assert.ok(html.includes(`content="${CSP}"`));
-  assert.match(html, /--font-display:"Newsreader"/);
-  assert.match(html, /@font-face\{font-family:"IBM Plex Sans"/);
+  assert.match(html, /--font-display:"Geist"/);
+  assert.match(html, /@font-face\{font-family:"Geist"/);
   assert.ok(!/Roboto|Arial/.test(html.match(/<style>[\s\S]*?<\/style>/)[0]), 'old system font stack is gone');
   // The SVG icons carry the xmlns namespace URI; it is an identifier, not a fetch.
   const noNs = html.replace(/<script>[\s\S]*?<\/script>/g, '').replaceAll('xmlns="http://www.w3.org/2000/svg"', '');
@@ -28,8 +28,8 @@ test('default build embeds the paper theme, its fonts and keeps the strict CSP',
 });
 
 test('spec theme and --theme both select a theme; --theme wins', () => {
-  assert.match(buildProject({ ...base, theme: 'editorial' }).html, /--font-display:"Bricolage Grotesque"/);
-  assert.match(buildProject({ ...base, theme: 'editorial' }, { theme: 'blueprint' }).html, /--font-display:"IBM Plex Sans"/);
+  assert.match(buildProject({ ...base, theme: 'ink' }).html, /--font-display:"Bricolage Grotesque"/);
+  assert.match(buildProject({ ...base, theme: 'ink' }, { theme: 'editorial' }).html, /--font-display:"Newsreader"/);
 });
 
 test('unknown spec theme is a validation error with did-you-mean', () => {

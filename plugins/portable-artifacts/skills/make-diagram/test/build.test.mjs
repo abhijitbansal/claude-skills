@@ -80,18 +80,18 @@ test('--json prints { ok, out } on one line', () => {
 
 test('--theme overrides the spec theme', () => {
   const dir = tmp();
-  const r = run([example('flow'), '--out', path.join(dir, 'e.html'), '--theme', 'editorial']);
+  const r = run([example('flow'), '--out', path.join(dir, 'e.html'), '--theme', 'ink']);
   assert.equal(r.status, 0, r.stderr);
   assert.match(fs.readFileSync(path.join(dir, 'e.html'), 'utf8'), /--font-display:"Bricolage Grotesque"/);
 });
 
-test('the default theme is blueprint: IBM Plex Sans display and the kind hues on :root; --theme paper brings Newsreader back', () => {
+test('the default theme is blueprint: Geist display and the kind hues on :root; --theme editorial brings Newsreader back', () => {
   const html = readOut(run([example('flow')]));
-  assert.match(html, /--font-display:"IBM Plex Sans"/);
+  assert.match(html, /--font-display:"Geist"/);
   assert.ok(!html.includes('Newsreader'));
   assert.match(html, /--k-service:#0e7490/);
   const dir = tmp();
-  const r = run([example('flow'), '--out', path.join(dir, 'p.html'), '--theme', 'paper']);
+  const r = run([example('flow'), '--out', path.join(dir, 'p.html'), '--theme', 'editorial']);
   assert.equal(r.status, 0, r.stderr);
   assert.match(fs.readFileSync(path.join(dir, 'p.html'), 'utf8'), /--font-display:"Newsreader"/);
 });

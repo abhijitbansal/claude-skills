@@ -232,28 +232,28 @@ test('/theme/<name>.json and .css serve a shared theme, fonts come from the sync
   assert.match(json.headers['content-type'], /application\/json/);
   const theme = JSON.parse(json.body);
   assert.equal(theme.name, 'ink');
-  assert.equal(theme.fonts.body.family, 'IBM Plex Sans');
+  assert.equal(theme.fonts.body.family, 'Geist');
   assert.match(theme.dark.page, /^#[0-9a-f]{6}$/i);
   const css = await get(srv.url, '/theme/ink.css');
   assert.equal(css.status, 200);
   assert.match(css.headers['content-type'], /text\/css/);
-  assert.match(css.body, /@font-face\{font-family:"IBM Plex Sans";font-style:normal;font-weight:600;font-display:block;src:url\(\/theme\/fonts\/ibm-plex-sans-latin-600-normal\.woff2\) format\("woff2"\)\}/);
-  assert.match(css.body, /@font-face\{font-family:"JetBrains Mono"/);
-  assert.match(css.body, /#stage\{--sans:"IBM Plex Sans", -apple-system, 'Segoe UI', sans-serif;--mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace\}/);
+  assert.match(css.body, /@font-face\{font-family:"Geist";font-style:normal;font-weight:600;font-display:block;src:url\(\/theme\/fonts\/geist-sans-latin-600-normal\.woff2\) format\("woff2"\)\}/);
+  assert.match(css.body, /@font-face\{font-family:"Geist Mono"/);
+  assert.match(css.body, /#stage\{--sans:"Geist", -apple-system, 'Segoe UI', sans-serif;--mono:"Geist Mono", ui-monospace, Menlo, Consolas, monospace\}/);
   assert.ok(!css.body.includes('data:'), 'the page CSP allows fonts from self only');
   assert.ok(!css.body.includes('Bricolage'), 'the display role is not used, so its font is not offered');
-  const font = await get(srv.url, '/theme/fonts/ibm-plex-sans-latin-600-normal.woff2');
+  const font = await get(srv.url, '/theme/fonts/geist-sans-latin-600-normal.woff2');
   assert.equal(font.status, 200);
   assert.equal(font.headers['content-type'], 'font/woff2');
 }));
 
 test('theme routes refuse unknown names, traversal and anything but a woff2', () => withServer(async (srv) => {
   for (const p of ['/theme/nope.json', '/theme/nope.css', '/theme/..%2Fserver.json', '/theme/fonts/metrics.json',
-    '/theme/fonts/LICENSES/ibm-plex-sans.txt', '/theme/fonts/..%2Fthemes%2Fink.json', '/theme/fonts/%2e%2e/theme.mjs', '/theme/ink.js',
+    '/theme/fonts/LICENSES/geist-sans.txt', '/theme/fonts/..%2Fthemes%2Fink.json', '/theme/fonts/%2e%2e/theme.mjs', '/theme/ink.js',
     // encoded twice: one decode must not leave a slash or a dot-segment for a second decode to find
-    '/theme/fonts/%252e%252e%252fthemes%252fink.json', '/theme/fonts/sub%252Fibm-plex-sans-latin-600-normal.woff2',
-    '/theme/fonts/%2e%2e', '/theme/fonts/%2e%2e%2fibm-plex-sans-latin-600-normal.woff2', '/theme/fonts/%2fibm-plex-sans-latin-600-normal.woff2',
-    '/theme/fonts/ibm-plex-sans-latin-600-normal.woff2%00', '/theme/fonts/.woff2', '/theme/fonts/%5cibm-plex-sans-latin-600-normal.woff2']) {
+    '/theme/fonts/%252e%252e%252fthemes%252fink.json', '/theme/fonts/sub%252Fgeist-sans-latin-600-normal.woff2',
+    '/theme/fonts/%2e%2e', '/theme/fonts/%2e%2e%2fgeist-sans-latin-600-normal.woff2', '/theme/fonts/%2fgeist-sans-latin-600-normal.woff2',
+    '/theme/fonts/geist-sans-latin-600-normal.woff2%00', '/theme/fonts/.woff2', '/theme/fonts/%5cgeist-sans-latin-600-normal.woff2']) {
     assert.equal((await get(srv.url, p)).status, 404, p);
   }
 }));

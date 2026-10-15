@@ -6,32 +6,31 @@ import { measure, wrap, lineHeight, fontFor } from '../text.mjs';
 import { listThemes, loadTheme } from '../theme.mjs';
 
 const METRICS = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../fonts/metrics.json', import.meta.url)), 'utf8'));
-const PLEX = { family: 'IBM Plex Sans', weight: 400, size: 14 };
+const PLEX = { family: 'Geist', weight: 400, size: 14 };
 const PLEX_BOLD = { ...PLEX, weight: 600 };
 
 // Reference widths from Chrome. Method: Playwright (system Chrome, channel 'chrome'),
 // the shipped woff2 loaded via `new FontFace(family, 'url(data:font/woff2;base64,…)')`,
 // then canvas `ctx.font = '<weight> 14px "<family>"'; ctx.measureText(text).width`.
 // Chrome applies kerning; our advance-sum does not, hence the tolerances below.
-// Measured 2026-10-12: Hello (Plex Sans 400) 32.970 px in Chrome vs 33.04 from metrics; the
-// 28-char phrase differs by -0.04% to +0.80% across the eight fonts (Newsreader worst).
+// Measured 2026-10-15 (Geist) / 2026-10-12 (others): Hello (Geist 400) 33.740 px in Chrome vs 33.88 from metrics; the
+// 28-char phrase differs by -0.04% to +0.80% for the older fonts (Newsreader worst) and +1.8% for Geist 400/600 (kerning; inside the 2% tolerance).
 const CHROME = {
-  'IBM Plex Sans|400': { Hello: 32.969970703125, 'Checkout API gateway service': 189.32174682617188 },
-  'IBM Plex Sans|600': { Hello: 33.89396667480469, 'Checkout API gateway service': 196.46177673339844 },
-  'IBM Plex Mono|400': { Hello: 41.999969482421875, 'Checkout API gateway service': 235.1998291015625 },
+  'Geist|400': { Hello: 33.73997497558594, 'Checkout API gateway service': 197.3858184814453 },
+  'Geist|600': { Hello: 35.43394470214844, 'Checkout API gateway service': 206.5837860107422 },
+  'Geist Mono|400': { Hello: 41.999969482421875, 'Checkout API gateway service': 235.1998291015625 },
   'Newsreader|600': { Hello: 33.900970458984375, 'Checkout API gateway service': 188.48878479003906 },
   'Bricolage Grotesque|600': { Hello: 34.033966064453125, 'Checkout API gateway service': 204.30178833007812 },
   'Atkinson Hyperlegible|400': { Hello: 31.625961303710938, 'Checkout API gateway service': 186.05982971191406 },
   'Atkinson Hyperlegible|700': { Hello: 34.24397277832031, 'Checkout API gateway service': 202.27183532714844 },
-  'JetBrains Mono|400': { Hello: 41.999969482421875, 'Checkout API gateway service': 235.1998291015625 },
 };
 
 test('empty string measures 0', () => {
   assert.equal(measure('', PLEX), 0);
 });
 
-test('Hello in Plex Sans 400 14px matches Chrome within 0.5 px', () => {
-  assert.ok(Math.abs(measure('Hello', PLEX) - 32.97) <= 0.5, String(measure('Hello', PLEX)));
+test('Hello in Geist 400 14px matches Chrome within 0.5 px', () => {
+  assert.ok(Math.abs(measure('Hello', PLEX) - 33.74) <= 0.5, String(measure('Hello', PLEX)));
 });
 
 test('every shipped font stays within 2% of Chrome on a phrase (kerning slack) and 0.5 px on Hello', () => {
@@ -57,17 +56,17 @@ test('bold is wider than regular', () => {
 });
 
 test('weight defaults to 400 and size to 14', () => {
-  assert.equal(measure('Hello', { family: 'IBM Plex Sans' }), measure('Hello', PLEX));
+  assert.equal(measure('Hello', { family: 'Geist' }), measure('Hello', PLEX));
 });
 
 test('a weight the family lacks resolves to the nearest available one', () => {
-  // Plex Sans ships 400 and 600; 500 is closer to 400 (tie goes lighter), 700 to 600.
+  // Geist ships 400 and 600; 500 is closer to 400 (tie goes lighter), 700 to 600.
   assert.equal(measure('Hello', { ...PLEX, weight: 500 }), measure('Hello', PLEX));
   assert.equal(measure('Hello', { ...PLEX, weight: 700 }), measure('Hello', PLEX_BOLD));
 });
 
 test('unknown family throws and lists what is available', () => {
-  assert.throws(() => measure('x', { family: 'Comic Sans' }), /Comic Sans.*IBM Plex Sans/);
+  assert.throws(() => measure('x', { family: 'Comic Sans' }), /Comic Sans.*Geist/);
 });
 
 test('wrap breaks on words; every line fits', () => {
@@ -107,11 +106,11 @@ test('a long word mid-sentence breaks on its own lines, later words rejoin the t
 });
 
 test('CJK falls back to a safe non-zero width of at least 1 em per glyph', () => {
-  const { fallback, unitsPerEm } = METRICS['IBM Plex Sans|400'];
+  const { fallback, unitsPerEm } = METRICS['Geist|400'];
   const w = measure('注文データベース', PLEX);
   assert.ok(w > 0);
   assert.ok(w >= (8 * fallback / unitsPerEm) * 14, `${w}`);
-  // fallback x 1.6 is 0.91 em for Plex Sans, so the 1 em floor applies.
+  // fallback x 1.6 is 0.96 em for Geist, so the 1 em floor applies.
   assert.ok(Math.abs(w - 8 * 14) < 1e-9, `${w}`);
 });
 
@@ -134,7 +133,7 @@ test('wide glyphs hard-break consistently with measure()', () => {
 });
 
 test('unknown non-CJK codepoints use plain fallback; emoji never measure 0', () => {
-  const fb = METRICS['IBM Plex Sans|400'].fallback / METRICS['IBM Plex Sans|400'].unitsPerEm * 14;
+  const fb = METRICS['Geist|400'].fallback / METRICS['Geist|400'].unitsPerEm * 14;
   assert.ok(Math.abs(measure('Ж', PLEX) - fb) < 1e-9, 'Cyrillic is below U+2E80');
   assert.ok(measure('😀', PLEX) > 0);
 });
@@ -142,15 +141,16 @@ test('unknown non-CJK codepoints use plain fallback; emoji never measure 0', () 
 test('lineHeight is at least size x 1.3 and scales with size', () => {
   assert.ok(lineHeight(PLEX) >= 14 * 1.3 - 1e-9);
   assert.ok(lineHeight({ ...PLEX, size: 28 }) > lineHeight(PLEX));
-  assert.ok(lineHeight({ family: 'IBM Plex Sans' }) >= 14 * 1.3 - 1e-9);
+  assert.ok(lineHeight({ family: 'Geist' }) >= 14 * 1.3 - 1e-9);
 });
 
 test('fontFor: body and mono give their lowest weight, display its declared weight', () => {
   const paper = loadTheme('paper');
-  assert.deepEqual(fontFor(paper, 'body'), { family: 'IBM Plex Sans', weight: 400 });
-  assert.deepEqual(fontFor(paper, 'mono'), { family: 'IBM Plex Mono', weight: 400 });
-  assert.deepEqual(fontFor(paper, 'display'), { family: 'Newsreader', weight: 600 });
+  assert.deepEqual(fontFor(paper, 'body'), { family: 'Geist', weight: 400 });
+  assert.deepEqual(fontFor(paper, 'mono'), { family: 'Geist Mono', weight: 400 });
+  assert.deepEqual(fontFor(paper, 'display'), { family: 'Geist', weight: 600 });
   assert.deepEqual(fontFor(loadTheme('editorial'), 'body'), { family: 'Atkinson Hyperlegible', weight: 400 });
+  assert.deepEqual(fontFor(loadTheme('editorial'), 'display'), { family: 'Newsreader', weight: 600 });
   assert.throws(() => fontFor(paper, 'heading'), /heading.*display, body, mono/);
 });
 

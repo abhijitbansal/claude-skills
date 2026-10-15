@@ -192,7 +192,7 @@ Everything this plugin depends on is open source:
 | [ELK](https://github.com/kieler/elkjs) (`elkjs`) | EPL-2.0 |
 | [Lucide](https://lucide.dev) icons | ISC |
 | [Simple Icons](https://simpleicons.org) brand marks | CC0-1.0 |
-| IBM Plex Sans, IBM Plex Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible, JetBrains Mono (latin subsets, via Fontsource) | OFL-1.1 |
+| Geist, Geist Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible (latin subsets, via Fontsource) | OFL-1.1 |
 | ffmpeg (system binary, not vendored) | LGPL/GPL |
 | [Kokoro](https://github.com/hexgrad/kokoro) TTS (`kokoro-js`, installed on demand) | Apache-2.0 |
 

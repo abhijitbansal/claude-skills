@@ -2,15 +2,15 @@
   "width": 686,
   "height": 1106,
   "drawing": {
-    "x": 200,
+    "x": 190,
     "y": 30,
-    "width": 286,
+    "width": 306,
     "height": 1076
   },
   "legend": {
-    "x": 24,
+    "x": 24.7,
     "y": 24,
-    "width": 638,
+    "width": 637.3,
     "height": 20,
     "items": [
       {
@@ -19,80 +19,80 @@
         "family": "bare",
         "count": 1,
         "dx": 0,
-        "width": 50.2
+        "width": 50.1
       },
       {
         "kind": "kind",
         "name": "io",
         "family": "service",
         "count": 1,
-        "dx": 66.2,
-        "width": 36.1
+        "dx": 66.1,
+        "width": 34.1
       },
       {
         "kind": "kind",
         "name": "decision",
         "family": "decision",
         "count": 1,
-        "dx": 118.3,
-        "width": 68.4
+        "dx": 116.2,
+        "width": 67.9
       },
       {
         "kind": "kind",
         "name": "step",
         "family": "service",
         "count": 1,
-        "dx": 202.7,
-        "width": 48.8
+        "dx": 200.1,
+        "width": 48
       },
       {
         "kind": "kind",
         "name": "wait",
         "family": "service",
         "count": 1,
-        "dx": 267.5,
-        "width": 48.1
+        "dx": 264.1,
+        "width": 47.4
       },
       {
         "kind": "kind",
         "name": "subprocess",
         "family": "service",
         "count": 1,
-        "dx": 331.6,
-        "width": 84
+        "dx": 327.5,
+        "width": 84.9
       },
       {
         "kind": "kind",
         "name": "end",
         "family": "bare",
         "count": 1,
-        "dx": 431.6,
-        "width": 45.9
+        "dx": 428.4,
+        "width": 44.2
       },
       {
         "kind": "style",
         "name": "solid",
         "style": "solid",
         "label": "call",
-        "dx": 493.5,
-        "width": 47.4
+        "dx": 488.6,
+        "width": 48.7
       },
       {
         "kind": "style",
         "name": "dashed",
         "style": "dashed",
         "label": "secondary",
-        "dx": 556.9,
-        "width": 81.1
+        "dx": 553.3,
+        "width": 84
       }
     ]
   },
   "nodes": [
     {
       "id": "begin",
-      "x": 301,
+      "x": 298,
       "y": 54,
-      "width": 78,
+      "width": 80,
       "height": 40,
       "shape": "stadium",
       "lines": [
@@ -108,9 +108,9 @@
     },
     {
       "id": "ask",
-      "x": 230,
+      "x": 224,
       "y": 166,
-      "width": 220,
+      "width": 228,
       "height": 54,
       "shape": "parallelogram",
       "lines": [
@@ -126,9 +126,9 @@
     },
     {
       "id": "known",
-      "x": 224,
+      "x": 214,
       "y": 384,
-      "width": 238,
+      "width": 258,
       "height": 56,
       "shape": "diamond",
       "lines": [
@@ -144,9 +144,9 @@
     },
     {
       "id": "send",
-      "x": 280,
+      "x": 277,
       "y": 649,
-      "width": 126,
+      "width": 132,
       "height": 40,
       "shape": "rect",
       "lines": [
@@ -162,9 +162,9 @@
     },
     {
       "id": "wait",
-      "x": 267,
+      "x": 263,
       "y": 761,
-      "width": 152,
+      "width": 160,
       "height": 54,
       "shape": "rounded-rect",
       "lines": [
@@ -180,9 +180,9 @@
     },
     {
       "id": "check",
-      "x": 262,
+      "x": 259,
       "y": 916,
-      "width": 162,
+      "width": 168,
       "height": 54,
       "shape": "double-bar-rect",
       "lines": [
@@ -198,9 +198,9 @@
     },
     {
       "id": "done",
-      "x": 259,
+      "x": 255,
       "y": 1042,
-      "width": 168,
+      "width": 176,
       "height": 40,
       "shape": "stadium",
       "lines": [
@@ -218,9 +218,9 @@
   "groups": [
     {
       "id": "email",
-      "x": 243,
+      "x": 239,
       "y": 609,
-      "width": 200,
+      "width": 208,
       "height": 230,
       "label": "Email",
       "depth": 0,
@@ -234,11 +234,11 @@
       "to": "ask",
       "points": [
         {
-          "x": 340,
+          "x": 338,
           "y": 94
         },
         {
-          "x": 340,
+          "x": 338,
           "y": 166
         }
       ],
@@ -251,19 +251,19 @@
       "to": "known",
       "points": [
         {
-          "x": 376.7,
+          "x": 376,
           "y": 220
         },
         {
-          "x": 376.7,
+          "x": 376,
           "y": 336
         },
         {
-          "x": 382.7,
+          "x": 386,
           "y": 336
         },
         {
-          "x": 382.7,
+          "x": 386,
           "y": 384
         }
       ],
@@ -300,11 +300,11 @@
       "to": "ask",
       "points": [
         {
-          "x": 303.3,
+          "x": 300,
           "y": 384
         },
         {
-          "x": 303.3,
+          "x": 300,
           "y": 220
         }
       ],
@@ -312,7 +312,7 @@
       "both": false,
       "label": {
         "text": "no",
-        "x": 267.3,
+        "x": 264,
         "y": 292,
         "width": 30,
         "height": 20

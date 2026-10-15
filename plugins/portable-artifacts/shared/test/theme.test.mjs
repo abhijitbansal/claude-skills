@@ -19,7 +19,7 @@ test('themeCss: light tokens on :root, dark under the media query AND data-theme
   }
   assert.match(css, /@media \(prefers-color-scheme: dark\)\{:root:not\(\[data-theme="light"\]\)\{color-scheme:dark;/);
   assert.match(css, /:root\[data-theme="dark"\]\{color-scheme:dark;/);
-  assert.match(css, /@font-face\{font-family:"IBM Plex Sans";font-style:normal;font-weight:400;font-display:swap;src:url\(data:font\/woff2;base64,[A-Za-z0-9+/=]+\) format\("woff2"\)\}/);
+  assert.match(css, /@font-face\{font-family:"Geist";font-style:normal;font-weight:400;font-display:swap;src:url\(data:font\/woff2;base64,[A-Za-z0-9+/=]+\) format\("woff2"\)\}/);
   assert.ok(!/url\((?!data:)/.test(css), 'no external url() anywhere');
 });
 
@@ -40,4 +40,17 @@ test('kind hues and the glow are tokens with their own CSS variables', () => {
   assert.ok(css.includes('--k-service:#38bdf8'), 'dark service hue');
   assert.ok(css.includes('--glow:#8fd0ff'), 'dark glow');
   for (const v of ['--k-data', '--k-queue', '--k-external', '--k-decision']) assert.ok(css.includes(`${v}:`), v);
+});
+
+test('themes use the Geist type system; editorial keeps its serif display', () => {
+  const fam = (t, role) => loadTheme(t).fonts[role].family;
+  for (const t of ['paper', 'blueprint']) {
+    assert.equal(fam(t, 'display'), 'Geist');
+    assert.equal(fam(t, 'body'), 'Geist');
+  }
+  assert.equal(fam('ink', 'display'), 'Bricolage Grotesque');
+  assert.equal(fam('ink', 'body'), 'Geist');
+  assert.equal(fam('editorial', 'display'), 'Newsreader');
+  assert.equal(fam('editorial', 'body'), 'Atkinson Hyperlegible');
+  for (const t of listThemes()) assert.equal(fam(t, 'mono'), 'Geist Mono');
 });

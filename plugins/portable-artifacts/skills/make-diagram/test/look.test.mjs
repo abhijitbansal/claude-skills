@@ -62,9 +62,9 @@ test('a card has a tile (icon, or the emoji instead), the kind in spaced capital
 
 test('the card is at least as wide as its type line; notes are measured in the theme mono font at 11 px', () => {
   const f = fonts(theme);
-  assert.deepEqual([f.note.family, f.note.weight, f.note.size], ['IBM Plex Mono', 400, 11]);
-  assert.deepEqual([f.type.family, f.type.weight, f.type.size], ['IBM Plex Sans', 600, 10]);
-  assert.equal(fonts(loadTheme('ink')).note.family, 'JetBrains Mono');
+  assert.deepEqual([f.note.family, f.note.weight, f.note.size], ['Geist Mono', 400, 11]);
+  assert.deepEqual([f.type.family, f.type.weight, f.type.size], ['Geist', 600, 10]);
+  assert.equal(fonts(loadTheme('ink')).note.family, 'Geist Mono');
   assert.deepEqual([f.legend.size, f.legend.weight], [11, 400]);
   const narrow = nodeSize({ id: 'x', label: 'Io' }, KINDS.architecture.kinds.external, theme);
   assert.ok(narrow.width >= trackedWidth('EXTERNAL', f.type, TYPE_TRACK) + 28 + TILE_SIZE + TILE_GAP - 2, `${narrow.width} holds the type line`);

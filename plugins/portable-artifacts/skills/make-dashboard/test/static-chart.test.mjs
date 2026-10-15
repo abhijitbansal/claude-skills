@@ -420,10 +420,10 @@ test('thin: the last reading is added when there is room, else it takes the plac
 
 test('tick labels are sized by the theme font\'s real advances, and by Vega\'s 0.8 em for a family it has none for', () => {
   const sample = '1,234,567';
-  for (const family of ['IBM Plex Sans', 'Atkinson Hyperlegible', 'JetBrains Mono']) {
+  for (const family of ['Geist', 'Atkinson Hyperlegible', 'Geist Mono']) {
     assert.equal(labelWidth(sample, 12, family), measure(sample, { family, size: 12, weight: 400 }), family);
   }
-  assert.notEqual(labelWidth(sample, 12, 'IBM Plex Sans'), labelWidth(sample, 12, 'Atkinson Hyperlegible'));
+  assert.notEqual(labelWidth(sample, 12, 'Geist'), labelWidth(sample, 12, 'Atkinson Hyperlegible'));
   assert.equal(labelWidth(sample, 12, 'No Such Sans'), sample.length * 0.8 * 12, 'unknown family: the estimate Vega uses');
   assert.equal(labelWidth(sample, 12), sample.length * 0.8 * 12, 'no family: the same estimate');
 });
@@ -431,8 +431,8 @@ test('tick labels are sized by the theme font\'s real advances, and by Vega\'s 0
 test('tickLayout fits the labels of the font it is given: a narrower face keeps more ticks in the same room', () => {
   const ticks = (family, pixels) => tickLayout({ domain: [0, 100], pixels, label: () => sample, fontSize: 12, horizontal: true, max: 9, family }).values.length;
   const sample = '1,234,567';
-  assert.deepEqual([ticks('Atkinson Hyperlegible', 420), ticks('IBM Plex Sans', 420)], [6, 3], 'Atkinson is narrower than Plex Sans');
-  assert.deepEqual([ticks('IBM Plex Sans', 460), ticks('JetBrains Mono', 460)], [6, 3], 'Plex Sans is narrower than the monospace');
+  assert.deepEqual([ticks('Atkinson Hyperlegible', 420), ticks('Geist', 420)], [6, 3], 'Atkinson is narrower than Geist');
+  assert.deepEqual([ticks('Geist', 460), ticks('Geist Mono', 460)], [6, 3], 'Geist is narrower than the monospace');
   assert.equal(ticks('No Such Sans', 460), ticks(undefined, 460), 'unknown family = the 0.8 em estimate');
   assert.equal(ticks(undefined, 460), 3, 'which is wider than any of the real faces here');
 });
