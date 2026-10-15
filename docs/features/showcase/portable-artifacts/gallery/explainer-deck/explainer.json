@@ -117,7 +117,7 @@
     },
     {
       "type": "table",
-      "title": "Haiku matches Sonnet on every skill",
+      "title": "Haiku and Sonnet both pass every build",
       "label": "Haiku vs Sonnet",
       "columns": [
         "Skill",
@@ -194,7 +194,7 @@
     },
     {
       "type": "text",
-      "title": "Install three skills before asking for a deck",
+      "title": "Install all three skills before asking for decks",
       "label": "Before you start",
       "text": "The explainer embeds diagrams and charts from its sibling skills. Each page works offline; keep a page and its assets folder together when you share it."
     }

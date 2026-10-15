@@ -19,7 +19,7 @@ any agent that can run shell commands. Nothing leaves your machine.
   the geometry (text that does not fit its box, overlapping nodes, labels on
   top of nodes), so a spec that validates is buildable.
 - **Deterministic**: the same spec and versions give byte-identical
-  pages. The only thing that varies is the provenance date in the footer (the
+  pages. The only thing that varies is the date in the provenance line (the
   build day); set `SOURCE_DATE_EPOCH` to pin it.
 - **A page worth opening**: a story player (named chapters of beats, a travelling dot along each hop, a transport bar with speed and loop), an Explore panel (what a node sends and receives, the shortest route between two nodes, Find), kind-coloured cards with emoji tiles, lanes and a legend, light and dark, full screen, SVG and PNG export.
 

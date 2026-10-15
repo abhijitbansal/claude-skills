@@ -37,7 +37,7 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
   loop.
 - **Targeted edits** — a change is one field in the spec, never regenerated
   code, so everything else stays exactly the same.
-- **Reproducible** — the same spec always produces the same page or video. The one thing that varies is the provenance date in the footer, the day you build; set `SOURCE_DATE_EPOCH` to pin it.
+- **Reproducible** — the same spec always produces the same page or video. What varies is the provenance date in the footer, the day you build (set `SOURCE_DATE_EPOCH` to pin it), and a dashboard's refresh time.
 - **Offline** — after a one-time install nothing touches the network except
   your own data sources. Specs that try (remote chart data, `url()` colours)
   are rejected, and the outputs carry a strict CSP.
@@ -46,8 +46,8 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
   effort level and agent that wrote the spec, from the spec's `generatedBy`
   field or the `--model`, `--effort` and `--agent` build flags. A field the
   agent does not know reads "not reported"; nothing is guessed. The make-motion
-  MP4 carries it in its `comment` and `artist` tags.
-- **Easy to read** — Geist type on every page, and the explainer opens with a
+  MP4 carries it in its `comment` tag, and the model in `artist` when it is reported.
+- **Easy to read** — Geist type on every HTML page (make-motion's unthemed video keeps Inter and JetBrains Mono), and the explainer opens with a
   hero and TL;DR card, short section `label`s in its contents list and soft text
   caps that warn (never fail) when a title, paragraph or card runs long.
 
@@ -62,7 +62,7 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
 
 Then ask for a dashboard, a diagram, an explainer or a video, or call the skill directly:
 `/make-dashboard …`, `/make-diagram …`, `/make-explainer …` or `/make-motion …`. On first use the agent runs the
-one-time `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboard, make-diagram and make-explainer).
+skill's doctor and, once you agree, installs the dependencies (`npm ci` inside the skill folder; `npm ci --omit=dev` for make-dashboard, make-diagram and make-explainer).
 
 ### Any agent, with `npx skills`
 
@@ -75,9 +75,10 @@ npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram m
 npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion -a claude-code codex github-copilot -y
 ```
 
-It copies the folders but doesn't install their dependencies, so the agent
-runs `npm ci` inside each skill folder on first use (the SKILL.md tells it
-to; make-dashboard, make-diagram and make-explainer need only `npm ci --omit=dev`).
+It copies the folders but doesn't install their dependencies, so on first use
+the agent runs the skill's doctor and, once you agree, `npm ci` inside the skill
+folder (the SKILL.md tells it to; make-dashboard, make-diagram and make-explainer
+need only `npm ci --omit=dev`).
 
 **`make-explainer` needs `make-diagram` and `make-dashboard` next to it** to
 draw diagrams, charts and card icons (and `make-motion` to render a motion spec;
@@ -134,9 +135,10 @@ To build a dashboard, a diagram, an explainer page or an animated video, read an
 
 Not sure what is missing? Run `node <skill-dir>/scripts/doctor.mjs --json` (it
 needs only Node, so it works before `npm ci`). It lists each missing item with
-its size and the fix for your OS; add `--for <spec.json|check|voiceover>` for
-sister skills, the check browser or a voiceover, and `--fix <ids>` to install the
-ones that need no `sudo`. Agents run it first and ask once before installing
+its size and the fix for your OS; add `--for` with a spec `.json` (every skill;
+only make-explainer adds sister skills from it), `check` (make-diagram and
+make-explainer: the check browser) or `voiceover` (make-motion), and `--fix <ids>`
+to install the ones that need no `sudo`. Agents run it first and ask once before installing
 anything.
 
 | | make-dashboard | make-diagram | make-explainer | make-motion |
@@ -189,17 +191,18 @@ Each skill folder also has its own README.
 
 ## Tested hosts
 
-Tested live on Claude Code and GitHub Copilot CLI (Copilot: one non-interactive
-run per skill on 2026-10-15, with the interactive install consent and the
-browser check not exercised). The Codex CLI and Gemini CLI install paths were
-verified against those hosts' documentation, not run live. Details:
+Tested live on this branch: **Claude Code**, and **GitHub Copilot CLI 1.0.98** (one non-interactive run per skill on 2026-10-15, plus reruns of the doctor install path; the browser check and the ask-first consent prompt were not exercised there). An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**: dashboard 10/10, motion 6/10, the last four motion prompts stopped by the account's usage limit ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)). **Gemini CLI**: install paths verified against its documentation, not run live.
+
+Details:
 [`eval/results/summary-portability-copilot-2026-10-15.md`](eval/results/summary-portability-copilot-2026-10-15.md)
 and [`eval/results/summary-install-targets-2026-10-15.md`](eval/results/summary-install-targets-2026-10-15.md).
 
 ## Cross-host eval
 
 [`eval/`](eval/) runs a fixed set of prompts per skill (8 to 10) through `claude`,
-`codex`, `codex --oss` (Ollama), `gemini` and `copilot`, and scores spec
+`codex`, `codex --oss` (Ollama), `gemini` and `copilot`. The full run on
+2026-10-10 covered dashboard and motion on claude, codex, copilot and codex --oss;
+Gemini was skipped. The harness scores spec
 written / valid / validate retries / build or render ok / changed paths on edit
 prompts. Results summaries live in `eval/results/summary-*.md`.
 

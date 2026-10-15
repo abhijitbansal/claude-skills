@@ -19,9 +19,10 @@ shell commands.
   same video.
 - **Self-check for models**: `--contact-sheet` writes one PNG per scene, so a
   model that can read images can review its own work before rendering.
-- **Stamped**: the preview has a favicon and a provenance footer (model, effort,
-  agent from `generatedBy` or `--model`/`--effort`/`--agent`; "not reported" when
-  unknown), and the MP4 carries the same in its metadata. The preview has no theme
+- **Stamped**: the preview has a favicon and a provenance footer (model, effort
+  and agent from the spec's `generatedBy`; "not reported" when unknown; `preview.mjs`
+  takes no flags), and the MP4 carries the same in its metadata (`render.mjs` also
+  takes `--model`/`--effort`/`--agent`). The preview has no theme
   toggle: it is a dark-only local tool, and the video follows the spec's theme.
   `scripts/doctor.mjs` reports a missing ffmpeg or browser before the first render.
 
@@ -92,7 +93,7 @@ examples in [`references/examples/`](references/examples/).
 | `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` |
 | `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. The MP4 timing is exact | `--open` |
 | `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--contact-sheet` |
-| `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover>`, `--fix <id[,id]>` |
+| `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci` | `--json`, `--for <spec.json\|voiceover>`, `--fix <id[,id]>` |
 
 Limits: up to 50 scenes and 120 s in total, up to 20 audio tracks; fps is 24, 25, 30 or 60; each side
 is 16–3840 px. Frame *i* samples `t = i / fps`, so put a final keyframe at

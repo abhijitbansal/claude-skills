@@ -54,9 +54,9 @@ never prompts and never installs anything on its own.
 
 ```bash
 node <skill-dir>/scripts/doctor.mjs --json                  # what is missing, with the fix for your OS
-node <skill-dir>/scripts/doctor.mjs --json --for spec.json  # also the sister skills this spec needs
-node <skill-dir>/scripts/doctor.mjs --json --for check      # Playwright and a browser, before check.mjs
-node <skill-dir>/scripts/doctor.mjs --json --for voiceover  # kokoro-js, before a make-motion voiceover
+node <skill-dir>/scripts/doctor.mjs --json --for spec.json  # make-explainer: also the sister skills the spec needs
+node <skill-dir>/scripts/doctor.mjs --json --for check      # make-diagram, make-explainer: Playwright and a browser
+node <skill-dir>/scripts/doctor.mjs --json --for voiceover  # make-motion: kokoro-js, before a voiceover
 node <skill-dir>/scripts/doctor.mjs --fix node_modules      # install the named ids (comma-separated)
 ```
 
@@ -67,18 +67,23 @@ needs `sudo`, has no automatic fix or fails (for example a sandbox without
 network) comes back to you as the exact command to run yourself; in Claude Code
 prefix it with `!`. On no the agent does what it can without the item, for
 example make-motion still writes and validates `motion.json` and hands you the
-render commands. Unknown or misspelled arguments exit 2 and list the accepted
-ones.
+render commands. `--for` takes a spec `.json` in every skill (only make-explainer
+adds sister skills from it), `check` in make-diagram and make-explainer, and
+`voiceover` in make-motion; make-dashboard has no keyword target. Unknown or
+misspelled arguments exit 2 and list the accepted ones.
 
 ### Tested hosts
 
-Tested live on **Claude Code** and **GitHub Copilot CLI**. For Copilot CLI 1.0.98
-there was one non-interactive run per skill on 2026-10-15: each run picked up its
-skill, ran the doctor, set the host name, validated and built a page. The
-browser check (`check.mjs`) was never run by an agent there, and consent was
-pre-granted in the prompt, so the ask-first step was not exercised. The
-**Codex CLI** and **Gemini CLI** install paths were checked against those hosts'
-current documentation on 2026-10-15 and not run live. Results:
+Tested live on this branch: **Claude Code**, and **GitHub Copilot CLI 1.0.98**
+(one non-interactive run per skill on 2026-10-15, plus reruns of the doctor
+install path: each run picked up its skill, ran the doctor, set the host name,
+validated and built a page). The browser check (`check.mjs`) was never run by an
+agent there, and consent was pre-granted in the prompt, so the ask-first step was
+not exercised. An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**:
+dashboard 10/10, motion 6/10, with the last four motion prompts stopped by the
+account's usage limit ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)).
+**Gemini CLI**: its install paths were checked against its documentation on
+2026-10-15 and not run live. Results:
 [`eval/results/summary-portability-copilot-2026-10-15.md`](eval/results/summary-portability-copilot-2026-10-15.md)
 and [`eval/results/summary-install-targets-2026-10-15.md`](eval/results/summary-install-targets-2026-10-15.md).
 
@@ -281,8 +286,8 @@ intro and "If something fails"), `concept` (tl;dr, explanation, cards, steps),
 The contents list and a small eyebrow above the heading use it; `title` stays
 the finding sentence. Without a label the contents list falls back to the title.
 A label shows on every section that has a `title`, except a `callout`, and on a
-leading `tldr`'s hero card even without a title. `scaffold.mjs` writes labels
-for you.
+leading `tldr`'s hero card even without a title. `scaffold.mjs` adds a label
+placeholder (`TODO: 2-4 word label`) to each section; the agent fills it in.
 
 **In the page:** the page opens with a hero (title, subtitle, meta chips and the
 leading `tldr` as a card with an accent rule), then the numbers; sections
@@ -361,7 +366,11 @@ wrote it, or override per field at build time with flags:
 
 ```bash
 node <skill-dir>/scripts/build.mjs spec.json --model "Claude Opus 5.5" --effort high --agent "Claude Code"
+node <skill-dir>/scripts/render.mjs motion.json --model "Claude Opus 5.5" --effort high --agent "Claude Code"   # make-motion
 ```
+
+make-motion's `preview.mjs` takes no provenance flags: the preview footer comes
+from the spec's `generatedBy`, and `render.mjs` takes the flags for the MP4.
 
 Each field is 1 to 60 characters from `A-Za-z0-9 ._:/()+-`; anything else fails
 validation (exit 1) and never reaches the page. A field the agent does not know is
@@ -369,11 +378,12 @@ left out, and the page reads "not reported": nothing is guessed. The stamp shows
 a footer line (make-diagram: a line under the title), for example
 `make-explainer · Claude Haiku · low effort · Claude Code · 15 Oct 2026`, and as
 `<meta name="generator">`. The make-motion preview shows it in its footer, and the
-MP4 gets it in the `comment` tag (and the model in `artist` when it is reported). The stamp lives in
-the spec, so a dashboard refresh keeps the original author. Set `SOURCE_DATE_EPOCH`
-to pin the date in the footer for a reproducible build.
+MP4 gets it in the `comment` tag (and the model in `artist` when it is reported). When `generatedBy`
+is set in the spec, a dashboard refresh keeps the original author; a stamp passed
+only as flags is not kept by a refresh run without them. A dashboard also shows its
+refresh time. Set `SOURCE_DATE_EPOCH` to pin the footer date for a reproducible build.
 
-**Type.** Geist and Geist Mono everywhere, with a serif display face only in the
+**Type.** Geist and Geist Mono on every HTML page (the make-motion video, which has no theme in its spec, keeps Inter and JetBrains Mono), with a serif display face only in the
 `editorial` theme (Newsreader headings, Atkinson Hyperlegible body) and Bricolage
 Grotesque headings in `ink`. Links in running text are underlined; buttons,
 navigation and cards are not.

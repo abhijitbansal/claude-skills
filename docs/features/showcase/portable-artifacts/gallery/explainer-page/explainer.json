@@ -242,7 +242,7 @@
     },
     {
       "type": "chart",
-      "title": "Haiku and Sonnet pass all 30 runs",
+      "title": "Haiku and Sonnet pass 30; gemma4 passes 15",
       "label": "Eval pass rates",
       "kind": "bar",
       "x": "model",
@@ -273,7 +273,7 @@
     },
     {
       "type": "motion",
-      "title": "A narrated clip walks from prompt to dashboard",
+      "title": "A narrated 15 second clip: prompt to dashboard",
       "label": "Narrated clip",
       "video": "media/prompt-to-dashboard.mp4",
       "poster": "media/prompt-to-dashboard-poster.jpg",
@@ -281,7 +281,7 @@
     },
     {
       "type": "motion",
-      "title": "A launch announcement counts up to 3x faster",
+      "title": "10 second launch clip: up to 3x faster",
       "label": "Launch clip",
       "video": "media/launch-announcement.mp4",
       "poster": "media/launch-announcement-poster.jpg",
@@ -289,7 +289,7 @@
     },
     {
       "type": "motion",
-      "title": "A clip explains the make-dashboard SQL guard",
+      "title": "12 second clip explains the make-dashboard SQL guard",
       "label": "SQL guard clip",
       "video": "media/sql-guard-explainer.mp4",
       "poster": "media/sql-guard-explainer-poster.jpg",
@@ -364,7 +364,7 @@
     {
       "type": "callout",
       "tone": "good",
-      "title": "CI is green and eval-gated skills pass",
+      "title": "CI is green; eval-gated skills pass with Haiku",
       "text": "CI on PR #38 passes 5 of 5 checks. make-dashboard v2, make-diagram and make-explainer each passed their Haiku eval gate. make-motion has no eval gate yet."
     }
   ]
