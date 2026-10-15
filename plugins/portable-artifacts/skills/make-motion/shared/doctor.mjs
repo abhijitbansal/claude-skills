@@ -13,6 +13,7 @@ const REPO = 'abhijitbansal/claude-skills';
 const KOKORO_PIN = 'kokoro-js@1.2.1';
 const SKILLS_CLI = 'skills@1.7.2';
 const USER_SCOPE_DIRS = ['.claude', '.agents', '.copilot', '.gemini'];
+const PROJECT_SCOPE_DIRS = [...USER_SCOPE_DIRS, '.github'];
 const USAGE = 'doctor.mjs [--json] [--for <spec.json|target>] | --fix <id[,id]>';
 
 // Passed to requirementsFor() by --fix: every requirement the skill could need.
@@ -28,6 +29,7 @@ export function defaultCtx(skillDir) {
     cwd: process.cwd(),
     homedir: os.homedir(),
     exists: (p) => fs.existsSync(p),
+    realpath: (p) => fs.realpathSync(p),
     isExecutable: (p) => {
       try {
         fs.accessSync(p, fs.constants.X_OK);
@@ -40,30 +42,48 @@ export function defaultCtx(skillDir) {
   };
 }
 
-const isUnder = (child, parent) => {
-  const rel = path.relative(parent, child);
-  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
-};
-
+const pp = (ctx) => (ctx.platform === 'win32' ? path.win32 : path.posix);
 const manualAll = (cmd) => ({ darwin: cmd, linux: cmd, win32: cmd });
 const argvOf = (step) => (Array.isArray(step) ? step : step.argv);
-const quote = (a) => (/\s/.test(a) ? JSON.stringify(a) : a);
-const render = (steps) => steps.map((st) => argvOf(st).map(quote).join(' ')).join(' && ');
 
 // cmd.exe quoting: one argument -> one token. Metacharacters and whitespace
-// force double quotes; an inner " doubles; % is broken out of the quotes and
-// caret-escaped so %VAR% pairs cannot form.
+// force double quotes. Backslash runs before an inner ", before a % break-out
+// or at the end double (CRT rule); " doubles to ""; % is broken out of the
+// quotes and caret-escaped so %VAR% pairs cannot form.
 const CMD_SPECIAL = /[\s&|<>^()%!"]/;
 export function cmdQuote(arg) {
+  if (/[\0\r\n]/.test(arg)) throw new TypeError('argument contains a NUL, CR or LF character');
   if (arg !== '' && !CMD_SPECIAL.test(arg)) return arg;
-  return `"${arg.replace(/"/g, '""').replace(/%/g, '"^%"')}"`;
+  const inner = arg.replace(/(\\*)("|%|$)/g, (_m, bs, c) => bs + bs + (c === '"' ? '""' : c === '%' ? '"^%"' : ''));
+  return `"${inner}"`;
 }
 export const cmdLine = (argv) => argv.map(cmdQuote).join(' ');
+
+// Copy-paste display quoting: POSIX single quotes, cmd.exe double quotes.
+const POSIX_SAFE = /^[A-Za-z0-9_@%+=:,./-]+$/;
+const posixQuote = (a) => (POSIX_SAFE.test(a) ? a : `'${a.replace(/'/g, "'\\''")}'`);
+const quoteFor = (platform) => (platform === 'win32' ? cmdQuote : posixQuote);
+
+// Steps joined with &&; a step with a cwd is shown as `cd <dir> && <cmd>`.
+export function render(steps, platform) {
+  const q = quoteFor(platform);
+  const cd = platform === 'win32' ? 'cd /d' : 'cd';
+  return steps
+    .map((st) => {
+      const line = argvOf(st).map(q).join(' ');
+      return !Array.isArray(st) && st.cwd !== undefined ? `${cd} ${q(st.cwd)} && ${line}` : line;
+    })
+    .join(' && ');
+}
 const isExec = (ctx, p) => (ctx.isExecutable ? ctx.isExecutable(p) : ctx.exists(p));
+
+// Fix order: lower rank first. Others (unknown ids) rank last, keeping list order.
+const RANK = { node: 0, nodeModules: 1, sister: 2, ffmpeg: 3, chromium: 4, kokoro: 5, other: 6 };
 
 export function nodeVersion(min = 20) {
   return {
     id: 'node',
+    rank: RANK.node,
     why: `runs the scripts (Node ${min} or newer)`,
     required: true,
     size: '—',
@@ -76,13 +96,14 @@ export function nodeVersion(min = 20) {
 export function nodeModules({ omitDev = true } = {}) {
   return {
     id: 'node_modules',
+    rank: RANK.nodeModules,
     why: "installs the skill's own npm packages",
     required: true,
     size: '≈30–60 MB',
-    check: (ctx) => ctx.exists(path.join(ctx.skillDir, 'node_modules')),
+    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')),
     fix: (ctx) => {
       const argv = ['npm', 'ci', ...(omitDev ? ['--omit=dev'] : []), '--prefix', ctx.skillDir];
-      return { auto: [argv], manual: manualAll(render([argv])) };
+      return { auto: [argv], manual: manualAll(render([argv], ctx.platform)) };
     },
     needsSudo: () => false,
   };
@@ -115,25 +136,50 @@ async function playwrightChromiumPresent(ctx) {
 
 const SISTER_NAME = /^[a-z0-9-]+$/;
 
+// Resolved, separator-trimmed, realpath'd where the path exists, lower-cased on win32.
+function normPath(ctx, p) {
+  const P = pp(ctx);
+  let out = P.resolve(p);
+  try {
+    if (ctx.realpath && ctx.exists(out)) out = ctx.realpath(out);
+  } catch {
+    // keep the resolved path
+  }
+  return ctx.platform === 'win32' ? out.toLowerCase() : out;
+}
+
 // Where the skills CLI should run for a skill laid out as <root>/.<dir>/skills/<self>.
-// Project scope: cwd=<root>. User scope (~/.claude, .agents, .copilot, .gemini): -g from home.
-// Anything else (plugin cache, custom path): null, manual only.
+// User scope (root is home, dir in USER_SCOPE_DIRS): -g from home. Project scope
+// (another root, dir in PROJECT_SCOPE_DIRS): cwd=<root>, no -g. Anything else: null.
 function sisterPlan(ctx) {
-  const skillsRoot = path.dirname(ctx.skillDir);
-  const dot = path.dirname(skillsRoot);
-  if (path.basename(skillsRoot) !== 'skills' || !path.basename(dot).startsWith('.')) return null;
-  const root = path.dirname(dot);
+  const P = pp(ctx);
+  const skillsRoot = P.dirname(ctx.skillDir);
+  const dot = P.dirname(skillsRoot);
+  const dotName = P.basename(dot);
+  if (P.basename(skillsRoot) !== 'skills' || !PROJECT_SCOPE_DIRS.includes(dotName.toLowerCase())) return null;
+  const root = P.dirname(dot);
   const home = ctx.homedir ?? os.homedir();
-  if (root === home) return USER_SCOPE_DIRS.includes(path.basename(dot)) ? { skillsRoot, cwd: home, global: true, dot } : null;
-  return { skillsRoot, cwd: root, global: false, dot };
+  if (normPath(ctx, root) === normPath(ctx, home)) return USER_SCOPE_DIRS.includes(dotName) ? { skillsRoot, cwd: home, global: true, dot, root } : null;
+  return { skillsRoot, cwd: root, global: false, dot, root };
+}
+
+// Where the skills CLI may have put the skill, other than next to this one.
+function locateSister(ctx, plan, name) {
+  const P = pp(ctx);
+  for (const d of PROJECT_SCOPE_DIRS) {
+    const dir = P.join(plan.cwd, d, 'skills', name);
+    if (ctx.exists(P.join(dir, 'SKILL.md'))) return dir;
+  }
+  return null;
 }
 
 export function sisterSkill(name) {
   if (typeof name !== 'string' || !SISTER_NAME.test(name)) throw new TypeError(`sisterSkill: invalid skill name ${JSON.stringify(name)}`);
-  const sisterDir = (ctx) => path.join(path.dirname(ctx.skillDir), name);
-  const present = (ctx) => ctx.exists(path.join(sisterDir(ctx), 'SKILL.md'));
+  const sisterDir = (ctx) => pp(ctx).join(pp(ctx).dirname(ctx.skillDir), name);
+  const present = (ctx) => ctx.exists(pp(ctx).join(sisterDir(ctx), 'SKILL.md'));
   return {
     id: name,
+    rank: RANK.sister,
     why: `sister skill ${name} is used for the matching sections`,
     required: true,
     size: '≈30–60 MB',
@@ -143,23 +189,26 @@ export function sisterSkill(name) {
       const add = ['npx', '--yes', SKILLS_CLI, 'add', REPO, '--skill', name, '-y', ...(plan?.global ? ['-g'] : [])];
       const install = ['npm', 'ci', '--omit=dev', '--prefix', sisterDir(ctx)];
       if (plan === null) {
-        const hint = `reinstall with your host's installer (for example run \`npx ${SKILLS_CLI} add ${REPO} --skill ${name} -y\` from your project root, or reinstall the plugin), then ${render([install])}`;
+        const hint = `reinstall with your host's installer (for example run \`npx ${SKILLS_CLI} add ${REPO} --skill ${name} -y\` from your project root, or reinstall the plugin), then ${render([install], ctx.platform)}`;
         return { auto: null, manual: manualAll(hint) };
       }
-      const auto = [{ argv: add, cwd: plan.cwd, verify: present }, install];
+      const auto = [
+        { argv: add, cwd: plan.cwd, verify: present, locate: (c) => locateSister(c, plan, name), skillsRoot: plan.skillsRoot },
+        install,
+      ];
       const where = plan.global ? `your user-scope skills folder (${plan.skillsRoot}, via -g)` : plan.skillsRoot;
-      const manual = manualAll(`cd ${quote(plan.cwd)} && ${render(auto)}`);
       const notes = `downloads from GitHub via npx ${SKILLS_CLI}; writes the skill into ${where}, plus skills-lock.json and agent symlinks such as .claude/skills/${name} in ${plan.cwd}`;
-      return { auto, manual, notes };
+      return { auto, manual: manualAll(render(auto, ctx.platform)), notes };
     },
     needsSudo: () => false,
   };
 }
 
 export function ffmpeg() {
-  const staticBinary = (ctx) => path.join(ctx.skillDir, 'node_modules', 'ffmpeg-static', ctx.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+  const staticBinary = (ctx) => pp(ctx).join(ctx.skillDir, 'node_modules', 'ffmpeg-static', ctx.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
   return {
     id: 'ffmpeg',
+    rank: RANK.ffmpeg,
     why: 'renders the MP4',
     required: true,
     size: '≈80 MB',
@@ -189,21 +238,32 @@ export function ffmpeg() {
   };
 }
 
+const LINUX_LIBS_HINT = 'sudo npx playwright install --with-deps chromium';
+
 export function browser({ required = false } = {}) {
   return {
     id: 'chromium',
+    rank: RANK.chromium,
+    needsNodeModules: true,
     why: 'renders pages to image and video (Playwright Chromium or installed Chrome)',
     required,
     size: '≈150 MB',
     check: async (ctx) => systemChromePaths(ctx).some((p) => ctx.exists(p)) || playwrightChromiumPresent(ctx),
+    // Platform hint for a chromium that is already present.
+    presentInfo: (ctx) => (ctx.platform === 'linux' ? { note: `launching may need system libraries: ${LINUX_LIBS_HINT}`, sudoHint: LINUX_LIBS_HINT } : null),
     fix: (ctx) => {
       // --no: never let npx fetch a different playwright; needs node_modules first.
       const argv = ['npx', '--no', '--prefix', ctx.skillDir, 'playwright', 'install', 'chromium'];
-      const out = { auto: [argv], manual: manualAll(render([argv])), notes: 'downloads ≈150 MB of Chromium; run after node_modules is installed' };
+      const manual = render([argv], ctx.platform);
+      const out = {
+        auto: [argv],
+        manual: manualAll(manual),
+        notes: 'downloads ≈150 MB of Chromium; run after node_modules is installed',
+        failManual: ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) ? manual : `install node_modules first (doctor --fix node_modules), then run: ${manual}`,
+      };
       if (ctx.platform === 'linux') {
-        const hint = 'sudo npx playwright install --with-deps chromium';
-        out.notes += `; launching may need system libraries: ${hint}`;
-        out.sudoHint = hint;
+        out.notes += `; launching may need system libraries: ${LINUX_LIBS_HINT}`;
+        out.sudoHint = LINUX_LIBS_HINT;
       }
       return out;
     },
@@ -214,36 +274,46 @@ export function browser({ required = false } = {}) {
 export function kokoro() {
   return {
     id: 'kokoro',
+    rank: RANK.kokoro,
+    needsNodeModules: true,
     why: 'local text-to-speech for voiceover',
     required: false,
     size: '≈250 MB, plus a 90 MB model on first use',
-    check: (ctx) => ctx.exists(path.join(ctx.skillDir, 'node_modules', 'kokoro-js')),
+    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'kokoro-js')),
     fix: (ctx) => {
       const argv = ['npm', 'install', KOKORO_PIN, '--no-save', '--prefix', ctx.skillDir];
-      return { auto: [argv], manual: manualAll(render([argv])), notes: 'the 90 MB voice model downloads on first use' };
+      return { auto: [argv], manual: manualAll(render([argv], ctx.platform)), notes: 'the 90 MB voice model downloads on first use' };
     },
     needsSudo: () => false,
   };
 }
 
+// { ok, missing, info? }. info lists present items that carry a platform hint.
 export async function diagnose(requirements, ctx) {
   const missing = [];
+  const info = [];
   for (const r of requirements) {
-    if (await r.check(ctx)) continue;
+    if (await r.check(ctx)) {
+      const hint = r.presentInfo?.(ctx);
+      if (hint) info.push({ id: r.id, note: hint.note, sudoHint: hint.sudoHint });
+      continue;
+    }
     const fix = r.fix(ctx);
     const entry = {
       id: r.id,
       why: r.why,
       required: r.required,
       size: r.size,
-      fix: { auto: fix.auto === null ? null : render(fix.auto), manual: fix.manual },
+      fix: { auto: fix.auto === null ? null : render(fix.auto, ctx.platform), manual: fix.manual },
       needsSudo: r.needsSudo(ctx),
     };
     if (fix.notes) entry.notes = fix.notes;
     if (fix.sudoHint) entry.sudoHint = fix.sudoHint;
     missing.push(entry);
   }
-  return { ok: !missing.some((m) => m.required), missing };
+  const result = { ok: !missing.some((m) => m.required), missing };
+  if (info.length > 0) result.info = info;
+  return result;
 }
 
 const defaultRun = (cmd, args, opts) => spawnSync(cmd, args, opts);
@@ -265,14 +335,32 @@ async function stillMissing(req, ctx) {
   }
 }
 
+const spawnError = (r) => {
+  if (r.error) return String(r.error.code ?? r.error.message);
+  if (r.status === null || r.status === undefined) return r.signal ? `killed by ${r.signal}` : 'did not run';
+  return undefined;
+};
+
+// Requested ids run by rank (node, node_modules, sisters, ffmpeg, chromium, kokoro, others),
+// deduped. A failed node_modules skips the requirements that need it.
 export async function runFixes(ids, requirements, ctx, run = defaultRun) {
   const wanted = new Set(ids);
+  const ordered = requirements
+    .map((req, index) => ({ req, index }))
+    .sort((a, b) => (a.req.rank ?? RANK.other) - (b.req.rank ?? RANK.other) || a.index - b.index)
+    .map((x) => x.req);
   const results = [];
-  // Requirement order (node_modules, sisters, ffmpeg, chromium, kokoro), deduped.
-  for (const req of requirements) {
+  let nodeModulesFailed = false;
+  for (const req of ordered) {
     if (!wanted.has(req.id)) continue;
     wanted.delete(req.id);
-    results.push(await fixOne(req, ctx, run));
+    if (nodeModulesFailed && req.needsNodeModules) {
+      results.push({ id: req.id, ok: false, skipped: 'needs node_modules' });
+      continue;
+    }
+    const result = await fixOne(req, ctx, run);
+    if (req.id === 'node_modules' && !result.ok) nodeModulesFailed = true;
+    results.push(result);
   }
   for (const id of wanted) results.push({ id, ok: false, refused: 'unknown id' });
   return results;
@@ -280,23 +368,51 @@ export async function runFixes(ids, requirements, ctx, run = defaultRun) {
 
 async function fixOne(req, ctx, run) {
   const id = req.id;
+  try {
+    return await fixSteps(req, ctx, run);
+  } catch (e) {
+    return { id, ok: false, error: firstLine(e) };
+  }
+}
+
+async function fixSteps(req, ctx, run) {
+  const id = req.id;
   const fix = req.fix(ctx);
   const manual = fix.manual[ctx.platform] ?? fix.manual.linux;
   if (req.needsSudo(ctx)) return { id, ok: false, refused: 'needs sudo', manual };
   if (fix.auto === null) return { id, ok: false, refused: 'no automatic fix', manual };
-  const ran = render(fix.auto);
+  const done = [];
   for (const step of fix.auto) {
+    done.push(step);
     const r = runStep(step, ctx, run);
-    if (r.status !== 0) return { id, ok: false, ran, manual };
+    if (r.status !== 0) {
+      const failed = { id, ok: false, ran: render(done, ctx.platform), manual: fix.failManual ?? manual };
+      const error = spawnError(r);
+      return error === undefined ? failed : { ...failed, error };
+    }
     if (!Array.isArray(step) && step.verify && !(await step.verify(ctx))) {
-      return { id, ok: false, ran, manual: `installed elsewhere (not found next to this skill) — run: ${manual}` };
+      return { id, ok: false, ran: render(done, ctx.platform), elsewhere: true, manual: elsewhereMessage(step, ctx) };
     }
   }
+  const ran = render(done, ctx.platform);
   if (await stillMissing(req, ctx)) {
     const hint = ctx.platform === 'win32' && id === 'ffmpeg' ? 'open a new terminal, then rerun doctor' : manual;
     return { id, ok: false, ran, stillMissing: true, manual: hint };
   }
-  return { id, ok: true, ran };
+  const ok = { id, ok: true, ran };
+  if (fix.sudoHint) {
+    ok.sudoHint = fix.sudoHint;
+    ok.note = `launching may need system libraries: ${fix.sudoHint}`;
+  }
+  return ok;
+}
+
+function elsewhereMessage(step, ctx) {
+  const P = pp(ctx);
+  const found = step.locate?.(ctx);
+  const root = step.cwd;
+  if (found) return `the skills CLI wrote it to ${found}; move it into ${step.skillsRoot} (next to this skill) or rerun the install from ${root}`;
+  return `it was not found in ${step.skillsRoot} or in the agent folders under ${root}; check the skills CLI output above, then install it into ${P.normalize(step.skillsRoot)} yourself`;
 }
 
 function describe(m, platform) {
@@ -308,7 +424,19 @@ function describe(m, platform) {
 
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 
-export async function doctorMain(argv, { skill, skillDir, targets = ['check'], requirementsFor }) {
+function printFixResult(r) {
+  const out = (line) => process.stdout.write(`${line}\n`);
+  if (r.ok) out(`fixed: ${r.id} (ran: ${r.ran})${r.note ? ` Note: ${r.note}.` : ''}`);
+  else if (r.skipped) out(`skipped: ${r.id} — ${r.skipped} (run doctor --fix node_modules first)`);
+  else if (r.refused) out(`refused: ${r.id} — ${r.refused}${r.manual ? `. Run it yourself: ${r.manual}` : ''}`);
+  else if (r.elsewhere) out(`installed elsewhere: ${r.id} — ${r.manual}`);
+  else if (r.stillMissing) out(`still missing: ${r.id} after (ran: ${r.ran}). ${r.manual}`);
+  else if (r.ran === undefined) out(`failed: ${r.id} — ${r.error}`);
+  else out(`failed: ${r.id} (ran: ${r.ran})${r.error ? ` [${r.error}]` : ''}. Run it yourself: ${r.manual}`);
+}
+
+// overrides ({ ctx, run }) exist for tests: inject a fake ctx and a command recorder.
+export async function doctorMain(argv, { skill, skillDir, targets = ['check'], requirementsFor }, overrides = {}) {
   if (!Array.isArray(targets) || targets.some((t) => typeof t !== 'string')) throw new TypeError('doctorMain: targets must be an array of strings');
   let values;
   try {
@@ -321,40 +449,36 @@ export async function doctorMain(argv, { skill, skillDir, targets = ['check'], r
     return;
   }
   const json = values.json;
-  const ctx = defaultCtx(skillDir);
+  const ctx = overrides.ctx ?? defaultCtx(skillDir);
   const spec = values.for;
   if (spec !== undefined && !targets.includes(spec) && !(spec.endsWith('.json') && ctx.exists(spec))) {
     exitUsage(new UsageError(`--for must be one of: ${targets.join(', ')}, or an existing spec .json file; got ${JSON.stringify(spec)}`), { json });
     return;
   }
   try {
-    if (values.fix !== undefined) await fixMain(values.fix, { ctx, json, requirementsFor });
+    if (values.fix !== undefined) await fixMain(values.fix, { ctx, json, requirementsFor, run: overrides.run });
     else await diagnoseMain({ ctx, json, skill, spec, requirementsFor });
   } catch (e) {
     exitUsage(new UsageError(firstLine(e)), { json });
   }
 }
 
-async function fixMain(raw, { ctx, json, requirementsFor }) {
+async function fixMain(raw, { ctx, json, requirementsFor, run }) {
   const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);
   if (ids.length === 0) throw new UsageError(`--fix needs at least one id; usage: ${USAGE}`);
-  const results = await runFixes(ids, requirementsFor(ALL), ctx);
+  const results = await runFixes(ids, requirementsFor(ALL), ctx, run);
   if (json) process.stdout.write(`${JSON.stringify(results)}\n`);
-  else {
-    for (const r of results) {
-      if (r.ok) process.stdout.write(`fixed: ${r.id} (ran: ${r.ran})\n`);
-      else if (r.refused) process.stdout.write(`refused: ${r.id} — ${r.refused}${r.manual ? `. Run it yourself: ${r.manual}` : ''}\n`);
-      else if (r.stillMissing) process.stdout.write(`still missing: ${r.id} after (ran: ${r.ran}). ${r.manual}\n`);
-      else process.stdout.write(`failed: ${r.id} (ran: ${r.ran}). Run it yourself: ${r.manual}\n`);
-    }
-  }
+  else for (const r of results) printFixResult(r);
   if (results.some((r) => !r.ok)) process.exitCode = 1;
 }
 
 async function diagnoseMain({ ctx, json, skill, spec, requirementsFor }) {
   const result = await diagnose(requirementsFor(spec), ctx);
   if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
-  else if (result.missing.length === 0) process.stdout.write(`ok: everything ${skill} needs is installed\n`);
-  else for (const m of result.missing) process.stdout.write(`${describe(m, ctx.platform)}\n`);
+  else {
+    if (result.missing.length === 0) process.stdout.write(`ok: everything ${skill} needs is installed\n`);
+    for (const m of result.missing) process.stdout.write(`${describe(m, ctx.platform)}\n`);
+    for (const i of result.info ?? []) process.stdout.write(`Note: ${i.id} — ${i.note}\n`);
+  }
   if (!result.ok) process.exitCode = 1;
 }

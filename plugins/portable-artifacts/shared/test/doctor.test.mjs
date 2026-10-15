@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { roundTrip } from './helpers/cmdsim.mjs';
 import { nodeVersion, nodeModules, sisterSkill, ffmpeg, browser, kokoro, diagnose, runFixes, doctorMain, ALL, cmdQuote } from '../doctor.mjs';
 
 const ctx = (over = {}) => ({
@@ -129,7 +130,8 @@ test('sister skill: installed elsewhere stops before npm ci', async () => {
   const res = await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ skillDir: '/p/.agents/skills/make-explainer', cwd: '/p', homedir: '/h' }), (c) => { calls.push(c); return { status: 0 }; });
   assert.deepEqual(calls, ['npx']);
   assert.equal(res[0].ok, false);
-  assert.match(res[0].manual, /^installed elsewhere/);
+  assert.equal(res[0].elsewhere, true);
+  assert.match(res[0].manual, /not found in \/p\/\.agents\/skills/);
 });
 
 test('sister skill: hostile names are rejected', () => {
@@ -168,7 +170,7 @@ test('runFixes: id with no auto fix is refused with the manual command', async (
 
 // --- doctorMain ---
 
-async function runMain(argv, opts) {
+async function runMain(argv, opts, over = {}) {
   let out = '';
   let err = '';
   const w = process.stdout.write.bind(process.stdout);
@@ -177,7 +179,7 @@ async function runMain(argv, opts) {
   process.stderr.write = (s) => { err += s; return true; };
   const prev = process.exitCode;
   process.exitCode = undefined;
-  try { await doctorMain(argv, opts); } finally { process.stdout.write = w; process.stderr.write = e; }
+  try { await doctorMain(argv, opts, { ctx: ctx(), run: () => ({ status: 0 }), ...over }); } finally { process.stdout.write = w; process.stderr.write = e; }
   const code = process.exitCode ?? 0;
   process.exitCode = prev;
   return { out, err, code };
@@ -253,7 +255,7 @@ test('non-win32: argv arrays, no shell, spaces untouched', async () => {
 test('runFixes: requirement order, deduped; unknown ids last', async () => {
   const ran = [];
   const reqs = [nodeModules(), ffmpeg(), kokoro()];
-  const res = await runFixes(['kokoro', 'nope', 'node_modules', 'kokoro', 'ffmpeg'], reqs, ctx({ which: (c) => c === 'brew' }), (c) => { ran.push(c); return { status: 0 }; });
+  const res = await runFixes(['kokoro', 'nope', 'node_modules', 'kokoro', 'ffmpeg'], reqs, ctx({ which: (c) => c === 'brew' || (c === 'ffmpeg' && ran.includes('brew')), exists: () => ran.length > 0 }), (c) => { ran.push(c); return { status: 0 }; });
   assert.deepEqual(ran, ['npm', 'brew', 'npm']);
   assert.deepEqual(res.map((r) => r.id), ['node_modules', 'ffmpeg', 'kokoro', 'nope']);
 });
@@ -329,4 +331,139 @@ test('doctorMain: targets defaults to check and must be strings', async () => {
 test('doctorMain: text output prints notes', async () => {
   const r = await runMain([], { ...sisterOpts(), requirementsFor: () => [kokoro()] });
   assert.match(r.out, /Note: the 90 MB voice model/);
+});
+
+// --- fix round 2 ---
+
+test('R24/R25: linux chromium present yields an info entry; other platforms none', async () => {
+  const present = (platform) => ctx({ platform, exists: (p) => p === '/usr/bin/google-chrome' || p === '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
+  const linux = await diagnose([browser()], present('linux'));
+  assert.deepEqual(linux.missing, []);
+  assert.equal(linux.info[0].id, 'chromium');
+  assert.match(linux.info[0].sudoHint, /--with-deps chromium/);
+  assert.equal((await diagnose([browser()], present('darwin'))).info, undefined);
+  const text = await runMain([], { ...mainOpts(), requirementsFor: () => [browser()] }, { ctx: present('linux') });
+  assert.match(text.out, /Note: chromium — launching may need system libraries/);
+});
+
+test('R24/R25: a successful linux --fix chromium carries the sudo hint', async () => {
+  const res = await runFixes(['chromium'], [browser()], ctx({ platform: 'linux', exists: (p) => p === '/usr/bin/google-chrome' }), () => ({ status: 0 }));
+  assert.equal(res[0].ok, true);
+  assert.match(res[0].sudoHint, /with-deps/);
+  const mac = await runFixes(['chromium'], [browser()], ctx({ exists: (p) => p === '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' }), () => ({ status: 0 }));
+  assert.equal(mac[0].sudoHint, undefined);
+});
+
+test('N2: the shown sister command includes cd <root>; ran includes it; win32 uses cd /d', async () => {
+  const base = { skillDir: '/p/.agents/skills/make-explainer', homedir: '/h' };
+  const { missing } = await diagnose([sisterSkill('make-diagram')], ctx(base));
+  assert.match(missing[0].fix.auto, /^cd \/p && npx --yes skills@1\.7\.2 add /);
+  assert.match(missing[0].fix.manual.darwin, /^cd \/p && /);
+  const win = await diagnose([sisterSkill('make-diagram')], ctx({ platform: 'win32', skillDir: 'C:\\p\\.agents\\skills\\make-explainer', homedir: 'C:\\Users\\u' }));
+  assert.match(win.missing[0].fix.auto, /^cd \/d C:\\p && npx /);
+  const res = await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ ...base, exists: () => true }), () => ({ status: 0 }));
+  assert.match(res[0].ran, /^cd \/p && npx .* && npm ci/);
+});
+
+test('N3: doctorMain with injected ctx/run never reaches spawnSync; --fix uses the recorder', async () => {
+  const calls = [];
+  const r = await runMain(['--fix', 'kokoro', '--json'], { ...mainOpts(), requirementsFor: () => [kokoro()] }, { run: (c, a) => { calls.push([c, ...a].join(' ')); return { status: 0 }; } });
+  assert.deepEqual(calls, ['npm install kokoro-js@1.2.1 --no-save --prefix /s/make-motion']);
+  assert.equal(JSON.parse(r.out)[0].id, 'kokoro');
+});
+
+const SIM_CASES = ['C:\\Users\\John Doe\\s', 'a&b', '50%off', '%PATH%', 'x%USERNAME%y', 'C:\\x y\\', 'C:\\x\\', 'say "hi"', 'a"&calc&"b', 'x\\"&calc', 'C:\\a&b\\100%\\x', 'C:\\a\\%PATH%', 'a|b<c>d', 'a^b', '(x)', '%', 'C:\\dir with space\\"q"\\'];
+test('N4: cmdLine round-trips through the cmd + UCRT model with no unquoted & | < >', () => {
+  for (const c of SIM_CASES) {
+    const r = roundTrip(['npx', '--prefix', c, 'playwright']);
+    assert.deepEqual(r.argv, ['npx', '--prefix', c, 'playwright'], JSON.stringify(c));
+    assert.equal(r.unquotedMeta, '', JSON.stringify(c));
+  }
+});
+
+test('N4: cmdQuote rejects NUL, CR and LF', () => {
+  for (const bad of ['a\0b', 'a\nb', 'a\rb']) assert.throws(() => cmdQuote(bad), TypeError);
+});
+
+test('N4: a failure from a bad argument becomes that id\'s failure result', async () => {
+  const res = await runFixes(['node_modules'], [nodeModules()], ctx({ platform: 'win32', skillDir: 'C:\\a\nb' }), () => ({ status: 0 }));
+  assert.equal(res[0].ok, false);
+  assert.match(res[0].error, /NUL, CR or LF/);
+});
+
+test('N5: fix order is by rank regardless of wrapper order; failed node_modules skips chromium and kokoro', async () => {
+  const ran = [];
+  const reqs = [kokoro(), browser(), ffmpeg(), sisterSkill('make-diagram'), nodeModules(), nodeVersion(20)];
+  const base = ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h', which: (c) => c === 'brew' });
+  const res = await runFixes(['kokoro', 'chromium', 'ffmpeg', 'make-diagram', 'node_modules'], reqs, base, (c, a) => { ran.push(`${c} ${a[0]}`); return { status: ran.length === 1 ? 1 : 0 }; });
+  assert.deepEqual(res.map((r) => r.id), ['node_modules', 'make-diagram', 'ffmpeg', 'chromium', 'kokoro']);
+  assert.equal(res.find((r) => r.id === 'chromium').skipped, 'needs node_modules');
+  assert.equal(res.find((r) => r.id === 'kokoro').skipped, 'needs node_modules');
+  assert.equal(ran[0].startsWith('npm'), true);
+  assert.ok(!ran.some((r) => r.startsWith('npx --no')));
+});
+
+test('N5: chromium failure says to install node_modules first', async () => {
+  const res = await runFixes(['chromium'], [browser()], ctx(), () => ({ status: 1 }));
+  assert.match(res[0].manual, /install node_modules first \(doctor --fix node_modules\)/);
+});
+
+test('N6: installed elsewhere names where it landed and what to do', async () => {
+  const exists = (p) => p === '/p/.claude/skills/make-diagram/SKILL.md';
+  const res = await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h', exists }), () => ({ status: 0 }));
+  assert.match(res[0].manual, /wrote it to \/p\/\.claude\/skills\/make-diagram; move it into \/p\/\.agents\/skills/);
+  const text = await runMain(['--fix', 'make-diagram'], { ...mainOpts(), requirementsFor: () => [sisterSkill('make-diagram')] }, { ctx: ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h' }) });
+  assert.match(text.out, /^installed elsewhere: make-diagram — /);
+});
+
+test('N7: ran lists only the steps that ran', async () => {
+  const res = await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h' }), () => ({ status: 1 }));
+  assert.doesNotMatch(res[0].ran, /npm ci/);
+  assert.match(res[0].ran, /npx --yes/);
+});
+
+test('N9: win32 home compares case-insensitively; unknown dot-dir and unknown scope fall back to manual', async () => {
+  const w = ctx({ platform: 'win32', skillDir: 'c:\\users\\u\\.claude\\skills\\make-explainer', homedir: 'C:\\Users\\u\\' });
+  const g = await diagnose([sisterSkill('make-diagram')], w);
+  assert.match(g.missing[0].fix.auto, /-y -g/);
+  const unknown = await diagnose([sisterSkill('make-diagram')], ctx({ skillDir: '/p/.cursor/skills/make-explainer', homedir: '/h' }));
+  assert.equal(unknown.missing[0].fix.auto, null);
+  const github = await diagnose([sisterSkill('make-diagram')], ctx({ skillDir: '/p/.github/skills/make-explainer', homedir: '/h' }));
+  assert.match(github.missing[0].fix.auto, /^cd \/p && /);
+  const homeGithub = await diagnose([sisterSkill('make-diagram')], ctx({ skillDir: '/h/.github/skills/make-explainer', homedir: '/h' }));
+  assert.equal(homeGithub.missing[0].fix.auto, null);
+});
+
+test('N9: realpath resolves a symlinked home', async () => {
+  const c = ctx({ skillDir: '/link/.claude/skills/make-explainer', homedir: '/real/home', exists: () => true, realpath: (p) => p.replace('/link', '/real/home') });
+  const { ok } = await diagnose([sisterSkill('make-diagram')], c);
+  assert.equal(ok, true);
+  const c2 = ctx({ skillDir: '/link/.claude/skills/make-explainer', homedir: '/real/home', realpath: (p) => p.replace('/link', '/real/home'), exists: (p) => p === '/link' || p === '/real/home' });
+  const { missing } = await diagnose([sisterSkill('make-diagram')], c2);
+  assert.match(missing[0].fix.auto, /-y -g/);
+});
+
+test('N10: an error thrown by fix() is that id\'s failure; other results still come', async () => {
+  const bad = { ...kokoro(), id: 'bad', fix: () => { throw new Error('exploded\nstack'); } };
+  const res = await runFixes(['bad', 'kokoro'], [bad, kokoro()], ctx(), () => ({ status: 0 }));
+  assert.deepEqual(res.map((r) => r.id), ['bad', 'kokoro']);
+  assert.equal(res[0].error, 'exploded');
+});
+
+test('N11: spawn errors surface in the result', async () => {
+  const enoent = await runFixes(['kokoro'], [kokoro()], ctx(), () => ({ status: null, error: Object.assign(new Error('spawn npm ENOENT'), { code: 'ENOENT' }) }));
+  assert.equal(enoent[0].error, 'ENOENT');
+  const killed = await runFixes(['kokoro'], [kokoro()], ctx(), () => ({ status: null, signal: 'SIGKILL' }));
+  assert.equal(killed[0].error, 'killed by SIGKILL');
+  const plain = await runFixes(['kokoro'], [kokoro()], ctx(), () => ({ status: 1 }));
+  assert.equal(plain[0].error, undefined);
+});
+
+test('N12: display quoting is shell-safe per platform', async () => {
+  const mac = await diagnose([nodeModules()], ctx({ skillDir: "/Users/o'neil/a&b $HOME/x" }));
+  assert.equal(mac.missing[0].fix.auto, "npm ci --omit=dev --prefix '/Users/o'\\''neil/a&b $HOME/x'");
+  const win = await diagnose([nodeModules()], ctx({ platform: 'win32', skillDir: 'C:\\John Doe\\x\\' }));
+  assert.equal(win.missing[0].fix.auto, 'npm ci --omit=dev --prefix "C:\\John Doe\\x\\\\"');
+  const plain = await diagnose([nodeModules()], ctx());
+  assert.equal(plain.missing[0].fix.auto, 'npm ci --omit=dev --prefix /s/make-motion');
 });
