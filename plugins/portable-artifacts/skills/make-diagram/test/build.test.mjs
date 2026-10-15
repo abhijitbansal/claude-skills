@@ -174,8 +174,9 @@ for (const name of NAMES) {
   });
 
   test(`${name}: two builds are byte-identical`, () => {
-    const a = readOut(run([example(name)]));
-    assert.equal(readOut(run([example(name)])), a);
+    const env = { SOURCE_DATE_EPOCH: '1792000000' };
+    const a = readOut(run([example(name)], { env }));
+    assert.equal(readOut(run([example(name)], { env })), a);
   });
 }
 

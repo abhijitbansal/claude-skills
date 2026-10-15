@@ -25,8 +25,11 @@ test('viewer page has favicon, generator meta, icon toggle and provenance', () =
 });
 
 test('hostile --agent fails with exit 1', () => {
-  const r = run([example('flow'), '--out', path.join(tmp(), 'b.html'), '--agent', '<img src=x>']);
+  const out = path.join(tmp(), 'b.html');
+  const r = run([example('flow'), '--out', out, '--agent', '<img src=x>']);
   assert.equal(r.status, 1);
+  assert.match(r.stdout + r.stderr, /generatedBy/);
+  assert.equal(fs.existsSync(out), false);
 });
 
 test('generatedBy in the spec renders; flags override it', () => {

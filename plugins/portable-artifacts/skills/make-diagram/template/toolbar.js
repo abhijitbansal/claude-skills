@@ -7,8 +7,6 @@
   var root = document.documentElement;
   var stage = document.getElementById('pa-stage');
   var one = function (sel) { return document.querySelector(sel); };
-  var safeStorage = function () { try { return window.localStorage; } catch (e) { return undefined; } };
-  var local = safeStorage();
 
   // ---- diagram ---------------------------------------------------------------------
   var buttons = {};

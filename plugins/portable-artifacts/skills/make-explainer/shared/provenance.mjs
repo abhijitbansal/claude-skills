@@ -55,7 +55,10 @@ export function provenanceText(skill, gen = {}, date = buildDate()) {
   ].join(' · ');
 }
 
-export const provenanceHtml = (skill, gen, date) => `<p class="pa-provenance">${esc(provenanceText(skill, gen, date))}</p>`;
+export function provenanceHtml(skill, gen, date) {
+  const text = esc(provenanceText(skill, gen, date));
+  return `<p class="pa-provenance" title="${text}">${text}</p>`;
+}
 
 export function generatorMeta(skill, gen = {}) {
   const parts = FIELDS.map((k) => `${k}=${has(gen?.[k]) ? gen[k] : 'not reported'}`).join('; ');

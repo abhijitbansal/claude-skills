@@ -39,7 +39,7 @@ test('text names the skill, model, effort, agent and UTC date; missing fields sa
 test('html and meta escape their values', () => {
   const gen = { model: 'A&B' };
   assert.equal(provenanceHtml('make-motion', gen, DATE),
-    '<p class="pa-provenance">make-motion · A&amp;B · effort not reported · agent not reported · 14 Oct 2026</p>');
+    '<p class="pa-provenance" title="make-motion · A&amp;B · effort not reported · agent not reported · 14 Oct 2026">make-motion · A&amp;B · effort not reported · agent not reported · 14 Oct 2026</p>');
   assert.equal(generatorMeta('make-motion', gen),
     '<meta name="generator" content="portable-artifacts make-motion; model=A&amp;B; effort=not reported; agent=not reported">');
 });
