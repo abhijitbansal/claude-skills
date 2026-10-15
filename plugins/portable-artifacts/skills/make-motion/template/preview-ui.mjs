@@ -1,5 +1,6 @@
 // Preview chrome: scrubber, play/pause, mute, scene markers, shortcuts, live reload.
 import { audioController } from './preview-audio.mjs';
+import { chromeChanged } from './chrome-change.mjs';
 
 const PLAY_ICON = '▶';
 const PAUSE_ICON = '❚❚';
@@ -89,9 +90,14 @@ export function initPreviewUI() {
     else if (e.code === 'ArrowLeft') { e.preventDefault(); setPlaying(false); seek(time - frame); }
   });
 
+  const fetchSpec = () => fetch('/spec.json', { cache: 'no-store' }).then((r) => r.json()).catch(() => null);
+  let served = null;
+  fetchSpec().then((spec) => { served = spec; });
   const events = new EventSource('/events');
   events.onmessage = async (e) => {
     if (e.data !== 'reload') return;
+    const next = await fetchSpec();
+    if (next && chromeChanged(served, next)) { location.reload(); return; } // favicon and footer are server-rendered
     await window.__reload();
     layout();
   };

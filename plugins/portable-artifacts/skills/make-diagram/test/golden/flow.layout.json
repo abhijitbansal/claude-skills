@@ -1,0 +1,396 @@
+{
+  "width": 686,
+  "height": 1106,
+  "drawing": {
+    "x": 190,
+    "y": 30,
+    "width": 306,
+    "height": 1076
+  },
+  "legend": {
+    "x": 24.7,
+    "y": 24,
+    "width": 637.3,
+    "height": 20,
+    "items": [
+      {
+        "kind": "kind",
+        "name": "start",
+        "family": "bare",
+        "count": 1,
+        "dx": 0,
+        "width": 50.1
+      },
+      {
+        "kind": "kind",
+        "name": "io",
+        "family": "service",
+        "count": 1,
+        "dx": 66.1,
+        "width": 34.1
+      },
+      {
+        "kind": "kind",
+        "name": "decision",
+        "family": "decision",
+        "count": 1,
+        "dx": 116.2,
+        "width": 67.9
+      },
+      {
+        "kind": "kind",
+        "name": "step",
+        "family": "service",
+        "count": 1,
+        "dx": 200.1,
+        "width": 48
+      },
+      {
+        "kind": "kind",
+        "name": "wait",
+        "family": "service",
+        "count": 1,
+        "dx": 264.1,
+        "width": 47.4
+      },
+      {
+        "kind": "kind",
+        "name": "subprocess",
+        "family": "service",
+        "count": 1,
+        "dx": 327.5,
+        "width": 84.9
+      },
+      {
+        "kind": "kind",
+        "name": "end",
+        "family": "bare",
+        "count": 1,
+        "dx": 428.4,
+        "width": 44.2
+      },
+      {
+        "kind": "style",
+        "name": "solid",
+        "style": "solid",
+        "label": "call",
+        "dx": 488.6,
+        "width": 48.7
+      },
+      {
+        "kind": "style",
+        "name": "dashed",
+        "style": "dashed",
+        "label": "secondary",
+        "dx": 553.3,
+        "width": 84
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "begin",
+      "x": 298,
+      "y": 54,
+      "width": 80,
+      "height": 40,
+      "shape": "stadium",
+      "lines": [
+        "Start"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": null,
+      "typeLine": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 0
+    },
+    {
+      "id": "ask",
+      "x": 224,
+      "y": 166,
+      "width": 228,
+      "height": 54,
+      "shape": "parallelogram",
+      "lines": [
+        "Enter email address"
+      ],
+      "noteLine": null,
+      "icon": "lucide:arrow-right-left",
+      "emoji": null,
+      "typeLine": "IO",
+      "tone": "neutral",
+      "group": null,
+      "layer": 1
+    },
+    {
+      "id": "known",
+      "x": 214,
+      "y": 384,
+      "width": 258,
+      "height": 56,
+      "shape": "diamond",
+      "lines": [
+        "Account exists?"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": null,
+      "typeLine": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 2
+    },
+    {
+      "id": "send",
+      "x": 277,
+      "y": 649,
+      "width": 132,
+      "height": 40,
+      "shape": "rect",
+      "lines": [
+        "Send reset link"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": null,
+      "typeLine": null,
+      "tone": "neutral",
+      "group": "email",
+      "layer": 3
+    },
+    {
+      "id": "wait",
+      "x": 263,
+      "y": 761,
+      "width": 160,
+      "height": 54,
+      "shape": "rounded-rect",
+      "lines": [
+        "Wait for click"
+      ],
+      "noteLine": null,
+      "icon": "lucide:clock",
+      "emoji": null,
+      "typeLine": "WAIT",
+      "tone": "neutral",
+      "group": "email",
+      "layer": 4
+    },
+    {
+      "id": "check",
+      "x": 259,
+      "y": 916,
+      "width": 168,
+      "height": 54,
+      "shape": "double-bar-rect",
+      "lines": [
+        "Verify token"
+      ],
+      "noteLine": null,
+      "icon": "lucide:workflow",
+      "emoji": null,
+      "typeLine": "SUBPROCESS",
+      "tone": "neutral",
+      "group": null,
+      "layer": 5
+    },
+    {
+      "id": "done",
+      "x": 255,
+      "y": 1042,
+      "width": 176,
+      "height": 40,
+      "shape": "stadium",
+      "lines": [
+        "Password changed"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": null,
+      "typeLine": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 6
+    }
+  ],
+  "groups": [
+    {
+      "id": "email",
+      "x": 239,
+      "y": 609,
+      "width": 208,
+      "height": 230,
+      "label": "Email",
+      "depth": 0,
+      "parent": null
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-0",
+      "from": "begin",
+      "to": "ask",
+      "points": [
+        {
+          "x": 338,
+          "y": 94
+        },
+        {
+          "x": 338,
+          "y": 166
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "edge-1",
+      "from": "ask",
+      "to": "known",
+      "points": [
+        {
+          "x": 376,
+          "y": 220
+        },
+        {
+          "x": 376,
+          "y": 336
+        },
+        {
+          "x": 386,
+          "y": 336
+        },
+        {
+          "x": 386,
+          "y": 384
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "edge-2",
+      "from": "known",
+      "to": "send",
+      "points": [
+        {
+          "x": 343,
+          "y": 440
+        },
+        {
+          "x": 343,
+          "y": 649
+        }
+      ],
+      "style": "solid",
+      "both": false,
+      "label": {
+        "text": "yes",
+        "x": 301,
+        "y": 512,
+        "width": 36,
+        "height": 20
+      }
+    },
+    {
+      "id": "edge-3",
+      "from": "known",
+      "to": "ask",
+      "points": [
+        {
+          "x": 300,
+          "y": 384
+        },
+        {
+          "x": 300,
+          "y": 220
+        }
+      ],
+      "style": "dashed",
+      "both": false,
+      "label": {
+        "text": "no",
+        "x": 264,
+        "y": 292,
+        "width": 30,
+        "height": 20
+      }
+    },
+    {
+      "id": "edge-4",
+      "from": "send",
+      "to": "wait",
+      "points": [
+        {
+          "x": 343,
+          "y": 689
+        },
+        {
+          "x": 343,
+          "y": 761
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "edge-5",
+      "from": "wait",
+      "to": "check",
+      "points": [
+        {
+          "x": 343,
+          "y": 815
+        },
+        {
+          "x": 343,
+          "y": 916
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "edge-6",
+      "from": "check",
+      "to": "done",
+      "points": [
+        {
+          "x": 343,
+          "y": 970
+        },
+        {
+          "x": 343,
+          "y": 1042
+        }
+      ],
+      "style": "solid",
+      "both": false
+    }
+  ],
+  "layers": [
+    [
+      "begin"
+    ],
+    [
+      "ask"
+    ],
+    [
+      "known"
+    ],
+    [
+      "send"
+    ],
+    [
+      "wait"
+    ],
+    [
+      "check"
+    ],
+    [
+      "done"
+    ]
+  ]
+}

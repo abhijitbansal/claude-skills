@@ -1,0 +1,101 @@
+{
+  "encoding": {
+    "x": {
+      "field": "month",
+      "type": "temporal",
+      "title": "month",
+      "timeUnit": "utcyearmonth",
+      "scale": {
+        "type": "utc"
+      }
+    }
+  },
+  "layer": [
+    {
+      "params": [
+        {
+          "name": "pa_zoom",
+          "select": {
+            "type": "interval",
+            "encodings": [
+              "x"
+            ]
+          },
+          "bind": "scales"
+        }
+      ],
+      "mark": "line",
+      "encoding": {
+        "y": {
+          "field": "revenue",
+          "type": "quantitative",
+          "title": "revenue"
+        }
+      }
+    },
+    {
+      "params": [
+        {
+          "name": "pa_x",
+          "select": {
+            "type": "point",
+            "encodings": [
+              "x"
+            ],
+            "nearest": true,
+            "on": "pointerover",
+            "clear": "pointerout"
+          }
+        }
+      ],
+      "mark": {
+        "type": "rule",
+        "tooltip": false
+      },
+      "encoding": {
+        "opacity": {
+          "condition": {
+            "param": "pa_x",
+            "empty": false,
+            "value": 0.5
+          },
+          "value": 0
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "point",
+        "filled": true
+      },
+      "encoding": {
+        "y": {
+          "field": "revenue",
+          "type": "quantitative",
+          "title": "revenue"
+        },
+        "tooltip": [
+          {
+            "field": "month",
+            "type": "temporal",
+            "title": "month",
+            "timeUnit": "utcyearmonth"
+          },
+          {
+            "field": "revenue",
+            "type": "quantitative",
+            "title": "revenue"
+          }
+        ],
+        "opacity": {
+          "condition": {
+            "param": "pa_x",
+            "empty": false,
+            "value": 1
+          },
+          "value": 0
+        }
+      }
+    }
+  ]
+}

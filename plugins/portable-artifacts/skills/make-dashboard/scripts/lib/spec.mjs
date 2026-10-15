@@ -4,14 +4,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
 import { compile } from 'vega-lite';
-import { formatAjvErrors, didYouMean, pathJoin } from './errors.mjs';
+import { formatAjvErrors, didYouMean, pathJoin } from '../../shared/errors.mjs';
 import {
-  openDb, openLockedDb, checkSelect, wrapLimit, runTimed, errMessage, DEFAULT_TIMEOUT_MS,
+  openDb, openLockedDb, checkSelect, describeQuery, errMessage, DEFAULT_TIMEOUT_MS,
 } from './sql.mjs';
 import {
   checkSource, envUrl, sourceShapeErrors, policyFor, RESERVED_SOURCE_NAMES, FILE_TYPES, SOURCE_TYPES, URL_TYPES,
 } from './sources.mjs';
-import { UsageError } from './cli.mjs';
+import { UsageError } from '../../shared/cli.mjs';
+import { listThemes } from '../../shared/theme.mjs';
+import { KIND_NAMES, roleErrors } from './kinds.mjs';
+import { checkFields } from './data.mjs';
+import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 
 const NAME = '^[a-z][a-z0-9_]*$';
 const ID = '^[A-Za-z][A-Za-z0-9_-]*$';
@@ -29,6 +33,8 @@ export const SCHEMA = {
     title: { type: 'string', minLength: 1 },
     description: { type: 'string' },
     maxRows: { type: 'integer', minimum: 1, maximum: 100000 },
+    theme: { type: 'string', minLength: 1 },
+    generatedBy: GENERATED_BY_SCHEMA,
     sources: {
       type: 'object',
       propertyNames: { pattern: NAME },
@@ -68,13 +74,22 @@ export const SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['id', 'title', 'query', 'vegaLite'],
+        required: ['id', 'title', 'query'],
         properties: {
           id: { type: 'string', pattern: ID },
           title: { type: 'string', minLength: 1 },
           query: { type: 'string' },
           width: { enum: WIDTHS },
           vegaLite: { type: 'object' },
+          kind: { enum: KIND_NAMES },
+          x: { type: 'string', minLength: 1 },
+          y: { type: 'string', minLength: 1 },
+          color: { type: 'string', minLength: 1 },
+          size: { type: 'string', minLength: 1 },
+          value: { type: 'string', minLength: 1 },
+          format: { enum: FORMATS },
+          views: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true, maxItems: 6 },
+          pair: { type: 'boolean' },
         },
       },
     },
@@ -107,6 +122,9 @@ function items(spec) {
   ];
 }
 
+// Chart keys only a kind chart reads; on a raw vegaLite chart they would be ignored silently.
+const KIND_ONLY_KEYS = ['x', 'y', 'color', 'size', 'value', 'views', 'format', 'pair'];
+
 function crossRefs(spec, dir, { allowOutside }) {
   const errors = [];
   const queryNames = Object.keys(spec.queries ?? {});
@@ -137,6 +155,21 @@ function crossRefs(spec, dir, { allowOutside }) {
       const { error } = envUrl(src);
       if (error) errors.push({ path: `sources.${name}.env`, message: error });
     }
+  }
+  (spec.charts ?? []).forEach((c, i) => {
+    const p = pathJoin('charts', i);
+    if (c.kind && c.vegaLite) errors.push({ path: p, message: 'use either kind or vegaLite, not both' });
+    else if (!c.kind && !c.vegaLite) errors.push({ path: p, message: `add kind (one of ${KIND_NAMES.join(', ')}) or vegaLite` });
+    else if (!c.kind) {
+      for (const key of KIND_ONLY_KEYS) {
+        if (c[key] !== undefined) errors.push({ path: pathJoin(p, key), message: `${key} needs kind (raw vegaLite charts ignore it)` });
+      }
+    }
+  });
+  if (spec.theme !== undefined && !listThemes().includes(spec.theme)) {
+    const themes = listThemes();
+    const hint = didYouMean(spec.theme, themes);
+    errors.push({ path: 'theme', message: `unknown theme ${JSON.stringify(spec.theme)}; ${hint ? `did you mean ${JSON.stringify(hint)}?` : `available: ${themes.join(', ')}`}` });
   }
   return errors;
 }
@@ -204,6 +237,7 @@ function inspectMarks(vl, p, errors) {
 function vegaLiteErrors(spec) {
   const errors = [];
   (spec.charts ?? []).forEach((chart, i) => {
+    if (!chart.vegaLite) return;
     const p = `${pathJoin('charts', i)}.vegaLite`;
     const found = [];
     forbiddenKeys(chart.vegaLite, p, found);
@@ -219,19 +253,21 @@ function vegaLiteErrors(spec) {
   return errors;
 }
 
-// Run each query with LIMIT 0 on the locked db, so "valid" means buildable.
-async function bindErrors(spec, dir, { allowOutside, timeoutMs }) {
+// Describe each query (LIMIT 0) on the locked db, so "valid" means buildable
+// and field/role checks see real column names and types.
+async function bindQueries(spec, dir, { allowOutside, timeoutMs }) {
   let db;
   try {
     db = await openLockedDb(spec, dir, { allowOutside });
   } catch (e) {
-    return e.errors ?? [{ path: 'sources', message: errMessage(e) }];
+    return { errors: e.errors ?? [{ path: 'sources', message: errMessage(e) }], described: {} };
   }
   const errors = [];
+  const described = {};
   try {
     for (const [name, sql] of Object.entries(spec.queries)) {
       try {
-        await runTimed(db.conn, wrapLimit(sql, 0), timeoutMs);
+        described[name] = await describeQuery(db.conn, sql, timeoutMs);
       } catch (e) {
         errors.push({ path: `queries.${name}`, message: errMessage(e, 3, db.scrub) });
       }
@@ -239,7 +275,7 @@ async function bindErrors(spec, dir, { allowOutside, timeoutMs }) {
   } finally {
     db.close();
   }
-  return errors;
+  return { errors, described };
 }
 
 export async function validateSpec(spec, { dir, allowOutside = false, timeoutMs = DEFAULT_TIMEOUT_MS }) {
@@ -249,6 +285,12 @@ export async function validateSpec(spec, { dir, allowOutside = false, timeoutMs 
   const refs = crossRefs(spec, dir, { allowOutside });
   const sql = await sqlErrors(spec);
   const errors = [...refs, ...sql, ...vegaLiteErrors(spec)];
-  if (!refs.length && !sql.length) errors.push(...(await bindErrors(spec, dir, { allowOutside, timeoutMs })));
+  if (!refs.length && !sql.length) {
+    const bound = await bindQueries(spec, dir, { allowOutside, timeoutMs });
+    errors.push(...bound.errors);
+    if (!bound.errors.length && !errors.length) {
+      errors.push(...checkFields(spec, bound.described), ...roleErrors(spec, bound.described));
+    }
+  }
   return { ok: errors.length === 0, errors };
 }

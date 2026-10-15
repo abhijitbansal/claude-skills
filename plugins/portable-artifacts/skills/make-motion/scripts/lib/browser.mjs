@@ -1,6 +1,8 @@
 import { chromium } from 'playwright';
+import { doctorCommand, npxInstallChromium } from './doctor-hint.mjs';
 
-const INSTALL_HINT = 'No browser available. Run: npx playwright install chromium';
+const INSTALL_HINT = `No browser available. Run: ${npxInstallChromium()} `
+  + `(doctor: ${doctorCommand()}, id chromium)`;
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 
 // Bundled Chromium first; falls back to system Chrome with a warning.
@@ -13,7 +15,7 @@ export async function launchBrowser({ quiet = false } = {}) {
       const browser = await chromium.launch({ channel: 'chrome' });
       if (!quiet) {
         process.stderr.write('warning: Playwright Chromium not installed; using system Chrome. '
-          + 'Output may differ between machines. Fix: npx playwright install chromium\n');
+          + 'Output may differ between machines. Fix: ' + npxInstallChromium() + '\n');
       }
       return browser;
     } catch (second) {

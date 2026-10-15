@@ -1,0 +1,55 @@
+{
+  "params": [
+    {
+      "name": "pa_hover",
+      "select": {
+        "type": "point",
+        "on": "pointerover",
+        "clear": "pointerout"
+      }
+    }
+  ],
+  "mark": "rect",
+  "encoding": {
+    "x": {
+      "field": "hour",
+      "type": "nominal",
+      "title": "hour"
+    },
+    "y": {
+      "field": "day",
+      "type": "nominal",
+      "title": "day"
+    },
+    "color": {
+      "field": "n",
+      "type": "quantitative",
+      "title": "n"
+    },
+    "tooltip": [
+      {
+        "field": "hour",
+        "type": "nominal",
+        "title": "hour"
+      },
+      {
+        "field": "day",
+        "type": "nominal",
+        "title": "day"
+      },
+      {
+        "field": "n",
+        "type": "quantitative",
+        "title": "n"
+      }
+    ],
+    "opacity": {
+      "condition": {
+        "param": "pa_hover",
+        "empty": true,
+        "value": 1
+      },
+      "value": 0.55
+    }
+  }
+}

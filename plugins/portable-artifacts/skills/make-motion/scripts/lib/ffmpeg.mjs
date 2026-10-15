@@ -1,8 +1,10 @@
 import { spawnSync } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
+import { doctorCommand, npmInstallFfmpegStatic } from './doctor-hint.mjs';
 
 const HINT = 'ffmpeg not found. Install it (macOS: brew install ffmpeg; Windows: winget install Gyan.FFmpeg; Debian/Ubuntu: sudo apt-get install ffmpeg), '
-  + 'or set FFMPEG_PATH, or run: npm i ffmpeg-static';
+  + `or set FFMPEG_PATH, or run: ${npmInstallFfmpegStatic()} `
+  + `(doctor: ${doctorCommand()}, id ffmpeg)`;
 
 const isExecutable = (p) => {
   try { accessSync(p, constants.X_OK); return true; } catch { return false; }
@@ -59,12 +61,15 @@ function audioGraph(audio) {
 }
 
 // `audio`: resolveAudio() output plus an absolute `file` per track. `duration` caps the MP4 at the video length.
-export function encodeArgs({ fps, out, audio = [], duration }) {
-  if (audio.length === 0) return [...VIDEO_INPUT(fps), ...VIDEO_CODEC, out];
+const metadataArgs = (m = {}) => Object.entries(m).filter(([, v]) => v).flatMap(([k, v]) => ['-metadata', `${k}=${v}`]);
+
+// `metadata`: { comment?, artist? } written into the MP4 container tags.
+export function encodeArgs({ fps, out, audio = [], duration, metadata }) {
+  if (audio.length === 0) return [...VIDEO_INPUT(fps), ...VIDEO_CODEC, ...metadataArgs(metadata), out];
   if (!Number.isFinite(duration)) throw new Error('encodeArgs: duration is required when audio tracks are given');
   const { graph, label } = audioGraph(audio);
   return [...VIDEO_INPUT(fps), ...audio.flatMap((t) => ['-i', t.file]), '-filter_complex', graph,
-    '-map', '0:v', '-map', label, ...VIDEO_CODEC, ...AUDIO_CODEC, '-t', sec(duration), out];
+    '-map', '0:v', '-map', label, ...VIDEO_CODEC, ...AUDIO_CODEC, '-t', sec(duration), ...metadataArgs(metadata), out];
 }
 
 // The real mix graph against a lavfi video stand-in, discarded after PROBE_SECONDS: proves the

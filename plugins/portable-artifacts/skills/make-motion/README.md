@@ -19,6 +19,12 @@ shell commands.
   same video.
 - **Self-check for models**: `--contact-sheet` writes one PNG per scene, so a
   model that can read images can review its own work before rendering.
+- **Stamped**: the preview has a favicon, a `<meta name="generator">` and a provenance footer (model, effort
+  and agent from the spec's `generatedBy`; "not reported" when unknown; `preview.mjs`
+  takes no flags), and the MP4 carries the same in its metadata (`render.mjs` also
+  takes `--model`/`--effort`/`--agent`). The preview has no theme
+  toggle: it is a dark-only local tool, and the video follows the spec's theme.
+  `scripts/doctor.mjs` reports a missing ffmpeg or browser before the first render.
 
 > Agents: the instructions you follow are in [`SKILL.md`](SKILL.md). This
 > README is for people.
@@ -27,6 +33,7 @@ shell commands.
 
 ```bash
 cd make-motion && npm ci && npx playwright install chromium && cd -   # one-time
+node make-motion/scripts/doctor.mjs   # optional: reports ffmpeg, the browser and anything else missing
 # plus ffmpeg on PATH:
 #   macOS:   brew install ffmpeg
 #   Windows: winget install Gyan.FFmpeg   (then open a new terminal)
@@ -85,7 +92,8 @@ examples in [`references/examples/`](references/examples/).
 | `validate.mjs <spec>` | Schema plus cross-field checks (unique ids, keyframe times, per-type props, image and audio paths, audio scene/start/fade fits, chart compile, no remote URLs) | `--json` |
 | `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` |
 | `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. The MP4 timing is exact | `--open` |
-| `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks) via Playwright frame capture → ffmpeg | `--out <file>`, `--fps <n>`, `--size WxH`, `--contact-sheet` |
+| `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--contact-sheet` |
+| `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci` | `--json`, `--for <spec.json\|voiceover>`, `--fix <id[,id]>` |
 
 Limits: up to 50 scenes and 120 s in total, up to 20 audio tracks; fps is 24, 25, 30 or 60; each side
 is 16–3840 px. Frame *i* samples `t = i / fps`, so put a final keyframe at

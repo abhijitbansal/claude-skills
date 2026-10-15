@@ -1,7 +1,8 @@
 // Pure-ish helpers for the cross-host eval runner. Kept separate from the CLI
 // so scoring can be tested with a fake host and no LLM.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 export const SKILLS = {
@@ -19,7 +20,97 @@ export const SKILLS = {
     outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/render.mjs'), spec, '--contact-sheet', '--out', path.join(work, 'out')],
     artifacts: ['out'],
   },
+  diagram: {
+    dir: 'make-diagram',
+    spec: 'diagram.json',
+    // Build into <work>/out; success = out/diagram.html exists.
+    outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/build.mjs'), spec, '--out', path.join(work, 'out/diagram.html')],
+    artifacts: ['out/diagram.html'],
+  },
+  explainer: {
+    dir: 'make-explainer',
+    spec: 'explainer.json',
+    // Sibling skills are copied next to it: make-explainer resolves them as ../<name> and loads them lazily.
+    // make-motion is left out: motion sections need ffmpeg and Chromium, and no prompt asks for one.
+    siblings: ['make-diagram', 'make-dashboard'],
+    // Build into <work>/out; success = out/explainer.html exists.
+    outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/build.mjs'), spec, '--out', path.join(work, 'out/explainer.html')],
+    artifacts: ['out/explainer.html'],
+  },
 };
+
+// A prompt with `"repo": true` gets a small git repository at <work>/repo: `main`, then the branch
+// feat/search with three commits (one adds a test file). Git runs with argument arrays and a scrubbed
+// environment, so the developer's own git config (signing, hooks, templates) cannot change the result.
+export function createFixtureRepo(dir) {
+  const env = {
+    ...process.env,
+    GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_SYSTEM: os.devNull,
+    GIT_AUTHOR_NAME: 'Eval Author', GIT_AUTHOR_EMAIL: 'author@example.com',
+    GIT_COMMITTER_NAME: 'Eval Author', GIT_COMMITTER_EMAIL: 'author@example.com',
+  };
+  for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) delete env[k];
+  const git = (...args) => {
+    const r = spawnSync('git', ['-c', 'commit.gpgsign=false', '-c', `core.hooksPath=${os.devNull}`, ...args], { cwd: dir, encoding: 'utf8', env });
+    if (r.error) throw new Error(`git ${args.join(' ')} could not run: ${r.error.code ?? r.error.message}`);
+    if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr.trim()}${args[0] === 'init' ? ' (git 2.28 or newer is needed for init -b)' : ''}`);
+  };
+  const write = (rel, content) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), content);
+  };
+  let day = 1;
+  const commit = (message) => {
+    const when = `2026-10-${String(day++).padStart(2, '0')}T12:00:00Z`;
+    git('add', '-A');
+    env.GIT_AUTHOR_DATE = when;
+    env.GIT_COMMITTER_DATE = when;
+    git('commit', '-q', '-m', message);
+  };
+  fs.mkdirSync(dir, { recursive: true });
+  git('init', '-q', '-b', 'main');
+  write('README.md', '# notes-app\n\nA small notes service.\n');
+  write('src/notes.js', 'export const notes = [];\nexport const add = (text) => notes.push(text);\n');
+  commit('chore: start the notes app');
+  git('checkout', '-q', '-b', 'feat/search');
+  write('src/search.js', 'import { notes } from "./notes.js";\nexport const search = (q) => notes.filter((n) => n.includes(q));\n');
+  commit('feat: search notes by text');
+  write('src/search.js', 'import { notes } from "./notes.js";\nexport const search = (q) => notes.filter((n) => n.toLowerCase().includes(q.toLowerCase()));\n');
+  write('docs/search.md', 'Search is case-insensitive.\n');
+  commit('fix: make search case-insensitive');
+  write('test/search.test.js', 'import test from "node:test";\nimport assert from "node:assert/strict";\nimport { search } from "../src/search.js";\ntest("empty store", () => assert.deepEqual(search("x"), []));\n');
+  commit('test: cover search on an empty store');
+}
+
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', 'test']);
+
+// Copy a skill into <work>/skills/<name> without node_modules, which is linked back to the original.
+export function copySkill(src, work) {
+  const dst = path.join(work, 'skills', path.basename(src));
+  fs.cpSync(src, dst, {
+    recursive: true,
+    filter: (from) => !path.relative(src, from).split(path.sep).some((seg) => SKIP_DIRS.has(seg)),
+  });
+  // Deps not installed (CI runs these tests before npm ci): nothing to link; a real run fails later with npm's own error.
+  if (fs.existsSync(path.join(src, 'node_modules'))) linkNodeModules(path.join(src, 'node_modules'), path.join(dst, 'node_modules'));
+}
+
+// A fresh work directory for one prompt: the skill and its sibling skills under skills/, the data fixtures
+// under data/, ./repo for a `"repo": true` prompt, and the seed spec for an edit prompt.
+// `skillsRoot` holds the skill folders, `evalDir` the fixtures. -> { work, seedSpec }.
+export function prepareWorkdir(p, { skillCfg, skillsRoot, evalDir, tmpDir = os.tmpdir() }) {
+  const work = fs.mkdtempSync(path.join(tmpDir, `pa-eval-${p.id}-`));
+  for (const name of [skillCfg.dir, ...(skillCfg.siblings ?? [])]) copySkill(path.join(skillsRoot, name), work);
+  if (p.repo) createFixtureRepo(path.join(work, 'repo'));
+  fs.cpSync(path.join(evalDir, 'fixtures', 'data'), path.join(work, 'data'), { recursive: true });
+  let seedSpec = null;
+  if (p.seed) {
+    const seedPath = path.join(evalDir, 'fixtures', p.seed);
+    fs.copyFileSync(seedPath, path.join(work, skillCfg.spec));
+    seedSpec = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+  }
+  return { work, seedSpec };
+}
 
 export function buildPrompt(skillCfg, task) {
   return [
@@ -48,8 +139,11 @@ export function run(argv, { cwd, env, timeoutMs = 0, logFile } = {}) {
     const started = Date.now();
     // detached = own process group, so a timeout also kills grandchildren
     // (renders, servers) the host started.
+    // NODE_USE_SYSTEM_CA makes Node 24 read the macOS keychain at startup; the codex
+    // sandbox denies that and every node process SIGSEGVs. The eval is offline.
+    const { NODE_USE_SYSTEM_CA: _drop, ...baseEnv } = process.env;
     const child = spawn(argv[0], argv.slice(1), {
-      cwd, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
+      cwd, env: { ...baseEnv, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
     });
     let out = '';
     const onData = (d) => { out += d; };

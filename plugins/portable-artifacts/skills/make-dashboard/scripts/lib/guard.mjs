@@ -14,7 +14,7 @@
 // CTE names that shadow system objects are rejected outright as a second layer.
 // Returns a message for the first violation, or null.
 
-import { didYouMean } from './errors.mjs';
+import { didYouMean } from '../../shared/errors.mjs';
 
 const ALLOWED_TABLE_FUNCTIONS = ['range', 'generate_series', 'unnest'];
 const SYSTEM_NAMES = ['system', 'temp', 'pg_catalog', 'information_schema'];

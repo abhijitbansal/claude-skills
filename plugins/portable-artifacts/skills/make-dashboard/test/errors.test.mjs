@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import Ajv from 'ajv';
 import {
   levenshtein, didYouMean, formatAjvErrors, pathJoin, printResult,
-} from '../scripts/lib/errors.mjs';
+} from '../shared/errors.mjs';
 
 const schema = {
   type: 'object',

@@ -1,0 +1,427 @@
+{
+  "width": 1202,
+  "height": 210,
+  "drawing": {
+    "x": 0,
+    "y": 30,
+    "width": 1202,
+    "height": 180
+  },
+  "legend": {
+    "x": 757.2,
+    "y": 24,
+    "width": 420.8,
+    "height": 20,
+    "items": [
+      {
+        "kind": "kind",
+        "name": "start",
+        "family": "bare",
+        "count": 1,
+        "dx": 0,
+        "width": 50.1
+      },
+      {
+        "kind": "kind",
+        "name": "state",
+        "family": "decision",
+        "count": 4,
+        "dx": 66.1,
+        "width": 54.9
+      },
+      {
+        "kind": "kind",
+        "name": "choice",
+        "family": "decision",
+        "count": 1,
+        "dx": 137,
+        "width": 58.9
+      },
+      {
+        "kind": "kind",
+        "name": "end",
+        "family": "bare",
+        "count": 1,
+        "dx": 211.9,
+        "width": 44.2
+      },
+      {
+        "kind": "style",
+        "name": "solid",
+        "style": "solid",
+        "label": "call",
+        "dx": 272.1,
+        "width": 48.7
+      },
+      {
+        "kind": "style",
+        "name": "dashed",
+        "style": "dashed",
+        "label": "secondary",
+        "dx": 336.8,
+        "width": 84
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "begin",
+      "x": 34,
+      "y": 139,
+      "width": 20,
+      "height": 20,
+      "shape": "filled-dot",
+      "lines": [
+        "Begin"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": null,
+      "typeLine": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 0,
+      "labelBox": {
+        "x": 24,
+        "y": 164,
+        "width": 40,
+        "height": 20
+      },
+      "labelSide": "bottom"
+    },
+    {
+      "id": "placed",
+      "x": 144,
+      "y": 129,
+      "width": 80,
+      "height": 40,
+      "shape": "rounded-rect",
+      "lines": [
+        "Placed"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": null,
+      "typeLine": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 1
+    },
+    {
+      "id": "paid",
+      "x": 496,
+      "y": 121,
+      "width": 122,
+      "height": 56,
+      "shape": "rounded-rect",
+      "lines": [
+        "Paid"
+      ],
+      "noteLine": "stock reserved",
+      "icon": null,
+      "emoji": null,
+      "typeLine": null,
+      "tone": "good",
+      "group": null,
+      "layer": 2
+    },
+    {
+      "id": "ok",
+      "x": 713,
+      "y": 137,
+      "width": 24,
+      "height": 24,
+      "shape": "small-diamond",
+      "lines": [
+        "Stock ok?"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": null,
+      "typeLine": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 3,
+      "labelBox": {
+        "x": 690,
+        "y": 166,
+        "width": 70,
+        "height": 20
+      },
+      "labelSide": "bottom"
+    },
+    {
+      "id": "shipped",
+      "x": 972,
+      "y": 133,
+      "width": 86,
+      "height": 40,
+      "shape": "rounded-rect",
+      "lines": [
+        "Shipped"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": null,
+      "typeLine": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 4
+    },
+    {
+      "id": "cancelled",
+      "x": 966,
+      "y": 61,
+      "width": 98,
+      "height": 40,
+      "shape": "rounded-rect",
+      "lines": [
+        "Cancelled"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": null,
+      "typeLine": null,
+      "tone": "bad",
+      "group": null,
+      "layer": 4
+    },
+    {
+      "id": "finish",
+      "x": 1147,
+      "y": 139.7,
+      "width": 20,
+      "height": 20,
+      "shape": "ringed-dot",
+      "lines": [
+        "Finish"
+      ],
+      "noteLine": null,
+      "icon": null,
+      "emoji": null,
+      "typeLine": null,
+      "tone": "neutral",
+      "group": null,
+      "layer": 5,
+      "labelBox": {
+        "x": 1136,
+        "y": 164.7,
+        "width": 42,
+        "height": 20
+      },
+      "labelSide": "bottom"
+    }
+  ],
+  "groups": [],
+  "edges": [
+    {
+      "id": "edge-0",
+      "from": "begin",
+      "to": "placed",
+      "points": [
+        {
+          "x": 54,
+          "y": 149
+        },
+        {
+          "x": 144,
+          "y": 149
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "edge-1",
+      "from": "placed",
+      "to": "paid",
+      "points": [
+        {
+          "x": 224,
+          "y": 149
+        },
+        {
+          "x": 496,
+          "y": 149
+        }
+      ],
+      "style": "solid",
+      "both": false,
+      "label": {
+        "text": "payment captured",
+        "x": 304,
+        "y": 156,
+        "width": 120,
+        "height": 20
+      }
+    },
+    {
+      "id": "edge-2",
+      "from": "paid",
+      "to": "ok",
+      "points": [
+        {
+          "x": 618,
+          "y": 149
+        },
+        {
+          "x": 713,
+          "y": 149
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "edge-3",
+      "from": "ok",
+      "to": "shipped",
+      "points": [
+        {
+          "x": 737,
+          "y": 153
+        },
+        {
+          "x": 972,
+          "y": 153
+        }
+      ],
+      "style": "solid",
+      "both": false,
+      "label": {
+        "text": "in stock",
+        "x": 832,
+        "y": 160,
+        "width": 62,
+        "height": 20
+      }
+    },
+    {
+      "id": "edge-4",
+      "from": "ok",
+      "to": "cancelled",
+      "points": [
+        {
+          "x": 737,
+          "y": 145
+        },
+        {
+          "x": 784,
+          "y": 145
+        },
+        {
+          "x": 784,
+          "y": 81
+        },
+        {
+          "x": 966,
+          "y": 81
+        }
+      ],
+      "style": "dashed",
+      "both": false,
+      "label": {
+        "text": "sold out",
+        "x": 832,
+        "y": 54,
+        "width": 62,
+        "height": 20
+      }
+    },
+    {
+      "id": "edge-5",
+      "from": "placed",
+      "to": "placed",
+      "points": [
+        {
+          "x": 170.7,
+          "y": 129
+        },
+        {
+          "x": 170.7,
+          "y": 105
+        },
+        {
+          "x": 197.3,
+          "y": 105
+        },
+        {
+          "x": 197.3,
+          "y": 129
+        }
+      ],
+      "style": "solid",
+      "both": false,
+      "label": {
+        "text": "retry payment",
+        "x": 136,
+        "y": 79,
+        "width": 96,
+        "height": 20
+      }
+    },
+    {
+      "id": "edge-6",
+      "from": "shipped",
+      "to": "finish",
+      "points": [
+        {
+          "x": 1058,
+          "y": 153
+        },
+        {
+          "x": 1147,
+          "y": 153
+        }
+      ],
+      "style": "solid",
+      "both": false
+    },
+    {
+      "id": "edge-7",
+      "from": "cancelled",
+      "to": "finish",
+      "points": [
+        {
+          "x": 1064,
+          "y": 81
+        },
+        {
+          "x": 1088,
+          "y": 81
+        },
+        {
+          "x": 1088,
+          "y": 146.3
+        },
+        {
+          "x": 1147,
+          "y": 146.3
+        }
+      ],
+      "style": "solid",
+      "both": false
+    }
+  ],
+  "layers": [
+    [
+      "begin"
+    ],
+    [
+      "placed"
+    ],
+    [
+      "paid"
+    ],
+    [
+      "ok"
+    ],
+    [
+      "cancelled",
+      "shipped"
+    ],
+    [
+      "finish"
+    ]
+  ]
+}

@@ -5,15 +5,11 @@
   "charts": [
     {
       "id": "c1",
-      "title": "Units by product",
+      "title": "Gadget sells the most units",
       "query": "units_by_product",
-      "vegaLite": {
-        "mark": "bar",
-        "encoding": {
-          "x": { "field": "product", "type": "nominal", "sort": null },
-          "y": { "field": "units", "type": "quantitative" }
-        }
-      }
+      "kind": "bar",
+      "x": "product",
+      "y": "units"
     }
   ]
 }

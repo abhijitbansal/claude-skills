@@ -1,0 +1,187 @@
+<body class="has-toc">
+<a class="skip" href="#content">Skip to content</a>
+<header class="hero">
+<div class="mast-text">
+<h1>feat/visual-artifacts: dashboards, diagrams and explainers</h1>
+<p class="subtitle">What shipped, how it works, how to test it</p>
+<dl class="meta">
+<div class="m-date"><dt>Date</dt><dd>2026-10-12</dd></div>
+<div class="m-branch"><dt>Branch</dt><dd>feat/visual-artifacts</dd></div>
+<div class="m-author"><dt>Author</dt><dd>Abhijit Bansal</dd></div>
+</dl>
+</div>
+<button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><span class="pa-ti pa-ti-auto"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-light"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-dark"><svg data-sibling-svg></svg></span></button>
+<script>/* shared theme toggle */</script>
+<div class="hero-tldr tone-good" id="verdict" role="region" aria-labelledby="verdict-title">
+<h2 class="hero-tldr-title" id="verdict-title">Three skills share one core</h2>
+<div class="tldr tone-good">
+<p class="tldr-tone"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span></p>
+<p class="lead">Ready for review.</p>
+<ul class="points">
+<li>One theme layer</li>
+<li>One lint</li>
+</ul>
+</div>
+</div>
+</header>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+<details open>
+<summary>Contents</summary>
+<ol>
+<li><a href="#verdict">Three skills share one core</a></li>
+<li><a href="#why">Why</a></li>
+<li><a href="#pieces">Pieces</a></li>
+<li><a href="#sizes">Sizes</a></li>
+<li><a href="#what-could-go-wrong">What could go wrong</a></li>
+<li><a href="#files-changed">Files changed</a></li>
+<li><a href="#rollout">Rollout</a></li>
+<li><a href="#history">History</a></li>
+<li><a href="#two-routes">Two routes</a></li>
+<li><a href="#run-it">Run it</a></li>
+<li><a href="#screenshot">Screenshot</a></li>
+</ol>
+</details>
+</nav>
+<main id="content" class="sections">
+<section class="sec sec-text" id="why" aria-labelledby="why-title">
+<h2 class="sec-title" id="why-title">Why<a class="anchor" href="#why" aria-label="Link to this section: Why">#</a></h2>
+<div class="prose">
+<p>Plain <strong>bold</strong>, <em>italic</em>, <code>code</code> and a <a href="https://example.com" rel="noopener noreferrer">link</a>.</p>
+<ul>
+<li>first</li>
+<li>second</li>
+</ul>
+</div>
+</section>
+<section class="sec sec-kpis sec-alt" id="section-3">
+<dl class="kpis">
+<div class="kpi tone-good"><dt>Commits</dt><dd class="kpi-value">42</dd><dd class="kpi-delta"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span><span>+3</span></dd><dd class="kpi-note">since main</dd></div>
+<div class="kpi tone-neutral"><dt>Tests</dt><dd class="kpi-value">612 pass</dd></div>
+</dl>
+</section>
+<section class="sec sec-cards" id="pieces" aria-labelledby="pieces-title">
+<h2 class="sec-title" id="pieces-title">Pieces<a class="anchor" href="#pieces" aria-label="Link to this section: Pieces">#</a></h2>
+<ul class="cards cols-3">
+<li class="card tone-accent">
+<div class="card-head"><svg data-sibling-svg></svg><h3>Theme</h3><span class="tag">shared</span></div>
+<p>Tokens become CSS.</p>
+</li>
+</ul>
+</section>
+<section class="sec sec-table" id="sizes" aria-labelledby="sizes-title">
+<h2 class="sec-title" id="sizes-title">Sizes<a class="anchor" href="#sizes" aria-label="Link to this section: Sizes">#</a></h2>
+<div class="tablewrap" role="region" aria-label="Built output" tabindex="0">
+<table><caption>Built output</caption>
+<thead><tr><th scope="col" class="a-l">Page</th><th scope="col" class="a-r">KB</th></tr></thead>
+<tbody>
+<tr><th scope="row" class="a-l">recap</th><td class="a-r">410</td></tr>
+<tr><th scope="row" class="a-l">slides</th><td class="a-r">520</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+<section class="sec sec-risks" id="what-could-go-wrong" aria-labelledby="what-could-go-wrong-title">
+<h2 class="sec-title" id="what-could-go-wrong-title">What could go wrong<a class="anchor" href="#what-could-go-wrong" aria-label="Link to this section: What could go wrong">#</a></h2>
+<div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
+<table>
+<thead><tr><th scope="col">Severity</th><th scope="col">Risk</th><th scope="col">Mitigation</th><th scope="col">Owner</th></tr></thead>
+<tbody>
+<tr>
+<td data-label="Severity"><span class="chip tone-low"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>Low</span></span></td>
+<td data-label="Risk">Fonts drift</td>
+<td data-label="Mitigation">Synced copy is checked in CI</td>
+<td data-label="Owner">Abhijit</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section class="sec sec-files" id="files-changed" aria-labelledby="files-changed-title">
+<h2 class="sec-title" id="files-changed-title">Files changed<a class="anchor" href="#files-changed" aria-label="Link to this section: Files changed">#</a></h2>
+<div class="files">
+<p class="files-sum">1 file · 1 added · +40 −0 lines</p>
+<ul class="tree">
+<li class="folder"><details open>
+<summary><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg><span class="dir">shared/</span><span class="count">1 file</span></summary>
+<ul class="tree">
+<li class="file">
+<span class="file-main"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span>Added</span></span><code class="path" title="shared/theme.mjs">theme.mjs</code><span class="stat"><span class="add">+40</span> <span class="del">−0</span></span></span>
+<span class="file-note">theme tokens to CSS</span>
+</li>
+</ul>
+</details></li>
+</ul>
+</div>
+</section>
+<section class="sec sec-steps" id="rollout" aria-labelledby="rollout-title">
+<h2 class="sec-title" id="rollout-title">Rollout<a class="anchor" href="#rollout" aria-label="Link to this section: Rollout">#</a></h2>
+<ol class="steps">
+<li class="step">
+<div class="step-head"><strong class="step-title">Merge</strong><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg><span>Done</span></span></div>
+<p>Squash.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Publish</strong></div>
+
+</li>
+</ol>
+</section>
+<section class="sec sec-timeline" id="history" aria-labelledby="history-title">
+<h2 class="sec-title" id="history-title">History<a class="anchor" href="#history" aria-label="Link to this section: History">#</a></h2>
+<ol class="timeline">
+<li class="tl-item">
+<span class="tl-date">2026-10-01</span>
+<strong class="tl-title">Spec</strong>
+<p>Design agreed.</p>
+</li>
+</ol>
+</section>
+<section class="sec sec-compare sec-alt" id="two-routes" aria-labelledby="two-routes-title">
+<h2 class="sec-title" id="two-routes-title">Two routes<a class="anchor" href="#two-routes" aria-label="Link to this section: Two routes">#</a></h2>
+<div class="compare cols-2">
+<div class="cmp-col tone-good">
+<h3>Inline</h3><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span>
+<ul>
+<li>Simple</li>
+</ul>
+</div>
+<div class="cmp-col tone-neutral">
+<h3>Sibling</h3>
+<ul>
+<li>Reuse</li>
+</ul>
+</div>
+</div>
+<p class="verdict"><strong>Verdict.</strong> Sibling wins.</p>
+</section>
+<section class="sec sec-callout" id="heads-up">
+<aside class="callout tone-warn">
+<p class="callout-head"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Warning</span></span><strong class="callout-title">Heads up</strong></p>
+<p>Needs Node 20.</p>
+</aside>
+</section>
+<section class="sec sec-code" id="run-it" aria-labelledby="run-it-title">
+<h2 class="sec-title" id="run-it-title">Run it<a class="anchor" href="#run-it" aria-label="Link to this section: Run it">#</a></h2>
+<figure class="code">
+<div class="code-bar"><span class="code-lang">bash</span><button type="button" class="btn copy" data-copy aria-label="Copy code">Copy</button></div>
+<pre tabindex="0"><code>node scripts/validate.mjs explainer.json</code></pre>
+<figcaption>Validate</figcaption>
+</figure>
+</section>
+<section class="sec sec-details" id="section-13">
+<details class="det">
+<summary>Why not HTML?</summary>
+<div class="det-body prose">
+<p>The model writes JSON only.</p>
+</div>
+</details>
+</section>
+<section class="sec sec-image" id="screenshot" aria-labelledby="screenshot-title">
+<h2 class="sec-title" id="screenshot-title">Screenshot<a class="anchor" href="#screenshot" aria-label="Link to this section: Screenshot">#</a></h2>
+<figure class="img">
+<img src="data:image/png;base64,…" alt="A single pixel">
+<figcaption>Tiny</figcaption>
+</figure>
+</section>
+</main>

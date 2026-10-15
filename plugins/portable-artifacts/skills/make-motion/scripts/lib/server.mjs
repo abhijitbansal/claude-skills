@@ -7,7 +7,11 @@ import { readFileSync, statSync, createReadStream, watch } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveAsset, resolveUrlPath } from './paths.mjs';
-import { validateSpec } from './spec.mjs';
+import { validateSpec, checkGeneratedBy } from './spec.mjs';
+import { loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
+import { faviconLink } from '../../shared/icons.mjs';
+import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
+import { themeData, themeCss, FONTS_DIR } from './theme.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NODE_MODULES = path.join(SKILL_ROOT, 'node_modules');
@@ -87,6 +91,29 @@ function loadIndex(mode) {
   return { html: template.replace('{{MODE}}', mode), csp };
 }
 
+function themeOrDefault(name) {
+  try { return loadTheme(name ?? DEFAULT_THEME); } catch { return loadTheme(DEFAULT_THEME); }
+}
+
+// Favicon and provenance footer for the current spec, read fresh. Only `generatedBy` (valid against its own
+// schema) and `theme` (a known name) matter: an unrelated spec error never blanks the stamp, and a hostile
+// generatedBy falls back to "not reported".
+function pageChrome(ctx) {
+  let spec;
+  try { spec = JSON.parse(readFileSync(ctx.specFile, 'utf8')); } catch { spec = undefined; }
+  const gen = checkGeneratedBy(spec?.generatedBy) ? spec.generatedBy : undefined;
+  return {
+    favicon: faviconLink('make-motion', themeOrDefault(spec?.theme ?? ctx.theme)),
+    generator: generatorMeta('make-motion', gen),
+    provenance: provenanceHtml('make-motion', gen, buildDate()),
+  };
+}
+
+function indexHtml(ctx) {
+  const { favicon, generator, provenance } = pageChrome(ctx);
+  return ctx.index.html.replace('{{FAVICON}}', () => favicon).replace('{{GENERATOR}}', () => generator).replace('{{PROVENANCE}}', () => provenance);
+}
+
 // Image and audio srcs named by the current spec; /assets serves nothing else.
 function referencedAssets(specFile) {
   try {
@@ -118,6 +145,29 @@ function serveFont(res, name) {
   return notFound(res);
 }
 
+// The shared theme a spec names: its JSON for the colours, a stylesheet for the fonts.
+function serveTheme(res, name, kind) {
+  const theme = themeData(name);
+  if (!theme) return notFound(res);
+  if (kind === 'json') return sendBody(res, MIME['.json'], JSON.stringify(theme));
+  return sendBody(res, MIME['.css'], themeCss(theme));
+}
+
+// Only the font files themselves: a plain "<name>.woff2" after one decode. Anything left holding a
+// slash, a backslash, a percent sign or a leading dot (an encoded slash or dot-segment, or a name
+// that was encoded twice) is not a font name, so there is no second decode for it to hide in.
+const FONT_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.woff2$/;
+function serveThemeFont(res, rawName) {
+  const name = safeDecode(rawName);
+  const { file } = FONT_FILE.test(name) && !name.includes('..') ? resolveAsset(FONTS_DIR, name) : {};
+  return file ? sendFile(res, file) : notFound(res);
+}
+
+function sendBody(res, type, body) {
+  res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
+  res.end(body);
+}
+
 function serveEvents(ctx, req, res) {
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
   res.write(': connected\n\n');
@@ -126,25 +176,40 @@ function serveEvents(ctx, req, res) {
   req.on('close', () => { clearInterval(ping); ctx.clients.delete(res); });
 }
 
+const safeDecode = (text) => { try { return decodeURIComponent(text); } catch { return ''; } };
+
 function route(ctx, req, res) {
   const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
   if (pathname === '/' || pathname === '/index.html') {
     res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-store', 'content-security-policy': ctx.index.csp });
-    return res.end(ctx.index.html);
+    return res.end(indexHtml(ctx));
   }
   if (pathname === '/spec.json') return serveSpec(ctx, res);
   if (pathname === '/events') return serveEvents(ctx, req, res);
   if (pathname.startsWith('/template/')) return serveUnder(res, TEMPLATE_DIR, pathname.slice('/template/'.length));
   if (pathname.startsWith('/assets/')) return serveAsset(ctx, req, res, pathname.slice('/assets/'.length));
+  if (pathname.startsWith('/theme/fonts/')) return serveThemeFont(res, pathname.slice('/theme/fonts/'.length));
+  const themeRoute = /^\/theme\/([^/]+)\.(json|css)$/.exec(pathname);
+  if (themeRoute) return serveTheme(res, safeDecode(themeRoute[1]), themeRoute[2]);
   if (pathname.startsWith('/vendor/fonts/')) return serveFont(res, pathname.slice('/vendor/fonts/'.length));
   const vendor = /^\/vendor\/([^/]+)\/(.*)$/.exec(pathname);
   if (vendor && VENDOR_ROOTS[vendor[1]]) return serveUnder(res, VENDOR_ROOTS[vendor[1]], vendor[2]);
   return notFound(res);
 }
 
+// The spec as written; an embedding tool may give the server a theme for specs that name none.
+function specBody(ctx) {
+  const body = readFileSync(ctx.specFile);
+  if (ctx.theme === undefined) return body;
+  try {
+    const spec = JSON.parse(body.toString('utf8'));
+    return spec !== null && typeof spec === 'object' && !Array.isArray(spec) && spec.theme === undefined ? JSON.stringify({ ...spec, theme: ctx.theme }) : body;
+  } catch { return body; }
+}
+
 function serveSpec(ctx, res) {
   try {
-    const body = readFileSync(ctx.specFile);
+    const body = specBody(ctx);
     res.writeHead(200, { 'content-type': MIME['.json'], 'cache-control': 'no-store' });
     return res.end(body);
   } catch { return notFound(res); }
@@ -192,9 +257,10 @@ function watchSpec(ctx) {
   return { stop: () => { clearTimeout(timer); watcher.close(); } };
 }
 
-export async function startServer({ specPath, mode = 'preview' }) {
+// `theme`: a shared theme name for specs that set none (render --theme).
+export async function startServer({ specPath, mode = 'preview', theme }) {
   const specFile = path.resolve(specPath);
-  const ctx = { specFile, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
+  const ctx = { specFile, theme, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
   const watcher = watchSpec(ctx);
   const server = http.createServer((req, res) => handle(ctx, req, res));
   await new Promise((resolve, reject) => {

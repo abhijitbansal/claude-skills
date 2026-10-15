@@ -1,0 +1,178 @@
+{
+  "title": "feat/visual-artifacts: dashboards, diagrams and explainers",
+  "subtitle": "What shipped, how it works, how to test it",
+  "preset": "recap",
+  "mode": "page",
+  "theme": "paper",
+  "meta": {
+    "date": "2026-10-12",
+    "branch": "feat/visual-artifacts",
+    "author": "Abhijit Bansal"
+  },
+  "sections": [
+    {
+      "type": "tldr",
+      "id": "verdict",
+      "title": "Three skills share one core",
+      "text": "Ready for review.",
+      "points": [
+        "One theme layer",
+        "One lint"
+      ],
+      "tone": "good"
+    },
+    {
+      "type": "text",
+      "title": "Why",
+      "text": "Plain **bold**, *italic*, `code` and a [link](https://example.com).\n\n- first\n- second"
+    },
+    {
+      "type": "kpis",
+      "items": [
+        {
+          "label": "Commits",
+          "value": "42",
+          "delta": "+3",
+          "tone": "good",
+          "note": "since main"
+        },
+        {
+          "label": "Tests",
+          "value": "612 pass"
+        }
+      ]
+    },
+    {
+      "type": "cards",
+      "title": "Pieces",
+      "columns": 3,
+      "items": [
+        {
+          "title": "Theme",
+          "text": "Tokens become CSS.",
+          "icon": "lucide:palette",
+          "tone": "accent",
+          "tag": "shared"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Sizes",
+      "columns": [
+        "Page",
+        "KB"
+      ],
+      "rows": [
+        [
+          "recap",
+          410
+        ],
+        [
+          "slides",
+          "520"
+        ]
+      ],
+      "caption": "Built output",
+      "align": [
+        "left",
+        "right"
+      ]
+    },
+    {
+      "type": "risks",
+      "title": "What could go wrong",
+      "items": [
+        {
+          "risk": "Fonts drift",
+          "severity": "low",
+          "mitigation": "Synced copy is checked in CI",
+          "owner": "Abhijit"
+        }
+      ]
+    },
+    {
+      "type": "files",
+      "title": "Files changed",
+      "items": [
+        {
+          "path": "shared/theme.mjs",
+          "change": "added",
+          "note": "theme tokens to CSS",
+          "add": 40,
+          "del": 0
+        }
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "Rollout",
+      "items": [
+        {
+          "title": "Merge",
+          "text": "Squash.",
+          "status": "done"
+        },
+        {
+          "title": "Publish"
+        }
+      ]
+    },
+    {
+      "type": "timeline",
+      "title": "History",
+      "items": [
+        {
+          "date": "2026-10-01",
+          "title": "Spec",
+          "text": "Design agreed."
+        }
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "Two routes",
+      "columns": [
+        {
+          "title": "Inline",
+          "points": [
+            "Simple"
+          ],
+          "tone": "good"
+        },
+        {
+          "title": "Sibling",
+          "points": [
+            "Reuse"
+          ]
+        }
+      ],
+      "verdict": "Sibling wins."
+    },
+    {
+      "type": "callout",
+      "tone": "warn",
+      "title": "Heads up",
+      "text": "Needs Node 20."
+    },
+    {
+      "type": "code",
+      "title": "Run it",
+      "code": "node scripts/validate.mjs explainer.json\n",
+      "language": "bash",
+      "caption": "Validate"
+    },
+    {
+      "type": "details",
+      "summary": "Why not HTML?",
+      "text": "The model writes JSON only."
+    },
+    {
+      "type": "image",
+      "title": "Screenshot",
+      "src": "pixel.png",
+      "alt": "A single pixel",
+      "caption": "Tiny"
+    }
+  ]
+}

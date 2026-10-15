@@ -1,14 +1,16 @@
 # portable-artifacts
 
-**Dashboards and animated explainers from a prompt — built locally, offline,
+**Dashboards, diagrams, explainer pages and animated videos from a prompt — built locally, offline,
 from open-source parts, by any coding agent.**
 
-Two agent skills that do what hosted "artifact" features do, without a cloud,
+Four agent skills that do what hosted "artifact" features do, without a cloud,
 an account or a particular model:
 
 | Skill | You say | You get |
 |---|---|---|
-| [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + Vega-Lite charts. Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh — no LLM involved. |
+| [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + charts (11 kinds, alternate views, a sortable Table, PNG/SVG/CSV export, four themes). Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh, or `serve.mjs --watch` for live reload — no LLM involved. |
+| [`make-diagram`](skills/make-diagram/) | "Draw the checkout request path from the browser to the orders DB" | One self-contained HTML diagram (architecture, flowchart, sequence or state) laid out with ELK: zoom, hover tracing, a story player (named chapters of beats with a travelling dot), an Explore panel, full screen and export. The agent writes a small JSON topology; scripts do the rest. |
+| [`make-explainer`](skills/make-explainer/) | "Recap this branch with a manual test checklist" | One self-contained HTML page or slide deck made of typed sections (verdict, numbers, files changed, timeline, risks, comparisons, tick-and-remember checklists, slides), with make-diagram figures, make-dashboard charts and make-motion clips embedded when asked. A script reads the git branch for the facts; the agent writes the prose; a linter rejects emoji, filler phrases and leftover placeholders before the page is built. |
 | [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. Silent unless you ask for sound: `audio` tracks (music, voiceover, SFX) are added only when the prompt asks, and narration is synthesised locally with Kokoro. "Slow scene 2" changes one field, not the whole video. |
 
 [**See them in action**](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#showcase): a real dashboard and video an agent generated from one prompt each, with the prompts and specs.
@@ -35,10 +37,19 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
   loop.
 - **Targeted edits** — a change is one field in the spec, never regenerated
   code, so everything else stays exactly the same.
-- **Reproducible** — the same spec always produces the same page or video.
+- **Reproducible** — the same spec always produces the same page or video. What varies is the provenance date in the footer, the day you build (set `SOURCE_DATE_EPOCH` to pin it), and a dashboard's refresh time.
 - **Offline** — after a one-time install nothing touches the network except
   your own data sources. Specs that try (remote chart data, `url()` colours)
   are rejected, and the outputs carry a strict CSP.
+- **Stamped** — every page has a favicon, an icon theme toggle (Auto, Light,
+  Dark; not on the make-motion preview) and a provenance line: the model,
+  effort level and agent that wrote the spec, from the spec's `generatedBy`
+  field or the `--model`, `--effort` and `--agent` build flags. A field the
+  agent does not know reads "not reported"; nothing is guessed. The make-motion
+  MP4 carries it in its `comment` tag, and the model in `artist` when it is reported.
+- **Easy to read** — Geist on every generated page; the make-motion preview UI and unthemed video keep Inter and JetBrains Mono, and the explainer opens with a
+  hero and TL;DR card, short section `label`s in its contents list and soft text
+  caps that warn (never fail) when a title, paragraph or card runs long.
 
 ## Install
 
@@ -49,29 +60,45 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
 /plugin install portable-artifacts@claude-skills
 ```
 
-Then ask for a dashboard or a video, or call the skill directly:
-`/make-dashboard …` or `/make-motion …`. On first use the agent runs the
-one-time `npm ci` inside the skill folder.
+Then ask for a dashboard, a diagram, an explainer or a video, or call the skill directly:
+`/make-dashboard …`, `/make-diagram …`, `/make-explainer …` or `/make-motion …`. On first use the agent runs the
+skill's doctor and, once you agree, installs the dependencies (`npm ci` inside the skill folder; `npm ci --omit=dev` for make-dashboard, make-diagram and make-explainer).
 
 ### Any agent, with `npx skills`
 
-[`skills`](https://github.com/vercel-labs/skills) installs the two skill
+[`skills`](https://github.com/vercel-labs/skills) installs the four skill
 folders into whichever agents you pick (Claude Code, Codex, Copilot,
 Cursor, Gemini CLI, and others):
 
 ```bash
-npx skills add abhijitbansal/claude-skills --skill make-dashboard make-motion
-npx skills add abhijitbansal/claude-skills --skill make-dashboard make-motion -a claude-code codex github-copilot -y
+npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion
+npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion -a claude-code codex github-copilot -y
 ```
 
-It copies the folders but doesn't install their dependencies, so the agent
-runs `npm ci` inside each skill folder on first use (the SKILL.md tells it
-to).
+It copies the folders but doesn't install their dependencies, so on first use
+the agent runs the skill's doctor and, once you agree, `npm ci` inside the skill
+folder (the SKILL.md tells it to; make-dashboard, make-diagram and make-explainer
+need only `npm ci --omit=dev`).
+
+**`make-explainer` needs `make-diagram` and `make-dashboard` next to it** to
+draw diagrams, charts and card icons (and `make-motion` to render a motion spec;
+an existing `.mp4` needs nothing). `npx skills add` does not resolve
+dependencies, so name them:
+
+```bash
+npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram make-dashboard
+```
+
+If you forget, the first section that needs a missing skill fails validation
+with that exact command. `bin/install.mjs` (below) does resolve them: it reads
+`portableArtifacts.requires` from the skill's `package.json` and installs
+`make-diagram` and `make-dashboard` before `make-explainer`, whether or not you
+named them. `make-motion` is optional and is installed only if you ask for it.
 
 ### Codex, GitHub Copilot, Gemini CLI (or Claude Code without the marketplace)
 
 Each host reads skill folders from its own directory, and the skill itself is
-the slash command. The installer copies both skills to the right place and
+the slash command. The installer copies all four skills to the right place and
 installs their dependencies:
 
 ```bash
@@ -90,25 +117,41 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs copilot --project 
 
 Flags: `--skills make-motion` (just one), `--link` (symlink to this checkout
 so `git pull` updates it), `--force` (replace an existing install),
-`--no-deps` (skip `npm ci`).
+`--no-deps` (skip `npm ci`). Asking for `--skills make-explainer` installs its
+required skills too.
 
 **Any other agent** that can read files and run shell commands: copy a skill
-folder into your project, run `npm ci` inside it, and add one line to your
+folder into your project **together with its `shared/` folder** (it sits inside
+the skill folder, so copy the folder whole), run `npm ci` inside it
+(`npm ci --omit=dev` for make-dashboard, make-diagram and make-explainer; copy
+`make-diagram` and `make-dashboard` too if you use make-explainer), and add one line to your
 `AGENTS.md` (or `.github/copilot-instructions.md`):
 
 ```markdown
-To build a dashboard or an animated explainer, read and follow skills/make-dashboard/SKILL.md or skills/make-motion/SKILL.md.
+To build a dashboard, a diagram, an explainer page or an animated video, read and follow skills/make-dashboard/SKILL.md, skills/make-diagram/SKILL.md, skills/make-explainer/SKILL.md or skills/make-motion/SKILL.md.
 ```
 
 ### Requirements
 
-| | make-dashboard | make-motion |
-|---|---|---|
-| Node.js ≥ 20 | ✓ | ✓ |
-| `npm ci` in the skill folder (once) | ✓ | ✓ |
-| Chromium for frame capture (once, ≈150 MB) | — | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) |
-| ffmpeg on `PATH` | — | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 4.4 for audio tracks) |
-| kokoro-js (voiceover only, on demand) | — | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (≈250 MB) plus a one-time 90 MB voice model download; the agent asks first |
+Not sure what is missing? Run `node <skill-dir>/scripts/doctor.mjs --json` (it
+needs only Node, so it works before `npm ci`). It lists each missing item with
+its size and the fix for your OS; add `--for` with a spec `.json` (every skill;
+only make-explainer adds sister skills from it), `check` (make-diagram and
+make-explainer: the check browser) or `voiceover` (make-motion), and `--fix <ids>`
+to install the ones that need no `sudo` (ids are resolved against the same `--for`;
+`dev_deps` and `chromium` are required for `check`, and `motion_chromium` is
+make-explainer's browser for a motion section). Agents run it first and ask once before installing
+anything.
+
+| | make-dashboard | make-diagram | make-explainer | make-motion |
+|---|---|---|---|---|
+| Node.js ≥ 20 | ✓ | ✓ | ✓ | ✓ |
+| `npm ci` in the skill folder (once; `--omit=dev` is enough for make-dashboard, make-diagram and make-explainer) | ✓ | ✓ | ✓ | ✓ |
+| Other skills beside it | — | — | make-diagram and make-dashboard (required for diagram and chart sections and for card icons); make-motion only to render a motion spec | — |
+| `git` on `PATH` | — | — | only for `gather.mjs` | — |
+| Chromium for frame capture (once, ≈150 MB) | — | optional: only `check.mjs` (needs a full `npm ci`, not `--omit=dev`, plus `npx playwright install chromium` in the skill folder); build needs no browser, and `check.mjs` skips cleanly without one | none to build; only a motion section that renders a spec needs make-motion's Chromium | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) |
+| ffmpeg on `PATH` | — | — | only to render a motion spec | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 4.4 for audio tracks) |
+| kokoro-js (voiceover only, on demand) | — | — | — | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (≈250 MB) plus a one-time 90 MB voice model download; the agent asks first |
 
 Install make-motion's tools per OS (run the Chromium download inside the
 make-motion skill folder, so it matches the Playwright version `npm ci` installed):
@@ -148,10 +191,20 @@ Each skill folder also has its own README.
   `unsafe-eval`; the renderer aborts any non-local request; local servers bind
   `127.0.0.1` and check the `Host` header.
 
+## Tested hosts
+
+Tested live on this branch: **Claude Code**, and **GitHub Copilot CLI 1.0.98** (one non-interactive run per skill on 2026-10-15, plus reruns of the doctor install path; the browser check and the ask-first consent prompt were not exercised there). An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**: dashboard 10/10, motion 6/10, the last four motion prompts stopped by the account's usage limit ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)). **Gemini CLI**: install paths verified against its documentation, not run live.
+
+Details:
+[`eval/results/summary-portability-copilot-2026-10-15.md`](eval/results/summary-portability-copilot-2026-10-15.md)
+and [`eval/results/summary-install-targets-2026-10-15.md`](eval/results/summary-install-targets-2026-10-15.md).
+
 ## Cross-host eval
 
-[`eval/`](eval/) runs a fixed set of 10 prompts per skill through `claude`,
-`codex`, `codex --oss` (Ollama), `gemini` and `copilot`, and scores spec
+[`eval/`](eval/) runs a fixed set of prompts per skill (8 to 10) through `claude`,
+`codex`, `codex --oss` (Ollama), `gemini` and `copilot`. The full run on
+2026-10-10 covered dashboard and motion on claude, codex, copilot and codex --oss;
+Gemini was skipped. The harness scores spec
 written / valid / validate retries / build or render ok / changed paths on edit
 prompts. Results summaries live in `eval/results/summary-*.md`.
 
@@ -166,7 +219,11 @@ Everything this plugin depends on is open source:
 | [anime.js](https://animejs.com) v4 | MIT |
 | [Playwright](https://playwright.dev) | Apache-2.0 |
 | [Ajv](https://ajv.js.org) | MIT |
-| Inter, JetBrains Mono (via Fontsource) | OFL-1.1 |
+| [ELK](https://github.com/kieler/elkjs) (`elkjs`) | EPL-2.0 |
+| [Lucide](https://lucide.dev) icons | ISC |
+| [Simple Icons](https://simpleicons.org) brand marks | CC0-1.0 |
+| Geist, Geist Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible (latin subsets, via Fontsource) | OFL-1.1 |
+| Inter, JetBrains Mono (make-motion default look, via Fontsource) | OFL-1.1 |
 | ffmpeg (system binary, not vendored) | LGPL/GPL |
 | [Kokoro](https://github.com/hexgrad/kokoro) TTS (`kokoro-js`, installed on demand) | Apache-2.0 |
 

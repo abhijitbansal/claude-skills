@@ -8,28 +8,27 @@ argument-hint: what to make, e.g. an 8s clip with Q3 revenue up 18% then a bar c
 
 You write one JSON file, `motion.json`. Scripts validate it, preview it in a browser and render it to MP4. You never write animation code, and you never edit generated output.
 
-`<skill-dir>` is the folder that contains this SKILL.md. Run every command from the project folder (where `motion.json` lives), using the full path to the scripts. Image paths resolve relative to the spec file. If the request is empty, ask what the video should say, how long it should be, and the size (default 1920x1080, 30 fps).
+Run every command from the project folder (where `motion.json` lives), using the full path to the scripts. Image paths resolve relative to the spec file. If the request is empty, ask what the video should say, how long it should be, and the size (default 1920x1080, 30 fps).
 
 **Audio is opt-in.** Add `audio` tracks only when the prompt asks for sound (music, soundtrack, voiceover, narration, "read it aloud", a sound effect) or the user confirms when you ask. Never add audio to a prompt that does not mention it. When the prompt is about sound but unclear (for example "make it feel polished" with an mp3 in the folder), ask one question before writing the spec. Music and sound effects are files the user supplies; a voiceover can be synthesised with `voice.mjs` (workflow step 2) when the prompt asks for narration without giving a file.
 
-## First use (say what each step is before running it)
+## Before the first build
 
-1. `<skill-dir>/node_modules` missing: run `npm ci --prefix <skill-dir>` (animejs, vega-lite, playwright, fonts).
-2. Chromium for frame capture: ask first (about 150 MB), then run `npx playwright install chromium` inside `<skill-dir>`. If the user declines, rendering falls back to installed Google Chrome. On Linux, if Chromium then fails to launch for missing system libraries, give the user `npx playwright install --with-deps chromium` to run inside `<skill-dir>` (it needs sudo).
-3. `ffmpeg` not on PATH: stop and give the install command (macOS `brew install ffmpeg`, Windows `winget install Gyan.FFmpeg` then a new terminal, Debian/Ubuntu `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH`). Never install system packages yourself.
-4. Voiceover requested and `<skill-dir>/node_modules/kokoro-js` missing: ask first (about 250 MB of packages plus a 90 MB voice model downloaded once on first use, then offline), then run `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>`. `npm ci` removes it again; reinstall when `voice.mjs` prints the hint. If the user declines, ask for a voice file instead.
+`<skill-dir>` is the folder containing this SKILL.md. Run `node <skill-dir>/scripts/doctor.mjs --json` (add `--for <spec.json>` once the spec exists, `--for voiceover` for a voiceover (make-motion), `--for check` before `check.mjs` (skills that have one)). It needs only Node.
+
+If it reports anything missing, tell the user in one message: each item, why it is needed, its size and the command, plus every `notes` and `info` entry from the output (they disclose downloads and the files an install writes). Ask once per set of missing items (the plain run and a later `--for` run may each find new ones). On yes, run `node <skill-dir>/scripts/doctor.mjs --fix <ids>` with the ids it reported, and the same `--for` you diagnosed with (for example `--fix <ids> --for check`). Hand the user the exact command to run themselves for anything the doctor reports as refused (it needs sudo, or has no automatic fix), skipped (needs node_modules first), installed elsewhere, still missing, or failed; in Claude Code suggest prefixing it with `!`. On no, do what you can without it and give the user the remaining commands.
 
 ## Workflow
 
 Run every step yourself, in this same turn, with your shell or file tools. Do not end your reply after showing or describing the JSON: keep going until validate prints `valid` and the output file exists.
 
 1. Write `motion.json` in the project (shape below; full reference in `<skill-dir>/references/schema.md`; copy a file from `<skill-dir>/references/examples/` to start).
-   Actually create the file: describing it or announcing a patch is not enough. If your file tool fails, write it from the shell (`cat > motion.json <<'EOF'` … `EOF`), then `ls motion.json` to confirm it exists before validating.
-2. Voiceover (only when asked, see above): write the narration to `voice/<scene-id>.txt` (plain spoken text, no markdown), then `node <skill-dir>/scripts/voice.mjs --text-file voice/<scene-id>.txt --out voice/<scene-id>.wav [--voice af_heart] [--speed 1]` writes a 24 kHz wav and prints its length. Use `--text-file`, not a quoted argument: the shell would expand `$4.2M` or backticks inside a double-quoted string and the clip would silently say something else. One clip per scene, scene-anchored in the spec (`"scene": "<id>", "at": 0.3`); keep each clip shorter than its scene (lengthen the scene if the printed duration does not fit). Voices: `af_heart` (default, warm US female), `af_bella`, `am_michael` (US male), `bf_emma` (UK female); `--list-voices` prints all. Write the narration text yourself from the prompt; keep it short and spoken, no markdown.
+   Actually create the file: describing it or announcing a patch is not enough. If your file tool fails, write it with a short `node -e` script that calls `fs.writeFileSync`, then confirm the file exists before validating.
+2. Voiceover (only when asked, see above; run the doctor with `--for voiceover` first, and if the user declines the voice install, ask for a voice file instead): write the narration to `voice/<scene-id>.txt` (plain spoken text, no markdown), then `node <skill-dir>/scripts/voice.mjs --text-file voice/<scene-id>.txt --out voice/<scene-id>.wav [--voice af_heart] [--speed 1]` writes a 24 kHz wav and prints its length. Use `--text-file`, not a quoted argument: the shell would expand `$4.2M` or backticks inside a double-quoted string and the clip would silently say something else. One clip per scene, scene-anchored in the spec (`"scene": "<id>", "at": 0.3`); keep each clip shorter than its scene (lengthen the scene if the printed duration does not fit). Voices: `af_heart` (default, warm US female), `af_bella`, `am_michael` (US male), `bf_emma` (UK female); `--list-voices` prints all. Write the narration text yourself from the prompt; keep it short and spoken, no markdown.
 3. `node <skill-dir>/scripts/validate.mjs motion.json` — fix every line it prints (`<json.path>: <message>`, with did-you-mean) and re-run until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage/IO error.
 4. Self-check: `node <skill-dir>/scripts/render.mjs motion.json --contact-sheet` writes `out/contact/<scene-id>.png` next to the spec (one frame per scene, at 85% of its duration). Look at each PNG: clipped text, invisible elements, overlaps, wrong fonts. Fix the spec and repeat.
 5. `node <skill-dir>/scripts/preview.mjs motion.json [--open]` prints a localhost URL with scrubber, play/pause, scene markers, Space and arrow keys. The page reloads when the file changes. It plays the audio tracks in sync (approximate; M mutes); the MP4 timing is exact.
-6. `node <skill-dir>/scripts/render.mjs motion.json [--out out/video.mp4] [--fps 30] [--size 1920x1080]` writes the MP4 (H.264, yuv420p; AAC audio when the spec has tracks). It prints the path and frame count.
+6. Set `generatedBy` to the model you are running as, your effort level if you know it, and your host (for example Claude Code, Codex, Copilot CLI, Gemini CLI). Never guess; leave out any field you do not know. `--model`, `--effort` and `--agent` on render.mjs override it. `node <skill-dir>/scripts/render.mjs motion.json [--out out/video.mp4] [--fps 30] [--size 1920x1080] [--model <m>] [--effort <e>] [--agent <a>]` writes the MP4 (H.264, yuv420p; AAC audio when the spec has tracks). It prints the path and frame count. The provenance goes into the MP4's `comment` and `artist` tags, and the preview page shows the same line in a footer.
 
 When asked for a change ("slow scene 2", "make the title blue"), edit only the fields the request names in `motion.json`, then validate again. Do not rewrite the spec from scratch.
 
@@ -53,7 +52,7 @@ When done, report the spec path, the MP4 path with its duration and size, and on
 }
 ```
 
-- Root: `size` (default 1920x1080), `fps` (24, 25, 30, 60), `background`, `scenes` (1–50, total ≤ 120 s). Only `scenes` is required.
+- Root: `size` (default 1920x1080), `fps` (24, 25, 30, 60), `background`, optional `generatedBy` (`{ model?, effort?, agent? }`), optional `theme` (a shared theme name: `paper`, `ink`, `blueprint`, `editorial` — its dark colours and body/mono fonts become the defaults; omit it for the default look), `scenes` (1–50, total ≤ 120 s). Only `scenes` is required.
 - Audio track (optional root `audio` array, up to 20): `src` (relative to the spec, inside the spec folder; mp3, wav, m4a, aac, ogg or flac), `at` (seconds from the video start, default 0), `scene` (a scene `id`; `at` is then relative to that scene's start, so lengthening an earlier scene keeps a voiceover aligned), `duration` (trim, seconds), `volume` (0–1, default 1), `fadeIn` / `fadeOut` (seconds). `fadeOut` anchors to the `duration` trim or the video end; a clip that ends earlier gets no fade. No `loop`: a short music file just stops.
 - Scene: `id`, `duration` (0.2–60 s), `elements`, optional `background`, `transition` (`none` or `fade`, a 0.4 s fade-in). Only one scene is visible at a time; scenes play back to back.
 - Every element: `id` (unique in the whole spec), `type`, `x`, `y` (canvas pixels; the anchor is the element centre), optional `opacity`, `scale`, `rotate` (degrees), `keyframes`.
@@ -67,7 +66,7 @@ Dark background, Inter for text, JetBrains Mono for `"font": "mono"`, 1920x1080 
 
 ## Degraded mode
 
-If Node, Chromium or ffmpeg cannot be installed here, still write and validate `motion.json` (validation needs only `npm ci`), then give the user the exact preview and render commands above to run themselves.
+If Node, Chromium or ffmpeg cannot be installed here, still write and validate `motion.json` (validation needs only the skill's `node_modules`: run the doctor), then give the user the exact preview and render commands above to run themselves.
 
 ## Voiceover and audio notes
 

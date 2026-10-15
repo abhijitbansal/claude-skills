@@ -161,3 +161,19 @@ test('probeGraph accepts a valid mix and reports the first stderr line for a bad
   assert.match(probeGraph(ff, { fps: 10, audio }, bad) ?? '', /afromat|No such filter/);
   return undefined;
 });
+
+test('encodeArgs writes provenance metadata before the output path', () => {
+  const args = encodeArgs({ fps: 30, out: 'o.mp4', metadata: { comment: 'make-motion · Claude Sonnet 5 · effort not reported · Claude Code · 14 Oct 2026', artist: 'Claude Sonnet 5' } });
+  assert.deepEqual(args.slice(-5), ['-metadata', 'comment=make-motion · Claude Sonnet 5 · effort not reported · Claude Code · 14 Oct 2026', '-metadata', 'artist=Claude Sonnet 5', 'o.mp4']);
+});
+
+test('encodeArgs puts metadata before the output path on the audio branch too', () => {
+  const audio = [{ file: '/a.wav', start: 0, volume: 1 }];
+  const args = encodeArgs({ fps: 30, out: 'o.mp4', audio, duration: 2, metadata: { comment: 'c' } });
+  assert.deepEqual(args.slice(-3), ['-metadata', 'comment=c', 'o.mp4']);
+});
+
+test('encodeArgs without metadata is unchanged', () => {
+  assert.deepEqual(encodeArgs({ fps: 30, out: 'o.mp4' }).at(-1), 'o.mp4');
+  assert.equal(encodeArgs({ fps: 30, out: 'o.mp4' }).includes('-metadata'), false);
+});

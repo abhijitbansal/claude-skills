@@ -1,0 +1,70 @@
+{
+  "params": [
+    {
+      "name": "pa_hover",
+      "select": {
+        "type": "point",
+        "on": "pointerover",
+        "clear": "pointerout"
+      }
+    }
+  ],
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "region",
+      "type": "nominal",
+      "title": "region",
+      "sort": null
+    },
+    "y": {
+      "field": "pa_share",
+      "type": "quantitative",
+      "title": "Share of revenue",
+      "axis": {
+        "format": ".0%"
+      }
+    },
+    "tooltip": [
+      {
+        "field": "region",
+        "type": "nominal",
+        "title": "region"
+      },
+      {
+        "field": "revenue",
+        "type": "quantitative",
+        "title": "revenue"
+      },
+      {
+        "field": "pa_share",
+        "type": "quantitative",
+        "title": "Share of revenue",
+        "format": ".1%"
+      }
+    ],
+    "opacity": {
+      "condition": {
+        "param": "pa_hover",
+        "empty": true,
+        "value": 1
+      },
+      "value": 0.55
+    }
+  },
+  "transform": [
+    {
+      "joinaggregate": [
+        {
+          "op": "sum",
+          "field": "revenue",
+          "as": "pa_total"
+        }
+      ]
+    },
+    {
+      "calculate": "datum[\"revenue\"] / datum.pa_total",
+      "as": "pa_share"
+    }
+  ]
+}

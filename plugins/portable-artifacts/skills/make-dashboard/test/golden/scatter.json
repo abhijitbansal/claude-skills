@@ -1,0 +1,64 @@
+{
+  "params": [
+    {
+      "name": "pa_zoom",
+      "select": {
+        "type": "interval"
+      },
+      "bind": "scales"
+    },
+    {
+      "name": "pa_legend",
+      "select": {
+        "type": "point",
+        "fields": [
+          "g"
+        ]
+      },
+      "bind": "legend"
+    }
+  ],
+  "mark": "point",
+  "encoding": {
+    "x": {
+      "field": "a",
+      "type": "quantitative",
+      "title": "a"
+    },
+    "y": {
+      "field": "b",
+      "type": "quantitative",
+      "title": "b"
+    },
+    "color": {
+      "field": "g",
+      "type": "nominal",
+      "title": "g"
+    },
+    "tooltip": [
+      {
+        "field": "a",
+        "type": "quantitative",
+        "title": "a"
+      },
+      {
+        "field": "b",
+        "type": "quantitative",
+        "title": "b"
+      },
+      {
+        "field": "g",
+        "type": "nominal",
+        "title": "g"
+      }
+    ],
+    "opacity": {
+      "condition": {
+        "param": "pa_legend",
+        "empty": true,
+        "value": 1
+      },
+      "value": 0.2
+    }
+  }
+}

@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<!--@GENERATOR-->
+<!--@FAVICON-->
+<title><!--@TITLE--></title>
+<script>
+// Apply the saved theme before first paint (no flash). Storage may throw.
+(function () { try { var t = window.localStorage.getItem('pa-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {} })();
+</script>
+<style id="pa-theme-css">
+<!--@THEME-->
+</style>
+<style id="pa-diagram-css">
+<!--@DIAGRAM_CSS-->
+</style>
+<style>
+* { box-sizing: border-box; }
+/* The canvas: a dotted grid on the page colour; in dark, a wash of the glow at the top and faint grid lines. Mirrors the theme's own dark selectors. */
+:root { --stage-light: radial-gradient(circle, var(--grid) 1px, transparent 1.5px) 0 0 / 18px 18px, var(--page); --stage-bg: var(--stage-light); --stage-dark: var(--stage-light); }
+@supports (color: color-mix(in srgb, red, red)) { :root { --stage-dark: radial-gradient(ellipse 70% 55% at 50% 38%, color-mix(in srgb, var(--glow) 13%, transparent), transparent 75%), linear-gradient(color-mix(in srgb, var(--grid) 42%, transparent) 1px, transparent 1px) 0 0 / 56px 56px, linear-gradient(90deg, color-mix(in srgb, var(--grid) 42%, transparent) 1px, transparent 1px) 0 0 / 56px 56px, var(--page); } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --stage-bg: var(--stage-dark); } }
+:root[data-theme="dark"] { --stage-bg: var(--stage-dark); }
+html, body { height: 100%; }
+body { margin: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; background: var(--page); color: var(--text); font: var(--fs-sm)/1.4 var(--font); /* dense UI: 1.4, not --lh-body (R13) */ -webkit-text-size-adjust: 100%; }
+button { font: inherit; color: inherit; }
+.bar { flex: none; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.titles { min-width: 0; }
+h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); overflow-wrap: anywhere; }
+.sub { margin: 2px 0 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.pa-provenance { margin: 2px 0 0; color: var(--text-3); font-size: var(--fs-xs); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tools .tool[data-theme-toggle] { min-width: 30px; min-height: 0; padding: 4px 6px; }
+.tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tools .group { display: inline-flex; gap: 4px; align-items: center; }
+.tool { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; cursor: pointer; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.3; transition: color .16s ease, background-color .16s ease, transform .16s cubic-bezier(.23,1,.32,1); }
+@media (hover: hover) and (pointer: fine) { .tool:hover:not(:disabled) { color: var(--text); background: var(--accent-soft); } }
+.tool:active:not(:disabled), .pa-chip:active { transform: scale(0.97); }
+.tool[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
+@supports (color: color-mix(in srgb, red, red)) { .tool[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); } }
+.tool:disabled { opacity: 0.6; cursor: default; }
+/* Full screen, real (the root element is :fullscreen) or the window-filling fallback (.pa-fill on the root, when the browser refused, as inside a sandboxed iframe): the same chrome goes, the canvas takes the room; the tabs, Fit, Find, the chapters and the way out stay. Any root works, the page's or a dialog's (fullscreen.js marks it data-pa-full-root). */
+.pa-fill .titles, [data-pa-full-root]:fullscreen .titles, .pa-fill [data-act]:not([data-act="fit"]), [data-pa-full-root]:fullscreen [data-act]:not([data-act="fit"]), .pa-fill .zoom-label, [data-pa-full-root]:fullscreen .zoom-label, .pa-fill .grp-export, [data-pa-full-root]:fullscreen .grp-export, .pa-fill [data-export], [data-pa-full-root]:fullscreen [data-export], .pa-fill [data-theme-toggle], [data-pa-full-root]:fullscreen [data-theme-toggle] { display: none; }
+.zoom-label { min-width: 3.2em; text-align: center; color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.export-error { flex: none; margin: 0; padding: 6px 16px; color: var(--bad); font-size: var(--fs-sm); border-bottom: 1px solid var(--line); background: var(--surface); }
+.export-error[hidden] { display: none; }
+.body { flex: 1 1 0; min-height: 0; display: flex; }
+.stage { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; background: var(--stage-bg); }
+.stage.pa-grabbing { cursor: grabbing; }
+.stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.stage > svg .pa-legend { display: none; }
+.legend { position: absolute; top: 10px; right: 12px; z-index: 1; max-width: min(60%, 400px); display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 6px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--text-2); font-size: var(--fs-xs); line-height: 16px; pointer-events: none; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+@supports (color: color-mix(in srgb, red, red)) { .legend { background: color-mix(in srgb, var(--surface) 80%, transparent); border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); } }
+:root[data-theme="dark"] .legend { box-shadow: none; }
+@supports (color: color-mix(in srgb, red, red)) { :root[data-theme="dark"] .legend { box-shadow: 0 0 16px color-mix(in srgb, var(--glow) 16%, transparent); } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .legend { box-shadow: none; } }
+@supports (color: color-mix(in srgb, red, red)) { @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .legend { box-shadow: 0 0 16px color-mix(in srgb, var(--glow) 16%, transparent); } } }
+.lg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.lg-sw { width: 12px; height: 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); }
+.lg-wire { width: 22px; height: 0; border-top: 1.5px solid var(--text-3); }
+.lg-wire-dashed { border-top-style: dashed; }
+.lg-wire-dotted { border-top-style: dotted; border-top-width: 2px; }
+.tip { position: absolute; z-index: 2; max-width: 260px; padding: 4px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--text); font-size: var(--fs-xs); pointer-events: none; overflow-wrap: anywhere; }
+.tip[hidden] { display: none; }
+.panel { flex: none; width: 300px; min-height: 0; overflow: auto; padding: 12px 16px; background: var(--surface); border-left: 1px solid var(--line); font-size: var(--fs-sm); }
+.panel[hidden] { display: none; }
+@media (max-width: 719px) { .body { flex-direction: column; } .panel { width: auto; max-height: 36%; border-left: 0; border-top: 1px solid var(--line); } }
+.panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.panel-title { margin: 0; font: 600 var(--fs-base)/var(--lh-head) var(--font-display); overflow-wrap: anywhere; }
+.panel-body[hidden], .panel-empty[hidden], .panel-close[hidden] { display: none; }
+.panel-icon { margin: 8px 0; font-size: var(--fs-lg); line-height: 1; }
+.panel-glyph { width: 24px; height: 24px; color: var(--text-2); }
+.panel-kind { margin: 0; color: var(--text-3); font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; }
+.panel-note, .panel-detail { margin: 8px 0 0; color: var(--text-2); overflow-wrap: anywhere; }
+.panel h3 { margin: 14px 0 4px; color: var(--text-3); font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; }
+.panel ul { margin: 0; padding: 0; list-style: none; }
+.panel ol { margin: 0; padding-left: 1.4em; }
+.panel li { overflow-wrap: anywhere; }
+.pa-row { display: block; width: 100%; margin: 0; padding: 4px 6px; background: none; border: 0; border-radius: 6px; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.pa-row:hover { background: var(--accent-soft); }
+.panel-arrow, .panel-none { color: var(--text-3); }
+.bar .chapters { flex: 1 0 100%; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; }
+.chapters[hidden] { display: none; }
+.pa-chip { transition: color .16s ease, transform .16s cubic-bezier(.23,1,.32,1); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; cursor: pointer; color: var(--text-2); font-size: var(--fs-xs); line-height: 1.4; white-space: nowrap; }
+@media (hover: hover) and (pointer: fine) { .pa-chip:hover { color: var(--text); } }
+.pa-chip[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
+.find { font: inherit; color: inherit; width: 11em; padding: 4px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.bar .found { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 6px; }
+.found[hidden] { display: none; }
+.counts { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.hint { margin: 8px 0 0; color: var(--text-2); }
+.caption { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 16px; background: var(--surface); border-top: 1px solid var(--line); }
+.caption[hidden] { display: none; }
+.cap-line { margin: 0; font-size: var(--fs-sm); line-height: 1.4; overflow-wrap: anywhere; max-height: 15vh; max-height: 15dvh; overflow-y: auto; }
+.beats { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.scrub { flex: 1 1 160px; min-width: 120px; margin: 0; }
+.cap-count { color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Play on a phone, portrait or landscape (narrow, or short): the tool row and the transport scroll sideways instead of wrapping, and the legend overlay steps aside, so the stage keeps about half the screen. */
+@media (max-width: 719px), (max-height: 500px) {
+  body.pa-presenting .tools, body.pa-presenting .transport { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+  body.pa-presenting .tools > *, body.pa-presenting .transport > * { flex-shrink: 0; }
+  body.pa-presenting .legend { display: none; }
+}
+/* Short (a landscape phone): the title block and the beat chips go too (the chapter chips, the scrubber and Prev / Next stay), and the caption line keeps two lines. */
+@media (max-height: 500px) {
+  body.pa-presenting .titles, body.pa-presenting .beats { display: none; }
+  body.pa-presenting .cap-line { max-height: 2.8em; }
+}
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+</style>
+<style><!--@TOGGLE_CSS--></style>
+<style id="pa-legend-css">
+<!--@LEGEND_CSS-->
+</style>
+</head>
+<body>
+<header class="bar">
+<div class="titles">
+<h1><!--@TITLE--></h1>
+<!--@SUBTITLE-->
+<!--@PROVENANCE-->
+</div>
+<div class="tools" role="group" aria-label="Diagram controls">
+<span class="group" role="group" aria-label="Mode">
+<button type="button" class="tool" data-pa-mode="play" aria-pressed="false" title="Play the story (P)">Play story</button>
+<button type="button" class="tool" data-pa-mode="explore" aria-pressed="true" title="Explore the diagram (E)">Explore</button>
+</span>
+<span class="group" role="group" aria-label="View">
+<button type="button" class="tool" data-act="fit" aria-keyshortcuts="0" title="Fit to screen (0)">Fit</button>
+<button type="button" class="tool" data-act="zoom-out" aria-label="Zoom out" title="Zoom out (-)">&minus;</button>
+<span class="zoom-label" data-zoom-label aria-hidden="true">100%</span>
+<button type="button" class="tool" data-act="zoom-in" aria-label="Zoom in" title="Zoom in (+)">+</button>
+</span>
+<button type="button" class="tool" data-act="animate" aria-pressed="false" title="Animate edges (A)">Animate: Off</button>
+<button type="button" class="tool" data-pa-full aria-pressed="false" aria-keyshortcuts="F" title="Full screen (F)">Full screen</button>
+<input type="search" class="find" data-pa-find placeholder="Find a node" aria-label="Find a node" aria-keyshortcuts="/" autocomplete="off" spellcheck="false">
+<span class="group grp-export" role="group" aria-label="Export">
+<button type="button" class="tool" data-export="svg" title="Download as SVG">SVG</button>
+<button type="button" class="tool" data-export="png" title="Download as PNG">PNG</button>
+</span>
+<button type="button" class="tool" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><!--@TOGGLE_ICONS--></button>
+<script><!--@TOGGLE_JS--></script>
+</div>
+<div class="chapters" data-pa-chapters role="group" aria-label="Chapters" hidden></div>
+<div class="found" data-pa-found role="group" aria-label="Matching nodes" aria-live="polite" hidden></div>
+</header>
+<p class="export-error" data-export-error role="alert" hidden></p>
+<div class="body">
+<main class="stage" id="pa-stage">
+<!--@SVG-->
+<!--@LEGEND-->
+<div class="tip" data-pa-tip role="tooltip" hidden></div>
+</main>
+<aside class="panel" data-pa-panel aria-label="Details">
+<div class="panel-head">
+<h2 class="panel-title" data-pa-panel-title tabindex="-1" aria-live="polite">Map</h2>
+<button type="button" class="tool panel-close" data-pa-panel-close aria-label="Close details (Esc)" hidden>Close</button>
+</div>
+<div class="panel-empty" data-pa-empty>
+<div class="counts" data-pa-tally role="list" aria-label="What the map holds"></div>
+<p class="hint">Click a node or edge. Shift-click a second node to trace a path.</p>
+</div>
+<div class="panel-body" data-pa-panel-body hidden></div>
+</aside>
+</div>
+<aside class="caption" data-pa-caption aria-label="Story player" hidden>
+<p class="cap-line" data-pa-line aria-live="polite"></p>
+<div class="beats" data-pa-beats role="group" aria-label="Beats"></div>
+<div class="transport" role="group" aria-label="Transport">
+<button type="button" class="tool" data-pa-prev-chapter title="Previous chapter">Prev chapter</button>
+<button type="button" class="tool" data-pa-prev title="Previous beat (Left)">Prev</button>
+<button type="button" class="tool" data-pa-play title="Play or pause (Space)">Play</button>
+<button type="button" class="tool" data-pa-next title="Next beat (Right)">Next</button>
+<button type="button" class="tool" data-pa-next-chapter title="Next chapter">Next chapter</button>
+<input type="range" class="scrub" data-pa-scrub min="0" max="0" step="1" value="0" aria-label="Beat" list="pa-ticks">
+<datalist id="pa-ticks" data-pa-ticks></datalist>
+<span class="cap-count">Beat <span data-pa-count></span></span>
+<button type="button" class="tool" data-pa-speed aria-label="Speed 1×; change speed" title="Playback speed">1×</button>
+<button type="button" class="tool" data-pa-loop aria-pressed="false" title="Loop the story">Loop</button>
+<button type="button" class="tool" data-pa-exit title="Leave the story (Esc)">Exit</button>
+</div>
+</aside>
+<!--@TEXT-->
+<script type="application/json" id="pa-data"><!--@DATA--></script>
+<script><!--@CORE--></script>
+<script><!--@CHROME--></script>
+</body>
+</html>

@@ -6,11 +6,11 @@
 // against the current folder; with --spec, an attached source (duckdb, sqlite,
 // postgres, mysql) lists its tables, or --table shows one of them.
 import path from 'node:path';
-import { UsageError, parseCli, exitUsage } from './lib/cli.mjs';
+import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { openLockedDb, checkSelect, errMessage, sqlLiteral, quoteId } from './lib/sql.mjs';
 import { fetchQuery } from './lib/data.mjs';
 import { loadSpec, validateSpec } from './lib/spec.mjs';
-import { printResult } from './lib/errors.mjs';
+import { printResult } from '../shared/errors.mjs';
 import { policyFor } from './lib/sources.mjs';
 
 const USAGE = 'node scripts/inspect.mjs <file.csv|parquet|json> [--type t] [--json] [--allow-outside] | --spec dashboard.json --source <name> [--table <t>]';
@@ -86,7 +86,8 @@ async function inspectSource(values) {
   const valid = await validateSpec(spec, { dir, allowOutside: values['allow-outside'] });
   if (!valid.ok) {
     printResult(valid, { json: values.json, label: values.spec });
-    process.exit(1);
+    process.exitCode = 1; // not process.exit(): it can SIGSEGV after a pipe write on Node 24.7
+    return;
   }
   if (values.table === '') throw new UsageError('--table needs a table name');
   const src = spec.sources?.[values.source];

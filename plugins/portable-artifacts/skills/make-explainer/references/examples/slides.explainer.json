@@ -1,0 +1,120 @@
+{
+  "title": "Four skills, one rule: the model writes JSON, never markup",
+  "subtitle": "What the visual-artifacts work in this repo does and where it stops",
+  "preset": "slides",
+  "theme": "paper",
+  "meta": {
+    "date": "2026-10-12",
+    "repo": "claude-skills",
+    "branch": "feat/visual-artifacts"
+  },
+  "sections": [
+    {
+      "type": "tldr",
+      "title": "A prompt becomes one file that opens anywhere",
+      "label": "In short",
+      "text": "Diagrams, dashboards, videos and explainers now share a theme, a checker and a rule: the model fills in JSON and a script renders it.",
+      "points": [
+        "Each output is one local file with no network at build or view time.",
+        "Checks run before the render, so a bad spec fails with a path and a fix.",
+        "One set of themes keeps every artifact in the same family."
+      ],
+      "tone": "good"
+    },
+    {
+      "type": "cards",
+      "title": "Each skill covers one kind of artifact",
+      "label": "The skills",
+      "columns": 2,
+      "items": [
+        { "title": "make-diagram", "text": "Architecture, flow, sequence and state diagrams with zoom and hover tracing." },
+        { "title": "make-dashboard", "text": "Charts and KPI pages built from local data files." },
+        { "title": "make-motion", "text": "Short animated videos, previewed locally and exported to MP4." },
+        { "title": "make-explainer", "text": "Recaps, checklists, concept pages and slide decks like this one." }
+      ]
+    },
+    {
+      "type": "motion",
+      "title": "Clips from make-motion play on their slide",
+      "label": "Motion",
+      "video": "clip.mp4",
+      "poster": "clip-poster.png",
+      "caption": "Drawn from clip.motion.json, which names the paper theme. Space and the arrow keys belong to the player while it has focus."
+    },
+    {
+      "type": "steps",
+      "title": "Every build follows the same four steps",
+      "label": "The build",
+      "items": [
+        { "title": "Write the outline", "text": "Typed sections in one JSON file." },
+        { "title": "Validate it", "text": "Schema, file references and prose rules." },
+        { "title": "Render it", "text": "Themed HTML with fonts and script inlined." },
+        { "title": "Open it", "text": "One file: open it in a browser, or print it to PDF." }
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "Outlines stay consistent; hand-written pages drift",
+      "label": "Why outlines",
+      "columns": [
+        {
+          "title": "Hand-written page",
+          "tone": "warn",
+          "points": [
+            "Spacing changes from page to page.",
+            "A font or script may come from a CDN.",
+            "Nothing checks the prose."
+          ]
+        },
+        {
+          "title": "Generated from an outline",
+          "tone": "good",
+          "points": [
+            "One renderer per section type.",
+            "The content security policy blocks the network.",
+            "Banned phrases fail the build."
+          ]
+        }
+      ]
+    },
+    {
+      "type": "code",
+      "title": "A slide's title is its claim",
+      "label": "One slide",
+      "language": "json",
+      "code": "{\n  \"title\": \"Short deck\",\n  \"mode\": \"slides\",\n  \"sections\": [\n    {\n      \"type\": \"text\",\n      \"title\": \"One claim per slide\",\n      \"text\": \"- Six points at most\\n- Eighty words at most\"\n    }\n  ]\n}"
+    },
+    {
+      "type": "table",
+      "title": "Overfull slides are errors, not warnings",
+      "label": "Slide budget",
+      "columns": ["Limit", "Per slide"],
+      "rows": [
+        ["Points or bullets", 6],
+        ["Table rows", 8],
+        ["Code lines", 12],
+        ["Words of text", 80]
+      ],
+      "caption": "Over the limit, validation says which slide and how to split it."
+    },
+    {
+      "type": "callout",
+      "tone": "info",
+      "title": "Keys that work in the deck",
+      "text": "Left and right arrows, Space, Page Up and Page Down move between slides, and Home and End jump to the first and last. **O** opens the outline. A link such as `#slide-3` opens that slide, and the last slide is remembered."
+    },
+    {
+      "type": "details",
+      "title": "A tall slide scrolls inside itself",
+      "label": "Long slides",
+      "summary": "What a tall slide does",
+      "text": "A slide taller than the screen scrolls inside itself. Space scrolls it first and moves on at the bottom, and a table that scrolls sideways keeps the arrow keys while it has focus."
+    },
+    {
+      "type": "text",
+      "title": "Diagrams, charts and videos fit slides too",
+      "label": "Embeds",
+      "text": "- A diagram section draws a make-diagram figure with hover tracing and a Present mode.\n- A chart section draws a make-dashboard chart as a static image with a data table.\n- A motion section plays a clip, like the one on slide 4, and never autoplays."
+    }
+  ]
+}

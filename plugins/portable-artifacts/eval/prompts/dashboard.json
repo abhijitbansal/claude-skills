@@ -8,5 +8,9 @@
   { "id": "traffic-lines", "prompt": "Build a dashboard from data/web_traffic.csv with a multi-line chart of daily sessions, one line per channel." },
   { "id": "conversion", "prompt": "Build a dashboard from data/web_traffic.csv showing signup conversion rate (signups divided by sessions) per channel as a bar chart, plus an overall conversion rate KPI formatted as a percent." },
   { "id": "overview", "prompt": "Build a sales overview dashboard from data/sales.csv: two KPI tiles (total revenue, total units) and three half-width charts (revenue by region, monthly revenue trend, units by product)." },
-  { "id": "edit-existing", "seed": "seeds/dashboard.json", "prompt": "Edit the existing dashboard.json: change the revenue-by-region chart from bars to a line chart ordered by region, and add a KPI tile for total units. Keep everything else unchanged." }
+  { "id": "edit-existing", "seed": "seeds/dashboard.json", "prompt": "Edit the existing dashboard.json: change the revenue-by-region chart from bars to a line chart ordered by region, and add a KPI tile for total units. Keep everything else unchanged." },
+  { "id": "kinds-mix", "prompt": "Build a dashboard from data/sales.csv with revenue by region as a bar chart (currency) and monthly revenue per region as a line chart." },
+  { "id": "views-pair", "prompt": "Build a dashboard from data/sales.csv showing revenue by product, with the share-of-total view shown side by side with the bars." },
+  { "id": "themed", "prompt": "Build a dashboard from data/sales.csv with total units per region as a donut, using the editorial theme." },
+  { "id": "edit-kind", "seed": "seeds/dashboard.json", "prompt": "In dashboard.json, change the revenue-by-region chart from a bar chart to a donut chart. Keep everything else unchanged." }
 ]

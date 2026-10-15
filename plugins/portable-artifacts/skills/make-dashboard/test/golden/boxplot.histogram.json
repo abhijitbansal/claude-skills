@@ -1,0 +1,51 @@
+{
+  "params": [
+    {
+      "name": "pa_hover",
+      "select": {
+        "type": "point",
+        "on": "pointerover",
+        "clear": "pointerout"
+      }
+    }
+  ],
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "a",
+      "type": "quantitative",
+      "title": "a",
+      "bin": {
+        "maxbins": 20
+      }
+    },
+    "y": {
+      "aggregate": "count",
+      "type": "quantitative",
+      "title": "Count"
+    },
+    "tooltip": [
+      {
+        "field": "a",
+        "type": "quantitative",
+        "title": "a",
+        "bin": {
+          "maxbins": 20
+        }
+      },
+      {
+        "aggregate": "count",
+        "type": "quantitative",
+        "title": "Count"
+      }
+    ],
+    "opacity": {
+      "condition": {
+        "param": "pa_hover",
+        "empty": true,
+        "value": 1
+      },
+      "value": 0.55
+    }
+  }
+}

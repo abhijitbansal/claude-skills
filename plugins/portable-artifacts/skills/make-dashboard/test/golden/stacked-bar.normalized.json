@@ -1,0 +1,62 @@
+{
+  "params": [
+    {
+      "name": "pa_legend",
+      "select": {
+        "type": "point",
+        "fields": [
+          "region"
+        ]
+      },
+      "bind": "legend"
+    }
+  ],
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "quarter",
+      "type": "nominal",
+      "title": "quarter",
+      "sort": null
+    },
+    "y": {
+      "field": "revenue",
+      "type": "quantitative",
+      "title": "revenue",
+      "stack": "normalize",
+      "axis": {
+        "format": ".0%"
+      }
+    },
+    "color": {
+      "field": "region",
+      "type": "nominal",
+      "title": "region"
+    },
+    "tooltip": [
+      {
+        "field": "quarter",
+        "type": "nominal",
+        "title": "quarter"
+      },
+      {
+        "field": "revenue",
+        "type": "quantitative",
+        "title": "revenue"
+      },
+      {
+        "field": "region",
+        "type": "nominal",
+        "title": "region"
+      }
+    ],
+    "opacity": {
+      "condition": {
+        "param": "pa_legend",
+        "empty": true,
+        "value": 1
+      },
+      "value": 0.2
+    }
+  }
+}

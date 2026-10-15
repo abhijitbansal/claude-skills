@@ -162,11 +162,13 @@ Sharpen the ask before the work, surface the right next step after it. Zero conf
 
 ## portable-artifacts (plugin)
 
-Dashboards and animated explainers from a prompt — built locally, offline, from open-source parts, by any coding agent. The model writes one small JSON spec; deterministic Node scripts validate it and build, preview or render. Needs Node.js ≥ 20 (`npm ci` once per skill); `make-motion` also needs Chromium and ffmpeg, and installs kokoro-js on demand when a voiceover is asked for. `bin/install.mjs` ports both skills to Codex, Copilot, Gemini CLI and Claude Code.
+Dashboards, diagrams, explainer pages and animated videos from a prompt — built locally, offline, from open-source parts, by any coding agent. The model writes one small JSON spec; deterministic Node scripts validate it and build, preview or render. Needs Node.js ≥ 20 (`npm ci` once per skill); `make-motion` also needs Chromium and ffmpeg, and installs kokoro-js on demand when a voiceover is asked for. `bin/install.mjs` ports all four skills to Codex, Copilot, Gemini CLI and Claude Code.
 
 | Name | Kind | What it does |
 | --- | --- | --- |
 | `make-dashboard` | skill | Prompt + data file (CSV, Parquet, JSON, DuckDB, SQLite, Postgres, MySQL) → `dashboard.json` → one self-contained `index.html` of KPI tiles and Vega-Lite charts. Every chart shows its SQL, row count and refresh time; refresh is one command, no LLM. Invoke `/make-dashboard` (`$make-dashboard` in Codex). |
+| `make-diagram` | skill | Prompt → `diagram.json` topology (architecture, flowchart, sequence or state) → one self-contained HTML page laid out with ELK: zoom and pan, hover tracing, a story player with chapters and beats, an Explore panel, full screen and PNG/SVG export. Offline, no LLM at build time. Invoke `/make-diagram` (`$make-diagram` in Codex). |
+| `make-explainer` | skill | Prompt → `explainer.json` of typed sections (recap, diff review, concept or plan explainer, test checklist, slide deck) → one self-contained HTML page or deck. Scripts validate the spec, lint the prose and render offline; embeds `make-diagram` figures, `make-dashboard` charts and video clips, so the installer pulls in `make-diagram` and `make-dashboard` (`npx skills add` needs all three named; `make-motion` is optional). No LLM at build time. Invoke `/make-explainer` (`$make-explainer` in Codex). |
 | `make-motion` | skill | Prompt → `motion.json` scene spec → live preview with a scrubber and a deterministic 1080p MP4. Audio is opt-in: `audio` tracks (music, voiceover, SFX) are added only when the prompt asks for sound, mixed in by ffmpeg and played in sync in the preview; narration is synthesised locally with Kokoro. A change is one field in the spec. Invoke `/make-motion` (`$make-motion` in Codex). |
 
 Visual guide: [portable-artifacts](features/portable-artifacts.html).

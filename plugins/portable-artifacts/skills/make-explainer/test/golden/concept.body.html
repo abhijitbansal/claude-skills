@@ -1,0 +1,284 @@
+<body class="has-toc">
+<a class="skip" href="#content">Skip to content</a>
+<header class="hero">
+<div class="mast-text">
+<h1>Why an explainer is a JSON outline, not a page you write</h1>
+<p class="subtitle">The idea behind make-explainer, what it guarantees, and where it stops</p>
+<dl class="meta">
+<div class="m-date"><dt>Date</dt><dd>2026-10-12</dd></div>
+<div class="m-author"><dt>Author</dt><dd>Abhijit Bansal</dd></div>
+<div class="m-status"><dt>Status</dt><dd>Draft for review</dd></div>
+</dl>
+</div>
+<button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><span class="pa-ti pa-ti-auto"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-light"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-dark"><svg data-sibling-svg></svg></span></button>
+<script>/* shared theme toggle */</script>
+<div class="hero-tldr tone-good" id="verdict" role="region" aria-labelledby="verdict-title">
+<p class="sec-eyebrow pa-label">The verdict</p>
+<h2 class="hero-tldr-title sr-only" id="verdict-title">An outline, not a page, keeps explainers consistent</h2>
+<div class="tldr tone-good">
+<p class="tldr-tone"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span></p>
+<p class="lead">You write the facts; the tool owns the layout. The page is always well formed, offline and the same family as every other one.</p>
+<ul class="points">
+<li>The model fills typed sections in JSON and never writes HTML, CSS or script.</li>
+<li>Checks run before the build: schema, file references, prose rules.</li>
+<li>One theme, one accent and one set of components keep every page consistent.</li>
+</ul>
+</div>
+</div>
+</header>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+<details open>
+<summary>Contents</summary>
+<ol>
+<li><a href="#verdict">The verdict</a></li>
+<li><a href="#what-one-build-produces">One build</a></li>
+<li><a href="#a-hand-written-page-drifts-a-generated-o">The problem</a></li>
+<li><a href="#three-steps-from-facts-to-a-finished-pag">The pipeline</a></li>
+<li><a href="#four-rules-keep-the-output-trustworthy">Guarantees</a></li>
+<li><a href="#typed-sections-trade-freedom-for-consist">Trade-offs</a></li>
+<li><a href="#each-section-type-answers-a-different-qu">Section types</a></li>
+<li><a href="#building-a-page-takes-four-moves">Workflow</a></li>
+<li><a href="#the-whole-loop-is-two-commands">Commands</a></li>
+<li><a href="#three-limits-you-should-know-about">Limits</a></li>
+<li><a href="#each-section-type-is-one-small-renderer">Renderers</a></li>
+<li><a href="#the-design-settled-in-three-passes">History</a></li>
+</ol>
+</details>
+</nav>
+<main id="content" class="sections">
+<section class="sec sec-kpis sec-alt" id="what-one-build-produces" aria-labelledby="what-one-build-produces-title">
+<p class="sec-eyebrow pa-label">One build</p>
+<h2 class="sec-title" id="what-one-build-produces-title">What one build produces<a class="anchor" href="#what-one-build-produces" aria-label="Link to this section: What one build produces">#</a></h2>
+<dl class="kpis">
+<div class="kpi tone-neutral"><dt>Network requests</dt><dd class="kpi-value">0</dd><dd class="kpi-note">fonts and script are inlined</dd></div>
+<div class="kpi tone-accent"><dt>Section types</dt><dd class="kpi-value">18</dd><dd class="kpi-delta"><span>4 need a sibling skill</span></dd></div>
+<div class="kpi tone-neutral"><dt>Themes</dt><dd class="kpi-value">4</dd><dd class="kpi-note">light and dark each</dd></div>
+</dl>
+</section>
+<section class="sec sec-text" id="a-hand-written-page-drifts-a-generated-o" aria-labelledby="a-hand-written-page-drifts-a-generated-o-title">
+<p class="sec-eyebrow pa-label">The problem</p>
+<h2 class="sec-title" id="a-hand-written-page-drifts-a-generated-o-title">A hand-written page drifts, a generated one cannot<a class="anchor" href="#a-hand-written-page-drifts-a-generated-o" aria-label="Link to this section: A hand-written page drifts, a generated one cannot">#</a></h2>
+<div class="prose">
+<p>A page written freehand looks fine once. The second one uses a different spacing scale, the third a different set of colours, and the fourth quietly pulls a font from a CDN.</p>
+<p>With an outline, the layout is not up for discussion. Each section <strong>type</strong> has one renderer, and the renderer is the only place that knows about markup. The <code>title</code> of a section is a claim a reader can agree or disagree with, not a label such as &quot;Overview&quot;.</p>
+<p>Text fields accept a small subset of markdown: bold, italic, <code>code</code>, <a href="https://example.com" rel="noopener noreferrer">links to https pages</a> and <code>- </code> lists. Anything else is shown as plain text, so a stray angle bracket can never become a tag.</p>
+</div>
+</section>
+<section class="sec sec-image" id="three-steps-from-facts-to-a-finished-pag" aria-labelledby="three-steps-from-facts-to-a-finished-pag-title">
+<p class="sec-eyebrow pa-label">The pipeline</p>
+<h2 class="sec-title" id="three-steps-from-facts-to-a-finished-pag-title">Three steps from facts to a finished page<a class="anchor" href="#three-steps-from-facts-to-a-finished-pag" aria-label="Link to this section: Three steps from facts to a finished page">#</a></h2>
+<figure class="img">
+<img src="data:image/svg+xml;base64,…" alt="Three boxes joined by arrows, top to bottom: Outline, Checks, Page.">
+<figcaption>The outline is typed JSON sections, the checks cover schema, links and prose, and the page is one offline HTML file. A bad outline never reaches the build.</figcaption>
+</figure>
+</section>
+<section class="sec sec-cards" id="four-rules-keep-the-output-trustworthy" aria-labelledby="four-rules-keep-the-output-trustworthy-title">
+<p class="sec-eyebrow pa-label">Guarantees</p>
+<h2 class="sec-title" id="four-rules-keep-the-output-trustworthy-title">Four rules keep the output trustworthy<a class="anchor" href="#four-rules-keep-the-output-trustworthy" aria-label="Link to this section: Four rules keep the output trustworthy">#</a></h2>
+<ul class="cards cols-2">
+<li class="card tone-neutral">
+<div class="card-head"><svg data-sibling-svg></svg><h3>Closed vocabulary</h3><span class="tag">schema</span></div>
+<p>Tones, severities and changes come from fixed lists. A typo gets a did-you-mean hint instead of a silent default.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><svg data-sibling-svg></svg><h3>Files stay local</h3><span class="tag">paths</span></div>
+<p>Images and diagrams resolve inside the spec folder. Absolute paths, parent folders and symlinks are refused.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><svg data-sibling-svg></svg><h3>Plain prose</h3><span class="tag">lint</span></div>
+<p>A lint rejects emoji, filler phrases and placeholder text before the page exists.</p>
+</li>
+<li class="card tone-accent">
+<div class="card-head"><svg data-sibling-svg></svg><h3>Status needs a word</h3><span class="tag">a11y</span></div>
+<p>Severity, change type and step status each show a shape and a label, never colour alone.</p>
+</li>
+</ul>
+</section>
+<section class="sec sec-compare sec-alt" id="typed-sections-trade-freedom-for-consist" aria-labelledby="typed-sections-trade-freedom-for-consist-title">
+<p class="sec-eyebrow pa-label">Trade-offs</p>
+<h2 class="sec-title" id="typed-sections-trade-freedom-for-consist-title">Typed sections trade freedom for consistency<a class="anchor" href="#typed-sections-trade-freedom-for-consist" aria-label="Link to this section: Typed sections trade freedom for consistency">#</a></h2>
+<div class="compare cols-2">
+<div class="cmp-col tone-warn">
+<h3>Freehand HTML</h3><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Caution</span></span>
+<ul>
+<li>Any layout you can imagine</li>
+<li>Every page needs a design pass</li>
+<li>Easy to ship a broken or networked page</li>
+</ul>
+</div>
+<div class="cmp-col tone-good">
+<h3>Typed outline</h3><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span>
+<ul>
+<li>Eighteen section types, all themed</li>
+<li>Checked before it is built</li>
+<li>Cannot load anything from the network</li>
+</ul>
+</div>
+</div>
+<p class="verdict"><strong>Verdict.</strong> Use the outline for recaps, checklists and concept pages. Reach for a bespoke page only when the layout itself is the point.</p>
+</section>
+<section class="sec sec-table" id="each-section-type-answers-a-different-qu" aria-labelledby="each-section-type-answers-a-different-qu-title">
+<p class="sec-eyebrow pa-label">Section types</p>
+<h2 class="sec-title" id="each-section-type-answers-a-different-qu-title">Each section type answers a different question<a class="anchor" href="#each-section-type-answers-a-different-qu" aria-label="Link to this section: Each section type answers a different question">#</a></h2>
+<div class="tablewrap" role="region" aria-label="A short extract of the full list" tabindex="0">
+<table><caption>A short extract of the full list</caption>
+<thead><tr><th scope="col" class="a-l">Section</th><th scope="col" class="a-l">Use it to show</th><th scope="col" class="a-l">Typical size</th></tr></thead>
+<tbody>
+<tr><th scope="row" class="a-l">tldr</th><td class="a-l">The verdict and its few supporting points</td><td class="a-l">1 per page</td></tr>
+<tr><th scope="row" class="a-l">kpis</th><td class="a-l">Headline numbers</td><td class="a-l">3 to 6 tiles</td></tr>
+<tr><th scope="row" class="a-l">table</th><td class="a-l">Rows that compare across the same columns</td><td class="a-l">up to 60 rows</td></tr>
+<tr><th scope="row" class="a-l">files</th><td class="a-l">What changed, grouped by folder</td><td class="a-l">up to 200 files</td></tr>
+<tr><th scope="row" class="a-l">steps</th><td class="a-l">An ordered procedure with a status</td><td class="a-l">3 to 10 steps</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+<section class="sec sec-steps" id="building-a-page-takes-four-moves" aria-labelledby="building-a-page-takes-four-moves-title">
+<p class="sec-eyebrow pa-label">Workflow</p>
+<h2 class="sec-title" id="building-a-page-takes-four-moves-title">Building a page takes four moves<a class="anchor" href="#building-a-page-takes-four-moves" aria-label="Link to this section: Building a page takes four moves">#</a></h2>
+<ol class="steps">
+<li class="step">
+<div class="step-head"><strong class="step-title">Pick a preset</strong><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg><span>Done</span></span></div>
+<p>Recap, checklist, concept or slides gives you a section skeleton.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Fill the sections</strong><span class="chip tone-accent"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none"/></svg><span>In progress</span></span></div>
+<p>Replace every placeholder with a real sentence.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Validate</strong><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>To do</span></span></div>
+<p>Fix each error; every one names the JSON path and the repair.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Build and open</strong><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>To do</span></span></div>
+
+</li>
+</ol>
+</section>
+<section class="sec sec-code" id="the-whole-loop-is-two-commands" aria-labelledby="the-whole-loop-is-two-commands-title">
+<p class="sec-eyebrow pa-label">Commands</p>
+<h2 class="sec-title" id="the-whole-loop-is-two-commands-title">The whole loop is two commands<a class="anchor" href="#the-whole-loop-is-two-commands" aria-label="Link to this section: The whole loop is two commands">#</a></h2>
+<figure class="code">
+<div class="code-bar"><span class="code-lang">bash</span><button type="button" class="btn copy" data-copy aria-label="Copy code">Copy</button></div>
+<pre tabindex="0"><code>node scripts/validate.mjs explainer.json
+node scripts/build.mjs explainer.json --out ./page.html</code></pre>
+<figcaption>Validation prints one line per problem; the build prints the file it wrote.</figcaption>
+</figure>
+</section>
+<section class="sec sec-risks" id="three-limits-you-should-know-about" aria-labelledby="three-limits-you-should-know-about-title">
+<p class="sec-eyebrow pa-label">Limits</p>
+<h2 class="sec-title" id="three-limits-you-should-know-about-title">Three limits you should know about<a class="anchor" href="#three-limits-you-should-know-about" aria-label="Link to this section: Three limits you should know about">#</a></h2>
+<div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
+<table>
+<thead><tr><th scope="col">Severity</th><th scope="col">Risk</th><th scope="col">Mitigation</th><th scope="col">Owner</th></tr></thead>
+<tbody>
+<tr>
+<td data-label="Severity"><span class="chip tone-medium"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg><span>Medium</span></span></td>
+<td data-label="Risk">A layout the section types cannot express</td>
+<td data-label="Mitigation">Split the content across sections, or build a bespoke page for that one case.</td>
+<td data-label="Owner">Author</td>
+</tr>
+<tr>
+<td data-label="Severity"><span class="chip tone-low"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>Low</span></span></td>
+<td data-label="Risk">A diagram or chart needs a sibling skill</td>
+<td data-label="Mitigation">The installer adds make-diagram and make-dashboard next to this skill.</td>
+<td data-label="Owner"></td>
+</tr>
+<tr>
+<td data-label="Severity"><span class="chip tone-high"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/></svg><span>High</span></span></td>
+<td data-label="Risk">A very large inline image bloats the page</td>
+<td data-label="Mitigation">Images over 1.5 MB are rejected; resize or link a smaller export.</td>
+<td data-label="Owner"></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section class="sec sec-files" id="each-section-type-is-one-small-renderer" aria-labelledby="each-section-type-is-one-small-renderer-title">
+<p class="sec-eyebrow pa-label">Renderers</p>
+<h2 class="sec-title" id="each-section-type-is-one-small-renderer-title">Each section type is one small renderer module<a class="anchor" href="#each-section-type-is-one-small-renderer" aria-label="Link to this section: Each section type is one small renderer module">#</a></h2>
+<div class="files">
+<p class="files-sum">6 files · 5 added, 1 modified · +571 −2 lines</p>
+<ul class="tree">
+<li class="folder"><details open>
+<summary><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg><span class="dir">scripts/lib/</span><span class="count">5 files</span></summary>
+<ul class="tree">
+<li class="file">
+<span class="file-main"><span class="chip tone-neutral"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none"/></svg><span>Modified</span></span><code class="path" title="scripts/lib/checks.mjs">checks.mjs</code><span class="stat"><span class="add">+33</span> <span class="del">−2</span></span></span>
+<span class="file-note">image and icon checks</span>
+</li>
+<li class="file">
+<span class="file-main"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span>Added</span></span><code class="path" title="scripts/lib/image.mjs">image.mjs</code><span class="stat"><span class="add">+53</span> <span class="del">−0</span></span></span>
+<span class="file-note">size cap and SVG safety rule</span>
+</li>
+<li class="file">
+<span class="file-main"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span>Added</span></span><code class="path" title="scripts/lib/page.mjs">page.mjs</code><span class="stat"><span class="add">+160</span> <span class="del">−0</span></span></span>
+<span class="file-note">page assembly; line counts are from commit b113ada</span>
+</li>
+<li class="folder"><details open>
+<summary><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg><span class="dir">render/</span><span class="count">2 files</span></summary>
+<ul class="tree">
+<li class="file">
+<span class="file-main"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span>Added</span></span><code class="path" title="scripts/lib/render/cards.mjs">cards.mjs</code><span class="stat"><span class="add">+21</span> <span class="del">−0</span></span></span>
+</li>
+<li class="file">
+<span class="file-main"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span>Added</span></span><code class="path" title="scripts/lib/render/table.mjs">table.mjs</code><span class="stat"><span class="add">+38</span> <span class="del">−0</span></span></span>
+<span class="file-note">numeric columns right-align</span>
+</li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="folder"><details open>
+<summary><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg><span class="dir">template/</span><span class="count">1 file</span></summary>
+<ul class="tree">
+<li class="file">
+<span class="file-main"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span>Added</span></span><code class="path" title="template/page.html">page.html</code><span class="stat"><span class="add">+266</span> <span class="del">−0</span></span></span>
+<span class="file-note">styles and print rules</span>
+</li>
+</ul>
+</details></li>
+</ul>
+</div>
+</section>
+<section class="sec sec-timeline" id="the-design-settled-in-three-passes" aria-labelledby="the-design-settled-in-three-passes-title">
+<p class="sec-eyebrow pa-label">History</p>
+<h2 class="sec-title" id="the-design-settled-in-three-passes-title">The design settled in three passes<a class="anchor" href="#the-design-settled-in-three-passes" aria-label="Link to this section: The design settled in three passes">#</a></h2>
+<ol class="timeline">
+<li class="tl-item">
+<span class="tl-date">Pass 1</span>
+<strong class="tl-title">Schema first</strong>
+<p>Closed section types, limits and did-you-mean errors.</p>
+</li>
+<li class="tl-item">
+<span class="tl-date">Pass 2</span>
+<strong class="tl-title">Renderers</strong>
+<p>One module per type, each with an escaping test.</p>
+</li>
+<li class="tl-item">
+<span class="tl-date">Pass 3</span>
+<strong class="tl-title">Runtime</strong>
+<p>Theme toggle, contents highlight and copy buttons.</p>
+</li>
+</ol>
+</section>
+<section class="sec sec-callout" id="text-is-escaped-not-trusted">
+<aside class="callout tone-warn">
+<p class="callout-head"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Warning</span></span><strong class="callout-title">Text is escaped, not trusted</strong></p>
+<p>A field such as <code>&lt;img onerror=alert(1)&gt;</code> is shown as characters on the page. If you need real markup, the section type is missing, not the escape.</p>
+</aside>
+</section>
+<section class="sec sec-details" id="section-14">
+<details class="det">
+<summary>Why not let the model write HTML directly?</summary>
+<div class="det-body prose">
+<p>It can, but then every page needs its own review for network calls, broken markup and style drift.</p>
+<ul>
+<li>The outline removes that review.</li>
+<li>It also makes pages diffable: a change is a change to JSON.</li>
+</ul>
+</div>
+</details>
+</section>
+</main>

@@ -31,6 +31,50 @@ const VEGA_CONFIG = {
   title: { color: '#f4f6fb', font: 'Inter', fontSize: 32 },
 };
 
+// What the page draws with when the spec names no theme. A themed spec swaps these for the theme's body
+// and mono fonts and its dark colours (see themedLook); nothing else about the page changes.
+const DEFAULT_LOOK = Object.freeze({
+  text: '#ffffff', shape: '#ffffff', background: null, vega: VEGA_CONFIG,
+  sans: 'Inter', mono: "'JetBrains Mono'", chartFace: 'Inter',
+  weight: (_kind, asked) => asked,
+});
+
+const quote = (family) => `"${family}"`;
+
+// The shipped weight closest to the one asked for (the lighter one on a tie): a theme font ships a few
+// weights, and any other would be drawn as a synthetic bold.
+function nearestWeight(asked, shipped) {
+  let best = shipped[0];
+  for (const w of shipped) if (Math.abs(w - asked) < Math.abs(best - asked)) best = w;
+  return best;
+}
+
+function themedLook(theme) {
+  const c = theme.dark;
+  const sans = quote(theme.fonts.body.family);
+  const ink = c.text3;
+  const axisTitle = c.text2;
+  const shipped = { sans: Object.keys(theme.fonts.body.weights).map(Number).sort((a, b) => a - b), mono: Object.keys(theme.fonts.mono.weights).map(Number).sort((a, b) => a - b) };
+  const weight = (kind, asked) => nearestWeight(asked, shipped[kind]);
+  return {
+    weight,
+    text: c.text, shape: c.accent, background: c.page,
+    sans, mono: quote(theme.fonts.mono.family), chartFace: sans,
+    vega: {
+      ...VEGA_CONFIG,
+      font: sans,
+      range: { category: [c.cat1, c.cat2, c.cat3, c.cat4, c.cat5, c.cat6] },
+      mark: { color: c.accent },
+      line: { color: c.accent },
+      bar: { color: c.accent, cornerRadiusEnd: 6 },
+      point: { filled: true, size: 120, color: c.accent },
+      axis: { ...VEGA_CONFIG.axis, domainColor: c.line, tickColor: c.line, gridColor: c.grid, labelColor: ink, titleColor: axisTitle, labelFont: sans, titleFont: sans, labelFontWeight: weight('sans', 400), titleFontWeight: weight('sans', VEGA_CONFIG.axis.titleFontWeight) },
+      legend: { ...VEGA_CONFIG.legend, labelColor: ink, titleColor: axisTitle, labelFont: sans, labelFontWeight: weight('sans', 400), titleFontWeight: weight('sans', 700) },
+      title: { ...VEGA_CONFIG.title, color: c.text, font: sans, fontWeight: weight('sans', 700) },
+    },
+  };
+}
+
 const px = (n) => `${n}px`;
 const svgEl = (name, attrs = {}) => {
   const node = document.createElementNS(SVG_NS, name);
@@ -39,16 +83,16 @@ const svgEl = (name, attrs = {}) => {
 };
 const assetUrl = (src) => `/assets/${src.split('/').map(encodeURIComponent).join('/')}`;
 
-function textStyle(node, el) {
+function textStyle(node, el, look) {
   node.style.fontSize = px(el.fontSize ?? 48);
-  node.style.fontWeight = String(el.fontWeight ?? 600);
-  node.style.color = el.color ?? '#ffffff';
+  node.style.fontWeight = String(look.weight(el.font === 'mono' ? 'mono' : 'sans', el.fontWeight ?? 600));
+  node.style.color = el.color ?? look.text;
   node.style.textAlign = el.align ?? 'center';
   if (el.maxWidth) node.style.maxWidth = px(el.maxWidth);
   if (el.font === 'mono') node.classList.add('mono');
 }
 
-function makeShape(el) {
+function makeShape(el, look) {
   const sw = el.strokeWidth ?? (el.shape === 'line' ? 4 : 0);
   const w = el.width ?? 100;
   const h = el.shape === 'line' ? sw : (el.height ?? 100);
@@ -56,9 +100,9 @@ function makeShape(el) {
   const common = { pathLength: 1, 'stroke-dasharray': 1, 'stroke-dashoffset': 0 };
   let node;
   if (el.shape === 'line') {
-    node = svgEl('line', { x1: 0, y1: h / 2, x2: w, y2: h / 2, stroke: el.stroke ?? el.fill ?? '#ffffff', 'stroke-width': sw, ...common });
+    node = svgEl('line', { x1: 0, y1: h / 2, x2: w, y2: h / 2, stroke: el.stroke ?? el.fill ?? look.shape, 'stroke-width': sw, ...common });
   } else {
-    const fill = el.fill ?? (el.stroke ? 'none' : '#ffffff');
+    const fill = el.fill ?? (el.stroke ? 'none' : look.shape);
     const inset = sw / 2;
     const attrs = { fill, stroke: el.stroke ?? 'none', 'stroke-width': sw, ...common };
     node = el.shape === 'ellipse'
@@ -78,9 +122,9 @@ function mergeConfig(base, extra = {}) {
   return out;
 }
 
-async function renderChart(el) {
+async function renderChart(el, look) {
   const vl = el.vegaLite;
-  const config = mergeConfig(VEGA_CONFIG, vl.config);
+  const config = mergeConfig(look.vega, vl.config);
   const compiled = window.vegaLite.compile({
     ...vl, width: el.width, height: el.height, config, autosize: { type: 'fit', contains: 'padding' },
   }).spec;
@@ -93,22 +137,22 @@ async function renderChart(el) {
   return holder.firstElementChild;
 }
 
-function buildElement(el) {
+function buildElement(el, look) {
   const node = document.createElement('div');
   node.className = `el ${el.type}`;
   node.dataset.id = el.id;
   const part = { node, el };
   switch (el.type) {
     case 'text':
-      textStyle(node, el);
+      textStyle(node, el, look);
       node.textContent = el.text;
       break;
     case 'counter':
-      textStyle(node, el);
+      textStyle(node, el, look);
       part.format = (v) => `${el.prefix ?? ''}${v.toFixed(el.decimals ?? 0)}${el.suffix ?? ''}`;
       break;
     case 'shape': {
-      const s = makeShape(el);
+      const s = makeShape(el, look);
       Object.assign(part, { drawNode: s.drawNode });
       node.style.width = px(s.width);
       node.style.height = px(s.height);
@@ -135,7 +179,7 @@ function buildElement(el) {
   return part;
 }
 
-async function buildStage(spec) {
+async function buildStage(spec, look) {
   const stage = document.createElement('div');
   stage.id = 'stage';
   stage.style.width = px(spec.size[0]);
@@ -149,11 +193,11 @@ async function buildStage(spec) {
     layer.className = 'scene';
     if (scene.background) layer.style.background = scene.background;
     for (const el of scene.elements) {
-      const part = buildElement(el);
+      const part = buildElement(el, look);
       parts.push(part);
       layer.append(part.node);
       if (el.type === 'chart') {
-        pending.push(renderChart(el).then((svg) => part.node.append(svg)));
+        pending.push(renderChart(el, look).then((svg) => part.node.append(svg)));
       }
       if (part.img) pending.push(part.img.decode().catch(() => { throw new Error(`image failed to load: ${el.src}`); }));
     }
@@ -171,24 +215,24 @@ function collectStrings(node, out = []) {
 }
 
 // [css font shorthand, sample text] per use, so only the subsets the spec needs are fetched.
-function fontNeeds(spec) {
+function fontNeeds(spec, look) {
   const needs = [];
   const digits = '0123456789.,-+%$';
   for (const el of spec.scenes.flatMap((s) => s.elements)) {
-    const family = el.font === 'mono' ? "'JetBrains Mono'" : 'Inter';
-    const face = `${el.fontWeight ?? 600} ${el.fontSize ?? 48}px ${family}`;
+    const family = el.font === 'mono' ? look.mono : look.sans;
+    const face = `${look.weight(el.font === 'mono' ? 'mono' : 'sans', el.fontWeight ?? 600)} ${el.fontSize ?? 48}px ${family}`;
     if (el.type === 'text') needs.push([face, el.text]);
     if (el.type === 'counter') needs.push([face, `${el.prefix ?? ''}${el.suffix ?? ''}${digits}`]);
     if (el.type === 'chart') {
       const sample = collectStrings(el.vegaLite).join(' ') + digits;
-      for (const weight of [400, 500, 600, 700]) needs.push([`${weight} 24px Inter`, sample]);
+      for (const weight of new Set([400, 500, 600, 700].map((w) => look.weight('sans', w)))) needs.push([`${weight} 24px ${look.chartFace}`, sample]);
     }
   }
   return needs;
 }
 
-async function loadFonts(spec) {
-  await Promise.all(fontNeeds(spec).map(([font, text]) => document.fonts.load(font, text)));
+async function loadFonts(spec, look) {
+  await Promise.all(fontNeeds(spec, look).map(([font, text]) => document.fonts.load(font, text)));
   await document.fonts.ready;
 }
 
@@ -228,10 +272,45 @@ function fitStage(size) {
   currentStage.style.transform = `translate(${left}px, ${top}px) scale(${k})`;
 }
 
+// The stylesheet that offers a themed spec's fonts. One <link>, swapped when the theme changes.
+function useThemeStylesheet(name) {
+  const href = `/theme/${encodeURIComponent(name)}.css`;
+  let link = document.getElementById('theme-css');
+  if (link?.getAttribute('href') === href) return Promise.resolve();
+  if (!link) {
+    link = document.createElement('link');
+    link.id = 'theme-css';
+    link.rel = 'stylesheet';
+    document.head.append(link);
+  }
+  return new Promise((resolve, reject) => {
+    link.onload = resolve;
+    link.onerror = () => reject(new Error(`failed to load the stylesheet of theme "${name}"`));
+    link.href = href;
+  });
+}
+
+// A themed spec's look; a spec without a theme asks the server for nothing.
+async function lookFor(name) {
+  if (name === undefined) {
+    document.getElementById('theme-css')?.remove();
+    return DEFAULT_LOOK;
+  }
+  const response = await fetch(`/theme/${encodeURIComponent(name)}.json`, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`failed to load theme "${name}": HTTP ${response.status}`);
+  const theme = await response.json();
+  await useThemeStylesheet(name);
+  return themedLook(theme);
+}
+
 async function fetchSpec() {
   const response = await fetch('/spec.json', { cache: 'no-store' });
   if (!response.ok) throw new Error(`failed to load spec: HTTP ${response.status}`);
-  return withDefaults(await response.json());
+  const raw = await response.json();
+  const look = await lookFor(raw.theme);
+  const spec = withDefaults(raw);
+  if (raw.background === undefined && look.background) spec.background = look.background;
+  return { spec, look };
 }
 
 let currentAudio = null;
@@ -275,9 +354,9 @@ let generation = 0;
 // Builds a new stage and swaps it in. Returns null when a newer mount started meanwhile.
 async function mount() {
   const mine = ++generation;
-  const spec = await fetchSpec();
-  await loadFonts(spec);
-  const dom = await buildStage(spec);
+  const { spec, look } = await fetchSpec();
+  await loadFonts(spec, look);
+  const dom = await buildStage(spec, look);
   if (mine !== generation) return null;
   const built = buildTimeline(spec);
   const apply = makeApply(dom, built);

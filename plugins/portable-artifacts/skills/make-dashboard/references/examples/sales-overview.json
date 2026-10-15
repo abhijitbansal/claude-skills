@@ -23,52 +23,39 @@
   "charts": [
     {
       "id": "c1",
-      "title": "Revenue by region",
+      "title": "East earns the most revenue",
       "query": "rev_by_region",
       "width": "half",
-      "vegaLite": {
-        "mark": "bar",
-        "encoding": {
-          "x": { "field": "region", "type": "nominal", "sort": null, "title": null },
-          "y": { "field": "revenue", "type": "quantitative", "title": "Revenue" }
-        }
-      }
+      "kind": "bar", "x": "region", "y": "revenue", "format": "currency"
     },
     {
       "id": "c2",
-      "title": "Units by product",
+      "title": "Gadget sells the most units",
       "query": "units_by_product",
       "width": "half",
-      "vegaLite": {
-        "mark": "bar",
-        "encoding": {
-          "x": { "field": "product", "type": "nominal", "sort": null, "title": null },
-          "y": { "field": "units", "type": "quantitative", "title": "Units" }
-        }
-      }
+      "kind": "bar", "x": "product", "y": "units", "views": ["sorted", "table"]
     },
     {
       "id": "c3",
-      "title": "Monthly revenue",
+      "title": "August is the peak revenue month",
+      "query": "rev_by_month",
+      "kind": "line", "x": "month", "y": "revenue", "format": "currency"
+    },
+    {
+      "id": "c4",
+      "title": "East leads revenue in Q1 to Q3; West takes Q4",
+      "query": "rev_by_quarter_region",
+      "kind": "grouped-bar", "x": "quarter", "y": "revenue", "color": "region", "pair": true
+    },
+    {
+      "id": "c5",
+      "title": "February is the weakest month (raw Vega-Lite, with points)",
       "query": "rev_by_month",
       "vegaLite": {
         "mark": { "type": "line", "point": true },
         "encoding": {
           "x": { "field": "month", "type": "temporal", "timeUnit": "utcyearmonth", "title": null },
           "y": { "field": "revenue", "type": "quantitative", "title": "Revenue" }
-        }
-      }
-    },
-    {
-      "id": "c4",
-      "title": "Revenue by quarter and region",
-      "query": "rev_by_quarter_region",
-      "vegaLite": {
-        "mark": "bar",
-        "encoding": {
-          "x": { "field": "quarter", "type": "ordinal", "title": null },
-          "y": { "field": "revenue", "type": "quantitative", "title": "Revenue" },
-          "color": { "field": "region", "type": "nominal", "title": "Region" }
         }
       }
     }

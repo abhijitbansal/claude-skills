@@ -1,0 +1,4 @@
+{
+  "size": [160, 90],
+  "scenes": [{ "id": "hello", "duration": 1, "elements": [{ "id": "t", "type": "text", "text": "Hello", "x": 80, "y": 45, "fontSize": 24 }] }]
+}

@@ -1,6 +1,6 @@
 // Run the spec's queries against locked-down in-memory DuckDB and make the
 // results JSON-safe. Also: the post-query field check for charts and KPIs.
-import { didYouMean, pathJoin } from './errors.mjs';
+import { didYouMean, pathJoin } from '../../shared/errors.mjs';
 import {
   openLockedDb, runTimed, describeQuery, wrapLimit, quoteId, errMessage, DEFAULT_TIMEOUT_MS,
 } from './sql.mjs';
@@ -137,8 +137,8 @@ export async function runQueries(spec, dir, { now = new Date(), allowOutside = f
   try {
     for (const [name, sql] of Object.entries(spec.queries)) {
       try {
-        const { rows, columns, truncated } = await fetchQuery(db.conn, sql, maxRows, timeoutMs, db.scrubData);
-        results[name] = { rows, columns, rowCount: rows.length, truncated, sql, refreshedAt };
+        const { rows, columns, types, truncated } = await fetchQuery(db.conn, sql, maxRows, timeoutMs, db.scrubData);
+        results[name] = { rows, columns, types, rowCount: rows.length, truncated, sql, refreshedAt };
       } catch (e) {
         errors.push({ path: `queries.${name}`, message: errMessage(e, 3, db.scrub) });
       }
@@ -226,6 +226,7 @@ export function checkFields(spec, results) {
     }
   });
   (spec.charts ?? []).forEach((chart, i) => {
+    if (!chart.vegaLite) return;
     const columns = results[chart.query]?.columns;
     if (!columns) return;
     const derived = new Set();

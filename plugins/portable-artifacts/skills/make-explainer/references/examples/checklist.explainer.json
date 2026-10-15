@@ -1,0 +1,88 @@
+{
+  "title": "feat/visual-artifacts: manual test checklist",
+  "subtitle": "What automated tests and the headless browser could not cover",
+  "preset": "checklist",
+  "mode": "page",
+  "theme": "paper",
+  "meta": {
+    "branch": "feat/visual-artifacts",
+    "repo": "abhijitbansal/claude-skills",
+    "status": "Ready to test"
+  },
+  "sections": [
+    {
+      "type": "checklist",
+      "id": "manual-tests",
+      "title": "Manual tests for the visual artifact skills",
+      "label": "Before merge",
+      "key": "feat-visual-artifacts",
+      "intro": "This branch adds two skills to the `portable-artifacts` plugin and brings a third to v2:\n\n- **make-dashboard** (v2) builds an interactive dashboard from data files, with live reload.\n- **make-diagram** (new) draws architecture, flow, sequence and state diagrams as one HTML file.\n- **make-explainer** (new) turns a small JSON outline into a recap, concept page, slide deck or this checklist.\n\nUnit tests, the schema checks and a headless Chromium run already cover rendering, validation and storage. Only the items below need a person: a fresh machine, a real window, a print dialog. Items tagged **Regression** guard bugs fixed during review.\n\n**Fixed during review**\n\n- make-diagram: edge ids can no longer collide, a group highlight stays visible, and self-loops are easier to read.\n- make-dashboard: stacked-area crosshair dots sit on the coloured areas, nominal x keeps query order, and a paired card keeps its tab row.\n- make-explainer: an SVG check scans the whole file, and section ids stay unique.",
+      "groups": [
+        {
+          "title": "Install paths",
+          "items": [
+            { "text": "`npx skills add abhijitbansal/claude-skills --skill make-explainer` installs the skill and both sibling skills it needs", "tag": "device", "note": "run it on a machine that has none of the three" },
+            { "text": "Installing `make-diagram` alone leaves `make-explainer` absent, and `make-explainer` names the exact install command", "tag": "manual" },
+            { "text": "`/make-explainer` appears in a new Claude Code session after installing", "tag": "device" },
+            { "text": "Removing the skill from `~/.claude/skills` leaves no stray files behind", "tag": "manual" }
+          ]
+        },
+        {
+          "title": "Themes",
+          "items": [
+            { "text": "Paper, Ink, Blueprint and Editorial each build a page with readable body text", "tag": "visual" },
+            { "text": "The theme toggle cycles Auto, Light and Dark, and the choice survives a reload", "tag": "visual" },
+            { "text": "Dark mode follows the system setting with no flash of the light page on load", "tag": "device", "note": "switch macOS appearance while the page is open" },
+            { "text": "Status chips stay legible in all four themes without relying on colour", "tag": "visual" }
+          ]
+        },
+        {
+          "title": "Kinds and views",
+          "items": [
+            { "text": "Each dashboard kind renders its chart, and the Table view sorts by clicking a header", "tag": "visual" },
+            { "text": "The view switcher moves with the arrow keys and announces the selected view", "tag": "manual" },
+            { "text": "A paired card keeps its tab row when only one pane has data", "tag": "regression" },
+            { "text": "A chart with zero rows shows an empty state and the other views still open", "tag": "regression" }
+          ]
+        },
+        {
+          "title": "Export",
+          "items": [
+            { "text": "A card exports to PNG, SVG and CSV, and each file opens in its own app", "tag": "device" },
+            { "text": "The exported SVG keeps the card's fonts and colours when opened in a browser", "tag": "visual" },
+            { "text": "Printing the explainer to PDF opens every collapsed section and drops the contents list", "tag": "device", "note": "use the system print dialog, not a screenshot" }
+          ]
+        },
+        {
+          "title": "Live reload",
+          "items": [
+            { "text": "`serve.mjs --watch` rebuilds the dashboard after saving a data file", "tag": "manual" },
+            { "text": "Rebuild now refreshes the data without losing the selected view", "tag": "manual" },
+            { "text": "A broken data file shows the error on the page and the last good chart stays", "tag": "regression" },
+            { "text": "`--interval` above 86400 seconds is refused with a clear message", "tag": "regression" }
+          ]
+        },
+        {
+          "title": "Diagrams",
+          "items": [
+            { "text": "Hovering a node traces its edges and dims everything else", "tag": "visual" },
+            { "text": "The Present overlay opens full screen, steps through reveals and closes with Escape", "tag": "manual" },
+            { "text": "A self-loop edge is readable and does not overlap its own node", "tag": "regression" },
+            { "text": "A group highlight stays visible against the page in dark mode", "tag": "regression" }
+          ]
+        },
+        {
+          "title": "Regression checks",
+          "items": [
+            { "text": "Ticks survive a reload, and reordering the items in the JSON keeps them", "tag": "regression" },
+            { "text": "Editing one item's text clears that tick only", "tag": "regression" },
+            { "text": "A page opened with storage blocked shows the unsaved note and still lets you tick items", "tag": "regression", "note": "private window with site data blocked" },
+            { "text": "Reset asks inline and never opens a browser dialog", "tag": "regression" },
+            { "text": "A heading ending in an exclamation mark or an emoji in any text is rejected by `validate.mjs`", "tag": "regression" }
+          ]
+        }
+      ],
+      "onFail": "- Leave the box unticked and write down the step, what you saw and what you expected.\n- Check the [open issues](https://github.com/abhijitbansal/claude-skills/issues) for the same symptom before filing a new one.\n- After the fix, re-run the failed item and every **Regression** item in its group."
+    }
+  ]
+}

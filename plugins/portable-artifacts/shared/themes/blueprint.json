@@ -1,0 +1,100 @@
+{
+  "name": "blueprint",
+  "label": "Blueprint",
+  "fonts": {
+    "display": {
+      "family": "Geist",
+      "fallback": "-apple-system, 'Segoe UI', sans-serif",
+      "weights": {
+        "600": "geist-sans-latin-600-normal.woff2"
+      }
+    },
+    "body": {
+      "family": "Geist",
+      "fallback": "-apple-system, 'Segoe UI', sans-serif",
+      "weights": {
+        "400": "geist-sans-latin-400-normal.woff2",
+        "600": "geist-sans-latin-600-normal.woff2"
+      }
+    },
+    "mono": {
+      "family": "Geist Mono",
+      "fallback": "ui-monospace, Menlo, Consolas, monospace",
+      "weights": {
+        "400": "geist-mono-latin-400-normal.woff2"
+      }
+    }
+  },
+  "light": {
+    "page": "#f4f6f8",
+    "surface": "#ffffff",
+    "text": "#111827",
+    "text2": "#475467",
+    "text3": "#5d6b7e",
+    "line": "#dfe4ea",
+    "grid": "#e8ecf0",
+    "accent": "#1e5f8a",
+    "accentSoft": "#e3eef6",
+    "warn": "#b45309",
+    "good": "#15803d",
+    "bad": "#b91c1c",
+    "cat1": "#2a78d6",
+    "cat2": "#eb6834",
+    "cat3": "#1baf7a",
+    "cat4": "#eda100",
+    "cat5": "#e87ba4",
+    "cat6": "#008300",
+    "cat7": "#4a3aa7",
+    "cat8": "#e34948",
+    "seq1": "#cde2fb",
+    "seq2": "#9ec5f4",
+    "seq3": "#6da7ec",
+    "seq4": "#3987e5",
+    "seq5": "#256abf",
+    "seq6": "#184f95",
+    "seq7": "#0d366b",
+    "kindPerson": "#a3480a",
+    "kindService": "#0e7490",
+    "kindData": "#6d28d9",
+    "kindQueue": "#0f766e",
+    "kindExternal": "#56677b",
+    "kindDecision": "#4338ca",
+    "glow": "#1e5f8a"
+  },
+  "dark": {
+    "page": "#0e1319",
+    "surface": "#151c24",
+    "text": "#e8edf3",
+    "text2": "#b7c2cf",
+    "text3": "#94a1b0",
+    "line": "#253140",
+    "grid": "#1f2935",
+    "accent": "#6cb2e6",
+    "accentSoft": "#16314a",
+    "warn": "#f5a524",
+    "good": "#4ade80",
+    "bad": "#f87171",
+    "cat1": "#3987e5",
+    "cat2": "#d95926",
+    "cat3": "#199e70",
+    "cat4": "#c98500",
+    "cat5": "#d55181",
+    "cat6": "#008300",
+    "cat7": "#9085e9",
+    "cat8": "#e66767",
+    "seq1": "#184f95",
+    "seq2": "#1c5cab",
+    "seq3": "#256abf",
+    "seq4": "#2a78d6",
+    "seq5": "#3987e5",
+    "seq6": "#6da7ec",
+    "seq7": "#9ec5f4",
+    "kindPerson": "#f5a524",
+    "kindService": "#38bdf8",
+    "kindData": "#a78bfa",
+    "kindQueue": "#2dd4bf",
+    "kindExternal": "#94a3b8",
+    "kindDecision": "#818cf8",
+    "glow": "#8fd0ff"
+  }
+}

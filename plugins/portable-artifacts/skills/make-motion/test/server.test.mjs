@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, readdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, symlinkSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startServer } from '../scripts/lib/server.mjs';
@@ -145,7 +145,8 @@ test('vendor routes and template serve 200', () => withServer(async (srv) => {
     assert.equal((await get(srv.url, p)).status, 200, p);
   }
   assert.equal((await get(srv.url, '/vendor/fonts/..%2f..%2fpackage.json')).status, 404);
-  assert.equal((await get(srv.url, '/template/../scripts/lib/errors.mjs')).status, 404);
+  assert.equal((await get(srv.url, '/template/../scripts/lib/spec.mjs')).status, 404);
+  assert.equal((await get(srv.url, '/template/..%2fscripts%2flib%2fspec.mjs')).status, 404);
   assert.equal((await get(srv.url, '/nope')).status, 404);
 }));
 
@@ -222,3 +223,100 @@ test('/events emits reload when a referenced audio file changes, even in a subfo
   });
   assert.match(seen, /data: reload/);
 }));
+
+// ---- theme ---------------------------------------------------------------------------------
+
+test('/theme/<name>.json and .css serve a shared theme, fonts come from the synced shared/fonts', () => withServer(async (srv) => {
+  const json = await get(srv.url, '/theme/ink.json');
+  assert.equal(json.status, 200);
+  assert.match(json.headers['content-type'], /application\/json/);
+  const theme = JSON.parse(json.body);
+  assert.equal(theme.name, 'ink');
+  assert.equal(theme.fonts.body.family, 'Geist');
+  assert.match(theme.dark.page, /^#[0-9a-f]{6}$/i);
+  const css = await get(srv.url, '/theme/ink.css');
+  assert.equal(css.status, 200);
+  assert.match(css.headers['content-type'], /text\/css/);
+  assert.match(css.body, /@font-face\{font-family:"Geist";font-style:normal;font-weight:600;font-display:block;src:url\(\/theme\/fonts\/geist-sans-latin-600-normal\.woff2\) format\("woff2"\)\}/);
+  assert.match(css.body, /@font-face\{font-family:"Geist Mono"/);
+  assert.match(css.body, /#stage\{--sans:"Geist", -apple-system, 'Segoe UI', sans-serif;--mono:"Geist Mono", ui-monospace, Menlo, Consolas, monospace\}/);
+  assert.ok(!css.body.includes('data:'), 'the page CSP allows fonts from self only');
+  assert.ok(!css.body.includes('Bricolage'), 'the display role is not used, so its font is not offered');
+  const font = await get(srv.url, '/theme/fonts/geist-sans-latin-600-normal.woff2');
+  assert.equal(font.status, 200);
+  assert.equal(font.headers['content-type'], 'font/woff2');
+}));
+
+test('theme routes refuse unknown names, traversal and anything but a woff2', () => withServer(async (srv) => {
+  for (const p of ['/theme/nope.json', '/theme/nope.css', '/theme/..%2Fserver.json', '/theme/fonts/metrics.json',
+    '/theme/fonts/LICENSES/geist-sans.txt', '/theme/fonts/..%2Fthemes%2Fink.json', '/theme/fonts/%2e%2e/theme.mjs', '/theme/ink.js',
+    // encoded twice: one decode must not leave a slash or a dot-segment for a second decode to find
+    '/theme/fonts/%252e%252e%252fthemes%252fink.json', '/theme/fonts/sub%252Fgeist-sans-latin-600-normal.woff2',
+    '/theme/fonts/%2e%2e', '/theme/fonts/%2e%2e%2fgeist-sans-latin-600-normal.woff2', '/theme/fonts/%2fgeist-sans-latin-600-normal.woff2',
+    '/theme/fonts/geist-sans-latin-600-normal.woff2%00', '/theme/fonts/.woff2', '/theme/fonts/%5cgeist-sans-latin-600-normal.woff2']) {
+    assert.equal((await get(srv.url, p)).status, 404, p);
+  }
+}));
+
+test('/spec.json gets the render theme only when the server was given one and the spec has none', async () => {
+  const f = fixture();
+  const read = async (opts, doc) => {
+    writeFileSync(f.specPath, doc);
+    const srv = await startServer({ specPath: f.specPath, mode: 'render', ...opts });
+    try { return (await get(srv.url, '/spec.json')).body; } finally { await srv.close(); }
+  };
+  const plain = JSON.stringify(spec('a'));
+  assert.equal(await read({}, plain), plain, 'no theme given: the file is served as it is, byte for byte');
+  assert.equal(JSON.parse(await read({ theme: 'ink' }, plain)).theme, 'ink');
+  assert.equal(JSON.parse(await read({ theme: 'ink' }, JSON.stringify({ ...spec('a'), theme: 'paper' }))).theme, 'paper');
+  assert.equal(await read({ theme: 'ink' }, '{ not json'), '{ not json', 'an unreadable spec is passed through for the page to report');
+});
+
+test('GET / carries the skill favicon and provenance footer, CSP unchanged', () => withServer(async (srv, f) => {
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('one'), generatedBy: { model: 'Claude Opus 5', agent: 'Claude Code' } }));
+  const r = await get(srv.url, '/');
+  assert.match(r.body, /<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,/);
+  assert.match(r.body, /<p class="pa-provenance" title="[^"]*">make-motion · Claude Opus 5 · effort not reported · Claude Code · /);
+  assert.ok(!r.body.includes('{{'), 'no unfilled placeholder');
+  assert.match(r.body, /<meta name="generator" content="portable-artifacts make-motion; model=Claude Opus 5; effort=not reported; agent=Claude Code">/);
+  const hash = createHash('sha256').update(/<script type="importmap">([\s\S]*?)<\/script>/.exec(r.body)[1]).digest('base64');
+  assert.equal(r.headers['content-security-policy'], ["default-src 'self'", "img-src 'self' data: blob:", "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'", "connect-src 'self'", `script-src 'self' 'sha256-${hash}'`, "object-src 'none'", "base-uri 'none'"].join('; '));
+}));
+
+test('GET / keeps a valid generatedBy when the spec has an unrelated error, and follows a changed theme', () => withServer(async (srv, f) => {
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('one'), fps: 7, generatedBy: { model: 'Claude Opus 5', agent: 'Claude Code' } }));
+  const bad = await get(srv.url, '/');
+  assert.match(bad.body, /make-motion · Claude Opus 5 · effort not reported · Claude Code · /);
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('one'), theme: 'ink', generatedBy: { model: 'Claude Sonnet 5' } }));
+  const next = await get(srv.url, '/');
+  assert.match(next.body, /make-motion · Claude Sonnet 5 · effort not reported · agent not reported · /);
+  assert.notEqual(next.body.match(/rel="icon"[^>]*/)[0], bad.body.match(/rel="icon"[^>]*/)[0]);
+}));
+
+test('GET / falls back to "not reported" provenance when the spec is unreadable', () => withServer(async (srv, f) => {
+  writeFileSync(f.specPath, '{ not json');
+  const r = await get(srv.url, '/');
+  assert.match(r.body, /<p class="pa-provenance" title="[^"]*">make-motion · model not reported · effort not reported · agent not reported · /);
+  assert.match(r.body, /<link rel="icon"/);
+  assert.match(r.body, /<meta name="generator" content="portable-artifacts make-motion; model=not reported; effort=not reported; agent=not reported">/);
+}));
+
+test('GET / never injects hostile generatedBy values', () => withServer(async (srv, f) => {
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('one'), generatedBy: { model: '<script>x</script>' } }));
+  const r = await get(srv.url, '/');
+  assert.ok(!r.body.includes('<script>x'));
+  assert.match(r.body, /model not reported/);
+}));
+
+test('footer CSS: hidden by default (render mode), shown only under body.preview', () => {
+  const css = readFileSync(new URL('../template/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /^\.pa-footer \{ display: none; \}$/m);
+  assert.ok(css.includes('body.preview .pa-footer { display: block;'), 'preview rule');
+  assert.equal((css.match(/\.pa-footer[^{]*\{[^}]*display:\s*(block|flex)/g) ?? []).length, 1, 'only one rule may show the footer');
+});
+
+test('render mode serves the footer markup but the page never shows it', () => withServer(async (srv) => {
+  const r = await get(srv.url, '/');
+  assert.match(r.body, /<footer class="pa-footer">/);
+}, 'render'));

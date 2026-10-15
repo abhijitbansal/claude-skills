@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 300" width="320" height="300" role="img" aria-label="Three steps, top to bottom: Outline, Checks, Page">
+<g fill="none" stroke="#767676" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+<rect x="20" y="16" width="280" height="64" rx="10"/>
+<rect x="20" y="118" width="280" height="64" rx="10"/>
+<rect x="20" y="220" width="280" height="64" rx="10"/>
+<path d="M160 84v30m-7-8 7 8 7-8"/>
+<path d="M160 186v30m-7-8 7 8 7-8"/>
+</g>
+<g font-family="Helvetica, Arial, sans-serif" font-size="20" font-weight="700" fill="#767676" text-anchor="middle">
+<text x="160" y="55">1  Outline</text>
+<text x="160" y="157">2  Checks</text>
+<text x="160" y="259">3  Page</text>
+</g>
+</svg>

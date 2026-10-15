@@ -1,0 +1,23 @@
+{
+  "title": "Order lifecycle",
+  "type": "state",
+  "nodes": [
+    { "id": "begin", "label": "Begin", "kind": "start" },
+    { "id": "placed", "label": "Placed" },
+    { "id": "paid", "label": "Paid", "tone": "good", "note": "stock reserved" },
+    { "id": "ok", "label": "Stock ok?", "kind": "choice" },
+    { "id": "shipped", "label": "Shipped" },
+    { "id": "cancelled", "label": "Cancelled", "tone": "bad" },
+    { "id": "finish", "label": "Finish", "kind": "end" }
+  ],
+  "edges": [
+    { "from": "begin", "to": "placed" },
+    { "from": "placed", "to": "paid", "label": "payment captured" },
+    { "from": "paid", "to": "ok" },
+    { "from": "ok", "to": "shipped", "label": "in stock" },
+    { "from": "ok", "to": "cancelled", "label": "sold out", "style": "dashed" },
+    { "from": "placed", "to": "placed", "label": "retry payment" },
+    { "from": "shipped", "to": "finish" },
+    { "from": "cancelled", "to": "finish" }
+  ]
+}

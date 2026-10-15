@@ -73,20 +73,29 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: shared errors.mjs copies are byte-identical
-        run: cmp plugins/portable-artifacts/skills/make-dashboard/scripts/lib/errors.mjs plugins/portable-artifacts/skills/make-motion/scripts/lib/errors.mjs
+      - name: shared/ copies are in sync
+        run: node plugins/portable-artifacts/bin/sync-shared.mjs --check
+      - name: shared/ (themes, contrast, errors)
+        run: node --test "plugins/portable-artifacts/shared/test/*.test.mjs"
       - name: cross-host installer
         working-directory: plugins/portable-artifacts/bin
         run: node --test "test/*.test.mjs"
-      - name: eval harness (fake host, no LLM)
-        working-directory: plugins/portable-artifacts/eval
-        run: node --test "test/**/*.test.mjs"
       - name: make-dashboard
         working-directory: plugins/portable-artifacts/skills/make-dashboard
-        run: npm ci && npm test
+        run: npm ci && npx playwright install --with-deps chromium && npm test
       - name: make-motion
         working-directory: plugins/portable-artifacts/skills/make-motion
         run: npm ci && npm test
+      - name: make-diagram
+        working-directory: plugins/portable-artifacts/skills/make-diagram
+        run: npm ci && npx playwright install --with-deps chromium && npm test
+      - name: make-explainer
+        working-directory: plugins/portable-artifacts/skills/make-explainer
+        run: npm ci && npx playwright install --with-deps chromium && npm test
+      # after the skills: the harness tests copy and run the skills, so their npm deps must be installed
+      - name: eval harness (fake host, no LLM)
+        working-directory: plugins/portable-artifacts/eval
+        run: node --test "test/**/*.test.mjs"
       - name: cache-clock (Copilot CLI extension, fake session)
         working-directory: tools/cache-clock
         run: node --test "test/*.test.mjs"

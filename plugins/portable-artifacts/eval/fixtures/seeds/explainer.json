@@ -1,0 +1,35 @@
+{
+  "title": "Why the read path got faster",
+  "subtitle": "What changed in the order lookup and what it costs",
+  "preset": "concept",
+  "mode": "page",
+  "theme": "paper",
+  "sections": [
+    {
+      "type": "tldr",
+      "title": "Order lookups are served from memory, so reads no longer wait on the database",
+      "text": "A small cache sits in front of the orders table. Most reads never reach it.",
+      "points": [
+        "The cache holds the 10,000 most recent orders.",
+        "A write removes the cached copy, so a reader never sees stale data.",
+        "A cold start is slower for a few minutes while the cache fills."
+      ],
+      "tone": "good"
+    },
+    {
+      "type": "text",
+      "title": "A read checks the cache first and the database second",
+      "text": "The API asks the cache for the order. On a hit it returns at once. On a miss it reads the row from the database, stores a copy in the cache and returns it.\n\nA write updates the database and then removes the cached copy. The next read fills it again."
+    },
+    {
+      "type": "cards",
+      "title": "Three parts make up the read path",
+      "columns": 3,
+      "items": [
+        { "title": "API", "text": "Receives the read and decides where to look." },
+        { "title": "Cache", "text": "Holds recent orders in memory for quick reads." },
+        { "title": "Database", "text": "Stores every order and answers cache misses." }
+      ]
+    }
+  ]
+}

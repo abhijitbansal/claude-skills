@@ -7,10 +7,14 @@ what the host left behind.
 ```bash
 # one-time: install each skill's deps
 (cd ../skills/make-dashboard && npm ci)
+(cd ../skills/make-diagram && npm ci --omit=dev)
+(cd ../skills/make-explainer && npm ci --omit=dev)   # also needs make-diagram and make-dashboard installed
 (cd ../skills/make-motion && npm ci && npx playwright install chromium)
 
 node run-eval.mjs --skill dashboard --host claude --limit 3
 node run-eval.mjs --skill motion --host codex --only q3-counter,edit-existing
+node run-eval.mjs --skill diagram --host claude --only checkout-path,edit-existing
+node run-eval.mjs --skill explainer --host claude --model haiku --only recap-from-repo,edit-existing
 node run-eval.mjs --skill dashboard --host codex-oss --model gemma4
 ```
 
@@ -23,13 +27,16 @@ optional `modelArgs` and a `check` command.
 
 1. Copies the skill (without `node_modules`, which is symlinked back to
    the original), `fixtures/data/`, and the seed spec for edit prompts
-   into a temp dir.
+   into a temp dir. A skill that loads sibling skills (`explainer` needs
+   `make-diagram` and `make-dashboard`) gets those copied beside it. A prompt
+   marked `"repo": true` also gets `./repo`, a small git repository (`main`,
+   then `feat/search` with three commits) for `gather.mjs` to read.
 2. Runs the host with the prompt *"Read `skills/<skill>/SKILL.md` and
    follow its workflow … Task: … Save the spec as `./<spec>.json`."*.
    `EVAL_LOG` is set, so every `validate.mjs` call the host makes adds a
    line to a log, which is how retries are counted.
 3. Scores the result. The harness reruns `validate` and the output step
-   (`build` for dashboards, `render --contact-sheet` for motion) itself,
+   (`build` for dashboards, diagrams and explainers, `render --contact-sheet` for motion) itself,
    so a host whose sandbox blocked commands is still scored on its spec.
 
 | Metric | Meaning |

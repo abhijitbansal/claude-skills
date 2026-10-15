@@ -1,0 +1,12 @@
+{
+  "title": "Sales fixture",
+  "sources": { "sales": { "type": "csv", "path": "sales.csv" } },
+  "queries": {
+    "by_region": "SELECT region, SUM(amount) AS revenue FROM sales GROUP BY 1 ORDER BY 2 DESC",
+    "weekly": "SELECT day, region, SUM(amount) AS revenue FROM sales GROUP BY 1, 2 ORDER BY 1"
+  },
+  "charts": [
+    { "id": "by-region", "title": "Revenue by region", "query": "by_region", "kind": "bar", "x": "region", "y": "revenue", "format": "currency" },
+    { "id": "weekly", "title": "Weekly revenue", "query": "weekly", "kind": "line", "x": "day", "y": "revenue", "color": "region" }
+  ]
+}

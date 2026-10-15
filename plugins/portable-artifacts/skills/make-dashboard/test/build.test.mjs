@@ -164,6 +164,20 @@ test('Review Focus 4: empty and truncated results are labelled', () => {
   assert.equal(data.queries.empty.rowCount, 0);
 });
 
+test('Review Focus 1: a kind chart over zero rows builds, says so, and still offers the table', () => {
+  const p = project({
+    queries: { none: 'SELECT region, SUM(amount) AS revenue FROM sales WHERE 1 = 0 GROUP BY 1' },
+    charts: [{ id: 'c1', title: 'Nothing', query: 'none', kind: 'bar', x: 'region', y: 'revenue' }],
+  });
+  const r = build([p.file]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const html = readPage(path.join(p.dir, 'dist'));
+  assert.match(html, /<p class="meta empty">No rows returned<\/p>/);
+  const chart = JSON.parse(dataBlock(html)).charts[0];
+  assert.equal(chart.empty, true);
+  assert.deepEqual(chart.views.map((v) => v.name), ['bar', 'sorted', 'table'], 'share is blocked (no positive total, no divide by zero)');
+});
+
 test('field typo is caught with a did-you-mean', () => {
   const p = project();
   const spec = JSON.parse(fs.readFileSync(p.file, 'utf8'));
@@ -247,7 +261,7 @@ test('page carries a restrictive CSP and fixed embed options', () => {
   assert.equal(csp[1], "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:");
   assert.ok(html.indexOf('Content-Security-Policy') < html.indexOf('<style>'), 'CSP comes before any content');
   assert.match(html, /ast: true/);
-  assert.match(html, /opts\.actions = false/);
+  assert.match(html, /actions: false/);
 });
 
 test('build prints each resolved source path and a serve hint', () => {
@@ -363,4 +377,11 @@ test('build output has no "N rows" note under the chart, only a truncation note'
   const out = tmp();
   build([EXAMPLE, '--out', out]);
   assert.doesNotMatch(readPage(out), /<p class="meta">\d+ rows/);
+});
+
+test('an unknown --theme fails fast with exit 2 and a did-you-mean', () => {
+  const { file } = project();
+  const r = build([file, '--theme', 'papr']);
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /--theme: unknown theme "papr"; did you mean "paper"\?/);
 });

@@ -5,7 +5,7 @@
 // from the cache, so they stay offline. DUCKDB_EXTENSION_DIRECTORY overrides
 // the cache location. Exit 0 ok, 1 install failed, 2 usage.
 import path from 'node:path';
-import { UsageError, parseCli, exitUsage } from './lib/cli.mjs';
+import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { loadSpec } from './lib/spec.mjs';
 import { extensionsFor } from './lib/sources.mjs';
 import { openDb, runOne, sqlLiteral, useExtensionDirectory, errMessage } from './lib/sql.mjs';
@@ -29,14 +29,17 @@ try {
           await runOne(db.conn, `INSTALL ${ext}`);
         } catch (e) {
           process.stderr.write(`cannot install ${ext}: ${errMessage(e, 1)}\n`);
-          process.exit(1);
+          process.exitCode = 1; // not process.exit(): it can SIGSEGV after a pipe write on Node 24.7
+          break;
         }
         const rows = (await db.conn.runAndReadAll(`SELECT install_path FROM duckdb_extensions() WHERE extension_name LIKE ${sqlLiteral(`${ext}%`)}`)).getRowObjectsJS();
         installed.push([ext, rows[0]?.install_path ?? '(installed)']);
       }
-      const dir = path.dirname(installed.find(([, p]) => p.startsWith('/') || /^[A-Za-z]:/.test(p))?.[1] ?? '.');
-      process.stdout.write(`extension directory: ${dir}\n`);
-      for (const [ext, where] of installed) process.stdout.write(`${ext}: ${where}\n`);
+      if (!process.exitCode) {
+        const dir = path.dirname(installed.find(([, p]) => p.startsWith('/') || /^[A-Za-z]:/.test(p))?.[1] ?? '.');
+        process.stdout.write(`extension directory: ${dir}\n`);
+        for (const [ext, where] of installed) process.stdout.write(`${ext}: ${where}\n`);
+      }
     } finally {
       db.close();
     }

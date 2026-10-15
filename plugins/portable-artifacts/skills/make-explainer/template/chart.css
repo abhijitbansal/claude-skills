@@ -1,0 +1,36 @@
+/* chart sections: a static SVG per colour scheme and size in a card, the data table behind it */
+.ch { margin: 0; }
+.ch-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 14px 8px; }
+.sec-alt .ch-card { background: var(--page); }
+.ch-svg svg { display: block; width: 100%; height: auto; }
+/* A phone gets the narrow drawing, made for about its width, instead of the wide one shrunk. */
+.ch-narrow { display: none; }
+@media (max-width: 640px) {
+  .ch-card { padding: 10px 10px 4px; }
+  .ch-wide { display: none; }
+  .ch-narrow { display: block; }
+}
+/* The same selectors the page theme uses: auto follows the OS unless light is forced; dark is forced by the toggle. */
+.ch-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ch-light { display: none; }
+  :root:not([data-theme="light"]) .ch-dark { display: block; }
+}
+:root[data-theme="dark"] .ch-light { display: none; }
+:root[data-theme="dark"] .ch-dark { display: block; }
+.ch figcaption { margin-top: 10px; max-width: 66ch; color: var(--text-3); font-size: var(--fs-sm); }
+.ch-data { margin-top: 10px; }
+.ch-data summary { cursor: pointer; padding: 4px 0; color: var(--text-2); font-size: var(--fs-sm); }
+.ch-data .tablewrap { margin-top: 8px; }
+.ch-note { margin: 6px 0 0; color: var(--text-3); font-size: var(--fs-xs); }
+.ch-links { margin: 10px 0 0; font-size: var(--fs-sm); }
+
+/* in a deck the plot is bounded by the viewport, with a floor so a short window never collapses it */
+.slide-chart .ch-svg svg { max-height: max(calc(100dvh - 20rem), 12rem); }
+
+@media print {
+  .ch-light { display: block !important; }
+  .ch-dark { display: none !important; }
+  .ch-wide { display: block !important; }
+  .ch-narrow { display: none !important; }
+}

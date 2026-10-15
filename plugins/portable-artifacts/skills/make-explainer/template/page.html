@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="<!--@CSP-->">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title><!--@TITLE--></title>
+<!--@FAVICON-->
+<!--@GENERATOR-->
+<script>
+// Before first paint: apply the saved theme (no flash; storage may throw) and, when motion
+// is allowed, arm the one-time rise-in so sections never paint visible and then drop to
+// hidden. If the runtime has not started after 2 s, disarm it so content is never stuck hidden.
+(function () {
+  var root = document.documentElement;
+  try { var t = window.localStorage.getItem('pa-theme'); if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t); } catch (e) {}
+  var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!calm && 'IntersectionObserver' in window) {
+    root.classList.add('rise-ready');
+    window.setTimeout(function () { if (!window.paReady) root.classList.remove('rise-ready'); }, 2000);
+  }
+})();
+</script>
+<style>
+<!--@THEME-->
+</style>
+<style>
+<!--@BASECSS-->
+</style>
+<style>
+<!--@TOGGLE_CSS-->
+</style>
+<!--@SECTIONCSS-->
+</head>
+<body class="<!--@BODYCLASS-->">
+<a class="skip" href="#content">Skip to content</a>
+<header class="hero">
+<div class="mast-text">
+<h1><!--@H1--></h1>
+<!--@SUBTITLE-->
+<!--@META-->
+</div>
+<button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><!--@TOGGLE_ICONS--></button>
+<script>
+<!--@TOGGLE_JS-->
+</script>
+<!--@HEROTLDR-->
+</header>
+<div class="layout">
+<!--@TOC-->
+<main id="content" class="sections">
+<!--@SECTIONS-->
+</main>
+</div>
+<!--@FOOTER-->
+<script>
+<!--@PALIB-->
+</script>
+<!--@SECTIONJS-->
+<script>
+<!--@RUNTIME-->
+</script>
+</body>
+</html>
