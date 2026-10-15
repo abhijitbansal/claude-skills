@@ -7,7 +7,7 @@ import { readFileSync, statSync, createReadStream, watch } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveAsset, resolveUrlPath } from './paths.mjs';
-import { validateSpec } from './spec.mjs';
+import { validateSpec, checkGeneratedBy } from './spec.mjs';
 import { loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
 import { faviconLink } from '../../shared/icons.mjs';
 import { provenanceHtml, buildDate } from '../../shared/provenance.mjs';
@@ -95,17 +95,16 @@ function themeOrDefault(name) {
   try { return loadTheme(name ?? DEFAULT_THEME); } catch { return loadTheme(DEFAULT_THEME); }
 }
 
-// Favicon and provenance footer for the current spec, read fresh; an unreadable or invalid spec
-// (hostile generatedBy included) falls back to the default theme and "not reported".
+// Favicon and provenance footer for the current spec, read fresh. Only `generatedBy` (valid against its own
+// schema) and `theme` (a known name) matter: an unrelated spec error never blanks the stamp, and a hostile
+// generatedBy falls back to "not reported".
 function pageChrome(ctx) {
   let spec;
-  try {
-    const parsed = JSON.parse(readFileSync(ctx.specFile, 'utf8'));
-    if (validateSpec(parsed, { dir: ctx.specDir }).ok) spec = parsed;
-  } catch { /* fall through to defaults */ }
+  try { spec = JSON.parse(readFileSync(ctx.specFile, 'utf8')); } catch { spec = undefined; }
+  const gen = spec?.generatedBy;
   return {
     favicon: faviconLink('make-motion', themeOrDefault(spec?.theme ?? ctx.theme)),
-    provenance: provenanceHtml('make-motion', spec?.generatedBy, buildDate()),
+    provenance: provenanceHtml('make-motion', checkGeneratedBy(gen) ? gen : undefined, buildDate()),
   };
 }
 

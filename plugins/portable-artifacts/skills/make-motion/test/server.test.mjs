@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, readdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, symlinkSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startServer } from '../scripts/lib/server.mjs';
@@ -278,7 +278,19 @@ test('GET / carries the skill favicon and provenance footer, CSP unchanged', () 
   assert.match(r.body, /<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,/);
   assert.match(r.body, /<p class="pa-provenance" title="[^"]*">make-motion · Claude Opus 5 · effort not reported · Claude Code · /);
   assert.ok(!r.body.includes('{{'), 'no unfilled placeholder');
-  assert.ok(r.headers['content-security-policy'].includes("img-src 'self' data: blob:"));
+  const hash = createHash('sha256').update(/<script type="importmap">([\s\S]*?)<\/script>/.exec(r.body)[1]).digest('base64');
+  assert.equal(r.headers['content-security-policy'], ["default-src 'self'", "img-src 'self' data: blob:", "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'", "connect-src 'self'", `script-src 'self' 'sha256-${hash}'`, "object-src 'none'", "base-uri 'none'"].join('; '));
+}));
+
+test('GET / keeps a valid generatedBy when the spec has an unrelated error, and follows a changed theme', () => withServer(async (srv, f) => {
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('one'), fps: 7, generatedBy: { model: 'Claude Opus 5', agent: 'Claude Code' } }));
+  const bad = await get(srv.url, '/');
+  assert.match(bad.body, /make-motion · Claude Opus 5 · effort not reported · Claude Code · /);
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('one'), theme: 'ink', generatedBy: { model: 'Claude Sonnet 5' } }));
+  const next = await get(srv.url, '/');
+  assert.match(next.body, /make-motion · Claude Sonnet 5 · effort not reported · agent not reported · /);
+  assert.notEqual(next.body.match(/rel="icon"[^>]*/)[0], bad.body.match(/rel="icon"[^>]*/)[0]);
 }));
 
 test('GET / falls back to "not reported" provenance when the spec is unreadable', () => withServer(async (srv, f) => {
@@ -294,3 +306,15 @@ test('GET / never injects hostile generatedBy values', () => withServer(async (s
   assert.ok(!r.body.includes('<script>x'));
   assert.match(r.body, /model not reported/);
 }));
+
+test('footer CSS: hidden by default (render mode), shown only under body.preview', () => {
+  const css = readFileSync(new URL('../template/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /^\.pa-footer \{ display: none; \}$/m);
+  assert.ok(css.includes('body.preview .pa-footer { display: block;'), 'preview rule');
+  assert.equal((css.match(/\.pa-footer[^{]*\{[^}]*display:\s*(block|flex)/g) ?? []).length, 1, 'only one rule may show the footer');
+});
+
+test('render mode serves the footer markup but the page never shows it', () => withServer(async (srv) => {
+  const r = await get(srv.url, '/');
+  assert.match(r.body, /<footer class="pa-footer">/);
+}, 'render'));

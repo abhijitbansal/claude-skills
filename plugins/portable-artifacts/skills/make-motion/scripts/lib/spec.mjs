@@ -137,6 +137,10 @@ export const SCHEMA = {
 
 const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
 const schemaCheck = ajv.compile(SCHEMA);
+const generatedByCheck = ajv.compile(GENERATED_BY_SCHEMA);
+
+// True only for a present, schema-valid `generatedBy`; the preview footer uses it without validating the whole spec.
+export const checkGeneratedBy = (value) => value !== undefined && generatedByCheck(value);
 
 export function loadSpec(file) {
   const abs = path.resolve(file);
