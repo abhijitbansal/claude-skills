@@ -76,7 +76,7 @@ export async function buildDashboard(specFile, { out, theme: themeName, allowOut
   const expanded = expandCharts(spec, results);
   if (expanded.errors.length) return { ok: false, errors: expanded.errors };
   const outDir = path.resolve(out ?? path.join(dir, 'dist'));
-  const target = writePage(outDir, renderPage(spec, results, { vendor, theme, charts: expanded.charts, env }));
+  const target = writePage(outDir, renderPage(spec, results, { vendor, theme, charts: expanded.charts, env, now }));
   const sources = Object.entries(spec.sources).map(([name, src]) => [
     name,
     FILE_TYPES.includes(src.type) ? checkSource(src, dir, { allowOutside }).abs : `${src.type} (env ${src.env})`,

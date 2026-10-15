@@ -24,7 +24,7 @@ test('dashboard page has favicon, generator meta, icon toggle and provenance', (
   assert.match(html, /portable-artifacts make-dashboard; model=Claude Haiku 4\.5; effort=low; agent=Claude Code/);
   assert.match(html, /<button[^>]*data-theme-toggle[^>]*data-mode="auto"/);
   assert.doesNotMatch(html, /Theme: Auto<\/button>/);
-  assert.match(html, /make-dashboard · Claude Haiku 4\.5 · low effort · Claude Code · /);
+  assert.match(html, /make-dashboard · Claude Haiku 4\.5 · low effort · Claude Code · 14 Oct 2026</); // SOURCE_DATE_EPOCH=1792000000
 });
 
 test('hostile --agent fails with exit 1 and writes nothing', () => {
@@ -68,4 +68,25 @@ test('refresh time sits in the footer beside the stamp', () => {
   const html = readPage(out);
   assert.match(html, /<footer class="pa-footer"><p class="refreshed">Refreshed [\s\S]+?<\/p><p class="pa-provenance" title="[^"]*">make-dashboard · /);
   assert.doesNotMatch(html, /<header[\s\S]*class="refreshed"[\s\S]*<\/header>/);
+});
+
+test('without SOURCE_DATE_EPOCH the stamp date is the build date', () => {
+  const out = tmp();
+  const env = { ...process.env };
+  delete env.SOURCE_DATE_EPOCH;
+  const r = spawnSync(process.execPath, [BUILD, EXAMPLE, '--out', out], { encoding: 'utf8', env });
+  assert.equal(r.status, 0, r.stderr);
+  const d = new Date();
+  const want = `${d.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+  assert.match(readPage(out), new RegExp(`not reported · ${want}<`));
+});
+
+test('inline scripts cannot close their element or open an HTML comment', async () => {
+  const { renderPage } = await import('../scripts/lib/html.mjs');
+  const { loadTheme } = await import('../shared/theme.mjs');
+  const vendor = { vega: 'var a="</script><!--";', vegaLite: '', vegaEmbed: '' };
+  const html = renderPage({ title: 'T' }, {}, { vendor, theme: loadTheme('paper'), charts: [] });
+  assert.doesNotMatch(html, /var a="<\/script>/);
+  assert.doesNotMatch(html, /var a="[^"]*<!--/);
+  assert.match(html, /var a="<\\\/script><\\!--";/);
 });

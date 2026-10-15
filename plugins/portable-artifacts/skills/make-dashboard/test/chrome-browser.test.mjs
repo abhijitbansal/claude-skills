@@ -32,8 +32,8 @@ test('toggle cycles icons, repaints the charts and keeps the stamp visible', { s
     await page.click('[data-theme-toggle]');
     assert.deepEqual(await state(), [want, want]);
     assert.equal(await page.isVisible(`[data-theme-toggle] .pa-ti-${want}`), true);
-    await page.waitForFunction(() => window.paReady === true);
-    await page.waitForTimeout(300);
+    const before = seen.light;
+    if (before) await page.waitForFunction(([sel, old]) => getComputedStyle(document.querySelector(sel)).fill !== old, ['.chart svg text', before], { timeout: 5000 });
     seen[want] = await labelFill();
   }
   assert.notEqual(seen.light, seen.dark, 'chart label colour follows the theme');
