@@ -54,7 +54,7 @@ test('root shape errors', async () => {
 test('unknown top-level property gets did-you-mean, or the allowed list', async () => {
   assert.deepEqual(await errorsOf({ ...doc([text()]), titel: 'x' }), [{ path: 'titel', message: 'unknown property; did you mean "title"?' }]);
   assert.deepEqual(await errorsOf({ ...doc([text()]), zzzzzz: 1 }), [
-    { path: 'zzzzzz', message: 'unknown property; allowed: title, subtitle, preset, mode, theme, meta, sections' },
+    { path: 'zzzzzz', message: 'unknown property; allowed: title, subtitle, preset, mode, theme, generatedBy, meta, sections' },
   ]);
   assert.deepEqual(await errorsOf({ title: 'x', section: [text()] }), [
     { path: 'section', message: 'unknown property; did you mean "sections"?' },

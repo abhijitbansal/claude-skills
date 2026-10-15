@@ -159,7 +159,7 @@ test('resume: blocked storage is tolerated and navigation still works', async (t
   await page.keyboard.press('ArrowRight');
   assert.equal(await current(page), 2);
   await page.locator('[data-theme-toggle]').click();
-  assert.equal(await page.locator('[data-theme-toggle]').textContent(), 'Theme: Light');
+  assert.equal(await page.locator('[data-theme-toggle]').getAttribute('data-mode'), 'light');
   assert.deepEqual(problems, []);
   await context.close();
 });
@@ -278,7 +278,7 @@ test('the theme toggle works in slides mode and the deck takes the dark theme', 
   const { page, context } = await openPage(deck5().url, { colorScheme: 'dark' });
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   await page.locator('[data-theme-toggle]').click();
-  assert.equal(await page.locator('[data-theme-toggle]').textContent(), 'Theme: Light');
+  assert.equal(await page.locator('[data-theme-toggle]').getAttribute('data-mode'), 'light');
   assert.notEqual(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), bg);
   await context.close();
 });

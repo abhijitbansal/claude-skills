@@ -1,4 +1,4 @@
-// Explainer page behaviour: theme toggle, contents highlight, copy buttons,
+// Explainer page behaviour: contents highlight, copy buttons,
 // checklists, one rise-in per section, print-friendly details. Nothing is fetched.
 (function () {
   var PA = window.PA;
@@ -16,23 +16,6 @@
     live.textContent = text;
   }
   PA.announce = announce; // slides.js speaks through the same region
-
-  // ---- theme ---------------------------------------------------------------
-  var LABEL = { auto: 'Auto', light: 'Light', dark: 'Dark' };
-  var toggle = document.querySelector('[data-theme-toggle]');
-  function currentTheme() { return root.getAttribute('data-theme') || 'auto'; }
-  function applyTheme(mode) {
-    if (mode === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', mode);
-    if (toggle) { toggle.textContent = 'Theme: ' + LABEL[mode]; toggle.setAttribute('aria-label', 'Theme: ' + LABEL[mode] + '. Change theme'); }
-  }
-  applyTheme(currentTheme());
-  if (toggle) {
-    toggle.addEventListener('click', function () {
-      var next = PA.nextTheme(currentTheme());
-      PA.writeStore(local, 'pa-theme', next);
-      applyTheme(next);
-    });
-  }
 
   // ---- contents ------------------------------------------------------------
   var toc = document.querySelector('.toc');

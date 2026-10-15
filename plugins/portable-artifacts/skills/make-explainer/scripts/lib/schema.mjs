@@ -2,6 +2,8 @@
 // spec.mjs enforces. Lengths and counts are checked there instead, so their
 // messages can state the value and the limit. Each section type has its own
 // closed schema; validateSpec picks it by `type`.
+import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
+
 export const NON_SPACE = '\\S';
 export const ID_PATTERN = /^[a-z][a-z0-9-]*$/;
 export const KEY_PATTERN = /^[a-z0-9][a-z0-9._-]*$/;
@@ -138,6 +140,7 @@ export const ROOT_SCHEMA = object(['title', 'sections'], {
   preset: { enum: PRESETS },
   mode: { enum: MODES },
   theme: text,
+  generatedBy: GENERATED_BY_SCHEMA,
   meta: object([], Object.fromEntries(META_KEYS.map((k) => [k, text]))),
   sections: list({ type: 'object' }),
 });

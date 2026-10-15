@@ -11,6 +11,7 @@ Every section type and its fields: [sections.md](sections.md). Banned phrases: [
 | `preset` | `recap` `checklist` `concept` `slides` `none` | Default `none`. A label only: it selects slides mode (`slides`) and turns on the checklist `intro` warning (`checklist`). |
 | `mode` | `page` `slides` | Default `page`; `preset: "slides"` implies slides. `preset: "slides"` with `mode: "page"` is an error. |
 | `theme` | `paper` `blueprint` `ink` `editorial` | Default `paper`. Each has light and dark variants; the page follows the reader's setting and has a Theme toggle. |
+| `generatedBy` | object | Keys `model`, `effort`, `agent`; each 1-60 characters of letters, digits, spaces and `. _ : / ( ) + -`. Shown in the page footer and a `<meta name="generator">` tag; a missing field reads "not reported". The `--model`, `--effort` and `--agent` flags of `build.mjs` override it. |
 | `meta` | object | Keys `date`, `branch`, `repo`, `author`, `version`, `status`; each value at most 60 characters. Shown as chips under the title. |
 | `sections` | array, required | 1 to 40 sections, see below. |
 
@@ -67,5 +68,5 @@ Environment: `PA_OUTPUT_DIR` (default output folder), `PA_MOTION_TIMEOUT_MS` (ho
 | `gather.mjs git [--base <branch>] [--repo <folder>] [--json]` | Without `--base`: `main`, then `master`, preferring origin's copy when it is ahead. Facts about the checked-out branch as JSON: branch, base, commits, changed files with line counts and renames, test files, date. Committed work only. |
 | `scaffold.mjs <recap\|checklist\|concept\|slides> [--facts facts.json] [--title <text>]` | A starter `explainer.json` on stdout. Facts fill numbers, files, commits and folders; every sentence is a `TODO:` string. |
 | `validate.mjs <explainer.json> [--json]` | Schema, limits, prose lint, slide budget, file references and the embedded diagram, chart and motion checks. |
-| `build.mjs <explainer.json> [--out <file.html\|dir>] [--theme <name>] [--json]` | Validates, then writes the page. |
+| `build.mjs <explainer.json> [--out <file.html\|dir>] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--json]` | Validates, then writes the page. |
 | `check.mjs <page.html> [--json]` | Optional headless check of a built page at 1280 and 390 px: console errors and warnings, sideways scrolling, elements wider than the page, content clipped sideways inside a slide, a deck's last slide reachable by arrow keys with the counter reading N / N, and each diagram's viewer mounting and its Present overlay opening and closing on Esc. Exit 0 ok or skipped (no browser), 1 problems, 2 usage. Needs Playwright and a browser (full `npm ci`); `PA_CHECK_TIMEOUT_MS` shortens the 60 s cap. |

@@ -6,6 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title><!--@TITLE--></title>
+<!--@FAVICON-->
+<!--@GENERATOR-->
 <script>
 // Before first paint: apply the saved theme (no flash; storage may throw).
 (function () {
@@ -17,6 +19,9 @@
 </style>
 <style>
 <!--@BASECSS-->
+</style>
+<style>
+<!--@TOGGLE_CSS-->
 </style>
 <!--@SECTIONCSS-->
 <style>
@@ -44,7 +49,8 @@ html, body { height: 100%; overflow: hidden; }
 }
 .deck-controls { display: flex; align-items: center; gap: 10px; max-width: 76rem; margin: 0 auto; padding: 8px 24px; }
 .deck-count { margin-left: auto; color: var(--text-2); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
-.deck-controls .btn, .deck-controls .theme-toggle { padding: 4px 12px; font-size: 0.85rem; }
+.deck-controls .btn { padding: 4px 12px; font-size: 0.85rem; }
+.slide .pa-footer { width: 100%; max-width: 60rem; margin: 24px auto 0; padding: 12px 0 0; }
 .key { display: inline-block; min-width: 1.4em; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-3); font-size: 0.78rem; line-height: 1.5; text-align: center; }
 
 /* outline: a native modal dialog */
@@ -80,6 +86,9 @@ html, body { height: 100%; overflow: hidden; }
 </head>
 <body>
 <!--@DECK-->
+<script>
+<!--@TOGGLE_JS-->
+</script>
 <script>
 <!--@PALIB-->
 </script>

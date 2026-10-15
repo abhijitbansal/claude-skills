@@ -28,8 +28,10 @@ h1 { margin: 0; max-width: 22em; font: 600 clamp(1.9rem, 4.2vw, 2.9rem)/1.1 var(
 .meta dt { color: var(--text-3); }
 .meta dd { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
 .meta .m-branch dd, .meta .m-repo dd, .meta .m-version dd { font-family: var(--mono); font-size: 0.8rem; }
-.theme-toggle { flex: none; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 4px 12px; cursor: pointer; color: var(--text-2); font-size: 0.85rem; }
-.theme-toggle:hover { color: var(--text); }
+.theme-toggle { flex: none; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; color: var(--text-2); }
+.theme-toggle:hover { color: var(--text); border-color: var(--text-3); }
+.pa-footer { max-width: 76rem; margin: 64px auto 32px; padding: 16px 24px 0; border-top: 1px solid var(--line); }
+.pa-provenance { margin: 0; color: var(--text-3); font-size: 0.8rem; }
 
 /* layout */
 .layout { max-width: 76rem; margin: 0 auto; padding: 8px 24px 96px; }

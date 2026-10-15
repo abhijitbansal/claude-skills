@@ -13,6 +13,9 @@ import { slugify } from '../../shared/output.mjs';
 import { loadSibling, SiblingError } from './siblings.mjs';
 import { SectionErrors } from './section-errors.mjs';
 import { isSlides, renderDeck } from './slides.mjs';
+import { faviconLink } from '../../shared/icons.mjs';
+import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
+import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mjs';
 import { esc, inline, headingInline, plain, rawText } from './render/ui.mjs';
 
 const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), slides: new URL('../../template/slides.html', import.meta.url) };
@@ -183,7 +186,7 @@ function deckParts(spec, ctx) {
     const def = SECTIONS[section.type];
     return { section, ownHeading: def.ownHeading, body: renderBody(section, i, def, ctx) };
   });
-  return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug }) };
+  return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug, footerHtml: `<footer class="pa-footer">${provenanceHtml('make-explainer', spec.generatedBy, buildDate(ctx.env))}</footer>` }) };
 }
 
 /**
@@ -225,6 +228,12 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
   const parts = {
     CSP: esc(contentSecurityPolicy(spec)),
     TITLE: plain(spec.title),
+    FAVICON: faviconLink('make-explainer', themeData),
+    GENERATOR: generatorMeta('make-explainer', spec.generatedBy),
+    TOGGLE_ICONS: toggleIcons(),
+    TOGGLE_CSS,
+    TOGGLE_JS: inlineCode(TOGGLE_JS),
+    PROVENANCE: provenanceHtml('make-explainer', spec.generatedBy, buildDate(env)),
     THEME: themeCss(themeData),
     BASECSS: fs.readFileSync(BASE_CSS, 'utf8').replace(/\n$/, ''),
     ...layout,
