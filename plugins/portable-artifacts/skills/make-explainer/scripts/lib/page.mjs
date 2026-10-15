@@ -186,7 +186,7 @@ function deckParts(spec, ctx) {
     const def = SECTIONS[section.type];
     return { section, ownHeading: def.ownHeading, body: renderBody(section, i, def, ctx) };
   });
-  return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug, footerHtml: `<footer class="pa-footer">${provenanceHtml('make-explainer', spec.generatedBy, buildDate(ctx.env))}</footer>` }) };
+  return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug, footerHtml: ctx.footer }) };
 }
 
 /**
@@ -205,6 +205,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
   const slug = pageSlug(target);
   const slides = isSlides(spec);
   const ids = sectionIds(spec.sections);
+  const footer = `<footer class="pa-footer">${provenanceHtml('make-explainer', spec.generatedBy, buildDate(env))}</footer>`;
   const ctx = {
     theme: themeData,
     dir,
@@ -215,6 +216,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     idFor: slides ? (_section, i) => `slide-${i + 2}` : (_section, i) => ids[i],
     icons: await loadIcons(spec),
     env,
+    footer,
   };
 
   const assets = [];
@@ -233,7 +235,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     TOGGLE_ICONS: toggleIcons(),
     TOGGLE_CSS,
     TOGGLE_JS: inlineCode(TOGGLE_JS),
-    PROVENANCE: provenanceHtml('make-explainer', spec.generatedBy, buildDate(env)),
+    FOOTER: footer,
     THEME: themeCss(themeData),
     BASECSS: fs.readFileSync(BASE_CSS, 'utf8').replace(/\n$/, ''),
     ...layout,

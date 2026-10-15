@@ -51,6 +51,6 @@ export const TOGGLE_JS = `(function () {
     try { window.localStorage.setItem(${JSON.stringify(THEME_KEY)}, m); } catch (err) {}
     apply(m);
   });
+  paint(current());
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { paint(current()); });
-  else paint(current());
 })();`;

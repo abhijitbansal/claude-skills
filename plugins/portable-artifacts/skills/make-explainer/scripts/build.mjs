@@ -12,21 +12,13 @@ import { resolveOutput, assetsFolder } from './lib/output.mjs';
 import { syncAssets, assetConflicts, specInputs, WriteError } from './lib/assets.mjs';
 import { SiblingError } from './lib/siblings.mjs';
 import { UsageError, parseCli } from '../shared/cli.mjs';
-import { PROVENANCE_OPTIONS, mergeGeneratedBy } from '../shared/provenance.mjs';
+import { PROVENANCE_OPTIONS, withGeneratedBy } from '../shared/provenance.mjs';
 
 const USAGE = 'node scripts/build.mjs <explainer.json> [--out <file.html|dir>] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--json]';
 const OPTIONS = { out: { type: 'string' }, theme: { type: 'string' }, json: { type: 'boolean' }, ...PROVENANCE_OPTIONS };
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const fail = (errors) => ({ ok: false, errors });
-
-// Flags overlay spec.generatedBy. Only a missing or plain-object value is merged; anything else is left for the schema to reject.
-function withGeneratedBy(spec, flags) {
-  const own = spec.generatedBy;
-  if (own !== undefined && (own === null || typeof own !== 'object' || Array.isArray(own))) return spec;
-  const generatedBy = mergeGeneratedBy(own, flags);
-  return generatedBy ? { ...spec, generatedBy } : spec;
-}
 
 /**
  * Build the page for a spec file. Returns { ok: true, out, assets, bytes, warnings } after

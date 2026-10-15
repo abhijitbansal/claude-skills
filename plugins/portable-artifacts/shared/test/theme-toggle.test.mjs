@@ -86,11 +86,16 @@ test('running the script twice adds one listener: one click advances one mode', 
   assert.deepEqual(dom.events.map((e) => e.detail.mode), ['light']);
 });
 
-test('initial paint waits for DOMContentLoaded while loading, runs at once otherwise', () => {
+test('initial paint runs at once; while loading it repaints on DOMContentLoaded', () => {
   const loading = fakeDom({ setItem() {} }, { readyState: 'loading', htmlTheme: 'dark' });
-  assert.equal(loading.button.attrs['aria-label'], undefined);
+  assert.equal(loading.button.attrs['aria-label'], 'Theme: Dark. Switch to Auto');
+  loading.button.attrs['aria-label'] = 'stale';
   loading.ready();
   assert.equal(loading.button.attrs['aria-label'], 'Theme: Dark. Switch to Auto');
+  const complete = fakeDom({ setItem() {} }, { readyState: 'complete', htmlTheme: 'dark' });
+  complete.button.attrs['aria-label'] = 'stale';
+  complete.ready(); // no DOMContentLoaded listener when already parsed: nothing repaints
+  assert.equal(complete.button.attrs['aria-label'], 'stale');
   const done = fakeDom({ setItem() {} }, { readyState: 'complete' });
   assert.equal(done.button.attrs['aria-label'], 'Theme: Auto. Switch to Light');
 });

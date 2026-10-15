@@ -24,6 +24,15 @@ export function mergeGeneratedBy(fromSpec, flags = {}) {
   return Object.keys(merged).length ? merged : undefined;
 }
 
+// Returns a new spec with the flags overlaid on spec.generatedBy. Only a missing or plain-object value is
+// merged; any other value is left for the schema to reject. Never mutates the spec.
+export function withGeneratedBy(spec, flags = {}) {
+  const own = spec.generatedBy;
+  if (own !== undefined && (own === null || typeof own !== 'object' || Array.isArray(own))) return spec;
+  const generatedBy = mergeGeneratedBy(own, flags);
+  return generatedBy ? { ...spec, generatedBy } : spec;
+}
+
 export function buildDate(env = process.env) {
   const epoch = env.SOURCE_DATE_EPOCH;
   if (!/^\d+$/.test(epoch ?? '')) return new Date();

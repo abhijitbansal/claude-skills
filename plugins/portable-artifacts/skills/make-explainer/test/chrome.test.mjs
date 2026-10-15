@@ -26,7 +26,8 @@ for (const name of ['recap', 'slides']) {
     assert.equal(html.match(/<link rel="icon"/g)?.length, 1);
     assert.equal(html.match(/<meta name="generator"/g)?.length, 1);
     assert.match(html, /content="portable-artifacts make-explainer; model=Claude Opus 5.5; effort=high; agent=Claude Code"/);
-    assert.equal(html.match(/data-theme-toggle/g)?.length >= 1, true);
+    assert.equal(html.match(/<button[^>]*data-theme-toggle/g)?.length, 1);
+    assert.equal(html.match(/__paThemeToggle = true/g)?.length, 1);
     assert.match(html, /data-mode="auto"/);
     assert.match(html, /class="pa-ti pa-ti-light"/);
     assert.doesNotMatch(html, />Theme: Auto</);
@@ -76,4 +77,5 @@ test('an embedded diagram adds no second favicon, meta or toggle', () => {
   assert.equal(html.match(/<link rel="icon"/g)?.length, 1);
   assert.equal(html.match(/<meta name="generator"/g)?.length, 1);
   assert.equal(html.match(/<button[^>]*data-theme-toggle/g)?.length, 1);
+  assert.equal(html.match(/__paThemeToggle = true/g)?.length, 1);
 });

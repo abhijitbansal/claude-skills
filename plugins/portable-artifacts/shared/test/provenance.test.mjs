@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  GENERATED_BY_SCHEMA, PROVENANCE_OPTIONS, mergeGeneratedBy, buildDate,
+  GENERATED_BY_SCHEMA, PROVENANCE_OPTIONS, mergeGeneratedBy, withGeneratedBy, buildDate,
   provenanceText, provenanceHtml, generatorMeta,
 } from '../provenance.mjs';
 
@@ -70,4 +70,23 @@ test('empty strings count as not reported in text and meta', () => {
 test('mergeGeneratedBy keeps unknown spec keys so the closed schema can reject them', () => {
   assert.deepEqual(mergeGeneratedBy({ model: 'A', modle: 'x' }, {}), { model: 'A', modle: 'x' });
   assert.deepEqual(mergeGeneratedBy({ model: 'A' }, { model: undefined, agent: 'C' }), { model: 'A', agent: 'C' });
+});
+
+test('withGeneratedBy overlays flags on a new spec and never mutates', () => {
+  const spec = { title: 'T', generatedBy: { model: 'A' } };
+  const out = withGeneratedBy(spec, { effort: 'high', model: 'B' });
+  assert.deepEqual(out.generatedBy, { model: 'B', effort: 'high' });
+  assert.deepEqual(spec.generatedBy, { model: 'A' });
+  assert.notEqual(out, spec);
+  assert.deepEqual(withGeneratedBy({ title: 'T' }, { agent: 'Codex' }).generatedBy, { agent: 'Codex' });
+  const bare = { title: 'T' };
+  assert.equal(withGeneratedBy(bare, {}), bare);
+  assert.equal(withGeneratedBy(bare, { model: undefined }), bare);
+});
+
+test('withGeneratedBy leaves a non-object generatedBy untouched for the schema to reject', () => {
+  for (const bad of ['Claude', ['x'], null, 5]) {
+    const spec = { title: 'T', generatedBy: bad };
+    assert.equal(withGeneratedBy(spec, { model: 'X' }), spec);
+  }
 });
