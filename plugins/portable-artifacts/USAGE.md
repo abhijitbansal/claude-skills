@@ -201,7 +201,7 @@ your project folder):
    `TODO:` text, emoji, filler phrases ("leverage", "seamless", "delve"), titles
    numbered like `01` or ending in `!`, and (for slides) a slide with more
    than 6 points, 8 table rows, 12 code lines or 80 words. Each line is a JSON
-   path, the problem and the fix; paragraphs over 120 words only warn.
+   path, the problem and the fix; text over the soft caps (title 8 words, paragraph 60 words, text section 120, page 900) only warns.
 5. `build.mjs explainer.json` writes one HTML file and prints its path. The
    default folder is `~/.agent/diagrams/` (set `PA_OUTPUT_DIR`, or pass
    `--out file.html` or `--out dir`). `--theme paper|blueprint|ink|editorial`

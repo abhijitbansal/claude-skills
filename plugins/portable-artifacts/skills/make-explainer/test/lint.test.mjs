@@ -7,7 +7,7 @@ const errorsOf = (text, opts) => lintText(text, P, opts).errors;
 const clean = 'The build reads the spec and writes one page.';
 
 test('clean prose has no errors and no warnings', () => {
-  assert.deepEqual(lintText(clean, P), { errors: [], warnings: [] });
+  assert.deepEqual(lintText(clean, P), { errors: [] });
 });
 
 test('TODO: placeholder is an error', () => {
@@ -86,7 +86,7 @@ test('numbered section titles are errors', () => {
 });
 
 test('length is no longer linted here; budget.mjs owns the soft caps', () => {
-  assert.deepEqual(lintText(Array(300).fill('word').join(' '), P), { errors: [], warnings: [] });
+  assert.deepEqual(lintText(Array(300).fill('word').join(' '), P), { errors: [] });
 });
 
 test('several problems in one string are all reported', () => {

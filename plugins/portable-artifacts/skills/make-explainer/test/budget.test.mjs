@@ -41,7 +41,7 @@ test('list lines are counted one by one', () => {
 
 test('text section over 120 words warns even when every paragraph is short', () => {
   const text = [w(50), w(50), w(30)].join('\n\n');
-  assert.ok(warnBudget(spec([{ type: 'text', title: 'T', text }])).some((x) => /120 words/.test(x.message)));
+  assert.ok(warnBudget(spec([{ type: 'text', title: 'T', text }])).some((x) => /keep it to 120/.test(x.message)));
 });
 
 test('card text over 30, list item over 20, tldr over 3 points warn', () => {
@@ -70,9 +70,10 @@ test('code, tables and file lists are not prose', () => {
 });
 
 test('every warning suggests a conversion', () => {
-  const all = warnBudget(spec([{ type: 'text', title: w(12), text: w(200) }]));
-  assert.ok(all.length >= 3);
-  for (const x of all) assert.match(x.message, /→|cards|steps|split|state the finding/);
+  const all = warnBudget(spec([{ type: 'text', title: w(12), label: w(6), text: w(200) }]));
+  assert.ok(all.some((x) => x.path === 'sections[0].label'));
+  assert.ok(all.length >= 4);
+  for (const x of all) assert.match(x.message, /→|cards|steps|split|state the finding|name the topic/);
 });
 
 test('the four shipped examples are inside the caps', () => {
@@ -80,4 +81,68 @@ test('the four shipped examples are inside the caps', () => {
     const s = JSON.parse(fs.readFileSync(new URL(`../references/examples/${n}.explainer.json`, import.meta.url)));
     assert.deepEqual(warnBudget(s), [], n);
   }
+});
+
+const at = (sections) => warnBudget(spec(sections));
+const msgs = (sections) => at(sections).map((x) => x.message);
+
+test('I-1: risk and mitigation are list items and count toward the page', () => {
+  const risks = [{ type: 'risks', title: 'T', items: [{ risk: w(130), severity: 'low', mitigation: 'm' }] }];
+  assert.deepEqual(paths(spec(risks)), ['sections[0].items[0].risk']);
+  const page = [{ type: 'risks', title: 'T', items: [{ risk: w(20), severity: 'low', mitigation: w(20) }] }];
+  const many = Array.from({ length: 23 }, () => page[0]);
+  assert.equal(at(many).filter((x) => x.path === '').length, 1);
+});
+
+test('I-4: verdict and summary are prose; nested titles are capped', () => {
+  assert.ok(paths(spec([{ type: 'compare', title: 'T', columns: [{ title: 'A', points: ['a'] }], verdict: w(61) }])).includes('sections[0].verdict'));
+  assert.ok(paths(spec([{ type: 'details', summary: w(61), text: 'x' }])).includes('sections[0].summary'));
+  assert.ok(paths(spec([{ type: 'cards', title: 'T', items: [{ title: w(9), text: 'x' }] }])).includes('sections[0].items[0].title'));
+  assert.ok(paths(spec([{ type: 'compare', title: 'T', columns: [{ title: w(9), points: ['a'] }] }])).includes('sections[0].columns[0].title'));
+});
+
+test('I-4: backstop prose warns over 120 words but never counts toward the page total', () => {
+  const cl = (t) => ({ type: 'checklist', title: 'T', key: 'k', intro: t, groups: [{ title: 'g', items: [{ text: 'x' }] }] });
+  assert.deepEqual(paths(spec([cl(w(120))])), []);
+  assert.deepEqual(paths(spec([cl(w(121))])), ['sections[0].intro']);
+  assert.ok(paths(spec([{ type: 'image', title: 'T', src: 'a.png', alt: 'a', caption: w(121) }])).includes('sections[0].caption'));
+  assert.ok(paths(spec([{ type: 'timeline', title: 'T', items: [{ date: 'd', title: 't', text: w(121) }] }])).includes('sections[0].items[0].text'));
+  assert.ok(paths(spec([{ type: 'files', title: 'T', items: [{ path: 'a', change: 'added', note: w(121) }] }])).includes('sections[0].items[0].note'));
+  const many = Array.from({ length: 10 }, () => cl(w(100)));
+  assert.deepEqual(warnBudget(spec(many)), []);
+});
+
+test('I-4: table cells, headers and hrefs never count', () => {
+  assert.deepEqual(paths(spec([{ type: 'table', title: 'T', columns: [w(200)], rows: [[w(200)]] }])), []);
+});
+
+test('M-1: details and callout get the 120-word section cap', () => {
+  const half = `${w(55)}.\n\n${w(55)}.\n\n${w(55)}.`;
+  assert.ok(warnBudget(spec([{ type: 'details', summary: 's', text: half }])).some((x) => /details section is \d+ words/.test(x.message)));
+  assert.ok(warnBudget(spec([{ type: 'callout', tone: 'info', title: 'T', text: half }])).some((x) => /callout section/.test(x.message)));
+});
+
+test('M-2: a bullet is measured against the list-item cap', () => {
+  assert.deepEqual(msgs([{ type: 'text', title: 'T', text: `- ${w(25)}\n- short` }]), [`list item is 25 words; keep it to 20 → cut it, or move the detail into a text section`]);
+});
+
+test('M-3: sentence counting', () => {
+  assert.equal(sentences('Mr. Smith ran it. It passed.'), 2);
+  assert.equal(sentences('Dr. No. Mrs. Yes. Jr. Done.'), 3);
+  assert.equal(sentences('U.S. teams ship it. Fine.'), 2);
+  assert.equal(sentences('Wait... then it broke. Fixed.'), 2);
+  assert.equal(sentences('He said "stop." Then it stopped.'), 2);
+  assert.equal(sentences('(See above.) Next one.'), 2);
+  assert.equal(sentences('Apples, pears, etc. Then more.'), 2);
+  assert.equal(sentences('Apples, pears, etc. and more. Done.'), 2);
+});
+
+test('M-4: caps are inclusive in the wording; exactly 120 words is silent', () => {
+  const para = (n) => `${w(n)}.`;
+  assert.deepEqual(paths(spec([{ type: 'text', title: 'T', text: [para(40), para(40), para(40)].join('\n\n') }])), []);
+  assert.ok(msgs([{ type: 'text', title: 'T', text: w(61) }])[0].includes('keep it to 60'));
+});
+
+test('M-5: several paragraphs in one field are named', () => {
+  assert.match(msgs([{ type: 'text', title: 'T', text: `short.\n\n${w(61)}` }])[0], /^paragraph 2 of 2 is 61 words/);
 });

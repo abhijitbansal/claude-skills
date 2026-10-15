@@ -419,7 +419,7 @@ test('a long paragraph is a warning only', async () => {
   assert.equal(r.ok, true);
   assert.deepEqual(r.errors, []);
   assert.deepEqual(r.warnings.map((x) => x.path), ['sections[0].text', 'sections[0]']);
-  assert.match(r.warnings[0].message, /^paragraph is 130 words; keep it under 60/);
+  assert.match(r.warnings[0].message, /^paragraph is 130 words; keep it to 60/);
   const bad = await validateSpec(doc([{ type: 'text', text: `${long} leverage` }]), { dir: FIXTURES });
   assert.equal(bad.ok, false);
   assert.equal(bad.warnings.length, 2);

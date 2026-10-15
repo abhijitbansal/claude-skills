@@ -176,8 +176,8 @@ test('checklist: one group per top-level folder of changed files, key from the b
     const [check] = section(spec, 'checklist');
     assert.equal(check.key, 'feat-login');
     assert.match(check.intro, /^TODO:.*What's in this branch/);
-    assert.match(check.intro, /every feature/);
-    assert.match(check.intro, /review-cycle fix/);
+    assert.match(check.intro, /features/);
+    assert.match(check.intro, /review fixes/);
     const titles = check.groups.map((g) => g.title);
     assert.deepEqual(titles.slice(0, -1), ['docs', 'src', 'test']);
     assert.equal(titles.at(-1), 'Regression checks');

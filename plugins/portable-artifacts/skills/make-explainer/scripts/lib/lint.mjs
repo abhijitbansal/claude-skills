@@ -90,7 +90,7 @@ function lintHeading(text, path, sectionTitle) {
  * `sectionTitle`: it is a section's title (also rejects "01 ..." numbering).
  * `banned: false`: the string is data written as the reader should see it (a table cell), so the
  * banned-phrase rule is skipped; placeholders and emoji still apply.
- * -> { errors, warnings }, each [{ path, message }].
+ * -> { errors }, each [{ path, message }].
  */
 export function lintText(text, path, { heading = false, sectionTitle = false, banned: checkBanned = true } = {}) {
   const errors = [
@@ -99,5 +99,5 @@ export function lintText(text, path, { heading = false, sectionTitle = false, ba
     ...(checkBanned ? lintBanned(text, path) : []),
     ...(heading ? lintHeading(text, path, sectionTitle) : []),
   ];
-  return { errors, warnings: [] };
+  return { errors };
 }

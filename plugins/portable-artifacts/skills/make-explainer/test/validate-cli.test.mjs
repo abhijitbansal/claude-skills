@@ -51,8 +51,8 @@ test('warnings are printed but the exit code stays 0', () => {
     const r = run([file]);
     assert.equal(r.status, 0);
     assert.equal(r.stdout, [
-      'sections[0].text: warning: paragraph is 130 words; keep it under 60 → split it, or turn it into cards or steps',
-      'sections[0]: warning: text section is 130 words; keep it under 120 words → split it into sections, or turn it into cards or steps',
+      'sections[0].text: warning: paragraph is 130 words; keep it to 60 → split it, or turn it into cards or steps',
+      'sections[0]: warning: text section is 130 words; keep it to 120 → split it into sections, or turn it into cards or steps',
       `${file}: valid (2 warnings)`,
       '',
     ].join('\n'));
@@ -104,8 +104,8 @@ test('--json prints one machine-readable result line, warnings included', () => 
       ok: true,
       errors: [],
       warnings: [
-        { path: 'sections[0].text', message: 'paragraph is 130 words; keep it under 60 → split it, or turn it into cards or steps' },
-        { path: 'sections[0]', message: 'text section is 130 words; keep it under 120 words → split it into sections, or turn it into cards or steps' },
+        { path: 'sections[0].text', message: 'paragraph is 130 words; keep it to 60 → split it, or turn it into cards or steps' },
+        { path: 'sections[0]', message: 'text section is 130 words; keep it to 120 → split it into sections, or turn it into cards or steps' },
       ],
     });
   });

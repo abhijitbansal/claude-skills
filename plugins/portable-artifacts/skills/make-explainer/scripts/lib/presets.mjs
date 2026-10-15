@@ -31,7 +31,7 @@ const ON_FAIL = [
 
 const tldr = (points) => ({
   type: 'tldr',
-  title: todo('one finding, ≤ 8 words'),
+  title: todo('the verdict as one finding, ≤ 8 words'),
   label: LABEL,
   text: todo('one sentence: what this is and why it matters'),
   points: points.map(todo),
@@ -97,19 +97,19 @@ const timelineOmission = (total) => (total > MAX_TIMELINE
 
 function recap(facts, title) {
   return {
-    title: title ?? todo('what this branch achieves, ≤ 8 words'),
+    title: title ?? todo('what this branch achieves; aim for ≤ 8 words'),
     subtitle: todo('one line: what it adds, what it leaves alone'),
     preset: 'recap',
     ...meta(facts, ['date', 'branch', 'repo']),
     sections: [
       tldr(['first supporting fact, ≤ 20 words', 'second supporting fact', 'what to review first']),
       ...(facts ? [kpisSection(facts)] : []),
-      { type: 'text', title: todo('one finding, ≤ 8 words'), label: LABEL, text: todo('how it works, ≤ 3 short sentences; read the changed files first') },
+      { type: 'text', title: todo('how the change works, ≤ 8 words'), label: LABEL, text: todo('how it works, ≤ 3 short sentences; read the changed files first') },
       ...(facts && facts.files.length > 0 ? [filesSection(facts.files), ...filesOmission(facts.files.length)] : []),
       ...(facts && facts.commits.length > 0 ? [timelineSection(facts.commits), ...timelineOmission(facts.commits.length)] : []),
       {
         type: 'risks',
-        title: todo('one finding, ≤ 8 words'),
+        title: todo('what could still go wrong, ≤ 8 words'),
         label: LABEL,
         items: [{ risk: todo('a risk this change carries'), severity: 'medium', mitigation: todo('how it is handled or checked') }],
       },
@@ -183,10 +183,10 @@ function checklist(facts, title) {
     ...meta(facts, ['date', 'branch', 'repo']),
     sections: [{
       type: 'checklist',
-      title: todo('one finding, ≤ 8 words'),
+      title: todo('what the tester confirms, ≤ 8 words'),
       label: LABEL,
       key: checklistKey(facts),
-      intro: todo("write the \"What's in this branch\" summary: every feature and every review-cycle fix this branch delivers, and what automated tests already cover, so a tester needs no PR"),
+      intro: todo("the \"What's in this branch\" summary: features, review fixes, what tests already cover"),
       groups,
       onFail: ON_FAIL,
     }],
@@ -195,23 +195,23 @@ function checklist(facts, title) {
 
 function concept(facts, title) {
   return {
-    title: title ?? todo('the idea as one finding, ≤ 8 words'),
+    title: title ?? todo('the idea as one finding; aim for ≤ 8 words'),
     subtitle: todo('one line on what the reader will understand'),
     preset: 'concept',
     ...meta(facts, ['date', 'repo']),
     sections: [
       tldr(['the first thing to remember', 'the second thing to remember', 'where the idea stops']),
-      { type: 'text', title: todo('one finding, ≤ 8 words'), label: LABEL, text: todo('why it works this way, ≤ 3 short sentences') },
+      { type: 'text', title: todo('why it works this way, ≤ 8 words'), label: LABEL, text: todo('why it works this way, ≤ 3 short sentences') },
       {
         type: 'cards',
-        title: todo('one finding, ≤ 8 words'),
+        title: todo('the claim the parts support, ≤ 8 words'),
         label: LABEL,
         columns: 3,
         items: [1, 2, 3].map((n) => ({ title: todo(`name part ${n}`), text: todo(`what part ${n} does, ≤ 30 words`) })),
       },
       {
         type: 'steps',
-        title: todo('one finding, ≤ 8 words'),
+        title: todo('how to apply it, ≤ 8 words'),
         label: LABEL,
         items: [1, 2, 3].map((n) => ({ title: todo(`step ${n}`), text: todo(`what to do in step ${n}, ≤ 30 words`) })),
       },
@@ -221,14 +221,14 @@ function concept(facts, title) {
 
 function slides(facts, title) {
   return {
-    title: title ?? todo('the deck as one finding, ≤ 8 words'),
+    title: title ?? todo('the deck as one finding; aim for ≤ 8 words'),
     subtitle: todo('one line on what the audience leaves knowing'),
     preset: 'slides',
     ...meta(facts, ['date', 'repo']),
     sections: [
       tldr(['the first point', 'the second point', 'the third point']),
-      { type: 'cards', title: todo('one finding, ≤ 8 words'), label: LABEL, columns: 3, items: [1, 2, 3].map((n) => ({ title: todo(`card ${n}`), text: todo(`one line for card ${n}`) })) },
-      { type: 'steps', title: todo('one finding, ≤ 8 words'), label: LABEL, items: [1, 2, 3].map((n) => ({ title: todo(`step ${n}`) })) },
+      { type: 'cards', title: todo('the cards slide as one finding, ≤ 8 words'), label: LABEL, columns: 3, items: [1, 2, 3].map((n) => ({ title: todo(`card ${n}`), text: todo(`one line for card ${n}`) })) },
+      { type: 'steps', title: todo('the steps slide as one finding, ≤ 8 words'), label: LABEL, items: [1, 2, 3].map((n) => ({ title: todo(`step ${n}`) })) },
       { type: 'text', title: todo('closing finding, ≤ 8 words'), label: LABEL, text: todo('two short sentences: what to do next') },
     ],
   };

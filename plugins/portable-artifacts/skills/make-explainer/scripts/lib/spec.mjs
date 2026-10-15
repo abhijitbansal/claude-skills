@@ -89,7 +89,6 @@ const isTableCell = (spec, at) => {
 // Every string: placeholders everywhere, the style lint on prose only.
 export function lintSpec(spec) {
   const errors = [];
-  const warnings = [];
   for (const { path: at, text, prose, heading } of collectStrings(spec)) {
     if (!prose) {
       errors.push(...lintPlaceholders(text, at));
@@ -99,9 +98,8 @@ export function lintSpec(spec) {
     // Table cells are data (commands, identifiers, quoted values), not sentences: no banned-phrase rule there.
     const r = lintText(text, at, { heading, sectionTitle, banned: !isTableCell(spec, at) });
     errors.push(...r.errors);
-    warnings.push(...r.warnings);
   }
-  return { errors, warnings };
+  return { errors };
 }
 
 // Every check registered for a section's type. A check returns { path, message } errors;
@@ -136,5 +134,5 @@ export async function validateSpec(spec, { dir = process.cwd() } = {}) {
   if (spec.mode === 'slides' || spec.preset === 'slides') errors.push(...slideBudget(spec));
   const registry = await registryResults(spec, dir);
   errors.push(...registry.errors);
-  return { ok: errors.length === 0, errors, warnings: [...lint.warnings, ...warnBudget(spec), ...warnSections(spec), ...registry.warnings] };
+  return { ok: errors.length === 0, errors, warnings: [...warnBudget(spec), ...warnSections(spec), ...registry.warnings] };
 }

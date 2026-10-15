@@ -11,7 +11,7 @@
   "sections": [
     {
       "type": "tldr",
-      "title": "A prompt becomes one file, openable anywhere",
+      "title": "A prompt becomes one file that opens anywhere",
       "label": "In short",
       "text": "Diagrams, dashboards, videos and explainers now share a theme, a checker and a rule: the model fills in JSON and a script renders it.",
       "points": [
@@ -79,7 +79,7 @@
     },
     {
       "type": "code",
-      "title": "A slide is a section with a claim",
+      "title": "A slide's title is its claim",
       "label": "One slide",
       "language": "json",
       "code": "{\n  \"title\": \"Short deck\",\n  \"mode\": \"slides\",\n  \"sections\": [\n    {\n      \"type\": \"text\",\n      \"title\": \"One claim per slide\",\n      \"text\": \"- Six points at most\\n- Eighty words at most\"\n    }\n  ]\n}"
@@ -101,7 +101,7 @@
       "type": "callout",
       "tone": "info",
       "title": "Keys that work in the deck",
-      "text": "Arrows, Space, Page Up and Page Down move between slides, and Home and End jump to the first and last. **O** opens the outline. A link such as `#slide-3` opens that slide, and the last slide is remembered."
+      "text": "Left and right arrows, Space, Page Up and Page Down move between slides, and Home and End jump to the first and last. **O** opens the outline. A link such as `#slide-3` opens that slide, and the last slide is remembered."
     },
     {
       "type": "details",

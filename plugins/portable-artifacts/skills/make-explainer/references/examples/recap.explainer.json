@@ -27,7 +27,7 @@
     {
       "type": "kpis",
       "id": "in-numbers",
-      "title": "1,100 lines added, over half of them tests",
+      "title": "1,107 lines added, over half of them tests",
       "label": "In numbers",
       "items": [
         {
@@ -166,7 +166,7 @@
     {
       "type": "files",
       "id": "changed-files",
-      "title": "Most of the change is viewer and renderer",
+      "title": "Most changes land in the viewer and renderer",
       "label": "Changed files",
       "items": [
         {
