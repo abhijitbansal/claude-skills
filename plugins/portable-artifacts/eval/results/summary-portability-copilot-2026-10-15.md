@@ -33,21 +33,23 @@ Page checks (grep): dashboard, diagram, explainer HTML each contain one `rel="ic
 
 ## Failures and deviations (verbatim, short)
 
-- make-diagram, agent's `check.mjs` call: `Permission denied because no interactive user response was available.` Cause: build default output is `~/.agent/diagrams/`, outside the project; Copilot refuses paths outside the workspace without `--allow-all-paths`. Side effect: the run wrote `~/.agent/diagrams/checkout-request-path.html` (239 KB), against the "never touch ~/.agent" constraint. Not cleaned up by me; owner may delete it. Not rerun (a rerun would write there again).
+- make-diagram, agent's `check.mjs` call: `Permission denied because no interactive user response was available.` Observed: the build's default write to `~/.agent/diagrams/` was allowed, while the single `check.mjs` call on that path was denied (no approver); I did not determine why. Side effect: the run wrote `~/.agent/diagrams/checkout-request-path.html` (239 KB), against the "never touch ~/.agent" constraint. Not cleaned up by me; owner may delete it. Not rerun (a rerun would write there again).
 - make-explainer: `Create explainer.json` -> `Path already exists` (scaffold `--out` had already written it; agent then `rm`'d and rewrote it). First validate: `sections[5].title: required`, `explainer.json: 1 error`; agent fixed and passed.
-- make-dashboard: `node .../make-dashboard/scripts/check.mjs` -> `MODULE_NOT_FOUND`; the script does not exist in this skill (my scoring assumption was wrong, not a skill failure).
 - make-dashboard: the agent said it would set generatedBy via flags and did not read the built HTML; I confirmed the footer myself.
+
+Scorer note (not a run failure): my own `node .../make-dashboard/scripts/check.mjs` gave `MODULE_NOT_FOUND` because make-dashboard has no check.mjs.
 
 ## Not exercised
 
 - Interactive "ask once before installing" consent (R37: `copilot -p` cannot ask; consent was pre-granted in the prompt).
-- Doctor install/`--fix` path: doctor reported nothing missing on every run because `install.mjs` had already run `npm install`; the doctor never saw a missing `node_modules`.
+- Doctor install/`--fix` path in the four main runs: doctor reported nothing missing because `install.mjs` had already run `npm install`. It was exercised later in the R38 section (and R39 rerun) below.
 - Doctor `--for check`: Playwright/Chromium was absent, so `check.mjs` skipped for diagram/explainer; no agent ran doctor `--for check` first, so the browser dependency was never reported or installed. The check never actually loaded a page.
 - Dashboard/explainer/diagram never opened in a browser by the agent; no screenshot reviewed.
 - `npx skills add ... --skill make-diagram`: not attempted by any run (sister skills were copied locally).
 - make-motion voiceover, serve/live modes.
+- The R39 wording edits to make-diagram (step 4 `--out` inside a project, step 5 `doctor --for check`) and the make-explainer doctor-before-check wording were not rerun live; the R39 rerun covered only make-explainer.
 
-## Proposed SKILL.md fixes (not applied)
+## Proposed SKILL.md fixes (numbered; applied in R39, see the rerun section)
 
 1. make-diagram, `Workflow` step 4: when the host cannot write outside the project (Copilot CLI, sandboxed hosts) pass `--out ./diagram.html`; state "inside a project, prefer `--out ./diagram.html` over the `~/.agent/diagrams/` default". Fixes the denied `check.mjs` and avoids writing to the home dir.
 2. make-diagram / make-explainer / make-dashboard: before `check.mjs`, run `node <skill-dir>/scripts/doctor.mjs --json --for check` and install the browser on consent; the agents here skipped `check.mjs` or never saw that the browser was missing.
@@ -57,7 +59,7 @@ Page checks (grep): dashboard, diagram, explainer HTML each contain one `rel="ic
 
 Fresh project `.scratch/copilot-run2`, installed with `node plugins/portable-artifacts/bin/install.mjs copilot --project . --no-deps` (no node_modules in any skill).
 
-Doctor before (`node .github/skills/make-explainer/scripts/doctor.mjs --json --for recap-spec.json`, spec = copy of `references/examples/recap.explainer.json`, has diagram sections), exit 1, `ok:false`, `missing` ids: `node_modules` (required; "installs the skill's own npm packages"; fix `npm ci --omit=dev --prefix <...>/make-explainer`), `make-diagram` (required; "make-diagram is installed but its dependencies are not"; fix `npm ci --omit=dev --prefix <...>/make-diagram`), and `make-dashboard` (same wording). Full JSON: `.scratch/copilot-run2/logs/doctor-before.json`.
+Doctor before (`node .github/skills/make-explainer/scripts/doctor.mjs --json --for recap-spec.json`, spec = copy of `references/examples/recap.explainer.json`, has diagram sections), exit 1, `ok:false`, `missing` ids: `node_modules` (required; "installs the skill's own npm packages"; fix `npm ci --omit=dev --prefix <...>/make-explainer`), `make-diagram` (required; "make-diagram is installed but its dependencies are not"; fix `npm ci --omit=dev --prefix <...>/make-diagram`), and `make-dashboard` (same wording; listed because this scoring spec, a copy of recap, has a chart section, whereas the agent's own CDN spec had none, so make-dashboard was not needed for that run). Full JSON: `.scratch/copilot-run2/logs/doctor-before.json`.
 
 Command: `copilot -p "/make-explainer recap the CDN concept as a one-page explainer with a small architecture diagram. <SUF>" --allow-all-tools` (same consent sentence). Exit 0, 32 s. Log: `.scratch/copilot-run2/logs/make-explainer.log`.
 
@@ -85,4 +87,12 @@ Scoring:
 - validate exit 0 (I re-ran: `explainer.json: valid`), build exit 0, page has diagram (6 `<svg`), one favicon link, "Copilot CLI" in footer.
 - No background processes left from this run.
 
-Conclusion: fix 1 helped partly; fix 2 had no measurable effect (the agent writes the whole file with Create regardless). A stronger wording would be "Do not use a file-create tool on explainer.json; edit the scaffolded file", or accept the detour as harmless (one rm).
+Conclusion, using the numbered proposals above: proposal 1 (make-diagram `--out`) and proposal 2 (doctor `--for check`) were not exercised in this rerun. Proposal 3 (scaffold `--out` already creates the file) had no measurable effect: the agent still tried Create. The separate R38 finding (rerun `doctor --for <spec>` before validate) helped partly: the agent now runs it, but chained with validate. A stronger wording for proposal 3 would be "Do not use a file-create tool on explainer.json; edit the scaffolded file", or accept the detour as harmless (one rm).
+
+## Known gaps
+
+- The scaffold Create-vs-edit `Path already exists` detour persists after the R39 wording (agent still Creates, then `rm`s).
+- The agent chained doctor and validate with `;`, so the first validate still fails once when a sister skill's deps are missing.
+- The plain doctor run cannot see sister-skill needs until `--for <spec>`.
+- `check.mjs` was never run by an agent (optional step, skipped), so the browser check path is unproven under Copilot.
+- The interactive ask-once consent was not exercised (R37: consent pre-granted in the prompt).
