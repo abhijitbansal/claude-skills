@@ -20,13 +20,15 @@ const VENDOR_FILES = {
   vegaEmbed: 'node_modules/vega-embed/build/vega-embed.min.js',
 };
 
+const shellQuote = (p) => (/^[A-Za-z0-9_@%+=:,./\\-]+$/.test(p) ? p : process.platform === 'win32' ? `"${p}"` : `'${p.replace(/'/g, "'\\''")}'`);
+
 function readVendor() {
   const out = {};
   for (const [key, rel] of Object.entries(VENDOR_FILES)) {
     try {
       out[key] = fs.readFileSync(path.join(SKILL, rel), 'utf8');
     } catch {
-      throw new UsageError(`missing ${rel}; run "npm ci" in ${SKILL}`);
+      throw new UsageError(`missing ${rel}; run "npm ci" in ${SKILL} (doctor: node ${shellQuote(path.join(SKILL, 'scripts/doctor.mjs'))}, id node_modules)`);
     }
   }
   return out;

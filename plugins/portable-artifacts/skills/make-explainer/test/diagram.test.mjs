@@ -267,6 +267,7 @@ test('the check loads make-diagram through api.mjs alone, and a make-diagram wit
   assert.equal(errors[0].path, 'sections[0].diagram');
   assert.match(errors[0].message, /make-diagram is too old \(no validateSpec in api\.mjs\)/);
   assert.ok(errors[0].message.includes(`install it with: ${INSTALL}`));
+  assert.match(errors[0].message, /\(doctor: node \S*scripts\/doctor\.mjs, id make-diagram\)$/);
 });
 
 test('build() turns a SiblingError from the page build into a failure with a path, not a stack', async () => {

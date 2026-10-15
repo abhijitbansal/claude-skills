@@ -185,16 +185,23 @@ function locateSister(ctx, plan, name) {
 export function sisterSkill(name) {
   if (typeof name !== 'string' || !SISTER_NAME.test(name)) throw new TypeError(`sisterSkill: invalid skill name ${JSON.stringify(name)}`);
   const sisterDir = (ctx) => pp(ctx).join(pp(ctx).dirname(ctx.skillDir), name);
-  const present = (ctx) => ctx.exists(pp(ctx).join(sisterDir(ctx), 'SKILL.md'));
+  const skillPresent = (ctx) => ctx.exists(pp(ctx).join(sisterDir(ctx), 'SKILL.md'));
+  const depsPresent = (ctx) => ctx.exists(pp(ctx).join(sisterDir(ctx), 'node_modules'));
+  const present = (ctx) => skillPresent(ctx) && depsPresent(ctx);
   return {
     id: name,
     rank: RANK.sister,
-    why: `sister skill ${name} is used for the matching sections`,
+    why: (ctx) => (skillPresent(ctx) ? `${name} is installed but its dependencies are not` : `sister skill ${name} is used for the matching sections`),
     required: true,
     size: '≈30–60 MB',
     check: present,
     fix: (ctx) => {
       const plan = sisterPlan(ctx);
+      const install0 = ['npm', 'ci', '--omit=dev', '--prefix', sisterDir(ctx)];
+      if (skillPresent(ctx)) {
+        // Folder is there, its npm packages are not: install them only, never re-add the skill.
+        return { auto: [install0], manual: manualAll(render([install0], ctx.platform)), notes: `${name} is installed but its dependencies are not; this runs npm ci in ${sisterDir(ctx)} only` };
+      }
       const add = ['npx', '--yes', SKILLS_CLI, 'add', REPO, '--skill', name, '-y', ...(plan?.global ? ['-g'] : [])];
       const install = ['npm', 'ci', '--omit=dev', '--prefix', sisterDir(ctx)];
       if (plan === null) {
@@ -202,7 +209,7 @@ export function sisterSkill(name) {
         return { auto: null, manual: manualAll(hint) };
       }
       const auto = [
-        { argv: add, cwd: plan.cwd, verify: present, locate: (c) => locateSister(c, plan, name), skillsRoot: plan.skillsRoot, sisterDir: sisterDir(ctx), install },
+        { argv: add, cwd: plan.cwd, verify: skillPresent, locate: (c) => locateSister(c, plan, name), skillsRoot: plan.skillsRoot, sisterDir: sisterDir(ctx), install },
         install,
       ];
       const where = plan.global ? `your user-scope skills folder (${plan.skillsRoot}, via -g)` : plan.skillsRoot;
@@ -292,7 +299,7 @@ export function kokoro() {
     check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'kokoro-js')),
     fix: (ctx) => {
       const argv = ['npm', 'install', KOKORO_PIN, '--no-save', '--prefix', ctx.skillDir];
-      return { auto: [argv], manual: manualAll(render([argv], ctx.platform)), notes: 'the 90 MB voice model downloads on first use' };
+      return { auto: [argv], manual: manualAll(render([argv], ctx.platform)), notes: 'the 90 MB voice model downloads on first use; a later `--fix node_modules` (npm ci) removes kokoro again, so rerun `--fix kokoro`' };
     },
     needsSudo: () => false,
   };
@@ -311,7 +318,7 @@ export async function diagnose(requirements, ctx) {
     const fix = r.fix(ctx);
     const entry = {
       id: r.id,
-      why: r.why,
+      why: typeof r.why === 'function' ? r.why(ctx) : r.why,
       required: r.required,
       size: r.size,
       fix: { auto: fix.auto === null ? null : render(fix.auto, ctx.platform), manual: fix.manual },
@@ -464,7 +471,7 @@ export async function doctorMain(argv, { skill, skillDir, targets = ['check'], r
   const ctx = overrides.ctx ?? defaultCtx(skillDir);
   const spec = values.for;
   if (spec !== undefined && !targets.includes(spec) && !(spec.endsWith('.json') && ctx.exists(spec))) {
-    exitUsage(new UsageError(`--for must be one of: ${targets.join(', ')}, or an existing spec .json file; got ${JSON.stringify(spec)}`), { json });
+    exitUsage(new UsageError(`--for must be ${targets.length > 0 ? `one of: ${targets.join(', ')}, or ` : ''}an existing spec .json file; got ${JSON.stringify(spec)}`), { json });
     return;
   }
   try {

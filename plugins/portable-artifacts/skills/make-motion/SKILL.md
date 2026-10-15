@@ -14,9 +14,9 @@ You write one JSON file, `motion.json`. Scripts validate it, preview it in a bro
 
 ## Before the first build
 
-`<skill-dir>` is the folder containing this SKILL.md. Run `node <skill-dir>/scripts/doctor.mjs --json` (add `--for <spec.json>` once the spec exists, `--for voiceover` for a voiceover, `--for check` before `check.mjs`). It needs only Node.
+`<skill-dir>` is the folder containing this SKILL.md. Run `node <skill-dir>/scripts/doctor.mjs --json` (add `--for <spec.json>` once the spec exists, `--for voiceover` for a voiceover (make-motion), `--for check` before `check.mjs` (skills that have one)). It needs only Node.
 
-If it reports anything missing, tell the user in one message: each item, why it is needed, its size and the command, plus every `notes` and `info` entry from the output (they disclose downloads and the files an install writes). Ask once. On yes, run `node <skill-dir>/scripts/doctor.mjs --fix <ids>` with the ids it reported. Anything it refuses (it needs sudo) or that fails, give the user the exact command to run themselves; in Claude Code suggest prefixing it with `!`. On no, do what you can without it and give the user the remaining commands.
+If it reports anything missing, tell the user in one message: each item, why it is needed, its size and the command, plus every `notes` and `info` entry from the output (they disclose downloads and the files an install writes). Ask once per set of missing items (the plain run and a later `--for` run may each find new ones). On yes, run `node <skill-dir>/scripts/doctor.mjs --fix <ids>` with the ids it reported. Hand the user the exact command to run themselves for anything the doctor reports as refused (it needs sudo, or has no automatic fix), skipped (needs node_modules first), installed elsewhere, still missing, or failed; in Claude Code suggest prefixing it with `!`. On no, do what you can without it and give the user the remaining commands.
 
 ## Workflow
 
@@ -66,7 +66,7 @@ Dark background, Inter for text, JetBrains Mono for `"font": "mono"`, 1920x1080 
 
 ## Degraded mode
 
-If Node, Chromium or ffmpeg cannot be installed here, still write and validate `motion.json` (validation needs only `npm ci`), then give the user the exact preview and render commands above to run themselves.
+If Node, Chromium or ffmpeg cannot be installed here, still write and validate `motion.json` (validation needs only the skill's `node_modules`: run the doctor), then give the user the exact preview and render commands above to run themselves.
 
 ## Voiceover and audio notes
 

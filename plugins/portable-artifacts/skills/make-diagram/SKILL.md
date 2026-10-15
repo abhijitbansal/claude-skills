@@ -16,9 +16,9 @@ Run every step yourself, in this same turn. Do not end your reply after showing 
 
 ## Before the first build
 
-`<skill-dir>` is the folder containing this SKILL.md. Run `node <skill-dir>/scripts/doctor.mjs --json` (add `--for <spec.json>` once the spec exists, `--for voiceover` for a voiceover, `--for check` before `check.mjs`). It needs only Node.
+`<skill-dir>` is the folder containing this SKILL.md. Run `node <skill-dir>/scripts/doctor.mjs --json` (add `--for <spec.json>` once the spec exists, `--for voiceover` for a voiceover (make-motion), `--for check` before `check.mjs` (skills that have one)). It needs only Node.
 
-If it reports anything missing, tell the user in one message: each item, why it is needed, its size and the command, plus every `notes` and `info` entry from the output (they disclose downloads and the files an install writes). Ask once. On yes, run `node <skill-dir>/scripts/doctor.mjs --fix <ids>` with the ids it reported. Anything it refuses (it needs sudo) or that fails, give the user the exact command to run themselves; in Claude Code suggest prefixing it with `!`. On no, do what you can without it and give the user the remaining commands.
+If it reports anything missing, tell the user in one message: each item, why it is needed, its size and the command, plus every `notes` and `info` entry from the output (they disclose downloads and the files an install writes). Ask once per set of missing items (the plain run and a later `--for` run may each find new ones). On yes, run `node <skill-dir>/scripts/doctor.mjs --fix <ids>` with the ids it reported. Hand the user the exact command to run themselves for anything the doctor reports as refused (it needs sudo, or has no automatic fix), skipped (needs node_modules first), installed elsewhere, still missing, or failed; in Claude Code suggest prefixing it with `!`. On no, do what you can without it and give the user the remaining commands.
 
 ## Workflow
 
@@ -26,7 +26,7 @@ If it reports anything missing, tell the user in one message: each item, why it 
 2. Icons and emoji are optional. Find an icon: `node <skill-dir>/scripts/icons.mjs search <word>` prints refs like `lucide:database` or `brand:postgresql`. Use a ref exactly as printed. Skip icons if unsure: most kinds have a default icon (see `<skill-dir>/references/kinds.md`); flow `start`, `end`, `decision` and state `start`, `end`, `choice` are drawn as shapes and take no icon or emoji.
 3. `node <skill-dir>/scripts/validate.mjs diagram.json`. Fix every line it prints (a JSON path, the problem, the fix) and rerun until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage error.
 4. Set `generatedBy` to the model you are running as, your effort level if you know it, and your host (for example Claude Code, Codex, Copilot CLI, Gemini CLI). Never guess; leave out any field you do not know. `--model`, `--effort` and `--agent` on the build override it. `node <skill-dir>/scripts/build.mjs diagram.json` prints the HTML path. Default folder is `~/.agent/diagrams/` (or `$PA_OUTPUT_DIR`); `--out <file.html|dir>` picks another; `--theme paper|blueprint|ink|editorial` overrides the theme (default `blueprint`).
-5. `node <skill-dir>/scripts/check.mjs <printed path>` opens the page at desktop and phone width and fails on overflow, console errors or a node under the legend overlay. It skips cleanly (exit 0) when Playwright or a browser is missing; do not install either for it.
+5. `node <skill-dir>/scripts/check.mjs <printed path>` opens the page at desktop and phone width and fails on overflow, console errors or a node under the legend overlay. It needs Playwright and a browser (`doctor --for check` reports and installs them, after the user agrees); without them it skips cleanly (exit 0).
 6. Report: the HTML path, one line on what the diagram shows, and "Play story (or `P`) opens beat 1, Space plays it, `E` explores, `F` is full screen".
 
 For a change ("rename the cache", "add a beat for the retry"), edit only those fields of `diagram.json`, then validate and build again.

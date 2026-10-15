@@ -19,7 +19,8 @@ export class SiblingError extends Error {
 export const installCommand = (names) => `npx skills add abhijitbansal/claude-skills --skill make-explainer ${names.join(' ')}`;
 export const MISSING_HINT = (names) => `install it with: ${installCommand(names)}`;
 // Points at the doctor, which can install it for the user once they agree; its id for a sister skill is the skill name.
-const doctorHint = (name) => `(doctor: node ${path.join(SELF_DIR, 'scripts/doctor.mjs')}, id ${name})`;
+const shellQuote = (p) => (/^[A-Za-z0-9_@%+=:,./\\-]+$/.test(p) ? p : process.platform === 'win32' ? `"${p}"` : `'${p.replace(/'/g, "'\\''")}'`);
+export const doctorHint = (id) => `(doctor: node ${shellQuote(path.join(SELF_DIR, 'scripts/doctor.mjs'))}, id ${id})`;
 
 // Absolute path of the sibling skill folder. Does not check that it exists.
 export function siblingDir(name) {

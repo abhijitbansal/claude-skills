@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UsageError } from './spec.mjs';
+import { doctorCommand } from './doctor-hint.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const MODEL_CACHE_DIR = path.join(SKILL_ROOT, '.cache', 'models');
@@ -19,7 +20,8 @@ const CLAUSE_BREAK = /(?<=[,;:—–])\s+/;
 
 export const USAGE = 'usage: node scripts/voice.mjs "<text>" | --text-file <file> --out <file.wav> [--voice af_heart] [--speed 1] | --list-voices';
 export const INSTALL_HINT = 'kokoro-js is not installed. Run: npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>'
-  + ' (about 250 MB; the voice model, about 90 MB, downloads once on first use) (doctor: node <skill-dir>/scripts/doctor.mjs --for voiceover, id kokoro)';
+  + ' (about 250 MB; the voice model, about 90 MB, downloads once on first use; '
+  + `doctor: ${doctorCommand('--for', 'voiceover')}, id kokoro)`;
 
 function takeValue(argv, i, flag) {
   const value = argv[i + 1];

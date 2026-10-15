@@ -7,15 +7,17 @@ import { ALL, doctorMain, nodeVersion, nodeModules, ffmpeg, browser, kokoro } fr
 const SKILL_DIR = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 // Rendering always needs ffmpeg and a browser; kokoro only for a voiceover (or --fix, which may install any).
+export const requirementsFor = (target) => [
+  nodeVersion(20),
+  nodeModules({ omitDev: false }),
+  ffmpeg(),
+  browser({ required: true }),
+  ...(target === 'voiceover' || target === ALL ? [kokoro()] : []),
+];
+
 await doctorMain(process.argv.slice(2), {
   skill: 'make-motion',
   skillDir: SKILL_DIR,
-  targets: ['check', 'voiceover'],
-  requirementsFor: (target) => [
-    nodeVersion(20),
-    nodeModules({ omitDev: false }),
-    ffmpeg(),
-    browser({ required: true }),
-    ...(target === 'voiceover' || target === ALL ? [kokoro()] : []),
-  ],
+  targets: ['voiceover'],
+  requirementsFor,
 });

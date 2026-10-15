@@ -462,6 +462,7 @@ test('make-dashboard without its node_modules is a SiblingError with the install
     assert.ok(e.message.includes(`make-dashboard is installed but its dependencies are missing (vega)`), e.message);
     assert.ok(e.message.includes(`run "npm ci" in ${dash}`), e.message);
     assert.ok(e.message.includes(`install it with: ${INSTALL}`), e.message);
+    assert.match(e.message, /\(doctor: node \S*scripts\/doctor\.mjs, id make-dashboard\)$/);
     return true;
   });
 });

@@ -6,10 +6,14 @@ import { ALL, doctorMain, nodeVersion, nodeModules, browser } from '../shared/do
 
 const SKILL_DIR = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
-// Plain diagnosis needs no browser; check.mjs / --fix (ALL) do.
+// Plain diagnosis needs no browser. check.mjs (and --fix, ALL) needs playwright, a devDependency, so a full npm ci.
+export const requirementsFor = (target) => (target === 'check' || target === ALL
+  ? [nodeVersion(20), nodeModules({ omitDev: false }), browser()]
+  : [nodeVersion(20), nodeModules()]);
+
 await doctorMain(process.argv.slice(2), {
   skill: 'make-diagram',
   skillDir: SKILL_DIR,
   targets: ['check'],
-  requirementsFor: (target) => [nodeVersion(20), nodeModules(), ...(target === 'check' || target === ALL ? [browser()] : [])],
+  requirementsFor,
 });

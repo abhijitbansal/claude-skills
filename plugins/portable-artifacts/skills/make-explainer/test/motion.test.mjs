@@ -182,6 +182,7 @@ test('without make-motion, a spec section fails validation with the install comm
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.ok(r.stdout.includes('sections[0].spec: make-motion skill not found next to make-explainer'), r.stdout);
   assert.ok(r.stdout.includes(`install it with: ${INSTALL}`), r.stdout);
+  assert.match(r.stdout, /\(doctor: node \S*scripts\/doctor\.mjs, id make-motion\)/);
   assert.equal(run([video({ poster: 'poster.png' })]).status, 0);
 });
 
@@ -467,3 +468,10 @@ test('end to end: the poster frame follows the page theme, and a motion spec wit
   return undefined;
 });
 
+
+test('renderMotion without make-motion/render.mjs throws a SiblingError that names the doctor id', async () => {
+  await assert.rejects(
+    renderMotion('/nonexistent/motion.json', { scenes: [] }, process.env, { script: '/nonexistent/render.mjs' }),
+    (e) => e.name === 'SiblingError' && /\(doctor: node \S*scripts\/doctor\.mjs, id make-motion\)$/.test(e.message),
+  );
+});

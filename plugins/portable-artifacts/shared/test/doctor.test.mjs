@@ -90,7 +90,7 @@ test('nodeModules: omitDev false drops --omit=dev; present dir is fine', async (
 test('sister skill: present when sibling dir has SKILL.md; fix chains npm ci, project scope has no -g', async () => {
   const dir = '/p/.agents/skills/make-explainer';
   const base = { skillDir: dir, cwd: '/p', homedir: '/h' };
-  const here = await diagnose([sisterSkill('make-diagram')], ctx({ ...base, exists: (p) => p === '/p/.agents/skills/make-diagram/SKILL.md' }));
+  const here = await diagnose([sisterSkill('make-diagram')], ctx({ ...base, exists: (p) => p === '/p/.agents/skills/make-diagram/SKILL.md' || p === '/p/.agents/skills/make-diagram/node_modules' }));
   assert.equal(here.ok, true);
   const { missing } = await diagnose([sisterSkill('make-diagram')], ctx(base));
   assert.match(missing[0].fix.auto, / && npm ci --omit=dev --prefix \/p\/\.agents\/skills\/make-diagram$/);
@@ -362,7 +362,9 @@ test('N2: the shown sister command includes cd <root>; ran includes it; win32 us
   assert.match(missing[0].fix.manual.darwin, /^cd \/p && /);
   const win = await diagnose([sisterSkill('make-diagram')], ctx({ platform: 'win32', skillDir: 'C:\\p\\.agents\\skills\\make-explainer', homedir: 'C:\\Users\\u' }));
   assert.match(win.missing[0].fix.auto, /^cd \/d C:\\p && npx /);
-  const res = await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ ...base, exists: () => true }), () => ({ status: 0 }));
+  // the skill folder appears once the add step has run; node_modules appears after npm ci
+  const seen = new Set();
+  const res = await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ ...base, exists: (p) => (p.endsWith('SKILL.md') ? seen.has('npx') : seen.has('npm')) }), (c) => { seen.add(c); return { status: 0 }; });
   assert.match(res[0].ran, /^cd \/p && npx .* && npm ci/);
 });
 
@@ -513,4 +515,31 @@ test('R3-8: spawn errors show code and message', async () => {
   assert.equal(res[0].error, 'ENOENT: spawn npx ENOENT');
   const noCode = await runFixes(['kokoro'], [kokoro()], ctx(), () => ({ status: null, error: new Error('weird') }));
   assert.equal(noCode[0].error, 'weird');
+});
+
+test('sister skill: SKILL.md present but node_modules missing fixes with npm ci only', async () => {
+  const base = { skillDir: '/p/.agents/skills/make-explainer', cwd: '/p', homedir: '/h', exists: (p) => p === '/p/.agents/skills/make-diagram/SKILL.md' };
+  const { ok, missing } = await diagnose([sisterSkill('make-diagram')], ctx(base));
+  assert.equal(ok, false);
+  assert.equal(missing[0].why, 'make-diagram is installed but its dependencies are not');
+  assert.equal(missing[0].fix.auto, 'npm ci --omit=dev --prefix /p/.agents/skills/make-diagram');
+  assert.doesNotMatch(missing[0].fix.auto, /npx/);
+  assert.match(missing[0].notes, /npm ci/);
+  const calls = [];
+  const res = await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx(base), (c, a) => { calls.push([c, ...a]); return { status: 0 }; });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 'npm');
+  assert.equal(res[0].ok, false); // still no node_modules in the fake fs: reported, not claimed fixed
+});
+
+test('sister skill: absent skill still reports the add + npm ci chain', async () => {
+  const { missing } = await diagnose([sisterSkill('make-diagram')], ctx({ skillDir: '/p/.agents/skills/make-explainer', cwd: '/p', homedir: '/h' }));
+  assert.match(missing[0].why, /is used for the matching sections/);
+  assert.match(missing[0].fix.auto, /npx/);
+});
+
+test('doctorMain: empty targets accept only a spec .json for --for', async () => {
+  const r = await runMain(['--for', 'check'], mainOpts({ targets: [] }));
+  assert.equal(r.code, 2);
+  assert.match(r.err, /--for must be an existing spec \.json file/);
 });
