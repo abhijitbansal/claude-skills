@@ -24,12 +24,16 @@ const topLevelTokens = (v) => {
   if (cur) out.push(cur);
   return out;
 };
+// A size: number/unit/percentage, a size keyword, var(), or a min/max/clamp/calc function.
+const SIZE_TOKEN = /^(?:[+-]?\.?\d|(?:xx?x?-)?(?:small|large)\b|medium\b|smaller\b|larger\b|var\(|(?:min|max|clamp|calc)\()/;
 // The family part of a `font:` shorthand: everything after the size[/line-height] token.
 export function shorthandFamily(value) {
   const t = topLevelTokens(value);
   if (t.length === 1) return t[0];
-  const i = t.findIndex((x) => /^(?:\.?\d|var\(--fs|clamp\(|calc\()/.test(x) && !/^\d{3}$/.test(x));
-  return i < 0 ? '' : t.slice(i + 1).join(' ');
+  const i = t.findIndex((x) => SIZE_TOKEN.test(x) && !/^\d{3}$/.test(x));
+  // No recognisable size: fail loudly (the unparsed value is not an allowed family) rather than drop the family.
+  const family = i < 0 ? '' : t.slice(i + 1).join(' ');
+  return family || `<unparsed font shorthand: ${value.trim()}>`;
 }
 export const findShorthandFamilies = (css) => [...css.matchAll(/(?<![-\w])font\s*:\s*([^;}]+)/g)].map((m) => shorthandFamily(m[1])).filter(Boolean);
 export const findFontVars = (css) => [...css.matchAll(/(--(?:font|font-display|mono|sans)|--[\w-]*font[\w-]*)\s*:\s*([^;}]+)/g)].map((m) => m[2].trim());
@@ -63,6 +67,10 @@ test('lint catches what it should (guardrail proof)', () => {
   assert.deepEqual(lintFonts("a{font: 600 clamp(1rem, 2vw, 3rem)/1.1 'Comic Sans MS', serif}", 'make-explainer'), ["'Comic Sans MS', serif"]);
   assert.deepEqual(lintFonts(":root{--sans: 'Comic Sans MS'}", 'make-motion'), ["'Comic Sans MS'"]);
   assert.deepEqual(lintFonts(":root{--ui-font: 'Comic Sans MS'}", 'make-explainer'), ["'Comic Sans MS'"]);
+  assert.deepEqual(lintFonts("a{font: 600 large 'Comic Sans MS'}", 'make-explainer'), ["'Comic Sans MS'"]);
+  assert.deepEqual(lintFonts("a{font: 600 var(--size) 'Comic Sans MS'}", 'make-explainer'), ["'Comic Sans MS'"]);
+  assert.deepEqual(lintFonts("a{font: 600 min(1rem,2vw) 'Comic Sans MS'}", 'make-explainer'), ["'Comic Sans MS'"]);
+  assert.equal(lintFonts('a{font: 600 wibble var(--font)}', 'make-explainer').length, 1, 'unrecognised size fails loudly');
   // Inter / --sans belong to make-motion only.
   assert.deepEqual(lintFonts("a{font-family:'Inter', sans-serif}", 'make-explainer'), ["'Inter', sans-serif"]);
   assert.deepEqual(lintFonts('a{font-family:var(--sans)}', 'make-dashboard'), ['var(--sans)']);
@@ -82,13 +90,19 @@ for (const rel of SOURCES) {
   });
 }
 
-test('make-diagram EMOJI_FONTS holds only emoji and system families', () => {
-  const src = fs.readFileSync(path.join(SKILLS, 'make-diagram/scripts/lib/css.mjs'), 'utf8');
+const EMOJI_OK = new Set(['Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'sans-serif']);
+export function badEmojiFamilies(src) {
   const m = src.match(/const EMOJI_FONTS = '([^']+)'/);
   assert.ok(m, 'EMOJI_FONTS constant found');
-  const families = m[1].split(',').map((f) => f.trim().replace(/^"|"$/g, ''));
-  const OK = new Set(['Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'sans-serif']);
-  for (const f of families) assert.ok(OK.has(f), `unexpected emoji-stack family ${f}`);
+  return m[1].split(',').map((f) => f.trim().replace(/^"|"$/g, '')).filter((f) => !EMOJI_OK.has(f));
+}
+
+test('make-diagram EMOJI_FONTS holds only emoji and system families', () => {
+  assert.deepEqual(badEmojiFamilies(fs.readFileSync(path.join(SKILLS, 'make-diagram/scripts/lib/css.mjs'), 'utf8')), []);
+});
+
+test('EMOJI_FONTS assertion fails on a non-emoji family (guardrail proof)', () => {
+  assert.deepEqual(badEmojiFamilies(`const EMOJI_FONTS = '"Apple Color Emoji","Comic Sans MS",sans-serif';`), ['Comic Sans MS']);
 });
 
 test('nav links keep text-decoration:none against the shared li a prose-link rule', () => {
