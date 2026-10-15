@@ -131,7 +131,7 @@ test('sister skill: installed elsewhere stops before npm ci', async () => {
   assert.deepEqual(calls, ['npx']);
   assert.equal(res[0].ok, false);
   assert.equal(res[0].elsewhere, true);
-  assert.match(res[0].manual, /not found in \/p\/\.agents\/skills/);
+  assert.match(res[0].manual, /not found in \/p\/\.agents\/skills .*install it into \/p\/\.agents\/skills\/make-diagram yourself, then run: npm ci/);
 });
 
 test('sister skill: hostile names are rejected', () => {
@@ -272,7 +272,7 @@ test('runFixes: re-checks after the fix and reports stillMissing', async () => {
 
 test('linux chromium carries a sudo hint; optional notes exist', async () => {
   const { missing } = await diagnose([browser(), kokoro()], ctx({ platform: 'linux' }));
-  assert.match(missing[0].sudoHint, /sudo npx playwright install --with-deps chromium/);
+  assert.match(missing[0].sudoHint, /^sudo npx --no --prefix \/s\/make-motion playwright install-deps chromium$/);
   assert.match(missing[0].notes, /150 MB/);
   assert.match(missing[1].notes, /90 MB/);
   const mac = await diagnose([browser()], ctx());
@@ -340,7 +340,8 @@ test('R24/R25: linux chromium present yields an info entry; other platforms none
   const linux = await diagnose([browser()], present('linux'));
   assert.deepEqual(linux.missing, []);
   assert.equal(linux.info[0].id, 'chromium');
-  assert.match(linux.info[0].sudoHint, /--with-deps chromium/);
+  assert.match(linux.info[0].sudoHint, /^sudo npx --no --prefix \/s\/make-motion playwright install-deps chromium$/);
+  assert.doesNotMatch(linux.info[0].sudoHint, /with-deps/);
   assert.equal((await diagnose([browser()], present('darwin'))).info, undefined);
   const text = await runMain([], { ...mainOpts(), requirementsFor: () => [browser()] }, { ctx: present('linux') });
   assert.match(text.out, /Note: chromium — launching may need system libraries/);
@@ -349,7 +350,7 @@ test('R24/R25: linux chromium present yields an info entry; other platforms none
 test('R24/R25: a successful linux --fix chromium carries the sudo hint', async () => {
   const res = await runFixes(['chromium'], [browser()], ctx({ platform: 'linux', exists: (p) => p === '/usr/bin/google-chrome' }), () => ({ status: 0 }));
   assert.equal(res[0].ok, true);
-  assert.match(res[0].sudoHint, /with-deps/);
+  assert.match(res[0].sudoHint, /install-deps chromium/);
   const mac = await runFixes(['chromium'], [browser()], ctx({ exists: (p) => p === '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' }), () => ({ status: 0 }));
   assert.equal(mac[0].sudoHint, undefined);
 });
@@ -411,7 +412,7 @@ test('N5: chromium failure says to install node_modules first', async () => {
 test('N6: installed elsewhere names where it landed and what to do', async () => {
   const exists = (p) => p === '/p/.claude/skills/make-diagram/SKILL.md';
   const res = await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h', exists }), () => ({ status: 0 }));
-  assert.match(res[0].manual, /wrote it to \/p\/\.claude\/skills\/make-diagram; move it into \/p\/\.agents\/skills/);
+  assert.match(res[0].manual, /wrote it to \/p\/\.claude\/skills\/make-diagram; move that folder to \/p\/\.agents\/skills\/make-diagram, then run: npm ci --omit=dev --prefix \/p\/\.agents\/skills\/make-diagram \(that step was skipped\)/);
   const text = await runMain(['--fix', 'make-diagram'], { ...mainOpts(), requirementsFor: () => [sisterSkill('make-diagram')] }, { ctx: ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h' }) });
   assert.match(text.out, /^installed elsewhere: make-diagram — /);
 });
@@ -452,7 +453,7 @@ test('N10: an error thrown by fix() is that id\'s failure; other results still c
 
 test('N11: spawn errors surface in the result', async () => {
   const enoent = await runFixes(['kokoro'], [kokoro()], ctx(), () => ({ status: null, error: Object.assign(new Error('spawn npm ENOENT'), { code: 'ENOENT' }) }));
-  assert.equal(enoent[0].error, 'ENOENT');
+  assert.equal(enoent[0].error, 'ENOENT: spawn npm ENOENT');
   const killed = await runFixes(['kokoro'], [kokoro()], ctx(), () => ({ status: null, signal: 'SIGKILL' }));
   assert.equal(killed[0].error, 'killed by SIGKILL');
   const plain = await runFixes(['kokoro'], [kokoro()], ctx(), () => ({ status: 1 }));
@@ -466,4 +467,50 @@ test('N12: display quoting is shell-safe per platform', async () => {
   assert.equal(win.missing[0].fix.auto, 'npm ci --omit=dev --prefix "C:\\John Doe\\x\\\\"');
   const plain = await diagnose([nodeModules()], ctx());
   assert.equal(plain.missing[0].fix.auto, 'npm ci --omit=dev --prefix /s/make-motion');
+});
+
+// --- fix round 3 ---
+
+test('R3-1: the linux hint is install-deps pinned to the skill prefix, never an unpinned install as root', async () => {
+  const { missing } = await diagnose([browser()], ctx({ platform: 'linux', skillDir: '/s/my skill' }));
+  assert.equal(missing[0].sudoHint, "sudo npx --no --prefix '/s/my skill' playwright install-deps chromium");
+  assert.doesNotMatch(missing[0].notes, /with-deps/);
+});
+
+test('R3-2/3: win32 compares skills and dot-dir names case-insensitively; linux does not', async () => {
+  const g = await diagnose([sisterSkill('make-diagram')], ctx({ platform: 'win32', skillDir: 'C:\\Users\\u\\.Claude\\skills\\make-explainer', homedir: 'C:\\Users\\u' }));
+  assert.match(g.missing[0].fix.auto, /-y -g/);
+  const s2 = await diagnose([sisterSkill('make-diagram')], ctx({ platform: 'win32', skillDir: 'C:\\p\\.agents\\Skills\\make-explainer', homedir: 'C:\\Users\\u' }));
+  assert.match(s2.missing[0].fix.auto, /^cd \/d C:\\p && /);
+  const lin = await diagnose([sisterSkill('make-diagram')], ctx({ platform: 'linux', skillDir: '/p/.CLAUDE/skills/x', homedir: '/h' }));
+  assert.equal(lin.missing[0].fix.auto, null);
+  const lin2 = await diagnose([sisterSkill('make-diagram')], ctx({ platform: 'linux', skillDir: '/p/.claude/Skills/x', homedir: '/h' }));
+  assert.equal(lin2.missing[0].fix.auto, null);
+});
+
+test('R3-4: the rendered cd target is quoted for spaces and quotes', async () => {
+  const mk = (over) => diagnose([sisterSkill('make-diagram')], ctx({ homedir: '/h', ...over }));
+  const spaced = await mk({ skillDir: '/my proj/.agents/skills/make-explainer' });
+  assert.match(spaced.missing[0].fix.auto, /^cd '\/my proj' && /);
+  const quoted = await mk({ skillDir: "/o'neil/.agents/skills/make-explainer" });
+  assert.match(quoted.missing[0].fix.auto, /^cd '\/o'\\''neil' && /);
+  const win = await mk({ platform: 'win32', skillDir: 'C:\\John Doe\\.agents\\skills\\make-explainer', homedir: 'C:\\Users\\u' });
+  assert.match(win.missing[0].fix.auto, /^cd \/d "C:\\John Doe" && /);
+});
+
+test('R3-6: win32 cd path containing % uses plain double quotes (no "^%" break-out)', async () => {
+  const win = await diagnose([sisterSkill('make-diagram')], ctx({ platform: 'win32', skillDir: 'C:\\100%\\.agents\\skills\\make-explainer', homedir: 'C:\\Users\\u' }));
+  assert.match(win.missing[0].fix.auto, /^cd \/d "C:\\100%" && /);
+});
+
+test('R3-7: -g display cwd is the normalised home, without a trailing separator', async () => {
+  const { missing } = await diagnose([sisterSkill('make-diagram')], ctx({ skillDir: '/h/.claude/skills/make-explainer', homedir: '/h/' }));
+  assert.match(missing[0].fix.auto, /^cd \/h && /);
+});
+
+test('R3-8: spawn errors show code and message', async () => {
+  const res = await runFixes(['kokoro'], [kokoro()], ctx(), () => ({ status: null, error: Object.assign(new Error('spawn npx ENOENT'), { code: 'ENOENT' }) }));
+  assert.equal(res[0].error, 'ENOENT: spawn npx ENOENT');
+  const noCode = await runFixes(['kokoro'], [kokoro()], ctx(), () => ({ status: null, error: new Error('weird') }));
+  assert.equal(noCode[0].error, 'weird');
 });

@@ -65,13 +65,18 @@ const posixQuote = (a) => (POSIX_SAFE.test(a) ? a : `'${a.replace(/'/g, "'\\''")
 const quoteFor = (platform) => (platform === 'win32' ? cmdQuote : posixQuote);
 
 // Steps joined with &&; a step with a cwd is shown as `cd <dir> && <cmd>`.
+// The cd target on win32 is a builtin's argument, never a command, so plain double
+// quotes suffice (Windows paths cannot hold "); cmdQuote's "^%" break-out is not
+// something `cd` is known to accept.
+const cdQuote = (platform, dir) => (platform === 'win32' && !dir.includes('"') ? (CMD_SPECIAL.test(dir) ? `"${dir}"` : dir) : quoteFor(platform)(dir));
+
 export function render(steps, platform) {
   const q = quoteFor(platform);
   const cd = platform === 'win32' ? 'cd /d' : 'cd';
   return steps
     .map((st) => {
       const line = argvOf(st).map(q).join(' ');
-      return !Array.isArray(st) && st.cwd !== undefined ? `${cd} ${q(st.cwd)} && ${line}` : line;
+      return !Array.isArray(st) && st.cwd !== undefined ? `${cd} ${cdQuote(platform, st.cwd)} && ${line}` : line;
     })
     .join(' && ');
 }
@@ -136,7 +141,7 @@ async function playwrightChromiumPresent(ctx) {
 
 const SISTER_NAME = /^[a-z0-9-]+$/;
 
-// Resolved, separator-trimmed, realpath'd where the path exists, lower-cased on win32.
+// Resolved, separator-trimmed, realpath'd where the path exists; lower-cased on win32 for comparison only.
 function normPath(ctx, p) {
   const P = pp(ctx);
   let out = P.resolve(p);
@@ -145,8 +150,12 @@ function normPath(ctx, p) {
   } catch {
     // keep the resolved path
   }
-  return ctx.platform === 'win32' ? out.toLowerCase() : out;
+  return ci(ctx, out);
 }
+
+// Names compare case-insensitively on win32 only.
+const ci = (ctx, str) => (ctx.platform === 'win32' ? str.toLowerCase() : str);
+const inDirs = (ctx, dirs, name) => dirs.includes(ci(ctx, name));
 
 // Where the skills CLI should run for a skill laid out as <root>/.<dir>/skills/<self>.
 // User scope (root is home, dir in USER_SCOPE_DIRS): -g from home. Project scope
@@ -156,11 +165,11 @@ function sisterPlan(ctx) {
   const skillsRoot = P.dirname(ctx.skillDir);
   const dot = P.dirname(skillsRoot);
   const dotName = P.basename(dot);
-  if (P.basename(skillsRoot) !== 'skills' || !PROJECT_SCOPE_DIRS.includes(dotName.toLowerCase())) return null;
+  if (ci(ctx, P.basename(skillsRoot)) !== 'skills' || !inDirs(ctx, PROJECT_SCOPE_DIRS, dotName)) return null;
   const root = P.dirname(dot);
   const home = ctx.homedir ?? os.homedir();
-  if (normPath(ctx, root) === normPath(ctx, home)) return USER_SCOPE_DIRS.includes(dotName) ? { skillsRoot, cwd: home, global: true, dot, root } : null;
-  return { skillsRoot, cwd: root, global: false, dot, root };
+  if (normPath(ctx, root) === normPath(ctx, home)) return inDirs(ctx, USER_SCOPE_DIRS, dotName) ? { skillsRoot, cwd: P.resolve(home), global: true, dot, root } : null;
+  return { skillsRoot, cwd: P.resolve(root), global: false, dot, root };
 }
 
 // Where the skills CLI may have put the skill, other than next to this one.
@@ -193,7 +202,7 @@ export function sisterSkill(name) {
         return { auto: null, manual: manualAll(hint) };
       }
       const auto = [
-        { argv: add, cwd: plan.cwd, verify: present, locate: (c) => locateSister(c, plan, name), skillsRoot: plan.skillsRoot },
+        { argv: add, cwd: plan.cwd, verify: present, locate: (c) => locateSister(c, plan, name), skillsRoot: plan.skillsRoot, sisterDir: sisterDir(ctx), install },
         install,
       ];
       const where = plan.global ? `your user-scope skills folder (${plan.skillsRoot}, via -g)` : plan.skillsRoot;
@@ -238,7 +247,8 @@ export function ffmpeg() {
   };
 }
 
-const LINUX_LIBS_HINT = 'sudo npx playwright install --with-deps chromium';
+// install-deps (system libraries only), pinned to the skill's own playwright: never an unpinned download as root.
+const libsHint = (ctx) => `sudo npx --no --prefix ${quoteFor(ctx.platform)(ctx.skillDir)} playwright install-deps chromium`;
 
 export function browser({ required = false } = {}) {
   return {
@@ -250,7 +260,7 @@ export function browser({ required = false } = {}) {
     size: '≈150 MB',
     check: async (ctx) => systemChromePaths(ctx).some((p) => ctx.exists(p)) || playwrightChromiumPresent(ctx),
     // Platform hint for a chromium that is already present.
-    presentInfo: (ctx) => (ctx.platform === 'linux' ? { note: `launching may need system libraries: ${LINUX_LIBS_HINT}`, sudoHint: LINUX_LIBS_HINT } : null),
+    presentInfo: (ctx) => (ctx.platform === 'linux' ? { note: `launching may need system libraries: ${libsHint(ctx)}`, sudoHint: libsHint(ctx) } : null),
     fix: (ctx) => {
       // --no: never let npx fetch a different playwright; needs node_modules first.
       const argv = ['npx', '--no', '--prefix', ctx.skillDir, 'playwright', 'install', 'chromium'];
@@ -262,8 +272,8 @@ export function browser({ required = false } = {}) {
         failManual: ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) ? manual : `install node_modules first (doctor --fix node_modules), then run: ${manual}`,
       };
       if (ctx.platform === 'linux') {
-        out.notes += `; launching may need system libraries: ${LINUX_LIBS_HINT}`;
-        out.sudoHint = LINUX_LIBS_HINT;
+        out.notes += `; launching may need system libraries: ${libsHint(ctx)}`;
+        out.sudoHint = libsHint(ctx);
       }
       return out;
     },
@@ -336,7 +346,7 @@ async function stillMissing(req, ctx) {
 }
 
 const spawnError = (r) => {
-  if (r.error) return String(r.error.code ?? r.error.message);
+  if (r.error) return r.error.code ? `${r.error.code}: ${r.error.message}` : String(r.error.message);
   if (r.status === null || r.status === undefined) return r.signal ? `killed by ${r.signal}` : 'did not run';
   return undefined;
 };
@@ -410,9 +420,11 @@ async function fixSteps(req, ctx, run) {
 function elsewhereMessage(step, ctx) {
   const P = pp(ctx);
   const found = step.locate?.(ctx);
-  const root = step.cwd;
-  if (found) return `the skills CLI wrote it to ${found}; move it into ${step.skillsRoot} (next to this skill) or rerun the install from ${root}`;
-  return `it was not found in ${step.skillsRoot} or in the agent folders under ${root}; check the skills CLI output above, then install it into ${P.normalize(step.skillsRoot)} yourself`;
+  const skillsRoot = P.resolve(step.skillsRoot);
+  const target = P.resolve(step.sisterDir);
+  const next = `then run: ${render([step.install], ctx.platform)} (that step was skipped)`;
+  if (found) return `the skills CLI wrote it to ${P.resolve(found)}; move that folder to ${target}, ${next}`;
+  return `it was not found in ${skillsRoot} or in the agent folders under ${step.cwd}; check the skills CLI output above, install it into ${target} yourself, ${next}`;
 }
 
 function describe(m, platform) {
