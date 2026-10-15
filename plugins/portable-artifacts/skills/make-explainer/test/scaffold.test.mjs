@@ -472,3 +472,24 @@ test('every titled TODO section carries a label TODO and a short-title prompt', 
     }
   }
 });
+
+test('scaffold --out writes the spec to a file, prints "wrote <file>", and matches the stdout form', () => {
+  const s = sandbox();
+  try {
+    const file = path.join(s.dir, 'deep', 'explainer.json');
+    const r = node('scaffold.mjs', ['concept', '--out', file]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout.trim(), `wrote ${file}`);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), scaffold('concept', { dir: s.dir }));
+  } finally { s.done(); }
+});
+
+test('scaffold --out with an unknown preset writes nothing and exits 2', () => {
+  const s = sandbox();
+  try {
+    const file = path.join(s.dir, 'x.json');
+    const r = node('scaffold.mjs', ['nope', '--out', file]);
+    assert.equal(r.status, 2);
+    assert.equal(fs.existsSync(file), false);
+  } finally { s.done(); }
+});

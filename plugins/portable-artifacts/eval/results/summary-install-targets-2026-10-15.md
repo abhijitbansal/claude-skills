@@ -21,11 +21,16 @@ Audit of `bin/install.mjs` HOSTS against each host's official docs. Result: all 
 - "User Skills: `~/.gemini/skills/` or the `~/.agents/skills/` alias." / "Workspace Skills: `.gemini/skills/` or the `.agents/skills/` alias."
 - Skills are model-activated by description (user approves); no documented `/name` for skills themselves.
 - Commands URL: https://geminicli.com/docs/cli/custom-commands.md
-- "Located in `~/.gemini/commands/`." / "Located in `<your-project-root>/.gemini/commands/`."; required TOML field `prompt`.
+- "Located in `~/.gemini/commands/`." / "Located in `<your-project-root>/.gemini/commands/`."; required TOML field `prompt` ("The prompt that will be sent to the Gemini model when the command is executed.").
+- Optional: "`description` (String): A brief, one-line description of what the command does."
+- Args: "If your `prompt` contains the special placeholder `{{args}}`, the CLI will replace that placeholder" (with what the user typed after the command).
 - Code: skills `.gemini/skills` both scopes, TOML commands in `.gemini/commands`, invoke `/name` (via the generated command). MATCH. Note: the creating-skills page does not mention `.gemini/commands`; that path is confirmed by the custom-commands page only.
 
 ## agents (generic)
 - `.agents/skills` is the shared alias documented by Codex, Copilot and Gemini above. MATCH.
 
 ## Claude Code
-- Not re-fetched (own product, `.claude/skills`, `/name`); Copilot docs above also list `.claude/skills`. Unverified this run.
+- URL: https://code.claude.com/docs/en/skills (verified 2026-10-15)
+- Personal: "`~/.claude/skills/<skill-name>/SKILL.md`" (all projects on this machine). Project: "`.claude/skills/<skill-name>/SKILL.md`".
+- Invoke: "Claude uses skills when relevant, or you can invoke one directly with `/skill-name`."
+- Code: user+project `.claude/skills`, invoke `/name`. MATCH.

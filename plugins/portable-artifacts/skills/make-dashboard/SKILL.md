@@ -33,7 +33,7 @@ If the request is empty, ask what to build and from which data file(s).
    `node <skill-dir>/scripts/inspect.mjs --spec dashboard.json --source shop` and `... --source shop --table items`.
 2. Write `dashboard.json` next to the data. Source paths are relative to the spec file and must stay
    inside the spec's folder.
-   Actually create the file: describing it or announcing a patch is not enough. If your file tool fails, write it from the shell (`cat > dashboard.json <<'EOF'` … `EOF`), then `ls dashboard.json` to confirm it exists before validating.
+   Actually create the file: describing it or announcing a patch is not enough. If your file tool fails, write it with a short `node -e` script that calls `fs.writeFileSync`, then confirm the file exists before validating.
 3. Validate and fix until it prints `valid` (it also runs every query, so valid means buildable):
    `node <skill-dir>/scripts/validate.mjs dashboard.json`
 4. Set `generatedBy` to the model you are running as, your effort level if you know it, and your host (for example Claude Code, Codex, Copilot CLI, Gemini CLI). Never guess; leave out any field you do not know. `--model`, `--effort` and `--agent` on the build override it. Build: `node <skill-dir>/scripts/build.mjs dashboard.json` (writes `dist/index.html`, `--out <dir>` to change).

@@ -39,8 +39,8 @@ any agent that can run shell commands. Nothing leaves your machine.
 
 ```bash
 cd make-explainer && npm ci --omit=dev && cd -        # one-time
-node make-explainer/scripts/gather.mjs git > facts.json
-node make-explainer/scripts/scaffold.mjs recap --facts facts.json > explainer.json
+node make-explainer/scripts/gather.mjs git --out facts.json
+node make-explainer/scripts/scaffold.mjs recap --facts facts.json --out explainer.json
 # replace every "TODO: ..." in explainer.json with real prose, then:
 node make-explainer/scripts/validate.mjs explainer.json
 node make-explainer/scripts/build.mjs    explainer.json

@@ -5,14 +5,35 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SKILLS = fileURLToPath(new URL('../../skills/', import.meta.url));
-const HOST_ONLY = [/AskUserQuestion/, /TodoWrite/, /\bSkill\(/, /\bTask tool\b/, /\bsubagent\b/i, /~\/\.claude\b/];
-const BASH_ONLY = [/\$\(/, /2>\/dev\/null/, /\|\s*grep\b/, /^\s*export\s+\w+=/m, /(?<![-\w])source\s+\S+/]; // lookbehind: allow the CLI flag `--source name`
-const SKILL_DIR_LINE = '`<skill-dir>` is the folder containing this SKILL.md.';
 
-// Commands the agent runs: fenced blocks plus inline code that starts with node/npm/npx.
-export function commands(md) {
-  const fenced = [...md.matchAll(/```[a-z]*\n([\s\S]*?)```/g)].map((m) => m[1]);
-  const inline = [...md.matchAll(/`((?:node|npm|npx) [^`]+)`/g)].map((m) => m[1]);
+// Tool names and paths that exist on one host only.
+const HOST_ONLY = [
+  /AskUserQuestion/, /TodoWrite/, /\bSkill\(/, /\bTask tool\b/, /\bsubagents?\b/i,
+  /(~|\$HOME|%USERPROFILE%)[\\/]\.claude\b/,
+  /\b(WebFetch|WebSearch|NotebookEdit)\b/, /\bmcp__/,
+];
+// Shell syntax that bash and zsh accept but PowerShell or cmd.exe do not.
+const BASH_ONLY = [
+  /\$\(/, /`[^`]*`/, /2>\/dev\/null/, /2>&1/, /\|\s*grep\b/, /\|\s*tee\b/, /&&/,
+  /<<-?\s*['"]?\w+/, /\s>>?\s*[\w./~$]/,
+  /^\s*export\s+\w+=/m, /^\s*\w+=\S*\s+\w/m,
+  /(^|[;&|]\s*)source\s+\S+/m, // line-start only: `--source shop` is a CLI flag
+  /(^|[;&|]\s*)\.\s+\S+/m,
+  /(^|\s)~\//, /\$[A-Za-z_]\w*/, /(^|\s)\S*\*\S*/,
+];
+const SKILL_DIR_LINE = '`<skill-dir>` is the folder containing this SKILL.md.';
+const INLINE_COMMAND = /^(?:(?:node|npm|npx|cat|cd|ls|export|source|echo|rm|cp|mv)\b|\w+=\S+\s+\w)/;
+
+// Commands the agent runs: fenced blocks (``` or ~~~, any info string, json skipped)
+// plus inline code that starts with a command word or an env assignment.
+export function commands(raw) {
+  const md = raw.replace(/\r\n?/g, '\n');
+  const fenced = [];
+  const prose = md.replace(/^[ \t]*(```|~~~)([^\n]*)\n([\s\S]*?)^[ \t]*\1[ \t]*$/gm, (_, _f, info, body) => {
+    if (!/^\s*json/i.test(info)) fenced.push(body);
+    return '';
+  });
+  const inline = [...prose.matchAll(/(``?)(?!`)(.+?)\1(?!`)/g)].map((m) => m[2].trim()).filter((c) => INLINE_COMMAND.test(c));
   return [...fenced, ...inline];
 }
 
@@ -24,13 +45,58 @@ export function problems(md) {
   return out;
 }
 
-test('guardrail proof: a bad SKILL.md trips every rule', () => {
-  const bad = 'Use AskUserQuestion. Save to ~/.claude/x.\n```\nnode a.mjs $(pwd) 2>/dev/null | grep x\n```\n';
-  const p = problems(bad);
-  assert.ok(p.some((x) => x.includes('AskUserQuestion')));
-  assert.ok(p.some((x) => x.includes('.claude')));
-  assert.ok(p.some((x) => x.includes('$\\(')));
-  assert.ok(p.some((x) => x.includes('<skill-dir>')));
+const L = `${SKILL_DIR_LINE}\n`;
+const flagged = (body) => problems(L + body);
+
+// One fixture per rule: each must fire on its own, so a rule cannot go dead unnoticed.
+const FIXTURES = [
+  ['Use AskUserQuestion.', 'AskUserQuestion'],
+  ['Use TodoWrite.', 'TodoWrite'],
+  ['Call Skill(x).', 'Skill'],
+  ['Use the Task tool.', 'Task tool'],
+  ['Spawn subagents.', 'subagent'],
+  ['Save to ~/.claude/x.', '.claude'],
+  ['Save to $HOME/.claude/x.', '.claude'],
+  ['Save to %USERPROFILE%\\.claude.', '.claude'],
+  ['Use WebFetch.', 'WebFetch'],
+  ['call mcp__foo__bar', 'mcp__'],
+  ['Run `node a.mjs $(pwd)`.', '\\$\\('],
+  ['Run ``node a.mjs `pwd` ``.', '`'],
+  ['```\nnode a.mjs 2>/dev/null\n```\n', 'dev/null'],
+  ['```\nnode a.mjs 2>&1\n```\n', '2>&1'],
+  ['```\nnode a.mjs | grep x\n```\n', 'grep'],
+  ['Run `node a.mjs 2>&1 | tee log`.', 'tee'],
+  ['Run `cd x && node a.mjs`.', '&&'],
+  ["Run `cat > d.json <<'EOF'` then `EOF`.", '<<'],
+  ['Run `node a.mjs > out.json`.', '>'],
+  ['```sh\nexport X=1\n```\n', 'export'],
+  ['   ```sh\n   export X=1\n   ```\n', 'export'],
+  ['Run `PA_OUTPUT_DIR=out node build.mjs`.', 'bash-only'],
+  ['```\nsource venv/bin/activate\n```\n', 'source'],
+  ['```\n. venv/bin/activate\n```\n', 'bash-only'],
+  ['Run `node build.mjs --out ~/x`.', '~'],
+  ['Run `node build.mjs --out $HOME/x`.', 'bash-only'],
+  ['Run `node validate.mjs *.json`.', '\\*'],
+  ['```PowerShell\nnode a.mjs $(pwd)\n```\n', '\\$\\('],
+  ['```bash\r\nnode a.mjs $(pwd)\r\n```\r\n', '\\$\\('],
+  ['~~~\nnode a.mjs $(pwd)\n~~~\n', '\\$\\('],
+];
+
+test('guardrail proof: every rule fires on its own fixture', () => {
+  for (const [body, needle] of FIXTURES) {
+    assert.ok(flagged(body).some((x) => x.includes(needle) || new RegExp(needle).test(x)), `no problem containing "${needle}" for: ${JSON.stringify(body)}`);
+  }
+  assert.ok(problems('nothing here').some((x) => x.includes('<skill-dir>')), 'missing <skill-dir> line must fire');
+});
+
+test('guardrail proof: legitimate text is not flagged', () => {
+  const ok = [
+    'Run `node <skill-dir>/scripts/inspect.mjs --spec d.json --source shop`.',
+    '```json\n{"note": "the source of truth"}\n```\n',
+    'In Claude Code suggest prefixing it with `!`; Codex and Copilot CLI differ.',
+    'Writes to ~/.agent/diagrams/ by default.',
+  ];
+  for (const body of ok) assert.deepEqual(flagged(body), [], body);
 });
 
 for (const skill of fs.readdirSync(SKILLS).filter((d) => fs.existsSync(path.join(SKILLS, d, 'SKILL.md')))) {

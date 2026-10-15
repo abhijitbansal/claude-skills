@@ -466,3 +466,21 @@ test('a bare repository or the inside of .git says there is no work tree', () =>
     } finally { bare.cleanup(); }
   });
 });
+
+test('--out writes the facts to a file (creating parent dirs), prints "wrote <file>", and stdout stays free of JSON', () => {
+  withRepo(featureRepo, (repo) => {
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gather-out-')));
+    try {
+      const file = path.join(dir, 'nested', 'facts.json');
+      const r = run(['git', '--repo', repo.dir, '--out', file]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout.trim(), `wrote ${file}`);
+      assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).branch, gather(repo).branch);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+test('--out with no value is a usage error (exit 2)', () => {
+  const r = run(['git', '--out']);
+  assert.equal(r.status, 2);
+});

@@ -185,11 +185,11 @@ for the login change", "turn this plan into a one-page explainer")
 **What the agent does** (commands are `node <skill-dir>/scripts/…`, run from
 your project folder):
 
-1. For a branch, `gather.mjs git > facts.json` reads the committed
+1. For a branch, `gather.mjs git --out facts.json` reads the committed
    work: commits, files changed with line counts and renames, test files and
    the date. `--repo <folder>` reads another checkout; `--base` defaults to
    `main`, then `master`, preferring origin's copy when it is ahead.
-2. `scaffold.mjs recap --facts facts.json > explainer.json` writes a starter
+2. `scaffold.mjs recap --facts facts.json --out explainer.json` writes a starter
    file (also `checklist`, `concept` and `slides`). `concept` and `slides` take no facts. Without `--facts`, `recap` is a shorter skeleton (tl;dr, how it works, risks: no numbers, files or timeline) and `checklist` has one TODO area group plus the regression group.
    The numbers, file list, timeline and checklist groups are filled in; every
    sentence is a `TODO: …` string. With no preset, the agent writes the file
