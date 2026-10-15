@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { quoteArg } from '../shared/doctor.mjs';
 
 const SKILL = fileURLToPath(new URL('..', import.meta.url));
 const NAME = 'make-motion';
@@ -14,26 +15,20 @@ const made = [];
 after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 const tmp = (prefix) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); made.push(d); return d; };
 
-// A copy with only scripts/doctor.mjs and shared/: no node_modules, no sister skills.
+// A copy with only scripts/doctor.mjs, scripts/lib/requirements.mjs and shared/: no node_modules, no sister skills.
+// It proves the doctor imports nothing but node: built-ins and shared/.
 function freshCopy() {
   const copy = path.join(tmp('doctor-fresh-'), NAME);
   fs.mkdirSync(path.join(copy, 'scripts'), { recursive: true });
   fs.cpSync(path.join(SKILL, 'shared'), path.join(copy, 'shared'), { recursive: true });
+  fs.mkdirSync(path.join(copy, 'scripts/lib'), { recursive: true });
   fs.copyFileSync(path.join(SKILL, 'scripts/doctor.mjs'), path.join(copy, 'scripts/doctor.mjs'));
+  fs.copyFileSync(path.join(SKILL, 'scripts/lib/requirements.mjs'), path.join(copy, 'scripts/lib/requirements.mjs'));
   return copy;
 }
 
-// Import the wrapper for its exported requirementsFor; the import also runs one read-only diagnosis, whose output is swallowed.
-async function loadRequirements() {
-  const saved = { argv: process.argv, write: process.stdout.write, code: process.exitCode };
-  process.argv = [process.argv[0], 'doctor.mjs', '--json'];
-  process.stdout.write = () => true;
-  try {
-    return (await import(pathToFileURL(path.join(SKILL, 'scripts/doctor.mjs')).href)).requirementsFor;
-  } finally {
-    process.argv = saved.argv; process.stdout.write = saved.write; process.exitCode = saved.code;
-  }
-}
+// Side-effect free: importing it runs nothing.
+const loadRequirements = async () => (await import(pathToFileURL(path.join(SKILL, 'scripts/lib/requirements.mjs')).href)).requirementsFor;
 const idsOf = (reqs) => reqs.map((r) => r.id);
 
 test('runs on a fresh copy with no node_modules and reports it missing', () => {
@@ -66,6 +61,10 @@ test('ffmpeg is reported required-missing when PATH is empty and FFMPEG_PATH uns
     t.skip('ffmpeg is not on this machine\'s PATH, so the real-PATH guardrail step cannot run');
     return;
   }
+  if (fs.existsSync(path.join(SKILL, 'node_modules/ffmpeg-static'))) {
+    t.skip('ffmpeg-static is installed in make-motion, so an empty PATH still finds an ffmpeg');
+    return;
+  }
   const env = { ...process.env, PATH: tmp('doctor-path-') };
   delete env.FFMPEG_PATH;
   // node is run by absolute path, so an empty PATH is fine; ffmpeg-static is absent from node_modules.
@@ -91,9 +90,11 @@ test('requirementsFor: rendering always needs ffmpeg and a required browser; ALL
 
 test('install hints name the doctor with its real path and the missing item id', async () => {
   const lib = (f) => import(pathToFileURL(path.join(SKILL, 'scripts/lib', f)).href);
-  const doctor = path.join(SKILL, 'scripts/doctor.mjs');
+  const doctor = quoteArg(path.join(SKILL, 'scripts/doctor.mjs'));
   const { INSTALL_HINT } = await lib('voice.mjs');
   assert.ok(INSTALL_HINT.includes(`node ${doctor} --for voiceover, id kokoro)`), INSTALL_HINT);
+  assert.ok(INSTALL_HINT.includes(`--prefix ${quoteArg(SKILL.replace(/[\\/]$/, ''))}`), INSTALL_HINT);
+  assert.doesNotMatch(INSTALL_HINT, /<skill-dir>/);
   const { findFfmpeg } = await lib('ffmpeg.mjs');
   const saved = { p: process.env.PATH, f: process.env.FFMPEG_PATH };
   process.env.PATH = tmp('doctor-nopath-'); delete process.env.FFMPEG_PATH;
@@ -103,13 +104,22 @@ test('install hints name the doctor with its real path and the missing item id',
     process.env.PATH = saved.p;
     if (saved.f !== undefined) process.env.FFMPEG_PATH = saved.f;
   }
-  const src = fs.readFileSync(path.join(SKILL, 'scripts/lib/browser.mjs'), 'utf8');
-  assert.match(src, /doctor: \$\{doctorCommand\(\)\}, id chromium\)/);
 });
 
-test('the doctor command in hints quotes a path with spaces', async () => {
+test('the browser hint names the doctor id (run in a child where chromium and chrome cannot launch)', () => {
+  const code = `import { launchBrowser } from ${JSON.stringify(pathToFileURL(path.join(SKILL, 'scripts/lib/browser.mjs')).href)};
+    try { const b = await launchBrowser({ quiet: true }); await b.close(); console.log('LAUNCHED'); } catch (e) { console.log(e.message); }`;
+  const env = { ...process.env, PLAYWRIGHT_BROWSERS_PATH: tmp('doctor-pw-') };
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', env });
+  if (r.stdout.includes('LAUNCHED')) return; // system Chrome launched: no failure to observe on this machine
+  assert.ok(r.stdout.includes(`node ${quoteArg(path.join(SKILL, 'scripts/doctor.mjs'))}, id chromium)`), r.stdout + r.stderr);
+});
+
+test('the doctor command in hints quotes a path with spaces, as the shared helper does', async () => {
   const dir = path.join(tmp('doctor space '), 'make motion');
   fs.cpSync(path.join(SKILL, 'scripts'), path.join(dir, 'scripts'), { recursive: true });
+  fs.cpSync(path.join(SKILL, 'shared'), path.join(dir, 'shared'), { recursive: true });
   const { doctorCommand } = await import(pathToFileURL(path.join(dir, 'scripts/lib/doctor-hint.mjs')).href);
-  assert.ok(doctorCommand().startsWith(`node '${path.join(fs.realpathSync(dir), 'scripts/doctor.mjs')}'`) || doctorCommand().startsWith('node "'), doctorCommand());
+  assert.equal(doctorCommand(), `node ${quoteArg(path.join(fs.realpathSync(dir), 'scripts/doctor.mjs'))}`);
+  assert.match(doctorCommand(), /^node ["']/);
 });

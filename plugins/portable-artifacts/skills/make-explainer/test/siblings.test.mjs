@@ -16,6 +16,7 @@ async function layout(siblings = {}) {
   const lib = path.join(root, 'make-explainer/scripts/lib');
   fs.mkdirSync(lib, { recursive: true });
   fs.copyFileSync(new URL('../scripts/lib/siblings.mjs', import.meta.url), path.join(lib, 'siblings.mjs'));
+  fs.cpSync(new URL('../shared', import.meta.url), path.join(root, 'make-explainer/shared'), { recursive: true });
   for (const [name, files] of Object.entries(siblings)) {
     for (const [rel, body] of Object.entries(files)) {
       const f = path.join(root, name, rel);

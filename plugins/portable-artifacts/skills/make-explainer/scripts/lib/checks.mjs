@@ -7,7 +7,7 @@ import path from 'node:path';
 import { resolveRef } from './paths.mjs';
 import { pathJoin } from '../../shared/errors.mjs';
 import { readImage } from './image.mjs';
-import { loadSibling, SiblingError, MISSING_HINT, doctorHint } from './siblings.mjs';
+import { loadSibling, SiblingError, MISSING_HINT } from './siblings.mjs';
 import { DEFAULT_THEME } from '../../shared/theme.mjs';
 import { itemKey } from './render/checklist.mjs';
 import { readDiagramSpec, reportDiagramErrors, inPageTheme } from './diagram-source.mjs';
@@ -107,7 +107,7 @@ registerCheck('diagram', async ({ section, path: at, dir, spec }) => {
     return [{ path: where, message: e.message }];
   }
   if (typeof api.validateSpec !== 'function') {
-    return [{ path: where, message: `make-diagram is too old (no validateSpec in api.mjs); ${MISSING_HINT(['make-diagram'])} ${doctorHint('make-diagram')}` }];
+    return [{ path: where, message: `make-diagram is too old (no validateSpec in api.mjs); update it: ${MISSING_HINT(['make-diagram'])}` }];
   }
   const pageTheme = spec.theme ?? DEFAULT_THEME;
   const warnings = source.spec.theme === undefined ? [] : [{

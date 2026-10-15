@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { roundTrip } from './helpers/cmdsim.mjs';
-import { nodeVersion, nodeModules, sisterSkill, ffmpeg, browser, kokoro, diagnose, runFixes, doctorMain, ALL, cmdQuote } from '../doctor.mjs';
+import { nodeVersion, nodeModules, devDeps, sisterSkill, ffmpeg, browser, kokoro, quoteArg, diagnose, runFixes, doctorMain, ALL, cmdQuote } from '../doctor.mjs';
 
 const ctx = (over = {}) => ({
   platform: 'darwin', env: {}, skillDir: '/s/make-motion', nodeVersion: '24.7.0',
@@ -406,9 +406,9 @@ test('N5: fix order is by rank regardless of wrapper order; failed node_modules 
   assert.ok(!ran.some((r) => r.startsWith('npx --no')));
 });
 
-test('N5: chromium failure says to install node_modules first', async () => {
+test('N5: chromium failure says to install playwright (dev_deps) first', async () => {
   const res = await runFixes(['chromium'], [browser()], ctx(), () => ({ status: 1 }));
-  assert.match(res[0].manual, /install node_modules first \(doctor --fix node_modules\)/);
+  assert.match(res[0].manual, /playwright is not installed: run doctor --fix dev_deps/);
 });
 
 test('N6: installed elsewhere names where it landed and what to do', async () => {
@@ -542,4 +542,41 @@ test('doctorMain: empty targets accept only a spec .json for --for', async () =>
   const r = await runMain(['--for', 'check'], mainOpts({ targets: [] }));
   assert.equal(r.code, 2);
   assert.match(r.err, /--for must be an existing spec \.json file/);
+});
+
+test('dev_deps: present when node_modules/playwright exists; fix is a full npm ci with disclosure', async () => {
+  const ok = await diagnose([devDeps()], ctx({ exists: (p) => p === '/s/make-motion/node_modules/playwright' }));
+  assert.equal(ok.ok, true);
+  const { missing } = await diagnose([devDeps()], ctx());
+  assert.equal(missing[0].id, 'dev_deps');
+  assert.equal(missing[0].required, false);
+  assert.equal(missing[0].fix.auto, 'npm ci --prefix /s/make-motion');
+  assert.match(missing[0].notes, /dev dependencies/);
+});
+
+test('consent text equals the run command for node_modules and dev_deps', async () => {
+  const calls = [];
+  const { missing } = await diagnose([nodeModules(), devDeps()], ctx());
+  const c = ctx({ exists: (p) => p === '/s/make-motion/node_modules' && calls.length > 0 });
+  await runFixes(['node_modules', 'dev_deps'], [nodeModules(), devDeps()], c, (cmd, a) => { calls.push([cmd, ...a].join(' ')); return { status: 0 }; });
+  assert.deepEqual(calls, missing.map((m) => m.fix.auto));
+});
+
+test('fix order: node_modules, dev_deps, sisters, ffmpeg, chromium, kokoro', async () => {
+  const reqs = [kokoro(), browser(), ffmpeg(), sisterSkill('make-diagram'), devDeps(), nodeModules(), nodeVersion(20)];
+  const res = await runFixes(reqs.map((r) => r.id), reqs, ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h' }), () => ({ status: 0 }));
+  assert.deepEqual(res.map((r) => r.id), ['node', 'node_modules', 'dev_deps', 'make-diagram', 'ffmpeg', 'chromium', 'kokoro']);
+});
+
+test('ffmpeg staticDir: a static binary in another skill counts', async () => {
+  const dir = (c) => '/s/make-motion-sibling/node_modules';
+  const isExecutable = (p) => p === '/s/make-motion-sibling/node_modules/ffmpeg-static/ffmpeg';
+  assert.equal((await diagnose([ffmpeg({ staticDir: dir })], ctx({ isExecutable }))).ok, true);
+  assert.equal((await diagnose([ffmpeg()], ctx({ isExecutable }))).ok, false);
+});
+
+test('quoteArg: POSIX single quotes, cmd.exe double quotes, safe words bare', () => {
+  assert.equal(quoteArg('/a/b', 'darwin'), '/a/b');
+  assert.equal(quoteArg('/a b/c', 'linux'), "'/a b/c'");
+  assert.equal(quoteArg('C:\\a b\\c', 'win32'), '"C:\\a b\\c"');
 });

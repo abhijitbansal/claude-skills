@@ -14,26 +14,20 @@ const made = [];
 after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 const tmp = (prefix) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); made.push(d); return d; };
 
-// A copy with only scripts/doctor.mjs and shared/: no node_modules, no sister skills.
+// A copy with only scripts/doctor.mjs, scripts/lib/requirements.mjs and shared/: no node_modules, no sister skills.
+// It proves the doctor imports nothing but node: built-ins and shared/.
 function freshCopy() {
   const copy = path.join(tmp('doctor-fresh-'), NAME);
   fs.mkdirSync(path.join(copy, 'scripts'), { recursive: true });
   fs.cpSync(path.join(SKILL, 'shared'), path.join(copy, 'shared'), { recursive: true });
+  fs.mkdirSync(path.join(copy, 'scripts/lib'), { recursive: true });
   fs.copyFileSync(path.join(SKILL, 'scripts/doctor.mjs'), path.join(copy, 'scripts/doctor.mjs'));
+  fs.copyFileSync(path.join(SKILL, 'scripts/lib/requirements.mjs'), path.join(copy, 'scripts/lib/requirements.mjs'));
   return copy;
 }
 
-// Import the wrapper for its exported requirementsFor; the import also runs one read-only diagnosis, whose output is swallowed.
-async function loadRequirements() {
-  const saved = { argv: process.argv, write: process.stdout.write, code: process.exitCode };
-  process.argv = [process.argv[0], 'doctor.mjs', '--json'];
-  process.stdout.write = () => true;
-  try {
-    return (await import(pathToFileURL(path.join(SKILL, 'scripts/doctor.mjs')).href)).requirementsFor;
-  } finally {
-    process.argv = saved.argv; process.stdout.write = saved.write; process.exitCode = saved.code;
-  }
-}
+// Side-effect free: importing it runs nothing.
+const loadRequirements = async () => (await import(pathToFileURL(path.join(SKILL, 'scripts/lib/requirements.mjs')).href)).requirementsFor;
 const idsOf = (reqs) => reqs.map((r) => r.id);
 
 test('runs on a fresh copy with no node_modules and reports it missing', () => {
@@ -92,12 +86,21 @@ test('a malformed spec is a one-line usage error', () => {
   assert.equal(r.stderr.trim().split('\n').length, 1, r.stderr);
 });
 
-test('requirementsFor: check and ALL use a full npm ci; ALL has every sister, ffmpeg and the browser', async () => {
+test('requirementsFor: check adds dev_deps and the browser; ALL has every sister, motion needs and the browser', async () => {
   const requirementsFor = await loadRequirements();
   const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
   assert.deepEqual(idsOf(requirementsFor(undefined)), ['node', 'node_modules']);
-  assert.deepEqual(idsOf(requirementsFor('check')), ['node', 'node_modules', 'chromium']);
-  const all = requirementsFor(ALL);
-  for (const id of ['make-diagram', 'make-dashboard', 'make-motion', 'ffmpeg', 'chromium']) assert.ok(idsOf(all).includes(id), id);
-  assert.match(all[1].fix({ platform: 'darwin', skillDir: '/s/x' }).auto[0].join(' '), /^npm ci --prefix /);
+  assert.deepEqual(idsOf(requirementsFor('check')), ['node', 'node_modules', 'dev_deps', 'chromium']);
+  const all = idsOf(requirementsFor(ALL));
+  for (const id of ['make-diagram', 'make-dashboard', 'make-motion', 'ffmpeg', 'chromium', 'dev_deps']) assert.ok(all.includes(id), id);
+  assert.equal(new Set(all).size, all.length, 'no duplicate ids');
+});
+
+test('a motion section needs a required browser and counts make-motion\'s ffmpeg-static', async () => {
+  const requirementsFor = await loadRequirements();
+  const reqs = requirementsFor(specFile([{ type: 'motion' }]));
+  assert.equal(reqs.find((r) => r.id === 'chromium').required, true);
+  const ff = reqs.find((r) => r.id === 'ffmpeg');
+  const isExecutable = (p) => p === '/s/make-motion/node_modules/ffmpeg-static/ffmpeg';
+  assert.equal(await ff.check({ platform: 'darwin', env: {}, skillDir: '/s/make-explainer', exists: () => false, which: () => false, isExecutable }), true);
 });

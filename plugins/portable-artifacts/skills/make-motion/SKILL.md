@@ -8,7 +8,7 @@ argument-hint: what to make, e.g. an 8s clip with Q3 revenue up 18% then a bar c
 
 You write one JSON file, `motion.json`. Scripts validate it, preview it in a browser and render it to MP4. You never write animation code, and you never edit generated output.
 
-`<skill-dir>` is the folder that contains this SKILL.md. Run every command from the project folder (where `motion.json` lives), using the full path to the scripts. Image paths resolve relative to the spec file. If the request is empty, ask what the video should say, how long it should be, and the size (default 1920x1080, 30 fps).
+Run every command from the project folder (where `motion.json` lives), using the full path to the scripts. Image paths resolve relative to the spec file. If the request is empty, ask what the video should say, how long it should be, and the size (default 1920x1080, 30 fps).
 
 **Audio is opt-in.** Add `audio` tracks only when the prompt asks for sound (music, soundtrack, voiceover, narration, "read it aloud", a sound effect) or the user confirms when you ask. Never add audio to a prompt that does not mention it. When the prompt is about sound but unclear (for example "make it feel polished" with an mp3 in the folder), ask one question before writing the spec. Music and sound effects are files the user supplies; a voiceover can be synthesised with `voice.mjs` (workflow step 2) when the prompt asks for narration without giving a file.
 

@@ -14,26 +14,20 @@ const made = [];
 after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 const tmp = (prefix) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); made.push(d); return d; };
 
-// A copy with only scripts/doctor.mjs and shared/: no node_modules, no sister skills.
+// A copy with only scripts/doctor.mjs, scripts/lib/requirements.mjs and shared/: no node_modules, no sister skills.
+// It proves the doctor imports nothing but node: built-ins and shared/.
 function freshCopy() {
   const copy = path.join(tmp('doctor-fresh-'), NAME);
   fs.mkdirSync(path.join(copy, 'scripts'), { recursive: true });
   fs.cpSync(path.join(SKILL, 'shared'), path.join(copy, 'shared'), { recursive: true });
+  fs.mkdirSync(path.join(copy, 'scripts/lib'), { recursive: true });
   fs.copyFileSync(path.join(SKILL, 'scripts/doctor.mjs'), path.join(copy, 'scripts/doctor.mjs'));
+  fs.copyFileSync(path.join(SKILL, 'scripts/lib/requirements.mjs'), path.join(copy, 'scripts/lib/requirements.mjs'));
   return copy;
 }
 
-// Import the wrapper for its exported requirementsFor; the import also runs one read-only diagnosis, whose output is swallowed.
-async function loadRequirements() {
-  const saved = { argv: process.argv, write: process.stdout.write, code: process.exitCode };
-  process.argv = [process.argv[0], 'doctor.mjs', '--json'];
-  process.stdout.write = () => true;
-  try {
-    return (await import(pathToFileURL(path.join(SKILL, 'scripts/doctor.mjs')).href)).requirementsFor;
-  } finally {
-    process.argv = saved.argv; process.stdout.write = saved.write; process.exitCode = saved.code;
-  }
-}
+// Side-effect free: importing it runs nothing.
+const loadRequirements = async () => (await import(pathToFileURL(path.join(SKILL, 'scripts/lib/requirements.mjs')).href)).requirementsFor;
 const idsOf = (reqs) => reqs.map((r) => r.id);
 
 test('runs on a fresh copy with no node_modules and reports it missing', () => {
@@ -60,20 +54,17 @@ test('--fix with an unknown id reports it instead of installing anything', () =>
   assert.match(r.stdout + r.stderr, /no-such-requirement/);
 });
 
-test('requirementsFor: check and ALL add the browser with a full npm ci; plain does not', async () => {
+test('requirementsFor: check and ALL add dev_deps and the browser; plain does not', async () => {
   const requirementsFor = await loadRequirements();
   const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
   assert.deepEqual(idsOf(requirementsFor(undefined)), ['node', 'node_modules']);
-  for (const t of ['check', ALL]) {
-    const reqs = requirementsFor(t);
-    assert.deepEqual(idsOf(reqs), ['node', 'node_modules', 'chromium']);
-    assert.match(reqs[1].fix({ platform: 'darwin', skillDir: '/s/x' }).auto[0].join(' '), /^npm ci --prefix /, 'playwright is a devDependency: no --omit=dev');
-  }
+  for (const t of ['check', ALL]) assert.deepEqual(idsOf(requirementsFor(t)), ['node', 'node_modules', 'dev_deps', 'chromium']);
 });
 
-test('--for check on a fresh copy asks for a full npm ci (playwright is a devDependency)', () => {
-  const nm = JSON.parse(run(freshCopy(), ['--json', '--for', 'check']).stdout).missing.find((m) => m.id === 'node_modules');
-  assert.doesNotMatch(nm.fix.auto, /--omit=dev/);
-  const plain = JSON.parse(run(freshCopy(), ['--json']).stdout).missing.find((m) => m.id === 'node_modules');
-  assert.match(plain.fix.auto, /--omit=dev/);
+test('--for check on a fresh copy asks for dev_deps; node_modules keeps --omit=dev so consent equals what --fix runs', () => {
+  const missing = JSON.parse(run(freshCopy(), ['--json', '--for', 'check']).stdout).missing;
+  assert.match(missing.find((m) => m.id === 'node_modules').fix.auto, /--omit=dev/);
+  const dev = missing.find((m) => m.id === 'dev_deps');
+  assert.doesNotMatch(dev.fix.auto, /--omit=dev/);
+  assert.match(dev.notes, /dev dependencies/);
 });

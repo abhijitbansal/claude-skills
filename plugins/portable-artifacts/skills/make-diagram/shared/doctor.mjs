@@ -63,6 +63,8 @@ export const cmdLine = (argv) => argv.map(cmdQuote).join(' ');
 const POSIX_SAFE = /^[A-Za-z0-9_@%+=:,./-]+$/;
 const posixQuote = (a) => (POSIX_SAFE.test(a) ? a : `'${a.replace(/'/g, "'\\''")}'`);
 const quoteFor = (platform) => (platform === 'win32' ? cmdQuote : posixQuote);
+// One argument, quoted for display/paste on this platform (cmd.exe rules on win32, POSIX single quotes elsewhere).
+export const quoteArg = (arg, platform = process.platform) => quoteFor(platform)(arg);
 
 // Steps joined with &&; a step with a cwd is shown as `cd <dir> && <cmd>`.
 // The cd target on win32 is a builtin's argument, never a command, so plain double
@@ -83,7 +85,7 @@ export function render(steps, platform) {
 const isExec = (ctx, p) => (ctx.isExecutable ? ctx.isExecutable(p) : ctx.exists(p));
 
 // Fix order: lower rank first. Others (unknown ids) rank last, keeping list order.
-const RANK = { node: 0, nodeModules: 1, sister: 2, ffmpeg: 3, chromium: 4, kokoro: 5, other: 6 };
+const RANK = { node: 0, nodeModules: 1, devDeps: 2, sister: 3, ffmpeg: 4, chromium: 5, kokoro: 6, other: 7 };
 
 export function nodeVersion(min = 20) {
   return {
@@ -109,6 +111,24 @@ export function nodeModules({ omitDev = true } = {}) {
     fix: (ctx) => {
       const argv = ['npm', 'ci', ...(omitDev ? ['--omit=dev'] : []), '--prefix', ctx.skillDir];
       return { auto: [argv], manual: manualAll(render([argv], ctx.platform)) };
+    },
+    needsSudo: () => false,
+  };
+}
+
+// check.mjs and the browser steps need playwright, a devDependency: reinstalls node_modules with dev packages.
+export function devDeps() {
+  return {
+    id: 'dev_deps',
+    rank: RANK.devDeps,
+    needsNodeModules: true,
+    why: 'check.mjs needs the dev tools (playwright)',
+    required: false,
+    size: '≈10–40 MB more than node_modules alone',
+    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'playwright')),
+    fix: (ctx) => {
+      const argv = ['npm', 'ci', '--prefix', ctx.skillDir];
+      return { auto: [argv], manual: manualAll(render([argv], ctx.platform)), notes: 'reinstalls node_modules with the dev dependencies included' };
     },
     needsSudo: () => false,
   };
@@ -220,8 +240,9 @@ export function sisterSkill(name) {
   };
 }
 
-export function ffmpeg() {
-  const staticBinary = (ctx) => pp(ctx).join(ctx.skillDir, 'node_modules', 'ffmpeg-static', ctx.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+// staticDir: the node_modules folder whose ffmpeg-static counts (default: this skill's; make-explainer points at make-motion's).
+export function ffmpeg({ staticDir } = {}) {
+  const staticBinary = (ctx) => pp(ctx).join(staticDir?.(ctx) ?? pp(ctx).join(ctx.skillDir, 'node_modules'), 'ffmpeg-static', ctx.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
   return {
     id: 'ffmpeg',
     rank: RANK.ffmpeg,
@@ -276,7 +297,9 @@ export function browser({ required = false } = {}) {
         auto: [argv],
         manual: manualAll(manual),
         notes: 'downloads ≈150 MB of Chromium; run after node_modules is installed',
-        failManual: ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) ? manual : `install node_modules first (doctor --fix node_modules), then run: ${manual}`,
+        failManual: ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'playwright'))
+          ? manual
+          : `playwright is not installed: run doctor --fix dev_deps (or node_modules for make-motion) first, then run: ${manual}`,
       };
       if (ctx.platform === 'linux') {
         out.notes += `; launching may need system libraries: ${libsHint(ctx)}`;
@@ -358,7 +381,7 @@ const spawnError = (r) => {
   return undefined;
 };
 
-// Requested ids run by rank (node, node_modules, sisters, ffmpeg, chromium, kokoro, others),
+// Requested ids run by rank (node, node_modules, dev_deps, sisters, ffmpeg, chromium, kokoro, others),
 // deduped. A failed node_modules skips the requirements that need it.
 export async function runFixes(ids, requirements, ctx, run = defaultRun) {
   const wanted = new Set(ids);

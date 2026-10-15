@@ -10,7 +10,7 @@ effort: low
 
 You write one JSON file, `diagram.json`: a title, a type, nodes with edges (or participants with messages), and usually one or two stories: named chapters of beats, each beat one hop along an edge with a title and a caption. Scripts lay it out with ELK, check the geometry and build one offline HTML page with a story player, an Explore panel and full screen. You never write coordinates, CSS, SVG or HTML.
 
-`<skill-dir>` is the folder that contains this SKILL.md. Run every command from the project folder (where `diagram.json` lives), using the full path to the scripts. If the request is empty, ask what to draw.
+Run every command from the project folder (where `diagram.json` lives), using the full path to the scripts. If the request is empty, ask what to draw.
 
 Run every step yourself, in this same turn. Do not end your reply after showing the JSON: keep going until validate prints `valid` and the HTML exists.
 

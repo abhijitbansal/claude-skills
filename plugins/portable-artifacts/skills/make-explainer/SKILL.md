@@ -10,7 +10,7 @@ effort: low
 
 You write one JSON file, `explainer.json`: a title and a list of typed sections. Scripts validate it, lint the prose and build one offline HTML page or slide deck. You never write HTML, CSS, SVG or script. Text fields take only markdown-lite: paragraphs, `**bold**`, `*italic*`, `` `code` ``, `[text](https://…)` and `- ` lists; anything else is shown as plain text.
 
-`<skill-dir>` is the folder that contains this SKILL.md. Run every command from the project folder (where `explainer.json` lives), using the full path to the scripts. If the request is empty, ask what to explain.
+Run every command from the project folder (where `explainer.json` lives), using the full path to the scripts. If the request is empty, ask what to explain.
 
 Run every step yourself, in this same turn. Do not end your reply after showing the JSON: keep going until validate prints `valid` and the HTML exists.
 

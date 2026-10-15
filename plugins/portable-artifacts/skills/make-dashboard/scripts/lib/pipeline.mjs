@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { quoteArg } from '../../shared/doctor.mjs';
 import { loadSpec, validateSpec } from './spec.mjs';
 import { runQueries, checkFields, QueryError } from './data.mjs';
 import { renderPage } from './html.mjs';
@@ -20,15 +21,13 @@ const VENDOR_FILES = {
   vegaEmbed: 'node_modules/vega-embed/build/vega-embed.min.js',
 };
 
-const shellQuote = (p) => (/^[A-Za-z0-9_@%+=:,./\\-]+$/.test(p) ? p : process.platform === 'win32' ? `"${p}"` : `'${p.replace(/'/g, "'\\''")}'`);
-
 function readVendor() {
   const out = {};
   for (const [key, rel] of Object.entries(VENDOR_FILES)) {
     try {
       out[key] = fs.readFileSync(path.join(SKILL, rel), 'utf8');
     } catch {
-      throw new UsageError(`missing ${rel}; run "npm ci" in ${SKILL} (doctor: node ${shellQuote(path.join(SKILL, 'scripts/doctor.mjs'))}, id node_modules)`);
+      throw new UsageError(`missing ${rel}; run npm ci --omit=dev --prefix ${quoteArg(SKILL)}`);
     }
   }
   return out;

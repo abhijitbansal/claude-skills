@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { quoteArg } from '../shared/doctor.mjs';
 
 const SKILL = fileURLToPath(new URL('..', import.meta.url));
 const NAME = 'make-dashboard';
@@ -14,26 +15,20 @@ const made = [];
 after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 const tmp = (prefix) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); made.push(d); return d; };
 
-// A copy with only scripts/doctor.mjs and shared/: no node_modules, no sister skills.
+// A copy with only scripts/doctor.mjs, scripts/lib/requirements.mjs and shared/: no node_modules, no sister skills.
+// It proves the doctor imports nothing but node: built-ins and shared/.
 function freshCopy() {
   const copy = path.join(tmp('doctor-fresh-'), NAME);
   fs.mkdirSync(path.join(copy, 'scripts'), { recursive: true });
   fs.cpSync(path.join(SKILL, 'shared'), path.join(copy, 'shared'), { recursive: true });
+  fs.mkdirSync(path.join(copy, 'scripts/lib'), { recursive: true });
   fs.copyFileSync(path.join(SKILL, 'scripts/doctor.mjs'), path.join(copy, 'scripts/doctor.mjs'));
+  fs.copyFileSync(path.join(SKILL, 'scripts/lib/requirements.mjs'), path.join(copy, 'scripts/lib/requirements.mjs'));
   return copy;
 }
 
-// Import the wrapper for its exported requirementsFor; the import also runs one read-only diagnosis, whose output is swallowed.
-async function loadRequirements() {
-  const saved = { argv: process.argv, write: process.stdout.write, code: process.exitCode };
-  process.argv = [process.argv[0], 'doctor.mjs', '--json'];
-  process.stdout.write = () => true;
-  try {
-    return (await import(pathToFileURL(path.join(SKILL, 'scripts/doctor.mjs')).href)).requirementsFor;
-  } finally {
-    process.argv = saved.argv; process.stdout.write = saved.write; process.exitCode = saved.code;
-  }
-}
+// Side-effect free: importing it runs nothing.
+const loadRequirements = async () => (await import(pathToFileURL(path.join(SKILL, 'scripts/lib/requirements.mjs')).href)).requirementsFor;
 const idsOf = (reqs) => reqs.map((r) => r.id);
 
 test('runs on a fresh copy with no node_modules and reports it missing', () => {
@@ -60,13 +55,14 @@ test('--fix with an unknown id reports it instead of installing anything', () =>
   assert.match(r.stdout + r.stderr, /no-such-requirement/);
 });
 
-test('requirementsFor: plain and ALL need no browser (nothing here uses one)', async () => {
-  const { requirementsFor } = { requirementsFor: await loadRequirements() };
+test('requirementsFor: plain and the real ALL need no browser (nothing here uses one)', async () => {
+  const requirementsFor = await loadRequirements();
+  const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
   assert.deepEqual(idsOf(requirementsFor()), ['node', 'node_modules']);
-  assert.deepEqual(idsOf(requirementsFor(Symbol('x'))), ['node', 'node_modules']);
+  assert.deepEqual(idsOf(requirementsFor(ALL)), ['node', 'node_modules']);
 });
 
-test('a build missing its vendored chart libraries names the doctor id', () => {
+test('a build missing its vendored chart libraries prints the npm ci command', () => {
   const dir = path.join(tmp('doctor build '), NAME);
   for (const d of ['scripts', 'shared', 'template', 'references', 'test']) fs.cpSync(path.join(SKILL, d), path.join(dir, d), { recursive: true });
   fs.copyFileSync(path.join(SKILL, 'package.json'), path.join(dir, 'package.json'));
@@ -82,6 +78,6 @@ test('a build missing its vendored chart libraries names the doctor id', () => {
   fs.copyFileSync(path.join(SKILL, 'references/examples/sales-overview.json'), spec);
   const r = spawnSync(process.execPath, [path.join(dir, 'scripts/build.mjs'), spec, '--out', path.join(proj, 'out')], { encoding: 'utf8' });
   assert.notEqual(r.status, 0);
-  const doctor = path.join(fs.realpathSync(dir), 'scripts/doctor.mjs');
-  assert.ok((r.stdout + r.stderr).includes(`(doctor: node '${doctor}', id node_modules)`), r.stdout + r.stderr);
+  assert.ok((r.stdout + r.stderr).includes(`run npm ci --omit=dev --prefix ${quoteArg(fs.realpathSync(dir))}`), r.stdout + r.stderr);
+  assert.doesNotMatch(r.stdout + r.stderr, /\(doctor:/);
 });
