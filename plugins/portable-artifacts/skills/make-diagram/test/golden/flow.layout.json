@@ -1,12 +1,98 @@
 {
-  "width": 286,
-  "height": 1034,
+  "width": 686,
+  "height": 1106,
+  "drawing": {
+    "x": 190,
+    "y": 30,
+    "width": 306,
+    "height": 1076
+  },
+  "legend": {
+    "x": 24.7,
+    "y": 24,
+    "width": 637.3,
+    "height": 20,
+    "items": [
+      {
+        "kind": "kind",
+        "name": "start",
+        "family": "bare",
+        "count": 1,
+        "dx": 0,
+        "width": 50.1
+      },
+      {
+        "kind": "kind",
+        "name": "io",
+        "family": "service",
+        "count": 1,
+        "dx": 66.1,
+        "width": 34.1
+      },
+      {
+        "kind": "kind",
+        "name": "decision",
+        "family": "decision",
+        "count": 1,
+        "dx": 116.2,
+        "width": 67.9
+      },
+      {
+        "kind": "kind",
+        "name": "step",
+        "family": "service",
+        "count": 1,
+        "dx": 200.1,
+        "width": 48
+      },
+      {
+        "kind": "kind",
+        "name": "wait",
+        "family": "service",
+        "count": 1,
+        "dx": 264.1,
+        "width": 47.4
+      },
+      {
+        "kind": "kind",
+        "name": "subprocess",
+        "family": "service",
+        "count": 1,
+        "dx": 327.5,
+        "width": 84.9
+      },
+      {
+        "kind": "kind",
+        "name": "end",
+        "family": "bare",
+        "count": 1,
+        "dx": 428.4,
+        "width": 44.2
+      },
+      {
+        "kind": "style",
+        "name": "solid",
+        "style": "solid",
+        "label": "call",
+        "dx": 488.6,
+        "width": 48.7
+      },
+      {
+        "kind": "style",
+        "name": "dashed",
+        "style": "dashed",
+        "label": "secondary",
+        "dx": 553.3,
+        "width": 84
+      }
+    ]
+  },
   "nodes": [
     {
       "id": "begin",
-      "x": 98.7,
-      "y": 24,
-      "width": 78,
+      "x": 298,
+      "y": 54,
+      "width": 80,
       "height": 40,
       "shape": "stadium",
       "lines": [
@@ -14,31 +100,35 @@
       ],
       "noteLine": null,
       "icon": null,
+      "emoji": null,
+      "typeLine": null,
       "tone": "neutral",
       "group": null,
       "layer": 0
     },
     {
       "id": "ask",
-      "x": 34.7,
-      "y": 136,
-      "width": 206,
-      "height": 40,
+      "x": 224,
+      "y": 166,
+      "width": 228,
+      "height": 54,
       "shape": "parallelogram",
       "lines": [
         "Enter email address"
       ],
       "noteLine": null,
       "icon": "lucide:arrow-right-left",
+      "emoji": null,
+      "typeLine": "IO",
       "tone": "neutral",
       "group": null,
       "layer": 1
     },
     {
       "id": "known",
-      "x": 24,
-      "y": 340,
-      "width": 238,
+      "x": 214,
+      "y": 384,
+      "width": 258,
       "height": 56,
       "shape": "diamond",
       "lines": [
@@ -46,15 +136,17 @@
       ],
       "noteLine": null,
       "icon": null,
+      "emoji": null,
+      "typeLine": null,
       "tone": "neutral",
       "group": null,
       "layer": 2
     },
     {
       "id": "send",
-      "x": 80,
-      "y": 605,
-      "width": 126,
+      "x": 277,
+      "y": 649,
+      "width": 132,
       "height": 40,
       "shape": "rect",
       "lines": [
@@ -62,47 +154,53 @@
       ],
       "noteLine": null,
       "icon": null,
+      "emoji": null,
+      "typeLine": null,
       "tone": "neutral",
       "group": "email",
       "layer": 3
     },
     {
       "id": "wait",
-      "x": 74,
-      "y": 717,
-      "width": 138,
-      "height": 40,
+      "x": 263,
+      "y": 761,
+      "width": 160,
+      "height": 54,
       "shape": "rounded-rect",
       "lines": [
         "Wait for click"
       ],
       "noteLine": null,
       "icon": "lucide:clock",
+      "emoji": null,
+      "typeLine": "WAIT",
       "tone": "neutral",
       "group": "email",
       "layer": 4
     },
     {
       "id": "check",
-      "x": 69,
-      "y": 858,
-      "width": 148,
-      "height": 40,
+      "x": 259,
+      "y": 916,
+      "width": 168,
+      "height": 54,
       "shape": "double-bar-rect",
       "lines": [
         "Verify token"
       ],
       "noteLine": null,
       "icon": "lucide:workflow",
+      "emoji": null,
+      "typeLine": "SUBPROCESS",
       "tone": "neutral",
       "group": null,
       "layer": 5
     },
     {
       "id": "done",
-      "x": 59,
-      "y": 970,
-      "width": 168,
+      "x": 255,
+      "y": 1042,
+      "width": 176,
       "height": 40,
       "shape": "stadium",
       "lines": [
@@ -110,6 +208,8 @@
       ],
       "noteLine": null,
       "icon": null,
+      "emoji": null,
+      "typeLine": null,
       "tone": "neutral",
       "group": null,
       "layer": 6
@@ -118,10 +218,10 @@
   "groups": [
     {
       "id": "email",
-      "x": 50,
-      "y": 565,
-      "width": 186,
-      "height": 216,
+      "x": 239,
+      "y": 609,
+      "width": 208,
+      "height": 230,
       "label": "Email",
       "depth": 0,
       "parent": null
@@ -134,12 +234,12 @@
       "to": "ask",
       "points": [
         {
-          "x": 137.7,
-          "y": 64
+          "x": 338,
+          "y": 94
         },
         {
-          "x": 137.7,
-          "y": 136
+          "x": 338,
+          "y": 166
         }
       ],
       "style": "solid",
@@ -151,20 +251,20 @@
       "to": "known",
       "points": [
         {
-          "x": 172,
-          "y": 176
+          "x": 376,
+          "y": 220
         },
         {
-          "x": 172,
-          "y": 292
+          "x": 376,
+          "y": 336
         },
         {
-          "x": 182.7,
-          "y": 292
+          "x": 386,
+          "y": 336
         },
         {
-          "x": 182.7,
-          "y": 340
+          "x": 386,
+          "y": 384
         }
       ],
       "style": "solid",
@@ -176,21 +276,21 @@
       "to": "send",
       "points": [
         {
-          "x": 143,
-          "y": 396
+          "x": 343,
+          "y": 440
         },
         {
-          "x": 143,
-          "y": 605
+          "x": 343,
+          "y": 649
         }
       ],
       "style": "solid",
       "both": false,
       "label": {
         "text": "yes",
-        "x": 105,
-        "y": 468,
-        "width": 32,
+        "x": 301,
+        "y": 512,
+        "width": 36,
         "height": 20
       }
     },
@@ -200,21 +300,21 @@
       "to": "ask",
       "points": [
         {
-          "x": 103.3,
-          "y": 340
+          "x": 300,
+          "y": 384
         },
         {
-          "x": 103.3,
-          "y": 176
+          "x": 300,
+          "y": 220
         }
       ],
       "style": "dashed",
       "both": false,
       "label": {
         "text": "no",
-        "x": 71.3,
-        "y": 248,
-        "width": 26,
+        "x": 264,
+        "y": 292,
+        "width": 30,
         "height": 20
       }
     },
@@ -224,12 +324,12 @@
       "to": "wait",
       "points": [
         {
-          "x": 143,
-          "y": 645
+          "x": 343,
+          "y": 689
         },
         {
-          "x": 143,
-          "y": 717
+          "x": 343,
+          "y": 761
         }
       ],
       "style": "solid",
@@ -241,12 +341,12 @@
       "to": "check",
       "points": [
         {
-          "x": 143,
-          "y": 757
+          "x": 343,
+          "y": 815
         },
         {
-          "x": 143,
-          "y": 858
+          "x": 343,
+          "y": 916
         }
       ],
       "style": "solid",
@@ -258,12 +358,12 @@
       "to": "done",
       "points": [
         {
-          "x": 143,
-          "y": 898
+          "x": 343,
+          "y": 970
         },
         {
-          "x": 143,
-          "y": 970
+          "x": 343,
+          "y": 1042
         }
       ],
       "style": "solid",

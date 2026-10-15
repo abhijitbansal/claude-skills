@@ -24,6 +24,7 @@ by any agent that can run shell commands.
   spec or the data and reloads the page.
 - **Refresh is a rebuild**: rerun `build.mjs` (from cron, launchd or by hand).
   No LLM is involved.
+- **Stamped**: a favicon, an icon theme toggle and a provenance footer beside the refresh time (model, effort, agent from `generatedBy` or `--model`/`--effort`/`--agent`; "not reported" when unknown). Put `generatedBy` in `dashboard.json`: `serve.mjs --watch` rebuilds from the spec and takes no such flags. `scripts/doctor.mjs` reports anything missing before the first build.
 
 > Agents: the instructions you follow are in [`SKILL.md`](SKILL.md). This
 > README is for people.
@@ -32,12 +33,13 @@ by any agent that can run shell commands.
 
 ```bash
 npm ci --omit=dev --prefix make-dashboard   # one-time, from the folder that contains make-dashboard
+node make-dashboard/scripts/doctor.mjs      # optional: what is missing, and how to fix it
 
 SKILL=path/to/make-dashboard
 node $SKILL/scripts/inspect.mjs data/sales.csv          # columns, types, 5 sample rows
 # … write dashboard.json (or let your agent write it) …
 node $SKILL/scripts/validate.mjs dashboard.json         # prints `valid`, or path-precise errors
-node $SKILL/scripts/build.mjs dashboard.json            # writes dist/index.html
+node $SKILL/scripts/build.mjs dashboard.json            # writes dist/index.html (add --model/--effort/--agent to stamp it)
 node $SKILL/scripts/serve.mjs dist --open               # or just open dist/index.html
 node $SKILL/scripts/serve.mjs --watch dashboard.json --open   # live: rebuilds on save
 ```
@@ -85,7 +87,8 @@ there are working specs in [`references/examples/`](references/examples/).
 |---|---|---|
 | `inspect.mjs <file>` | Column names, types and 5 sample rows of a csv/parquet/json file | `--type`, `--json`, `--allow-outside` |
 | `validate.mjs <spec>` | Schema, references, SQL guard; binds every query against the real data and compiles every chart. `valid` means buildable | `--json`, `--timeout <s>`, `--allow-outside` |
-| `build.mjs <spec>` | Runs the queries and writes `dist/index.html` (next to the spec). Prints the exact `serve:` command | `--out <dir>`, `--timeout <s>` (default 30), `--theme <name>`, `--allow-outside`, `--json` |
+| `build.mjs <spec>` | Runs the queries and writes `dist/index.html` (next to the spec). Prints the exact `serve:` command | `--out <dir>`, `--timeout <s>` (default 30), `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--allow-outside`, `--json` |
+| `doctor.mjs` | What the skill needs and is missing, with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci` | `--json`, `--for <spec.json>`, `--fix <id[,id]>` |
 | `serve.mjs [dir]` | Serves the built page on `127.0.0.1` | `--port <n>`, `--open` |
 | `serve.mjs --watch <spec>` | Builds, serves and live-reloads; rebuilds on save of the spec or file sources. Has a *Rebuild now* button. Postgres/MySQL need `--interval` | `--interval <5..86400 s>`, `--theme <name>`, `--port`, `--open`, `--allow-outside`, `--timeout` |
 | `setup.mjs [spec]` | One-time `INSTALL` of the DuckDB extensions for sqlite/postgres/mysql, so builds stay offline | — |
@@ -147,5 +150,5 @@ The agent writes the SQL, so it is treated as untrusted:
 
 Node.js ≥ 20. The dependencies, pinned by the lockfile, are DuckDB (MIT),
 Vega, Vega-Lite and vega-embed (BSD-3-Clause), and Ajv (MIT). The page embeds
-latin subsets of IBM Plex Sans, IBM Plex Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible, JetBrains Mono
+latin subsets of Geist, Geist Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible
 (OFL-1.1, via Fontsource); the licence texts ship in `shared/fonts/LICENSES/`.

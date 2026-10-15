@@ -50,7 +50,20 @@ test('warnings are printed but the exit code stays 0', () => {
   withSpec(doc([{ type: 'text', text: Array(130).fill('word').join(' ') }]), (file) => {
     const r = run([file]);
     assert.equal(r.status, 0);
-    assert.equal(r.stdout, `sections[0].text: warning: paragraph is 130 words; the limit is 120 — split it or cut it\n${file}: valid (1 warning)\n`);
+    assert.equal(r.stdout, [
+      'sections[0].text: warning: paragraph is 130 words; keep it to 60 → split it, or turn it into cards or steps',
+      'sections[0]: warning: text section is 130 words; keep it to 120 → split it into sections, or turn it into cards or steps',
+      `${file}: valid (2 warnings)`,
+      '',
+    ].join('\n'));
+  });
+});
+
+test('a 9-word title is a warning, not an error', () => {
+  withSpec(doc([{ type: 'text', title: 'one two three four five six seven eight nine', text: 'x' }]), (file) => {
+    const r = run([file]);
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, /^sections\[0\]\.title: warning: title is 9 words; keep it to 8/);
   });
 });
 
@@ -60,7 +73,7 @@ test('errors and warnings together exit 1 and count both', () => {
     assert.equal(r.status, 1);
     assert.match(r.stdout, /banned phrase "leverage"/);
     assert.match(r.stdout, /warning: paragraph is 131 words/);
-    assert.match(r.stdout, /explainer\.json: 1 error, 1 warning\n$/);
+    assert.match(r.stdout, /explainer\.json: 1 error, 2 warnings\n$/);
   });
 });
 
@@ -90,7 +103,10 @@ test('--json prints one machine-readable result line, warnings included', () => 
     assert.deepEqual(JSON.parse(r.stdout), {
       ok: true,
       errors: [],
-      warnings: [{ path: 'sections[0].text', message: 'paragraph is 130 words; the limit is 120 — split it or cut it' }],
+      warnings: [
+        { path: 'sections[0].text', message: 'paragraph is 130 words; keep it to 60 → split it, or turn it into cards or steps' },
+        { path: 'sections[0]', message: 'text section is 130 words; keep it to 120 → split it into sections, or turn it into cards or steps' },
+      ],
     });
   });
 });

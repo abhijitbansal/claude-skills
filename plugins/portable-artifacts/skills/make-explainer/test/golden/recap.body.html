@@ -1,6 +1,6 @@
 <body class="has-toc">
 <a class="skip" href="#content">Skip to content</a>
-<header class="masthead">
+<header class="hero">
 <div class="mast-text">
 <h1>Diagram sections: make-diagram figures inside an explainer</h1>
 <p class="subtitle">What the branch adds, how a figure gets onto the page, and what to check by hand</p>
@@ -11,31 +11,11 @@
 <div class="m-status"><dt>Status</dt><dd>Ready for review</dd></div>
 </dl>
 </div>
-<button type="button" class="theme-toggle" data-theme-toggle aria-label="Theme: Auto. Change theme">Theme: Auto</button>
-<script>
-// A stored theme was applied in <head>; label the toggle now, before the large scripts parse.
-(function () { var t = document.documentElement.getAttribute('data-theme'), b = document.querySelector('[data-theme-toggle]'); if (t && b) { var l = 'Theme: ' + t.charAt(0).toUpperCase() + t.slice(1); b.textContent = l; b.setAttribute('aria-label', l + '. Change theme'); } })();
-</script>
-</header>
-<div class="layout">
-<nav class="toc" aria-label="Contents">
-<details open>
-<summary>Contents</summary>
-<ol>
-<li><a href="#verdict">An explainer can now carry a live diagram, not a screenshot of one</a></li>
-<li><a href="#in-numbers">Two commits added about 1,100 lines, more than half of them tests</a></li>
-<li><a href="#build-path">A spec becomes a figure in four steps</a></li>
-<li><a href="#present-is-the-only-place-the-keyboard-s">Present is the only place the keyboard shortcuts live</a></li>
-<li><a href="#changed-files">Most of the change is the viewer, its styles and the section renderer</a></li>
-<li><a href="#added-lines">The viewer script is the largest addition</a></li>
-<li><a href="#commits">The fix followed the feature the same day</a></li>
-<li><a href="#what-could-still-bite">What could still bite</a></li>
-</ol>
-</details>
-</nav>
-<main id="content" class="sections">
-<section class="sec sec-tldr" id="verdict" aria-labelledby="verdict-title">
-<h2 class="sec-title" id="verdict-title">An explainer can now carry a live diagram, not a screenshot of one<a class="anchor" href="#verdict" aria-label="Link to this section: An explainer can now carry a live diagram, not a screenshot of one">#</a></h2>
+<button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><span class="pa-ti pa-ti-auto"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-light"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-dark"><svg data-sibling-svg></svg></span></button>
+<script>/* shared theme toggle */</script>
+<div class="hero-tldr tone-good" id="verdict" role="region" aria-labelledby="verdict-title">
+<p class="sec-eyebrow pa-label">The verdict</p>
+<h2 class="hero-tldr-title sr-only" id="verdict-title">Explainers now carry live diagrams, not screenshots</h2>
 <div class="tldr tone-good">
 <p class="tldr-tone"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span></p>
 <p class="lead">A diagram section takes a make-diagram spec, inline or from a file, and renders it as an SVG you can hover, with a Present button for a step-by-step walkthrough.</p>
@@ -45,9 +25,28 @@
 <li>In a slide deck, the arrow keys belong to the overlay while it is open.</li>
 </ul>
 </div>
-</section>
-<section class="sec sec-kpis" id="in-numbers" aria-labelledby="in-numbers-title">
-<h2 class="sec-title" id="in-numbers-title">Two commits added about 1,100 lines, more than half of them tests<a class="anchor" href="#in-numbers" aria-label="Link to this section: Two commits added about 1,100 lines, more than half of them tests">#</a></h2>
+</div>
+</header>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+<details open>
+<summary>Contents</summary>
+<ol>
+<li><a href="#verdict">The verdict</a></li>
+<li><a href="#in-numbers">In numbers</a></li>
+<li><a href="#build-path">Build path</a></li>
+<li><a href="#keyboard-shortcuts-live-only-in-present">Present mode</a></li>
+<li><a href="#changed-files">Changed files</a></li>
+<li><a href="#added-lines">Added lines</a></li>
+<li><a href="#commits">Commits</a></li>
+<li><a href="#what-could-still-bite">Risks</a></li>
+</ol>
+</details>
+</nav>
+<main id="content" class="sections">
+<section class="sec sec-kpis sec-alt" id="in-numbers" aria-labelledby="in-numbers-title">
+<p class="sec-eyebrow pa-label">In numbers</p>
+<h2 class="sec-title" id="in-numbers-title">1,107 lines added, over half of them tests<a class="anchor" href="#in-numbers" aria-label="Link to this section: 1,107 lines added, over half of them tests">#</a></h2>
 <dl class="kpis">
 <div class="kpi tone-neutral"><dt>Commits</dt><dd class="kpi-value">2</dd></div>
 <div class="kpi tone-neutral"><dt>Files changed</dt><dd class="kpi-value">25</dd></div>
@@ -57,30 +56,59 @@
 </dl>
 </section>
 <section class="sec sec-diagram" id="build-path" aria-labelledby="build-path-title">
+<p class="sec-eyebrow pa-label">Build path</p>
 <h2 class="sec-title" id="build-path-title">A spec becomes a figure in four steps<a class="anchor" href="#build-path" aria-label="Link to this section: A spec becomes a figure in four steps">#</a></h2>
-<figure class="dg" data-diagram style="--dg-w: 271; --dg-h: 692">
+<figure class="dg" data-diagram style="--dg-w: 475; --dg-h: 750">
 <div class="dg-slot" data-dg-slot data-dg-label="Diagram: From spec to page">
 <div class="dg-stage" data-dg-stage><svg data-sibling-svg></svg></div>
 </div>
 <button type="button" class="btn dg-present" data-dg-present aria-haspopup="dialog" aria-label="Present diagram: From spec to page">Present</button>
 <dialog class="dg-overlay" data-dg-dialog aria-label="Diagram presentation: From spec to page">
-<div class="dg-top"><span class="dg-top-title">From spec to page</span><button type="button" class="btn" data-dg-close>Close <span class="dg-key" aria-hidden="true">Esc</span></button></div>
-<div class="dg-body" data-dg-body></div>
-<div class="dg-cap" data-pa-caption hidden>
-<div class="dg-cap-text" aria-live="polite">
-<p class="dg-cap-count" data-pa-count></p>
-<p class="dg-cap-title" data-pa-title></p>
-<p class="dg-cap-note" data-pa-note hidden></p>
+<div class="dg-fs" data-dg-root>
+<div class="dg-top">
+<span class="dg-top-title">From spec to page</span>
+<span class="dg-tools">
+<span class="dg-modes" role="group" aria-label="Mode"><button type="button" class="btn" data-pa-mode="play" aria-pressed="true" title="Play the story (P)">Play story</button><button type="button" class="btn" data-pa-mode="explore" aria-pressed="false" title="Explore the diagram (E)">Explore</button></span>
+<input type="search" class="dg-find" data-pa-find placeholder="Find a node" aria-label="Find a node" aria-keyshortcuts="/" autocomplete="off" spellcheck="false">
+<button type="button" class="btn" data-pa-full aria-pressed="false" title="Full screen (F)">Full screen</button>
+<button type="button" class="btn" data-dg-close>Close <span class="dg-key" aria-hidden="true">Esc</span></button>
+</span>
 </div>
-<div class="dg-cap-nav"><button type="button" class="btn" data-pa-prev>Back</button><button type="button" class="btn" data-pa-next>Next</button></div>
+<div class="dg-chapters" data-pa-chapters role="group" aria-label="Chapters" hidden></div>
+<div class="dg-found" data-pa-found role="group" aria-label="Matching nodes" aria-live="polite" hidden></div>
+<div class="dg-main">
+<div class="dg-body" data-dg-body><div class="dg-tip" data-pa-tip role="tooltip" hidden></div></div>
+<aside class="dg-panel" data-pa-panel aria-label="Details">
+<div class="dg-panel-head"><h2 class="dg-panel-title" data-pa-panel-title tabindex="-1" aria-live="polite">Map</h2><button type="button" class="btn" data-pa-panel-close aria-label="Close details (Esc)" hidden>Close</button></div>
+<div class="dg-panel-empty" data-pa-empty><div class="dg-counts" data-pa-tally role="list" aria-label="What the map holds"></div><p class="dg-hint">Click a node or edge. Shift-click a second node to trace a path.</p></div>
+<div class="dg-panel-body" data-pa-panel-body hidden></div>
+</aside>
+</div>
+<div class="dg-cap" data-pa-caption aria-label="Story player" hidden>
+<p class="dg-cap-line" data-pa-line aria-live="polite"></p>
+<div class="dg-beats" data-pa-beats role="group" aria-label="Beats"></div>
+<div class="dg-transport" role="group" aria-label="Transport">
+<button type="button" class="btn" data-pa-prev-chapter title="Previous chapter">Prev chapter</button>
+<button type="button" class="btn" data-pa-prev title="Previous beat (Left)">Prev</button>
+<button type="button" class="btn" data-pa-play title="Play or pause (Space)">Play</button>
+<button type="button" class="btn" data-pa-next title="Next beat (Right)">Next</button>
+<button type="button" class="btn" data-pa-next-chapter title="Next chapter">Next chapter</button>
+<input type="range" class="dg-scrub" data-pa-scrub min="0" max="0" step="1" value="0" aria-label="Beat" list="dg_2-ticks">
+<datalist id="dg_2-ticks" data-pa-ticks></datalist>
+<span class="dg-cap-count">Beat <span data-pa-count></span></span>
+<button type="button" class="btn" data-pa-speed aria-label="Speed 1×; change speed" title="Playback speed">1×</button>
+<button type="button" class="btn" data-pa-loop aria-pressed="false" title="Loop the story">Loop</button>
+</div>
+</div>
 </div>
 </dialog>
-<script type="application/json" data-dg-data>{"type":"flow","title":"From spec to page","stem":"from-spec-to-page","animate":false,"width":271.3,"height":692,"steps":[{"title":"The section holds the spec","note":"Either an inline object or a .json file next to the explainer.","show":["spec"]},{"title":"Validation runs first","note":"Errors come back as sections[i].diagram… so the fix is easy to find.","show":["check"],"highlight":["check"]},{"title":"make-diagram draws the SVG","note":"Ids are prefixed per diagram, so two figures never clash.","show":["build"],"focus":["check","build"]},{"title":"The page builder embeds it","note":"The stylesheet and the viewer script are included once.","show":["page","file"]}],"ids":["spec","check","build","page","file"],"adjacency":{"spec":{"nodes":["check"],"edges":["edge-0","edge-4"]},"check":{"nodes":["spec","build"],"edges":["edge-0","edge-1","edge-4"]},"build":{"nodes":["check","page"],"edges":["edge-1","edge-2"]},"page":{"nodes":["build","file"],"edges":["edge-2","edge-3"]},"file":{"nodes":["page"],"edges":["edge-3"]}},"edges":{"edge-0":["spec","check"],"edge-1":["check","build"],"edge-2":["build","page"],"edge-3":["page","file"],"edge-4":["check","spec"]},"parents":{},"boxes":{"spec":[45.3,24,202,56],"check":[88,244,138,56],"build":[73,372,168,56],"page":[88,500,138,56],"file":[89,628,136,40]},"frames":[]}</script>
+<script type="application/json" data-dg-data>{"type":"flow","title":"From spec to page","stem":"from-spec-to-page","animate":false,"width":475,"height":750,"drawing":[88.5,30,298,720],"steps":[{"title":"The section holds the spec","note":"Either an inline object or a .json file next to the explainer.","show":["spec"]},{"title":"Validation runs first","note":"Errors come back as sections[i].diagram… so the fix is easy to find.","show":["check"],"highlight":["check"]},{"title":"make-diagram draws the SVG","note":"Ids are prefixed per diagram, so two figures never clash.","show":["build"],"focus":["check","build"]},{"title":"The page builder embeds it","note":"The stylesheet and the viewer script are included once.","show":["page","file"]}],"ids":["spec","check","build","page","file"],"adjacency":{"spec":{"nodes":["check"],"edges":["edge-0","edge-4"]},"check":{"nodes":["spec","build"],"edges":["edge-0","edge-1","edge-4"]},"build":{"nodes":["check","page"],"edges":["edge-1","edge-2"]},"page":{"nodes":["build","file"],"edges":["edge-2","edge-3"]},"file":{"nodes":["page"],"edges":["edge-3"]}},"edges":{"edge-0":["spec","check"],"edge-1":["check","build"],"edge-2":["build","page"],"edge-3":["page","file"],"edge-4":["check","spec"]},"parents":{},"boxes":{"spec":[120.5,54,242,70],"check":[183.2,288,148,56],"build":[159.2,416,196,70],"page":[180.2,558,154,56],"file":[186.2,686,142,40]},"frames":[],"autoplay":false,"beats":[{"kind":"step","chapter":0,"title":"The section holds the spec","edge":null,"reverse":false,"ids":[],"reveal":["spec"],"highlight":[],"caption":"Either an inline object or a .json file next to the explainer."},{"kind":"step","chapter":0,"title":"Validation runs first","edge":null,"reverse":false,"ids":[],"reveal":["check"],"highlight":["check"],"caption":"Errors come back as sections[i].diagram… so the fix is easy to find."},{"kind":"step","chapter":0,"title":"make-diagram draws the SVG","edge":null,"reverse":false,"ids":["check","build"],"reveal":["build"],"highlight":[],"caption":"Ids are prefixed per diagram, so two figures never clash."},{"kind":"step","chapter":0,"title":"The page builder embeds it","edge":null,"reverse":false,"ids":[],"reveal":["page","file"],"highlight":[],"caption":"The stylesheet and the viewer script are included once."}],"chapters":[{"id":"walkthrough","title":"Walkthrough","start":0,"end":4}],"info":{"spec":{"label":"Explainer JSON","kind":"io","note":"diagram: object or path"},"check":{"label":"Validate","kind":"step","note":"make-diagram rules"},"build":{"label":"buildDiagram","kind":"subprocess","note":"SVG and step data"},"page":{"label":"Page builder","kind":"step","note":"css and viewer once"},"file":{"label":"One HTML file","kind":"end"},"edge-0":{"style":"solid"},"edge-1":{"style":"solid"},"edge-2":{"style":"solid"},"edge-3":{"style":"solid"},"edge-4":{"style":"dashed","label":"errors with paths"}},"directed":{"spec":["edge-0"],"check":["edge-1","edge-4"],"build":["edge-2"],"page":["edge-3"]}}</script>
 <figcaption>Hover a box to trace its links. Present walks through the four steps.</figcaption>
 </figure>
 </section>
-<section class="sec sec-text" id="present-is-the-only-place-the-keyboard-s" aria-labelledby="present-is-the-only-place-the-keyboard-s-title">
-<h2 class="sec-title" id="present-is-the-only-place-the-keyboard-s-title">Present is the only place the keyboard shortcuts live<a class="anchor" href="#present-is-the-only-place-the-keyboard-s" aria-label="Link to this section: Present is the only place the keyboard shortcuts live">#</a></h2>
+<section class="sec sec-text" id="keyboard-shortcuts-live-only-in-present" aria-labelledby="keyboard-shortcuts-live-only-in-present-title">
+<p class="sec-eyebrow pa-label">Present mode</p>
+<h2 class="sec-title" id="keyboard-shortcuts-live-only-in-present-title">Keyboard shortcuts live only in Present mode<a class="anchor" href="#keyboard-shortcuts-live-only-in-present" aria-label="Link to this section: Keyboard shortcuts live only in Present mode">#</a></h2>
 <div class="prose">
 <p>Inline, a figure traces links on hover or focus and never captures the mouse wheel, so the page keeps scrolling. <strong>Present</strong> opens a full-screen overlay with Back, Next and Close.</p>
 <p>Inside it the viewer&#39;s shortcuts apply: arrows or Space step forward and back, <code>Esc</code> closes and focus returns to the Present button. In a deck, the slide keys stay quiet until the overlay is closed.</p>
@@ -88,7 +116,8 @@
 </div>
 </section>
 <section class="sec sec-files" id="changed-files" aria-labelledby="changed-files-title">
-<h2 class="sec-title" id="changed-files-title">Most of the change is the viewer, its styles and the section renderer<a class="anchor" href="#changed-files" aria-label="Link to this section: Most of the change is the viewer, its styles and the section renderer">#</a></h2>
+<p class="sec-eyebrow pa-label">Changed files</p>
+<h2 class="sec-title" id="changed-files-title">Most changes land in the viewer and renderer<a class="anchor" href="#changed-files" aria-label="Link to this section: Most changes land in the viewer and renderer">#</a></h2>
 <div class="files">
 <p class="files-sum">14 files · 5 added, 9 modified · +385 −11 lines</p>
 <ul class="tree">
@@ -180,7 +209,8 @@
 </ul>
 </div>
 </section>
-<section class="sec sec-chart" id="added-lines" aria-labelledby="added-lines-title">
+<section class="sec sec-chart sec-alt" id="added-lines" aria-labelledby="added-lines-title">
+<p class="sec-eyebrow pa-label">Added lines</p>
 <h2 class="sec-title" id="added-lines-title">The viewer script is the largest addition<a class="anchor" href="#added-lines" aria-label="Link to this section: The viewer script is the largest addition">#</a></h2>
 <figure class="ch">
 <div class="ch-card" role="img" aria-label="Bar chart of added by file. The plotted values are in the data table below.">
@@ -213,6 +243,7 @@
 </figure>
 </section>
 <section class="sec sec-timeline" id="commits" aria-labelledby="commits-title">
+<p class="sec-eyebrow pa-label">Commits</p>
 <h2 class="sec-title" id="commits-title">The fix followed the feature the same day<a class="anchor" href="#commits" aria-label="Link to this section: The fix followed the feature the same day">#</a></h2>
 <ol class="timeline">
 <li class="tl-item">
@@ -228,6 +259,7 @@
 </ol>
 </section>
 <section class="sec sec-risks" id="what-could-still-bite" aria-labelledby="what-could-still-bite-title">
+<p class="sec-eyebrow pa-label">Risks</p>
 <h2 class="sec-title" id="what-could-still-bite-title">What could still bite<a class="anchor" href="#what-could-still-bite" aria-label="Link to this section: What could still bite">#</a></h2>
 <div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
 <table>

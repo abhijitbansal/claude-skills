@@ -11,7 +11,7 @@ import { launchBrowser } from '../../scripts/lib/browser.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const BUILD = path.join(ROOT, 'scripts/build.mjs');
 
-export const EXAMPLES = ['architecture', 'flow', 'state', 'sequence'];
+export const EXAMPLES = ['architecture', 'flow', 'state', 'sequence', 'story'];
 export const example = (name) => JSON.parse(fs.readFileSync(path.join(ROOT, `references/examples/${name}.diagram.json`), 'utf8'));
 
 export { launchBrowser };

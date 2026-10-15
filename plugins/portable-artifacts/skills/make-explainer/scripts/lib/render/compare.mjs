@@ -1,5 +1,8 @@
 import { inline, toneChip, toneClass } from './ui.mjs';
 
+// A visual section: every second one on a page sits on the surface band.
+export const band = true;
+
 export function render(section) {
   const n = section.columns.length === 3 ? 3 : 2;
   const cols = section.columns.map((c) => `<div class="cmp-col ${toneClass(c.tone)}">

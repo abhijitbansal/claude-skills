@@ -11,6 +11,9 @@ function icon(ref, icons) {
   return `<svg class="card-icon" viewBox="${esc(viewBox)}" width="22" height="22" ${paint} aria-hidden="true" focusable="false">${markup}</svg>`;
 }
 
+// A visual section: every second one on a page sits on the surface band.
+export const band = true;
+
 export function render(section, ctx) {
   const cols = COLUMNS.includes(section.columns) ? ` cols-${section.columns}` : '';
   const cards = section.items.map((c) => `<li class="card ${toneClass(c.tone)}">

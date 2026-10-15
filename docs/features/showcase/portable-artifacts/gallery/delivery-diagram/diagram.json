@@ -1,0 +1,63 @@
+{
+  "title": "Food delivery: one order",
+  "subtitle": "One order from the customer's tap to the courier's drop-off, across three lanes",
+  "type": "architecture",
+  "theme": "blueprint",
+  "direction": "right",
+  "autoplay": true,
+  "groups": [
+    { "id": "customer_side", "label": "Customer side" },
+    { "id": "platform", "label": "Platform" },
+    { "id": "partners", "label": "Partners" }
+  ],
+  "nodes": [
+    { "id": "customer", "label": "Customer", "kind": "user", "group": "customer_side", "emoji": "🧑", "detail": "Places the order in the app and later receives the food from the courier." },
+    { "id": "mobile", "label": "Mobile app", "kind": "client", "group": "customer_side", "emoji": "📱", "detail": "Collects the basket and payment method, then sends the order to the platform." },
+    { "id": "gateway", "label": "API gateway", "kind": "gateway", "group": "platform", "emoji": "🚪", "detail": "Single entry point. Checks the session and rate limits, then forwards the order to the orders service." },
+    { "id": "orders", "label": "Orders service", "kind": "service", "group": "platform", "emoji": "🧾", "detail": "Owns the order lifecycle from placed to delivered and talks to payments and the restaurant." },
+    { "id": "payments", "label": "Payments service", "kind": "service", "group": "platform", "emoji": "💳", "detail": "Creates the charge with the card provider and reports approved or declined back to orders." },
+    { "id": "db", "label": "Orders database", "kind": "database", "group": "platform", "emoji": "🐘", "detail": "Postgres. Stores every order and its state so nothing is lost if a service restarts." },
+    { "id": "queue", "label": "Event queue", "kind": "queue", "group": "platform", "emoji": "📨", "detail": "Carries order events to the partner apps without making the orders service wait for them." },
+    { "id": "card", "label": "Card provider", "kind": "external", "group": "partners", "emoji": "🏦", "detail": "External payment network. It approves or declines each charge." },
+    { "id": "tablet", "label": "Restaurant tablet", "kind": "client", "group": "partners", "emoji": "🍕", "detail": "Kitchen screen. The restaurant accepts or rejects each incoming order here." },
+    { "id": "courier", "label": "Courier app", "kind": "client", "group": "partners", "emoji": "🛵", "detail": "Shows the courier the pickup and the drop-off, and marks the order delivered." }
+  ],
+  "edges": [
+    { "id": "tap", "from": "customer", "to": "mobile", "label": "taps place order" },
+    { "id": "post", "from": "mobile", "to": "gateway", "label": "posts order" },
+    { "id": "route", "from": "gateway", "to": "orders", "label": "routes order" },
+    { "id": "charge", "from": "orders", "to": "payments", "label": "requests charge" },
+    { "id": "card-charge", "from": "payments", "to": "card", "label": "charges card" },
+    { "id": "card-reply", "from": "card", "to": "payments", "label": "returns approval", "style": "dashed" },
+    { "id": "paid", "from": "payments", "to": "orders", "label": "confirms payment", "style": "dashed" },
+    { "id": "write", "from": "orders", "to": "db", "label": "writes order" },
+    { "id": "publish", "from": "orders", "to": "queue", "label": "publishes order event", "style": "async" },
+    { "id": "accept", "from": "tablet", "to": "orders", "label": "accepts order" },
+    { "id": "offer", "from": "queue", "to": "courier", "label": "offers the job", "style": "async" },
+    { "id": "dropoff", "from": "courier", "to": "customer", "label": "drops off order" }
+  ],
+  "stories": [
+    {
+      "id": "place",
+      "title": "Place the order",
+      "beats": [
+        { "title": "The customer taps place order", "from": "customer", "to": "mobile", "caption": "Nothing leaves the phone until the customer confirms the basket." },
+        { "title": "The app posts the order", "from": "mobile", "to": "gateway", "caption": "One request carries the basket, so the platform sees the whole order at once." },
+        { "title": "The gateway routes it to orders", "from": "gateway", "to": "orders", "caption": "The gateway checks the session first, so only signed-in orders get through." },
+        { "title": "Orders asks payments to charge", "from": "orders", "to": "payments", "caption": "Payment runs before the restaurant hears about the order, so no unpaid food is cooked." },
+        { "title": "Payments charges the card", "from": "payments", "to": "card", "caption": "The card provider is external, so the charge has to go out to its network." },
+        { "title": "The card provider approves", "from": "card", "to": "payments", "caption": "The approval travels back against the arrow, so payments can confirm the charge." }
+      ]
+    },
+    {
+      "id": "deliver",
+      "title": "Deliver it",
+      "beats": [
+        { "title": "The restaurant accepts the order", "from": "tablet", "to": "orders", "caption": "The kitchen's accept is what starts the clock on the delivery." },
+        { "title": "Orders publishes it as ready", "from": "orders", "to": "queue", "caption": "Publishing to the queue lets the courier side react without orders waiting on it." },
+        { "title": "The queue offers the job to a courier", "from": "queue", "to": "courier", "caption": "The courier app gets the job as an event, so it can pick up and drop off on its own." },
+        { "title": "The courier drops off the food", "from": "courier", "to": "customer", "caption": "The last hop is the one the customer sees: the food arrives at the door." }
+      ]
+    }
+  ]
+}

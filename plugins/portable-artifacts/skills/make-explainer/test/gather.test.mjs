@@ -466,3 +466,39 @@ test('a bare repository or the inside of .git says there is no work tree', () =>
     } finally { bare.cleanup(); }
   });
 });
+
+test('--out writes the facts to a file (creating parent dirs), prints "wrote <file>", and stdout stays free of JSON', () => {
+  withRepo(featureRepo, (repo) => {
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gather-out-')));
+    try {
+      const file = path.join(dir, 'nested', 'facts.json');
+      const r = run(['git', '--repo', repo.dir, '--out', file]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout.trim(), `wrote ${file}`);
+      assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).branch, gather(repo).branch);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+test('--out with no value is a usage error (exit 2)', () => {
+  const r = run(['git', '--out']);
+  assert.equal(r.status, 2);
+});
+
+test('--out with an empty path or a directory is a one-line usage error (exit 2), not a stack trace', () => {
+  withRepo(featureRepo, (repo) => {
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gather-out-bad-')));
+    try {
+      const empty = run(['git', '--repo', repo.dir, '--out', '']);
+      assert.equal(empty.status, 2);
+      assert.match(empty.stderr, /^--out needs a file path/);
+      const isDir = run(['git', '--repo', repo.dir, '--out', dir]);
+      assert.equal(isDir.status, 2);
+      assert.match(isDir.stderr, /^--out must be a file, not a directory: /);
+      assert.doesNotMatch(isDir.stderr, /\n\s+at /);
+      const blocked = run(['git', '--repo', repo.dir, '--out', path.join(dir, 'f.json', 'x.json')].map((a, i, all) => (i === all.length - 1 ? (fs.writeFileSync(path.join(dir, 'f.json'), ''), a) : a)));
+      assert.equal(blocked.status, 2);
+      assert.equal(blocked.stderr.trim().split('\n').length, 1);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+});

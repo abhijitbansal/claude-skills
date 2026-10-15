@@ -49,7 +49,8 @@ for (const name of EXAMPLES) {
       const fit = await page.evaluate(() => {
         const limit = document.documentElement.clientWidth;
         const wide = [...document.querySelectorAll('body *')]
-          .filter((el) => !el.closest('.tablewrap, pre, .sr-only, .skip, svg') && el.getBoundingClientRect().right > limit + 1)
+          // .dg-slot scrolls sideways inside itself by design (diagram.css), so what it holds may pass the edge; the slot itself may not.
+          .filter((el) => !el.closest('.tablewrap, pre, .sr-only, .skip, svg, .dg-slot *') && el.getBoundingClientRect().right > limit + 1)
           .map((el) => `${el.tagName}.${el.className}`);
         return { scroll: document.documentElement.scrollWidth, limit, wide };
       });
@@ -74,12 +75,16 @@ for (const name of EXAMPLES) {
   }
 }
 
-test('the first viewport at 1280 x 900 holds the masthead and the whole verdict block', async (t) => {
+test('the first viewport at 1280 x 900 holds the hero, the whole verdict card and the numbers', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const { page, context } = await open(built('concept').url, { reducedMotion: 'reduce' });
-  const box = await page.locator('.sec-tldr .tldr').boundingBox();
-  assert.ok(box.y + box.height <= 900, `verdict ends at ${box.y + box.height}`);
-  await context.close();
+  for (const name of ['concept', 'recap']) {
+    const { page, context } = await open(built(name).url, { reducedMotion: 'reduce' });
+    const verdict = await page.locator('.hero .hero-tldr .tldr').boundingBox();
+    assert.ok(verdict.y + verdict.height <= 900, `${name}: verdict ends at ${verdict.y + verdict.height}`);
+    const kpis = await page.locator('.sec-kpis .kpis').boundingBox();
+    assert.ok(kpis.y + kpis.height <= 900, `${name}: numbers end at ${kpis.y + kpis.height}`);
+    await context.close();
+  }
 });
 
 // ---- contents ---------------------------------------------------------------------------
@@ -165,17 +170,17 @@ test('theme: the toggle cycles Auto, Light, Dark, is remembered, and applies bef
   if (await skipUnlessBrowser(t)) return;
   const { page, context } = await open(built('concept').url);
   const toggle = page.locator('[data-theme-toggle]');
-  assert.equal(await toggle.textContent(), 'Theme: Auto');
+  assert.equal(await toggle.getAttribute('data-mode'), 'auto');
   await toggle.click();
-  assert.equal(await toggle.textContent(), 'Theme: Light');
+  assert.equal(await toggle.getAttribute('data-mode'), 'light');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light');
   await toggle.click();
-  assert.equal(await toggle.textContent(), 'Theme: Dark');
+  assert.equal(await toggle.getAttribute('data-mode'), 'dark');
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   await page.reload();
   await page.waitForFunction(() => window.paReady === true);
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
-  assert.equal(await page.locator('[data-theme-toggle]').textContent(), 'Theme: Dark');
+  assert.equal(await page.locator('[data-theme-toggle]').getAttribute('data-mode'), 'dark');
   assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), bg);
   await page.locator('[data-theme-toggle]').click();
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme ?? null), null);
@@ -186,7 +191,7 @@ test('theme: blocked storage is tolerated', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('concept').url, { blockStorage: true });
   await page.locator('[data-theme-toggle]').click();
-  assert.equal(await page.locator('[data-theme-toggle]').textContent(), 'Theme: Light');
+  assert.equal(await page.locator('[data-theme-toggle]').getAttribute('data-mode'), 'light');
   assert.deepEqual(problems, []);
   await context.close();
 });
@@ -223,7 +228,7 @@ test('rise-in: sections fade in once and reduced motion turns it off', async (t)
   if (await skipUnlessBrowser(t)) return;
   const full = await open(built('concept').url);
   assert.equal(await full.page.evaluate(() => document.documentElement.classList.contains('rise-ready')), true);
-  await full.page.waitForFunction(() => document.querySelector('.sec-tldr').classList.contains('in'));
+  await full.page.waitForFunction(() => document.querySelector('.sections > .sec').classList.contains('in'));
   const before = await full.page.evaluate(() => document.querySelectorAll('.sec.in').length);
   assert.ok(before < (await full.page.evaluate(() => document.querySelectorAll('.sec').length)), 'sections below the fold wait for their turn');
   await full.page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
@@ -372,5 +377,66 @@ test('a page built from a hostile spec runs no script and shows the text', async
   assert.equal(await page.evaluate(() => document.querySelectorAll('main img, main script').length), 0);
   assert.match(await page.locator('main').textContent(), /<img src=x onerror="window\.__pwned=1">/);
   assert.equal(await page.evaluate(() => document.querySelectorAll('main a[href^="javascript"]').length), 0);
+  await context.close();
+});
+
+// ---- hero card and phone hero (Task 10 review) ----------------------------------------------------
+
+const LONG_TITLE = {
+  title: 'Interoperability considerations for internationalisation pipelines',
+  sections: [
+    { type: 'tldr', label: 'Verdict', text: 'Lead sentence.', points: ['One.', 'Two.'] },
+    { type: 'kpis', title: 'Numbers', items: [{ label: 'n', value: 1 }] },
+  ],
+};
+
+test('phone hero: no line of the title runs under the theme toggle', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  // ink and editorial: Bricolage's glyph boxes overhang the line box most, Newsreader's least
+  const long = (theme) => buildSpec({ ...LONG_TITLE, theme }, { name: `long-${theme}` }).url;
+  for (const [name, url] of [['recap', built('recap').url], ['concept', built('concept').url], ['long', long('paper')], ['long ink', long('ink')], ['long editorial', long('editorial')]]) {
+    for (const width of [320, 340, 360, 390]) {
+      const { page, context } = await open(url, { width, height: 800, reducedMotion: 'reduce' });
+      const hits = await page.evaluate(() => {
+        const toggle = document.querySelector('.hero .theme-toggle').getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(document.querySelector('h1'));
+        return [...range.getClientRects()].filter((r) => r.width > 0 && r.left < toggle.right && r.right > toggle.left && r.top < toggle.bottom && r.bottom > toggle.top)
+          .map((r) => `${Math.round(r.right - toggle.left)}x${Math.round(Math.min(r.bottom, toggle.bottom) - Math.max(r.top, toggle.top))}`);
+      });
+      assert.deepEqual(hits, [], `${name} at ${width}px: title overlaps the toggle`);
+      await context.close();
+    }
+  }
+});
+
+test('single column: the hero card reaches as far left as the bands and its text keeps the column edge', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const [url, width] of [[built('recap').url, 1024], [buildSpec(LONG_TITLE, { name: 'long-title' }).url, 1280], [built('recap').url, 390]]) {
+    const { page, context } = await open(url, { width, height: 900, reducedMotion: 'reduce' });
+    const m = await page.evaluate(() => {
+      const card = document.querySelector('.hero-tldr');
+      const band = document.querySelector('.sec-alt').getBoundingClientRect();
+      const text = document.querySelector('.hero-tldr .lead').getBoundingClientRect();
+      const col = document.querySelector('.sections').getBoundingClientRect();
+      return { card: Math.round(card.getBoundingClientRect().left), cardRight: Math.round(card.getBoundingClientRect().right), band: Math.round(band.left), bandRight: Math.round(band.right), text: Math.round(text.left), col: Math.round(col.left) };
+    });
+    assert.equal(m.card, m.band, `${width}px: card starts at ${m.card}, bands at ${m.band}`);
+    assert.equal(m.cardRight, m.bandRight, `${width}px: card ends at ${m.cardRight}, bands at ${m.bandRight}`);
+    assert.equal(m.text, m.col, `${width}px: card text at ${m.text}, column at ${m.col}`);
+    await context.close();
+  }
+});
+
+test('print: the hero card stays inside the page and its rule prints in ink', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await open(built('recap').url, { width: 720, height: 1000 });
+  await page.emulateMedia({ media: 'print' });
+  const m = await page.evaluate(() => {
+    const card = document.querySelector('.hero-tldr');
+    return { right: card.getBoundingClientRect().right, left: card.getBoundingClientRect().left, width: document.documentElement.clientWidth, rule: getComputedStyle(card).borderLeftColor };
+  });
+  assert.ok(m.left >= 0 && m.right <= m.width, `card spans ${m.left}-${m.right} on a ${m.width}px page`);
+  assert.equal(m.rule, 'rgb(0, 0, 0)');
   await context.close();
 });

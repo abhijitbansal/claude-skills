@@ -72,7 +72,8 @@ for (const name of EXAMPLES) {
       });
       assert.ok(fit.fits, 'no page overflow');
       const size = await page.evaluate(() => JSON.parse(document.getElementById('pa-data').textContent));
-      assert.ok(fit.x <= 0.01 && fit.y <= 0.01 && fit.x + fit.w >= size.width - 0.01 && fit.y + fit.h >= size.height - 0.01, 'the first view shows the whole diagram');
+      const [dx, dy, dw, dh] = size.drawing; // the page hides the drawn legend, so the fit holds the drawing, not the canvas widened and banded for it
+      assert.ok(fit.x <= dx + 0.01 && fit.y <= dy + 0.01 && fit.x + fit.w >= dx + dw - 0.01 && fit.y + fit.h >= dy + dh - 0.01, 'the first view shows the whole diagram');
       assert.ok(Math.abs((await zoom(page)) - 1) < 0.001);
       assert.deepEqual(problems, []);
       await context.close();
@@ -125,7 +126,7 @@ test('a single node with no edges fits, presents and zooms without NaN', async (
   const vb = await viewBox(page);
   assert.ok(vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0, String(vb));
   await page.keyboard.press('Escape');
-  await page.keyboard.press('f');
+  await page.keyboard.press('0');
   await page.keyboard.press('+');
   await page.keyboard.press('-');
   assert.ok((await viewBox(page)).every(Number.isFinite));
@@ -138,7 +139,7 @@ test('a stage with no size (display: none) refits without NaN or errors', async 
   const { page, problems, context } = await open(built('flow').url);
   await page.evaluate(() => { document.getElementById('pa-stage').style.display = 'none'; });
   await settle(page);
-  await page.keyboard.press('f');
+  await page.keyboard.press('0');
   await page.keyboard.press('p');
   await page.keyboard.press('+');
   const hiddenView = await viewBox(page);
@@ -175,7 +176,7 @@ test('zoom: wheel, +/- keys and buttons, clamped to 0.25x..4x of the fit', async
   await context.close();
 });
 
-test('pan: drag and arrow keys move the view; F, the Fit button and a double click restore it', async (t) => {
+test('pan: drag and arrow keys move the view; 0, the Fit button and a double click restore it', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('architecture').url);
   await page.keyboard.press('+');
@@ -193,7 +194,7 @@ test('pan: drag and arrow keys move the view; F, the Fit button and a double cli
   await page.mouse.up();
   const dragged = await viewBox(page);
   assert.ok(dragged[0] < afterKey[0], 'dragging right moves the content right (view left)');
-  for (const restore of [() => page.keyboard.press('f'), () => page.click('[data-act="fit"]'), () => page.mouse.dblclick(c.x, c.y + 200)]) {
+  for (const restore of [() => page.keyboard.press('0'), () => page.click('[data-act="fit"]'), () => page.mouse.dblclick(c.x, c.y + 200)]) {
     await page.keyboard.press('+');
     await restore();
     await settle(page);
@@ -274,22 +275,20 @@ test('Tab walks the toolbar, then the nodes in layer order; focus traces like ho
 
 const hiddenIds = (page) => page.evaluate(() => [...document.querySelectorAll('.pa-hidden')].map((e) => e.dataset.id ?? `label:${e.dataset.edge}`));
 
-test('presentation: P toggles, caption shows title, note and n / N, arrows, Space and click step', async (t) => {
+test('Play: P enters, the caption line and count show the beat, arrows and the buttons step, a canvas click does not, Escape leaves', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('architecture').url);
-  const steps = example('architecture').steps;
   assert.equal(await page.locator('[data-pa-caption]').isVisible(), false);
   await page.keyboard.press('p');
   assert.equal(await page.locator('[data-pa-caption]').isVisible(), true);
-  assert.equal(await page.textContent('[data-pa-title]'), steps[0].title);
-  assert.equal(await page.textContent('[data-pa-note]'), steps[0].note);
+  assert.equal(await page.textContent('[data-pa-line]'), '01 / 03 · WALKTHROUGH · The browser calls the API — TLS ends at the load balancer.');
   assert.equal(await page.textContent('[data-pa-count]'), '1 / 3');
-  assert.equal(await page.getAttribute('[data-act="present"]', 'aria-pressed'), 'true');
+  assert.equal(await page.getAttribute('[data-pa-mode="play"]', 'aria-pressed'), 'true');
   await page.keyboard.press('ArrowRight');
   assert.equal(await page.textContent('[data-pa-count]'), '2 / 3');
-  assert.equal(await page.isVisible('[data-pa-note]'), false, 'a step with no note shows none');
-  await page.keyboard.press('Space');
-  assert.equal(await page.textContent('[data-pa-title]'), 'Everything');
+  assert.equal(await page.textContent('[data-pa-line]'), '02 / 03 · WALKTHROUGH · The API writes the order', 'a beat with no caption shows none');
+  await page.keyboard.press('ArrowRight');
+  assert.ok((await page.textContent('[data-pa-line]')).endsWith('· Everything'));
   await page.keyboard.press('ArrowLeft');
   assert.equal(await page.textContent('[data-pa-count]'), '2 / 3');
   await page.click('[data-pa-next]');
@@ -298,9 +297,10 @@ test('presentation: P toggles, caption shows title, note and n / N, arrows, Spac
   await page.click('[data-pa-prev]');
   const c = await stageCentre(page);
   await page.mouse.click(c.x, c.y + 60);
-  assert.equal(await page.textContent('[data-pa-count]'), '3 / 3', 'a click on the canvas steps forward');
+  assert.equal(await page.textContent('[data-pa-count]'), '2 / 3', 'a click on the canvas no longer steps');
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('[data-pa-caption]').isVisible(), false);
+  assert.equal(await page.getAttribute('[data-pa-mode="play"]', 'aria-pressed'), 'false');
   assert.equal(await page.locator('.pa-hidden').count(), 0, 'leaving shows everything again');
   assert.deepEqual(problems, []);
   await context.close();
@@ -389,7 +389,7 @@ test('#step-N deep link opens the presentation at that step and follows the step
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('architecture').url, { hash: '#step-2' });
   assert.equal(await page.textContent('[data-pa-count]'), '2 / 3');
-  assert.equal(await page.textContent('[data-pa-title]'), example('architecture').steps[1].title);
+  assert.ok((await page.textContent('[data-pa-line]')).includes(example('architecture').steps[1].title));
   await page.keyboard.press('ArrowRight');
   assert.equal(await page.evaluate(() => location.hash), '#step-3');
   await page.keyboard.press('Escape');
@@ -481,12 +481,14 @@ test('the Everything step uses the fit camera, not a padded focus box', async (t
     const total = example(name).steps.length + 1;
     await page.keyboard.press('p');
     for (let i = 1; i < total; i++) await page.keyboard.press('ArrowRight');
-    assert.equal(await page.textContent('[data-pa-title]'), 'Everything', name);
+    assert.ok((await page.textContent('[data-pa-line]')).endsWith('· Everything'), name);
     await settle(page);
     assert.ok(Math.abs((await zoom(page)) - 1) < 0.001, `${name}: ${await zoom(page)}`);
     const [x, y, w, h] = await viewBox(page); // the caption shrinks the stage, so compare the centre, not the box
-    const size = await page.evaluate(() => JSON.parse(document.getElementById('pa-data').textContent));
-    assert.ok(Math.abs(x + w / 2 - size.width / 2) < 1 && Math.abs(y + h / 2 - size.height / 2) < 1, `${name}: centred on the diagram`);
+    const { drawing: [dx, dy, dw, dh] } = await page.evaluate(() => JSON.parse(document.getElementById('pa-data').textContent));
+    // the page fits the drawing (not the canvas padded for the legend row), below its legend overlay: centred across, the whole drawing in view
+    assert.ok(Math.abs(x + w / 2 - (dx + dw / 2)) < 1, `${name}: centred on the drawing`);
+    assert.ok(x <= dx + 1 && x + w >= dx + dw - 1 && y <= dy + 1 && y + h >= dy + dh - 1, `${name}: the whole drawing in view`);
     assert.deepEqual(problems, []);
     await context.close();
   }
@@ -554,7 +556,7 @@ test('a group with no nodes is revealed by the last auto step', async (t) => {
   assert.ok((await hiddenIds(page)).includes('empty'), 'hidden at the start');
   const total = Number((await page.textContent('[data-pa-count]')).split(' / ')[1]);
   for (let i = 1; i < total; i++) await page.keyboard.press('ArrowRight');
-  assert.equal(await page.textContent('[data-pa-title]'), 'Everything');
+  assert.ok((await page.textContent('[data-pa-line]')).endsWith('· Everything'));
   assert.deepEqual(await hiddenIds(page), []);
   assert.deepEqual(problems, []);
   await context.close();
@@ -581,21 +583,19 @@ test('a sequence step with no focus keeps the headers of its messages\' particip
   await context.close();
 });
 
-test('a double click in presentation advances one step, not two', async (t) => {
+test('a double click on the canvas in Play neither steps nor leaves', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('architecture').url);
   await page.keyboard.press('p');
   const c = await stageCentre(page);
   await page.mouse.dblclick(c.x, c.y + 60);
-  assert.equal(await page.textContent('[data-pa-count]'), '2 / 3');
-  await page.waitForTimeout(400);
-  await page.mouse.click(c.x, c.y + 60);
-  assert.equal(await page.textContent('[data-pa-count]'), '3 / 3', 'a later single click still advances');
+  assert.equal(await page.textContent('[data-pa-count]'), '1 / 3');
+  assert.equal(await page.locator('[data-pa-caption]').isVisible(), true);
   assert.deepEqual(problems, []);
   await context.close();
 });
 
-test('presentation never zooms in past 2x of the fit', async (t) => {
+test('presentation never zooms in past 2x of the fit, or 100% when the fit is tiny', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   for (const [name, spec] of [['architecture', example('architecture')], ['flow', example('flow')], ['solo', { title: 'Solo', type: 'flow', nodes: [{ id: 'a', label: 'Only node' }] }]]) {
     for (const width of [1440, 390]) {
@@ -605,13 +605,62 @@ test('presentation never zooms in past 2x of the fit', async (t) => {
       for (let i = 0; i < total; i++) {
         await settle(page);
         const z = await zoom(page);
-        assert.ok(z <= 2.001, `${name}@${width} step ${i + 1}: ${z}`);
+        const px = await page.evaluate(() => document.querySelector('#pa-stage svg').getScreenCTM().a);
+        // 2x of the fit, except that a tiny fit may still reach 100% (a narrow stage keeps a beat readable)
+        assert.ok(z <= Math.max(2, 1 / (px / z)) + 0.001, `${name}@${width} step ${i + 1}: ${z}`);
         await page.keyboard.press('ArrowRight');
       }
       assert.deepEqual(problems, []);
       await context.close();
     }
   }
+});
+
+test('at 390 px a hop beat is drawn at 100% or its own fit, never smaller than readable', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await open(built('story').url, { width: 390, height: 844 });
+  await page.keyboard.press('p');
+  await settle(page);
+  const m = await page.evaluate(() => {
+    const stage = document.getElementById('pa-stage');
+    const sr = stage.getBoundingClientRect();
+    const svg = stage.querySelector('svg');
+    const px = svg.getScreenCTM().a; // screen px per diagram unit
+    const ends = ['shopper', 'app'].map((id) => {
+      const r = svg.querySelector(`.pa-node[data-id="${id}"]`).getBoundingClientRect();
+      return { l: r.left - sr.left, r: sr.right - r.right, t: r.top - sr.top, b: sr.bottom - r.bottom, w: r.width };
+    });
+    return { px, ends };
+  });
+  for (const e of m.ends) assert.ok(e.l >= 0 && e.r >= 0 && e.t >= 0 && e.b >= 0, `end node fully inside the stage: ${JSON.stringify(e)}`);
+  // The two-node box plus padding is a little wider than 390 px at 100%, so the box's own fit (about 0.66) wins; the old cap (2x of a tiny fit) left it at 0.35.
+  assert.ok(m.px >= 0.6, `hop beat scale ${m.px}`);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('at 390 px a beat whose box fits at 100% is shown at 100%, not at 2x of a tiny fit', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const spec = {
+    title: 'Chain', type: 'flow', direction: 'right',
+    nodes: ids.map((id) => ({ id, label: `Node ${id}` })),
+    edges: ids.slice(1).map((id, i) => ({ from: ids[i], to: id })),
+    stories: [{ id: 's', title: 'S', beats: [{ title: 'Look at c', focus: ['c'] }] }],
+  };
+  const { page, problems, context } = await open(buildPage(spec, { name: 'focus-100' }).url, { width: 390, height: 844 });
+  await page.keyboard.press('p');
+  await settle(page);
+  const m = await page.evaluate(() => {
+    const svg = document.querySelector('#pa-stage svg');
+    const fit = Number(document.getElementById('pa-stage').dataset.zoom);
+    return { px: svg.getScreenCTM().a, fit };
+  });
+  const fs = m.px / m.fit;
+  assert.ok(fs < 0.5, `precondition: the fit-all scale is tiny (${fs})`);
+  assert.ok(Math.abs(m.px - 1) < 0.01, `focus beat scale ${m.px}`);
+  assert.deepEqual(problems, []);
+  await context.close();
 });
 
 test('exports are named after the .html slug, even for a title over 60 characters', async (t) => {
@@ -647,6 +696,11 @@ test('animate toggles flow on edges and keeps each style\'s dash pattern', async
   assert.equal((await edgeStyle(page, '.pa-edge-dashed path')).dash, dashedBefore, 'dashed keeps 6 4');
   assert.equal((await edgeStyle(page, '.pa-edge-async path')).dash, asyncBefore, 'async keeps its dots');
   assert.match((await edgeStyle(page, '.pa-edge-solid path')).dash, /^6px, 6px$|^6, 6$/, 'solid gets a pattern to animate');
+  for (const style of ['solid', 'dashed', 'async']) {
+    const sample = await edgeStyle(page, `.pa-legend-sample.pa-edge-${style} path`);
+    assert.equal(sample.name, 'none', `the legend's ${style} sample does not flow`);
+  }
+  assert.equal((await edgeStyle(page, '.pa-legend-sample.pa-edge-solid path')).dash, 'none', 'and the solid sample stays solid');
   await page.keyboard.press('a');
   assert.equal(await page.textContent('[data-act="animate"]'), 'Animate: Off');
   assert.deepEqual(problems, []);
@@ -695,11 +749,16 @@ test('SVG and PNG export download under the strict CSP, filled with the theme su
     const svg = await download(page, 'svg');
     assert.equal(svg.name, 'checkout-request-path.svg');
     const text = fs.readFileSync(svg.file, 'utf8');
+    assert.ok(await page.locator('.pa-edge .pa-hit').count() > 0, 'precondition: the page draws edge hit paths');
+    assert.ok(!/class="pa-hit"/.test(text), 'the hit paths stay out of the file');
     assert.match(text, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
     assert.ok(text.includes(`fill="${surface}"`), 'surface background rect');
     assert.ok(text.includes('<style>') && text.includes('.pa-node') && text.includes('--surface:'), 'self-contained styles');
     assert.ok(text.includes('@font-face'), 'fonts travel with the file');
-    assert.match(text, /viewBox="0 0 1370 255"/);
+    const data = JSON.parse(built('architecture').html.match(/id="pa-data">([^<]*)<\/script>/)[1]);
+    assert.match(text, new RegExp(`viewBox="0 0 ${data.width} ${data.height}"`));
+    assert.ok(text.includes('--k-service:') && text.includes('--s1:') && text.includes('--mono:'), 'the kind hues, lane colours and mono font travel with the file');
+    assert.ok(text.includes('class="pa-legend"'), 'the legend is part of the drawing');
     assert.ok(!/class="[^"]*\bpa-(hidden|dim|on|hl|animate)\b|tabindex=/.test(text), 'no viewer state in the file');
     const png = await download(page, 'png');
     assert.equal(png.name, 'checkout-request-path.png');
@@ -707,7 +766,7 @@ test('SVG and PNG export download under the strict CSP, filled with the theme su
     assert.deepEqual([...bytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], 'PNG signature');
     const width = bytes.readUInt32BE(16);
     const height = bytes.readUInt32BE(20);
-    assert.ok(width >= 1370 && height >= 255, `${width}x${height}`);
+    assert.ok(width >= data.width && height >= data.height, `${width}x${height}`);
     assert.equal(await page.locator('[data-export-error]').isVisible(), false);
     assert.deepEqual(problems, []);
     await context.close();
@@ -731,7 +790,9 @@ test('the PNG is surface-filled and shows the drawing (not blank), in dark too',
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
     const data = ctx.getImageData(0, 0, img.width, img.height).data;
-    const corner = [...data.slice(0, 4)];
+    // 4 px in from the corner: a canvas of fractional width (the legend can set it) resamples the very first pixel by one level.
+    const at = 4 * (4 * img.width + 4);
+    const corner = [...data.slice(at, at + 4)];
     let different = 0;
     for (let i = 0; i < data.length; i += 4) if (data[i] !== corner[0] || data[i + 1] !== corner[1] || data[i + 2] !== corner[2]) different++;
     return { corner, different, total: data.length / 4, surface: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() };
@@ -763,21 +824,22 @@ const token = (page, name) => page.evaluate((n) => getComputedStyle(document.doc
 test('theme toggle cycles Auto, Light, Dark and survives a reload', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('flow').url);
-  assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Auto');
-  assert.equal(await token(page, '--page'), '#f7f6f3');
+  const mode = () => page.getAttribute('[data-theme-toggle]', 'data-mode');
+  assert.equal(await mode(), 'auto');
+  assert.equal(await token(page, '--page'), '#f4f6f8');
   await page.click('[data-theme-toggle]');
-  assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Light');
+  assert.equal(await mode(), 'light');
   await page.click('[data-theme-toggle]');
-  assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Dark');
+  assert.equal(await mode(), 'dark');
   assert.equal(await page.getAttribute('html', 'data-theme'), 'dark');
-  assert.equal(await token(page, '--page'), '#0f1110');
+  assert.equal(await token(page, '--page'), '#0e1319');
   await page.reload();
   await page.waitForFunction(() => window.paReady === true);
-  assert.equal(await token(page, '--page'), '#0f1110', 'the choice persisted');
-  assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Dark');
-  assert.equal(await page.getAttribute('[data-theme-toggle]', 'aria-label'), 'Theme: Dark. Change theme');
+  assert.equal(await token(page, '--page'), '#0e1319', 'the choice persisted');
+  assert.equal(await mode(), 'dark');
+  assert.equal(await page.getAttribute('[data-theme-toggle]', 'aria-label'), 'Theme: Dark. Switch to Auto');
   await page.click('[data-theme-toggle]');
-  assert.equal(await page.textContent('[data-theme-toggle]'), 'Theme: Auto');
+  assert.equal(await mode(), 'auto');
   assert.deepEqual(problems, []);
   await context.close();
 });
@@ -788,7 +850,7 @@ test('blocked storage: the page renders and the toggle still works for the visit
   assert.ok((await page.locator('.pa-node').count()) > 0);
   await page.click('[data-theme-toggle]');
   await page.click('[data-theme-toggle]');
-  assert.equal(await token(page, '--page'), '#0f1110');
+  assert.equal(await token(page, '--page'), '#0e1319');
   assert.deepEqual(problems, []);
   await context.close();
 });
@@ -802,7 +864,7 @@ test('accessibility: one graphics-document root, graphics-symbol nodes with name
     roots: document.querySelectorAll('[role="graphics-document"]').length,
     imgs: document.querySelectorAll('svg [role="img"]').length,
     names: [...document.querySelectorAll('.pa-node')].map((n) => `${n.getAttribute('role')}|${n.getAttribute('aria-label')}`),
-    labelled: document.querySelector('svg').getAttribute('aria-labelledby').split(' ').every((id) => document.getElementById(id)?.textContent),
+    labelled: document.querySelector('#pa-stage svg').getAttribute('aria-labelledby').split(' ').every((id) => document.getElementById(id)?.textContent),
     text: document.querySelector('section[aria-label="Diagram as text"]').textContent,
     visible: document.querySelector('section[aria-label="Diagram as text"]').getBoundingClientRect().width,
   }));
@@ -825,7 +887,7 @@ test('hostile text in labels renders as text in the page (Review Focus 1)', asyn
   assert.ok((await page.textContent('.pa-node .pa-label')).includes(evil));
   assert.equal(await page.title(), `T ${evil}`);
   await page.keyboard.press('p');
-  assert.equal(await page.textContent('[data-pa-title]'), evil);
+  assert.ok((await page.textContent('[data-pa-line]')).includes(evil));
   assert.equal(await page.locator('b').count(), 0);
   assert.deepEqual(problems, []);
   await context.close();

@@ -9,6 +9,7 @@ import { validateSpec } from '../scripts/lib/spec.mjs';
 import { buildPage, BuildError, contentSecurityPolicy } from '../scripts/lib/page.mjs';
 import { build } from '../scripts/build.mjs';
 import { loadTheme } from '../shared/theme.mjs';
+import { quoteArg } from '../shared/doctor.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIXTURE = path.join(SKILL, 'test/fixtures/chart');
@@ -130,7 +131,7 @@ function skillWithoutSibling() {
   fs.symlinkSync(path.join(SKILL, 'node_modules'), path.join(copy, 'node_modules'));
   return { root, copy };
 }
-const INSTALL = 'npx skills add abhijitbansal/claude-skills --skill make-explainer make-dashboard';
+const INSTALL = 'npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill make-dashboard -y';
 
 test('without make-dashboard, validate exits 1 with the install command (inline and dashboard charts)', () => {
   const { root, copy } = skillWithoutSibling();
@@ -460,8 +461,9 @@ test('make-dashboard without its node_modules is a SiblingError with the install
   await assert.rejects(page.buildPage(doc([inline()]), { dir: root }), (e) => {
     assert.equal(e.name, 'SiblingError');
     assert.ok(e.message.includes(`make-dashboard is installed but its dependencies are missing (vega)`), e.message);
-    assert.ok(e.message.includes(`run "npm ci" in ${dash}`), e.message);
-    assert.ok(e.message.includes(`install it with: ${INSTALL}`), e.message);
+    assert.ok(e.message.includes(`run npm ci --omit=dev --prefix ${quoteArg(dash)}`), e.message);
+    assert.doesNotMatch(e.message, /skills add/);
+    assert.match(e.message, /\(doctor: node \S*scripts\/doctor\.mjs, id make-dashboard\)$/);
     return true;
   });
 });

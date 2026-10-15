@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { loadSibling, siblingDir, SiblingError, MISSING_HINT, installCommand } from './siblings.mjs';
+import { loadSibling, siblingDir, SiblingError, MISSING_HINT, installCommand, doctorHint } from './siblings.mjs';
 import { SectionErrors } from './section-errors.mjs';
 import { VIDEO_MAX_BYTES } from './motion-source.mjs';
 
@@ -183,7 +183,7 @@ export function childEnv(env) {
  */
 export async function renderMotion(specAbs, spec, env = process.env, { maxBytes = VIDEO_MAX_BYTES, pageTheme, script = path.join(siblingDir('make-motion'), 'scripts/render.mjs') } = {}) {
   if (!fs.existsSync(script)) {
-    throw new SiblingError(`make-motion/scripts/render.mjs not found in ${siblingDir('make-motion')}; ${MISSING_HINT(['make-motion'])}`, installCommand(['make-motion']));
+    throw new SiblingError(`make-motion/scripts/render.mjs not found in ${siblingDir('make-motion')}; ${MISSING_HINT(['make-motion'])} ${doctorHint('make-motion')}`, installCommand(['make-motion']));
   }
   const timeoutMs = timeoutOf(env);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-motion-render-'));

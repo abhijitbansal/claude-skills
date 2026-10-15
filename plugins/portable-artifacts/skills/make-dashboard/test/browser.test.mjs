@@ -118,16 +118,16 @@ test('every kind chart renders; hover dims bars, legend filters, wheel zooms sca
   await page.screenshot({ path: path.join(out, 'kinds.png'), fullPage: true });
 });
 
-test('theme toggle text reads "Theme: <mode>" and follows the cycle', async (t) => {
+test('theme toggle label follows the cycle', async (t) => {
   if (!(await haveBrowser())) return t.skip('no browser');
   const { out } = buildProject(SPEC);
   const { page, problems } = await open(out);
-  const text = () => page.locator('[data-theme-toggle]').textContent();
-  assert.equal(await text(), 'Theme: Auto');
+  const label = () => page.getAttribute('[data-theme-toggle]', 'aria-label');
+  assert.equal(await label(), 'Theme: Auto. Switch to Light');
   await page.click('[data-theme-toggle]');
-  assert.equal(await text(), 'Theme: Light');
+  assert.equal(await label(), 'Theme: Light. Switch to Dark');
   await page.click('[data-theme-toggle]');
-  assert.equal(await text(), 'Theme: Dark');
+  assert.equal(await label(), 'Theme: Dark. Switch to Auto');
   assert.deepEqual(problems, []);
 });
 
@@ -428,7 +428,7 @@ test('live page: a paused watcher is a non-error badge note; the page does not s
   }
 });
 
-test('a stored theme labels the toggle before the vendor scripts parse (no "Theme: Auto" flash)', async (t) => {
+test('a stored theme labels the toggle before the vendor scripts parse (no "Auto" flash)', async (t) => {
   if (!(await haveBrowser())) return t.skip('no browser');
   const { out } = buildProject(SPEC);
   browser ??= await launchBrowser();
@@ -438,15 +438,15 @@ test('a stored theme labels the toggle before the vendor scripts parse (no "Them
     let vega;
     // Records what the toggle says at the moment the (first) vendor script assigns window.vega.
     Object.defineProperty(window, 'vega', { configurable: true, get: () => vega, set(v) {
-      window.labelAtVendor = document.querySelector('[data-theme-toggle]').textContent;
+      window.modeAtVendor = document.querySelector('[data-theme-toggle]').getAttribute('data-mode');
       window.ariaAtVendor = document.querySelector('[data-theme-toggle]').getAttribute('aria-label');
       vega = v;
     } });
   });
   await page.goto(pathToFileURL(path.join(out, 'index.html')).href);
   await page.waitForFunction(() => window.paReady === true, null, { timeout: 15000 });
-  assert.equal(await page.evaluate(() => window.labelAtVendor), 'Theme: Dark');
-  assert.equal(await page.evaluate(() => window.ariaAtVendor), 'Theme: Dark. Change theme');
+  assert.equal(await page.evaluate(() => window.modeAtVendor), 'dark');
+  assert.equal(await page.evaluate(() => window.ariaAtVendor), 'Theme: Dark. Switch to Auto');
   await page.close();
 });
 

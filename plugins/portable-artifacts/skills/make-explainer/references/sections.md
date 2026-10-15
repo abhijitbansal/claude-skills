@@ -1,6 +1,8 @@
 # Sections
 
-Every section has `type`, an optional `id` and an optional `title`. A `title` is a claim a reader can agree or disagree with ("Search now ignores case"), not a label ("Overview"). Limits are in [schema.md](schema.md). Fields marked `*` are required. Closed sets: `tone` is `neutral` `accent` `good` `warn` `bad` unless the section says otherwise.
+Every section has `type`, an optional `id`, an optional `title` and an optional `label`. A `title` is a claim a reader can agree or disagree with ("Search now ignores case"), not a label ("Overview"). The `label` is that short name ("Eval results", at most 4 words): the contents list shows it, and it sits as a small eyebrow above the heading (and above the slide heading in a deck). The label shows on every section that renders a heading (any section with a `title`, except a `callout`) and on a leading tldr's hero card even without a title. A `callout` draws its own heading and never shows a label; a section without a `title` shows no label and is not listed in the contents. Limits are in [schema.md](schema.md). Fields marked `*` are required. Closed sets: `tone` is `neutral` `accent` `good` `warn` `bad` unless the section says otherwise.
+
+On a page, a `tldr` that comes first (and is not the only section) is drawn inside the hero, under the title, as its summary card; its `label` is the card's heading, and the `title` then names the card for screen readers only. Visual sections (`kpis`, `cards`, `compare`, `diagram`, `chart`) alternate onto a surface band, starting with the first: the 1st, 3rd and so on.
 
 In slides mode each section is one slide (the title is the slide heading) and must fit the budget in schema.md; split a section that does not.
 
@@ -8,7 +10,7 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 
 | Type | Fields | Notes |
 |---|---|---|
-| `tldr` | `text`*, `points[]`, `tone` | The verdict block. Put it first. `text` is one or two sentences, each point one fact. |
+| `tldr` | `text`*, `points[]`, `tone` | The verdict block. Put it first: it then becomes the hero's card. `text` is one or two sentences, each point one fact; three points at most read best. |
 | `text` | `text`* | Markdown-lite prose. Several short paragraphs beat one long one. |
 | `kpis` | `items[]`* (1-6): `label`*, `value`* (string or number), `delta`, `tone`, `note` | Stat tiles. A number value prints with thousands separators from 10,000 (51301 shows as 51,301; 2026 and 1107 stay as written); a string shows as written, so use a string for versions and "12k". Use `delta` for a change ("+12 vs last week"). |
 | `cards` | `items[]`* (1-12): `title`*, `text`*, `icon`, `tone`, `tag`; `columns` (2, 3 or 4) | Parallel items. `icon` is a make-diagram catalog ref (`lucide:<name>` or `brand:<slug>`); find one with `node <skill-dir>/../make-diagram/scripts/icons.mjs search <word>`. An unknown icon is an error. |
@@ -44,7 +46,7 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 `diagram`: `diagram`* and `caption`. `diagram` is either a make-diagram spec written inline as an object, or a path to a `.json` file in the explainer's folder (at most 1 MB). The full make-diagram rules apply, geometry lint included, and its errors are reported under the section (`sections[2].diagram.nodes[0].label: …`).
 
 - The page theme wins: a `theme` inside the diagram is ignored, with a warning.
-- Hover traces edges. A Present button opens a full-screen step-by-step walkthrough; in a deck the arrow keys belong to it while it is open.
+- Hover traces edges. A Present button opens make-diagram's whole viewer in an overlay: Play story (the transport, chapter and beat chips, the travelling dot), Explore (a side panel for a node or edge, Find, shift-click routes) and full screen. In a deck the keys belong to the overlay while it is open; Esc closes the panel, then leaves full screen, then closes the overlay.
 - Needs the `make-diagram` skill next to this one.
 
 ## Chart

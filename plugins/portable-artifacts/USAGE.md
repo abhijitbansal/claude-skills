@@ -9,10 +9,11 @@ plugin is, read the [README](README.md). For every spec field, see each skill's
 - [3. Diagrams with make-diagram](#3-diagrams-with-make-diagram)
 - [4. Explainers with make-explainer](#4-explainers-with-make-explainer)
 - [5. Videos with make-motion](#5-videos-with-make-motion)
-- [6. Asking for changes](#6-asking-for-changes)
-- [7. Hosts that can't run commands](#7-hosts-that-cant-run-commands)
-- [8. Troubleshooting](#8-troubleshooting)
-- [9. Checking a new host or model](#9-checking-a-new-host-or-model)
+- [6. What every page carries](#6-what-every-page-carries)
+- [7. Asking for changes](#7-asking-for-changes)
+- [8. Hosts that can't run commands](#8-hosts-that-cant-run-commands)
+- [9. Troubleshooting](#9-troubleshooting)
+- [10. Checking a new host or model](#10-checking-a-new-host-or-model)
 
 ## 1. Install
 
@@ -44,6 +45,58 @@ inside the skill folder (about 150 MB), and make sure `ffmpeg` is on your
 Per-OS commands for Node, ffmpeg and Chromium (macOS, Windows, Linux) are in
 the [README requirements](README.md#requirements).
 
+### Before the first build: doctor
+
+Every skill has a `scripts/doctor.mjs` that checks what the skill needs and
+prints the fix for each thing that is missing. It needs only Node, so it runs
+before `npm ci` and reports a missing `node_modules` instead of crashing. It
+never prompts and never installs anything on its own.
+
+```bash
+node <skill-dir>/scripts/doctor.mjs --json                  # what is missing, with the fix for your OS
+node <skill-dir>/scripts/doctor.mjs --json --for spec.json  # make-explainer: also the sister skills the spec needs
+node <skill-dir>/scripts/doctor.mjs --json --for check      # make-diagram, make-explainer: Playwright and a browser
+node <skill-dir>/scripts/doctor.mjs --json --for voiceover  # make-motion: kokoro-js, before a voiceover
+node <skill-dir>/scripts/doctor.mjs --fix node_modules      # install the named ids (comma-separated)
+```
+
+The consent flow in each SKILL.md: the agent runs the doctor first. If anything
+is missing it sends you one message with each item, why it is needed, its size
+and the command, and asks once. On yes it runs `--fix <ids>`. Anything that
+needs `sudo`, has no automatic fix or fails (for example a sandbox without
+network) comes back to you as the exact command to run yourself; in Claude Code
+prefix it with `!`. On no the agent does what it can without the item, for
+example make-motion still writes and validates `motion.json` and hands you the
+render commands. `--for` takes a spec `.json` in every skill (only make-explainer
+adds sister skills from it), `check` in make-diagram and make-explainer, and
+`voiceover` in make-motion; make-dashboard has no keyword target. Unknown or
+misspelled arguments exit 2 and list the accepted ones. `--fix` takes the same
+`--for` the diagnosis used: it resolves ids against that target, so an id the
+target does not list (say `chromium` with a spec that has no check step) is
+refused as "unknown id". Without `--for` it accepts every id the skill could
+need, sister skills included. `dev_deps` (Playwright) and `chromium` (the browser
+`check.mjs` uses) are required under `--for check`; plain diagnosis needs
+neither. make-explainer names the browser that renders its motion section
+`motion_chromium`: it installs through make-motion's Playwright, apart from its
+own `chromium`. `--fix` exits 1 when any requested id is refused, skipped,
+failed, still missing afterwards or installed elsewhere, optional ids included.
+On Windows the text output labels command lines `(cmd.exe)`.
+
+### Tested hosts
+
+Tested live on this branch: **Claude Code**, and **GitHub Copilot CLI 1.0.98**
+(one non-interactive run per skill on 2026-10-15, plus reruns of the doctor
+install path: each run picked up its skill, ran the doctor, set the host name,
+validated and built a page). The browser check (`check.mjs`) was never run by an
+agent there, and consent was pre-granted in the prompt, so the ask-first step was
+not exercised. An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**:
+dashboard 10/10, motion 6/10, with the last four motion prompts stopped by the
+account's usage limit ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)).
+**Gemini CLI**: its install paths were checked against its documentation on
+2026-10-15 and not run live. Results:
+[`eval/results/summary-portability-copilot-2026-10-15.md`](eval/results/summary-portability-copilot-2026-10-15.md)
+and [`eval/results/summary-install-targets-2026-10-15.md`](eval/results/summary-install-targets-2026-10-15.md).
+
 ## 2. Dashboards with make-dashboard
 
 **Ask:**
@@ -69,7 +122,7 @@ from your project folder):
 - **Chart kinds:** bar, stacked-bar, grouped-bar, line, area, scatter, bubble, heatmap, histogram, boxplot and donut. The agent names the columns and the build writes the chart. Raw Vega-Lite still works for anything else. Reference: `make-dashboard/references/kinds.md`.
 - **Views:** each card can switch between alternate views (sorted, share, 100%, area, boxplot, …) and a sortable Table view; `pair: true` shows two side by side.
 - **Export:** every card has an Export menu for PNG, SVG and CSV.
-- **Themes:** `paper` (default), `blueprint`, `editorial`, `ink`. Ask for one, or pass `--theme <name>` to `build.mjs`. The page also has a Theme: Auto / Light / Dark toggle.
+- **Themes:** `paper` (default), `blueprint`, `editorial`, `ink`. Ask for one, or pass `--theme <name>` to `build.mjs`. The page also has an icon toggle that cycles Auto, Light and Dark.
 - **Live reload:** see below.
 
 **Open the result:** double-click `dist/index.html` (it is one
@@ -135,24 +188,36 @@ your project folder):
    `--out file.html` or `--out dir`). `--theme paper|blueprint|ink|editorial`
    overrides the spec's theme.
 5. `check.mjs <page>` opens the page at 1440 and 390 px and reports overflow,
-   console errors and text that leaves its box. It needs Playwright and a
-   browser (a full `npm ci` plus `npx playwright install chromium` in the
-   skill folder). Without them it prints `check: skipped` and exits 0. Building
-   needs no browser.
-6. Tells you the path, what the diagram shows, and that `P` presents it.
+   console errors, text that leaves its box and a node under the legend
+   overlay. It needs Playwright and a browser (a full `npm ci` plus
+   `npx playwright install chromium` in the skill folder). Without them it
+   prints `check: skipped` with the doctor command to run
+   (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`) and exits 0.
+   Building needs no browser.
+6. Tells you the path, what the diagram shows, and that Play story (or `P`)
+   opens beat 1, Space plays it, `E` explores and `F` is full screen.
 
-**In the page:** wheel or pinch to zoom, drag to pan, `F` or double-click to
-fit, hover a node to trace its edges (click pins, `Esc` clears), `A` toggles
-edge-flow animation, and the toolbar exports SVG or PNG and switches between
-auto, light and dark. **Press `P` to present:** arrows or Space step through,
-the camera moves to each step's focus (never past twice the fit), and `Esc`
-exits. Reduced-motion settings turn the animation and camera moves off.
+**In the page:** wheel or pinch to zoom, drag to pan, `0` or double-click to
+fit, `F` for full screen, `A` toggles edge-flow animation, and the toolbar
+exports SVG or PNG, and an icon toggle cycles auto, light and dark. **Play story**
+(`P`) opens beat 1 and Space plays: the camera follows each hop, a dot travels
+along the edge, and the caption bar shows the beat's title and sentence. The
+transport bar has previous and next beat or chapter, a scrubber, speed (0.5x to
+2x) and loop; arrows, Page Up/Down, Home and End step, and `Esc` leaves.
+**Explore** (`E`): click a node or edge for its details (kind, note, detail,
+what it sends and receives), shift-click a second node for the shortest route,
+and `/` finds nodes by name. Reduced-motion settings turn the dot, the glides
+and `autoplay` off.
 
-**Steps:** leave `steps` out and the build makes one step per layer (one per
-message in a sequence). Write your own `steps` when you want a talk track:
-each has a `title`, an optional `note`, and the `show`, `focus` and
-`highlight` ids. Anything no step reveals appears in a final "Everything"
-step.
+**Stories:** write `stories`, up to 8 named chapters with 60 beats in all.
+Each beat has a `title`, an optional `caption`, and one target: an `edge` id,
+a `from`/`to` pair, or `focus` ids. One story for the main path and one per
+side path (the retry, the failure) reads best; `"autoplay": true` starts the
+player when the page opens. Nodes and participants may also carry one `emoji`
+(drawn in the icon tile) and a `detail` (up to 400 characters, shown in
+Explore). Leave `stories` out and the build makes one beat per layout layer
+(one per message in a sequence). The older `steps` form still works but cannot
+be mixed with `stories`.
 
 **Keep it readable:** labels are nouns, edge labels are verbs, and about 12
 nodes per diagram reads best. Past that, ask for two diagrams. Hard limits are
@@ -175,11 +240,11 @@ for the login change", "turn this plan into a one-page explainer")
 **What the agent does** (commands are `node <skill-dir>/scripts/…`, run from
 your project folder):
 
-1. For a branch, `gather.mjs git > facts.json` reads the committed
+1. For a branch, `gather.mjs git --out facts.json` reads the committed
    work: commits, files changed with line counts and renames, test files and
    the date. `--repo <folder>` reads another checkout; `--base` defaults to
    `main`, then `master`, preferring origin's copy when it is ahead.
-2. `scaffold.mjs recap --facts facts.json > explainer.json` writes a starter
+2. `scaffold.mjs recap --facts facts.json --out explainer.json` writes a starter
    file (also `checklist`, `concept` and `slides`). `concept` and `slides` take no facts. Without `--facts`, `recap` is a shorter skeleton (tl;dr, how it works, risks: no numbers, files or timeline) and `checklist` has one TODO area group plus the regression group.
    The numbers, file list, timeline and checklist groups are filled in; every
    sentence is a `TODO: …` string. With no preset, the agent writes the file
@@ -191,18 +256,20 @@ your project folder):
    `TODO:` text, emoji, filler phrases ("leverage", "seamless", "delve"), titles
    numbered like `01` or ending in `!`, and (for slides) a slide with more
    than 6 points, 8 table rows, 12 code lines or 80 words. Each line is a JSON
-   path, the problem and the fix; paragraphs over 120 words only warn.
+   path, the problem and the fix; text over the soft caps only warns (exit 0): title 8 words, label 4 words, paragraph 3 sentences or 60 words, text section 120 words, card text 30 words, list item 20 words, page prose 900 words, `tldr` 3 points. Each warning names the section; resolve them before building where you can.
 5. `build.mjs explainer.json` writes one HTML file and prints its path. The
    default folder is `~/.agent/diagrams/` (set `PA_OUTPUT_DIR`, or pass
    `--out file.html` or `--out dir`). `--theme paper|blueprint|ink|editorial`
-   overrides the spec's theme. A video or an interactive chart adds a
+   overrides the spec's theme; `--model`, `--effort` and `--agent` set the
+   provenance stamp (see [section 6](#6-what-every-page-carries)). A video or an interactive chart adds a
    `<name>.assets/` folder beside the page: keep them together.
 6. Optionally runs `check.mjs <page>`, which opens the page at 1280 and 390 px and
    fails on console errors or warnings, sideways scrolling, a deck that cannot
    reach its last slide with the arrow keys, or a diagram Present overlay that
    will not close on Esc. It needs Playwright and a browser (a full `npm ci` plus
    `npx playwright install chromium` in the skill folder); without them it prints
-   `check: skipped` and exits 0.
+   `check: skipped` with the doctor command to run
+   (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`) and exits 0.
 7. Tells you the path and what the page shows.
 
 **Presets:** `recap` (tl;dr, numbers, how it works, files changed, timeline,
@@ -228,8 +295,17 @@ intro and "If something fails"), `concept` (tl;dr, explanation, cards, steps),
 - These need `make-diagram` and `make-dashboard` installed beside
   `make-explainer` (the installer adds them; see the install table).
 
-**In the page:** a contents list from four sections up, copy buttons on code,
-a Theme toggle, print styles. **Checklists** save their ticks in your browser
+**Labels:** any section may carry a `label` of up to 4 words ("Eval results").
+The contents list and a small eyebrow above the heading use it; `title` stays
+the finding sentence. Without a label the contents list falls back to the title.
+A label shows on every section that has a `title`, except a `callout`, and on a
+leading `tldr`'s hero card even without a title. `scaffold.mjs` adds a label
+placeholder (`TODO: 2-4 word label`) to each section; the agent fills it in.
+
+**In the page:** the page opens with a hero (title, subtitle, meta chips and the
+leading `tldr` as a card with an accent rule), then the numbers; sections
+alternate onto a surface band. A contents list from four sections up, copy
+buttons on code, an icon theme toggle, print styles. **Checklists** save their ticks in your browser
 (per `key`), show a progress bar and per-group counts, and Reset asks before it
 clears. A tick follows its item if the list is reordered; editing an item's
 text clears that item. The `intro` ("What's in this branch") lists every
@@ -283,7 +359,49 @@ file you supply. For narration the agent runs
 `--voice af_heart` by default) after asking once to install `kokoro-js`
 (about 250 MB plus a 90 MB model downloaded a single time).
 
-## 6. Asking for changes
+## 6. What every page carries
+
+**Favicon.** Each page has an inline SVG favicon in its theme accent: three bars
+for a dashboard, three linked nodes for a diagram, a page with lines for an
+explainer, a play triangle for the make-motion preview. Nothing is fetched.
+
+**Theme toggle.** A sun, moon or auto icon button cycles Auto, then Light, then
+Dark, and remembers the choice in your browser. It still cycles when the browser
+blocks storage. The make-motion preview has none: it is a dark-only local tool,
+and the video follows the spec's theme.
+
+**Who made it.** Set `generatedBy` in the spec to the model, effort and host that
+wrote it, or override per field at build time with flags:
+
+```json
+"generatedBy": { "model": "Claude Opus 5.5", "effort": "high", "agent": "Claude Code" }
+```
+
+```bash
+node <skill-dir>/scripts/build.mjs spec.json --model "Claude Opus 5.5" --effort high --agent "Claude Code"
+node <skill-dir>/scripts/render.mjs motion.json --model "Claude Opus 5.5" --effort high --agent "Claude Code"   # make-motion
+```
+
+make-motion's `preview.mjs` takes no provenance flags: the preview footer comes
+from the spec's `generatedBy`, and `render.mjs` takes the flags for the MP4.
+
+Each field is 1 to 60 characters from `A-Za-z0-9 ._:/()+-`; anything else fails
+validation (exit 1) and never reaches the page. A field the agent does not know is
+left out, and the page reads "not reported": nothing is guessed. The stamp shows as
+a footer line (make-diagram: a line under the title), for example
+`make-explainer · Claude Haiku · low effort · Claude Code · 15 Oct 2026`, and as
+`<meta name="generator">`. The make-motion preview shows it in its footer and the same meta tag, and the
+MP4 gets it in the `comment` tag (and the model in `artist` when it is reported). When `generatedBy`
+is set in the spec, a dashboard refresh keeps the original author; a stamp passed
+only as flags is not kept by a refresh run without them. A dashboard also shows its
+refresh time. Set `SOURCE_DATE_EPOCH` to pin the footer date for a reproducible build.
+
+**Type.** Geist and Geist Mono on every generated page (the make-motion preview UI and the unthemed video keep Inter and JetBrains Mono), with a serif display face only in the
+`editorial` theme (Newsreader headings, Atkinson Hyperlegible body) and Bricolage
+Grotesque headings in `ink`. Links in running text are underlined; buttons,
+navigation and cards are not.
+
+## 7. Asking for changes
 
 All four skills edit **a few fields of the spec**, so everything else stays the
 same:
@@ -301,17 +419,17 @@ same:
 
 Never hand-edit `dist/`, the diagram or explainer HTML, or the MP4. Change the spec and rebuild.
 
-## 7. Hosts that can't run commands
+## 8. Hosts that can't run commands
 
 If an agent can write files but can't run shell commands, it still writes and
 explains the spec, then prints the exact `validate`, `build` / `render` and
 `serve` / `preview` commands for you to run.
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| `Cannot find package 'ajv'` (or duckdb, playwright) | Run `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboard, make-diagram and make-explainer) |
+| `Cannot find package 'ajv'` (or duckdb, playwright) | Run `node <skill-dir>/scripts/doctor.mjs --json`, or `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboard, make-diagram and make-explainer) |
 | `node` exits with code 139 / `SecItemCopyMatching failed -50` when an agent runs the scripts inside the Codex sandbox | `NODE_USE_SYSTEM_CA` is set (often via `launchctl setenv`); unset it for that session (`env -u NODE_USE_SYSTEM_CA codex …`) — Node 24 reads the keychain at startup and the sandbox denies it |
 | `run: node …/scripts/setup.mjs` | A sqlite, postgres or mysql source needs its DuckDB extension. Run that command once, online |
 | `sources.x.path: resolves outside the spec folder` | Move the data under the spec's folder, or add `--allow-outside` yourself |
@@ -320,15 +438,17 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | Query stopped after 30 s | Make it cheaper, or pass `--timeout 120` to `build` |
 | `nodes[0].kind: kind "databse" is not valid for architecture diagrams; did you mean "database"?` (and similar `path: message` lines from make-diagram) | The path is the field to fix and the message names the fix. The agent edits that field and reruns `validate` |
 | `text is … px wide; the box fits … px — shorten the label` or `node "b" overlaps node "a"` | make-diagram's geometry lint: shorten the label or note, or split the diagram |
+| `generatedBy.model: must match pattern "^[A-Za-z0-9 ._:/()+-]+$"` (or a 61-character value) | The `--model`, `--effort` or `--agent` flag, or the spec's `generatedBy`, has a character outside the allowed set or is longer than 60. Shorten it or drop the odd character |
+| `sections[3].title: warning: title is 12 words; keep it to 8` (or label, paragraph, card, list item) | A soft cap. It does not block the build. Shorten the text or convert it (a long `text` into `cards` or `steps`) |
 | `sections[3].text: still has a TODO placeholder` | A scaffold sentence was left in. Replace every `TODO: …` with real prose, or delete the section |
 | `banned phrase "leverage"; replace it with "use"` (or `contains emoji`, `heading ends with "!"`) | Reword as the message says. The full list is `make-explainer/references/style.md` |
 | `slide has 7 points; the limit is 6 — split this section into two slides` | In a deck each section is one slide: at most 6 points, 8 table rows, 12 code lines and 80 words. Split it |
-| `make-diagram skill not found next to make-explainer (looked in …); install it with: npx skills add …` (or make-dashboard, make-motion) | The embedded diagram, chart, icon or motion spec needs that sibling skill in the folder next to `make-explainer`. Run the printed command, or `node plugins/portable-artifacts/bin/install.mjs <host> --skills make-explainer` |
+| `make-diagram skill not found next to make-explainer (looked in …); install it with: npx --yes skills@1.7.2 add … -y` (or make-dashboard, make-motion) | The embedded diagram, chart, icon or motion spec needs that sibling skill in the folder next to `make-explainer`. Run the printed command, or `node plugins/portable-artifacts/bin/install.mjs <host> --skills make-explainer` |
 | `… is installed but its dependencies are missing` | Run `npm ci --omit=dev` inside the named sibling skill's folder |
 | `dashboard: source "x" is postgres, a network source; explainer charts read local files only` | A build never uses the network. Export the query to CSV or Parquet and point a file source at it |
 | `gather.mjs` prints `… is not a git repository` or `base "x" does not exist` (with the branches that do) | Pass `--repo <folder inside the repository>` and a real `--base <branch>` |
 | `make-motion cannot render this spec: it needs ffmpeg and a Chromium browser` | Install both (see the README requirements), or render the clip first and use `video` with the `.mp4` |
-| `check: skipped (no browser: …)` from make-diagram or make-explainer | Expected without Playwright or Chromium; the page is still built. To run the check: `npm ci` then `npx playwright install chromium` inside the skill folder |
+| `check: skipped (no browser: …)` from make-diagram or make-explainer | Expected without Playwright or Chromium; the page is still built. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci` then `npx playwright install chromium` inside the skill folder |
 | `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |
 | `kokoro-js is not installed` | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (voiceover only; `npm ci` removes it) |
 | `audio[0].src: ffmpeg cannot decode …` | The file is not a valid audio file. Re-export it as mp3 or wav |
@@ -336,7 +456,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `remote data is not allowed` / `not allowed — external URLs are never fetched` | Charts must carry their data inline (motion) or come from a SQL query (dashboard) |
 | A final counter value or keyframe never shows | Frame *i* samples `t = i/fps`. End keyframes at least one frame before the scene ends |
 
-## 9. Checking a new host or model
+## 10. Checking a new host or model
 
 `eval/run-eval.mjs` runs a fixed set of prompts through a host and scores the
 results:

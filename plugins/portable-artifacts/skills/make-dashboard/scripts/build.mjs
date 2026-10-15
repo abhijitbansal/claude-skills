@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// node scripts/build.mjs <spec.json> [--out <dir>] [--json] [--allow-outside] [--timeout s] [--theme name]
+// node scripts/build.mjs <spec.json> [--out <dir>] [--json] [--allow-outside] [--timeout s] [--theme name] [--model m] [--effort e] [--agent a]
 // exit 0 ok, 1 spec/query errors, 2 usage/IO
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,15 +7,17 @@ import { MAX_ROWS_DEFAULT } from './lib/spec.mjs';
 import { buildDashboard } from './lib/pipeline.mjs';
 import { UsageError, parseCli, parseTimeout, exitUsage } from '../shared/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
+import { PROVENANCE_OPTIONS } from '../shared/provenance.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const USAGE = 'node scripts/build.mjs <spec.json> [--out <dir>] [--json] [--allow-outside] [--timeout <seconds>] [--theme <name>]';
+const USAGE = 'node scripts/build.mjs <spec.json> [--out <dir>] [--json] [--allow-outside] [--timeout <seconds>] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>]';
 const OPTIONS = {
   out: { type: 'string' },
   json: { type: 'boolean' },
   'allow-outside': { type: 'boolean' },
   timeout: { type: 'string' },
   theme: { type: 'string' },
+  ...PROVENANCE_OPTIONS,
 };
 
 const argv = process.argv.slice(2);
@@ -27,7 +29,7 @@ try {
   jsonMode = values.json;
   if (positionals.length !== 1) throw new UsageError(`expected one spec file; usage: ${USAGE}`);
   const timeoutMs = parseTimeout(values.timeout, 30);
-  const result = await buildDashboard(positionals[0], { out: values.out, theme: values.theme, allowOutside: values['allow-outside'], timeoutMs });
+  const result = await buildDashboard(positionals[0], { out: values.out, theme: values.theme, allowOutside: values['allow-outside'], timeoutMs, model: values.model, effort: values.effort, agent: values.agent });
   if (!result.ok) {
     printResult({ ok: false, errors: result.errors }, { json: jsonMode, label: 'build' });
     process.exitCode = 1;

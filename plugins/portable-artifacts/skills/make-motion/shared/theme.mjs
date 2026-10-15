@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { typeCss } from './type.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const THEMES = path.join(HERE, 'themes');
@@ -20,6 +21,9 @@ const VARS = {
   warn: '--warn', good: '--good', bad: '--bad',
   cat1: '--s1', cat2: '--s2', cat3: '--s3', cat4: '--s4', cat5: '--s5', cat6: '--s6', cat7: '--s7', cat8: '--s8',
   seq1: '--seq1', seq2: '--seq2', seq3: '--seq3', seq4: '--seq4', seq5: '--seq5', seq6: '--seq6', seq7: '--seq7',
+  // make-diagram's kind families (one hue each) and the dark-mode glow
+  kindPerson: '--k-person', kindService: '--k-service', kindData: '--k-data', kindQueue: '--k-queue', kindExternal: '--k-external', kindDecision: '--k-decision',
+  glow: '--glow',
 };
 export const TOKENS = Object.keys(VARS);
 
@@ -73,5 +77,6 @@ export function themeCss(theme) {
     `:root{color-scheme:light;${vars(theme.light, theme.fonts)}}`,
     `@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;${vars(theme.dark)}}}`,
     `:root[data-theme="dark"]{color-scheme:dark;${vars(theme.dark)}}`,
+    typeCss(),
   ].join('\n');
 }

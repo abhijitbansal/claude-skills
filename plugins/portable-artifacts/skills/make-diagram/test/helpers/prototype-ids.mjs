@@ -13,6 +13,12 @@ export const PROTOTYPE_NAMED_SPECS = {
     edges: [{ from: 'a', to: 'b' }],
     steps: [{ title: 'group', focus: ['constructor'], highlight: ['constructor'] }],
   },
+  'a group named constructor at a two-headed edge end': {
+    title: 'GE', type: 'architecture',
+    groups: [{ id: 'constructor', label: 'Group' }],
+    nodes: [{ id: 'a', label: 'A', group: 'constructor' }, { id: 'b', label: 'B' }],
+    edges: [{ from: 'a', to: 'b' }, { from: 'b', to: 'constructor', both: true }],
+  },
   'an edge named constructor': {
     title: 'E', type: 'state',
     nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
@@ -27,5 +33,11 @@ export const PROTOTYPE_NAMED_SPECS = {
     title: 'M', type: 'sequence',
     participants: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
     messages: [{ id: 'constructor', from: 'a', to: 'b', label: 'hi' }],
+  },
+  'a story named constructor hopping from a node named constructor': {
+    title: 'St', type: 'flow',
+    nodes: [{ id: 'constructor', label: 'Ctor' }, { id: 'b', label: 'B' }],
+    edges: [{ id: 'hop', from: 'constructor', to: 'b' }],
+    stories: [{ id: 'constructor', title: 'Ctor', beats: [{ title: 'go', from: 'constructor', to: 'b' }, { title: 'look', focus: ['constructor'] }] }],
   },
 };

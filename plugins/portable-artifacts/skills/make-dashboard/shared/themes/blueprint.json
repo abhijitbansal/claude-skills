@@ -3,25 +3,25 @@
   "label": "Blueprint",
   "fonts": {
     "display": {
-      "family": "IBM Plex Sans",
+      "family": "Geist",
       "fallback": "-apple-system, 'Segoe UI', sans-serif",
       "weights": {
-        "600": "ibm-plex-sans-latin-600-normal.woff2"
+        "600": "geist-sans-latin-600-normal.woff2"
       }
     },
     "body": {
-      "family": "IBM Plex Sans",
+      "family": "Geist",
       "fallback": "-apple-system, 'Segoe UI', sans-serif",
       "weights": {
-        "400": "ibm-plex-sans-latin-400-normal.woff2",
-        "600": "ibm-plex-sans-latin-600-normal.woff2"
+        "400": "geist-sans-latin-400-normal.woff2",
+        "600": "geist-sans-latin-600-normal.woff2"
       }
     },
     "mono": {
-      "family": "IBM Plex Mono",
+      "family": "Geist Mono",
       "fallback": "ui-monospace, Menlo, Consolas, monospace",
       "weights": {
-        "400": "ibm-plex-mono-latin-400-normal.woff2"
+        "400": "geist-mono-latin-400-normal.woff2"
       }
     }
   },
@@ -52,7 +52,14 @@
     "seq4": "#3987e5",
     "seq5": "#256abf",
     "seq6": "#184f95",
-    "seq7": "#0d366b"
+    "seq7": "#0d366b",
+    "kindPerson": "#a3480a",
+    "kindService": "#0e7490",
+    "kindData": "#6d28d9",
+    "kindQueue": "#0f766e",
+    "kindExternal": "#56677b",
+    "kindDecision": "#4338ca",
+    "glow": "#1e5f8a"
   },
   "dark": {
     "page": "#0e1319",
@@ -81,6 +88,13 @@
     "seq4": "#2a78d6",
     "seq5": "#3987e5",
     "seq6": "#6da7ec",
-    "seq7": "#9ec5f4"
+    "seq7": "#9ec5f4",
+    "kindPerson": "#f5a524",
+    "kindService": "#38bdf8",
+    "kindData": "#a78bfa",
+    "kindQueue": "#2dd4bf",
+    "kindExternal": "#94a3b8",
+    "kindDecision": "#818cf8",
+    "glow": "#8fd0ff"
   }
 }

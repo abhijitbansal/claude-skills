@@ -22,7 +22,8 @@ Authoritative schema: `SCHEMA` in `scripts/lib/spec.mjs`. Unknown properties are
 |---|---|
 | `title` | required string |
 | `description` | optional subtitle |
-| `theme` | optional: `paper` (default), `blueprint`, `editorial`, `ink`. `build.mjs --theme <name>` and `serve.mjs --watch --theme <name>` override it. An unknown name fails with did-you-mean. The page also has a "Theme: Auto / Light / Dark" toggle |
+| `theme` | optional: `paper` (default), `blueprint`, `editorial`, `ink`. `build.mjs --theme <name>` and `serve.mjs --watch --theme <name>` override it. An unknown name fails with did-you-mean. The page also has an icon toggle that cycles Auto, Light, Dark |
+| `generatedBy` | optional object `{ model?, effort?, agent? }`: who made the dashboard, shown in the page footer beside the refresh time and in the generator meta; each field is 1-60 characters of letters, digits, space and `. _ : / ( ) + -`; `build.mjs --model`, `--effort` and `--agent` override it; a missing field shows as "not reported" |
 | `maxRows` | integer 1–100000, default 5000; applied to every query. Longer results are cut and the card says "truncated at N" |
 | `sources.<name>` | `name` matches `^[a-z][a-z0-9_]*$` and is not `main`, `temp` or `system` (DuckDB catalogs). `type`: `csv`, `parquet`, `json`, `duckdb`, `sqlite` (take `path`) or `postgres`, `mysql` (take `env`, never `path`). `path` is relative to the **spec file**, not the cwd, and must resolve (symlinks followed) to a regular file inside the spec's folder. Only `--allow-outside` on validate/build lifts the folder rule; it is deliberately not a spec field |
 | `queries.<name>` | one SQL `SELECT` (CTEs and UNIONs fine). Each source name is a table/view in the query. No other statement types |

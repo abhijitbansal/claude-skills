@@ -19,7 +19,7 @@ async function haveBrowser() {
   try { await (await launchBrowser({ quiet: true })).close(); return true; } catch { return false; }
 }
 
-// blueprint: IBM Plex Sans body and IBM Plex Mono, neither of which the unthemed page uses.
+// blueprint: Geist body and Geist Mono, neither of which the unthemed page uses.
 const BLUEPRINT = { page: '#0e1319', text: '#e8edf3', accent: '#6cb2e6' };
 const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
 const spec = (extra = {}, el = {}) => ({
@@ -74,13 +74,13 @@ async function drawn(motion) {
 test('themed: text, mono text, shape, chart and stage use the theme fonts and dark colours; its fonts really load', async (t) => {
   if (!(await haveBrowser())) return t.skip('browser unavailable');
   const { look, problems, requests } = await drawn(spec({ theme: 'blueprint' }));
-  assert.match(look.family, /^"IBM Plex Sans", /);
-  assert.match(look.mono, /^"IBM Plex Mono", /);
+  assert.match(look.family, /^"?Geist"?, /); // the browser drops quotes around a one-word family
+  assert.match(look.mono, /^"Geist Mono", /);
   assert.equal(look.color, rgb(BLUEPRINT.text));
   assert.equal(look.stage, rgb(BLUEPRINT.page));
   assert.equal(look.shape.toLowerCase(), BLUEPRINT.accent);
-  assert.ok(look.loaded.includes('IBM Plex Sans') && look.loaded.includes('IBM Plex Mono'), `fonts loaded: ${look.loaded}`);
-  assert.match(look.chartFont, /IBM Plex Sans/);
+  assert.ok(look.loaded.includes('Geist') && look.loaded.includes('Geist Mono'), `fonts loaded: ${look.loaded}`);
+  assert.match(look.chartFont, /^"?Geist"?(,|$)/);
   assert.ok(look.chartMarks.includes(BLUEPRINT.accent), 'the bars take the theme accent');
   assert.ok(requests.includes('/theme/blueprint.json') && requests.includes('/theme/blueprint.css'));
   assert.ok(requests.some((r) => r.startsWith('/theme/fonts/') && r.endsWith('.woff2')));
@@ -131,7 +131,7 @@ test('themed contact sheet: renders, differs from the unthemed one, and is not b
 
 test('themed: a requested weight maps to the nearest weight the theme font ships, mono default included', async (t) => {
   if (!(await haveBrowser())) return t.skip('browser unavailable');
-  // blueprint ships IBM Plex Sans 400 and 600, and IBM Plex Mono 400 only.
+  // blueprint ships Geist 400 and 600, and Geist Mono 400 only.
   const weights = { sans: [[undefined, '600'], [800, '600'], [700, '600'], [300, '400'], [400, '400']], mono: [[undefined, '400'], [700, '400']] };
   for (const [font, cases] of Object.entries(weights)) {
     for (const [asked, shipped] of cases) {

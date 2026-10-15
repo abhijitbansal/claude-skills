@@ -5,6 +5,7 @@ import Ajv from 'ajv';
 import { compile as compileVegaLite } from 'vega-lite';
 import { formatAjvErrors, pathJoin, didYouMean } from '../../shared/errors.mjs';
 import { listThemes } from '../../shared/theme.mjs';
+import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { resolveAsset } from './paths.mjs';
 import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, trackStart } from '../../template/audio.mjs';
 
@@ -115,6 +116,7 @@ export const SCHEMA = {
     fps: { enum: [24, 25, 30, 60] },
     background: color,
     theme: { type: 'string', minLength: 1 },
+    generatedBy: GENERATED_BY_SCHEMA,
     scenes: {
       type: 'array', minItems: 1, maxItems: 50,
       items: {
@@ -135,6 +137,10 @@ export const SCHEMA = {
 
 const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
 const schemaCheck = ajv.compile(SCHEMA);
+const generatedByCheck = ajv.compile(GENERATED_BY_SCHEMA);
+
+// True only for a present, schema-valid `generatedBy`; the preview footer uses it without validating the whole spec.
+export const checkGeneratedBy = (value) => value !== undefined && generatedByCheck(value);
 
 export function loadSpec(file) {
   const abs = path.resolve(file);

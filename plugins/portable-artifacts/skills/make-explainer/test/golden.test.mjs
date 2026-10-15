@@ -20,7 +20,7 @@ for (const preset of PRESETS) {
     try {
       const out = path.join(dir, `${preset}.html`);
       const spec = path.join(ROOT, `references/examples/${preset}.explainer.json`);
-      const r = spawnSync(process.execPath, [BUILD, spec, '--out', out], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '', PA_OUTPUT_DIR: '' } });
+      const r = spawnSync(process.execPath, [BUILD, spec, '--out', out], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '', PA_OUTPUT_DIR: '', SOURCE_DATE_EPOCH: '1792000000' } }); // pinned: the footer carries the build date
       assert.equal(r.status, 0, r.stdout + r.stderr);
       const actual = normalisedBody(fs.readFileSync(out, 'utf8'));
       const golden = path.join(ROOT, `test/golden/${preset}.body.html`);

@@ -11,7 +11,7 @@ import { haveBrowser, buildPage, example, EXAMPLES } from './helpers/browser.mjs
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CHECK = path.join(ROOT, 'scripts/check.mjs');
-const SKIP_RE = /^check: skipped \(no browser: [^;\n]+; run: npx playwright install chromium\)\n$/;
+const SKIP_RE = /^check: skipped \(no browser: [^;\n]+; ask the user, then run: node \S*doctor\.mjs\S* --for check --fix (dev_deps|chromium)\)\n$/;
 const run = (args, env = {}) => spawnSync(process.execPath, [CHECK, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'diagram-check-'));
 
@@ -39,7 +39,7 @@ for (const name of EXAMPLES) {
     const { file } = buildPage(example(name), { name });
     const r = run([file]);
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.match(r.stdout, /^check: ok \(2 viewports, \d+ steps\)\n$/);
+    assert.match(r.stdout, /^check: ok \(2 viewports, \d+ beats\)\n$/);
   });
 }
 
@@ -51,7 +51,7 @@ test('--json mirrors the passing result', async (t) => {
   const body = JSON.parse(r.stdout);
   assert.equal(body.ok, true);
   assert.equal(body.viewports, 2);
-  assert.ok(body.steps > 0);
+  assert.ok(body.beats > 0);
 });
 
 test('a label doctored too wide for its box fails and names the node id', async (t) => {
@@ -89,6 +89,33 @@ test('a page wider than the viewport fails', async (t) => {
   const r = run([bad]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /the page overflows the viewport/);
+});
+
+// A doctored page must really differ: a replace whose target drifted would leave a good page.
+const swap = (html, from, to) => {
+  assert.ok(html.includes(from), `the page still contains ${JSON.stringify(from)}`);
+  return html.replace(from, to);
+};
+// Makes the camera's fit ignore the legend overlay.
+const IGNORE_OVERLAY = ['var shown = r.height > 0 && r.width > 0 && o && o.height > 0;', 'var shown = false;'];
+
+test('a legend overlay sitting on a node fails and names the node', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  // The camera is told to ignore the overlay too, or it would fit the drawing into the sliver the stage-sized overlay leaves.
+  const bad = doctored('flow', (html) => swap(swap(html, '.legend { position: absolute; top: 10px; right: 12px; z-index: 1; max-width: min(60%, 400px);', '.legend { position: absolute; inset: 0; z-index: 1; max-width: none;'), IGNORE_OVERLAY[0], IGNORE_OVERLAY[1]));
+  const r = run([bad]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /^1440px: node "[a-z-]+" is \d+% under the legend overlay$/m);
+  assert.match(r.stdout, /^390px: node "[a-z-]+" is \d+% under the legend overlay$/m);
+  assert.ok(JSON.parse(run([bad, '--json']).stdout).problems.some((p) => p.includes('under the legend overlay')));
+});
+
+test('a camera that ignores the legend overlay (fits the whole padded canvas) fails at 390 px, where it covers the first node', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const bad = doctored('flow', (html) => swap(swap(html, 'var fitBox = overlay &&', 'var fitBox = false && overlay &&'), IGNORE_OVERLAY[0], IGNORE_OVERLAY[1]));
+  const r = run([bad]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /^390px: node "begin" is \d+% under the legend overlay$/m);
 });
 
 test('a page missing its presentation caption fails with a problem line, quickly', async (t) => {
@@ -147,6 +174,8 @@ test('PA_NO_BROWSER=1 prints the skip line and exits 0', () => {
   const json = JSON.parse(run([file, '--json'], { PA_NO_BROWSER: '1' }).stdout);
   assert.equal(json.ok, true);
   assert.equal(json.skipped, true);
+  assert.match(json.hint, /^ask the user, then run: node \S*doctor\.mjs\S* --for check --fix chromium$/);
+  assert.doesNotMatch(r.stdout + json.hint, /npx playwright install/);
 });
 
 test('without playwright installed the check skips and exits 0', () => {
@@ -154,12 +183,13 @@ test('without playwright installed the check skips and exits 0', () => {
   fs.mkdirSync(path.join(dir, 'scripts/lib'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'shared'));
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
-  for (const f of ['scripts/check.mjs', 'scripts/lib/browser.mjs', 'shared/cli.mjs', 'shared/errors.mjs']) fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
+  for (const f of ['scripts/check.mjs', 'scripts/lib/browser.mjs', 'scripts/lib/doctor-hint.mjs', 'shared/cli.mjs', 'shared/errors.mjs', 'shared/doctor.mjs']) fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
   const { file } = buildPage(example('flow'), { name: 'flow' });
   const r = spawnSync(process.execPath, [path.join(dir, 'scripts/check.mjs'), file], { encoding: 'utf8', env: { ...process.env, PA_NO_BROWSER: '' } });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, SKIP_RE);
   assert.match(r.stdout, /no browser: playwright is not installed/);
+  assert.match(r.stdout, /--for check --fix dev_deps\)/);
 });
 
 // ---- CLI rules --------------------------------------------------------------------------------------
@@ -177,17 +207,17 @@ test('usage errors exit 2', () => {
   assert.equal(json.ok, false);
 });
 
-// ---- size budget: <= 400 KB per built example ------------------------------------------------------------
+// ---- size budget: <= the page limit per built example ------------------------------------------------------------
 
 for (const name of EXAMPLES) {
-  test(`${name}: the built example is within the 400 KB budget`, () => {
+  test(`${name}: the built example is within the page budget`, () => {
     const { html } = buildPage(example(name), { name });
-    assert.ok(Buffer.byteLength(html) <= 400 * 1024, `${Buffer.byteLength(html)} bytes`);
+    assert.ok(Buffer.byteLength(html) <= MAX_PAGE_BYTES, `${Buffer.byteLength(html)} bytes`);
   });
 }
 
-test('the page limit is 400 KB and an oversized page is refused without writing', async () => {
-  assert.equal(MAX_PAGE_BYTES, 400 * 1024);
+test('the page limit is 1024 KB and an oversized page is refused without writing', async () => {
+  assert.equal(MAX_PAGE_BYTES, 1024 * 1024);
   const dir = tmp();
   const spec = path.join(dir, 'flow.diagram.json');
   fs.writeFileSync(spec, JSON.stringify(example('flow')));

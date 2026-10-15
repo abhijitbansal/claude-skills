@@ -97,7 +97,7 @@ test('hostile titles stay inert in labels, the outline and the heading', async (
 test('the CSP is unchanged and the page still loads no network resource', async () => {
   const { html } = await build(deck([text(1)]));
   assert.match(html, /Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;unsafe-inline&#39;; style-src &#39;unsafe-inline&#39;; img-src data: blob:; font-src data:">/);
-  assert.ok(!/<link\b/i.test(html));
+  assert.ok(!/<link\b(?![^>]*rel="icon"[^>]*href="data:)/i.test(html)); // only the inline data: favicon
   assert.ok(!/<script[^>]*\ssrc=/i.test(html));
   assert.match(html, /localStorage\.getItem\('pa-theme'\)/);
   assert.match(html, /data-theme-toggle/);

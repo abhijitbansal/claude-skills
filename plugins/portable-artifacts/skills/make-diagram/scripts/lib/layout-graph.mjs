@@ -4,10 +4,13 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { KINDS } from './kinds.mjs';
 import { nodeSize, edgeLabelSize, groupMinSize } from './sizes.mjs';
+import { edgeIds } from './edge-ids.mjs';
+import { legendLayout, placeLegend, drawingBounds, LEGEND_BAND } from './legend.mjs';
 
 export const OUTER_MARGIN = 24;
 const GROUP_PADDING = `[top=40,left=${OUTER_MARGIN},bottom=${OUTER_MARGIN},right=${OUTER_MARGIN}]`;
-const ROOT_PADDING = `[top=${OUTER_MARGIN},left=${OUTER_MARGIN},bottom=${OUTER_MARGIN},right=${OUTER_MARGIN}]`;
+// The legend row sits in a band above the drawing (legend.mjs).
+const ROOT_PADDING = `[top=${OUTER_MARGIN + LEGEND_BAND},left=${OUTER_MARGIN},bottom=${OUTER_MARGIN},right=${OUTER_MARGIN}]`;
 const DEFAULT_DIRECTION = { architecture: 'right', flow: 'down', state: 'right' };
 
 // ELK ids are prefixed per kind of thing so a node, group and edge never clash
@@ -177,6 +180,8 @@ function readNode(node, size, kindInfo, laid, layerOf, direction) {
     lines: size.lines,
     noteLine: size.noteLine,
     icon: size.icon,
+    emoji: size.emoji,
+    typeLine: size.typeLine,
     tone: node.tone ?? 'neutral',
     group: node.group ?? null,
     layer: layerOf.get(node.id),
@@ -186,20 +191,6 @@ function readNode(node, size, kindInfo, laid, layerOf, direction) {
     out.labelSide = LABEL_PLACEMENT[direction].side;
   }
   return out;
-}
-
-// Every edge's id: the authored one, else `edge-<index>`, extended with `_` while
-// it would reuse a node, group or other edge id (the viewer's id space is flat).
-function edgeIds(spec) {
-  const edges = spec.edges ?? [];
-  const taken = new Set([...(spec.groups ?? []), ...(spec.nodes ?? []), ...edges].map((x) => x.id).filter((id) => id !== undefined));
-  return edges.map((e, i) => {
-    if (e.id !== undefined) return e.id;
-    let id = `edge-${i}`;
-    while (taken.has(id)) id += '_';
-    taken.add(id);
-    return id;
-  });
 }
 
 // ELK spaces a self loop's two ports a third of the node side apart and draws
@@ -244,6 +235,25 @@ function readEdge(edge, id, i, laid, laidFrom, lonelySelfLoop) {
   return out;
 }
 
+/** The canvas for a drawing `drawingWidth` wide and a legend row `legendWidth` wide: a narrow drawing widens (to a whole pixel) and sits centred; `dx` is how far it moves right. */
+function canvasFor(drawingWidth, legendWidth) {
+  const needed = Math.ceil(legendWidth + 2 * OUTER_MARGIN);
+  if (needed <= drawingWidth) return { width: drawingWidth, dx: 0 };
+  return { width: needed, dx: round((needed - drawingWidth) / 2) };
+}
+
+/** The geometry with the drawing (not the legend) moved `dx` right. */
+function shiftDrawing(g, dx) {
+  const by = (o) => ({ ...o, x: round(o.x + dx) });
+  const withLabel = (o) => (o.labelBox ? { ...by(o), labelBox: by(o.labelBox) } : by(o));
+  return {
+    ...g,
+    nodes: g.nodes.map(withLabel),
+    groups: g.groups.map(by),
+    edges: g.edges.map((e) => ({ ...e, points: e.points.map(by), ...(e.label ? { label: by(e.label) } : {}) })),
+  };
+}
+
 /** Lay out an architecture, flow or state spec. */
 export async function layoutGraph(spec, theme) {
   const direction = spec.direction ?? DEFAULT_DIRECTION[spec.type];
@@ -269,9 +279,13 @@ export async function layoutGraph(spec, theme) {
   const selfLoops = new Map();
   for (const e of spec.edges ?? []) if (e.from === e.to) selfLoops.set(e.from, (selfLoops.get(e.from) ?? 0) + 1);
   const depths = groupDepths(spec.groups ?? []);
-  return {
-    width: round(result.width),
+  const legend = legendLayout(spec, theme);
+  const { width, dx } = canvasFor(round(result.width), legend.width);
+  const geometry = {
+    width,
     height: round(result.height),
+    drawing: drawingBounds(dx, result.width, result.height),
+    legend: placeLegend(legend, width, OUTER_MARGIN),
     nodes: nodes.map((n) => readNode(n, sizes.get(n.id), kindOf.get(n.id), laidNodes.get(elkNodeId(n.id)), layerOf, direction)),
     groups: (spec.groups ?? []).map((g) => ({
       id: g.id,
@@ -283,4 +297,5 @@ export async function layoutGraph(spec, theme) {
     edges: (spec.edges ?? []).map((e, i) => readEdge(e, ids[i], i, laidEdges.get(elkEdgeId(i)), laidNodes.get(elkNodeId(e.from)) ?? laidNodes.get(elkGroupId(e.from)), e.from === e.to && selfLoops.get(e.from) === 1)),
     layers: clustered.map((layer) => layer.map((n) => n.id)),
   };
+  return dx === 0 ? geometry : shiftDrawing(geometry, dx);
 }

@@ -1,6 +1,6 @@
 <body class="">
 <a class="skip" href="#content">Skip to content</a>
-<header class="masthead">
+<header class="hero">
 <div class="mast-text">
 <h1>feat/visual-artifacts: manual test checklist</h1>
 <p class="subtitle">What automated tests and the headless browser could not cover</p>
@@ -10,16 +10,15 @@
 <div class="m-status"><dt>Status</dt><dd>Ready to test</dd></div>
 </dl>
 </div>
-<button type="button" class="theme-toggle" data-theme-toggle aria-label="Theme: Auto. Change theme">Theme: Auto</button>
-<script>
-// A stored theme was applied in <head>; label the toggle now, before the large scripts parse.
-(function () { var t = document.documentElement.getAttribute('data-theme'), b = document.querySelector('[data-theme-toggle]'); if (t && b) { var l = 'Theme: ' + t.charAt(0).toUpperCase() + t.slice(1); b.textContent = l; b.setAttribute('aria-label', l + '. Change theme'); } })();
-</script>
+<button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><span class="pa-ti pa-ti-auto"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-light"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-dark"><svg data-sibling-svg></svg></span></button>
+<script>/* shared theme toggle */</script>
+
 </header>
 <div class="layout">
 
 <main id="content" class="sections">
 <section class="sec sec-checklist" id="manual-tests" aria-labelledby="manual-tests-title">
+<p class="sec-eyebrow pa-label">Before merge</p>
 <h2 class="sec-title" id="manual-tests-title">Manual tests for the visual artifact skills<a class="anchor" href="#manual-tests" aria-label="Link to this section: Manual tests for the visual artifact skills">#</a></h2>
 <div class="checklist" data-checklist data-key="feat-visual-artifacts" data-total="28">
 <details class="det cl-context" open>

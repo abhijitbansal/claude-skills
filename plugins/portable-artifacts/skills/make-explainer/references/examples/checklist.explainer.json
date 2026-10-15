@@ -14,6 +14,7 @@
       "type": "checklist",
       "id": "manual-tests",
       "title": "Manual tests for the visual artifact skills",
+      "label": "Before merge",
       "key": "feat-visual-artifacts",
       "intro": "This branch adds two skills to the `portable-artifacts` plugin and brings a third to v2:\n\n- **make-dashboard** (v2) builds an interactive dashboard from data files, with live reload.\n- **make-diagram** (new) draws architecture, flow, sequence and state diagrams as one HTML file.\n- **make-explainer** (new) turns a small JSON outline into a recap, concept page, slide deck or this checklist.\n\nUnit tests, the schema checks and a headless Chromium run already cover rendering, validation and storage. Only the items below need a person: a fresh machine, a real window, a print dialog. Items tagged **Regression** guard bugs fixed during review.\n\n**Fixed during review**\n\n- make-diagram: edge ids can no longer collide, a group highlight stays visible, and self-loops are easier to read.\n- make-dashboard: stacked-area crosshair dots sit on the coloured areas, nominal x keeps query order, and a paired card keeps its tab row.\n- make-explainer: an SVG check scans the whole file, and section ids stay unique.",
       "groups": [

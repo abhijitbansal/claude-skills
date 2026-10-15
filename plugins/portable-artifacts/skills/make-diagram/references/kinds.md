@@ -2,6 +2,21 @@
 
 Shape encodes kind, so colour is never the only signal. Most kinds have a default icon (the tables below say which); set `icon` to override it. The first kind listed for a type is its default.
 
+## Colour families
+
+Each kind belongs to one family; the family's hue (a theme token, `--k-<family>`) tints the card, its border, the icon tile, the small-caps kind label, the node's outgoing edges and its legend swatch. `tone` overrides only the border and icon. Bare shapes (flow `start`, `end`; state `start`, `end`) keep the neutral card.
+
+| family | kinds | reads as |
+|---|---|---|
+| `person` | `user`; sequence `actor` | amber: people |
+| `service` | `service`, `client`, `function`, `gateway`, `cache`, `other`; flow `step`, `io`, `subprocess`, `wait` | cyan: things that run |
+| `data` | `database`, `storage` | violet: things that keep |
+| `queue` | `queue` | teal: things that carry |
+| `external` | `external` | grey: things you do not run |
+| `decision` | flow `decision`; state `state`, `choice` | indigo: branches and states |
+
+An `emoji` replaces the icon in the tile and keeps the family tint.
+
 ## architecture
 
 | kind | shape | default icon |

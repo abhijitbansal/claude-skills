@@ -1,16 +1,26 @@
 // Page assembly: one self-contained HTML file around a built diagram. Theme CSS
 // and fonts, diagram CSS, the SVG, a hidden text alternative, a JSON data block
-// and the inlined runtime (template/viewer.js core + template/toolbar.js chrome).
+// and the inlined runtime (template/*.js in the order scripts/lib/runtime.mjs fixes, then template/toolbar.js chrome).
 // No network, no LLM. Every string from the spec goes through esc().
 import fs from 'node:fs';
 import { themeCss } from '../../shared/theme.mjs';
 import { esc } from './svg.mjs';
+import { runtimeSource } from './runtime.mjs';
+import { legendItems } from './legend.mjs';
+import { FAMILIES } from './kinds.mjs';
+import { faviconLink } from '../../shared/icons.mjs';
+import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
+import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mjs';
 
 const TEMPLATE = new URL('../../template/viewer.html', import.meta.url);
-const CORE = new URL('../../template/viewer.js', import.meta.url);
 const CHROME = new URL('../../template/toolbar.js', import.meta.url);
 
-export const MAX_PAGE_BYTES = 400 * 1024;
+// Covers the worst page a spec that passes validation can make (test/helpers/limit-specs.mjs):
+// 60 nodes with the 60 largest brand icons, 400-char details, 8 stories and "&" in every text
+// field builds about 920 KB (ordinary text, about 540 KB); the limit adds ~10%. Brand icons are
+// drawn once per page (svg.mjs shareBrandIcons), so they cost at most the 60 largest paths, ~120 KB.
+// make-explainer's DIAGRAM_MAX_BYTES bounds the spec file, not this page, so the two stay independent.
+export const MAX_PAGE_BYTES = 1024 * 1024;
 
 // JSON that is safe inside <script type="application/json">.
 export function jsonForScript(obj) {
@@ -70,22 +80,55 @@ function textAlternative(spec) {
   return `<section class="sr-only" aria-label="Diagram as text"><h2>${esc(spec.title)}</h2>${subtitle}${body}</section>`;
 }
 
+// ---- legend overlay ---------------------------------------------------------------------
+// The key as HTML in the stage's corner: the in-SVG legend scales with the camera and
+// is unreadable at fit on a wide diagram. Same items as the drawn one (legend.mjs).
+
+const LEGEND_TINT = 10; // % of the kind hue in a swatch: the card tint (css.mjs CARD_TINT)
+const WIRE_LOOK = { solid: 'solid', dashed: 'dashed', async: 'dotted' };
+
+const legendWord = (it) => (it.kind === 'kind' ? `${it.count} ${it.name}` : it.label);
+
+function legendMark(it) {
+  if (it.kind === 'style') return `<i class="lg-wire lg-wire-${WIRE_LOOK[it.style]}"></i>`;
+  return `<i class="lg-sw lg-sw-${esc(it.family)}"></i>`;
+}
+
+function legendHtml(spec) {
+  const items = legendItems(spec).map((it) => `<span class="lg">${legendMark(it)}${esc(legendWord(it))}</span>`);
+  return `<div class="legend" data-pa-legend aria-hidden="true">${items.join('')}</div>`;
+}
+
+// color-mix() wraps var(), so it sits in @supports (see css.mjs): an engine without it keeps the plain swatch.
+const legendCss = () => [
+  ...FAMILIES.map((f) => `.lg-sw-${f}{background:var(--surface);border-color:var(--k-${f})}`),
+  `@supports (color: color-mix(in srgb, red, red)){${FAMILIES.map((f) => `.lg-sw-${f}{background:color-mix(in srgb,var(--k-${f}) ${LEGEND_TINT}%,var(--surface))}`).join('')}}`,
+].join('\n');
+
 // ---- page ---------------------------------------------------------------------------------
 
 /**
  * The finished page for `spec`. `built` is buildDiagram's result and `theme`
  * the loaded theme it was built with.
  */
-export function renderViewer(spec, built, { theme }) {
+export function renderViewer(spec, built, { theme, env = process.env }) {
   const parts = {
     TITLE: esc(spec.title),
     SUBTITLE: spec.subtitle ? `<p class="sub">${esc(spec.subtitle)}</p>` : '',
+    PROVENANCE: provenanceHtml('make-diagram', spec.generatedBy, buildDate(env)),
+    FAVICON: faviconLink('make-diagram', theme),
+    GENERATOR: generatorMeta('make-diagram', spec.generatedBy),
+    TOGGLE_ICONS: toggleIcons(),
+    TOGGLE_CSS,
+    TOGGLE_JS: inlineCode(TOGGLE_JS),
     THEME: themeCss(theme),
     DIAGRAM_CSS: built.css,
+    LEGEND_CSS: legendCss(),
+    LEGEND: legendHtml(spec),
     SVG: built.svg,
     TEXT: textAlternative(spec),
     DATA: jsonForScript(built.data),
-    CORE: inlineCode(fs.readFileSync(CORE, 'utf8')),
+    CORE: inlineCode(runtimeSource()),
     CHROME: inlineCode(fs.readFileSync(CHROME, 'utf8')),
   };
   return fs.readFileSync(TEMPLATE, 'utf8').replace(/<!--@(\w+)-->/g, (_, key) => parts[key] ?? '');

@@ -15,6 +15,7 @@ import { UsageError } from '../../shared/cli.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { KIND_NAMES, roleErrors } from './kinds.mjs';
 import { checkFields } from './data.mjs';
+import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 
 const NAME = '^[a-z][a-z0-9_]*$';
 const ID = '^[A-Za-z][A-Za-z0-9_-]*$';
@@ -33,6 +34,7 @@ export const SCHEMA = {
     description: { type: 'string' },
     maxRows: { type: 'integer', minimum: 1, maximum: 100000 },
     theme: { type: 'string', minLength: 1 },
+    generatedBy: GENERATED_BY_SCHEMA,
     sources: {
       type: 'object',
       propertyNames: { pattern: NAME },

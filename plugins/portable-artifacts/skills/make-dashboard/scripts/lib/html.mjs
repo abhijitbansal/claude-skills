@@ -4,6 +4,9 @@ import { MAX_ROWS_DEFAULT } from './spec.mjs';
 import { themeCss } from '../../shared/theme.mjs';
 import { formatValue } from './format.mjs';
 import { vegaConfig } from './vega-config.mjs';
+import { faviconLink } from '../../shared/icons.mjs';
+import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
+import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mjs';
 
 const TEMPLATE = new URL('../../template/page.html', import.meta.url);
 const PA_LIB = new URL('../../template/pa-lib.js', import.meta.url);
@@ -35,7 +38,9 @@ export function vegaConfigScript() {
   return `window.PAVegaConfig = ${vegaConfig.toString()};`;
 }
 
-const inlineScript = (code) => `<script>${code.replace(/<\/(script)/gi, '<\\/$1')}</script>`;
+// Inline code must not close its <script> or open an HTML comment (`<!--` changes how the parser ends the element).
+const escapeInline = (code) => code.replace(/<\/(script)/gi, '<\\/$1').replaceAll('<!--', '<\\!--');
+const inlineScript = (code) => `<script>${escapeInline(code)}</script>`;
 
 const utc = (iso) => iso.slice(0, 16).replace('T', ' ');
 const timeTag = (iso, text) => `<time datetime="${escapeHtml(iso)}" data-t="${text}">${escapeHtml(text === 'hm' ? iso.slice(11, 16) + ' UTC' : `${utc(iso)} UTC`)}</time>`;
@@ -90,9 +95,13 @@ function card(chart, expanded, results, maxRows) {
 </article>`;
 }
 
+// SOURCE_DATE_EPOCH pins the stamp date for reproducible builds; otherwise it is the build's own `now`,
+// so it agrees with the refresh time beside it.
+const stampDate = (env, now) => (/^\d+$/.test(env.SOURCE_DATE_EPOCH ?? '') ? buildDate(env) : now);
+
 // vendor: { vega, vegaLite, vegaEmbed } source strings; theme: a loaded shared/ theme;
 // charts: expandCharts(...).charts.
-export function renderPage(spec, results, { vendor, theme, charts }) {
+export function renderPage(spec, results, { vendor, theme, charts, env = process.env, now = new Date() }) {
   const maxRows = spec.maxRows ?? MAX_ROWS_DEFAULT;
   const charted = new Set((spec.charts ?? []).map((c) => c.query));
   const queries = Object.fromEntries(
@@ -112,6 +121,12 @@ export function renderPage(spec, results, { vendor, theme, charts }) {
     TITLE: escapeHtml(spec.title),
     DESCRIPTION: spec.description ? `<p class="desc">${escapeHtml(spec.description)}</p>` : '',
     REFRESHED: timeTag(refreshed, 'full'),
+    PROVENANCE: provenanceHtml('make-dashboard', spec.generatedBy, stampDate(env, now)),
+    FAVICON: faviconLink('make-dashboard', theme),
+    GENERATOR: generatorMeta('make-dashboard', spec.generatedBy),
+    TOGGLE_ICONS: toggleIcons(),
+    TOGGLE_CSS,
+    TOGGLE_JS: escapeInline(TOGGLE_JS),
     KPIS: kpis,
     CARDS: cards,
     DATA: jsonForScript(data),

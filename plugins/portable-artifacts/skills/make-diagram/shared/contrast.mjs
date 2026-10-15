@@ -18,6 +18,20 @@ export function contrastRatio(a, b) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+const KIND = ['kindPerson', 'kindService', 'kindData', 'kindQueue', 'kindExternal', 'kindDecision'];
+// make-diagram paints a card as its kind hue mixed TINT into the surface
+// (css.mjs: color-mix(in srgb, hue 10%, surface)) and writes the kind on it in
+// the hue itself, so the hue is small text on that tint. One number, two places.
+export const TINT = 0.1;
+
+const hex2 = (n) => n.toString(16).padStart(2, '0');
+/** `a` mixed `share` (0..1) into `b`, per 8-bit channel and rounded: color-mix(in srgb, a share%, b). */
+export function mixHex(a, b, share) {
+  const ch = (c) => [1, 3, 5].map((i) => Number.parseInt(c.slice(i, i + 2), 16));
+  const [ca, cb] = [ch(a), ch(b)];
+  return `#${ca.map((v, i) => hex2(Math.round(v * share + cb[i] * (1 - share)))).join('')}`;
+}
+
 const TEXT = ['text', 'text2', 'text3'];
 const UI = ['accent', 'warn', 'good', 'bad'];
 const SEQ = ['seq1', 'seq2', 'seq3', 'seq4', 'seq5', 'seq6', 'seq7'];
@@ -36,6 +50,13 @@ export function checkTheme(theme) {
     for (const k of UI) {
       const r = contrastRatio(t[k], t.surface);
       if (r < 3) errors.push({ path: `${mode}.${k}`, message: `${t[k]} is ${fmt(r)} against surface; needs 3:1` });
+    }
+    for (const k of KIND) {
+      const against = [['surface', t.surface, 4.5], ['its tint', mixHex(t[k], t.surface, TINT), 4.5], ['page', t.page, 3]];
+      for (const [what, bg, need] of against) {
+        const r = contrastRatio(t[k], bg);
+        if (r < need) errors.push({ path: `${mode}.${k}`, message: `${t[k]} is ${fmt(r)} against ${what}; needs ${need}:1` });
+      }
     }
     const ramp = SEQ.map((k) => contrastRatio(t[k], t.surface));
     if (ramp.some((r, i) => i > 0 && r <= ramp[i - 1])) {

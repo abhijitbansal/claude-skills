@@ -11,10 +11,11 @@ Every section type and its fields: [sections.md](sections.md). Banned phrases: [
 | `preset` | `recap` `checklist` `concept` `slides` `none` | Default `none`. A label only: it selects slides mode (`slides`) and turns on the checklist `intro` warning (`checklist`). |
 | `mode` | `page` `slides` | Default `page`; `preset: "slides"` implies slides. `preset: "slides"` with `mode: "page"` is an error. |
 | `theme` | `paper` `blueprint` `ink` `editorial` | Default `paper`. Each has light and dark variants; the page follows the reader's setting and has a Theme toggle. |
+| `generatedBy` | object | Keys `model`, `effort`, `agent`; each 1-60 characters of letters, digits, spaces and `. _ : / ( ) + -`. Shown in the page footer and a `<meta name="generator">` tag; a missing field reads "not reported". The `--model`, `--effort` and `--agent` flags of `build.mjs` override it. |
 | `meta` | object | Keys `date`, `branch`, `repo`, `author`, `version`, `status`; each value at most 60 characters. Shown as chips under the title. |
 | `sections` | array, required | 1 to 40 sections, see below. |
 
-Every section has `type` (required), an optional `id` (`^[a-z][a-z0-9-]*$`, unique; the deep link `#<id>` on a page, and on a deck it opens that slide (the outline links use it; `#slide-<n>` keeps working); not `content`, `outline-title`, `slide-<n>`, `slide-<n>-title` or anything starting `ch<n>-`, which the page uses itself) and an optional `title` (at most 90 characters).
+Every section has `type` (required), an optional `id` (`^[a-z][a-z0-9-]*$`, unique; the deep link `#<id>` on a page, and on a deck it opens that slide (the outline links use it; `#slide-<n>` keeps working); not `content`, `outline-title`, `slide-<n>`, `slide-<n>-title` or anything starting `ch<n>-`, which the page uses itself), an optional `title` (at most 90 characters) and an optional `label` (a short name, at most 4 words, for the contents list and the small eyebrow above the heading; without it the contents list shows the `title`). A `label` shows on every section that renders a heading (any section with a `title`, except a `callout`) and on a leading tldr's hero card even without a title. A `callout` draws its own heading and never shows a label; a section without a `title` shows no label and is not listed in the contents.
 
 ## Limits
 
@@ -34,9 +35,9 @@ Every section has `type` (required), an optional `id` (`^[a-z][a-z0-9-]*$`, uniq
 | `image.src` | png, jpg, webp or svg, at most 1.5 MB |
 | `motion.video` | `.mp4`, at most 50 MB |
 | `diagram` file, `motion.spec` file | `.json`, at most 1 MB |
-| Paragraph | Over 120 words is a warning |
+| Text length | Soft caps, warnings only: title 8 words, label 4, paragraph 3 sentences or 60 words, text section 120, card text 30, list item 20, page prose 900, tldr 3 points |
 
-Slides mode adds a budget to each section (errors): at most 6 points (tldr points, `- ` list lines, items of list-like sections, compare points, checklist items), 8 table rows, 12 code lines and 80 words of prose (the title and captions do not count).
+Slides mode adds a budget to each section (errors): at most 6 points (tldr points, `- ` list lines, items of list-like sections, compare points, checklist items), 8 table rows, 12 code lines and 80 words of prose (the title, the label and captions do not count).
 
 ## Text
 
@@ -64,8 +65,8 @@ Environment: `PA_OUTPUT_DIR` (default output folder), `PA_MOTION_TIMEOUT_MS` (ho
 
 | Script | Use |
 |---|---|
-| `gather.mjs git [--base <branch>] [--repo <folder>] [--json]` | Without `--base`: `main`, then `master`, preferring origin's copy when it is ahead. Facts about the checked-out branch as JSON: branch, base, commits, changed files with line counts and renames, test files, date. Committed work only. |
-| `scaffold.mjs <recap\|checklist\|concept\|slides> [--facts facts.json] [--title <text>]` | A starter `explainer.json` on stdout. Facts fill numbers, files, commits and folders; every sentence is a `TODO:` string. |
+| `gather.mjs git [--base <branch>] [--repo <folder>] [--out <file>] [--json]` | Without `--base`: `main`, then `master`, preferring origin's copy when it is ahead. Prints (or writes to `--out`) facts about the checked-out branch as JSON: branch, base, commits, changed files with line counts and renames, test files, date. Committed work only. |
+| `scaffold.mjs <recap\|checklist\|concept\|slides> [--facts facts.json] [--title <text>] [--out <file>]` | A starter `explainer.json`, printed or written to `--out`. Facts fill numbers, files, commits and folders; every sentence is a `TODO:` string. |
 | `validate.mjs <explainer.json> [--json]` | Schema, limits, prose lint, slide budget, file references and the embedded diagram, chart and motion checks. |
-| `build.mjs <explainer.json> [--out <file.html\|dir>] [--theme <name>] [--json]` | Validates, then writes the page. |
+| `build.mjs <explainer.json> [--out <file.html\|dir>] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--json]` | Validates, then writes the page. |
 | `check.mjs <page.html> [--json]` | Optional headless check of a built page at 1280 and 390 px: console errors and warnings, sideways scrolling, elements wider than the page, content clipped sideways inside a slide, a deck's last slide reachable by arrow keys with the counter reading N / N, and each diagram's viewer mounting and its Present overlay opening and closing on Esc. Exit 0 ok or skipped (no browser), 1 problems, 2 usage. Needs Playwright and a browser (full `npm ci`); `PA_CHECK_TIMEOUT_MS` shortens the 60 s cap. |

@@ -2,8 +2,6 @@
 // playwright is a devDependency, so it is imported lazily: without it (npm ci
 // --omit=dev) or without a browser the callers skip instead of failing.
 
-export const SKIP_HINT = 'no browser; run: npx playwright install chromium';
-
 export class BrowserUnavailable extends Error {
   constructor(message) {
     super(message);

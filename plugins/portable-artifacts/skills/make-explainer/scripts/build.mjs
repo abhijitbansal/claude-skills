@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// node scripts/build.mjs <explainer.json> [--out <file.html|dir>] [--theme <name>] [--json]
+// node scripts/build.mjs <explainer.json> [--out <file.html|dir>] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--json]
 // Validates, renders and writes one offline HTML page (plus <slug>.assets/ when a section needs files).
 // Output: --out file.html, --out dir (-> dir/<slug>.html), else ${PA_OUTPUT_DIR or ~/.agent/diagrams}/<slug>.html.
 // exit 0 ok, 1 spec errors, 2 usage/IO
@@ -12,9 +12,10 @@ import { resolveOutput, assetsFolder } from './lib/output.mjs';
 import { syncAssets, assetConflicts, specInputs, WriteError } from './lib/assets.mjs';
 import { SiblingError } from './lib/siblings.mjs';
 import { UsageError, parseCli } from '../shared/cli.mjs';
+import { PROVENANCE_OPTIONS, withGeneratedBy } from '../shared/provenance.mjs';
 
-const USAGE = 'node scripts/build.mjs <explainer.json> [--out <file.html|dir>] [--theme <name>] [--json]';
-const OPTIONS = { out: { type: 'string' }, theme: { type: 'string' }, json: { type: 'boolean' } };
+const USAGE = 'node scripts/build.mjs <explainer.json> [--out <file.html|dir>] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--json]';
+const OPTIONS = { out: { type: 'string' }, theme: { type: 'string' }, json: { type: 'boolean' }, ...PROVENANCE_OPTIONS };
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const fail = (errors) => ({ ok: false, errors });
@@ -23,9 +24,10 @@ const fail = (errors) => ({ ok: false, errors });
  * Build the page for a spec file. Returns { ok: true, out, assets, bytes, warnings } after
  * writing it, else { ok: false, errors } (nothing is written).
  */
-export async function build(file, { out, theme, env = process.env } = {}) {
+export async function build(file, { out, theme, model, effort, agent, env = process.env } = {}) {
   const { spec: loaded, dir } = loadSpec(file);
-  const spec = theme === undefined ? loaded : { ...loaded, theme };
+  const themed = theme === undefined ? loaded : { ...loaded, theme };
+  const spec = withGeneratedBy(themed, { model, effort, agent });
   const checked = await validateSpec(spec, { dir });
   if (!checked.ok) return fail(checked.errors);
   const target = resolveOutput({ out, title: spec.title, env });
@@ -92,7 +94,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     const { values, positionals } = parseCli(argv, OPTIONS, USAGE);
     json = values.json === true;
     if (positionals.length !== 1) throw new UsageError(`expected one spec file; usage: ${USAGE}`);
-    const result = await build(positionals[0], { out: values.out, theme: values.theme });
+    const result = await build(positionals[0], { out: values.out, theme: values.theme, model: values.model, effort: values.effort, agent: values.agent });
     if (!result.ok) {
       printFailure(result, { json, label: positionals[0] });
       process.exitCode = 1;

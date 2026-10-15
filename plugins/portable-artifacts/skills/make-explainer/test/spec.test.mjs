@@ -54,7 +54,7 @@ test('root shape errors', async () => {
 test('unknown top-level property gets did-you-mean, or the allowed list', async () => {
   assert.deepEqual(await errorsOf({ ...doc([text()]), titel: 'x' }), [{ path: 'titel', message: 'unknown property; did you mean "title"?' }]);
   assert.deepEqual(await errorsOf({ ...doc([text()]), zzzzzz: 1 }), [
-    { path: 'zzzzzz', message: 'unknown property; allowed: title, subtitle, preset, mode, theme, meta, sections' },
+    { path: 'zzzzzz', message: 'unknown property; allowed: title, subtitle, preset, mode, theme, generatedBy, meta, sections' },
   ]);
   assert.deepEqual(await errorsOf({ title: 'x', section: [text()] }), [
     { path: 'section', message: 'unknown property; did you mean "sections"?' },
@@ -91,7 +91,7 @@ test('section type: required, unknown with did-you-mean, and per-section indepen
 test('section fields: required, unknown (closed), wrong type', async () => {
   assert.deepEqual(await errorsOf(doc([{ type: 'text' }])), [{ path: 'sections[0].text', message: 'required' }]);
   assert.deepEqual(await errorsOf(doc([{ type: 'text', text: 'x', points: ['a'] }])), [
-    { path: 'sections[0].points', message: 'unknown property; allowed: type, id, title, text' },
+    { path: 'sections[0].points', message: 'unknown property; allowed: type, id, title, label, text' },
   ]);
   assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a' }] }])), [{ path: 'sections[0].items[0].value', message: 'required' }]);
   assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a', value: [] }] }])), [{ path: 'sections[0].items[0].value', message: 'must be string,number' }]);
@@ -144,7 +144,7 @@ test('whitespace-only text is rejected with the fix', async () => {
 
 test('schema errors stop the run before the semantic and lint passes', async () => {
   const spec = doc([{ type: 'text', text: 'TODO: fix', extra: 1 }], { title: 'x'.repeat(200) });
-  assert.deepEqual(await errorsOf(spec), [{ path: 'sections[0].extra', message: 'unknown property; allowed: type, id, title, text' }]);
+  assert.deepEqual(await errorsOf(spec), [{ path: 'sections[0].extra', message: 'unknown property; allowed: type, id, title, label, text' }]);
 });
 
 // ---- limits -----------------------------------------------------------
@@ -418,10 +418,11 @@ test('a long paragraph is a warning only', async () => {
   const r = await validateSpec(doc([{ type: 'text', text: long }]), { dir: FIXTURES });
   assert.equal(r.ok, true);
   assert.deepEqual(r.errors, []);
-  assert.deepEqual(r.warnings, [{ path: 'sections[0].text', message: 'paragraph is 130 words; the limit is 120 — split it or cut it' }]);
+  assert.deepEqual(r.warnings.map((x) => x.path), ['sections[0].text', 'sections[0]']);
+  assert.match(r.warnings[0].message, /^paragraph is 130 words; keep it to 60/);
   const bad = await validateSpec(doc([{ type: 'text', text: `${long} leverage` }]), { dir: FIXTURES });
   assert.equal(bad.ok, false);
-  assert.equal(bad.warnings.length, 1);
+  assert.equal(bad.warnings.length, 2);
 });
 
 // ---- slides -----------------------------------------------------------

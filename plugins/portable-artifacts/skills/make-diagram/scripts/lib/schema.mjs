@@ -2,6 +2,7 @@
 // semantic checks in spec.mjs enforce. Lengths, counts and id spelling are
 // checked there instead, so their messages can state the value and the limit.
 import { TYPES } from './kinds.mjs';
+import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 
 export const ID_PATTERN = /^[a-z][a-z0-9_-]*$/;
 export const TONES = ['neutral', 'accent', 'good', 'warn', 'bad'];
@@ -16,13 +17,19 @@ export const LIMITS = Object.freeze({
   steps: 25,
   participants: 12,
   messages: 60,
+  stories: 8,
+  beats: 60,
   title: 120,
   subtitle: 160,
   label: 48,
   note: 60,
+  detail: 400,
   edgeLabel: 40,
   stepTitle: 60,
   stepNote: 200,
+  storyTitle: 40,
+  beatTitle: 48,
+  caption: 160,
   groupDepth: 3,
 });
 
@@ -41,13 +48,15 @@ export const SCHEMA = object(['title', 'type'], {
   subtitle: text,
   type: { enum: TYPES },
   theme: text,
+  generatedBy: GENERATED_BY_SCHEMA,
   direction: { enum: DIRECTIONS },
   animate: { type: 'boolean' },
+  autoplay: { type: 'boolean' },
   groups: { type: 'array', items: object(['id', 'label'], { id: text, label: text, parent: text }) },
   nodes: {
     type: 'array',
     items: object(['id', 'label'], {
-      id: text, label: text, kind: text, icon: text, group: text, note: text, tone: { enum: TONES },
+      id: text, label: text, kind: text, icon: text, group: text, note: text, tone: { enum: TONES }, emoji: text, detail: text,
     }),
   },
   edges: {
@@ -58,7 +67,7 @@ export const SCHEMA = object(['title', 'type'], {
   },
   participants: {
     type: 'array',
-    items: object(['id', 'label'], { id: text, label: text, kind: text, icon: text }),
+    items: object(['id', 'label'], { id: text, label: text, kind: text, icon: text, emoji: text, detail: text }),
   },
   messages: {
     type: 'array',
@@ -77,5 +86,16 @@ export const SCHEMA = object(['title', 'type'], {
   steps: {
     type: 'array',
     items: object(['title'], { title: text, note: text, show: ids, focus: ids, highlight: ids }),
+  },
+  stories: {
+    type: 'array',
+    items: object(['id', 'title', 'beats'], {
+      id: text,
+      title: text,
+      beats: {
+        type: 'array',
+        items: object(['title'], { title: text, caption: text, edge: text, from: text, to: text, focus: ids }),
+      },
+    }),
   },
 });

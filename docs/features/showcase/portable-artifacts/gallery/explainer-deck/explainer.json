@@ -11,7 +11,8 @@
   "sections": [
     {
       "type": "tldr",
-      "title": "The model writes JSON and a script builds the page",
+      "title": "A script builds the page from model JSON",
+      "label": "The idea",
       "text": "Diagrams, dashboards, videos and explainers share the same themes. Each page opens offline in any browser.",
       "points": [
         "Every page makes no network requests when it is viewed.",
@@ -23,6 +24,7 @@
     {
       "type": "cards",
       "title": "Each skill covers one kind of artifact",
+      "label": "Skills",
       "columns": 2,
       "items": [
         {
@@ -50,6 +52,7 @@
     {
       "type": "motion",
       "title": "A make-motion clip plays on its own slide",
+      "label": "Clip",
       "video": "clip.mp4",
       "poster": "clip-poster.png",
       "caption": "Rendered from a JSON spec. The clip never autoplays, so press play when you want it."
@@ -57,6 +60,7 @@
     {
       "type": "steps",
       "title": "Every skill follows the same four steps",
+      "label": "Workflow",
       "items": [
         {
           "title": "Write the spec",
@@ -79,6 +83,7 @@
     {
       "type": "code",
       "title": "One command installs all three skills together",
+      "label": "Install",
       "language": "bash",
       "caption": "Name all three skills. Installing make-explainer alone fails on its first diagram or chart section.",
       "code": "npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram make-dashboard"
@@ -86,6 +91,7 @@
     {
       "type": "kpis",
       "title": "Claude Haiku built every eval prompt",
+      "label": "Eval build",
       "items": [
         {
           "label": "Dashboard builds",
@@ -111,7 +117,8 @@
     },
     {
       "type": "table",
-      "title": "Haiku passes as many builds as Sonnet on every skill",
+      "title": "Haiku and Sonnet both pass every build",
+      "label": "Haiku vs Sonnet",
       "columns": [
         "Skill",
         "Model",
@@ -161,6 +168,7 @@
     {
       "type": "risks",
       "title": "Four limits to plan around before you ship",
+      "label": "Limits",
       "items": [
         {
           "risk": "A local gemma4 model fails most explainer builds",
@@ -186,7 +194,8 @@
     },
     {
       "type": "text",
-      "title": "Install all three skills before you ask for a deck",
+      "title": "Install all three skills before asking for decks",
+      "label": "Before you start",
       "text": "The explainer embeds diagrams and charts from its sibling skills. Each page works offline; keep a page and its assets folder together when you share it."
     }
   ]

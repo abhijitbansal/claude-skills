@@ -27,7 +27,7 @@ function pairs() {
   return [...out.entries()].sort(([a], [b]) => (a < b ? -1 : 1));
 }
 
-// ibm-plex-sans-latin-400-normal.woff2 -> @fontsource/ibm-plex-sans/files/<same>.woff
+// geist-sans-latin-400-normal.woff2 -> @fontsource/geist-sans/files/<same>.woff
 function woffPath(file) {
   const pkg = file.slice(0, file.indexOf('-latin-'));
   return require.resolve(`@fontsource/${pkg}/files/${file.replace(/\.woff2$/, '.woff')}`);

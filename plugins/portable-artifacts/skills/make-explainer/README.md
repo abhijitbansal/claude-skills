@@ -18,6 +18,14 @@ any agent that can run shell commands. Nothing leaves your machine.
   skills' validators, and a prose lint that rejects emoji, filler such as
   "seamless" or "leverage", numbered titles and placeholder text.
 - **Presets**: `recap`, `checklist`, `concept`, `slides`.
+- **Stamped**: a favicon, an icon theme toggle and a provenance footer (model,
+  effort, agent from `generatedBy` or `--model`/`--effort`/`--agent`; "not
+  reported" when unknown). `scripts/doctor.mjs` reports missing sister skills
+  and tools, with the fix for your OS.
+- **Short on purpose**: the page opens with a hero and a TL;DR card; any section
+  takes a `label` of up to 4 words for the contents list; validation warns (never
+  fails) over the soft caps: title 8 words, label 4, paragraph 3 sentences or 60
+  words, text section 120, card text 30, list item 20, page prose 900, tl;dr 3 points.
 - **A page worth opening**: themed (four themes, light and dark), a
   contents list from four sections up, copy buttons on code, print styles,
   reduced motion respected, no network at build or view time.
@@ -39,11 +47,12 @@ any agent that can run shell commands. Nothing leaves your machine.
 
 ```bash
 cd make-explainer && npm ci --omit=dev && cd -        # one-time
-node make-explainer/scripts/gather.mjs git > facts.json
-node make-explainer/scripts/scaffold.mjs recap --facts facts.json > explainer.json
+node make-explainer/scripts/doctor.mjs                # optional: what is missing, and how to fix it
+node make-explainer/scripts/gather.mjs git --out facts.json
+node make-explainer/scripts/scaffold.mjs recap --facts facts.json --out explainer.json
 # replace every "TODO: ..." in explainer.json with real prose, then:
-node make-explainer/scripts/validate.mjs explainer.json
-node make-explainer/scripts/build.mjs    explainer.json
+node make-explainer/scripts/validate.mjs explainer.json   # warnings (soft caps) do not block
+node make-explainer/scripts/build.mjs    explainer.json   # add --model/--effort/--agent to stamp the page
 node make-explainer/scripts/check.mjs    ~/.agent/diagrams/<name>.html   # optional; skips when no browser is installed
 ```
 
@@ -73,7 +82,8 @@ page, so keep the two together.
   headless check of the built page at 1280 and 390 px) and this skill's browser
   tests use one. Playwright is a dev dependency, so `check.mjs` needs a full
   `npm ci` plus a Chromium or Chrome (`npx playwright install chromium`); without
-  either it skips cleanly and says so.
+  either it skips cleanly and says so, naming the doctor command
+  (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`).
 
 ## Sections
 

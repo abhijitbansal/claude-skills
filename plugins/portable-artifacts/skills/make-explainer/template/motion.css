@@ -1,7 +1,7 @@
 /* motion */
 .mo { margin: 0; }
 .mo video { display: block; width: 100%; height: auto; aspect-ratio: auto 16 / 9; border: 1px solid var(--line); border-radius: 10px; background: #000; }
-.mo figcaption { margin-top: 8px; max-width: 68ch; color: var(--text-3); font-size: 0.82rem; }
+.mo figcaption { margin-top: 8px; max-width: 66ch; color: var(--text-3); font-size: var(--fs-sm); }
 .mo p { margin: 0; padding: 12px 16px; }
 
 /* in a deck the video is bounded by the viewport, with a floor so a short window never collapses it */

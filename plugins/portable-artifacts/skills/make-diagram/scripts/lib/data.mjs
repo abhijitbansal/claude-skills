@@ -2,6 +2,8 @@
 // both the page (scripts/lib/viewer.mjs) and embedders (buildDiagram().data).
 import { parentMap } from './steps.mjs';
 import { slugify } from './output.mjs';
+import { KINDS } from './kinds.mjs';
+import { linksOf } from './stories.mjs';
 
 const round = (v) => Math.round(v * 10) / 10;
 const box = (x, y, w, h) => [round(x), round(y), round(w), round(h)];
@@ -49,8 +51,50 @@ function boxesOf(geometry) {
   return Object.fromEntries(boxes);
 }
 
+const oneLine = (text) => String(text).replace(/\s+/g, ' ').trim();
+
+// id -> what the panel, the chips and the legend read: label and kind (plus
+// emoji, note and detail when set) for a node or participant; label and kind
+// "group" for a group (an edge may end at one); style and label (when set) for
+// an edge or message. Edges are keyed through linksOf, so an unnamed edge gets
+// the same `edge-<i>` id the layout draws it with, whatever order the geometry lists.
+function infoOf(spec) {
+  const info = new Map();
+  const sequence = spec.type === 'sequence';
+  for (const n of sequence ? spec.participants : spec.nodes) {
+    const entry = { label: oneLine(n.label), kind: n.kind ?? KINDS[spec.type].default };
+    if (n.emoji !== undefined) entry.emoji = n.emoji;
+    if (n.note !== undefined) entry.note = oneLine(n.note);
+    if (n.detail !== undefined) entry.detail = String(n.detail).trim();
+    info.set(n.id, entry);
+  }
+  for (const g of sequence ? [] : spec.groups ?? []) info.set(g.id, { label: oneLine(g.label), kind: 'group' });
+  const links = linksOf(spec);
+  (sequence ? spec.messages ?? [] : spec.edges ?? []).forEach((e, i) => {
+    const entry = { style: sequence ? e.kind ?? 'sync' : e.style ?? 'solid' };
+    if (e.label !== undefined) entry.label = oneLine(e.label);
+    info.set(links[i].id, entry);
+  });
+  return Object.fromEntries(info);
+}
+
+// id -> the edges that leave it along the arrow (a two-headed edge leaves both
+// ends). Only ids something leaves appear; the other end of an edge is edges[e].
+function directedOf(links) {
+  const out = new Map();
+  const add = (id, edge) => {
+    if (!out.has(id)) out.set(id, []);
+    out.get(id).push(edge);
+  };
+  for (const l of links) {
+    add(l.from, l.id);
+    if (l.both && l.to !== l.from) add(l.to, l.id);
+  }
+  return Object.fromEntries(out);
+}
+
 /**
- * `built` carries { geometry, steps, ids, width, height }. The result is what
+ * `built` carries { geometry, steps, ids, width, height, beats, chapters }. The result is what
  * PADiagram.mount takes (template/viewer.js) plus `stem`, the file name the
  * page and its exports share.
  */
@@ -63,6 +107,7 @@ export function viewerData(spec, built) {
     animate: spec.animate === true,
     width: built.width,
     height: built.height,
+    drawing: box(built.geometry.drawing.x, built.geometry.drawing.y, built.geometry.drawing.width, built.geometry.drawing.height), // the diagram without the legend band: what a page that hides the drawn legend fits
     steps: built.steps,
     ids: built.ids,
     adjacency: adjacencyOf(links),
@@ -70,5 +115,10 @@ export function viewerData(spec, built) {
     parents: Object.fromEntries(parentMap(spec)),
     boxes: boxesOf(built.geometry),
     frames: (built.geometry.frames ?? []).map((f) => ({ messages: [...f.messages], box: box(f.x, f.y, f.width, f.height) })),
+    autoplay: spec.autoplay === true,
+    beats: built.beats,
+    chapters: built.chapters,
+    info: infoOf(spec),
+    directed: directedOf(links),
   };
 }

@@ -1,6 +1,6 @@
 // Node, edge-label and group sizing from font metrics plus per-shape padding.
-// Every figure is a px constant here so the renderer and the geometry lint can
-// reuse them; nothing is measured in a browser.
+// Every figure is a px constant here so the renderer, the stylesheet and the
+// geometry lint can reuse them; nothing is measured in a browser.
 import { measure, wrap, lineHeight, fontFor } from '../../shared/text.mjs';
 import { BOX_SHAPES } from './kinds.mjs';
 
@@ -10,15 +10,23 @@ export const MAX_LABEL_LINES = 2;
 const WIDEN_STEP = 10;
 
 export const LABEL_SIZE = 14;
-export const NOTE_SIZE = 12;
+export const NOTE_SIZE = 11; // the note, in the theme's mono font
+export const TYPE_SIZE = 10; // the kind, in spaced capitals above the label
+export const TYPE_TRACK = 0.8; // px of letter-spacing per character (.08em at 10 px); measure() knows no tracking
+export const TYPE_GAP = 2; // type line to label block
 export const EDGE_LABEL_SIZE = 12;
-export const GROUP_LABEL_SIZE = 12;
-export const ICON_SIZE = 16;
-export const ICON_GAP = 8;
+export const LEGEND_SIZE = 11;
+export const GROUP_LABEL_SIZE = 11;
+export const GROUP_TRACK = 0.9; // .08em at 11 px: group labels are drawn in spaced capitals
+export const EMOJI_SIZE = 18; // an emoji in the tile (css.mjs draws .pa-emoji at this size)
+export const TILE_SIZE = 28; // the icon or emoji tile
+export const TILE_GAP = 10; // tile to text
+export const TILE_PAD_Y = 6; // tile to the box's top and bottom, at least
+export const TILE_RADIUS = 7;
 export const PAD_X = 14;
 export const PAD_Y = 10;
 export const NOTE_GAP = 2; // label block to note line
-export const EDGE_LABEL_PAD_X = 6; // the plate around an edge label
+export const EDGE_LABEL_PAD_X = 8; // the pill around an edge label
 export const EDGE_LABEL_PAD_Y = 2;
 export const GROUP_LABEL_INSET = 12; // label starts this far in from the group's left edge
 export const GROUP_MIN_HEIGHT = 64;
@@ -50,12 +58,20 @@ export const evenUp = (v) => Math.ceil(v / 2) * 2;
 
 export function fonts(theme) {
   const body = fontFor(theme, 'body');
+  const mono = fontFor(theme, 'mono');
   return {
     label: { ...body, weight: 600, size: LABEL_SIZE },
-    note: { ...body, weight: 400, size: NOTE_SIZE },
+    note: { ...mono, weight: 400, size: NOTE_SIZE },
+    type: { ...body, weight: 600, size: TYPE_SIZE },
     edge: { ...body, weight: 400, size: EDGE_LABEL_SIZE },
     group: { ...body, weight: 600, size: GROUP_LABEL_SIZE },
+    legend: { ...body, weight: 400, size: LEGEND_SIZE },
   };
+}
+
+/** Width of `text` drawn in spaced capitals: the uppercase measured, plus `track` px after every character. */
+export function trackedWidth(text, font, track) {
+  return measure(text.toUpperCase(), font) + track * [...text].length;
 }
 
 const oneLine = (text) => text.replace(/\s+/g, ' ').trim();
@@ -75,31 +91,44 @@ function wrapLabel(text, font) {
   return lines;
 }
 
-function textBlock(node, f) {
+// The type line (when the card has one), the label lines and the note, stacked.
+function textBlock(node, f, typeLine) {
   const lines = wrapLabel(node.label, f.label);
   const noteLine = node.note === undefined ? null : oneLine(node.note);
-  const width = Math.max(widest(lines, f.label), noteLine ? measure(noteLine, f.note) : 0);
-  const height = lines.length * lineHeight(f.label) + (noteLine ? NOTE_GAP + lineHeight(f.note) : 0);
+  const typeWidth = typeLine === null ? 0 : trackedWidth(typeLine, f.type, TYPE_TRACK);
+  const width = Math.max(widest(lines, f.label), noteLine ? measure(noteLine, f.note) : 0, typeWidth);
+  const height = (typeLine === null ? 0 : lineHeight(f.type) + TYPE_GAP) + lines.length * lineHeight(f.label) + (noteLine ? NOTE_GAP + lineHeight(f.note) : 0);
   return { lines, noteLine, width, height };
 }
 
-/** Whether a node of this shape reserves room for an icon. */
+/** Whether a node of this shape reserves room for a tile (icon or emoji). */
 export function holdsIcon(kindInfo) {
   return BOX_SHAPES.has(kindInfo.shape);
 }
 
+/** What the tile holds: { icon, emoji }. An emoji replaces the icon; a shape without a tile holds neither. */
+export function tileOf(node, kindInfo) {
+  if (!holdsIcon(kindInfo)) return { icon: null, emoji: null };
+  if (node.emoji !== undefined) return { icon: null, emoji: node.emoji };
+  return { icon: node.icon ?? kindInfo.icon ?? null, emoji: null };
+}
+
 /**
- * Size of one node. Returns { width, height, lines, noteLine, icon, labelBox? }:
- * widths and heights are even px; `icon` is the resolved icon ref (null when
- * the shape has no icon slot); `labelBox` ({ width, height }) is set only for
- * dot and small-diamond shapes, whose label is drawn outside the shape.
+ * Size of one node. Returns { width, height, lines, noteLine, icon, emoji, typeLine, labelBox? }:
+ * widths and heights are even px; `icon` is the resolved icon ref and `emoji`
+ * the emoji drawn instead of it (both null when there is no tile); `typeLine`
+ * is the kind in capitals, drawn above the label on every card with a tile,
+ * else null; `labelBox` ({ width, height }) is set only for dot and
+ * small-diamond shapes, whose label is drawn outside the shape.
  */
 export function nodeSize(node, kindInfo, theme) {
   const f = fonts(theme);
-  const block = textBlock(node, f);
+  const { icon, emoji } = tileOf(node, kindInfo);
+  const tile = icon !== null || emoji !== null;
+  const typeLine = tile && kindInfo.name ? kindInfo.name.toUpperCase() : null;
+  const block = textBlock(node, f, typeLine);
   const { shape } = kindInfo;
-  const icon = holdsIcon(kindInfo) ? (node.icon ?? kindInfo.icon ?? null) : null;
-  const base = { lines: block.lines, noteLine: block.noteLine, icon };
+  const base = { lines: block.lines, noteLine: block.noteLine, icon, emoji, typeLine };
 
   if (EXTERNAL_SHAPES[shape]) {
     return { ...base, ...EXTERNAL_SHAPES[shape], labelBox: { width: evenUp(block.width), height: evenUp(block.height) } };
@@ -111,11 +140,11 @@ export function nodeSize(node, kindInfo, theme) {
   }
   const extra = SHAPE_EXTRA[shape] ?? { width: 0, height: 0 };
   const min = shape === 'stadium' ? MIN_STADIUM : MIN_BOX;
-  const iconWidth = icon ? ICON_SIZE + ICON_GAP : 0;
+  const tileWidth = tile ? TILE_SIZE + TILE_GAP : 0;
   return {
     ...base,
-    width: evenUp(Math.max(block.width + 2 * PAD_X + iconWidth + extra.width, min.width)),
-    height: evenUp(Math.max(block.height + 2 * PAD_Y + extra.height, min.height)),
+    width: evenUp(Math.max(block.width + 2 * PAD_X + tileWidth + extra.width, min.width)),
+    height: evenUp(Math.max(block.height + 2 * PAD_Y + extra.height, tile ? TILE_SIZE + 2 * TILE_PAD_Y : 0, min.height)),
   };
 }
 
@@ -124,13 +153,13 @@ export function nodeSize(node, kindInfo, theme) {
  * width rule in nodeSize, so the geometry lint and the renderer read one rule.
  * Not for shapes whose label sits outside them (dots, small diamond).
  */
-export function textRoom(shape, width, hasIcon) {
+export function textRoom(shape, width, hasTile) {
   if (shape === 'diamond') return width / 2 - 2 * DIAMOND_PAD.x;
   const extra = SHAPE_EXTRA[shape]?.width ?? 0;
-  return width - 2 * PAD_X - (hasIcon ? ICON_SIZE + ICON_GAP : 0) - extra;
+  return width - 2 * PAD_X - (hasTile ? TILE_SIZE + TILE_GAP : 0) - extra;
 }
 
-/** Size of an edge label's plate: one line, never wrapped. */
+/** Size of an edge label's pill: one line, never wrapped. */
 export function edgeLabelSize(text, theme) {
   const font = fonts(theme).edge;
   const clean = oneLine(text);
@@ -141,11 +170,11 @@ export function edgeLabelSize(text, theme) {
   };
 }
 
-/** Smallest group box that holds its label. */
+/** Smallest group box that holds its label, drawn in spaced capitals. */
 export function groupMinSize(group, theme) {
   const font = fonts(theme).group;
   return {
-    width: evenUp(measure(oneLine(group.label), font) + 2 * GROUP_LABEL_INSET),
+    width: evenUp(trackedWidth(oneLine(group.label), font, GROUP_TRACK) + 2 * GROUP_LABEL_INSET),
     height: GROUP_MIN_HEIGHT,
   };
 }

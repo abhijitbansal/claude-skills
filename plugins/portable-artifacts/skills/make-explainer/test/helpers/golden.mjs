@@ -6,6 +6,8 @@
 import assert from 'node:assert/strict';
 
 const OWN_GLYPH = /^<svg class="gl"[\s>]/;
+// The shared theme-toggle script is inlined verbatim; its own tests cover it, so goldens keep a placeholder.
+const TOGGLE_SCRIPT = /<script>\n(?:(?!<\/script>)[\s\S])*__paThemeToggle[\s\S]*?<\/script>/;
 const SVG_TAG = /<(\/?)svg\b[^>]*>/g;
 
 /** Replaces each outermost non-glyph <svg ...>...</svg> (nested svgs included) with <svg data-sibling-svg></svg>. */
@@ -37,5 +39,5 @@ export function normalisedBody(html) {
   assert.ok(start > 0 && main > start, 'page has a <body> and a closing </main>');
   const body = html.slice(start, main + '</main>'.length);
   const shortImages = body.replace(/data:image\/([a-z+]+);base64,[A-Za-z0-9+/=]+/g, 'data:image/$1;base64,…');
-  return `${emptySiblingSvgs(shortImages)}\n`;
+  return `${emptySiblingSvgs(shortImages).replace(TOGGLE_SCRIPT, '<script>/* shared theme toggle */</script>')}\n`;
 }

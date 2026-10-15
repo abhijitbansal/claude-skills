@@ -16,6 +16,7 @@ async function layout(siblings = {}) {
   const lib = path.join(root, 'make-explainer/scripts/lib');
   fs.mkdirSync(lib, { recursive: true });
   fs.copyFileSync(new URL('../scripts/lib/siblings.mjs', import.meta.url), path.join(lib, 'siblings.mjs'));
+  fs.cpSync(new URL('../shared', import.meta.url), path.join(root, 'make-explainer/shared'), { recursive: true });
   for (const [name, files] of Object.entries(siblings)) {
     for (const [rel, body] of Object.entries(files)) {
       const f = path.join(root, name, rel);
@@ -42,7 +43,7 @@ test('MISSING_HINT is the exact install line', async () => {
   const { mod } = await layout();
   assert.equal(
     mod.MISSING_HINT(['make-diagram', 'make-dashboard']),
-    'install it with: npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram make-dashboard',
+    'install it with: npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill make-diagram make-dashboard -y',
   );
 });
 
@@ -53,10 +54,10 @@ test('a missing sibling directory throws SiblingError with the exact command', a
     (e) => {
       assert.ok(e instanceof mod.SiblingError);
       assert.equal(e.name, 'SiblingError');
-      assert.equal(e.command, 'npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram');
+      assert.equal(e.command, 'npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill make-diagram -y');
       assert.equal(
         e.message,
-        `make-diagram skill not found next to make-explainer (looked in ${path.join(root, 'make-diagram')}); install it with: ${e.command}`,
+        `make-diagram skill not found next to make-explainer (looked in ${path.join(root, 'make-diagram')}); install it with: ${e.command} (doctor: node ${path.join(root, 'make-explainer/scripts/doctor.mjs')}, id make-diagram)`,
       );
       return true;
     },
@@ -67,7 +68,7 @@ test('a sibling dir without the requested module throws SiblingError too', async
   const { mod } = await layout({ 'make-diagram': { 'SKILL.md': 'x' } });
   await assert.rejects(
     () => mod.loadSibling('make-diagram', 'scripts/api.mjs'),
-    (e) => e instanceof mod.SiblingError && /scripts\/api\.mjs/.test(e.message) && /npx skills add .* make-diagram$/.test(e.command),
+    (e) => e instanceof mod.SiblingError && /scripts\/api\.mjs/.test(e.message) && /^npx --yes skills@1\.7\.2 add .* --skill make-diagram -y$/.test(e.command),
   );
 });
 

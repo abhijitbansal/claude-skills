@@ -6,6 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title><!--@TITLE--></title>
+<!--@FAVICON-->
+<!--@GENERATOR-->
 <script>
 // Before first paint: apply the saved theme (no flash; storage may throw) and, when motion
 // is allowed, arm the one-time rise-in so sections never paint visible and then drop to
@@ -26,21 +28,24 @@
 <style>
 <!--@BASECSS-->
 </style>
+<style>
+<!--@TOGGLE_CSS-->
+</style>
 <!--@SECTIONCSS-->
 </head>
 <body class="<!--@BODYCLASS-->">
 <a class="skip" href="#content">Skip to content</a>
-<header class="masthead">
+<header class="hero">
 <div class="mast-text">
 <h1><!--@H1--></h1>
 <!--@SUBTITLE-->
 <!--@META-->
 </div>
-<button type="button" class="theme-toggle" data-theme-toggle aria-label="Theme: Auto. Change theme">Theme: Auto</button>
+<button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><!--@TOGGLE_ICONS--></button>
 <script>
-// A stored theme was applied in <head>; label the toggle now, before the large scripts parse.
-(function () { var t = document.documentElement.getAttribute('data-theme'), b = document.querySelector('[data-theme-toggle]'); if (t && b) { var l = 'Theme: ' + t.charAt(0).toUpperCase() + t.slice(1); b.textContent = l; b.setAttribute('aria-label', l + '. Change theme'); } })();
+<!--@TOGGLE_JS-->
 </script>
+<!--@HEROTLDR-->
 </header>
 <div class="layout">
 <!--@TOC-->
@@ -48,6 +53,7 @@
 <!--@SECTIONS-->
 </main>
 </div>
+<!--@FOOTER-->
 <script>
 <!--@PALIB-->
 </script>

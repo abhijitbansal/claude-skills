@@ -1,7 +1,8 @@
 // Page assembly: one self-contained HTML file around the rendered sections.
-// Theme CSS and fonts, the masthead, a contents list (4+ titled sections),
-// the sections, and the inlined runtime. No network, no LLM. Every string from
-// the spec goes through the markdown-lite renderer or escapeHtml.
+// Theme CSS and fonts, the hero (with a leading tldr as its card), a contents
+// list (4+ titled sections), the sections, and the inlined runtime. No network,
+// no LLM. Every string from the spec goes through the markdown-lite renderer or
+// escapeHtml.
 import fs from 'node:fs';
 import path from 'node:path';
 import { themeCss, loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
@@ -13,7 +14,10 @@ import { slugify } from '../../shared/output.mjs';
 import { loadSibling, SiblingError } from './siblings.mjs';
 import { SectionErrors } from './section-errors.mjs';
 import { isSlides, renderDeck } from './slides.mjs';
-import { esc, inline, headingInline, plain, rawText } from './render/ui.mjs';
+import { faviconLink } from '../../shared/icons.mjs';
+import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
+import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mjs';
+import { esc, inline, headingInline, plain, rawText, toneClass } from './render/ui.mjs';
 
 const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), slides: new URL('../../template/slides.html', import.meta.url) };
 const BASE_CSS = new URL('../../template/base.css', import.meta.url);
@@ -115,14 +119,31 @@ function sectionPageParts(spec, ctx) {
   };
 }
 
-function renderSection(section, i, id, titleId, def, ctx) {
+// The small label above a heading; only a section that shows its own title gets one.
+const eyebrow = (section) => (section.label === undefined ? '' : `<p class="sec-eyebrow pa-label">${plain(section.label)}</p>\n`);
+
+// `alt`: the section sits on the alternating surface band (every second visual section).
+function renderSection(section, i, id, titleId, def, ctx, alt = false) {
   const body = renderBody(section, i, def, ctx);
   const hasHeading = section.title !== undefined && !def.ownHeading;
   const heading = hasHeading
-    ? `<h2 class="sec-title" id="${esc(titleId)}">${headingInline(section.title)}<a class="anchor" href="#${esc(id)}" aria-label="Link to this section: ${plain(section.title)}">#</a></h2>\n`
+    ? `${eyebrow(section)}<h2 class="sec-title" id="${esc(titleId)}">${headingInline(section.title)}<a class="anchor" href="#${esc(id)}" aria-label="Link to this section: ${plain(section.title)}">#</a></h2>\n`
     : '';
   const labelled = hasHeading ? ` aria-labelledby="${esc(titleId)}"` : '';
-  return `<section class="sec sec-${section.type}" id="${esc(id)}"${labelled}>\n${heading}${body}\n</section>`;
+  return `<section class="sec sec-${section.type}${alt ? ' sec-alt' : ''}" id="${esc(id)}"${labelled}>\n${heading}${body}\n</section>`;
+}
+
+// A leading tldr is the hero's card: same body, the section id kept for deep links, the tone on the card.
+// The label is the card's visible heading; with a label the title stays for screen readers only (it names
+// the region), because the lead sentence already states the verdict. Without a label the title shows.
+function renderHeroTldr(section, id, titleId, ctx) {
+  const body = renderBody(section, 0, SECTIONS.tldr, ctx);
+  const hidden = section.label === undefined ? '' : ' sr-only';
+  const title = section.title === undefined ? '' : `<h2 class="hero-tldr-title${hidden}" id="${esc(titleId)}">${headingInline(section.title)}</h2>\n`;
+  const name = section.label === undefined ? 'Summary' : plain(section.label);
+  const labelled = section.title === undefined ? ` aria-label="${name}"` : ` aria-labelledby="${esc(titleId)}"`;
+  const tone = section.tone === undefined ? '' : ` ${toneClass(section.tone)}`;
+  return `<div class="hero-tldr${tone}" id="${esc(id)}" role="region"${labelled}>\n${eyebrow(section)}${title}${body}\n</div>`;
 }
 
 function renderMeta(meta) {
@@ -134,7 +155,7 @@ function renderMeta(meta) {
 
 function renderToc(entries) {
   if (entries.length < TOC_MIN) return '';
-  const items = entries.map(({ id, title }) => `<li><a href="#${esc(id)}">${plain(title)}</a></li>`);
+  const items = entries.map(({ id, title, label }) => `<li><a href="#${esc(id)}">${plain(label ?? title)}</a></li>`);
   return `<nav class="toc" aria-label="Contents">\n<details open>\n<summary>Contents</summary>\n<ol>\n${items.join('\n')}\n</ol>\n</details>\n</nav>`;
 }
 
@@ -159,12 +180,23 @@ function unsupported(spec) {
   return errors;
 }
 
-// The page layout: masthead pieces, the contents list and the sections.
+// Visual sections (a registry `band` flag) alternate onto a surface band, starting with the first: 1st, 3rd, ...
+function altFlags(sections) {
+  let visual = 0;
+  return sections.map((s) => SECTIONS[s.type].band && visual++ % 2 === 0);
+}
+
+// The page layout: hero pieces, the contents list and the sections.
 function pageParts(spec, ctx, ids) {
   const titleIds = headingIds(ids);
-  const rendered = spec.sections.map((section, i) => renderSection(section, i, ids[i], titleIds[i], SECTIONS[section.type], ctx));
+  // A tldr that is the only section stays in <main>: the skip link then still lands on content.
+  const heroTldr = spec.sections[0].type === 'tldr' && spec.sections.length > 1;
+  const alt = altFlags(spec.sections);
+  const rendered = spec.sections.map((section, i) => (heroTldr && i === 0
+    ? ''
+    : renderSection(section, i, ids[i], titleIds[i], SECTIONS[section.type], ctx, alt[i])));
   const tocEntries = spec.sections
-    .map((s, i) => ({ id: ids[i], title: s.title, own: SECTIONS[s.type].ownHeading }))
+    .map((s, i) => ({ id: ids[i], title: s.title, label: s.label, own: SECTIONS[s.type].ownHeading }))
     .filter((e) => e.title !== undefined && !e.own);
   const toc = renderToc(tocEntries);
   return {
@@ -172,8 +204,9 @@ function pageParts(spec, ctx, ids) {
     H1: inline(spec.title),
     SUBTITLE: spec.subtitle === undefined ? '' : `<p class="subtitle">${inline(spec.subtitle)}</p>`,
     META: renderMeta(spec.meta),
+    HEROTLDR: heroTldr ? renderHeroTldr(spec.sections[0], ids[0], titleIds[0], ctx) : '',
     TOC: toc,
-    SECTIONS: rendered.join('\n'),
+    SECTIONS: rendered.filter(Boolean).join('\n'),
   };
 }
 
@@ -183,7 +216,7 @@ function deckParts(spec, ctx) {
     const def = SECTIONS[section.type];
     return { section, ownHeading: def.ownHeading, body: renderBody(section, i, def, ctx) };
   });
-  return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug }) };
+  return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug, footerHtml: ctx.footer }) };
 }
 
 /**
@@ -202,6 +235,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
   const slug = pageSlug(target);
   const slides = isSlides(spec);
   const ids = sectionIds(spec.sections);
+  const footer = `<footer class="pa-footer">${provenanceHtml('make-explainer', spec.generatedBy, buildDate(env))}</footer>`;
   const ctx = {
     theme: themeData,
     dir,
@@ -212,6 +246,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     idFor: slides ? (_section, i) => `slide-${i + 2}` : (_section, i) => ids[i],
     icons: await loadIcons(spec),
     env,
+    footer,
   };
 
   const assets = [];
@@ -225,6 +260,12 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
   const parts = {
     CSP: esc(contentSecurityPolicy(spec)),
     TITLE: plain(spec.title),
+    FAVICON: faviconLink('make-explainer', themeData),
+    GENERATOR: generatorMeta('make-explainer', spec.generatedBy),
+    TOGGLE_ICONS: toggleIcons(),
+    TOGGLE_CSS,
+    TOGGLE_JS: inlineCode(TOGGLE_JS),
+    FOOTER: footer,
     THEME: themeCss(themeData),
     BASECSS: fs.readFileSync(BASE_CSS, 'utf8').replace(/\n$/, ''),
     ...layout,

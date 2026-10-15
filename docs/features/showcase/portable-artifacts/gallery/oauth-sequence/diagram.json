@@ -1,0 +1,134 @@
+{
+  "title": "Sign in with OAuth",
+  "type": "sequence",
+  "theme": "ink",
+  "participants": [
+    {
+      "id": "user",
+      "label": "User",
+      "kind": "actor",
+      "emoji": "🧑"
+    },
+    {
+      "id": "web",
+      "label": "Web app",
+      "emoji": "🌐"
+    },
+    {
+      "id": "auth",
+      "label": "Auth server",
+      "emoji": "🔐"
+    },
+    {
+      "id": "api",
+      "label": "API",
+      "emoji": "🔌"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m1",
+      "from": "user",
+      "to": "web",
+      "label": "starts sign-in"
+    },
+    {
+      "id": "m2",
+      "from": "web",
+      "to": "auth",
+      "label": "redirects to authorize"
+    },
+    {
+      "id": "m3",
+      "from": "auth",
+      "to": "user",
+      "label": "asks for consent"
+    },
+    {
+      "id": "m4",
+      "from": "user",
+      "to": "auth",
+      "label": "grants consent"
+    },
+    {
+      "id": "m5",
+      "from": "auth",
+      "to": "web",
+      "label": "sends authorization code"
+    },
+    {
+      "id": "m6",
+      "from": "web",
+      "to": "auth",
+      "label": "exchanges code for token"
+    },
+    {
+      "id": "m7",
+      "from": "auth",
+      "to": "web",
+      "label": "returns access token",
+      "kind": "reply"
+    },
+    {
+      "id": "m8",
+      "from": "web",
+      "to": "api",
+      "label": "calls API with token"
+    },
+    {
+      "id": "m9",
+      "from": "api",
+      "to": "web",
+      "label": "returns profile",
+      "kind": "reply"
+    }
+  ],
+  "stories": [
+    {
+      "id": "sign-in",
+      "title": "Sign in",
+      "beats": [
+        {
+          "title": "The app sends the user to log in",
+          "edge": "m2",
+          "caption": "The browser is redirected to the auth server."
+        },
+        {
+          "title": "The user is asked for consent",
+          "edge": "m3",
+          "caption": "The auth server shows what the app may access."
+        },
+        {
+          "title": "The user grants consent",
+          "edge": "m4",
+          "caption": "Nothing is shared until the user says yes."
+        },
+        {
+          "title": "The auth server sends a code",
+          "edge": "m5",
+          "caption": "A short-lived code comes back through the redirect."
+        },
+        {
+          "title": "The app trades the code for a token",
+          "edge": "m6",
+          "caption": "Server to server, so the token never touches the browser."
+        },
+        {
+          "title": "The token comes back",
+          "edge": "m7",
+          "caption": "An access token is issued to the app."
+        },
+        {
+          "title": "The app calls the API",
+          "edge": "m8",
+          "caption": "The token rides along as a bearer credential."
+        },
+        {
+          "title": "The API answers with the profile",
+          "edge": "m9",
+          "caption": "The user is now signed in."
+        }
+      ]
+    }
+  ]
+}

@@ -13,7 +13,8 @@
     {
       "type": "tldr",
       "id": "verdict",
-      "title": "Writing the outline, not the page, keeps every explainer consistent",
+      "title": "An outline, not a page, keeps explainers consistent",
+      "label": "The verdict",
       "text": "You write the facts; the tool owns the layout. The page is always well formed, offline and the same family as every other one.",
       "points": [
         "The model fills typed sections in JSON and never writes HTML, CSS or script.",
@@ -23,13 +24,9 @@
       "tone": "good"
     },
     {
-      "type": "text",
-      "title": "A hand-written page drifts, a generated one cannot",
-      "text": "A page written freehand looks fine once. The second one uses a different spacing scale, the third a different set of colours, and the fourth quietly pulls a font from a CDN.\n\nWith an outline, the layout is not up for discussion. Each section **type** has one renderer, and the renderer is the only place that knows about markup. The `title` of a section is a claim a reader can agree or disagree with, not a label such as \"Overview\".\n\nText fields accept a small subset of markdown: bold, italic, `code`, [links to https pages](https://example.com) and `- ` lists. Anything else is shown as plain text, so a stray angle bracket can never become a tag."
-    },
-    {
       "type": "kpis",
       "title": "What one build produces",
+      "label": "One build",
       "items": [
         {
           "label": "Network requests",
@@ -50,8 +47,15 @@
       ]
     },
     {
+      "type": "text",
+      "title": "A hand-written page drifts, a generated one cannot",
+      "label": "The problem",
+      "text": "A page written freehand looks fine once. The second one uses a different spacing scale, the third a different set of colours, and the fourth quietly pulls a font from a CDN.\n\nWith an outline, the layout is not up for discussion. Each section **type** has one renderer, and the renderer is the only place that knows about markup. The `title` of a section is a claim a reader can agree or disagree with, not a label such as \"Overview\".\n\nText fields accept a small subset of markdown: bold, italic, `code`, [links to https pages](https://example.com) and `- ` lists. Anything else is shown as plain text, so a stray angle bracket can never become a tag."
+    },
+    {
       "type": "image",
       "title": "Three steps from facts to a finished page",
+      "label": "The pipeline",
       "src": "pipeline.svg",
       "alt": "Three boxes joined by arrows, top to bottom: Outline, Checks, Page.",
       "caption": "The outline is typed JSON sections, the checks cover schema, links and prose, and the page is one offline HTML file. A bad outline never reaches the build."
@@ -59,6 +63,7 @@
     {
       "type": "cards",
       "title": "Four rules keep the output trustworthy",
+      "label": "Guarantees",
       "columns": 2,
       "items": [
         {
@@ -90,7 +95,8 @@
     },
     {
       "type": "compare",
-      "title": "Typed sections win on consistency and lose on freedom",
+      "title": "Typed sections trade freedom for consistency",
+      "label": "Trade-offs",
       "columns": [
         {
           "title": "Freehand HTML",
@@ -116,6 +122,7 @@
     {
       "type": "table",
       "title": "Each section type answers a different question",
+      "label": "Section types",
       "columns": [
         "Section",
         "Use it to show",
@@ -153,6 +160,7 @@
     {
       "type": "steps",
       "title": "Building a page takes four moves",
+      "label": "Workflow",
       "items": [
         {
           "title": "Pick a preset",
@@ -178,6 +186,7 @@
     {
       "type": "code",
       "title": "The whole loop is two commands",
+      "label": "Commands",
       "code": "node scripts/validate.mjs explainer.json\nnode scripts/build.mjs explainer.json --out ./page.html",
       "language": "bash",
       "caption": "Validation prints one line per problem; the build prints the file it wrote."
@@ -185,6 +194,7 @@
     {
       "type": "risks",
       "title": "Three limits you should know about",
+      "label": "Limits",
       "items": [
         {
           "risk": "A layout the section types cannot express",
@@ -207,6 +217,7 @@
     {
       "type": "files",
       "title": "Each section type is one small renderer module",
+      "label": "Renderers",
       "items": [
         {
           "path": "scripts/lib/page.mjs",
@@ -254,6 +265,7 @@
     {
       "type": "timeline",
       "title": "The design settled in three passes",
+      "label": "History",
       "items": [
         {
           "date": "Pass 1",

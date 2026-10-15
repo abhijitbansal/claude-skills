@@ -1,18 +1,19 @@
 // Slides mode: each section is one slide, so each gets a content budget.
 // Points: tldr points, "- " list lines in markdown fields, items of list-like
 // sections, compare points, checklist items. Words: every prose string of the
-// section except its own title and captions (tables and code have their own
+// section except its own title, its label and captions (tables and code have their own
 // limits).
 // The deck: a title slide from the spec head, then one slide per section, plus
 // the progress bar, counter, outline dialog and the live region the runtime uses.
 import { pathJoin } from '../../shared/errors.mjs';
 import { SLIDE_LIMITS } from './schema.mjs';
 import { collectStrings } from './walk.mjs';
+import { words } from './budget.mjs';
+import { toggleIcons } from '../../shared/theme-toggle.mjs';
 import { esc, inline, headingInline, plain } from './render/ui.mjs';
 
 const listLines = (text) => (text ?? '').split('\n').filter((l) => l.trimStart().startsWith('- ')).length;
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
-const words = (s) => (s.match(/\S+/g) ?? []).length;
 
 export function codeLines(code) {
   return code.replace(/\n+$/, '').split('\n').length;
@@ -32,7 +33,7 @@ function pointCount(s) {
 function wordCount(s, path) {
   if (s.type === 'table') return 0;
   return sum(collectStrings(s, path)
-    .filter((x) => x.prose && x.path !== pathJoin(path, 'title') && x.key !== 'caption')
+    .filter((x) => x.prose && x.path !== pathJoin(path, 'title') && x.path !== pathJoin(path, 'label') && x.key !== 'caption')
     .map((x) => words(x.text)));
 }
 
@@ -71,12 +72,12 @@ const typeLabel = (type) => TYPE_LABELS[type] ?? `${type[0].toUpperCase()}${type
 export const slideTitle = (section) => (section.title === undefined ? typeLabel(section.type) : plain(section.title));
 
 // A section's own id is a deep link (#<id>), kept in data-sid: the element id stays slide-N.
-function slide(n, total, title, classes, inner, sid) {
+function slide(n, total, title, classes, inner, sid, footer = '') {
   const link = sid === undefined ? '' : ` data-sid="${esc(sid)}"`;
   return `<section class="slide ${classes}" id="slide-${n}"${link} tabindex="-1" aria-label="Slide ${n} of ${total}: ${title}">
 <div class="slide-inner">
 ${inner}
-</div>
+</div>${footer}
 </section>`;
 }
 
@@ -85,9 +86,11 @@ function cover(spec, total, metaHtml) {
   return slide(1, total, plain(spec.title), 'slide-cover', `<h1>${inline(spec.title)}</h1>${subtitle}${metaHtml ? `\n${metaHtml}` : ''}`);
 }
 
-function sectionSlide({ section, body, ownHeading }, n, total) {
-  const heading = section.title !== undefined && !ownHeading ? `<h2 class="slide-title" id="slide-${n}-title">${headingInline(section.title)}</h2>\n` : '';
-  return slide(n, total, slideTitle(section), `slide-${section.type}`, `${heading}${body}`, section.id);
+function sectionSlide({ section, body, ownHeading }, n, total, footer = '') {
+  const hasHeading = section.title !== undefined && !ownHeading;
+  const eyebrow = hasHeading && section.label !== undefined ? `<p class="slide-eyebrow pa-label">${plain(section.label)}</p>\n` : '';
+  const heading = hasHeading ? `${eyebrow}<h2 class="slide-title" id="slide-${n}-title">${headingInline(section.title)}</h2>\n` : '';
+  return slide(n, total, slideTitle(section), `slide-${section.type}`, `${heading}${body}`, section.id, footer);
 }
 
 function outline(titles, sids) {
@@ -105,7 +108,7 @@ function chrome(total) {
 <div class="deck-progress" role="progressbar" aria-label="Slide progress" aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="1" aria-valuetext="Slide 1 of ${total}"><span data-progress></span></div>
 <div class="deck-controls">
 <button type="button" class="btn" data-outline-open aria-haspopup="dialog" aria-keyshortcuts="O">Outline <span class="key" aria-hidden="true">O</span></button>
-<button type="button" class="theme-toggle" data-theme-toggle aria-label="Theme: Auto. Change theme">Theme: Auto</button>
+<button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light">${toggleIcons()}</button>
 <span class="deck-count" aria-hidden="true"><span data-count>1</span> / ${total}</span>
 </div>
 <div class="sr-only" role="status" data-live></div>
@@ -117,9 +120,9 @@ function chrome(total) {
  * `rendered` = [{ section, body, ownHeading }] in order (bodies already rendered),
  * `metaHtml` = the title slide's meta list ('' when none), `slug` keys the saved position.
  */
-export function renderDeck({ spec, rendered, metaHtml, slug }) {
+export function renderDeck({ spec, rendered, metaHtml, slug, footerHtml = '' }) {
   const total = rendered.length + 1;
-  const slides = [cover(spec, total, metaHtml), ...rendered.map((r, i) => sectionSlide(r, i + 2, total))];
+  const slides = [cover(spec, total, metaHtml), ...rendered.map((r, i) => sectionSlide(r, i + 2, total, i === rendered.length - 1 ? `\n${footerHtml}` : ''))];
   const titles = [plain(spec.title), ...rendered.map((r) => slideTitle(r.section))];
   const sids = [undefined, ...rendered.map((r) => r.section.id)];
   return `<main id="content" class="deck" data-deck data-slug="${esc(slug)}" data-total="${total}" data-current="1">

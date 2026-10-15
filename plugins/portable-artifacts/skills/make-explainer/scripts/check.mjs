@@ -10,7 +10,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { launchBrowser, BrowserUnavailable, SKIP_HINT } from './lib/browser.mjs';
+import { launchBrowser, BrowserUnavailable } from './lib/browser.mjs';
+import { skipHint } from './lib/doctor-hint.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 
 const USAGE = 'node scripts/check.mjs <page.html> [--json]';
@@ -259,11 +260,11 @@ function report(result, json) {
   if (json) {
     const errors = result.problems.map((message) => ({ path: '', message }));
     const base = { ok: result.status !== 'failed' };
-    const body = result.status === 'skipped' ? { ...base, skipped: true, reason: result.reason, hint: SKIP_HINT }
+    const body = result.status === 'skipped' ? { ...base, skipped: true, reason: result.reason, hint: skipHint(result.reason) }
       : result.status === 'ok' ? { ...base, viewports: result.viewports, slides: result.slides, presented: result.presented }
         : { ...base, errors, problems: result.problems };
     process.stdout.write(`${JSON.stringify(body)}\n`);
-  } else if (result.status === 'skipped') process.stdout.write(`check: skipped (no browser: ${result.reason}; run: npx playwright install chromium)\n`);
+  } else if (result.status === 'skipped') process.stdout.write(`check: skipped (no browser: ${result.reason}; ${skipHint(result.reason)})\n`);
   else if (result.status === 'ok') process.stdout.write(okLine(result));
   else {
     // The timeout line already reads as a verdict; every other failure gets a tally.

@@ -1,7 +1,6 @@
 // Embedding API: spec -> drawable diagram, for make-diagram's own builder and
 // for other skills (make-explainer). Stable contract; see test/api.test.mjs.
-import fs from 'node:fs';
-import { loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
+import { themeFor } from './theme.mjs';
 import { validateSpec } from './spec.mjs';
 import { layoutDiagram } from './layout.mjs';
 import { lintGeometry } from './lint.mjs';
@@ -10,11 +9,12 @@ import { DiagramError } from './diagram-error.mjs';
 import { LIMITS } from './schema.mjs';
 import { revealedBy } from './steps.mjs';
 import { viewerData } from './data.mjs';
+import { beatsOf } from './stories.mjs';
+import { runtimeSource } from './runtime.mjs';
 
 // validateSpec(spec, { layout }) -> { ok, errors }: the same checks buildDiagram runs, for callers that only validate.
 export { validateSpec } from './spec.mjs';
 
-const VIEWER_JS = new URL('../../template/viewer.js', import.meta.url);
 const ID_PREFIX = /^[A-Za-z0-9_-]+$/;
 
 const first = (items, fallback) => items[0] ?? fallback;
@@ -93,21 +93,22 @@ const idsOf = (spec) => (spec.type === 'sequence'
   ? [...spec.participants.map((p) => p.id), ...(spec.messages ?? []).map((m) => m.id)]
   : [...(spec.groups ?? []).map((g) => g.id), ...spec.nodes.map((n) => n.id)]);
 
-/** The viewer's core script (zoom, pan, hover, presentation, animation) without toolbar chrome, for embedding. */
+/** The viewer's core script (camera, trace, story, transport and the mount that wires them) without toolbar chrome, for embedding. */
 export function viewerRuntime() {
-  return fs.readFileSync(VIEWER_JS, 'utf8');
+  return runtimeSource();
 }
 
 /**
  * Build a diagram from a spec.
  *
  * `theme` is a theme name or a loaded theme object (default: the spec's theme,
- * else paper). Resolves to { svg, css, width, height, steps, ids, data, geometry }:
+ * else blueprint). Resolves to { svg, css, width, height, steps, ids, data, geometry }:
  * `svg` uses classes and CSS variables only (no fonts, no <style>; include
  * `css` once per page), `steps` is the spec's steps (copied; ids it never
  * reveals get a final "Everything" step) or ones built from the layout, `ids`
  * lists every id a step can name, `data` is what `PADiagram.mount`
- * (viewerRuntime()) takes along with the `svg`, and `idPrefix`
+ * (viewerRuntime()) takes along with the `svg` (it also carries the story timeline
+ * `beats` and `chapters`, per-id `info`, `directed` out-edges, `autoplay`, and `drawing`, the [x, y, w, h] of the diagram without the legend band and the widening for a wide legend row: a page that hides the drawn legend fits that), and `idPrefix`
  * (^[A-Za-z0-9_-]+$) namespaces the SVG's ids when several diagrams share a page. Throws DiagramError when the
  * spec is invalid or the layout fails the geometry lint.
  */
@@ -117,12 +118,13 @@ export async function buildDiagram(spec, { theme, idPrefix } = {}) {
   }
   const semantic = await validateSpec(spec, { layout: false });
   if (!semantic.ok) throw new DiagramError(semantic.errors);
-  const resolved = typeof theme === 'object' && theme !== null ? theme : loadTheme(theme ?? spec.theme ?? DEFAULT_THEME);
+  const resolved = themeFor(spec, theme);
   const geometry = await layoutDiagram(spec, resolved);
   const lint = lintGeometry(geometry, { theme: resolved });
   if (lint.length > 0) throw new DiagramError(lint);
   const ids = idsOf(spec);
   const steps = stepsOf(spec, geometry, ids);
+  const { beats, chapters } = beatsOf(spec, steps);
   const width = geometry.width;
   const height = geometry.height;
   return {
@@ -132,7 +134,7 @@ export async function buildDiagram(spec, { theme, idPrefix } = {}) {
     height,
     steps,
     ids,
-    data: viewerData(spec, { geometry, steps, ids, width, height }),
+    data: viewerData(spec, { geometry, steps, ids, width, height, beats, chapters }),
     geometry,
   };
 }

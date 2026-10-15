@@ -19,7 +19,7 @@ test('the core fixture builds into one document with the CSP and no network refe
   const { html, assets } = await build(CORE);
   assert.deepEqual(assets, []);
   assert.match(html, /<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;unsafe-inline&#39;; style-src &#39;unsafe-inline&#39;; img-src data: blob:; font-src data:">/);
-  assert.ok(!/<link\b/i.test(html), 'no <link>');
+  assert.ok(!/<link\b(?![^>]*rel="icon"[^>]*href="data:)/i.test(html), 'no <link> except the inline data: favicon');
   assert.ok(!/<script[^>]*\ssrc=/i.test(html), 'no external script');
   assert.ok(!/url\(\s*["']?https?:/i.test(html), 'no css url() to the network');
   assert.ok(!/@import/.test(html));
@@ -151,7 +151,7 @@ test('theme: --theme override beats spec.theme; unknown names throw with the lis
 test('the dark theme and the toggle with its pre-paint script are in the page', async () => {
   const { html } = await build(doc([text(1)]));
   assert.match(html, /localStorage\.getItem\('pa-theme'\)/);
-  assert.match(html, /<button type="button" class="theme-toggle" data-theme-toggle aria-label="Theme: Auto\. Change theme">Theme: Auto<\/button>/);
+  assert.match(html, /<button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto\. Switch to Light" title="Theme: Auto\. Switch to Light">/);
   assert.match(html, /:root\[data-theme="dark"\]/);
   assert.match(html, /prefers-reduced-motion: reduce/);
   assert.match(html, /@media print/);
@@ -165,14 +165,6 @@ function loadLib() {
   vm.runInNewContext(fs.readFileSync(new URL('../template/pa-lib.js', import.meta.url), 'utf8'), sandbox);
   return sandbox.PA;
 }
-
-test('pa-lib: nextTheme cycles auto, light, dark and treats junk as auto', () => {
-  const { nextTheme } = loadLib();
-  assert.equal(nextTheme('auto'), 'light');
-  assert.equal(nextTheme('light'), 'dark');
-  assert.equal(nextTheme('dark'), 'auto');
-  assert.equal(nextTheme('weird'), 'light');
-});
 
 test('pa-lib: storage helpers tolerate a missing or throwing store', () => {
   const { readStore, writeStore } = loadLib();

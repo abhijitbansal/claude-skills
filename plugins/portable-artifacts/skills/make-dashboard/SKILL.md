@@ -12,15 +12,20 @@ You write one JSON spec (`dashboard.json`: sources, SQL queries, KPIs, charts as
 Scripts validate it and build a single offline `index.html`. Every chart card shows its SQL,
 row count and refresh time. No network, no LLM at build time.
 
+## Before the first build
+
+`<skill-dir>` is the folder containing this SKILL.md. Run `node <skill-dir>/scripts/doctor.mjs --json` (add `--for <spec.json>` once the spec exists, `--for voiceover` for a voiceover (make-motion), `--for check` before `check.mjs` (skills that have one)). It needs only Node.
+
+If it reports anything missing, tell the user in one message: each item, why it is needed, its size and the command, plus every `notes` and `info` entry from the output (they disclose downloads and the files an install writes). Ask once per set of missing items (the plain run and a later `--for` run may each find new ones). On yes, run `node <skill-dir>/scripts/doctor.mjs --fix <ids>` with the ids it reported, and the same `--for` you diagnosed with (for example `--fix <ids> --for check`). Hand the user the exact command to run themselves for anything the doctor reports as refused (it needs sudo, or has no automatic fix), skipped (needs node_modules first), installed elsewhere, still missing, or failed; in Claude Code suggest prefixing it with `!`. On no, do what you can without it and give the user the remaining commands.
+
 ## Workflow
 
 Run every step yourself, in this same turn, with your shell or file tools. Do not end your reply after showing or describing the JSON: keep going until validate prints `valid` and the output file exists.
 
-`<skill-dir>` is the folder that contains this SKILL.md. Run every command from the project folder
+Run every command from the project folder
 (where `dashboard.json` lives), using the full path to the scripts.
 
-First use: if `<skill-dir>/node_modules` is missing, tell the user it is a one-time local install and run
-`npm ci --omit=dev --prefix <skill-dir>`. If the request is empty, ask what to build and from which data file(s).
+If the request is empty, ask what to build and from which data file(s).
 
 1. Look at the data first. Never guess columns:
    `node <skill-dir>/scripts/inspect.mjs data/sales.csv` (column names, types, 5 sample rows; csv, parquet or json).
@@ -28,10 +33,10 @@ First use: if `<skill-dir>/node_modules` is missing, tell the user it is a one-t
    `node <skill-dir>/scripts/inspect.mjs --spec dashboard.json --source shop` and `... --source shop --table items`.
 2. Write `dashboard.json` next to the data. Source paths are relative to the spec file and must stay
    inside the spec's folder.
-   Actually create the file: describing it or announcing a patch is not enough. If your file tool fails, write it from the shell (`cat > dashboard.json <<'EOF'` … `EOF`), then `ls dashboard.json` to confirm it exists before validating.
+   Actually create the file: describing it or announcing a patch is not enough. If your file tool fails, write it with a short `node -e` script that calls `fs.writeFileSync`, then confirm the file exists before validating.
 3. Validate and fix until it prints `valid` (it also runs every query, so valid means buildable):
    `node <skill-dir>/scripts/validate.mjs dashboard.json`
-4. Build: `node <skill-dir>/scripts/build.mjs dashboard.json` (writes `dist/index.html`, `--out <dir>` to change).
+4. Write `generatedBy` into `dashboard.json`: the model you are running as, your effort level if you know it, and your host (for example Claude Code, Codex, Copilot CLI, Gemini CLI). Never guess; leave out any field you do not know. A `serve.mjs --watch` rebuild reads it from the spec and does not get the flags, so the spec is where it must live. `--model`, `--effort` and `--agent` on the build override it for a one-off build. Build: `node <skill-dir>/scripts/build.mjs dashboard.json` (writes `dist/index.html`, `--out <dir>` to change).
    An error such as `charts[0].y: "revnue" is not a column of query "by_region" (columns: region, revenue); did you mean "revenue"?`
    names the exact path and fix.
 5. Show it. For live updates while editing the spec or data:

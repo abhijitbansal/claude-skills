@@ -3,10 +3,10 @@
   "label": "Editorial",
   "fonts": {
     "display": {
-      "family": "Bricolage Grotesque",
-      "fallback": "'Trebuchet MS', 'Segoe UI', sans-serif",
+      "family": "Newsreader",
+      "fallback": "Georgia, 'Times New Roman', serif",
       "weights": {
-        "600": "bricolage-grotesque-latin-600-normal.woff2"
+        "600": "newsreader-latin-600-normal.woff2"
       }
     },
     "body": {
@@ -18,10 +18,10 @@
       }
     },
     "mono": {
-      "family": "JetBrains Mono",
+      "family": "Geist Mono",
       "fallback": "ui-monospace, Menlo, Consolas, monospace",
       "weights": {
-        "400": "jetbrains-mono-latin-400-normal.woff2"
+        "400": "geist-mono-latin-400-normal.woff2"
       }
     }
   },
@@ -52,7 +52,14 @@
     "seq4": "#3987e5",
     "seq5": "#256abf",
     "seq6": "#184f95",
-    "seq7": "#0d366b"
+    "seq7": "#0d366b",
+    "kindPerson": "#a3480a",
+    "kindService": "#0e7490",
+    "kindData": "#6d28d9",
+    "kindQueue": "#0f766e",
+    "kindExternal": "#56677b",
+    "kindDecision": "#4338ca",
+    "glow": "#1f4e79"
   },
   "dark": {
     "page": "#13120f",
@@ -81,6 +88,13 @@
     "seq4": "#2a78d6",
     "seq5": "#3987e5",
     "seq6": "#6da7ec",
-    "seq7": "#9ec5f4"
+    "seq7": "#9ec5f4",
+    "kindPerson": "#f5a524",
+    "kindService": "#38bdf8",
+    "kindData": "#a78bfa",
+    "kindQueue": "#2dd4bf",
+    "kindExternal": "#94a3b8",
+    "kindDecision": "#818cf8",
+    "glow": "#b4d4f0"
   }
 }

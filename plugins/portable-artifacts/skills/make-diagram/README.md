@@ -8,16 +8,20 @@ any agent that can run shell commands. Nothing leaves your machine.
 - **One spec, `diagram.json`**: a title, a type, and nodes with edges (or
   participants with messages). The agent never writes coordinates, CSS, SVG
   or HTML; the spec accepts none of them.
+- **Stamped**: a favicon, an icon theme toggle in the toolbar and a provenance
+  line under the title (model, effort, agent from `generatedBy` or
+  `--model`/`--effort`/`--agent`; "not reported" when unknown).
+  `scripts/doctor.mjs` reports anything missing with the fix for your OS;
+  `--for check` adds the `check.mjs` needs (`dev_deps`, `chromium`).
 - **Targeted edits**: "rename the cache" or "add a queue between the API and
   the worker" changes a few fields, and the layout is recomputed.
 - **Checked before you see it**: validation lays the diagram out and lints
   the geometry (text that does not fit its box, overlapping nodes, labels on
   top of nodes), so a spec that validates is buildable.
 - **Deterministic**: the same spec and versions give byte-identical
-  pages (there is no build timestamp).
-- **A page worth opening**: zoom and pan, hover tracing of a node's edges,
-  edge-flow animation, light and dark, SVG and PNG export, and a
-  step-by-step presentation mode (`P`).
+  pages. The only thing that varies is the date in the provenance line (the
+  build day); set `SOURCE_DATE_EPOCH` to pin it.
+- **A page worth opening**: a story player (named chapters of beats, a travelling dot along each hop, a transport bar with speed and loop), an Explore panel (what a node sends and receives, the shortest route between two nodes, Find), kind-coloured cards with emoji tiles, lanes and a legend, light and dark, full screen, SVG and PNG export.
 
 > Agents: the instructions you follow are in [`SKILL.md`](SKILL.md). This
 > README is for people.
@@ -26,8 +30,9 @@ any agent that can run shell commands. Nothing leaves your machine.
 
 ```bash
 cd make-diagram && npm ci --omit=dev && cd -        # one-time
+node make-diagram/scripts/doctor.mjs                # optional: what is missing, and how to fix it
 node make-diagram/scripts/validate.mjs make-diagram/references/examples/architecture.diagram.json
-node make-diagram/scripts/build.mjs    make-diagram/references/examples/architecture.diagram.json --out checkout.html
+node make-diagram/scripts/build.mjs    make-diagram/references/examples/architecture.diagram.json --out checkout.html --model "Claude Sonnet" --agent "Claude Code"
 node make-diagram/scripts/check.mjs    checkout.html   # optional; skips when no browser is installed
 ```
 
@@ -45,23 +50,24 @@ you where the page is. Default output folder is `~/.agent/diagrams/`
   browser tests use one. `check.mjs` needs Playwright (a dev dependency, so a
   full `npm ci`, not `--omit=dev`) plus a Chromium or Chrome; without either
   it skips cleanly and says so (`PA_NO_BROWSER=1` forces the skip). To enable
-  it: `npm ci && npx playwright install chromium` inside this folder.
+  it: `node scripts/doctor.mjs --for check --fix dev_deps,chromium`, or `npm ci && npx playwright install chromium` inside this folder.
 
 ## The page
 
 | Key | Does |
 |---|---|
-| `F`, double-click | fit the diagram |
+| `P` / `E` | Play story (opens beat 1) / Explore |
+| Space | play or pause the story |
+| arrows, Page Up/Down, Home/End | in Play: step the beats (left/up back, right/down forward); first and last beat |
+| `F` | full screen (`Esc` leaves; a sandboxed page fills its window instead) |
+| `0`, double-click | fit the diagram |
 | `+` / `-`, wheel, pinch | zoom |
-| arrows, drag | pan |
-| hover, focus, click | trace a node's edges; click pins; `Esc` clears |
-| `P` | present: arrows, Space or Page Up/Down step; `Esc` exits |
+| arrows (Explore), drag | pan |
+| hover, click, shift-click | tooltip; the side panel; the shortest route; `Esc` closes the panel |
+| `/` | Find a node |
 | `A` | toggle edge-flow animation (off under reduced motion) |
 
-Presentation steps come from the spec's `steps`, or are built from the
-layout (one per layer, one per message in a sequence). The presentation
-camera never zooms past twice the fit. Reduced-motion settings turn off
-animation and camera tweening.
+Beats come from the spec's stories, or, with none, from the layout (one per layer, one per message in a sequence). The camera never zooms past twice the fit. Reduced-motion settings turn off the travelling dot, camera glides and autoplay.
 
 ## Types
 

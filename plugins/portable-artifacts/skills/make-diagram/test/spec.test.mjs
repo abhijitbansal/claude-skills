@@ -66,7 +66,7 @@ test('unknown property inside a node is rejected', async () => {
   const e = await mutated('flow', (s) => { s.nodes[0].pos = { x: 1, y: 2 }; });
   assert.equal(e.length, 1);
   assert.equal(e[0].path, 'nodes[0].pos');
-  assert.match(e[0].message, /^unknown property; allowed: id, label, kind, icon, group, note, tone$/);
+  assert.match(e[0].message, /^unknown property; allowed: id, label, kind, icon, group, note, tone, emoji, detail$/);
 });
 
 test('unknown property inside an edge, step, frame and note is rejected', async () => {
@@ -554,4 +554,40 @@ test('edges that cross group borders without nesting stay valid', async () => {
 
 test('a self-edge on a node inside a group stays valid', async () => {
   assert.deepEqual(await mutated('architecture', (s) => { s.edges.push({ from: 'api', to: 'api' }); }), []);
+});
+
+// ---- emoji, detail, autoplay -------------------------------------------------
+
+test('emoji: one emoji grapheme is valid on nodes and participants; text and two emoji are not', async () => {
+  for (const emoji of ['🛒', '👍🏽', '👨‍👩‍👧', '🇯🇵', '1️⃣']) {
+    assert.deepEqual(await mutated('architecture', (s) => { s.nodes[0].emoji = emoji; }), [], emoji);
+    assert.deepEqual(await mutated('sequence', (s) => { s.participants[0].emoji = emoji; }), [], emoji);
+  }
+  assert.deepEqual(await mutated('architecture', (s) => { s.nodes[0].emoji = 'A'; }), [{ path: 'nodes[0].emoji', message: '"A" is not an emoji; use exactly one emoji, like "🛒"' }]);
+  assert.deepEqual(await mutated('architecture', (s) => { s.nodes[0].emoji = '👍👍'; }), [{ path: 'nodes[0].emoji', message: '"👍👍" is 2 characters; use exactly one emoji, like "🛒"' }]);
+  assert.deepEqual(await mutated('architecture', (s) => { s.nodes[0].emoji = 'ok'; }), [{ path: 'nodes[0].emoji', message: '"ok" is 2 characters; use exactly one emoji, like "🛒"' }]);
+  assert.deepEqual(await mutated('sequence', (s) => { s.participants[1].emoji = '1'; }), [{ path: 'participants[1].emoji', message: '"1" is not an emoji; use exactly one emoji, like "🛒"' }]);
+});
+
+test('emoji on a kind drawn as a bare shape is rejected like an icon', async () => {
+  const flow = await mutated('flow', (s) => { s.nodes[1].kind = 'decision'; s.nodes[1].emoji = '🛒'; });
+  assert.deepEqual(flow, [{ path: 'nodes[1].emoji', message: 'kind "decision" is drawn as a shape without an icon; remove emoji or use kind "step"' }]);
+  const state = await mutated('state', (s) => { s.nodes[1].kind = 'choice'; s.nodes[1].emoji = '🛒'; });
+  assert.deepEqual(state, [{ path: 'nodes[1].emoji', message: 'kind "choice" is drawn as a shape without an icon; remove emoji or use kind "state"' }]);
+});
+
+test('emoji and icon may both be set (the emoji is the one drawn)', async () => {
+  assert.deepEqual(await mutated('architecture', (s) => { s.nodes[1].emoji = '🧾'; }), []); // nodes[1] already carries icon brand:nodedotjs
+});
+
+test('detail is plain text up to 400 characters', async () => {
+  assert.deepEqual(await mutated('architecture', (s) => { s.nodes[0].detail = 'd'.repeat(400); }), []);
+  assert.deepEqual(await mutated('architecture', (s) => { s.nodes[0].detail = 'd'.repeat(401); }), [{ path: 'nodes[0].detail', message: 'detail is 401 characters; the limit is 400 — shorten it' }]);
+  assert.deepEqual(await mutated('sequence', (s) => { s.participants[2].detail = 'd'.repeat(401); }), [{ path: 'participants[2].detail', message: 'detail is 401 characters; the limit is 400 — shorten it' }]);
+  assert.deepEqual(await mutated('architecture', (s) => { s.nodes[0].detail = '  '; }), [{ path: 'nodes[0].detail', message: 'must contain at least one non-space character' }]);
+});
+
+test('autoplay is a boolean', async () => {
+  assert.deepEqual(await mutated('flow', (s) => { s.autoplay = true; }), []);
+  assert.deepEqual(await mutated('flow', (s) => { s.autoplay = 'yes'; }), [{ path: 'autoplay', message: 'must be boolean' }]);
 });

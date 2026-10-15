@@ -2,13 +2,6 @@
 // and through node:vm in tests, so: no imports, no DOM access here.
 (function (root) {
   'use strict';
-  var THEMES = ['auto', 'light', 'dark'];
-
-  function nextTheme(mode) {
-    var i = Math.max(0, THEMES.indexOf(mode)); // junk counts as 'auto'
-    return THEMES[(i + 1) % THEMES.length];
-  }
-
   // window.localStorage / sessionStorage, or undefined when merely reading the property throws.
   function safeStorage(name) {
     try { return root[name]; } catch (e) { return undefined; }
@@ -151,7 +144,7 @@
   }
 
   root.PA = {
-    nextTheme: nextTheme, safeStorage: safeStorage, readStore: readStore, writeStore: writeStore, saveStore: saveStore,
+    safeStorage: safeStorage, readStore: readStore, writeStore: writeStore, saveStore: saveStore,
     readChecks: readChecks, mergeChecks: mergeChecks, checkProgress: checkProgress, activeIndex: activeIndex,
     clampSlide: clampSlide, parseSlideHash: parseSlideHash, parseResume: parseResume, slideKey: slideKey,
     moveTarget: moveTarget, canScroll: canScroll, slideAtScroll: slideAtScroll,

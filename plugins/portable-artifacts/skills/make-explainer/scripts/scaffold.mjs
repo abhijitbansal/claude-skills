@@ -1,20 +1,21 @@
 #!/usr/bin/env node
-// node scripts/scaffold.mjs <recap|checklist|concept|slides> [--facts facts.json] [--title <text>]
+// node scripts/scaffold.mjs <recap|checklist|concept|slides> [--facts facts.json] [--title <text>] [--out <file>]
 // Prints a starter explainer.json on stdout. Facts (from gather.mjs) fill the numbers, files,
 // commits and folders; every sentence is a "TODO: ..." string that validate.mjs rejects until
-// it is replaced. Redirect the output to a file: scaffold.mjs recap --facts f.json > explainer.json
+// it is replaced. Write it to a file with --out: scaffold.mjs recap --facts f.json --out explainer.json
 // exit 0 ok, 2 usage / unreadable facts
 import fs from 'node:fs';
+import { emit } from './lib/write-out.mjs';
 import { scaffold, PRESET_NAMES } from './lib/presets.mjs';
 import { CHANGES } from './lib/schema.mjs';
 import { didYouMean } from '../shared/errors.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 
-const USAGE = `node scripts/scaffold.mjs <${PRESET_NAMES.join('|')}> [--facts facts.json] [--title <text>]`;
-const OPTIONS = { facts: { type: 'string' }, title: { type: 'string' } };
+const USAGE = `node scripts/scaffold.mjs <${PRESET_NAMES.join('|')}> [--facts facts.json] [--title <text>] [--out <file>]`;
+const OPTIONS = { facts: { type: 'string' }, title: { type: 'string' }, out: { type: 'string' } };
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const bad = (path, what) => new UsageError(`facts.${path} must be ${what}; produce the file with: node scripts/gather.mjs git > facts.json`);
+const bad = (path, what) => new UsageError(`facts.${path} must be ${what}; produce the file with: node scripts/gather.mjs git --out facts.json`);
 
 function checkStrings(value, path, keys) {
   for (const key of keys) {
@@ -81,7 +82,7 @@ try {
   const preset = presetFrom(positionals);
   if (values.title !== undefined && values.title.trim() === '') throw new UsageError(`--title must not be empty; pass --title <text> or leave it out for a TODO title; usage: ${USAGE}`);
   const facts = values.facts === undefined ? null : readFacts(values.facts);
-  process.stdout.write(`${JSON.stringify(scaffold(preset, { facts, title: values.title }), null, 2)}\n`);
+  emit(`${JSON.stringify(scaffold(preset, { facts, title: values.title }), null, 2)}\n`, values.out);
 } catch (e) {
   if (!(e instanceof UsageError)) throw e;
   exitUsage(e);

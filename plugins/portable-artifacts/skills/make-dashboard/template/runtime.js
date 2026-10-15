@@ -1,4 +1,4 @@
-// Dashboard page behaviour: theme toggle and chart rendering.
+// Dashboard page behaviour: chart rendering (the theme toggle is the shared one in the page).
 // Data comes from <script id="dash-data">; nothing is fetched.
 (function () {
   var PA = window.PA;
@@ -6,7 +6,6 @@
   var root = document.documentElement;
   var css = function (name) { return getComputedStyle(root).getPropertyValue(name).trim(); };
   var safeStorage = function (name) { try { return window[name]; } catch (e) { return undefined; } };
-  var local = safeStorage('localStorage');
 
   // Local-time display for refresh stamps (server text is UTC fallback).
   document.querySelectorAll('time[data-t]').forEach(function (el) {
@@ -16,24 +15,6 @@
       ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
   });
-
-  // ---- theme ---------------------------------------------------------------
-  var LABEL = { auto: 'Auto', light: 'Light', dark: 'Dark' };
-  var toggle = document.querySelector('[data-theme-toggle]');
-  function currentTheme() { return root.getAttribute('data-theme') || 'auto'; }
-  function applyTheme(mode) {
-    if (mode === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', mode);
-    if (toggle) { toggle.textContent = 'Theme: ' + LABEL[mode]; toggle.setAttribute('aria-label', 'Theme: ' + LABEL[mode] + '. Change theme'); }
-  }
-  applyTheme(currentTheme());
-  if (toggle) {
-    toggle.addEventListener('click', function () {
-      var next = PA.nextTheme(currentTheme());
-      PA.writeStore(local, 'pa-theme', next);
-      applyTheme(next);
-      render();
-    });
-  }
 
   // ---- charts --------------------------------------------------------------
   // Vega config built from the CSS tokens, so charts follow the theme.
@@ -177,6 +158,8 @@
     var cfg = config();
     return Promise.all(data.charts.map(function (c) { return renderChart(c, cfg); }));
   }
+  // The shared toggle (in the page) announces a theme change; charts take their colours from the CSS tokens.
+  document.addEventListener('pa:theme', function () { render(); });
 
   function select(c, name, focus) {
     active[c.id] = name;
