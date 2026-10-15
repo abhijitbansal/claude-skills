@@ -15,36 +15,40 @@ export const GENERATED_BY_SCHEMA = {
 
 export const PROVENANCE_OPTIONS = { model: { type: 'string' }, effort: { type: 'string' }, agent: { type: 'string' } };
 
+// Unknown spec keys are kept so the closed schema can reject typos like "modle".
 export function mergeGeneratedBy(fromSpec, flags = {}) {
-  const merged = {};
+  const merged = { ...fromSpec };
   for (const k of FIELDS) {
-    const v = flags[k] ?? fromSpec?.[k];
-    if (v !== undefined) merged[k] = v;
+    if (flags[k] !== undefined) merged[k] = flags[k];
   }
   return Object.keys(merged).length ? merged : undefined;
 }
 
 export function buildDate(env = process.env) {
   const epoch = env.SOURCE_DATE_EPOCH;
-  return /^\d+$/.test(epoch ?? '') ? new Date(Number(epoch) * 1000) : new Date();
+  if (!/^\d+$/.test(epoch ?? '')) return new Date();
+  const date = new Date(Number(epoch) * 1000);
+  return Number.isFinite(date.getTime()) ? date : new Date();
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const DATE_FMT = { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' };
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const formatDate = (d) => `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+const has = (v) => typeof v === 'string' && v.length > 0;
 
 export function provenanceText(skill, gen = {}, date = buildDate()) {
   return [
     skill,
-    gen?.model ?? 'model not reported',
-    gen?.effort ? `${gen.effort} effort` : 'effort not reported',
-    gen?.agent ?? 'agent not reported',
-    date.toLocaleDateString('en-GB', DATE_FMT),
+    has(gen?.model) ? gen.model : 'model not reported',
+    has(gen?.effort) ? `${gen.effort} effort` : 'effort not reported',
+    has(gen?.agent) ? gen.agent : 'agent not reported',
+    formatDate(date),
   ].join(' · ');
 }
 
 export const provenanceHtml = (skill, gen, date) => `<p class="pa-provenance">${esc(provenanceText(skill, gen, date))}</p>`;
 
 export function generatorMeta(skill, gen = {}) {
-  const parts = FIELDS.map((k) => `${k}=${gen?.[k] ?? 'not reported'}`).join('; ');
+  const parts = FIELDS.map((k) => `${k}=${has(gen?.[k]) ? gen[k] : 'not reported'}`).join('; ');
   return `<meta name="generator" content="${esc(`portable-artifacts ${skill}; ${parts}`)}">`;
 }

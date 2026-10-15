@@ -23,6 +23,8 @@ export const TOGGLE_CSS = [
 
 // Plain ES5 so it runs inline on every page; mirrors nextMode() above.
 export const TOGGLE_JS = `(function () {
+  if (window.__paThemeToggle) return;
+  window.__paThemeToggle = true;
   var MODES = ${JSON.stringify(MODES)};
   var LABEL = { auto: 'Auto', light: 'Light', dark: 'Dark' };
   var root = document.documentElement;
@@ -49,5 +51,6 @@ export const TOGGLE_JS = `(function () {
     try { window.localStorage.setItem(${JSON.stringify(THEME_KEY)}, m); } catch (err) {}
     apply(m);
   });
-  paint(current());
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { paint(current()); });
+  else paint(current());
 })();`;

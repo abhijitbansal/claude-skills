@@ -21,7 +21,7 @@ test('icons and css cover all three modes', () => {
 });
 
 // Minimal DOM: enough for TOGGLE_JS (attributes, querySelectorAll, one delegated click listener).
-function fakeDom(storage) {
+function fakeDom(storage, { readyState = 'complete', htmlTheme, runs = 1 } = {}) {
   const attrs = (init = {}) => {
     const a = { ...init };
     return {
@@ -31,21 +31,25 @@ function fakeDom(storage) {
       attrs: a,
     };
   };
-  const root = attrs();
+  const root = attrs(htmlTheme ? { 'data-theme': htmlTheme } : {});
+  const icon = { closest: (sel) => (sel === '[data-theme-toggle]' ? button : null) };
   const button = { ...attrs({ 'data-mode': 'auto' }), closest: (sel) => (sel === '[data-theme-toggle]' ? button : null) };
   const events = [];
   let clickHandler;
+  let ready;
   const document = {
     documentElement: root,
+    readyState,
     querySelectorAll: () => [button],
-    addEventListener: (type, fn) => { if (type === 'click') clickHandler = fn; },
+    addEventListener: (type, fn) => { if (type === 'click') (clickHandler = clickHandler ? ((a, b) => (e) => { a(e); b(e); })(clickHandler, fn) : fn); if (type === 'DOMContentLoaded') ready = fn; },
     dispatchEvent: (e) => events.push(e),
   };
   const window = {};
   Object.defineProperty(window, 'localStorage', { get: () => { if (storage === 'throws') throw new Error('blocked'); return storage; } });
   const context = { document, window, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init.detail; } } };
-  vm.runInNewContext(TOGGLE_JS, context);
-  return { root, button, events, click: () => clickHandler({ target: button }) };
+  vm.createContext(context);
+  for (let i = 0; i < runs; i++) vm.runInContext(TOGGLE_JS, context);
+  return { root, button, events, ready: () => ready && ready(), click: () => clickHandler({ target: button }), clickIcon: () => clickHandler({ target: icon }) };
 }
 
 test('clicking cycles data-theme, stores the mode, relabels and fires pa:theme', () => {
@@ -70,4 +74,37 @@ test('blocked storage: toggle still cycles without throwing', () => {
   dom.click();
   dom.click();
   assert.equal(dom.root.attrs['data-theme'], 'dark');
+  assert.equal(dom.button.attrs['data-mode'], 'dark');
+  assert.equal(dom.button.attrs['aria-label'], 'Theme: Dark. Switch to Auto');
+  assert.equal(dom.button.attrs.title, 'Theme: Dark. Switch to Auto');
+});
+
+test('running the script twice adds one listener: one click advances one mode', () => {
+  const dom = fakeDom({ setItem() {} }, { runs: 2 });
+  dom.click();
+  assert.equal(dom.root.attrs['data-theme'], 'light');
+  assert.deepEqual(dom.events.map((e) => e.detail.mode), ['light']);
+});
+
+test('initial paint waits for DOMContentLoaded while loading, runs at once otherwise', () => {
+  const loading = fakeDom({ setItem() {} }, { readyState: 'loading', htmlTheme: 'dark' });
+  assert.equal(loading.button.attrs['aria-label'], undefined);
+  loading.ready();
+  assert.equal(loading.button.attrs['aria-label'], 'Theme: Dark. Switch to Auto');
+  const done = fakeDom({ setItem() {} }, { readyState: 'complete' });
+  assert.equal(done.button.attrs['aria-label'], 'Theme: Auto. Switch to Light');
+});
+
+test('html starting at data-theme=dark paints dark and a click goes to auto', () => {
+  const dom = fakeDom({ setItem() {} }, { htmlTheme: 'dark' });
+  assert.equal(dom.button.attrs['data-mode'], 'dark');
+  assert.equal(dom.button.attrs['aria-label'], 'Theme: Dark. Switch to Auto');
+  dom.click();
+  assert.equal('data-theme' in dom.root.attrs, false);
+});
+
+test('a click on a child icon resolves to the toggle button', () => {
+  const dom = fakeDom({ setItem() {} });
+  dom.clickIcon();
+  assert.equal(dom.root.attrs['data-theme'], 'light');
 });

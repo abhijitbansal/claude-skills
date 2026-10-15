@@ -50,3 +50,24 @@ test('buildDate honours SOURCE_DATE_EPOCH and ignores junk', () => {
   assert.ok(Math.abs(buildDate({ SOURCE_DATE_EPOCH: 'soon' }).getTime() - now) < 5000);
   assert.ok(Math.abs(buildDate({}).getTime() - now) < 5000);
 });
+
+test('dates use a fixed UTC month table (September is Sep)', () => {
+  assert.equal(provenanceText('s', undefined, new Date(Date.UTC(2026, 8, 3))), 's · model not reported · effort not reported · agent not reported · 3 Sep 2026');
+});
+
+test('out-of-range SOURCE_DATE_EPOCH falls back to now', () => {
+  const d = buildDate({ SOURCE_DATE_EPOCH: '1'.repeat(20) });
+  assert.ok(Number.isFinite(d.getTime()));
+  assert.ok(Math.abs(d.getTime() - Date.now()) < 5000);
+});
+
+test('empty strings count as not reported in text and meta', () => {
+  const gen = { model: '', effort: '', agent: '' };
+  assert.match(provenanceText('s', gen, DATE), /^s · model not reported · effort not reported · agent not reported/);
+  assert.match(generatorMeta('s', gen), /model=not reported; effort=not reported; agent=not reported/);
+});
+
+test('mergeGeneratedBy keeps unknown spec keys so the closed schema can reject them', () => {
+  assert.deepEqual(mergeGeneratedBy({ model: 'A', modle: 'x' }, {}), { model: 'A', modle: 'x' });
+  assert.deepEqual(mergeGeneratedBy({ model: 'A' }, { model: undefined, agent: 'C' }), { model: 'A', agent: 'C' });
+});

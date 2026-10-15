@@ -31,6 +31,12 @@ test('faviconHref is a data URI with no raw quotes or angle brackets', () => {
   }
 });
 
+test('no favicon SVG in any theme contains "undefined"', () => {
+  for (const name of listThemes()) {
+    for (const skill of SKILLS) assert.doesNotMatch(faviconSvg(skill, loadTheme(name)), /undefined/);
+  }
+});
+
 test('faviconLink is one rel=icon link tag', () => {
   const link = faviconLink('make-explainer', loadTheme('ink'));
   assert.match(link, /^<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,[^"]+">$/);
