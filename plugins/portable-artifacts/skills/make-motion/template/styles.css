@@ -78,7 +78,7 @@ html, body { margin: 0; height: 100%; background: var(--ui-bg); overflow: hidden
 body { font-family: var(--sans); color: var(--ui-fg); }
 
 #viewport { position: absolute; inset: 0; overflow: hidden; }
-body.preview #viewport { bottom: 84px; }
+body.preview #viewport { bottom: 108px; }
 #stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; }
 .scene { position: absolute; inset: 0; display: none; }
 .el { position: absolute; left: 0; top: 0; will-change: transform, opacity; }
@@ -93,7 +93,7 @@ body.preview #viewport { bottom: 84px; }
   background: #3b1219; color: #ffb4bd; font: 14px/1.4 var(--mono); white-space: pre-wrap; display: none; z-index: 5; }
 
 #ui { display: none; }
-body.preview #ui { display: flex; position: absolute; left: 0; right: 0; bottom: 0; height: 84px; padding: 0 20px;
+body.preview #ui { display: flex; position: absolute; left: 0; right: 0; bottom: 24px; height: 84px; padding: 0 20px;
   align-items: center; gap: 16px; background: #0d0f15; border-top: 1px solid #1c2130; font-size: 13px; }
 #ui button { all: unset; cursor: pointer; width: 40px; height: 40px; border-radius: 50%; background: #1a1f2d;
   display: grid; place-items: center; color: var(--ui-fg); font-size: 14px; }
@@ -107,3 +107,9 @@ body.preview #ui { display: flex; position: absolute; left: 0; right: 0; bottom:
 #marks i { position: absolute; top: 0; height: 14px; border-left: 1px solid #39425a; padding-left: 4px;
   font: 11px/14px var(--mono); font-style: normal; color: var(--ui-dim); white-space: nowrap; }
 #readout { font: 13px var(--mono); color: var(--ui-dim); min-width: 140px; text-align: right; }
+
+/* Provenance footer: preview only (the render captures the whole page), below the controls. */
+.pa-footer { display: none; }
+body.preview .pa-footer { display: block; position: absolute; left: 0; right: 0; bottom: 0; height: 24px; padding: 0 20px;
+  background: #0d0f15; border-top: 1px solid #1c2130; }
+.pa-provenance { margin: 0; font: 11px/24px var(--mono); color: var(--ui-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

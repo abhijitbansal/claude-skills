@@ -271,3 +271,26 @@ test('/spec.json gets the render theme only when the server was given one and th
   assert.equal(JSON.parse(await read({ theme: 'ink' }, JSON.stringify({ ...spec('a'), theme: 'paper' }))).theme, 'paper');
   assert.equal(await read({ theme: 'ink' }, '{ not json'), '{ not json', 'an unreadable spec is passed through for the page to report');
 });
+
+test('GET / carries the skill favicon and provenance footer, CSP unchanged', () => withServer(async (srv, f) => {
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('one'), generatedBy: { model: 'Claude Opus 5', agent: 'Claude Code' } }));
+  const r = await get(srv.url, '/');
+  assert.match(r.body, /<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,/);
+  assert.match(r.body, /<p class="pa-provenance" title="[^"]*">make-motion · Claude Opus 5 · effort not reported · Claude Code · /);
+  assert.ok(!r.body.includes('{{'), 'no unfilled placeholder');
+  assert.ok(r.headers['content-security-policy'].includes("img-src 'self' data: blob:"));
+}));
+
+test('GET / falls back to "not reported" provenance when the spec is unreadable', () => withServer(async (srv, f) => {
+  writeFileSync(f.specPath, '{ not json');
+  const r = await get(srv.url, '/');
+  assert.match(r.body, /<p class="pa-provenance" title="[^"]*">make-motion · model not reported · effort not reported · agent not reported · /);
+  assert.match(r.body, /<link rel="icon"/);
+}));
+
+test('GET / never injects hostile generatedBy values', () => withServer(async (srv, f) => {
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('one'), generatedBy: { model: '<script>x</script>' } }));
+  const r = await get(srv.url, '/');
+  assert.ok(!r.body.includes('<script>x'));
+  assert.match(r.body, /model not reported/);
+}));

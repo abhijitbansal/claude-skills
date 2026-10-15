@@ -240,3 +240,11 @@ test('theme: a shared theme name is valid, anything else gets a did-you-mean or 
 test('theme does not change the defaults withDefaults fills (the page applies them)', () => {
   assert.deepEqual(withDefaults({ ...good(), theme: 'ink' }).background, '#0b0d12');
 });
+
+test('generatedBy: model/effort/agent strings pass; hostile, long or unknown values fail', () => {
+  assert.deepEqual(errs({ ...good(), generatedBy: { model: 'Claude Opus 5', effort: 'high', agent: 'Claude Code' } }), []);
+  assert.notDeepEqual(errs({ ...good(), generatedBy: { model: '<x>' } }), []);
+  assert.notDeepEqual(errs({ ...good(), generatedBy: { model: 'a'.repeat(61) } }), []);
+  assert.notDeepEqual(errs({ ...good(), generatedBy: { modle: 'x' } }), []);
+  assert.notDeepEqual(errs({ ...good(), generatedBy: 'x' }), []);
+});
