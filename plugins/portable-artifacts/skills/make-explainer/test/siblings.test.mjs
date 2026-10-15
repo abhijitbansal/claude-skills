@@ -56,7 +56,7 @@ test('a missing sibling directory throws SiblingError with the exact command', a
       assert.equal(e.command, 'npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram');
       assert.equal(
         e.message,
-        `make-diagram skill not found next to make-explainer (looked in ${path.join(root, 'make-diagram')}); install it with: ${e.command}`,
+        `make-diagram skill not found next to make-explainer (looked in ${path.join(root, 'make-diagram')}); install it with: ${e.command} (doctor: node ${path.join(root, 'make-explainer/scripts/doctor.mjs')}, id make-diagram)`,
       );
       return true;
     },

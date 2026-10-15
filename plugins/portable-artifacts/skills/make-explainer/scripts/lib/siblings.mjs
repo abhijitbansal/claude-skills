@@ -18,6 +18,8 @@ export class SiblingError extends Error {
 
 export const installCommand = (names) => `npx skills add abhijitbansal/claude-skills --skill make-explainer ${names.join(' ')}`;
 export const MISSING_HINT = (names) => `install it with: ${installCommand(names)}`;
+// Points at the doctor, which can install it for the user once they agree; its id for a sister skill is the skill name.
+const doctorHint = (name) => `(doctor: node ${path.join(SELF_DIR, 'scripts/doctor.mjs')}, id ${name})`;
 
 // Absolute path of the sibling skill folder. Does not check that it exists.
 export function siblingDir(name) {
@@ -35,7 +37,7 @@ export async function loadSibling(name, relModule) {
   }
   if (!fs.existsSync(file)) {
     const where = fs.existsSync(dir) ? `${name}/${relModule} not found in ${dir}` : `${name} skill not found next to make-explainer (looked in ${dir})`;
-    throw new SiblingError(`${where}; ${MISSING_HINT([name])}`, installCommand([name]));
+    throw new SiblingError(`${where}; ${MISSING_HINT([name])} ${doctorHint(name)}`, installCommand([name]));
   }
   try {
     return await import(pathToFileURL(file).href);
@@ -43,6 +45,6 @@ export async function loadSibling(name, relModule) {
     // The folder is there but its npm dependencies are not: say so, with the fix, instead of a raw module error.
     const missing = e?.code === 'ERR_MODULE_NOT_FOUND' ? /Cannot find package '([^']+)' imported from (.+)$/.exec(e.message) : null;
     if (!missing || !path.resolve(missing[2]).startsWith(`${dir}${path.sep}`)) throw e;
-    throw new SiblingError(`${name} is installed but its dependencies are missing (${missing[1]}); run "npm ci" in ${dir}, or ${MISSING_HINT([name])}`, installCommand([name]));
+    throw new SiblingError(`${name} is installed but its dependencies are missing (${missing[1]}); run "npm ci" in ${dir}, or ${MISSING_HINT([name])} ${doctorHint(name)}`, installCommand([name]));
   }
 }

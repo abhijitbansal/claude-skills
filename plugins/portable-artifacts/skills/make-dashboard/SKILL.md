@@ -19,8 +19,13 @@ Run every step yourself, in this same turn, with your shell or file tools. Do no
 `<skill-dir>` is the folder that contains this SKILL.md. Run every command from the project folder
 (where `dashboard.json` lives), using the full path to the scripts.
 
-First use: if `<skill-dir>/node_modules` is missing, tell the user it is a one-time local install and run
-`npm ci --omit=dev --prefix <skill-dir>`. If the request is empty, ask what to build and from which data file(s).
+## Before the first build
+
+`<skill-dir>` is the folder containing this SKILL.md. Run `node <skill-dir>/scripts/doctor.mjs --json` (add `--for <spec.json>` once the spec exists, `--for voiceover` for a voiceover, `--for check` before `check.mjs`). It needs only Node.
+
+If it reports anything missing, tell the user in one message: each item, why it is needed, its size and the command, plus every `notes` and `info` entry from the output (they disclose downloads and the files an install writes). Ask once. On yes, run `node <skill-dir>/scripts/doctor.mjs --fix <ids>` with the ids it reported. Anything it refuses (it needs sudo) or that fails, give the user the exact command to run themselves; in Claude Code suggest prefixing it with `!`. On no, do what you can without it and give the user the remaining commands.
+
+If the request is empty, ask what to build and from which data file(s).
 
 1. Look at the data first. Never guess columns:
    `node <skill-dir>/scripts/inspect.mjs data/sales.csv` (column names, types, 5 sample rows; csv, parquet or json).

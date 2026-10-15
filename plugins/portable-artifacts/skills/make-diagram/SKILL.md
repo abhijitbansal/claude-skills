@@ -14,7 +14,11 @@ You write one JSON file, `diagram.json`: a title, a type, nodes with edges (or p
 
 Run every step yourself, in this same turn. Do not end your reply after showing the JSON: keep going until validate prints `valid` and the HTML exists.
 
-First use: if `<skill-dir>/node_modules` is missing, say it is a one-time local install and run `npm ci --omit=dev --prefix <skill-dir>`.
+## Before the first build
+
+`<skill-dir>` is the folder containing this SKILL.md. Run `node <skill-dir>/scripts/doctor.mjs --json` (add `--for <spec.json>` once the spec exists, `--for voiceover` for a voiceover, `--for check` before `check.mjs`). It needs only Node.
+
+If it reports anything missing, tell the user in one message: each item, why it is needed, its size and the command, plus every `notes` and `info` entry from the output (they disclose downloads and the files an install writes). Ask once. On yes, run `node <skill-dir>/scripts/doctor.mjs --fix <ids>` with the ids it reported. Anything it refuses (it needs sudo) or that fails, give the user the exact command to run themselves; in Claude Code suggest prefixing it with `!`. On no, do what you can without it and give the user the remaining commands.
 
 ## Workflow
 

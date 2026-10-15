@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
 
 const HINT = 'ffmpeg not found. Install it (macOS: brew install ffmpeg; Windows: winget install Gyan.FFmpeg; Debian/Ubuntu: sudo apt-get install ffmpeg), '
-  + 'or set FFMPEG_PATH, or run: npm i ffmpeg-static';
+  + 'or set FFMPEG_PATH, or run: npm i ffmpeg-static (doctor: node <skill-dir>/scripts/doctor.mjs, id ffmpeg)';
 
 const isExecutable = (p) => {
   try { accessSync(p, constants.X_OK); return true; } catch { return false; }

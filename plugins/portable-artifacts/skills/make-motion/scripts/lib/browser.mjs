@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 
-const INSTALL_HINT = 'No browser available. Run: npx playwright install chromium';
+const INSTALL_HINT = 'No browser available. Run: npx playwright install chromium (doctor: node <skill-dir>/scripts/doctor.mjs, id chromium)';
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 
 // Bundled Chromium first; falls back to system Chrome with a warning.
