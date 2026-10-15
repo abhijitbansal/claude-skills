@@ -82,7 +82,8 @@ page, so keep the two together.
   headless check of the built page at 1280 and 390 px) and this skill's browser
   tests use one. Playwright is a dev dependency, so `check.mjs` needs a full
   `npm ci` plus a Chromium or Chrome (`npx playwright install chromium`); without
-  either it skips cleanly and says so.
+  either it skips cleanly and says so, naming the doctor command
+  (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`).
 
 ## Sections
 

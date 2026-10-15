@@ -138,7 +138,9 @@ needs only Node, so it works before `npm ci`). It lists each missing item with
 its size and the fix for your OS; add `--for` with a spec `.json` (every skill;
 only make-explainer adds sister skills from it), `check` (make-diagram and
 make-explainer: the check browser) or `voiceover` (make-motion), and `--fix <ids>`
-to install the ones that need no `sudo`. Agents run it first and ask once before installing
+to install the ones that need no `sudo` (ids are resolved against the same `--for`;
+`dev_deps` and `chromium` are required for `check`, and `motion_chromium` is
+make-explainer's browser for a motion section). Agents run it first and ask once before installing
 anything.
 
 | | make-dashboard | make-diagram | make-explainer | make-motion |

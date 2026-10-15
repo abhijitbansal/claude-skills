@@ -71,10 +71,16 @@ render commands. `--for` takes a spec `.json` in every skill (only make-explaine
 adds sister skills from it), `check` in make-diagram and make-explainer, and
 `voiceover` in make-motion; make-dashboard has no keyword target. Unknown or
 misspelled arguments exit 2 and list the accepted ones. `--fix` takes the same
-`--for` the diagnosis used (it resolves ids against that target; without `--for`
-it accepts every id the skill knows), and exits 1 when any requested id is
-refused, skipped, failed or unknown, optional ids included. On Windows the text
-output labels command lines `(cmd.exe)`.
+`--for` the diagnosis used: it resolves ids against that target, so an id the
+target does not list (say `chromium` with a spec that has no check step) is
+refused as "unknown id". Without `--for` it accepts every id the skill could
+need, sister skills included. `dev_deps` (Playwright) and `chromium` (the browser
+`check.mjs` uses) are required under `--for check`; plain diagnosis needs
+neither. make-explainer names the browser that renders its motion section
+`motion_chromium`: it installs through make-motion's Playwright, apart from its
+own `chromium`. `--fix` exits 1 when any requested id is refused, skipped,
+failed, still missing afterwards or installed elsewhere, optional ids included.
+On Windows the text output labels command lines `(cmd.exe)`.
 
 ### Tested hosts
 
@@ -185,7 +191,9 @@ your project folder):
    console errors, text that leaves its box and a node under the legend
    overlay. It needs Playwright and a browser (a full `npm ci` plus
    `npx playwright install chromium` in the skill folder). Without them it
-   prints `check: skipped` and exits 0. Building needs no browser.
+   prints `check: skipped` with the doctor command to run
+   (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`) and exits 0.
+   Building needs no browser.
 6. Tells you the path, what the diagram shows, and that Play story (or `P`)
    opens beat 1, Space plays it, `E` explores and `F` is full screen.
 
@@ -260,7 +268,8 @@ your project folder):
    reach its last slide with the arrow keys, or a diagram Present overlay that
    will not close on Esc. It needs Playwright and a browser (a full `npm ci` plus
    `npx playwright install chromium` in the skill folder); without them it prints
-   `check: skipped` and exits 0.
+   `check: skipped` with the doctor command to run
+   (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`) and exits 0.
 7. Tells you the path and what the page shows.
 
 **Presets:** `recap` (tl;dr, numbers, how it works, files changed, timeline,
@@ -381,7 +390,7 @@ validation (exit 1) and never reaches the page. A field the agent does not know 
 left out, and the page reads "not reported": nothing is guessed. The stamp shows as
 a footer line (make-diagram: a line under the title), for example
 `make-explainer · Claude Haiku · low effort · Claude Code · 15 Oct 2026`, and as
-`<meta name="generator">`. The make-motion preview shows it in its footer, and the
+`<meta name="generator">`. The make-motion preview shows it in its footer and the same meta tag, and the
 MP4 gets it in the `comment` tag (and the model in `artist` when it is reported). When `generatedBy`
 is set in the spec, a dashboard refresh keeps the original author; a stamp passed
 only as flags is not kept by a refresh run without them. A dashboard also shows its
@@ -434,12 +443,12 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `sections[3].text: still has a TODO placeholder` | A scaffold sentence was left in. Replace every `TODO: …` with real prose, or delete the section |
 | `banned phrase "leverage"; replace it with "use"` (or `contains emoji`, `heading ends with "!"`) | Reword as the message says. The full list is `make-explainer/references/style.md` |
 | `slide has 7 points; the limit is 6 — split this section into two slides` | In a deck each section is one slide: at most 6 points, 8 table rows, 12 code lines and 80 words. Split it |
-| `make-diagram skill not found next to make-explainer (looked in …); install it with: npx skills add …` (or make-dashboard, make-motion) | The embedded diagram, chart, icon or motion spec needs that sibling skill in the folder next to `make-explainer`. Run the printed command, or `node plugins/portable-artifacts/bin/install.mjs <host> --skills make-explainer` |
+| `make-diagram skill not found next to make-explainer (looked in …); install it with: npx --yes skills@1.7.2 add … -y` (or make-dashboard, make-motion) | The embedded diagram, chart, icon or motion spec needs that sibling skill in the folder next to `make-explainer`. Run the printed command, or `node plugins/portable-artifacts/bin/install.mjs <host> --skills make-explainer` |
 | `… is installed but its dependencies are missing` | Run `npm ci --omit=dev` inside the named sibling skill's folder |
 | `dashboard: source "x" is postgres, a network source; explainer charts read local files only` | A build never uses the network. Export the query to CSV or Parquet and point a file source at it |
 | `gather.mjs` prints `… is not a git repository` or `base "x" does not exist` (with the branches that do) | Pass `--repo <folder inside the repository>` and a real `--base <branch>` |
 | `make-motion cannot render this spec: it needs ffmpeg and a Chromium browser` | Install both (see the README requirements), or render the clip first and use `video` with the `.mp4` |
-| `check: skipped (no browser: …)` from make-diagram or make-explainer | Expected without Playwright or Chromium; the page is still built. To run the check: `npm ci` then `npx playwright install chromium` inside the skill folder |
+| `check: skipped (no browser: …)` from make-diagram or make-explainer | Expected without Playwright or Chromium; the page is still built. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci` then `npx playwright install chromium` inside the skill folder |
 | `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |
 | `kokoro-js is not installed` | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (voiceover only; `npm ci` removes it) |
 | `audio[0].src: ffmpeg cannot decode …` | The file is not a valid audio file. Re-export it as mp3 or wav |

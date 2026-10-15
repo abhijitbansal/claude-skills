@@ -24,7 +24,7 @@ by any agent that can run shell commands.
   spec or the data and reloads the page.
 - **Refresh is a rebuild**: rerun `build.mjs` (from cron, launchd or by hand).
   No LLM is involved.
-- **Stamped**: a favicon, an icon theme toggle and a provenance footer beside the refresh time (model, effort, agent from `generatedBy` or `--model`/`--effort`/`--agent`; "not reported" when unknown). `scripts/doctor.mjs` reports anything missing before the first build.
+- **Stamped**: a favicon, an icon theme toggle and a provenance footer beside the refresh time (model, effort, agent from `generatedBy` or `--model`/`--effort`/`--agent`; "not reported" when unknown). Put `generatedBy` in `dashboard.json`: `serve.mjs --watch` rebuilds from the spec and takes no such flags. `scripts/doctor.mjs` reports anything missing before the first build.
 
 > Agents: the instructions you follow are in [`SKILL.md`](SKILL.md). This
 > README is for people.

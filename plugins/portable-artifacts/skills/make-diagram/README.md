@@ -11,8 +11,8 @@ any agent that can run shell commands. Nothing leaves your machine.
 - **Stamped**: a favicon, an icon theme toggle in the toolbar and a provenance
   line under the title (model, effort, agent from `generatedBy` or
   `--model`/`--effort`/`--agent`; "not reported" when unknown).
-  `scripts/doctor.mjs` reports anything missing (such as the `check.mjs`
-  browser) with the fix for your OS.
+  `scripts/doctor.mjs` reports anything missing with the fix for your OS;
+  `--for check` adds the `check.mjs` needs (`dev_deps`, `chromium`).
 - **Targeted edits**: "rename the cache" or "add a queue between the API and
   the worker" changes a few fields, and the layout is recomputed.
 - **Checked before you see it**: validation lays the diagram out and lints
@@ -50,7 +50,7 @@ you where the page is. Default output folder is `~/.agent/diagrams/`
   browser tests use one. `check.mjs` needs Playwright (a dev dependency, so a
   full `npm ci`, not `--omit=dev`) plus a Chromium or Chrome; without either
   it skips cleanly and says so (`PA_NO_BROWSER=1` forces the skip). To enable
-  it: `npm ci && npx playwright install chromium` inside this folder.
+  it: `node scripts/doctor.mjs --for check --fix dev_deps,chromium`, or `npm ci && npx playwright install chromium` inside this folder.
 
 ## The page
 

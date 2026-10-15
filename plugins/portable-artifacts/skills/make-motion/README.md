@@ -19,7 +19,7 @@ shell commands.
   same video.
 - **Self-check for models**: `--contact-sheet` writes one PNG per scene, so a
   model that can read images can review its own work before rendering.
-- **Stamped**: the preview has a favicon and a provenance footer (model, effort
+- **Stamped**: the preview has a favicon, a `<meta name="generator">` and a provenance footer (model, effort
   and agent from the spec's `generatedBy`; "not reported" when unknown; `preview.mjs`
   takes no flags), and the MP4 carries the same in its metadata (`render.mjs` also
   takes `--model`/`--effort`/`--agent`). The preview has no theme
