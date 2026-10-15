@@ -31,7 +31,7 @@ First use: if `<skill-dir>/node_modules` is missing, tell the user it is a one-t
    Actually create the file: describing it or announcing a patch is not enough. If your file tool fails, write it from the shell (`cat > dashboard.json <<'EOF'` … `EOF`), then `ls dashboard.json` to confirm it exists before validating.
 3. Validate and fix until it prints `valid` (it also runs every query, so valid means buildable):
    `node <skill-dir>/scripts/validate.mjs dashboard.json`
-4. Build: `node <skill-dir>/scripts/build.mjs dashboard.json` (writes `dist/index.html`, `--out <dir>` to change).
+4. Set `generatedBy` to the model you are running as, your effort level if you know it, and your host (for example Claude Code, Codex, Copilot CLI, Gemini CLI). Never guess; leave out any field you do not know. `--model`, `--effort` and `--agent` on the build override it. Build: `node <skill-dir>/scripts/build.mjs dashboard.json` (writes `dist/index.html`, `--out <dir>` to change).
    An error such as `charts[0].y: "revnue" is not a column of query "by_region" (columns: region, revenue); did you mean "revenue"?`
    names the exact path and fix.
 5. Show it. For live updates while editing the spec or data:

@@ -13,14 +13,6 @@ export function loadPaLib() {
   return ctx.PA;
 }
 
-test('theme cycles auto -> light -> dark -> auto; junk falls back to auto', () => {
-  const PA = loadPaLib();
-  assert.equal(PA.nextTheme('auto'), 'light');
-  assert.equal(PA.nextTheme('light'), 'dark');
-  assert.equal(PA.nextTheme('dark'), 'auto');
-  assert.equal(PA.nextTheme('weird'), 'light');
-});
-
 test('storage helpers survive storage that throws (private mode)', () => {
   const PA = loadPaLib();
   const broken = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };

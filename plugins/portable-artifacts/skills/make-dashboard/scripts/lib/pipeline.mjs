@@ -11,6 +11,7 @@ import { UsageError } from '../../shared/cli.mjs';
 import { didYouMean } from '../../shared/errors.mjs';
 import { loadTheme, listThemes, DEFAULT_THEME, ThemeError } from '../../shared/theme.mjs';
 import { checkTheme } from '../../shared/contrast.mjs';
+import { withGeneratedBy } from '../../shared/provenance.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const VENDOR_FILES = {
@@ -53,8 +54,9 @@ function resolveTheme(name) {
   }
 }
 
-export async function buildDashboard(specFile, { out, theme: themeName, allowOutside = false, timeoutMs, now = new Date() } = {}) {
-  const { spec, dir } = loadSpec(specFile);
+export async function buildDashboard(specFile, { out, theme: themeName, allowOutside = false, timeoutMs, now = new Date(), model, effort, agent, env = process.env } = {}) {
+  const { spec: loaded, dir } = loadSpec(specFile);
+  const spec = withGeneratedBy(loaded, { model, effort, agent });
   const valid = await validateSpec(spec, { dir, allowOutside, timeoutMs });
   if (!valid.ok) return { ok: false, errors: valid.errors };
   const vendor = readVendor();
@@ -74,7 +76,7 @@ export async function buildDashboard(specFile, { out, theme: themeName, allowOut
   const expanded = expandCharts(spec, results);
   if (expanded.errors.length) return { ok: false, errors: expanded.errors };
   const outDir = path.resolve(out ?? path.join(dir, 'dist'));
-  const target = writePage(outDir, renderPage(spec, results, { vendor, theme, charts: expanded.charts }));
+  const target = writePage(outDir, renderPage(spec, results, { vendor, theme, charts: expanded.charts, env }));
   const sources = Object.entries(spec.sources).map(([name, src]) => [
     name,
     FILE_TYPES.includes(src.type) ? checkSource(src, dir, { allowOutside }).abs : `${src.type} (env ${src.env})`,

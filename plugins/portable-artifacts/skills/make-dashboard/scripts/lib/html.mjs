@@ -4,6 +4,9 @@ import { MAX_ROWS_DEFAULT } from './spec.mjs';
 import { themeCss } from '../../shared/theme.mjs';
 import { formatValue } from './format.mjs';
 import { vegaConfig } from './vega-config.mjs';
+import { faviconLink } from '../../shared/icons.mjs';
+import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
+import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mjs';
 
 const TEMPLATE = new URL('../../template/page.html', import.meta.url);
 const PA_LIB = new URL('../../template/pa-lib.js', import.meta.url);
@@ -92,7 +95,7 @@ function card(chart, expanded, results, maxRows) {
 
 // vendor: { vega, vegaLite, vegaEmbed } source strings; theme: a loaded shared/ theme;
 // charts: expandCharts(...).charts.
-export function renderPage(spec, results, { vendor, theme, charts }) {
+export function renderPage(spec, results, { vendor, theme, charts, env = process.env }) {
   const maxRows = spec.maxRows ?? MAX_ROWS_DEFAULT;
   const charted = new Set((spec.charts ?? []).map((c) => c.query));
   const queries = Object.fromEntries(
@@ -112,6 +115,12 @@ export function renderPage(spec, results, { vendor, theme, charts }) {
     TITLE: escapeHtml(spec.title),
     DESCRIPTION: spec.description ? `<p class="desc">${escapeHtml(spec.description)}</p>` : '',
     REFRESHED: timeTag(refreshed, 'full'),
+    PROVENANCE: provenanceHtml('make-dashboard', spec.generatedBy, buildDate(env)),
+    FAVICON: faviconLink('make-dashboard', theme),
+    GENERATOR: generatorMeta('make-dashboard', spec.generatedBy),
+    TOGGLE_ICONS: toggleIcons(),
+    TOGGLE_CSS,
+    TOGGLE_JS: TOGGLE_JS.replace(/<\/(script)/gi, '<\\/$1'),
     KPIS: kpis,
     CARDS: cards,
     DATA: jsonForScript(data),
