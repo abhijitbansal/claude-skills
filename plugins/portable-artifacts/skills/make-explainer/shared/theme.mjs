@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { typeCss } from './type.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const THEMES = path.join(HERE, 'themes');
@@ -76,5 +77,6 @@ export function themeCss(theme) {
     `:root{color-scheme:light;${vars(theme.light, theme.fonts)}}`,
     `@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;${vars(theme.dark)}}}`,
     `:root[data-theme="dark"]{color-scheme:dark;${vars(theme.dark)}}`,
+    typeCss(),
   ].join('\n');
 }

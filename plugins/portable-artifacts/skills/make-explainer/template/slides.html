@@ -38,7 +38,7 @@ html, body { height: 100%; overflow: hidden; }
 .slide .points { font-size: 1.05em; }
 .slide-cover h1 { max-width: 14em; font-size: clamp(2.3rem, 1.4rem + 4.2vw, 4.2rem); line-height: 1.05; }
 .slide-cover .subtitle { max-width: 34ch; margin-top: 20px; font-size: clamp(1.15rem, 1rem + 0.8vw, 1.6rem); }
-.slide-cover .meta { margin-top: 32px; font-size: 0.95rem; }
+.slide-cover .meta { margin-top: 32px; font-size: var(--fs-sm); }
 
 /* controls: a solid bar under the content; slides keep their end clear of it */
 .deck-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; background: var(--page); border-top: 1px solid var(--line); }
@@ -48,26 +48,26 @@ html, body { height: 100%; overflow: hidden; }
   .deck-progress > span { transition: width 0.25s ease; }
 }
 .deck-controls { display: flex; align-items: center; gap: 10px; max-width: 76rem; margin: 0 auto; padding: 8px 24px; }
-.deck-count { margin-left: auto; color: var(--text-2); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
-.deck-controls .btn { padding: 4px 12px; font-size: 0.85rem; }
+.deck-count { margin-left: auto; color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.deck-controls .btn { padding: 4px 12px; font-size: var(--fs-sm); }
 .slide .pa-footer { width: 100%; max-width: 60rem; margin: 24px auto 0; padding: 12px 0 0; }
-.key { display: inline-block; min-width: 1.4em; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-3); font-size: 0.78rem; line-height: 1.5; text-align: center; }
+.key { display: inline-block; min-width: 1.4em; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-3); font-size: var(--fs-xs); line-height: 1.5; text-align: center; }
 
 /* outline: a native modal dialog */
 .outline { width: min(32rem, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); overflow: hidden; }
 .outline[open] { display: flex; flex-direction: column; }
 .outline::backdrop { background: rgb(0 0 0 / 0.5); }
 .outline-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
-.outline-head h2 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.outline-head h2 { margin: 0; font-size: var(--fs-base); font-weight: 600; }
 .outline-list { margin: 0; padding: 8px 18px 14px 44px; overflow: auto; }
 .outline-list li { padding: 2px 0; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .outline-list a { display: block; padding: 5px 4px; color: var(--text); text-decoration: none; line-height: 1.35; overflow-wrap: anywhere; }
-.outline-list a:hover { text-decoration: underline; }
+.outline-list a:hover { color: var(--accent); }
 .outline-list a[aria-current="location"] { color: var(--accent); font-weight: 600; }
 
 @media (max-width: 640px) {
   .slide { padding: 28px 16px 80px; }
-  .slide-inner { font-size: 1.05rem; }
+  .slide-inner { font-size: var(--fs-base); }
   .slide-title { margin-bottom: 18px; }
   .deck-controls { padding: 6px 16px; gap: 8px; }
   .deck-controls .key { display: none; }
