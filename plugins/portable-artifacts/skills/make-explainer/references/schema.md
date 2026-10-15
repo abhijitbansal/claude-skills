@@ -65,8 +65,8 @@ Environment: `PA_OUTPUT_DIR` (default output folder), `PA_MOTION_TIMEOUT_MS` (ho
 
 | Script | Use |
 |---|---|
-| `gather.mjs git [--base <branch>] [--repo <folder>] [--json]` | Without `--base`: `main`, then `master`, preferring origin's copy when it is ahead. Facts about the checked-out branch as JSON: branch, base, commits, changed files with line counts and renames, test files, date. Committed work only. |
-| `scaffold.mjs <recap\|checklist\|concept\|slides> [--facts facts.json] [--title <text>]` | A starter `explainer.json` on stdout. Facts fill numbers, files, commits and folders; every sentence is a `TODO:` string. |
+| `gather.mjs git [--base <branch>] [--repo <folder>] [--out <file>] [--json]` | Without `--base`: `main`, then `master`, preferring origin's copy when it is ahead. Prints (or writes to `--out`) facts about the checked-out branch as JSON: branch, base, commits, changed files with line counts and renames, test files, date. Committed work only. |
+| `scaffold.mjs <recap\|checklist\|concept\|slides> [--facts facts.json] [--title <text>] [--out <file>]` | A starter `explainer.json`, printed or written to `--out`. Facts fill numbers, files, commits and folders; every sentence is a `TODO:` string. |
 | `validate.mjs <explainer.json> [--json]` | Schema, limits, prose lint, slide budget, file references and the embedded diagram, chart and motion checks. |
 | `build.mjs <explainer.json> [--out <file.html\|dir>] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--json]` | Validates, then writes the page. |
 | `check.mjs <page.html> [--json]` | Optional headless check of a built page at 1280 and 390 px: console errors and warnings, sideways scrolling, elements wider than the page, content clipped sideways inside a slide, a deck's last slide reachable by arrow keys with the counter reading N / N, and each diagram's viewer mounting and its Present overlay opening and closing on Esc. Exit 0 ok or skipped (no browser), 1 problems, 2 usage. Needs Playwright and a browser (full `npm ci`); `PA_CHECK_TIMEOUT_MS` shortens the 60 s cap. |

@@ -48,7 +48,8 @@ export function problems(md) {
 const L = `${SKILL_DIR_LINE}\n`;
 const flagged = (body) => problems(L + body);
 
-// One fixture per rule: each must fire on its own, so a rule cannot go dead unnoticed.
+// One fixture per rule: the hit list must name that rule, so a rule cannot go dead unnoticed.
+// Fixtures avoid tripping other rules, so a shared hit cannot mask a dead rule.
 const FIXTURES = [
   ['Use AskUserQuestion.', 'AskUserQuestion'],
   ['Use TodoWrite.', 'TodoWrite'],
@@ -65,9 +66,9 @@ const FIXTURES = [
   ['```\nnode a.mjs 2>/dev/null\n```\n', 'dev/null'],
   ['```\nnode a.mjs 2>&1\n```\n', '2>&1'],
   ['```\nnode a.mjs | grep x\n```\n', 'grep'],
-  ['Run `node a.mjs 2>&1 | tee log`.', 'tee'],
+  ['Run `node a.mjs | tee log`.', 'tee'],
   ['Run `cd x && node a.mjs`.', '&&'],
-  ["Run `cat > d.json <<'EOF'` then `EOF`.", '<<'],
+  ['Run `node a.mjs <<EOF`.', '<<'],
   ['Run `node a.mjs > out.json`.', '>'],
   ['```sh\nexport X=1\n```\n', 'export'],
   ['   ```sh\n   export X=1\n   ```\n', 'export'],

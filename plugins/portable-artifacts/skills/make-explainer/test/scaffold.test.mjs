@@ -493,3 +493,20 @@ test('scaffold --out with an unknown preset writes nothing and exits 2', () => {
     assert.equal(fs.existsSync(file), false);
   } finally { s.done(); }
 });
+
+test('scaffold --out with an empty path or a directory is a one-line usage error (exit 2)', () => {
+  const s = sandbox();
+  try {
+    const empty = node('scaffold.mjs', ['concept', '--out', '']);
+    assert.equal(empty.status, 2);
+    assert.match(empty.stderr, /^--out needs a file path/);
+    const isDir = node('scaffold.mjs', ['concept', '--out', s.dir]);
+    assert.equal(isDir.status, 2);
+    assert.match(isDir.stderr, /^--out must be a file, not a directory: /);
+    assert.doesNotMatch(isDir.stderr, /\n\s+at /);
+    fs.writeFileSync(path.join(s.dir, 'f.json'), '');
+    const blocked = node('scaffold.mjs', ['concept', '--out', path.join(s.dir, 'f.json', 'x.json')]);
+    assert.equal(blocked.status, 2);
+    assert.equal(blocked.stderr.trim().split('\n').length, 1);
+  } finally { s.done(); }
+});
