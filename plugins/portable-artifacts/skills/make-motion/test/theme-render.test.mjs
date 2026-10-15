@@ -80,7 +80,7 @@ test('themed: text, mono text, shape, chart and stage use the theme fonts and da
   assert.equal(look.stage, rgb(BLUEPRINT.page));
   assert.equal(look.shape.toLowerCase(), BLUEPRINT.accent);
   assert.ok(look.loaded.includes('Geist') && look.loaded.includes('Geist Mono'), `fonts loaded: ${look.loaded}`);
-  assert.match(look.chartFont, /Geist/);
+  assert.match(look.chartFont, /^"?Geist"?(,|$)/);
   assert.ok(look.chartMarks.includes(BLUEPRINT.accent), 'the bars take the theme accent');
   assert.ok(requests.includes('/theme/blueprint.json') && requests.includes('/theme/blueprint.css'));
   assert.ok(requests.some((r) => r.startsWith('/theme/fonts/') && r.endsWith('.woff2')));

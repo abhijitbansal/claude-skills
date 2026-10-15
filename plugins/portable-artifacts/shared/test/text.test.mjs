@@ -6,8 +6,8 @@ import { measure, wrap, lineHeight, fontFor } from '../text.mjs';
 import { listThemes, loadTheme } from '../theme.mjs';
 
 const METRICS = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../fonts/metrics.json', import.meta.url)), 'utf8'));
-const PLEX = { family: 'Geist', weight: 400, size: 14 };
-const PLEX_BOLD = { ...PLEX, weight: 600 };
+const GEIST = { family: 'Geist', weight: 400, size: 14 };
+const GEIST_BOLD = { ...GEIST, weight: 600 };
 
 // Reference widths from Chrome. Method: Playwright (system Chrome, channel 'chrome'),
 // the shipped woff2 loaded via `new FontFace(family, 'url(data:font/woff2;base64,…)')`,
@@ -26,13 +26,15 @@ const CHROME = {
 };
 
 test('empty string measures 0', () => {
-  assert.equal(measure('', PLEX), 0);
+  assert.equal(measure('', GEIST), 0);
 });
 
 test('Hello in Geist 400 14px matches Chrome within 0.5 px', () => {
-  assert.ok(Math.abs(measure('Hello', PLEX) - 33.74) <= 0.5, String(measure('Hello', PLEX)));
+  assert.ok(Math.abs(measure('Hello', GEIST) - 33.74) <= 0.5, String(measure('Hello', GEIST)));
 });
 
+// Geist overestimates Chrome by ~1.8% on the phrase (Chrome applies kerning, the advance-sum does not). The error is
+// on the safe side (boxes come out slightly wide), so if this fails, investigate; do not loosen the tolerance.
 test('every shipped font stays within 2% of Chrome on a phrase (kerning slack) and 0.5 px on Hello', () => {
   for (const [key, texts] of Object.entries(CHROME)) {
     const [family, weight] = key.split('|');
@@ -46,23 +48,23 @@ test('every shipped font stays within 2% of Chrome on a phrase (kerning slack) a
 });
 
 test('width grows with text and with size', () => {
-  assert.ok(measure('Hello world', PLEX) > measure('Hello', PLEX));
-  assert.ok(measure('Hello', { ...PLEX, size: 28 }) > measure('Hello', PLEX));
-  assert.ok(Math.abs(measure('Hello', { ...PLEX, size: 28 }) - 2 * measure('Hello', PLEX)) < 1e-9);
+  assert.ok(measure('Hello world', GEIST) > measure('Hello', GEIST));
+  assert.ok(measure('Hello', { ...GEIST, size: 28 }) > measure('Hello', GEIST));
+  assert.ok(Math.abs(measure('Hello', { ...GEIST, size: 28 }) - 2 * measure('Hello', GEIST)) < 1e-9);
 });
 
 test('bold is wider than regular', () => {
-  assert.ok(measure('Checkout API gateway', PLEX_BOLD) > measure('Checkout API gateway', PLEX));
+  assert.ok(measure('Checkout API gateway', GEIST_BOLD) > measure('Checkout API gateway', GEIST));
 });
 
 test('weight defaults to 400 and size to 14', () => {
-  assert.equal(measure('Hello', { family: 'Geist' }), measure('Hello', PLEX));
+  assert.equal(measure('Hello', { family: 'Geist' }), measure('Hello', GEIST));
 });
 
 test('a weight the family lacks resolves to the nearest available one', () => {
   // Geist ships 400 and 600; 500 is closer to 400 (tie goes lighter), 700 to 600.
-  assert.equal(measure('Hello', { ...PLEX, weight: 500 }), measure('Hello', PLEX));
-  assert.equal(measure('Hello', { ...PLEX, weight: 700 }), measure('Hello', PLEX_BOLD));
+  assert.equal(measure('Hello', { ...GEIST, weight: 500 }), measure('Hello', GEIST));
+  assert.equal(measure('Hello', { ...GEIST, weight: 700 }), measure('Hello', GEIST_BOLD));
 });
 
 test('unknown family throws and lists what is available', () => {
@@ -70,44 +72,44 @@ test('unknown family throws and lists what is available', () => {
 });
 
 test('wrap breaks on words; every line fits', () => {
-  const lines = wrap('Checkout API gateway service', 90, PLEX);
+  const lines = wrap('Checkout API gateway service', 90, GEIST);
   assert.ok(lines.length >= 2, JSON.stringify(lines));
-  for (const l of lines) assert.ok(measure(l, PLEX) <= 90, `"${l}"`);
+  for (const l of lines) assert.ok(measure(l, GEIST) <= 90, `"${l}"`);
   assert.equal(lines.join(' '), 'Checkout API gateway service');
 });
 
 test('wrap leaves short text on one line and returns [] for empty text', () => {
-  assert.deepEqual(wrap('Hello', 200, PLEX), ['Hello']);
-  assert.deepEqual(wrap('', 200, PLEX), []);
+  assert.deepEqual(wrap('Hello', 200, GEIST), ['Hello']);
+  assert.deepEqual(wrap('', 200, GEIST), []);
 });
 
 test('wrap honours explicit newlines', () => {
-  assert.deepEqual(wrap('a\nb', 200, PLEX), ['a', 'b']);
+  assert.deepEqual(wrap('a\nb', 200, GEIST), ['a', 'b']);
 });
 
 test('a single 60-char word hard-breaks with no hyphen and no loss', () => {
   const word = 'x'.repeat(60);
-  const lines = wrap(word, 100, PLEX);
+  const lines = wrap(word, 100, GEIST);
   assert.ok(lines.length >= 2);
   assert.equal(lines.join(''), word);
   assert.ok(!lines.join('').includes('-'));
-  for (const l of lines) assert.ok(measure(l, PLEX) <= 100, `"${l}"`);
+  for (const l of lines) assert.ok(measure(l, GEIST) <= 100, `"${l}"`);
 });
 
 test('wrap terminates when one glyph is wider than maxWidth', () => {
-  assert.deepEqual(wrap('WWW', 1, PLEX), ['W', 'W', 'W']);
+  assert.deepEqual(wrap('WWW', 1, GEIST), ['W', 'W', 'W']);
 });
 
 test('a long word mid-sentence breaks on its own lines, later words rejoin the tail', () => {
-  const lines = wrap(`go ${'y'.repeat(40)} on`, 80, PLEX);
+  const lines = wrap(`go ${'y'.repeat(40)} on`, 80, GEIST);
   assert.equal(lines[0], 'go');
   assert.equal(lines.join('').replaceAll(' ', ''), `go${'y'.repeat(40)}on`);
-  for (const l of lines) assert.ok(measure(l, PLEX) <= 80, `"${l}"`);
+  for (const l of lines) assert.ok(measure(l, GEIST) <= 80, `"${l}"`);
 });
 
 test('CJK falls back to a safe non-zero width of at least 1 em per glyph', () => {
   const { fallback, unitsPerEm } = METRICS['Geist|400'];
-  const w = measure('注文データベース', PLEX);
+  const w = measure('注文データベース', GEIST);
   assert.ok(w > 0);
   assert.ok(w >= (8 * fallback / unitsPerEm) * 14, `${w}`);
   // fallback x 1.6 is 0.96 em for Geist, so the 1 em floor applies.
@@ -126,21 +128,21 @@ test('wide glyphs (CJK, emoji) measure at least 1 em in every shipped font', () 
 });
 
 test('wide glyphs hard-break consistently with measure()', () => {
-  const lines = wrap('注文データベースの設計', 50, PLEX);
+  const lines = wrap('注文データベースの設計', 50, GEIST);
   assert.ok(lines.length >= 3, JSON.stringify(lines));
-  for (const l of lines) assert.ok(measure(l, PLEX) <= 50, `"${l}"`);
+  for (const l of lines) assert.ok(measure(l, GEIST) <= 50, `"${l}"`);
   assert.equal(lines.join(''), '注文データベースの設計');
 });
 
 test('unknown non-CJK codepoints use plain fallback; emoji never measure 0', () => {
   const fb = METRICS['Geist|400'].fallback / METRICS['Geist|400'].unitsPerEm * 14;
-  assert.ok(Math.abs(measure('Ж', PLEX) - fb) < 1e-9, 'Cyrillic is below U+2E80');
-  assert.ok(measure('😀', PLEX) > 0);
+  assert.ok(Math.abs(measure('Ж', GEIST) - fb) < 1e-9, 'Cyrillic is below U+2E80');
+  assert.ok(measure('😀', GEIST) > 0);
 });
 
 test('lineHeight is at least size x 1.3 and scales with size', () => {
-  assert.ok(lineHeight(PLEX) >= 14 * 1.3 - 1e-9);
-  assert.ok(lineHeight({ ...PLEX, size: 28 }) > lineHeight(PLEX));
+  assert.ok(lineHeight(GEIST) >= 14 * 1.3 - 1e-9);
+  assert.ok(lineHeight({ ...GEIST, size: 28 }) > lineHeight(GEIST));
   assert.ok(lineHeight({ family: 'Geist' }) >= 14 * 1.3 - 1e-9);
 });
 

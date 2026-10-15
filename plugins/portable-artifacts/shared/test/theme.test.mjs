@@ -42,7 +42,7 @@ test('kind hues and the glow are tokens with their own CSS variables', () => {
   for (const v of ['--k-data', '--k-queue', '--k-external', '--k-decision']) assert.ok(css.includes(`${v}:`), v);
 });
 
-test('themes use the Geist type system; editorial keeps its serif display', () => {
+test('themes use the Geist type system; editorial takes the serif display', () => {
   const fam = (t, role) => loadTheme(t).fonts[role].family;
   for (const t of ['paper', 'blueprint']) {
     assert.equal(fam(t, 'display'), 'Geist');

@@ -2,9 +2,9 @@
   "name": "paper",
   "label": "Paper",
   "fonts": {
-    "display": { "family": "Geist", "fallback": "-apple-system, 'Segoe UI', sans-serif", "weights": {"600": "geist-sans-latin-600-normal.woff2"}},
-    "body": { "family": "Geist", "fallback": "-apple-system, 'Segoe UI', sans-serif", "weights": {"400": "geist-sans-latin-400-normal.woff2", "600": "geist-sans-latin-600-normal.woff2"}},
-    "mono": { "family": "Geist Mono", "fallback": "ui-monospace, Menlo, Consolas, monospace", "weights": {"400": "geist-mono-latin-400-normal.woff2"}}
+    "display": { "family": "Geist", "fallback": "-apple-system, 'Segoe UI', sans-serif", "weights": { "600": "geist-sans-latin-600-normal.woff2" } },
+    "body": { "family": "Geist", "fallback": "-apple-system, 'Segoe UI', sans-serif", "weights": { "400": "geist-sans-latin-400-normal.woff2", "600": "geist-sans-latin-600-normal.woff2" } },
+    "mono": { "family": "Geist Mono", "fallback": "ui-monospace, Menlo, Consolas, monospace", "weights": { "400": "geist-mono-latin-400-normal.woff2" } }
   },
   "light": {
     "page": "#f7f6f3", "surface": "#ffffff", "text": "#161513", "text2": "#4f4d48", "text3": "#6b6963",

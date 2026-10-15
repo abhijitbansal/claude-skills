@@ -147,5 +147,5 @@ The agent writes the SQL, so it is treated as untrusted:
 
 Node.js ≥ 20. The dependencies, pinned by the lockfile, are DuckDB (MIT),
 Vega, Vega-Lite and vega-embed (BSD-3-Clause), and Ajv (MIT). The page embeds
-latin subsets of IBM Plex Sans, IBM Plex Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible, JetBrains Mono
+latin subsets of Geist, Geist Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible
 (OFL-1.1, via Fontsource); the licence texts ship in `shared/fonts/LICENSES/`.
