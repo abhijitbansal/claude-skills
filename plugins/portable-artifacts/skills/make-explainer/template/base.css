@@ -16,13 +16,14 @@ code, pre, .path, .tl-date, .code-lang { font-family: var(--mono); }
 .tone-medium { --tc: var(--warn); }
 .tone-low { --tc: var(--text-2); }
 
-/* masthead */
-.masthead { max-width: 76rem; margin: 0 auto; padding: 40px 24px 8px; display: flex; gap: 24px; align-items: flex-start; justify-content: space-between; }
-.mast-text { min-width: 0; }
+/* hero: title, subtitle, meta chips and the toggle; a leading tldr is its card */
+.hero { max-width: 76rem; margin: 0 auto; padding: 44px 24px 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; align-items: start; }
+.mast-text { grid-column: 1; grid-row: 1; min-width: 0; }
+.hero > .theme-toggle { grid-column: 2; grid-row: 1; }
 h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--font-display); letter-spacing: var(--track-hero); text-wrap: balance; overflow-wrap: anywhere; }
-.subtitle { margin: 12px 0 0; max-width: 48ch; color: var(--text-2); font-size: var(--fs-md); line-height: 1.45; }
-.meta { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 18px 0 0; padding: 0; font-size: var(--fs-sm); }
-.meta div { display: flex; gap: 6px; }
+.subtitle { margin: 14px 0 0; max-width: 42em; color: var(--text-2); font-size: var(--fs-md); line-height: 1.4; text-wrap: pretty; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 0; padding: 0; font-size: var(--fs-sm); }
+.meta div { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 100%; padding: 2px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
 .meta dt { color: var(--text-3); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
 .meta dd { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
 .meta .m-branch dd, .meta .m-repo dd, .meta .m-version dd { font-family: var(--mono); font-size: var(--fs-xs); }
@@ -30,6 +31,17 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 .theme-toggle:hover { color: var(--text); border-color: var(--text-3); }
 .pa-footer { max-width: 76rem; margin: 64px auto 32px; padding: 16px 24px 0; border-top: 1px solid var(--line); }
 .pa-provenance { margin: 0; color: var(--text-3); font-size: var(--fs-xs); }
+
+/* 69rem: the contents column, its gap and the section column, so the card ends where the sections do */
+.hero-tldr { grid-column: 1 / -1; margin-top: 28px; max-width: 69rem; }
+.hero-tldr-title { margin: 0 0 10px; max-width: 40em; font: 600 var(--fs-base)/var(--lh-head) var(--font); color: var(--text-2); text-wrap: balance; overflow-wrap: anywhere; }
+.hero-tldr .tldr { border: 0; border-left: 3px solid var(--accent); border-radius: 0 14px 14px 0; padding: 22px 28px; }
+@media (min-width: 900px) {
+  .hero-tldr .tldr { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); grid-template-rows: auto 1fr; column-gap: 40px; align-items: start; }
+  /* the points fill the right column from the top; the tone chip sits over the lead */
+  .hero-tldr .tldr-tone { grid-column: 1; }
+  .hero-tldr .points { grid-column: 2; grid-row: 1 / span 2; margin-top: 0; }
+}
 
 /* layout */
 .layout { max-width: 76rem; margin: 0 auto; padding: 8px 24px 96px; }
@@ -40,19 +52,23 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 .toc { margin: 16px 0 0; }
 .toc summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-sm); padding: 6px 0; }
 .toc ol { list-style: none; margin: 0; padding: 0; }
-.toc a { display: block; padding: 5px 0; color: var(--text-2); text-decoration: none; font-size: var(--fs-sm); line-height: 1.35; }
+.toc a { display: block; padding: 5px 0 5px 14px; color: var(--text-2); text-decoration: none; font-size: var(--fs-sm); line-height: 1.35; box-shadow: inset 1px 0 0 var(--line); }
 .toc a:hover { color: var(--text); }
-.toc a[aria-current="location"] { color: var(--accent); font-weight: 600; }
+.toc a[aria-current="location"] { color: var(--text); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
 @media (min-width: 1100px) {
   .toc { position: sticky; top: 24px; align-self: start; max-height: calc(100vh - 48px); overflow: auto; margin-top: 28px; }
   .toc summary { cursor: default; list-style: none; text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--fs-xs); color: var(--text-3); pointer-events: none; }
   .toc summary::-webkit-details-marker { display: none; }
 }
 
-/* sections */
-.sec { margin-top: 44px; padding-top: 32px; border-top: 1px solid var(--line); }
+/* sections: wide gaps instead of dividers; every second visual section sits on a surface band */
 .sec:first-child { margin-top: 24px; }
-.sec-tldr { border-top: 0; padding-top: 0; }
+.sec + .sec { margin-top: 96px; }
+.sec-alt { background: var(--surface); border-radius: 16px; padding: 32px; }
+/* inner surfaces drop to the page colour so they stay visible on the band (diagram.css and chart.css do the same) */
+.sec-alt :is(.kpi, .card, .cmp-col, .tablewrap) { background: var(--page); }
+.sec-eyebrow { margin: 0 0 8px; }
+.sec-eyebrow.pa-label { color: var(--accent); }
 .sec-title { position: relative; margin: 0 0 18px; max-width: 28em; font: 600 var(--fs-lg)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); text-wrap: balance; overflow-wrap: anywhere; scroll-margin-top: 24px; }
 .sec { scroll-margin-top: 24px; }
 .anchor { margin-left: 0.5em; color: var(--text-3); font-family: var(--font); font-weight: 400; font-size: 0.8em; opacity: 0; }
@@ -80,10 +96,11 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 
 /* kpis */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 12px; margin: 0; }
-.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+/* the value leads each tile (visual order only), so values line up however long the labels are */
+.kpi { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; min-width: 0; }
 .kpi dt { color: var(--text-2); font-size: var(--fs-sm); }
 .kpi dd { margin: 0; }
-.kpi-value { margin-top: 4px; font-size: var(--fs-xl); line-height: var(--lh-head); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kpi-value { order: -1; margin-bottom: 6px; font: 600 var(--fs-xl)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .kpi-delta { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--tc, var(--text-2)); }
 .kpi-note { margin-top: 6px; color: var(--text-3); font-size: var(--fs-xs); }
 
@@ -243,9 +260,15 @@ tbody th { font-weight: 600; }
 }
 
 @media (max-width: 640px) {
-  .masthead { padding: 28px 16px 4px; gap: 12px; flex-wrap: wrap; }
+  .hero { padding: 28px 16px 4px; column-gap: 12px; }
+  h1 { font-size: var(--fs-xl); line-height: 1.1; }
+  .hero-tldr { margin-top: 24px; }
+  .meta { gap: 4px 16px; }
+  .meta div { padding: 0; border: 0; background: none; }
   .layout { padding: 4px 16px 72px; }
-  .tldr { padding: 18px 18px; }
+  .tldr, .hero-tldr .tldr { padding: 18px 18px; }
+  .sec + .sec { margin-top: 64px; }
+  .sec-alt { margin-inline: -16px; border-radius: 0; padding: 28px 16px; }
   .cl-group { padding: 10px 14px 2px; }
   .sec-title { font-size: var(--fs-md); }
 }
@@ -255,9 +278,10 @@ tbody th { font-weight: 600; }
   body { font-size: 11pt; }
   .theme-toggle, .toc, .copy, .anchor, .skip, .cl-reset, .cl-confirm { display: none !important; }
   .layout, .has-toc .layout { display: block; padding: 0; }
-  .masthead { padding: 0 0 8px; }
+  .hero { padding: 0 0 8px; }
   .rise-ready .sec { opacity: 1; transform: none; transition: none; }
-  .sec { break-inside: auto; margin-top: 24px; padding-top: 16px; }
+  .sec, .sec + .sec { break-inside: auto; margin-top: 24px; }
+  .sec-alt { margin-inline: 0; padding: 0; background: none; }
   .sec-title, .kpi, .card, .cmp-col, .step, .tl-item, .callout, .code, .file, tr, .cl-item { break-inside: avoid; }
   .cl-bar { position: static; }
   .cl-meter { border: 1px solid #555; }

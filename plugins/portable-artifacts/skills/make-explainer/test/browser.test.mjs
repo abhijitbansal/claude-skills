@@ -75,12 +75,16 @@ for (const name of EXAMPLES) {
   }
 }
 
-test('the first viewport at 1280 x 900 holds the masthead and the whole verdict block', async (t) => {
+test('the first viewport at 1280 x 900 holds the hero, the whole verdict card and the numbers', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const { page, context } = await open(built('concept').url, { reducedMotion: 'reduce' });
-  const box = await page.locator('.sec-tldr .tldr').boundingBox();
-  assert.ok(box.y + box.height <= 900, `verdict ends at ${box.y + box.height}`);
-  await context.close();
+  for (const name of ['concept', 'recap']) {
+    const { page, context } = await open(built(name).url, { reducedMotion: 'reduce' });
+    const verdict = await page.locator('.hero .hero-tldr .tldr').boundingBox();
+    assert.ok(verdict.y + verdict.height <= 900, `${name}: verdict ends at ${verdict.y + verdict.height}`);
+    const kpis = await page.locator('.sec-kpis .kpis').boundingBox();
+    assert.ok(kpis.y + kpis.height <= 900, `${name}: numbers end at ${kpis.y + kpis.height}`);
+    await context.close();
+  }
 });
 
 // ---- contents ---------------------------------------------------------------------------
@@ -224,7 +228,7 @@ test('rise-in: sections fade in once and reduced motion turns it off', async (t)
   if (await skipUnlessBrowser(t)) return;
   const full = await open(built('concept').url);
   assert.equal(await full.page.evaluate(() => document.documentElement.classList.contains('rise-ready')), true);
-  await full.page.waitForFunction(() => document.querySelector('.sec-tldr').classList.contains('in'));
+  await full.page.waitForFunction(() => document.querySelector('.sections > .sec').classList.contains('in'));
   const before = await full.page.evaluate(() => document.querySelectorAll('.sec.in').length);
   assert.ok(before < (await full.page.evaluate(() => document.querySelectorAll('.sec').length)), 'sections below the fold wait for their turn');
   await full.page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));

@@ -15,7 +15,7 @@ Every section type and its fields: [sections.md](sections.md). Banned phrases: [
 | `meta` | object | Keys `date`, `branch`, `repo`, `author`, `version`, `status`; each value at most 60 characters. Shown as chips under the title. |
 | `sections` | array, required | 1 to 40 sections, see below. |
 
-Every section has `type` (required), an optional `id` (`^[a-z][a-z0-9-]*$`, unique; the deep link `#<id>` on a page, and on a deck it opens that slide (the outline links use it; `#slide-<n>` keeps working); not `content`, `outline-title`, `slide-<n>`, `slide-<n>-title` or anything starting `ch<n>-`, which the page uses itself) and an optional `title` (at most 90 characters).
+Every section has `type` (required), an optional `id` (`^[a-z][a-z0-9-]*$`, unique; the deep link `#<id>` on a page, and on a deck it opens that slide (the outline links use it; `#slide-<n>` keeps working); not `content`, `outline-title`, `slide-<n>`, `slide-<n>-title` or anything starting `ch<n>-`, which the page uses itself) an optional `title` (at most 90 characters) and an optional `label` (a short name, at most 4 words, for the contents list and the small eyebrow above the heading; without it the contents list shows the `title`).
 
 ## Limits
 
@@ -37,7 +37,7 @@ Every section has `type` (required), an optional `id` (`^[a-z][a-z0-9-]*$`, uniq
 | `diagram` file, `motion.spec` file | `.json`, at most 1 MB |
 | Paragraph | Over 120 words is a warning |
 
-Slides mode adds a budget to each section (errors): at most 6 points (tldr points, `- ` list lines, items of list-like sections, compare points, checklist items), 8 table rows, 12 code lines and 80 words of prose (the title and captions do not count).
+Slides mode adds a budget to each section (errors): at most 6 points (tldr points, `- ` list lines, items of list-like sections, compare points, checklist items), 8 table rows, 12 code lines and 80 words of prose (the title, the label and captions do not count).
 
 ## Text
 

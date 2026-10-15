@@ -6,6 +6,9 @@ import { esc, inline, toneChip, toneClass } from './ui.mjs';
 const NUMBER_FORMAT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 20, useGrouping: 'min2' });
 const valueText = (value) => (typeof value === 'number' ? NUMBER_FORMAT.format(value) : String(value));
 
+// A visual section: every second one on a page sits on the surface band.
+export const band = true;
+
 export function render(section) {
   const items = section.items.map((k) => {
     const delta = k.delta === undefined && !toneChip(k.tone) ? '' : `<dd class="kpi-delta">${toneChip(k.tone)}${k.delta === undefined ? '' : `<span>${esc(k.delta)}</span>`}</dd>`;

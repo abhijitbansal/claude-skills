@@ -1,6 +1,6 @@
 // Page assembly: one self-contained HTML file around the rendered sections.
-// Theme CSS and fonts, the masthead, a contents list (4+ titled sections),
-// the sections, and the inlined runtime. No network, no LLM. Every string from
+// Theme CSS and fonts, the hero (with a leading tldr as its card), a contents
+// list (4+ titled sections), the sections, and the inlined runtime. No network, no LLM. Every string from
 // the spec goes through the markdown-lite renderer or escapeHtml.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -118,14 +118,26 @@ function sectionPageParts(spec, ctx) {
   };
 }
 
-function renderSection(section, i, id, titleId, def, ctx) {
+// The small label above a heading; only a section that shows its own title gets one.
+const eyebrow = (section) => (section.label === undefined ? '' : `<p class="sec-eyebrow pa-label">${plain(section.label)}</p>\n`);
+
+// `alt`: the section sits on the alternating surface band (every second visual section).
+function renderSection(section, i, id, titleId, def, ctx, alt = false) {
   const body = renderBody(section, i, def, ctx);
   const hasHeading = section.title !== undefined && !def.ownHeading;
   const heading = hasHeading
-    ? `<h2 class="sec-title" id="${esc(titleId)}">${headingInline(section.title)}<a class="anchor" href="#${esc(id)}" aria-label="Link to this section: ${plain(section.title)}">#</a></h2>\n`
+    ? `${eyebrow(section)}<h2 class="sec-title" id="${esc(titleId)}">${headingInline(section.title)}<a class="anchor" href="#${esc(id)}" aria-label="Link to this section: ${plain(section.title)}">#</a></h2>\n`
     : '';
   const labelled = hasHeading ? ` aria-labelledby="${esc(titleId)}"` : '';
-  return `<section class="sec sec-${section.type}" id="${esc(id)}"${labelled}>\n${heading}${body}\n</section>`;
+  return `<section class="sec sec-${section.type}${alt ? ' sec-alt' : ''}" id="${esc(id)}"${labelled}>\n${heading}${body}\n</section>`;
+}
+
+// A leading tldr is the hero's card: same body, its own heading, the section id kept for deep links.
+function renderHeroTldr(section, id, titleId, ctx) {
+  const body = renderBody(section, 0, SECTIONS.tldr, ctx);
+  const heading = section.title === undefined ? '' : `${eyebrow(section)}<h2 class="hero-tldr-title" id="${esc(titleId)}">${headingInline(section.title)}</h2>\n`;
+  const labelled = section.title === undefined ? ' aria-label="Summary"' : ` aria-labelledby="${esc(titleId)}"`;
+  return `<div class="hero-tldr" id="${esc(id)}" role="region"${labelled}>\n${heading}${body}\n</div>`;
 }
 
 function renderMeta(meta) {
@@ -137,7 +149,7 @@ function renderMeta(meta) {
 
 function renderToc(entries) {
   if (entries.length < TOC_MIN) return '';
-  const items = entries.map(({ id, title }) => `<li><a href="#${esc(id)}">${plain(title)}</a></li>`);
+  const items = entries.map(({ id, title, label }) => `<li><a href="#${esc(id)}">${plain(label ?? title)}</a></li>`);
   return `<nav class="toc" aria-label="Contents">\n<details open>\n<summary>Contents</summary>\n<ol>\n${items.join('\n')}\n</ol>\n</details>\n</nav>`;
 }
 
@@ -162,12 +174,22 @@ function unsupported(spec) {
   return errors;
 }
 
-// The page layout: masthead pieces, the contents list and the sections.
+// Visual sections (a registry `band` flag) alternate onto a surface band: every second one gets it.
+function altFlags(sections) {
+  let visual = 0;
+  return sections.map((s) => SECTIONS[s.type].band && visual++ % 2 === 1);
+}
+
+// The page layout: hero pieces, the contents list and the sections.
 function pageParts(spec, ctx, ids) {
   const titleIds = headingIds(ids);
-  const rendered = spec.sections.map((section, i) => renderSection(section, i, ids[i], titleIds[i], SECTIONS[section.type], ctx));
+  const heroTldr = spec.sections[0].type === 'tldr';
+  const alt = altFlags(spec.sections);
+  const rendered = spec.sections.map((section, i) => (heroTldr && i === 0
+    ? ''
+    : renderSection(section, i, ids[i], titleIds[i], SECTIONS[section.type], ctx, alt[i])));
   const tocEntries = spec.sections
-    .map((s, i) => ({ id: ids[i], title: s.title, own: SECTIONS[s.type].ownHeading }))
+    .map((s, i) => ({ id: ids[i], title: s.title, label: s.label, own: SECTIONS[s.type].ownHeading }))
     .filter((e) => e.title !== undefined && !e.own);
   const toc = renderToc(tocEntries);
   return {
@@ -175,8 +197,9 @@ function pageParts(spec, ctx, ids) {
     H1: inline(spec.title),
     SUBTITLE: spec.subtitle === undefined ? '' : `<p class="subtitle">${inline(spec.subtitle)}</p>`,
     META: renderMeta(spec.meta),
+    HEROTLDR: heroTldr ? renderHeroTldr(spec.sections[0], ids[0], titleIds[0], ctx) : '',
     TOC: toc,
-    SECTIONS: rendered.join('\n'),
+    SECTIONS: rendered.filter(Boolean).join('\n'),
   };
 }
 

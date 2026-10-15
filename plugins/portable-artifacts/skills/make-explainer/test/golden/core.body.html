@@ -1,6 +1,6 @@
 <body class="has-toc">
 <a class="skip" href="#content">Skip to content</a>
-<header class="masthead">
+<header class="hero">
 <div class="mast-text">
 <h1>feat/visual-artifacts: dashboards, diagrams and explainers</h1>
 <p class="subtitle">What shipped, how it works, how to test it</p>
@@ -12,6 +12,17 @@
 </div>
 <button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><span class="pa-ti pa-ti-auto"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-light"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-dark"><svg data-sibling-svg></svg></span></button>
 <script>/* shared theme toggle */</script>
+<div class="hero-tldr" id="verdict" role="region" aria-labelledby="verdict-title">
+<h2 class="hero-tldr-title" id="verdict-title">Three skills share one core</h2>
+<div class="tldr tone-good">
+<p class="tldr-tone"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span></p>
+<p class="lead">Ready for review.</p>
+<ul class="points">
+<li>One theme layer</li>
+<li>One lint</li>
+</ul>
+</div>
+</div>
 </header>
 <div class="layout">
 <nav class="toc" aria-label="Contents">
@@ -33,17 +44,6 @@
 </details>
 </nav>
 <main id="content" class="sections">
-<section class="sec sec-tldr" id="verdict" aria-labelledby="verdict-title">
-<h2 class="sec-title" id="verdict-title">Three skills share one core<a class="anchor" href="#verdict" aria-label="Link to this section: Three skills share one core">#</a></h2>
-<div class="tldr tone-good">
-<p class="tldr-tone"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span></p>
-<p class="lead">Ready for review.</p>
-<ul class="points">
-<li>One theme layer</li>
-<li>One lint</li>
-</ul>
-</div>
-</section>
 <section class="sec sec-text" id="why" aria-labelledby="why-title">
 <h2 class="sec-title" id="why-title">Why<a class="anchor" href="#why" aria-label="Link to this section: Why">#</a></h2>
 <div class="prose">
@@ -60,7 +60,7 @@
 <div class="kpi tone-neutral"><dt>Tests</dt><dd class="kpi-value">612 pass</dd></div>
 </dl>
 </section>
-<section class="sec sec-cards" id="pieces" aria-labelledby="pieces-title">
+<section class="sec sec-cards sec-alt" id="pieces" aria-labelledby="pieces-title">
 <h2 class="sec-title" id="pieces-title">Pieces<a class="anchor" href="#pieces" aria-label="Link to this section: Pieces">#</a></h2>
 <ul class="cards cols-3">
 <li class="card tone-accent">

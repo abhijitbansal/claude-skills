@@ -1,7 +1,7 @@
 // Slides mode: each section is one slide, so each gets a content budget.
 // Points: tldr points, "- " list lines in markdown fields, items of list-like
 // sections, compare points, checklist items. Words: every prose string of the
-// section except its own title and captions (tables and code have their own
+// section except its own title, its label and captions (tables and code have their own
 // limits).
 // The deck: a title slide from the spec head, then one slide per section, plus
 // the progress bar, counter, outline dialog and the live region the runtime uses.
@@ -33,7 +33,7 @@ function pointCount(s) {
 function wordCount(s, path) {
   if (s.type === 'table') return 0;
   return sum(collectStrings(s, path)
-    .filter((x) => x.prose && x.path !== pathJoin(path, 'title') && x.key !== 'caption')
+    .filter((x) => x.prose && x.path !== pathJoin(path, 'title') && x.path !== pathJoin(path, 'label') && x.key !== 'caption')
     .map((x) => words(x.text)));
 }
 
@@ -87,7 +87,9 @@ function cover(spec, total, metaHtml) {
 }
 
 function sectionSlide({ section, body, ownHeading }, n, total, footer = '') {
-  const heading = section.title !== undefined && !ownHeading ? `<h2 class="slide-title" id="slide-${n}-title">${headingInline(section.title)}</h2>\n` : '';
+  const hasHeading = section.title !== undefined && !ownHeading;
+  const eyebrow = hasHeading && section.label !== undefined ? `<p class="slide-eyebrow pa-label">${plain(section.label)}</p>\n` : '';
+  const heading = hasHeading ? `${eyebrow}<h2 class="slide-title" id="slide-${n}-title">${headingInline(section.title)}</h2>\n` : '';
   return slide(n, total, slideTitle(section), `slide-${section.type}`, `${heading}${body}`, section.id, footer);
 }
 

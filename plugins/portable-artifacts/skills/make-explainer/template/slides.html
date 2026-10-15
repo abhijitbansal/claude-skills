@@ -31,12 +31,14 @@ html, body { height: 100%; overflow: hidden; }
 .slide { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow-y: auto; overflow-x: hidden; scroll-snap-align: start; scroll-snap-stop: always; padding: 56px 56px 88px; }
 .slide:focus { outline: none; }
 /* margin:auto centres a short slide and collapses on a tall one, so the top is never cut off */
-.slide-inner { width: 100%; max-width: 60rem; margin: auto; min-width: 0; font-size: clamp(1.05rem, 0.9rem + 0.55vw, 1.3rem); }
-.slide-title { margin: 0 0 28px; max-width: 24em; font: 600 clamp(1.7rem, 1.2rem + 2.2vw, 2.7rem)/1.15 var(--font-display); letter-spacing: -0.01em; text-wrap: balance; overflow-wrap: anywhere; }
+.slide-inner { width: 100%; max-width: 60rem; margin: auto; min-width: 0; font-size: clamp(var(--fs-base), 0.85rem + 0.4vw, var(--fs-md)); }
+.slide-eyebrow { margin: 0 0 14px; }
+.slide-eyebrow.pa-label { color: var(--accent); }
+.slide-title { margin: 0 0 32px; max-width: 20em; font: 600 clamp(var(--fs-lg), 1.2rem + 2.6vw, 3.5rem)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); text-wrap: balance; overflow-wrap: anywhere; }
 .slide .prose > * { max-width: 66ch; }
 .slide .lead { font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.2rem); max-width: 28ch; }
 .slide .points { font-size: 1.05em; }
-.slide-cover h1 { max-width: 14em; font-size: clamp(2.3rem, 1.4rem + 4.2vw, 4.2rem); line-height: 1.05; }
+.slide-cover h1 { max-width: 14em; font-size: clamp(2.3rem, 1.4rem + 4.2vw, 4.2rem); line-height: var(--lh-hero); letter-spacing: var(--track-hero); }
 .slide-cover .subtitle { max-width: 34ch; margin-top: 20px; font-size: clamp(1.15rem, 1rem + 0.8vw, 1.6rem); }
 .slide-cover .meta { margin-top: 32px; font-size: var(--fs-sm); }
 

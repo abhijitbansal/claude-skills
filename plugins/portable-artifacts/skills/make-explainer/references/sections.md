@@ -1,6 +1,8 @@
 # Sections
 
-Every section has `type`, an optional `id` and an optional `title`. A `title` is a claim a reader can agree or disagree with ("Search now ignores case"), not a label ("Overview"). Limits are in [schema.md](schema.md). Fields marked `*` are required. Closed sets: `tone` is `neutral` `accent` `good` `warn` `bad` unless the section says otherwise.
+Every section has `type`, an optional `id`, an optional `title` and an optional `label`. A `title` is a claim a reader can agree or disagree with ("Search now ignores case"), not a label ("Overview"). The `label` is that short name ("Eval results", at most 4 words): the contents list shows it, and it sits as a small eyebrow above the heading (and above the slide heading in a deck). Limits are in [schema.md](schema.md). Fields marked `*` are required. Closed sets: `tone` is `neutral` `accent` `good` `warn` `bad` unless the section says otherwise.
+
+On a page, a `tldr` that comes first is drawn inside the hero, under the title, as its summary card. Every second visual section (`kpis`, `cards`, `compare`, `diagram`, `chart`) sits on a surface band.
 
 In slides mode each section is one slide (the title is the slide heading) and must fit the budget in schema.md; split a section that does not.
 
@@ -8,7 +10,7 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 
 | Type | Fields | Notes |
 |---|---|---|
-| `tldr` | `text`*, `points[]`, `tone` | The verdict block. Put it first. `text` is one or two sentences, each point one fact. |
+| `tldr` | `text`*, `points[]`, `tone` | The verdict block. Put it first: it then becomes the hero's card. `text` is one or two sentences, each point one fact; three points at most read best. |
 | `text` | `text`* | Markdown-lite prose. Several short paragraphs beat one long one. |
 | `kpis` | `items[]`* (1-6): `label`*, `value`* (string or number), `delta`, `tone`, `note` | Stat tiles. A number value prints with thousands separators from 10,000 (51301 shows as 51,301; 2026 and 1107 stay as written); a string shows as written, so use a string for versions and "12k". Use `delta` for a change ("+12 vs last week"). |
 | `cards` | `items[]`* (1-12): `title`*, `text`*, `icon`, `tone`, `tag`; `columns` (2, 3 or 4) | Parallel items. `icon` is a make-diagram catalog ref (`lucide:<name>` or `brand:<slug>`); find one with `node <skill-dir>/../make-diagram/scripts/icons.mjs search <word>`. An unknown icon is an error. |

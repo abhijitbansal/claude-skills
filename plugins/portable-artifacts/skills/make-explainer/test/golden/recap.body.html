@@ -1,6 +1,6 @@
 <body class="has-toc">
 <a class="skip" href="#content">Skip to content</a>
-<header class="masthead">
+<header class="hero">
 <div class="mast-text">
 <h1>Diagram sections: make-diagram figures inside an explainer</h1>
 <p class="subtitle">What the branch adds, how a figure gets onto the page, and what to check by hand</p>
@@ -13,26 +13,9 @@
 </div>
 <button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><span class="pa-ti pa-ti-auto"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-light"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-dark"><svg data-sibling-svg></svg></span></button>
 <script>/* shared theme toggle */</script>
-</header>
-<div class="layout">
-<nav class="toc" aria-label="Contents">
-<details open>
-<summary>Contents</summary>
-<ol>
-<li><a href="#verdict">An explainer can now carry a live diagram, not a screenshot of one</a></li>
-<li><a href="#in-numbers">Two commits added about 1,100 lines, more than half of them tests</a></li>
-<li><a href="#build-path">A spec becomes a figure in four steps</a></li>
-<li><a href="#present-is-the-only-place-the-keyboard-s">Present is the only place the keyboard shortcuts live</a></li>
-<li><a href="#changed-files">Most of the change is the viewer, its styles and the section renderer</a></li>
-<li><a href="#added-lines">The viewer script is the largest addition</a></li>
-<li><a href="#commits">The fix followed the feature the same day</a></li>
-<li><a href="#what-could-still-bite">What could still bite</a></li>
-</ol>
-</details>
-</nav>
-<main id="content" class="sections">
-<section class="sec sec-tldr" id="verdict" aria-labelledby="verdict-title">
-<h2 class="sec-title" id="verdict-title">An explainer can now carry a live diagram, not a screenshot of one<a class="anchor" href="#verdict" aria-label="Link to this section: An explainer can now carry a live diagram, not a screenshot of one">#</a></h2>
+<div class="hero-tldr" id="verdict" role="region" aria-labelledby="verdict-title">
+<p class="sec-eyebrow pa-label">The verdict</p>
+<h2 class="hero-tldr-title" id="verdict-title">An explainer can now carry a live diagram, not a screenshot of one</h2>
 <div class="tldr tone-good">
 <p class="tldr-tone"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span></p>
 <p class="lead">A diagram section takes a make-diagram spec, inline or from a file, and renders it as an SVG you can hover, with a Present button for a step-by-step walkthrough.</p>
@@ -42,8 +25,27 @@
 <li>In a slide deck, the arrow keys belong to the overlay while it is open.</li>
 </ul>
 </div>
-</section>
+</div>
+</header>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+<details open>
+<summary>Contents</summary>
+<ol>
+<li><a href="#verdict">The verdict</a></li>
+<li><a href="#in-numbers">In numbers</a></li>
+<li><a href="#build-path">Build path</a></li>
+<li><a href="#present-is-the-only-place-the-keyboard-s">Present mode</a></li>
+<li><a href="#changed-files">Changed files</a></li>
+<li><a href="#added-lines">Added lines</a></li>
+<li><a href="#commits">Commits</a></li>
+<li><a href="#what-could-still-bite">Risks</a></li>
+</ol>
+</details>
+</nav>
+<main id="content" class="sections">
 <section class="sec sec-kpis" id="in-numbers" aria-labelledby="in-numbers-title">
+<p class="sec-eyebrow pa-label">In numbers</p>
 <h2 class="sec-title" id="in-numbers-title">Two commits added about 1,100 lines, more than half of them tests<a class="anchor" href="#in-numbers" aria-label="Link to this section: Two commits added about 1,100 lines, more than half of them tests">#</a></h2>
 <dl class="kpis">
 <div class="kpi tone-neutral"><dt>Commits</dt><dd class="kpi-value">2</dd></div>
@@ -53,7 +55,8 @@
 <div class="kpi tone-neutral"><dt>Test files touched</dt><dd class="kpi-value">8</dd><dd class="kpi-note">two new, six edited</dd></div>
 </dl>
 </section>
-<section class="sec sec-diagram" id="build-path" aria-labelledby="build-path-title">
+<section class="sec sec-diagram sec-alt" id="build-path" aria-labelledby="build-path-title">
+<p class="sec-eyebrow pa-label">Build path</p>
 <h2 class="sec-title" id="build-path-title">A spec becomes a figure in four steps<a class="anchor" href="#build-path" aria-label="Link to this section: A spec becomes a figure in four steps">#</a></h2>
 <figure class="dg" data-diagram style="--dg-w: 475; --dg-h: 750">
 <div class="dg-slot" data-dg-slot data-dg-label="Diagram: From spec to page">
@@ -104,6 +107,7 @@
 </figure>
 </section>
 <section class="sec sec-text" id="present-is-the-only-place-the-keyboard-s" aria-labelledby="present-is-the-only-place-the-keyboard-s-title">
+<p class="sec-eyebrow pa-label">Present mode</p>
 <h2 class="sec-title" id="present-is-the-only-place-the-keyboard-s-title">Present is the only place the keyboard shortcuts live<a class="anchor" href="#present-is-the-only-place-the-keyboard-s" aria-label="Link to this section: Present is the only place the keyboard shortcuts live">#</a></h2>
 <div class="prose">
 <p>Inline, a figure traces links on hover or focus and never captures the mouse wheel, so the page keeps scrolling. <strong>Present</strong> opens a full-screen overlay with Back, Next and Close.</p>
@@ -112,6 +116,7 @@
 </div>
 </section>
 <section class="sec sec-files" id="changed-files" aria-labelledby="changed-files-title">
+<p class="sec-eyebrow pa-label">Changed files</p>
 <h2 class="sec-title" id="changed-files-title">Most of the change is the viewer, its styles and the section renderer<a class="anchor" href="#changed-files" aria-label="Link to this section: Most of the change is the viewer, its styles and the section renderer">#</a></h2>
 <div class="files">
 <p class="files-sum">14 files · 5 added, 9 modified · +385 −11 lines</p>
@@ -205,6 +210,7 @@
 </div>
 </section>
 <section class="sec sec-chart" id="added-lines" aria-labelledby="added-lines-title">
+<p class="sec-eyebrow pa-label">Added lines</p>
 <h2 class="sec-title" id="added-lines-title">The viewer script is the largest addition<a class="anchor" href="#added-lines" aria-label="Link to this section: The viewer script is the largest addition">#</a></h2>
 <figure class="ch">
 <div class="ch-card" role="img" aria-label="Bar chart of added by file. The plotted values are in the data table below.">
@@ -237,6 +243,7 @@
 </figure>
 </section>
 <section class="sec sec-timeline" id="commits" aria-labelledby="commits-title">
+<p class="sec-eyebrow pa-label">Commits</p>
 <h2 class="sec-title" id="commits-title">The fix followed the feature the same day<a class="anchor" href="#commits" aria-label="Link to this section: The fix followed the feature the same day">#</a></h2>
 <ol class="timeline">
 <li class="tl-item">
@@ -252,6 +259,7 @@
 </ol>
 </section>
 <section class="sec sec-risks" id="what-could-still-bite" aria-labelledby="what-could-still-bite-title">
+<p class="sec-eyebrow pa-label">Risks</p>
 <h2 class="sec-title" id="what-could-still-bite-title">What could still bite<a class="anchor" href="#what-could-still-bite" aria-label="Link to this section: What could still bite">#</a></h2>
 <div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
 <table>

@@ -34,6 +34,7 @@ For a change ("rename the card", "add a risk"), edit only those fields, then val
 ## Writing rules
 
 - A section `title` states the finding ("Search now ignores case"), never a label ("Overview", "Changes"). Same for the page title.
+- `label` ≤ 4 words for the contents list; `title` states the finding in ≤ 8 words.
 - Plain words. Validate rejects emoji, filler such as "leverage", "seamless" and "delve" (full list in `<skill-dir>/references/style.md`), titles ending in `!`, titles numbered "01", and any leftover `TODO:` or lorem ipsum. Paragraphs over 120 words warn.
 - Use the section that fits the content: numbers as `kpis`, a list of files as `files`, a sequence as `steps`, options as `compare`. A wall of `text` is the last resort.
 - Checklist: always supply `intro` (validate only warns when it is missing). Fill it with the "What's in this branch" summary that lists every feature and every review-cycle fix the branch delivers, and what automated tests already cover, so the tester needs no PR. Tag the review-cycle fixes `regression`, device-only items `device`.
@@ -69,8 +70,8 @@ File paths (`diagram`, `chart.dashboard`, `motion.video`, `motion.spec`, `motion
   "title": "Search now ignores case",
   "preset": "concept",
   "sections": [
-    { "type": "tldr", "title": "Queries match however they are typed", "text": "Both sides are lowercased before the comparison.", "points": ["No change to the stored notes.", "One new test covers an empty store."] },
-    { "type": "diagram", "title": "A query takes one extra step", "diagram": { "title": "Search path", "type": "flow", "nodes": [{ "id": "q", "label": "Query", "kind": "start" }, { "id": "l", "label": "Lowercase both sides" }, { "id": "m", "label": "Match notes", "kind": "end" }], "edges": [{ "from": "q", "to": "l" }, { "from": "l", "to": "m" }] } }
+    { "type": "tldr", "title": "Queries match however they are typed", "label": "The verdict", "text": "Both sides are lowercased before the comparison.", "points": ["No change to the stored notes.", "One new test covers an empty store."] },
+    { "type": "diagram", "title": "A query takes one extra step", "label": "Search path", "diagram": { "title": "Search path", "type": "flow", "nodes": [{ "id": "q", "label": "Query", "kind": "start" }, { "id": "l", "label": "Lowercase both sides" }, { "id": "m", "label": "Match notes", "kind": "end" }], "edges": [{ "from": "q", "to": "l" }, { "from": "l", "to": "m" }] } }
   ]
 }
 ```

@@ -66,6 +66,9 @@ async function buildInteractive(source, section, ctx) {
   return dashboards.get(source.abs);
 }
 
+// A visual section: every second one on a page sits on the surface band.
+export const band = true;
+
 export async function prepare(section, ctx, i) {
   const source = await loadChartSource(section, ctx.dir);
   if (source.errors.length > 0) throw new SectionErrors(source.errors);

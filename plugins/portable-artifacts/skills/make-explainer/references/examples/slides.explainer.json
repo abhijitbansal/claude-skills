@@ -12,6 +12,7 @@
     {
       "type": "tldr",
       "title": "A prompt becomes one file you can open anywhere",
+      "label": "In short",
       "text": "Diagrams, dashboards, videos and explainers now share a theme, a checker and a rule: the model fills in JSON and a script renders it.",
       "points": [
         "Each output is one local file with no network at build or view time.",
@@ -23,6 +24,7 @@
     {
       "type": "cards",
       "title": "Each skill covers one kind of artifact",
+      "label": "The skills",
       "columns": 2,
       "items": [
         { "title": "make-diagram", "text": "Architecture, flow, sequence and state diagrams with zoom and hover tracing." },
@@ -34,6 +36,7 @@
     {
       "type": "motion",
       "title": "A clip rendered by make-motion plays on its slide",
+      "label": "Motion",
       "video": "clip.mp4",
       "poster": "clip-poster.png",
       "caption": "Drawn from clip.motion.json, which names the paper theme. Space and the arrow keys belong to the player while it has focus."
@@ -41,6 +44,7 @@
     {
       "type": "steps",
       "title": "Every build follows the same four steps",
+      "label": "The build",
       "items": [
         { "title": "Write the outline", "text": "Typed sections in one JSON file." },
         { "title": "Validate it", "text": "Schema, file references and prose rules." },
@@ -51,6 +55,7 @@
     {
       "type": "compare",
       "title": "An outline stays consistent where a hand-written page drifts",
+      "label": "Why outlines",
       "columns": [
         {
           "title": "Hand-written page",
@@ -75,12 +80,14 @@
     {
       "type": "code",
       "title": "A slide is a section with a claim for a title",
+      "label": "One slide",
       "language": "json",
       "code": "{\n  \"title\": \"Short deck\",\n  \"mode\": \"slides\",\n  \"sections\": [\n    {\n      \"type\": \"text\",\n      \"title\": \"One claim per slide\",\n      \"text\": \"- Six points at most\\n- Eighty words at most\"\n    }\n  ]\n}"
     },
     {
       "type": "table",
       "title": "A slide that is too full is an error, not a warning",
+      "label": "Slide budget",
       "columns": ["Limit", "Per slide"],
       "rows": [
         ["Points or bullets", 6],
@@ -99,12 +106,14 @@
     {
       "type": "details",
       "title": "A tall slide scrolls inside itself",
+      "label": "Long slides",
       "summary": "What a tall slide does",
       "text": "A slide taller than the screen scrolls inside itself. Space scrolls it first and moves on at the bottom, and a table that scrolls sideways keeps the arrow keys while it has focus."
     },
     {
       "type": "text",
       "title": "Diagrams, charts and videos fit on a slide too",
+      "label": "Embeds",
       "text": "- A diagram section draws a make-diagram figure with hover tracing and a Present mode.\n- A chart section draws a make-dashboard chart as a static image with a data table.\n- A motion section plays a clip, like the one on slide 4, and never autoplays."
     }
   ]

@@ -1,6 +1,6 @@
 <body class="has-toc">
 <a class="skip" href="#content">Skip to content</a>
-<header class="masthead">
+<header class="hero">
 <div class="mast-text">
 <h1>Why an explainer is a JSON outline, not a page you write</h1>
 <p class="subtitle">The idea behind make-explainer, what it guarantees, and where it stops</p>
@@ -12,30 +12,9 @@
 </div>
 <button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><span class="pa-ti pa-ti-auto"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-light"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-dark"><svg data-sibling-svg></svg></span></button>
 <script>/* shared theme toggle */</script>
-</header>
-<div class="layout">
-<nav class="toc" aria-label="Contents">
-<details open>
-<summary>Contents</summary>
-<ol>
-<li><a href="#verdict">Writing the outline, not the page, keeps every explainer consistent</a></li>
-<li><a href="#a-hand-written-page-drifts-a-generated-o">A hand-written page drifts, a generated one cannot</a></li>
-<li><a href="#what-one-build-produces">What one build produces</a></li>
-<li><a href="#three-steps-from-facts-to-a-finished-pag">Three steps from facts to a finished page</a></li>
-<li><a href="#four-rules-keep-the-output-trustworthy">Four rules keep the output trustworthy</a></li>
-<li><a href="#typed-sections-win-on-consistency-and-lo">Typed sections win on consistency and lose on freedom</a></li>
-<li><a href="#each-section-type-answers-a-different-qu">Each section type answers a different question</a></li>
-<li><a href="#building-a-page-takes-four-moves">Building a page takes four moves</a></li>
-<li><a href="#the-whole-loop-is-two-commands">The whole loop is two commands</a></li>
-<li><a href="#three-limits-you-should-know-about">Three limits you should know about</a></li>
-<li><a href="#each-section-type-is-one-small-renderer">Each section type is one small renderer module</a></li>
-<li><a href="#the-design-settled-in-three-passes">The design settled in three passes</a></li>
-</ol>
-</details>
-</nav>
-<main id="content" class="sections">
-<section class="sec sec-tldr" id="verdict" aria-labelledby="verdict-title">
-<h2 class="sec-title" id="verdict-title">Writing the outline, not the page, keeps every explainer consistent<a class="anchor" href="#verdict" aria-label="Link to this section: Writing the outline, not the page, keeps every explainer consistent">#</a></h2>
+<div class="hero-tldr" id="verdict" role="region" aria-labelledby="verdict-title">
+<p class="sec-eyebrow pa-label">The verdict</p>
+<h2 class="hero-tldr-title" id="verdict-title">Writing the outline, not the page, keeps every explainer consistent</h2>
 <div class="tldr tone-good">
 <p class="tldr-tone"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span></p>
 <p class="lead">You write the facts; the tool owns the layout. The page is always well formed, offline and the same family as every other one.</p>
@@ -45,16 +24,31 @@
 <li>One theme, one accent and one set of components keep every page consistent.</li>
 </ul>
 </div>
-</section>
-<section class="sec sec-text" id="a-hand-written-page-drifts-a-generated-o" aria-labelledby="a-hand-written-page-drifts-a-generated-o-title">
-<h2 class="sec-title" id="a-hand-written-page-drifts-a-generated-o-title">A hand-written page drifts, a generated one cannot<a class="anchor" href="#a-hand-written-page-drifts-a-generated-o" aria-label="Link to this section: A hand-written page drifts, a generated one cannot">#</a></h2>
-<div class="prose">
-<p>A page written freehand looks fine once. The second one uses a different spacing scale, the third a different set of colours, and the fourth quietly pulls a font from a CDN.</p>
-<p>With an outline, the layout is not up for discussion. Each section <strong>type</strong> has one renderer, and the renderer is the only place that knows about markup. The <code>title</code> of a section is a claim a reader can agree or disagree with, not a label such as &quot;Overview&quot;.</p>
-<p>Text fields accept a small subset of markdown: bold, italic, <code>code</code>, <a href="https://example.com" rel="noopener noreferrer">links to https pages</a> and <code>- </code> lists. Anything else is shown as plain text, so a stray angle bracket can never become a tag.</p>
 </div>
-</section>
+</header>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+<details open>
+<summary>Contents</summary>
+<ol>
+<li><a href="#verdict">The verdict</a></li>
+<li><a href="#what-one-build-produces">One build</a></li>
+<li><a href="#a-hand-written-page-drifts-a-generated-o">The problem</a></li>
+<li><a href="#three-steps-from-facts-to-a-finished-pag">The pipeline</a></li>
+<li><a href="#four-rules-keep-the-output-trustworthy">Guarantees</a></li>
+<li><a href="#typed-sections-win-on-consistency-and-lo">Trade-offs</a></li>
+<li><a href="#each-section-type-answers-a-different-qu">Section types</a></li>
+<li><a href="#building-a-page-takes-four-moves">Workflow</a></li>
+<li><a href="#the-whole-loop-is-two-commands">Commands</a></li>
+<li><a href="#three-limits-you-should-know-about">Limits</a></li>
+<li><a href="#each-section-type-is-one-small-renderer">Renderers</a></li>
+<li><a href="#the-design-settled-in-three-passes">History</a></li>
+</ol>
+</details>
+</nav>
+<main id="content" class="sections">
 <section class="sec sec-kpis" id="what-one-build-produces" aria-labelledby="what-one-build-produces-title">
+<p class="sec-eyebrow pa-label">One build</p>
 <h2 class="sec-title" id="what-one-build-produces-title">What one build produces<a class="anchor" href="#what-one-build-produces" aria-label="Link to this section: What one build produces">#</a></h2>
 <dl class="kpis">
 <div class="kpi tone-neutral"><dt>Network requests</dt><dd class="kpi-value">0</dd><dd class="kpi-note">fonts and script are inlined</dd></div>
@@ -62,14 +56,25 @@
 <div class="kpi tone-neutral"><dt>Themes</dt><dd class="kpi-value">4</dd><dd class="kpi-note">light and dark each</dd></div>
 </dl>
 </section>
+<section class="sec sec-text" id="a-hand-written-page-drifts-a-generated-o" aria-labelledby="a-hand-written-page-drifts-a-generated-o-title">
+<p class="sec-eyebrow pa-label">The problem</p>
+<h2 class="sec-title" id="a-hand-written-page-drifts-a-generated-o-title">A hand-written page drifts, a generated one cannot<a class="anchor" href="#a-hand-written-page-drifts-a-generated-o" aria-label="Link to this section: A hand-written page drifts, a generated one cannot">#</a></h2>
+<div class="prose">
+<p>A page written freehand looks fine once. The second one uses a different spacing scale, the third a different set of colours, and the fourth quietly pulls a font from a CDN.</p>
+<p>With an outline, the layout is not up for discussion. Each section <strong>type</strong> has one renderer, and the renderer is the only place that knows about markup. The <code>title</code> of a section is a claim a reader can agree or disagree with, not a label such as &quot;Overview&quot;.</p>
+<p>Text fields accept a small subset of markdown: bold, italic, <code>code</code>, <a href="https://example.com" rel="noopener noreferrer">links to https pages</a> and <code>- </code> lists. Anything else is shown as plain text, so a stray angle bracket can never become a tag.</p>
+</div>
+</section>
 <section class="sec sec-image" id="three-steps-from-facts-to-a-finished-pag" aria-labelledby="three-steps-from-facts-to-a-finished-pag-title">
+<p class="sec-eyebrow pa-label">The pipeline</p>
 <h2 class="sec-title" id="three-steps-from-facts-to-a-finished-pag-title">Three steps from facts to a finished page<a class="anchor" href="#three-steps-from-facts-to-a-finished-pag" aria-label="Link to this section: Three steps from facts to a finished page">#</a></h2>
 <figure class="img">
 <img src="data:image/svg+xml;base64,…" alt="Three boxes joined by arrows, top to bottom: Outline, Checks, Page.">
 <figcaption>The outline is typed JSON sections, the checks cover schema, links and prose, and the page is one offline HTML file. A bad outline never reaches the build.</figcaption>
 </figure>
 </section>
-<section class="sec sec-cards" id="four-rules-keep-the-output-trustworthy" aria-labelledby="four-rules-keep-the-output-trustworthy-title">
+<section class="sec sec-cards sec-alt" id="four-rules-keep-the-output-trustworthy" aria-labelledby="four-rules-keep-the-output-trustworthy-title">
+<p class="sec-eyebrow pa-label">Guarantees</p>
 <h2 class="sec-title" id="four-rules-keep-the-output-trustworthy-title">Four rules keep the output trustworthy<a class="anchor" href="#four-rules-keep-the-output-trustworthy" aria-label="Link to this section: Four rules keep the output trustworthy">#</a></h2>
 <ul class="cards cols-2">
 <li class="card tone-neutral">
@@ -91,6 +96,7 @@
 </ul>
 </section>
 <section class="sec sec-compare" id="typed-sections-win-on-consistency-and-lo" aria-labelledby="typed-sections-win-on-consistency-and-lo-title">
+<p class="sec-eyebrow pa-label">Trade-offs</p>
 <h2 class="sec-title" id="typed-sections-win-on-consistency-and-lo-title">Typed sections win on consistency and lose on freedom<a class="anchor" href="#typed-sections-win-on-consistency-and-lo" aria-label="Link to this section: Typed sections win on consistency and lose on freedom">#</a></h2>
 <div class="compare cols-2">
 <div class="cmp-col tone-warn">
@@ -113,6 +119,7 @@
 <p class="verdict"><strong>Verdict.</strong> Use the outline for recaps, checklists and concept pages. Reach for a bespoke page only when the layout itself is the point.</p>
 </section>
 <section class="sec sec-table" id="each-section-type-answers-a-different-qu" aria-labelledby="each-section-type-answers-a-different-qu-title">
+<p class="sec-eyebrow pa-label">Section types</p>
 <h2 class="sec-title" id="each-section-type-answers-a-different-qu-title">Each section type answers a different question<a class="anchor" href="#each-section-type-answers-a-different-qu" aria-label="Link to this section: Each section type answers a different question">#</a></h2>
 <div class="tablewrap" role="region" aria-label="A short extract of the full list" tabindex="0">
 <table><caption>A short extract of the full list</caption>
@@ -128,6 +135,7 @@
 </div>
 </section>
 <section class="sec sec-steps" id="building-a-page-takes-four-moves" aria-labelledby="building-a-page-takes-four-moves-title">
+<p class="sec-eyebrow pa-label">Workflow</p>
 <h2 class="sec-title" id="building-a-page-takes-four-moves-title">Building a page takes four moves<a class="anchor" href="#building-a-page-takes-four-moves" aria-label="Link to this section: Building a page takes four moves">#</a></h2>
 <ol class="steps">
 <li class="step">
@@ -149,6 +157,7 @@
 </ol>
 </section>
 <section class="sec sec-code" id="the-whole-loop-is-two-commands" aria-labelledby="the-whole-loop-is-two-commands-title">
+<p class="sec-eyebrow pa-label">Commands</p>
 <h2 class="sec-title" id="the-whole-loop-is-two-commands-title">The whole loop is two commands<a class="anchor" href="#the-whole-loop-is-two-commands" aria-label="Link to this section: The whole loop is two commands">#</a></h2>
 <figure class="code">
 <div class="code-bar"><span class="code-lang">bash</span><button type="button" class="btn copy" data-copy aria-label="Copy code">Copy</button></div>
@@ -158,6 +167,7 @@ node scripts/build.mjs explainer.json --out ./page.html</code></pre>
 </figure>
 </section>
 <section class="sec sec-risks" id="three-limits-you-should-know-about" aria-labelledby="three-limits-you-should-know-about-title">
+<p class="sec-eyebrow pa-label">Limits</p>
 <h2 class="sec-title" id="three-limits-you-should-know-about-title">Three limits you should know about<a class="anchor" href="#three-limits-you-should-know-about" aria-label="Link to this section: Three limits you should know about">#</a></h2>
 <div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
 <table>
@@ -186,6 +196,7 @@ node scripts/build.mjs explainer.json --out ./page.html</code></pre>
 </div>
 </section>
 <section class="sec sec-files" id="each-section-type-is-one-small-renderer" aria-labelledby="each-section-type-is-one-small-renderer-title">
+<p class="sec-eyebrow pa-label">Renderers</p>
 <h2 class="sec-title" id="each-section-type-is-one-small-renderer-title">Each section type is one small renderer module<a class="anchor" href="#each-section-type-is-one-small-renderer" aria-label="Link to this section: Each section type is one small renderer module">#</a></h2>
 <div class="files">
 <p class="files-sum">6 files · 5 added, 1 modified · +571 −2 lines</p>
@@ -232,6 +243,7 @@ node scripts/build.mjs explainer.json --out ./page.html</code></pre>
 </div>
 </section>
 <section class="sec sec-timeline" id="the-design-settled-in-three-passes" aria-labelledby="the-design-settled-in-three-passes-title">
+<p class="sec-eyebrow pa-label">History</p>
 <h2 class="sec-title" id="the-design-settled-in-three-passes-title">The design settled in three passes<a class="anchor" href="#the-design-settled-in-three-passes" aria-label="Link to this section: The design settled in three passes">#</a></h2>
 <ol class="timeline">
 <li class="tl-item">

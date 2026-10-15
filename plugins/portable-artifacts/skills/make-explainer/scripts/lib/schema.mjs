@@ -56,9 +56,9 @@ const cell = { type: ['string', 'number'] };
 // A number or non-blank text (the pattern applies to strings only).
 const metric = { type: ['string', 'number'], pattern: NON_SPACE };
 
-// A section schema: every section has type, id and title.
+// A section schema: every section has a type and may have an id, a title and a label (a short name for the contents list).
 function section(type, required, props) {
-  return object(['type', ...required], { type: { const: type }, id: text, title: text, ...props });
+  return object(['type', ...required], { type: { const: type }, id: text, title: text, label: text, ...props });
 }
 
 export const SECTION_SCHEMAS = {

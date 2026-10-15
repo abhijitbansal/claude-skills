@@ -18,6 +18,9 @@ const state = (ctx) => (ctx.diagrams ??= { items: new Map(), css: '', runtime: '
 // SVG ids are prefixed per section index; "_" keeps them apart from section and heading ids.
 const idPrefix = (i) => `dg_${i}`;
 
+// A visual section: every second one on a page sits on the surface band.
+export const band = true;
+
 export async function prepare(section, ctx, i) {
   const source = readDiagramSpec(section.diagram, ctx.dir);
   if (source.error) throw new SectionErrors([{ path: 'diagram', message: source.error }]);

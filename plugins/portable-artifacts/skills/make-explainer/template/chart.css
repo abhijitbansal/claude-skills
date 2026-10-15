@@ -1,6 +1,7 @@
 /* chart sections: a static SVG per colour scheme and size in a card, the data table behind it */
 .ch { margin: 0; }
 .ch-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 14px 8px; }
+.sec-alt .ch-card { background: var(--page); }
 .ch-svg svg { display: block; width: 100%; height: auto; }
 /* A phone gets the narrow drawing, made for about its width, instead of the wide one shrunk. */
 .ch-narrow { display: none; }

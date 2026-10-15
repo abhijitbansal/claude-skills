@@ -91,7 +91,7 @@ test('section type: required, unknown with did-you-mean, and per-section indepen
 test('section fields: required, unknown (closed), wrong type', async () => {
   assert.deepEqual(await errorsOf(doc([{ type: 'text' }])), [{ path: 'sections[0].text', message: 'required' }]);
   assert.deepEqual(await errorsOf(doc([{ type: 'text', text: 'x', points: ['a'] }])), [
-    { path: 'sections[0].points', message: 'unknown property; allowed: type, id, title, text' },
+    { path: 'sections[0].points', message: 'unknown property; allowed: type, id, title, label, text' },
   ]);
   assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a' }] }])), [{ path: 'sections[0].items[0].value', message: 'required' }]);
   assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a', value: [] }] }])), [{ path: 'sections[0].items[0].value', message: 'must be string,number' }]);
@@ -144,7 +144,7 @@ test('whitespace-only text is rejected with the fix', async () => {
 
 test('schema errors stop the run before the semantic and lint passes', async () => {
   const spec = doc([{ type: 'text', text: 'TODO: fix', extra: 1 }], { title: 'x'.repeat(200) });
-  assert.deepEqual(await errorsOf(spec), [{ path: 'sections[0].extra', message: 'unknown property; allowed: type, id, title, text' }]);
+  assert.deepEqual(await errorsOf(spec), [{ path: 'sections[0].extra', message: 'unknown property; allowed: type, id, title, label, text' }]);
 });
 
 // ---- limits -----------------------------------------------------------

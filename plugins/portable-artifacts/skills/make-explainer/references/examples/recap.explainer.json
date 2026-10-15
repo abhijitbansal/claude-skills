@@ -15,6 +15,7 @@
       "type": "tldr",
       "id": "verdict",
       "title": "An explainer can now carry a live diagram, not a screenshot of one",
+      "label": "The verdict",
       "text": "A diagram section takes a make-diagram spec, inline or from a file, and renders it as an SVG you can hover, with a Present button for a step-by-step walkthrough.",
       "points": [
         "Mistakes in the embedded spec are reported under the section that holds it.",
@@ -27,6 +28,7 @@
       "type": "kpis",
       "id": "in-numbers",
       "title": "Two commits added about 1,100 lines, more than half of them tests",
+      "label": "In numbers",
       "items": [
         {
           "label": "Commits",
@@ -55,6 +57,7 @@
       "type": "diagram",
       "id": "build-path",
       "title": "A spec becomes a figure in four steps",
+      "label": "Build path",
       "diagram": {
         "title": "From spec to page",
         "subtitle": "How a diagram section is checked and built",
@@ -157,12 +160,14 @@
     {
       "type": "text",
       "title": "Present is the only place the keyboard shortcuts live",
+      "label": "Present mode",
       "text": "Inline, a figure traces links on hover or focus and never captures the mouse wheel, so the page keeps scrolling. **Present** opens a full-screen overlay with Back, Next and Close.\n\nInside it the viewer's shortcuts apply: arrows or Space step forward and back, `Esc` closes and focus returns to the Present button. In a deck, the slide keys stay quiet until the overlay is closed.\n\nThe file list below leaves out the 10 files under test folders (8 tests, a helper and a fixture) and this example. Numbers come from `git diff --numstat 9a8769e^ 665ce40`."
     },
     {
       "type": "files",
       "id": "changed-files",
       "title": "Most of the change is the viewer, its styles and the section renderer",
+      "label": "Changed files",
       "items": [
         {
           "path": "plugins/portable-artifacts/skills/make-explainer/template/diagram.js",
@@ -253,6 +258,7 @@
       "type": "chart",
       "id": "added-lines",
       "title": "The viewer script is the largest addition",
+      "label": "Added lines",
       "caption": "Lines added per file, the six largest in the list above.",
       "data": [
         {
@@ -288,6 +294,7 @@
       "type": "timeline",
       "id": "commits",
       "title": "The fix followed the feature the same day",
+      "label": "Commits",
       "items": [
         {
           "date": "2026-10-12",
@@ -304,6 +311,7 @@
     {
       "type": "risks",
       "title": "What could still bite",
+      "label": "Risks",
       "items": [
         {
           "risk": "A wide diagram is wider than a phone screen.",
