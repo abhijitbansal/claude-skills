@@ -206,7 +206,7 @@
     },
     {
       "type": "code",
-      "title": "Two install routes cover every agent",
+      "title": "Two install routes cover Claude Code and others",
       "label": "Install",
       "language": "text",
       "caption": "The first two lines install in Claude Code. The third line installs with npx for any agent. The last two lines use the bundled installer.",

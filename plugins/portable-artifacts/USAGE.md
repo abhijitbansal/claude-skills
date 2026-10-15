@@ -70,7 +70,11 @@ example make-motion still writes and validates `motion.json` and hands you the
 render commands. `--for` takes a spec `.json` in every skill (only make-explainer
 adds sister skills from it), `check` in make-diagram and make-explainer, and
 `voiceover` in make-motion; make-dashboard has no keyword target. Unknown or
-misspelled arguments exit 2 and list the accepted ones.
+misspelled arguments exit 2 and list the accepted ones. `--fix` takes the same
+`--for` the diagnosis used (it resolves ids against that target; without `--for`
+it accepts every id the skill knows), and exits 1 when any requested id is
+refused, skipped, failed or unknown, optional ids included. On Windows the text
+output labels command lines `(cmd.exe)`.
 
 ### Tested hosts
 
@@ -383,7 +387,7 @@ is set in the spec, a dashboard refresh keeps the original author; a stamp passe
 only as flags is not kept by a refresh run without them. A dashboard also shows its
 refresh time. Set `SOURCE_DATE_EPOCH` to pin the footer date for a reproducible build.
 
-**Type.** Geist and Geist Mono on every HTML page (the make-motion video, which has no theme in its spec, keeps Inter and JetBrains Mono), with a serif display face only in the
+**Type.** Geist and Geist Mono on every generated page (the make-motion preview UI and the unthemed video keep Inter and JetBrains Mono), with a serif display face only in the
 `editorial` theme (Newsreader headings, Atkinson Hyperlegible body) and Bricolage
 Grotesque headings in `ink`. Links in running text are underlined; buttons,
 navigation and cards are not.

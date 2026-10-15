@@ -9,5 +9,5 @@ const PREFIX = quoteArg(SKILL_DIR);
 
 export const doctorCommand = (...args) => ['node', quoteArg(DOCTOR), ...args].join(' ');
 export const npmInstallKokoro = () => `npm install ${KOKORO_PIN} --no-save --prefix ${PREFIX}`;
-export const npmInstallFfmpegStatic = () => `npm i ffmpeg-static --prefix ${PREFIX}`;
+export const npmInstallFfmpegStatic = () => `npm i ffmpeg-static --no-save --prefix ${PREFIX}`;
 export const npxInstallChromium = () => `npx --no --prefix ${PREFIX} playwright install chromium`;

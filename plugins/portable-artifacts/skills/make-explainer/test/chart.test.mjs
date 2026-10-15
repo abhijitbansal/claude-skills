@@ -131,7 +131,7 @@ function skillWithoutSibling() {
   fs.symlinkSync(path.join(SKILL, 'node_modules'), path.join(copy, 'node_modules'));
   return { root, copy };
 }
-const INSTALL = 'npx skills add abhijitbansal/claude-skills --skill make-explainer make-dashboard';
+const INSTALL = 'npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill make-dashboard -y';
 
 test('without make-dashboard, validate exits 1 with the install command (inline and dashboard charts)', () => {
   const { root, copy } = skillWithoutSibling();

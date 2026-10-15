@@ -153,7 +153,7 @@ function skillWithoutSibling(fake = {}) {
   }
   return { root, copy };
 }
-const INSTALL = 'npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram';
+const INSTALL = 'npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill make-diagram -y';
 
 test('without make-diagram, validate exits 1 with the install command', () => {
   const { root, copy } = skillWithoutSibling();

@@ -118,13 +118,13 @@ export function nodeModules({ omitDev = true } = {}) {
 
 // check.mjs and the browser steps need playwright, a devDependency: reinstalls node_modules with dev packages.
 // size: disclosed per skill (measured with du on macOS, approximate).
-export function devDeps({ size = '≈20–120 MB more than node_modules alone, depending on the skill' } = {}) {
+export function devDeps({ size = '≈20–120 MB more than node_modules alone, depending on the skill', required = false } = {}) {
   return {
     id: 'dev_deps',
     rank: RANK.devDeps,
     needsNodeModules: true,
     why: 'check.mjs needs the dev tools (playwright)',
-    required: false,
+    required,
     size,
     check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'playwright')),
     fix: (ctx) => {
@@ -279,12 +279,20 @@ export function ffmpeg({ staticDir } = {}) {
 // install-deps (system libraries only), pinned to the skill's own playwright: never an unpinned download as root.
 const libsHint = (ctx, dir = ctx.skillDir) => `sudo npx --no --prefix ${quoteFor(ctx.platform)(dir)} playwright install-deps chromium`;
 
+function browserFailManual(ctx, { dir, where, manual, first }) {
+  if (dir && !ctx.exists(where)) {
+    const name = pp(ctx).basename(where);
+    return `${name} is not installed next to this skill: install it first (doctor --fix ${name}), then run: ${manual}`;
+  }
+  return ctx.exists(pp(ctx).join(where, 'node_modules', 'playwright')) ? manual : `playwright is not installed: ${first}, then run: ${manual}`;
+}
+
 // dir: (ctx) => folder whose playwright is used (default: this skill). make-explainer points it at make-motion,
 // whose browser renders the video.
-export function browser({ required = false, dir } = {}) {
+export function browser({ required = false, dir, id = 'chromium' } = {}) {
   const where = (ctx) => (dir ? dir(ctx) : ctx.skillDir);
   return {
-    id: 'chromium',
+    id,
     rank: RANK.chromium,
     needsNodeModules: dir === undefined,
     why: dir ? "renders make-motion's video (Playwright Chromium from make-motion, or installed Chrome)" : 'renders pages to image and video (Playwright Chromium or installed Chrome)',
@@ -304,9 +312,7 @@ export function browser({ required = false, dir } = {}) {
         notes: dir
           ? `downloads ≈150 MB of Chromium for make-motion (into ${where(ctx)}'s playwright cache); make-motion's node_modules must already be installed`
           : 'downloads ≈150 MB of Chromium; run after node_modules is installed',
-        failManual: ctx.exists(pp(ctx).join(where(ctx), 'node_modules', 'playwright'))
-          ? manual
-          : `playwright is not installed: ${first}, then run: ${manual}`,
+        failManual: browserFailManual(ctx, { dir, where: where(ctx), manual, first }),
       };
       if (ctx.platform === 'linux') {
         out.notes += `; launching may need system libraries: ${libsHint(ctx, where(ctx))}`;
@@ -468,20 +474,21 @@ function describe(m, platform) {
   const cmd = m.fix.auto ?? m.fix.manual[platform] ?? m.fix.manual.linux;
   const sudo = m.needsSudo ? ' (needs sudo: run it yourself)' : '';
   const notes = m.notes ? ` Note: ${m.notes}.` : '';
-  return `missing (${m.required ? 'required' : 'optional'}): ${m.id} — ${m.why} (${m.size}). Run: ${cmd}${sudo}${notes}`;
+  return `missing (${m.required ? 'required' : 'optional'}): ${m.id} — ${m.why} (${m.size}). Run${platform === 'win32' ? ' (cmd.exe)' : ''}: ${cmd}${sudo}${notes}`;
 }
 
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 
-function printFixResult(r) {
+function printFixResult(r, platform) {
+  const shell = platform === 'win32' ? ' (cmd.exe)' : '';
   const out = (line) => process.stdout.write(`${line}\n`);
   if (r.ok) out(`fixed: ${r.id} (ran: ${r.ran})${r.note ? ` Note: ${r.note}.` : ''}`);
   else if (r.skipped) out(`skipped: ${r.id} — ${r.skipped} (run doctor --fix node_modules first)`);
-  else if (r.refused) out(`refused: ${r.id} — ${r.refused}${r.manual ? `. Run it yourself: ${r.manual}` : ''}`);
+  else if (r.refused) out(`refused: ${r.id} — ${r.refused}${r.manual ? `. Run it yourself${shell}: ${r.manual}` : ''}`);
   else if (r.elsewhere) out(`installed elsewhere: ${r.id} — ${r.manual}`);
   else if (r.stillMissing) out(`still missing: ${r.id} after (ran: ${r.ran}). ${r.manual}`);
   else if (r.ran === undefined) out(`failed: ${r.id} — ${r.error}`);
-  else out(`failed: ${r.id} (ran: ${r.ran})${r.error ? ` [${r.error}]` : ''}. Run it yourself: ${r.manual}`);
+  else out(`failed: ${r.id} (ran: ${r.ran})${r.error ? ` [${r.error}]` : ''}. Run it yourself${shell}: ${r.manual}`);
 }
 
 // overrides ({ ctx, run }) exist for tests: inject a fake ctx and a command recorder.
@@ -505,19 +512,19 @@ export async function doctorMain(argv, { skill, skillDir, targets = ['check'], r
     return;
   }
   try {
-    if (values.fix !== undefined) await fixMain(values.fix, { ctx, json, requirementsFor, run: overrides.run });
+    if (values.fix !== undefined) await fixMain(values.fix, { ctx, json, requirementsFor, spec, run: overrides.run });
     else await diagnoseMain({ ctx, json, skill, spec, requirementsFor });
   } catch (e) {
     exitUsage(new UsageError(firstLine(e)), { json });
   }
 }
 
-async function fixMain(raw, { ctx, json, requirementsFor, run }) {
+async function fixMain(raw, { ctx, json, requirementsFor, spec, run }) {
   const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);
   if (ids.length === 0) throw new UsageError(`--fix needs at least one id; usage: ${USAGE}`);
-  const results = await runFixes(ids, requirementsFor(ALL), ctx, run);
+  const results = await runFixes(ids, requirementsFor(spec ?? ALL), ctx, run);
   if (json) process.stdout.write(`${JSON.stringify(results)}\n`);
-  else for (const r of results) printFixResult(r);
+  else for (const r of results) printFixResult(r, ctx.platform);
   if (results.some((r) => !r.ok)) process.exitCode = 1;
 }
 

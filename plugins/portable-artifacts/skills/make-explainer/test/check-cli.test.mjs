@@ -41,11 +41,12 @@ test('without a browser the check skips: exit 0 and the install hint', () => {
   const built = buildFile(exampleFile('concept'));
   const r = cli([built.file], { PA_NO_BROWSER: '1' });
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.match(r.stdout, /^check: skipped \(no browser: .*npx playwright install chromium\)/);
+  assert.match(r.stdout, /^check: skipped \(no browser: [^;\n]+; ask the user, then run: node \S*doctor\.mjs\S* --for check --fix chromium\)/);
+  assert.doesNotMatch(r.stdout, /npx playwright install/);
   const j = JSON.parse(cli([built.file, '--json'], { PA_NO_BROWSER: '1' }).stdout);
   assert.equal(j.ok, true);
   assert.equal(j.skipped, true);
-  assert.match(j.hint, /playwright install chromium/);
+  assert.match(j.hint, /^ask the user, then run: node \S*doctor\.mjs\S* --for check --fix chromium$/);
 });
 
 test('PA_CHECK_TIMEOUT_MS must be a positive number', () => {

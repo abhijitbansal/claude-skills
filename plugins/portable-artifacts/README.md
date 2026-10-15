@@ -47,7 +47,7 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
   field or the `--model`, `--effort` and `--agent` build flags. A field the
   agent does not know reads "not reported"; nothing is guessed. The make-motion
   MP4 carries it in its `comment` tag, and the model in `artist` when it is reported.
-- **Easy to read** — Geist type on every HTML page (make-motion's unthemed video keeps Inter and JetBrains Mono), and the explainer opens with a
+- **Easy to read** — Geist on every generated page; the make-motion preview UI and unthemed video keep Inter and JetBrains Mono, and the explainer opens with a
   hero and TL;DR card, short section `label`s in its contents list and soft text
   caps that warn (never fail) when a title, paragraph or card runs long.
 

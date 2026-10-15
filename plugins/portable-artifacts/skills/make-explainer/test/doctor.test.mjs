@@ -91,18 +91,22 @@ test('requirementsFor: check adds dev_deps and the browser; ALL has every sister
   const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
   assert.deepEqual(idsOf(requirementsFor(undefined)), ['node', 'node_modules']);
   assert.deepEqual(idsOf(requirementsFor('check')), ['node', 'node_modules', 'dev_deps', 'chromium']);
+  assert.deepEqual(requirementsFor('check').map((r) => r.required), [true, true, true, true], 'check.mjs skips without playwright or a browser');
   const all = idsOf(requirementsFor(ALL));
-  for (const id of ['make-diagram', 'make-dashboard', 'make-motion', 'ffmpeg', 'chromium']) assert.ok(all.includes(id), id);
+  for (const id of ['make-diagram', 'make-dashboard', 'make-motion', 'ffmpeg', 'chromium', 'motion_chromium']) assert.ok(all.includes(id), id);
   assert.ok(all.includes('dev_deps'), 'ALL accepts --fix dev_deps');
   assert.equal(requirementsFor('check')[2].size, '≈19 MB');
   assert.equal(new Set(all).size, all.length, 'no duplicate ids');
+  assert.equal(all.filter((id) => id === 'chromium').length, 1, 'own browser');
+  assert.equal(all.filter((id) => id === 'motion_chromium').length, 1, "make-motion's browser");
 });
 
 test('a motion section does not ask for dev_deps; its browser is make-motion\'s', async () => {
   const requirementsFor = await loadRequirements();
   const reqs = requirementsFor(specFile([{ type: 'motion' }]));
   assert.equal(reqs.some((r) => r.id === 'dev_deps'), false);
-  const b = reqs.find((r) => r.id === 'chromium');
+  const b = reqs.find((r) => r.id === 'motion_chromium');
+  assert.equal(reqs.some((r) => r.id === 'chromium'), false);
   assert.match(b.why, /make-motion/);
   assert.equal(b.fix({ platform: 'darwin', skillDir: '/s/make-explainer', exists: () => false, which: () => false }).auto[0][3], '/s/make-motion');
 });
@@ -116,8 +120,26 @@ test('a fresh --omit=dev copy with a motion spec reports no dev_deps', () => {
 test('a motion section needs a required browser and counts make-motion\'s ffmpeg-static', async () => {
   const requirementsFor = await loadRequirements();
   const reqs = requirementsFor(specFile([{ type: 'motion' }]));
-  assert.equal(reqs.find((r) => r.id === 'chromium').required, true);
+  assert.equal(reqs.find((r) => r.id === 'motion_chromium').required, true);
   const ff = reqs.find((r) => r.id === 'ffmpeg');
   const isExecutable = (p) => p === '/s/make-motion/node_modules/ffmpeg-static/ffmpeg';
   assert.equal(await ff.check({ platform: 'darwin', env: {}, skillDir: '/s/make-explainer', exists: () => false, which: () => false, isExecutable }), true);
+});
+
+// R44: --fix takes the same --for the diagnosis used, so both browsers are addressable.
+test('R44: --for check --fix chromium installs into make-explainer; motion_chromium into make-motion', async () => {
+  const { doctorMain } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
+  const { requirementsFor, targets } = await import(pathToFileURL(path.join(SKILL, 'scripts/lib/requirements.mjs')).href);
+  const skillDir = '/p/skills/make-explainer';
+  const fixCalls = async (argv) => {
+    const calls = [];
+    const ctx = { platform: 'darwin', env: {}, skillDir, nodeVersion: '24.7.0', homedir: '/h', exists: (p) => p.startsWith('/p/skills/') && !p.includes('ms-playwright'), which: () => false };
+    const w = process.stdout.write.bind(process.stdout);
+    process.stdout.write = () => true;
+    const prev = process.exitCode;
+    try { await doctorMain(argv, { skill: NAME, skillDir, targets, requirementsFor }, { ctx, run: (c, a) => { calls.push([c, ...a].join(' ')); return { status: 0 }; } }); } finally { process.stdout.write = w; process.exitCode = prev; }
+    return calls;
+  };
+  assert.deepEqual((await fixCalls(['--for', 'check', '--fix', 'chromium'])).filter((c) => c.startsWith('npx')), ['npx --no --prefix /p/skills/make-explainer playwright install chromium']);
+  assert.deepEqual((await fixCalls(['--fix', 'motion_chromium'])).filter((c) => c.startsWith('npx')), ['npx --no --prefix /p/skills/make-motion playwright install chromium']);
 });

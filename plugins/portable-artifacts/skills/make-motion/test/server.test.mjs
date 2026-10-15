@@ -278,6 +278,7 @@ test('GET / carries the skill favicon and provenance footer, CSP unchanged', () 
   assert.match(r.body, /<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,/);
   assert.match(r.body, /<p class="pa-provenance" title="[^"]*">make-motion · Claude Opus 5 · effort not reported · Claude Code · /);
   assert.ok(!r.body.includes('{{'), 'no unfilled placeholder');
+  assert.match(r.body, /<meta name="generator" content="portable-artifacts make-motion; model=Claude Opus 5; effort=not reported; agent=Claude Code">/);
   const hash = createHash('sha256').update(/<script type="importmap">([\s\S]*?)<\/script>/.exec(r.body)[1]).digest('base64');
   assert.equal(r.headers['content-security-policy'], ["default-src 'self'", "img-src 'self' data: blob:", "style-src 'self' 'unsafe-inline'",
     "font-src 'self'", "connect-src 'self'", `script-src 'self' 'sha256-${hash}'`, "object-src 'none'", "base-uri 'none'"].join('; '));
@@ -298,6 +299,7 @@ test('GET / falls back to "not reported" provenance when the spec is unreadable'
   const r = await get(srv.url, '/');
   assert.match(r.body, /<p class="pa-provenance" title="[^"]*">make-motion · model not reported · effort not reported · agent not reported · /);
   assert.match(r.body, /<link rel="icon"/);
+  assert.match(r.body, /<meta name="generator" content="portable-artifacts make-motion; model=not reported; effort=not reported; agent=not reported">/);
 }));
 
 test('GET / never injects hostile generatedBy values', () => withServer(async (srv, f) => {

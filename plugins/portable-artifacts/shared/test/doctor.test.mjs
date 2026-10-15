@@ -310,6 +310,24 @@ test('doctorMain: --fix resolves ids against ALL (sister works without --for)', 
   assert.doesNotMatch(r.out, /unknown id/);
 });
 
+test('R44: --fix honours --for (ids resolve against that target)', async () => {
+  const seen = [];
+  const r = await runMain(['--for', 'check', '--fix', 'make-diagram', '--json'], { ...sisterOpts(), targets: ['check'], requirementsFor: (t) => { seen.push(t); return t === 'check' ? [] : sisterOpts().requirementsFor(t); } });
+  assert.deepEqual(seen, ['check']);
+  assert.match(r.out, /unknown id/);
+});
+
+test('R44: browser({ id }) names the requirement; default stays chromium', () => {
+  assert.equal(browser().id, 'chromium');
+  assert.equal(browser({ id: 'motion_chromium', dir: () => '/s/make-motion' }).id, 'motion_chromium');
+});
+
+test('T12: win32 text output labels manual and auto command lines (cmd.exe)', async () => {
+  const w = ctx({ platform: 'win32' });
+  const r = await runMain([], { ...mainOpts(), requirementsFor: () => [ffmpeg()] }, { ctx: w });
+  assert.match(r.out, /Run \(cmd\.exe\): /);
+});
+
 test('doctorMain: empty --fix is a usage error (exit 2)', async () => {
   for (const v of ['', ',']) assert.equal((await runMain(['--fix', v], mainOpts())).code, 2);
 });
@@ -590,7 +608,16 @@ test('browser({ dir }): checks and installs into the other skill, quoted; not sk
   assert.equal(missing[0].fix.auto, "npx --no --prefix '/s/make motion' playwright install chromium");
   assert.match(missing[0].why, /make-motion/);
   assert.match(missing[0].notes, /make-motion/);
-  assert.match(b.fix(ctx({ skillDir: '/s/make-explainer' })).failManual, /make-motion's node_modules first/);
+  assert.match(b.fix(ctx({ skillDir: '/s/make-explainer', exists: (p) => p === '/s/make motion' })).failManual, /make-motion's node_modules first/);
+  const absent = b.fix(ctx({ skillDir: '/s/make-explainer' })).failManual;
+  assert.match(absent, /^make motion is not installed next to this skill: install it first \(doctor --fix make motion\)/);
+});
+
+test('devDeps required option (check.mjs skips without playwright)', async () => {
+  assert.equal(devDeps().required, false);
+  const { ok, missing } = await diagnose([devDeps({ required: true })], ctx());
+  assert.equal(ok, false);
+  assert.equal(missing[0].required, true);
 });
 
 test('devDeps size option is disclosed', async () => {

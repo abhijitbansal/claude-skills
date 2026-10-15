@@ -169,7 +169,7 @@ function skillWithoutSibling() {
   for (const f of ['demo.mp4', 'poster.png', 'motion.json']) fs.copyFileSync(path.join(FIXTURES, f), path.join(root, f));
   return { root, copy };
 }
-const INSTALL = 'npx skills add abhijitbansal/claude-skills --skill make-explainer make-motion';
+const INSTALL = 'npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill make-motion -y';
 
 test('without make-motion, a spec section fails validation with the install command; a video never needs it', () => {
   const { root, copy } = skillWithoutSibling();

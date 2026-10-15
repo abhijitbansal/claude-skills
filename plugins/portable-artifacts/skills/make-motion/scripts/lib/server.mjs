@@ -10,7 +10,7 @@ import { resolveAsset, resolveUrlPath } from './paths.mjs';
 import { validateSpec, checkGeneratedBy } from './spec.mjs';
 import { loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
 import { faviconLink } from '../../shared/icons.mjs';
-import { provenanceHtml, buildDate } from '../../shared/provenance.mjs';
+import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
 import { themeData, themeCss, FONTS_DIR } from './theme.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -101,16 +101,17 @@ function themeOrDefault(name) {
 function pageChrome(ctx) {
   let spec;
   try { spec = JSON.parse(readFileSync(ctx.specFile, 'utf8')); } catch { spec = undefined; }
-  const gen = spec?.generatedBy;
+  const gen = checkGeneratedBy(spec?.generatedBy) ? spec.generatedBy : undefined;
   return {
     favicon: faviconLink('make-motion', themeOrDefault(spec?.theme ?? ctx.theme)),
-    provenance: provenanceHtml('make-motion', checkGeneratedBy(gen) ? gen : undefined, buildDate()),
+    generator: generatorMeta('make-motion', gen),
+    provenance: provenanceHtml('make-motion', gen, buildDate()),
   };
 }
 
 function indexHtml(ctx) {
-  const { favicon, provenance } = pageChrome(ctx);
-  return ctx.index.html.replace('{{FAVICON}}', () => favicon).replace('{{PROVENANCE}}', () => provenance);
+  const { favicon, generator, provenance } = pageChrome(ctx);
+  return ctx.index.html.replace('{{FAVICON}}', () => favicon).replace('{{GENERATOR}}', () => generator).replace('{{PROVENANCE}}', () => provenance);
 }
 
 // Image and audio srcs named by the current spec; /assets serves nothing else.

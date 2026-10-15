@@ -11,7 +11,7 @@ import { haveBrowser, buildPage, example, EXAMPLES } from './helpers/browser.mjs
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CHECK = path.join(ROOT, 'scripts/check.mjs');
-const SKIP_RE = /^check: skipped \(no browser: [^;\n]+; run: npx playwright install chromium\)\n$/;
+const SKIP_RE = /^check: skipped \(no browser: [^;\n]+; ask the user, then run: node \S*doctor\.mjs\S* --for check --fix (dev_deps|chromium)\)\n$/;
 const run = (args, env = {}) => spawnSync(process.execPath, [CHECK, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'diagram-check-'));
 
@@ -174,6 +174,8 @@ test('PA_NO_BROWSER=1 prints the skip line and exits 0', () => {
   const json = JSON.parse(run([file, '--json'], { PA_NO_BROWSER: '1' }).stdout);
   assert.equal(json.ok, true);
   assert.equal(json.skipped, true);
+  assert.match(json.hint, /^ask the user, then run: node \S*doctor\.mjs\S* --for check --fix chromium$/);
+  assert.doesNotMatch(r.stdout + json.hint, /npx playwright install/);
 });
 
 test('without playwright installed the check skips and exits 0', () => {
@@ -181,12 +183,13 @@ test('without playwright installed the check skips and exits 0', () => {
   fs.mkdirSync(path.join(dir, 'scripts/lib'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'shared'));
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
-  for (const f of ['scripts/check.mjs', 'scripts/lib/browser.mjs', 'shared/cli.mjs', 'shared/errors.mjs']) fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
+  for (const f of ['scripts/check.mjs', 'scripts/lib/browser.mjs', 'scripts/lib/doctor-hint.mjs', 'shared/cli.mjs', 'shared/errors.mjs', 'shared/doctor.mjs']) fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
   const { file } = buildPage(example('flow'), { name: 'flow' });
   const r = spawnSync(process.execPath, [path.join(dir, 'scripts/check.mjs'), file], { encoding: 'utf8', env: { ...process.env, PA_NO_BROWSER: '' } });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, SKIP_RE);
   assert.match(r.stdout, /no browser: playwright is not installed/);
+  assert.match(r.stdout, /--for check --fix dev_deps\)/);
 });
 
 // ---- CLI rules --------------------------------------------------------------------------------------

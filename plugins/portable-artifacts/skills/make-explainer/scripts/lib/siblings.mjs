@@ -17,7 +17,8 @@ export class SiblingError extends Error {
   }
 }
 
-export const installCommand = (names) => `npx skills add abhijitbansal/claude-skills --skill make-explainer ${names.join(' ')}`;
+// The same pinned form the doctor runs.
+export const installCommand = (names) => `npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill ${names.join(' ')} -y`;
 export const MISSING_HINT = (names) => `install it with: ${installCommand(names)}`;
 // Points at the doctor, which can install it for the user once they agree; its id for a sister skill is the skill name.
 export const doctorHint = (id) => `(doctor: node ${quoteArg(path.join(SELF_DIR, 'scripts/doctor.mjs'))}, id ${id})`;

@@ -129,7 +129,7 @@ test('the ffmpeg hint installs into make-motion', async () => {
   const saved = { p: process.env.PATH, f: process.env.FFMPEG_PATH };
   process.env.PATH = tmp('doctor-nopath-'); delete process.env.FFMPEG_PATH;
   try {
-    await assert.rejects(() => findFfmpeg({ skipStatic: true }), (e) => e.message.includes(`npm i ffmpeg-static --prefix ${quoteArg(SKILL.replace(/[\\/]$/, ''))}`));
+    await assert.rejects(() => findFfmpeg({ skipStatic: true }), (e) => e.message.includes(`npm i ffmpeg-static --no-save --prefix ${quoteArg(SKILL.replace(/[\\/]$/, ''))}`));
   } finally {
     process.env.PATH = saved.p;
     if (saved.f !== undefined) process.env.FFMPEG_PATH = saved.f;

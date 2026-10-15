@@ -58,7 +58,10 @@ test('requirementsFor: check and ALL add dev_deps and the browser; plain does no
   const requirementsFor = await loadRequirements();
   const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
   assert.deepEqual(idsOf(requirementsFor(undefined)), ['node', 'node_modules']);
-  for (const t of ['check', ALL]) assert.deepEqual(idsOf(requirementsFor(t)), ['node', 'node_modules', 'dev_deps', 'chromium']);
+  for (const t of ['check', ALL]) {
+    assert.deepEqual(idsOf(requirementsFor(t)), ['node', 'node_modules', 'dev_deps', 'chromium']);
+    assert.deepEqual(requirementsFor(t).map((r) => r.required), [true, true, true, true], 'check.mjs skips without a browser, so ok must be false');
+  }
 });
 
 test('--for check on a fresh copy asks for dev_deps; node_modules keeps --omit=dev so consent equals what --fix runs', () => {

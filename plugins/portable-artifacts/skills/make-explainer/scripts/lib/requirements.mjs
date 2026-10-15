@@ -9,7 +9,8 @@ const SECTION_SISTERS = { diagram: 'make-diagram', chart: 'make-dashboard', moti
 const motionDir = (ctx) => path.join(path.dirname(ctx.skillDir), 'make-motion');
 const motionFfmpeg = () => ffmpeg({ staticDir: (ctx) => path.join(motionDir(ctx), 'node_modules') });
 // make-motion's own browser and node_modules do the rendering, so this skill's dev dependencies are not involved.
-const motionNeeds = () => [motionFfmpeg(), browser({ required: true, dir: motionDir })];
+// Its id differs from this skill's own `chromium` (the check.mjs browser), so --fix can address each one.
+const motionNeeds = () => [motionFfmpeg(), browser({ required: true, dir: motionDir, id: 'motion_chromium' })];
 
 // Requirements a spec adds: its sister skills, plus ffmpeg and a browser when it has a motion section.
 function specNeeds(specFile) {
@@ -28,8 +29,8 @@ export const targets = ['check'];
 export function requirementsFor(target) {
   const base = [nodeVersion(20), nodeModules()];
   // check.mjs needs playwright (a devDependency) and a browser.
-  if (target === ALL) return [...base, devDeps({ size: '≈19 MB' }), ...Object.values(SECTION_SISTERS).map(sisterSkill), ...motionNeeds()];
-  if (target === 'check') return [...base, devDeps({ size: '≈19 MB' }), browser()];
+  if (target === ALL) return [...base, devDeps({ size: '≈19 MB', required: true }), browser({ required: true }), ...Object.values(SECTION_SISTERS).map(sisterSkill), ...motionNeeds()];
+  if (target === 'check') return [...base, devDeps({ size: '≈19 MB', required: true }), browser({ required: true })];
   if (typeof target === 'string' && target.endsWith('.json')) return [...base, ...specNeeds(target)];
   return base;
 }
