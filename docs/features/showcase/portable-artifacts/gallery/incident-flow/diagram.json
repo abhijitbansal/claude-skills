@@ -1,0 +1,43 @@
+{
+  "title": "Incident response",
+  "type": "flow",
+  "theme": "paper",
+  "nodes": [
+    { "id": "alert", "label": "Alert fires", "kind": "start" },
+    { "id": "triage", "label": "Triage the alert", "kind": "step", "emoji": "🔍", "detail": "Confirm the alert is real and find which service it names." },
+    { "id": "impact", "label": "Customer impact?", "kind": "decision" },
+    { "id": "page", "label": "Page the on-call", "kind": "step", "emoji": "📟", "detail": "For customer-facing impact. The on-call engineer takes over now." },
+    { "id": "ticket", "label": "Open a ticket", "kind": "step", "emoji": "🎫", "detail": "For internal-only problems. Handled in working hours." },
+    { "id": "mitigate", "label": "Mitigate", "kind": "step", "emoji": "🛠", "detail": "Roll back, fail over or shed load until the symptoms stop." },
+    { "id": "resolved", "label": "Resolved?", "kind": "decision" },
+    { "id": "postmortem", "label": "Write the postmortem", "kind": "step", "emoji": "📝", "detail": "Blameless review: timeline, cause, and the follow-up actions." },
+    { "id": "closed", "label": "Closed", "kind": "end" }
+  ],
+  "edges": [
+    { "id": "fire", "from": "alert", "to": "triage", "label": "starts triage" },
+    { "id": "assess", "from": "triage", "to": "impact", "label": "checks scope" },
+    { "id": "yes-impact", "from": "impact", "to": "page", "label": "yes" },
+    { "id": "no-impact", "from": "impact", "to": "ticket", "label": "no" },
+    { "id": "escalate", "from": "page", "to": "mitigate", "label": "hands off" },
+    { "id": "track", "from": "ticket", "to": "mitigate", "label": "works it" },
+    { "id": "check", "from": "mitigate", "to": "resolved", "label": "checks symptoms" },
+    { "id": "yes-resolved", "from": "resolved", "to": "postmortem", "label": "yes" },
+    { "id": "no-resolved", "from": "resolved", "to": "mitigate", "label": "no, keep going" },
+    { "id": "close", "from": "postmortem", "to": "closed", "label": "publishes review" }
+  ],
+  "stories": [
+    {
+      "id": "outage",
+      "title": "A real outage",
+      "beats": [
+        { "title": "The alert fires", "edge": "fire", "caption": "Checkout error rate passes its threshold at 14:02." },
+        { "title": "Triage confirms the scope", "edge": "assess", "caption": "Two regions show errors, so the impact is real." },
+        { "title": "Customers are affected", "edge": "yes-impact", "caption": "Payments fail for some users, so the on-call is paged." },
+        { "title": "Mitigation starts", "edge": "escalate", "caption": "The on-call rolls back the last deploy." },
+        { "title": "The fix is checked", "edge": "check", "caption": "Error rate is back to normal, so the incident can close." },
+        { "title": "The incident is resolved", "edge": "yes-resolved", "caption": "No symptoms remain, so the review starts." },
+        { "title": "The postmortem is published", "edge": "close", "caption": "The timeline and follow-ups go to the team." }
+      ]
+    }
+  ]
+}

@@ -135,24 +135,34 @@ your project folder):
    `--out file.html` or `--out dir`). `--theme paper|blueprint|ink|editorial`
    overrides the spec's theme.
 5. `check.mjs <page>` opens the page at 1440 and 390 px and reports overflow,
-   console errors and text that leaves its box. It needs Playwright and a
-   browser (a full `npm ci` plus `npx playwright install chromium` in the
-   skill folder). Without them it prints `check: skipped` and exits 0. Building
-   needs no browser.
-6. Tells you the path, what the diagram shows, and that `P` presents it.
+   console errors, text that leaves its box and a node under the legend
+   overlay. It needs Playwright and a browser (a full `npm ci` plus
+   `npx playwright install chromium` in the skill folder). Without them it
+   prints `check: skipped` and exits 0. Building needs no browser.
+6. Tells you the path, what the diagram shows, and that Play story (or `P`)
+   opens beat 1, Space plays it, `E` explores and `F` is full screen.
 
-**In the page:** wheel or pinch to zoom, drag to pan, `F` or double-click to
-fit, hover a node to trace its edges (click pins, `Esc` clears), `A` toggles
-edge-flow animation, and the toolbar exports SVG or PNG and switches between
-auto, light and dark. **Press `P` to present:** arrows or Space step through,
-the camera moves to each step's focus (never past twice the fit), and `Esc`
-exits. Reduced-motion settings turn the animation and camera moves off.
+**In the page:** wheel or pinch to zoom, drag to pan, `0` or double-click to
+fit, `F` for full screen, `A` toggles edge-flow animation, and the toolbar
+exports SVG or PNG and switches between auto, light and dark. **Play story**
+(`P`) opens beat 1 and Space plays: the camera follows each hop, a dot travels
+along the edge, and the caption bar shows the beat's title and sentence. The
+transport bar has previous and next beat or chapter, a scrubber, speed (0.5x to
+2x) and loop; arrows, Page Up/Down, Home and End step, and `Esc` leaves.
+**Explore** (`E`): click a node or edge for its details (kind, note, detail,
+what it sends and receives), shift-click a second node for the shortest route,
+and `/` finds nodes by name. Reduced-motion settings turn the dot, the glides
+and `autoplay` off.
 
-**Steps:** leave `steps` out and the build makes one step per layer (one per
-message in a sequence). Write your own `steps` when you want a talk track:
-each has a `title`, an optional `note`, and the `show`, `focus` and
-`highlight` ids. Anything no step reveals appears in a final "Everything"
-step.
+**Stories:** write `stories`, up to 8 named chapters with 60 beats in all.
+Each beat has a `title`, an optional `caption`, and one target: an `edge` id,
+a `from`/`to` pair, or `focus` ids. One story for the main path and one per
+side path (the retry, the failure) reads best; `"autoplay": true` starts the
+player when the page opens. Nodes and participants may also carry one `emoji`
+(drawn in the icon tile) and a `detail` (up to 400 characters, shown in
+Explore). Leave `stories` out and the build makes one beat per layout layer
+(one per message in a sequence). The older `steps` form still works but cannot
+be mixed with `stories`.
 
 **Keep it readable:** labels are nouns, edge labels are verbs, and about 12
 nodes per diagram reads best. Past that, ask for two diagrams. Hard limits are
