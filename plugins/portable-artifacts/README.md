@@ -37,10 +37,19 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
   loop.
 - **Targeted edits** — a change is one field in the spec, never regenerated
   code, so everything else stays exactly the same.
-- **Reproducible** — the same spec always produces the same page or video.
+- **Reproducible** — the same spec always produces the same page or video. The one thing that varies is the provenance date in the footer, the day you build; set `SOURCE_DATE_EPOCH` to pin it.
 - **Offline** — after a one-time install nothing touches the network except
   your own data sources. Specs that try (remote chart data, `url()` colours)
   are rejected, and the outputs carry a strict CSP.
+- **Stamped** — every page has a favicon, an icon theme toggle (Auto, Light,
+  Dark; not on the make-motion preview) and a provenance line: the model,
+  effort level and agent that wrote the spec, from the spec's `generatedBy`
+  field or the `--model`, `--effort` and `--agent` build flags. A field the
+  agent does not know reads "not reported"; nothing is guessed. The make-motion
+  MP4 carries it in its `comment` and `artist` tags.
+- **Easy to read** — Geist type on every page, and the explainer opens with a
+  hero and TL;DR card, short section `label`s in its contents list and soft text
+  caps that warn (never fail) when a title, paragraph or card runs long.
 
 ## Install
 
@@ -123,6 +132,13 @@ To build a dashboard, a diagram, an explainer page or an animated video, read an
 
 ### Requirements
 
+Not sure what is missing? Run `node <skill-dir>/scripts/doctor.mjs --json` (it
+needs only Node, so it works before `npm ci`). It lists each missing item with
+its size and the fix for your OS; add `--for <spec.json|check|voiceover>` for
+sister skills, the check browser or a voiceover, and `--fix <ids>` to install the
+ones that need no `sudo`. Agents run it first and ask once before installing
+anything.
+
 | | make-dashboard | make-diagram | make-explainer | make-motion |
 |---|---|---|---|---|
 | Node.js ≥ 20 | ✓ | ✓ | ✓ | ✓ |
@@ -170,6 +186,15 @@ Each skill folder also has its own README.
   any depth; motion colours can't be `url()`; pages run under a CSP without
   `unsafe-eval`; the renderer aborts any non-local request; local servers bind
   `127.0.0.1` and check the `Host` header.
+
+## Tested hosts
+
+Tested live on Claude Code and GitHub Copilot CLI (Copilot: one non-interactive
+run per skill on 2026-10-15, with the interactive install consent and the
+browser check not exercised). The Codex CLI and Gemini CLI install paths were
+verified against those hosts' documentation, not run live. Details:
+[`eval/results/summary-portability-copilot-2026-10-15.md`](eval/results/summary-portability-copilot-2026-10-15.md)
+and [`eval/results/summary-install-targets-2026-10-15.md`](eval/results/summary-install-targets-2026-10-15.md).
 
 ## Cross-host eval
 

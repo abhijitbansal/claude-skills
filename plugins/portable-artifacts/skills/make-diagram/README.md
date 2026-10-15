@@ -8,13 +8,19 @@ any agent that can run shell commands. Nothing leaves your machine.
 - **One spec, `diagram.json`**: a title, a type, and nodes with edges (or
   participants with messages). The agent never writes coordinates, CSS, SVG
   or HTML; the spec accepts none of them.
+- **Stamped**: a favicon, an icon theme toggle in the toolbar and a provenance
+  line under the title (model, effort, agent from `generatedBy` or
+  `--model`/`--effort`/`--agent`; "not reported" when unknown).
+  `scripts/doctor.mjs` reports anything missing (such as the `check.mjs`
+  browser) with the fix for your OS.
 - **Targeted edits**: "rename the cache" or "add a queue between the API and
   the worker" changes a few fields, and the layout is recomputed.
 - **Checked before you see it**: validation lays the diagram out and lints
   the geometry (text that does not fit its box, overlapping nodes, labels on
   top of nodes), so a spec that validates is buildable.
 - **Deterministic**: the same spec and versions give byte-identical
-  pages (there is no build timestamp).
+  pages. The only thing that varies is the provenance date in the footer (the
+  build day); set `SOURCE_DATE_EPOCH` to pin it.
 - **A page worth opening**: a story player (named chapters of beats, a travelling dot along each hop, a transport bar with speed and loop), an Explore panel (what a node sends and receives, the shortest route between two nodes, Find), kind-coloured cards with emoji tiles, lanes and a legend, light and dark, full screen, SVG and PNG export.
 
 > Agents: the instructions you follow are in [`SKILL.md`](SKILL.md). This
@@ -24,8 +30,9 @@ any agent that can run shell commands. Nothing leaves your machine.
 
 ```bash
 cd make-diagram && npm ci --omit=dev && cd -        # one-time
+node make-diagram/scripts/doctor.mjs                # optional: what is missing, and how to fix it
 node make-diagram/scripts/validate.mjs make-diagram/references/examples/architecture.diagram.json
-node make-diagram/scripts/build.mjs    make-diagram/references/examples/architecture.diagram.json --out checkout.html
+node make-diagram/scripts/build.mjs    make-diagram/references/examples/architecture.diagram.json --out checkout.html --model "Claude Sonnet" --agent "Claude Code"
 node make-diagram/scripts/check.mjs    checkout.html   # optional; skips when no browser is installed
 ```
 
