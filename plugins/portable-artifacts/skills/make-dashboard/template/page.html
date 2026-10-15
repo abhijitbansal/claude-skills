@@ -17,7 +17,7 @@
 </style>
 <style>
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--page); color: var(--text); font: var(--fs-sm)/1.5 var(--font); -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--page); color: var(--text); font: var(--fs-sm)/1.5 var(--font); /* dense UI: 1.5, not --lh-body (R13) */ -webkit-text-size-adjust: 100%; }
 main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 0; }
 .page-head { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
 h1 { margin: 0; font: 600 var(--fs-xl)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); overflow-wrap: anywhere; }
@@ -28,11 +28,10 @@ h1 { margin: 0; font: 600 var(--fs-xl)/var(--lh-head) var(--font-display); lette
 button { font: inherit; color: inherit; }
 .theme-toggle { flex: none; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--text-2); }
 .theme-toggle:hover { color: var(--text); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
 .kpi-label { color: var(--text-2); font-size: var(--fs-sm); }
-.kpi-value { margin-top: 4px; font-size: var(--fs-lg); line-height: 1.15; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kpi-value { margin-top: 4px; font-size: var(--fs-lg); line-height: var(--lh-head); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 @media (min-width: 900px) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

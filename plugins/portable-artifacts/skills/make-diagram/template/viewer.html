@@ -26,10 +26,8 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --stage-bg: var(--stage-dark); } }
 :root[data-theme="dark"] { --stage-bg: var(--stage-dark); }
 html, body { height: 100%; }
-body { margin: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; background: var(--page); color: var(--text); font: var(--fs-sm)/1.4 var(--font); -webkit-text-size-adjust: 100%; }
+body { margin: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; background: var(--page); color: var(--text); font: var(--fs-sm)/1.4 var(--font); /* dense UI: 1.4, not --lh-body (R13) */ -webkit-text-size-adjust: 100%; }
 button { font: inherit; color: inherit; }
-.pa-diagram { font-variant-numeric: normal; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .bar { flex: none; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .titles { min-width: 0; }
 h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); overflow-wrap: anywhere; }
@@ -71,7 +69,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 .panel[hidden] { display: none; }
 @media (max-width: 719px) { .body { flex-direction: column; } .panel { width: auto; max-height: 36%; border-left: 0; border-top: 1px solid var(--line); } }
 .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.panel-title { margin: 0; font: 600 var(--fs-base)/1.3 var(--font-display); overflow-wrap: anywhere; }
+.panel-title { margin: 0; font: 600 var(--fs-base)/var(--lh-head) var(--font-display); overflow-wrap: anywhere; }
 .panel-body[hidden], .panel-empty[hidden], .panel-close[hidden] { display: none; }
 .panel-icon { margin: 8px 0; font-size: var(--fs-lg); line-height: 1; }
 .panel-glyph { width: 24px; height: 24px; color: var(--text-2); }

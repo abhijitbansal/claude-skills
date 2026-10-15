@@ -33,7 +33,7 @@ html, body { height: 100%; overflow: hidden; }
 /* margin:auto centres a short slide and collapses on a tall one, so the top is never cut off */
 .slide-inner { width: 100%; max-width: 60rem; margin: auto; min-width: 0; font-size: clamp(1.05rem, 0.9rem + 0.55vw, 1.3rem); }
 .slide-title { margin: 0 0 28px; max-width: 24em; font: 600 clamp(1.7rem, 1.2rem + 2.2vw, 2.7rem)/1.15 var(--font-display); letter-spacing: -0.01em; text-wrap: balance; overflow-wrap: anywhere; }
-.slide .prose > * { max-width: 68ch; }
+.slide .prose > * { max-width: 66ch; }
 .slide .lead { font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.2rem); max-width: 28ch; }
 .slide .points { font-size: 1.05em; }
 .slide-cover h1 { max-width: 14em; font-size: clamp(2.3rem, 1.4rem + 4.2vw, 4.2rem); line-height: 1.05; }
@@ -62,7 +62,7 @@ html, body { height: 100%; overflow: hidden; }
 .outline-list { margin: 0; padding: 8px 18px 14px 44px; overflow: auto; }
 .outline-list li { padding: 2px 0; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .outline-list a { display: block; padding: 5px 4px; color: var(--text); text-decoration: none; line-height: 1.35; overflow-wrap: anywhere; }
-.outline-list a:hover { color: var(--accent); }
+.outline-list a:hover { background: var(--accent-soft); border-radius: 4px; }
 .outline-list a[aria-current="location"] { color: var(--accent); font-weight: 600; }
 
 @media (max-width: 640px) {

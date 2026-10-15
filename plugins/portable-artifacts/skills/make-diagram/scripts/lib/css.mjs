@@ -19,7 +19,7 @@ const supportsMix = (rs) => `@supports (color: color-mix(in srgb, red, red)){${r
 
 const rules = [
   // frame
-  '.pa-diagram{display:block;font-family:var(--font);font-size:14px;color:var(--text)}',
+  '.pa-diagram{display:block;font-family:var(--font);font-size:14px;font-variant-numeric:normal;color:var(--text)}',
   // groups: a lane with a coloured bar (top-level) or a nested box; labels in spaced capitals
   '.pa-group-box{fill:var(--surface);stroke:var(--line);stroke-width:1}',
   supportsMix(['.pa-group-box{fill:color-mix(in srgb,var(--text-3) 7%,transparent)}']),

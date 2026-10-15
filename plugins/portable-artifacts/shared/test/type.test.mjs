@@ -14,8 +14,9 @@ test('every token is emitted with its spec value', () => {
 
 test('links: underline only inside running text; never for nav or buttons; visible focus', () => {
   const css = typeCss();
-  assert.match(css, /a\{[^}]*text-decoration:none/);
+  assert.match(css, /(?:^|\n)a\{[^}]*text-decoration:none/);
   assert.match(css, /\.prose a, p a, li a, td a, dd a, figcaption a\{[^}]*text-decoration-line:underline[^}]*text-decoration-thickness:1px[^}]*text-underline-offset:0\.22em/);
+  assert.match(css, /color-mix\(in srgb, var\(--accent\) 45%, transparent\)/);
   assert.match(css, /:focus-visible\{outline:2px solid var\(--accent\)/);
 });
 
@@ -25,4 +26,8 @@ test('themeCss carries the type tokens', () => {
 
 test('.pa-label never restyles make-diagram SVG labels (<text class="pa-label">)', () => {
   assert.match(typeCss(), /\.pa-label:not\(text\)\{/);
+});
+
+test('no body-level tabular-nums (it would reach measured SVG text); tabular figures stay where scoped', () => {
+  assert.doesNotMatch(typeCss(), /tabular-nums/);
 });

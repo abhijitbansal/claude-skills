@@ -18,6 +18,5 @@ export function typeCss() {
     ':focus-visible{outline:2px solid var(--accent);outline-offset:2px}',
     // :not(text) keeps the small-label class off make-diagram's SVG node labels (<text class="pa-label">), whose size is layout-measured.
     '.pa-label:not(text){font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:0.06em;color:var(--text-3);font-weight:600}',
-    'body{font-variant-numeric:tabular-nums}',
   ].join('\n');
 }

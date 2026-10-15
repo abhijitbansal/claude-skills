@@ -17,12 +17,12 @@
 }
 :root[data-theme="dark"] .ch-light { display: none; }
 :root[data-theme="dark"] .ch-dark { display: block; }
-.ch figcaption { margin-top: 10px; max-width: 68ch; color: var(--text-3); font-size: 0.82rem; }
+.ch figcaption { margin-top: 10px; max-width: 66ch; color: var(--text-3); font-size: var(--fs-sm); }
 .ch-data { margin-top: 10px; }
-.ch-data summary { cursor: pointer; padding: 4px 0; color: var(--text-2); font-size: 0.85rem; }
+.ch-data summary { cursor: pointer; padding: 4px 0; color: var(--text-2); font-size: var(--fs-sm); }
 .ch-data .tablewrap { margin-top: 8px; }
-.ch-note { margin: 6px 0 0; color: var(--text-3); font-size: 0.8rem; }
-.ch-links { margin: 10px 0 0; font-size: 0.9rem; }
+.ch-note { margin: 6px 0 0; color: var(--text-3); font-size: var(--fs-xs); }
+.ch-links { margin: 10px 0 0; font-size: var(--fs-sm); }
 
 /* in a deck the plot is bounded by the viewport, with a floor so a short window never collapses it */
 .slide-chart .ch-svg svg { max-height: max(calc(100dvh - 20rem), 12rem); }
