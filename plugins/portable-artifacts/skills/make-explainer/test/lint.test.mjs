@@ -85,19 +85,8 @@ test('numbered section titles are errors', () => {
   assert.deepEqual(errorsOf('007 agents', opts), []);
 });
 
-test('a paragraph over 120 words is a warning, not an error', () => {
-  const long = Array(121).fill('word').join(' ');
-  assert.deepEqual(lintText(long, P), { errors: [], warnings: [{ path: P, message: 'paragraph is 121 words; the limit is 120 — split it or cut it' }] });
-  assert.deepEqual(lintText(Array(120).fill('word').join(' '), P), { errors: [], warnings: [] });
-  const split = `${Array(100).fill('a').join(' ')}\n\n${Array(100).fill('b').join(' ')}`;
-  assert.deepEqual(lintText(split, P).warnings, []);
-});
-
-test('list lines are counted one by one', () => {
-  const list = Array(60).fill('- two words').join('\n');
-  assert.deepEqual(lintText(list, P).warnings, []);
-  const longItem = `- ${Array(121).fill('w').join(' ')}`;
-  assert.equal(lintText(`- short\n${longItem}`, P).warnings.length, 1);
+test('length is no longer linted here; budget.mjs owns the soft caps', () => {
+  assert.deepEqual(lintText(Array(300).fill('word').join(' '), P), { errors: [], warnings: [] });
 });
 
 test('several problems in one string are all reported', () => {

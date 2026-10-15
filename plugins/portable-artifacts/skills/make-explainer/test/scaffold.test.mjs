@@ -462,3 +462,13 @@ test('--title "" is refused instead of producing an empty title', () => {
     assert.equal(r.stdout, '');
   }
 });
+
+test('every titled TODO section carries a label TODO and a short-title prompt', () => {
+  for (const preset of ['recap', 'checklist', 'concept', 'slides']) {
+    const spec = scaffold(preset);
+    for (const s of spec.sections.filter((x) => typeof x.title === 'string' && x.title.startsWith('TODO:'))) {
+      assert.equal(s.label, 'TODO: 2-4 word label', `${preset} ${s.type}`);
+      assert.match(s.title, /≤ 8 words/, `${preset} ${s.type}`);
+    }
+  }
+});

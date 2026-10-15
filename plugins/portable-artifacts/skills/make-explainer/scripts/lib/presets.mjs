@@ -19,6 +19,7 @@ const KEY_HASH = 6;
 const TITLE_SUFFIX = ': manual test checklist';
 
 const todo = (hint) => `TODO: ${hint}`;
+const LABEL = todo('2-4 word label');
 const byCodeUnit = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const sum = (files, key) => files.reduce((n, f) => n + (f[key] ?? 0), 0);
 
@@ -30,8 +31,9 @@ const ON_FAIL = [
 
 const tldr = (points) => ({
   type: 'tldr',
-  title: todo('state the verdict as a claim a reader can agree or disagree with'),
-  text: todo('one or two sentences: what this is and why it matters'),
+  title: todo('one finding, ≤ 8 words'),
+  label: LABEL,
+  text: todo('one sentence: what this is and why it matters'),
   points: points.map(todo),
   tone: 'good',
 });
@@ -95,19 +97,20 @@ const timelineOmission = (total) => (total > MAX_TIMELINE
 
 function recap(facts, title) {
   return {
-    title: title ?? todo('say what this branch achieves'),
-    subtitle: todo('one line on scope: what it adds and what it leaves alone'),
+    title: title ?? todo('what this branch achieves, ≤ 8 words'),
+    subtitle: todo('one line: what it adds, what it leaves alone'),
     preset: 'recap',
     ...meta(facts, ['date', 'branch', 'repo']),
     sections: [
-      tldr(['the first fact that supports the verdict', 'the second fact that supports the verdict', 'what a reviewer should look at first']),
+      tldr(['first supporting fact, ≤ 20 words', 'second supporting fact', 'what to review first']),
       ...(facts ? [kpisSection(facts)] : []),
-      { type: 'text', title: todo('claim about how the change works'), text: todo('explain how it works in plain prose; read the changed files first') },
+      { type: 'text', title: todo('one finding, ≤ 8 words'), label: LABEL, text: todo('how it works, ≤ 3 short sentences; read the changed files first') },
       ...(facts && facts.files.length > 0 ? [filesSection(facts.files), ...filesOmission(facts.files.length)] : []),
       ...(facts && facts.commits.length > 0 ? [timelineSection(facts.commits), ...timelineOmission(facts.commits.length)] : []),
       {
         type: 'risks',
-        title: todo('say what could still go wrong'),
+        title: todo('one finding, ≤ 8 words'),
+        label: LABEL,
         items: [{ risk: todo('a risk this change carries'), severity: 'medium', mitigation: todo('how it is handled or checked') }],
       },
     ],
@@ -180,7 +183,8 @@ function checklist(facts, title) {
     ...meta(facts, ['date', 'branch', 'repo']),
     sections: [{
       type: 'checklist',
-      title: todo('claim about what the tester is confirming'),
+      title: todo('one finding, ≤ 8 words'),
+      label: LABEL,
       key: checklistKey(facts),
       intro: todo("write the \"What's in this branch\" summary: every feature and every review-cycle fix this branch delivers, and what automated tests already cover, so a tester needs no PR"),
       groups,
@@ -191,23 +195,25 @@ function checklist(facts, title) {
 
 function concept(facts, title) {
   return {
-    title: title ?? todo('state the idea as a claim'),
+    title: title ?? todo('the idea as one finding, ≤ 8 words'),
     subtitle: todo('one line on what the reader will understand'),
     preset: 'concept',
     ...meta(facts, ['date', 'repo']),
     sections: [
       tldr(['the first thing to remember', 'the second thing to remember', 'where the idea stops']),
-      { type: 'text', title: todo('claim about why it works this way'), text: todo('explain the idea in plain prose, one example at a time') },
+      { type: 'text', title: todo('one finding, ≤ 8 words'), label: LABEL, text: todo('why it works this way, ≤ 3 short sentences') },
       {
         type: 'cards',
-        title: todo('claim that the parts below support'),
+        title: todo('one finding, ≤ 8 words'),
+        label: LABEL,
         columns: 3,
-        items: [1, 2, 3].map((n) => ({ title: todo(`name part ${n}`), text: todo(`what part ${n} does`) })),
+        items: [1, 2, 3].map((n) => ({ title: todo(`name part ${n}`), text: todo(`what part ${n} does, ≤ 30 words`) })),
       },
       {
         type: 'steps',
-        title: todo('claim about how to apply it'),
-        items: [1, 2, 3].map((n) => ({ title: todo(`step ${n}`), text: todo(`what to do in step ${n}`) })),
+        title: todo('one finding, ≤ 8 words'),
+        label: LABEL,
+        items: [1, 2, 3].map((n) => ({ title: todo(`step ${n}`), text: todo(`what to do in step ${n}, ≤ 30 words`) })),
       },
     ],
   };
@@ -215,15 +221,15 @@ function concept(facts, title) {
 
 function slides(facts, title) {
   return {
-    title: title ?? todo('state the deck as one claim'),
+    title: title ?? todo('the deck as one finding, ≤ 8 words'),
     subtitle: todo('one line on what the audience leaves knowing'),
     preset: 'slides',
     ...meta(facts, ['date', 'repo']),
     sections: [
       tldr(['the first point', 'the second point', 'the third point']),
-      { type: 'cards', title: todo('claim for the cards slide'), columns: 3, items: [1, 2, 3].map((n) => ({ title: todo(`card ${n}`), text: todo(`one line for card ${n}`) })) },
-      { type: 'steps', title: todo('claim for the steps slide'), items: [1, 2, 3].map((n) => ({ title: todo(`step ${n}`) })) },
-      { type: 'text', title: todo('closing claim'), text: todo('two sentences: what to do next') },
+      { type: 'cards', title: todo('one finding, ≤ 8 words'), label: LABEL, columns: 3, items: [1, 2, 3].map((n) => ({ title: todo(`card ${n}`), text: todo(`one line for card ${n}`) })) },
+      { type: 'steps', title: todo('one finding, ≤ 8 words'), label: LABEL, items: [1, 2, 3].map((n) => ({ title: todo(`step ${n}`) })) },
+      { type: 'text', title: todo('closing finding, ≤ 8 words'), label: LABEL, text: todo('two short sentences: what to do next') },
     ],
   };
 }

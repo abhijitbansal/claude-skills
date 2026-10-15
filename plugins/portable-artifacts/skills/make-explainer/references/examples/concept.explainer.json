@@ -13,7 +13,7 @@
     {
       "type": "tldr",
       "id": "verdict",
-      "title": "Writing the outline, not the page, keeps every explainer consistent",
+      "title": "An outline, not a page, keeps explainers consistent",
       "label": "The verdict",
       "text": "You write the facts; the tool owns the layout. The page is always well formed, offline and the same family as every other one.",
       "points": [
@@ -95,7 +95,7 @@
     },
     {
       "type": "compare",
-      "title": "Typed sections win on consistency and lose on freedom",
+      "title": "Typed sections trade freedom for consistency",
       "label": "Trade-offs",
       "columns": [
         {

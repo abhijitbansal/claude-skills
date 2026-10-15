@@ -14,7 +14,7 @@
     {
       "type": "tldr",
       "id": "verdict",
-      "title": "An explainer can now carry a live diagram, not a screenshot of one",
+      "title": "Explainers now carry live diagrams, not screenshots",
       "label": "The verdict",
       "text": "A diagram section takes a make-diagram spec, inline or from a file, and renders it as an SVG you can hover, with a Present button for a step-by-step walkthrough.",
       "points": [
@@ -27,7 +27,7 @@
     {
       "type": "kpis",
       "id": "in-numbers",
-      "title": "Two commits added about 1,100 lines, more than half of them tests",
+      "title": "1,100 lines added, over half of them tests",
       "label": "In numbers",
       "items": [
         {
@@ -159,14 +159,14 @@
     },
     {
       "type": "text",
-      "title": "Present is the only place the keyboard shortcuts live",
+      "title": "Keyboard shortcuts live only in Present mode",
       "label": "Present mode",
       "text": "Inline, a figure traces links on hover or focus and never captures the mouse wheel, so the page keeps scrolling. **Present** opens a full-screen overlay with Back, Next and Close.\n\nInside it the viewer's shortcuts apply: arrows or Space step forward and back, `Esc` closes and focus returns to the Present button. In a deck, the slide keys stay quiet until the overlay is closed.\n\nThe file list below leaves out the 10 files under test folders (8 tests, a helper and a fixture) and this example. Numbers come from `git diff --numstat 9a8769e^ 665ce40`."
     },
     {
       "type": "files",
       "id": "changed-files",
-      "title": "Most of the change is the viewer, its styles and the section renderer",
+      "title": "Most of the change is viewer and renderer",
       "label": "Changed files",
       "items": [
         {

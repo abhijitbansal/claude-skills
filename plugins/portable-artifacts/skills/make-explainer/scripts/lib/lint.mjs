@@ -1,10 +1,9 @@
 // Deterministic prose lint. Errors: placeholders (TODO:, lorem ipsum), emoji,
 // banned phrases (references/style.md), headings ending in "!", numbered
-// section titles. Warning: paragraphs over PARAGRAPH_WORDS words.
+// section titles. Length is not linted here: soft caps live in budget.mjs.
 import fs from 'node:fs';
 import { proseOnly } from './markdown.mjs';
 
-export const PARAGRAPH_WORDS = 120;
 const STYLE_FILE = new URL('../../references/style.md', import.meta.url);
 const q = (v) => JSON.stringify(v);
 
@@ -86,29 +85,11 @@ function lintHeading(text, path, sectionTitle) {
   return errors;
 }
 
-const words = (s) => (s.match(/\S+/g) ?? []).length;
-
-// A blank line separates paragraphs; in a block made only of "- " lines each
-// line is its own paragraph.
-function paragraphs(text) {
-  return text.split(/\n\s*\n/).flatMap((block) => {
-    const lines = block.split('\n').filter((l) => l.trim() !== '');
-    return lines.length > 0 && lines.every((l) => l.trimStart().startsWith('- ')) ? lines : [block];
-  });
-}
-
-function lintLength(text, path) {
-  return paragraphs(text)
-    .map(words)
-    .filter((n) => n > PARAGRAPH_WORDS)
-    .map((n) => ({ path, message: `paragraph is ${n} words; the limit is ${PARAGRAPH_WORDS} — split it or cut it` }));
-}
-
 /**
  * Lint one prose string. `heading`: the string is a heading (title, summary).
  * `sectionTitle`: it is a section's title (also rejects "01 ..." numbering).
  * `banned: false`: the string is data written as the reader should see it (a table cell), so the
- * banned-phrase rule is skipped; placeholders, emoji and length still apply.
+ * banned-phrase rule is skipped; placeholders and emoji still apply.
  * -> { errors, warnings }, each [{ path, message }].
  */
 export function lintText(text, path, { heading = false, sectionTitle = false, banned: checkBanned = true } = {}) {
@@ -118,5 +99,5 @@ export function lintText(text, path, { heading = false, sectionTitle = false, ba
     ...(checkBanned ? lintBanned(text, path) : []),
     ...(heading ? lintHeading(text, path, sectionTitle) : []),
   ];
-  return { errors, warnings: lintLength(text, path) };
+  return { errors, warnings: [] };
 }

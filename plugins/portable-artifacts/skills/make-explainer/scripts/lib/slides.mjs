@@ -8,12 +8,12 @@
 import { pathJoin } from '../../shared/errors.mjs';
 import { SLIDE_LIMITS } from './schema.mjs';
 import { collectStrings } from './walk.mjs';
+import { words } from './budget.mjs';
 import { toggleIcons } from '../../shared/theme-toggle.mjs';
 import { esc, inline, headingInline, plain } from './render/ui.mjs';
 
 const listLines = (text) => (text ?? '').split('\n').filter((l) => l.trimStart().startsWith('- ')).length;
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
-const words = (s) => (s.match(/\S+/g) ?? []).length;
 
 export function codeLines(code) {
   return code.replace(/\n+$/, '').split('\n').length;

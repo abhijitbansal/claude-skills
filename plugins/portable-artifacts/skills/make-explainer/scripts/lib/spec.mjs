@@ -10,6 +10,7 @@ import { ROOT_SCHEMA, SECTION_SCHEMAS, TYPE_SCHEMA, NON_SPACE } from './schema.m
 import { checkTop, checkIds, checkSections, warnSections } from './semantic.mjs';
 import { collectStrings } from './walk.mjs';
 import { lintText, lintPlaceholders } from './lint.mjs';
+import { warnBudget } from './budget.mjs';
 import { slideBudget } from './slides.mjs';
 import { checksFor } from './checks.mjs';
 
@@ -135,5 +136,5 @@ export async function validateSpec(spec, { dir = process.cwd() } = {}) {
   if (spec.mode === 'slides' || spec.preset === 'slides') errors.push(...slideBudget(spec));
   const registry = await registryResults(spec, dir);
   errors.push(...registry.errors);
-  return { ok: errors.length === 0, errors, warnings: [...lint.warnings, ...warnSections(spec), ...registry.warnings] };
+  return { ok: errors.length === 0, errors, warnings: [...lint.warnings, ...warnBudget(spec), ...warnSections(spec), ...registry.warnings] };
 }
