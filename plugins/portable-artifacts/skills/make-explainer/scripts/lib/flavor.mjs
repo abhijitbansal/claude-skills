@@ -36,6 +36,39 @@ export function flavorVars(flavor) {
   ].join('\n');
 }
 
+// The deck's title slide sets its text on a scrim: --page at `alpha` over the full-bleed art. Only the `inks`
+// may sit directly on it (test/flavor.test.mjs proves them against the worst art pixel); anything else on the
+// title slide brings its own solid ground. The closing slide puts its content on solid --page instead, because
+// any section type can close a deck.
+export const SCRIM = Object.freeze({ token: 'page', alpha: 0.84, inks: Object.freeze(['text', 'text2']) });
+
+/** The scrim as one custom property ('' for classic); color-mix keeps it a token, so it follows the mode. */
+export function scrimVar(flavor) {
+  if (!CARD_INKS[flavorFor(flavor)]) return '';
+  return `:root{--scrim:color-mix(in srgb, var(${CSS_NAME[SCRIM.token]}) ${Math.round(SCRIM.alpha * 100)}%, transparent)}`;
+}
+
+/**
+ * Every scrim ink below 4.5:1 over some art pixel, as "<flavor> <mode>: <ink> on the scrim over <hex> is N:1" lines.
+ * The pixels are every #rrggbb token of the theme plus black and white; `mix` is mixHex from shared/contrast.mjs.
+ */
+export function scrimProblems(scrim, themes, ratio, mix) {
+  const problems = [];
+  for (const [flavor, theme] of Object.entries(themes)) {
+    for (const mode of ['light', 'dark']) {
+      const tokens = theme[mode];
+      const pixels = ['#000000', '#ffffff', ...Object.values(tokens).filter((v) => /^#[0-9a-f]{6}$/i.test(v))];
+      for (const ink of scrim.inks) {
+        const worst = pixels
+          .map((px) => ({ px, value: ratio(tokens[ink], mix(tokens[scrim.token], px, scrim.alpha)) }))
+          .reduce((a, b) => (b.value < a.value ? b : a));
+        if (!(worst.value >= 4.5)) problems.push(`${flavor} ${mode}: ${ink} on the scrim over ${worst.px} is ${worst.value.toFixed(2)}:1`);
+      }
+    }
+  }
+  return problems;
+}
+
 /**
  * Every ink pair below 4.5:1, as "<flavor> <mode>: <fg> on <bg> is N:1" lines ([] when all pass).
  * `themes` maps a flavor to its loaded theme JSON; `ratio` is contrastRatio from shared/contrast.mjs.

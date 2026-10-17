@@ -237,7 +237,7 @@ test('the CSP is unchanged by a diagram', async () => {
 
 test('slides mode renders the same figure inside its slide', async () => {
   const { html } = await build([section(flow('Request path'), { title: 'The path' })], { mode: 'slides' });
-  assert.match(html, /<section class="slide slide-diagram" id="slide-2"/);
+  assert.match(html, /<section class="slide slide-diagram(?: slide-has-art)?" id="slide-2"/);
   assert.match(html, /data-dg-present/);
   assert.equal((html.match(/PADiagram\.mount = mount;/g) ?? []).length, 1);
 });

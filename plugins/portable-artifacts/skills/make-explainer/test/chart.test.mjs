@@ -276,7 +276,7 @@ test('the CSP is unchanged by a chart', async () => {
 
 test('slides mode renders the same figure inside its slide', async () => {
   const { html } = await make([inline({ title: 'Open bugs' })], folder(), { mode: 'slides' });
-  assert.match(html, /<section class="slide slide-chart" id="slide-2"/);
+  assert.match(html, /<section class="slide slide-chart(?: slide-has-art)?" id="slide-2"/);
   assert.match(html, /<figure class="ch"/);
   assert.equal(svgs(html).length, PER_CHART);
   assert.match(html, /\.slide-chart \.ch-svg svg/);
