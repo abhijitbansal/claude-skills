@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { SOFT_CAPS, warnBudget, words, sentences } from '../scripts/lib/budget.mjs';
+import { SOFT_CAPS, warnBudget, emojiDensityWarnings, words, sentences } from '../scripts/lib/budget.mjs';
 
 const w = (n) => Array.from({ length: n }, (_, i) => `w${i}`).join(' ');
 const spec = (sections) => ({ title: 'T', sections });
@@ -165,4 +165,40 @@ test('NI-3: single-letter initials are not sentence ends', () => {
 test('NI-4: paragraphs and list items are numbered apart', () => {
   const text = `- ${w(25)}\n- ${w(25)}\n\n${w(61)}`;
   assert.deepEqual(msgs([{ type: 'text', title: 'T', text }]).map((m) => m.split(' is ')[0]), ['list item 1 of 2', 'list item 2 of 2', 'paragraph']);
+});
+
+// ---- emoji density ---------------------------------------------------------------------------
+
+const EM = '\u{1F680}';
+const emojiWarn = (s) => emojiDensityWarnings(spec(s));
+
+test('emoji density: 5 emoji in 100 chars warns once, naming emoji', () => {
+  const text = `${EM.repeat(5)}${'x'.repeat(95)}`;
+  const r = emojiWarn([{ type: 'text', title: 'T', text }]);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].path, 'sections[0]');
+  assert.match(r[0].message, /emoji/);
+});
+
+test('emoji density: 1 emoji in 200 chars is silent; exactly 1 in 40 is silent', () => {
+  assert.deepEqual(emojiWarn([{ type: 'text', title: 'T', text: `${EM}${'x'.repeat(199)}` }]), []);
+  assert.deepEqual(emojiWarn([{ type: 'text', title: 'T', text: `${EM}${'x'.repeat(39)}` }]), []);
+  assert.equal(emojiWarn([{ type: 'text', title: 'T', text: `${EM}${'x'.repeat(38)}` }]).length, 1);
+});
+
+test('emoji in code spans and link urls are not counted', () => {
+  assert.deepEqual(emojiWarn([{ type: 'text', title: 'T', text: `\`${EM.repeat(5)}\` [a](https://x.test/${EM.repeat(5)}) plain words here` }]), []);
+});
+
+test('emoji title: 3 silent, 4 warns at the title path', () => {
+  assert.deepEqual(emojiWarn([{ type: 'text', title: `Hi ${EM.repeat(3)}`, text: 'x'.repeat(400) }]), []);
+  const r = emojiWarn([{ type: 'text', title: `Hi ${EM.repeat(4)}`, text: 'x'.repeat(400) }]);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].path, 'sections[0].title');
+  assert.match(r[0].message, /emoji/);
+});
+
+test('emoji density is a warning through warnBudget, never an error', () => {
+  const s = spec([{ type: 'text', title: 'T', text: `${EM.repeat(5)}${'x'.repeat(95)}` }]);
+  assert.ok(warnBudget(s).some((x) => /emoji/.test(x.message)));
 });

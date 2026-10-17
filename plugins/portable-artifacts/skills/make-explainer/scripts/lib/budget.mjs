@@ -2,6 +2,8 @@
 // scannable pages. Prose = the strings a reader reads as sentences; code,
 // tables, file lists and the like are exempt (see EXEMPT_TYPES).
 import { pathJoin } from '../../shared/errors.mjs';
+import { EMOJI } from './lint.mjs';
+import { proseOnly } from './markdown.mjs';
 
 export const SOFT_CAPS = {
   titleWords: 8,
@@ -28,6 +30,12 @@ const SECTION_CAP_TYPES = new Set(['text', 'details', 'callout']);
 const CARD_TYPES = new Set(['cards', 'steps']);
 const LIST_KEYS = new Set(['points', 'items', 'risk', 'mitigation']);
 const ABBREVIATION = /\b(?:Mr|Mrs|Ms|Dr|Jr|Sr|St|vs|approx)\.|\b[A-Z]\.(?=\s+[A-Z][a-z])|\b(?:[A-Za-z]\.){2,}|\betc\.(?=\s+[a-z])/g;
+
+// Emoji are allowed; these keep a page from turning into confetti. Warn when emoji exceed 1 in
+// EMOJI_DENSITY_CHARS characters of a section's prose, or when one title holds more than MAX_TITLE_EMOJI.
+export const EMOJI_DENSITY_CHARS = 40;
+export const MAX_TITLE_EMOJI = 3;
+const countEmoji = (s) => (s.match(EMOJI) ?? []).length;
 
 export const words = (s) => (s.match(/\S+/g) ?? []).length;
 
@@ -157,6 +165,43 @@ function sectionWarnings(section, i) {
   return { out, wordCount };
 }
 
+// Titles at any depth, same reach as titleWarnings: [{ path, text }].
+function titleStrings(section, at) {
+  const out = [];
+  const visit = (v, path) => {
+    if (Array.isArray(v)) v.forEach((x, i) => visit(x, pathJoin(path, i)));
+    else if (v && typeof v === 'object') {
+      for (const [k, x] of Object.entries(v)) {
+        if (typeof x === 'string' && k === 'title') out.push({ path: pathJoin(path, k), text: x });
+        else if (typeof x === 'object') visit(x, pathJoin(path, k));
+      }
+    }
+  };
+  if (NO_TITLE_CAP.has(section.type)) {
+    if (typeof section.title === 'string') out.push({ path: pathJoin(at, 'title'), text: section.title });
+  } else visit(section, at);
+  return out;
+}
+
+/** Emoji-density warnings for a parsed spec -> [{ path, message }]. Never an error. Code spans and URLs are not counted. */
+export function emojiDensityWarnings(spec) {
+  const out = [];
+  (spec.sections ?? []).forEach((section, i) => {
+    const at = pathJoin('sections', i);
+    for (const t of titleStrings(section, at)) {
+      const n = countEmoji(t.text);
+      if (n > MAX_TITLE_EMOJI) out.push(warn(t.path, `title has ${n} emoji; keep it to ${MAX_TITLE_EMOJI} → one is plenty, say the rest in words`));
+    }
+    const prose = proseStrings(section, at).map((s) => proseOnly(s.text));
+    const emoji = prose.reduce((sum, t) => sum + countEmoji(t), 0);
+    const chars = prose.reduce((sum, t) => sum + [...t].length, 0);
+    if (emoji > 0 && emoji * EMOJI_DENSITY_CHARS > chars) {
+      out.push(warn(at, `${emoji} emoji in ${chars} characters of prose; keep it under 1 per ${EMOJI_DENSITY_CHARS} → cut some, say it in words`));
+    }
+  });
+  return out;
+}
+
 /** Soft-cap warnings for a parsed spec -> [{ path, message }]. Never an error. */
 export function warnBudget(spec) {
   const out = [];
@@ -169,5 +214,6 @@ export function warnBudget(spec) {
   if (page > SOFT_CAPS.pageWords) {
     out.push(warn('', `page has ${page.toLocaleString('en-US')} words of prose; aim for ${SOFT_CAPS.pageWords} → cut, or convert sections to kpis, cards or steps`));
   }
+  out.push(...emojiDensityWarnings(spec));
   return out;
 }

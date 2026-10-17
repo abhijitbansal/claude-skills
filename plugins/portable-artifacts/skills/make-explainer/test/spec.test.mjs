@@ -389,7 +389,6 @@ test('style lint runs on prose with the path of each string', async () => {
   ], { subtitle: 'Lorem ipsum' });
   assert.deepEqual(await errorsOf(spec), [
     { path: 'sections[0].title', message: 'heading ends with "!"; drop the exclamation mark and state the claim plainly' },
-    { path: 'sections[0].text', message: 'contains emoji "🚀"; remove it and say it in words' },
     { path: 'sections[0].text', message: 'banned phrase "leverage"; replace it with "use"' },
     { path: 'sections[1].items[0].title', message: 'banned phrase "Seamless"; replace it with "smooth"' },
     { path: 'subtitle', message: 'still has lorem ipsum placeholder text — replace it with real content' },

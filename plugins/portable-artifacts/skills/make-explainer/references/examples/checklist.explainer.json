@@ -78,7 +78,7 @@
             { "text": "Editing one item's text clears that tick only", "tag": "regression" },
             { "text": "A page opened with storage blocked shows the unsaved note and still lets you tick items", "tag": "regression", "note": "private window with site data blocked" },
             { "text": "Reset asks inline and never opens a browser dialog", "tag": "regression" },
-            { "text": "A heading ending in an exclamation mark or an emoji in any text is rejected by `validate.mjs`", "tag": "regression" }
+            { "text": "A heading ending in an exclamation mark is rejected by `validate.mjs`", "tag": "regression" }
           ]
         }
       ],

@@ -15,7 +15,7 @@ any agent that can run shell commands. Nothing leaves your machine.
   agent replaces each `TODO:` with prose, and validation fails until it has.
 - **Checked before you see it**: schema and limits, file references (inside
   the spec folder, no symlinks), embedded diagrams and charts through their own
-  skills' validators, and a prose lint that rejects emoji, filler such as
+  skills' validators, and a prose lint that rejects filler such as
   "seamless" or "leverage", numbered titles and placeholder text.
 - **Presets**: `recap`, `checklist`, `concept`, `slides`.
 - **Stamped**: a favicon, an icon theme toggle and a provenance footer (model,
