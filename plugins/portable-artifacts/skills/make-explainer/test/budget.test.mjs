@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { SOFT_CAPS, warnBudget, emojiDensityWarnings, words, sentences } from '../scripts/lib/budget.mjs';
+import { SOFT_CAPS, warnBudget, emojiDensityWarnings, MIN_EMOJI_FOR_DENSITY, words, sentences } from '../scripts/lib/budget.mjs';
 
 const w = (n) => Array.from({ length: n }, (_, i) => `w${i}`).join(' ');
 const spec = (sections) => ({ title: 'T', sections });
@@ -176,14 +176,40 @@ test('emoji density: 5 emoji in 100 chars warns once, naming emoji', () => {
   const text = `${EM.repeat(5)}${'x'.repeat(95)}`;
   const r = emojiWarn([{ type: 'text', title: 'T', text }]);
   assert.equal(r.length, 1);
-  assert.equal(r[0].path, 'sections[0]');
+  assert.equal(r[0].path, 'sections[0].text');
   assert.match(r[0].message, /emoji/);
 });
 
-test('emoji density: 1 emoji in 200 chars is silent; exactly 1 in 40 is silent', () => {
-  assert.deepEqual(emojiWarn([{ type: 'text', title: 'T', text: `${EM}${'x'.repeat(199)}` }]), []);
-  assert.deepEqual(emojiWarn([{ type: 'text', title: 'T', text: `${EM}${'x'.repeat(39)}` }]), []);
-  assert.equal(emojiWarn([{ type: 'text', title: 'T', text: `${EM}${'x'.repeat(38)}` }]).length, 1);
+test('emoji density needs the ratio and at least MIN_EMOJI_FOR_DENSITY emoji', () => {
+  const at = (n, len) => emojiWarn([{ type: 'text', title: 'T', text: `${EM.repeat(n)}${'x'.repeat(len - n)}` }]).length;
+  assert.equal(MIN_EMOJI_FOR_DENSITY, 3);
+  assert.equal(at(1, 6), 0, '1 emoji in 6 chars');
+  assert.equal(at(2, 10), 0, '2 emoji in 10 chars');
+  assert.equal(at(3, 30), 1, '3 emoji in 30 chars');
+  assert.equal(at(3, 200), 0, '3 emoji in 200 chars: ratio too low');
+  assert.equal(at(1, 200), 0);
+});
+
+test('multi-codepoint emoji count once each', () => {
+  const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}';
+  for (const g of [family, '\u{1F1FA}\u{1F1F8}', '\u{1F44D}\u{1F3FD}', '1\uFE0F\u20E3']) {
+    // three glyphs in 20 chars warns and reports exactly 3, not 6 or 9
+    const r = emojiWarn([{ type: 'text', title: 'T', text: `${g}${g}${g}${'x'.repeat(14)}` }]);
+    assert.equal(r.length, 1, g);
+    assert.match(r[0].message, /^3 emoji/, g);
+    // two glyphs never reach the floor, even though they hold 4+ codepoints
+    assert.deepEqual(emojiWarn([{ type: 'text', title: 'T', text: `${g}${g}` }]), [], g);
+  }
+  // two family emoji in a title stay under the title limit
+  assert.deepEqual(emojiWarn([{ type: 'text', title: `${family}${family}`, text: 'x'.repeat(400) }]), []);
+});
+
+test('text-presentation symbols count 0 toward density', () => {
+  assert.deepEqual(emojiWarn([{ type: 'text', title: 'T', text: '→ ✓ ✔ ↔ ▶ ★ ❤ ⚠ ℹ → ✓ ✔ ↔' }]), []);
+});
+
+test('a title with emoji does not also count toward prose density', () => {
+  assert.deepEqual(emojiWarn([{ type: 'text', title: `Hi ${EM.repeat(3)}`, text: 'ok' }]), []);
 });
 
 test('emoji in code spans and link urls are not counted', () => {

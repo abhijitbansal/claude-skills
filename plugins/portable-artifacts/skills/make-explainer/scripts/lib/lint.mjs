@@ -24,6 +24,13 @@ export function lintPlaceholders(text, path) {
 // are ordinary typography and pass, as do the copyright, registered and trade mark signs.
 export const EMOJI = /\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F|(?=[\u{10000}-\u{10FFFF}])\p{Extended_Pictographic}|[\u{E0020}-\u{E007F}]|\u20E3/gu;
 
+// An emoji sequence: a pictograph or regional indicator, its selectors / skin tone / tag modifiers, and more of
+// the same joined by U+200D. Removing it removes its joiners and selectors with it, while the same characters
+// in other scripts (a Devanagari conjunct, Persian text) are left alone.
+const PICTOGRAPH = '\\p{Extended_Pictographic}|\\p{Regional_Indicator}';
+const MODIFIERS = '[\\uFE0E\\uFE0F\\u{1F3FB}-\\u{1F3FF}\\u{E0020}-\\u{E007F}]*';
+export const EMOJI_SEQUENCE = new RegExp(`(?:${PICTOGRAPH})${MODIFIERS}(?:\\u200D(?:${PICTOGRAPH})${MODIFIERS})*`, 'gu');
+
 // ---- banned phrases ---------------------------------------------------
 
 let banned;

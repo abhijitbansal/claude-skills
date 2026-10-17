@@ -2,7 +2,7 @@
 // scannable pages. Prose = the strings a reader reads as sentences; code,
 // tables, file lists and the like are exempt (see EXEMPT_TYPES).
 import { pathJoin } from '../../shared/errors.mjs';
-import { EMOJI } from './lint.mjs';
+import { EMOJI, EMOJI_SEQUENCE } from './lint.mjs';
 import { proseOnly } from './markdown.mjs';
 
 export const SOFT_CAPS = {
@@ -32,10 +32,21 @@ const LIST_KEYS = new Set(['points', 'items', 'risk', 'mitigation']);
 const ABBREVIATION = /\b(?:Mr|Mrs|Ms|Dr|Jr|Sr|St|vs|approx)\.|\b[A-Z]\.(?=\s+[A-Z][a-z])|\b(?:[A-Za-z]\.){2,}|\betc\.(?=\s+[a-z])/g;
 
 // Emoji are allowed; these keep a page from turning into confetti. Warn when emoji exceed 1 in
-// EMOJI_DENSITY_CHARS characters of a section's prose, or when one title holds more than MAX_TITLE_EMOJI.
+// EMOJI_DENSITY_CHARS characters of a prose string (and the string has at least MIN_EMOJI_FOR_DENSITY, so a
+// short line with one emoji stays quiet), or when one title holds more than MAX_TITLE_EMOJI.
 export const EMOJI_DENSITY_CHARS = 40;
 export const MAX_TITLE_EMOJI = 3;
-const countEmoji = (s) => (s.match(EMOJI) ?? []).length;
+export const MIN_EMOJI_FOR_DENSITY = 3;
+const IS_EMOJI = new RegExp(EMOJI.source, 'u');
+const KEYCAP_MARK = /\uFE0F?\u20E3/gu;
+// One emoji = one glyph: a ZWJ family, a flag pair, a skin-toned hand and a keycap each count once.
+// Text-presentation symbols (arrows, check marks, hearts) are not emoji and count 0.
+const FLAG = /\p{Regional_Indicator}{2}/gu;
+const countEmoji = (s) => {
+  const flags = s.match(FLAG) ?? [];
+  const rest = s.replace(FLAG, ' ');
+  return flags.length + (rest.match(EMOJI_SEQUENCE) ?? []).filter((m) => IS_EMOJI.test(m)).length + (rest.match(KEYCAP_MARK) ?? []).length;
+};
 
 export const words = (s) => (s.match(/\S+/g) ?? []).length;
 
@@ -192,11 +203,13 @@ export function emojiDensityWarnings(spec) {
       const n = countEmoji(t.text);
       if (n > MAX_TITLE_EMOJI) out.push(warn(t.path, `title has ${n} emoji; keep it to ${MAX_TITLE_EMOJI} → one is plenty, say the rest in words`));
     }
-    const prose = proseStrings(section, at).map((s) => proseOnly(s.text));
-    const emoji = prose.reduce((sum, t) => sum + countEmoji(t), 0);
-    const chars = prose.reduce((sum, t) => sum + [...t].length, 0);
-    if (emoji > 0 && emoji * EMOJI_DENSITY_CHARS > chars) {
-      out.push(warn(at, `${emoji} emoji in ${chars} characters of prose; keep it under 1 per ${EMOJI_DENSITY_CHARS} → cut some, say it in words`));
+    for (const str of proseStrings(section, at)) {
+      const text = proseOnly(str.text);
+      const emoji = countEmoji(text);
+      const chars = [...text].length;
+      if (emoji >= MIN_EMOJI_FOR_DENSITY && emoji * EMOJI_DENSITY_CHARS > chars) {
+        out.push(warn(str.path, `${emoji} emoji in ${chars} characters of prose; keep it under 1 per ${EMOJI_DENSITY_CHARS} → cut some, say it in words`));
+      }
     }
   });
   return out;
