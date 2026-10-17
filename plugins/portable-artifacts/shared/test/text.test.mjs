@@ -177,11 +177,7 @@ test('metrics.json keys are sorted and nothing extra is shipped', () => {
   const keys = Object.keys(METRICS);
   assert.deepEqual(keys, [...keys].sort());
   const used = new Set(listThemes().flatMap((n) => Object.values(loadTheme(n).fonts).flatMap((d) => Object.keys(d.weights).map((w) => `${d.family}|${w}`))));
-  // Metrics for the dusk/press/poster faces land before their theme JSONs (design-refresh Task 1);
-  // drop PENDING_THEMES once those themes exist so this goes back to an exact match.
-  const PENDING_THEMES = ['Host Grotesk|400', 'Host Grotesk|700', 'Schibsted Grotesk|400', 'Schibsted Grotesk|700',
-    'Familjen Grotesk|400', 'Familjen Grotesk|700', 'Commit Mono|400', 'JetBrains Mono|400', 'Martian Mono|400'];
-  assert.deepEqual(new Set(keys), new Set([...used, ...PENDING_THEMES]));
+  assert.deepEqual(new Set(keys), used);
 });
 
 test("every shipped theme's body and mono faces have metrics", () => {
