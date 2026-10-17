@@ -35,3 +35,19 @@ export function flavorVars(flavor) {
     `:root[data-theme="dark"]{${pair(inks.dark)}}`,
   ].join('\n');
 }
+
+/**
+ * Every ink pair below 4.5:1, as "<flavor> <mode>: <fg> on <bg> is N:1" lines ([] when all pass).
+ * `themes` maps a flavor to its loaded theme JSON; `ratio` is contrastRatio from shared/contrast.mjs.
+ */
+export function cardInkProblems(inks, themes, ratio) {
+  const problems = [];
+  for (const [flavor, modes] of Object.entries(inks)) {
+    for (const [mode, [bg, fg]] of Object.entries(modes)) {
+      const tokens = themes[flavor]?.[mode];
+      const value = tokens ? ratio(tokens[bg], tokens[fg]) : 0;
+      if (!(value >= 4.5)) problems.push(`${flavor} ${mode}: ${fg} on ${bg} is ${value.toFixed(2)}:1`);
+    }
+  }
+  return problems;
+}

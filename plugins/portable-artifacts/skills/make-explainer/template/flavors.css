@@ -9,7 +9,9 @@
 :root[data-flavor="press"] { --rule-w: 2px; --head-weight: 400; --head-track: -0.025em; --lh-hero: 0.98; --display: calc(var(--fs-display) * 0.92); --grain-op: 0.08; }
 :root[data-flavor="poster"] { --head-weight: 900; --head-case: uppercase; --head-track: 0.004em; --lh-hero: 0.86; --display: calc(var(--fs-display) * 1.22); --grain-op: 0.06; }
 
-html[data-flavor] body { overflow-x: clip; -webkit-font-smoothing: antialiased; }
+html[data-flavor] body { -webkit-font-smoothing: antialiased; }
+/* only the hero clips sideways: the tilted card and its offset shadow reach a few px past its box */
+html[data-flavor] .hero { overflow-x: clip; }
 
 /* film grain: a noise tile used as a mask over the text colour, so the grain is a token, not a literal */
 html[data-flavor] body::before {
@@ -69,6 +71,8 @@ html[data-flavor] .hero-tldr :is(.pa-label, .sec-eyebrow.pa-label, .hero-tldr-ti
 html[data-flavor] .hero-tldr .pa-label { font-family: var(--mono); font-weight: 400; letter-spacing: 0.14em; }
 html[data-flavor] .hero-tldr .chip { border-color: currentColor; }
 html[data-flavor] .hero-tldr a { text-decoration-color: currentColor; }
+/* the shared ring is --accent, which is (or nearly is) the card fill: ring in the card's text colour instead */
+html[data-flavor] .hero-tldr :focus-visible { outline-color: var(--card-fg); }
 html[data-flavor] .hero-tldr code { background: none; color: inherit; box-shadow: inset 0 0 0 1px currentColor; }
 html[data-flavor] .hero-tldr .lead { font-size: clamp(var(--fs-md), 1rem + 1vw, var(--fs-lg)); line-height: 1.2; font-weight: var(--head-weight); letter-spacing: -0.015em; }
 :root[data-flavor="poster"] .hero-tldr .lead { letter-spacing: 0.01em; line-height: 1.05; font-size: clamp(var(--fs-lg), 1rem + 1.6vw, var(--fs-xl)); }
@@ -90,10 +94,10 @@ html[data-flavor] .sec-alt { border-radius: var(--r-big); }
 /* the counter is decoration: the alt text after "/" keeps it out of the accessible name */
 html[data-flavor] .sec:has(> .sec-title)::before { content: counter(sec, decimal-leading-zero); content: counter(sec, decimal-leading-zero) / ""; pointer-events: none; user-select: none; font-family: var(--font-display); font-weight: var(--head-weight); font-variant-numeric: tabular-nums; }
 
-/* dusk: an oversized outlined numeral hangs above the heading's right end */
-:root[data-flavor="dusk"] .sec:has(> .sec-title)::before { position: absolute; z-index: -1; right: -0.04em; top: calc(-0.62 * var(--fs-numeral)); font-size: var(--fs-numeral); line-height: 1; letter-spacing: -0.06em; color: transparent; -webkit-text-stroke: 1.5px color-mix(in srgb, var(--text) 30%, transparent); }
-:root[data-flavor="dusk"] .sec-alt:has(> .sec-title)::before { right: var(--band-x); top: var(--sp-3); }
-:root[data-flavor="dusk"] .sec-title { max-width: min(22em, calc(100% - 1.15 * var(--fs-numeral))); }
+/* dusk: an oversized outlined numeral floats at the heading's right end; the section's content clears it */
+:root[data-flavor="dusk"] .sec:has(> .sec-title)::before { float: right; margin: 0 0 var(--sp-2) var(--sp-4); font-size: calc(var(--fs-numeral) * 0.8); line-height: 0.8; letter-spacing: -0.06em; color: transparent; -webkit-text-stroke: 1.5px color-mix(in srgb, var(--text) 30%, transparent); }
+:root[data-flavor="dusk"] .sec:has(> .sec-title) > :is(.sec-eyebrow, .sec-title) { display: flow-root; }
+:root[data-flavor="dusk"] .sec:has(> .sec-title) > :not(.sec-eyebrow, .sec-title) { clear: both; }
 
 /* press: a newspaper rule over each section; the numeral sits in a margin column; drop caps open the text */
 :root[data-flavor="press"] .sec { border-top: 2px solid var(--text); padding-top: var(--sp-4); }
@@ -111,7 +115,7 @@ html[data-flavor] .sec:has(> .sec-title)::before { content: counter(sec, decimal
 :root[data-flavor="poster"] .sec { border-top: 1px solid var(--text); padding-top: var(--sp-4); }
 :root[data-flavor="poster"] .sec-alt { border-radius: 0; padding-top: var(--band-y); }
 :root[data-flavor="poster"] .sec-title { font-size: clamp(34px, 2vw + 22px, 56px); line-height: 0.9; }
-:root[data-flavor="poster"] .sec:has(> .sec-title)::before { float: left; margin: 0 var(--sp-4) 0 0; font-size: clamp(3.2rem, 2rem + 3vw, 5rem); line-height: 0.82; color: transparent; -webkit-text-stroke: 1px var(--text); }
+:root[data-flavor="poster"] .sec:has(> .sec-title)::before { float: left; width: 1.1em; margin: 0 var(--sp-4) 0 0; font-size: clamp(3.2rem, 2rem + 3vw, 5rem); line-height: 0.82; white-space: nowrap; color: transparent; -webkit-text-stroke: 1px var(--text); }
 :root[data-flavor="poster"] .sec:has(> .sec-title) > :not(.sec-eyebrow, .sec-title) { clear: both; }
 /* the eyebrow and a wrapping title stay beside the numeral instead of running under it */
 :root[data-flavor="poster"] .sec:has(> .sec-title) > :is(.sec-eyebrow, .sec-title) { display: flow-root; }
@@ -130,6 +134,8 @@ html[data-flavor] .kpi dt { font-family: var(--mono); font-size: var(--fs-xs); t
 :root[data-flavor="dusk"] .kpi:first-child { background: var(--text); color: var(--page); }
 :root[data-flavor="dusk"] .kpi:first-child :is(dt, .kpi-value, .kpi-delta, .kpi-note, .chip) { color: inherit; }
 :root[data-flavor="dusk"] .kpi:first-child .chip { border-color: currentColor; }
+:root[data-flavor="dusk"] .kpi:first-child :focus-visible { outline-color: var(--page); }
+:root[data-flavor="dusk"] .kpi:first-child a { color: inherit; text-decoration-color: currentColor; }
 :root[data-flavor="dusk"] .kpi:last-child:not(:first-child):nth-child(n + 3) { background: none; box-shadow: inset 0 0 0 1.5px var(--text-3); }
 
 /* ---- cards and compare: dusk varies the shapes, press uses rules, poster shares hard borders -------- */
@@ -184,9 +190,11 @@ html[data-flavor] .tablewrap { border-radius: var(--r-card); }
 :root[data-flavor="press"] thead th { background: var(--page); }
 :root[data-flavor="poster"] .tablewrap { border-color: var(--text); }
 html[data-flavor] thead th { font-family: var(--mono); font-weight: 400; letter-spacing: 0.08em; }
-html[data-flavor] .callout { border: 1px solid var(--tc); background: color-mix(in srgb, var(--tc) 8%, var(--surface)); padding: var(--sp-4) var(--sp-5); }
+html[data-flavor] .callout { border: 1px solid var(--tc); background: color-mix(in srgb, var(--tc) 5%, var(--surface)); padding: var(--sp-4) var(--sp-5); }
 :root[data-flavor="dusk"] .callout { border-radius: 4px var(--r-card) var(--r-card) var(--r-card); }
-:root[data-flavor="press"] .callout { border: 2px solid var(--tc); border-radius: 0; background: color-mix(in srgb, var(--tc) 6%, var(--page)); }
+:root[data-flavor="press"] .callout { border: 2px solid var(--tc); border-radius: 0; background: var(--page); }
+/* the hatch runs under the text, so the chip gets its own solid ground */
+:root[data-flavor="poster"] .callout .chip { background: var(--surface); }
 :root[data-flavor="poster"] .callout { border: 1px solid var(--text); box-shadow: 6px 6px 0 var(--tc); border-radius: 0; background: repeating-linear-gradient(-45deg, transparent 0 10px, color-mix(in srgb, var(--tc) 12%, transparent) 10px 11px), var(--surface); }
 html[data-flavor] .callout-title { font-size: var(--fs-md); }
 html[data-flavor] .det { border-radius: var(--r-card); }
@@ -236,9 +244,7 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
   html[data-flavor] .sec-alt { border-radius: 0; }
   html[data-flavor] .sec-title { font-size: clamp(26px, 6.4vw, 32px); }
   :root[data-flavor="poster"] .sec-title { font-size: clamp(30px, 9vw, 40px); }
-  :root[data-flavor="dusk"] .sec:has(> .sec-title)::before { font-size: 5rem; top: -3.4rem; }
-  :root[data-flavor="dusk"] .sec-alt:has(> .sec-title)::before { right: 16px; top: 8px; }
-  :root[data-flavor="dusk"] .sec-title { max-width: calc(100% - 5.5rem); }
+  :root[data-flavor="dusk"] .sec:has(> .sec-title)::before { font-size: 4rem; }
   html[data-flavor] .step { padding-left: 50px; }
   :root[data-flavor="poster"] :is(.path, .dir, .stat, .code pre) { font-size: 12px; }
 }
