@@ -44,7 +44,8 @@
 
 /* title slide: the text sits on the scrim, in the proven inks only */
 .slide-cover .slide-inner { width: auto; max-width: min(52rem, 100%); margin: auto auto auto 0; padding: clamp(22px, 3.4vw, 52px); background: var(--scrim); color: var(--text); }
-.slide-cover h1 { max-width: 13em; font-size: clamp(2.4rem, 1rem + 4.6vw, 5.4rem); line-height: var(--lh-hero); font-weight: var(--head-weight); letter-spacing: var(--head-track); text-transform: var(--head-case); }
+/* :root[data-flavor] outranks flavors.css's html[data-flavor] h1 */
+:root[data-flavor] .slide-cover h1 { max-width: 13em; font-size: clamp(2.4rem, 1rem + 4.6vw, 5.4rem); line-height: var(--lh-hero); font-weight: var(--head-weight); letter-spacing: var(--head-track); text-transform: var(--head-case); }
 .slide-cover .subtitle { color: var(--text-2); }
 .slide-cover .meta div { background: var(--surface); }
 /* a flavor may clear the pill, leaving the labels on the scrim: keep them in a proven ink */
@@ -117,7 +118,7 @@
   :root[data-flavor] .slide-art { inset: 0; border-radius: 0; }
   :root[data-flavor] .slide::after { display: none; }
   .slide-cover .slide-inner { margin: auto 0; }
-  .slide-cover h1 { font-size: clamp(2rem, 9vw, 2.8rem); }
+  :root[data-flavor] .slide-cover h1 { font-size: clamp(2rem, 9vw, 2.8rem); }
   :root[data-flavor="poster"] .slide-cover h1 { font-size: clamp(2.4rem, 12vw, 3.4rem); }
   :root[data-flavor="dusk"] .slide-cover .subtitle { margin-top: var(--sp-5); padding: var(--sp-3) var(--sp-4); }
   :root[data-flavor="press"] .slide-has-art:not(.slide-cover) .slide-inner, :root[data-flavor="poster"] .slide-has-art:not(.slide-cover) .slide-inner { box-shadow: 4px 4px 0 var(--accent); }
