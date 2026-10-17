@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildSpec, buildFile, exampleFile, haveBrowser, openPage, closeSharedBrowser, scratchDir, DECK_CONTRAST_JS } from './helpers/browser.mjs';
+import { SCRIM } from '../scripts/lib/flavor.mjs';
 
 after(closeSharedBrowser);
 
@@ -709,7 +710,7 @@ const FLAVORS = ['dusk', 'press', 'poster'];
 const MODES = ['light', 'dark'];
 // Every section kind a deck commonly closes on, with emoji in a title, a point and a callout, and a dense table last.
 const KINDS = (theme) => ({
-  title: 'Cache clock: the per-project rollout 🚀', subtitle: 'What shipped, what moved and what comes next', mode: 'slides', theme,
+  title: 'Cache clock: the per-project rollout 🚀', subtitle: 'Read the [design note](https://example.com/notes) and run `cache-clock init` first', mode: 'slides', theme,
   meta: { date: '2026-10-17', branch: 'feat/cache-clock' },
   sections: [
     { type: 'tldr', title: 'Warm caches are now a decision', label: 'In short', text: 'Every project gets its own cache clock, so a cold send is visible first.', points: ['One clock per repo ✅', 'A prompt before any cold send', 'Zero keep-alive scripts'], tone: 'good' },
@@ -743,7 +744,7 @@ test('flavored decks: every slide\'s text reads at 4.5:1 on its ground, art slid
         assert.deepEqual(found, [], `${theme} ${name} ${colorScheme}`);
         // The title slide's ground is the proven scrim (flavor.mjs SCRIM) or a solid card fill, never thinner.
         const alpha = await page.evaluate(() => window.__deck.parse(getComputedStyle(document.querySelector('.slide-cover .slide-inner')).backgroundColor)[3]);
-        assert.ok([0.84, 1].includes(Math.round(alpha * 100) / 100), `${theme} ${colorScheme}: title slide ground alpha ${alpha}`);
+        assert.ok([SCRIM.alpha, 1].includes(Math.round(alpha * 100) / 100), `${theme} ${colorScheme}: title slide ground alpha ${alpha}`);
         assert.deepEqual(problems, []);
         await context.close();
       }
@@ -776,8 +777,11 @@ test('flavored decks: the outline and every focusable on every slide shows a rin
         };
         for (let n = 1; n <= total; n++) {
           if (n > 1) { await page.keyboard.press('Escape'); await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('ArrowRight'); }
+          assert.equal(await current(page), n, `${theme} ${name}: the keys reached slide ${n}`);
           await tabRound(8);
         }
+        assert.equal(await current(page), total, `${theme} ${name}: the last slide was reached and tabbed through`);
+        if (name === 'kinds') assert.ok([...visited].some((k) => k.startsWith('slide-1<a')), `${theme} ${colorScheme}: Tab reached the link on the title slide`);
         await page.keyboard.press('o');
         await tabRound(6);
         await page.keyboard.press('Escape');
@@ -836,4 +840,62 @@ test('flavored decks: the arrow keys reach the last slide and it is scrolled int
     assert.deepEqual(problems, []);
     await context.close();
   }
+});
+
+test('flavored decks: the arriving slide\'s rise ends fully opaque and in place when motion is allowed', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const theme of FLAVORS) {
+    const { url } = buildFile(exampleFile('slides'), { theme, name: `rise-${theme}` });
+    const { page, context } = await openPage(url, { width: 1280, height: 720, reducedMotion: 'no-preference' });
+    await page.keyboard.press('ArrowRight');
+    await settled(page, 2);
+    const name = await page.evaluate(() => getComputedStyle(document.querySelector('#slide-2 > .slide-inner')).animationName);
+    assert.equal(name, 'deck-rise', `${theme}: the slide rises in`);
+    await page.waitForFunction(() => document.querySelector('#slide-2 > .slide-inner').getAnimations().every((a) => a.playState === 'finished'));
+    const end = await page.evaluate(() => { const cs = getComputedStyle(document.querySelector('#slide-2 > .slide-inner')); return [cs.opacity, cs.transform]; });
+    assert.deepEqual(end, ['1', 'none'], theme);
+    await context.close();
+  }
+});
+
+test('flavored decks print flat: no art, shadows, blur or fills, and the title sits where a classic deck puts it', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const printed = async (url) => {
+    const { page, context } = await openPage(url, { width: 1280, height: 720 });
+    await page.emulateMedia({ media: 'print' });
+    const r = await page.evaluate(() => {
+      const css = (sel, prop) => getComputedStyle(document.querySelector(sel))[prop];
+      const last = `#slide-${document.querySelectorAll('section.slide').length} > .slide-inner`;
+      return {
+        art: [...document.querySelectorAll('.slide-art')].map((a) => getComputedStyle(a).display),
+        coverTop: css('#slide-1 > .slide-inner', 'marginTop'),
+        coverFill: css('#slide-1 > .slide-inner', 'backgroundColor'),
+        coverBlur: css('#slide-1 > .slide-inner', 'backdropFilter'),
+        coverShadow: css('#slide-1 > .slide-inner', 'boxShadow'),
+        lastFill: css(last, 'backgroundColor'),
+        lastShadow: css(last, 'boxShadow'),
+      };
+    });
+    await context.close();
+    return r;
+  };
+  const classic = await printed(buildFile(exampleFile('slides'), { theme: 'paper', name: 'print-paper' }).url);
+  for (const theme of FLAVORS) {
+    const r = await printed(buildFile(exampleFile('slides'), { theme, name: `print-${theme}` }).url);
+    assert.deepEqual(r.art, ['none', 'none'], theme);
+    assert.equal(r.coverTop, classic.coverTop, `${theme}: the title's print offset matches paper`);
+    for (const k of ['coverFill', 'lastFill']) assert.equal(r[k], 'rgba(0, 0, 0, 0)', `${theme} ${k}`);
+    for (const k of ['coverShadow', 'lastShadow']) assert.equal(r[k], 'none', `${theme} ${k}`);
+    assert.equal(r.coverBlur, 'none', theme);
+  }
+});
+
+test('poster file slides: paths and stats take the deck\'s projection scale, not the page\'s fixed 13px', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { url } = buildSpec(KINDS('poster'), { name: 'poster-files' });
+  const { page, context } = await openPage(url, { width: 1280, height: 720 });
+  const sizes = await page.evaluate(() => [...document.querySelectorAll('.slide-files :is(.path, .dir, .stat)')].map((el) => parseFloat(getComputedStyle(el).fontSize)));
+  assert.ok(sizes.length > 0);
+  assert.ok(sizes.every((px) => px > 13), `sizes ${sizes}`);
+  await context.close();
 });

@@ -50,6 +50,12 @@
 .slide-cover .meta div { background: var(--surface); }
 /* a flavor may clear the pill, leaving the labels on the scrim: keep them in a proven ink */
 .slide-cover .meta :is(dt, dd) { color: var(--text-2); }
+/* links and code on any cover ground (scrim, accent card, lime block) take that ground's proven ink, as the
+   page's verdict card does; the focus ring follows it, since --accent may be the ground itself */
+:root[data-flavor] .slide-cover :is(a, code) { color: inherit; }
+:root[data-flavor] .slide-cover a { text-decoration-color: currentColor; }
+:root[data-flavor] .slide-cover code { background: none; box-shadow: inset 0 0 0 1px currentColor; }
+:root[data-flavor] .slide-cover :focus-visible { outline-color: currentColor; }
 
 /* closing slide: any section type can close, so its content gets solid ground; the art frames it */
 .slide-has-art:not(.slide-cover) .slide-inner { padding: clamp(20px, 3vw, 44px); background: var(--page); }
@@ -60,7 +66,7 @@
 
 /* a gentle rise for the slide that arrives; none when motion is reduced */
 @media (prefers-reduced-motion: no-preference) {
-  :root[data-flavor] .slide:not([inert]) > .slide-inner { animation: deck-rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  :root[data-flavor] .slide:not([inert]) > .slide-inner { animation: deck-rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
   @keyframes deck-rise { from { opacity: 0; transform: translateY(12px); } }
 }
 
@@ -96,19 +102,23 @@
 /* ---- poster: condensed caps, an oversized outlined numeral, hard rules, crop marks, the lime block ------ */
 :root[data-flavor="poster"] .slide:not(.slide-has-art) .slide-inner { border-top: 1px solid var(--text); padding-top: var(--sp-4); }
 :root[data-flavor="poster"] .slide-title { font-size: clamp(2.2rem, 1rem + 4vw, 4.8rem); line-height: 0.9; letter-spacing: 0.004em; }
-:root[data-flavor="poster"] .slide:not(.slide-has-art)::before { top: 18px; right: 22px; font-size: clamp(5rem, 1rem + 9vw, 12rem); letter-spacing: -0.01em; color: transparent; -webkit-text-stroke: 1px color-mix(in srgb, var(--text) 40%, transparent); }
+:root[data-flavor="poster"] .slide:not(.slide-has-art)::before { top: 40px; right: 40px; font-size: clamp(5rem, 1rem + 9vw, 12rem); letter-spacing: -0.01em; color: transparent; -webkit-text-stroke: 1px color-mix(in srgb, var(--text) 40%, transparent); }
 /* crop marks at the four corners of every slide: a bordered box masked down to its corners */
 :root[data-flavor="poster"] .slide:not(.slide-has-art)::after { content: ""; position: absolute; inset: 14px 14px 64px; z-index: -1; pointer-events: none; border: 1px solid var(--text);
   -webkit-mask: linear-gradient(#000 0 0) top left / 18px 18px no-repeat, linear-gradient(#000 0 0) top right / 18px 18px no-repeat, linear-gradient(#000 0 0) bottom left / 18px 18px no-repeat, linear-gradient(#000 0 0) bottom right / 18px 18px no-repeat;
   mask: linear-gradient(#000 0 0) top left / 18px 18px no-repeat, linear-gradient(#000 0 0) top right / 18px 18px no-repeat, linear-gradient(#000 0 0) bottom left / 18px 18px no-repeat, linear-gradient(#000 0 0) bottom right / 18px 18px no-repeat; }
 /* the title sits on the lime block: every cover ink follows the block's text colour */
 :root[data-flavor="poster"] .slide-cover .slide-inner { margin: auto auto 0 0; background: var(--card-bg); color: var(--card-fg); border: 1px solid var(--text); }
-:root[data-flavor="poster"] .slide-cover h1 { max-width: 11em; font-size: clamp(3rem, 1rem + 6.6vw, 7.4rem); line-height: 0.86; }
+/* 0.96, not tighter: a comma descends into the next line's caps below that */
+:root[data-flavor="poster"] .slide-cover h1 { max-width: 11em; font-size: clamp(3rem, 1rem + 5.8vw, 7rem); line-height: 0.96; }
 :root[data-flavor="poster"] .slide-cover :is(.subtitle, .meta div, .meta dt, .meta dd) { color: inherit; background: none; border-color: currentColor; }
 :root[data-flavor="poster"] .slide-has-art:not(.slide-cover) .slide-inner { border: 1px solid var(--text); box-shadow: 8px 8px 0 var(--glow); }
 :root[data-flavor="poster"] .slide-has-art:not(.slide-cover) .pa-footer { border: 1px solid var(--text); border-top-width: 0; }
 :root[data-flavor="poster"] .deck-progress > span { background: var(--glow); }
 :root[data-flavor="poster"] .deck-count { font-family: var(--mono); }
+/* flavors.css pins the poster mono to 13px for the page; a slide gives it the projection scale */
+:root[data-flavor="poster"] .slide :is(.path, .dir) { font-size: calc(var(--fs-sm) * 0.88); }
+:root[data-flavor="poster"] .slide .stat { font-size: var(--fs-xs); }
 
 /* ---- phone and short screens ------------------------------------------------------------------------- */
 @media (max-width: 900px) {
@@ -125,10 +135,13 @@
 }
 
 /* ---- print: flat, in ink ----------------------------------------------------------------------------- */
+/* !important: the flavor rules above are more specific, and print must win over every one of them */
 @media print {
   .slide-art, .slide::before, .slide::after { display: none !important; }
   .slide { background: none !important; }
-  .slide-cover .slide-inner, .slide-has-art .slide-inner { background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--text); }
-  :root[data-flavor="dusk"] .slide-cover .subtitle { color: var(--text); }
+  .slide-has-art .slide-inner, .slide-has-art .pa-footer { background: none !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; color: var(--text) !important; border: 0 !important; border-radius: 0 !important; padding: 0 !important; }
+  /* the classic deck's print placement (slides.html): full width, the title 30vh down */
+  .slide-cover .slide-inner { max-width: none !important; margin: 30vh 0 0 !important; }
+  :root[data-flavor="dusk"] .slide-cover .subtitle { color: var(--text) !important; padding: 0 !important; }
   :root[data-flavor="dusk"] .slide-cover .subtitle::before { display: none; }
 }
