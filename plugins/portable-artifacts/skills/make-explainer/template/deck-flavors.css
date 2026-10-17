@@ -11,8 +11,25 @@
 :root[data-flavor] .slide-title { font-weight: var(--head-weight); letter-spacing: var(--head-track); text-transform: var(--head-case); line-height: 1.02; }
 :root[data-flavor] .slide-eyebrow.pa-label { font-family: var(--mono); font-weight: 400; letter-spacing: 0.14em; }
 :root[data-flavor] .slide .lead { font-weight: var(--head-weight); letter-spacing: -0.015em; line-height: 1.12; }
+/* a deck is read from across a room: inside a slide the type tokens grow with the screen, so every section's
+   own sizes (cards, tables, code, callouts) scale with them */
+:root[data-flavor] .slide-inner { --fs-xs: clamp(12px, 0.45rem + 0.5vw, 16px); --fs-sm: clamp(14px, 0.5rem + 0.85vw, 20px); --fs-base: clamp(16px, 0.6rem + 0.9vw, 23px); --fs-md: clamp(19px, 0.7rem + 1.2vw, 28px); }
+:root[data-flavor] .slide .callout { max-width: 48rem; padding: var(--sp-5) var(--sp-6); }
+:root[data-flavor] .slide .callout-title { font-size: clamp(1.4rem, 0.8rem + 1.8vw, 2.4rem); line-height: 1.05; }
+:root[data-flavor] .slide .callout > p:not(.callout-head) { font-size: var(--fs-md); line-height: 1.45; }
+:root[data-flavor] .slide .det summary { font-size: var(--fs-md); }
+:root[data-flavor="poster"] .slide .code pre { font-size: calc(var(--fs-sm) * 0.88); }
+/* numbers too: the deck scales them past the page's cap */
+:root[data-flavor] .slide .kpi-value { font-size: clamp(2.8rem, 1.2rem + 4.4vw, 6rem); }
+:root[data-flavor] .slide .step { padding-bottom: var(--sp-3); }
 /* the tldr's own box would stack a card on the slide: the slide is the card */
 :root[data-flavor] .slide-tldr .tldr { background: none; border: 0; border-radius: 0; padding: 0; }
+/* on a wide screen the verdict and its points sit side by side */
+@media (min-width: 1000px) and (min-aspect-ratio: 4/3) {
+  :root[data-flavor] .slide-tldr .tldr { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); column-gap: var(--sp-7); align-items: start; }
+  :root[data-flavor] .slide-tldr .tldr > :not(.lead, .points) { grid-column: 1 / -1; }
+  :root[data-flavor] .slide-tldr .points { margin-top: 0; }
+}
 
 /* the art: full-bleed under the slide's content, one drawing per mode */
 .slide-art { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; background: var(--page); }
@@ -78,9 +95,9 @@
 /* ---- poster: condensed caps, an oversized outlined numeral, hard rules, crop marks, the lime block ------ */
 :root[data-flavor="poster"] .slide:not(.slide-has-art) .slide-inner { border-top: 1px solid var(--text); padding-top: var(--sp-4); }
 :root[data-flavor="poster"] .slide-title { font-size: clamp(2.2rem, 1rem + 4vw, 4.8rem); line-height: 0.9; letter-spacing: 0.004em; }
-:root[data-flavor="poster"] .slide:not(.slide-has-art)::before { top: 18px; right: var(--deck-pad); font-size: clamp(6rem, 2rem + 12vw, 15rem); letter-spacing: -0.01em; color: transparent; -webkit-text-stroke: 1px color-mix(in srgb, var(--text) 40%, transparent); }
+:root[data-flavor="poster"] .slide:not(.slide-has-art)::before { top: 18px; right: 22px; font-size: clamp(5rem, 1rem + 9vw, 12rem); letter-spacing: -0.01em; color: transparent; -webkit-text-stroke: 1px color-mix(in srgb, var(--text) 40%, transparent); }
 /* crop marks at the four corners of every slide: a bordered box masked down to its corners */
-:root[data-flavor="poster"] .slide::after { content: ""; position: absolute; inset: 14px 14px 64px; z-index: -1; pointer-events: none; border: 1px solid var(--text);
+:root[data-flavor="poster"] .slide:not(.slide-has-art)::after { content: ""; position: absolute; inset: 14px 14px 64px; z-index: -1; pointer-events: none; border: 1px solid var(--text);
   -webkit-mask: linear-gradient(#000 0 0) top left / 18px 18px no-repeat, linear-gradient(#000 0 0) top right / 18px 18px no-repeat, linear-gradient(#000 0 0) bottom left / 18px 18px no-repeat, linear-gradient(#000 0 0) bottom right / 18px 18px no-repeat;
   mask: linear-gradient(#000 0 0) top left / 18px 18px no-repeat, linear-gradient(#000 0 0) top right / 18px 18px no-repeat, linear-gradient(#000 0 0) bottom left / 18px 18px no-repeat, linear-gradient(#000 0 0) bottom right / 18px 18px no-repeat; }
 /* the title sits on the lime block: every cover ink follows the block's text colour */
