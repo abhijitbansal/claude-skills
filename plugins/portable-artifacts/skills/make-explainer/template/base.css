@@ -39,7 +39,7 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 .theme-toggle { flex: none; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; color: var(--text-2); }
 .theme-toggle:hover { color: var(--text); border-color: var(--text-3); }
 .pa-footer { max-width: 76rem; margin: 64px auto 32px; padding: 16px 24px 0; border-top: 1px solid var(--line); }
-.pa-provenance { margin: 0; color: var(--text-3); font-size: var(--fs-xs); }
+.pa-provenance, .pa-theme { margin: 0; color: var(--text-3); font-size: var(--fs-xs); }
 
 /* In one column the card's box matches a band's (the column plus --band-x on each side) and its text keeps the
    column edge. Beside a contents list it starts at the text edge, spans the list, and ends where a band ends.

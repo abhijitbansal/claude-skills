@@ -19,9 +19,13 @@ import { faviconLink } from '../../shared/icons.mjs';
 import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
 import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mjs';
 import { esc, inline, headingInline, plain, rawText, toneClass } from './render/ui.mjs';
+import { flavorFor, flavorVars, CLASSIC } from './flavor.mjs';
+import { artSvg } from '../../shared/art.mjs';
 
 const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), slides: new URL('../../template/slides.html', import.meta.url) };
 const BASE_CSS = new URL('../../template/base.css', import.meta.url);
+const FLAVOR_CSS = new URL('../../template/flavors.css', import.meta.url);
+const ART = { width: 1280, height: 720 };
 const SLIDES_JS = new URL('../../template/slides.js', import.meta.url);
 const PA_LIB = new URL('../../template/pa-lib.js', import.meta.url);
 const RUNTIME = new URL('../../template/runtime.js', import.meta.url);
@@ -187,6 +191,13 @@ function altFlags(sections) {
   return sections.map((s) => SECTIONS[s.type].band && visual++ % 2 === 0);
 }
 
+// The hero's procedural art, seeded from the title: one drawing per colour mode in one slot, the
+// stylesheet shows the one that matches. Decorative, so hidden from assistive tech.
+function heroArt(spec, theme) {
+  const drawing = (mode) => artSvg({ theme: theme.name, seed: spec.title, ...ART, mode }).replace(/^<svg /, `<svg class="art-${mode}" `);
+  return `<div class="hero-art" aria-hidden="true">${drawing('light')}${drawing('dark')}</div>`;
+}
+
 // The page layout: hero pieces, the contents list and the sections.
 function pageParts(spec, ctx, ids) {
   const titleIds = headingIds(ids);
@@ -236,7 +247,8 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
   const slug = pageSlug(target);
   const slides = isSlides(spec);
   const ids = sectionIds(spec.sections);
-  const footer = `<footer class="pa-footer">${provenanceHtml('make-explainer', spec.generatedBy, buildDate(env))}</footer>`;
+  const flavor = flavorFor(themeData.name);
+  const footer = `<footer class="pa-footer">${provenanceHtml('make-explainer', spec.generatedBy, buildDate(env))}<p class="pa-theme">Theme: ${esc(themeData.name)}</p></footer>`;
   const ctx = {
     theme: themeData,
     dir,
@@ -257,6 +269,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     if (def.assets) assets.push(...(await def.assets(section, ctx)).map((a) => ({ ...a, at: `sections[${i}]` })));
   }
   const layout = slides ? deckParts(spec, ctx) : pageParts(spec, ctx, ids);
+  const flavored = flavor !== CLASSIC;
 
   const parts = {
     CSP: esc(contentSecurityPolicy(spec)),
@@ -267,8 +280,11 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     TOGGLE_CSS,
     TOGGLE_JS: inlineCode(TOGGLE_JS),
     FOOTER: footer,
-    THEME: themeCss(themeData),
+    THEME: flavored ? `${themeCss(themeData)}\n${flavorVars(flavor)}` : themeCss(themeData),
     BASECSS: fs.readFileSync(BASE_CSS, 'utf8').replace(/\n$/, ''),
+    FLAVOR: flavor,
+    FLAVORCSS: flavored && !slides ? `<style>\n${fs.readFileSync(FLAVOR_CSS, 'utf8').replace(/\n$/, '')}\n</style>` : '',
+    HEROART: flavored && !slides ? heroArt(spec, themeData) : '',
     ...layout,
     ...sectionPageParts(spec, ctx),
     PALIB: inlineCode(fs.readFileSync(PA_LIB, 'utf8')),

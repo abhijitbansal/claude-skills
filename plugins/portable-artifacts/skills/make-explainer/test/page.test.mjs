@@ -242,3 +242,57 @@ test('with no theme anywhere the explainer defaults to dusk; --theme press swaps
   const press = (await build(doc([text(1)]), { theme: 'press' })).html;
   assert.match(press, /@font-face\{[^}]*font-family:"Young Serif"/);
 });
+
+// ---- flavors: theme character beyond tokens (the head and the hero; goldens cover the body only) ----
+
+const EXAMPLES = fileURLToPath(new URL('../references/examples/', import.meta.url));
+const CONCEPT = JSON.parse(fs.readFileSync(path.join(EXAMPLES, 'concept.explainer.json'), 'utf8'));
+const unthemed = (spec) => {
+  const { theme: _pinned, ...rest } = spec;
+  return rest;
+};
+const heroArt = (html) => html.match(/<div class="hero-art"[^>]*>[\s\S]*?<\/div>/g) ?? [];
+
+test('flavor: the default theme is dusk; --theme press and poster set their own flavor', async () => {
+  assert.match((await build(unthemed(CONCEPT), { dir: EXAMPLES })).html, /<html lang="en" data-flavor="dusk">/);
+  assert.match((await build(CONCEPT, { dir: EXAMPLES, theme: 'press' })).html, /<html lang="en" data-flavor="press">/);
+  assert.match((await build(CONCEPT, { dir: EXAMPLES, theme: 'poster' })).html, /<html lang="en" data-flavor="poster">/);
+});
+
+test('flavor: the four older themes keep their look under the classic flavor, with no hero art', async () => {
+  for (const theme of ['paper', 'blueprint', 'ink', 'editorial']) {
+    const { html } = await build(CONCEPT, { dir: EXAMPLES, theme });
+    assert.match(html, /<html lang="en" data-flavor="classic">/, theme);
+    assert.deepEqual(heroArt(html), [], theme);
+    assert.ok(!html.includes('/* flavors */'), `${theme}: no flavor stylesheet`);
+  }
+});
+
+test('hero art: one aria-hidden .hero-art holding the light and the dark drawing of the title', async () => {
+  for (const theme of ['dusk', 'press', 'poster']) {
+    const { html } = await build(CONCEPT, { dir: EXAMPLES, theme });
+    const art = heroArt(html);
+    assert.equal(art.length, 1, theme);
+    assert.match(art[0], /^<div class="hero-art" aria-hidden="true">/);
+    assert.equal((art[0].match(/<svg /g) ?? []).length, 2, `${theme}: one drawing per mode`);
+    assert.match(art[0], /<svg [^>]*class="art-light"/);
+    assert.match(art[0], /<svg [^>]*class="art-dark"/);
+    assert.match(art[0], new RegExp(`data-art="${theme}"`));
+  }
+});
+
+test('flavor pages: no network url(), the spacing and numeral tokens, the flavor stylesheet and its grain', async () => {
+  const { html } = await build(unthemed(CONCEPT), { dir: EXAMPLES });
+  assert.ok(!/url\(\s*["']?http/i.test(html), 'no url(http');
+  assert.match(html, /--sp-1:4px/);
+  assert.match(html, /--fs-numeral:/);
+  assert.match(html, /--fs-display:/);
+  assert.match(html, /\/\* flavors \*\//);
+  assert.match(html, /--card-bg:var\(--accent\);--card-fg:var\(--page\)/);
+  assert.match(html, /mask-image:\s*url\("data:image\/svg\+xml/);
+});
+
+test('the footer records the theme by name', async () => {
+  assert.match((await build(unthemed(CONCEPT), { dir: EXAMPLES })).html, /<footer class="pa-footer"><p class="pa-provenance"[^>]*>[^<]*<\/p><p class="pa-theme">Theme: dusk<\/p><\/footer>/);
+  assert.match((await build(CONCEPT, { dir: EXAMPLES })).html, /<p class="pa-theme">Theme: paper<\/p>/);
+});

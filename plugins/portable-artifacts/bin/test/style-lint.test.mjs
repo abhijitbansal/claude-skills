@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SKILLS = fileURLToPath(new URL('../../skills/', import.meta.url));
-const SOURCES = ['make-explainer/template/base.css', 'make-explainer/template/chart.css', 'make-explainer/template/diagram.css',
+const SOURCES = ['make-explainer/template/base.css', 'make-explainer/template/flavors.css', 'make-explainer/template/chart.css', 'make-explainer/template/diagram.css',
   'make-explainer/template/motion.css', 'make-explainer/template/slides.html', 'make-explainer/template/page.html',
   'make-diagram/template/viewer.html', 'make-diagram/scripts/lib/css.mjs', 'make-dashboard/template/page.html', 'make-motion/template/styles.css'];
 

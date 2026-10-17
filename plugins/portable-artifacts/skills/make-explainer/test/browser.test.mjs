@@ -75,6 +75,51 @@ for (const name of EXAMPLES) {
   }
 }
 
+// The flavored themes: the examples pin paper, so build each again under dusk, press and poster.
+// Martian Mono (poster) is the widest mono; code, paths and tables must scroll or wrap, never widen the page.
+for (const name of EXAMPLES) {
+  for (const theme of ['dusk', 'press', 'poster']) {
+    test(`${name} under ${theme}: no horizontal overflow at 1280, 500 and 375 px, light and dark, no console problems`, async (t) => {
+      if (await skipUnlessBrowser(t)) return;
+      const { url } = buildFile(exampleFile(name), { name: `${name}-${theme}`, theme });
+      for (const width of [1280, 500, 375]) {
+        for (const colorScheme of ['light', 'dark']) {
+          const { page, problems, context } = await open(url, { width, height: 900, colorScheme, reducedMotion: 'reduce' });
+          const fit = await page.evaluate(() => {
+            const limit = document.documentElement.clientWidth;
+            const wide = [...document.querySelectorAll('body *')]
+              .filter((el) => !el.closest('.tablewrap, pre, .sr-only, .skip, svg, .dg-slot *') && el.getBoundingClientRect().right > limit + 1)
+              .map((el) => `${el.tagName}.${el.className}`);
+            return { scroll: document.documentElement.scrollWidth, limit, wide };
+          });
+          assert.ok(fit.scroll <= fit.limit, `${width} ${colorScheme}: page scrolls sideways: ${fit.scroll} > ${fit.limit}`);
+          assert.deepEqual(fit.wide, [], `${width} ${colorScheme}`);
+          assert.deepEqual(problems, [], `${width} ${colorScheme}`);
+          await context.close();
+        }
+      }
+    });
+  }
+}
+
+test('the flavored hero shows the verdict card whole in the first 1280 x 900 viewport, and exactly one drawing per mode', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const theme of ['dusk', 'press', 'poster']) {
+    for (const colorScheme of ['light', 'dark']) {
+      const { page, context } = await open(buildFile(exampleFile('concept'), { name: `concept-${theme}`, theme }).url, { colorScheme, reducedMotion: 'reduce' });
+      const m = await page.evaluate(() => {
+        const card = document.querySelector('.hero .hero-tldr .tldr').getBoundingClientRect();
+        const shown = [...document.querySelectorAll('.hero-art svg')].filter((s) => getComputedStyle(s).display !== 'none').map((s) => s.getAttribute('class'));
+        return { bottom: card.bottom, shown, flavor: document.documentElement.dataset.flavor };
+      });
+      assert.equal(m.flavor, theme);
+      assert.ok(m.bottom <= 900, `${theme} ${colorScheme}: verdict ends at ${m.bottom}`);
+      assert.deepEqual(m.shown, [`art-${colorScheme}`], `${theme} ${colorScheme}`);
+      await context.close();
+    }
+  }
+});
+
 test('the first viewport at 1280 x 900 holds the hero, the whole verdict card and the numbers', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   for (const name of ['concept', 'recap']) {
@@ -394,7 +439,8 @@ test('phone hero: no line of the title runs under the theme toggle', async (t) =
   if (await skipUnlessBrowser(t)) return;
   // ink and editorial: Bricolage's glyph boxes overhang the line box most, Newsreader's least
   const long = (theme) => buildSpec({ ...LONG_TITLE, theme }, { name: `long-${theme}` }).url;
-  for (const [name, url] of [['recap', built('recap').url], ['concept', built('concept').url], ['long', long('paper')], ['long ink', long('ink')], ['long editorial', long('editorial')]]) {
+  const flavored = ['dusk', 'press', 'poster'].map((theme) => [`long ${theme}`, long(theme)]);
+  for (const [name, url] of [['recap', built('recap').url], ['concept', built('concept').url], ['long', long('paper')], ['long ink', long('ink')], ['long editorial', long('editorial')], ...flavored]) {
     for (const width of [320, 340, 360, 390]) {
       const { page, context } = await open(url, { width, height: 800, reducedMotion: 'reduce' });
       const hits = await page.evaluate(() => {
@@ -410,9 +456,10 @@ test('phone hero: no line of the title runs under the theme toggle', async (t) =
   }
 });
 
+// Classic geometry: the flavored themes (dusk, press, poster) set the card on its own solid fill instead.
 test('single column: the hero card reaches as far left as the bands and its text keeps the column edge', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  for (const [url, width] of [[built('recap').url, 1024], [buildSpec(LONG_TITLE, { name: 'long-title' }).url, 1280], [built('recap').url, 390]]) {
+  for (const [url, width] of [[built('recap').url, 1024], [buildSpec({ ...LONG_TITLE, theme: 'paper' }, { name: 'long-title' }).url, 1280], [built('recap').url, 390]]) {
     const { page, context } = await open(url, { width, height: 900, reducedMotion: 'reduce' });
     const m = await page.evaluate(() => {
       const card = document.querySelector('.hero-tldr');
