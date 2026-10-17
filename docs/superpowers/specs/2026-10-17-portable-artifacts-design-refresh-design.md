@@ -25,11 +25,11 @@ Three new theme files in `shared/themes/`, each with light and dark modes hand-t
 
 | Theme | Source | Display / body / mono | Feel | Best for |
 |---|---|---|---|---|
-| `dusk` (default) | Specimen C | Funnel Display (Unbounded only for short big numerals) / Host Grotesk / Commit Mono | Aubergine to peach, coral and mint, film grain, tilted cards | Anything, or unclear |
+| `dusk` (default) | Specimen C | Funnel Display  / Host Grotesk / Commit Mono | Aubergine to peach, coral and mint, film grain, tilted cards | Anything, or unclear |
 | `press` | Specimen A | Young Serif / Schibsted Grotesk / JetBrains Mono | Bone paper, ink, vermilion, marginal numerals, overprint art | Dense docs, long reads, branch recaps |
 | `poster` | Specimen B | Big Shoulders / Familjen Grotesk / Martian Mono | Near-black, acid lime and orange, condensed caps, halftone, registration marks | Launch decks, pitches, energetic clips |
 
-Display faces chosen over the alternates because: Gloock's hairline serifs are fragile below ~28px; Anybody at 50% width is clumsy next to Big Shoulders; Unbounded is too wide beyond short text.
+Display faces chosen over the alternates because: Gloock's hairline serifs are fragile below ~28px; Anybody at 50% width is clumsy next to Big Shoulders; Unbounded was dropped: too wide, and the loader has three font roles.
 
 All fonts are SIL OFL 1.1, bundled as latin woff2 in `shared/fonts/` with licences in `shared/fonts/LICENSES`. The theme JSON schema is the existing one (fonts, light/dark colour tokens, categorical and sequential ramps) so existing consumers keep working. Avoided faces: Inter, Geist, Space Grotesk, Instrument Serif, Fraunces, Playfair, Roboto.
 
@@ -76,3 +76,11 @@ All fonts are SIL OFL 1.1, bundled as latin woff2 in `shared/fonts/` with licenc
 - Font payload size per page grows with three families per theme; keep to the weights actually used and subset to latin.
 - `dusk` grain and blurred blobs are heavy on low-end devices; provide a reduced-effects path.
 - `poster` all-caps condensed display needs short headings; the heading budget warning already caps titles at 8 words.
+
+## Findings from the code (added while planning)
+
+- `DEFAULT_THEME` in `shared/theme.mjs` is `paper` and make-dashboard uses it. Explainer and motion get their own default constants (as make-diagram does with `DIAGRAM_THEME`); the shared default does not change.
+- Each theme is capped at 6 font files and 200 KiB (`shared/test/theme.test.mjs`), so only the weights in the plan ship, not every weight the specimens loaded.
+- `shared/contrast.mjs` `checkTheme` gates every theme (4.5:1 text, 3:1 UI, kind hues, monotone sequential ramp). Themes need `kind*` hues and `glow` tokens that the specimens did not define.
+- `bin/test/style-lint.test.mjs` has a font allowlist that must learn the new families; `shared/fonts/metrics.json` needs an entry for every body and mono face, and no generator exists yet (plan adds `bin/font-metrics.py`).
+- Golden baselines move with the markup and are regenerated on purpose.
