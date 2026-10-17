@@ -8,9 +8,12 @@
 //
 // Safety contract: the output has no script, no foreignObject, no href and no
 // external url(); the only colours interpolated are #rrggbb tokens checked by
-// assertHex; the seed text is only ever hashed, never written out. There is no
-// xmlns attribute (it would put "http" in the string): the SVG is meant to be
-// inlined in HTML; add xmlns yourself to save it as a standalone .svg file.
+// assertHex; the seed text is only ever hashed, never written out. The root
+// carries the SVG namespace (a name, not a reference) so the string also works
+// in <img>, data: URIs, CSS backgrounds, canvas and as a saved .svg file.
+// Ids are unique per argument set: inlining the exact same call twice on one
+// page duplicates its ids (harmless, identical defs), so vary the seed if a
+// page shows one title twice and you need distinct ids.
 import { loadTheme, ThemeError } from './theme.mjs';
 
 export { ThemeError };
@@ -22,7 +25,11 @@ const FALLBACK_STYLE = 'press';
 const MODES = ['light', 'dark'];
 const HEX = /^#[0-9a-f]{6}$/i;
 const TAU = Math.PI * 2;
-const MAX_DOTS = 1400; // per halftone layer; keeps 1280x720 well under 60 KB
+const MAX_DOTS = 1400; // per halftone layer; keeps every accepted size under 60 KB
+const MIN_SIZE = 16;
+const MAX_SIZE = 8192;
+const WARP_LINES = 36; // grid-warp lines along the long side; the short side scales down
+const XMLNS = 'http://www.w3.org/2000/svg';
 const RADIUS_LEVELS = 7; // halftone dot sizes are quantised to this many paths
 
 export function assertHex(value, key) {
@@ -108,14 +115,20 @@ function screen(ctx, angle, step, value) {
     for (let v = -n; v <= n; v++) {
       const x = W / 2 + u * step * ca - v * step * sa;
       const y = H / 2 + u * step * sa + v * step * ca;
-      if (x < -step || y < -step || x > W + step || y > H + step) continue;
+      if (x < -step / 2 || y < -step / 2 || x > W + step / 2 || y > H + step / 2) continue;
       out.push([x, y, value(x, y)]);
     }
   }
   return out;
 }
 
-const dotStep = (ctx, budget) => Math.max(6, Math.sqrt((ctx.W * ctx.H) / budget));
+// Pitch s such that the clipped grid, (W + s)(H + s) / s^2 cells, holds at
+// most `budget` dots whatever the aspect ratio.
+function dotStep(ctx, budget) {
+  const { W, H } = ctx;
+  const b = budget - 1;
+  return Math.max(6, (W + H + Math.sqrt((W + H) ** 2 + 4 * b * W * H)) / (2 * b));
+}
 
 // Closed smooth curve: quadratic segments through the midpoints of samples.
 function ring(cx, cy, radius, shape, points = 28) {
@@ -352,8 +365,12 @@ function posterWarp(ctx, opacity) {
   const { r, c, W, H, S } = ctx;
   const n = noise(r);
   const amp = S * (0.05 + r() * 0.04);
-  const rows = 20;
-  const cols = Math.round((rows * W) / H);
+  // line counts follow the aspect ratio but stay within [2, WARP_LINES], and
+  // every line has the same number of samples, so bytes are bounded
+  const lines = (side) => Math.max(2, Math.min(WARP_LINES, Math.round((WARP_LINES * side) / ctx.L)));
+  const rows = lines(H);
+  const cols = lines(W);
+  const samples = WARP_LINES;
   const k = 3.2;
   const pt = (x, y) => {
     const o = n((x / W) * k, (y / H) * k) * amp;
@@ -363,13 +380,13 @@ function posterWarp(ctx, opacity) {
   let ink = '';
   for (let i = 0; i <= rows; i++) {
     let d = '';
-    for (let j = 0; j <= cols; j++) d += `${j ? 'L' : 'M'}${pt((j / cols) * W, (i / rows) * H)}`;
+    for (let j = 0; j <= samples; j++) d += `${j ? 'L' : 'M'}${pt((j / samples) * W, (i / rows) * H)}`;
     ink += `<path d="${d}"/>`;
   }
   let lime = '';
   for (let j = 0; j <= cols; j += 3) {
     let d = '';
-    for (let i = 0; i <= rows; i++) d += `${i ? 'L' : 'M'}${pt((j / cols) * W, (i / rows) * H)}`;
+    for (let i = 0; i <= samples; i++) d += `${i ? 'L' : 'M'}${pt((j / cols) * W, (i / samples) * H)}`;
     lime += `<path d="${d}"/>`;
   }
   return `<g fill="none" stroke-width="${width}" opacity="${op(opacity)}"><g stroke="${c.text}">${ink}</g><g stroke="${c.accent}" opacity=".85">${lime}</g></g>`;
@@ -401,14 +418,17 @@ const GENERATORS = {
 };
 
 function size(name, value) {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    throw new TypeError(`${name} must be a positive finite number, got ${JSON.stringify(value)}`);
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new TypeError(`${name} must be a finite number, got ${typeof value === 'number' ? String(value) : JSON.stringify(value) ?? String(value)}`);
+  }
+  if (value < MIN_SIZE || value > MAX_SIZE) {
+    throw new RangeError(`${name} must be between ${MIN_SIZE} and ${MAX_SIZE}, got ${String(value)}`);
   }
   return value;
 }
 
 // mode defaults to 'dark': the dusk and poster specimens are dark-first.
-export function artSvg({ theme, seed, width, height, mode = 'dark' }) {
+export function artSvg({ theme, seed, width, height, mode = 'dark' } = {}) {
   const tokens = loadTheme(theme);
   if (!MODES.includes(mode)) throw new TypeError(`mode must be one of ${MODES.join(', ')}, got ${JSON.stringify(mode)}`);
   const W = size('width', width);
@@ -429,6 +449,6 @@ export function artSvg({ theme, seed, width, height, mode = 'dark' }) {
   };
   const art = GENERATORS[style](ctx);
   const g = grain(ctx, art.grain);
-  return `<svg viewBox="0 0 ${f(W)} ${f(H)}" width="${f(W)}" height="${f(H)}" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false" data-art="${style}" style="isolation:isolate">`
+  return `<svg xmlns="${XMLNS}" viewBox="0 0 ${f(W)} ${f(H)}" width="${f(W)}" height="${f(H)}" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false" data-art="${style}" style="isolation:isolate">`
     + `<defs>${art.defs}${g.defs}</defs>${art.body}${g.layer}</svg>`;
 }

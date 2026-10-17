@@ -7,6 +7,7 @@ const THEMES = ['dusk', 'press', 'poster'];
 const MODES = ['light', 'dark'];
 const base = { theme: 'dusk', seed: 'Launch review', width: 1280, height: 720, mode: 'dark' };
 
+const XMLNS = ' xmlns="http://www.w3.org/2000/svg"';
 const ids = (svg) => [...svg.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
 const refs = (svg) => [...svg.matchAll(/url\(#([^)]+)\)/g)].map((m) => m[1]);
 
@@ -34,11 +35,33 @@ test('every theme and mode: standalone svg, viewBox, no external refs, one filte
       assert.ok(svg.startsWith('<svg'), label);
       assert.ok(svg.endsWith('</svg>'), label);
       assert.match(svg, /viewBox="0 0 1280 720"/, label);
-      for (const bad of ['http', 'url(http', '<script', '<foreignObject', 'href=', '<image', 'var(']) {
-        assert.ok(!svg.includes(bad), `${label} contains ${bad}`);
+      assert.equal(svg.split(XMLNS).length, 2, `${label} has exactly one xmlns`);
+      const rest = svg.replace(XMLNS, '');
+      for (const bad of ['http', 'href', 'url(http', '<script', '<foreignObject', '<image', 'var(']) {
+        assert.ok(!rest.includes(bad), `${label} contains ${bad} outside the xmlns`);
       }
       assert.equal((svg.match(/<filter\b/g) || []).length, 1, `${label} filter count`);
       assert.ok(Buffer.byteLength(svg) < 60 * 1024, `${label} is ${Buffer.byteLength(svg)} bytes`);
+    }
+  }
+});
+
+test('the root <svg> carries the SVG namespace so <img>, data: URIs and .svg files render', () => {
+  for (const theme of THEMES) assert.ok(artSvg({ ...base, theme }).startsWith(`<svg${XMLNS} `), theme);
+});
+
+test('extreme aspect ratios and the size limits: no throw, under 60 KB, for every theme and mode', () => {
+  const sizes = [[1920, 200], [200, 1920], [3000, 100], [100, 3000], [8192, 16], [16, 8192], [16, 16], [8192, 8192]];
+  for (const theme of THEMES) {
+    for (const mode of MODES) {
+      for (const [width, height] of sizes) {
+        for (const seed of ['Launch review', 'Q3 roadmap', 'Design refresh']) {
+          const svg = artSvg({ theme, mode, seed, width, height });
+          const label = `${theme}/${mode} ${width}x${height} ${seed}`;
+          assert.ok(Buffer.byteLength(svg) < 60 * 1024, `${label} is ${Buffer.byteLength(svg)} bytes`);
+          assert.ok(!/NaN|Infinity|undefined/.test(svg), label);
+        }
+      }
     }
   }
 });
@@ -75,9 +98,17 @@ test('unknown theme throws ThemeError; legacy themes fall back to the press styl
 
 test('bad mode, size or seed type is rejected', () => {
   assert.throws(() => artSvg({ ...base, mode: 'dim' }), TypeError);
-  for (const width of [0, -1, NaN, Infinity, '1280']) assert.throws(() => artSvg({ ...base, width }), TypeError, String(width));
-  assert.throws(() => artSvg({ ...base, height: 0 }), TypeError);
+  for (const width of [NaN, Infinity, '1280', undefined]) assert.throws(() => artSvg({ ...base, width }), TypeError, String(width));
+  for (const width of [0, -1, 1e-9, 15.9, 8192.1, 1e6]) assert.throws(() => artSvg({ ...base, width }), RangeError, String(width));
+  assert.throws(() => artSvg({ ...base, height: 0 }), RangeError);
+  assert.throws(() => artSvg({ ...base, width: NaN }), /got NaN/, 'NaN is named, not "null"');
+  assert.throws(() => artSvg({ ...base, width: 10 }), /between 16 and 8192/);
+  assert.ok(artSvg({ ...base, width: 16, height: 8192 }).startsWith('<svg'));
   assert.throws(() => artSvg({ ...base, seed: 42 }), TypeError);
+});
+
+test('artSvg() with no argument throws the module error, not a destructuring error', () => {
+  assert.throws(() => artSvg(), ThemeError);
 });
 
 test('seedFrom is a stable non-negative 32-bit integer', () => {
