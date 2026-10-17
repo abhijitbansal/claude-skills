@@ -40,7 +40,8 @@ export const findFontVars = (css) => [...css.matchAll(/(--(?:font|font-display|m
 
 // Only the FIRST family is checked: a theme variable, a generic/system keyword, or a bundled family.
 // Inter, JetBrains Mono and --sans are make-motion's own bundled default look, so only its sources may use them.
-const BASE_BUNDLED = ['Geist', 'Geist Mono', 'Newsreader', 'Bricolage Grotesque', 'Atkinson Hyperlegible'];
+const BASE_BUNDLED = ['Geist', 'Geist Mono', 'Newsreader', 'Bricolage Grotesque', 'Atkinson Hyperlegible',
+  'Funnel Display', 'Host Grotesk', 'Commit Mono', 'Young Serif', 'Schibsted Grotesk', 'JetBrains Mono', 'Big Shoulders Display', 'Familjen Grotesk', 'Martian Mono'];
 const MOTION_BUNDLED = ['Inter', 'JetBrains Mono'];
 const KEYWORDS = 'inherit|system-ui|-apple-system|ui-monospace|monospace|sans-serif|serif';
 export function allowedFamily(skill) {
@@ -78,6 +79,11 @@ test('lint catches what it should (guardrail proof)', () => {
   // the passing shapes
   assert.deepEqual(lintFonts('a{font: 600 var(--fs-lg)/var(--lh-head) var(--font-display); font: 12px/1.5 var(--mono); font: inherit}', 'make-explainer'), []);
   assert.deepEqual(lintFonts("a{font-family:'Geist Mono', monospace}", 'make-diagram'), []);
+  // the dusk / press / poster families are bundled for the explainer family
+  for (const f of ['Funnel Display', 'Host Grotesk', 'Commit Mono', 'Young Serif', 'Schibsted Grotesk', 'JetBrains Mono', 'Big Shoulders Display', 'Familjen Grotesk', 'Martian Mono']) {
+    assert.deepEqual(lintFonts(`a{font-family:'${f}', sans-serif}`, 'make-explainer'), [], f);
+  }
+  assert.deepEqual(lintFonts("a{font-family:'Unbounded'}", 'make-explainer'), ["'Unbounded'"], 'Unbounded is not shipped');
 });
 
 for (const rel of SOURCES) {

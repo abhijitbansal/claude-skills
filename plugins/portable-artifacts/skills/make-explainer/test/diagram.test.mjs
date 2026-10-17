@@ -77,7 +77,7 @@ test('an embedded diagram theme is ignored with a warning; the page theme is use
     const inkPage = await validateSpec(doc([section(diagram)], { theme: 'ink' }), { dir });
     assert.equal(inkPage.ok, true, JSON.stringify(inkPage.errors));
     assert.deepEqual(inkPage.warnings, warning('ink', file));
-    assert.deepEqual((await validateSpec(doc([section(diagram)]), { dir })).warnings, warning('paper', file));
+    assert.deepEqual((await validateSpec(doc([section(diagram)]), { dir })).warnings, warning('dusk', file));
   }
   assert.deepEqual((await validateSpec(doc([section(flow())]), { dir })).warnings, [], 'no theme, no warning');
   const { html } = await buildPage(doc([section(flow('T', { theme: 'no-such-theme' }))], { theme: 'ink' }), { dir });

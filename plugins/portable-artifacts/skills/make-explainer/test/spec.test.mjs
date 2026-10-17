@@ -160,7 +160,7 @@ test('top-level limits state the value and the limit', async () => {
   assert.equal((await validateSpec(doc(Array.from({ length: 40 }, () => text())), { dir: FIXTURES })).ok, true);
   assert.deepEqual(await errorsOf(doc([text()], { theme: 'papr' })), [{ path: 'theme', message: 'unknown theme "papr"; did you mean "paper"?' }]);
   assert.deepEqual(await errorsOf(doc([text()], { theme: 'zzzzzzzzzz' })), [
-    { path: 'theme', message: 'unknown theme "zzzzzzzzzz"; available: blueprint, editorial, ink, paper' },
+    { path: 'theme', message: 'unknown theme "zzzzzzzzzz"; available: blueprint, dusk, editorial, ink, paper, poster, press' },
   ]);
 });
 

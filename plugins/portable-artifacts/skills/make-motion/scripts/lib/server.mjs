@@ -8,7 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveAsset, resolveUrlPath } from './paths.mjs';
 import { validateSpec, checkGeneratedBy } from './spec.mjs';
-import { loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
+import { loadTheme } from '../../shared/theme.mjs';
+import { MOTION_THEME } from './default-theme.mjs';
 import { faviconLink } from '../../shared/icons.mjs';
 import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
 import { themeData, themeCss, FONTS_DIR } from './theme.mjs';
@@ -91,8 +92,8 @@ function loadIndex(mode) {
   return { html: template.replace('{{MODE}}', mode), csp };
 }
 
-function themeOrDefault(name) {
-  try { return loadTheme(name ?? DEFAULT_THEME); } catch { return loadTheme(DEFAULT_THEME); }
+export function themeOrDefault(name) {
+  try { return loadTheme(name ?? MOTION_THEME); } catch { return loadTheme(MOTION_THEME); }
 }
 
 // Favicon and provenance footer for the current spec, read fresh. Only `generatedBy` (valid against its own

@@ -234,3 +234,11 @@ test('the inlined scripts cannot close their own tag', async () => {
   assert.ok(scripts.length >= 3);
   for (const s of scripts) assert.equal((s.match(/<\/script/gi) ?? []).length, 1);
 });
+
+test('with no theme anywhere the explainer defaults to dusk; --theme press swaps the fonts', async () => {
+  const dusk = (await build(doc([text(1)]))).html;
+  assert.match(dusk, /@font-face\{[^}]*font-family:"Funnel Display"/);
+  assert.ok(!dusk.includes('Young Serif'));
+  const press = (await build(doc([text(1)]), { theme: 'press' })).html;
+  assert.match(press, /@font-face\{[^}]*font-family:"Young Serif"/);
+});

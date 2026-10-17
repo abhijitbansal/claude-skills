@@ -5,7 +5,8 @@
 // escapeHtml.
 import fs from 'node:fs';
 import path from 'node:path';
-import { themeCss, loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
+import { themeCss, loadTheme } from '../../shared/theme.mjs';
+import { EXPLAINER_THEME } from './default-theme.mjs';
 import { pathJoin } from '../../shared/errors.mjs';
 import { META_KEYS } from './schema.mjs';
 import { SECTIONS } from './sections.mjs';
@@ -230,7 +231,7 @@ function deckParts(spec, ctx) {
 export async function buildPage(spec, { dir = process.cwd(), theme, out, env = process.env } = {}) {
   const problems = unsupported(spec);
   if (problems.length > 0) throw new BuildError(problems);
-  const themeData = loadTheme(theme ?? spec.theme ?? DEFAULT_THEME);
+  const themeData = loadTheme(theme ?? spec.theme ?? EXPLAINER_THEME);
   const target = resolveOutput({ out, title: spec.title, env });
   const slug = pageSlug(target);
   const slides = isSlides(spec);

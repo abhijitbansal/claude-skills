@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
-import { startServer } from '../scripts/lib/server.mjs';
+import { startServer, themeOrDefault } from '../scripts/lib/server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER = path.join(root, 'scripts/render.mjs');
@@ -183,4 +183,10 @@ test('render --theme with an unknown name is a usage error (exit 2) with a did-y
   const missing = spawnSync(process.execPath, [RENDER, path.join(dir, 'm.json'), '--theme'], { encoding: 'utf8' });
   assert.equal(missing.status, 2);
   assert.match(missing.stderr, /--theme needs a value/);
+});
+
+test('with no theme named, make-motion falls back to dusk', () => {
+  assert.equal(themeOrDefault(undefined).name, 'dusk');
+  assert.equal(themeOrDefault('no-such-theme').name, 'dusk');
+  assert.equal(themeOrDefault('paper').name, 'paper');
 });

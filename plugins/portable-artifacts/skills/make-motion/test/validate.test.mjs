@@ -232,7 +232,7 @@ test('fontWeight is one of 400, 500, 600, 700, 800', () => {
 test('theme: a shared theme name is valid, anything else gets a did-you-mean or the list', () => {
   for (const name of ['paper', 'ink', 'blueprint', 'editorial']) assert.deepEqual(errs({ ...good(), theme: name }), [], name);
   assert.deepEqual(errs({ ...good(), theme: 'inx' }), ['theme: unknown theme "inx"; did you mean "ink"?']);
-  assert.deepEqual(errs({ ...good(), theme: 'zzzzzzzz' }), ['theme: unknown theme "zzzzzzzz"; available: blueprint, editorial, ink, paper']);
+  assert.deepEqual(errs({ ...good(), theme: 'zzzzzzzz' }), ['theme: unknown theme "zzzzzzzz"; available: blueprint, dusk, editorial, ink, paper, poster, press']);
   assert.deepEqual(errs({ ...good(), theme: '' }), ['theme: must NOT have fewer than 1 characters']);
   assert.deepEqual(errs({ ...good(), theme: 3 }), ['theme: must be string']);
 });
