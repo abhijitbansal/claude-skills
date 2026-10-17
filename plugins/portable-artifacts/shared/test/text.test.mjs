@@ -177,7 +177,32 @@ test('metrics.json keys are sorted and nothing extra is shipped', () => {
   const keys = Object.keys(METRICS);
   assert.deepEqual(keys, [...keys].sort());
   const used = new Set(listThemes().flatMap((n) => Object.values(loadTheme(n).fonts).flatMap((d) => Object.keys(d.weights).map((w) => `${d.family}|${w}`))));
-  assert.deepEqual(new Set(keys), used);
+  // Metrics for the dusk/press/poster faces land before their theme JSONs (design-refresh Task 1);
+  // drop PENDING_THEMES once those themes exist so this goes back to an exact match.
+  const PENDING_THEMES = ['Host Grotesk|400', 'Host Grotesk|700', 'Schibsted Grotesk|400', 'Schibsted Grotesk|700',
+    'Familjen Grotesk|400', 'Familjen Grotesk|700', 'Commit Mono|400', 'JetBrains Mono|400', 'Martian Mono|400'];
+  assert.deepEqual(new Set(keys), new Set([...used, ...PENDING_THEMES]));
+});
+
+test("every shipped theme's body and mono faces have metrics", () => {
+  const faces = ['Host Grotesk|400', 'Host Grotesk|700', 'Schibsted Grotesk|400', 'Schibsted Grotesk|700',
+    'Familjen Grotesk|400', 'Familjen Grotesk|700', 'Commit Mono|400', 'JetBrains Mono|400', 'Martian Mono|400'];
+  for (const key of faces) {
+    assert.ok(key in METRICS, `metrics.json is missing ${key}`);
+    const [family, weight] = key.split('|');
+    const w = measure('Hello', { family, weight: Number(weight), size: 14 });
+    assert.ok(Number.isFinite(w) && w > 0, `${key}: measure('Hello') = ${w}`);
+  }
+  for (const name of listThemes()) {
+    const theme = loadTheme(name);
+    for (const role of ['body', 'mono']) {
+      const { family, weights } = theme.fonts[role];
+      for (const weight of Object.keys(weights)) {
+        const w = measure('Hello', { family, weight: Number(weight), size: 14 });
+        assert.ok(Number.isFinite(w) && w > 0, `${name}.${role} ${family}|${weight}`);
+      }
+    }
+  }
 });
 
 function range(a, b) {
