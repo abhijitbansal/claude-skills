@@ -30,6 +30,8 @@
 .slide-cover h1 { max-width: 13em; font-size: clamp(2.4rem, 1rem + 4.6vw, 5.4rem); line-height: var(--lh-hero); font-weight: var(--head-weight); letter-spacing: var(--head-track); text-transform: var(--head-case); }
 .slide-cover .subtitle { color: var(--text-2); }
 .slide-cover .meta div { background: var(--surface); }
+/* a flavor may clear the pill, leaving the labels on the scrim: keep them in a proven ink */
+.slide-cover .meta :is(dt, dd) { color: var(--text-2); }
 
 /* closing slide: any section type can close, so its content gets solid ground; the art frames it */
 .slide-has-art:not(.slide-cover) .slide-inner { padding: clamp(20px, 3vw, 44px); background: var(--page); }
@@ -45,7 +47,8 @@
 }
 
 /* ---- dusk: soft gradients, a frosted card over rounded art, the tilted accent card, outlined numerals --- */
-:root[data-flavor="dusk"] .slide:not(.slide-has-art) { background: radial-gradient(70% 80% at 100% 0%, color-mix(in srgb, var(--glow) 9%, transparent), transparent 70%), radial-gradient(60% 70% at 0% 100%, color-mix(in srgb, var(--good) 7%, transparent), transparent 70%); }
+/* the glows are surface tinted by a hue, so every ink keeps its contrast on them (see slides-browser.test.mjs) */
+:root[data-flavor="dusk"] .slide:not(.slide-has-art) { background: radial-gradient(70% 80% at 100% 0%, color-mix(in srgb, var(--glow) 10%, var(--surface)), transparent 70%), radial-gradient(60% 70% at 0% 100%, color-mix(in srgb, var(--good) 8%, var(--surface)), transparent 70%); }
 :root[data-flavor="dusk"] .slide:not(.slide-has-art)::before { top: 28px; right: var(--deck-pad); font-size: clamp(5rem, 2rem + 8vw, 11rem); letter-spacing: -0.06em; color: transparent; -webkit-text-stroke: 1.5px color-mix(in srgb, var(--text) 24%, transparent); }
 :root[data-flavor="dusk"] .slide-art { inset: 14px 14px 64px; border-radius: var(--r-big) var(--r-big) var(--r-big) 10px; }
 :root[data-flavor="dusk"] .slide-cover .slide-inner { -webkit-backdrop-filter: blur(16px) saturate(1.1); backdrop-filter: blur(16px) saturate(1.1); border-radius: var(--r-big) var(--r-big) var(--r-big) 10px; }

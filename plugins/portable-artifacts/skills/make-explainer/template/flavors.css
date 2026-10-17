@@ -195,7 +195,7 @@ html[data-flavor] .callout { border: 1px solid var(--tc); background: color-mix(
 :root[data-flavor="press"] .callout { border: 2px solid var(--tc); border-radius: 0; background: var(--page); }
 /* the hatch runs under the text, so the chip gets its own solid ground */
 :root[data-flavor="poster"] .callout .chip { background: var(--surface); }
-:root[data-flavor="poster"] .callout { border: 1px solid var(--text); box-shadow: 6px 6px 0 var(--tc); border-radius: 0; background: repeating-linear-gradient(-45deg, transparent 0 10px, color-mix(in srgb, var(--tc) 12%, transparent) 10px 11px), var(--surface); }
+:root[data-flavor="poster"] .callout { border: 1px solid var(--text); box-shadow: 6px 6px 0 var(--tc); border-radius: 0; background: repeating-linear-gradient(-45deg, transparent 0 10px, color-mix(in srgb, var(--tc) 10%, transparent) 10px 11px), var(--surface); }
 html[data-flavor] .callout-title { font-size: var(--fs-md); }
 html[data-flavor] .det { border-radius: var(--r-card); }
 :root[data-flavor="press"] .det, :root[data-flavor="poster"] .det { background: none; border-width: 1px 0; border-color: var(--text); }
