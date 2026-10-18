@@ -51,3 +51,22 @@ reply, a "no" branch, a transition and a two-way link). Sequence diagrams print
 
 Change `STYLE_WORD` in `scripts/lib/legend.mjs`, the pinned legend tests, the
 goldens and the two docs if you pick another.
+
+## make-motion: the two unused `@fontsource` npm deps (branch feat/portable-artifacts-design-refresh, 2026-10-17)
+
+`skills/make-motion/package.json` still pins `@fontsource/inter` and
+`@fontsource/jetbrains-mono` (5.3.0). make-motion no longer reads either since
+`dusk` became its default look: every theme now loads its faces from the
+bundled `shared/fonts/` (which still carries JetBrains Mono for the `press`
+theme). The deps only cost install size; nothing imports them.
+
+- **A (default, shipped):** keep both in `package.json` and
+  `package-lock.json`. Installs stay byte-identical to before the branch; no
+  network install was needed to land it.
+- **B (recommended):** remove both and regenerate `package-lock.json` in a
+  follow-up that can run a network `npm install`. Smaller installs; nothing
+  in the skill reads them.
+
+To pick B: drop the two lines from `skills/make-motion/package.json`, run
+`npm install` in `skills/make-motion`, commit the lockfile, and drop the
+"still pinned" note from the Inter row of the plugin README's font table.
