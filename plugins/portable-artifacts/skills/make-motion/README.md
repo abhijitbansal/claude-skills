@@ -82,7 +82,7 @@ Keyframes are `{ "t": seconds-in-scene, "ease": "outCubic", …props }`. Each
 property holds its value before its first keyframe, interpolates between
 keyframes using the later keyframe's ease, and holds after the last one.
 There are 28 anime.js eases, from `linear` to `inOutElastic`. The full reference
-is [`references/schema.md`](references/schema.md), and there are 3 complete
+is [`references/schema.md`](references/schema.md), and there are 4 complete
 examples in [`references/examples/`](references/examples/).
 
 ## Scripts
@@ -120,4 +120,5 @@ then `PATH`, then an optional `ffmpeg-static` install. It is never bundled.
 Node.js ≥ 20, ffmpeg (≥ 4.4 for audio tracks), Chromium (one-time download) or Google Chrome. The
 dependencies, pinned by the lockfile, are anime.js v4 (MIT), Playwright
 (Apache-2.0), Vega, Vega-Lite and vega-interpreter (BSD-3-Clause), Ajv (MIT),
-and Inter and JetBrains Mono via Fontsource (OFL-1.1).
+and the theme fonts in the synced `shared/fonts` (OFL-1.1). `@fontsource/inter` and
+`@fontsource/jetbrains-mono` are still pinned but no longer used.
