@@ -102,3 +102,27 @@ test('the key never appears in any error (message or stack) across failure modes
     await assert.rejects(call(c), (e) => !JSON.stringify([e.message, e.stack, e.name]).includes(KEY));
   }
 });
+
+import { heroPrompt } from '../scripts/lib/image-hook.mjs';
+
+test('heroPrompt cuts by code points, never leaving a lone surrogate', () => {
+  const title = `${'a'.repeat(399)}😀tail`;
+  const prompt = heroPrompt({ title });
+  assert.equal([...prompt].length, 400);
+  assert.ok(prompt.endsWith('😀'));
+  assert.equal(prompt.isWellFormed(), true);
+  assert.equal(JSON.parse(JSON.stringify({ prompt })).prompt, prompt);
+});
+
+test('a key with surrounding whitespace is trimmed; a whitespace-only key is the missing-key error', async () => {
+  let auth;
+  const fetchImpl = async (_u, init) => { auth = init.headers.authorization; return new Response(PNG, { headers: { 'content-type': 'image/png' } }); };
+  await call({ key: `  ${KEY}\n`, fetchImpl });
+  assert.equal(auth, `Bearer ${KEY}`);
+  await assert.rejects(call({ key: '\n' }), /PA_IMAGE_API_KEY/);
+});
+
+test('a redirect is reported as such, without echoing URLs', async () => {
+  const fetchImpl = async () => { throw new TypeError(`fetch failed https://evil.example/${KEY}`, { cause: new Error('unexpected redirect') }); };
+  await assert.rejects(call({ fetchImpl }), (e) => /redirected; redirects are not followed/.test(e.message) && !e.message.includes('evil') && !e.message.includes(KEY));
+});

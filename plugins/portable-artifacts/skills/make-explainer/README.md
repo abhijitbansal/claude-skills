@@ -4,7 +4,8 @@
 recap, a diff review, a concept or plan explainer, an interactive test
 checklist or a presentation. The agent fills a small JSON document of typed
 sections; local scripts validate it, lint the prose and render it. Works with
-any agent that can run shell commands. Nothing leaves your machine.
+any agent that can run shell commands. Nothing leaves your machine
+unless you opt in with `--image-api` (see below).
 
 - **One spec, `explainer.json`**: a title and 1 to 40 sections of 18 types.
   The agent never writes HTML, CSS, SVG or script; the spec accepts none of
@@ -28,7 +29,8 @@ any agent that can run shell commands. Nothing leaves your machine.
   words, text section 120, card text 30, list item 20, page prose 900, tl;dr 3 points.
 - **A page worth opening**: themed (seven themes, light and dark; `dusk` by default), a
   contents list from four sections up, copy buttons on code, print styles,
-  reduced motion respected, no network at build or view time.
+  reduced motion respected, no network at build or view time
+  (unless you opt in with `--image-api`, see below).
 - **Optional hero image**: `--image-api <https-endpoint>` swaps the page hero's
   art for a picture from your own image service. Off by default. It sends the
   page title and subtitle to that host, needs your key in `PA_IMAGE_API_KEY`, and

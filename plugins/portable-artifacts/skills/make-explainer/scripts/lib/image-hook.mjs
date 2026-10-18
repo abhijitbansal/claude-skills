@@ -32,8 +32,9 @@ export function parseEndpoint(endpoint) {
 
 /** The key itself, else an ImageHookError naming the environment variable. */
 export function requireKey(key) {
-  if (typeof key !== 'string' || key.trim() === '') throw new ImageHookError(`${KEY_ENV} is not set; export your image API key in ${KEY_ENV} and rerun`);
-  return key;
+  const trimmed = typeof key === 'string' ? key.trim() : '';
+  if (trimmed === '') throw new ImageHookError(`${KEY_ENV} is not set or empty; export your image API key in ${KEY_ENV} and rerun`);
+  return trimmed;
 }
 
 const scrub = (text, key) => (key ? String(text).split(key).join('[redacted]') : String(text));
@@ -68,7 +69,7 @@ async function readCapped(response, maxBytes) {
  */
 export async function fetchHeroImage({ prompt, endpoint, key, fetchImpl = fetch, timeoutMs = 60000, maxBytes = 8 * 1024 * 1024 }) {
   const url = parseEndpoint(endpoint);
-  requireKey(key);
+  key = requireKey(key);
   if (typeof prompt !== 'string' || prompt.trim() === '') throw new ImageHookError('image prompt is empty; give the spec a title');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -84,6 +85,7 @@ export async function fetchHeroImage({ prompt, endpoint, key, fetchImpl = fetch,
       });
     } catch (e) {
       if (controller.signal.aborted) throw new ImageHookError(`image API at ${url.host} did not answer within ${timeoutMs} ms; check the endpoint or retry`);
+      if (/redirect/i.test(`${e?.cause?.message ?? ''} ${e?.message ?? ''}`)) throw new ImageHookError(`image API at ${url.host} redirected; redirects are not followed, so give the final https endpoint`);
       const why = scrub(e?.cause?.code ?? e?.name ?? 'error', key);
       throw new ImageHookError(`image API request to ${url.host} failed (${why}); check the endpoint and your network`);
     }
@@ -111,5 +113,6 @@ export async function fetchHeroImage({ prompt, endpoint, key, fetchImpl = fetch,
 /** The prompt for a spec: title and subtitle, trimmed to PROMPT_MAX characters. */
 export function heroPrompt(spec) {
   const plain = (v) => (typeof v === 'string' ? v : '');
-  return [plain(spec.title), plain(spec.subtitle)].filter(Boolean).join('. ').slice(0, PROMPT_MAX);
+  const joined = [plain(spec.title), plain(spec.subtitle)].filter(Boolean).join('. ');
+  return [...joined].slice(0, PROMPT_MAX).join('').toWellFormed();
 }

@@ -256,7 +256,7 @@ function flavorSheets(flavor, slides) {
  * The finished page for a validated spec.
  * `dir` is the spec's folder (file references resolve against it), `theme`
  * overrides spec.theme, `out` is the destination (file.html or directory; the
- * default output rules apply when omitted), `heroImage` ({ mime, bytes }) replaces the page hero's
+ * default output rules apply when omitted), `heroImage` ({ mime, bytes }, or an async function of `{ assets }` returning one, called last) replaces the page hero's
  * procedural art.
  * -> { html, assets: [{ from, to } or { content, to }] } with absolute paths; nothing is written.
  * Throws BuildError (path + message list) when a section cannot be rendered.
@@ -291,6 +291,8 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     if (def.assets) assets.push(...(await def.assets(section, ctx)).map((a) => ({ ...a, at: `sections[${i}]` })));
   }
   const flavored = flavor !== CLASSIC;
+  // The last local step before the output: a provider is asked for the image only now (it may call the network).
+  const image = typeof heroImage === 'function' ? await heroImage({ assets }) : heroImage;
   const layout = slides ? deckParts(spec, ctx, flavored) : pageParts(spec, ctx, ids);
 
   const parts = {
@@ -306,7 +308,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     BASECSS: fs.readFileSync(BASE_CSS, 'utf8').replace(/\n$/, ''),
     FLAVOR: flavor,
     FLAVORCSS: flavorSheets(flavor, slides),
-    HEROART: flavored && !slides ? heroArt(spec, themeData, heroImage) : '',
+    HEROART: flavored && !slides ? heroArt(spec, themeData, image) : '',
     ...layout,
     ...sectionPageParts(spec, ctx),
     PALIB: inlineCode(fs.readFileSync(PA_LIB, 'utf8')),

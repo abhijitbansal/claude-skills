@@ -73,10 +73,10 @@ Environment: `PA_OUTPUT_DIR` (default output folder), `PA_MOTION_TIMEOUT_MS` (ho
 
 ## Hero image from an image API
 
-`build.mjs --image-api <endpoint>` replaces the page hero's procedural art with a picture made by your own image service. It is off by default; without the flag the build never touches the network. It affects the page hero only: a deck's cover and closing slides keep their procedural art.
+`build.mjs --image-api <endpoint>` replaces the page hero's procedural art with a picture made by your own image service. It is off by default; without the flag the build never touches the network. It affects the page hero of a `dusk`, `press` or `poster` page only: a slide deck or a classic-theme page (`paper`, `blueprint`, `ink`, `editorial`) is refused with exit 2 before anything is sent.
 
 - **What leaves the machine**: the page title and subtitle (joined, at most 400 characters) go to the endpoint's host. The build prints `image-api: sending the title and subtitle to <host> (leaves this machine)` on stderr before it sends.
 - **Key**: your own key, in the environment variable `PA_IMAGE_API_KEY` (sent as `authorization: Bearer <key>`). The build fails with exit 2 when it is missing. Never put the key in a spec, a config file or an example; it is never written to the page.
 - **Cost**: each build with the flag is one request to your service and may be billed by it. Rebuild without the flag to avoid repeat calls.
-- **Endpoint contract**: an `https` URL without credentials, no redirects followed. The build POSTs JSON `{"prompt": "...", "width": 1280, "height": 720}` with `content-type: application/json`. The endpoint must answer HTTP 200 with the picture itself as the body, `content-type` `image/png`, `image/jpeg` or `image/webp`, up to 8 MB, and the bytes must really be that format (SVG, HTML and JSON replies are refused). It must answer within 60 seconds.
+- **Endpoint contract**: an `https` URL without credentials, no redirects followed. The build POSTs JSON `{"prompt": "...", "width": 1280, "height": 720}` with `content-type: application/json`. The endpoint must answer HTTP 200 with the picture itself as the body, `content-type` `image/png`, `image/jpeg` or `image/webp`, up to 8 MiB, and the bytes must really be that format (SVG, HTML and JSON replies are refused). It must answer within 60 seconds.
 - **Failure**: any problem fails the build with exit 2 and a message that names the fix; there is no silent fallback to the procedural art. The image is inlined as a `data:` URI, so the finished page stays a single offline file.

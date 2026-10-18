@@ -64,7 +64,7 @@ When done, report the spec path, the MP4 path with its duration and size, and on
 
 Seven themes exist; `dusk` is the default. Pick one (the spec's theme field, or `--theme <name>` on the render) in this order:
 
-1. An explicit `--theme <name>` or a phrase from the user ("use poster") wins. Use it as given.
+1. A theme the user names ("use poster") wins. Use it as given: write it as the spec's theme field. On the render, `--theme <name>` only fills in for a spec that names none, so a theme already in the spec wins over the flag.
 2. Otherwise infer it from the prompt and say which theme and why in one line. Dense docs, long reads, changelogs and branch recaps: `press`. Launch decks, pitches, demos and energetic clips: `poster`. Everything else, or unclear: `dusk`.
 3. If the prompt is genuinely split between two themes, ask the user once and list all three with a one-line feel each: `dusk` is soft, warm and playful; `press` is print editorial, calm and long-form; `poster` is loud, condensed and high-energy.
 4. If you cannot ask, use `dusk`.

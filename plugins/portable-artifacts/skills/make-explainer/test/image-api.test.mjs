@@ -121,3 +121,56 @@ test('CLI: unknown flags still list the usage, which now shows --image-api', () 
   assert.equal(r.status, 2);
   assert.match(r.stderr, /did you mean '--image-api'/);
 });
+
+// ---- fix round 1: refuse before any request ----------------------------------------------------
+
+function refusal(specOver) {
+  const f = fixture();
+  const base = JSON.parse(fs.readFileSync(f.spec, 'utf8'));
+  fs.writeFileSync(f.spec, JSON.stringify({ ...base, ...specOver }));
+  return f;
+}
+async function refused(f, pattern) {
+  let calls = 0;
+  const err = captureStderr();
+  try {
+    await assert.rejects(
+      build(f.spec, { out: f.out, imageApi: ENDPOINT, fetchImpl: async () => { calls++; throw new Error('network touched'); }, env: { PA_IMAGE_API_KEY: KEY } }),
+      (e) => e.name === 'ImageHookError' && pattern.test(e.message),
+    );
+  } finally { err.restore(); }
+  assert.equal(calls, 0);
+  assert.deepEqual(err.lines, []);
+  assert.equal(fs.existsSync(f.out), false);
+}
+
+test('--image-api on a slide deck is refused before the notice and any request', async () => {
+  await refused(refusal({ mode: 'slides' }), /only applies to explainer pages, not slide decks/);
+});
+
+test('--image-api on a classic theme is refused before the notice and any request', async () => {
+  for (const theme of ['paper', 'blueprint', 'ink', 'editorial']) await refused(refusal({ theme }), new RegExp(`needs a dusk, press or poster page \\(got ${theme}\\)`));
+});
+
+test('CLI: deck and classic refusals exit 2', () => {
+  for (const [over, re] of [[{ mode: 'slides' }, /not slide decks/], [{ theme: 'paper' }, /got paper/]]) {
+    const f = refusal(over);
+    const r = run([f.spec, '--out', f.out, '--image-api', ENDPOINT], { PA_IMAGE_API_KEY: KEY });
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, re);
+    assert.doesNotMatch(r.stderr, /image-api: sending/);
+  }
+});
+
+test('buildPage asks for the image only after every local step succeeded', async () => {
+  const { buildPage, BuildError } = await import('../scripts/lib/page.mjs');
+  let asked = 0;
+  const provider = async () => { asked++; return { mime: 'image/png', bytes: PNG }; };
+  const bad = { title: 'T', theme: 'dusk', sections: [{ type: 'nope' }] };
+  await assert.rejects(buildPage(bad, { heroImage: provider }), BuildError);
+  assert.equal(asked, 0);
+  const good = { title: 'T', theme: 'dusk', sections: [{ type: 'text', text: 'x' }] };
+  const { html } = await buildPage(good, { heroImage: provider });
+  assert.equal(asked, 1);
+  assert.match(html, /<img src="data:image\/png/);
+});

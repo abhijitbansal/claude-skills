@@ -13,6 +13,9 @@ import { buildPage, BuildError } from './lib/page.mjs';
 import { resolveOutput, assetsFolder } from './lib/output.mjs';
 import { syncAssets, assetConflicts, specInputs, WriteError } from './lib/assets.mjs';
 import { SiblingError } from './lib/siblings.mjs';
+import { isSlides } from './lib/slides.mjs';
+import { flavorFor, CLASSIC } from './lib/flavor.mjs';
+import { EXPLAINER_THEME } from './lib/default-theme.mjs';
 import { fetchHeroImage, heroPrompt, parseEndpoint, requireKey, ImageHookError, KEY_ENV } from './lib/image-hook.mjs';
 import { UsageError, parseCli } from '../shared/cli.mjs';
 import { PROVENANCE_OPTIONS, withGeneratedBy } from '../shared/provenance.mjs';
@@ -34,7 +37,16 @@ export async function build(file, { out, theme, model, effort, agent, imageApi, 
   const checked = await validateSpec(spec, { dir });
   if (!checked.ok) return fail(checked.errors);
   const target = resolveOutput({ out, title: spec.title, env });
-  const heroImage = imageApi === undefined ? undefined : await requestHeroImage(spec, imageApi, { fetchImpl, env });
+  if (imageApi !== undefined) checkImageApi(spec, imageApi, env);
+  const assetsDir = assetsFolder(target);
+  let conflicts = [];
+  // The request is the last thing that can fail after local work: buildPage calls this once everything else
+  // rendered, and a clash with files this build did not write stops it before anything is sent.
+  const heroImage = imageApi === undefined ? undefined : async ({ assets }) => {
+    conflicts = assetConflicts(assetsDir, assets);
+    if (conflicts.length > 0) return undefined;
+    return requestHeroImage(spec, imageApi, { fetchImpl, env });
+  };
   let built;
   try {
     built = await buildPage(spec, { dir, out: target, env, heroImage });
@@ -43,14 +55,22 @@ export async function build(file, { out, theme, model, effort, agent, imageApi, 
     if (e instanceof SiblingError) return fail([{ path: 'sections', message: e.message }]);
     throw e;
   }
-  const assetsDir = assetsFolder(target);
   // Before anything is written: a file in the folder that no build wrote is never overwritten.
-  const conflicts = assetConflicts(assetsDir, built.assets);
+  conflicts = assetConflicts(assetsDir, built.assets);
   if (conflicts.length > 0) return fail(conflicts);
   // Assets and their manifest first, then the page (atomically), then the tidy-up of files this build no longer
   // writes (see assets.mjs): a failure anywhere names its path and leaves the previous page and files in place.
   syncAssets(assetsDir, built.assets, { protect: specInputs(spec, dir), publish: () => writePage(target, built.html) });
   return { ok: true, out: target, assets: built.assets.map((a) => a.to), bytes: Buffer.byteLength(built.html), warnings: checked.warnings };
+}
+
+// Refusals that need no network: a deck, a classic theme, a bad endpoint or a missing key. Throws ImageHookError.
+function checkImageApi(spec, imageApi, env) {
+  parseEndpoint(imageApi);
+  requireKey(env[KEY_ENV]);
+  if (isSlides(spec)) throw new ImageHookError('--image-api only applies to explainer pages, not slide decks; drop the flag or build a page');
+  const theme = spec.theme ?? EXPLAINER_THEME;
+  if (flavorFor(theme) === CLASSIC) throw new ImageHookError(`--image-api needs a dusk, press or poster page (got ${theme}); pass --theme dusk or drop the flag`);
 }
 
 // The one network call, announced on stderr before anything leaves the machine. Throws ImageHookError.
