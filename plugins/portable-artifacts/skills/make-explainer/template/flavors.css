@@ -37,7 +37,8 @@ html[data-flavor] .theme-toggle { background: var(--surface); }
 
 /* the art: two drawings (light, dark); the one for the current mode shows */
 .hero-art { position: relative; overflow: hidden; min-width: 0; grid-column: 1 / -1; height: 11rem; margin-top: var(--sp-6); background: var(--surface); }
-.hero-art svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.hero-art svg, .hero-art img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.hero-art img { object-fit: cover; }
 .hero-art .art-dark { display: none; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .hero-art .art-light { display: none; }

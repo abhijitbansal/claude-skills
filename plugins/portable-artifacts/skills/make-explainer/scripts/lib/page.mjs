@@ -21,6 +21,7 @@ import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mj
 import { esc, inline, headingInline, plain, rawText, toneClass } from './render/ui.mjs';
 import { flavorFor, flavorVars, scrimVar, CLASSIC } from './flavor.mjs';
 import { artSvg } from '../../shared/art.mjs';
+import { dataUri } from './image.mjs';
 
 const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), slides: new URL('../../template/slides.html', import.meta.url) };
 const BASE_CSS = new URL('../../template/base.css', import.meta.url);
@@ -200,8 +201,10 @@ function artPair(theme, seed, size) {
 }
 
 // The hero's art, seeded from the title. Decorative, so hidden from assistive tech.
-function heroArt(spec, theme) {
-  return `<div class="hero-art" aria-hidden="true">${artPair(theme, spec.title, ART)}</div>`;
+// With a returned image (build.mjs --image-api) it replaces the procedural pair.
+function heroArt(spec, theme, image) {
+  const inner = image ? `<img src="${dataUri(image)}" alt="" role="presentation">` : artPair(theme, spec.title, ART);
+  return `<div class="hero-art" aria-hidden="true">${inner}</div>`;
 }
 
 // The page layout: hero pieces, the contents list and the sections.
@@ -253,11 +256,12 @@ function flavorSheets(flavor, slides) {
  * The finished page for a validated spec.
  * `dir` is the spec's folder (file references resolve against it), `theme`
  * overrides spec.theme, `out` is the destination (file.html or directory; the
- * default output rules apply when omitted).
+ * default output rules apply when omitted), `heroImage` ({ mime, bytes }) replaces the page hero's
+ * procedural art.
  * -> { html, assets: [{ from, to } or { content, to }] } with absolute paths; nothing is written.
  * Throws BuildError (path + message list) when a section cannot be rendered.
  */
-export async function buildPage(spec, { dir = process.cwd(), theme, out, env = process.env } = {}) {
+export async function buildPage(spec, { dir = process.cwd(), theme, out, env = process.env, heroImage } = {}) {
   const problems = unsupported(spec);
   if (problems.length > 0) throw new BuildError(problems);
   const themeData = loadTheme(theme ?? spec.theme ?? EXPLAINER_THEME);
@@ -302,7 +306,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     BASECSS: fs.readFileSync(BASE_CSS, 'utf8').replace(/\n$/, ''),
     FLAVOR: flavor,
     FLAVORCSS: flavorSheets(flavor, slides),
-    HEROART: flavored && !slides ? heroArt(spec, themeData) : '',
+    HEROART: flavored && !slides ? heroArt(spec, themeData, heroImage) : '',
     ...layout,
     ...sectionPageParts(spec, ctx),
     PALIB: inlineCode(fs.readFileSync(PA_LIB, 'utf8')),
