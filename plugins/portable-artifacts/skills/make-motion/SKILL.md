@@ -60,6 +60,17 @@ When done, report the spec path, the MP4 path with its duration and size, and on
 - Keyframe: `t` (seconds inside the scene, sorted, ≤ scene duration), optional `ease`, plus any animatable props for that type. Per property: it holds the first keyframe's value before it, interpolates to each later keyframe using that keyframe's `ease`, and holds the last value after. A property missing from a keyframe is interpolated across it. Frame *i* samples t = i/fps, so put the final keyframe at least one frame (1/fps s) before the scene end. A counter with no `value` keyframes counts from→to over min(2 s, 80% of the scene) with outCubic.
 - Eases: `linear`, or `in|out|inOut` + `Quad|Cubic|Quart|Back|Elastic|Bounce|Sine|Expo|Circ`. Prefer `outCubic` / `outQuad` for entrances.
 
+## Choosing a theme
+
+Seven themes exist; `dusk` is the default. Pick one (the spec's theme field, or `--theme <name>` on the render) in this order:
+
+1. An explicit `--theme <name>` or a phrase from the user ("use poster") wins. Use it as given.
+2. Otherwise infer it from the prompt and say which theme and why in one line. Dense docs, long reads, changelogs and branch recaps: `press`. Launch decks, pitches, demos and energetic clips: `poster`. Everything else, or unclear: `dusk`.
+3. If the prompt is genuinely split between two themes, ask the user once and list all three with a one-line feel each: `dusk` is soft, warm and playful; `press` is print editorial, calm and long-form; `poster` is loud, condensed and high-energy.
+4. If you cannot ask, use `dusk`.
+
+The older themes `paper`, `blueprint`, `ink` and `editorial` stay available by name; use one only when the user names it.
+
 ## Style defaults
 
 The `dusk` theme when the spec names none: its dark page colour, Host Grotesk for text, Commit Mono for `"font": "mono"`, Funnel Display for `role: "title"`; 1920x1080 sizes (titles 72–120 px, body 40–48 px, captions ≥ 28 px). Charts get a dark theme automatically; put a Vega-Lite `config` in the chart to override it. Keep entrances short (0.5–0.9 s), stagger elements by 0.2–0.4 s, and stay under 15 s unless asked. Fonts are bundled; never use CDN URLs. Charts must carry inline data (`data.values`, or `datasets` + `data.name`); any `url` in a chart spec is rejected. Colours must be hex, rgb()/hsl() or named.
