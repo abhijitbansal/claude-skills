@@ -2,7 +2,7 @@
   "title": "Portable Artifacts Deck",
   "subtitle": "What the portable-artifacts plugin builds, how to use it, and where it stops",
   "preset": "slides",
-  "theme": "blueprint",
+  "theme": "dusk",
   "meta": {
     "date": "2026-10-13",
     "repo": "claude-skills",
