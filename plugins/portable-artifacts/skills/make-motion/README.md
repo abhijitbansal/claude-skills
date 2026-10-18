@@ -120,5 +120,6 @@ then `PATH`, then an optional `ffmpeg-static` install. It is never bundled.
 Node.js ≥ 20, ffmpeg (≥ 4.4 for audio tracks), Chromium (one-time download) or Google Chrome. The
 dependencies, pinned by the lockfile, are anime.js v4 (MIT), Playwright
 (Apache-2.0), Vega, Vega-Lite and vega-interpreter (BSD-3-Clause), Ajv (MIT),
-and the theme fonts in the synced `shared/fonts` (OFL-1.1). `@fontsource/inter` and
-`@fontsource/jetbrains-mono` are still pinned but no longer used.
+and the theme fonts in the synced `shared/fonts` (OFL-1.1). The `@fontsource/inter` and
+`@fontsource/jetbrains-mono` npm packages are still pinned but no longer read: the
+default look now comes from `dusk`, and the `press` theme gets JetBrains Mono from `shared/fonts`.
