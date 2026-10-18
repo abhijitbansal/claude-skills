@@ -207,6 +207,9 @@ test('render --theme gives a spec without a theme that theme; a spec with its ow
   const own = sheetOf(dir, 'own', spec({ theme: 'ink' }), ['--theme', 'blueprint']);
   const ink = sheetOf(dir, 'ink', spec({ theme: 'ink' }));
   assert.deepEqual(own.png, ink.png, "the spec's own theme wins over --theme");
+  assert.match(plain.r.stdout, /^theme: dusk\n/, 'no theme anywhere prints the default');
+  assert.match(flagged.r.stdout, /^theme: blueprint\n/, '--theme is printed when the spec names none');
+  assert.match(own.r.stdout, /^theme: ink\n/, "the printed theme is the spec's own when it names one");
   return undefined;
 });
 

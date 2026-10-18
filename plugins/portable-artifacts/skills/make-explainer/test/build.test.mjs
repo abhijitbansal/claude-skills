@@ -18,13 +18,13 @@ function sandbox() {
 }
 const run = (args, env = {}) => spawnSync(process.execPath, [BUILD, ...args], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '', PA_OUTPUT_DIR: '', ...env } });
 
-test('--out file.html writes the page and prints wrote / open lines', () => {
+test('--out file.html writes the page and prints theme / wrote / open lines', () => {
   const { root, done } = sandbox();
   try {
     const out = path.join(root, 'deep', 'my.html');
     const r = run([CORE, '--out', out]);
     assert.equal(r.status, 0, r.stderr + r.stdout);
-    assert.equal(r.stdout, `wrote ${out}\nopen: ${pathToFileURL(out).href}\n`);
+    assert.equal(r.stdout, `theme: paper\nwrote ${out}\nopen: ${pathToFileURL(out).href}\n`);
     assert.match(fs.readFileSync(out, 'utf8'), /^<!doctype html>/);
     assert.ok(!fs.existsSync(path.join(root, 'deep', 'my.assets')), 'no assets folder when nothing needs one');
   } finally { done(); }
@@ -60,6 +60,21 @@ test('--json prints one result line', () => {
     assert.equal(result.out, out);
     assert.deepEqual(result.assets, []);
     assert.equal(result.bytes, fs.statSync(out).size);
+    assert.equal(result.theme, 'paper');
+  } finally { done(); }
+});
+
+test('the printed theme is the one used: --theme beats spec.theme, and no theme anywhere means dusk', () => {
+  const { root, done } = sandbox();
+  try {
+    const flagged = run([CORE, '--out', path.join(root, 'a.html'), '--theme', 'blueprint']);
+    assert.match(flagged.stdout, /^theme: blueprint\nwrote /m);
+    const bare = path.join(root, 'bare.explainer.json');
+    fs.writeFileSync(bare, JSON.stringify({ title: 'No theme named', sections: [{ type: 'text', text: 'Plain words.' }] }));
+    const plain = run([bare, '--out', path.join(root, 'b.html')]);
+    assert.equal(plain.status, 0, plain.stderr + plain.stdout);
+    assert.match(plain.stdout, /^theme: dusk\nwrote /m);
+    assert.equal(JSON.parse(run([bare, '--out', path.join(root, 'c.html'), '--json']).stdout).theme, 'dusk');
   } finally { done(); }
 });
 

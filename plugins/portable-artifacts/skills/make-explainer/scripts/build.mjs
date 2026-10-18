@@ -27,8 +27,9 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const fail = (errors) => ({ ok: false, errors });
 
 /**
- * Build the page for a spec file. Returns { ok: true, out, assets, bytes, warnings } after
- * writing it, else { ok: false, errors } (nothing is written).
+ * Build the page for a spec file. Returns { ok: true, out, theme, assets, bytes, warnings } after
+ * writing it (`theme` is the one drawn: --theme, else spec.theme, else the default), else
+ * { ok: false, errors } (nothing is written).
  */
 export async function build(file, { out, theme, model, effort, agent, imageApi, fetchImpl, env = process.env } = {}) {
   const { spec: loaded, dir } = loadSpec(file);
@@ -61,7 +62,7 @@ export async function build(file, { out, theme, model, effort, agent, imageApi, 
   // Assets and their manifest first, then the page (atomically), then the tidy-up of files this build no longer
   // writes (see assets.mjs): a failure anywhere names its path and leaves the previous page and files in place.
   syncAssets(assetsDir, built.assets, { protect: specInputs(spec, dir), publish: () => writePage(target, built.html) });
-  return { ok: true, out: target, assets: built.assets.map((a) => a.to), bytes: Buffer.byteLength(built.html), warnings: checked.warnings };
+  return { ok: true, out: target, theme: spec.theme ?? EXPLAINER_THEME, assets: built.assets.map((a) => a.to), bytes: Buffer.byteLength(built.html), warnings: checked.warnings };
 }
 
 // Refusals that need no network: a deck, a classic theme, a bad endpoint or a missing key. Throws ImageHookError.
@@ -131,10 +132,10 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
       printFailure(result, { json, label: positionals[0] });
       process.exitCode = 1;
     } else if (json) {
-      process.stdout.write(`${JSON.stringify({ ok: true, out: result.out, assets: result.assets, bytes: result.bytes, warnings: result.warnings })}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: true, out: result.out, theme: result.theme, assets: result.assets, bytes: result.bytes, warnings: result.warnings })}\n`);
     } else {
       for (const w of result.warnings) process.stdout.write(`${w.path || '(root)'}: warning: ${w.message}\n`);
-      process.stdout.write(`wrote ${result.out}\nopen: ${pathToFileURL(result.out).href}\n`);
+      process.stdout.write(`theme: ${result.theme}\nwrote ${result.out}\nopen: ${pathToFileURL(result.out).href}\n`);
     }
   } catch (e) {
     if (!(e instanceof UsageError || e instanceof ImageHookError)) throw e;
