@@ -1,4 +1,4 @@
-// A spec with `theme` draws with the shared theme's fonts and dark colours; one without it is untouched.
+// A spec with `theme` draws with the shared theme's fonts and dark colours; one without it draws as dusk.
 // Render-smoke style: needs a browser, skips without one.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,6 +21,8 @@ async function haveBrowser() {
 
 // blueprint: Geist body and Geist Mono, neither of which the unthemed page uses.
 const BLUEPRINT = { page: '#0e1319', text: '#e8edf3', accent: '#6cb2e6' };
+// dusk: make-motion's default theme (MOTION_THEME).
+const DUSK = { page: '#17102a', text: '#f7ebe0', accent: '#ff7f61' };
 const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
 const spec = (extra = {}, el = {}) => ({
   size: [480, 270],
@@ -53,11 +55,15 @@ async function drawn(motion) {
     await page.evaluate(() => window.__motion.ready);
     const look = await page.evaluate(() => {
       const css = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el) : {}; };
-      const family = css('.el.text:not(.mono)').fontFamily;
+      const family = css('.el.text:not(.mono):not(.title)').fontFamily;
       const mono = css('.el.text.mono').fontFamily;
+      const sheets = [...document.styleSheets].map((sheet) => [...sheet.cssRules].map((r) => r.cssText).join('\n')).join('\n');
       return {
-        family, mono,
-        color: css('.el.text:not(.mono)').color,
+        family, mono, sheets,
+        title: css('.el.text.title').fontFamily,
+        titleWeight: document.querySelector('.el.text.title')?.style.fontWeight,
+        art: document.querySelector('.scene > .art img') ? { w: document.querySelector('.scene > .art img').naturalWidth, src: document.querySelector('.scene > .art img').getAttribute('src') } : null,
+        color: css('.el.text:not(.mono):not(.title)').color,
         stage: css('#stage').backgroundColor,
         page: getComputedStyle(document.documentElement).backgroundColor,
         loaded: [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family.replaceAll('"', '')),
@@ -96,16 +102,46 @@ test("themed: the spec's own colours and background still win", async (t) => {
   return undefined;
 });
 
-test('unthemed: Inter and the old colours, and the page never asks for a theme', async (t) => {
+test('unthemed: dusk fonts and dark colours, its stylesheet and display font on the page', async (t) => {
   if (!(await haveBrowser())) return t.skip('browser unavailable');
   const { look, requests, problems } = await drawn(spec());
-  assert.match(look.family, /^Inter, /);
-  assert.match(look.mono, /^"JetBrains Mono", /);
-  assert.equal(look.color, 'rgb(255, 255, 255)');
-  assert.equal(look.stage, rgb('#0b0d12'));
-  assert.equal(look.shape, '#ffffff');
-  assert.match(look.chartFont, /Inter/);
-  assert.deepEqual(requests.filter((r) => r.startsWith('/theme')), []);
+  assert.match(look.family, /^"Host Grotesk", /);
+  assert.match(look.mono, /^"Commit Mono", /);
+  assert.equal(look.color, rgb(DUSK.text));
+  assert.equal(look.stage, rgb(DUSK.page));
+  assert.equal(look.page, rgb(DUSK.page), 'the letterbox takes the dusk page colour too');
+  assert.equal(look.shape.toLowerCase(), DUSK.accent);
+  assert.match(look.chartFont, /Host Grotesk/);
+  assert.ok(look.sheets.includes('Funnel Display'), 'the dusk display font is offered');
+  assert.match(look.sheets, /--display: "Funnel Display"/);
+  assert.ok(requests.includes('/theme/dusk.json') && requests.includes('/theme/dusk.css'));
+  assert.deepEqual(problems, []);
+  return undefined;
+});
+
+test('role:title text draws with the theme display font: Funnel Display (dusk), Big Shoulders Display (poster)', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const titled = (extra) => spec(extra, { role: 'title' });
+  const dusk = await drawn(titled({}));
+  assert.match(dusk.look.title, /^"Funnel Display", /);
+  assert.equal(dusk.look.titleWeight, '700', 'the one weight Funnel Display ships');
+  assert.ok(dusk.look.loaded.includes('Funnel Display'), `fonts loaded: ${dusk.look.loaded}`);
+  const poster = await drawn(titled({ theme: 'poster' }));
+  assert.match(poster.look.title, /^"Big Shoulders Display", /);
+  assert.equal(poster.look.titleWeight, '900');
+  assert.ok(poster.look.sheets.includes('Big Shoulders Display'));
+  assert.ok(poster.look.loaded.includes('Big Shoulders Display'), `fonts loaded: ${poster.look.loaded}`);
+  assert.deepEqual([...dusk.problems, ...poster.problems], []);
+  return undefined;
+});
+
+test('a scene with background "art" draws the theme art from the local server, not a flat colour', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const motion = spec({ theme: 'poster' });
+  motion.scenes[0].background = 'art';
+  const { look, requests, problems } = await drawn(motion);
+  assert.deepEqual(look.art, { w: 480, src: '/art/one.svg' });
+  assert.ok(requests.includes('/art/one.svg'));
   assert.deepEqual(problems, []);
   return undefined;
 });
@@ -143,10 +179,10 @@ test('themed: a requested weight maps to the nearest weight the theme font ships
   return undefined;
 });
 
-test('unthemed: weights are used as asked (Inter ships them all)', async (t) => {
+test('unthemed: weights map to what dusk ships (Host Grotesk 400 and 700)', async (t) => {
   if (!(await haveBrowser())) return t.skip('browser unavailable');
   const { look } = await drawn({ size: [64, 64], scenes: [{ id: 's', duration: 1, elements: [{ id: 'w', type: 'text', text: 'x', x: 10, y: 10, fontWeight: 800 }, { id: 'b', type: 'shape', shape: 'rect', x: 1, y: 1 }, { id: 'c', type: 'text', text: 'c', x: 1, y: 1, font: 'mono' }, { id: 'd', type: 'chart', x: 1, y: 1, width: 20, height: 20, vegaLite: { data: { values: [{ a: 'x', b: 2 }] }, mark: 'bar', encoding: { x: { field: 'a', type: 'nominal' }, y: { field: 'b', type: 'quantitative' } } } }] }] });
-  assert.equal(look.firstWeight, '800');
+  assert.equal(look.firstWeight, '700');
   return undefined;
 });
 

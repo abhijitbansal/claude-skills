@@ -139,12 +139,12 @@ test('/assets answers 404, not 500, while the spec is temporarily invalid JSON',
 test('vendor routes and template serve 200', () => withServer(async (srv) => {
   for (const p of ['/vendor/animejs/anime.esm.js', '/vendor/vega/vega.min.js', '/vendor/vega-lite/vega-lite.min.js',
     '/vendor/vega-util/index.js', '/vendor/vega-interpreter/vega-interpreter.js',
-    '/vendor/fonts/inter-latin-700-normal.woff2', '/vendor/fonts/inter-cyrillic-400-normal.woff2',
-    '/vendor/fonts/jetbrains-mono-latin-400-normal.woff2', '/vendor/fonts/jetbrains-mono-greek-400-normal.woff2',
     '/template/renderer.mjs', '/template/timeline.mjs', '/template/defaults.mjs', '/template/styles.css']) {
     assert.equal((await get(srv.url, p)).status, 200, p);
   }
   assert.equal((await get(srv.url, '/vendor/fonts/..%2f..%2fpackage.json')).status, 404);
+  // the old Inter / JetBrains Mono default look is gone: every font now comes from /theme/fonts
+  assert.equal((await get(srv.url, '/vendor/fonts/inter-latin-700-normal.woff2')).status, 404);
   assert.equal((await get(srv.url, '/template/../scripts/lib/spec.mjs')).status, 404);
   assert.equal((await get(srv.url, '/template/..%2fscripts%2flib%2fspec.mjs')).status, 404);
   assert.equal((await get(srv.url, '/nope')).status, 404);
@@ -271,6 +271,45 @@ test('theme routes refuse unknown names, traversal and anything but a woff2', ()
     '/theme/fonts/geist-sans-latin-600-normal.woff2%00', '/theme/fonts/.woff2', '/theme/fonts/%5cgeist-sans-latin-600-normal.woff2']) {
     assert.equal((await get(srv.url, p)).status, 404, p);
   }
+}));
+
+// ---- art ------------------------------------------------------------------------------------
+
+test('/art/<scene>.svg draws the scene art: seeded by the scene id, in the spec theme, at the canvas size', () => withServer(async (srv, f) => {
+  const doc = (extra = {}) => ({ size: [640, 360], scenes: [
+    { id: 'open', duration: 1, background: 'art', elements: [] },
+    { id: 'flat', duration: 1, background: '#112233', elements: [] },
+    { id: 'two words', duration: 1, background: 'art', elements: [] },
+  ], ...extra });
+  writeFileSync(f.specPath, JSON.stringify(doc()));
+  const a = await get(srv.url, '/art/open.svg');
+  assert.equal(a.status, 200);
+  assert.equal(a.headers['content-type'], 'image/svg+xml');
+  assert.match(a.body, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 640 360" width="640" height="360"/);
+  assert.match(a.body, /data-art="dusk"/, 'no theme: dusk art');
+  assert.equal((await get(srv.url, '/art/open.svg')).body, a.body, 'same spec, same bytes');
+  assert.notEqual((await get(srv.url, '/art/two%20words.svg')).body, a.body, 'another scene id, another seed');
+  writeFileSync(f.specPath, JSON.stringify(doc({ theme: 'poster' })));
+  assert.match((await get(srv.url, '/art/open.svg')).body, /data-art="poster"/);
+  for (const p of ['/art/flat.svg', '/art/nope.svg', '/art/..%2Fm.json', '/art/open.png', '/art/open.svg/x']) {
+    assert.equal((await get(srv.url, p)).status, 404, p);
+  }
+  writeFileSync(f.specPath, '{ not json');
+  assert.equal((await get(srv.url, '/art/open.svg')).status, 404, 'an unreadable spec has no art');
+}));
+
+test('/art follows the render --theme for a spec without one', async () => {
+  const f = fixture();
+  writeFileSync(f.specPath, JSON.stringify({ size: [64, 64], scenes: [{ id: 's', duration: 1, background: 'art', elements: [] }] }));
+  const srv = await startServer({ specPath: f.specPath, mode: 'render', theme: 'press' });
+  try { assert.match((await get(srv.url, '/art/s.svg')).body, /data-art="press"/); } finally { await srv.close(); }
+});
+
+test('GET / links the theme stylesheet (dusk without a theme) after the page styles', () => withServer(async (srv, f) => {
+  const plain = await get(srv.url, '/');
+  assert.match(plain.body, /<link rel="stylesheet" href="\/template\/styles\.css">\n<link id="theme-css" rel="stylesheet" href="\/theme\/dusk\.css">/);
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('one'), theme: 'poster' }));
+  assert.match((await get(srv.url, '/')).body, /href="\/theme\/poster\.css"/);
 }));
 
 test('/spec.json gets the render theme only when the server was given one and the spec has none', async () => {

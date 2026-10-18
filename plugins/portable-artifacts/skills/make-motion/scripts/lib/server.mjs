@@ -13,6 +13,7 @@ import { MOTION_THEME } from './default-theme.mjs';
 import { faviconLink } from '../../shared/icons.mjs';
 import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
 import { themeData, themeCss, FONTS_DIR } from './theme.mjs';
+import { artSvg } from '../../shared/art.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NODE_MODULES = path.join(SKILL_ROOT, 'node_modules');
@@ -36,7 +37,6 @@ const VENDOR_ROOTS = {
   'vega-util': path.join(NODE_MODULES, 'vega-util/build'),
   'vega-interpreter': path.join(NODE_MODULES, 'vega-interpreter/build'),
 };
-const FONT_ROOTS = ['@fontsource/inter', '@fontsource/jetbrains-mono'].map((p) => path.join(NODE_MODULES, p, 'files'));
 
 // Single byte range from a Range header against a file of `size` bytes; null when absent or malformed.
 function parseRange(header, size) {
@@ -96,23 +96,52 @@ export function themeOrDefault(name) {
   try { return loadTheme(name ?? MOTION_THEME); } catch { return loadTheme(MOTION_THEME); }
 }
 
-// Favicon and provenance footer for the current spec, read fresh. Only `generatedBy` (valid against its own
-// schema) and `theme` (a known name) matter: an unrelated spec error never blanks the stamp, and a hostile
-// generatedBy falls back to "not reported".
+function readSpecFile(ctx) {
+  try { return JSON.parse(readFileSync(ctx.specFile, 'utf8')); } catch { return undefined; }
+}
+
+// Favicon, theme stylesheet and provenance footer for the current spec, read fresh. Only `generatedBy`
+// (valid against its own schema) and `theme` (a known name) matter: an unrelated spec error never blanks
+// the stamp, and a hostile generatedBy falls back to "not reported". The stylesheet is linked here so the
+// preview chrome has the theme's fonts and tokens from the first paint.
 function pageChrome(ctx) {
-  let spec;
-  try { spec = JSON.parse(readFileSync(ctx.specFile, 'utf8')); } catch { spec = undefined; }
+  const spec = readSpecFile(ctx);
   const gen = checkGeneratedBy(spec?.generatedBy) ? spec.generatedBy : undefined;
+  const theme = themeOrDefault(spec?.theme ?? ctx.theme);
   return {
-    favicon: faviconLink('make-motion', themeOrDefault(spec?.theme ?? ctx.theme)),
+    favicon: faviconLink('make-motion', theme),
+    themeCss: `<link id="theme-css" rel="stylesheet" href="/theme/${encodeURIComponent(theme.name)}.css">`,
     generator: generatorMeta('make-motion', gen),
     provenance: provenanceHtml('make-motion', gen, buildDate()),
   };
 }
 
 function indexHtml(ctx) {
-  const { favicon, generator, provenance } = pageChrome(ctx);
-  return ctx.index.html.replace('{{FAVICON}}', () => favicon).replace('{{GENERATOR}}', () => generator).replace('{{PROVENANCE}}', () => provenance);
+  const { favicon, themeCss: link, generator, provenance } = pageChrome(ctx);
+  return ctx.index.html.replace('{{FAVICON}}', () => favicon).replace('{{THEME_CSS}}', () => link)
+    .replace('{{GENERATOR}}', () => generator).replace('{{PROVENANCE}}', () => provenance);
+}
+
+// artSvg accepts 16..8192 px a side. A valid spec's size is 16..3840, so the clamp only matters for a
+// spec that is mid-edit and invalid: it keeps the art route answering instead of throwing.
+const ART_MIN = 16;
+const ART_MAX = 8192;
+const DEFAULT_SIZE = [1920, 1080];
+const artSide = (n, fallback) => Math.min(ART_MAX, Math.max(ART_MIN, Number.isFinite(n) ? n : fallback));
+
+// /art/<scene id>.svg: the seeded art of a scene whose background is "art", drawn in the spec's theme
+// (dusk when it names none) in dark mode at the canvas size, seeded by the scene id. Same spec, same
+// bytes. Only scenes the current spec marks "art" are served.
+function serveArt(ctx, res, sceneId) {
+  const spec = readSpecFile(ctx);
+  const scene = Array.isArray(spec?.scenes) ? spec.scenes.find((s) => s?.id === sceneId && s.background === 'art') : undefined;
+  if (!scene) return notFound(res);
+  const size = Array.isArray(spec.size) ? spec.size : DEFAULT_SIZE;
+  const svg = artSvg({
+    theme: themeOrDefault(spec.theme ?? ctx.theme).name, seed: scene.id,
+    width: artSide(size[0], DEFAULT_SIZE[0]), height: artSide(size[1], DEFAULT_SIZE[1]), mode: 'dark',
+  });
+  return sendBody(res, MIME['.svg'], svg);
 }
 
 // Image and audio srcs named by the current spec; /assets serves nothing else.
@@ -136,14 +165,6 @@ function serveAsset(ctx, req, res, rel) {
 function serveUnder(res, root, rel) {
   const file = resolveUrlPath(root, rel);
   return file ? sendFile(res, file) : notFound(res);
-}
-
-function serveFont(res, name) {
-  for (const root of FONT_ROOTS) {
-    const file = resolveUrlPath(root, name);
-    if (file) return sendFile(res, file);
-  }
-  return notFound(res);
 }
 
 // The shared theme a spec names: its JSON for the colours, a stylesheet for the fonts.
@@ -190,9 +211,10 @@ function route(ctx, req, res) {
   if (pathname.startsWith('/template/')) return serveUnder(res, TEMPLATE_DIR, pathname.slice('/template/'.length));
   if (pathname.startsWith('/assets/')) return serveAsset(ctx, req, res, pathname.slice('/assets/'.length));
   if (pathname.startsWith('/theme/fonts/')) return serveThemeFont(res, pathname.slice('/theme/fonts/'.length));
+  const artRoute = /^\/art\/([^/]+)\.svg$/.exec(pathname);
+  if (artRoute) return serveArt(ctx, res, safeDecode(artRoute[1]));
   const themeRoute = /^\/theme\/([^/]+)\.(json|css)$/.exec(pathname);
   if (themeRoute) return serveTheme(res, safeDecode(themeRoute[1]), themeRoute[2]);
-  if (pathname.startsWith('/vendor/fonts/')) return serveFont(res, pathname.slice('/vendor/fonts/'.length));
   const vendor = /^\/vendor\/([^/]+)\/(.*)$/.exec(pathname);
   if (vendor && VENDOR_ROOTS[vendor[1]]) return serveUnder(res, VENDOR_ROOTS[vendor[1]], vendor[2]);
   return notFound(res);

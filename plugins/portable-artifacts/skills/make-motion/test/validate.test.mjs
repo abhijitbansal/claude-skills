@@ -35,7 +35,8 @@ test('minimal spec valid; defaults filled', () => {
   const d = withDefaults(good());
   assert.deepEqual(d.size, [1920, 1080]);
   assert.equal(d.fps, 30);
-  assert.equal(d.background, '#0b0d12');
+  assert.equal(d.background, undefined, 'the page fills the background from the theme (dusk by default)');
+  assert.equal(d.theme, 'dusk');
   const el = d.scenes[0].elements[0];
   assert.equal(el.opacity, 1); assert.equal(el.scale, 1); assert.equal(el.rotate, 0);
   assert.equal(el.draw, 1); assert.equal(el.reveal, 1);
@@ -230,7 +231,7 @@ test('fontWeight is one of 400, 500, 600, 700, 800', () => {
 });
 
 test('theme: a shared theme name is valid, anything else gets a did-you-mean or the list', () => {
-  for (const name of ['paper', 'ink', 'blueprint', 'editorial']) assert.deepEqual(errs({ ...good(), theme: name }), [], name);
+  for (const name of ['paper', 'ink', 'blueprint', 'editorial', 'dusk', 'press', 'poster']) assert.deepEqual(errs({ ...good(), theme: name }), [], name);
   assert.deepEqual(errs({ ...good(), theme: 'inx' }), ['theme: unknown theme "inx"; did you mean "ink"?']);
   assert.deepEqual(errs({ ...good(), theme: 'zzzzzzzz' }), ['theme: unknown theme "zzzzzzzz"; available: blueprint, dusk, editorial, ink, paper, poster, press']);
   assert.deepEqual(errs({ ...good(), theme: '' }), ['theme: must NOT have fewer than 1 characters']);
@@ -238,7 +239,32 @@ test('theme: a shared theme name is valid, anything else gets a did-you-mean or 
 });
 
 test('theme does not change the defaults withDefaults fills (the page applies them)', () => {
-  assert.deepEqual(withDefaults({ ...good(), theme: 'ink' }).background, '#0b0d12');
+  assert.equal(withDefaults({ ...good(), theme: 'ink' }).background, undefined);
+  assert.equal(withDefaults({ ...good(), theme: 'ink', background: '#112233' }).background, '#112233');
+});
+
+test('role: "title" is valid on text; any other value gets a did-you-mean; other types reject it', () => {
+  const s = good(); s.scenes[0].elements[0].role = 'title';
+  assert.deepEqual(errs(s), []);
+  s.scenes[0].elements[0].role = 'heading';
+  assert.deepEqual(errs(s), ['scenes[0].elements[0].role: unknown role "heading"; did you mean "title"?']);
+  s.scenes[0].elements[0].role = 'titel';
+  assert.deepEqual(errs(s), ['scenes[0].elements[0].role: unknown role "titel"; did you mean "title"?']);
+  s.scenes[0].elements[0].role = 3;
+  assert.deepEqual(errs(s), ['scenes[0].elements[0].role: must be string']);
+  const c = good(); c.scenes[0].elements = [{ id: 'c', type: 'counter', to: 3, x: 1, y: 1, role: 'title' }];
+  assert.ok(errs(c).some((e) => e.startsWith('scenes[0].elements[0].role: not valid on counter')), errs(c).join('\n'));
+});
+
+test('scene background "art" is valid; the root background and other words are still colours only', () => {
+  const s = good(); s.scenes[0].background = 'art';
+  assert.deepEqual(errs(s), []);
+  for (const word of ['ART', 'artwork', 'arts', 'noise']) {
+    s.scenes[0].background = word;
+    assert.ok(errs(s).some((e) => e.startsWith('scenes[0].background: must be a CSS colour')), word);
+  }
+  const root = good(); root.background = 'art';
+  assert.deepEqual(errs(root), ['background: must be a CSS colour (hex, rgb(), rgba(), hsl(), hsla() or a named colour); "art" is only valid as a scene background']);
 });
 
 test('generatedBy: model/effort/agent strings pass; hostile, long or unknown values fail', () => {

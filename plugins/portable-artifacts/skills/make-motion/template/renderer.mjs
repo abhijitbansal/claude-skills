@@ -9,35 +9,18 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const MODE = document.querySelector('meta[name="motion-mode"]')?.content ?? 'preview';
 const SCENE_END_EPSILON = 1e-9;
 
-// Dark defaults for Vega-Lite charts; a spec's own `config` overrides these.
-const INK = '#8b93a7';
-const GRID = '#1f2635';
+// Vega-Lite sizes shared by every theme; themedLook adds the theme's fonts and colours. A spec's own
+// `config` overrides both.
 const VEGA_CONFIG = {
   background: null,
   view: { stroke: null },
-  font: 'Inter',
-  range: { category: ['#5eead4', '#7aa2ff', '#f6b26b', '#e879a8', '#a78bfa', '#9be564'] },
-  mark: { color: '#5eead4' },
-  line: { color: '#5eead4' },
-  bar: { color: '#5eead4', cornerRadiusEnd: 6 },
-  point: { filled: true, size: 120, color: '#5eead4' },
-  axis: {
-    domainColor: '#3a4256', tickColor: '#3a4256', gridColor: GRID, labelColor: INK, titleColor: '#c9cfdd',
-    labelFont: 'Inter', titleFont: 'Inter', labelFontSize: 24, titleFontSize: 26, titleFontWeight: 500,
-    labelPadding: 10, titlePadding: 18, tickSize: 8,
-  },
+  bar: { cornerRadiusEnd: 6 },
+  point: { filled: true, size: 120 },
+  axis: { labelFontSize: 24, titleFontSize: 26, titleFontWeight: 500, labelPadding: 10, titlePadding: 18, tickSize: 8 },
   axisX: { labelAngle: 0, labelPadding: 14 },
-  legend: { labelColor: INK, titleColor: '#c9cfdd', labelFont: 'Inter', labelFontSize: 22, titleFontSize: 22 },
-  title: { color: '#f4f6fb', font: 'Inter', fontSize: 32 },
+  legend: { labelFontSize: 22, titleFontSize: 22 },
+  title: { fontSize: 32 },
 };
-
-// What the page draws with when the spec names no theme. A themed spec swaps these for the theme's body
-// and mono fonts and its dark colours (see themedLook); nothing else about the page changes.
-const DEFAULT_LOOK = Object.freeze({
-  text: '#ffffff', shape: '#ffffff', background: null, vega: VEGA_CONFIG,
-  sans: 'Inter', mono: "'JetBrains Mono'", chartFace: 'Inter',
-  weight: (_kind, asked) => asked,
-});
 
 const quote = (family) => `"${family}"`;
 
@@ -49,25 +32,32 @@ function nearestWeight(asked, shipped) {
   return best;
 }
 
+// Which font role a text or counter draws with: `role: "title"` text uses the display font (even with
+// `font: "mono"`), `font: "mono"` the mono font, everything else the body font.
+const fontKind = (el) => (el.role === 'title' ? 'display' : el.font === 'mono' ? 'mono' : 'sans');
+const shippedWeights = (font) => Object.keys(font.weights).map(Number).sort((a, b) => a - b);
+
+// The spec's theme (dusk when it names none) as what the page draws with: its fonts and dark colours.
 function themedLook(theme) {
   const c = theme.dark;
   const sans = quote(theme.fonts.body.family);
   const ink = c.text3;
   const axisTitle = c.text2;
-  const shipped = { sans: Object.keys(theme.fonts.body.weights).map(Number).sort((a, b) => a - b), mono: Object.keys(theme.fonts.mono.weights).map(Number).sort((a, b) => a - b) };
+  const shipped = { display: shippedWeights(theme.fonts.display), sans: shippedWeights(theme.fonts.body), mono: shippedWeights(theme.fonts.mono) };
   const weight = (kind, asked) => nearestWeight(asked, shipped[kind]);
   return {
     weight,
     text: c.text, shape: c.accent, background: c.page,
-    sans, mono: quote(theme.fonts.mono.family), chartFace: sans,
+    fonts: { display: quote(theme.fonts.display.family), sans, mono: quote(theme.fonts.mono.family) },
+    chartFace: sans,
     vega: {
       ...VEGA_CONFIG,
       font: sans,
       range: { category: [c.cat1, c.cat2, c.cat3, c.cat4, c.cat5, c.cat6] },
       mark: { color: c.accent },
       line: { color: c.accent },
-      bar: { color: c.accent, cornerRadiusEnd: 6 },
-      point: { filled: true, size: 120, color: c.accent },
+      bar: { ...VEGA_CONFIG.bar, color: c.accent },
+      point: { ...VEGA_CONFIG.point, color: c.accent },
       axis: { ...VEGA_CONFIG.axis, domainColor: c.line, tickColor: c.line, gridColor: c.grid, labelColor: ink, titleColor: axisTitle, labelFont: sans, titleFont: sans, labelFontWeight: weight('sans', 400), titleFontWeight: weight('sans', VEGA_CONFIG.axis.titleFontWeight) },
       legend: { ...VEGA_CONFIG.legend, labelColor: ink, titleColor: axisTitle, labelFont: sans, labelFontWeight: weight('sans', 400), titleFontWeight: weight('sans', 700) },
       title: { ...VEGA_CONFIG.title, color: c.text, font: sans, fontWeight: weight('sans', 700) },
@@ -85,11 +75,12 @@ const assetUrl = (src) => `/assets/${src.split('/').map(encodeURIComponent).join
 
 function textStyle(node, el, look) {
   node.style.fontSize = px(el.fontSize ?? 48);
-  node.style.fontWeight = String(look.weight(el.font === 'mono' ? 'mono' : 'sans', el.fontWeight ?? 600));
+  node.style.fontWeight = String(look.weight(fontKind(el), el.fontWeight ?? 600));
   node.style.color = el.color ?? look.text;
   node.style.textAlign = el.align ?? 'center';
   if (el.maxWidth) node.style.maxWidth = px(el.maxWidth);
-  if (el.font === 'mono') node.classList.add('mono');
+  if (el.role === 'title') node.classList.add('title');
+  else if (el.font === 'mono') node.classList.add('mono');
 }
 
 function makeShape(el, look) {
@@ -179,6 +170,20 @@ function buildElement(el, look) {
   return part;
 }
 
+// A scene with `background: "art"`: the theme's seeded art (drawn by the server, see /art/ in
+// server.mjs) under a scrim in the theme's page colour, so text on top stays legible.
+function artLayer(scene) {
+  const holder = document.createElement('div');
+  holder.className = 'art';
+  const img = document.createElement('img');
+  img.alt = '';
+  img.src = `/art/${encodeURIComponent(scene.id)}.svg`;
+  const scrim = document.createElement('div');
+  scrim.className = 'art-scrim';
+  holder.append(img, scrim);
+  return { holder, loaded: img.decode().catch(() => { throw new Error(`art failed to load for scene "${scene.id}"`); }) };
+}
+
 async function buildStage(spec, look) {
   const stage = document.createElement('div');
   stage.id = 'stage';
@@ -191,7 +196,11 @@ async function buildStage(spec, look) {
   for (const scene of spec.scenes) {
     const layer = document.createElement('div');
     layer.className = 'scene';
-    if (scene.background) layer.style.background = scene.background;
+    if (scene.background === 'art') {
+      const art = artLayer(scene);
+      layer.append(art.holder);
+      pending.push(art.loaded);
+    } else if (scene.background) layer.style.background = scene.background;
     for (const el of scene.elements) {
       const part = buildElement(el, look);
       parts.push(part);
@@ -219,8 +228,8 @@ function fontNeeds(spec, look) {
   const needs = [];
   const digits = '0123456789.,-+%$';
   for (const el of spec.scenes.flatMap((s) => s.elements)) {
-    const family = el.font === 'mono' ? look.mono : look.sans;
-    const face = `${look.weight(el.font === 'mono' ? 'mono' : 'sans', el.fontWeight ?? 600)} ${el.fontSize ?? 48}px ${family}`;
+    const kind = fontKind(el);
+    const face = `${look.weight(kind, el.fontWeight ?? 600)} ${el.fontSize ?? 48}px ${look.fonts[kind]}`;
     if (el.type === 'text') needs.push([face, el.text]);
     if (el.type === 'counter') needs.push([face, `${el.prefix ?? ''}${el.suffix ?? ''}${digits}`]);
     if (el.type === 'chart') {
@@ -272,11 +281,19 @@ function fitStage(size) {
   currentStage.style.transform = `translate(${left}px, ${top}px) scale(${k})`;
 }
 
-// The stylesheet that offers a themed spec's fonts. One <link>, swapped when the theme changes.
+// The stylesheet that offers the theme's fonts and colour tokens. One <link> (the server writes the
+// first one into the page), swapped when the theme changes.
 function useThemeStylesheet(name) {
   const href = `/theme/${encodeURIComponent(name)}.css`;
   let link = document.getElementById('theme-css');
-  if (link?.getAttribute('href') === href) return Promise.resolve();
+  const failed = () => new Error(`failed to load the stylesheet of theme "${name}"`);
+  if (link?.getAttribute('href') === href) {
+    if (link.sheet) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      link.addEventListener('load', resolve, { once: true });
+      link.addEventListener('error', () => reject(failed()), { once: true });
+    });
+  }
   if (!link) {
     link = document.createElement('link');
     link.id = 'theme-css';
@@ -285,17 +302,13 @@ function useThemeStylesheet(name) {
   }
   return new Promise((resolve, reject) => {
     link.onload = resolve;
-    link.onerror = () => reject(new Error(`failed to load the stylesheet of theme "${name}"`));
+    link.onerror = () => reject(failed());
     link.href = href;
   });
 }
 
-// A themed spec's look; a spec without a theme asks the server for nothing.
+// The look of theme `name` (withDefaults has already turned a missing theme into dusk).
 async function lookFor(name) {
-  if (name === undefined) {
-    document.getElementById('theme-css')?.remove();
-    return DEFAULT_LOOK;
-  }
   const response = await fetch(`/theme/${encodeURIComponent(name)}.json`, { cache: 'no-store' });
   if (!response.ok) throw new Error(`failed to load theme "${name}": HTTP ${response.status}`);
   const theme = await response.json();
@@ -307,9 +320,9 @@ async function fetchSpec() {
   const response = await fetch('/spec.json', { cache: 'no-store' });
   if (!response.ok) throw new Error(`failed to load spec: HTTP ${response.status}`);
   const raw = await response.json();
-  const look = await lookFor(raw.theme);
   const spec = withDefaults(raw);
-  if (raw.background === undefined && look.background) spec.background = look.background;
+  const look = await lookFor(spec.theme);
+  if (raw.background === undefined) spec.background = look.background;
   return { spec, look };
 }
 
