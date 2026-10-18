@@ -291,8 +291,6 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     if (def.assets) assets.push(...(await def.assets(section, ctx)).map((a) => ({ ...a, at: `sections[${i}]` })));
   }
   const flavored = flavor !== CLASSIC;
-  // The last local step before the output: a provider is asked for the image only now (it may call the network).
-  const image = typeof heroImage === 'function' ? await heroImage({ assets }) : heroImage;
   const layout = slides ? deckParts(spec, ctx, flavored) : pageParts(spec, ctx, ids);
 
   const parts = {
@@ -308,7 +306,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     BASECSS: fs.readFileSync(BASE_CSS, 'utf8').replace(/\n$/, ''),
     FLAVOR: flavor,
     FLAVORCSS: flavorSheets(flavor, slides),
-    HEROART: flavored && !slides ? heroArt(spec, themeData, image) : '',
+    HEROART: flavored && !slides ? heroArt(spec, themeData, typeof heroImage === 'function' ? undefined : heroImage) : '',
     ...layout,
     ...sectionPageParts(spec, ctx),
     PALIB: inlineCode(fs.readFileSync(PA_LIB, 'utf8')),
@@ -316,6 +314,11 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     RUNTIME: inlineCode(fs.readFileSync(RUNTIME, 'utf8')),
   };
   // One pass: a value that contains "<!--@X-->" is never substituted again.
-  const html = fs.readFileSync(TEMPLATES[ctx.mode], 'utf8').replace(/<!--@(\w+)-->/g, (_, key) => parts[key] ?? '');
-  return { html, assets };
+  const template = fs.readFileSync(TEMPLATES[ctx.mode], 'utf8');
+  const fill = (values) => template.replace(/<!--@(\w+)-->/g, (_, key) => values[key] ?? '');
+  const html = fill(parts);
+  // Everything that can throw has run. Only now may a provider be asked for the image (it may call the network);
+  // the hero art is then swapped in by a pure string operation.
+  const image = typeof heroImage === 'function' && parts.HEROART !== '' ? await heroImage({ assets }) : undefined;
+  return { html: image ? fill({ ...parts, HEROART: heroArt(spec, themeData, image) }) : html, assets };
 }

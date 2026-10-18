@@ -66,11 +66,11 @@ export async function build(file, { out, theme, model, effort, agent, imageApi, 
 
 // Refusals that need no network: a deck, a classic theme, a bad endpoint or a missing key. Throws ImageHookError.
 function checkImageApi(spec, imageApi, env) {
-  parseEndpoint(imageApi);
-  requireKey(env[KEY_ENV]);
   if (isSlides(spec)) throw new ImageHookError('--image-api only applies to explainer pages, not slide decks; drop the flag or build a page');
   const theme = spec.theme ?? EXPLAINER_THEME;
   if (flavorFor(theme) === CLASSIC) throw new ImageHookError(`--image-api needs a dusk, press or poster page (got ${theme}); pass --theme dusk or drop the flag`);
+  parseEndpoint(imageApi);
+  requireKey(env[KEY_ENV]);
 }
 
 // The one network call, announced on stderr before anything leaves the machine. Throws ImageHookError.

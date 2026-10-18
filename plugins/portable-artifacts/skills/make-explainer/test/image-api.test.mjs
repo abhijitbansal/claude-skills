@@ -174,3 +174,22 @@ test('buildPage asks for the image only after every local step succeeded', async
   assert.equal(asked, 1);
   assert.match(html, /<img src="data:image\/png/);
 });
+
+test('a section render error happens before the image is requested', async () => {
+  const { buildPage } = await import('../scripts/lib/page.mjs');
+  const f = fixture();
+  // Passes the registry checks but cannot render: the file is gone (as if it changed after validation).
+  const spec = { title: 'T', theme: 'dusk', sections: [{ type: 'image', src: 'gone.png', alt: 'x' }] };
+  let asked = 0;
+  const err = captureStderr();
+  try {
+    await assert.rejects(buildPage(spec, { dir: f.dir, heroImage: async () => { asked++; throw new Error('network touched'); } }), /image\.src/);
+  } finally { err.restore(); }
+  assert.equal(asked, 0);
+  assert.deepEqual(err.lines, []);
+});
+
+test('a deck without a key is told about the deck first', async () => {
+  const f = refusal({ mode: 'slides' });
+  await assert.rejects(build(f.spec, { out: f.out, imageApi: ENDPOINT, env: {} }), /slide decks/);
+});
