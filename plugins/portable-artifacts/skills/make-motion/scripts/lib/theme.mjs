@@ -10,6 +10,9 @@ export const FONTS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url
 // display: `role: "title"` text; body: all other text, counters and charts; mono: `font: "mono"`.
 const ROLES = [['display', '--display'], ['body', '--sans'], ['mono', '--mono']];
 const HEX = /^#[0-9a-f]{6}$/i;
+// The preview chrome's corner shape per theme: dusk's soft pills (the styles.css default), press's
+// letterpress near-square, poster's hard edge.
+const UI_RADIUS = Object.freeze({ press: '3px', poster: '0' });
 
 /** -> the theme JSON, or null for an unknown name. */
 export function themeData(name) {
@@ -39,5 +42,6 @@ export function themeCss(theme) {
   const fonts = ROLES.map(([role, name]) => `${name}:"${theme.fonts[role].family}", ${theme.fonts[role].fallback}`);
   // Theme files are checked by shared/test; a non-hex token still never reaches the stylesheet.
   const colours = Object.entries(theme.dark).filter(([, v]) => HEX.test(v)).map(([k, v]) => `--${k}:${v}`);
-  return `${faces.join('\n')}\n:root{${[...fonts, ...colours].join(';')}}\n`;
+  const shape = Object.hasOwn(UI_RADIUS, theme.name) ? [`--ui-radius:${UI_RADIUS[theme.name]}`] : [];
+  return `${faces.join('\n')}\n:root{${[...fonts, ...colours, ...shape].join(';')}}\n`;
 }
