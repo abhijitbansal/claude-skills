@@ -18,7 +18,8 @@ by any agent that can run shell commands.
   the build adds tooltips, legend filter or zoom, alternate views (sorted,
   share, 100%, area/line, ...), a sortable Table view and PNG, SVG and CSV
   export. Raw Vega-Lite still works for anything else.
-- **Themes**: `paper` (default), `blueprint`, `editorial`, `ink`; the page also
+- **Themes**: `paper` (default), `blueprint`, `editorial`, `ink`, and the newer
+  `dusk`, `press` and `poster`; the page also
   toggles Auto, Light and Dark.
 - **Live reload**: `serve.mjs --watch dashboard.json` rebuilds when you save the
   spec or the data and reloads the page.
@@ -74,7 +75,7 @@ monthly trend from data/sales.csv."* In Claude Code or Copilot you can call
 | `queries` | One SQL `SELECT` per name. Alias every aggregate; chart fields are those aliases |
 | `kpis` | Number tiles: `query`, `field`, `format` = `number`, `currency`, `percent` or `compact` |
 | `charts` | Each has exactly one of `kind` (+ role columns `x`, `y`, `color`, `size`, `value`, optional `format`, `views`, `pair`) or raw `vegaLite` (a Vega-Lite spec **without `data`**). `width` = `full` or `half` |
-| `theme` | `paper` (default), `blueprint`, `editorial`, `ink` |
+| `theme` | `paper` (default), `blueprint`, `editorial`, `ink`, `dusk`, `press`, `poster` |
 | `maxRows` | Row cap applied to every query (default 5000, max 100000) |
 
 The full reference is in [`references/schema.md`](references/schema.md), every kind
@@ -150,5 +151,7 @@ The agent writes the SQL, so it is treated as untrusted:
 
 Node.js ≥ 20. The dependencies, pinned by the lockfile, are DuckDB (MIT),
 Vega, Vega-Lite and vega-embed (BSD-3-Clause), and Ajv (MIT). The page embeds
-latin subsets of Geist, Geist Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible
-(OFL-1.1, via Fontsource); the licence texts ship in `shared/fonts/LICENSES/`.
+latin subsets of the chosen theme's fonts, from the bundled Geist, Geist Mono, Newsreader,
+Bricolage Grotesque, Atkinson Hyperlegible, Funnel Display, Host Grotesk, Commit Mono,
+Young Serif, Schibsted Grotesk, JetBrains Mono, Big Shoulders Display, Familjen Grotesk
+and Martian Mono (OFL-1.1, via Fontsource); the licence texts ship in `shared/fonts/LICENSES/`.

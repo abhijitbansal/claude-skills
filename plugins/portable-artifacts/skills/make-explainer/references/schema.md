@@ -10,7 +10,7 @@ Every section type and its fields: [sections.md](sections.md). Banned phrases: [
 | `subtitle` | string | At most 140 characters. |
 | `preset` | `recap` `checklist` `concept` `slides` `none` | Default `none`. A label only: it selects slides mode (`slides`) and turns on the checklist `intro` warning (`checklist`). |
 | `mode` | `page` `slides` | Default `page`; `preset: "slides"` implies slides. `preset: "slides"` with `mode: "page"` is an error. |
-| `theme` | `paper` `blueprint` `ink` `editorial` | Default `paper`. Each has light and dark variants; the page follows the reader's setting and has a Theme toggle. |
+| `theme` | `dusk` `press` `poster` `paper` `blueprint` `ink` `editorial` | Default `dusk`. `SKILL.md` ("Choosing a theme") says which to pick. Each has light and dark variants; the page follows the reader's setting and has a Theme toggle. |
 | `generatedBy` | object | Keys `model`, `effort`, `agent`; each 1-60 characters of letters, digits, spaces and `. _ : / ( ) + -`. Shown in the page footer and a `<meta name="generator">` tag; a missing field reads "not reported". The `--model`, `--effort` and `--agent` flags of `build.mjs` override it. |
 | `meta` | object | Keys `date`, `branch`, `repo`, `author`, `version`, `status`; each value at most 60 characters. Shown as chips under the title. |
 | `sections` | array, required | 1 to 40 sections, see below. |
