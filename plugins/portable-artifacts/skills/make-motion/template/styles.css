@@ -27,10 +27,14 @@ body.preview #viewport { bottom: 108px; }
 .el svg { display: block; overflow: visible; }
 .el img { display: block; }
 .el.chart svg { width: 100%; height: 100%; }
-/* background: "art": the seeded art full-bleed under the elements, dimmed by a scrim of the page colour. */
+/* background: "art": the seeded art full-bleed under the elements, lightly dimmed by a page-colour scrim.
+   Text and counters on art carry a soft page-colour halo that moves and scales with them, so the art
+   stays vivid around the words and the words stay legible (sampled >= 4.5:1 behind the glyphs). */
 .scene > .art { position: absolute; inset: 0; }
 .scene > .art img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.art-scrim { position: absolute; inset: 0; background: var(--page); opacity: 0.5; }
+.art-scrim { position: absolute; inset: 0; background: var(--page); opacity: 0.3; }
+.scene.on-art .el.text::before, .scene.on-art .el.counter::before { content: ''; position: absolute; inset: -0.35em -0.6em;
+  z-index: -1; border-radius: 999px; background: var(--page); opacity: 0.8; filter: blur(0.35em); }
 
 #error { position: absolute; left: 16px; right: 16px; top: 16px; padding: 12px 16px; border-radius: 10px;
   background: var(--surface); color: var(--text); border-left: 4px solid var(--bad);

@@ -172,6 +172,27 @@ test('--contact-sheet writes one non-blank PNG per scene (no ffmpeg needed)', as
   return undefined;
 });
 
+test('a scene with background "art" renders the theme art: not the flat scene, and the same bytes every time', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const dir = tmp('art-');
+  const scene = (background) => ({ theme: 'poster', size: [480, 270], scenes: [{ id: 'cover', duration: 1, background,
+    elements: [{ id: 'h', type: 'text', role: 'title', text: 'Art', x: 240, y: 135, fontSize: 64 }] }] });
+  const sheet = (name, motion) => {
+    writeFileSync(path.join(dir, `${name}.json`), JSON.stringify(motion));
+    const out = path.join(dir, name);
+    const r = render([path.join(dir, `${name}.json`), '--contact-sheet', '--out', out, '--size', '480x270']);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    return readFileSync(path.join(out, 'contact', 'cover.png'));
+  };
+  const art = sheet('art', scene('art'));
+  const again = sheet('again', scene('art'));
+  const flat = sheet('flat', scene('#0d0e0c')); // poster's own page colour, so only the art differs
+  assert.deepEqual(again, art, 'two renders of the same spec give byte-identical frames');
+  assert.notDeepEqual(art, flat, 'the art scene is not the flat colour');
+  assert.ok(await nonBackgroundRatio(path.join(dir, 'art', 'contact', 'cover.png')) > 0.1, 'the art covers the frame');
+  return undefined;
+});
+
 test('ffmpeg dying early: clean non-zero exit, ffmpeg stderr shown, no partial file', async (t) => {
   if (!(await haveBrowser())) return t.skip('browser unavailable');
   const dir = tmp('epipe-');

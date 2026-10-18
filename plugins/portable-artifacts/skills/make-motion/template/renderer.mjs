@@ -171,7 +171,7 @@ function buildElement(el, look) {
 }
 
 // A scene with `background: "art"`: the theme's seeded art (drawn by the server, see /art/ in
-// server.mjs) under a scrim in the theme's page colour, so text on top stays legible.
+// server.mjs) under a light page-colour scrim; styles.css gives text on it a page-colour halo.
 function artLayer(scene) {
   const holder = document.createElement('div');
   holder.className = 'art';
@@ -198,6 +198,7 @@ async function buildStage(spec, look) {
     layer.className = 'scene';
     if (scene.background === 'art') {
       const art = artLayer(scene);
+      layer.classList.add('on-art');
       layer.append(art.holder);
       pending.push(art.loaded);
     } else if (scene.background) layer.style.background = scene.background;
