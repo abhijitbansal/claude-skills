@@ -39,15 +39,15 @@ export const findShorthandFamilies = (css) => [...css.matchAll(/(?<![-\w])font\s
 export const findFontVars = (css) => [...css.matchAll(/(--(?:font|font-display|mono|sans)|--[\w-]*font[\w-]*)\s*:\s*([^;}]+)/g)].map((m) => m[2].trim());
 
 // Only the FIRST family is checked: a theme variable, a generic/system keyword, or a bundled family.
-// Inter, JetBrains Mono and --sans are make-motion's own bundled default look, so only its sources may use them.
+// Every skill draws from the same bundled families. make-motion names its font roles --sans and
+// --display (the theme stylesheet it is served sets them), so only its sources may use those variables.
 const BASE_BUNDLED = ['Geist', 'Geist Mono', 'Newsreader', 'Bricolage Grotesque', 'Atkinson Hyperlegible',
   'Funnel Display', 'Host Grotesk', 'Commit Mono', 'Young Serif', 'Schibsted Grotesk', 'JetBrains Mono', 'Big Shoulders Display', 'Familjen Grotesk', 'Martian Mono'];
-const MOTION_BUNDLED = ['Inter', 'JetBrains Mono'];
 const KEYWORDS = 'inherit|system-ui|-apple-system|ui-monospace|monospace|sans-serif|serif';
 export function allowedFamily(skill) {
   const motion = skill === 'make-motion';
-  const names = (motion ? [...BASE_BUNDLED, ...MOTION_BUNDLED] : BASE_BUNDLED).join('|');
-  const vars = motion ? 'font|font-display|mono|sans' : 'font|font-display|mono';
+  const names = BASE_BUNDLED.join('|');
+  const vars = motion ? 'font|font-display|mono|sans|display' : 'font|font-display|mono';
   return new RegExp(`^(?:var\\(--(?:${vars})\\)|${KEYWORDS}|(['"])(?:${names})\\1|(?:${names}))\\s*(?:,|$)`);
 }
 
@@ -72,10 +72,12 @@ test('lint catches what it should (guardrail proof)', () => {
   assert.deepEqual(lintFonts("a{font: 600 var(--size) 'Comic Sans MS'}", 'make-explainer'), ["'Comic Sans MS'"]);
   assert.deepEqual(lintFonts("a{font: 600 min(1rem,2vw) 'Comic Sans MS'}", 'make-explainer'), ["'Comic Sans MS'"]);
   assert.equal(lintFonts('a{font: 600 wibble var(--font)}', 'make-explainer').length, 1, 'unrecognised size fails loudly');
-  // Inter / --sans belong to make-motion only.
+  // Inter is no longer bundled anywhere (make-motion's old default look); --sans / --display belong to make-motion only.
   assert.deepEqual(lintFonts("a{font-family:'Inter', sans-serif}", 'make-explainer'), ["'Inter', sans-serif"]);
+  assert.deepEqual(lintFonts("a{font-family:'Inter', sans-serif}", 'make-motion'), ["'Inter', sans-serif"]);
   assert.deepEqual(lintFonts('a{font-family:var(--sans)}', 'make-dashboard'), ['var(--sans)']);
-  assert.deepEqual(lintFonts("a{font-family:'Inter', sans-serif}", 'make-motion'), []);
+  assert.deepEqual(lintFonts('a{font-family:var(--display)}', 'make-explainer'), ['var(--display)']);
+  assert.deepEqual(lintFonts('a{font-family:var(--display); font: 12px var(--sans)}', 'make-motion'), []);
   // the passing shapes
   assert.deepEqual(lintFonts('a{font: 600 var(--fs-lg)/var(--lh-head) var(--font-display); font: 12px/1.5 var(--mono); font: inherit}', 'make-explainer'), []);
   assert.deepEqual(lintFonts("a{font-family:'Geist Mono', monospace}", 'make-diagram'), []);
