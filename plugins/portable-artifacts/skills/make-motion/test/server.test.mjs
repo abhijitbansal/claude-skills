@@ -239,12 +239,27 @@ test('/theme/<name>.json and .css serve a shared theme, fonts come from the sync
   assert.match(css.headers['content-type'], /text\/css/);
   assert.match(css.body, /@font-face\{font-family:"Geist";font-style:normal;font-weight:600;font-display:block;src:url\(\/theme\/fonts\/geist-sans-latin-600-normal\.woff2\) format\("woff2"\)\}/);
   assert.match(css.body, /@font-face\{font-family:"Geist Mono"/);
-  assert.match(css.body, /#stage\{--sans:"Geist", -apple-system, 'Segoe UI', sans-serif;--mono:"Geist Mono", ui-monospace, Menlo, Consolas, monospace\}/);
+  // the font roles and the dark colour tokens sit on :root, so the preview chrome draws with them too
+  assert.match(css.body, /:root\{--display:"Bricolage Grotesque", [^;]+;--sans:"Geist", -apple-system, 'Segoe UI', sans-serif;--mono:"Geist Mono", ui-monospace, Menlo, Consolas, monospace;/);
+  assert.match(css.body, /@font-face\{font-family:"Bricolage Grotesque";font-style:normal;font-weight:600;font-display:block;src:url\(\/theme\/fonts\/bricolage-grotesque-latin-600-normal\.woff2\)/, 'the display role is offered for role:title text');
+  assert.ok(css.body.includes(`--page:${theme.dark.page};`) && css.body.includes(`--accent:${theme.dark.accent};`), 'dark colour tokens');
   assert.ok(!css.body.includes('data:'), 'the page CSP allows fonts from self only');
-  assert.ok(!css.body.includes('Bricolage'), 'the display role is not used, so its font is not offered');
   const font = await get(srv.url, '/theme/fonts/geist-sans-latin-600-normal.woff2');
   assert.equal(font.status, 200);
   assert.equal(font.headers['content-type'], 'font/woff2');
+}));
+
+test('a new theme\'s display font is served from /theme/fonts like the body and mono fonts', () => withServer(async (srv) => {
+  for (const [name, file] of [['dusk', 'funnel-display-latin-700-normal.woff2'], ['press', 'young-serif-latin-400-normal.woff2'], ['poster', 'big-shoulders-display-latin-900-normal.woff2']]) {
+    const css = await get(srv.url, `/theme/${name}.css`);
+    assert.ok(css.body.includes(`src:url(/theme/fonts/${file}) format("woff2")`), `${name} offers ${file}`);
+    const font = await get(srv.url, `/theme/fonts/${file}`);
+    assert.equal(font.status, 200, file);
+    assert.equal(font.headers['content-type'], 'font/woff2');
+  }
+  for (const p of ['/theme/fonts/..%2Ffonts%2Ffunnel-display-latin-700-normal.woff2', '/theme/fonts/%2e%2e%2ffunnel-display-latin-700-normal.woff2']) {
+    assert.equal((await get(srv.url, p)).status, 404, p);
+  }
 }));
 
 test('theme routes refuse unknown names, traversal and anything but a woff2', () => withServer(async (srv) => {
