@@ -72,11 +72,14 @@ and in Codex `$make-motion …`.
 
 | Element `type` | Key fields | Animatable |
 |---|---|---|
-| `text` | `text`, `fontSize`, `fontWeight`, `color`, `align`, `maxWidth`, `font` (`sans`/`mono`) | `opacity x y scale rotate` |
+| `text` | `text`, `role` (`title`: display font, plus the theme's entrance when it has no `keyframes`), `fontSize`, `fontWeight`, `color`, `align`, `maxWidth`, `font` (`sans`/`mono`) | `opacity x y scale rotate` |
 | `counter` | `from`, `to`, `decimals`, `prefix`, `suffix` + text styling | + `value` (with no `value` keyframes it counts from→to automatically) |
 | `shape` | `shape` (`rect`/`ellipse`/`line`), `width`, `height`, `radius`, `fill`, `stroke`, `strokeWidth` | + `draw` (0–1 stroke reveal) |
 | `image` | `src` (relative to the spec), `width`, `height`, `fit` | `opacity x y scale rotate` |
 | `chart` | `vegaLite` with inline `data.values`, `width`, `height` | + `reveal` (0–1 left-to-right wipe) |
+
+A scene's `background` is a CSS colour or `"art"`: the theme's seeded art,
+full-bleed behind the elements and seeded by the scene `id`.
 
 Keyframes are `{ "t": seconds-in-scene, "ease": "outCubic", …props }`. Each
 property holds its value before its first keyframe, interpolates between
