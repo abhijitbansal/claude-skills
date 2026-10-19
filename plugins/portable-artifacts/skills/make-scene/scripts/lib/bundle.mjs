@@ -30,18 +30,18 @@ export function bundleHeaderHash(text) {
   return match ? match[1] : null;
 }
 
-function bundleHeaderThree(text) {
-  const match = HEADER_RE.exec(text);
-  return match ? match[2] : null;
-}
-
-/** Installed three version, or the one recorded in the committed bundle header when node_modules is absent. */
-export function threeVersion() {
-  const pkg = path.join(SKILL_DIR, 'node_modules', 'three', 'package.json');
-  if (fs.existsSync(pkg)) return JSON.parse(fs.readFileSync(pkg, 'utf8')).version;
-  const fromHeader = fs.existsSync(BUNDLE_FILE) ? bundleHeaderThree(readBundle()) : null;
-  if (!fromHeader) throw new UsageError(`cannot determine three version: run \`npm ci\` in ${SKILL_DIR}.`);
-  return fromHeader;
+/**
+ * three version the bundle is built from: the installed one (what esbuild bundles), else the
+ * devDependencies pin in package.json (always present, so a bump without a rebundle is
+ * detected even under `npm ci --omit=dev`). `root` is injectable for tests.
+ */
+export function threeVersion(root = SKILL_DIR) {
+  const installed = path.join(root, 'node_modules', 'three', 'package.json');
+  if (fs.existsSync(installed)) return JSON.parse(fs.readFileSync(installed, 'utf8')).version;
+  const pkgFile = path.join(root, 'package.json');
+  const pin = fs.existsSync(pkgFile) ? JSON.parse(fs.readFileSync(pkgFile, 'utf8')).devDependencies?.three : null;
+  if (!pin) throw new UsageError(`cannot determine three version: no node_modules/three and no devDependencies.three in ${pkgFile}.`);
+  return pin;
 }
 
 function runtimeFiles(dir = RUNTIME_DIR) {
