@@ -92,7 +92,7 @@ export async function build(file, { out, theme, world, model, effort, agent, env
   let built;
   let html;
   try {
-    built = await buildScene(spec, { dir, theme: pageTheme, idPrefix: ID_PREFIX });
+    built = await buildScene(spec, { dir, theme: pageTheme, idPrefix: ID_PREFIX, allowOutside });
     html = renderPage(spec, built, { theme: pageTheme, env });
   } catch (e) {
     if (e instanceof SceneError) return { ok: false, errors: e.errors };

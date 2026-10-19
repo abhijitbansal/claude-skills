@@ -1,0 +1,128 @@
+// bar, stacked-bar, grouped-bar and histogram as box towers. Towers rise from the floor (y = 0) in
+// proportion to the value, or hang below it for a negative one. Stacked bars stack in one column (positive
+// values up from 0, negative down); grouped bars stand in one lane per colour; a histogram is a row of
+// touching towers, one per bin.
+import { displayValue, groupColour } from '../lib/palette.mjs';
+import { orderOf } from './dashboard-data.mjs';
+import { MIN_MARK, WIDTH, focusCollector, frameOf, lanesOf, legendOf, slotsOf, valueAxis } from './dashboard-frame.mjs';
+
+const MAX_TOWER = 1.4;
+const TOWER_SHARE = 0.7; // of its slot
+const BIN_SHARE = 0.94;
+const BIN_DEPTH = 1.2;
+const LANE_FILL = 0.8;
+const MAX_BINS = 20; // as the dashboard's own histogram
+const BIN_EPSILON = 1e-9;
+const clean = (v) => Number(v.toFixed(10));
+
+const emptyBatch = (id, colour) => ({ id, shape: 'box', colour, emissive: null, flat: false, instances: [] });
+
+// A tower on y = 0 (or hanging from it); `base` is where a stacked segment starts.
+function tower(x, z, w, d, height, base = 0) {
+  const length = Math.max(Math.abs(height), MIN_MARK);
+  return { box: [x, height < 0 ? base - length / 2 : base + length / 2, z, w, length, d], top: height < 0 ? base - length : base + length };
+}
+
+// [lo, hi] of what the towers reach: stacked columns add up, positive and negative apart.
+function reach(model) {
+  const values = model.points.map((p) => p.y);
+  if (model.kind !== 'stacked-bar') return [Math.min(0, ...values), Math.max(0, ...values)];
+  const up = new Map();
+  const down = new Map();
+  for (const p of model.points) {
+    const sums = p.y >= 0 ? up : down;
+    sums.set(p.x, (sums.get(p.x) ?? 0) + p.y);
+  }
+  return [Math.min(0, ...down.values()), Math.max(0, ...up.values())];
+}
+
+/** The part for a bar, stacked-bar or grouped-bar chart. */
+export function barsPart(model, { units, niceStep }) {
+  const { kind, roles, points } = model;
+  const xs = orderOf(points.map((p) => p.x), model.xTemporal);
+  const xIndex = new Map(xs.map((x, i) => [x, i]));
+  const { slot, at } = slotsOf(xs.length);
+  const names = roles.color === undefined ? [roles.y] : model.groupNames;
+  const groupOf = new Map(names.map((n, i) => [n, i]));
+  const grouped = kind === 'grouped-bar';
+  const stacked = kind === 'stacked-bar';
+  const lane = lanesOf(grouped ? names.length : 1);
+  const axis = valueAxis(...reach(model), niceStep);
+  const w = Math.min(MAX_TOWER, slot * TOWER_SHARE);
+  const d = grouped ? Math.max(0.2, lane.pitch * LANE_FILL) : w;
+  const batches = names.map((_, g) => emptyBatch(`b${g}`, groupColour(g)));
+  const stack = new Map();
+  const [xFocus, colourFocus, itemFocus] = [focusCollector(), focusCollector(), focusCollector()];
+  const items = points.map((p, idx) => {
+    const g = roles.color === undefined ? 0 : groupOf.get(p.color);
+    const x = at(xIndex.get(p.x));
+    const z = lane.z(grouped ? g : 0);
+    const height = p.y * axis.k;
+    const sums = stack.get(p.x) ?? { up: 0, down: 0 };
+    const { box, top } = tower(x, z, w, d, height, stacked ? (p.y >= 0 ? sums.up : sums.down) : 0);
+    if (stacked && p.y !== 0) stack.set(p.x, p.y >= 0 ? { ...sums, up: sums.up + height } : { ...sums, down: sums.down + height });
+    batches[g].instances.push([...box, idx]);
+    const label = roles.color === undefined ? p.x : `${p.x} · ${p.color}`;
+    const place = [x, box[1], z];
+    xFocus.add(p.x, place);
+    if (roles.color !== undefined) colourFocus.add(p.color, place);
+    itemFocus.add(label, place);
+    return { id: `i${idx}`, label, group: g, value: p.y, display: displayValue(p.y, units) };
+  });
+  const frame = frameOf({
+    axis,
+    depth: lane.depth,
+    xTicks: xs.map((text, i) => ({ text, x: at(i) })),
+    titles: { x: roles.x, y: roles.y, lane: grouped ? roles.color : undefined },
+    laneNames: grouped ? names : [],
+    lane,
+    firstBatch: names.length,
+  });
+  return {
+    groups: legendOf(names), items, batches: [...batches, ...frame.batches], tubes: [], surfaces: [], labels: frame.labels,
+    focus: [xFocus.entries(), colourFocus.entries(), itemFocus.entries()],
+    categories: { x: true, color: roles.color !== undefined },
+  };
+}
+
+// The histogram's bins: nice edges, at most MAX_BINS of them, counting the rows in each.
+function binned(values, niceStep) {
+  if (values.length === 0) return { start: 0, step: 1, counts: [] };
+  const [min, max] = [Math.min(...values), Math.max(...values)];
+  const step = niceStep(max > min ? (max - min) / MAX_BINS : Math.abs(min) / MAX_BINS || 1 / MAX_BINS);
+  const start = clean(Math.floor(min / step) * step);
+  const counts = new Array(Math.floor((max - start) / step + BIN_EPSILON) + 1).fill(0);
+  for (const v of values) counts[Math.min(counts.length - 1, Math.floor((v - start) / step + BIN_EPSILON))] += 1;
+  return { start, step, counts };
+}
+
+/** The part for a histogram: one tower per bin, its value the row count. */
+export function histogramPart(model, { niceStep }) {
+  const { start, step, counts } = binned(model.points.map((p) => p.value), niceStep);
+  const { slot, at } = slotsOf(counts.length);
+  const axis = valueAxis(0, Math.max(0, ...counts), niceStep, { integer: true });
+  const edge = (j) => clean(start + j * step);
+  const lane = lanesOf(1);
+  const batch = emptyBatch('b0', groupColour(0));
+  const itemFocus = focusCollector();
+  const items = counts.map((count, j) => {
+    const { box } = tower(at(j), 0, slot * BIN_SHARE, BIN_DEPTH, count * axis.k);
+    batch.instances.push([...box, j]);
+    const label = `${displayValue(edge(j), '')} – ${displayValue(edge(j + 1), '')}`;
+    itemFocus.add(label, [at(j), box[1], 0]);
+    return { id: `i${j}`, label, group: 0, value: count, display: `${count} ${count === 1 ? 'row' : 'rows'}` };
+  });
+  const frame = frameOf({
+    axis,
+    depth: lane.depth,
+    xTicks: Array.from({ length: counts.length + 1 }, (_, j) => ({ text: displayValue(edge(j), ''), x: -WIDTH / 2 + j * slot })),
+    titles: { x: model.roles.value, y: 'count' },
+    lane,
+    firstBatch: 1,
+  });
+  return {
+    groups: legendOf(['count']), items, batches: [batch, ...frame.batches], tubes: [], surfaces: [], labels: frame.labels,
+    focus: [itemFocus.entries()],
+    categories: { x: false, color: false },
+  };
+}

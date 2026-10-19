@@ -191,12 +191,11 @@ test('--allow-outside passes through to validation', async (t) => {
   assert.equal(allowed.ok, true, JSON.stringify(allowed.errors));
 });
 
-test('a lift spec is a clear error until its module exists', async (t) => {
+test('a dashboard lift of a file that is not a dashboard is an error under lift.dashboard, never a stack', async (t) => {
   const file = writeScene(t, { title: 'Lift', lift: { dashboard: 'rows.json', chart: 'c1' } });
   const result = await build(file, { env: env(tempDir(t)) });
   assert.equal(result.ok, false);
-  assert.equal(result.errors[0].path, 'lift');
-  assert.match(result.errors[0].message, /not available yet/);
+  assert.ok(result.errors.length > 0 && result.errors.every((e) => e.path.startsWith('lift.dashboard')), JSON.stringify(result.errors));
 });
 
 test('a world that fails to build is a "not available" row; the page is still written and the build succeeds', async (t) => {

@@ -8,7 +8,7 @@ import { recommend } from './recommend.mjs';
 import { DataError, loadData } from './rows.mjs';
 import { themeFor } from './theme.mjs';
 import { WORLDS } from '../worlds/index.mjs';
-import { liftDiagram } from '../lifts/index.mjs';
+import { liftDashboard, liftDiagram } from '../lifts/index.mjs';
 import { SceneError } from './scene-error.mjs';
 
 // validateSpec(spec, { dir, allowOutside }) -> { ok, errors }: the same checks a build runs, for callers that only validate.
@@ -62,11 +62,11 @@ export function sceneFromGraph(graph, { idPrefix = 'sc', autoplay = false } = {}
 }
 
 // A lift's graph: a diagram's own stories play as the tour unless the spec gives one; the scene's title names it.
-async function liftGraph(spec, { dir, theme, idPrefix }) {
-  if (spec.lift.diagram === undefined) {
-    throw new SceneError([{ path: 'lift', message: 'chart lifts are not available yet; give the data as rows instead' }]);
-  }
-  const lifted = await liftDiagram(spec.lift.diagram, { dir, theme, idPrefix: `${idPrefix}-fb` });
+async function liftGraph(spec, { dir, theme, idPrefix, allowOutside }) {
+  const fallbackPrefix = `${idPrefix}-fb`;
+  const lifted = spec.lift.diagram !== undefined
+    ? await liftDiagram(spec.lift.diagram, { dir, theme, idPrefix: fallbackPrefix })
+    : await liftDashboard({ dashboard: spec.lift.dashboard, chart: spec.lift.chart }, { dir, theme, idPrefix: fallbackPrefix, allowOutside, units: spec.units });
   assertGraph(lifted);
   const withTitle = { ...lifted, title: spec.title };
   return { world: null, graph: (spec.tour ?? []).length > 0 ? { ...withTitle, tour: tourFrom(spec, withTitle) } : withTitle };
@@ -95,10 +95,10 @@ async function graphFor(spec, ctx) {
  * `spec` is a validated scene spec; `dir` is its folder (data paths resolve there). `theme` is the page's
  * theme (name or loaded) and is checked here so a bad one fails before any work; the 3D view reads its
  * colours from the page's CSS variables at runtime. `idPrefix` namespaces the ids, so several scenes can
- * share a page. Throws SceneError for content problems.
+ * share a page. `allowOutside` lets a lifted dashboard read data from outside its folder. Throws SceneError for content problems.
  */
-export async function buildScene(spec, { dir = process.cwd(), theme, idPrefix = 'sc' } = {}) {
+export async function buildScene(spec, { dir = process.cwd(), theme, idPrefix = 'sc', allowOutside = false } = {}) {
   const loaded = themeFor(spec, theme);
-  const { world, graph } = await graphFor(spec, { dir, theme: loaded, idPrefix });
+  const { world, graph } = await graphFor(spec, { dir, theme: loaded, idPrefix, allowOutside });
   return { ...sceneFromGraph(graph, { idPrefix, autoplay: spec.autoplay === true }), world };
 }
