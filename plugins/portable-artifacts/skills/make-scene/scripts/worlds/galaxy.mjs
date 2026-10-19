@@ -23,6 +23,7 @@ const ARC_SEGMENTS = 16;
 const TUBE_MIN = 0.03;
 const TUBE_SPAN = 0.07;
 const TUBE_PLAIN = 0.05;
+const LINK_COLOUR = { base: '#c8d0e0', tint: 'accent', share: 0.3 }; // space is dark in both modes: a pale link with a hint of the theme accent
 const LABEL_RISE = 0.4;
 const LABEL_SIZE = 0.6;
 const FOCUS_DIRECTION = [0.5, 0.8, 0.9];
@@ -75,7 +76,7 @@ function tubesFrom(links, centres, gi, units) {
       id: `e${tubes.length}`,
       points: arc(centres[from], centres[to]),
       radius: share === null ? TUBE_PLAIN : TUBE_MIN + TUBE_SPAN * share,
-      colour: 'text2',
+      colour: LINK_COLOUR,
       item: null,
       label: `${l.from} → ${l.to}`,
       ...(text === '' ? {} : { display: text }),
@@ -122,7 +123,7 @@ export function build({ rows, links = [] }, spec = {}) {
   g.items = itemsFrom(rows, spec.units);
   g.batches = [
     ...groups.map((_, n) => ({
-      id: `b${n}`, shape: 'sphere', colour: groupColour(n), emissive: { colour: 'glow', density: 1 }, flat: false,
+      id: `b${n}`, shape: 'sphere', colour: groupColour(n), emissive: { colour: groupColour(n), density: 1 }, flat: false,
       instances: [[...centres[n], STAR_SIZE, STAR_SIZE, STAR_SIZE, -1]],
     })),
     ...planetBatches,

@@ -274,6 +274,21 @@ test('galaxy: planet size is 0.06 + value/max * 0.32', () => {
   assert.ok(Math.abs(size(2) - 0.38) < 1e-3);
 });
 
+test('galaxy: each star glows in its own group colour, never a shared glow token', () => {
+  const g = WORLDS.galaxy(fixture(), SPEC);
+  const stars = g.batches.filter((b) => b.emissive !== null);
+  assert.equal(stars.length, g.groups.length);
+  stars.forEach((b, n) => {
+    assert.deepEqual(b.emissive, { colour: g.groups[n].colour, density: 1 });
+    assert.deepEqual(b.colour, g.groups[n].colour);
+  });
+});
+
+test('galaxy: link tubes are a pale blue-grey nudged toward the accent, readable on dark space in both modes', () => {
+  const g = WORLDS.galaxy(fixture(), SPEC);
+  for (const t of g.tubes) assert.deepEqual(t.colour, { base: '#c8d0e0', tint: 'accent', share: 0.3 });
+});
+
 test('galaxy: links become tubes between stars', () => {
   const g = WORLDS.galaxy(fixture(), SPEC);
   assert.equal(g.tubes.length, 3);

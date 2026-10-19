@@ -41,10 +41,13 @@ export function createControls({ camera, dom, target, polarMax, distance, reduce
   const onPointer = () => settle('pointer');
   const onWheel = () => settle('wheel');
   const onKey = (event) => {
-    settle('key');
+    // Only the arrows are ours: the tour listens for Space and the arrows on the document, so other keys
+    // must neither stop the drift nor be swallowed. Arrows are consumed here (the tour's use them off-canvas).
     const step = ARROWS[event.key];
     if (!step || event.altKey || event.ctrlKey || event.metaKey) return;
+    settle('key');
     event.preventDefault();
+    event.stopPropagation();
     const offset = new Vector3().subVectors(camera.position, controls.target);
     const spherical = new Spherical().setFromVector3(offset);
     spherical.theta += step[0] * KEY_STEP;
