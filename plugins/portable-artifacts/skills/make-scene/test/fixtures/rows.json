@@ -1,0 +1,9 @@
+{
+  "rows": [
+    { "group": "api", "t": "2026-W30", "value": 12, "label": "api W30" },
+    { "group": "web", "t": "2026-W30", "value": 5 },
+    { "group": "api", "t": "2026-W31", "value": 7 },
+    { "group": "web", "t": "2026-W31", "value": 9 }
+  ],
+  "links": [{ "from": "api", "to": "web", "value": 3 }]
+}
