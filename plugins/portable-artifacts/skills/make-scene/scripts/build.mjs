@@ -108,7 +108,8 @@ export async function build(file, { out, theme, world, model, effort, agent, env
   const rewroteSpec = world !== undefined && loaded.world !== world;
   if (rewroteSpec) writeFile(path.resolve(file), `${JSON.stringify({ ...loaded, world }, null, 2)}\n`);
 
-  const alternatives = await alternativesFor({ spec, dir, theme: pageTheme, built, bytes });
+  // A lift is never second-guessed: it has no other worlds to offer.
+  const alternatives = spec.lift === undefined ? await alternativesFor({ spec, dir, theme: pageTheme, built, bytes }) : [];
   const table = costTable({
     specText: fs.readFileSync(file, 'utf8'),
     current: built.world,

@@ -2,6 +2,7 @@
 // node scripts/validate.mjs <scene.json> [--json] [--allow-outside]
 // exit 0 valid, 1 spec errors, 2 usage/IO
 import { loadSpec, validateSpec } from './lib/spec.mjs';
+import './lifts/index.mjs'; // registers the lift checks
 import { UsageError, parseCli, exitUsage, evalLog } from '../shared/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
 import { exitInternal } from './lib/internal-error.mjs';

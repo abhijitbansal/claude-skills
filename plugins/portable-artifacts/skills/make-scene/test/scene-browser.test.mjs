@@ -125,10 +125,16 @@ test('no webgl shows fallback: the table is visible, the controls are hidden, no
   const { file } = await buildWorldPage(t, 'city');
   const page = await (await blind.newContext({ viewport: VIEWPORTS[0] })).newPage();
   const problems = [];
-  page.on('console', (m) => { if (m.type() === 'error') problems.push(m.text()); });
+  const notes = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error') problems.push(m.text());
+    if (m.type() === 'warning') problems.push(`warning: ${m.text()}`); // the expected no-WebGL case is info, so a warning is a real problem
+    if (m.type() === 'info') notes.push(m.text());
+  });
   page.on('pageerror', (e) => problems.push(e.message));
   await page.goto(pathToFileURL(file).href);
   await page.waitForTimeout(600);
+  assert.ok(notes.some((n) => /showing the table instead of the 3D view \(WebGL is not available\)/.test(n)), `info says why: ${JSON.stringify(notes)}`);
   assert.equal(await page.evaluate(() => document.querySelector('[data-pa-scene]').dataset.sceneState), 'fallback');
   assert.equal(await page.locator('.sc-table table').isVisible(), true, 'the fallback table is visible');
   assert.ok((await page.locator('.sc-table tbody tr').count()) > 0, 'with its rows');

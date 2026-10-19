@@ -1,0 +1,28 @@
+{
+  "title": "Checkout request path",
+  "subtitle": "How an order reaches the database",
+  "type": "architecture",
+  "theme": "paper",
+  "direction": "right",
+  "animate": false,
+  "groups": [
+    { "id": "aws", "label": "AWS us-east-1" },
+    { "id": "vpc", "label": "Private VPC", "parent": "aws" }
+  ],
+  "nodes": [
+    { "id": "web", "label": "Web app", "kind": "client" },
+    { "id": "api", "label": "Checkout API", "kind": "service", "group": "vpc", "icon": "brand:nodedotjs" },
+    { "id": "db", "label": "Orders DB", "kind": "database", "group": "vpc", "icon": "brand:postgresql", "note": "primary + replica" },
+    { "id": "pay", "label": "Payments", "kind": "external", "tone": "warn" }
+  ],
+  "edges": [
+    { "from": "web", "to": "api", "label": "POST /checkout" },
+    { "from": "api", "to": "db", "label": "writes order", "style": "solid" },
+    { "from": "api", "to": "pay", "label": "charges card", "style": "async" },
+    { "from": "web", "to": "vpc", "style": "dashed", "both": true }
+  ],
+  "steps": [
+    { "title": "The browser calls the API", "show": ["web", "api"], "note": "TLS ends at the load balancer." },
+    { "title": "The API writes the order", "show": ["db"], "focus": ["api", "db"], "highlight": ["db"] }
+  ]
+}

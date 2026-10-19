@@ -29,10 +29,7 @@ export function costTable({ specText, current, pageBytes, skillDir, specPath = '
   const rows = alternatives.map((a) => row(a, { current, pageBytes, skillDir, specPath }));
   const widths = COLUMNS.map((c, i) => Math.max(c.length, ...rows.map((r) => r[i].length)));
   const line = (cells) => cells.map((c, i) => c.padEnd(widths[i])).join(' | ').trimEnd();
-  return [
-    `spec authoring ≈ ${tokens} tokens (estimated)`,
-    line(COLUMNS),
-    widths.map((w) => '-'.repeat(w)).join('-+-'),
-    ...rows.map(line),
-  ].join('\n');
+  // A lift offers no other worlds: just the authoring estimate, no empty table.
+  const table = rows.length === 0 ? [] : [line(COLUMNS), widths.map((w) => '-'.repeat(w)).join('-+-'), ...rows.map(line)];
+  return [`spec authoring ≈ ${tokens} tokens (estimated)`, ...table].join('\n');
 }

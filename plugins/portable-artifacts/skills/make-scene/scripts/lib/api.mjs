@@ -8,6 +8,8 @@ import { recommend } from './recommend.mjs';
 import { DataError, loadData } from './rows.mjs';
 import { themeFor } from './theme.mjs';
 import { WORLDS } from '../worlds/index.mjs';
+import { liftDiagram } from '../lifts/index.mjs';
+import { SceneError } from './scene-error.mjs';
 
 // validateSpec(spec, { dir, allowOutside }) -> { ok, errors }: the same checks a build runs, for callers that only validate.
 export { validateSpec } from './spec.mjs';
@@ -16,13 +18,7 @@ const CHROME_CSS = new URL('../../template/page.css', import.meta.url);
 const ID_PREFIX = /^[A-Za-z0-9_-]+$/;
 
 /** A problem with the scene's content (not a bug): errors are [{ path, message }], like the validator's. */
-export class SceneError extends Error {
-  constructor(errors) {
-    super(errors[0].message);
-    this.name = 'SceneError';
-    this.errors = errors;
-  }
-}
+export { SceneError };
 
 // Spec tour beats -> graph tour entries. A beat flies to the first focus that names a group or label
 // of the graph; a beat that names none keeps its first entry (the chrome shows its caption and stays put).
@@ -65,10 +61,20 @@ export function sceneFromGraph(graph, { idPrefix = 'sc', autoplay = false } = {}
   return { graph, html, css: sceneCss(graph), runtime: readBundle(), fallbackHtml: fallback, bytes: Buffer.byteLength(html) };
 }
 
-function graphFor(spec, dir) {
-  if (spec.lift !== undefined) {
-    throw new SceneError([{ path: 'lift', message: 'diagram and chart lifts are not available yet; give the data as rows instead' }]);
+// A lift's graph: a diagram's own stories play as the tour unless the spec gives one; the scene's title names it.
+async function liftGraph(spec, { dir, theme, idPrefix }) {
+  if (spec.lift.diagram === undefined) {
+    throw new SceneError([{ path: 'lift', message: 'chart lifts are not available yet; give the data as rows instead' }]);
   }
+  const lifted = await liftDiagram(spec.lift.diagram, { dir, theme, idPrefix: `${idPrefix}-fb` });
+  assertGraph(lifted);
+  const withTitle = { ...lifted, title: spec.title };
+  return { world: null, graph: (spec.tour ?? []).length > 0 ? { ...withTitle, tour: tourFrom(spec, withTitle) } : withTitle };
+}
+
+async function graphFor(spec, ctx) {
+  if (spec.lift !== undefined) return liftGraph(spec, ctx);
+  const { dir } = ctx;
   let data;
   try {
     data = loadData(spec, dir);
@@ -85,13 +91,14 @@ function graphFor(spec, dir) {
 
 /**
  * buildScene(spec, { dir, theme, idPrefix }) -> { graph, html, css, runtime, fallbackHtml, bytes, world }
+ * (`world` is null for a lift)
  * `spec` is a validated scene spec; `dir` is its folder (data paths resolve there). `theme` is the page's
  * theme (name or loaded) and is checked here so a bad one fails before any work; the 3D view reads its
  * colours from the page's CSS variables at runtime. `idPrefix` namespaces the ids, so several scenes can
  * share a page. Throws SceneError for content problems.
  */
 export async function buildScene(spec, { dir = process.cwd(), theme, idPrefix = 'sc' } = {}) {
-  themeFor(spec, theme);
-  const { world, graph } = graphFor(spec, dir);
+  const loaded = themeFor(spec, theme);
+  const { world, graph } = await graphFor(spec, { dir, theme: loaded, idPrefix });
   return { ...sceneFromGraph(graph, { idPrefix, autoplay: spec.autoplay === true }), world };
 }

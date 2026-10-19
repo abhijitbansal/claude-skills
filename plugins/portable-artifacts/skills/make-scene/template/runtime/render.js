@@ -7,6 +7,7 @@ import {
   SphereGeometry, TubeGeometry, Vector3,
 } from 'three';
 import { resolveColour } from './colour.js';
+import { createTravel } from './travel.js';
 
 const UPSAMPLE = 5; // terrain: data cells sit every 5th vertex (Task 5 convention)
 const STAR_COUNT = 700;
@@ -25,6 +26,10 @@ const SKY_SPACE = 'space';
 const PICK_TUBE_FACTOR = 4; // hover radius of a link, in link radii
 const PICK_TUBE_MIN_SHARE = 0.004; // ...and at least this share of the scene's diagonal
 const PICK_MATERIAL = new MeshBasicMaterial(); // never drawn (the pick meshes are invisible); raycasting needs a material
+const LIGHT_MIN_RADIUS = 0.16; // the travelling light: a sphere this big (or a share of the scene's diagonal)...
+const LIGHT_DIAG_SHARE = 0.005;
+const LIGHT_HALO = 2.4; // ...inside a soft halo this many times wider
+const LIGHT_HALO_OPACITY = 0.3;
 
 // FNV-1a + mulberry32, copied from shared/art.mjs (the runtime cannot import Node shared files).
 function seedFrom(text) {
@@ -133,6 +138,7 @@ export function buildObjects(graph, palette) {
   const tints = []; // (palette) => void; every retintable thing registers one
   const disposables = [];
   const animators = [];
+  const tubeCurves = new Map(); // tube id -> the curve the tube is drawn along (the travelling light rides it)
   const shapeGeometries = new Map();
   const batchMeshes = new Map(); // batch id -> { batch, mesh }
   const extent = boundsInfo(graph.bounds);
@@ -259,6 +265,7 @@ export function buildObjects(graph, palette) {
   // shows them); a hidden, fatter twin takes the hits, since a 0.06 radius is a few pixels wide on screen.
   (graph.tubes ?? []).forEach((tube, ti) => {
     const curve = new CatmullRomCurve3(tube.points.map((p) => new Vector3(p[0], p[1], p[2])));
+    tubeCurves.set(tube.id, curve);
     const segments = Math.max(12, tube.points.length * 12);
     const geometry = new TubeGeometry(curve, segments, tube.radius, 8, false);
     const material = new MeshStandardMaterial({ roughness: 0.6, metalness: 0.1 });
@@ -274,6 +281,27 @@ export function buildObjects(graph, palette) {
     root.add(pick);
     pickables.push(pick);
   });
+
+  // The travelling light: a glowing sphere that rides one tube per tour beat (graph.tour[].path is a tube id).
+  const travel = createTravel();
+  const light = new Group();
+  light.visible = false;
+  const lightRadius = Math.max(LIGHT_MIN_RADIUS, extent.diag * LIGHT_DIAG_SHARE);
+  const lightMesh = (radius, opacity) => {
+    const material = new MeshBasicMaterial({ transparent: opacity < 1, opacity, depthWrite: opacity === 1, toneMapped: false });
+    return new Mesh(track(new SphereGeometry(radius, 20, 14), material), material);
+  };
+  const lightParts = [lightMesh(lightRadius * LIGHT_HALO, LIGHT_HALO_OPACITY), lightMesh(lightRadius, 1)];
+  light.add(...lightParts);
+  root.add(light);
+  tints.push(() => {
+    for (const part of lightParts) part.material.color.copy(colourOf('glow'));
+  });
+  const placeLight = (frame) => {
+    const curve = frame === null ? undefined : tubeCurves.get(frame.id);
+    light.visible = curve !== undefined;
+    if (curve) light.position.copy(curve.getPointAt(frame.at));
+  };
 
   // Surfaces (terrain) and water
   for (const surface of graph.surfaces ?? []) {
@@ -360,9 +388,25 @@ export function buildObjects(graph, palette) {
     fog,
     pickables,
     retint,
-    animated: animators.length > 0,
+    get animated() {
+      return animators.length > 0 || travel.active;
+    },
     animate(t) {
       for (const step of animators) step(t);
+      if (travel.active) placeLight(travel.tick(t));
+    },
+    /** Send the light along tube `id` (forwards, or against its direction when `reverse`); `instant` puts it at its destination. null or an unknown id hides it. */
+    travel(id, { reverse = false, instant = false } = {}) {
+      placeLight(travel.start(tubeCurves.has(id) ? id : null, { reverse, instant }));
+    },
+    /** Put a running light at its destination now (reduced motion switched on). */
+    settle() {
+      placeLight(travel.finish());
+    },
+    /** { id, at, done, position } while the light is shown, else null. */
+    traveller() {
+      const frame = travel.frame();
+      return frame !== null && light.visible ? { ...frame, position: light.position.toArray() } : null;
     },
     /** graph.tubes index for a raycast hit on a link, else -1. */
     tubeAt(hit) {

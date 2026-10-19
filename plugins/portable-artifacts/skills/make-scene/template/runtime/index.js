@@ -43,13 +43,13 @@ function fitCamera(camera, extent, aspect) {
 function inert(canvas) {
   return {
     destroy: noop, flyTo: () => false, pick: () => -1, pickHit: () => NO_HIT, project: () => OUT_OF_VIEW,
-    onFrame: () => noop, renderNow: noop, wake: noop, canvas,
+    travel: noop, traveller: () => null, onFrame: () => noop, renderNow: noop, wake: noop, canvas,
   };
 }
 
 /**
- * mount(host, graph, opts?) -> { destroy(), flyTo(focusKey, { instant }), pick(clientX, clientY), pickHit(clientX, clientY),
- *   project(x, y, z), onFrame(fn), renderNow(), wake(), canvas }
+ * mount(host, graph, opts?) -> { destroy(), flyTo(focusKey, { instant }), travel(tubeId, { reverse, instant }), traveller(),
+ *   pick(clientX, clientY), pickHit(clientX, clientY), project(x, y, z), onFrame(fn), renderNow(), wake(), canvas }
  *
  * host contains an optional [data-scene-canvas] (where the canvas goes; the host itself if absent), a
  * [data-scene-fallback] element (the semantic table/svg: fully visible until the first good frame and again
@@ -90,9 +90,11 @@ function mount(host, graph, opts = {}) {
   show('loading');
   container.appendChild(canvas);
 
-  const failed = (why) => {
+  const failed = (why, expected = false) => {
     show('fallback');
-    if (why) console.warn(`make-scene: showing the table instead of the 3D view (${why})`);
+    // No WebGL is an expected state on a headless or GPU-less machine: info, so a console-clean check is not failed by it.
+    // Anything else is unexpected: warn.
+    if (why) (expected ? console.info : console.warn)(`make-scene: showing the table instead of the 3D view (${why})`);
     return inert(canvas);
   };
 
@@ -103,7 +105,7 @@ function mount(host, graph, opts = {}) {
   } catch {
     gl = null;
   }
-  if (!gl) return failed('WebGL is not available');
+  if (!gl) return failed('WebGL is not available', true);
 
   // One idempotent teardown for destroy(), a failed mount and a failed frame: each setup step registers
   // its own undo, so a throw part-way through still releases everything created so far.
@@ -250,9 +252,12 @@ function mount(host, graph, opts = {}) {
     }, doc.documentElement, win));
     const onReduced = () => {
       controlsApi.applyReducedMotion();
-      if (isReduced() && built.animated) {
-        animClock = 0;
-        built.animate(0);
+      if (isReduced()) {
+        built.settle(); // a light mid-journey rests at its destination
+        if (built.animated) {
+          animClock = 0;
+          built.animate(0);
+        }
       }
       wake('motion');
     };
@@ -282,6 +287,16 @@ function mount(host, graph, opts = {}) {
         controlsApi.flyTo(graph.focus[key], { instant });
         return true;
       },
+      /**
+       * Send the travelling light along graph.tubes[].id `tubeId` (against its direction when `reverse`); under reduced
+       * motion, or with `instant`, it appears at its destination. null (or an unknown id) hides it.
+       */
+      travel(tubeId, { reverse = false, instant = false } = {}) {
+        built.travel(tubeId, { reverse, instant: instant || isReduced() });
+        wake('travel');
+      },
+      /** { id, at, done, position } of the light while it is shown, else null. */
+      traveller: () => built.traveller(),
       /** { item, tube } under a viewport point: graph.items / graph.tubes indices, -1 for none (nothing, decoration, a cell with no row). */
       pickHit(clientX, clientY) {
         const rect = canvas.getBoundingClientRect();
@@ -366,8 +381,10 @@ function mountScene(host, graph, opts = {}) {
 /**
  * Test hook, only when the page URL has ?test: window.PAScene.__project(itemIndex) -> { x, y } viewport point on top of
  * the first drawn instance of that item (the first scene on the page), or null. The browser tests hover it.
+ * window.PAScene.__scene is that scene's api (the tests read its travelling light).
  */
 function exposeProjection(graph, api) {
+  window.PAScene.__scene = api;
   window.PAScene.__project = (itemIndex) => {
     const inst = graph.batches.flatMap((b) => b.instances).find((i) => i[6] === itemIndex);
     if (!inst) return null;

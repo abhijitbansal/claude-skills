@@ -56,7 +56,10 @@ export function createChrome(host, graph, opts = {}) {
   let transport = null;
   const tour = createTour(beats, {
     reducedMotion: reduced,
-    onBeat: (beat, { instant }) => fly(beat.focus, instant),
+    onBeat: (beat, { instant }) => {
+      fly(beat.focus, instant);
+      api?.travel(beat.path ?? null, { reverse: beat.reverse === true, instant });
+    },
     onChange: (state) => transport?.render(state),
   });
   if (tourButton) {
@@ -80,6 +83,7 @@ export function createChrome(host, graph, opts = {}) {
   }
   function closeTour() {
     tour.pause();
+    api?.travel(null);
     transport.hide();
     host.classList.remove('sc-touring');
     tourButton.setAttribute('aria-pressed', 'false');

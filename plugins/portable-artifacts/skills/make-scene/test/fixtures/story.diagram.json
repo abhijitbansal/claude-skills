@@ -1,0 +1,51 @@
+{
+  "title": "Order fulfilment",
+  "subtitle": "From a tap in the app to a parcel on its way",
+  "type": "architecture",
+  "autoplay": false,
+  "groups": [
+    { "id": "edge", "label": "Edge" },
+    { "id": "core", "label": "Core services" }
+  ],
+  "nodes": [
+    { "id": "shopper", "label": "Shopper", "kind": "user", "emoji": "🧑‍💻", "detail": "Places the order from the mobile app." },
+    { "id": "app", "label": "Mobile app", "kind": "client", "group": "edge", "emoji": "📱" },
+    { "id": "gateway", "label": "API gateway", "kind": "gateway", "group": "edge", "note": "auth, rate limits" },
+    { "id": "orders", "label": "Orders service", "group": "core", "emoji": "📦", "detail": "Owns the order lifecycle. Writes every state change to the orders table and emits an event per transition." },
+    { "id": "db", "label": "Orders DB", "kind": "database", "group": "core", "icon": "brand:postgresql" },
+    { "id": "bus", "label": "Event bus", "kind": "queue", "group": "core", "emoji": "🚌" },
+    { "id": "warehouse", "label": "Warehouse", "kind": "external", "emoji": "🏭", "tone": "warn" }
+  ],
+  "edges": [
+    { "from": "shopper", "to": "app", "label": "taps Buy" },
+    { "id": "place", "from": "app", "to": "gateway", "label": "POST /orders" },
+    { "from": "gateway", "to": "orders", "label": "forwards" },
+    { "from": "orders", "to": "db", "label": "writes order" },
+    { "from": "orders", "to": "bus", "label": "order.placed", "style": "async" },
+    { "from": "bus", "to": "warehouse", "label": "pick and pack", "style": "async" },
+    { "from": "orders", "to": "gateway", "label": "201 Created", "style": "dashed" }
+  ],
+  "stories": [
+    {
+      "id": "placing",
+      "title": "Place the order",
+      "beats": [
+        { "title": "The shopper taps Buy", "from": "shopper", "to": "app", "caption": "The app builds the order from the basket." },
+        { "title": "The app calls the API", "edge": "place", "caption": "One POST with an idempotency key." },
+        { "title": "The gateway forwards it", "from": "gateway", "to": "orders", "caption": "After checking the token and the rate limit." },
+        { "title": "The order is written", "from": "orders", "to": "db" },
+        { "title": "201 goes back", "from": "orders", "to": "gateway", "caption": "The reply carries the order id." },
+        { "title": "The shopper sees a receipt", "from": "app", "to": "shopper", "caption": "This hop plays backwards: the reply runs against the arrow." }
+      ]
+    },
+    {
+      "id": "fulfilling",
+      "title": "Fulfil it",
+      "beats": [
+        { "title": "An event leaves the core", "from": "orders", "to": "bus", "caption": "order.placed, published once the write commits." },
+        { "title": "The warehouse picks it up", "from": "bus", "to": "warehouse" },
+        { "title": "The whole core", "focus": ["core"], "caption": "Three services, one database, one bus." }
+      ]
+    }
+  ]
+}

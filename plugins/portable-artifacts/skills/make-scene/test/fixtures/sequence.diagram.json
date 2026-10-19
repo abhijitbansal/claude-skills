@@ -1,0 +1,38 @@
+{
+  "title": "Checkout with payment retry",
+  "type": "sequence",
+  "participants": [
+    { "id": "shopper", "label": "Shopper", "kind": "actor" },
+    { "id": "web", "label": "Web app" },
+    { "id": "orders", "label": "Orders service" },
+    { "id": "db", "label": "Orders DB", "kind": "database" },
+    { "id": "psp", "label": "Payment provider", "kind": "external" }
+  ],
+  "messages": [
+    { "id": "m1", "from": "shopper", "to": "web", "label": "press Pay" },
+    { "id": "m2", "from": "web", "to": "orders", "label": "POST /orders" },
+    { "id": "m3", "from": "orders", "to": "db", "label": "insert order (pending)" },
+    { "id": "m4", "from": "orders", "to": "psp", "label": "charge card", "kind": "async" },
+    { "id": "m5", "from": "psp", "to": "orders", "label": "declined", "kind": "reply" },
+    { "id": "m6", "from": "orders", "to": "orders", "label": "schedule retry in 5 min", "kind": "self" },
+    { "id": "m7", "from": "orders", "to": "psp", "label": "charge card again" },
+    { "id": "m8", "from": "psp", "to": "orders", "label": "approved", "kind": "reply" },
+    { "id": "m9", "from": "orders", "to": "db", "label": "mark order paid" },
+    { "id": "m10", "from": "orders", "to": "web", "label": "201 Created", "kind": "reply" },
+    { "id": "m11", "from": "web", "to": "shopper", "label": "show receipt", "kind": "reply" }
+  ],
+  "frames": [
+    { "kind": "loop", "label": "until approved", "messages": ["m4", "m5", "m6", "m7", "m8"] },
+    { "kind": "alt", "label": "card declined", "messages": ["m5", "m6", "m7"] }
+  ],
+  "notes": [
+    { "over": ["orders", "psp"], "text": "idempotency key sent on every charge", "after": "m4" },
+    { "over": ["db"], "text": "order stays pending until the provider answers", "after": "m3" }
+  ],
+  "steps": [
+    { "title": "The shopper pays", "show": ["shopper", "web", "orders", "m1", "m2"] },
+    { "title": "The order is stored and charged", "show": ["db", "psp", "m3", "m4"] },
+    { "title": "A decline triggers a retry", "show": ["m5", "m6", "m7", "m8"] },
+    { "title": "The shopper gets a receipt", "show": ["m9", "m10", "m11"] }
+  ]
+}
