@@ -13,7 +13,8 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CHECK = path.join(ROOT, 'scripts/check.mjs');
 const SKIP_RE = /^check: skipped \(no browser: [^;\n]+; ask the user, then run: node \S*doctor\.mjs\S* --for check --fix (dev_deps|chromium)\)\n$/;
 const TOUR = [{ title: 'First', focus: ['api'], caption: 'one' }, { title: 'Second', focus: ['web'], caption: 'two' }];
-const run = (args, env = {}) => spawnSync(process.execPath, [CHECK, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
+const RUN_TIMEOUT_MS = 120000; // a hung check fails its test instead of stalling the suite
+const run = (args, env = {}) => spawnSync(process.execPath, [CHECK, ...args], { encoding: 'utf8', timeout: RUN_TIMEOUT_MS, env: { ...process.env, ...env } });
 
 const skipUnlessBrowser = async (t) => {
   if (await haveBrowser()) return false;
@@ -125,6 +126,29 @@ test('a page stuck in an infinite loop hits the wall-clock cap instead of hangin
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.equal(r.stdout, 'check: timed out after 1.5 s\n');
   assert.ok(Date.now() - started < 20000);
+});
+
+test('a watchdog that fires while the browser is still launching closes it once it lands and does no more work', async (t) => {
+  const calls = [];
+  const slowLauncher = () => new Promise((resolve) => {
+    setTimeout(() => resolve({ close: async () => calls.push('close'), newContext: async () => { calls.push('newContext'); throw new Error('no work after the watchdog'); } }), 300);
+  });
+  const result = await checkPage(await goodPage(t), { timeoutMs: 20, launcher: slowLauncher });
+  assert.equal(result.status, 'failed');
+  assert.deepEqual(result.problems, ['check: timed out after 20 ms']);
+  assert.deepEqual(calls, ['close'], 'the late browser was closed and never used');
+});
+
+test('with a tiny cap the CLI reports the timeout and exits, with no browser left running', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const file = await goodPage(t);
+  const started = Date.now();
+  const r = run([file], { PA_CHECK_TIMEOUT_MS: '20' });
+  assert.equal(r.status, 1, `exited (signal ${r.signal}): ${r.stdout}${r.stderr}`);
+  assert.equal(r.stdout, 'check: timed out after 20 ms\n');
+  assert.ok(Date.now() - started < 30000, 'the process ended soon after the report');
+  const leftovers = spawnSync('pgrep', ['-f', `chrom.*${path.basename(path.dirname(file))}`], { encoding: 'utf8' });
+  assert.notEqual(leftovers.status, 0, `a browser is still running: ${leftovers.stdout}`);
 });
 
 test('a bad PA_CHECK_TIMEOUT_MS is a usage error', async (t) => {

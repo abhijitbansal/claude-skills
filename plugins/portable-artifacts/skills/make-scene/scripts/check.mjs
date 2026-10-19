@@ -20,6 +20,7 @@ const ACTION_MS = 5000; // default timeout for every page action and navigation
 const SELECTOR_MS = 2000; // reads of elements the runtime should already have drawn
 const WATCHDOG_MS = 60000; // wall-clock cap for the whole check
 const FALLBACK_HIDDEN_PX = 2; // the visually hidden table is 1 x 1 px; a visible one is far larger
+const EXIT_BACKSTOP_MS = 3000; // after the report is written, a handle that keeps Node alive this long is forced out
 const TIMED_OUT = Symbol('timed out');
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 
@@ -115,34 +116,43 @@ async function checkViewport(browser, url, viewport, readyMs) {
  * Check one built page. Returns { status: 'ok' | 'failed' | 'skipped', viewports, beats, problems, reason? }.
  * `timeoutMs` is a wall-clock cap: past it the browser is closed and the result is a failure. `readyMs` is how long the scene may stay loading.
  */
-export async function checkPage(file, { env = process.env, timeoutMs = WATCHDOG_MS, readyMs = READY_MS } = {}) {
-  let browser;
+export async function checkPage(file, { env = process.env, timeoutMs = WATCHDOG_MS, readyMs = READY_MS, launcher = launchBrowser } = {}) {
+  // The launch promise is kept: if the watchdog wins while Chromium is still starting, the finally block
+  // closes whatever the launch yields, and `stopped` keeps the late-arriving work from touching it.
+  const launching = launcher(env);
+  let stopped = false;
   const work = (async () => {
+    let browser;
     try {
-      browser = await launchBrowser(env);
+      browser = await launching;
     } catch (e) {
       if (!(e instanceof BrowserUnavailable)) throw e;
       return { status: 'skipped', viewports: 0, beats: 0, problems: [], reason: firstLine(e) };
     }
     const url = pathToFileURL(file).href;
     const results = [];
-    for (const viewport of VIEWPORTS) results.push(await checkViewport(browser, url, viewport, readyMs));
+    for (const viewport of VIEWPORTS) {
+      if (stopped) break;
+      results.push(await checkViewport(browser, url, viewport, readyMs));
+    }
     const problems = results.flatMap((r) => r.problems);
     const skipped = results.find((r) => r.skipped);
     if (skipped && problems.length === 0) return { status: 'skipped', viewports: 0, beats: 0, problems: [], reason: skipped.skipped, noWebgl: true };
-    return { status: problems.length ? 'failed' : 'ok', viewports: VIEWPORTS.length, beats: Math.max(...results.map((r) => r.beats)), problems };
+    return { status: problems.length ? 'failed' : 'ok', viewports: VIEWPORTS.length, beats: Math.max(0, ...results.map((r) => r.beats)), problems };
   })();
   let timer;
   const watchdog = new Promise((resolve) => { timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs); });
   try {
     const result = await Promise.race([work, watchdog]);
     if (result !== TIMED_OUT) return result;
+    stopped = true;
     work.catch(() => {}); // the closed browser rejects whatever was in flight
-    const seconds = Number((timeoutMs / 1000).toFixed(1));
-    return { status: 'failed', viewports: 0, beats: 0, problems: [`check: timed out after ${seconds} s`], timedOut: true };
+    const after = timeoutMs < 1000 ? `${Math.round(timeoutMs)} ms` : `${Number((timeoutMs / 1000).toFixed(1))} s`;
+    return { status: 'failed', viewports: 0, beats: 0, problems: [`check: timed out after ${after}`], timedOut: true };
   } finally {
     clearTimeout(timer);
-    await browser?.close().catch(() => {});
+    stopped = true;
+    await launching.then((browser) => browser.close()).catch(() => {}); // a launch still pending when the watchdog fired is closed once it lands
   }
 }
 
@@ -189,6 +199,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     const result = await checkPage(file, { timeoutMs });
     report(result, json);
     process.exitCode = result.status === 'failed' ? 1 : 0;
+    setTimeout(() => process.exit(), EXIT_BACKSTOP_MS).unref(); // a stray handle must never keep the CLI alive
   } catch (e) {
     if (e instanceof UsageError) exitUsage(e, { json });
     else {
