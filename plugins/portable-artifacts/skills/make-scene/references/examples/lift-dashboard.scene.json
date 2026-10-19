@@ -1,0 +1,6 @@
+{
+  "title": "Units by product in 3D",
+  "theme": "dusk",
+  "lift": { "dashboard": "dashboard.json", "chart": "units" },
+  "units": "units"
+}

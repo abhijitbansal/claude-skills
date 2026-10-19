@@ -1,0 +1,26 @@
+{
+  "title": "Rainfall by region and month",
+  "subtitle": "Elevation is millimetres; sea level marks the dry months",
+  "world": "terrain",
+  "theme": "dusk",
+  "data": {
+    "rows": [
+      { "group": "North", "t": "2026-01", "value": 80 },
+      { "group": "North", "t": "2026-02", "value": 60 },
+      { "group": "North", "t": "2026-03", "value": 95 },
+      { "group": "North", "t": "2026-04", "value": 120 },
+      { "group": "Centre", "t": "2026-01", "value": 40 },
+      { "group": "Centre", "t": "2026-02", "value": 35 },
+      { "group": "Centre", "t": "2026-03", "value": 55 },
+      { "group": "Centre", "t": "2026-04", "value": 70 },
+      { "group": "South", "t": "2026-01", "value": 10 },
+      { "group": "South", "t": "2026-02", "value": 15 },
+      { "group": "South", "t": "2026-03", "value": 30 },
+      { "group": "South", "t": "2026-04", "value": 45 }
+    ]
+  },
+  "units": "mm",
+  "tour": [
+    { "title": "The North peaks in April", "focus": ["North"], "caption": "The wettest month on the map." }
+  ]
+}

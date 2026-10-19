@@ -1,0 +1,22 @@
+{
+  "title": "Team skills by squad",
+  "subtitle": "One tree per squad; a branch per skill, a sub-team grows off its parent",
+  "world": "forest",
+  "theme": "dusk",
+  "data": {
+    "rows": [
+      { "group": "Platform", "t": 1, "value": 9, "label": "Platform: infra" },
+      { "group": "Platform", "t": 2, "value": 6, "label": "Platform: tooling" },
+      { "group": "Product", "t": 1, "value": 12, "label": "Product: research" },
+      { "group": "Product", "t": 2, "value": 8, "label": "Product: design" },
+      { "group": "Mobile", "t": 1, "value": 7, "parent": "Product", "label": "Mobile: iOS" },
+      { "group": "Mobile", "t": 2, "value": 4, "parent": "Product", "label": "Mobile: Android" },
+      { "group": "Data", "t": 1, "value": 5, "parent": "Platform", "label": "Data: pipelines" }
+    ]
+  },
+  "units": "people",
+  "tour": [
+    { "title": "Product is the biggest tree", "focus": ["Product"], "caption": "Research carries the most people." },
+    { "title": "Mobile grows from Product", "focus": ["Mobile"] }
+  ]
+}
