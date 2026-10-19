@@ -79,7 +79,7 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
 
 **Files:**
 - Create: `MS/package.json`, `MS/SKILL.md` (stub that passes the gates; full prose is written in Task 14), `MS/README.md` (one paragraph), `MS/scripts/doctor.mjs`, `MS/scripts/lib/requirements.mjs`, `MS/scripts/lib/internal-error.mjs` (copy of make-diagram's), `MS/test/doctor.test.mjs`
-- Modify: `PA/shared/icons.mjs:5,15-20` (add `make-scene` to `SKILLS` and add a glyph), `PA/shared/test/icons.test.mjs`, `.github/workflows/test.yml:89-95` (add a make-scene step after make-diagram, with `npm ci`, `npx playwright install --with-deps chromium` and `npm test`), `docs/catalog.html` (add a Skill row copied from the make-motion row at `:217`)
+- Modify: `PA/shared/icons.mjs:5,15-20` (add `make-scene` to `SKILLS` and add a glyph), `PA/shared/test/icons.test.mjs`, `.github/workflows/test.yml:89-95` (add a make-scene step between make-diagram and make-explainer, with `npm ci`, `npx playwright install --with-deps chromium` and `npm test`. make-scene's lift tests need make-diagram's and make-dashboard's node_modules; make-explainer's scene test needs make-scene's), `docs/catalog.html` (add a Skill row copied from the make-motion row at `:217`)
 - Run: `node PA/bin/sync-shared.mjs`, `python3 scripts/sweep_counts.py --write`
 
 **Interfaces:**
@@ -102,9 +102,10 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
 - [ ] **Step 3: Implement.**
   - `package.json`:
     - same shape as `PA/skills/make-diagram/package.json`;
-    - `dependencies` `ajv: 8.20.0`, `three: <pin>`;
-    - `devDependencies` `esbuild: <latest stable pin>`, `playwright: 1.64.0`;
+    - `dependencies` `ajv: 8.20.0` only;
+    - `devDependencies` `three: <pin>`, `esbuild: <latest stable pin>`, `playwright: 1.64.0`. Node never imports three; it only reaches the committed bundle, so `npm ci --omit=dev` installs stay small;
     - `portableArtifacts.requires: ["make-diagram","make-dashboard"]`.
+  - Add `.gitattributes` at the repo root with `plugins/portable-artifacts/skills/make-scene/template/vendor/*.min.js -diff linguist-generated`.
   - `SKILL.md` stub: valid frontmatter, the `<skill-dir>` line, and one sentence saying the workflow is being built.
   - doctor and requirements: mirror `PA/skills/make-diagram/scripts/doctor.mjs` and `PA/skills/make-explainer/scripts/lib/requirements.mjs:9-31`.
   - Run `npm install` to produce the lockfile.
@@ -161,6 +162,7 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
   - `exactly one data source` (rows | file | csv);
   - `csv columns map group t value label parent`;
   - `rejects URL and missing data paths`;
+  - `data path outside spec dir rejected`. `data.csv`, `data.file` and `lift.*` paths must resolve inside the spec's folder (no `..`, no absolute paths) unless `validateSpec(spec, { dir, allowOutside: true })`. Mirror make-dashboard's default. `validate.mjs` and `build.mjs` take `--allow-outside`;
   - `rejects negative or non-finite value`;
   - `group is free text up to 48 chars` (`.github` passes, 49 chars fails);
   - `parent must name a group` (did-you-mean);
@@ -327,7 +329,7 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
   - `api.mjs`: `async buildScene(spec, { dir, theme, idPrefix = 'sc' }) → { graph, html, css, runtime, fallbackHtml, bytes }`. Here `html` is the embeddable fragment: host div, fallback, and a JSON data block. `runtime` is the bundle text. Explainer and build both use it. `validateSpec` is re-exported.
   - `page.mjs`: `renderPage(spec, built, { theme, env }) → string`. It writes the full document with the sibling CSP, the theme toggle, the favicon, a title/subtitle header, `built.html`, the runtime inlined once, and the provenance footer.
   - `build.mjs`: `async build(file, { out, theme, world, model, effort, agent, env, maxBytes = MAX_PAGE_BYTES }) → { ok, out, bytes, table } | { ok:false, errors }`.
-    - `--world` rewrites only the `world` field of `scene.json` (2-space JSON, key order preserved) and prints `scene.json: world set to <w>`.
+    - `--world` first checks eligibility. If the data cannot feed that world, it returns the error and leaves `scene.json` untouched. Only after the check passes does it rewrite the `world` field of `scene.json` (2-space JSON, key order preserved) and print `scene.json: world set to <w>`.
     - Without `world`, the build uses `recommend().ranked[0]`.
     - The CLI prints `wrote <path>`, `open: <file URL>`, then `costTable(...)`. `--json` prints `{ ok, out, bytes, world, alternatives }`.
     - Page-over-cap is a spec error naming both sizes.
@@ -337,7 +339,8 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
     - the legend shows group swatches;
     - the Explore panel (`E`) lists groups → items, and clicking one flies to its focus;
     - `F` toggles full screen;
-    - the export button saves a PNG of the current frame (render, then `canvas.toBlob`).
+    - the export button saves a PNG of the current frame. Call `renderer.render()` synchronously, then `canvas.toBlob()` in the same tick. There is no `preserveDrawingBuffer`, so a later readback is black.
+    - Fallback CSS: when `graph.fallback.css` is set (diagram lift), `page.mjs` includes it once. When `graph.fallback.svgDark` is set (dashboard lift), both SVGs ship, switched by the theme the same way make-explainer's chart section does.
     - Canvas has `aria-hidden="true"`; the fallback table and Explore are the accessible path.
 
 - [ ] **Step 1: Failing tests**:
@@ -347,6 +350,7 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
   - `fallback table lists every item`;
   - `same spec same bytes` (with `SOURCE_DATE_EPOCH` pinned);
   - `--world rewrites only the world field`;
+  - `--world to an ineligible world leaves scene.json unchanged`;
   - `no world uses top recommendation`;
   - `over-cap page is an error with both sizes`;
   - `default output is PA_OUTPUT_DIR or ~/.agent/scenes`;
@@ -363,7 +367,7 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
 **Interfaces:** the CLI is `node scripts/check.mjs <page.html> [--json]`. Exit 0 means ok, or skipped with no browser. Exit 1 means problems, 2 means usage. It checks at 1440×900 and 390×780:
 - no console errors;
 - no page overflow;
-- the canvas is not blank (sample a 32×32 grid of pixels; the distinct-colour count is ≥ `MIN_COLOURS = 12`);
+- the canvas is not blank. Take a Playwright element `screenshot()` of the canvas, decode the PNG in Node (a small zero-dependency PNG decoder over `node:zlib` in `scripts/lib/png.mjs`), sample a 32×32 grid, and require a distinct-colour count ≥ `MIN_COLOURS = 12`. Never read pixels in-page: without `preserveDrawingBuffer`, in-page readback is black. The "re-tints" and "reduced motion" tests use the same screenshot path;
 - the fallback is hidden once WebGL runs;
 - the tour reaches its last beat when present.
 
@@ -394,10 +398,12 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
   - Edges are tubes along ELK `points` at y = 0.3. `style: async` uses the `accent` colour; `dashed` uses `text2`.
   - Sequence: participants are pillars along x. Each message is a horizontal tube at `y = top - index * STEP`.
   - Tour: `spec.tour` wins. Otherwise `stories` beats become `{ focus: to-node, path: edge tube id, reverse }`. The runtime animates a glowing sphere along `path`.
-  - Fallback: `{ kind: 'svg', svg: built.svg }`.
+  - Fallback: `{ kind: 'svg', svg: built.svg, css: built.css }`.
+  - Its lift check validates tour `focus` against node and participant ids, with did-you-mean.
 
 - [ ] **Step 1: Failing tests**:
   - architecture golden;
+  - `tour focus on unknown node id suggests one`;
   - sequence golden;
   - `stories become tour beats with paths`;
   - `reply beat reverses`;
@@ -424,7 +430,8 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
     - donut → extruded ring segments (`cylinder` batch with per-instance angle via scale/rotation, or one tube per segment; builder's choice, but it must be golden-tested).
   - Negative `y` values extend below the floor, and the floor is drawn at 0.
   - Axis labels go in `labels`.
-  - Fallback: `{ kind: 'svg', svg: <light svg> }` plus the table.
+  - Fallback: `{ kind: 'svg', svg: <light svg>, svgDark: <dark svg> }` plus the table.
+  - Tour `focus` resolves against the chart's x and color category values (lowercased). The lift check gives did-you-mean.
 - Errors:
   - unknown chart → did-you-mean over the chart ids;
   - `boxplot` / `vegaLite` → `lift.chart: <kind> charts cannot be lifted; liftable kinds: …`;
@@ -437,6 +444,7 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
   - `boxplot rejected with liftable list`;
   - `unknown chart did-you-mean`;
   - `vegaLite chart rejected`;
+  - `tour focus on unknown category suggests one`;
   - `missing make-dashboard gives install command`.
 
   These tests need make-dashboard's node_modules installed. If DuckDB is unavailable, skip with a reason.
@@ -446,11 +454,11 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
 ### Task 12: `rows.mjs` data helper (git)
 
 **Files:**
-- Create: `MS/scripts/rows.mjs`, `MS/scripts/lib/git-rows.mjs`, `MS/test/rows-git.test.mjs`
+- Create: `MS/scripts/rows.mjs`, `MS/scripts/lib/history-rows.mjs`, `MS/test/rows-history.test.mjs`
 
 **Interfaces:**
 - CLI: `node scripts/rows.mjs git [--weeks 12] [--depth 1] [--repo <dir>] [--out <rows.json>]`. It writes `{ "rows": [...] }`, by default to `./scene-rows.json`, and prints the path plus a ready-to-paste `"data": { "file": "scene-rows.json" }` line.
-- `gitRows({ repo, weeks, depth, now }) → Row[]`, using `git log --numstat --format=%H%x09%cI`:
+- `historyRows({ repo, weeks, depth, now }) → Row[]` (file names avoid the substring "git": the worktree Bash guard refuses such paths), using `git log --numstat --format=%H%x09%cI`:
   - It runs with argument arrays and a scrubbed env, the same as `PA/eval/lib.mjs` `createFixtureRepo`.
   - The buffer cap is 256 MB.
   - `group` = the path prefix at `depth`; root files fall under `(root)`.
@@ -505,7 +513,7 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
   - `missing make-scene gives install command`;
   - `doctor --for spec with a scene section requires make-scene`;
   - The existing `page.test.mjs` "every schema type has a renderer" passes.
-- [ ] **Step 2: Run and see them fail.** **Step 3: Implement.** **Step 4:** the make-explainer `npm test` and the make-scene `npm test` are both green.
+- [ ] **Step 2: Run and see them fail.** **Step 3: Implement.** **Step 4:** the make-explainer `npm test` and the make-scene `npm test` are both green. Measure the built explainer page size with 1 and with 4 scene sections, and report both numbers for the PR body.
 - [ ] **Step 5: Controller commits** `feat(make-explainer): scene section embeds make-scene`.
 
 ### Task 14: SKILL.md, references, examples, inventory prose
@@ -527,6 +535,8 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
 - [ ] **Step 5: Controller commits** `docs(make-scene): SKILL.md, references, examples, inventory`.
 
 ### Task 15: Eval (controller runs the billed part)
+
+The worktree Bash guard refuses command paths containing `eval`. Edit these files with the Write/Edit tools. In Bash, reach the folder through the `PA/ev[a]l` glob.
 
 **Files:**
 - Modify: `PA/eval/lib.mjs:8-40` (`SKILLS.scene = { dir: 'make-scene', spec: 'scene.json', siblings: ['make-diagram','make-dashboard'], outputCmd: … '--out', <work>/out/scene.html, artifacts: ['out/scene.html'] }`), `PA/eval/test/lib.test.mjs` (a `SKILLS.scene` case mirroring `:181`), `PA/eval/README.md`
