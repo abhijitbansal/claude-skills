@@ -1,0 +1,12 @@
+[
+  { "id": "city-inline", "prompt": "Show our quarterly sales as a 3D city. North made 120 in Q1, 150 in Q2 and 170 in Q3. South made 90, 95 and 130. West made 60, 110 and 105. Add a short tour that points out the strongest region and the quarter West dipped." },
+  { "id": "forest-parent", "prompt": "Show our team headcount as a 3D forest. Engineering has 20 people, with Platform (8 people) and Mobile (6 people) as sub-teams inside it. Design has 5 people. Support has 7, with a Tier 2 sub-team of 3. Add a short tour of the biggest team." },
+  { "id": "galaxy-links", "prompt": "data/service_calls.json lists our services with their busiest endpoints, and which service calls which. Show it as a 3D galaxy of linked services, with a short tour that starts at the service that receives the most traffic." },
+  { "id": "terrain-traffic", "prompt": "Make a 3D landscape from data/web_traffic.csv: one row of terrain per channel, with sessions across the dates, so I can see where traffic peaks." },
+  { "id": "git-activity", "repo": true, "prompt": "Show where the work has been happening in the repo in ./repo: commits per folder per week, as a 3D scene, with a tour of the busiest folder." },
+  { "id": "lift-diagram", "prompt": "I already have a diagram of the orders service in data/orders.diagram.json. Turn it into a 3D scene I can orbit around." },
+  { "id": "lift-dashboard", "prompt": "The dashboard in data/units.dashboard.json has a chart titled 'Gadget sells the most units'. Make that one chart a 3D scene I can orbit around." },
+  { "id": "edit-add-tour", "seed": "seeds/scene.json", "prompt": "Add a three-beat tour to the scene in scene.json: the API leading early, the web spike in week 32, and docs picking up at the end. Keep everything else unchanged." },
+  { "id": "edit-switch-forest", "seed": "seeds/scene.json", "prompt": "Show the scene in scene.json as a forest instead of a city. Keep everything else unchanged." },
+  { "id": "edit-rename-group", "seed": "seeds/scene-tour.json", "prompt": "In the scene in scene.json, rename the 'api' group to 'backend' everywhere, including in the tour. Keep everything else unchanged." }
+]

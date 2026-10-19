@@ -1,0 +1,71 @@
+{
+  "title": "Commits per folder, last 4 weeks",
+  "subtitle": "One block per folder and week; height is commits",
+  "world": "city",
+  "theme": "dusk",
+  "data": {
+    "rows": [
+      {
+        "group": "api",
+        "t": "2026-W30",
+        "value": 12
+      },
+      {
+        "group": "api",
+        "t": "2026-W31",
+        "value": 7
+      },
+      {
+        "group": "api",
+        "t": "2026-W32",
+        "value": 18
+      },
+      {
+        "group": "api",
+        "t": "2026-W33",
+        "value": 9
+      },
+      {
+        "group": "web",
+        "t": "2026-W30",
+        "value": 5
+      },
+      {
+        "group": "web",
+        "t": "2026-W31",
+        "value": 9
+      },
+      {
+        "group": "web",
+        "t": "2026-W32",
+        "value": 22
+      },
+      {
+        "group": "web",
+        "t": "2026-W33",
+        "value": 14
+      },
+      {
+        "group": "docs",
+        "t": "2026-W30",
+        "value": 2
+      },
+      {
+        "group": "docs",
+        "t": "2026-W31",
+        "value": 4
+      },
+      {
+        "group": "docs",
+        "t": "2026-W32",
+        "value": 3
+      },
+      {
+        "group": "docs",
+        "t": "2026-W33",
+        "value": 6
+      }
+    ]
+  },
+  "units": "commits"
+}

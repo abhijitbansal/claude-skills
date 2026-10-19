@@ -256,6 +256,84 @@ test('the explainer seed validates and the edit prompt asks for changes the scor
   assert.match(prompt, /tl;dr.*'warn'/);
 });
 
+test('SKILLS.scene builds into <work>/out/scene.html and needs the diagram and dashboard siblings', () => {
+  const cfg = SKILLS.scene;
+  assert.equal(cfg.dir, 'make-scene');
+  assert.equal(cfg.spec, 'scene.json');
+  assert.deepEqual(cfg.outputCmd('/s', '/w/scene.json', '/w'), ['/s/scripts/build.mjs', '/w/scene.json', '--out', '/w/out/scene.html']);
+  assert.deepEqual(cfg.artifacts, ['out/scene.html']);
+  assert.match(buildPrompt(cfg, 'Show X.'), /skills\/make-scene\/SKILL\.md.*\.\/scene\.json/);
+  assert.deepEqual(cfg.siblings, ['make-diagram', 'make-dashboard']);
+  const pkg = readJson('..', 'skills', 'make-scene', 'package.json');
+  assert.deepEqual(cfg.siblings, pkg.portableArtifacts.requires, 'the eval copies exactly the skills make-scene requires');
+  for (const name of [cfg.dir, ...cfg.siblings]) assert.ok(fs.existsSync(path.join(skillsDir, name, 'SKILL.md')), `${name} exists`);
+});
+
+test('scene prompts: ten unique ids, four worlds, a repo prompt, two lifts, three edit prompts whose seeds exist', () => {
+  const prompts = readJson('prompts', 'scene.json');
+  assert.equal(prompts.length, 10);
+  assert.equal(new Set(prompts.map((p) => p.id)).size, 10);
+  assert.deepEqual(prompts.filter((p) => p.repo).map((p) => p.id), ['git-activity']);
+  for (const id of ['city-inline', 'forest-parent', 'galaxy-links', 'terrain-traffic', 'git-activity', 'lift-diagram', 'lift-dashboard', 'edit-add-tour', 'edit-switch-forest', 'edit-rename-group']) {
+    assert.ok(prompts.some((p) => p.id === id), `prompt ${id}`);
+  }
+  const seeded = prompts.filter((p) => p.seed);
+  assert.deepEqual(seeded.map((p) => p.id), ['edit-add-tour', 'edit-switch-forest', 'edit-rename-group']);
+  for (const p of seeded) assert.ok(fs.existsSync(path.join(evalDir, 'fixtures', p.seed)), `${p.seed} exists`);
+  // every data file a prompt names ships in fixtures/data
+  for (const p of prompts) {
+    for (const [, file] of p.prompt.matchAll(/\bdata\/([\w.-]*\w)/g)) assert.ok(fs.existsSync(path.join(evalDir, 'fixtures', 'data', file)), `${p.id}: data/${file} exists`);
+  }
+  assert.match(prompts.find((p) => p.repo).prompt, /\.\/repo/);
+  assert.ok(prompts.some((p) => p.id === 'terrain-traffic' && /web_traffic\.csv/.test(p.prompt)));
+  assert.match(prompts.find((p) => p.id === 'lift-diagram').prompt, /3D/);
+});
+
+test('scene seeds, lift inputs and the terrain CSV validate with make-scene', async () => {
+  const scene = path.join(skillsDir, 'make-scene/scripts/validate.mjs');
+  const files = [
+    path.join(evalDir, 'fixtures/seeds/scene.json'),
+    path.join(evalDir, 'fixtures/seeds/scene-tour.json'),
+  ];
+  for (const f of files) {
+    const r = await run(['node', scene, f, '--json'], { env: { EVAL_LOG: '' } });
+    assert.equal(r.code, 0, `${path.basename(f)}: ${r.out}`);
+  }
+  // the fixtures a prompt points at (data/…) feed the spec that prompt should produce
+  const work = tmp();
+  fs.cpSync(path.join(evalDir, 'fixtures', 'data'), path.join(work, 'data'), { recursive: true });
+  const specs = {
+    galaxy: { title: 'Service calls', world: 'galaxy', data: { file: 'data/service_calls.json' } },
+    terrain: { title: 'Web traffic', world: 'terrain', data: { csv: 'data/web_traffic.csv', columns: { group: 'channel', t: 'date', value: 'sessions' } } },
+    diagram: { title: 'Orders', lift: { diagram: 'data/orders.diagram.json' } },
+    dashboard: { title: 'Units', lift: { dashboard: 'data/units.dashboard.json', chart: 'units' } },
+  };
+  for (const [name, spec] of Object.entries(specs)) {
+    const f = path.join(work, `${name}.json`);
+    fs.writeFileSync(f, JSON.stringify(spec));
+    const r = await run(['node', scene, f, '--json'], { env: { EVAL_LOG: '' } });
+    assert.equal(r.code, 0, `${name}: ${r.out}`);
+  }
+});
+
+test('scene edit prompts ask for changes the scorer can see in the seed', () => {
+  const prompts = readJson('prompts', 'scene.json');
+  const bare = readJson('fixtures', 'seeds', 'scene.json');
+  assert.equal(bare.tour, undefined, 'the tour prompt starts from a scene with no tour');
+  const withTour = structuredClone(bare);
+  withTour.tour = [1, 2, 3];
+  assert.deepEqual(diffPaths(bare, withTour), ['tour']);
+  const forest = structuredClone(bare);
+  forest.world = 'forest';
+  assert.notEqual(bare.world, 'forest');
+  assert.deepEqual(diffPaths(bare, forest), ['world']);
+  const ts = readJson('fixtures', 'seeds', 'scene-tour.json');
+  assert.ok(ts.tour?.some((b) => b.focus.includes('api')), 'the rename seed has a tour that names the group');
+  assert.match(prompts.find((p) => p.id === 'edit-rename-group').prompt, /api.*backend/s);
+  assert.match(prompts.find((p) => p.id === 'edit-add-tour').prompt, /3|three/);
+  assert.match(prompts.find((p) => p.id === 'edit-switch-forest').prompt, /forest/i);
+});
+
 test('createFixtureRepo builds a branch the gather script can read: commits, files and a test file', async () => {
   const dir = path.join(tmp(), 'repo');
   createFixtureRepo(dir);
