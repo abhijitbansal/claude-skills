@@ -17,8 +17,10 @@ shell commands.
 - **Deterministic**: every frame is captured after seeking the timeline to
   exactly `i / fps`, never in real time, so the same spec always gives the
   same video.
-- **Self-check for models**: `--contact-sheet` writes one PNG per scene, so a
-  model that can read images can review its own work before rendering.
+- **Self-check for models**: `--contact-sheet` writes one tiled, timestamped PNG
+  per scene, so a model that can read images can review its own work before
+  rendering; `check.mjs` then flags text outside the safe area, overlapping text
+  and a scene that ends with nothing visible.
 - **Stamped**: the preview has a favicon, a `<meta name="generator">` and a provenance footer (model, effort
   and agent from the spec's `generatedBy`; "not reported" when unknown; `preview.mjs`
   takes no flags), and the MP4 carries the same in its metadata (`render.mjs` also
@@ -43,6 +45,7 @@ SKILL=path/to/make-motion
 cp $SKILL/references/examples/q3-revenue.json motion.json
 node $SKILL/scripts/validate.mjs motion.json              # `valid`, or path-precise errors
 node $SKILL/scripts/render.mjs motion.json --contact-sheet # out/contact/<scene>.png
+node $SKILL/scripts/check.mjs motion.json                 # safe area, overlaps, empty endings
 node $SKILL/scripts/preview.mjs motion.json --open         # scrubber, play/pause, live reload
 node $SKILL/scripts/render.mjs motion.json                 # out/motion.mp4, 1920x1080 @ 30 fps
 ```
@@ -96,7 +99,8 @@ examples in [`references/examples/`](references/examples/).
 | `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` |
 | `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. The MP4 timing is exact | `--open` |
 | `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--contact-sheet` |
-| `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci` | `--json`, `--for <spec.json\|voiceover>`, `--fix <id[,id]>` |
+| `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: visible text outside the safe area (60 px at 1080 on the short side, on every side) once it has landed, overlapping visible text, a scene that ends with every element invisible. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped: no browser (…)` and exits 0 | `--json` |
+| `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover>`, `--fix <id[,id]>` |
 
 Limits: up to 50 scenes and 120 s in total, up to 20 audio tracks; fps is 24, 25, 30 or 60; each side
 is 16–3840 px. Frame *i* samples `t = i / fps`, so put a final keyframe at
