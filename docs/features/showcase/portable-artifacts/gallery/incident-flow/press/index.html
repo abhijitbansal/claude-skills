@@ -187,6 +187,18 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 .tool[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
 @supports (color: color-mix(in srgb, red, red)) { .tool[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); } }
 .tool:disabled { opacity: 0.6; cursor: default; }
+/* The play button is an icon (a 40 px hit area); its svg paints in currentColor, so each theme and the light/dark toggle recolor it. */
+.tool.pa-play { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; padding: 0; }
+.pa-playicon { display: inline-flex; }
+.pa-playicon svg { display: block; }
+/* The hold ring (transport.js): decorative, and absolutely placed so it never moves a control. Next reserves a slot for it on its right (a circle of 14 px); in Play it circles the icon. The arc runs in the accent over a faint currentColor track. */
+.tool[data-pa-next] { position: relative; padding-right: 28px; }
+.pa-ring { position: absolute; width: 14px; height: 14px; pointer-events: none; }
+.tool[data-pa-next] > .pa-ring { right: 8px; top: 50%; margin-top: -7px; }
+.tool.pa-play > .pa-ring { inset: 2px; width: auto; height: auto; }
+.pa-ring svg { display: block; width: 100%; height: 100%; }
+.pa-ring-track { opacity: .25; }
+.pa-ring-arc { stroke: var(--accent); }
 /* Full screen, real (the root element is :fullscreen) or the window-filling fallback (.pa-fill on the root, when the browser refused, as inside a sandboxed iframe): the same chrome goes, the canvas takes the room; the tabs, Fit, Find, the chapters and the way out stay. Any root works, the page's or a dialog's (fullscreen.js marks it data-pa-full-root). */
 .pa-fill .titles, [data-pa-full-root]:fullscreen .titles, .pa-fill [data-act]:not([data-act="fit"]), [data-pa-full-root]:fullscreen [data-act]:not([data-act="fit"]), .pa-fill .zoom-label, [data-pa-full-root]:fullscreen .zoom-label, .pa-fill .grp-export, [data-pa-full-root]:fullscreen .grp-export, .pa-fill [data-export], [data-pa-full-root]:fullscreen [data-export], .pa-fill [data-theme-toggle], [data-pa-full-root]:fullscreen [data-theme-toggle] { display: none; }
 .zoom-label { min-width: 3.2em; text-align: center; color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
@@ -338,7 +350,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 <p class="export-error" data-export-error role="alert" hidden></p>
 <div class="body">
 <main class="stage" id="pa-stage">
-<svg xmlns="http://www.w3.org/2000/svg" class="pa-diagram pa-type-flow" viewBox="0 0 441 1634" role="graphics-document" aria-labelledby="d-title d-desc"><title id="d-title">Incident response</title><desc id="d-desc">flow diagram with 9 nodes and 10 edges.</desc><defs><marker id="d-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-fill" d="M0 0.5L8 4L0 7.5Z"/></marker><marker id="d-arrow-open" viewBox="0 0 8 8" refX="7.4" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-open" d="M0.8 0.8L7.4 4L0.8 7.2"/></marker></defs><g class="pa-edge pa-edge-solid" data-id="fire" data-from="alert" data-to="triage" data-family="bare"><path class="pa-wire" d="M175.3 94L175.3 258" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="assess" data-from="triage" data-to="impact" data-family="service"><path class="pa-wire" d="M175.3 312L175.3 476" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="yes-impact" data-from="impact" data-to="page" data-family="decision"><path class="pa-wire" d="M222.7 522.65L222.7 550Q222.7 556 228.7 556L322 556Q328 556 328 562L328 696" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="no-impact" data-from="impact" data-to="ticket" data-family="decision"><path class="pa-wire" d="M128 522.67L128 696" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="escalate" data-from="page" data-to="mitigate" data-family="service"><path class="pa-wire" d="M328 750L328 860Q328 866 322 866L175.3 866Q169.3 866 169.3 872L169.3 914" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="track" data-from="ticket" data-to="mitigate" data-family="service"><path class="pa-wire" d="M128 750L128 914" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="check" data-from="mitigate" data-to="resolved" data-family="service"><path class="pa-wire" d="M169.3 968L169.3 1078Q169.3 1084 175.3 1084L180.7 1084Q186.7 1084 186.7 1090L186.7 1141.35" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="yes-resolved" data-from="resolved" data-to="postmortem" data-family="decision"><path class="pa-wire" d="M157.3 1188L157.3 1352" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="no-resolved" data-from="resolved" data-to="mitigate" data-family="decision"><path class="pa-wire" d="M128 1141.32L128 968" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="close" data-from="postmortem" data-to="closed" data-family="service"><path class="pa-wire" d="M157.3 1406L157.3 1570" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-node pa-kind-start pa-family-bare pa-tone-neutral" data-id="alert" tabindex="0" role="graphics-symbol" aria-label="Alert fires: start"><path class="pa-shape pa-shape-stadium" d="M138.3 54L212.3 54A20 20 0 0 1 212.3 94L138.3 94A20 20 0 0 1 138.3 54Z"/><text class="pa-label" text-anchor="middle"><tspan x="175.3" y="78.9">Alert fires</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="triage" tabindex="0" role="graphics-symbol" aria-label="Triage the alert: step"><path class="pa-shape pa-shape-rect" d="M91.3 258L259.3 258A2 2 0 0 1 261.3 260L261.3 310A2 2 0 0 1 259.3 312L91.3 312A2 2 0 0 1 89.3 310L89.3 260A2 2 0 0 1 91.3 258Z"/><rect class="pa-tile" x="103.58" y="271" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="117.58" y="291.3">🔍</text><text class="pa-type" text-anchor="middle"><tspan x="194.3" y="278.4">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="194.3" y="297.4">Triage the alert</tspan></text></g><g class="pa-node pa-kind-decision pa-family-decision pa-tone-neutral" data-id="impact" tabindex="0" role="graphics-symbol" aria-label="Customer impact?: decision"><path class="pa-shape pa-shape-diamond" d="M175.3 476L317.3 504L175.3 532L33.3 504Z"/><text class="pa-label" text-anchor="middle"><tspan x="175.3" y="508.9">Customer impact?</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="ticket" tabindex="0" role="graphics-symbol" aria-label="Open a ticket: step"><path class="pa-shape pa-shape-rect" d="M51 696L205 696A2 2 0 0 1 207 698L207 748A2 2 0 0 1 205 750L51 750A2 2 0 0 1 49 748L49 698A2 2 0 0 1 51 696Z"/><rect class="pa-tile" x="63.8" y="709" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="77.8" y="729.3">🎫</text><text class="pa-type" text-anchor="middle"><tspan x="147" y="716.4">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="147" y="735.4">Open a ticket</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="page" tabindex="0" role="graphics-symbol" aria-label="Page the on-call: step"><path class="pa-shape pa-shape-rect" d="M241 696L415 696A2 2 0 0 1 417 698L417 748A2 2 0 0 1 415 750L241 750A2 2 0 0 1 239 748L239 698A2 2 0 0 1 241 696Z"/><rect class="pa-tile" x="253.63" y="709" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="267.63" y="729.3">📟</text><text class="pa-type" text-anchor="middle"><tspan x="347" y="716.4">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="347" y="735.4">Page the on-call</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="mitigate" tabindex="0" role="graphics-symbol" aria-label="Mitigate: step"><path class="pa-shape pa-shape-rect" d="M88.7 914L208.7 914A2 2 0 0 1 210.7 916L210.7 966A2 2 0 0 1 208.7 968L88.7 968A2 2 0 0 1 86.7 966L86.7 916A2 2 0 0 1 88.7 914Z"/><rect class="pa-tile" x="101.45" y="927" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="115.45" y="947.3">🛠</text><text class="pa-type" text-anchor="middle"><tspan x="167.7" y="934.4">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="167.7" y="953.4">Mitigate</tspan></text></g><g class="pa-node pa-kind-decision pa-family-decision pa-tone-neutral" data-id="resolved" tabindex="0" role="graphics-symbol" aria-label="Resolved?: decision"><path class="pa-shape pa-shape-diamond" d="M157.3 1132L245.3 1160L157.3 1188L69.3 1160Z"/><text class="pa-label" text-anchor="middle"><tspan x="157.3" y="1164.9">Resolved?</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="postmortem" tabindex="0" role="graphics-symbol" aria-label="Write the postmortem: step"><path class="pa-shape pa-shape-rect" d="M50.3 1352L264.3 1352A2 2 0 0 1 266.3 1354L266.3 1404A2 2 0 0 1 264.3 1406L50.3 1406A2 2 0 0 1 48.3 1404L48.3 1354A2 2 0 0 1 50.3 1352Z"/><rect class="pa-tile" x="62.96" y="1365" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="76.96" y="1385.3">📝</text><text class="pa-type" text-anchor="middle"><tspan x="176.3" y="1372.4">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="176.3" y="1391.4">Write the postmortem</tspan></text></g><g class="pa-node pa-kind-end pa-family-bare pa-tone-neutral" data-id="closed" tabindex="0" role="graphics-symbol" aria-label="Closed: end"><path class="pa-shape pa-shape-stadium" d="M131.3 1570L183.3 1570A20 20 0 0 1 183.3 1610L131.3 1610A20 20 0 0 1 131.3 1570Z"/><text class="pa-label" text-anchor="middle"><tspan x="157.3" y="1594.9">Closed</tspan></text></g><g class="pa-edge-label" data-edge="fire"><rect class="pa-edge-plate" x="85.3" y="166" width="84" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="127.3" y="180.2">starts triage</tspan></text></g><g class="pa-edge-label" data-edge="assess"><rect class="pa-edge-plate" x="75.3" y="384" width="94" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="122.3" y="398.2">checks scope</tspan></text></g><g class="pa-edge-label" data-edge="yes-impact"><rect class="pa-edge-plate" x="335" y="604" width="36" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="353" y="618.2">yes</tspan></text></g><g class="pa-edge-label" data-edge="no-impact"><rect class="pa-edge-plate" x="90" y="604" width="32" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="106" y="618.2">no</tspan></text></g><g class="pa-edge-label" data-edge="escalate"><rect class="pa-edge-plate" x="335" y="822" width="70" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="370" y="836.2">hands off</tspan></text></g><g class="pa-edge-label" data-edge="track"><rect class="pa-edge-plate" x="60" y="822" width="62" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="91" y="836.2">works it</tspan></text></g><g class="pa-edge-label" data-edge="check"><rect class="pa-edge-plate" x="176.3" y="1040" width="118" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="235.3" y="1054.2">checks symptoms</tspan></text></g><g class="pa-edge-label" data-edge="yes-resolved"><rect class="pa-edge-plate" x="115.3" y="1260" width="36" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="133.3" y="1274.2">yes</tspan></text></g><g class="pa-edge-label" data-edge="no-resolved"><rect class="pa-edge-plate" x="24" y="1040" width="98" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="73" y="1054.2">no, keep going</tspan></text></g><g class="pa-edge-label" data-edge="close"><rect class="pa-edge-plate" x="39.3" y="1478" width="112" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="95.3" y="1492.2">publishes review</tspan></text></g><g class="pa-legend" aria-hidden="true"><rect class="pa-swatch pa-family-bare" x="94" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="112" y="37.85">1 start</tspan></text><rect class="pa-swatch pa-family-service" x="158.2" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="176.2" y="37.85">5 step</tspan></text><rect class="pa-swatch pa-family-decision" x="223.5" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="241.5" y="37.85">2 decision</tspan></text><rect class="pa-swatch pa-family-bare" x="309.4" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="327.4" y="37.85">1 end</tspan></text><g class="pa-legend-sample pa-edge-solid"><path class="pa-wire" d="M369.1 34L393.1 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="399.1" y="37.85">call</tspan></text></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" class="pa-diagram pa-type-flow" viewBox="0 0 441 1634" role="graphics-document" aria-labelledby="d-title d-desc"><title id="d-title">Incident response</title><desc id="d-desc">flow diagram with 9 nodes and 10 edges.</desc><defs><marker id="d-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-fill" d="M0 0.5L8 4L0 7.5Z"/></marker><marker id="d-arrow-open" viewBox="0 0 8 8" refX="7.4" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-open" d="M0.8 0.8L7.4 4L0.8 7.2"/></marker></defs><g class="pa-edge pa-edge-solid" data-id="fire" data-from="alert" data-to="triage" data-family="bare"><path class="pa-wire" d="M175.3 94L175.3 258" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="assess" data-from="triage" data-to="impact" data-family="service"><path class="pa-wire" d="M175.3 312L175.3 476" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="yes-impact" data-from="impact" data-to="page" data-family="decision"><path class="pa-wire" d="M222.7 522.65C222.7 556 328 556 328 696" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="no-impact" data-from="impact" data-to="ticket" data-family="decision"><path class="pa-wire" d="M128 522.67L128 696" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="escalate" data-from="page" data-to="mitigate" data-family="service"><path class="pa-wire" d="M328 750C328 866 169.3 866 169.3 914" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="track" data-from="ticket" data-to="mitigate" data-family="service"><path class="pa-wire" d="M128 750L128 914" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="check" data-from="mitigate" data-to="resolved" data-family="service"><path class="pa-wire" d="M169.3 968L169.3 1078Q169.3 1084 175.3 1084L180.7 1084Q186.7 1084 186.7 1090L186.7 1141.35" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="yes-resolved" data-from="resolved" data-to="postmortem" data-family="decision"><path class="pa-wire" d="M157.3 1188L157.3 1352" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="no-resolved" data-from="resolved" data-to="mitigate" data-family="decision"><path class="pa-wire" d="M128 1141.32L128 968" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="close" data-from="postmortem" data-to="closed" data-family="service"><path class="pa-wire" d="M157.3 1406L157.3 1570" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-node pa-kind-start pa-family-bare pa-tone-neutral" data-id="alert" tabindex="0" role="graphics-symbol" aria-label="Alert fires: start"><path class="pa-shape pa-shape-stadium" d="M138.3 54L212.3 54A20 20 0 0 1 212.3 94L138.3 94A20 20 0 0 1 138.3 54Z"/><text class="pa-label" text-anchor="middle"><tspan x="175.3" y="78.9">Alert fires</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="triage" tabindex="0" role="graphics-symbol" aria-label="Triage the alert: step"><path class="pa-shape pa-shape-rect" d="M91.3 258L259.3 258A2 2 0 0 1 261.3 260L261.3 310A2 2 0 0 1 259.3 312L91.3 312A2 2 0 0 1 89.3 310L89.3 260A2 2 0 0 1 91.3 258Z"/><rect class="pa-tile" x="103.58" y="271" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="117.58" y="291.3">🔍</text><text class="pa-type" text-anchor="middle"><tspan x="194.3" y="278.4">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="194.3" y="297.4">Triage the alert</tspan></text></g><g class="pa-node pa-kind-decision pa-family-decision pa-tone-neutral" data-id="impact" tabindex="0" role="graphics-symbol" aria-label="Customer impact?: decision"><path class="pa-shape pa-shape-diamond" d="M175.3 476L317.3 504L175.3 532L33.3 504Z"/><text class="pa-label" text-anchor="middle"><tspan x="175.3" y="508.9">Customer impact?</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="ticket" tabindex="0" role="graphics-symbol" aria-label="Open a ticket: step"><path class="pa-shape pa-shape-rect" d="M51 696L205 696A2 2 0 0 1 207 698L207 748A2 2 0 0 1 205 750L51 750A2 2 0 0 1 49 748L49 698A2 2 0 0 1 51 696Z"/><rect class="pa-tile" x="63.8" y="709" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="77.8" y="729.3">🎫</text><text class="pa-type" text-anchor="middle"><tspan x="147" y="716.4">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="147" y="735.4">Open a ticket</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="page" tabindex="0" role="graphics-symbol" aria-label="Page the on-call: step"><path class="pa-shape pa-shape-rect" d="M241 696L415 696A2 2 0 0 1 417 698L417 748A2 2 0 0 1 415 750L241 750A2 2 0 0 1 239 748L239 698A2 2 0 0 1 241 696Z"/><rect class="pa-tile" x="253.63" y="709" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="267.63" y="729.3">📟</text><text class="pa-type" text-anchor="middle"><tspan x="347" y="716.4">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="347" y="735.4">Page the on-call</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="mitigate" tabindex="0" role="graphics-symbol" aria-label="Mitigate: step"><path class="pa-shape pa-shape-rect" d="M88.7 914L208.7 914A2 2 0 0 1 210.7 916L210.7 966A2 2 0 0 1 208.7 968L88.7 968A2 2 0 0 1 86.7 966L86.7 916A2 2 0 0 1 88.7 914Z"/><rect class="pa-tile" x="101.45" y="927" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="115.45" y="947.3">🛠</text><text class="pa-type" text-anchor="middle"><tspan x="167.7" y="934.4">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="167.7" y="953.4">Mitigate</tspan></text></g><g class="pa-node pa-kind-decision pa-family-decision pa-tone-neutral" data-id="resolved" tabindex="0" role="graphics-symbol" aria-label="Resolved?: decision"><path class="pa-shape pa-shape-diamond" d="M157.3 1132L245.3 1160L157.3 1188L69.3 1160Z"/><text class="pa-label" text-anchor="middle"><tspan x="157.3" y="1164.9">Resolved?</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="postmortem" tabindex="0" role="graphics-symbol" aria-label="Write the postmortem: step"><path class="pa-shape pa-shape-rect" d="M50.3 1352L264.3 1352A2 2 0 0 1 266.3 1354L266.3 1404A2 2 0 0 1 264.3 1406L50.3 1406A2 2 0 0 1 48.3 1404L48.3 1354A2 2 0 0 1 50.3 1352Z"/><rect class="pa-tile" x="62.96" y="1365" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="76.96" y="1385.3">📝</text><text class="pa-type" text-anchor="middle"><tspan x="176.3" y="1372.4">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="176.3" y="1391.4">Write the postmortem</tspan></text></g><g class="pa-node pa-kind-end pa-family-bare pa-tone-neutral" data-id="closed" tabindex="0" role="graphics-symbol" aria-label="Closed: end"><path class="pa-shape pa-shape-stadium" d="M131.3 1570L183.3 1570A20 20 0 0 1 183.3 1610L131.3 1610A20 20 0 0 1 131.3 1570Z"/><text class="pa-label" text-anchor="middle"><tspan x="157.3" y="1594.9">Closed</tspan></text></g><g class="pa-edge-label" data-edge="fire"><rect class="pa-edge-plate" x="133.3" y="166" width="84" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="175.3" y="180.2">starts triage</tspan></text></g><g class="pa-edge-label" data-edge="assess"><rect class="pa-edge-plate" x="128.3" y="384" width="94" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="175.3" y="398.2">checks scope</tspan></text></g><g class="pa-edge-label" data-edge="yes-impact"><rect class="pa-edge-plate" x="281.45" y="584.52" width="36" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="299.45" y="598.72">yes</tspan></text></g><g class="pa-edge-label" data-edge="no-impact"><rect class="pa-edge-plate" x="112" y="599.34" width="32" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="128" y="613.54">no</tspan></text></g><g class="pa-edge-label" data-edge="escalate"><rect class="pa-edge-plate" x="231.31" y="837.67" width="70" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="266.31" y="851.87">hands off</tspan></text></g><g class="pa-edge-label" data-edge="track"><rect class="pa-edge-plate" x="97" y="822" width="62" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="128" y="836.2">works it</tspan></text></g><g class="pa-edge-label" data-edge="check"><rect class="pa-edge-plate" x="176.3" y="1040" width="118" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="235.3" y="1054.2">checks symptoms</tspan></text></g><g class="pa-edge-label" data-edge="yes-resolved"><rect class="pa-edge-plate" x="139.3" y="1260" width="36" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="157.3" y="1274.2">yes</tspan></text></g><g class="pa-edge-label" data-edge="no-resolved"><rect class="pa-edge-plate" x="24" y="1040" width="98" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="73" y="1054.2">no, keep going</tspan></text></g><g class="pa-edge-label" data-edge="close"><rect class="pa-edge-plate" x="101.3" y="1478" width="112" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="157.3" y="1492.2">publishes review</tspan></text></g><g class="pa-legend" aria-hidden="true"><rect class="pa-swatch pa-family-bare" x="94" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="112" y="37.85">1 start</tspan></text><rect class="pa-swatch pa-family-service" x="158.2" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="176.2" y="37.85">5 step</tspan></text><rect class="pa-swatch pa-family-decision" x="223.5" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="241.5" y="37.85">2 decision</tspan></text><rect class="pa-swatch pa-family-bare" x="309.4" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="327.4" y="37.85">1 end</tspan></text><g class="pa-legend-sample pa-edge-solid"><path class="pa-wire" d="M369.1 34L393.1 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="399.1" y="37.85">call</tspan></text></g></svg>
 <div class="legend" data-pa-legend aria-hidden="true"><span class="lg"><i class="lg-sw lg-sw-bare"></i>1 start</span><span class="lg"><i class="lg-sw lg-sw-service"></i>5 step</span><span class="lg"><i class="lg-sw lg-sw-decision"></i>2 decision</span><span class="lg"><i class="lg-sw lg-sw-bare"></i>1 end</span><span class="lg"><i class="lg-wire lg-wire-solid"></i>call</span></div>
 <div class="tip" data-pa-tip role="tooltip" hidden></div>
 </main>
@@ -360,7 +372,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 <div class="transport" role="group" aria-label="Transport">
 <button type="button" class="tool" data-pa-prev-chapter title="Previous chapter">Prev chapter</button>
 <button type="button" class="tool" data-pa-prev title="Previous beat (Left)">Prev</button>
-<button type="button" class="tool" data-pa-play title="Play or pause (Space)">Play</button>
+<button type="button" class="tool pa-play" data-pa-play aria-label="Play" title="Play or pause (Space)"><span class="pa-playicon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path d="M7 4.5v15l13-7.5z"/></svg></span></button>
 <button type="button" class="tool" data-pa-next title="Next beat (Right)">Next</button>
 <button type="button" class="tool" data-pa-next-chapter title="Next chapter">Next chapter</button>
 <input type="range" class="scrub" data-pa-scrub min="0" max="0" step="1" value="0" aria-label="Beat" list="pa-ticks">
@@ -1040,7 +1052,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 // edge and lights the edge; a focus beat fits and lights its ids (a group
 // lights its members); everything else dims. A step beat (from the older
 // steps[] form) reveals what it shows and hides the rest, as before, with no
-// dimming. Playing runs each beat as glide (600 ms for a story beat, the
+// dimming. Playing runs each beat as glide (450 ms for a story beat, the
 // camera's own glide for a step beat), then (a hop, motion allowed) the dot,
 // then a hold, and moves on; every duration divides by the speed; reduced
 // motion drops the dot and the glide. Registered as PADiagram.story and
@@ -1053,11 +1065,11 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
 
-  var GLIDE_MS = 600; // the camera's glide to a story (hop or focus) beat
-  var DOT_MS = 1200; // the dot along a hop's edge
-  var HOLD_MS = 2500; // then the caption holds...
-  var HOLD_PER_CHAR_MS = 40; // ...longer for a longer caption...
-  var HOLD_MAX_MS = 6000; // ...up to this
+  var GLIDE_MS = 450; // the camera's glide to a story (hop or focus) beat
+  var DOT_MS = 900; // the dot along a hop's edge
+  var HOLD_MS = 1800; // then the caption holds...
+  var HOLD_PER_CHAR_MS = 30; // ...longer for a longer caption...
+  var HOLD_MAX_MS = 4500; // ...up to this
   var SPEEDS = [0.5, 1, 1.5, 2];
   var DOT_RADIUS = 5;
 
@@ -1238,7 +1250,14 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
     var seenNow = null; // what the current step beat reveals, for reframe
     var run = 0; // bumps on every goTo, pause and exit, so a stale timer or frame does nothing
     var timer = 0;
+    var inHold = false; // a hold reported to hooks.onHold and not yet ended
+    function endHold() {
+      if (!inHold) return;
+      inHold = false;
+      if (hooks.onHoldEnd) hooks.onHoldEnd();
+    }
     function cancelRun() {
+      endHold();
       run += 1;
       if (timer) global.clearTimeout(timer);
       timer = 0;
@@ -1269,12 +1288,17 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       camera.unfit();
       camera.moveTo(targetOf(beat, seen), { ms: glide });
       var hold = function () {
-        later(token, holdMs(beat), function () {
+        if (token !== run) return; // a dot frame that outlived its run
+        var ms = holdMs(beat);
+        later(token, ms, function () {
+          endHold();
           if (!playing) return;
           if (stepIndex < beats.length - 1) goTo(stepIndex + 1);
           else if (loop) goTo(0);
           else pause();
         });
+        // only a hold armed while playing is reported: one armed while paused never moves on
+        if (playing) { inHold = true; if (hooks.onHold) hooks.onHold(ms); }
       };
       later(token, instant ? 0 : glide, function () {
         if (beat.kind === 'hop' && !instant) travel(beat, DOT_MS / speed, hold); else hold();
@@ -1392,12 +1416,30 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 // jump), data-pa-scrub (an <input type="range"> with aria-valuetext
 // "Beat n of N") and data-pa-ticks (its <datalist>), data-pa-prev,
 // data-pa-next, data-pa-prev-chapter, data-pa-next-chapter, data-pa-exit,
-// data-pa-play (its label reads Play or Pause),
+// data-pa-play (an icon button: aria-label reads Play or Pause, and its
+// span.pa-playicon holds the svg paint() swaps),
 // data-pa-speed (0.5× ... 2×), data-pa-loop (aria-pressed). Text goes in as
-// textContent, never markup.
+// textContent, never markup (the play icon and ring svgs are the constant exceptions).
+//
+// The returned object also has hold(ms) and holdEnd(), which the story's
+// onHold / onHoldEnd hooks call: a span.pa-ring (aria-hidden) fills over ms inside
+// the control that fires next, Next, or Play on the last beat with loop on, and
+// is absent on the last beat with loop off. paint() re-places a running ring but
+// never restarts it.
 (function (global) {
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
+
+  // The play button's icon: a triangle while paused, two bars while playing.
+  // Both use currentColor, so every theme and the light/dark toggle recolor them.
+  var PLAY_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path d="M7 4.5v15l13-7.5z"/></svg>';
+  var PAUSE_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><rect x="6" y="4.5" width="4.2" height="15" rx="1"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1"/></svg>';
+
+  // The hold ring: a track and an arc of pathLength 100; the arc's dash offset
+  // runs 100 (empty) to 0 (full). The arc colour and the ring's size come from CSS.
+  var RING_SVG = '<svg viewBox="0 0 24 24" focusable="false"><circle class="pa-ring-track" cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3"/><circle class="pa-ring-arc" cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" transform="rotate(-90 12 12)"/></svg>';
+  var RING_EMPTY = 100;
+  var RING_STATIC = 50; // reduced motion: half filled, a cue that the story moves on, no motion
 
   var pad2 = function (n) { return (n < 10 ? '0' : '') + n; };
 
@@ -1461,6 +1503,69 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       button.disabled = off;
     }
 
+    // The icon span ships in the page's markup; one is added if an embedder left it out.
+    function paintPlay(button, playing) {
+      var icon = button.querySelector('.pa-playicon');
+      if (!icon) {
+        icon = doc.createElement('span');
+        icon.className = 'pa-playicon';
+        icon.setAttribute('aria-hidden', 'true');
+        button.appendChild(icon);
+      }
+      icon.innerHTML = playing ? PAUSE_SVG : PLAY_SVG;
+      button.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    }
+
+    // ---- the hold ring ------------------------------------------------------------------
+    var ring = null;
+    var arc = null;
+    var ringAnimation = null;
+    var holding = false; // between hold() and holdEnd(): paint() may place the ring only then
+    var reducedMotion = function () {
+      return !!(global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    };
+    // Where the ring belongs: the control that fires next. Nothing follows the last beat unless it loops.
+    function ringTarget() {
+      if (story.index() < story.count() - 1) return part('data-pa-next');
+      return story.loop() ? part('data-pa-play') : null;
+    }
+    // Moves a ring that is running; leaves it be when the target did not change.
+    function placeRing() {
+      if (!ring || !holding) return;
+      var to = ringTarget();
+      if (to === ring.parentNode) return;
+      if (ring.parentNode) ring.parentNode.removeChild(ring);
+      if (to) to.appendChild(ring);
+    }
+    // Ends the animation and takes the ring away. It runs while the story still reports
+    // playing (the hook fires inside cancelRun), so it never repaints: onStep does that.
+    function holdEnd() {
+      if (ringAnimation) ringAnimation.cancel();
+      ringAnimation = null;
+      holding = false;
+      if (ring && ring.parentNode) ring.parentNode.removeChild(ring);
+    }
+    function hold(ms) {
+      holdEnd();
+      if (!(ms > 0)) return;
+      if (!ring) {
+        ring = doc.createElement('span');
+        ring.className = 'pa-ring';
+        ring.setAttribute('aria-hidden', 'true');
+        ring.innerHTML = RING_SVG;
+        arc = ring.querySelector('.pa-ring-arc');
+      }
+      if (!arc) return;
+      holding = true;
+      if (reducedMotion() || !arc.animate) {
+        arc.setAttribute('stroke-dashoffset', String(RING_STATIC));
+      } else {
+        arc.setAttribute('stroke-dashoffset', String(RING_EMPTY));
+        ringAnimation = arc.animate([{ strokeDashoffset: RING_EMPTY }, { strokeDashoffset: 0 }], { duration: ms, easing: 'linear', fill: 'forwards' });
+      }
+      placeRing();
+    }
+
     function paint() {
       var presenting = story.isPresenting();
       if (caption) caption.hidden = !presenting;
@@ -1477,7 +1582,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       disable(part('data-pa-prev'), i === 0);
       disable(part('data-pa-next'), i === n - 1);
       var play = part('data-pa-play');
-      if (play) play.textContent = story.isPlaying() ? 'Pause' : 'Play';
+      if (play) paintPlay(play, story.isPlaying());
       var speed = part('data-pa-speed');
       if (speed) {
         speed.textContent = story.speed() + '×';
@@ -1491,6 +1596,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       }
       mark(beatChips, beatRow, i);
       mark(chapterChips, chaptersEl, story.chapter());
+      placeRing();
     }
     function wire(name, fn) {
       var b = part(name);
@@ -1514,7 +1620,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       });
     }
     paint();
-    return { paint: paint };
+    return { paint: paint, hold: hold, holdEnd: holdEnd };
   };
 })(window);
 
@@ -1654,10 +1760,15 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
     var camera = PADiagram.camera(stage, svg, data, { onApply: emit });
     var trace = PADiagram.trace(svg, data, els, { isOff: function () { return story.isPresenting(); } });
     // Entering Play drops the selection and the route (the panel hides with them); each beat repaints the chrome.
-    var story = PADiagram.story(stage, svg, data, els, camera, { onStep: function () {
-      if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
-      transport.paint(); trace.refresh(); panel.paint(); emit();
-    } });
+    var story = PADiagram.story(stage, svg, data, els, camera, {
+      onStep: function () {
+        if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
+        transport.paint(); trace.refresh(); panel.paint(); emit();
+      },
+      // the transport shows the hold as a progress ring
+      onHold: function (ms) { transport.hold(ms); },
+      onHoldEnd: function () { transport.holdEnd(); },
+    });
     var transport = PADiagram.transport({ caption: options.caption || null, chapters: options.chapters || null }, data, story);
     var panel = PADiagram.panel({ panel: options.panel || null, tip: options.tip || null, found: options.found || null }, data, els, trace, {
       isOff: function () { return story.isPresenting(); },
@@ -1858,7 +1969,6 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
     stage.addEventListener('dblclick', function () { if (!story.isPresenting()) camera.fit(); });
     stage.addEventListener('wheel', function (e) {
       e.preventDefault();
-      story.pause();
       var r = stage.getBoundingClientRect();
       var dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
       camera.zoomAt(Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);

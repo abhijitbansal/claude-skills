@@ -209,6 +209,7 @@ test('the diagram figure carries its caption, a Present button and a dialog hold
   const dialog = html.match(/<dialog class="dg-overlay"[\s\S]*?<\/dialog>/)[0];
   for (const part of ['data-pa-mode="play"', 'data-pa-mode="explore"', 'data-pa-find', 'data-pa-full', 'data-dg-close', 'data-pa-chapters', 'data-pa-found', 'data-pa-tip', 'data-pa-panel', 'data-pa-panel-title', 'data-pa-panel-close', 'data-pa-tally', 'data-pa-panel-body',
     'data-pa-caption', 'data-pa-line', 'data-pa-beats', 'data-pa-prev-chapter', 'data-pa-prev', 'data-pa-play', 'data-pa-next', 'data-pa-next-chapter', 'data-pa-scrub', 'data-pa-ticks', 'data-pa-count', 'data-pa-speed', 'data-pa-loop']) assert.ok(dialog.includes(part), part);
+  assert.match(dialog, /<button type="button" class="btn dg-play" data-pa-play aria-label="Play" title="Play or pause \(Space\)"><span class="pa-playicon" aria-hidden="true"><svg [^>]*fill="currentColor"[^>]*>[\s\S]*?<\/svg><\/span><\/button>/, 'the play button is an icon with aria-label Play, no visible text');
   assert.ok(!dialog.includes('data-pa-title') && !dialog.includes('data-pa-note'), 'the caption line replaces the older title and note parts');
   assert.match(html, /<input type="range" class="dg-scrub" data-pa-scrub[^>]* list="dg_0-ticks">/);
   assert.match(html, /<datalist id="dg_0-ticks" data-pa-ticks><\/datalist>/);

@@ -1,0 +1,14 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "facts",
+      "duration": 2,
+      "elements": [
+        { "id": "first", "type": "text", "text": "Revenue up", "x": 900, "y": 540, "fontSize": 64 },
+        { "id": "second", "type": "text", "text": "Costs down", "x": 1020, "y": 560, "fontSize": 64 }
+      ]
+    }
+  ]
+}

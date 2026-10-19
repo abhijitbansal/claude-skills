@@ -1,0 +1,15 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "intro",
+      "duration": 3,
+      "elements": [
+        { "id": "title", "type": "text", "role": "title", "text": "Quarterly results", "x": 960, "y": 10, "fontSize": 72,
+          "keyframes": [{ "t": 2.4, "x": 960 }, { "t": 2.8, "x": 2600, "ease": "inCubic" }] },
+        { "id": "stays", "type": "text", "text": "Up 18%", "x": 960, "y": 540, "fontSize": 64 }
+      ]
+    }
+  ]
+}

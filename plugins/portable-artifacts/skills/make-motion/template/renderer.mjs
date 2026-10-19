@@ -351,6 +351,23 @@ function replaceAudio(spec) {
   return tracks;
 }
 
+const STAMP_CSS = 'position:fixed;right:1.2vw;bottom:1.2vw;z-index:2147483647;padding:.3em .6em;border-radius:.3em;'
+  + 'background:rgba(0,0,0,.72);color:#fff;font:600 max(11px,1.7vw)/1.2 ui-monospace,Menlo,monospace;pointer-events:none';
+
+// A fixed `<scene-id> · 1.20s` label for contact sheets. Created lazily so other modes have no such element;
+// an empty text removes it again.
+function stampSheet(text) {
+  let el = document.querySelector('[data-sheet-stamp]');
+  if (!text) { el?.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.dataset.sheetStamp = '';
+    el.style.cssText = STAMP_CSS;
+    document.body.append(el);
+  }
+  el.textContent = text;
+}
+
 function makeMotion(spec, built, apply, audio) {
   return {
     duration: built.duration, fps: spec.fps, size: spec.size, sceneStarts: built.sceneStarts,
@@ -360,6 +377,8 @@ function makeMotion(spec, built, apply, audio) {
       seekTo(built.timeline, t);
       apply(t);
     },
+    // Contact-sheet mode only: render.mjs --contact-sheet calls this; a normal render or preview never does.
+    stamp(text) { stampSheet(text); },
   };
 }
 

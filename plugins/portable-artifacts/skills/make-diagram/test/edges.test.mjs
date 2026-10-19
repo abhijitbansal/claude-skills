@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { layoutGraph } from '../scripts/lib/layout-graph.mjs';
-import { anchorEdges, anchorRoute, roundedPath } from '../scripts/lib/edges.mjs';
+import { anchorEdges, anchorRoute, roundedPath, curvedRoute, FALLBACK_CORNER_RADIUS } from '../scripts/lib/edges.mjs';
 import { shapeParts, polyline, pathD, outlineHit, CORNER_RADIUS, RECT_RADIUS, STACK_RADIUS } from '../scripts/lib/shapes.mjs';
 import { HEXAGON_CUT, PARALLELOGRAM_SLANT, CYLINDER_CAP } from '../scripts/lib/sizes.mjs';
 import { KINDS } from '../scripts/lib/kinds.mjs';
@@ -156,6 +156,46 @@ test('roundedPath rounds corners with a 6 px radius, shortened on short segments
   assert.equal(roundedPath([{ x: 0, y: 0 }, { x: 8, y: 0 }, { x: 8, y: 40 }]), 'M0 0L4 0Q8 0 8 4L8 40');
   assert.equal(roundedPath([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 0 }]), 'M0 0L10 0L20 0');
   assert.equal(roundedPath([{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 20, y: 0 }]), 'M0 0L20 0');
+});
+
+// ---- Bézier routes --------------------------------------------------------------
+
+const P = (x, y) => ({ x, y });
+
+test('curvedRoute draws a straight run as one line and an L as one cubic bend', () => {
+  assert.deepEqual(curvedRoute([P(0, 0), P(20, 0)]), { d: 'M0 0L20 0', mid: P(10, 0) });
+  assert.deepEqual(curvedRoute([P(0, 0), P(10, 0), P(20, 0)]), { d: 'M0 0L20 0', mid: P(10, 0) }, 'a point on a straight run is no corner');
+  assert.deepEqual(curvedRoute([P(0, 0), P(0, 0), P(20, 0)]), { d: 'M0 0L20 0', mid: P(10, 0) }, 'repeated points are dropped');
+  // c1 = p0 + (p1 - p0) * 0.6 = (24, 0); c2 = p2 + (p1 - p2) * 0.6 = (40, 16); mid = the curve at t = 0.5
+  assert.deepEqual(curvedRoute([P(0, 0), P(40, 0), P(40, 40)]), { d: 'M0 0C24 0 40 16 40 40', mid: P(29, 11) });
+});
+
+test('curvedRoute draws a Z as one cubic whose control points are its two inner corners', () => {
+  assert.deepEqual(curvedRoute([P(0, 0), P(0, 30), P(50, 30), P(50, 60)]), { d: 'M0 0C0 30 50 30 50 60', mid: P(25, 30) });
+});
+
+test('curvedRoute keeps the waypoints of a longer route and rounds its corners at the fallback radius', () => {
+  assert.equal(FALLBACK_CORNER_RADIUS, 24);
+  const pts = [P(0, 0), P(100, 0), P(100, 50), P(200, 50), P(200, 150)];
+  const r = curvedRoute(pts);
+  assert.equal(r.d, 'M0 0L76 0Q100 0 100 24L100 26Q100 50 124 50L176 50Q200 50 200 74L200 150');
+  assert.equal(r.d, roundedPath(pts, FALLBACK_CORNER_RADIUS));
+  assert.deepEqual(r.mid, P(125, 50), 'half way along the polyline (350 px long)');
+});
+
+test('mid of a symmetric Z is its centre', () => {
+  assert.deepEqual(curvedRoute([P(0, 0), P(40, 0), P(40, 80), P(80, 80)]).mid, P(40, 40));
+  assert.deepEqual(curvedRoute([P(10, 100), P(10, 60), P(70, 60), P(70, 20)]).mid, P(40, 60));
+});
+
+test('curve ends leave and arrive along the first and last segments, so arrow heads keep their direction', () => {
+  const dir = (a, b) => { const l = Math.hypot(b.x - a.x, b.y - a.y); return P(Math.round(((b.x - a.x) / l) * 1e6) / 1e6, Math.round(((b.y - a.y) / l) * 1e6) / 1e6); };
+  for (const pts of [[P(0, 0), P(40, 0), P(40, 40)], [P(0, 0), P(0, 30), P(50, 30), P(50, 60)]]) {
+    const n = curvedRoute(pts).d.match(/C(.*)$/)[1].trim().split(/[\s,]+/).map(Number);
+    const [c1, c2, end] = [P(n[0], n[1]), P(n[2], n[3]), P(n[4], n[5])];
+    assert.deepEqual(dir(pts[0], c1), dir(pts[0], pts[1]));
+    assert.deepEqual(dir(c2, end), dir(pts.at(-2), pts.at(-1)));
+  }
 });
 
 test('shape path data is closed, finite and built from the shared constants', () => {

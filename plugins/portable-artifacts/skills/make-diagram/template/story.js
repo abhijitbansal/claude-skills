@@ -3,7 +3,7 @@
 // edge and lights the edge; a focus beat fits and lights its ids (a group
 // lights its members); everything else dims. A step beat (from the older
 // steps[] form) reveals what it shows and hides the rest, as before, with no
-// dimming. Playing runs each beat as glide (600 ms for a story beat, the
+// dimming. Playing runs each beat as glide (450 ms for a story beat, the
 // camera's own glide for a step beat), then (a hop, motion allowed) the dot,
 // then a hold, and moves on; every duration divides by the speed; reduced
 // motion drops the dot and the glide. Registered as PADiagram.story and
@@ -16,11 +16,11 @@
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
 
-  var GLIDE_MS = 600; // the camera's glide to a story (hop or focus) beat
-  var DOT_MS = 1200; // the dot along a hop's edge
-  var HOLD_MS = 2500; // then the caption holds...
-  var HOLD_PER_CHAR_MS = 40; // ...longer for a longer caption...
-  var HOLD_MAX_MS = 6000; // ...up to this
+  var GLIDE_MS = 450; // the camera's glide to a story (hop or focus) beat
+  var DOT_MS = 900; // the dot along a hop's edge
+  var HOLD_MS = 1800; // then the caption holds...
+  var HOLD_PER_CHAR_MS = 30; // ...longer for a longer caption...
+  var HOLD_MAX_MS = 4500; // ...up to this
   var SPEEDS = [0.5, 1, 1.5, 2];
   var DOT_RADIUS = 5;
 
@@ -201,7 +201,14 @@
     var seenNow = null; // what the current step beat reveals, for reframe
     var run = 0; // bumps on every goTo, pause and exit, so a stale timer or frame does nothing
     var timer = 0;
+    var inHold = false; // a hold reported to hooks.onHold and not yet ended
+    function endHold() {
+      if (!inHold) return;
+      inHold = false;
+      if (hooks.onHoldEnd) hooks.onHoldEnd();
+    }
     function cancelRun() {
+      endHold();
       run += 1;
       if (timer) global.clearTimeout(timer);
       timer = 0;
@@ -232,12 +239,17 @@
       camera.unfit();
       camera.moveTo(targetOf(beat, seen), { ms: glide });
       var hold = function () {
-        later(token, holdMs(beat), function () {
+        if (token !== run) return; // a dot frame that outlived its run
+        var ms = holdMs(beat);
+        later(token, ms, function () {
+          endHold();
           if (!playing) return;
           if (stepIndex < beats.length - 1) goTo(stepIndex + 1);
           else if (loop) goTo(0);
           else pause();
         });
+        // only a hold armed while playing is reported: one armed while paused never moves on
+        if (playing) { inHold = true; if (hooks.onHold) hooks.onHold(ms); }
       };
       later(token, instant ? 0 : glide, function () {
         if (beat.kind === 'hop' && !instant) travel(beat, DOT_MS / speed, hold); else hold();

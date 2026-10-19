@@ -4,6 +4,7 @@ import { eases } from 'animejs';
 import { buildTimeline, seekTo } from '../template/timeline.mjs';
 import { EASES } from '../scripts/lib/spec.mjs';
 
+const NAMED = ['enter', 'exit', 'move', 'land'];
 const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} !~ ${b}`);
 
 function spec(scenes) {
@@ -168,6 +169,41 @@ test('every EASES name resolves in anime v4 and animates', () => {
     seekTo(timeline, 0.5);
     const v = states.get('a').x;
     assert.ok(Number.isFinite(v), `${ease} gave ${v}`);
-    if (ease !== 'linear') assert.ok(typeof eases[ease] === 'function', `${ease} missing in eases`);
+    if (ease !== 'linear' && !NAMED.includes(ease)) assert.ok(typeof eases[ease] === 'function', `${ease} missing in eases`);
   }
+});
+
+// x(t) for a 0 -> 100 tween over 1 s with `ease`, at progress p (0..1).
+function eased(ease, p) {
+  const { timeline, states } = buildTimeline(spec([
+    { id: 's1', duration: 2, elements: [text('a', [{ t: 0, x: 0 }, { t: 1, x: 100, ease }])] },
+  ]));
+  seekTo(timeline, p);
+  return states.get('a').x;
+}
+
+test('named eases are in EASES and resolve to curves (a string cubicBezier would be silently linear)', () => {
+  for (const name of NAMED) assert.ok(EASES.includes(name), name);
+  for (const name of NAMED) assert.ok(Math.abs(eased(name, 0.25) - 25) > 1, `${name} at 0.25 is ${eased(name, 0.25)}, i.e. linear`);
+});
+
+test('land overshoots: past 100 at 80 % of the tween (anime does not clamp), and lands on 100', () => {
+  assert.ok(eased('land', 0.8) > 100, `land at 0.8 is ${eased('land', 0.8)}`);
+  near(eased('land', 1), 100, 1e-6);
+});
+
+test('enter is a fast-out curve: far ahead of linear at 0.25, monotonic, no overshoot', () => {
+  assert.ok(eased('enter', 0.25) > 50, `enter at 0.25 is ${eased('enter', 0.25)}`);
+  let prev = -Infinity;
+  for (let i = 0; i <= 20; i++) {
+    const v = eased('enter', i / 20);
+    assert.ok(v >= prev - 1e-9 && v <= 100 + 1e-9, `enter at ${i / 20} is ${v}`);
+    prev = v;
+  }
+});
+
+test('exit starts slowly (behind linear at 0.25); move is symmetric about the midpoint', () => {
+  assert.ok(eased('exit', 0.25) < 25, `exit at 0.25 is ${eased('exit', 0.25)}`);
+  near(eased('move', 0.5), 50, 1e-3);
+  near(eased('move', 0.25) + eased('move', 0.75), 100, 1e-3);
 });

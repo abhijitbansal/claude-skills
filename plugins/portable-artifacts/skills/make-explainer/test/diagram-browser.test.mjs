@@ -92,6 +92,9 @@ test('Present opens the overlay, steps forward and back, and Esc closes it with 
   assert.equal(await line(page), '01 / 04 · WALKTHROUGH · Client calls');
   assert.equal(await page.locator('[data-pa-prev]').isDisabled(), true);
   assert.equal(await activeIs(page, '[data-pa-play]'), true, 'focus starts on Play');
+  assert.equal(await page.getAttribute(`${DLG} [data-pa-play]`, 'aria-label'), 'Play', 'the overlay Play button is an icon with an accessible name');
+  const playBox = await page.locator(`${DLG} [data-pa-play]`).boundingBox();
+  assert.ok(playBox.width >= 40 && playBox.height >= 40, `Play hit area ${playBox.width}x${playBox.height} is at least 40x40`);
   assert.equal(await page.getAttribute(`${DLG} [data-pa-mode="play"]`, 'aria-pressed'), 'true');
 
   await page.keyboard.press('ArrowRight');
@@ -631,6 +634,60 @@ test('an inline figure of a narrow diagram still shows its whole legend at rest'
   const FIT_MARGIN = 16; // make-diagram's camera: the whole canvas and this much around it
   const expected = [-FIT_MARGIN, -FIT_MARGIN, seen.canvas[0] + 2 * FIT_MARGIN, seen.canvas[1] + 2 * FIT_MARGIN];
   seen.view.forEach((v, i) => assert.ok(Math.abs(v - expected[i]) <= 1, `the view ${seen.view.join(' ')} is the whole canvas (${expected.join(' ')}), not the ${seen.drawing.join('x')} drawing`));
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('the overlay gives Next a progress ring while a story plays, and takes it away on pause', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(storyPage().url, { reducedMotion: 'no-preference' });
+  await page.locator('[data-dg-present]').click();
+  assert.equal(await page.locator(`${DLG} .pa-ring`).count(), 0, 'paused: no ring');
+  await page.keyboard.press('Space'); // focus starts on Play
+  await page.waitForSelector(`${DLG} [data-pa-next] .pa-ring`, { state: 'attached', timeout: 6000 });
+  const geo = await page.evaluate(() => {
+    const n = document.querySelector('[data-dg-dialog] [data-pa-next]').getBoundingClientRect();
+    const r = document.querySelector('[data-dg-dialog] [data-pa-next] .pa-ring').getBoundingClientRect();
+    return { w: r.width, h: r.height, inside: r.left >= n.left && r.right <= n.right && r.top >= n.top && r.bottom <= n.bottom };
+  });
+  assert.ok(geo.w >= 10 && geo.h >= 10 && geo.inside, `ring ${geo.w}x${geo.h} sits inside Next`);
+  assert.equal(await page.locator(`${DLG} [data-pa-next]`).textContent(), 'Next');
+  await page.keyboard.press('Space'); // pause
+  assert.equal(await page.locator(`${DLG} .pa-ring`).count(), 0, 'no ring after pause');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('the overlay ring never shifts the transport, and on the last beat with loop on it circles the Play icon', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(storyPage().url, { reducedMotion: 'no-preference' });
+  const edges = () => page.evaluate(() => ['[data-pa-next]', '[data-pa-next-chapter]', '[data-pa-scrub]', '[data-pa-loop]']
+    .map((s) => { const r = document.querySelector(`[data-dg-dialog] ${s}`).getBoundingClientRect(); return [s, r.left, r.right]; }));
+  await page.locator('[data-dg-present]').click();
+  const paused = await edges();
+  await page.keyboard.press('Space');
+  await page.waitForSelector(`${DLG} [data-pa-next] .pa-ring`, { state: 'attached', timeout: 6000 });
+  assert.deepEqual(await edges(), paused, 'a hold starting moves nothing');
+  await page.keyboard.press('Space'); // pause
+  assert.deepEqual(await edges(), paused, 'nor does pausing');
+  // last beat, loop on (Speed 0.5x first: the hold is long enough to read the DOM)
+  await page.locator(`${DLG} [data-pa-speed]`).click();
+  await page.locator(`${DLG} [data-pa-speed]`).click();
+  await page.locator(`${DLG} [data-pa-speed]`).click();
+  await page.locator(`${DLG} [data-pa-loop]`).click();
+  await page.locator(`${DLG} [data-pa-play]`).focus();
+  await page.keyboard.press('End');
+  await page.locator(`${DLG} [data-pa-play]`).click();
+  await page.waitForSelector(`${DLG} [data-pa-play] .pa-ring`, { state: 'attached', timeout: 8000 });
+  const geo = await page.evaluate(() => {
+    const play = document.querySelector('[data-dg-dialog] [data-pa-play]');
+    const box = (el) => { const r = el.getBoundingClientRect(); return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width }; };
+    return { ring: box(play.querySelector('.pa-ring')), icon: box(play.querySelector('.pa-playicon')), play: box(play), next: document.querySelector('[data-dg-dialog] [data-pa-next] .pa-ring') !== null };
+  });
+  assert.equal(geo.next, false, 'no ring left in Next');
+  assert.ok(Math.abs(geo.ring.cx - geo.icon.cx) <= 2 && Math.abs(geo.ring.cy - geo.icon.cy) <= 2, `ring centred on the icon: ${JSON.stringify([geo.ring, geo.icon])}`);
+  assert.ok(geo.ring.w > geo.icon.w && geo.ring.l >= geo.play.l && geo.ring.r <= geo.play.r && geo.ring.t >= geo.play.t && geo.ring.b <= geo.play.b, 'it circles the icon inside the button');
+  await page.keyboard.press('Space'); // pause
   assert.deepEqual(problems, []);
   await context.close();
 });
