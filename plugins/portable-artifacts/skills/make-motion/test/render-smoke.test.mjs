@@ -10,6 +10,7 @@ import { findFfmpeg } from '../scripts/lib/ffmpeg.mjs';
 import { launchBrowser, guardNetwork } from '../scripts/lib/browser.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { writeWav } from './helpers/wav.mjs';
+import { sheetTimes, sheetLayout, PHONE_WIDTH } from '../scripts/lib/sheet.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER = path.join(root, 'scripts/render.mjs');
@@ -169,6 +170,53 @@ test('--contact-sheet writes one non-blank PNG per scene (no ffmpeg needed)', as
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.deepEqual(readdirSync(path.join(dir, 'contact')).sort(), ['bars.png', 'intro.png']);
   assert.ok(await nonBackgroundRatio(path.join(dir, 'contact', 'intro.png')) > 0.02, 'intro is blank');
+  return undefined;
+});
+
+const pngSize = (buf) => ({ w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) });
+
+test('--contact-sheet tiles a multi-keyframe scene: one tile per sheetTimes entry plus the 360 px phone tile', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const dir = tmp('cst-');
+  const scene = { id: 'multi', duration: 2, elements: [
+    { id: 'a', type: 'text', text: 'Hello', x: 240, y: 135, fontSize: 48, keyframes: [{ t: 0, opacity: 0 }, { t: 0.6, opacity: 1 }] },
+  ] };
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify({ size: [480, 270], scenes: [scene] }));
+  const r = render([path.join(dir, 'm.json'), '--contact-sheet', '--out', dir], { PATH: '/nonexistent' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /\n1 contact sheet\(s\)\n$/);
+  const times = sheetTimes({ ...scene, elements: scene.elements }, 30);
+  assert.equal(times.length, 4);
+  const frame = { w: 480, h: 270 };
+  const expected = sheetLayout([...times.map(() => frame), { ...frame, width: PHONE_WIDTH }]);
+  const got = pngSize(readFileSync(path.join(dir, 'contact', 'multi.png')));
+  assert.deepEqual(got, { w: expected.width, h: expected.height }, 'sheet size matches sheetTimes().length + 1 tiles');
+  assert.ok(got.w > 480, 'the sheet is wider than one frame');
+  return undefined;
+});
+
+test('the overlay stamp exists only in contact mode: a normal render page never has [data-sheet-stamp]', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const dir = tmp('stamp-');
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify({ size: [320, 180], scenes: [{ id: 's', duration: 1, elements: [{ id: 'a', type: 'text', text: 'Hi', x: 160, y: 90, fontSize: 40 }] }] }));
+  const srv = await startServer({ specPath: path.join(dir, 'm.json'), mode: 'render' });
+  const browser = await launchBrowser({ quiet: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 320, height: 180 }, deviceScaleFactor: 1 });
+    await page.goto(srv.url);
+    await page.evaluate(() => window.__motion.ready);
+    const count = () => page.evaluate(() => document.querySelectorAll('[data-sheet-stamp]').length);
+    assert.equal(await count(), 0, 'absent after load');
+    await page.evaluate(() => window.__motion.seek(0.5));
+    assert.equal(await count(), 0, 'absent after a seek');
+    const plain = await page.screenshot({ type: 'png' });
+    const again = await page.screenshot({ type: 'png' });
+    assert.deepEqual(again, plain, 'two screenshots of a normal frame are byte-identical');
+    // the guard can fire: the contact-mode hook adds the element and changes the frame
+    await page.evaluate(() => window.__motion.stamp('s \u00b7 0.50s'));
+    assert.equal(await count(), 1);
+    assert.notDeepEqual(await page.screenshot({ type: 'png' }), plain);
+  } finally { await browser.close(); await srv.close(); }
   return undefined;
 });
 

@@ -3,9 +3,9 @@
 // --theme: a shared theme for a spec that names none (a spec's own `theme` wins). The first stdout line names
 // the theme drawn: `theme: <name>`.
 // --model/--effort/--agent override the spec's generatedBy; they are stamped into the MP4 comment/artist tags.
-// With --contact-sheet, --out is a directory; PNGs go to <out>/contact/<scene-id>.png.
+// With --contact-sheet, --out is a directory; one tiled, timestamped PNG per scene goes to <out>/contact/<scene-id>.png.
 import { spawn } from 'node:child_process';
-import { mkdirSync, renameSync, rmSync } from 'node:fs';
+import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { loadSpec, validateSpec, withDefaults, UsageError } from './lib/spec.mjs';
 import { printResult, didYouMean } from '../shared/errors.mjs';
@@ -17,8 +17,8 @@ import { resolveAsset } from './lib/paths.mjs';
 import { withGeneratedBy, provenanceText, buildDate } from '../shared/provenance.mjs';
 import { resolveAudio } from '../template/audio.mjs';
 import { MOTION_THEME } from './lib/default-theme.mjs';
+import { sheetTimes, tileSheet, PHONE_WIDTH } from './lib/sheet.mjs';
 
-const CONTACT_POINT = 0.85;
 const PROGRESS_STEPS = 10;
 const MAX_FPS = 120;
 const MIN_SIDE = 16;
@@ -144,12 +144,18 @@ function startEncoder(ffmpegPath, args) {
   return { write, finish, kill };
 }
 
-async function renderContactSheets(page, p, info) {
+async function renderContactSheets(page, p, info, browser) {
   const outDir = path.join(p.out, 'contact');
   mkdirSync(outDir, { recursive: true });
   for (const [i, scene] of p.spec.scenes.entries()) {
-    await page.evaluate((s) => window.__motion.seek(s), info.sceneStarts[i] + scene.duration * CONTACT_POINT);
-    await page.screenshot({ type: 'png', path: path.join(outDir, `${scene.id}.png`) });
+    const tiles = [];
+    for (const t of sheetTimes(scene, p.fps)) {
+      await page.evaluate(([sec, label]) => { window.__motion.seek(sec); window.__motion.stamp(label); }, [info.sceneStarts[i] + t, `${scene.id} · ${t.toFixed(2)}s`]);
+      tiles.push({ png: await page.screenshot({ type: 'png' }), label: `${scene.id} · ${t.toFixed(2)}s` });
+    }
+    const last = tiles[tiles.length - 1];
+    tiles.push({ ...last, label: `${last.label} · ${PHONE_WIDTH}px phone`, width: Math.min(PHONE_WIDTH, p.size[0]) });
+    writeFileSync(path.join(outDir, `${scene.id}.png`), await tileSheet(browser, tiles));
   }
   process.stdout.write(`${outDir}\n${p.spec.scenes.length} contact sheet(s)\n`);
 }
@@ -209,7 +215,7 @@ async function main() {
   try {
     const page = await openPage(p, server, state);
     const info = await page.evaluate(() => ({ sceneStarts: window.__motion.sceneStarts }));
-    await (p.contact ? renderContactSheets(page, p, info) : renderVideo(page, p, state));
+    await (p.contact ? renderContactSheets(page, p, info, state.browser) : renderVideo(page, p, state));
     return 0;
   } catch (e) {
     if (state.exiting) return new Promise(() => {}); // the signal handler owns the exit
