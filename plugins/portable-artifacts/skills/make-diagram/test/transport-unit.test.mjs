@@ -69,11 +69,11 @@ function load({ playing = () => false, reduced = false } = {}) {
   row.clientWidth = 200;
   const caption = fakeEl(doc, 'aside');
   caption.querySelector = (sel) => parts[sel.slice(1, -1)] ?? null;
-  const state = { at: 0, loop: false };
+  const state = { at: 0, loop: false, speed: 1 };
   const noop = () => {};
   const story = {
     isPresenting: () => true, index: () => state.at, count: () => DATA.beats.length, current: () => DATA.beats[state.at], chapter: () => 0,
-    isPlaying: () => playing(), speed: () => 1, loop: () => state.loop,
+    isPlaying: () => playing(), speed: () => state.speed, loop: () => state.loop,
     goTo: noop, prev: noop, next: noop, exit: noop, prevChapter: noop, nextChapter: noop, togglePlay: noop, cycleSpeed: noop, toggleLoop: noop, pause: noop,
   };
   // The row clamps scrollLeft at 0 as a browser does, and a chip's rect moves with the row's scroll:
@@ -176,7 +176,9 @@ test('the ring survives paint() and a speed change mid-hold', () => {
   transport.hold(1800);
   const ring = ringOf(parts['data-pa-next']);
   const arc = arcOf(ring);
+  state.speed = 2;
   transport.paint(); // what a speed or loop change calls (via onStep)
+  state.speed = 0.5;
   state.at = 2; // a beat later with the hold still running is impossible, but paint must not care
   transport.paint();
   assert.equal(arcOf(ring), arc);

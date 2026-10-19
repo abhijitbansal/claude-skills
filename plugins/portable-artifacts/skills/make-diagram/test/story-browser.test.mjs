@@ -763,8 +763,7 @@ test('the ring survives a speed change and a loop toggle mid-hold; on the last b
   await page.keyboard.press('Space'); // pause (focus is on a button: Space is play/pause there too)
   await page.click('[data-pa-loop]'); // loop off again
   await page.click('[data-pa-speed]');
-  await page.click('[data-pa-speed]');
-  await page.click('[data-pa-speed]'); // back to 1x
+  await page.click('[data-pa-speed]'); // 1.5x -> 2x -> 0.5x: the last beat holds 3.6 s or more, room for the steps below
   await page.keyboard.press('End');
   await page.evaluate(() => document.activeElement.blur());
   await page.keyboard.press('Space');
@@ -801,6 +800,42 @@ test('under reduced motion the ring is a static half fill: no animation', async 
   assert.ok(box.width >= 10, 'and it is visible');
   await page.keyboard.press('Space');
   assert.equal(await page.locator('.pa-ring').count(), 0);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+// The ring never moves the controls: Next reserves its slot, so what follows it keeps its x.
+test('the transport does not shift when the ring comes and goes: Next chapter and the scrubber keep their place', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url, { init: SPY_RING });
+  const edges = () => page.evaluate(() => ['[data-pa-next]', '[data-pa-next-chapter]', '[data-pa-scrub]', '[data-pa-speed]', '[data-pa-exit]']
+    .map((s) => { const r = document.querySelector(s).getBoundingClientRect(); return [s, r.left, r.right]; }));
+  await page.keyboard.press('p');
+  const paused = await edges();
+  await page.keyboard.press('Space');
+  await waitRing(page, '[data-pa-next]');
+  const holding = await edges();
+  assert.deepEqual(holding, paused, 'a hold starting moves nothing');
+  await page.waitForFunction(() => !document.querySelector('.pa-ring'), null, { timeout: 8000 }); // the hold ends: next beat's glide
+  assert.deepEqual(await edges(), paused, 'a hold ending moves nothing');
+  await page.keyboard.press('Space');
+  assert.deepEqual(await edges(), paused, 'nor does pausing');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('leaving Play mid-hold (Escape, or Exit) takes the ring away and cancels its animation', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url, { init: SPY_RING });
+  for (const leave of ['Escape', 'Exit']) {
+    await page.keyboard.press('p');
+    await page.keyboard.press('Space');
+    await waitRing(page, '[data-pa-next]');
+    if (leave === 'Escape') await page.keyboard.press('Escape'); else await page.click('[data-pa-exit]');
+    assert.equal(await page.locator('.pa-ring').count(), 0, `${leave}: no ring in Explore`);
+    assert.equal((await ringAnims(page)).at(-1).state, 'idle', `${leave}: the animation was cancelled`);
+    assert.equal(await page.isVisible('[data-pa-caption]'), false, `${leave}: out of Play`);
+  }
   assert.deepEqual(problems, []);
   await context.close();
 });
