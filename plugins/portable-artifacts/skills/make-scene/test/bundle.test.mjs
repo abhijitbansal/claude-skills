@@ -83,3 +83,17 @@ test('three version errors when neither installed nor pinned', (t) => {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   assert.throws(() => threeVersion(dir), /cannot determine three version/);
 });
+
+test('bundle carries three.js licence notice (MIT requires it in every copy)', () => {
+  const text = readBundle();
+  assert.match(text, /@license[\s\S]{0,40}Copyright[^\n]*Three\.js Authors/, 'three copyright line missing from the bundle');
+  assert.match(text, /SPDX-License-Identifier: MIT/, 'three SPDX identifier missing from the bundle');
+});
+
+test('a built page inlines the licence notice with the bundle', async (t) => {
+  const { buildWorldPage } = await import('./helpers/browser.mjs');
+  const { file } = await buildWorldPage(t, 'city');
+  const page = fs.readFileSync(file, 'utf8');
+  assert.match(page, /@license[\s\S]{0,40}Copyright[^\n]*Three\.js Authors/, 'built page has no three copyright line');
+  assert.match(page, /SPDX-License-Identifier: MIT/, 'built page has no SPDX identifier');
+});

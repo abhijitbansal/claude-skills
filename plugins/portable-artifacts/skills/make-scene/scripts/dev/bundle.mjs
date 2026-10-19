@@ -13,7 +13,7 @@ try {
     format: 'iife',
     minify: true,
     target: 'es2020',
-    legalComments: 'none',
+    legalComments: 'eof', // three is MIT: its @license / SPDX notice must travel with every inlined copy
     write: false,
   });
   const body = result.outputFiles[0].text;

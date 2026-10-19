@@ -30,7 +30,10 @@ export function linkRows(graph) {
   return (graph.tubes ?? []).filter((t) => t.label !== undefined || t.display !== undefined).map((t) => ({ label: t.label ?? '', display: t.display ?? '' }));
 }
 
-/** createExplore({ host, graph, onFly, onToggle }) -> { el, isOpen, open(), close(), toggle(), retint(palette), destroy() } */
+/**
+ * createExplore({ host, graph, onFly, onToggle }) -> { el, isOpen, open(), close(), toggle(), retint(palette), destroy() }
+ * onToggle(open, { hadFocus }) follows every change; hadFocus is true when focus was inside the panel as it closed.
+ */
 export function createExplore({ host, graph, onFly, onToggle }) {
   const model = exploreModel(graph);
   const links = linkRows(graph);
@@ -95,8 +98,9 @@ export function createExplore({ host, graph, onFly, onToggle }) {
 
   const setOpen = (open) => {
     if (el.hidden !== open) return;
+    const hadFocus = !open && el.contains(el.ownerDocument.activeElement);
     el.hidden = !open;
-    onToggle(open);
+    onToggle(open, { hadFocus });
   };
   closeButton.addEventListener('click', () => setOpen(false));
 

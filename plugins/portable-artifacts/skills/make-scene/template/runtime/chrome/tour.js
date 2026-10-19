@@ -12,12 +12,14 @@ export function dwellFor(beat) {
 }
 
 /**
- * createTour(beats, hooks?) -> { play(), pause(), toggle(), next(), prev(), go(i), state }
+ * createTour(beats, hooks?) -> { play(), pause(), toggle(), next(), prev(), go(i), hold(on), state }
  *
  * `state` is { index, playing, count } read fresh each time; index is -1 until a beat has been shown.
  * hooks.onBeat(beat, { index, instant }) runs whenever a beat is entered: `instant` is true when
  * reducedMotion() is, so the camera cuts to the beat instead of flying. hooks.onChange(state) follows every change.
  * Reaching the last beat while playing stops the tour there; play() at the end starts over.
+ * hold(true) freezes the dwell timer without leaving "playing" (nobody can see the scene: tab hidden, scrolled away);
+ * hold(false) lets the beat's remaining time run out. hooks.now() is the clock that measures it.
  */
 export function createTour(beats, {
   reducedMotion = () => false,
@@ -25,11 +27,15 @@ export function createTour(beats, {
   onChange = noop,
   schedule = (fn, ms) => setTimeout(fn, ms),
   cancel = (id) => clearTimeout(id),
+  now = () => Date.now(),
 } = {}) {
   const count = beats.length;
   let index = -1;
   let playing = false;
   let timer = null;
+  let held = false;
+  let armedAt = 0;
+  let left = null; // ms of the shown beat still to run when a hold interrupted it; null = the full dwell
 
   const snapshot = () => ({ index, playing, count });
   const disarm = () => {
@@ -38,10 +44,13 @@ export function createTour(beats, {
   };
   const arm = () => {
     disarm();
-    if (playing && index >= 0) timer = schedule(advance, dwellFor(beats[index]));
+    if (!playing || index < 0 || held) return;
+    armedAt = now();
+    timer = schedule(advance, left ?? dwellFor(beats[index]));
   };
   function enter(i) {
     index = i;
+    left = null;
     onBeat(beats[i], { index: i, instant: Boolean(reducedMotion()) });
     arm();
     onChange(snapshot());
@@ -54,6 +63,7 @@ export function createTour(beats, {
   function pause() {
     const was = playing;
     playing = false;
+    left = null;
     disarm();
     if (was) onChange(snapshot());
   }
@@ -77,6 +87,14 @@ export function createTour(beats, {
       }
     },
     pause,
+    hold(on) {
+      if (Boolean(on) === held) return;
+      held = Boolean(on);
+      if (held) {
+        if (timer !== null) left = Math.max(0, (left ?? dwellFor(beats[index])) - (now() - armedAt));
+        disarm();
+      } else arm();
+    },
     toggle() {
       if (playing) pause();
       else this.play();

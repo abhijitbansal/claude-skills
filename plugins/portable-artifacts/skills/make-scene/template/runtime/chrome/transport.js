@@ -31,8 +31,12 @@ export function createTransport({ parent, beats, tour }) {
       count.textContent = state.index < 0 ? '' : `${state.index + 1} / ${state.count}`;
       play.textContent = state.playing ? 'Pause' : 'Play';
       play.setAttribute('aria-pressed', String(state.playing));
+      const focus = el.ownerDocument.activeElement;
       prev.disabled = state.index <= 0;
       next.disabled = state.index >= state.count - 1;
+      // A button that has just gone dead must not take the viewer's place with it: hand focus to its neighbour.
+      if (focus === next && next.disabled) (prev.disabled ? close : prev).focus();
+      else if (focus === prev && prev.disabled) (next.disabled ? close : next).focus();
     },
     show: () => {
       el.hidden = false;

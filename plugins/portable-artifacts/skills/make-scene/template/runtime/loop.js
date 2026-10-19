@@ -22,14 +22,25 @@ export function isBusy({ animated = false, reducedMotion = false, damping = fals
  * render(nowMs) draws one frame and returns whether something is still moving (see isBusy).
  * The loop runs only while visible (IntersectionObserver) and active (document not hidden), and stops
  * IDLE_MS after the last busy frame or wake(). wake() starts it again.
+ * `visible` / `active` are the starting states (an observer that has not reported yet is `visible: false`).
+ * viewable() is whether the scene can be seen right now (visible and active); onViewable(fn) calls fn(viewable)
+ * whenever that changes and returns the unsubscribe: what the tour waits on, so it does not run unseen.
  */
-export function createLoop({ render, now, raf, caf }) {
+export function createLoop({ render, now, raf, caf, visible: startVisible = true, active: startActive = true }) {
   let frameId = null;
-  let visible = true;
-  let active = true;
+  let visible = Boolean(startVisible);
+  let active = Boolean(startActive);
   let lastBusy = 0;
+  let announced = visible && active;
+  const listeners = new Set();
 
   const canRun = () => visible && active;
+  function announce() {
+    const now_ = canRun();
+    if (now_ === announced) return;
+    announced = now_;
+    for (const fn of [...listeners]) fn(now_);
+  }
 
   function frame() {
     frameId = null;
@@ -62,11 +73,18 @@ export function createLoop({ render, now, raf, caf }) {
       visible = Boolean(isVisible);
       if (visible) wake();
       else sleep();
+      announce();
     },
     setActive(isActive) {
       active = Boolean(isActive);
       if (active) wake();
       else sleep();
+      announce();
+    },
+    viewable: canRun,
+    onViewable(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
     },
   };
 }

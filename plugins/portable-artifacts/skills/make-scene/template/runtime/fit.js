@@ -116,3 +116,13 @@ export function focusScale(offsetLength, aspect, ceiling) {
   const wanted = offsetLength / Math.min(1, Math.max(aspect, 0.05));
   return Math.max(1, Math.min(wanted, Math.max(ceiling, offsetLength)) / offsetLength);
 }
+
+/** Distance from the target of the closest view in graph.focus ({ key: { position, target } }); Infinity when there is none. */
+export function nearestFocusDistance(focus) {
+  let nearest = Infinity;
+  for (const view of Object.values(focus ?? {})) {
+    const d = Math.hypot(...view.position.map((c, i) => c - view.target[i]));
+    if (d > 0 && d < nearest) nearest = d;
+  }
+  return nearest;
+}

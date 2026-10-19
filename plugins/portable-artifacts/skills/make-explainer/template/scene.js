@@ -11,7 +11,8 @@
     if (host.getAttribute('data-scene-init')) return;
     host.setAttribute('data-scene-init', '1');
     try {
-      PS.mountScene(host, JSON.parse(host.querySelector('script[type="application/json"]').textContent));
+      // embedded: the page scrolls, so the wheel and a vertical swipe pass through the scene (like a diagram figure); full screen takes them.
+      PS.mountScene(host, JSON.parse(host.querySelector('script[type="application/json"]').textContent), { embedded: true });
     } catch (e) {
       console.warn('make-scene: showing the table instead of the 3D view (' + (e && e.message ? e.message : e) + ')');
     }

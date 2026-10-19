@@ -2,7 +2,7 @@
 // defines window.PAScene.mount. Nothing here touches the DOM at load time.
 import { PerspectiveCamera, Raycaster, Scene, Vector2, Vector3, WebGLRenderer } from 'three';
 import { createControls } from './controls.js';
-import { MAX_ELEVATION_CLAMP, alignToStrip, fitDistance, focusScale, framePoints, viewDirection } from './fit.js';
+import { MAX_ELEVATION_CLAMP, alignToStrip, fitDistance, focusScale, framePoints, nearestFocusDistance, viewDirection } from './fit.js';
 import { createLoop, isBusy, pixelRatio } from './loop.js';
 import { createChrome } from './chrome/index.js';
 import { buildObjects } from './render.js';
@@ -47,19 +47,22 @@ function frameOf(graph, aspect) {
 function inert(canvas) {
   return {
     destroy: noop, flyTo: () => false, pick: () => -1, pickHit: () => NO_HIT, project: () => OUT_OF_VIEW,
-    travel: noop, traveller: () => null, onFrame: () => noop, renderNow: noop, wake: noop, canvas,
+    travel: noop, traveller: () => null, onFrame: () => noop, renderNow: noop, wake: noop, setCapture: noop,
+    viewable: () => true, onViewable: () => noop, canvas,
   };
 }
 
 /**
  * mount(host, graph, opts?) -> { destroy(), flyTo(focusKey, { instant }), travel(tubeId, { reverse, instant }), traveller(),
- *   pick(clientX, clientY), pickHit(clientX, clientY), project(x, y, z), onFrame(fn), renderNow(), wake(), canvas }
+ *   pick(clientX, clientY), pickHit(clientX, clientY), project(x, y, z), onFrame(fn), renderNow(), wake(), setCapture(on),
+ *   viewable(), onViewable(fn), canvas }
  *
  * host contains an optional [data-scene-canvas] (where the canvas goes; the host itself if absent), a
  * [data-scene-fallback] element (the semantic table/svg: fully visible until the first good frame and again
  * whenever WebGL is unavailable or lost; visually hidden but still in the accessibility tree while the 3D
  * view works) and any [data-scene-controls] elements (hidden with the canvas).
  * host.dataset.sceneState is "loading", "ready" or "fallback". opts.reducedMotion overrides the media query.
+ * opts.embedded (a scene inside a page that scrolls) leaves the wheel and a vertical swipe to the page until setCapture(true).
  */
 function mount(host, graph, opts = {}) {
   const doc = host.ownerDocument;
@@ -72,7 +75,7 @@ function mount(host, graph, opts = {}) {
   canvas.setAttribute('role', 'img');
   canvas.setAttribute('aria-label', String(graph.title ?? ''));
   canvas.setAttribute('aria-keyshortcuts', 'ArrowLeft ArrowRight ArrowUp ArrowDown'); // the arrows orbit (controls.js)
-  Object.assign(canvas.style, { display: 'block', width: '100%', height: '100%', touchAction: 'none' });
+  Object.assign(canvas.style, { display: 'block', width: '100%', height: '100%' }); // touch-action: setCapture() (after OrbitControls sets its own)
 
   // Hiding goes through inline display: an author `display` on these elements would beat the [hidden] attribute.
   // Showing puts back what the author wrote (original), never a blank that would hand control to the stylesheet.
@@ -229,6 +232,9 @@ function mount(host, graph, opts = {}) {
     }
 
     const loop = createLoop({
+      // An observer that has not reported yet means "not seen": the tour must not start before the scene is on screen.
+      visible: typeof win.IntersectionObserver !== 'function',
+      active: !doc.hidden,
       now: () => win.performance.now(),
       raf: (cb) => win.requestAnimationFrame(cb),
       caf: (id) => win.cancelAnimationFrame(id),
@@ -245,11 +251,12 @@ function mount(host, graph, opts = {}) {
     const wake = (reason) => loop.wake(reason);
 
     controlsApi = createControls({
-      camera, dom: canvas, target, distance, reducedMotion: isReduced, onInput: wake,
+      camera, dom: canvas, target, distance, nearestFocus: nearestFocusDistance(graph.focus), reducedMotion: isReduced, onInput: wake,
       polarMax: graph.env?.sky === 'space' ? Math.PI - MAX_ELEVATION_CLAMP : Math.PI / 2 - MAX_ELEVATION_CLAMP,
       polarMin: graph.env?.sky === 'space' ? MAX_ELEVATION_CLAMP : 0,
     });
     undo.push(() => controlsApi.dispose());
+    controlsApi.setCapture(opts.embedded !== true);
 
     const onLost = (event) => {
       event.preventDefault();
@@ -306,6 +313,12 @@ function mount(host, graph, opts = {}) {
     const api = {
       canvas,
       wake,
+      /** The scene owns the wheel and touch (true), or an embedded one hands them to the page (false). Full screen takes them back. */
+      setCapture: (on) => controlsApi.setCapture(on),
+      /** True while the scene is on screen and the document is showing. */
+      viewable: () => loop.viewable(),
+      /** fn(viewable) whenever the scene is shown or hidden (scrolled out of view, tab hidden). Returns the unsubscribe. */
+      onViewable: (fn) => loop.onViewable(fn),
       /** Fly to graph.focus[key] (keys are lowercased). Returns false for an unknown key. */
       flyTo(focusKey, { instant = false } = {}) {
         const key = String(focusKey).toLowerCase();

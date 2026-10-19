@@ -23,7 +23,8 @@ const SWAY_AMPLITUDE = 0.06; // fraction of a leaf cluster's width
 const WINDOW_CELL = 0.36; // world units per window cell, before fitting to the wall
 const NO_ROTATION = new Quaternion();
 const SKY_SPACE = 'space';
-const PICK_TUBE_FACTOR = 4; // hover radius of a link, in link radii
+const PICK_TUBE_FACTOR = 4; // hover radius of a thin link, in link radii...
+const PICK_TUBE_MARGIN_CAP = 0.25; // ...but never more than this far (world units) beyond the drawn tube: a 0.55 donut segment must not swallow its hole
 const PICK_TUBE_MIN_SHARE = 0.004; // ...and at least this share of the scene's diagonal
 const PICK_MATERIAL = new MeshBasicMaterial(); // never drawn (the pick meshes are invisible); raycasting needs a material
 const LIGHT_MIN_RADIUS = 0.16; // the travelling light: a sphere this big (or a share of the scene's diagonal)...
@@ -327,7 +328,8 @@ export function buildObjects(graph, palette) {
     }
     const item = Number.isInteger(tube.item) ? tube.item : -1;
     if (item < 0 && tube.label === undefined && tube.display === undefined) return;
-    const reach = Math.max(tube.radius * PICK_TUBE_FACTOR, extent.diag * PICK_TUBE_MIN_SHARE);
+    const margin = Math.min(tube.radius * (PICK_TUBE_FACTOR - 1), PICK_TUBE_MARGIN_CAP);
+    const reach = Math.max(tube.radius + margin, extent.diag * PICK_TUBE_MIN_SHARE);
     const pick = new Mesh(track(new TubeGeometry(curve, segments, reach, 4, false)), PICK_MATERIAL);
     pick.visible = false;
     pick.userData = { kind: 'tube', item, tube: ti };

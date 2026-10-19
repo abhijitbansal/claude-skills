@@ -27,6 +27,9 @@ export function createChrome(host, graph, opts = {}) {
   const beats = graph.tour ?? [];
   let api = null;
   let unwatch = null;
+  let unviewable = null;
+  let exploreOpener = null; // the toolbar button that opened a panel (null: a key did), so closing it gives focus back
+  let tourOpener = null;
 
   const status = h('p', { class: 'sc-status', role: 'status', hidden: true });
   const exploreButton = button('Explore', { 'aria-keyshortcuts': 'E', title: 'Explore every group and item (E)' });
@@ -42,14 +45,18 @@ export function createChrome(host, graph, opts = {}) {
   const tooltip = createTooltip({ host, graph });
   const legend = createLegend({ parent: bottom, graph });
   const labels = createLabels({ host, graph });
+  // A panel that held focus has just hidden: focus goes back to the button that opened it, else to the canvas, never to the page.
+  const focusBack = (opener) => (opener ?? api?.canvas)?.focus();
   const fly = (key, instant = false) => api?.flyTo(key, { instant: instant || reduced() });
   const explore = createExplore({
     host,
     graph,
     onFly: (key) => fly(key),
-    onToggle: (open) => {
+    onToggle: (open, { hadFocus = false } = {}) => {
       tooltip.hide();
       exploreButton.setAttribute('aria-pressed', String(open));
+      if (open) exploreOpener = doc.activeElement === exploreButton ? exploreButton : null;
+      else if (hadFocus) focusBack(exploreOpener);
       api?.wake('chrome');
     },
   });
@@ -69,12 +76,14 @@ export function createChrome(host, graph, opts = {}) {
   }
   const fullscreen = createFullscreen(host, () => {
     fullButton.setAttribute('aria-pressed', String(fullscreen.isOn()));
+    if (opts.embedded) api?.setCapture(fullscreen.isOn()); // an embedded scene owns the wheel and touch only in full screen
     api?.wake('resize');
   });
 
   function openTour(play = false) {
     if (!transport) return;
     tooltip.hide();
+    if (!transport.isShown()) tourOpener = doc.activeElement === tourButton ? tourButton : null;
     transport.show();
     host.classList.add('sc-touring');
     tourButton.setAttribute('aria-pressed', 'true');
@@ -82,9 +91,11 @@ export function createChrome(host, graph, opts = {}) {
     else tour.go(0);
   }
   function closeTour() {
+    const hadFocus = transport.el.contains(doc.activeElement);
     tour.pause();
     api?.travel(null);
     transport.hide();
+    if (hadFocus) focusBack(tourOpener);
     host.classList.remove('sc-touring');
     tourButton.setAttribute('aria-pressed', 'false');
   }
@@ -135,12 +146,30 @@ export function createChrome(host, graph, opts = {}) {
       api = scene;
       tooltip.bind(scene);
       labels.bind(scene);
+      // The dwell timer runs only while the scene can be seen, and an autoplaying tour starts when it first can.
+      unviewable = scene.onViewable((viewable) => tour.hold(!viewable));
+      if (!scene.viewable()) tour.hold(true);
       const wantsAutoplay = host.hasAttribute('data-autoplay') && transport && !reduced();
-      if (wantsAutoplay && host.dataset.sceneState !== FALLBACK_STATE) openTour(true);
+      const autoplay = () => (host.dataset.sceneState === FALLBACK_STATE ? undefined : openTour(true));
+      if (!wantsAutoplay) return;
+      if (scene.viewable()) autoplay();
+      else {
+        const off = scene.onViewable((viewable) => {
+          if (!viewable) return;
+          off();
+          autoplay();
+        });
+        const stop = unviewable;
+        unviewable = () => {
+          stop();
+          off();
+        };
+      }
     },
     destroy() {
       keyTarget.removeEventListener('keydown', onKey);
       unwatch?.();
+      unviewable?.();
       tour.pause();
       fullscreen.destroy();
       tooltip.destroy();
