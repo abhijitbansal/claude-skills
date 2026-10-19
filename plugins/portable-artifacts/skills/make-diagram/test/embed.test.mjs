@@ -62,11 +62,12 @@ test('a sequence mounts the same way', async (t) => {
 
 test('the viewer forwards the story hold hooks to the transport: hold(ms) on play, holdEnd() on pause', async (t) => {
   if (!(await haveBrowser())) return t.skip('no browser');
-  // Task 4's transport gains hold/holdEnd; until then a spy wraps the factory and adds them.
+  // A spy wraps the transport's real hold/holdEnd: the log proves the viewer forwards the hooks and the originals still run (this embed passes no caption, so no ring shows).
   const spy = `window.holdLog = []; var make = PADiagram.transport; PADiagram.transport = function () {
     var tr = make.apply(this, arguments);
-    tr.hold = function (ms) { window.holdLog.push(['hold', ms]); };
-    tr.holdEnd = function () { window.holdLog.push(['end']); };
+    var h = tr.hold; var e = tr.holdEnd;
+    tr.hold = function (ms) { window.holdLog.push(['hold', ms]); return h.call(tr, ms); };
+    tr.holdEnd = function () { window.holdLog.push(['end']); return e.call(tr); };
     return tr;
   };`;
   const { page, problems } = await embedPage(example('architecture'), spy);
@@ -79,7 +80,9 @@ test('the viewer forwards the story hold hooks to the transport: hold(ms) on pla
   assert.equal(first[0], 'hold');
   assert.ok(first[1] >= 1800 && first[1] <= 4500, `hold ms ${first[1]} within HOLD_MS..HOLD_MAX_MS`);
   await page.keyboard.press('Space'); // pause
-  assert.equal((await page.evaluate(() => window.holdLog)).filter((e) => e[0] === 'end').length, 1, 'pausing ends the hold once');
+  const log = await page.evaluate(() => window.holdLog);
+  assert.equal(log.filter((e) => e[0] === 'end').length, log.filter((e) => e[0] === 'hold').length, 'every hold ended, pausing included (a slow runner may have advanced a beat first)');
+  assert.deepEqual(log.at(-1), ['end'], 'pausing ended the last hold');
   assert.deepEqual(problems, []);
   await page.close();
 });

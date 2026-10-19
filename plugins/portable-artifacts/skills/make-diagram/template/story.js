@@ -239,9 +239,8 @@
       camera.unfit();
       camera.moveTo(targetOf(beat, seen), { ms: glide });
       var hold = function () {
+        if (token !== run) return; // a dot frame that outlived its run
         var ms = holdMs(beat);
-        // only a hold that will advance is reported: one armed while paused never moves on
-        if (playing) { inHold = true; if (hooks.onHold) hooks.onHold(ms); }
         later(token, ms, function () {
           endHold();
           if (!playing) return;
@@ -249,6 +248,8 @@
           else if (loop) goTo(0);
           else pause();
         });
+        // only a hold armed while playing is reported: one armed while paused never moves on
+        if (playing) { inHold = true; if (hooks.onHold) hooks.onHold(ms); }
       };
       later(token, instant ? 0 : glide, function () {
         if (beat.kind === 'hop' && !instant) travel(beat, DOT_MS / speed, hold); else hold();

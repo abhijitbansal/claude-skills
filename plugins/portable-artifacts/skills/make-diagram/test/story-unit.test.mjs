@@ -172,11 +172,17 @@ test('reframe keeps the running beat: the camera glides to the same target again
 
 // ---- hold hooks: onHold(ms) / onHoldEnd() ---------------------------------------------------
 // A step beat has no dot, so one fired timer (the glide) reaches the hold.
+// `calls` holds the hold hooks only; `order` also records onStep (the transport repaint).
 function holdHarness(data, speed) {
   const calls = [];
-  const h = load(data, { onHold: (ms) => calls.push(['hold', ms]), onHoldEnd: () => calls.push(['end']) });
+  const order = [];
+  const h = load(data, {
+    onHold: (ms) => { calls.push(['hold', ms]); order.push('hold'); },
+    onHoldEnd: () => { calls.push(['end']); order.push('end'); },
+    onStep: () => order.push('step'),
+  });
   if (speed) h.story.setSpeed(speed);
-  return { ...h, calls };
+  return { ...h, calls, order };
 }
 const captioned = (n) => ({ ...STEPS, beats: [
   beat('step', { title: 'One', ids: ['a'], reveal: ['a'], caption: 'x'.repeat(n) }),
@@ -199,11 +205,13 @@ test('speed 2x halves the reported ms', () => {
 });
 
 test('pause during a hold fires onHoldEnd before anything else', () => {
-  const { story, timers, calls } = holdHarness(captioned(50));
+  const { story, timers, calls, order } = holdHarness(captioned(50));
   story.play();
   timers.at(-1).fn();
   calls.length = 0;
+  order.length = 0;
   story.pause();
+  assert.deepEqual(order, ['end', 'step'], 'the hold ends before the transport repaints');
   assert.deepEqual(calls, [['end']]);
   story.pause();
   assert.deepEqual(calls, [['end']], 'a second pause is a no-op: the hold ended exactly once');
@@ -242,4 +250,93 @@ test('the last beat with loop off fires onHold then onHoldEnd when the hold expi
   timers.at(-1).fn(); // last beat, loop off: the hold expires into pause()
   assert.equal(story.isPlaying(), false);
   assert.deepEqual(calls, [['hold', 3300], ['end']], 'ended exactly once, not once for expiry and again for pause');
+});
+
+test('exit during a hold fires onHoldEnd once', () => {
+  const { story, timers, calls } = holdHarness(captioned(50));
+  story.play();
+  timers.at(-1).fn();
+  calls.length = 0;
+  story.exit();
+  assert.deepEqual(calls, [['end']]);
+  story.exit();
+  assert.deepEqual(calls, [['end']], 'a second exit is a no-op');
+});
+
+test('the last beat with loop on: the hold ends at expiry, then beat 0 holds after its glide', () => {
+  const { story, timers, calls } = holdHarness(captioned(50));
+  story.setLoop(true);
+  story.play();
+  timers.at(-1).fn(); // beat 0 hold
+  timers.at(-1).fn(); // expiry into beat 1
+  timers.at(-1).fn(); // beat 1 glide over: its hold
+  calls.length = 0;
+  timers.at(-1).fn(); // the last beat's hold expires into goTo(0)
+  assert.deepEqual(calls, [['end']], 'ended at once; beat 0 is still gliding');
+  assert.equal(story.index(), 0);
+  timers.at(-1).fn(); // beat 0's glide over
+  assert.deepEqual(calls, [['end'], ['hold', 3300]]);
+});
+
+test('a hold armed while paused reports nothing; play() on that beat reports exactly one hold and the stale timer does nothing', () => {
+  const { story, timers, calls } = holdHarness(captioned(50));
+  story.present(0);
+  timers.at(-1).fn(); // paused: the hold timer is armed
+  const stale = timers.at(-1);
+  assert.deepEqual(calls, []);
+  story.play();
+  assert.deepEqual(calls, [], 'play re-runs the beat from its glide');
+  timers.at(-1).fn();
+  assert.deepEqual(calls, [['hold', 3300]]);
+  stale.fn();
+  assert.deepEqual(calls, [['hold', 3300]], 'the stale paused timer is dead');
+  assert.equal(story.index(), 0);
+});
+
+test('setSpeed mid-hold fires nothing; the next beat reports the new ms', () => {
+  const { story, timers, calls } = holdHarness(captioned(50));
+  story.play();
+  timers.at(-1).fn();
+  calls.length = 0;
+  story.setSpeed(2);
+  assert.deepEqual(calls, [], 'the hold under way keeps its clock');
+  timers.at(-1).fn(); // expiry into beat 1
+  assert.deepEqual(calls, [['end']]);
+  assert.equal(timers.at(-1).ms, 150, 'beat 1 glides at the new speed');
+  timers.at(-1).fn();
+  assert.deepEqual(calls, [['end'], ['hold', 1650]]);
+});
+
+test('a hop beat reports its hold after the dot lands, not before', () => {
+  const { story, timers, frames, calls } = holdHarness(HOPS);
+  story.play();
+  timers.at(-1).fn(); // glide over: the dot sets off
+  assert.deepEqual(calls, [], 'no hold while the dot travels');
+  const first = frames.length - 1;
+  frames[first](0);
+  frames[first + 1](899);
+  assert.deepEqual(calls, []);
+  frames[first + 2](900);
+  assert.deepEqual(calls, [['hold', 1800]]);
+});
+
+test('a dot frame that outlives its run reports no hold', () => {
+  const { story, timers, frames, calls } = holdHarness(HOPS);
+  story.play();
+  timers.at(-1).fn(); // the dot sets off
+  const first = frames.length - 1;
+  frames[first](0);
+  story.goTo(1); // a new run; the fake cancelAnimationFrame cancels nothing
+  frames[first + 1](900); // the old dot lands anyway
+  assert.deepEqual(calls, [], 'a stale landing neither reports a hold nor leaves one open');
+  story.pause();
+  assert.deepEqual(calls, [], 'and pausing has no hold to end');
+});
+
+test('a throwing onHold still leaves the hold timer armed', () => {
+  const h = load(captioned(50), { onHold: () => { throw new Error('hook'); } });
+  h.story.play();
+  const before = h.timers.length;
+  assert.throws(() => h.timers.at(-1).fn(), /hook/);
+  assert.equal(h.timers.length, before + 1, 'the timer was armed before the hook ran');
 });

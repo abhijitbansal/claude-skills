@@ -14,7 +14,13 @@
 // data-pa-play (an icon button: aria-label reads Play or Pause, and its
 // span.pa-playicon holds the svg paint() swaps),
 // data-pa-speed (0.5× ... 2×), data-pa-loop (aria-pressed). Text goes in as
-// textContent, never markup (the play icon's svg is the one constant exception).
+// textContent, never markup (the play icon and ring svgs are the constant exceptions).
+//
+// The returned object also has hold(ms) and holdEnd(), which the story's
+// onHold / onHoldEnd hooks call: a span.pa-ring (aria-hidden) fills over ms inside
+// the control that fires next, Next, or Play on the last beat with loop on, and
+// is absent on the last beat with loop off. paint() re-places a running ring but
+// never restarts it.
 (function (global) {
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
@@ -23,6 +29,12 @@
   // Both use currentColor, so every theme and the light/dark toggle recolor them.
   var PLAY_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path d="M7 4.5v15l13-7.5z"/></svg>';
   var PAUSE_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><rect x="6" y="4.5" width="4.2" height="15" rx="1"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1"/></svg>';
+
+  // The hold ring: a track and an arc of pathLength 100; the arc's dash offset
+  // runs 100 (empty) to 0 (full). The arc colour and the ring's size come from CSS.
+  var RING_SVG = '<svg viewBox="0 0 24 24" focusable="false"><circle class="pa-ring-track" cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3"/><circle class="pa-ring-arc" cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" transform="rotate(-90 12 12)"/></svg>';
+  var RING_EMPTY = 100;
+  var RING_STATIC = 50; // reduced motion: half filled, a cue that the story moves on, no motion
 
   var pad2 = function (n) { return (n < 10 ? '0' : '') + n; };
 
@@ -99,6 +111,56 @@
       button.setAttribute('aria-label', playing ? 'Pause' : 'Play');
     }
 
+    // ---- the hold ring ------------------------------------------------------------------
+    var ring = null;
+    var arc = null;
+    var ringAnimation = null;
+    var holding = false; // between hold() and holdEnd(): paint() may place the ring only then
+    var reducedMotion = function () {
+      return !!(global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    };
+    // Where the ring belongs: the control that fires next. Nothing follows the last beat unless it loops.
+    function ringTarget() {
+      if (story.index() < story.count() - 1) return part('data-pa-next');
+      return story.loop() ? part('data-pa-play') : null;
+    }
+    // Moves a ring that is running; leaves it be when the target did not change.
+    function placeRing() {
+      if (!ring || !holding) return;
+      var to = ringTarget();
+      if (to === ring.parentNode) return;
+      if (ring.parentNode) ring.parentNode.removeChild(ring);
+      if (to) to.appendChild(ring);
+    }
+    // Ends the animation and takes the ring away. It runs while the story still reports
+    // playing (the hook fires inside cancelRun), so it never repaints: onStep does that.
+    function holdEnd() {
+      if (ringAnimation) ringAnimation.cancel();
+      ringAnimation = null;
+      holding = false;
+      if (ring && ring.parentNode) ring.parentNode.removeChild(ring);
+    }
+    function hold(ms) {
+      holdEnd();
+      if (!(ms > 0)) return;
+      if (!ring) {
+        ring = doc.createElement('span');
+        ring.className = 'pa-ring';
+        ring.setAttribute('aria-hidden', 'true');
+        ring.innerHTML = RING_SVG;
+        arc = ring.querySelector('.pa-ring-arc');
+      }
+      if (!arc) return;
+      holding = true;
+      if (reducedMotion() || !arc.animate) {
+        arc.setAttribute('stroke-dashoffset', String(RING_STATIC));
+      } else {
+        arc.setAttribute('stroke-dashoffset', String(RING_EMPTY));
+        ringAnimation = arc.animate([{ strokeDashoffset: RING_EMPTY }, { strokeDashoffset: 0 }], { duration: ms, easing: 'linear', fill: 'forwards' });
+      }
+      placeRing();
+    }
+
     function paint() {
       var presenting = story.isPresenting();
       if (caption) caption.hidden = !presenting;
@@ -129,6 +191,7 @@
       }
       mark(beatChips, beatRow, i);
       mark(chapterChips, chaptersEl, story.chapter());
+      placeRing();
     }
     function wire(name, fn) {
       var b = part(name);
@@ -152,6 +215,6 @@
       });
     }
     paint();
-    return { paint: paint };
+    return { paint: paint, hold: hold, holdEnd: holdEnd };
   };
 })(window);

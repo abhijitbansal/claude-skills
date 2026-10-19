@@ -637,3 +637,23 @@ test('an inline figure of a narrow diagram still shows its whole legend at rest'
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+test('the overlay gives Next a progress ring while a story plays, and takes it away on pause', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(storyPage().url, { reducedMotion: 'no-preference' });
+  await page.locator('[data-dg-present]').click();
+  assert.equal(await page.locator(`${DLG} .pa-ring`).count(), 0, 'paused: no ring');
+  await page.keyboard.press('Space'); // focus starts on Play
+  await page.waitForSelector(`${DLG} [data-pa-next] .pa-ring`, { state: 'attached', timeout: 6000 });
+  const geo = await page.evaluate(() => {
+    const n = document.querySelector('[data-dg-dialog] [data-pa-next]').getBoundingClientRect();
+    const r = document.querySelector('[data-dg-dialog] [data-pa-next] .pa-ring').getBoundingClientRect();
+    return { w: r.width, h: r.height, inside: r.left >= n.left && r.right <= n.right && r.top >= n.top && r.bottom <= n.bottom };
+  });
+  assert.ok(geo.w >= 10 && geo.h >= 10 && geo.inside, `ring ${geo.w}x${geo.h} sits inside Next`);
+  assert.equal(await page.locator(`${DLG} [data-pa-next]`).textContent(), 'Next');
+  await page.keyboard.press('Space'); // pause
+  assert.equal(await page.locator(`${DLG} .pa-ring`).count(), 0, 'no ring after pause');
+  assert.deepEqual(problems, []);
+  await context.close();
+});

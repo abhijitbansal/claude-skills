@@ -706,3 +706,101 @@ test('Play: stepping to a later chapter scrolls its chip into view in the chapte
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+// ---- the hold-progress ring ---------------------------------------------------------------------
+// Records every WAAPI animation the ring's arc starts, so a test can read its timing and state.
+const SPY_RING = () => {
+  const orig = Element.prototype.animate;
+  window.__ring = [];
+  Element.prototype.animate = function (...a) {
+    const an = orig.apply(this, a);
+    if (this.classList && this.classList.contains('pa-ring-arc')) window.__ring.push(an);
+    return an;
+  };
+};
+const ringsIn = (page, sel) => page.locator(`${sel} .pa-ring`).count();
+const ringAnims = (page) => page.evaluate(() => window.__ring.map((a) => ({ state: a.playState, ms: a.effect.getTiming().duration, t: a.currentTime })));
+const waitRing = (page, sel) => page.waitForSelector(`${sel} .pa-ring`, { state: 'attached', timeout: 6000 });
+
+test('a ring fills inside Next while the story plays; gone after pause, and never in Explore', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url, { init: SPY_RING });
+  assert.equal(await page.locator('.pa-ring').count(), 0, 'no ring in Explore');
+  await page.keyboard.press('p');
+  assert.equal(await page.locator('.pa-ring').count(), 0, 'none in a paused Play');
+  await page.keyboard.press('Space');
+  await waitRing(page, '[data-pa-next]');
+  assert.equal(await page.getAttribute('[data-pa-next] .pa-ring', 'aria-hidden'), 'true');
+  const [anim] = (await ringAnims(page)).slice(-1);
+  assert.equal(anim.state, 'running');
+  assert.ok(anim.ms >= 1800 && anim.ms <= 4500, `fills over the hold: ${anim.ms} ms`);
+  const geo = await page.evaluate(() => {
+    const n = document.querySelector('[data-pa-next]').getBoundingClientRect();
+    const r = document.querySelector('[data-pa-next] .pa-ring').getBoundingClientRect();
+    return { n, r };
+  });
+  assert.ok(geo.r.width >= 10 && geo.r.height >= 10, `ring is visible: ${geo.r.width}x${geo.r.height}`);
+  assert.ok(geo.r.left >= geo.n.left && geo.r.right <= geo.n.right && geo.r.top >= geo.n.top && geo.r.bottom <= geo.n.bottom, 'ring sits inside Next');
+  assert.equal(await page.textContent('[data-pa-next]'), 'Next', 'the label is unchanged');
+  await page.keyboard.press('Space'); // pause
+  assert.equal(await page.locator('.pa-ring').count(), 0, 'no ring after pause');
+  assert.equal((await ringAnims(page)).at(-1).state, 'idle', 'the animation was cancelled');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('the ring survives a speed change and a loop toggle mid-hold; on the last beat it lives in Play only with loop on', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url, { init: SPY_RING });
+  await page.keyboard.press('p');
+  await page.keyboard.press('Space');
+  await waitRing(page, '[data-pa-next]');
+  const before = (await ringAnims(page)).length;
+  await page.click('[data-pa-speed]'); // 1.5x, mid-hold
+  await page.click('[data-pa-loop]');
+  assert.equal(await ringsIn(page, '[data-pa-next]'), 1, 'still one ring under Next');
+  assert.equal((await ringAnims(page)).length, before, 'neither change restarted the fill');
+  await page.keyboard.press('Space'); // pause (focus is on a button: Space is play/pause there too)
+  await page.click('[data-pa-loop]'); // loop off again
+  await page.click('[data-pa-speed]');
+  await page.click('[data-pa-speed]');
+  await page.click('[data-pa-speed]'); // back to 1x
+  await page.keyboard.press('End');
+  await page.evaluate(() => document.activeElement.blur());
+  await page.keyboard.press('Space');
+  await page.waitForFunction(() => window.__ring.length > 0 && document.querySelector('[data-pa-count]').textContent === '9 / 9');
+  await page.waitForFunction(() => window.__ring.at(-1).playState === 'running');
+  assert.equal(await page.locator('.pa-ring').count(), 0, 'last beat, loop off: no ring');
+  const t0 = (await ringAnims(page)).at(-1).t;
+  const n = (await ringAnims(page)).length;
+  await page.click('[data-pa-loop]');
+  assert.equal(await ringsIn(page, '[data-pa-play]'), 1, 'loop on: the ring appears in Play');
+  assert.equal(await ringsIn(page, '[data-pa-next]'), 0);
+  const after = await ringAnims(page);
+  assert.equal(after.length, n, 'not restarted');
+  assert.ok(after.at(-1).state === 'running' && after.at(-1).t >= t0, 'the same animation kept running');
+  assert.equal(await page.getAttribute('[data-pa-play]', 'aria-label'), 'Pause', 'the icon is untouched by the ring');
+  assert.equal(await page.locator('[data-pa-play] .pa-playicon svg').count(), 1);
+  await page.click('[data-pa-loop]');
+  assert.equal(await page.locator('.pa-ring').count(), 0, 'loop off again: the ring goes');
+  await page.keyboard.press('Space');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('under reduced motion the ring is a static half fill: no animation', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url, { reducedMotion: 'reduce', init: SPY_RING });
+  await page.keyboard.press('p');
+  await page.keyboard.press('Space');
+  await waitRing(page, '[data-pa-next]');
+  assert.equal(await page.getAttribute('[data-pa-next] .pa-ring-arc', 'stroke-dashoffset'), '50');
+  assert.equal((await ringAnims(page)).length, 0, 'nothing animates');
+  assert.equal(await page.evaluate(() => document.querySelector('[data-pa-next] .pa-ring-arc').getAnimations().length), 0);
+  const box = await page.locator('[data-pa-next] .pa-ring').boundingBox();
+  assert.ok(box.width >= 10, 'and it is visible');
+  await page.keyboard.press('Space');
+  assert.equal(await page.locator('.pa-ring').count(), 0);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
