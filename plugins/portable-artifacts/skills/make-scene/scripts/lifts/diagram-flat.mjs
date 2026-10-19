@@ -2,7 +2,7 @@
 // 2D px / 40 -> world units; ELK x -> x, ELK y -> z. Nodes are blocks (shape and height by kind), groups are
 // platforms raised by depth, edges are tubes along ELK's edge points at y = TUBE_Y.
 import { emptyGraph, finalizeGraph } from '../lib/graph.mjs';
-import { TUBE_RADIUS, blockOf, cameraFor, colourOfStyle, displayOf, focusFrom, kindGroups, oneLine, px, rounded, viewOf } from './diagram-parts.mjs';
+import { TUBE_RADIUS, blockOf, cameraFor, colourOfStyle, displayOf, focusFrom, kindGroups, oneLine, px, rounded, routeView, viewOf } from './diagram-parts.mjs';
 
 const TUBE_Y = 0.3;
 const PLATFORM_COLOUR = 'line';
@@ -11,7 +11,9 @@ const PLATFORM_RISE = 0.1; // each nesting level stands this much higher than it
 const LABEL_RISE = 0.15;
 const NODE_LABEL_SIZE = 0.45;
 const GROUP_LABEL_SIZE = 0.5;
-const VIEW_DIRECTION = [0.25, 0.9, 1];
+const GROUP_LABEL_CHAR = 0.3; // world width of one character of a group label, roughly
+const GROUP_LABEL_PAD = 0.25;
+const VIEW_DIRECTION = [0.15, 1.25, 1]; // about 50 degrees up: a wide, flat layout reads as a plan, never edge-on
 const NODE_VIEW_MIN = 12;
 const NODE_VIEW_PER_UNIT = 1.8;
 const NODE_VIEW_MARGIN = 6;
@@ -32,6 +34,7 @@ function tubesOf(geometry, names, at) {
       colour: colourOfStyle(e.style),
       item: null,
       label: e.label ? oneLine(e.label.text) : ends,
+      arrow: e.both ? 'both' : 'end',
     };
     return e.label ? { ...tube, display: ends } : tube;
   });
@@ -71,7 +74,11 @@ export function flatGraph(built, spec) {
     const [x, z] = [at.x(g.x + g.width / 2), at.z(g.y + g.height / 2)];
     const top = topOfDepth(g.depth);
     platform.instances.push([x, top - PLATFORM_THICKNESS / 2, z, w, PLATFORM_THICKNESS, d, -1]);
-    labels.push({ text: oneLine(g.label), at: [x, top, z - d / 2 + LABEL_RISE], size: GROUP_LABEL_SIZE });
+    // At the platform's back-left corner, where a nested group's label cannot land on its parent's: the label is
+    // centred on its anchor, so the anchor sits half its width in from the corner.
+    const text = oneLine(g.label);
+    const half = Math.min(w / 2, (GROUP_LABEL_CHAR * text.length) / 2 + GROUP_LABEL_PAD);
+    labels.push({ text, at: [x - w / 2 + half, top, z - d / 2 + LABEL_RISE], size: GROUP_LABEL_SIZE });
     groupViews.push([g.id, viewOf([x, top, z], VIEW_DIRECTION, GROUP_VIEW_PER_UNIT * Math.hypot(w, d) + GROUP_VIEW_MARGIN)]);
   });
 
@@ -81,7 +88,8 @@ export function flatGraph(built, spec) {
   g.batches = platform.instances.length > 0 ? [...batches, platform] : batches;
   g.tubes = tubesOf(geometry, names, at);
   g.labels = labels;
-  g.focus = focusFrom([...nodeViews, ...groupViews], geometry.nodes.map((n, i) => [items[i].label, nodeViews[i][1]]));
+  const edgeViews = g.tubes.map((t) => [t.id, routeView(t.points, VIEW_DIRECTION)]);
+  g.focus = focusFrom([...nodeViews, ...groupViews, ...edgeViews], geometry.nodes.map((n, i) => [items[i].label, nodeViews[i][1]]));
   const done = finalizeGraph(g);
   return finalizeGraph({ ...done, camera: cameraFor(done.bounds, VIEW_DIRECTION) });
 }

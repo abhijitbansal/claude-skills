@@ -113,6 +113,18 @@ export function viewOf(target, dir, distance) {
   return { position: target.map((c, a) => c + d[a] * distance), target };
 }
 
+const ROUTE_VIEW_MIN = 11;
+const ROUTE_VIEW_PER_UNIT = 2.2; // a view is authored for a square viewport, the route's ends within 55% of the half-frame; the runtime widens it for a narrower one
+const ROUTE_VIEW_MARGIN = 1.5; // room for the blocks at both ends
+
+/** A view that takes in a whole route (both end blocks and everything between): its middle, from `dir`, far enough back for its extent. */
+export function routeView(points, dir) {
+  const lo = [0, 1, 2].map((a) => Math.min(...points.map((p) => p[a])));
+  const hi = [0, 1, 2].map((a) => Math.max(...points.map((p) => p[a])));
+  const reach = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+  return viewOf(lo.map((c, a) => (c + hi[a]) / 2), dir, Math.max(ROUTE_VIEW_MIN, ROUTE_VIEW_PER_UNIT * (reach + ROUTE_VIEW_MARGIN)));
+}
+
 /** Focus keys: ids first (lowercased), then labels that are not already a key; the first view wins. */
 export function focusFrom(idViews, labelViews) {
   const out = new Map();

@@ -7,6 +7,7 @@ import { seedFrom } from '../shared/art.mjs';
 import { WORLDS } from '../scripts/worlds/index.mjs';
 import { assertGraph } from '../scripts/lib/graph.mjs';
 import { groupColour } from '../scripts/lib/palette.mjs';
+import { boxOfInstance, segmentHitsBox } from '../scripts/lib/views.mjs';
 
 const GOLDEN_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'golden');
 const SPEC = { title: 'Commits per folder', units: 'commits' };
@@ -144,6 +145,27 @@ test('city: night lights on, window density tracks value, every district has a f
   assert.equal(g.fallback.rows.length, 72);
 });
 
+test('city focus: nothing but the target itself stands between the camera and a district or a labelled building', () => {
+  const labelled = fixture();
+  labelled.rows = labelled.rows.map((r, i) => (i % 17 === 3 ? { ...r, label: `row ${i}` } : r));
+  for (const data of [labelled, { rows: labelled.rows.filter((r) => r.group !== 'docs' && r.group !== 'infra'), links: [] }]) {
+    const g = WORLDS.city(data, SPEC);
+    const buildings = g.batches.flatMap((b) => b.instances).filter((inst) => inst[6] >= 0);
+    const groupKeys = new Map(g.groups.map((grp, gi) => [grp.name.toLowerCase(), gi]));
+    let checked = 0;
+    for (const [key, view] of Object.entries(g.focus)) {
+      const own = groupKeys.has(key) ? (inst) => g.items[inst[6]].group === groupKeys.get(key) : (inst) => g.items[inst[6]].label.toLowerCase() === key;
+      const blockers = buildings.filter((inst) => !own(inst)).map(boxOfInstance);
+      const hit = blockers.filter((box) => segmentHitsBox(view.position, view.target, box)).length;
+      assert.equal(hit, 0, `focus "${key}": ${hit} buildings in the way`);
+      const [dx, dy, dz] = view.position.map((c, a) => c - view.target[a]);
+      assert.ok(Math.asin(dy / Math.hypot(dx, dy, dz)) >= (30 * Math.PI) / 180, `focus "${key}" looks down at least 30 degrees`);
+      checked += 1;
+    }
+    assert.ok(checked >= g.groups.length + 1, 'groups and labelled rows were checked');
+  }
+});
+
 test('group colours stay distinct past eight', () => {
   assert.notDeepEqual(groupColour(0), groupColour(8));
   const rows = Array.from({ length: 9 }, (_, i) => ({ group: `g${i}`, t: 1, value: 1 }));
@@ -152,43 +174,127 @@ test('group colours stay distinct past eight', () => {
   assert.equal(new Set(g.groups.map((x) => JSON.stringify(x.colour))).size, 9);
 });
 
-test('terrain: grid is upsampled 5x and cells map data cells to items', () => {
+test('terrain: the data grid sits inside a ring of empty cells, upsampled 5x; cells map data cells to items', () => {
   const g = WORLDS.terrain(fixture(), SPEC);
   const [s] = g.surfaces;
   assert.equal(g.surfaces.length, 1);
-  assert.equal(s.nx, (12 - 1) * 5 + 1);
-  assert.equal(s.nz, (6 - 1) * 5 + 1);
+  const cols = 12 + 2;
+  const rows = 6 + 2;
+  assert.equal(s.nx, (cols - 1) * 5 + 1);
+  assert.equal(s.nz, (rows - 1) * 5 + 1);
   assert.equal(s.heights.length, s.nx * s.nz);
-  assert.equal(s.cells.length, 72);
-  // data cell (gi, ti) sits on upsampled vertex (gi*5, ti*5) and shows that item's value
+  assert.equal(s.cells.length, cols * rows);
+  // data cell (gi, ti) is cell (gi + 1) * cols + ti + 1, on vertex ((ti + 1) * 5, (gi + 1) * 5), and shows that item's value
   const max = Math.max(...g.items.map((i) => i.value));
   for (const [gi, ti] of [[0, 0], [2, 5], [5, 11]]) {
-    const item = g.items[s.cells[gi * 12 + ti]];
+    const item = g.items[s.cells[(gi + 1) * cols + ti + 1]];
     assert.equal(item.group, gi);
-    assert.ok(Math.abs(s.heights[gi * 5 * s.nx + ti * 5] - item.value / max) < 1e-3);
+    assert.ok(Math.abs(s.heights[(gi + 1) * 5 * s.nx + (ti + 1) * 5] - item.value / max) < 1e-3);
   }
+  // the ring is empty: no item on it
+  for (let c = 0; c < cols; c++) assert.equal(s.cells[c], -1);
+  for (let r = 0; r < rows; r++) assert.equal(s.cells[r * cols], -1);
+  const used = s.cells.filter((c) => c >= 0);
+  assert.equal(used.length, 72);
+  assert.equal(new Set(used).size, 72, 'every row is on the grid exactly once');
 });
 
-test('terrain: bilinear midpoints, normalized heights, bands and sea level', () => {
+test('terrain: an island: the edge of the surface is flat at height 0 and the shore slopes down to it', () => {
+  const [s] = WORLDS.terrain(fixture(), SPEC).surfaces;
+  for (let ix = 0; ix < s.nx; ix++) {
+    assert.equal(s.heights[ix], 0, 'north edge');
+    assert.equal(s.heights[(s.nz - 1) * s.nx + ix], 0, 'south edge');
+  }
+  for (let iz = 0; iz < s.nz; iz++) {
+    assert.equal(s.heights[iz * s.nx], 0, 'west edge');
+    assert.equal(s.heights[iz * s.nx + s.nx - 1], 0, 'east edge');
+  }
+  assert.ok(Math.max(...s.heights) > 0.5, 'land inside');
+  // Walking in from the middle of the west edge: the heights run 0 -> the first data column's height without leaving 0..1.
+  const row = 3 * 5 * s.nx;
+  const run = Array.from({ length: 6 }, (_, k) => s.heights[row + k]);
+  assert.equal(run[0], 0);
+  assert.ok(run.every((h) => h >= 0 && h <= 1));
+  assert.ok(run.every((h, k) => k === 0 || h >= run[k - 1] - 0.05 || k === 5), 'rising to the shore');
+});
+
+test('terrain: smooth interpolation passes exactly through every data cell and stays within 0..1', () => {
+  const rows = [
+    { group: 'a', t: 1, value: 0 }, { group: 'a', t: 2, value: 10 }, { group: 'a', t: 3, value: 2 },
+    { group: 'b', t: 1, value: 10 }, { group: 'b', t: 2, value: 0 }, { group: 'b', t: 3, value: 7 },
+  ];
+  const g = WORLDS.terrain({ rows, links: [] }, SPEC);
+  const [s] = g.surfaces;
+  const cols = 3 + 2;
+  assert.ok(s.heights.every((h) => h >= 0 && h <= 1));
+  assert.equal(Math.max(...s.heights), 1);
+  g.items.forEach((item, i) => {
+    const cell = s.cells.indexOf(i);
+    const [gi, ti] = [Math.floor(cell / cols), cell % cols];
+    assert.ok(Math.abs(s.heights[gi * 5 * s.nx + ti * 5] - item.value / 10) < 1e-3, `item ${i}`);
+  });
+  // between two data cells the height moves smoothly: no kink at a data column (the slope either side agrees)
+  const row = 1 * 5 * s.nx; // row of group a
+  const at = (ix) => s.heights[row + ix];
+  const slopeIn = at(15) - at(14); // the 2, on the way down from the 10 to the sea
+  const slopeOut = at(16) - at(15);
+  assert.ok(Math.abs(slopeIn - slopeOut) < 0.08, `slope ${slopeIn.toFixed(3)} then ${slopeOut.toFixed(3)}`);
+  const mid = at(7); // between the 0 (vertex 5) and the 10 (vertex 10)
+  assert.ok(mid > 0.3 && mid < 0.7, `midpoint ${mid}`);
+});
+
+test('terrain focus: no other row of land stands between the camera and a row, or between it and a labelled cell', () => {
+  const data = fixture();
+  data.rows = data.rows.map((r, i) => (i % 23 === 5 ? { ...r, label: `cell ${i}` } : r));
+  const g = WORLDS.terrain(data, SPEC);
+  const [s] = g.surfaces;
+  const cols = 12 + 2;
+  const [sx, sz, sy] = s.size;
+  const [px, pz] = [sx / (12 + 1), sz / (6 + 1)];
+  const boxes = (skip) => s.cells.flatMap((item, cell) => {
+    const [gi, ti] = [Math.floor(cell / cols) - 1, (cell % cols) - 1];
+    if (item < 0 || skip(gi, ti)) return [];
+    const [x, z] = [((ti + 1) / 13 - 0.5) * sx, ((gi + 1) / 7 - 0.5) * sz];
+    const h = s.heights[(gi + 1) * 5 * s.nx + (ti + 1) * 5] * sy;
+    return [{ min: [x - px / 2, 0, z - pz / 2], max: [x + px / 2, h, z + pz / 2] }];
+  });
+  let checked = 0;
+  g.groups.forEach((grp, gi) => {
+    const view = g.focus[grp.name.toLowerCase()];
+    assert.equal(boxes((r) => r === gi).filter((b) => segmentHitsBox(view.position, view.target, b)).length, 0, `row ${grp.name}`);
+    checked += 1;
+  });
+  for (const [key, view] of Object.entries(g.focus).filter(([k]) => k.startsWith('cell '))) {
+    const item = g.items.findIndex((it) => it.label === key);
+    const cell = s.cells.indexOf(item);
+    const [gi, ti] = [Math.floor(cell / cols) - 1, (cell % cols) - 1];
+    assert.equal(boxes((r, t) => r === gi && t === ti).filter((b) => segmentHitsBox(view.position, view.target, b)).length, 0, key);
+    checked += 1;
+  }
+  assert.ok(checked > g.groups.length, 'labelled cells were checked too');
+});
+
+test('terrain: bands, sea level and the world size', () => {
   const rows = [
     { group: 'a', t: 1, value: 0 }, { group: 'a', t: 2, value: 10 },
     { group: 'b', t: 1, value: 10 }, { group: 'b', t: 2, value: 0 },
   ];
   const g = WORLDS.terrain({ rows, links: [] }, SPEC);
   const [s] = g.surfaces;
-  assert.ok(s.heights.every((h) => h >= 0 && h <= 1));
-  assert.equal(Math.max(...s.heights), 1);
-  assert.ok(Math.abs(s.heights[1] - 0.2) < 1e-3, 'edge vertex 1/5 of the way from 0 to 1');
-  assert.ok(Math.abs(s.heights[2 * s.nx + 2] - 0.48) < 1e-3, 'bilinear saddle at (0.4, 0.4): 0.4*0.6 + 0.6*0.4');
   assert.deepEqual(s.bands.map((b) => b.colour), ['#d8c38a', '#6b9a4f', '#8a8178', '#f4f6f8']);
   assert.ok(s.bands.every((b, i, a) => i === 0 || b.below > a[i - 1].below));
   assert.deepEqual(g.env.water, { y: 0.12 });
+  // the surface spans the data plus one cell of sea each side: its width is (columns + 1) cell pitches
+  const [sx, sz] = s.size;
+  assert.ok(sx / 3 <= 2.5 + 1e-9 && sz / 3 <= 2.5 + 1e-9, 'a tiny grid does not stretch its cells');
 });
 
 test('terrain: missing grid cells get cell -1 and zero height, never NaN', () => {
   const rows = [{ group: 'a', t: 1, value: 4 }, { group: 'a', t: 2, value: 6 }, { group: 'b', t: 1, value: 5 }];
   const g = WORLDS.terrain({ rows, links: [] }, SPEC);
-  assert.deepEqual(g.surfaces[0].cells, [0, 1, 2, -1]);
+  assert.deepEqual(g.surfaces[0].cells.filter((c) => c >= 0), [0, 1, 2]);
+  assert.equal(g.surfaces[0].cells.length, 16, 'a 2 x 2 grid and its ring of empty cells');
+  assert.equal(g.surfaces[0].cells[2 * 4 + 2], -1, 'the missing (b, 2) cell is empty');
   assert.deepEqual(finite(g), []);
 });
 

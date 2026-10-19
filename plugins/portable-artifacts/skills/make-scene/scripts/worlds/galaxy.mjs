@@ -1,6 +1,6 @@
 // Galaxy: one star per group on a ring; each row is a planet orbiting its
 // group's star at r = 1.4 + rank * pitch (pitch 0.32, squeezed so no orbit passes r = 8), rank by t (value, largest first,
-// when t is absent), size = 0.06 + value / max * 0.32. A planet is stored at
+// when t is absent), size = PLANET_MIN + value / max * PLANET_SPAN. Each orbit also gets a faint ring. A planet is stored at
 // its orbit position for time 0: centre + r * (cos phase, 0, sin phase); the
 // runtime advances phase by speed * time. Links are arcs between star centres.
 import { emptyGraph, finalizeGraph, tableFallback } from '../lib/graph.mjs';
@@ -12,12 +12,14 @@ import { seedFrom } from '../../shared/art.mjs';
 export const ORBIT_BASE = 1.4;
 export const ORBIT_PITCH = 0.32;
 export const ORBIT_MAX = 8; // the outermost orbit of any system
-export const PLANET_MIN = 0.06;
-export const PLANET_SPAN = 0.32;
+export const PLANET_MIN = 0.1;
+export const PLANET_SPAN = 0.4;
 export const SPEED_K = 0.9; // speed = SPEED_K / sqrt(r)
 export const ARC_LIFT = 1; // apex rise = ARC_LIFT + distance * ARC_LIFT_PER_DISTANCE
 export const ARC_LIFT_PER_DISTANCE = 0.15;
-const STAR_SIZE = 0.9;
+const STAR_SIZE = 1.3;
+const RING_COLOUR = '#8fa0c8'; // faint pale blue on dark space, in both themes (the runtime draws rings translucent)
+const RING_THICKNESS = 0.02;
 const STAR_GAP = 1.2;
 const ARC_SEGMENTS = 16;
 const TUBE_MIN = 0.03;
@@ -117,6 +119,10 @@ export function build({ rows, links = [] }, spec = {}) {
     orbits.push(orbit);
   });
 
+  const rings = {
+    id: `b${2 * groups.length}`, shape: 'ring', colour: RING_COLOUR, emissive: null, flat: false,
+    instances: orbits.flatMap((o) => o.r.map((r) => [o.center[0], o.center[1], o.center[2], 2 * r, RING_THICKNESS, 2 * r, -1])),
+  };
   const g = emptyGraph('galaxy', spec);
   g.env = { ...g.env, sky: 'space', stars: true, fog: false };
   g.groups = groups;
@@ -127,6 +133,7 @@ export function build({ rows, links = [] }, spec = {}) {
       instances: [[...centres[n], STAR_SIZE, STAR_SIZE, STAR_SIZE, -1]],
     })),
     ...planetBatches,
+    ...(rings.instances.length > 0 ? [rings] : []),
   ];
   const { tubes, table } = tubesFrom(links, centres, gi, spec.units);
   g.tubes = tubes;

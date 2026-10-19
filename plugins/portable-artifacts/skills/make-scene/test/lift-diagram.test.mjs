@@ -120,8 +120,8 @@ test('stories become tour beats with paths', async () => {
   const g = await lift('story.diagram.json');
   assert.equal(g.tour.length, 9);
   const [first, second] = g.tour;
-  assert.deepEqual(first, { title: 'The shopper taps Buy', caption: 'The app builds the order from the basket.', focus: 'app', path: 'edge-0', reverse: false });
-  assert.deepEqual({ focus: second.focus, path: second.path }, { focus: 'gateway', path: 'place' });
+  assert.deepEqual(first, { title: 'The shopper taps Buy', caption: 'The app builds the order from the basket.', focus: 'edge-0', path: 'edge-0', reverse: false });
+  assert.deepEqual({ focus: second.focus, path: second.path }, { focus: 'place', path: 'place' });
   assert.ok(g.tour.every((b) => b.path === null || tubeIds(g).includes(b.path)), 'every path names a tube');
   assert.ok(g.tour.every((b) => Object.hasOwn(g.focus, b.focus)), 'every focus is a key');
   const last = g.tour.at(-1);
@@ -133,8 +133,66 @@ test('reply beat reverses', async () => {
   const reply = g.tour.find((b) => b.title === 'The shopper sees a receipt');
   assert.equal(reply.reverse, true);
   assert.equal(reply.path, 'edge-0');
-  assert.equal(reply.focus, 'shopper', 'the camera goes to where the light ends up');
+  assert.equal(reply.focus, 'edge-0', 'the camera frames the whole edge, so the light is in view from end to end');
   assert.equal(g.tour.find((b) => b.title === '201 goes back').reverse, false, 'a reply with its own edge plays forward');
+});
+
+// Where `point` lands in a view's frame (NDC), 45 degree lens, square viewport: both ends of a hop must be well inside.
+function ndcIn(view, point) {
+  const f = view.target.map((c, i) => c - view.position[i]);
+  const fl = Math.hypot(...f);
+  const fw = f.map((c) => c / fl);
+  let r = [fw[2], 0, -fw[0]];
+  const rl = Math.hypot(...r);
+  r = r.map((c) => c / rl);
+  const u = [fw[1] * r[2] - fw[2] * r[1], fw[2] * r[0] - fw[0] * r[2], fw[0] * r[1] - fw[1] * r[0]];
+  const v = point.map((c, i) => c - view.position[i]);
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const depth = dot(v, fw);
+  const tan = Math.tan((45 * Math.PI) / 360);
+  return [dot(v, r) / (depth * tan), dot(v, u) / (depth * tan)];
+}
+
+test('every edge and message has its own view with the whole route inside the middle 60% of the frame', async () => {
+  for (const file of ['story', 'architecture', 'sequence']) {
+    const g = await lift(`${file}.diagram.json`);
+    for (const t of g.tubes) {
+      const view = g.focus[t.id.toLowerCase()];
+      assert.ok(view, `${file}: ${t.id} has a focus view`);
+      for (const p of [t.points[0], t.points.at(-1)]) {
+        const [x, y] = ndcIn(view, p);
+        assert.ok(Math.abs(x) <= 0.6 && Math.abs(y) <= 0.6, `${file}: ${t.id} end ${JSON.stringify(p)} lands at ${x.toFixed(2)}, ${y.toFixed(2)}`);
+      }
+    }
+  }
+});
+
+test('a hop beat frames its edge', async () => {
+  const g = await lift('story.diagram.json');
+  for (const beat of g.tour.filter((b) => b.path !== null)) assert.equal(beat.focus, beat.path.toLowerCase());
+});
+
+test('every edge ends in an arrowhead; a two-headed edge has one at each end', async () => {
+  const arch = await lift('architecture.diagram.json');
+  assert.ok(arch.tubes.every((t) => t.arrow === 'end' || t.arrow === 'both'));
+  assert.equal(arch.tubes.filter((t) => t.arrow === 'both').length, 1, 'the one edge written with both: true');
+  assert.equal(arch.tubes.find((t) => t.label === 'POST /checkout').arrow, 'end');
+  const seq = await lift('sequence.diagram.json');
+  assert.ok(seq.tubes.every((t) => t.arrow === 'end'), 'a message points at its receiver');
+  assertGraph(arch);
+});
+
+test('group labels sit at their platform back-left corner, so a nested group never shares its parent anchor', async () => {
+  const g = await lift('architecture.diagram.json');
+  const platforms = g.batches.find((b) => b.colour === 'line').instances;
+  const labels = ['AWS us-east-1', 'Private VPC'].map((text) => g.labels.find((l) => l.text === text));
+  assert.ok(labels.every(Boolean));
+  labels.forEach((label, i) => {
+    const [x, , z, w, , d] = platforms[i];
+    assert.ok(label.at[0] > x - w / 2 && label.at[0] < x, `${label.text} is in the left half of its platform`);
+    assert.ok(Math.abs(label.at[2] - (z - d / 2)) < 0.5, `${label.text} is at the back edge`);
+  });
+  assert.ok(Math.hypot(labels[0].at[0] - labels[1].at[0], labels[0].at[2] - labels[1].at[2]) > 1, 'parent and child anchors are apart');
 });
 
 test('a diagram without stories has no tour', async () => {

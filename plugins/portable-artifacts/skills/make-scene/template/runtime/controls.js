@@ -14,11 +14,11 @@ const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], Arrow
 const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - ((-2 * k + 2) ** 3) / 2);
 
 /**
- * createControls({ camera, dom, target, polarMax, distance, reducedMotion, onInput })
+ * createControls({ camera, dom, target, polarMax, polarMin, distance, reducedMotion, onInput })
  * `reducedMotion()` is read live: no auto-rotate, and fly-to cuts instead of easing.
  * `onInput(reason)` fires for anything that should wake the loop.
  */
-export function createControls({ camera, dom, target, polarMax, distance, reducedMotion, onInput }) {
+export function createControls({ camera, dom, target, polarMax, polarMin = 0, distance, reducedMotion, onInput }) {
   const controls = new OrbitControls(camera, dom);
   controls.enableDamping = true;
   controls.dampingFactor = DAMPING;
@@ -26,6 +26,7 @@ export function createControls({ camera, dom, target, polarMax, distance, reduce
   controls.minDistance = distance * 0.15;
   controls.maxDistance = distance * 4;
   controls.maxPolarAngle = polarMax;
+  controls.minPolarAngle = polarMin;
   controls.target.copy(target);
   let sawInput = false;
   let tween = null;
@@ -51,7 +52,7 @@ export function createControls({ camera, dom, target, polarMax, distance, reduce
     const offset = new Vector3().subVectors(camera.position, controls.target);
     const spherical = new Spherical().setFromVector3(offset);
     spherical.theta += step[0] * KEY_STEP;
-    spherical.phi = Math.min(polarMax, Math.max(POLAR_MARGIN, spherical.phi + step[1] * KEY_STEP));
+    spherical.phi = Math.min(polarMax, Math.max(Math.max(POLAR_MARGIN, polarMin), spherical.phi + step[1] * KEY_STEP));
     camera.position.copy(controls.target).add(offset.setFromSpherical(spherical));
     camera.lookAt(controls.target);
   };

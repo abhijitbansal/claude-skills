@@ -51,7 +51,7 @@
 
 /* Text labels over the canvas */
 .sc-labels { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
-.sc-label { position: absolute; left: 0; top: 0; white-space: nowrap; font-weight: 600; color: var(--text); text-shadow: 0 0 3px var(--page), 0 0 8px var(--page); will-change: transform; }
+.sc-label { position: absolute; left: 0; top: 0; box-sizing: border-box; max-width: min(40vw, 90%); padding: 2px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--text); text-shadow: 0 0 3px var(--page), 0 0 8px var(--page); will-change: transform; }
 .sc-label[hidden] { display: none; }
 .sc-space .sc-label { color: #f4f1ff; text-shadow: 0 0 4px #04050c, 0 0 9px #04050c; }
 

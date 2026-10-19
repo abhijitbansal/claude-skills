@@ -3,6 +3,7 @@
 // the runtime can keep one emissive setting per batch.
 import { emptyGraph, finalizeGraph, tableFallback } from '../lib/graph.mjs';
 import { compareT, groupIndex, groupsFrom, itemsFrom, groupColour } from '../lib/palette.mjs';
+import { clearPosition, ringCandidates } from '../lib/views.mjs';
 
 export const MAX_HEIGHT = 9; // H: the tallest building is FLOOR + H
 export const FLOOR = 0.15;
@@ -13,8 +14,12 @@ const ROW_PITCH = 1.8;
 const LIGHT_LEVELS = 4;
 const LABEL_GAP = 1.4;
 const LABEL_SIZE = 0.6;
-const FOCUS_BACK = 9;
-const FOCUS_RISE = 4;
+const FOCUS_MIN = 12; // a focus view is at least this far from its target...
+const FOCUS_PER_UNIT = 1.4; // ...and this many times a district's width (+ FOCUS_MARGIN): authored for a square viewport
+const FOCUS_MARGIN = 5;
+const BUILDING_FOCUS = 9;
+const FOCUS_SKEW = 0.4; // a view leans off the street's axis, so a district reads in 3/4, not head-on
+const FOCUS_ELEVATIONS = [32, 42, 52, 62, 72]; // degrees above the floor, lowest first
 
 const keyOfT = (t) => `${typeof t}:${t}`;
 
@@ -81,29 +86,38 @@ function buildBatches(placed, groupCount) {
     });
 }
 
+// A view of `target` from the open side of the city (the near edge for a front district, the far edge for a back one),
+// lowest elevation first, taking the first whose line of sight crosses no building but those `skip` leaves out.
+function viewOfDistrict(target, distance, { placed, openSide, skip }) {
+  const blockers = placed.filter((p) => !skip(p)).map((p) => ({
+    min: [p.x - FOOTPRINT / 2, 0, p.z - FOOTPRINT / 2],
+    max: [p.x + FOOTPRINT / 2, p.height, p.z + FOOTPRINT / 2],
+  }));
+  // The open side first; then down the street from either end (the other districts run beside it, not across it).
+  const headings = [[FOCUS_SKEW, openSide], [-FOCUS_SKEW, openSide], [1, FOCUS_SKEW * openSide], [-1, FOCUS_SKEW * openSide], [0, openSide], [0, -openSide]];
+  return { position: clearPosition(target, ringCandidates(target, headings, FOCUS_ELEVATIONS, distance), blockers), target };
+}
+
 function buildFocus(placed, groups) {
   const focus = new Map();
   const addFocus = (key, view) => {
     if (!focus.has(key)) focus.set(key, view);
   };
+  const openSideOf = (z) => (z < 0 ? -1 : 1);
   groups.forEach((g, gi) => {
     const mine = placed.filter((p) => p.group === gi);
     const x0 = Math.min(...mine.map((p) => p.x));
     const x1 = Math.max(...mine.map((p) => p.x));
     const tall = Math.max(...mine.map((p) => p.height));
     const z = mine[0].z;
-    const cx = (x0 + x1) / 2;
-    addFocus(g.name, {
-      position: [cx + 6, tall + FOCUS_RISE, z + FOCUS_BACK + (x1 - x0) * 0.25],
-      target: [cx, tall * 0.4, z],
-    });
+    const target = [(x0 + x1) / 2, tall * 0.4, z];
+    const distance = Math.max(FOCUS_MIN, FOCUS_PER_UNIT * (x1 - x0 + FOOTPRINT + FOCUS_MARGIN) + tall * 0.3);
+    addFocus(g.name, viewOfDistrict(target, distance, { placed, openSide: openSideOf(z), skip: (p) => p.group === gi }));
   });
   for (const p of placed) {
     if (p.label) {
-      addFocus(p.label, {
-        position: [p.x + 3, p.height + 3, p.z + 5],
-        target: [p.x, p.height / 2, p.z],
-      });
+      const target = [p.x, p.height / 2, p.z];
+      addFocus(p.label, viewOfDistrict(target, BUILDING_FOCUS + p.height * 0.5, { placed, openSide: openSideOf(p.z), skip: (q) => q === p }));
     }
   }
   return Object.fromEntries(focus);

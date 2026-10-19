@@ -2,9 +2,9 @@
 // ("Conventions the worlds follow") pins it down; draws nothing the graph does not list.
 import {
   AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, CatmullRomCurve3, CircleGeometry, Color, ConeGeometry,
-  CylinderGeometry, DirectionalLight, Float32BufferAttribute, Fog, Group, HemisphereLight, IcosahedronGeometry,
-  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, Points, PointsMaterial, Quaternion,
-  SphereGeometry, TubeGeometry, Vector3,
+  CylinderGeometry, DirectionalLight, DoubleSide, Float32BufferAttribute, Fog, Group, HemisphereLight, IcosahedronGeometry,
+  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Points, PointsMaterial, Quaternion,
+  RingGeometry, SphereGeometry, TubeGeometry, Vector3,
 } from 'three';
 import { resolveColour } from './colour.js';
 import { createTravel } from './travel.js';
@@ -30,6 +30,18 @@ const LIGHT_MIN_RADIUS = 0.16; // the travelling light: a sphere this big (or a 
 const LIGHT_DIAG_SHARE = 0.005;
 const LIGHT_HALO = 2.4; // ...inside a soft halo this many times wider
 const LIGHT_HALO_OPACITY = 0.3;
+const FOG_NEAR_FACTOR = 1.4; // fog starts and ends this many fitted camera distances away
+const FOG_FAR_FACTOR = 4.5;
+const GROUND_REACH = 1.5; // the ground disc reaches this far past the scene's half-diagonal (plus GROUND_EXTRA)...
+const GROUND_EXTRA = 2;
+const GROUND_FADE_START = 0.5; // ...and is fully solid out to this share of its radius, fading to nothing at the rim
+const WATER_REACH = 1.7; // the sea reaches this many half-diagonals of the surface
+const WATER_FADE_START = 0.78; // past the surface's own corners (0.59 of the radius), so the seabed never shows through
+const RING_OPACITY = 0.32; // orbit rings are drawn faint
+const RING_INNER = 0.4965; // of a unit ring (diameter 1): a hairline, so it grows with the orbit
+const ARROW_LENGTH = 7; // arrowhead, in tube radii
+const ARROW_WIDTH = 4.5;
+const ARROW_SEGMENTS = 14;
 
 // FNV-1a + mulberry32, copied from shared/art.mjs (the runtime cannot import Node shared files).
 function seedFrom(text) {
@@ -55,7 +67,39 @@ const SHAPES = {
   sphere: () => new SphereGeometry(0.5, 20, 14),
   icosa: () => new IcosahedronGeometry(0.5, 1),
   cone: () => new ConeGeometry(0.5, 1, 20),
+  ring: () => new RingGeometry(RING_INNER, 0.5, 96).rotateX(-Math.PI / 2), // flat in xz: scale [2r, ., 2r]
 };
+const Y_AXIS = new Vector3(0, 1, 0);
+
+// A cone whose tip sits on `tip` and which points away from `from` (the route's neighbouring point), sharing the tube's material.
+function addArrowhead(root, track, material, tip, from, radius) {
+  const dir = new Vector3(tip[0] - from[0], tip[1] - from[1], tip[2] - from[2]);
+  if (dir.lengthSq() === 0) return;
+  dir.normalize();
+  const length = radius * ARROW_LENGTH;
+  const cone = new Mesh(track(new ConeGeometry(0.5, 1, ARROW_SEGMENTS)), material);
+  cone.scale.set(radius * ARROW_WIDTH, length, radius * ARROW_WIDTH);
+  cone.quaternion.setFromUnitVectors(Y_AXIS, dir);
+  cone.position.set(tip[0], tip[1], tip[2]).addScaledVector(dir, -length / 2);
+  root.add(cone);
+}
+
+// A flat disc that dissolves at its rim: alpha falls from 1 to 0 between `start` (a share of `radius`) and the rim.
+// The disc is never rotated, so its local xz is its distance from the centre.
+function patchEdgeFade(material, radius, start) {
+  material.transparent = true;
+  material.depthWrite = false;
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uFadeRadius = { value: radius };
+    shader.uniforms.uFadeStart = { value: start };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vFadeXZ;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFadeXZ = position.xz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uFadeRadius;\nuniform float uFadeStart;\nvarying vec2 vFadeXZ;')
+      .replace('#include <dithering_fragment>', '#include <dithering_fragment>\ngl_FragColor.a *= 1.0 - smoothstep(uFadeStart, 1.0, length(vFadeXZ) / uFadeRadius);');
+  };
+}
 
 // Lit windows: a procedural mask on the walls of a unit box, sized in world units from the
 // instance scale and hashed from the cell and the instance position (deterministic, no texture).
@@ -127,7 +171,7 @@ export function surfaceCellAt(surface, point) {
 }
 
 /**
- * buildObjects(graph, palette) -> { root, background, fog, pickables, retint, animate, animated, itemAt, tubeAt, extent, dispose }
+ * buildObjects(graph, palette) -> { root, background, fog, pickables, retint, animate, animated, itemAt, tubeAt, extent, setFit, dispose }
  * palette = { dark: boolean, readVar(cssVar) -> colour string } (see theme.js).
  * `background` and `fog` are mutated in place by retint, so the caller assigns them to its Scene once.
  */
@@ -155,6 +199,13 @@ export function buildObjects(graph, palette) {
   };
   const sceneBackground = new Color();
   const fog = env.fog && env.sky !== SKY_SPACE ? new Fog(0xffffff, 1, 2) : null;
+  function setFit(distance) {
+    if (!fog) return;
+    fog.near = distance * FOG_NEAR_FACTOR;
+    fog.far = distance * FOG_FAR_FACTOR;
+  }
+  // Until the caller reports the camera it really fits, follow the camera the graph asks for.
+  setFit(Math.max(1, Math.hypot(...graph.camera.position.map((c, i) => c - graph.camera.target[i]))));
 
   // Lights
   const hemi = new HemisphereLight(0xffffff, 0x888888, 1);
@@ -175,20 +226,14 @@ export function buildObjects(graph, palette) {
     if (fog) fog.color.copy(sceneBackground);
   });
 
-  // Fog distances follow the camera the graph asks for
-  if (fog) {
-    const [px, py, pz] = graph.camera.position;
-    const [tx, ty, tz] = graph.camera.target;
-    const dist = Math.max(1, Math.hypot(px - tx, py - ty, pz - tz));
-    fog.near = dist * 1.4;
-    fog.far = dist * 4.5;
-  }
-
-  // Ground
+  // Ground: a disc well past the scene, solid under it and dissolving into the page at its rim, so no edge is ever framed.
   if (env.ground) {
-    const radius = Math.hypot(extent.size.x, extent.size.z) * 0.62 + 1.5;
-    const ground = new Mesh(track(new CircleGeometry(radius, 72).rotateX(-Math.PI / 2)), track(new MeshStandardMaterial({ roughness: 1, metalness: 0 })));
+    const radius = (Math.hypot(extent.size.x, extent.size.z) / 2) * GROUND_REACH + GROUND_EXTRA;
+    const material = track(new MeshStandardMaterial({ roughness: 1, metalness: 0 }));
+    patchEdgeFade(material, radius, GROUND_FADE_START);
+    const ground = new Mesh(track(new CircleGeometry(radius, 72).rotateX(-Math.PI / 2)), material);
     ground.position.set(extent.center.x, Math.min(0, graph.bounds.min[1]) - 0.01, extent.center.z);
+    ground.renderOrder = -1;
     root.add(ground);
     tints.push(() => ground.material.color.copy(colourOf(env.ground)));
   }
@@ -197,7 +242,10 @@ export function buildObjects(graph, palette) {
   for (const batch of graph.batches ?? []) {
     const count = batch.instances.length;
     if (count === 0) continue;
-    const material = track(new MeshStandardMaterial({ roughness: 0.82, metalness: 0.04, flatShading: Boolean(batch.flat) }));
+    const isRing = batch.shape === 'ring';
+    const material = track(isRing
+      ? new MeshBasicMaterial({ transparent: true, opacity: RING_OPACITY, side: DoubleSide, depthWrite: false, fog: false })
+      : new MeshStandardMaterial({ roughness: 0.82, metalness: 0.04, flatShading: Boolean(batch.flat) }));
     const windows = Boolean(batch.emissive) && Boolean(env.nightLights) && batch.shape === 'box';
     if (windows) patchWindows(material, batch.emissive.density);
     const mesh = new InstancedMesh(geometryFor(batch.shape), material, count);
@@ -212,10 +260,10 @@ export function buildObjects(graph, palette) {
     mesh.userData = { kind: 'batch', items };
     batchMeshes.set(batch.id, { batch, mesh });
     root.add(mesh);
-    pickables.push(mesh);
+    if (!isRing) pickables.push(mesh); // a hairline ring is scenery: it neither hides nor shows data
     tints.push((p) => {
       material.color.copy(colourOf(batch.colour));
-      if (!batch.emissive) return;
+      if (!batch.emissive || isRing) return;
       material.emissive.copy(colourOf(batch.emissive.colour));
       const on = env.nightLights ? p.dark : true;
       const strength = windows ? EMISSIVE_STRENGTH : SELF_LIT_STRENGTH * batch.emissive.density;
@@ -272,6 +320,11 @@ export function buildObjects(graph, palette) {
     const mesh = new Mesh(track(geometry, material), material);
     root.add(mesh);
     tints.push(() => material.color.copy(colourOf(tube.colour)));
+    if (tube.arrow === 'end' || tube.arrow === 'both') {
+      const last = tube.points.length - 1;
+      addArrowhead(root, track, material, tube.points[last], tube.points[last - 1], tube.radius);
+      if (tube.arrow === 'both') addArrowhead(root, track, material, tube.points[0], tube.points[1], tube.radius);
+    }
     const item = Number.isInteger(tube.item) ? tube.item : -1;
     if (item < 0 && tube.label === undefined && tube.display === undefined) return;
     const reach = Math.max(tube.radius * PICK_TUBE_FACTOR, extent.diag * PICK_TUBE_MIN_SHARE);
@@ -349,11 +402,13 @@ export function buildObjects(graph, palette) {
   }
   const lead = graph.surfaces?.[0];
   if (env.water && lead) {
-    const water = new Mesh(
-      track(new PlaneGeometry(lead.size[0], lead.size[1]).rotateX(-Math.PI / 2)),
-      track(new MeshStandardMaterial({ roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.74 })),
-    );
+    const radius = (Math.hypot(lead.size[0], lead.size[1]) / 2) * WATER_REACH;
+    // Solid over the seabed (so the terrain's flat margin never shows through), dissolving at its rim.
+    const material = track(new MeshStandardMaterial({ roughness: 0.2, metalness: 0.1 }));
+    patchEdgeFade(material, radius, WATER_FADE_START);
+    const water = new Mesh(track(new CircleGeometry(radius, 96).rotateX(-Math.PI / 2)), material);
     water.position.y = env.water.y * lead.size[2];
+    water.renderOrder = -1;
     root.add(water);
     tints.push(() => water.material.color.copy(colourOf(WATER_BASE)));
   }
@@ -422,6 +477,8 @@ export function buildObjects(graph, palette) {
       return -1;
     },
     extent,
+    /** The fitted camera distance: fog starts and ends relative to it. */
+    setFit,
     dispose() {
       for (const thing of disposables) thing.dispose();
       for (const mesh of pickables) if (mesh.isInstancedMesh) mesh.dispose();

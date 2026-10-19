@@ -89,6 +89,20 @@ test('assertGraph accepts a finalized graph and rejects structural breakage', ()
   assert.throws(() => assertGraph(badKind), /kind/);
 });
 
+test('assertGraph accepts the ring shape and tubes[].arrow end|both, and rejects any other arrow', () => {
+  const ok = finalizeGraph(sample());
+  const ring = structuredClone(ok);
+  ring.batches[0].shape = 'ring';
+  assert.doesNotThrow(() => assertGraph(ring));
+  const arrows = structuredClone(ok);
+  arrows.tubes = [{ id: 'e0', points: [[0, 0, 0], [1, 0, 0]], radius: 0.05, colour: 'line', item: null, arrow: 'end' }];
+  assert.doesNotThrow(() => assertGraph(arrows));
+  arrows.tubes[0].arrow = 'both';
+  assert.doesNotThrow(() => assertGraph(arrows));
+  arrows.tubes[0].arrow = 'start';
+  assert.throws(() => assertGraph(arrows), /tubes\[0\]\.arrow/);
+});
+
 test('groupColour maps 0-7 to cat tokens and lightens past eight', () => {
   assert.equal(groupColour(0), 'cat1');
   assert.equal(groupColour(7), 'cat8');

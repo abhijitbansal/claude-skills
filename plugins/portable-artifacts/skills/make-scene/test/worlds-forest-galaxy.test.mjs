@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { seedFrom } from '../shared/art.mjs';
 import { WORLDS } from '../scripts/worlds/index.mjs';
 import { assertGraph } from '../scripts/lib/graph.mjs';
-import { TRUNK_RADIUS, LIMB_LEN } from '../scripts/worlds/forest.mjs';
+import { TRUNK_RADIUS, LIMB_LEN, LEAF_MIN, LEAF_SPAN } from '../scripts/worlds/forest.mjs';
+import { PLANET_MIN, PLANET_SPAN } from '../scripts/worlds/galaxy.mjs';
 
 const GOLDEN_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'golden');
 const SPEC = { title: 'Work per area', units: 'tasks' };
@@ -110,17 +111,38 @@ test('forest and galaxy are registered', () => {
 
 // ---- forest ----
 
-test('forest: leaf cluster size is 0.15 + value/max * 0.95 and sway lists the leaf batches', () => {
+test('forest: leaf cluster size is LEAF_MIN + value/max * LEAF_SPAN and sway lists the leaf batches', () => {
   const rows = [{ group: 'a', t: 1, value: 0 }, { group: 'a', t: 2, value: 10 }, { group: 'a', t: 3, value: 40 }];
   const g = WORLDS.forest({ rows, links: [] }, SPEC);
   const size = (i) => leafOf(g, i)[3];
-  assert.ok(Math.abs(size(0) - 0.15) < 1e-3, 'zero still draws the minimum cluster');
-  assert.ok(Math.abs(size(1) - (0.15 + 0.25 * 0.95)) < 1e-3);
-  assert.ok(Math.abs(size(2) - 1.1) < 1e-3, 'the largest is 0.15 + 0.95');
+  assert.ok(Math.abs(size(0) - LEAF_MIN) < 1e-3, 'zero still draws the minimum cluster');
+  assert.ok(Math.abs(size(1) - (LEAF_MIN + 0.25 * LEAF_SPAN)) < 1e-3);
+  assert.ok(Math.abs(size(2) - (LEAF_MIN + LEAF_SPAN)) < 1e-3, 'the largest is the minimum plus the span');
   const leafIds = g.batches.filter((b) => b.shape === 'icosa').map((b) => b.id);
   assert.deepEqual(g.anim.sway, leafIds);
   assert.ok(leafIds.length > 0);
   assert.deepEqual(g.anim.orbits, []);
+});
+
+test('forest: each leaf cluster is ringed by two lower puffs of its group colour, in foliage batches that do not sway or carry data', () => {
+  const rows = [{ group: 'a', t: 1, value: 2 }, { group: 'a', t: 2, value: 8 }, { group: 'b', t: 1, value: 5 }];
+  const g = WORLDS.forest({ rows, links: [] }, SPEC);
+  const foliage = g.batches.filter((b) => b.shape === 'sphere' && b.id !== 'b1');
+  assert.deepEqual(foliage.map((b) => b.instances.length), [4, 2], 'two puffs per cluster, one foliage batch per group');
+  foliage.forEach((batch, n) => {
+    assert.deepEqual(batch.colour, g.batches.find((b) => b.id === `b${n + 2}`).colour, 'same colour as its leaves');
+    assert.ok(batch.instances.every((i) => i[6] === -1), 'puffs are decoration');
+    assert.ok(!g.anim.sway.includes(batch.id));
+  });
+  // The big cluster's own puffs: the two nearest to it in the xz plane.
+  const big = leafOf(g, 1);
+  const mine = [...foliage[0].instances].sort((p, q) => horizontal(p, big) - horizontal(q, big)).slice(0, 2);
+  for (const p of mine) {
+    assert.ok(p[1] < big[1], 'a puff sits below its cluster centre, never over its top');
+    assert.ok(p[3] < big[3], 'and is smaller than it');
+    assert.ok(horizontal(p, big) < big[3], 'and clings to it');
+  }
+  assert.ok(Math.abs(mine[0][3] - 0.68 * big[3]) < 1e-2, 'puff size grows with the cluster, so the silhouette tracks the value');
 });
 
 test('forest: trunks and branches are decoration (item -1), leaves carry the data', () => {
@@ -155,8 +177,8 @@ test('forest: parent nests under its tree', () => {
   const apiLeaves = g.items.map((it, i) => [it, i]).filter(([it]) => it.group === 0).map(([, i]) => leafOf(g, i));
   const treeRadius = Math.max(...apiLeaves.map((l) => horizontal(l, api)));
   const apiTop = api[1] + api[4] / 2;
-  // the one decoration sphere touching the api trunk is where auth's limb attaches
-  const attach = instances(g, (b) => b.shape === 'sphere').filter((s) => horizontal(s, api) <= trunkRadius + 1e-3);
+  // the one branch sphere touching the api trunk is where auth's limb attaches (foliage puffs are a separate batch)
+  const attach = instances(g, (b) => b.id === 'b1').filter((s) => horizontal(s, api) <= trunkRadius + 1e-3);
   assert.equal(attach.length, 1, 'one limb leaves the api trunk');
   assert.ok(horizontal(attach[0], api) <= treeRadius, 'attachment lies inside the parent tree radius');
   assert.ok(attach[0][1] > 0 && attach[0][1] < apiTop, 'at a height on the parent trunk');
@@ -264,14 +286,36 @@ test('galaxy: orbit arrays are per instance, speed is 0.9/sqrt(r), phases are se
   }
 });
 
-test('galaxy: planet size is 0.06 + value/max * 0.32', () => {
+test('galaxy: planet size is PLANET_MIN + value/max * PLANET_SPAN, big enough to read at the default view', () => {
   const rows = [{ group: 'a', t: 1, value: 0 }, { group: 'a', t: 2, value: 10 }, { group: 'a', t: 3, value: 40 }];
   const g = WORLDS.galaxy({ rows, links: [] }, SPEC);
   const planets = g.batches.find((b) => b.emissive === null).instances;
   const size = (i) => planets.find((inst) => inst[6] === i)[3];
-  assert.ok(Math.abs(size(0) - 0.06) < 1e-3);
-  assert.ok(Math.abs(size(1) - (0.06 + 0.25 * 0.32)) < 1e-3);
-  assert.ok(Math.abs(size(2) - 0.38) < 1e-3);
+  assert.ok(Math.abs(size(0) - PLANET_MIN) < 1e-3, 'zero still draws the minimum planet');
+  assert.ok(Math.abs(size(1) - (PLANET_MIN + 0.25 * PLANET_SPAN)) < 1e-3);
+  assert.ok(Math.abs(size(2) - (PLANET_MIN + PLANET_SPAN)) < 1e-3);
+  assert.ok(PLANET_MIN >= 0.1 && PLANET_MIN + PLANET_SPAN >= 0.45, 'the smallest is a visible dot, the largest is a clear sphere');
+  const star = g.batches.find((b) => b.emissive !== null).instances[0][3];
+  assert.ok(star > PLANET_MIN + PLANET_SPAN, 'a star outsizes its biggest planet');
+});
+
+test('galaxy: one faint orbit ring per planet, flat, centred on its star, decoration, drawn after the planets', () => {
+  const g = WORLDS.galaxy(fixture(), SPEC);
+  const rings = g.batches.filter((b) => b.shape === 'ring');
+  assert.equal(rings.length, 1, 'one ring batch');
+  assert.equal(g.batches.at(-1), rings[0], 'last, so the planets keep their batch positions');
+  assert.equal(rings[0].emissive, null);
+  const planets = g.anim.orbits.reduce((n, o) => n + o.r.length, 0);
+  assert.equal(rings[0].instances.length, planets);
+  const expected = g.anim.orbits.flatMap((o) => o.r.map((r) => [o.center[0], o.center[2], r]));
+  rings[0].instances.forEach((inst, k) => {
+    assert.equal(inst[6], -1, 'a ring is decoration');
+    assert.ok(Math.abs(inst[0] - expected[k][0]) < 1e-3 && Math.abs(inst[2] - expected[k][1]) < 1e-3, 'on its star');
+    assert.ok(Math.abs(inst[3] - 2 * expected[k][2]) < 2e-3 && Math.abs(inst[5] - 2 * expected[k][2]) < 2e-3, 'diameter 2r');
+    assert.ok(inst[4] <= 0.05, 'flat');
+  });
+  assert.deepEqual(g.anim.orbits.map((o) => o.batch), g.batches.filter((b) => b.shape === 'sphere' && b.emissive === null).map((b) => b.id), 'orbits still animate only the planets');
+  assertGraph(g);
 });
 
 test('galaxy: each star glows in its own group colour, never a shared glow token', () => {

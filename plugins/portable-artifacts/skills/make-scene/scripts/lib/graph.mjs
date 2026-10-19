@@ -4,7 +4,8 @@
 import { InternalError } from './internal-error.mjs';
 
 export const KINDS = ['city', 'forest', 'galaxy', 'terrain', 'diagram', 'chart'];
-export const SHAPES = ['box', 'cylinder', 'sphere', 'icosa', 'cone', 'disc'];
+export const SHAPES = ['box', 'cylinder', 'sphere', 'icosa', 'cone', 'disc', 'ring'];
+export const ARROWS = ['end', 'both'];
 
 const DECIMALS = 1000;
 const CAMERA_DIRECTION = [1, 0.8, 1];
@@ -157,6 +158,7 @@ function checkTubes(g) {
     for (const k of ['label', 'display']) {
       if (t[k] !== undefined && typeof t[k] !== 'string') fail(`tubes[${i}].${k}`, 'expected a string when present');
     }
+    if (t.arrow !== undefined && !ARROWS.includes(t.arrow)) fail(`tubes[${i}].arrow`, `${JSON.stringify(t.arrow)} is not one of ${ARROWS.join(', ')}`);
   });
 }
 

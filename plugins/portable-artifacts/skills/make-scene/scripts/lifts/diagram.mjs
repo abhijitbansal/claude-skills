@@ -4,7 +4,7 @@
 //
 //   graph layouts (architecture, flow, state): diagram-flat.mjs      sequence: diagram-sequence.mjs
 //   tour: spec.tour wins; otherwise the diagram's `stories` (capped at the scene's beat limit) become beats
-//         { focus: the node the light ends at, path: the edge's tube id, reverse }.
+//         { focus: the edge's own view (both ends in frame), path: the edge's tube id, reverse }.
 import fs from 'node:fs';
 import path from 'node:path';
 import { emptyGraph } from '../lib/graph.mjs';
@@ -57,11 +57,14 @@ const withoutTheme = ({ theme: _own, ...rest }) => rest; // the scene's theme dr
 
 // ---- tour -----------------------------------------------------------------
 
-// A hop plays along its edge; the camera goes to the end the light reaches. A focus beat goes to its first id.
+// A hop plays along its edge; the camera frames the whole edge, so the light is in view from end to end (make-diagram keeps
+// edge ids apart from node ids, so the edge's key is its own). A focus beat goes to its first id.
 function tourOf(beats, focus) {
   return beats.slice(0, LIMITS.beats).map((beat) => {
     const ids = beat.ids.map((id) => id.toLowerCase());
-    const target = beat.kind === 'hop' ? (beat.reverse ? ids[0] : ids.at(-1)) : ids.find((id) => Object.hasOwn(focus, id)) ?? ids[0];
+    const edge = beat.kind === 'hop' ? String(beat.edge).toLowerCase() : null;
+    const hopEnd = beat.reverse ? ids[0] : ids.at(-1);
+    const target = beat.kind === 'hop' ? (edge !== null && Object.hasOwn(focus, edge) ? edge : hopEnd) : ids.find((id) => Object.hasOwn(focus, id)) ?? ids[0];
     return {
       title: beat.title,
       caption: beat.caption ?? '',

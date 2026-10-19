@@ -3,7 +3,7 @@
 // y = top - i * STEP, so the first message is the highest. Frames and notes are not drawn in 3D (the 2D
 // fallback keeps them); self messages are a small loop beside the pillar.
 import { emptyGraph, finalizeGraph } from '../lib/graph.mjs';
-import { TUBE_RADIUS, cameraFor, colourOfStyle, displayOf, focusFrom, kindGroups, oneLine, px, viewOf } from './diagram-parts.mjs';
+import { TUBE_RADIUS, cameraFor, colourOfStyle, displayOf, focusFrom, kindGroups, oneLine, px, routeView, viewOf } from './diagram-parts.mjs';
 
 export const STEP = 0.9; // vertical distance between two messages
 const PILLAR_WIDTH = 0.8;
@@ -16,7 +16,7 @@ const LOOP_DROP = 0.4;
 const LABEL_RISE = 0.18;
 const MESSAGE_LABEL_SIZE = 0.34;
 const PARTICIPANT_LABEL_SIZE = 0.5;
-const VIEW_DIRECTION = [0.2, 0.15, 1];
+const VIEW_DIRECTION = [0.2, 0.5, 1]; // about 26 degrees up: the orbit never goes flatter than 20
 const FOCUS_DISTANCE = 9;
 
 /** The route of one message: pillar surface to pillar surface along x; a self message loops to the right. */
@@ -68,7 +68,7 @@ export function sequenceGraph(built, spec) {
       const mid = route[Math.floor(route.length / 2)];
       labels.push({ text: label, at: [m.from === m.to ? mid[0] + 1 : mid[0], y + LABEL_RISE, 0], size: MESSAGE_LABEL_SIZE });
     }
-    const tube = { id: m.id, points: route, radius: TUBE_RADIUS, colour: colourOfStyle(m.kind), item: null, label: label === '' ? ends : label };
+    const tube = { id: m.id, points: route, radius: TUBE_RADIUS, colour: colourOfStyle(m.kind), item: null, label: label === '' ? ends : label, arrow: 'end' };
     return label === '' ? tube : { ...tube, display: ends };
   });
 
@@ -78,7 +78,8 @@ export function sequenceGraph(built, spec) {
   g.batches = batches;
   g.tubes = tubes;
   g.labels = labels;
-  g.focus = focusFrom(views, geometry.participants.map((p, i) => [items[i].label, views[i][1]]));
+  const messageViews = tubes.map((t) => [t.id, routeView(t.points, VIEW_DIRECTION)]);
+  g.focus = focusFrom([...views, ...messageViews], geometry.participants.map((p, i) => [items[i].label, views[i][1]]));
   const done = finalizeGraph(g);
   return finalizeGraph({ ...done, camera: cameraFor(done.bounds, VIEW_DIRECTION) });
 }

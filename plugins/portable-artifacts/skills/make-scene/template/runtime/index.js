@@ -2,6 +2,7 @@
 // defines window.PAScene.mount. Nothing here touches the DOM at load time.
 import { PerspectiveCamera, Raycaster, Scene, Vector2, Vector3, WebGLRenderer } from 'three';
 import { createControls } from './controls.js';
+import { MAX_ELEVATION_CLAMP, alignToStrip, fitDistance, focusScale, framePoints, viewDirection } from './fit.js';
 import { createLoop, isBusy, pixelRatio } from './loop.js';
 import { createChrome } from './chrome/index.js';
 import { buildObjects } from './render.js';
@@ -9,7 +10,6 @@ import { readPalette, watchTheme } from './theme.js';
 
 const FOV = 45;
 const NEAR = 0.1;
-const FIT_MARGIN = 1.15; // breathing room around the scene's bounding sphere
 const MAX_DT = 0.1; // seconds of animation time per frame
 const CANVAS_ATTRS = { antialias: true, alpha: false, powerPreference: 'high-performance' };
 const REDUCED_QUERY = '(prefers-reduced-motion: reduce)';
@@ -30,14 +30,18 @@ function original(el) {
   return originals.get(el);
 }
 
-/** Dolly the camera straight back from the scene's centre until its bounding sphere fits the view (never moves it closer). */
-function fitCamera(camera, extent, aspect) {
-  const half = (FOV * Math.PI) / 360;
-  const limit = Math.min(half, Math.atan(Math.tan(half) * aspect));
-  const need = ((extent.diag / 2) / Math.sin(limit)) * FIT_MARGIN;
-  const offset = camera.position.clone().sub(extent.center);
-  const have = offset.length();
-  if (have > 0 && have < need) camera.position.copy(extent.center).add(offset.multiplyScalar(need / have));
+/**
+ * Frame the scene: keep the graph camera's side of the target (lifted to at least a 3/4 elevation) and put the camera
+ * exactly as far back as the scene's own points need for this aspect, in or out. Returns the distance.
+ */
+function fitCamera(camera, graph, aspect) {
+  const target = graph.camera.target;
+  const from = graph.camera.position.map((c, i) => c - target[i]);
+  const points = framePoints(graph);
+  const dir = alignToStrip(viewDirection(from), points, aspect);
+  const distance = fitDistance(points, target, dir, { fov: (FOV * Math.PI) / 180, aspect });
+  camera.position.set(target[0] + dir[0] * distance, target[1] + dir[1] * distance, target[2] + dir[2] * distance);
+  return distance;
 }
 
 function inert(canvas) {
@@ -139,7 +143,8 @@ function mount(host, graph, opts = {}) {
     undo.push(() => built.dispose());
     camera.far = built.extent.far;
     camera.position.set(...graph.camera.position);
-    fitCamera(camera, built.extent, Math.max(1, container.clientWidth || host.clientWidth) / Math.max(1, container.clientHeight || host.clientHeight));
+    const fitted = fitCamera(camera, graph, Math.max(1, container.clientWidth || host.clientWidth) / Math.max(1, container.clientHeight || host.clientHeight));
+    built.setFit(fitted);
     scene.add(built.root);
     scene.background = built.background;
     scene.fog = built.fog;
@@ -221,7 +226,8 @@ function mount(host, graph, opts = {}) {
 
     controlsApi = createControls({
       camera, dom: canvas, target, distance, reducedMotion: isReduced, onInput: wake,
-      polarMax: graph.env?.sky === 'space' ? Math.PI - 0.05 : Math.PI * 0.495,
+      polarMax: graph.env?.sky === 'space' ? Math.PI - MAX_ELEVATION_CLAMP : Math.PI / 2 - MAX_ELEVATION_CLAMP,
+      polarMin: graph.env?.sky === 'space' ? MAX_ELEVATION_CLAMP : 0,
     });
     undo.push(() => controlsApi.dispose());
 
@@ -284,7 +290,11 @@ function mount(host, graph, opts = {}) {
       flyTo(focusKey, { instant = false } = {}) {
         const key = String(focusKey).toLowerCase();
         if (!graph.focus || !Object.hasOwn(graph.focus, key)) return false;
-        controlsApi.flyTo(graph.focus[key], { instant });
+        const view = graph.focus[key];
+        const aspect = camera.aspect;
+        const offset = new Vector3(...view.position).sub(new Vector3(...view.target));
+        const grown = focusScale(offset.length(), aspect, fitted);
+        controlsApi.flyTo({ position: offset.multiplyScalar(grown).add(new Vector3(...view.target)).toArray(), target: view.target }, { instant });
         return true;
       },
       /**

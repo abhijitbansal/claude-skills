@@ -172,3 +172,93 @@ test('reduced motion stays still: two screenshots 500 ms apart are identical, an
   await moving.page.waitForTimeout(500);
   assert.notEqual(await canvasHash(moving.page), a, 'with motion allowed the scene moves');
 });
+
+// ---- first-open framing and labels (Task 15a) ----
+
+// Where every point of the page's graph (instance corners, ring circles, tube points, surface corners) lands on screen, in canvas pixels.
+const screenExtent = (page) => page.evaluate(() => {
+  const graph = JSON.parse(document.querySelector('script[type="application/json"]').textContent);
+  const api = window.PAScene.__scene;
+  const w = api.canvas.clientWidth;
+  const h = api.canvas.clientHeight;
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  const take = (x, y, z) => {
+    const p = api.project(x, y, z);
+    x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y);
+  };
+  for (const batch of graph.batches) {
+    for (const [x, y, z, sx, sy, sz] of batch.instances) {
+      if (batch.shape === 'ring') {
+        for (let k = 0; k < 16; k++) take(x + (Math.cos((k * Math.PI) / 8) * sx) / 2, y, z + (Math.sin((k * Math.PI) / 8) * sz) / 2);
+      } else {
+        for (const dx of [-sx / 2, sx / 2]) for (const dy of [-sy / 2, sy / 2]) for (const dz of [-sz / 2, sz / 2]) take(x + dx, y + dy, z + dz);
+      }
+    }
+  }
+  for (const tube of graph.tubes) for (const [x, y, z] of tube.points) take(x, y, z);
+  for (const surface of graph.surfaces) {
+    const [sx, sz, sy] = surface.size;
+    for (const x of [-sx / 2, sx / 2]) for (const z of [-sz / 2, sz / 2]) take(x, 0, z);
+    const top = surface.heights.reduce((m, v) => Math.max(m, v), 0) * sy;
+    for (const x of [-sx / 2, sx / 2]) for (const z of [-sz / 2, sz / 2]) take(x, top, z);
+  }
+  return { w, h, x0, y0, x1, y1 };
+});
+
+for (const world of WORLDS) {
+  test(`${world}: the first view frames the scene tightly, in both directions, at both widths`, async (t) => {
+    for (const viewport of VIEWPORTS) {
+      const ctx = await open(t, world, { viewport, reducedMotion: 'reduce' });
+      if (!ctx) return;
+      await ctx.page.waitForTimeout(500);
+      const e = await screenExtent(ctx.page);
+      const fillX = (e.x1 - e.x0) / e.w;
+      const fillY = (e.y1 - e.y0) / e.h;
+      const at = `${world} at ${viewport.width}px: fills ${fillX.toFixed(2)} x ${fillY.toFixed(2)}`;
+      assert.ok(e.x0 >= -2 && e.y0 >= -2 && e.x1 <= e.w + 2 && e.y1 <= e.h + 2, `${at}; nothing is cropped`);
+      assert.ok(Math.max(fillX, fillY) >= 0.6, `${at}; the scene fills at least 60% of the frame in its limiting direction`);
+    }
+  });
+}
+
+test('labels: a long label is cut with an ellipsis and keeps its full text in a title; no two visible labels overlap', async (t) => {
+  const long = (n) => `District ${n} of the infrastructure and platform reliability work`.slice(0, 48);
+  const rows = demoRows((group) => group).map((row) => ({ ...row, group: long(['api', 'web', 'db'].indexOf(row.group) + 1) }));
+  const ctx = await open(t, 'city', { viewport: VIEWPORTS[1], reducedMotion: 'reduce', build: { rows } });
+  if (!ctx) return;
+  await ctx.page.waitForTimeout(500);
+  const labels = await ctx.page.evaluate(() => [...document.querySelectorAll('.sc-label')].map((el) => {
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return { hidden: el.hidden, text: el.textContent, title: el.getAttribute('title'), left: r.left, right: r.right, top: r.top, bottom: r.bottom, overflow: s.textOverflow };
+  }));
+  const shown = labels.filter((l) => !l.hidden);
+  assert.ok(shown.length >= 1, 'at least one label is drawn');
+  for (const l of labels) assert.equal(l.title, l.text, 'the full text is in the title attribute');
+  for (const l of shown) {
+    assert.ok(l.right - l.left <= 0.4 * 390 + 1, `a label is at most 40vw wide (${(l.right - l.left).toFixed(0)}px)`);
+    assert.equal(l.overflow, 'ellipsis');
+  }
+  shown.forEach((a, i) => shown.slice(i + 1).forEach((b) => {
+    const overlap = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    assert.equal(overlap, false, `"${a.text}" and "${b.text}" overlap`);
+  }));
+  assert.deepEqual(ctx.problems, []);
+});
+
+test('the first tour beat of a city keeps its target in the middle of the frame at 390px and nothing between them', async (t) => {
+  const tour = [{ title: 'API', focus: ['api'], caption: 'x' }];
+  const ctx = await open(t, 'city', { viewport: VIEWPORTS[1], reducedMotion: 'reduce', build: { spec: { tour } } });
+  if (!ctx) return;
+  const { page } = ctx;
+  await page.keyboard.press('p');
+  await page.waitForTimeout(500);
+  const at = await page.evaluate(() => {
+    const graph = JSON.parse(document.querySelector('script[type="application/json"]').textContent);
+    const [x, y, z] = graph.focus.api.target;
+    const api = window.PAScene.__scene;
+    const p = api.project(x, y, z);
+    return { x: p.x / api.canvas.clientWidth, y: p.y / api.canvas.clientHeight, visible: p.visible };
+  });
+  assert.ok(at.visible && Math.abs(at.x - 0.5) <= 0.3 && Math.abs(at.y - 0.5) <= 0.3, `the target is in the middle 60%: ${JSON.stringify(at)}`);
+});
