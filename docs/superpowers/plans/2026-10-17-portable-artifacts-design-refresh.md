@@ -223,3 +223,12 @@ Design rules to carry from the specimens: structure from type and rules, not car
 - [ ] **Step 3:** Dispatch one fresh code reviewer on `git diff main...HEAD` with the report-everything sentence from the repo's review rules; apply the gate (CRITICAL and HIGH block).
 - [ ] **Step 4:** Generate the interactive manual-test checklist (`.scratch/portable-artifacts-design-refresh-test-checklist.html`) covering what automated checks cannot: motion playing in a real browser, MP4 playback, phone-size layouts, theme feel in light and dark, the image hook against a real endpoint if the user supplies one.
 - [ ] **Step 5:** Stop and hand the branch to the user for push and PR approval; do not merge.
+
+## Status (2026-10-19)
+
+Tasks 1-11 done. Task 11 results (measured, run from `plugins/portable-artifacts` unless noted): explainer 760/760, make-diagram 635/635, make-dashboard 338/338 (run from `skills/make-dashboard`: one live-page test reads a cwd-relative path), make-motion 188 pass and 3 skipped (voice tests need a cached Kokoro model), bin 60/60, shared 163/163, `sync-shared.mjs --check` clean; pytest 173 passed, bats 0 failures; manifest validation OK (8 plugins).
+
+Fresh Opus review of `git diff main...HEAD`: 0 critical, 1 high, 2 medium, 17 low. The high (light-mode accent text 4.07-4.25:1 under the film grain) is fixed by darkening the light `accent`, `warn`, `good`, `bad` tokens and press `text3` to 5.3:1, and the grain test now covers all flat-ground text. Open, not fixed: motion text legibility on `background: "art"` is claimed but not measured, and the low findings (stale comments in `fit.mjs` and `flavor.mjs`, `deck-flavors.css` missing from the font lint, no body cancel on a non-ok image response, raw markdown in the image prompt).
+
+Showcase: every explainer, deck, diagram and motion sample is rebuilt in dusk, press and poster, with a Theme switch in the site Gallery. Manual-test checklist: `.scratch/portable-artifacts-design-refresh-test-checklist.html` (local, git-ignored).
+
