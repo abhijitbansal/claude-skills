@@ -363,15 +363,33 @@ function mountScene(host, graph, opts = {}) {
   };
 }
 
+/**
+ * Test hook, only when the page URL has ?test: window.PAScene.__project(itemIndex) -> { x, y } viewport point on top of
+ * the first drawn instance of that item (the first scene on the page), or null. The browser tests hover it.
+ */
+function exposeProjection(graph, api) {
+  window.PAScene.__project = (itemIndex) => {
+    const inst = graph.batches.flatMap((b) => b.instances).find((i) => i[6] === itemIndex);
+    if (!inst) return null;
+    const at = api.project(inst[0], inst[1] + inst[4] / 2, inst[2]);
+    const rect = api.canvas.getBoundingClientRect();
+    return at.visible ? { x: rect.left + at.x, y: rect.top + at.y } : null;
+  };
+}
+
 /** Mount every [data-pa-scene] host that carries its graph in a <script type="application/json"> child. */
 function initAll(opts = {}) {
   const mounted = [];
+  const hooked = new URLSearchParams(window.location.search).has('test');
   for (const host of document.querySelectorAll('[data-pa-scene]')) {
     const data = host.querySelector('script[type="application/json"]');
     if (!data || host.dataset.sceneInit) continue;
     host.dataset.sceneInit = '1';
     try {
-      mounted.push(mountScene(host, JSON.parse(data.textContent), opts));
+      const graph = JSON.parse(data.textContent);
+      const api = mountScene(host, graph, opts);
+      mounted.push(api);
+      if (hooked && mounted.length === 1) exposeProjection(graph, api);
     } catch (err) {
       console.warn(`make-scene: showing the table instead of the 3D view (${err?.message ?? err})`);
     }
