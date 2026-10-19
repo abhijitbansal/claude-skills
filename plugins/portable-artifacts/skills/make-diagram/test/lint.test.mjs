@@ -57,14 +57,23 @@ test('the label of a dot counts as part of the dot: a node on top of it overlaps
 });
 
 test('an edge label over a node is reported at the edge', async () => {
-  const g = clone(await graph('architecture'));
-  const i = g.edges.findIndex((e) => e.label);
-  const target = g.nodes[0];
+  // a self loop's plate is drawn where ELK put it, so moving that box moves the drawn plate
+  const g = clone(await graph('state'));
+  const i = g.edges.findIndex((e) => e.label && e.from === e.to);
+  const target = g.nodes.find((n) => n.id === 'paid');
   g.edges[i].label = { ...g.edges[i].label, x: target.x + 2, y: target.y + 2 };
   const errors = lint(g);
   assert.equal(errors.length, 1, only(errors).join('\n'));
   assert.equal(errors[0].path, `edges[${i}].label`);
   assert.match(errors[0].message, new RegExp(`overlaps node "${target.id}"`));
+});
+
+test('lint checks the plate as drawn: on a curve, ELK\'s unused box does not count', async () => {
+  // architecture edge-0 is drawn as a curve with its plate on the wire, wherever ELK's box is
+  const g = clone(await graph('architecture'));
+  const target = g.nodes.find((n) => n.id === 'db');
+  g.edges[0].label = { ...g.edges[0].label, x: target.x + 2, y: target.y + 2 };
+  assert.deepEqual(lint(g), []);
 });
 
 test('text wider than its box is reported with both widths', async () => {

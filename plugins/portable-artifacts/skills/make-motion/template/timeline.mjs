@@ -1,18 +1,22 @@
 // Pure, DOM-free: compiles a motion spec into one paused anime.js timeline that
 // animates a plain state object per element. Runs unchanged in Node and the browser.
-import { createTimeline } from 'animejs';
-import { withDefaults, FADE_SECONDS } from './defaults.mjs';
+import { createTimeline, cubicBezier } from 'animejs';
+import { withDefaults, FADE_SECONDS, EASE_CURVES } from './defaults.mjs';
 
 const MS = 1000;
 const MIN_SEGMENT_MS = 1;
 const COUNTER_MAX_SECONDS = 2;
 const COUNTER_SCENE_SHARE = 0.8;
 
+// The named eases as anime.js easing functions; every other name is one of anime's own (a string it resolves).
+const NAMED_EASES = Object.fromEntries(Object.entries(EASE_CURVES).map(([name, points]) => [name, cubicBezier(...points)]));
+const easeOf = (name) => NAMED_EASES[name] ?? name ?? 'linear';
+
 // Keyframes that set `prop`, as [{t, value, ease}] in order.
 function track(keyframes, prop) {
   return keyframes
     .filter((kf) => kf[prop] !== undefined)
-    .map((kf) => ({ t: kf.t, value: kf[prop], ease: kf.ease ?? 'linear' }));
+    .map((kf) => ({ t: kf.t, value: kf[prop], ease: easeOf(kf.ease) }));
 }
 
 // A counter with no `value` keyframes counts from -> to at the start of its scene.

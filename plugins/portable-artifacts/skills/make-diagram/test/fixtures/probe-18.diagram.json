@@ -1,0 +1,23 @@
+{
+  "title": "probe 18",
+  "subtitle": "Review repro: a Z cubic from n0 to n2 crossed n1 before the clearance check",
+  "type": "architecture",
+  "direction": "right",
+  "nodes": [
+    { "id": "n0", "label": "Node 0", "kind": "queue" },
+    { "id": "n1", "label": "Node 1 with a longer two line label", "kind": "service" },
+    { "id": "n2", "label": "Node 2", "kind": "client" },
+    { "id": "n3", "label": "Node 3 with a longer two line label", "kind": "queue" },
+    { "id": "n4", "label": "Node 4", "kind": "service" },
+    { "id": "n5", "label": "Node 5", "kind": "queue" },
+    { "id": "n6", "label": "Node 6 with a longer two line label", "kind": "database" }
+  ],
+  "edges": [
+    { "from": "n0", "to": "n1" },
+    { "from": "n0", "to": "n2", "label": "calls" },
+    { "from": "n0", "to": "n3", "label": "emits event" },
+    { "from": "n2", "to": "n4", "label": "emits event" },
+    { "from": "n4", "to": "n5", "label": "reads" },
+    { "from": "n0", "to": "n6", "label": "calls" }
+  ]
+}

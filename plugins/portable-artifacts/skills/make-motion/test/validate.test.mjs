@@ -148,7 +148,8 @@ function readFileSyncLine(f) { return readFileSync(f, 'utf8').trim().split('\n')
 
 test('EASES is the documented set', () => {
   assert.ok(EASES.includes('linear') && EASES.includes('outCubic') && EASES.includes('inOutElastic'));
-  assert.equal(EASES.length, 1 + 3 * 9);
+  assert.deepEqual(EASES.slice(-4), ['enter', 'exit', 'move', 'land'], 'the four named eases');
+  assert.equal(EASES.length, 1 + 3 * 9 + 4);
 });
 
 // ---- review fix pass -------------------------------------------------------
@@ -273,4 +274,24 @@ test('generatedBy: model/effort/agent strings pass; hostile, long or unknown val
   assert.notDeepEqual(errs({ ...good(), generatedBy: { model: 'a'.repeat(61) } }), []);
   assert.notDeepEqual(errs({ ...good(), generatedBy: { modle: 'x' } }), []);
   assert.notDeepEqual(errs({ ...good(), generatedBy: 'x' }), []);
+});
+
+test('named eases enter, exit, move and land validate; a near miss gets a did-you-mean', () => {
+  for (const ease of ['enter', 'exit', 'move', 'land']) {
+    const s = good(); s.scenes[0].elements[0].keyframes[1].ease = ease;
+    assert.deepEqual(errs(s), [], ease);
+  }
+  const s = good(); s.scenes[0].elements[0].keyframes[1].ease = 'enterr';
+  const e = errs(s);
+  assert.ok(e.some((x) => x.includes('scenes[0].elements[0].keyframes[1].ease') && x.includes('did you mean "enter"?')), e.join('\n'));
+  assert.ok(EASES.includes('outCubic') && EASES.includes('linear'), 'the existing names still validate');
+});
+
+test('`exit` is a boolean on text; a string is rejected, and other element types do not take it', () => {
+  const ok = good(); Object.assign(ok.scenes[0].elements[0], { role: 'title', exit: true });
+  assert.deepEqual(errs(ok), []);
+  const str = good(); str.scenes[0].elements[0].exit = 'yes';
+  assert.ok(errs(str).some((x) => x.startsWith('scenes[0].elements[0].exit')), errs(str).join('\n'));
+  const counter = good(); counter.scenes[0].elements[0] = { id: 'c', type: 'counter', to: 5, x: 0, y: 0, exit: true };
+  assert.ok(errs(counter).some((x) => x.startsWith('scenes[0].elements[0].exit: not valid on counter')), errs(counter).join('\n'));
 });

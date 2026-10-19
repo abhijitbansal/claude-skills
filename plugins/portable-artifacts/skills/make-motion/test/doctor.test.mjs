@@ -72,12 +72,19 @@ test('ffmpeg is reported required-missing when PATH is empty and FFMPEG_PATH uns
   assert.ok(f && f.required === true);
 });
 
-test('--for voiceover asks for kokoro; plain does not; --for check is no longer accepted', () => {
+test('--for voiceover asks for kokoro; plain does not; --for check is accepted and never asks for kokoro', () => {
   const ids = (args) => JSON.parse(run(SKILL, ['--json', ...args]).stdout).missing.map((m) => m.id);
   assert.equal(ids([]).includes('kokoro'), false);
   const hasKokoro = fs.existsSync(path.join(SKILL, 'node_modules/kokoro-js'));
   assert.equal(ids(['--for', 'voiceover']).includes('kokoro'), !hasKokoro);
-  assert.equal(run(SKILL, ['--for', 'check']).status, 2);
+  assert.notEqual(run(SKILL, ['--for', 'check']).status, 2);
+  assert.equal(ids(['--for', 'check']).includes('kokoro'), false);
+});
+
+test('requirementsFor check: node, node_modules and a required browser; no ffmpeg (check.mjs captures no video)', async () => {
+  const requirementsFor = await loadRequirements();
+  assert.deepEqual(idsOf(requirementsFor('check')), ['node', 'node_modules', 'chromium']);
+  assert.equal(requirementsFor('check')[2].required, true);
 });
 
 test('requirementsFor: rendering always needs ffmpeg and a required browser; ALL adds kokoro', async () => {

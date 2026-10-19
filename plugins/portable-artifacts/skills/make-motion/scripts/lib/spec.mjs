@@ -11,13 +11,14 @@ import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, trackStart } from '../../template/a
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
+import { EASE_CURVES } from '../../template/defaults.mjs';
 
 export class UsageError extends Error {}
 
 const MAX_TOTAL_SECONDS = 120;
 
 const EASE_FAMILIES = ['Quad', 'Cubic', 'Quart', 'Back', 'Elastic', 'Bounce', 'Sine', 'Expo', 'Circ'];
-export const EASES = ['linear', ...['in', 'out', 'inOut'].flatMap((d) => EASE_FAMILIES.map((f) => d + f))];
+export const EASES = ['linear', ...['in', 'out', 'inOut'].flatMap((d) => EASE_FAMILIES.map((f) => d + f)), ...Object.keys(EASE_CURVES)];
 
 const POSE = ['opacity', 'x', 'y', 'scale', 'rotate'];
 export const ANIMATABLE = {
@@ -31,7 +32,7 @@ export const ANIMATABLE = {
 const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes'];
 const TEXT_STYLE = ['fontSize', 'fontWeight', 'color', 'align', 'maxWidth', 'font'];
 const FIELDS = {
-  text: [...COMMON, 'text', 'role', ...TEXT_STYLE],
+  text: [...COMMON, 'text', 'role', 'exit', ...TEXT_STYLE],
   counter: [...COMMON, 'from', 'to', 'decimals', 'prefix', 'suffix', ...TEXT_STYLE],
   shape: [...COMMON, 'shape', 'width', 'height', 'radius', 'fill', 'stroke', 'strokeWidth'],
   image: [...COMMON, 'src', 'width', 'height', 'fit'],
@@ -69,6 +70,7 @@ const element = {
     keyframes: { type: 'array', items: keyframe },
     text: { type: 'string' },
     role: { type: 'string' },
+    exit: { type: 'boolean' },
     fontSize: { type: 'number', minimum: 1 },
     fontWeight: { enum: [400, 500, 600, 700, 800] },
     color,

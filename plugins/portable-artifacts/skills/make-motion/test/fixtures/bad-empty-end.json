@@ -1,0 +1,16 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "outro",
+      "duration": 2,
+      "elements": [
+        { "id": "thanks", "type": "text", "text": "Thanks for watching", "x": 960, "y": 540, "fontSize": 64,
+          "keyframes": [{ "t": 1.2, "opacity": 1 }, { "t": 1.8, "opacity": 0, "ease": "inCubic" }] },
+        { "id": "rule", "type": "shape", "shape": "line", "width": 400, "x": 960, "y": 620,
+          "keyframes": [{ "t": 1.2, "opacity": 1 }, { "t": 1.8, "opacity": 0, "ease": "inCubic" }] }
+      ]
+    }
+  ]
+}

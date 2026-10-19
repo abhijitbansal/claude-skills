@@ -187,6 +187,18 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 .tool[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
 @supports (color: color-mix(in srgb, red, red)) { .tool[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); } }
 .tool:disabled { opacity: 0.6; cursor: default; }
+/* The play button is an icon (a 40 px hit area); its svg paints in currentColor, so each theme and the light/dark toggle recolor it. */
+.tool.pa-play { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; padding: 0; }
+.pa-playicon { display: inline-flex; }
+.pa-playicon svg { display: block; }
+/* The hold ring (transport.js): decorative, and absolutely placed so it never moves a control. Next reserves a slot for it on its right (a circle of 14 px); in Play it circles the icon. The arc runs in the accent over a faint currentColor track. */
+.tool[data-pa-next] { position: relative; padding-right: 28px; }
+.pa-ring { position: absolute; width: 14px; height: 14px; pointer-events: none; }
+.tool[data-pa-next] > .pa-ring { right: 8px; top: 50%; margin-top: -7px; }
+.tool.pa-play > .pa-ring { inset: 2px; width: auto; height: auto; }
+.pa-ring svg { display: block; width: 100%; height: 100%; }
+.pa-ring-track { opacity: .25; }
+.pa-ring-arc { stroke: var(--accent); }
 /* Full screen, real (the root element is :fullscreen) or the window-filling fallback (.pa-fill on the root, when the browser refused, as inside a sandboxed iframe): the same chrome goes, the canvas takes the room; the tabs, Fit, Find, the chapters and the way out stay. Any root works, the page's or a dialog's (fullscreen.js marks it data-pa-full-root). */
 .pa-fill .titles, [data-pa-full-root]:fullscreen .titles, .pa-fill [data-act]:not([data-act="fit"]), [data-pa-full-root]:fullscreen [data-act]:not([data-act="fit"]), .pa-fill .zoom-label, [data-pa-full-root]:fullscreen .zoom-label, .pa-fill .grp-export, [data-pa-full-root]:fullscreen .grp-export, .pa-fill [data-export], [data-pa-full-root]:fullscreen [data-export], .pa-fill [data-theme-toggle], [data-pa-full-root]:fullscreen [data-theme-toggle] { display: none; }
 .zoom-label { min-width: 3.2em; text-align: center; color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
@@ -338,7 +350,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 <p class="export-error" data-export-error role="alert" hidden></p>
 <div class="body">
 <main class="stage" id="pa-stage">
-<svg xmlns="http://www.w3.org/2000/svg" class="pa-diagram pa-type-architecture" viewBox="0 0 2516 454" role="graphics-document" aria-labelledby="d-title d-desc"><title id="d-title">Food delivery: one order</title><desc id="d-desc">One order from the customer&#39;s tap to the courier&#39;s drop-off, across three lanes. architecture diagram with 10 nodes and 12 edges.</desc><defs><marker id="d-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-fill" d="M0 0.5L8 4L0 7.5Z"/></marker><marker id="d-arrow-open" viewBox="0 0 8 8" refX="7.4" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-open" d="M0.8 0.8L7.4 4L0.8 7.2"/></marker></defs><g class="pa-group" data-id="customer_side" data-depth="0" data-lane="0"><rect class="pa-group-box" x="53" y="227" width="568" height="119" rx="6"/><rect class="pa-lane" x="53" y="233" width="4" height="107" rx="2"/><text class="pa-group-label" text-anchor="start"><tspan x="65" y="250.85">Customer side</tspan></text></g><g class="pa-group" data-id="platform" data-depth="0" data-lane="1"><rect class="pa-group-box" x="855" y="129" width="1110" height="229.2" rx="6"/><rect class="pa-lane" x="855" y="135" width="4" height="217.2" rx="2"/><text class="pa-group-label" text-anchor="start"><tspan x="867" y="152.85">Platform</tspan></text></g><g class="pa-group" data-id="partners" data-depth="0" data-lane="2"><rect class="pa-group-box" x="2227" y="102" width="226" height="290" rx="6"/><rect class="pa-lane" x="2227" y="108" width="4" height="278" rx="2"/><text class="pa-group-label" text-anchor="start"><tspan x="2239" y="125.85">Partners</tspan></text></g><g class="pa-edge pa-edge-solid" data-id="tap" data-from="customer" data-to="mobile" data-family="person"><path class="pa-wire" d="M207 294L459 294" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="post" data-from="mobile" data-to="gateway" data-family="service"><path class="pa-wire" d="M597 294L886 294" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="route" data-from="gateway" data-to="orders" data-family="service"><path class="pa-wire" d="M1054 294L1279 294Q1285 294 1285 288L1285 245.4Q1285 239.4 1291 239.4L1323 239.4" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="charge" data-from="orders" data-to="payments" data-family="service"><path class="pa-wire" d="M1323 217.8L1275.1 217.8Q1275 217.8 1275 217.9L1275 217.9Q1275 218 1274.9 218L1086.25 218Q1085 218 1085 219.25L1085 219.25Q1085 220.5 1083.75 220.5L1061 220.5" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="card-charge" data-from="payments" data-to="card" data-family="service"><path class="pa-wire" d="M1061 193.5L1079 193.5Q1085 193.5 1085 187.5L1085 175Q1085 169 1091 169L2262 169" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="card-reply" data-from="card" data-to="payments" data-family="external"><path class="pa-wire" d="M2418 169L2476 169Q2482 169 2482 163L2482 98Q2482 92 2476 92L818 92Q812 92 812 98L812 201Q812 207 818 207L879 207" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="paid" data-from="payments" data-to="orders" data-family="service"><path class="pa-wire" d="M1061 207L1323 207" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="write" data-from="orders" data-to="db" data-family="service"><path class="pa-wire" d="M1485 214.2L1765 214.2" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-async" data-id="publish" data-from="orders" data-to="queue" data-family="service"><path class="pa-wire" d="M1485 232.2L1503 232.2Q1509 232.2 1509 238.2L1509 300.2Q1509 306.2 1515 306.2L1780 306.2" fill="none" marker-end="url(#d-arrow-open)"/></g><g class="pa-edge pa-edge-solid" data-id="accept" data-from="tablet" data-to="orders" data-family="service"><path class="pa-wire" d="M2429 255L2486 255Q2492 255 2492 249L2492 60Q2492 54 2486 54L808 54Q802 54 802 60L802 250Q802 256 808 256L1269 256Q1275 256 1275 250L1275 234.6Q1275 228.6 1281 228.6L1323 228.6" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-async" data-id="offer" data-from="queue" data-to="courier" data-family="queue"><path class="pa-wire" d="M1926 306.2L2168 306.2Q2174 306.2 2174 312.2L2174 335Q2174 341 2180 341L2269 341" fill="none" marker-end="url(#d-arrow-open)"/></g><g class="pa-edge pa-edge-solid" data-id="dropoff" data-from="courier" data-to="customer" data-family="service"><path class="pa-wire" d="M2411 341L2476 341Q2482 341 2482 347L2482 396Q2482 402 2476 402L30 402Q24 402 24 396L24 300Q24 294 30 294L77 294" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-node pa-kind-user pa-family-person pa-tone-neutral" data-id="customer" tabindex="0" role="graphics-symbol" aria-label="Customer: user"><path class="pa-shape pa-shape-rounded-rect" d="M85 267L199 267A8 8 0 0 1 207 275L207 313A8 8 0 0 1 199 321L85 321A8 8 0 0 1 77 313L77 275A8 8 0 0 1 85 267Z"/><rect class="pa-tile" x="91.46" y="280" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="105.46" y="300.3">🧑</text><text class="pa-type" text-anchor="middle"><tspan x="161" y="287.19">USER</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="161" y="306.55">Customer</tspan></text></g><g class="pa-node pa-kind-client pa-family-service pa-tone-neutral" data-id="mobile" tabindex="0" role="graphics-symbol" aria-label="Mobile app: client"><path class="pa-shape pa-shape-rounded-rect" d="M467 267L589 267A8 8 0 0 1 597 275L597 313A8 8 0 0 1 589 321L467 321A8 8 0 0 1 459 313L459 275A8 8 0 0 1 467 267Z"/><rect class="pa-tile" x="473.44" y="280" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="487.44" y="300.3">📱</text><text class="pa-type" text-anchor="middle"><tspan x="547" y="287.19">CLIENT</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="547" y="306.55">Mobile app</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="payments" tabindex="0" role="graphics-symbol" aria-label="Payments service: service"><path class="pa-shape pa-shape-rounded-rect" d="M887 180L1053 180A8 8 0 0 1 1061 188L1061 226A8 8 0 0 1 1053 234L887 234A8 8 0 0 1 879 226L879 188A8 8 0 0 1 887 180Z"/><rect class="pa-tile" x="893.47" y="193" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="907.47" y="213.3">💳</text><text class="pa-type" text-anchor="middle"><tspan x="989" y="200.19">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="989" y="219.55">Payments service</tspan></text></g><g class="pa-node pa-kind-gateway pa-family-service pa-tone-neutral" data-id="gateway" tabindex="0" role="graphics-symbol" aria-label="API gateway: gateway"><path class="pa-shape pa-shape-hexagon-rect" d="M896 267L1044 267L1054 277L1054 311L1044 321L896 321L886 311L886 277Z"/><rect class="pa-tile" x="910.11" y="280" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="924.11" y="300.3">🚪</text><text class="pa-type" text-anchor="middle"><tspan x="989" y="287.19">GATEWAY</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="989" y="306.55">API gateway</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="orders" tabindex="0" role="graphics-symbol" aria-label="Orders service: service"><path class="pa-shape pa-shape-rounded-rect" d="M1331 196.2L1477 196.2A8 8 0 0 1 1485 204.2L1485 242.2A8 8 0 0 1 1477 250.2L1331 250.2A8 8 0 0 1 1323 242.2L1323 204.2A8 8 0 0 1 1331 196.2Z"/><rect class="pa-tile" x="1337.51" y="209.2" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="1351.51" y="229.5">🧾</text><text class="pa-type" text-anchor="middle"><tspan x="1423" y="216.39">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="1423" y="235.75">Orders service</tspan></text></g><g class="pa-node pa-kind-database pa-family-data pa-tone-neutral" data-id="db" tabindex="0" role="graphics-symbol" aria-label="Orders database: database"><path class="pa-shape pa-shape-cylinder" d="M1765 187.2A88 6 0 0 1 1941 187.2L1941 241.2A88 6 0 0 1 1765 241.2Z"/><path class="pa-decor" d="M1765 187.2A88 6 0 0 0 1941 187.2"/><rect class="pa-tile" x="1779.69" y="200.2" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="1793.69" y="220.5">🐘</text><text class="pa-type" text-anchor="middle"><tspan x="1872" y="207.39">DATABASE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="1872" y="226.75">Orders database</tspan></text></g><g class="pa-node pa-kind-queue pa-family-queue pa-tone-neutral" data-id="queue" tabindex="0" role="graphics-symbol" aria-label="Event queue: queue"><path class="pa-shape pa-shape-stacked-rect" d="M1784 279.2L1922 279.2A4 4 0 0 1 1926 283.2L1926 329.2A4 4 0 0 1 1922 333.2L1784 333.2A4 4 0 0 1 1780 329.2L1780 283.2A4 4 0 0 1 1784 279.2Z"/><path class="pa-decor" d="M1787 279.2L1787 333.2"/><path class="pa-decor" d="M1919 279.2L1919 333.2"/><rect class="pa-tile" x="1794.3" y="292.2" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="1808.3" y="312.5">📨</text><text class="pa-type" text-anchor="middle"><tspan x="1872" y="299.39">QUEUE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="1872" y="318.75">Event queue</tspan></text></g><g class="pa-node pa-kind-external pa-family-external pa-tone-neutral" data-id="card" tabindex="0" role="graphics-symbol" aria-label="Card provider: external"><path class="pa-shape pa-shape-dashed-rounded-rect" d="M2270 142L2410 142A8 8 0 0 1 2418 150L2418 188A8 8 0 0 1 2410 196L2270 196A8 8 0 0 1 2262 188L2262 150A8 8 0 0 1 2270 142Z"/><rect class="pa-tile" x="2276.11" y="155" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="2290.11" y="175.3">🏦</text><text class="pa-type" text-anchor="middle"><tspan x="2359" y="162.19">EXTERNAL</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="2359" y="181.55">Card provider</tspan></text></g><g class="pa-node pa-kind-client pa-family-service pa-tone-neutral" data-id="tablet" tabindex="0" role="graphics-symbol" aria-label="Restaurant tablet: client"><path class="pa-shape pa-shape-rounded-rect" d="M2259 228L2421 228A8 8 0 0 1 2429 236L2429 274A8 8 0 0 1 2421 282L2259 282A8 8 0 0 1 2251 274L2251 236A8 8 0 0 1 2259 228Z"/><rect class="pa-tile" x="2265.4" y="241" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="2279.4" y="261.3">🍕</text><text class="pa-type" text-anchor="middle"><tspan x="2359" y="248.19">CLIENT</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="2359" y="267.55">Restaurant tablet</tspan></text></g><g class="pa-node pa-kind-client pa-family-service pa-tone-neutral" data-id="courier" tabindex="0" role="graphics-symbol" aria-label="Courier app: client"><path class="pa-shape pa-shape-rounded-rect" d="M2277 314L2403 314A8 8 0 0 1 2411 322L2411 360A8 8 0 0 1 2403 368L2277 368A8 8 0 0 1 2269 360L2269 322A8 8 0 0 1 2277 314Z"/><rect class="pa-tile" x="2283.09" y="327" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="2297.09" y="347.3">🛵</text><text class="pa-type" text-anchor="middle"><tspan x="2359" y="334.19">CLIENT</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="2359" y="353.55">Courier app</tspan></text></g><g class="pa-edge-label" data-edge="tap"><rect class="pa-edge-plate" x="279" y="301" width="108" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="333" y="315.2">taps place order</tspan></text></g><g class="pa-edge-label" data-edge="post"><rect class="pa-edge-plate" x="698" y="267" width="80" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="738" y="281.2">posts order</tspan></text></g><g class="pa-edge-label" data-edge="route"><rect class="pa-edge-plate" x="1149" y="301" width="86" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1192" y="315.2">routes order</tspan></text></g><g class="pa-edge-label" data-edge="charge"><rect class="pa-edge-plate" x="1138" y="225" width="108" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1192" y="239.2">requests charge</tspan></text></g><g class="pa-edge-label" data-edge="card-charge"><rect class="pa-edge-plate" x="2051" y="176" width="90" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="2096" y="190.2">charges card</tspan></text></g><g class="pa-edge-label" data-edge="card-reply"><rect class="pa-edge-plate" x="2042" y="99" width="108" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="2096" y="113.2">returns approval</tspan></text></g><g class="pa-edge-label" data-edge="paid"><rect class="pa-edge-plate" x="1133" y="180" width="118" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1192" y="194.2">confirms payment</tspan></text></g><g class="pa-edge-label" data-edge="write"><rect class="pa-edge-plate" x="1583" y="221.2" width="84" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1625" y="235.4">writes order</tspan></text></g><g class="pa-edge-label" data-edge="publish"><rect class="pa-edge-plate" x="1557" y="313.2" width="136" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1625" y="327.4">publishes order event</tspan></text></g><g class="pa-edge-label" data-edge="accept"><rect class="pa-edge-plate" x="2049" y="61" width="94" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="2096" y="75.2">accepts order</tspan></text></g><g class="pa-edge-label" data-edge="offer"><rect class="pa-edge-plate" x="2051" y="313.2" width="90" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="2096" y="327.4">offers the job</tspan></text></g><g class="pa-edge-label" data-edge="dropoff"><rect class="pa-edge-plate" x="1359" y="409" width="102" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1410" y="423.2">drops off order</tspan></text></g><g class="pa-legend" aria-hidden="true"><rect class="pa-swatch pa-family-person" x="1711.1" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="1729.1" y="37.85">1 user</tspan></text><rect class="pa-swatch pa-family-service" x="1777.3" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="1795.3" y="37.85">3 client</tspan></text><rect class="pa-swatch pa-family-service" x="1848.8" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="1866.8" y="37.85">1 gateway</tspan></text><rect class="pa-swatch pa-family-service" x="1937.7" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="1955.7" y="37.85">2 service</tspan></text><rect class="pa-swatch pa-family-data" x="2018.5" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="2036.5" y="37.85">1 database</tspan></text><rect class="pa-swatch pa-family-queue" x="2110.1" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="2128.1" y="37.85">1 queue</tspan></text><rect class="pa-swatch pa-family-external" x="2185.3" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="2203.3" y="37.85">1 external</tspan></text><g class="pa-legend-sample pa-edge-solid"><path class="pa-wire" d="M2271.1 34L2295.1 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="2301.1" y="37.85">call</tspan></text><g class="pa-legend-sample pa-edge-dashed"><path class="pa-wire" d="M2333.9 34L2357.9 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="2363.9" y="37.85">secondary</tspan></text><g class="pa-legend-sample pa-edge-async"><path class="pa-wire" d="M2433.5 34L2457.5 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="2463.5" y="37.85">event</tspan></text></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" class="pa-diagram pa-type-architecture" viewBox="0 0 2516 454" role="graphics-document" aria-labelledby="d-title d-desc"><title id="d-title">Food delivery: one order</title><desc id="d-desc">One order from the customer&#39;s tap to the courier&#39;s drop-off, across three lanes. architecture diagram with 10 nodes and 12 edges.</desc><defs><marker id="d-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-fill" d="M0 0.5L8 4L0 7.5Z"/></marker><marker id="d-arrow-open" viewBox="0 0 8 8" refX="7.4" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-open" d="M0.8 0.8L7.4 4L0.8 7.2"/></marker></defs><g class="pa-group" data-id="customer_side" data-depth="0" data-lane="0"><rect class="pa-group-box" x="53" y="227" width="568" height="119" rx="6"/><rect class="pa-lane" x="53" y="233" width="4" height="107" rx="2"/><text class="pa-group-label" text-anchor="start"><tspan x="65" y="250.85">Customer side</tspan></text></g><g class="pa-group" data-id="platform" data-depth="0" data-lane="1"><rect class="pa-group-box" x="855" y="129" width="1110" height="229.2" rx="6"/><rect class="pa-lane" x="855" y="135" width="4" height="217.2" rx="2"/><text class="pa-group-label" text-anchor="start"><tspan x="867" y="152.85">Platform</tspan></text></g><g class="pa-group" data-id="partners" data-depth="0" data-lane="2"><rect class="pa-group-box" x="2227" y="102" width="226" height="290" rx="6"/><rect class="pa-lane" x="2227" y="108" width="4" height="278" rx="2"/><text class="pa-group-label" text-anchor="start"><tspan x="2239" y="125.85">Partners</tspan></text></g><g class="pa-edge pa-edge-solid" data-id="tap" data-from="customer" data-to="mobile" data-family="person"><path class="pa-wire" d="M207 294L459 294" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="post" data-from="mobile" data-to="gateway" data-family="service"><path class="pa-wire" d="M597 294L886 294" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="route" data-from="gateway" data-to="orders" data-family="service"><path class="pa-wire" d="M1054 294C1285 294 1285 239.4 1323 239.4" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="charge" data-from="orders" data-to="payments" data-family="service"><path class="pa-wire" d="M1323 217.8L1275.1 217.8Q1275 217.8 1275 217.9L1275 217.9Q1275 218 1274.9 218L1086.25 218Q1085 218 1085 219.25L1085 219.25Q1085 220.5 1083.75 220.5L1061 220.5" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="card-charge" data-from="payments" data-to="card" data-family="service"><path class="pa-wire" d="M1061 193.5L1079 193.5Q1085 193.5 1085 187.5L1085 175Q1085 169 1091 169L2262 169" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="card-reply" data-from="card" data-to="payments" data-family="external"><path class="pa-wire" d="M2418 169L2458 169Q2482 169 2482 145L2482 116Q2482 92 2458 92L836 92Q812 92 812 116L812 183Q812 207 836 207L879 207" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="paid" data-from="payments" data-to="orders" data-family="service"><path class="pa-wire" d="M1061 207L1323 207" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="write" data-from="orders" data-to="db" data-family="service"><path class="pa-wire" d="M1485 214.2L1765 214.2" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-async" data-id="publish" data-from="orders" data-to="queue" data-family="service"><path class="pa-wire" d="M1485 232.2C1509 232.2 1509 306.2 1780 306.2" fill="none" marker-end="url(#d-arrow-open)"/></g><g class="pa-edge pa-edge-solid" data-id="accept" data-from="tablet" data-to="orders" data-family="service"><path class="pa-wire" d="M2429 255L2468 255Q2492 255 2492 231L2492 78Q2492 54 2468 54L826 54Q802 54 802 78L802 232Q802 256 826 256L1261.3 256Q1275 256 1275 242.3L1275 242.3Q1275 228.6 1288.7 228.6L1323 228.6" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-async" data-id="offer" data-from="queue" data-to="courier" data-family="queue"><path class="pa-wire" d="M1926 306.2C2174 306.2 2174 341 2269 341" fill="none" marker-end="url(#d-arrow-open)"/></g><g class="pa-edge pa-edge-solid" data-id="dropoff" data-from="courier" data-to="customer" data-family="service"><path class="pa-wire" d="M2411 341L2458 341Q2482 341 2482 365L2482 378Q2482 402 2458 402L48 402Q24 402 24 378L24 318Q24 294 48 294L77 294" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-node pa-kind-user pa-family-person pa-tone-neutral" data-id="customer" tabindex="0" role="graphics-symbol" aria-label="Customer: user"><path class="pa-shape pa-shape-rounded-rect" d="M85 267L199 267A8 8 0 0 1 207 275L207 313A8 8 0 0 1 199 321L85 321A8 8 0 0 1 77 313L77 275A8 8 0 0 1 85 267Z"/><rect class="pa-tile" x="91.46" y="280" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="105.46" y="300.3">🧑</text><text class="pa-type" text-anchor="middle"><tspan x="161" y="287.19">USER</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="161" y="306.55">Customer</tspan></text></g><g class="pa-node pa-kind-client pa-family-service pa-tone-neutral" data-id="mobile" tabindex="0" role="graphics-symbol" aria-label="Mobile app: client"><path class="pa-shape pa-shape-rounded-rect" d="M467 267L589 267A8 8 0 0 1 597 275L597 313A8 8 0 0 1 589 321L467 321A8 8 0 0 1 459 313L459 275A8 8 0 0 1 467 267Z"/><rect class="pa-tile" x="473.44" y="280" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="487.44" y="300.3">📱</text><text class="pa-type" text-anchor="middle"><tspan x="547" y="287.19">CLIENT</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="547" y="306.55">Mobile app</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="payments" tabindex="0" role="graphics-symbol" aria-label="Payments service: service"><path class="pa-shape pa-shape-rounded-rect" d="M887 180L1053 180A8 8 0 0 1 1061 188L1061 226A8 8 0 0 1 1053 234L887 234A8 8 0 0 1 879 226L879 188A8 8 0 0 1 887 180Z"/><rect class="pa-tile" x="893.47" y="193" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="907.47" y="213.3">💳</text><text class="pa-type" text-anchor="middle"><tspan x="989" y="200.19">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="989" y="219.55">Payments service</tspan></text></g><g class="pa-node pa-kind-gateway pa-family-service pa-tone-neutral" data-id="gateway" tabindex="0" role="graphics-symbol" aria-label="API gateway: gateway"><path class="pa-shape pa-shape-hexagon-rect" d="M896 267L1044 267L1054 277L1054 311L1044 321L896 321L886 311L886 277Z"/><rect class="pa-tile" x="910.11" y="280" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="924.11" y="300.3">🚪</text><text class="pa-type" text-anchor="middle"><tspan x="989" y="287.19">GATEWAY</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="989" y="306.55">API gateway</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="orders" tabindex="0" role="graphics-symbol" aria-label="Orders service: service"><path class="pa-shape pa-shape-rounded-rect" d="M1331 196.2L1477 196.2A8 8 0 0 1 1485 204.2L1485 242.2A8 8 0 0 1 1477 250.2L1331 250.2A8 8 0 0 1 1323 242.2L1323 204.2A8 8 0 0 1 1331 196.2Z"/><rect class="pa-tile" x="1337.51" y="209.2" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="1351.51" y="229.5">🧾</text><text class="pa-type" text-anchor="middle"><tspan x="1423" y="216.39">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="1423" y="235.75">Orders service</tspan></text></g><g class="pa-node pa-kind-database pa-family-data pa-tone-neutral" data-id="db" tabindex="0" role="graphics-symbol" aria-label="Orders database: database"><path class="pa-shape pa-shape-cylinder" d="M1765 187.2A88 6 0 0 1 1941 187.2L1941 241.2A88 6 0 0 1 1765 241.2Z"/><path class="pa-decor" d="M1765 187.2A88 6 0 0 0 1941 187.2"/><rect class="pa-tile" x="1779.69" y="200.2" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="1793.69" y="220.5">🐘</text><text class="pa-type" text-anchor="middle"><tspan x="1872" y="207.39">DATABASE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="1872" y="226.75">Orders database</tspan></text></g><g class="pa-node pa-kind-queue pa-family-queue pa-tone-neutral" data-id="queue" tabindex="0" role="graphics-symbol" aria-label="Event queue: queue"><path class="pa-shape pa-shape-stacked-rect" d="M1784 279.2L1922 279.2A4 4 0 0 1 1926 283.2L1926 329.2A4 4 0 0 1 1922 333.2L1784 333.2A4 4 0 0 1 1780 329.2L1780 283.2A4 4 0 0 1 1784 279.2Z"/><path class="pa-decor" d="M1787 279.2L1787 333.2"/><path class="pa-decor" d="M1919 279.2L1919 333.2"/><rect class="pa-tile" x="1794.3" y="292.2" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="1808.3" y="312.5">📨</text><text class="pa-type" text-anchor="middle"><tspan x="1872" y="299.39">QUEUE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="1872" y="318.75">Event queue</tspan></text></g><g class="pa-node pa-kind-external pa-family-external pa-tone-neutral" data-id="card" tabindex="0" role="graphics-symbol" aria-label="Card provider: external"><path class="pa-shape pa-shape-dashed-rounded-rect" d="M2270 142L2410 142A8 8 0 0 1 2418 150L2418 188A8 8 0 0 1 2410 196L2270 196A8 8 0 0 1 2262 188L2262 150A8 8 0 0 1 2270 142Z"/><rect class="pa-tile" x="2276.11" y="155" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="2290.11" y="175.3">🏦</text><text class="pa-type" text-anchor="middle"><tspan x="2359" y="162.19">EXTERNAL</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="2359" y="181.55">Card provider</tspan></text></g><g class="pa-node pa-kind-client pa-family-service pa-tone-neutral" data-id="tablet" tabindex="0" role="graphics-symbol" aria-label="Restaurant tablet: client"><path class="pa-shape pa-shape-rounded-rect" d="M2259 228L2421 228A8 8 0 0 1 2429 236L2429 274A8 8 0 0 1 2421 282L2259 282A8 8 0 0 1 2251 274L2251 236A8 8 0 0 1 2259 228Z"/><rect class="pa-tile" x="2265.4" y="241" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="2279.4" y="261.3">🍕</text><text class="pa-type" text-anchor="middle"><tspan x="2359" y="248.19">CLIENT</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="2359" y="267.55">Restaurant tablet</tspan></text></g><g class="pa-node pa-kind-client pa-family-service pa-tone-neutral" data-id="courier" tabindex="0" role="graphics-symbol" aria-label="Courier app: client"><path class="pa-shape pa-shape-rounded-rect" d="M2277 314L2403 314A8 8 0 0 1 2411 322L2411 360A8 8 0 0 1 2403 368L2277 368A8 8 0 0 1 2269 360L2269 322A8 8 0 0 1 2277 314Z"/><rect class="pa-tile" x="2283.09" y="327" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="2297.09" y="347.3">🛵</text><text class="pa-type" text-anchor="middle"><tspan x="2359" y="334.19">CLIENT</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="2359" y="353.55">Courier app</tspan></text></g><g class="pa-edge-label" data-edge="tap"><rect class="pa-edge-plate" x="279" y="284" width="108" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="333" y="298.2">taps place order</tspan></text></g><g class="pa-edge-label" data-edge="post"><rect class="pa-edge-plate" x="701.5" y="284" width="80" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="741.5" y="298.2">posts order</tspan></text></g><g class="pa-edge-label" data-edge="route"><rect class="pa-edge-plate" x="1149.68" y="274.75" width="86" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1192.68" y="288.95">routes order</tspan></text></g><g class="pa-edge-label" data-edge="charge"><rect class="pa-edge-plate" x="1138" y="225" width="108" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1192" y="239.2">requests charge</tspan></text></g><g class="pa-edge-label" data-edge="card-charge"><rect class="pa-edge-plate" x="2051" y="176" width="90" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="2096" y="190.2">charges card</tspan></text></g><g class="pa-edge-label" data-edge="card-reply"><rect class="pa-edge-plate" x="1572.5" y="82" width="108" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1626.5" y="96.2">returns approval</tspan></text></g><g class="pa-edge-label" data-edge="paid"><rect class="pa-edge-plate" x="1133" y="180" width="118" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1192" y="194.2">confirms payment</tspan></text></g><g class="pa-edge-label" data-edge="write"><rect class="pa-edge-plate" x="1583" y="204.2" width="84" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1625" y="218.4">writes order</tspan></text></g><g class="pa-edge-label" data-edge="publish"><rect class="pa-edge-plate" x="1556.75" y="284.96" width="136" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1624.75" y="299.16">publishes order event</tspan></text></g><g class="pa-edge-label" data-edge="accept"><rect class="pa-edge-plate" x="1361.97" y="44" width="94" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1408.97" y="58.2">accepts order</tspan></text></g><g class="pa-edge-label" data-edge="offer"><rect class="pa-edge-plate" x="2053.53" y="304.54" width="90" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="2098.53" y="318.74">offers the job</tspan></text></g><g class="pa-edge-label" data-edge="dropoff"><rect class="pa-edge-plate" x="1187.5" y="392" width="102" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="1238.5" y="406.2">drops off order</tspan></text></g><g class="pa-legend" aria-hidden="true"><rect class="pa-swatch pa-family-person" x="1711.1" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="1729.1" y="37.85">1 user</tspan></text><rect class="pa-swatch pa-family-service" x="1777.3" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="1795.3" y="37.85">3 client</tspan></text><rect class="pa-swatch pa-family-service" x="1848.8" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="1866.8" y="37.85">1 gateway</tspan></text><rect class="pa-swatch pa-family-service" x="1937.7" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="1955.7" y="37.85">2 service</tspan></text><rect class="pa-swatch pa-family-data" x="2018.5" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="2036.5" y="37.85">1 database</tspan></text><rect class="pa-swatch pa-family-queue" x="2110.1" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="2128.1" y="37.85">1 queue</tspan></text><rect class="pa-swatch pa-family-external" x="2185.3" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="2203.3" y="37.85">1 external</tspan></text><g class="pa-legend-sample pa-edge-solid"><path class="pa-wire" d="M2271.1 34L2295.1 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="2301.1" y="37.85">call</tspan></text><g class="pa-legend-sample pa-edge-dashed"><path class="pa-wire" d="M2333.9 34L2357.9 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="2363.9" y="37.85">secondary</tspan></text><g class="pa-legend-sample pa-edge-async"><path class="pa-wire" d="M2433.5 34L2457.5 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="2463.5" y="37.85">event</tspan></text></g></svg>
 <div class="legend" data-pa-legend aria-hidden="true"><span class="lg"><i class="lg-sw lg-sw-person"></i>1 user</span><span class="lg"><i class="lg-sw lg-sw-service"></i>3 client</span><span class="lg"><i class="lg-sw lg-sw-service"></i>1 gateway</span><span class="lg"><i class="lg-sw lg-sw-service"></i>2 service</span><span class="lg"><i class="lg-sw lg-sw-data"></i>1 database</span><span class="lg"><i class="lg-sw lg-sw-queue"></i>1 queue</span><span class="lg"><i class="lg-sw lg-sw-external"></i>1 external</span><span class="lg"><i class="lg-wire lg-wire-solid"></i>call</span><span class="lg"><i class="lg-wire lg-wire-dashed"></i>secondary</span><span class="lg"><i class="lg-wire lg-wire-dotted"></i>event</span></div>
 <div class="tip" data-pa-tip role="tooltip" hidden></div>
 </main>
@@ -360,7 +372,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 <div class="transport" role="group" aria-label="Transport">
 <button type="button" class="tool" data-pa-prev-chapter title="Previous chapter">Prev chapter</button>
 <button type="button" class="tool" data-pa-prev title="Previous beat (Left)">Prev</button>
-<button type="button" class="tool" data-pa-play title="Play or pause (Space)">Play</button>
+<button type="button" class="tool pa-play" data-pa-play aria-label="Play" title="Play or pause (Space)"><span class="pa-playicon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path d="M7 4.5v15l13-7.5z"/></svg></span></button>
 <button type="button" class="tool" data-pa-next title="Next beat (Right)">Next</button>
 <button type="button" class="tool" data-pa-next-chapter title="Next chapter">Next chapter</button>
 <input type="range" class="scrub" data-pa-scrub min="0" max="0" step="1" value="0" aria-label="Beat" list="pa-ticks">
@@ -1040,7 +1052,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 // edge and lights the edge; a focus beat fits and lights its ids (a group
 // lights its members); everything else dims. A step beat (from the older
 // steps[] form) reveals what it shows and hides the rest, as before, with no
-// dimming. Playing runs each beat as glide (600 ms for a story beat, the
+// dimming. Playing runs each beat as glide (450 ms for a story beat, the
 // camera's own glide for a step beat), then (a hop, motion allowed) the dot,
 // then a hold, and moves on; every duration divides by the speed; reduced
 // motion drops the dot and the glide. Registered as PADiagram.story and
@@ -1053,11 +1065,11 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
 
-  var GLIDE_MS = 600; // the camera's glide to a story (hop or focus) beat
-  var DOT_MS = 1200; // the dot along a hop's edge
-  var HOLD_MS = 2500; // then the caption holds...
-  var HOLD_PER_CHAR_MS = 40; // ...longer for a longer caption...
-  var HOLD_MAX_MS = 6000; // ...up to this
+  var GLIDE_MS = 450; // the camera's glide to a story (hop or focus) beat
+  var DOT_MS = 900; // the dot along a hop's edge
+  var HOLD_MS = 1800; // then the caption holds...
+  var HOLD_PER_CHAR_MS = 30; // ...longer for a longer caption...
+  var HOLD_MAX_MS = 4500; // ...up to this
   var SPEEDS = [0.5, 1, 1.5, 2];
   var DOT_RADIUS = 5;
 
@@ -1238,7 +1250,14 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
     var seenNow = null; // what the current step beat reveals, for reframe
     var run = 0; // bumps on every goTo, pause and exit, so a stale timer or frame does nothing
     var timer = 0;
+    var inHold = false; // a hold reported to hooks.onHold and not yet ended
+    function endHold() {
+      if (!inHold) return;
+      inHold = false;
+      if (hooks.onHoldEnd) hooks.onHoldEnd();
+    }
     function cancelRun() {
+      endHold();
       run += 1;
       if (timer) global.clearTimeout(timer);
       timer = 0;
@@ -1269,12 +1288,17 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       camera.unfit();
       camera.moveTo(targetOf(beat, seen), { ms: glide });
       var hold = function () {
-        later(token, holdMs(beat), function () {
+        if (token !== run) return; // a dot frame that outlived its run
+        var ms = holdMs(beat);
+        later(token, ms, function () {
+          endHold();
           if (!playing) return;
           if (stepIndex < beats.length - 1) goTo(stepIndex + 1);
           else if (loop) goTo(0);
           else pause();
         });
+        // only a hold armed while playing is reported: one armed while paused never moves on
+        if (playing) { inHold = true; if (hooks.onHold) hooks.onHold(ms); }
       };
       later(token, instant ? 0 : glide, function () {
         if (beat.kind === 'hop' && !instant) travel(beat, DOT_MS / speed, hold); else hold();
@@ -1392,12 +1416,30 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 // jump), data-pa-scrub (an <input type="range"> with aria-valuetext
 // "Beat n of N") and data-pa-ticks (its <datalist>), data-pa-prev,
 // data-pa-next, data-pa-prev-chapter, data-pa-next-chapter, data-pa-exit,
-// data-pa-play (its label reads Play or Pause),
+// data-pa-play (an icon button: aria-label reads Play or Pause, and its
+// span.pa-playicon holds the svg paint() swaps),
 // data-pa-speed (0.5× ... 2×), data-pa-loop (aria-pressed). Text goes in as
-// textContent, never markup.
+// textContent, never markup (the play icon and ring svgs are the constant exceptions).
+//
+// The returned object also has hold(ms) and holdEnd(), which the story's
+// onHold / onHoldEnd hooks call: a span.pa-ring (aria-hidden) fills over ms inside
+// the control that fires next, Next, or Play on the last beat with loop on, and
+// is absent on the last beat with loop off. paint() re-places a running ring but
+// never restarts it.
 (function (global) {
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
+
+  // The play button's icon: a triangle while paused, two bars while playing.
+  // Both use currentColor, so every theme and the light/dark toggle recolor them.
+  var PLAY_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path d="M7 4.5v15l13-7.5z"/></svg>';
+  var PAUSE_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><rect x="6" y="4.5" width="4.2" height="15" rx="1"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1"/></svg>';
+
+  // The hold ring: a track and an arc of pathLength 100; the arc's dash offset
+  // runs 100 (empty) to 0 (full). The arc colour and the ring's size come from CSS.
+  var RING_SVG = '<svg viewBox="0 0 24 24" focusable="false"><circle class="pa-ring-track" cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3"/><circle class="pa-ring-arc" cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" transform="rotate(-90 12 12)"/></svg>';
+  var RING_EMPTY = 100;
+  var RING_STATIC = 50; // reduced motion: half filled, a cue that the story moves on, no motion
 
   var pad2 = function (n) { return (n < 10 ? '0' : '') + n; };
 
@@ -1461,6 +1503,69 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       button.disabled = off;
     }
 
+    // The icon span ships in the page's markup; one is added if an embedder left it out.
+    function paintPlay(button, playing) {
+      var icon = button.querySelector('.pa-playicon');
+      if (!icon) {
+        icon = doc.createElement('span');
+        icon.className = 'pa-playicon';
+        icon.setAttribute('aria-hidden', 'true');
+        button.appendChild(icon);
+      }
+      icon.innerHTML = playing ? PAUSE_SVG : PLAY_SVG;
+      button.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    }
+
+    // ---- the hold ring ------------------------------------------------------------------
+    var ring = null;
+    var arc = null;
+    var ringAnimation = null;
+    var holding = false; // between hold() and holdEnd(): paint() may place the ring only then
+    var reducedMotion = function () {
+      return !!(global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    };
+    // Where the ring belongs: the control that fires next. Nothing follows the last beat unless it loops.
+    function ringTarget() {
+      if (story.index() < story.count() - 1) return part('data-pa-next');
+      return story.loop() ? part('data-pa-play') : null;
+    }
+    // Moves a ring that is running; leaves it be when the target did not change.
+    function placeRing() {
+      if (!ring || !holding) return;
+      var to = ringTarget();
+      if (to === ring.parentNode) return;
+      if (ring.parentNode) ring.parentNode.removeChild(ring);
+      if (to) to.appendChild(ring);
+    }
+    // Ends the animation and takes the ring away. It runs while the story still reports
+    // playing (the hook fires inside cancelRun), so it never repaints: onStep does that.
+    function holdEnd() {
+      if (ringAnimation) ringAnimation.cancel();
+      ringAnimation = null;
+      holding = false;
+      if (ring && ring.parentNode) ring.parentNode.removeChild(ring);
+    }
+    function hold(ms) {
+      holdEnd();
+      if (!(ms > 0)) return;
+      if (!ring) {
+        ring = doc.createElement('span');
+        ring.className = 'pa-ring';
+        ring.setAttribute('aria-hidden', 'true');
+        ring.innerHTML = RING_SVG;
+        arc = ring.querySelector('.pa-ring-arc');
+      }
+      if (!arc) return;
+      holding = true;
+      if (reducedMotion() || !arc.animate) {
+        arc.setAttribute('stroke-dashoffset', String(RING_STATIC));
+      } else {
+        arc.setAttribute('stroke-dashoffset', String(RING_EMPTY));
+        ringAnimation = arc.animate([{ strokeDashoffset: RING_EMPTY }, { strokeDashoffset: 0 }], { duration: ms, easing: 'linear', fill: 'forwards' });
+      }
+      placeRing();
+    }
+
     function paint() {
       var presenting = story.isPresenting();
       if (caption) caption.hidden = !presenting;
@@ -1477,7 +1582,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       disable(part('data-pa-prev'), i === 0);
       disable(part('data-pa-next'), i === n - 1);
       var play = part('data-pa-play');
-      if (play) play.textContent = story.isPlaying() ? 'Pause' : 'Play';
+      if (play) paintPlay(play, story.isPlaying());
       var speed = part('data-pa-speed');
       if (speed) {
         speed.textContent = story.speed() + '×';
@@ -1491,6 +1596,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       }
       mark(beatChips, beatRow, i);
       mark(chapterChips, chaptersEl, story.chapter());
+      placeRing();
     }
     function wire(name, fn) {
       var b = part(name);
@@ -1514,7 +1620,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       });
     }
     paint();
-    return { paint: paint };
+    return { paint: paint, hold: hold, holdEnd: holdEnd };
   };
 })(window);
 
@@ -1654,10 +1760,15 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
     var camera = PADiagram.camera(stage, svg, data, { onApply: emit });
     var trace = PADiagram.trace(svg, data, els, { isOff: function () { return story.isPresenting(); } });
     // Entering Play drops the selection and the route (the panel hides with them); each beat repaints the chrome.
-    var story = PADiagram.story(stage, svg, data, els, camera, { onStep: function () {
-      if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
-      transport.paint(); trace.refresh(); panel.paint(); emit();
-    } });
+    var story = PADiagram.story(stage, svg, data, els, camera, {
+      onStep: function () {
+        if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
+        transport.paint(); trace.refresh(); panel.paint(); emit();
+      },
+      // the transport shows the hold as a progress ring
+      onHold: function (ms) { transport.hold(ms); },
+      onHoldEnd: function () { transport.holdEnd(); },
+    });
     var transport = PADiagram.transport({ caption: options.caption || null, chapters: options.chapters || null }, data, story);
     var panel = PADiagram.panel({ panel: options.panel || null, tip: options.tip || null, found: options.found || null }, data, els, trace, {
       isOff: function () { return story.isPresenting(); },
@@ -1858,7 +1969,6 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
     stage.addEventListener('dblclick', function () { if (!story.isPresenting()) camera.fit(); });
     stage.addEventListener('wheel', function (e) {
       e.preventDefault();
-      story.pause();
       var r = stage.getBoundingClientRect();
       var dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
       camera.zoomAt(Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);

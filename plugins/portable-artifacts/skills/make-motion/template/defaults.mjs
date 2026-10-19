@@ -11,8 +11,22 @@ export const MOTION_THEME = 'dusk';
 // (paper, ink, blueprint, editorial) get no preset.
 export const TYPE_PRESETS = Object.freeze({ dusk: 'rise', press: 'ink-in', poster: 'slam' });
 
+// Named eases: cubic-Bézier control points (x1, y1, x2, y2). template/timeline.mjs turns each into an anime.js
+// cubicBezier function (an ease *string* such as 'cubicBezier(...)' is silently linear in anime 4.5).
+// enter: fast out, gentle settle (entrances). exit: slow start, accelerating away (exits). move: symmetric
+// in-out (a move between two places). land: like move, overshooting by about 1 % before it lands (one hero moment).
+export const EASE_CURVES = Object.freeze({
+  enter: Object.freeze([0.16, 1, 0.3, 1]),
+  exit: Object.freeze([0.6, 0, 0.9, 0.35]),
+  move: Object.freeze([0.65, 0, 0.35, 1]),
+  land: Object.freeze([0.55, 0, 0.2, 1.12]),
+});
+
 // Seconds each preset takes when the scene is long enough; a shorter scene compresses it.
 const PRESET_SECONDS = Object.freeze({ rise: 0.9, 'ink-in': 1.1, slam: 0.5 });
+const EXIT_SHARE = 0.5; // an exit takes about half its entrance
+const EXIT_EARLIEST = 0.9; // of the scene: an exit never starts before this, so the 85 % contact frame is fully in
+const SLAM_EXIT_SCALE = 0.85;
 const RISE_OPACITY_SHARE = 0.6; // the fade settles before the travel: a soft stagger
 const RISE_TRAVEL = 0.35; // of the font size
 const INK_SCALE = 1.04;
@@ -44,6 +58,38 @@ const GENERATORS = {
   ],
 };
 
+// Exits: from a hold on the element's own pose at `start` to its exit pose at `end`, with the `exit` ease.
+const EXITS = {
+  // dusk: the rise reversed, fading as it drops away.
+  rise: (el, start, end) => [
+    { t: start, opacity: el.opacity ?? 1, y: el.y },
+    { t: end, opacity: 0, y: el.y + Math.round((el.fontSize ?? DEFAULT_FONT_SIZE) * RISE_TRAVEL), ease: 'exit' },
+  ],
+  // press: the ink lifting off the page; it fades as it grows by the same hair it settled from.
+  'ink-in': (el, start, end) => [
+    { t: start, opacity: el.opacity ?? 1, scale: el.scale ?? 1 },
+    { t: end, opacity: 0, scale: INK_SCALE * (el.scale ?? 1), ease: 'exit' },
+  ],
+  // poster: a snap down and out.
+  slam: (el, start, end) => [
+    { t: start, opacity: el.opacity ?? 1, scale: el.scale ?? 1 },
+    { t: end, opacity: 0, scale: SLAM_EXIT_SCALE * (el.scale ?? 1), ease: 'exit' },
+  ],
+};
+
+/**
+ * The exit keyframes of preset `name` for a title whose entrance (`entrance`, from presetKeyframes) is already set,
+ * or [] when there is no room. The exit lands one frame (1/fps) before the scene end and takes half the entrance's
+ * full length, but never starts before 0.9 x the scene (a shorter scene gets a shorter exit), nor before the
+ * entrance has landed. Pure.
+ */
+export function exitKeyframes(name, el, sceneDuration, fps, entrance) {
+  const end = round(Math.floor((sceneDuration - 1 / fps) * T_DECIMALS) / T_DECIMALS);
+  const start = round(Math.max(end - PRESET_SECONDS[name] * EXIT_SHARE, sceneDuration * EXIT_EARLIEST));
+  if (start >= end || start < entrance.at(-1).t) return [];
+  return EXITS[name](el, start, end);
+}
+
 /**
  * The keyframes of preset `name` for text element `el` in a scene of `sceneDuration` seconds.
  * Pure: the same arguments always give the same keyframes. The last one lands at least one
@@ -54,10 +100,14 @@ export function presetKeyframes(name, el, sceneDuration, fps) {
   return GENERATORS[name](el, end);
 }
 
-function presetFor(el, theme, sceneDuration, fps) {
+// `exits`: whether an `exit: true` title may leave (every scene but the spec's last). Returns the keyframes and
+// whether an exit was appended.
+function presetFor(el, theme, sceneDuration, fps, exits) {
   const name = TYPE_PRESETS[theme];
-  if (!name || el.type !== 'text' || el.role !== 'title' || el.keyframes !== undefined) return el.keyframes;
-  return presetKeyframes(name, el, sceneDuration, fps);
+  if (!name || el.type !== 'text' || el.role !== 'title' || el.keyframes !== undefined) return { keyframes: el.keyframes, exited: false };
+  const entrance = presetKeyframes(name, el, sceneDuration, fps);
+  const exit = el.exit === true && exits ? exitKeyframes(name, el, sceneDuration, fps, entrance) : [];
+  return { keyframes: [...entrance, ...exit], exited: exit.length > 0 };
 }
 
 // Pure copy with every optional root and element base value filled in.
@@ -67,10 +117,12 @@ export function withDefaults(spec) {
   out.fps ??= DEFAULTS.fps;
   out.theme ??= MOTION_THEME;
   out.audio = (out.audio ?? []).map((track) => ({ at: 0, volume: 1, fadeIn: 0, fadeOut: 0, ...track }));
-  for (const scene of out.scenes) {
+  out.scenes.forEach((scene, si) => {
     scene.transition ??= 'none';
     for (const el of scene.elements) {
-      el.keyframes = presetFor(el, out.theme, scene.duration, out.fps);
+      const preset = presetFor(el, out.theme, scene.duration, out.fps, si < out.scenes.length - 1);
+      el.keyframes = preset.keyframes;
+      if (preset.exited) el.exitPreset = true; // check.mjs: this title leaves on purpose (it opted in with `exit`)
       el.opacity ??= 1;
       el.scale ??= 1;
       el.rotate ??= 0;
@@ -79,6 +131,6 @@ export function withDefaults(spec) {
       el.value = el.type === 'counter' ? (el.from ?? 0) : 0;
       el.keyframes ??= [];
     }
-  }
+  });
   return out;
 }

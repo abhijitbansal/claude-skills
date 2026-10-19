@@ -1,0 +1,15 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "exit",
+      "duration": 2,
+      "elements": [
+        { "id": "stays", "type": "text", "text": "Thanks", "x": 960, "y": 700, "fontSize": 64 },
+        { "id": "leaves", "type": "text", "text": "See you soon", "x": 960, "y": 400, "fontSize": 64,
+          "keyframes": [{ "t": 1.5, "x": 960 }, { "t": 1.9, "x": 2400, "ease": "inCubic" }] }
+      ]
+    }
+  ]
+}

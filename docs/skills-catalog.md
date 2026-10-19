@@ -123,6 +123,7 @@ The everyday glue, useful in any repo.
 | `worktree-isolation-guard-refuses-complex-bash` | skill (mined) | The worktree isolation guard refuses -C, chains, eval, source, heredocs and computed command names — one plain command per call, Write for file content. |
 | `claude-mod-store-race-host-rules-checklist` | skill (mined) | Claude Code mod checklist: $.store has no compare-and-swap and is shared across sessions, keep $ in register.tsx, next(e) first — serial write chain and fail-closed hooks. |
 | `dev-tracker-portable` | skill (mined) | In-repo dev tracker starter kit (one markdown ledger + archives + capture/list/fix/learn modes), the proven Cubby system genericized. |
+| `chrome-form-widgets` | skill (mined) | Form_input reports success on react-select, Workday dropdowns, checkboxes and radios without committing the value — per-widget recipes and read-back checks for claude-in-chrome form filling. |
 
 ## second-wind (plugin + CLI)
 

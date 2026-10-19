@@ -10,6 +10,7 @@ import { findFfmpeg } from '../scripts/lib/ffmpeg.mjs';
 import { launchBrowser, guardNetwork } from '../scripts/lib/browser.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { writeWav } from './helpers/wav.mjs';
+import { sheetTimes } from '../scripts/lib/sheet.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER = path.join(root, 'scripts/render.mjs');
@@ -169,6 +170,77 @@ test('--contact-sheet writes one non-blank PNG per scene (no ffmpeg needed)', as
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.deepEqual(readdirSync(path.join(dir, 'contact')).sort(), ['bars.png', 'intro.png']);
   assert.ok(await nonBackgroundRatio(path.join(dir, 'contact', 'intro.png')) > 0.02, 'intro is blank');
+  return undefined;
+});
+
+const pngSize = (buf) => ({ w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) });
+
+test('--contact-sheet tiles a multi-keyframe scene: one tile per sheetTimes entry plus the 360 px phone tile', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const dir = tmp('cst-');
+  const scene = { id: 'multi', duration: 2, elements: [
+    { id: 'a', type: 'text', text: 'Hello', x: 240, y: 135, fontSize: 48, keyframes: [{ t: 0, opacity: 0 }, { t: 0.6, opacity: 1 }] },
+  ] };
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify({ size: [480, 270], scenes: [scene] }));
+  const r = render([path.join(dir, 'm.json'), '--contact-sheet', '--out', dir], { PATH: '/nonexistent' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /\n1 contact sheet\(s\)\n$/);
+  assert.equal(r.stderr, '', 'no cap note when every moment fits');
+  assert.equal(sheetTimes(scene, 30).length, 4); // 0.1, 0.7, 1.7, 1.967 -> 4 frames + the phone tile = 5 tiles
+  // 4 columns of 480 px cells: 2000 px wide. Row 1: 270 + 24 caption; row 2: the 360 px phone tile, 203 + 24. 32 pad + 16 gap.
+  assert.deepEqual(pngSize(readFileSync(path.join(dir, 'contact', 'multi.png'))), { w: 2000, h: 569 });
+  return undefined;
+});
+
+test('--contact-sheet on a scene with more than 11 moments shows 11 frames and says so on stderr', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const dir = tmp('cap-');
+  const keyframes = Array.from({ length: 24 }, (_, i) => ({ t: 0.3 * (i + 1), opacity: 1 }));
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify({ size: [480, 270], scenes: [{ id: 'busy', duration: 10, elements: [
+    { id: 'a', type: 'text', text: 'Busy', x: 240, y: 135, fontSize: 48, keyframes }] }] }));
+  const r = render([path.join(dir, 'm.json'), '--contact-sheet', '--out', dir], { PATH: '/nonexistent' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stderr, /busy: 27 moments, showing 11\n/);
+  // 12 tiles in 4 columns = 3 rows of 270 + 24: 2000 px wide, 32 pad + 2 * 16 gaps
+  assert.deepEqual(pngSize(readFileSync(path.join(dir, 'contact', 'busy.png'))), { w: 2000, h: 946 });
+  return undefined;
+});
+
+test('the stamp exists only in contact mode: the real video path writes the frames a stamp-free page shows', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const dir = tmp('stamp-');
+  const spec = { size: [320, 180], scenes: [{ id: 's', duration: 1, elements: [{ id: 'a', type: 'text', text: 'Hi', x: 160, y: 90, fontSize: 40,
+    keyframes: [{ t: 0, opacity: 0 }, { t: 0.5, opacity: 1 }] }] }] };
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify(spec));
+  // Stand-in encoder: keeps the raw PNG stream render.mjs pipes in, then creates the output file.
+  const stream = path.join(dir, 'frames.bin');
+  const fake = path.join(dir, 'ffmpeg');
+  writeFileSync(fake, `#!/bin/sh\ncat > '${stream}'\nfor last; do :; done\n: > "$last"\n`);
+  chmodSync(fake, 0o755);
+  const r = render([path.join(dir, 'm.json'), '--out', path.join(dir, 'o.mp4'), '--fps', '2'], { FFMPEG_PATH: fake });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const srv = await startServer({ specPath: path.join(dir, 'm.json'), mode: 'render' });
+  const browser = await launchBrowser({ quiet: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 320, height: 180 }, deviceScaleFactor: 1 });
+    await page.goto(srv.url);
+    await page.evaluate(() => window.__motion.ready);
+    const count = () => page.evaluate(() => document.querySelectorAll('[data-sheet-stamp]').length);
+    assert.equal(await count(), 0, 'absent after load');
+    const frames = [];
+    for (const sec of [0, 0.5]) {
+      await page.evaluate((s) => window.__motion.seek(s), sec);
+      frames.push(await page.screenshot({ type: 'png' }));
+    }
+    assert.equal(await count(), 0, 'absent after seeks');
+    assert.deepEqual(readFileSync(stream), Buffer.concat(frames), 'video-mode frames are byte-identical to a stamp-free page');
+    // the guard can fire: stamping changes the frame
+    await page.evaluate(() => window.__motion.stamp('s \u00b7 0.50s'));
+    assert.equal(await count(), 1);
+    assert.notDeepEqual(await page.screenshot({ type: 'png' }), frames[1]);
+    await page.evaluate(() => window.__motion.stamp(''));
+    assert.equal(await count(), 0, 'an empty stamp removes the element');
+  } finally { await browser.close(); await srv.close(); }
   return undefined;
 });
 

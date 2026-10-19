@@ -6,7 +6,8 @@ import { lineHeight } from '../../shared/text.mjs';
 import { KINDS, family } from './kinds.mjs';
 import { fonts, GROUP_LABEL_INSET } from './sizes.mjs';
 import { legendSvg } from './legend.mjs';
-import { anchorEdges, roundedPath } from './edges.mjs';
+import { anchorEdges } from './edges.mjs';
+import { drawnEdges } from './curves.mjs';
 import { esc, num, textLines, markerDefs, shareBrandIcons } from './svg.mjs';
 import { shapeSvg, boxContent, outsideContent, plateSvg, edgeSvg, nodeOpen } from './parts.mjs';
 import { renderSequence } from './render-sequence.mjs';
@@ -43,12 +44,14 @@ function renderGraph(raw, spec, theme, prefix) {
   const groups = [...g.groups].sort((a, b) => a.depth - b.depth).map((x) => groupSvg(x, f, laneOf.has(x.id) ? laneOf.get(x.id) : null));
   // An edge takes its from-node's colour family (none when it leaves a group).
   const famOf = new Map(spec.nodes.map((n) => [n.id, family(spec.type, n.kind)]));
-  const edges = g.edges.map((e) => edgeSvg({ ...e, d: roundedPath(e.points), heads: EDGE_ARROW[e.style], family: famOf.get(e.from) }, prefix));
+  // Bézier wires where they are safe, else the old drawing (curves.mjs decides, plates included).
+  const drawn = drawnEdges(g);
+  const edges = g.edges.map((e, i) => edgeSvg({ ...e, d: drawn[i].d, heads: EDGE_ARROW[e.style], family: famOf.get(e.from) }, prefix));
   // Nodes are emitted in layer order: the DOM order is the Tab order.
   const rank = new Map(raw.layers.flat().map((id, i) => [id, i]));
   const nodes = g.nodes.map((n, i) => ({ id: n.id, svg: graphNodeSvg(n, spec.nodes[i], spec.type, f) }))
     .sort((a, b) => rank.get(a.id) - rank.get(b.id)).map((n) => n.svg);
-  const labels = g.edges.filter((e) => e.label).map((e) => plateSvg(e.id, e.label, f));
+  const labels = drawn.filter((x) => x.plate).map((x) => plateSvg(x.id, x.plate, f));
   return { width: g.width, height: g.height, body: [...groups, ...edges, ...nodes, ...labels, legendSvg(g.legend, f)].join(''), counts: `${g.nodes.length} nodes and ${g.edges.length} edges` };
 }
 

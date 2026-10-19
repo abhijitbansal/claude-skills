@@ -1,0 +1,16 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "swap",
+      "duration": 2,
+      "elements": [
+        { "id": "before", "type": "text", "text": "Q1: 32M", "x": 960, "y": 540, "fontSize": 96,
+          "keyframes": [{ "t": 1, "opacity": 1 }, { "t": 1.4, "opacity": 0, "ease": "inOutSine" }] },
+        { "id": "after", "type": "text", "text": "Q2: 35.7M", "x": 960, "y": 540, "fontSize": 96,
+          "keyframes": [{ "t": 1, "opacity": 0 }, { "t": 1.4, "opacity": 1, "ease": "inOutSine" }] }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "intro",
+      "duration": 2,
+      "elements": [
+        { "id": "title", "type": "text", "role": "title", "text": "Quarterly results", "x": 960, "y": 10, "fontSize": 72 }
+      ]
+    }
+  ]
+}

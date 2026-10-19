@@ -39,6 +39,18 @@
 
 /* the overlay's chrome: the same hooks as make-diagram's own page, styled here under .dg-overlay */
 .dg-top .btn, .dg-transport .btn { padding: 4px 14px; font-size: var(--fs-sm); }
+/* the play button is an icon (a 40 px hit area); its svg paints in currentColor */
+.dg-transport .dg-play { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; padding: 0; }
+.dg-play .pa-playicon { display: inline-flex; }
+.dg-play .pa-playicon svg { display: block; }
+/* the hold ring (make-diagram's transport.js): decorative and absolutely placed, so it never moves a control; Next reserves a slot on its right, in Play it circles the icon */
+.dg-transport [data-pa-next] { position: relative; padding-right: 32px; }
+.dg-transport .pa-ring { position: absolute; width: 14px; height: 14px; pointer-events: none; }
+.dg-transport [data-pa-next] > .pa-ring { right: 10px; top: 50%; margin-top: -7px; }
+.dg-transport .dg-play > .pa-ring { inset: 2px; width: auto; height: auto; }
+.dg-transport .pa-ring svg { display: block; width: 100%; height: 100%; }
+.dg-transport .pa-ring-track { opacity: .25; }
+.dg-transport .pa-ring-arc { stroke: var(--accent); }
 .dg-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .dg-modes { display: inline-flex; gap: 4px; }
 .dg-overlay .btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
