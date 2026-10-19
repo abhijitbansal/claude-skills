@@ -14,16 +14,22 @@ const MAX_BUFFER = 256 * 1024 * 1024;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 const HEADER = /^[0-9a-f]{40,64}\t(\S+)$/;
-const NUMSTAT = /^(?:\d+|-)\t(?:\d+|-)\t(.+)$/;
+const NUMSTAT = /^(?:\d+|-)\t(?:\d+|-)\t([\s\S]+)$/;
+// These GIT_* variables point git at another repository, object store, index, discovery root or config than --repo
+// names, so the child gets none of them (the same set as make-explainer's git.mjs, plus the config injectors).
+const REDIRECTING_ENV = new Set([
+  'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_COMMON_DIR', 'GIT_NAMESPACE', 'GIT_CEILING_DIRECTORIES', 'GIT_DISCOVERY_ACROSS_FILESYSTEM',
+  'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT',
+]);
+const CONFIG_PAIR_ENV = /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/;
 
 function gitEnv() {
-  const env = {
-    ...process.env,
-    GIT_CONFIG_GLOBAL: os.devNull,
-    GIT_CONFIG_SYSTEM: os.devNull,
-    GIT_TERMINAL_PROMPT: '0',
-  };
-  for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) delete env[k];
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !REDIRECTING_ENV.has(k) && !CONFIG_PAIR_ENV.test(k)));
+  env.GIT_CONFIG_GLOBAL = os.devNull;
+  env.GIT_CONFIG_SYSTEM = os.devNull;
+  env.GIT_OPTIONAL_LOCKS = '0';
+  env.GIT_TERMINAL_PROMPT = '0';
   return env;
 }
 
@@ -44,9 +50,11 @@ function weekStart(date) {
 
 function runGitLog(repo, sinceIso) {
   if (!fs.existsSync(repo) || !fs.statSync(repo).isDirectory()) throw new UsageError(`${repo} is not a folder`);
+  // -z: paths come back exact (no C-quoting of quotes, backslashes, tabs or newlines), NUL-separated.
   const args = [
-    '-c', 'core.quotePath=false',
-    'log', '--numstat', '--no-renames', '--no-merges', '--format=%H%x09%cI', `--since=${sinceIso}`,
+    '--no-pager', '-c', 'log.showSignature=false',
+    'log', '-z', '--numstat', '--no-renames', '--no-merges', '--no-textconv', '--no-ext-diff',
+    '--format=%H%x09%cI', `--since=${sinceIso}`,
   ];
   const r = spawnSync('git', args, { cwd: repo, encoding: 'utf8', env: gitEnv(), maxBuffer: MAX_BUFFER });
   if (r.error) {
@@ -69,20 +77,23 @@ function groupOf(file, depth) {
   return chars.length > LIMITS.group ? `${chars.slice(0, LIMITS.group - 1).join('')}…` : name;
 }
 
-// -> [{ week, groups: Set<string> }], one entry per commit with at least one changed file.
+// `log -z --numstat --format=%H%x09%cI`: NUL-separated fields, a header "hash<TAB>date" then one "add<TAB>del<TAB>path"
+// per file (the first of them behind a newline). -> [{ when, groups: Set<string> }], commits with changed files only.
 function parseCommits(log, depth) {
   const commits = [];
   let current = null;
-  for (const line of log.split('\n')) {
-    const header = HEADER.exec(line);
-    if (header) {
-      const when = new Date(header[1]);
-      current = Number.isNaN(when.getTime()) ? null : { when, groups: new Set() };
-      if (current) commits.push(current);
+  for (const raw of log.split('\0')) {
+    const field = raw.startsWith('\n') ? raw.slice(1) : raw;
+    const file = NUMSTAT.exec(field)?.[1];
+    if (file !== undefined) {
+      if (current) current.groups.add(groupOf(file, depth));
       continue;
     }
-    const file = NUMSTAT.exec(line)?.[1];
-    if (file !== undefined && current) current.groups.add(groupOf(file, depth));
+    const header = HEADER.exec(field);
+    if (!header) continue;
+    const when = new Date(header[1]);
+    current = Number.isNaN(when.getTime()) ? null : { when, groups: new Set() };
+    if (current) commits.push(current);
   }
   return commits.filter((c) => c.groups.size > 0);
 }

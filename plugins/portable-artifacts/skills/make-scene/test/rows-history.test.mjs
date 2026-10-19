@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { historyRows } from '../scripts/lib/history-rows.mjs';
-import { validateSpec } from '../scripts/lib/spec.mjs';
+import { loadSpec, validateSpec } from '../scripts/lib/spec.mjs';
 
 const ROWS_CLI = fileURLToPath(new URL('../scripts/rows.mjs', import.meta.url));
 // 2026-10-19 is a Monday: ISO week 2026-W43. W42 starts 10-12, W41 starts 10-05.
@@ -230,19 +230,42 @@ test('bad subcommand, extra positionals and bad numbers are usage errors', () =>
   }
 });
 
-test('CLI writes { rows } and prints the path plus a data line', () => {
+test('CLI writes { rows } and the pasted data line validates beside scene.json', async () => {
   const repo = fixtureRepo();
+  const outDir = tmp('scene-rows-abs-');
   try {
     repo.commit(new Date().toISOString(), 'src/a.js');
-    const out = path.join(repo.dir, 'nested-rows.json');
+    const out = path.join(outDir, 'nested-rows.json');
     const r = runCli(['git', '--repo', repo.dir, '--weeks', '2', '--out', out]);
     assert.equal(r.status, 0, r.stderr);
     const written = JSON.parse(fs.readFileSync(out, 'utf8'));
     assert.deepEqual(Object.keys(written), ['rows']);
     assert.equal(written.rows.length, 2);
-    assert.match(r.stdout, new RegExp(out.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-    assert.match(r.stdout, /"data": \{ "file": "[^"]+nested-rows\.json" \}/);
-  } finally { repo.cleanup(); }
+    assert.ok(r.stdout.includes(out), 'prints the path it wrote');
+    assert.ok(r.stdout.includes(outDir), 'says which folder scene.json must be in');
+    // The pasted line is relative to the scene's folder, so it validates for a scene.json next to the output.
+    const pasted = /"data": (\{ "file": "[^"]+" \})/.exec(r.stdout);
+    assert.ok(pasted, 'prints a data line');
+    assert.equal(JSON.parse(pasted[1]).file, 'nested-rows.json');
+    fs.writeFileSync(path.join(outDir, 'scene.json'), JSON.stringify({ title: 'History', data: JSON.parse(pasted[1]) }));
+    const { spec, dir } = loadSpec(path.join(outDir, 'scene.json'));
+    const result = await validateSpec(spec, { dir });
+    assert.deepEqual(result.errors, []);
+  } finally { repo.cleanup(); fs.rmSync(outDir, { recursive: true, force: true }); }
+});
+
+test('CLI --out with .. prints the bare file name, not the .. path', () => {
+  const repo = fixtureRepo();
+  const outDir = tmp('scene-rows-up-');
+  fs.mkdirSync(path.join(outDir, 'sub'));
+  try {
+    repo.commit(new Date().toISOString(), 'src/a.js');
+    const r = runCli(['git', '--repo', repo.dir, '--weeks', '2', '--out', '../up-rows.json'], { cwd: path.join(outDir, 'sub') });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(fs.existsSync(path.join(outDir, 'up-rows.json')));
+    assert.match(r.stdout, /"data": \{ "file": "up-rows\.json" \}/);
+    assert.doesNotMatch(r.stdout, /"file": "[^"]*\.\./);
+  } finally { repo.cleanup(); fs.rmSync(outDir, { recursive: true, force: true }); }
 });
 
 test('CLI default output is ./scene-rows.json in the current directory', () => {
@@ -254,5 +277,37 @@ test('CLI default output is ./scene-rows.json in the current directory', () => {
     assert.equal(r.status, 0, r.stderr);
     assert.ok(fs.existsSync(path.join(cwd, 'scene-rows.json')));
     assert.match(r.stdout, /"data": \{ "file": "scene-rows\.json" \}/);
+    assert.match(r.stdout, /scene\.json must sit in the same folder as scene-rows\.json/);
   } finally { repo.cleanup(); fs.rmSync(cwd, { recursive: true, force: true }); }
+});
+
+test('folders named with quotes, backslashes and tabs come back exact', () => {
+  const repo = fixtureRepo();
+  try {
+    repo.commit('2026-10-14T10:00:00Z', 'we"ird/a.js', 'tab\tdir/b.js', 'back\\slash/c.js', 'sp ace/d.js', 'caf\u00e9/e.js');
+    const rows = historyRows({ repo: repo.dir, weeks: 2, depth: 1, now: NOW });
+    assert.deepEqual(groupsOf(rows).sort(), ['back\\slash', 'caf\u00e9', 'sp ace', 'tab\tdir', 'we"ird']);
+    assert.equal(valueOf(rows, 'we"ird', '2026-W42'), 1);
+    assert.equal(valueOf(rows, 'tab\tdir', '2026-W42'), 1);
+  } finally { repo.cleanup(); }
+});
+
+test('inherited GIT_DIR and GIT_CONFIG_PARAMETERS do not change the result', () => {
+  const repo = fixtureRepo();
+  const decoy = fixtureRepo();
+  try {
+    repo.commit(new Date().toISOString(), 'src/a.js');
+    decoy.commit(new Date().toISOString(), 'decoy/z.js');
+    const hostile = {
+      GIT_DIR: path.join(decoy.dir, '.git'),
+      GIT_WORK_TREE: decoy.dir,
+      // makes any git that reads it refuse to run: "repository version 99"
+      GIT_CONFIG_PARAMETERS: "'core.repositoryformatversion=99'",
+      GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.repositoryformatversion', GIT_CONFIG_VALUE_0: '99',
+    };
+    const out = path.join(repo.dir, 'o.json');
+    const r = runCli(['git', '--repo', repo.dir, '--weeks', '2', '--out', out], { env: { ...process.env, ...hostile } });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(groupsOf(JSON.parse(fs.readFileSync(out, 'utf8')).rows), ['src']);
+  } finally { repo.cleanup(); decoy.cleanup(); }
 });

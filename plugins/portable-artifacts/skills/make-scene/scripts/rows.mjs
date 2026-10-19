@@ -43,8 +43,13 @@ try {
   } catch (e) {
     throw new UsageError(`cannot write ${out}: ${e.code ?? e.message}`);
   }
+  const file = path.basename(out);
+  const folder = path.dirname(path.resolve(out));
   process.stdout.write(`wrote ${rows.length} rows to ${out}\n`);
-  process.stdout.write(`paste into scene.json: "data": { "file": ${JSON.stringify(out)} }\n`);
+  process.stdout.write(`paste into scene.json: "data": { "file": ${JSON.stringify(file)} }\n`);
+  // data.file is resolved from the scene's own folder and may not be absolute or contain "..".
+  const where = folder === process.cwd() ? 'the same folder as' : `${folder}, the same folder as`;
+  process.stdout.write(`scene.json must sit in ${where} ${file}\n`);
 } catch (e) {
   if (e instanceof UsageError) exitUsage(e);
   else exitInternal(e);
