@@ -82,12 +82,6 @@ for (const world of ['city', 'terrain']) {
   });
 }
 
-test('forest and galaxy are registered but not implemented yet', () => {
-  assert.deepEqual(Object.keys(WORLDS), ['city', 'forest', 'galaxy', 'terrain']);
-  assert.throws(() => WORLDS.forest(fixture(), SPEC), /not implemented/);
-  assert.throws(() => WORLDS.galaxy(fixture(), SPEC), /not implemented/);
-});
-
 test('zero value still draws a floor marker', () => {
   const g = WORLDS.city({ rows: [{ group: 'a', t: 1, value: 0 }, { group: 'a', t: 2, value: 4 }], links: [] }, SPEC);
   const zero = g.batches.flatMap((b) => b.instances).find((inst) => inst[6] === 0);
@@ -205,4 +199,33 @@ test('terrain: rows without t, or duplicate (group, t), are internal errors', ()
 
 test('graph without data rows still builds', () => {
   assert.doesNotThrow(() => assertGraph(WORLDS.city({ rows: [], links: [] }, SPEC)));
+});
+
+for (const world of ['city', 'terrain']) {
+  test(`${world}: groups and labels named like Object.prototype keys still get a focus entry`, () => {
+    const names = ['constructor', '__proto__', 'toString', 'hasOwnProperty'];
+    const rows = names.map((group, i) => ({ group, t: i + 1, value: i + 1, label: `${group}-row` }));
+    rows.push({ group: 'plain', t: 5, value: 1, label: '__proto__' });
+    const g = WORLDS[world]({ rows, links: [] }, SPEC);
+    for (const n of names) {
+      assert.ok(Object.hasOwn(g.focus, n.toLowerCase()), `group ${n}`);
+      assert.ok(Object.hasOwn(g.focus, `${n}-row`.toLowerCase()), `label ${n}-row`);
+    }
+    assert.ok(Object.hasOwn(g.focus, 'plain'));
+    assert.doesNotThrow(() => assertGraph(g));
+    assert.deepEqual(JSON.parse(JSON.stringify(g)).focus, JSON.parse(JSON.stringify(g.focus)));
+    assert.ok(Object.hasOwn(JSON.parse(JSON.stringify(g)).focus, '__proto__'));
+  });
+
+  test(`${world}: items keep exact values and display for tiny numbers`, () => {
+    const g = WORLDS[world]({ rows: [{ group: 'a', t: 1, value: 0.0002 }, { group: 'a', t: 2, value: 5 }], links: [] }, SPEC);
+    assert.equal(g.items[0].value, 0.0002);
+    assert.equal(g.items[0].display, '0.0002 commits');
+  });
+}
+
+test('terrain surface size carries the vertical scale as its third element', () => {
+  const [s] = WORLDS.terrain(fixture(), SPEC).surfaces;
+  assert.equal(s.size.length, 3);
+  assert.ok(s.size.every(Number.isFinite));
 });

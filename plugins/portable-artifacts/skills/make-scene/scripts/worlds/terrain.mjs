@@ -81,18 +81,21 @@ function buildFocus(rows, groups, ts, cells, [sx, sz]) {
   const T = ts.length;
   const xOf = (ti) => (T === 1 ? 0 : (ti / (T - 1) - 0.5) * sx);
   const zOf = (g) => (groups.length === 1 ? 0 : (g / (groups.length - 1) - 0.5) * sz);
-  const focus = {};
+  const focus = new Map();
+  const addFocus = (key, view) => {
+    if (!focus.has(key)) focus.set(key, view);
+  };
   groups.forEach((g, i) => {
-    focus[g.name] ??= { position: [0, RELIEF + 2, zOf(i) + sz * FOCUS_BACK], target: [0, RELIEF * 0.3, zOf(i)] };
+    addFocus(g.name, { position: [0, RELIEF + 2, zOf(i) + sz * FOCUS_BACK], target: [0, RELIEF * 0.3, zOf(i)] });
   });
   cells.forEach((item, cell) => {
     const label = item === -1 ? null : rows[item].label;
     if (typeof label !== 'string' || label === '') return;
     const x = xOf(cell % T);
     const z = zOf(Math.floor(cell / T));
-    focus[label] ??= { position: [x + 3, RELIEF + 3, z + 5], target: [x, RELIEF * 0.3, z] };
+    addFocus(label, { position: [x + 3, RELIEF + 3, z + 5], target: [x, RELIEF * 0.3, z] });
   });
-  return focus;
+  return Object.fromEntries(focus);
 }
 
 /** build(data, spec) -> scene graph v1 for the terrain world. */

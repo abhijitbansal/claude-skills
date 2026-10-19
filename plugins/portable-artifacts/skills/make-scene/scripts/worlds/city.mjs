@@ -82,7 +82,10 @@ function buildBatches(placed, groupCount) {
 }
 
 function buildFocus(placed, groups) {
-  const focus = {};
+  const focus = new Map();
+  const addFocus = (key, view) => {
+    if (!focus.has(key)) focus.set(key, view);
+  };
   groups.forEach((g, gi) => {
     const mine = placed.filter((p) => p.group === gi);
     const x0 = Math.min(...mine.map((p) => p.x));
@@ -90,20 +93,20 @@ function buildFocus(placed, groups) {
     const tall = Math.max(...mine.map((p) => p.height));
     const z = mine[0].z;
     const cx = (x0 + x1) / 2;
-    focus[g.name] ??= {
+    addFocus(g.name, {
       position: [cx + 6, tall + FOCUS_RISE, z + FOCUS_BACK + (x1 - x0) * 0.25],
       target: [cx, tall * 0.4, z],
-    };
+    });
   });
   for (const p of placed) {
     if (p.label) {
-      focus[p.label] ??= {
+      addFocus(p.label, {
         position: [p.x + 3, p.height + 3, p.z + 5],
         target: [p.x, p.height / 2, p.z],
-      };
+      });
     }
   }
-  return focus;
+  return Object.fromEntries(focus);
 }
 
 /** build(data, spec) -> scene graph v1 for the city world. */

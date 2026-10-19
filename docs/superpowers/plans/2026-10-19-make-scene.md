@@ -51,7 +51,7 @@ Every world/lift module returns this object; the runtime (Task 7–8) consumes e
   "batches": [ { "id": "b0", "shape": "box|cylinder|sphere|icosa|cone|disc", "colour": "<ColourRef>", "emissive": null, "flat": false,
                  "instances": [ [0,0,0, 1,1,1, 0] ] } ],
   "tubes":   [ { "id": "e0", "points": [[0,0,0],[1,0,0]], "radius": 0.06, "colour": "<ColourRef>", "item": null } ],
-  "surfaces":[ { "id": "s0", "nx": 2, "nz": 2, "size": [10,6], "heights": [0,0,0,0], "bands": [ { "below": 0.9, "colour": "#d8c38a" } ], "cells": [0] } ],
+  "surfaces":[ { "id": "s0", "nx": 2, "nz": 2, "size": [10,6,3], "heights": [0,0,0,0], "bands": [ { "below": 0.9, "colour": "#d8c38a" } ], "cells": [0] } ],
   "labels":  [ { "text": "api", "at": [0,0,0], "size": 0.6 } ],
   "anim":    { "sway": ["b1"], "orbits": [ { "batch": "b2", "center": [0,0,0], "r": [1.4], "phase": [0.3], "speed": [0.7] } ] },
   "focus":   { "api": { "position": [0,0,0], "target": [0,0,0] } },

@@ -92,8 +92,8 @@ test('assertGraph accepts a finalized graph and rejects structural breakage', ()
 test('groupColour maps 0-7 to cat tokens and lightens past eight', () => {
   assert.equal(groupColour(0), 'cat1');
   assert.equal(groupColour(7), 'cat8');
-  assert.deepEqual(groupColour(8), { base: '#808080', tint: 'cat1', share: 0.65 });
-  assert.deepEqual(groupColour(10), { base: '#808080', tint: 'cat3', share: 0.65 });
+  assert.deepEqual(groupColour(8), { base: '#ffffff', tint: 'cat1', share: 0.6 });
+  assert.deepEqual(groupColour(10), { base: '#ffffff', tint: 'cat3', share: 0.6 });
 });
 
 test('itemsFrom builds label, group index and display with en-US grouping', () => {
@@ -105,7 +105,7 @@ test('itemsFrom builds label, group index and display with en-US grouping', () =
   const items = itemsFrom(rows, 'commits');
   assert.deepEqual(items.map((i) => i.group), [0, 1, 0]);
   assert.deepEqual(items.map((i) => i.id), ['i0', 'i1', 'i2']);
-  assert.equal(items[0].display, '12,345.679 commits');
+  assert.equal(items[0].display, '12,345.6789 commits');
   assert.equal(items[0].label, 'api · 2026-W30');
   assert.equal(items[1].label, 'Web');
   assert.equal(items[2].t, '3');
@@ -120,4 +120,58 @@ test('compareT orders numbers numerically, then strings, with t-less rows last',
 test('tableFallback lists every row as strings', () => {
   const fb = tableFallback([{ group: 'api', t: 3, value: 1.5 }, { group: 'web', value: 2 }]);
   assert.deepEqual(fb, { kind: 'table', columns: ['group', 't', 'value'], rows: [['api', '3', '1.5'], ['web', '', '2']], svg: null });
+});
+
+test('groupColour: 24 groups give 24 pairwise-distinct ColourRefs (lighter step, then darker step)', () => {
+  const refs = Array.from({ length: 24 }, (_, i) => JSON.stringify(groupColour(i)));
+  assert.equal(new Set(refs).size, 24);
+  assert.deepEqual(groupColour(8), { base: '#ffffff', tint: 'cat1', share: 0.6 });
+  assert.deepEqual(groupColour(16), { base: '#000000', tint: 'cat1', share: 0.6 });
+  assert.deepEqual(groupColour(23), { base: '#000000', tint: 'cat8', share: 0.6 });
+});
+
+test('finalizeGraph keeps focus keys that are Object.prototype names, including __proto__', () => {
+  const g = sample();
+  g.focus = Object.fromEntries([
+    ['constructor', { position: [1, 1, 1], target: [0, 0, 0] }],
+    ['__proto__', { position: [2, 2, 2], target: [0, 0, 0] }],
+    ['toString', { position: [3, 3, 3], target: [0, 0, 0] }],
+  ]);
+  const out = finalizeGraph(g);
+  assert.deepEqual(Object.keys(out.focus), ['constructor', '__proto__', 'tostring']);
+  assert.ok(Object.hasOwn(out.focus, '__proto__'));
+  assert.equal(Object.getPrototypeOf(out.focus), Object.prototype);
+  assert.deepEqual(out.focus['__proto__'].position, [2, 2, 2]);
+  assert.doesNotThrow(() => assertGraph(out));
+});
+
+test('finalizeGraph does not round items[].value and display keeps the exact value', () => {
+  const g = sample();
+  g.items = [{ id: 'i0', label: 'a', group: 0, value: 0.0002, display: '0.0002 u' }];
+  g.batches = [];
+  const out = finalizeGraph(g);
+  assert.equal(out.items[0].value, 0.0002);
+  assert.equal(out.items[0].display, '0.0002 u');
+  const bad = sample();
+  bad.items[0].value = Infinity;
+  assert.throws(() => finalizeGraph(bad), /items\[0\]\.value/);
+});
+
+test('itemsFrom display shows the exact value with en-US grouping', () => {
+  const [a, b, c] = itemsFrom([{ group: 'g', value: 0.0002 }, { group: 'g', value: 1234567.891234 }, { group: 'g', value: 0.1 + 0.2 }], 'u');
+  assert.equal(a.display, '0.0002 u');
+  assert.equal(b.display, '1,234,567.891234 u');
+  assert.equal(c.display, '0.30000000000000004 u');
+});
+
+test('assertGraph rejects a surface size without exactly 3 finite numbers; finalizeGraph never defaults sy', () => {
+  const ok = finalizeGraph(sample());
+  for (const size of [[1, 1], [1, 1, 1, 1], [1, 1, NaN], 'big']) {
+    const bad = structuredClone(ok);
+    bad.surfaces = [{ id: 's0', nx: 2, nz: 2, size, heights: [0, 0, 0, 0], bands: [], cells: [] }];
+    assert.throws(() => assertGraph(bad), /surfaces\[0\]\.size/, JSON.stringify(size));
+  }
+  const raw = emptyGraph('terrain', { title: 'T' });
+  raw.surfaces = [{ id: 's0', nx: 2, nz: 2, size: [10, 6], heights: [0, 0, 0, 0], bands: [], cells: [] }];
+  assert.throws(() => finalizeGraph(raw), /surfaces\[0\]\.size/);
 });

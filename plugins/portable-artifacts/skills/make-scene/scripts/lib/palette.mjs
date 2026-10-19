@@ -3,15 +3,17 @@
 import { InternalError } from './internal-error.mjs';
 
 const CATEGORICAL = 8;
-const BEYOND_BASE = '#808080';
-const BEYOND_SHARE = 0.65;
-const NUMBER_FORMAT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 });
+const STEP_SHARE = 0.6;
+const LIGHTER_BASE = '#ffffff'; // groups 8-15
+const DARKER_BASE = '#000000'; // groups 16-23
+// 20 is more fraction digits than any double needs: the display is the exact value.
+const NUMBER_FORMAT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 20 });
 
-/** Groups 0-7 take cat1..cat8; later groups repeat them mixed toward grey (lighter step). */
+/** Groups 0-7 take cat1..cat8; 8-15 repeat them mixed toward white, 16-23 toward black. */
 export function groupColour(i) {
   if (!Number.isInteger(i) || i < 0) throw new InternalError(`group index must be a non-negative integer, got ${i}`);
   if (i < CATEGORICAL) return `cat${i + 1}`;
-  return { base: BEYOND_BASE, tint: `cat${(i % CATEGORICAL) + 1}`, share: BEYOND_SHARE };
+  return { base: i < 2 * CATEGORICAL ? LIGHTER_BASE : DARKER_BASE, tint: `cat${(i % CATEGORICAL) + 1}`, share: STEP_SHARE };
 }
 
 /** Numbers first (numerically), then strings, then rows without t. Stable and locale-free. */

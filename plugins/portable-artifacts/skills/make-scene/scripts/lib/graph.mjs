@@ -10,7 +10,8 @@ const DECIMALS = 1000;
 const CAMERA_DIRECTION = [1, 0.8, 1];
 const CAMERA_FIT = 2.4; // distance = FIT * bounds radius: a 45 degree lens frames the whole scene
 const MIN_RADIUS = 1;
-const DEFAULT_SURFACE_HEIGHT = 1;
+// items[].value is the data itself: checked for finiteness, never rounded.
+const ITEM_VALUE_PATH = /^graph\.items\[\d+\]\.value$/;
 
 /** Round to 3 decimals; never returns negative zero. */
 export function round3(n) {
@@ -62,10 +63,11 @@ function boundsOf(g) {
   };
   for (const b of g.batches) for (const i of b.instances) grow(i, [i[3] / 2, i[4] / 2, i[5] / 2]);
   for (const t of g.tubes) for (const p of t.points) grow(p, [t.radius, t.radius, t.radius]);
-  for (const s of g.surfaces) {
-    const [sx, sz, sy = DEFAULT_SURFACE_HEIGHT] = s.size;
+  g.surfaces.forEach((s, i) => {
+    if (!isSize(s.size)) fail(`surfaces[${i}].size`, 'expected [sx, sz, sy]: exactly 3 finite numbers');
+    const [sx, sz, sy] = s.size;
     grow([0, sy / 2, 0], [sx / 2, sy / 2, sz / 2]);
-  }
+  });
   return min[0] === Infinity ? { min: [0, 0, 0], max: [0, 0, 0] } : { min, max };
 }
 
@@ -83,24 +85,28 @@ function defaultCamera({ min, max }) {
 function cleaned(value, at) {
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new InternalError(`scene graph has a non-finite number at ${at}`);
-    return round3(value);
+    return ITEM_VALUE_PATH.test(at) ? value : round3(value);
   }
   if (Array.isArray(value)) return value.map((v, i) => cleaned(v, `${at}[${i}]`));
   if (value && typeof value === 'object') {
-    const out = {};
-    for (const [k, v] of Object.entries(value)) if (v !== undefined) out[k] = cleaned(v, `${at}.${k}`);
-    return out;
+    // fromEntries defines own properties, so a key named __proto__ survives.
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, cleaned(v, `${at}.${k}`)]),
+    );
   }
   return value;
 }
 
+// Lowercase keys, first wins; a Map keeps names like "constructor" and "__proto__" safe.
 function lowercasedFocus(focus) {
-  const out = {};
+  const out = new Map();
   for (const [key, view] of Object.entries(focus)) {
     const lower = key.toLowerCase();
-    if (!Object.hasOwn(out, lower)) out[lower] = view;
+    if (!out.has(lower)) out.set(lower, view);
   }
-  return out;
+  return Object.fromEntries(out);
 }
 
 /** A new, finished graph: bounds, default camera, lowercase focus keys, rounded finite numbers. */
@@ -115,6 +121,7 @@ function fail(at, message) {
 }
 
 const isFinite3 = (v) => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
+const isSize = isFinite3;
 const isView = (v) => v && isFinite3(v.position) && isFinite3(v.target);
 
 function checkBatches(g) {
@@ -132,6 +139,7 @@ function checkSurfaces(g) {
   g.surfaces.forEach((s, si) => {
     const at = `surfaces[${si}]`;
     if (!Number.isInteger(s.nx) || !Number.isInteger(s.nz) || s.nx < 2 || s.nz < 2) fail(`${at}.nx`, 'nx and nz must be integers >= 2');
+    if (!isSize(s.size)) fail(`${at}.size`, 'expected [sx, sz, sy]: exactly 3 finite numbers');
     if (s.heights.length !== s.nx * s.nz) fail(`${at}.heights`, `expected ${s.nx * s.nz} values, got ${s.heights.length}`);
     s.cells.forEach((c, ci) => {
       if (!Number.isInteger(c) || c < -1 || c >= g.items.length) fail(`${at}.cells[${ci}]`, `item index ${c} is outside -1..${g.items.length - 1}`);
