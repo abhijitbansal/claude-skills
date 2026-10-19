@@ -45,15 +45,16 @@ export function reportSceneErrors(errors, base, file) {
 /**
  * A scene lifted from a dashboard with a postgres or mysql source would open a connection when make-scene
  * validates or builds it. The explainer's chart gate (the same message) looks at the dashboard first.
- * -> { path, message } under the scene ("lift.dashboard"), or null for no lift, a local dashboard, a path make-scene
- * reports itself, or a dashboard that is not JSON. `dir` is where the scene's own paths resolve. Throws SiblingError
- * when make-dashboard is not installed (only reached for a dashboard that declares sources).
+ * -> { path, message } under the scene ("lift.dashboard"), or null for no lift, a local dashboard, or a dashboard
+ * that is not JSON. A ref the chart gate refuses (absolute, outside the folder, a symlink, missing, not .json) is
+ * refused here with the same message, so make-scene never runs a dashboard the explainer would not. `dir` is where
+ * the scene's own paths resolve. Throws SiblingError when make-dashboard is not installed (only reached for a dashboard that declares sources).
  */
 export async function sceneNetworkError(spec, dir) {
   const dashboard = spec.lift?.dashboard;
   if (typeof dashboard !== 'string') return null;
   const ref = resolveRef(dir, dashboard, { exts: DASHBOARD_EXTS });
-  if (ref.error) return null;
+  if (ref.error) return { path: 'lift.dashboard', message: ref.error };
   const error = await networkSourceError(ref.abs, { dashboard });
   return error && { ...error, path: 'lift.dashboard' };
 }

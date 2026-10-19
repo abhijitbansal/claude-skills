@@ -140,13 +140,38 @@ export async function liftDashboard(source, { dir = process.cwd(), theme, idPref
   return { ...graph, fallback: { ...graph.fallback, svg: steadyIds(svgs.light.wide), svgDark: steadyIds(svgs.dark.wide) } };
 }
 
+// The one Vega failure that is expected: a number format built from a NaN step (`invalid format: ,.NaN~f`) when the
+// values are too close together for the axis. Vega logs it, then fails later with an unrelated TypeError.
+const KNOWN_VEGA_FAILURE = /invalid format/;
+const noted = new Set();
+
+// One line on stderr per chart and process, however often the drawing is tried (validate draws once per theme).
+function noteTable(chartId) {
+  const line = `note: ${chartId}: drawn as a table in the fallback because its values are too close together for a 2D chart`;
+  if (noted.has(line)) return;
+  noted.add(line);
+  process.stderr.write(`${line}\n`);
+}
+
 // make-dashboard's own 2D drawing of the chart. Vega cannot lay out some extreme data (values equal to float noise
-// make a NaN bin step); the 3D scene is still sound, so the fallback is then the plotted table alone (null).
-async function drawing({ lib, view, result }, theme, idPrefix) {
+// make a NaN bin step); the 3D scene is still sound, so the fallback is then the plotted table alone (null). Only
+// that known failure is caught; anything else is a real error and propagates. Vega's logger writes its stack to
+// console.error: it is held back while drawing, and shown again unless it was the known failure.
+async function drawing({ lib, view, result, chart }, theme, idPrefix) {
+  const logged = [];
+  const consoleError = console.error;
+  console.error = (...args) => { logged.push(args); };
+  let known = false;
   try {
     return await lib.renderThemedSvgs(view, result.rows, theme, { idPrefix: `${idPrefix ?? 'ch'}-` });
-  } catch {
+  } catch (e) {
+    known = logged.some((args) => KNOWN_VEGA_FAILURE.test(args.map(String).join(' ')));
+    if (!known) throw e;
     return null;
+  } finally {
+    console.error = consoleError;
+    if (known) noteTable(chart.id);
+    else for (const args of logged) consoleError(...args);
   }
 }
 

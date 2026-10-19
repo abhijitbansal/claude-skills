@@ -145,7 +145,9 @@ test('a throw during mount releases what was built: no live loop, context lost, 
   assert.equal(result.state, 'fallback');
   assert.ok(result.lost === true || result.lost === 'no-context');
   assert.deepEqual(result.errors, []);
-  assert.deepEqual(logs, ["warning: make-scene: showing the table instead of the 3D view (Cannot read properties of undefined (reading 'min'))"], 'the fallback says why, as a warning');
+  // The reason in brackets is the engine's own TypeError wording, which differs between browsers and versions: not pinned.
+  assert.equal(logs.length, 1, `one warning: ${JSON.stringify(logs)}`);
+  assert.match(logs[0], /^warning: make-scene: showing the table instead of the 3D view/, 'the fallback says why, as a warning');
 });
 
 test('a throw inside a frame falls back and cleans up without uncaught errors', async (t) => {

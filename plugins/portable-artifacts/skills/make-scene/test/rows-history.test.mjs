@@ -215,6 +215,34 @@ test('two folders whose shortened names collide stay separate, deterministically
   } finally { repo.cleanup(); }
 });
 
+test('a folder touched only outside the week window does not push an in-window folder onto a suffix', () => {
+  const repo = fixtureRepo();
+  try {
+    // weeks: 1 is W43 only (from Monday 10-19). Sunday 10-18 is inside git's day of slack but outside the window.
+    repo.commit('2026-10-18T10:00:00Z', `${'a'.repeat(45)}/shared/f.js`);
+    repo.commit('2026-10-19T10:00:00Z', `${'b'.repeat(45)}/shared/f.js`);
+    const rows = historyRows({ repo: repo.dir, weeks: 1, depth: 2, now: NOW });
+    assert.deepEqual(groupsOf(rows), ['…/shared'], 'the only group in the window keeps the plain name');
+    assert.equal(valueOf(rows, '…/shared', '2026-W43'), 1);
+  } finally { repo.cleanup(); }
+});
+
+test('a real folder named "x (2)" never merges with a generated "x (2)"', () => {
+  const repo = fixtureRepo();
+  try {
+    repo.commit('2026-10-14T10:00:00Z', `${'a'.repeat(45)}/shared/f.js`);
+    repo.commit('2026-10-15T10:00:00Z', `${'b'.repeat(45)}/shared/f.js`);
+    repo.commit('2026-10-16T10:00:00Z', `${'c'.repeat(45)}/shared (2)/f.js`, `${'c'.repeat(45)}/shared (2)/g.js`);
+    const rows = historyRows({ repo: repo.dir, weeks: 2, depth: 2, now: NOW });
+    const groups = groupsOf(rows);
+    assert.equal(groups.length, 3, `three distinct groups: ${groups.join(' | ')}`);
+    assert.equal(new Set(groups).size, 3);
+    assert.ok(groups.every((g) => [...g].length <= 48));
+    assert.ok(groups.includes('…/shared (2)'), 'the real folder keeps the name it has');
+    assert.deepEqual(groups.map((g) => valueOf(rows, g, '2026-W42')).sort(), [1, 1, 1], 'one commit each, none counted twice');
+  } finally { repo.cleanup(); }
+});
+
 test('a --repo subfolder counts only that folder, grouped by the folders inside it, with one note', () => {
   const repo = fixtureRepo();
   try {

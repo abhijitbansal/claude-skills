@@ -15,7 +15,7 @@ const LANE_FILL = 0.8;
 const MAX_BINS = 20; // as the dashboard's own histogram
 const BIN_EPSILON = 1e-9;
 const MAX_BIN_COUNT = 100; // a hard stop: nice steps give at most 22 bins
-const FLAT_SHARE = 1e-9; // values this close together, relative to their size, are one value plus float noise
+const FLAT_SHARE = 1e-14; // values this close together, relative to their size (a few dozen ULPs), are one value plus float noise
 
 const emptyBatch = (id, colour) => ({ id, shape: 'box', colour, emissive: null, flat: false, instances: [] });
 
@@ -98,7 +98,7 @@ export function barsPart(model, { units, niceStep }) {
 }
 
 // The histogram's bins: nice edges, at most MAX_BINS of them, counting the rows in each. Values that differ by
-// float noise only (a spread under FLAT_SHARE of their size) are one bin; every row is counted in a valid bin.
+// float noise only (a spread under FLAT_SHARE of their size: a few dozen ULPs, so a real spread such as 1e13 + 50 x i still bins) are one bin; every row is counted in a valid bin.
 function binned(values, niceStep) {
   if (values.length === 0) return { start: 0, step: 1, counts: [] };
   const [min, max] = [Math.min(...values), Math.max(...values)];

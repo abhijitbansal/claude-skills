@@ -97,3 +97,22 @@ test('a built page inlines the licence notice with the bundle', async (t) => {
   assert.match(page, /@license[\s\S]{0,40}Copyright[^\n]*Three\.js Authors/, 'built page has no three copyright line');
   assert.match(page, /SPDX-License-Identifier: MIT/, 'built page has no SPDX identifier');
 });
+
+// MIT: "The above copyright notice and this permission notice shall be included in all copies": the copyright line
+// alone is not enough, the permission paragraph travels too (verbatim from three's LICENSE).
+const THREE_LICENSE = fs.readFileSync(new URL('../node_modules/three/LICENSE', import.meta.url), 'utf8').trim();
+const noticeProblems = (text) => [
+  [/Copyright[^\n]*three\.js authors/i, 'the three.js copyright line'],
+  [/Permission is hereby granted/, 'the permission paragraph'],
+].filter(([re]) => !re.test(text)).map(([, what]) => what).concat(text.includes(THREE_LICENSE) ? [] : ['three\'s LICENSE verbatim']);
+
+test('bundle carries three.js full MIT notice: copyright line and permission paragraph, verbatim', () => {
+  assert.deepEqual(noticeProblems(readBundle()), []);
+  assert.match(readBundle(), /THE SOFTWARE\.\s*\*\/\s*$/, 'the notice is in a comment at the end of the bundle');
+});
+
+test('a built page carries three.js full MIT notice: copyright line and permission paragraph, verbatim', async (t) => {
+  const { buildWorldPage } = await import('./helpers/browser.mjs');
+  const { file } = await buildWorldPage(t, 'city');
+  assert.deepEqual(noticeProblems(fs.readFileSync(file, 'utf8')), []);
+});

@@ -296,7 +296,26 @@ test('a viewer who has moved the camera keeps it when the viewport turns; the ov
     const p = window.PAScene.__scene.project(x, y, z);
     return [Math.round(p.x), Math.round(p.y)];
   }));
+  // Pixels per world unit at the orbit centre, as height / scale: proportional to how far back the camera is (the overview distance).
+  const depth = () => page.evaluate(() => {
+    const api = window.PAScene.__scene;
+    return api.canvas.clientHeight / api.project(0, 0, 0).scale;
+  });
+  await page.waitForTimeout(400);
   const untouched = await pose();
+  const landscapeDepth = await depth();
+  // A camera nobody has touched refits when the viewport turns: it moves back to the portrait overview and, turned
+  // back, to the landscape one again.
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.waitForTimeout(800);
+  const portraitDepth = await depth();
+  assert.ok(Math.abs(portraitDepth / landscapeDepth - 1) > 0.05, `an untouched camera's overview distance changes with the viewport: ${landscapeDepth} -> ${portraitDepth}`);
+  assert.notDeepEqual(await pose(), untouched, 'an untouched camera moved to the portrait framing');
+  await page.setViewportSize(landscape);
+  await page.waitForTimeout(800);
+  const refitBack = await pose();
+  const drift = refitBack.flatMap(([x, y], i) => [Math.abs(x - untouched[i][0]), Math.abs(y - untouched[i][1])]);
+  assert.ok(Math.max(...drift) <= 4, `an untouched camera refits back to the landscape framing: ${JSON.stringify(untouched)} -> ${JSON.stringify(refitBack)}`);
   await page.mouse.move(300, 200);
   await page.mouse.down();
   await page.mouse.move(340, 200, { steps: 4 });

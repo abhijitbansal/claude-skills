@@ -468,13 +468,15 @@ test('full screen in the overlay is real: the wrapper inside the dialog is the f
   await page.waitForFunction(() => !!document.fullscreenElement || document.querySelector('[data-dg-dialog].pa-fill, [data-dg-dialog] .pa-fill'), null, { timeout: 5000 });
   assert.equal(await isRoot(), true, 'the wrapper div is document.fullscreenElement');
   assert.equal(await page.evaluate(() => !!document.querySelector('[data-dg-dialog] .pa-fill')), false, 'no fallback layer');
+  await page.waitForFunction(() => document.querySelector('[data-dg-dialog] [data-pa-full]')?.textContent === 'Exit full screen');
   assert.equal(await page.locator(`${DLG} [data-pa-full]`).textContent(), 'Exit full screen');
   const size = page.viewportSize();
   const box = await page.locator(`${DLG} [data-dg-root]`).boundingBox();
   assert.ok(box.width >= size.width - 1 && box.height >= size.height - 1, `the wrapper fills the screen: ${JSON.stringify(box)}`);
   assert.equal(await page.locator(`${DLG} [data-pa-full]`).isVisible(), true, 'the way out stays visible');
   await page.locator(`${DLG} [data-pa-full]`).click();
-  await page.waitForFunction(() => !document.fullscreenElement);
+  // The browser leaves full screen first and the button label follows on its own event: wait for the label, not just the state.
+  await page.waitForFunction(() => !document.fullscreenElement && document.querySelector('[data-dg-dialog] [data-pa-full]')?.textContent === 'Full screen');
   assert.equal(await page.locator(`${DLG} [data-pa-full]`).textContent(), 'Full screen');
   assert.equal(await open(page), true, 'leaving full screen keeps the overlay');
   await page.locator('[data-dg-close]').click();

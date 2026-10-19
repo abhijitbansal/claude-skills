@@ -9,6 +9,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { build } from '../scripts/build.mjs';
 import { MAX_PAGE_BYTES } from '../scripts/lib/bundle.mjs';
+import { buildPage, pageErrors } from '../scripts/lib/page-size.mjs';
+import { listThemes } from '../shared/theme.mjs';
 import { loadSibling } from '../scripts/lib/siblings.mjs';
 import { PINNED_ENV, tempDir } from './helpers/scene-fixtures.mjs';
 
@@ -37,6 +39,15 @@ const validated = (file, args = []) => {
   return { status: r.status, signal: r.signal, stderr: r.stderr, result };
 };
 
+// validate cites the heaviest theme's size (a build in dusk is smaller): the same message and path, never a smaller size.
+const capKb = (message) => Number(/is (\d+) KB/.exec(message)[1]);
+function sameCapError(validate, build) {
+  assert.equal(validate.length, 1);
+  assert.equal(validate[0].path, build[0].path);
+  assert.match(validate[0].message, CAP_MESSAGE);
+  assert.ok(capKb(validate[0].message) >= capKb(build[0].message), `${validate[0].message} vs ${build[0].message}`);
+}
+
 // groups x per rows, as the history command would write them.
 const gridRows = (groups, per) => Array.from({ length: groups * per }, (_, i) => ({ group: `g${i % groups}`, t: `w${String(Math.floor(i / groups)).padStart(3, '0')}`, value: (i * 7) % 50 }));
 
@@ -47,7 +58,7 @@ test('validate rejects a forest build would reject: 20 groups of 100 rows is ove
   assert.match(built.errors[0].message, CAP_MESSAGE);
   const v = validated(file);
   assert.equal(v.status, 1, `validate must refuse too: ${JSON.stringify(v.result)}`);
-  assert.deepEqual(v.result.errors, built.errors, 'the same message');
+  sameCapError(v.result.errors, built.errors);
 });
 
 test('validate rejects one group of 2000 rows in a forest, and accepts the same rows as a city', async (t) => {
@@ -66,6 +77,38 @@ test('validate and build agree on a spec just under the cap: both pass', async (
   assert.equal(built.ok, true, JSON.stringify(built.errors));
   assert.ok(built.bytes < MAX_PAGE_BYTES && built.bytes > MAX_PAGE_BYTES * 0.7, `${built.bytes} bytes`);
   assert.deepEqual(validated(file).result, { ok: true, errors: [] });
+});
+
+// ---- every theme, any provenance --------------------------------------------------------------------
+
+// build.mjs --theme <any> and --model/--effort/--agent change the page; validate must refuse whatever build could refuse.
+const SMALL_CITY = { title: 'City', world: 'city', data: { rows: gridRows(6, 12) } };
+const MAX_STAMP = { model: 'm'.repeat(60), effort: 'e'.repeat(60), agent: 'a'.repeat(60) };
+
+test('validate rejects a page that is under the cap in dusk but over it in the heaviest theme', async (t) => {
+  const { dir } = specIn(t, SMALL_CITY);
+  const bytesIn = async (theme) => (await buildPage({ ...SMALL_CITY, theme }, { dir })).bytes;
+  const dusk = await bytesIn('dusk');
+  const heaviest = Math.max(...await Promise.all(listThemes().map(bytesIn)));
+  assert.ok(heaviest > dusk + 1024, `the premise: some theme is heavier than dusk (${dusk} vs ${heaviest})`);
+  const maxBytes = Math.floor((dusk + heaviest) / 2);
+  const result = await pageErrors(SMALL_CITY, { dir, maxBytes });
+  assert.equal(result.ok, false, `dusk is ${dusk} bytes, the cap ${maxBytes}, the heaviest theme ${heaviest}`);
+  assert.match(result.errors[0].message, /^the page is \d+ KB; the limit is \d+ KB - use fewer rows or fewer groups$/);
+  const shown = Number(/is (\d+) KB/.exec(result.errors[0].message)[1]);
+  assert.ok(Math.abs(shown - heaviest / 1024) <= 2, `the message cites the heaviest size (${shown} KB vs ${heaviest / 1024})`);
+});
+
+test('whatever build accepts or rejects for a theme and stamp, validate has already rejected it', async (t) => {
+  const { dir } = specIn(t, SMALL_CITY);
+  const heaviestOk = await pageErrors(SMALL_CITY, { dir });
+  assert.equal(heaviestOk.ok, true, 'a small city is valid');
+  for (const theme of listThemes()) {
+    const built = (await buildPage({ ...SMALL_CITY, theme, generatedBy: MAX_STAMP }, { dir })).bytes;
+    // a cap exactly at that page: validate must refuse any cap build would refuse for this theme, with the longest stamp
+    const result = await pageErrors(SMALL_CITY, { dir, maxBytes: built - 1 });
+    assert.equal(result.ok, false, `${theme} with the longest stamp is ${built} bytes; a cap of ${built - 1} must be refused by validate too`);
+  }
 });
 
 test('the alternatives table lists an over-cap world as not available, with no switch command', async (t) => {
@@ -123,7 +166,7 @@ dtest('validate rejects a heatmap whose page is over the cap, as build does', as
   assert.match(built.errors[0].message, CAP_MESSAGE);
   const v = validated(file);
   assert.equal(v.status, 1, `validate must refuse too: ${JSON.stringify(v.result)} ${v.stderr.split('\n')[0]}`);
-  assert.deepEqual(v.result.errors, built.errors);
+  sameCapError(v.result.errors, built.errors);
 });
 
 dtest('a heatmap with 1,700 distinct values per axis is a spec error naming the limit, never an internal error', (t) => {

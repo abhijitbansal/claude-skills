@@ -229,6 +229,33 @@ test('missing make-scene gives install command', async () => {
   assert.match((await page.buildPage(doc([text]), { dir: root })).html, /<!doctype html>/, 'a page with no scene never needs it');
 });
 
+// A dashboard lift whose 2D chart Vega cannot draw (values too close together) has a table-only fallback, no svg.
+// Both modes must render it: the page keeps the table in the fallback region, the deck shows it alone.
+test('a dashboard lift with a table-only fallback renders in a page and in a deck, with no svg and no Vega noise', async () => {
+  const dir = folder({
+    'close.dashboard.json': { title: 'T', sources: {}, queries: { q: 'SELECT 33.333333333333336::DOUBLE AS v UNION ALL SELECT 33.33333333333333::DOUBLE' }, charts: [{ id: 'close', title: 'Close', query: 'q', kind: 'histogram', value: 'v' }] },
+  });
+  const lifted = { title: 'Close values', lift: { dashboard: 'close.dashboard.json', chart: 'close' } };
+  assert.deepEqual(await errorsOf(doc([section(lifted)]), dir), []);
+  const stderr = [];
+  const write = process.stderr.write;
+  process.stderr.write = (chunk) => { stderr.push(String(chunk)); return true; };
+  let page;
+  let deck;
+  try {
+    page = await build([section(lifted)], {}, dir);
+    deck = await build([section(lifted)], { mode: 'slides' }, dir);
+  } finally {
+    process.stderr.write = write;
+  }
+  for (const { html } of [page, deck]) {
+    assert.match(html, /<div class="sc-fallback[^"]*"[^>]*>(?:(?!<\/div><\/div>)[^])*<table>/, 'the fallback region holds the table');
+    assert.ok(!html.includes('<div class="sc-fb-svg'), 'no 2D drawing');
+  }
+  assert.match(deck.html, /<div class="sc-fallback sc-fb-static" role="region"[^>]*><div class="sc-table"><table>/);
+  assert.equal(stderr.join('').includes('ERROR'), false, stderr.join(''));
+});
+
 // ---- network sources -----------------------------------------------------------------------------
 
 // A scene lifted from a dashboard with a database source must be refused like a chart section on it is,
@@ -266,6 +293,48 @@ test('a scene lifting a postgres or mysql dashboard is refused as an explainer c
         assert.equal(result.ok, false);
         assert.equal(result.errors[0].message, message);
       }
+    }
+  } finally {
+    if (saved === undefined) delete process.env.SCENE_NET_URL;
+    else process.env.SCENE_NET_URL = saved;
+  }
+});
+
+// A dashboard ref the chart gate refuses (symlink, absolute, outside the folder, missing, wrong extension) must be
+// refused behind a scene section with the same message: make-scene would otherwise run the dashboard, and a
+// symlinked postgres dashboard would open a connection. The URL points at a closed port.
+test('a scene lifting a dashboard ref the chart gate refuses is refused with its message, no connection attempted', async () => {
+  const saved = process.env.SCENE_NET_URL;
+  process.env.SCENE_NET_URL = 'postgresql://user:pw@127.0.0.1:1/db';
+  try {
+    const dir = folder();
+    fs.cpSync(path.join(SKILL, 'test/fixtures/chart'), dir, { recursive: true });
+    const outside = folder();
+    const dash = JSON.parse(fs.readFileSync(path.join(dir, 'sales.dashboard.json'), 'utf8'));
+    dash.sources.warehouse = { type: 'postgres', env: 'SCENE_NET_URL' };
+    fs.writeFileSync(path.join(outside, 'net.dashboard.json'), JSON.stringify(dash));
+    fs.symlinkSync(path.join(outside, 'net.dashboard.json'), path.join(dir, 'link.dashboard.json'));
+    fs.writeFileSync(path.join(dir, 'dashboard.txt'), '{}');
+    const refs = {
+      symlink: 'link.dashboard.json', absolute: path.join(outside, 'net.dashboard.json'), outside: '../net.dashboard.json',
+      missing: 'nope.dashboard.json', extension: 'dashboard.txt',
+    };
+    const pattern = { symlink: /goes through a symlink/, absolute: /is absolute/, outside: /outside the spec folder/, missing: /file not found/, extension: /must be a \.json file/ };
+    for (const [kind, dashboard] of Object.entries(refs)) {
+      const [chartError] = await errorsOf(doc([{ type: 'chart', dashboard, chart: 'by-region' }]), dir);
+      assert.match(chartError.message, pattern[kind], `the chart gate refuses the ${kind} ref`);
+      const spec = doc([text, section({ title: 'Sales', lift: { dashboard, chart: 'by-region' } })]);
+      const [first, ...more] = await errorsOf(spec, dir);
+      assert.equal(more.length, 0, `${kind}: one error`);
+      assert.equal(first.path, 'sections[1].scene.lift.dashboard', kind);
+      assert.equal(first.message, chartError.message, `${kind}: the chart gate's message`);
+      assert.doesNotMatch(first.message, /Connection refused|ECONNREFUSED/);
+      await assert.rejects(buildPage(spec, { dir }), (e) => {
+        assert.ok(e instanceof BuildError);
+        assert.equal(e.errors[0].path, 'sections[1].scene.lift.dashboard');
+        assert.equal(e.errors[0].message, chartError.message);
+        return true;
+      });
     }
   } finally {
     if (saved === undefined) delete process.env.SCENE_NET_URL;

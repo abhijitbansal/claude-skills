@@ -131,10 +131,18 @@ dtest('validate: the same holds for a line, a scatter and a stacked bar', (t) =>
 const histogramOf = (t, values) => dashboardWith(t, values.map((v, i) => `SELECT ${v}::DOUBLE AS v`).join(' UNION ALL '), { kind: 'histogram', value: 'v' });
 const counted = (items) => items.reduce((n, i) => n + i.value, 0);
 
-dtest('histogram: values equal up to float noise make one bin holding every row (it used to crash with Invalid array length)', (t) => {
-  const items = liftedItems(histogramOf(t, ['0.99999999996', '0.99999999997']));
-  assert.equal(items.length, 1);
-  assert.equal(counted(items), 2);
+dtest('histogram: values 1e-11 apart round 1 are real data, binned and counted, not one collapsed bin', (t) => {
+  const { items, hasSvg } = lifted(histogramOf(t, ['0.99999999996', '0.99999999997']));
+  assert.equal(counted(items), 2, 'every row is counted');
+  assert.ok(items.length > 1 && items.length <= 22, `${items.length} bins`);
+  assert.equal(new Set(items.map((i) => i.label)).size, items.length, 'bin labels are distinct');
+  assert.equal(hasSvg, true, 'make-dashboard draws this one in 2D too');
+});
+
+dtest('histogram: 21 values 50 apart round 1e13 are binned like the 2D chart (about 20 bins), not collapsed to one', (t) => {
+  const { items } = lifted(histogramOf(t, Array.from({ length: 21 }, (_, i) => String(1e13 + i * 50))));
+  assert.equal(counted(items), 21);
+  assert.ok(items.length >= 10 && items.length <= 22, `${items.length} bins (the 2D chart draws 21 bins of 50)`);
 });
 
 dtest('histogram: a 1e-15 spread round 0.123456789012345 is one bin (it used to build millions of bins)', (t) => {

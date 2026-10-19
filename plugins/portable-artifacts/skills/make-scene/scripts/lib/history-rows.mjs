@@ -97,22 +97,30 @@ function shortened(name) {
   return `${ELLIPSIS}${chars.slice(-(LIMITS.group - 1)).join('')}`; // one folder name longer than the limit: its end
 }
 
-// The display name of every group, by full name. Distinct folders keep distinct names: when two shortened names
-// collide, the folders (in sorted order) after the first take " (2)", " (3)"... and are cut further to make room.
+// The display name of every group, by full name. Distinct folders keep distinct names: a folder keeps its shortened
+// name unless an earlier one (in sorted order) already holds it; those later folders take " (2)", " (3)"... (cut
+// further to make room), skipping every name that is taken: another folder's shortened name (a real folder called
+// "x (2)") or a suffix already handed out.
 function displayNames(fullNames) {
-  const byShort = new Map();
+  const names = new Map();
+  const taken = new Set();
+  const later = [];
   for (const full of [...fullNames].sort()) {
     const short = shortened(full);
-    byShort.set(short, [...(byShort.get(short) ?? []), full]);
+    if (taken.has(short)) later.push([full, short]);
+    else {
+      names.set(full, short);
+      taken.add(short);
+    }
   }
-  const names = new Map();
-  for (const [short, fulls] of byShort) {
-    fulls.forEach((full, i) => {
-      if (i === 0) return names.set(full, short);
-      const suffix = ` (${i + 1})`;
-      const room = [...short].slice(0, LIMITS.group - [...suffix].length).join('');
-      return names.set(full, `${room}${suffix}`);
-    });
+  for (const [full, short] of later) {
+    for (let n = 2; !names.has(full); n++) {
+      const suffix = ` (${n})`;
+      const name = `${[...short].slice(0, LIMITS.group - [...suffix].length).join('')}${suffix}`;
+      if (taken.has(name)) continue;
+      names.set(full, name);
+      taken.add(name);
+    }
   }
   return names;
 }
@@ -167,11 +175,11 @@ export function historyRows({ repo, weeks = 12, depth = 1, now = new Date(), war
   if (within !== '') warn(`counts cover only the folder ${within} of its repository (commits that change files in it), grouped by the folders inside it`);
   // A day of slack: git compares --since with its own timezone view; the exact week filter is below.
   const log = runGitLog(repo, new Date(first.getTime() - DAY_MS).toISOString(), { subfolder: within !== '' });
-  const parsed = parseCommits(log, depth);
-  const names = displayNames(new Set(parsed.flatMap((c) => [...c.groups])));
-  const inWindow = parsed
-    .filter((c) => c.when >= first && c.when < new Date(thisWeek.getTime() + WEEK_MS))
-    .map((c) => ({ week: isoWeek(c.when), groups: new Set([...c.groups].map((g) => names.get(g))) }));
+  // Only the folders that count (touched inside the week window) get display names: one touched only in the slack day
+  // around it must not push another onto a suffix.
+  const windowed = parseCommits(log, depth).filter((c) => c.when >= first && c.when < new Date(thisWeek.getTime() + WEEK_MS));
+  const names = displayNames(new Set(windowed.flatMap((c) => [...c.groups])));
+  const inWindow = windowed.map((c) => ({ week: isoWeek(c.when), groups: new Set([...c.groups].map((g) => names.get(g))) }));
   if (inWindow.length === 0) throw new UsageError(`no commits in the last ${weeks} week${weeks === 1 ? '' : 's'} in ${repo}; try a larger --weeks`);
 
   const { commits, order } = foldGroups(inWindow, warn);
