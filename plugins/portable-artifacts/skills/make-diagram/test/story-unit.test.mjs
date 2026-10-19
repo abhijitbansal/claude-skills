@@ -90,19 +90,42 @@ test('a step beat glides at the camera default (300 ms) and a story beat at 450 
   assert.deepEqual([hops.moves.at(-1), hops.timers.at(-1).ms], [{ ms: 225 }, 225]);
 });
 
-test('a 160-character caption holds 1800 + 30*160 = 4500 ms at 1x, divided by the speed', () => {
-  const caption = 'x'.repeat(160);
-  const data = { ...HOPS, beats: [beat('step', { title: 'One', ids: ['a'], reveal: ['a'], caption })] };
+// The ms the hold timer is armed with for one step beat (no dot, so one fired timer reaches the hold).
+function holdArmedFor(caption, speed) {
+  const data = { ...STEPS, beats: [beat('step', { title: 'One', ids: ['a'], reveal: ['a'], ...(caption === null ? {} : { caption }) })] };
   const { story, timers } = load(data);
+  story.setSpeed(speed);
   story.present(0);
   story.play();
   timers.at(-1).fn(); // the glide is over: a step beat goes straight to its hold
-  assert.equal(timers.at(-1).ms, 4500, 'the hold timer is armed with 1800 + 30*160');
-  const fast = load(data);
-  fast.story.setSpeed(2);
-  fast.story.play();
-  fast.timers.at(-1).fn();
-  assert.equal(fast.timers.at(-1).ms, 2250, 'at 2x the hold halves');
+  return timers.at(-1).ms;
+}
+
+test('a caption holds 1800 + 30 ms per character: none 1800, 50 chars 3300, both divided by the speed', () => {
+  assert.equal(holdArmedFor(null, 1), 1800, 'no caption: HOLD_MS alone');
+  assert.equal(holdArmedFor('x'.repeat(50), 1), 3300, '1800 + 30*50, under the cap');
+  assert.equal(holdArmedFor('x'.repeat(50), 2), 1650, 'at 2x the hold halves');
+});
+
+test('a 160-character caption hits the 4500 ms hold cap at 1x, and 2250 at 2x', () => {
+  assert.equal(holdArmedFor('x'.repeat(160), 1), 4500, '1800 + 30*160 = 6600, capped');
+  assert.equal(holdArmedFor('x'.repeat(160), 2), 2250);
+});
+
+test('the dot travels a hop for 900 ms at 1x and 450 ms at 2x, and the hold starts when it lands', () => {
+  for (const [speed, ms] of [[1, 900], [2, 450]]) {
+    const { story, timers, frames } = load(HOPS);
+    story.setSpeed(speed);
+    story.present(0);
+    timers.at(-1).fn(); // the glide is over: the dot sets off
+    const armed = timers.length;
+    const first = frames.length - 1;
+    frames[first](0); // t0
+    frames[first + 1](ms - 1);
+    assert.equal(timers.length, armed, `${ms - 1} ms in, the dot is still travelling`);
+    frames[first + 2](ms);
+    assert.equal(timers.length, armed + 1, `at ${ms} ms the dot lands and the hold timer is armed`);
+  }
 });
 
 test('the dot is placed on the first point of its edge before it shows, and on the last point for a reverse hop', () => {

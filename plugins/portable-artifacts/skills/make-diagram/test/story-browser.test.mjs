@@ -417,12 +417,15 @@ test('the wheel zooms and playback keeps running', async (t) => {
   const c = await stageCentre(page);
   await page.keyboard.press('Space');
   assert.equal(await playing(page), true);
+  await waitDotOn(page); // the entry glide is over; the next beat is a hold and a dot away
   const zoomOf = () => page.evaluate(() => Number(document.getElementById('pa-stage').dataset.zoom));
   const before = await zoomOf();
   await page.mouse.move(c.x, c.y + 60);
   await page.mouse.wheel(0, -240);
-  await page.waitForFunction((z) => Number(document.getElementById('pa-stage').dataset.zoom) !== z, before, { timeout: 5000 });
+  // short wait: far below a beat advance, so only the wheel can have moved the zoom
+  await page.waitForFunction((z) => Number(document.getElementById('pa-stage').dataset.zoom) !== z, before, { timeout: 300 });
   assert.notEqual(await zoomOf(), before, 'the wheel zoomed the camera');
+  assert.equal(await count(page), '1 / 9', 'still on the first beat: the zoom came from the wheel, not a beat change');
   assert.equal(await playing(page), true, 'the wheel does not pause');
   assert.deepEqual(problems, []);
   await context.close();

@@ -3,7 +3,7 @@
 // edge and lights the edge; a focus beat fits and lights its ids (a group
 // lights its members); everything else dims. A step beat (from the older
 // steps[] form) reveals what it shows and hides the rest, as before, with no
-// dimming. Playing runs each beat as glide (600 ms for a story beat, the
+// dimming. Playing runs each beat as glide (450 ms for a story beat, the
 // camera's own glide for a step beat), then (a hop, motion allowed) the dot,
 // then a hold, and moves on; every duration divides by the speed; reduced
 // motion drops the dot and the glide. Registered as PADiagram.story and
