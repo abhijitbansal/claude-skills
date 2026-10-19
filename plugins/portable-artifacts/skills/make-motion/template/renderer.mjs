@@ -354,9 +354,11 @@ function replaceAudio(spec) {
 const STAMP_CSS = 'position:fixed;right:1.2vw;bottom:1.2vw;z-index:2147483647;padding:.3em .6em;border-radius:.3em;'
   + 'background:rgba(0,0,0,.72);color:#fff;font:600 max(11px,1.7vw)/1.2 ui-monospace,Menlo,monospace;pointer-events:none';
 
-// A fixed `<scene-id> · 1.20s` label for contact sheets. Created lazily so other modes have no such element.
+// A fixed `<scene-id> · 1.20s` label for contact sheets. Created lazily so other modes have no such element;
+// an empty text removes it again.
 function stampSheet(text) {
   let el = document.querySelector('[data-sheet-stamp]');
+  if (!text) { el?.remove(); return; }
   if (!el) {
     el = document.createElement('div');
     el.dataset.sheetStamp = '';

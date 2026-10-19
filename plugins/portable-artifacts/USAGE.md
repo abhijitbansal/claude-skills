@@ -371,7 +371,7 @@ preset in `references/examples/`.
 1. Writes `motion.json` (scenes → elements → keyframes).
 2. `validate.mjs motion.json` until it prints `valid`.
 3. `render.mjs motion.json --contact-sheet` writes `out/contact/<scene>.png`,
-   one frame per scene. The agent looks at each one and fixes clipping,
+   one tiled, timestamped sheet per scene (up to 11 moments plus a phone-width copy). The agent looks at each one and fixes clipping,
    overlaps or unreadable text.
 4. Offers `preview.mjs motion.json --open`, a local page with a scrubber,
    play/pause, scene markers and frame-by-frame arrow keys. It reloads

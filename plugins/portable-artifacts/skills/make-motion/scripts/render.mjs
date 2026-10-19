@@ -17,7 +17,7 @@ import { resolveAsset } from './lib/paths.mjs';
 import { withGeneratedBy, provenanceText, buildDate } from '../shared/provenance.mjs';
 import { resolveAudio } from '../template/audio.mjs';
 import { MOTION_THEME } from './lib/default-theme.mjs';
-import { sheetTimes, tileSheet, PHONE_WIDTH } from './lib/sheet.mjs';
+import { sheetMoments, tileSheet, PHONE_WIDTH } from './lib/sheet.mjs';
 
 const PROGRESS_STEPS = 10;
 const MAX_FPS = 120;
@@ -147,14 +147,21 @@ function startEncoder(ffmpegPath, args) {
 async function renderContactSheets(page, p, info, browser) {
   const outDir = path.join(p.out, 'contact');
   mkdirSync(outDir, { recursive: true });
+  const seek = (sec, label) => page.evaluate(([s, text]) => { window.__motion.seek(s); window.__motion.stamp(text); }, [sec, label]);
   for (const [i, scene] of p.spec.scenes.entries()) {
+    const { times, total } = sheetMoments(scene, p.fps);
+    if (total > times.length) process.stderr.write(`${scene.id}: ${total} moments, showing ${times.length}\n`);
     const tiles = [];
-    for (const t of sheetTimes(scene, p.fps)) {
-      await page.evaluate(([sec, label]) => { window.__motion.seek(sec); window.__motion.stamp(label); }, [info.sceneStarts[i] + t, `${scene.id} · ${t.toFixed(2)}s`]);
-      tiles.push({ png: await page.screenshot({ type: 'png' }), label: `${scene.id} · ${t.toFixed(2)}s` });
+    for (const t of times) {
+      const label = `${scene.id} · ${t.toFixed(2)}s`;
+      await seek(info.sceneStarts[i] + t, label);
+      tiles.push({ png: await page.screenshot({ type: 'png' }), label });
     }
-    const last = tiles[tiles.length - 1];
-    tiles.push({ ...last, label: `${last.label} · ${PHONE_WIDTH}px phone`, width: Math.min(PHONE_WIDTH, p.size[0]) });
+    if (p.size[0] > PHONE_WIDTH) { // a phone-width copy of the last frame, without the stamp
+      const lastLabel = tiles[tiles.length - 1].label;
+      await seek(info.sceneStarts[i] + times[times.length - 1], '');
+      tiles.push({ png: await page.screenshot({ type: 'png' }), label: `${lastLabel} · ${PHONE_WIDTH}px phone`, width: PHONE_WIDTH });
+    }
     writeFileSync(path.join(outDir, `${scene.id}.png`), await tileSheet(browser, tiles));
   }
   process.stdout.write(`${outDir}\n${p.spec.scenes.length} contact sheet(s)\n`);
