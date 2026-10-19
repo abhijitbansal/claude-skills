@@ -39,6 +39,10 @@
 
 /* the overlay's chrome: the same hooks as make-diagram's own page, styled here under .dg-overlay */
 .dg-top .btn, .dg-transport .btn { padding: 4px 14px; font-size: var(--fs-sm); }
+/* the play button is an icon (a 40 px hit area); its svg paints in currentColor */
+.dg-transport .dg-play { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; padding: 0; }
+.dg-play .pa-playicon { display: inline-flex; }
+.dg-play .pa-playicon svg { display: block; }
 .dg-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .dg-modes { display: inline-flex; gap: 4px; }
 .dg-overlay .btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }

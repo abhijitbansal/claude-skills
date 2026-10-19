@@ -42,6 +42,10 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 .tool[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
 @supports (color: color-mix(in srgb, red, red)) { .tool[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); } }
 .tool:disabled { opacity: 0.6; cursor: default; }
+/* The play button is an icon (a 40 px hit area); its svg paints in currentColor, so each theme and the light/dark toggle recolor it. */
+.tool.pa-play { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; padding: 0; }
+.pa-playicon { display: inline-flex; }
+.pa-playicon svg { display: block; }
 /* Full screen, real (the root element is :fullscreen) or the window-filling fallback (.pa-fill on the root, when the browser refused, as inside a sandboxed iframe): the same chrome goes, the canvas takes the room; the tabs, Fit, Find, the chapters and the way out stay. Any root works, the page's or a dialog's (fullscreen.js marks it data-pa-full-root). */
 .pa-fill .titles, [data-pa-full-root]:fullscreen .titles, .pa-fill [data-act]:not([data-act="fit"]), [data-pa-full-root]:fullscreen [data-act]:not([data-act="fit"]), .pa-fill .zoom-label, [data-pa-full-root]:fullscreen .zoom-label, .pa-fill .grp-export, [data-pa-full-root]:fullscreen .grp-export, .pa-fill [data-export], [data-pa-full-root]:fullscreen [data-export], .pa-fill [data-theme-toggle], [data-pa-full-root]:fullscreen [data-theme-toggle] { display: none; }
 .zoom-label { min-width: 3.2em; text-align: center; color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
@@ -173,7 +177,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 <div class="transport" role="group" aria-label="Transport">
 <button type="button" class="tool" data-pa-prev-chapter title="Previous chapter">Prev chapter</button>
 <button type="button" class="tool" data-pa-prev title="Previous beat (Left)">Prev</button>
-<button type="button" class="tool" data-pa-play title="Play or pause (Space)">Play</button>
+<button type="button" class="tool pa-play" data-pa-play aria-label="Play" title="Play or pause (Space)"><span class="pa-playicon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path d="M7 4.5v15l13-7.5z"/></svg></span></button>
 <button type="button" class="tool" data-pa-next title="Next beat (Right)">Next</button>
 <button type="button" class="tool" data-pa-next-chapter title="Next chapter">Next chapter</button>
 <input type="range" class="scrub" data-pa-scrub min="0" max="0" step="1" value="0" aria-label="Beat" list="pa-ticks">

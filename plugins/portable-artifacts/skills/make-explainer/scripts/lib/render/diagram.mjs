@@ -66,7 +66,7 @@ function transport(prefix) {
 <div class="dg-transport" role="group" aria-label="Transport">
 <button type="button" class="btn" data-pa-prev-chapter title="Previous chapter">Prev chapter</button>
 <button type="button" class="btn" data-pa-prev title="Previous beat (Left)">Prev</button>
-<button type="button" class="btn" data-pa-play title="Play or pause (Space)">Play</button>
+<button type="button" class="btn dg-play" data-pa-play aria-label="Play" title="Play or pause (Space)"><span class="pa-playicon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path d="M7 4.5v15l13-7.5z"/></svg></span></button>
 <button type="button" class="btn" data-pa-next title="Next beat (Right)">Next</button>
 <button type="button" class="btn" data-pa-next-chapter title="Next chapter">Next chapter</button>
 <input type="range" class="dg-scrub" data-pa-scrub min="0" max="0" step="1" value="0" aria-label="Beat" list="${prefix}-ticks">

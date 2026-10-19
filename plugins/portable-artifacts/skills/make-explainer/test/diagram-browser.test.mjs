@@ -92,6 +92,9 @@ test('Present opens the overlay, steps forward and back, and Esc closes it with 
   assert.equal(await line(page), '01 / 04 · WALKTHROUGH · Client calls');
   assert.equal(await page.locator('[data-pa-prev]').isDisabled(), true);
   assert.equal(await activeIs(page, '[data-pa-play]'), true, 'focus starts on Play');
+  assert.equal(await page.getAttribute(`${DLG} [data-pa-play]`, 'aria-label'), 'Play', 'the overlay Play button is an icon with an accessible name');
+  const playBox = await page.locator(`${DLG} [data-pa-play]`).boundingBox();
+  assert.ok(playBox.width >= 40 && playBox.height >= 40, `Play hit area ${playBox.width}x${playBox.height} is at least 40x40`);
   assert.equal(await page.getAttribute(`${DLG} [data-pa-mode="play"]`, 'aria-pressed'), 'true');
 
   await page.keyboard.press('ArrowRight');

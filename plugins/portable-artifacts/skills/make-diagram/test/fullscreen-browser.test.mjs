@@ -95,7 +95,7 @@ test('F in Play enters full screen and leaves the story playing', async (t) => {
   const { page, problems, context } = await openPage(built('story').url, { init: REFUSES });
   await page.keyboard.press('p');
   await page.click('[data-pa-play]'); // the transport's Play starts the story
-  const playing = async () => (await page.textContent('[data-pa-play]')) === 'Pause';
+  const playing = async () => (await page.getAttribute('[data-pa-play]', 'aria-label')) === 'Pause';
   assert.equal(await playing(), true, 'the story plays');
   await page.keyboard.press('f');
   await page.waitForFunction(() => document.documentElement.classList.contains('pa-fill'));

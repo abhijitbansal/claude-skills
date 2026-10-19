@@ -11,12 +11,18 @@
 // jump), data-pa-scrub (an <input type="range"> with aria-valuetext
 // "Beat n of N") and data-pa-ticks (its <datalist>), data-pa-prev,
 // data-pa-next, data-pa-prev-chapter, data-pa-next-chapter, data-pa-exit,
-// data-pa-play (its label reads Play or Pause),
+// data-pa-play (an icon button: aria-label reads Play or Pause, and its
+// span.pa-playicon holds the svg paint() swaps),
 // data-pa-speed (0.5× ... 2×), data-pa-loop (aria-pressed). Text goes in as
-// textContent, never markup.
+// textContent, never markup (the play icon's svg is the one constant exception).
 (function (global) {
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
+
+  // The play button's icon: a triangle while paused, two bars while playing.
+  // Both use currentColor, so every theme and the light/dark toggle recolor them.
+  var PLAY_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path d="M7 4.5v15l13-7.5z"/></svg>';
+  var PAUSE_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><rect x="6" y="4.5" width="4.2" height="15" rx="1"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1"/></svg>';
 
   var pad2 = function (n) { return (n < 10 ? '0' : '') + n; };
 
@@ -80,6 +86,19 @@
       button.disabled = off;
     }
 
+    // The icon span ships in the page's markup; one is added if an embedder left it out.
+    function paintPlay(button, playing) {
+      var icon = button.querySelector('.pa-playicon');
+      if (!icon) {
+        icon = doc.createElement('span');
+        icon.className = 'pa-playicon';
+        icon.setAttribute('aria-hidden', 'true');
+        button.appendChild(icon);
+      }
+      icon.innerHTML = playing ? PAUSE_SVG : PLAY_SVG;
+      button.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    }
+
     function paint() {
       var presenting = story.isPresenting();
       if (caption) caption.hidden = !presenting;
@@ -96,7 +115,7 @@
       disable(part('data-pa-prev'), i === 0);
       disable(part('data-pa-next'), i === n - 1);
       var play = part('data-pa-play');
-      if (play) play.textContent = story.isPlaying() ? 'Pause' : 'Play';
+      if (play) paintPlay(play, story.isPlaying());
       var speed = part('data-pa-speed');
       if (speed) {
         speed.textContent = story.speed() + '×';
