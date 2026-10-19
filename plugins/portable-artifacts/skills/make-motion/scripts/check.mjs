@@ -3,7 +3,8 @@
 // Seeks the real render page to every contact-sheet moment of every scene (sheetTimes) and reads each element's box
 // and opacity from the DOM. Fails on: a visible text or counter outside the safe area while it is not moving; two
 // visible text or counter boxes overlapping while neither is moving or fading; a scene with nothing on screen at its
-// last frame. A box wholly off the canvas has left the frame: it is never clipped, overlaps nothing, and is not on screen.
+// last frame (a title whose `exit` preset was applied left on purpose and counts as present). A box wholly off the canvas
+// has left the frame: it is never clipped, overlaps nothing, and is not on screen.
 // --theme: the theme render.mjs --theme would draw a spec that names none in (a spec's own `theme` wins).
 // exit 0 ok or skipped (no browser), 1 problems (or an invalid spec), 2 usage/IO
 import fs from 'node:fs';
@@ -110,9 +111,10 @@ function overlapProblems(scene, i, samples, size) {
   return problems;
 }
 
+// A title whose `exit` preset was applied (withDefaults marks it `exitPreset`) left on purpose: it counts as present.
 function emptyEndProblems(scene, i, samples, size) {
   const last = samples[samples.length - 1];
-  if (!scene.elements.length || last.els.some((m) => isShown(m, size))) return [];
+  if (!scene.elements.length || last.els.some((m, j) => isShown(m, size) || scene.elements[j].exitPreset)) return [];
   return [{ path: `scenes[${i}]`, message: `scene "${scene.id}" ends with nothing on screen: every element is invisible or off the canvas (at ${at(last.t)})` }];
 }
 

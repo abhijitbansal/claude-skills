@@ -255,3 +255,51 @@ test('a scene whose only element has slid wholly off the canvas (still opaque) e
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.deepEqual(lines(r.stdout), ['scenes[0]: scene "s" ends with nothing on screen: every element is invisible or off the canvas (at 1.97s)', 'check: 1 problem']);
 });
+
+// ---- opt-in exits (Task 10) ----------------------------------------------------------------------
+
+test('a title with exit: true in a middle scene passes: its exit is motion, not a clip or an overlap', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const dir = mkdtempSync(path.join(tmpdir(), 'motion-check-'));
+  const file = path.join(dir, 'motion.json');
+  const title = (id, text) => ({ id, type: 'text', role: 'title', text, x: 960, y: 420, fontSize: 120, exit: true });
+  const sub = (id) => ({ id, type: 'text', text: 'Q3 2026', x: 960, y: 640, fontSize: 48 });
+  writeFileSync(file, JSON.stringify({ size: [1920, 1080], fps: 30, scenes: [
+    { id: 'a', duration: 3, elements: [title('t1', 'Revenue'), sub('s1')] },
+    { id: 'b', duration: 4, elements: [title('t2', 'Costs'), sub('s2')] },
+    { id: 'c', duration: 3, elements: [title('t3', 'Margin'), sub('s3')] },
+  ] }));
+  const r = check([file]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+// Three scenes; the middle one holds `elements` and lasts `duration` s.
+function middleScene(elements, duration) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'motion-check-'));
+  const file = path.join(dir, 'motion.json');
+  const filler = (id) => ({ id, type: 'text', text: id, x: 960, y: 540, fontSize: 64 });
+  writeFileSync(file, JSON.stringify({ size: [1920, 1080], fps: 30, scenes: [
+    { id: 'a', duration: 2, elements: [filler('fa')] },
+    { id: 'b', duration, elements },
+    { id: 'c', duration: 2, elements: [filler('fc')] },
+  ] }));
+  return file;
+}
+
+test('a lone exit: true title in a middle scene passes: its applied exit is the author leaving on purpose', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([middleScene([{ id: 'card', type: 'text', role: 'title', text: 'Chapter two', x: 960, y: 540, fontSize: 120, exit: true }], 4)]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+test('a lone title is judged normally when no exit preset was applied: dropped on a short scene, or author keyframes', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  // 0.5 s is too short for the exit (the entrance is still running at 90 %); base opacity 0 keeps it invisible.
+  const dropped = check([middleScene([{ id: 'card', type: 'text', role: 'title', text: 'Gone', x: 960, y: 540, fontSize: 120, exit: true, opacity: 0 }], 0.5)]);
+  assert.equal(dropped.status, 1, dropped.stdout + dropped.stderr);
+  assert.match(dropped.stdout, /^scenes\[1\]: scene "b" ends with nothing on screen/m);
+  const own = check([middleScene([{ id: 'card', type: 'text', role: 'title', text: 'Fades', x: 960, y: 540, fontSize: 120, exit: true,
+    keyframes: [{ t: 3, opacity: 1 }, { t: 3.8, opacity: 0 }] }], 4)]);
+  assert.equal(own.status, 1, own.stdout + own.stderr);
+  assert.match(own.stdout, /^scenes\[1\]: scene "b" ends with nothing on screen/m);
+});
