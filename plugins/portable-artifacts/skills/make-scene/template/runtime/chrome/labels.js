@@ -1,6 +1,6 @@
 // Graph labels[] (3D text) as an HTML overlay: each is projected from its world point after every draw,
 // positioned with a transform, and hidden when it is behind the camera, off the frame, or overlaps a nearer
-// label. A long label is cut with an ellipsis (the Explore list shows the full text). Text only (textContent).
+// label. A long label is cut with an ellipsis (Explore lists group and item names only, so a long axis or group label is only ever shown cut). Text only (textContent).
 import { h } from './dom.js';
 import { hiddenByOverlap } from './overlap.js';
 
