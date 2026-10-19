@@ -373,9 +373,10 @@ preset in `references/examples/`.
 2. `validate.mjs motion.json` until it prints `valid`.
 3. `render.mjs motion.json --contact-sheet` writes `out/contact/<scene>.png`,
    one tiled, timestamped sheet per scene (up to 11 moments plus a phone-width copy). The agent looks at each one and fixes clipping,
-   overlaps or unreadable text, then runs `check.mjs motion.json`, which
-   reports text or counters outside the safe area (60 px at 1080 on the short side), overlapping text and a scene that ends
-   with nothing visible (it prints `check: skipped (no browser: …)` and exits 0
+   overlaps or unreadable text, then runs `check.mjs motion.json` (with the same
+   `--theme` as the render, if any), which reports text or counters outside the safe area
+   (60 px at 1080 on the short side) while they are not moving, overlapping text or counters
+   and a scene that ends with nothing visible (it prints `check: skipped (no browser: …)` and exits 0
    without a browser).
 4. Offers `preview.mjs motion.json --open`, a local page with a scrubber,
    play/pause, scene markers and frame-by-frame arrow keys. It reloads

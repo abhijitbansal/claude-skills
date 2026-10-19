@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // node scripts/check.mjs <motion.json> [--json] [--theme <name>]
 // Seeks the real render page to every contact-sheet moment of every scene (sheetTimes) and reads each element's box
-// and opacity from the DOM. Fails on: a visible text or counter outside the safe area once it has settled; two visible
-// text or counter boxes overlapping once both have settled; a scene with every element invisible at its last frame.
-// A box wholly off the canvas has left the frame: it is never clipped and overlaps nothing.
+// and opacity from the DOM. Fails on: a visible text or counter outside the safe area while it is not moving; two
+// visible text or counter boxes overlapping while neither is moving or fading; a scene with nothing on screen at its
+// last frame. A box wholly off the canvas has left the frame: it is never clipped, overlaps nothing, and is not on screen.
 // --theme: the theme render.mjs --theme would draw a spec that names none in (a spec's own `theme` wins).
 // exit 0 ok or skipped (no browser), 1 problems (or an invalid spec), 2 usage/IO
 import fs from 'node:fs';
@@ -20,7 +20,7 @@ import { doctorCommand } from './lib/doctor-hint.mjs';
 
 const USAGE = 'node scripts/check.mjs <motion.json> [--json] [--theme <name>]';
 const OPTIONS = { json: { type: 'boolean' }, theme: { type: 'string' } };
-const READY_MS = 15000; // the page must build its stage within this, or the check fails instead of hanging
+const READY_MS = 30000; // the page must build its stage within this (render.mjs's first wait), or the check fails instead of hanging
 const CHECKED = new Set(['text', 'counter']); // rendered text: the element types rules 1 and 2 judge
 const SAFE_MARGIN_PX = 60; // at 1080 px on the canvas's short side; scaled by short side / 1080
 const SAFE_REFERENCE_SIDE = 1080;
@@ -38,14 +38,18 @@ const crashLine = (e) => firstLine(e).replace(/^(page|frame)\.\w+: (Error: )?/, 
 export const safeMargin = (size) => (SAFE_MARGIN_PX * Math.min(size[0], size[1])) / SAFE_REFERENCE_SIDE;
 const skipHint = () => `ask the user, then run: ${doctorCommand('--for', 'check', '--fix', 'chromium')}`;
 
-// Scene-local second of the element's last keyframe that sets one of `props` (0 if none does).
-// The safe-area rule judges an element only once its box stops moving (GEOMETRY), so an entrance from off-canvas is
-// not a finding, but where it lands is. The overlap rule judges a pair only once both have also stopped fading (POSE),
-// so a cross-fade swap in one spot is not a finding, and the verdict never hangs on a sample landing mid-motion.
-// sheetTimes samples every landing + 0.1 s, so every element gets at least one settled moment; the scene's last frame
-// always counts as settled (an element still moving there never settles on screen).
-const settledAt = (el, props) => Math.max(0, ...el.keyframes.filter((kf) => props.some((p) => kf[p] !== undefined)).map((kf) => kf.t));
-const isSettled = (from, t, n, samples) => t >= from - EPSILON || n === samples.length - 1;
+// Holds: an element is in motion at scene-local `t` when `t` lies strictly inside the span between two consecutive
+// keyframes that set the same prop of a rule's set, and in a hold otherwise (before its first keyframe, between
+// tweens, after its last). The safe-area rule judges an element only in a GEOMETRY hold, so an entrance from
+// off-canvas is not a finding but where it lands is, and a placement held before an exit is. The overlap rule judges a
+// pair only when both are in a POSE hold, so a cross-fade swap in one spot is not a finding but an overlap held before
+// an exit fade is. sheetTimes samples every landing + 0.1 s, so every element gets a held moment after each move; the
+// scene's last frame is always judged (the fallback for a continuous drift that never holds).
+const tweenSpans = (el, props) => props.flatMap((p) => {
+  const times = el.keyframes.filter((kf) => kf[p] !== undefined).map((kf) => kf.t);
+  return times.slice(1).map((to, k) => [times[k], to]);
+});
+const isHeld = (spans, t, n, samples) => n === samples.length - 1 || !spans.some(([from, to]) => t > from + EPSILON && t < to - EPSILON);
 
 // Runs in the page: seek to `sec`, then each element of scene layer `index` as {id, opacity, box} in canvas pixels.
 // Rendered opacity multiplies the element's and every ancestor's up to the stage (the scene fade); a hidden layer is 0.
@@ -74,10 +78,10 @@ function safeAreaProblems(scene, i, samples, margin, size) {
   const problems = [];
   scene.elements.forEach((el, j) => {
     if (!CHECKED.has(el.type)) return;
-    const from = settledAt(el, GEOMETRY);
+    const spans = tweenSpans(el, GEOMETRY);
     for (const [n, { t, els }] of samples.entries()) {
       const { box } = els[j];
-      if (!isShown(els[j], size) || !isSettled(from, t, n, samples)) continue;
+      if (!isShown(els[j], size) || !isHeld(spans, t, n, samples)) continue;
       const edges = [['top', margin - box.top], ['bottom', box.bottom - (size[1] - margin)], ['left', margin - box.left], ['right', box.right - (size[0] - margin)]]
         .filter(([, by]) => by > SUBPIXEL_PX).map(([edge]) => edge);
       if (!edges.length) continue;
@@ -93,11 +97,10 @@ const overlaps = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left)
 
 function overlapProblems(scene, i, samples, size) {
   const problems = [];
-  const texts = scene.elements.map((el, j) => ({ el, j, from: settledAt(el, POSE) })).filter(({ el }) => CHECKED.has(el.type));
+  const texts = scene.elements.map((el, j) => ({ el, j, spans: tweenSpans(el, POSE) })).filter(({ el }) => CHECKED.has(el.type));
   for (const [b, second] of texts.entries()) {
     for (const first of texts.slice(0, b)) {
-      const from = Math.max(first.from, second.from);
-      const hit = samples.find(({ t, els }, n) => isSettled(from, t, n, samples)
+      const hit = samples.find(({ t, els }, n) => isHeld(first.spans, t, n, samples) && isHeld(second.spans, t, n, samples)
         && isShown(els[first.j], size) && isShown(els[second.j], size) && overlaps(els[first.j].box, els[second.j].box));
       if (hit) {
         problems.push({ path: `scenes[${i}].elements[${second.j}]`, message: `${second.el.type} "${second.el.id}" overlaps ${first.el.type} "${first.el.id}" at ${at(hit.t)}` });
@@ -107,10 +110,10 @@ function overlapProblems(scene, i, samples, size) {
   return problems;
 }
 
-function emptyEndProblems(scene, i, samples) {
+function emptyEndProblems(scene, i, samples, size) {
   const last = samples[samples.length - 1];
-  if (!scene.elements.length || last.els.some(isVisible)) return [];
-  return [{ path: `scenes[${i}]`, message: `scene "${scene.id}" ends with every element invisible (at ${at(last.t)})` }];
+  if (!scene.elements.length || last.els.some((m) => isShown(m, size))) return [];
+  return [{ path: `scenes[${i}]`, message: `scene "${scene.id}" ends with nothing on screen: every element is invisible or off the canvas (at ${at(last.t)})` }];
 }
 
 async function sampleScene(page, scene, index, start, fps) {
@@ -157,7 +160,7 @@ async function inspect(browser, spec, server) {
   for (const [i, scene] of spec.scenes.entries()) {
     const samples = await sampleScene(page, scene, i, starts[i], spec.fps);
     moments += samples.length;
-    problems.push(...safeAreaProblems(scene, i, samples, margin, spec.size), ...overlapProblems(scene, i, samples, spec.size), ...emptyEndProblems(scene, i, samples));
+    problems.push(...safeAreaProblems(scene, i, samples, margin, spec.size), ...overlapProblems(scene, i, samples, spec.size), ...emptyEndProblems(scene, i, samples, spec.size));
   }
   return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems };
 }

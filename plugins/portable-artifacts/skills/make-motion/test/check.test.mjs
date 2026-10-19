@@ -55,7 +55,7 @@ test('bad-empty-end: a scene that fades every element out has nothing on screen 
   if (await skipUnlessBrowser(t)) return;
   const r = check([path.join(FIXTURES, 'bad-empty-end.json')]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.deepEqual(lines(r.stdout), ['scenes[0]: scene "outro" ends with every element invisible (at 1.97s)', 'check: 1 problem']);
+  assert.deepEqual(lines(r.stdout), ['scenes[0]: scene "outro" ends with nothing on screen: every element is invisible or off the canvas (at 1.97s)', 'check: 1 problem']);
 });
 
 test('bad-overlap: two visible text boxes that overlap are reported once, naming both ids', async (t) => {
@@ -229,4 +229,29 @@ test('--theme: an unknown name or a missing value exits 2', () => {
     const r = check([path.join(FIXTURES, 'bad-safe-area.json'), ...args], { PA_NO_BROWSER: '1' });
     assert.equal(r.status, 2, `${JSON.stringify(args)}: ${r.stdout}${r.stderr}`);
   }
+});
+
+// ---- review round 2: judge holds, not "after the last keyframe" ---------------------------------
+
+test('bad-overlap-then-exit: an overlap held on screen is caught even though one text fades out at the end', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([path.join(FIXTURES, 'bad-overlap-then-exit.json')]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.deepEqual(lines(r.stdout), ['scenes[0].elements[1]: text "second" overlaps text "first" at 0.10s', 'check: 1 problem']);
+});
+
+test('bad-safe-area-then-exit: a title held at the top edge is caught even though it later slides off the canvas', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([path.join(FIXTURES, 'bad-safe-area-then-exit.json')]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.deepEqual(lines(r.stdout), ['scenes[0].elements[0]: text "title" leaves the safe area (top) at 0.10s', 'check: 1 problem']);
+});
+
+test('a scene whose only element has slid wholly off the canvas (still opaque) ends empty', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const file = specFile([{ id: 'gone', type: 'text', text: 'Bye', x: 960, y: 540, fontSize: 64,
+    keyframes: [{ t: 1, x: 960 }, { t: 1.5, x: 2600, ease: 'inCubic' }] }]);
+  const r = check([file]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.deepEqual(lines(r.stdout), ['scenes[0]: scene "s" ends with nothing on screen: every element is invisible or off the canvas (at 1.97s)', 'check: 1 problem']);
 });
