@@ -128,27 +128,37 @@ test('a page stuck in an infinite loop hits the wall-clock cap instead of hangin
   assert.ok(Date.now() - started < 20000);
 });
 
-test('a watchdog that fires while the browser is still launching closes it once it lands and does no more work', async (t) => {
+test('a watchdog that fires while the browser is still launching returns at once, then closes it when it lands', async (t) => {
   const calls = [];
+  const LAUNCH_MS = 1500;
   const slowLauncher = () => new Promise((resolve) => {
-    setTimeout(() => resolve({ close: async () => calls.push('close'), newContext: async () => { calls.push('newContext'); throw new Error('no work after the watchdog'); } }), 300);
+    setTimeout(() => resolve({ close: async () => calls.push('close'), newContext: async () => { calls.push('newContext'); throw new Error('no work after the watchdog'); } }), LAUNCH_MS);
   });
-  const result = await checkPage(await goodPage(t), { timeoutMs: 20, launcher: slowLauncher });
+  const file = await goodPage(t);
+  const started = Date.now();
+  const result = await checkPage(file, { timeoutMs: 50, launcher: slowLauncher });
+  const took = Date.now() - started;
   assert.equal(result.status, 'failed');
-  assert.deepEqual(result.problems, ['check: timed out after 20 ms']);
+  assert.deepEqual(result.problems, ['check: timed out after 50 ms']);
+  assert.ok(took < LAUNCH_MS / 2, `the verdict did not wait for the launch (${took} ms)`);
+  await new Promise((resolve) => setTimeout(resolve, LAUNCH_MS));
   assert.deepEqual(calls, ['close'], 'the late browser was closed and never used');
 });
 
-test('with a tiny cap the CLI reports the timeout and exits, with no browser left running', async (t) => {
+// The CLI's exit backstop (3 s) force-exits a process that something keeps alive, and Playwright kills its browsers when
+// the process exits, so a leaked browser cannot be seen after exit. What shows it is how long the exit takes: a browser
+// left connected holds Node until the backstop fires, while the close path lets it end at once.
+const PROMPT_EXIT_MS = 2500;
+
+test('with a tiny cap the CLI reports the timeout and exits promptly, without waiting for the exit backstop', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const file = await goodPage(t);
   const started = Date.now();
   const r = run([file], { PA_CHECK_TIMEOUT_MS: '20' });
+  const took = Date.now() - started;
   assert.equal(r.status, 1, `exited (signal ${r.signal}): ${r.stdout}${r.stderr}`);
   assert.equal(r.stdout, 'check: timed out after 20 ms\n');
-  assert.ok(Date.now() - started < 30000, 'the process ended soon after the report');
-  const leftovers = spawnSync('pgrep', ['-f', `chrom.*${path.basename(path.dirname(file))}`], { encoding: 'utf8' });
-  assert.notEqual(leftovers.status, 0, `a browser is still running: ${leftovers.stdout}`);
+  assert.ok(took < PROMPT_EXIT_MS, `the process held on for ${took} ms after the verdict (a browser was left open)`);
 });
 
 test('a bad PA_CHECK_TIMEOUT_MS is a usage error', async (t) => {

@@ -141,18 +141,23 @@ export async function checkPage(file, { env = process.env, timeoutMs = WATCHDOG_
     return { status: problems.length ? 'failed' : 'ok', viewports: VIEWPORTS.length, beats: Math.max(0, ...results.map((r) => r.beats)), problems };
   })();
   let timer;
+  let launchSettled = false;
+  launching.then(() => { launchSettled = true; }, () => { launchSettled = true; });
   const watchdog = new Promise((resolve) => { timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs); });
+  let timedOut = false;
   try {
     const result = await Promise.race([work, watchdog]);
     if (result !== TIMED_OUT) return result;
-    stopped = true;
+    timedOut = true;
     work.catch(() => {}); // the closed browser rejects whatever was in flight
     const after = timeoutMs < 1000 ? `${Math.round(timeoutMs)} ms` : `${Number((timeoutMs / 1000).toFixed(1))} s`;
     return { status: 'failed', viewports: 0, beats: 0, problems: [`check: timed out after ${after}`], timedOut: true };
   } finally {
     clearTimeout(timer);
     stopped = true;
-    await launching.then((browser) => browser.close()).catch(() => {}); // a launch still pending when the watchdog fired is closed once it lands
+    const closing = launching.then((browser) => browser.close()).catch(() => {});
+    // A launch still pending when the watchdog fired is closed whenever it lands, but the verdict does not wait for it.
+    if (!timedOut || launchSettled) await closing;
   }
 }
 
@@ -199,7 +204,6 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     const result = await checkPage(file, { timeoutMs });
     report(result, json);
     process.exitCode = result.status === 'failed' ? 1 : 0;
-    setTimeout(() => process.exit(), EXIT_BACKSTOP_MS).unref(); // a stray handle must never keep the CLI alive
   } catch (e) {
     if (e instanceof UsageError) exitUsage(e, { json });
     else {
@@ -207,5 +211,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
       report({ status: 'failed', problems: [`check crashed: ${firstLine(e)}`] }, json);
       process.exitCode = 1;
     }
+  } finally {
+    setTimeout(() => process.exit(), EXIT_BACKSTOP_MS).unref(); // whatever the outcome, a stray handle must never keep the CLI alive
   }
 }
