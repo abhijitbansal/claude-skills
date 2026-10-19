@@ -80,8 +80,8 @@
       <p style="margin-bottom:14px">Real outputs, not mock-ups: each artifact below was produced by an agent (Claude Code, Sonnet) from the exact prompt shown, following the skill's <code>SKILL.md</code>. The card also shows the one follow-up line that asked for narration, because audio is never added unasked.</p>
       <div class="guide">
         <div class="gitem reveal" id="showcase-motion"><h4>/make-motion — a 15-second 1080p explainer from one prompt, narrated on request</h4>
-          <video controls playsinline preload="metadata" poster="showcase/portable-artifacts/prompt-to-dashboard-poster.jpg" style="width:100%;height:auto;aspect-ratio:16/9;margin-top:10px;border:1px solid var(--border);border-radius:var(--r-md);background:#000"><source src="showcase/portable-artifacts/prompt-to-dashboard.mp4" type="video/mp4"></video>
-          <p style="margin-top:10px"><a href="showcase/portable-artifacts/prompt-to-dashboard.mp4" download>Download the MP4 ↓</a> (427 KB, H.264 + AAC voiceover)</p>
+          <video controls playsinline preload="metadata" poster="showcase/portable-artifacts/prompt-to-dashboard-poster.jpg" data-tpl-poster="showcase/portable-artifacts/{t}prompt-to-dashboard-poster.jpg" style="width:100%;height:auto;aspect-ratio:16/9;margin-top:10px;border:1px solid var(--border);border-radius:var(--r-md);background:#000"><source src="showcase/portable-artifacts/prompt-to-dashboard.mp4" type="video/mp4" data-tpl-src="showcase/portable-artifacts/{t}prompt-to-dashboard.mp4"></video>
+          <p style="margin-top:10px"><a href="showcase/portable-artifacts/prompt-to-dashboard.mp4" data-tpl-href="showcase/portable-artifacts/{t}prompt-to-dashboard.mp4" download>Download the MP4 ↓</a> (H.264 + AAC voiceover)</p>
           <p style="margin-top:12px;font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint)">The exact prompt</p>
           <div class="code" style="margin-top:12px"><button class="copy" data-copy="Make a 15-second explainer, 1920x1080, titled &quot;From prompt to dashboard&quot;. Scene 1: the title and the subtitle &quot;Any agent. Offline. Open source.&quot; Scene 2: three steps appear one after another as rounded cards: &quot;1 Write the spec&quot;, &quot;2 Validate&quot;, &quot;3 Build&quot;, with connecting lines drawing in between them. Scene 3: a bar chart reveal of validate errors per attempt (attempt 1: 3, attempt 2: 1, attempt 3: 0) with the caption &quot;Field-level errors teach the model&quot;. Scene 4: a counter from 0 to 1 with the suffix &quot; file&quot;, and the caption &quot;One self-contained HTML page&quot;. End on a calm hold.
 ">copy</button><span class="code-body" style="white-space:pre-wrap;padding-right:58px">Make a 15-second explainer, 1920x1080, titled &quot;From prompt to dashboard&quot;. Scene 1: the title and the subtitle &quot;Any agent. Offline. Open source.&quot; Scene 2: three steps appear one after another as rounded cards: &quot;1 Write the spec&quot;, &quot;2 Validate&quot;, &quot;3 Build&quot;, with connecting lines drawing in between them. Scene 3: a bar chart reveal of validate errors per attempt (attempt 1: 3, attempt 2: 1, attempt 3: 0) with the caption &quot;Field-level errors teach the model&quot;. Scene 4: a counter from 0 to 1 with the suffix &quot; file&quot;, and the caption &quot;One self-contained HTML page&quot;. End on a calm hold.
@@ -94,7 +94,6 @@
     1080
   ],
   &quot;fps&quot;: 30,
-  &quot;background&quot;: &quot;#0b0d12&quot;,
   &quot;scenes&quot;: [
     {
       &quot;id&quot;: &quot;title&quot;,
@@ -108,7 +107,6 @@
           &quot;y&quot;: 480,
           &quot;fontSize&quot;: 112,
           &quot;fontWeight&quot;: 700,
-          &quot;color&quot;: &quot;#ffffff&quot;,
           &quot;keyframes&quot;: [
             {
               &quot;t&quot;: 0,
@@ -121,7 +119,8 @@
               &quot;y&quot;: 480,
               &quot;ease&quot;: &quot;outCubic&quot;
             }
-          ]
+          ],
+          &quot;role&quot;: &quot;title&quot;
         },
         {
           &quot;id&quot;: &quot;title-sub&quot;,
@@ -131,7 +130,6 @@
           &quot;y&quot;: 610,
           &quot;fontSize&quot;: 48,
           &quot;fontWeight&quot;: 500,
-          &quot;color&quot;: &quot;#5eead4&quot;,
           &quot;keyframes&quot;: [
             {
               &quot;t&quot;: 0.5,
@@ -146,7 +144,8 @@
             }
           ]
         }
-      ]
+      ],
+      &quot;background&quot;: &quot;art&quot;
     },
     {
       &quot;id&quot;: &quot;steps&quot;,
@@ -162,8 +161,8 @@
           &quot;width&quot;: 440,
           &quot;height&quot;: 200,
           &quot;radius&quot;: 28,
-          &quot;fill&quot;: &quot;#161b26&quot;,
-          &quot;stroke&quot;: &quot;#5eead4&quot;,
+          &quot;fill&quot;: &quot;#241a38&quot;,
+          &quot;stroke&quot;: &quot;#ff7f61&quot;,
           &quot;strokeWidth&quot;: 3,
           &quot;keyframes&quot;: [
             {
@@ -187,7 +186,6 @@
           &quot;y&quot;: 540,
           &quot;fontSize&quot;: 42,
           &quot;fontWeight&quot;: 600,
-          &quot;color&quot;: &quot;#ffffff&quot;,
           &quot;keyframes&quot;: [
             {
               &quot;t&quot;: 0.2,
@@ -198,7 +196,8 @@
               &quot;opacity&quot;: 1,
               &quot;ease&quot;: &quot;outCubic&quot;
             }
-          ]
+          ],
+          &quot;role&quot;: &quot;title&quot;
         },
         {
           &quot;id&quot;: &quot;steps-line-1&quot;,
@@ -207,7 +206,7 @@
           &quot;x&quot;: 650,
           &quot;y&quot;: 540,
           &quot;width&quot;: 180,
-          &quot;stroke&quot;: &quot;#5eead4&quot;,
+          &quot;stroke&quot;: &quot;#ff7f61&quot;,
           &quot;strokeWidth&quot;: 4,
           &quot;keyframes&quot;: [
             {
@@ -230,8 +229,8 @@
           &quot;width&quot;: 440,
           &quot;height&quot;: 200,
           &quot;radius&quot;: 28,
-          &quot;fill&quot;: &quot;#161b26&quot;,
-          &quot;stroke&quot;: &quot;#5eead4&quot;,
+          &quot;fill&quot;: &quot;#241a38&quot;,
+          &quot;stroke&quot;: &quot;#ff7f61&quot;,
           &quot;strokeWidth&quot;: 3,
           &quot;keyframes&quot;: [
             {
@@ -255,7 +254,6 @@
           &quot;y&quot;: 540,
           &quot;fontSize&quot;: 42,
           &quot;fontWeight&quot;: 600,
-          &quot;color&quot;: &quot;#ffffff&quot;,
           &quot;keyframes&quot;: [
             {
               &quot;t&quot;: 1.3,
@@ -275,7 +273,7 @@
           &quot;x&quot;: 1270,
           &quot;y&quot;: 540,
           &quot;width&quot;: 180,
-          &quot;stroke&quot;: &quot;#5eead4&quot;,
+          &quot;stroke&quot;: &quot;#ff7f61&quot;,
           &quot;strokeWidth&quot;: 4,
           &quot;keyframes&quot;: [
             {
@@ -298,8 +296,8 @@
           &quot;width&quot;: 440,
           &quot;height&quot;: 200,
           &quot;radius&quot;: 28,
-          &quot;fill&quot;: &quot;#161b26&quot;,
-          &quot;stroke&quot;: &quot;#5eead4&quot;,
+          &quot;fill&quot;: &quot;#241a38&quot;,
+          &quot;stroke&quot;: &quot;#ff7f61&quot;,
           &quot;strokeWidth&quot;: 3,
           &quot;keyframes&quot;: [
             {
@@ -323,7 +321,6 @@
           &quot;y&quot;: 540,
           &quot;fontSize&quot;: 42,
           &quot;fontWeight&quot;: 600,
-          &quot;color&quot;: &quot;#ffffff&quot;,
           &quot;keyframes&quot;: [
             {
               &quot;t&quot;: 2.4,
@@ -351,7 +348,6 @@
           &quot;y&quot;: 150,
           &quot;fontSize&quot;: 56,
           &quot;fontWeight&quot;: 600,
-          &quot;color&quot;: &quot;#ffffff&quot;,
           &quot;keyframes&quot;: [
             {
               &quot;t&quot;: 0,
@@ -362,7 +358,8 @@
               &quot;opacity&quot;: 1,
               &quot;ease&quot;: &quot;outCubic&quot;
             }
-          ]
+          ],
+          &quot;role&quot;: &quot;title&quot;
         },
         {
           &quot;id&quot;: &quot;errors-chart&quot;,
@@ -394,7 +391,7 @@
                   &quot;type&quot;: &quot;bar&quot;,
                   &quot;size&quot;: 120,
                   &quot;cornerRadiusEnd&quot;: 8,
-                  &quot;color&quot;: &quot;#5eead4&quot;
+                  &quot;color&quot;: &quot;#ff7f61&quot;
                 }
               },
               {
@@ -403,7 +400,7 @@
                   &quot;dy&quot;: -24,
                   &quot;fontSize&quot;: 36,
                   &quot;fontWeight&quot;: 600,
-                  &quot;color&quot;: &quot;#ffffff&quot;
+                  &quot;color&quot;: &quot;#f7ebe0&quot;
                 },
                 &quot;encoding&quot;: {
                   &quot;text&quot;: {
@@ -460,7 +457,6 @@
           &quot;y&quot;: 900,
           &quot;fontSize&quot;: 52,
           &quot;fontWeight&quot;: 500,
-          &quot;color&quot;: &quot;#5eead4&quot;,
           &quot;keyframes&quot;: [
             {
               &quot;t&quot;: 2.2,
@@ -492,7 +488,6 @@
           &quot;y&quot;: 440,
           &quot;fontSize&quot;: 220,
           &quot;fontWeight&quot;: 700,
-          &quot;color&quot;: &quot;#ffffff&quot;,
           &quot;keyframes&quot;: [
             {
               &quot;t&quot;: 0.3,
@@ -513,7 +508,6 @@
           &quot;y&quot;: 700,
           &quot;fontSize&quot;: 60,
           &quot;fontWeight&quot;: 500,
-          &quot;color&quot;: &quot;#5eead4&quot;,
           &quot;keyframes&quot;: [
             {
               &quot;t&quot;: 1.4,
@@ -526,9 +520,11 @@
               &quot;y&quot;: 700,
               &quot;ease&quot;: &quot;outCubic&quot;
             }
-          ]
+          ],
+          &quot;role&quot;: &quot;title&quot;
         }
-      ]
+      ],
+      &quot;background&quot;: &quot;art&quot;
     }
   ],
   &quot;audio&quot;: [
@@ -552,7 +548,8 @@
       &quot;scene&quot;: &quot;one-file&quot;,
       &quot;at&quot;: 0.3
     }
-  ]
+  ],
+  &quot;theme&quot;: &quot;dusk&quot;
 }</span></div></details>
         </div>
         <div class="gitem reveal" id="showcase-dashboard"><h4>/make-dashboard — a growth dashboard from two CSV files</h4>
@@ -714,6 +711,7 @@
 
     <section id="gallery" class="doc-section">
       <h2><span class="ix">02b</span> Gallery</h2>
+      <div class="theme-bar" role="group" aria-label="Sample theme"><span class="theme-bar-l">Theme</span><button type="button" data-th="dusk" aria-pressed="true">Dusk</button><button type="button" data-th="press" aria-pressed="false">Press</button><button type="button" data-th="poster" aria-pressed="false">Poster</button><span class="theme-bar-n">Switches every explainer, deck, diagram and motion sample below.</span></div>
       <style>
         .gal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:14px}
         .gal-card{display:flex;flex-direction:column;min-width:0}
@@ -725,6 +723,11 @@
         .gal-prompt{margin-top:8px!important}
         .gal-prompt .code-body{font-size:12.5px}
         .gal-links{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:auto!important;padding-top:12px;font-size:14px!important}
+        .theme-bar{position:sticky;top:56px;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:14px 0 0;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md)}
+        .theme-bar-l{font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint)}
+        .theme-bar button{font:inherit;font-size:13.5px;padding:4px 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+        .theme-bar button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+        .theme-bar-n{font-size:12.5px;color:var(--text-faint)}
         .gal-h3{font-size:18px;margin:26px 0 0;font-family:var(--font-head)}
         @media (max-width:760px){.gal-grid{grid-template-columns:minmax(0,1fr)}}
       </style>
@@ -767,91 +770,81 @@
       <h3 class="gal-h3">Motion</h3>
       <p style="margin:8px 0 0;font-size:14px;color:var(--text-dim)">Audio is opt-in. Each clip was first rendered silent from the prompt shown, then given the one-line follow-up under it. The agent wrote the narration, synthesised it locally with Kokoro and changed only the spec's <code>audio</code> field. Press play to hear it.</p>
       <div class="gal-grid">
-        <div class="gitem gal-card reveal"><h4>From prompt to dashboard</h4><p class="gal-meta">make-motion · 1920×1080 · 15 s · Kokoro voiceover</p>
-          <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/prompt-to-dashboard-poster.jpg"><source src="showcase/portable-artifacts/prompt-to-dashboard.mp4" type="video/mp4"></video>
+        <div class="gitem gal-card reveal"><h4>From prompt to dashboard</h4><p class="gal-meta">make-motion · 1920×1080 · 15 s · Kokoro voiceover · <span data-tname>dusk</span> theme</p>
+          <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/prompt-to-dashboard-poster.jpg" data-tpl-poster="showcase/portable-artifacts/{t}prompt-to-dashboard-poster.jpg"><source src="showcase/portable-artifacts/prompt-to-dashboard.mp4" type="video/mp4" data-tpl-src="showcase/portable-artifacts/{t}prompt-to-dashboard.mp4"></video>
           <p class="gal-lbl">The exact prompt</p>
           <div class="code gal-prompt"><button class="copy" data-copy="Make a 15-second explainer, 1920x1080, titled &quot;From prompt to dashboard&quot;. Scene 1: the title and the subtitle &quot;Any agent. Offline. Open source.&quot; Scene 2: three steps appear one after another as rounded cards: &quot;1 Write the spec&quot;, &quot;2 Validate&quot;, &quot;3 Build&quot;, with connecting lines drawing in between them. Scene 3: a bar chart reveal of validate errors per attempt (attempt 1: 3, attempt 2: 1, attempt 3: 0) with the caption &quot;Field-level errors teach the model&quot;. Scene 4: a counter from 0 to 1 with the suffix &quot; file&quot;, and the caption &quot;One self-contained HTML page&quot;. End on a calm hold.
 ">copy</button><span class="code-body" style="white-space:pre-wrap;padding-right:58px">Make a 15-second explainer, 1920x1080, titled &quot;From prompt to dashboard&quot;. Scene 1: the title and the subtitle &quot;Any agent. Offline. Open source.&quot; Scene 2: three steps appear one after another as rounded cards: &quot;1 Write the spec&quot;, &quot;2 Validate&quot;, &quot;3 Build&quot;, with connecting lines drawing in between them. Scene 3: a bar chart reveal of validate errors per attempt (attempt 1: 3, attempt 2: 1, attempt 3: 0) with the caption &quot;Field-level errors teach the model&quot;. Scene 4: a counter from 0 to 1 with the suffix &quot; file&quot;, and the caption &quot;One self-contained HTML page&quot;. End on a calm hold.
 </span></div>
           <p class="gal-lbl">The follow-up (audio is opt-in)</p>
           <div class="code gal-prompt"><button class="copy" data-copy="Add a voiceover that reads each scene aloud.">copy</button><span class="code-body" style="white-space:pre-wrap;padding-right:58px">Add a voiceover that reads each scene aloud.</span></div>
-          <p class="gal-links"><a href="showcase/portable-artifacts/prompt-to-dashboard.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/prompt-to-dashboard.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/prompt-to-dashboard.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/prompt-to-dashboard.mp4" data-tpl-href="showcase/portable-artifacts/{t}prompt-to-dashboard.mp4" download>Download MP4 ↓</a></p>
         </div>
-        <div class="gitem gal-card reveal"><h4>Launch announcement</h4><p class="gal-meta">make-motion · 1920×1080 · 10 s · Kokoro voiceover</p>
-          <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/launch-announcement/poster.jpg"><source src="showcase/portable-artifacts/gallery/launch-announcement/video.mp4" type="video/mp4"></video>
+        <div class="gitem gal-card reveal"><h4>Launch announcement</h4><p class="gal-meta">make-motion · 1920×1080 · 10 s · Kokoro voiceover · <span data-tname>dusk</span> theme</p>
+          <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/launch-announcement/poster.jpg" data-tpl-poster="showcase/portable-artifacts/gallery/launch-announcement/{t}poster.jpg"><source src="showcase/portable-artifacts/gallery/launch-announcement/video.mp4" data-tpl-src="showcase/portable-artifacts/gallery/launch-announcement/{t}video.mp4" type="video/mp4"></video>
           <p class="gal-lbl">The exact prompt</p>
           <div class="code gal-prompt"><button class="copy" data-copy="Make a 10-second launch announcement, 1920x1080: scene 1 the product name &quot;Lumen 2.0&quot; scales in with the tagline &quot;Search that keeps up&quot;; scene 2 a counter from 1 to 3 with the suffix &quot;x faster&quot; and the caption &quot;Median query time vs 1.0&quot;; scene 3 three feature labels (Offline index, Typo-tolerant, Private by default) appear one after another; end on &quot;Available today&quot;.
 ">copy</button><span class="code-body" style="white-space:pre-wrap;padding-right:58px">Make a 10-second launch announcement, 1920x1080: scene 1 the product name &quot;Lumen 2.0&quot; scales in with the tagline &quot;Search that keeps up&quot;; scene 2 a counter from 1 to 3 with the suffix &quot;x faster&quot; and the caption &quot;Median query time vs 1.0&quot;; scene 3 three feature labels (Offline index, Typo-tolerant, Private by default) appear one after another; end on &quot;Available today&quot;.
 </span></div>
           <p class="gal-lbl">The follow-up (audio is opt-in)</p>
           <div class="code gal-prompt"><button class="copy" data-copy="Add a voiceover that reads each scene aloud.">copy</button><span class="code-body" style="white-space:pre-wrap;padding-right:58px">Add a voiceover that reads each scene aloud.</span></div>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/launch-announcement/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/launch-announcement/video.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/launch-announcement/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/launch-announcement/video.mp4" data-tpl-href="showcase/portable-artifacts/gallery/launch-announcement/{t}video.mp4" download>Download MP4 ↓</a></p>
         </div>
-        <div class="gitem gal-card reveal"><h4>SQL guard explainer</h4><p class="gal-meta">make-motion · 1920×1080 · 12 s · Kokoro voiceover</p>
-          <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/sql-guard-explainer/poster.jpg"><source src="showcase/portable-artifacts/gallery/sql-guard-explainer/video.mp4" type="video/mp4"></video>
+        <div class="gitem gal-card reveal"><h4>SQL guard explainer</h4><p class="gal-meta">make-motion · 1920×1080 · 12 s · Kokoro voiceover · <span data-tname>dusk</span> theme</p>
+          <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/sql-guard-explainer/poster.jpg" data-tpl-poster="showcase/portable-artifacts/gallery/sql-guard-explainer/{t}poster.jpg"><source src="showcase/portable-artifacts/gallery/sql-guard-explainer/video.mp4" data-tpl-src="showcase/portable-artifacts/gallery/sql-guard-explainer/{t}video.mp4" type="video/mp4"></video>
           <p class="gal-lbl">The exact prompt</p>
           <div class="code gal-prompt"><button class="copy" data-copy="Make a 12-second explainer, 1920x1080, titled &quot;How the SQL guard works&quot;: scene 1 the title; scene 2 a query card &quot;SELECT … FROM query(&#x27;…&#x27;)&quot; with a red &quot;rejected&quot; label drawing in; scene 3 three stacked rounded boxes labelled &quot;Parse with DuckDB&quot;, &quot;Allowlist the tables&quot;, &quot;Locked connection&quot; connected by lines drawing downward; scene 4 the caption &quot;Only declared files. No network.&quot;
 ">copy</button><span class="code-body" style="white-space:pre-wrap;padding-right:58px">Make a 12-second explainer, 1920x1080, titled &quot;How the SQL guard works&quot;: scene 1 the title; scene 2 a query card &quot;SELECT … FROM query(&#x27;…&#x27;)&quot; with a red &quot;rejected&quot; label drawing in; scene 3 three stacked rounded boxes labelled &quot;Parse with DuckDB&quot;, &quot;Allowlist the tables&quot;, &quot;Locked connection&quot; connected by lines drawing downward; scene 4 the caption &quot;Only declared files. No network.&quot;
 </span></div>
           <p class="gal-lbl">The follow-up (audio is opt-in)</p>
           <div class="code gal-prompt"><button class="copy" data-copy="Add a voiceover that reads each scene aloud.">copy</button><span class="code-body" style="white-space:pre-wrap;padding-right:58px">Add a voiceover that reads each scene aloud.</span></div>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/sql-guard-explainer/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/sql-guard-explainer/video.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/sql-guard-explainer/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/sql-guard-explainer/video.mp4" data-tpl-href="showcase/portable-artifacts/gallery/sql-guard-explainer/{t}video.mp4" download>Download MP4 ↓</a></p>
         </div>
-        <div class="gitem gal-card reveal"><h4>Quarterly highlights</h4><p class="gal-meta">make-motion · 1080×1080 · 12 s · Kokoro voiceover</p>
-          <video class="gal-media sq" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/quarterly-highlights-square/poster.jpg"><source src="showcase/portable-artifacts/gallery/quarterly-highlights-square/video.mp4" type="video/mp4"></video>
+        <div class="gitem gal-card reveal"><h4>Quarterly highlights</h4><p class="gal-meta">make-motion · 1080×1080 · 12 s · Kokoro voiceover · <span data-tname>dusk</span> theme</p>
+          <video class="gal-media sq" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/quarterly-highlights-square/poster.jpg" data-tpl-poster="showcase/portable-artifacts/gallery/quarterly-highlights-square/{t}poster.jpg"><source src="showcase/portable-artifacts/gallery/quarterly-highlights-square/video.mp4" data-tpl-src="showcase/portable-artifacts/gallery/quarterly-highlights-square/{t}video.mp4" type="video/mp4"></video>
           <p class="gal-lbl">The exact prompt</p>
           <div class="code gal-prompt"><button class="copy" data-copy="Make a square 1080x1080 clip of about 12 seconds with four scenes: &quot;Q3 highlights&quot; title; revenue counter to $42.1M; a bar chart of signups by quarter (Q1 1200, Q2 1850, Q3 2400) revealed left to right; and a closing line &quot;Thank you, team&quot;.
 ">copy</button><span class="code-body" style="white-space:pre-wrap;padding-right:58px">Make a square 1080x1080 clip of about 12 seconds with four scenes: &quot;Q3 highlights&quot; title; revenue counter to $42.1M; a bar chart of signups by quarter (Q1 1200, Q2 1850, Q3 2400) revealed left to right; and a closing line &quot;Thank you, team&quot;.
 </span></div>
           <p class="gal-lbl">The follow-up (audio is opt-in)</p>
           <div class="code gal-prompt"><button class="copy" data-copy="Add a voiceover that reads each scene aloud.">copy</button><span class="code-body" style="white-space:pre-wrap;padding-right:58px">Add a voiceover that reads each scene aloud.</span></div>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/quarterly-highlights-square/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/quarterly-highlights-square/video.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/quarterly-highlights-square/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/quarterly-highlights-square/video.mp4" data-tpl-href="showcase/portable-artifacts/gallery/quarterly-highlights-square/{t}video.mp4" download>Download MP4 ↓</a></p>
         </div>
       </div>
       <h3 class="gal-h3">Explainers and diagrams</h3>
       <div class="gal-grid">
-        <div class="gitem gal-card reveal"><h4>Portable Artifacts explainer</h4><p class="gal-meta">make-explainer · dusk theme · 5 embedded videos</p>
-          <a href="showcase/portable-artifacts/gallery/explainer-page/index.html" target="_blank" rel="noopener" aria-label="Open the Portable Artifacts explainer full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/explainer-page/thumb.jpg" alt="The Portable Artifacts explainer page generated by make-explainer" loading="lazy" width="1280" height="720"></a>
+        <div class="gitem gal-card reveal"><h4>Portable Artifacts explainer</h4><p class="gal-meta">make-explainer · <span data-tname>dusk</span> theme · 5 embedded videos</p>
+          <a href="showcase/portable-artifacts/gallery/explainer-page/index.html" data-tpl-href="showcase/portable-artifacts/gallery/explainer-page/{t}index.html" target="_blank" rel="noopener" aria-label="Open the Portable Artifacts explainer full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/explainer-page/thumb.jpg" data-tpl-src="showcase/portable-artifacts/gallery/explainer-page/{t}thumb.jpg" alt="The Portable Artifacts explainer page generated by make-explainer" loading="lazy" width="1280" height="720"></a>
           <p>One page that explains this plugin: what each skill does, how to install it, the eval results as a chart, the pipeline as an embedded make-diagram figure, and the motion clips above as playable videos.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/explainer-page/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/explainer-page/explainer.json" target="_blank" rel="noopener">View spec</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/explainer-page/index.html" data-tpl-href="showcase/portable-artifacts/gallery/explainer-page/{t}index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/explainer-page/explainer.json" target="_blank" rel="noopener">View spec</a></p>
         </div>
-        <div class="gitem gal-card reveal"><h4>Portable Artifacts deck</h4><p class="gal-meta">make-explainer slides · dusk theme · 10 slides</p>
-          <a href="showcase/portable-artifacts/gallery/explainer-deck/index.html" target="_blank" rel="noopener" aria-label="Open the Portable Artifacts deck full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/explainer-deck/thumb.jpg" alt="The title slide of the Portable Artifacts deck generated by make-explainer" loading="lazy" width="1280" height="720"></a>
-          <p>The same story as a slide deck. Arrow keys or Space move between slides, O opens the outline, and slide 4 plays a make-motion clip.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/explainer-deck/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/explainer-deck/explainer.json" target="_blank" rel="noopener">View spec</a></p>
+        <div class="gitem gal-card reveal"><h4>Portable Artifacts deck</h4><p class="gal-meta">make-explainer slides · <span data-tname>dusk</span> theme · 10 slides</p>
+          <a href="showcase/portable-artifacts/gallery/explainer-deck/index.html" data-tpl-href="showcase/portable-artifacts/gallery/explainer-deck{k}/index.html" target="_blank" rel="noopener" aria-label="Open the Portable Artifacts deck full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/explainer-deck/thumb.jpg" data-tpl-src="showcase/portable-artifacts/gallery/explainer-deck{k}/thumb.jpg" alt="The title slide of the Portable Artifacts deck generated by make-explainer" loading="lazy" width="1280" height="720"></a>
+          <p>The same story as a slide deck. Arrow keys or Space move between slides, O opens the outline, and slide 4 plays a make-motion clip. Switch the theme above to open the same deck spec built with <code>--theme press</code> or <code>--theme poster</code>.</p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/explainer-deck/index.html" data-tpl-href="showcase/portable-artifacts/gallery/explainer-deck{k}/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/explainer-deck/explainer.json" target="_blank" rel="noopener">View spec</a></p>
         </div>
-        <div class="gitem gal-card reveal"><h4>Portable Artifacts deck in press</h4><p class="gal-meta">make-explainer slides · press theme · 10 slides</p>
-          <a href="showcase/portable-artifacts/gallery/explainer-deck-press/index.html" target="_blank" rel="noopener" aria-label="Open the press deck full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/explainer-deck-press/thumb.jpg" alt="The title slide of the Portable Artifacts deck in the press theme: a serif title over contour lines and halftone dots" loading="lazy" width="1280" height="720"></a>
-          <p>The same deck spec built with <code>--theme press</code>: Young Serif headings on bone paper, vermilion numerals, and halftone and contour art on the first and last slides.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/explainer-deck-press/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/explainer-deck/explainer.json" target="_blank" rel="noopener">View spec</a></p>
-        </div>
-        <div class="gitem gal-card reveal"><h4>Portable Artifacts deck in poster</h4><p class="gal-meta">make-explainer slides · poster theme · 10 slides</p>
-          <a href="showcase/portable-artifacts/gallery/explainer-deck-poster/index.html" target="_blank" rel="noopener" aria-label="Open the poster deck full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/explainer-deck-poster/thumb.jpg" alt="The title slide of the Portable Artifacts deck in the poster theme: condensed capitals on a lime card over orange halftone dots" loading="lazy" width="1280" height="720"></a>
-          <p>The same deck spec built with <code>--theme poster</code>: condensed Big Shoulders capitals, acid lime and orange, a halftone grid and registration marks.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/explainer-deck-poster/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/explainer-deck/explainer.json" target="_blank" rel="noopener">View spec</a></p>
-        </div>
-        <div class="gitem gal-card reveal"><h4>How a request becomes a finished page</h4><p class="gal-meta">make-diagram · architecture · ink theme</p>
-          <a href="showcase/portable-artifacts/gallery/pipeline-diagram/index.html" target="_blank" rel="noopener" aria-label="Open the pipeline diagram full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/pipeline-diagram/thumb.jpg" alt="An architecture diagram of the portable-artifacts pipeline generated by make-diagram" loading="lazy" width="1280" height="720"></a>
+        <div class="gitem gal-card reveal"><h4>How a request becomes a finished page</h4><p class="gal-meta">make-diagram · architecture · <span data-tname>dusk</span> theme</p>
+          <a href="showcase/portable-artifacts/gallery/pipeline-diagram/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/pipeline-diagram/{d}/index.html" target="_blank" rel="noopener" aria-label="Open the pipeline diagram full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/pipeline-diagram/dusk/thumb.jpg" data-tpl-src="showcase/portable-artifacts/gallery/pipeline-diagram/{d}/thumb.jpg" alt="An architecture diagram of the portable-artifacts pipeline generated by make-diagram" loading="lazy" width="1280" height="720"></a>
           <p>The pipeline from request to page, laid out by ELK. Play story (or <code>P</code>) opens beat 1; <code>Space</code> plays it, following a request hop by hop with a travelling dot and captions. Use Explore to click a node for what it sends and receives.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/pipeline-diagram/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/pipeline-diagram/diagram.json" target="_blank" rel="noopener">View spec</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/pipeline-diagram/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/pipeline-diagram/{d}/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/pipeline-diagram/diagram.json" target="_blank" rel="noopener">View spec</a></p>
         </div>
-        <div class="gitem gal-card reveal"><h4>Food delivery: one order</h4><p class="gal-meta">make-diagram · architecture · blueprint theme · autoplay</p>
-          <a href="showcase/portable-artifacts/gallery/delivery-diagram/index.html" target="_blank" rel="noopener" aria-label="Open the Food delivery: one order diagram full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/delivery-diagram/thumb.jpg" alt="An architecture diagram of a food delivery order in three lanes, mid-story with a glowing hop between the orders and payments services" loading="lazy" width="1280" height="720"></a>
+        <div class="gitem gal-card reveal"><h4>Food delivery: one order</h4><p class="gal-meta">make-diagram · architecture · <span data-tname>dusk</span> theme · autoplay</p>
+          <a href="showcase/portable-artifacts/gallery/delivery-diagram/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/delivery-diagram/{d}/index.html" target="_blank" rel="noopener" aria-label="Open the Food delivery: one order diagram full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/delivery-diagram/dusk/thumb.jpg" data-tpl-src="showcase/portable-artifacts/gallery/delivery-diagram/{d}/thumb.jpg" alt="An architecture diagram of a food delivery order in three lanes, mid-story with a glowing hop between the orders and payments services" loading="lazy" width="1280" height="720"></a>
           <p>One order across three lanes: customer side, platform and partners, with an emoji on every node. Two stories, "Place the order" and "Deliver it", start playing as soon as the page opens. Click any node in Explore for what it does.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/delivery-diagram/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/delivery-diagram/diagram.json" target="_blank" rel="noopener">View spec</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/delivery-diagram/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/delivery-diagram/{d}/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/delivery-diagram/diagram.json" target="_blank" rel="noopener">View spec</a></p>
         </div>
-        <div class="gitem gal-card reveal"><h4>Sign in with OAuth</h4><p class="gal-meta">make-diagram · sequence · ink theme</p>
-          <a href="showcase/portable-artifacts/gallery/oauth-sequence/index.html" target="_blank" rel="noopener" aria-label="Open the Sign in with OAuth diagram full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/oauth-sequence/thumb.jpg" alt="A sequence diagram of an OAuth sign-in, with the authorization code message lit and a dot travelling along it" loading="lazy" width="1280" height="720"></a>
+        <div class="gitem gal-card reveal"><h4>Sign in with OAuth</h4><p class="gal-meta">make-diagram · sequence · <span data-tname>dusk</span> theme</p>
+          <a href="showcase/portable-artifacts/gallery/oauth-sequence/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/oauth-sequence/{d}/index.html" target="_blank" rel="noopener" aria-label="Open the Sign in with OAuth diagram full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/oauth-sequence/dusk/thumb.jpg" data-tpl-src="showcase/portable-artifacts/gallery/oauth-sequence/{d}/thumb.jpg" alt="A sequence diagram of an OAuth sign-in, with the authorization code message lit and a dot travelling along it" loading="lazy" width="1280" height="720"></a>
           <p>A sequence diagram with an eight-beat story through the authorization code flow. Each beat lights one message; replies play against the arrow.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/oauth-sequence/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/oauth-sequence/diagram.json" target="_blank" rel="noopener">View spec</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/oauth-sequence/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/oauth-sequence/{d}/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/oauth-sequence/diagram.json" target="_blank" rel="noopener">View spec</a></p>
         </div>
-        <div class="gitem gal-card reveal"><h4>Incident response</h4><p class="gal-meta">make-diagram · flowchart · paper theme</p>
-          <a href="showcase/portable-artifacts/gallery/incident-flow/index.html" target="_blank" rel="noopener" aria-label="Open the Incident response diagram full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/incident-flow/thumb.jpg" alt="A flowchart of an incident response, with the yes branch from Customer impact to Page the on-call lit" loading="lazy" width="1280" height="720"></a>
+        <div class="gitem gal-card reveal"><h4>Incident response</h4><p class="gal-meta">make-diagram · flowchart · <span data-tname>dusk</span> theme</p>
+          <a href="showcase/portable-artifacts/gallery/incident-flow/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/incident-flow/{d}/index.html" target="_blank" rel="noopener" aria-label="Open the Incident response diagram full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/incident-flow/dusk/thumb.jpg" data-tpl-src="showcase/portable-artifacts/gallery/incident-flow/{d}/thumb.jpg" alt="A flowchart of an incident response, with the yes branch from Customer impact to Page the on-call lit" loading="lazy" width="1280" height="720"></a>
           <p>A flowchart from the alert to the published postmortem. Its seven-beat story follows one real outage down the yes branch, so the no branch stays dimmed.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/incident-flow/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/incident-flow/diagram.json" target="_blank" rel="noopener">View spec</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/incident-flow/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/incident-flow/{d}/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/incident-flow/diagram.json" target="_blank" rel="noopener">View spec</a></p>
         </div>
       </div>
-      <p style="margin-top:16px;font-size:13.5px;color:var(--text-faint)">Every dashboard and motion sample was generated by Claude Code (Sonnet) following SKILL.md from the prompt shown; each motion clip then took the one-line follow-up, which added only the <code>audio</code> field. The explainers and the pipeline diagram were written by Claude Haiku at low effort from a fact sheet, and a review pass corrected facts and layout in their specs before the build. The pipeline diagram's stories, emoji and details were written by hand for the stories release (2026-10-14); its nodes and edges are the Haiku original. The food delivery, OAuth and incident diagrams were written whole by Claude Haiku at low effort, stories included.</p><p style="margin-top:10px;font-size:13.5px;color:var(--text-faint)">The dashboards and diagrams were rebuilt on 2026-10-15 with the templates of that day (Geist type, favicon, icon theme toggle, provenance line). Their footers read as the samples were made, passed as build flags: the dashboards <code>--model "Claude Sonnet" --agent "Claude Code"</code> (effort was not recorded, so it reads "not reported"), all four diagrams <code>--model "Claude Haiku" --effort low --agent "Claude Code"</code>. The footer date, 15 Oct 2026, is the build day, pinned with <code>SOURCE_DATE_EPOCH</code>. The dashboard and diagram specs are unchanged, except that the OAuth spec's <code>theme</code> field was added after it was first passed on the command line. The dashboards were rebuilt from the sample data in the plugin's <code>eval/fixtures/data</code> folder, so their "refreshed" times show the rebuild.</p><p style="margin-top:10px;font-size:13.5px;color:var(--text-faint)">The explainer page and deck were rebuilt again on 2026-10-17, on the design-refresh branch, in the new default theme <code>dusk</code>: new type (Funnel Display, Host Grotesk, Commit Mono), seeded art in the page hero and on the deck's first and last slides, and a new layout. The flags are the same, <code>--model "Claude Haiku" --effort low --agent "Claude Code"</code>, and the footer date, 17 Oct 2026, is pinned with <code>SOURCE_DATE_EPOCH</code>. The page spec names no theme, so it now builds in <code>dusk</code> (the earlier build passed <code>editorial</code> on the command line). The deck spec's <code>theme</code> field changed from <code>blueprint</code> to <code>dusk</code>; the press and poster decks are that spec built with <code>--theme press</code> and <code>--theme poster</code>. Both explainer specs gained hand-written section labels (the <code>label</code> field) on an earlier branch, and a few long titles were shortened to fit the 8-word soft cap.</p><p style="margin-top:10px;font-size:13.5px;color:var(--text-faint)">The four motion clips were not re-rendered and keep the look from before the redesign (Inter type on the spec's colours). Their specs name no theme, and an unthemed spec now renders in <code>dusk</code>, so a re-render would change their type. Specs and outputs are unedited, their MP4s carry no provenance tags, and the explainer page and deck embed them as they were. The two GIFs in the usability guide were re-rendered on 2026-10-17 from make-motion's <code>q3-revenue</code> and <code>how-it-works</code> examples, which name no theme: they now use dusk's fonts, and their colours, set in the specs, did not change. Thumbnails are 1280×720 (light scheme, reduced motion; the diagrams are paused on the fourth beat of their story).</p>
+      <p style="margin-top:16px;font-size:13.5px;color:var(--text-faint)">Every dashboard and motion sample was generated by Claude Code (Sonnet) following SKILL.md from the prompt shown; each motion clip then took the one-line follow-up, which added only the <code>audio</code> field. The explainers and the pipeline diagram were written by Claude Haiku at low effort from a fact sheet, and a review pass corrected facts and layout in their specs before the build. The pipeline diagram's stories, emoji and details were written by hand for the stories release (2026-10-14); its nodes and edges are the Haiku original. The food delivery, OAuth and incident diagrams were written whole by Claude Haiku at low effort, stories included.</p><p style="margin-top:10px;font-size:13.5px;color:var(--text-faint)">The dashboards and diagrams were rebuilt on 2026-10-15 with the templates of that day (Geist type, favicon, icon theme toggle, provenance line). Their footers read as the samples were made, passed as build flags: the dashboards <code>--model "Claude Sonnet" --agent "Claude Code"</code> (effort was not recorded, so it reads "not reported"), all four diagrams <code>--model "Claude Haiku" --effort low --agent "Claude Code"</code>. The footer date, 15 Oct 2026, is the build day, pinned with <code>SOURCE_DATE_EPOCH</code>. The dashboard and diagram specs are unchanged, except that the OAuth spec's <code>theme</code> field was added after it was first passed on the command line. The dashboards were rebuilt from the sample data in the plugin's <code>eval/fixtures/data</code> folder, so their "refreshed" times show the rebuild.</p><p style="margin-top:10px;font-size:13.5px;color:var(--text-faint)">The explainer page and deck were rebuilt again on 2026-10-17, on the design-refresh branch, in the new default theme <code>dusk</code>: new type (Funnel Display, Host Grotesk, Commit Mono), seeded art in the page hero and on the deck's first and last slides, and a new layout. The flags are the same, <code>--model "Claude Haiku" --effort low --agent "Claude Code"</code>, and the footer date, 17 Oct 2026, is pinned with <code>SOURCE_DATE_EPOCH</code>. The page spec names no theme, so it now builds in <code>dusk</code> (the earlier build passed <code>editorial</code> on the command line). The deck spec's <code>theme</code> field changed from <code>blueprint</code> to <code>dusk</code>; the press and poster decks are that spec built with <code>--theme press</code> and <code>--theme poster</code>. Both explainer specs gained hand-written section labels (the <code>label</code> field) on an earlier branch, and a few long titles were shortened to fit the 8-word soft cap.</p><p style="margin-top:10px;font-size:13.5px;color:var(--text-faint)">On 2026-10-19 every explainer, deck, diagram and motion sample was rebuilt in all three new themes, <code>dusk</code>, <code>press</code> and <code>poster</code>, and the Theme switch at the top of the Gallery swaps between them. Dusk is the default and sits at the original paths; press and poster live in <code>press/</code> and <code>poster/</code> folders beside it, and the diagrams keep one folder per theme. The diagrams were built from their existing specs with <code>--theme</code>; the pipeline diagram's two lines that named the old themes were reworded. The four motion clips were re-rendered from their existing specs with the same voiceover files: the spec's own hex colours were removed so the theme sets the page, text and card colours (chart and error colours map to the theme's tokens), the first and last scenes use <code>background: "art"</code>, and the first text in each scene has <code>role: "title"</code>. The page and deck embed the clips of their own theme, and the explainer page's 4-second clip is a new two-scene spec rendered per theme. All builds pass <code>--model "Claude Haiku" --effort low --agent "Claude Code"</code> with <code>SOURCE_DATE_EPOCH</code> pinned to 17 Oct 2026. The two GIFs in the usability guide were re-rendered on 2026-10-17 from make-motion's <code>q3-revenue</code> and <code>how-it-works</code> examples. Thumbnails are 1280×720 (dusk dark scheme, press and poster light) and show the page as it loads; the clip thumbnails are a frame near the start.</p>
     </section>
 
     <section id="why" class="doc-section">
@@ -981,6 +974,22 @@
     </div>
   </div>
 </footer>
+<script>(function(){
+  var K={dusk:'',press:'press/',poster:'poster/'},KK={dusk:'',press:'-press',poster:'-poster'};
+  var th='dusk';try{var q=localStorage.getItem('pa-sample-theme');if(K[q]!==undefined)th=q}catch(e){}
+  function fill(v){return v.replace('{t}',K[th]).replace('{k}',KK[th]).replace('{d}',th)}
+  function apply(){
+    document.querySelectorAll('[data-tpl-src],[data-tpl-href],[data-tpl-poster]').forEach(function(el){
+      ['src','href','poster'].forEach(function(a){var t=el.getAttribute('data-tpl-'+a);if(t===null)return;
+        var u=fill(t);
+        if(el.getAttribute(a)!==u){el.setAttribute(a,u);if(el.tagName==='SOURCE'&&el.parentNode.load)el.parentNode.load()}});
+    });
+    document.querySelectorAll('[data-tname]').forEach(function(n){n.textContent=th});
+    document.querySelectorAll('.theme-bar button').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-th')===th))});
+  }
+  document.querySelectorAll('.theme-bar button').forEach(function(b){b.addEventListener('click',function(){th=b.getAttribute('data-th');try{localStorage.setItem('pa-sample-theme',th)}catch(e){}apply()})});
+  apply();
+})()</script>
 <script src="../../site/assets/site.js"></script>
 </body>
 </html>

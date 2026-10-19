@@ -1,49 +1,404 @@
 {
-  "size": [1920, 1080], "fps": 30, "background": "#0b0d12",
+  "size": [
+    1920,
+    1080
+  ],
+  "fps": 30,
   "scenes": [
-    { "id": "title", "duration": 2.5, "transition": "fade", "elements": [
-      { "id": "t", "type": "text", "text": "How the SQL guard works", "x": 960, "y": 520, "fontSize": 110, "fontWeight": 800, "color": "#f4f6fb",
-        "keyframes": [ { "t": 0.2, "opacity": 0, "y": 556 }, { "t": 1.0, "opacity": 1, "y": 520, "ease": "outCubic" } ] },
-      { "id": "tline", "type": "shape", "shape": "line", "x": 960, "y": 620, "width": 360, "strokeWidth": 4, "stroke": "#5eead4",
-        "keyframes": [ { "t": 0.8, "draw": 0 }, { "t": 1.5, "draw": 1, "ease": "inOutQuad" } ] }
-    ] },
-    { "id": "reject", "duration": 3, "transition": "fade", "elements": [
-      { "id": "card", "type": "shape", "shape": "rect", "x": 960, "y": 460, "width": 1300, "height": 240, "radius": 28, "fill": "#141925", "stroke": "#2a3142", "strokeWidth": 2,
-        "keyframes": [ { "t": 0.2, "opacity": 0, "scale": 0.94 }, { "t": 0.9, "opacity": 1, "scale": 1, "ease": "outCubic" } ] },
-      { "id": "query", "type": "text", "text": "SELECT … FROM query('…')", "x": 960, "y": 460, "fontSize": 64, "fontWeight": 600, "font": "mono", "color": "#f4f6fb",
-        "keyframes": [ { "t": 0.5, "opacity": 0 }, { "t": 1.1, "opacity": 1, "ease": "outCubic" } ] },
-      { "id": "strike", "type": "shape", "shape": "line", "x": 960, "y": 530, "width": 960, "strokeWidth": 6, "stroke": "#ef4444",
-        "keyframes": [ { "t": 1.3, "draw": 0 }, { "t": 1.9, "draw": 1, "ease": "inOutQuad" } ] },
-      { "id": "label", "type": "text", "text": "rejected", "x": 960, "y": 700, "fontSize": 80, "fontWeight": 800, "color": "#ef4444",
-        "keyframes": [ { "t": 1.7, "opacity": 0, "scale": 0.8 }, { "t": 2.3, "opacity": 1, "scale": 1, "ease": "outBack" } ] }
-    ] },
-    { "id": "layers", "duration": 4, "transition": "fade", "elements": [
-      { "id": "b1", "type": "shape", "shape": "rect", "x": 960, "y": 240, "width": 760, "height": 150, "radius": 28, "fill": "#141925", "stroke": "#5eead4", "strokeWidth": 3,
-        "keyframes": [ { "t": 0.2, "opacity": 0, "scale": 0.92 }, { "t": 0.8, "opacity": 1, "scale": 1, "ease": "outCubic" } ] },
-      { "id": "b1t", "type": "text", "text": "Parse with DuckDB", "x": 960, "y": 240, "fontSize": 56, "fontWeight": 700, "color": "#f4f6fb",
-        "keyframes": [ { "t": 0.4, "opacity": 0 }, { "t": 0.9, "opacity": 1, "ease": "outCubic" } ] },
-      { "id": "l1", "type": "shape", "shape": "line", "x": 960, "y": 380, "width": 130, "rotate": 90, "strokeWidth": 4, "stroke": "#5eead4",
-        "keyframes": [ { "t": 0.9, "draw": 0 }, { "t": 1.4, "draw": 1, "ease": "inOutQuad" } ] },
-      { "id": "b2", "type": "shape", "shape": "rect", "x": 960, "y": 520, "width": 760, "height": 150, "radius": 28, "fill": "#141925", "stroke": "#5eead4", "strokeWidth": 3,
-        "keyframes": [ { "t": 1.4, "opacity": 0, "scale": 0.92 }, { "t": 2.0, "opacity": 1, "scale": 1, "ease": "outCubic" } ] },
-      { "id": "b2t", "type": "text", "text": "Allowlist the tables", "x": 960, "y": 520, "fontSize": 56, "fontWeight": 700, "color": "#f4f6fb",
-        "keyframes": [ { "t": 1.6, "opacity": 0 }, { "t": 2.1, "opacity": 1, "ease": "outCubic" } ] },
-      { "id": "l2", "type": "shape", "shape": "line", "x": 960, "y": 660, "width": 130, "rotate": 90, "strokeWidth": 4, "stroke": "#5eead4",
-        "keyframes": [ { "t": 2.1, "draw": 0 }, { "t": 2.6, "draw": 1, "ease": "inOutQuad" } ] },
-      { "id": "b3", "type": "shape", "shape": "rect", "x": 960, "y": 800, "width": 760, "height": 150, "radius": 28, "fill": "#141925", "stroke": "#5eead4", "strokeWidth": 3,
-        "keyframes": [ { "t": 2.6, "opacity": 0, "scale": 0.92 }, { "t": 3.2, "opacity": 1, "scale": 1, "ease": "outCubic" } ] },
-      { "id": "b3t", "type": "text", "text": "Locked connection", "x": 960, "y": 800, "fontSize": 56, "fontWeight": 700, "color": "#f4f6fb",
-        "keyframes": [ { "t": 2.8, "opacity": 0 }, { "t": 3.3, "opacity": 1, "ease": "outCubic" } ] }
-    ] },
-    { "id": "caption", "duration": 2.5, "transition": "fade", "elements": [
-      { "id": "cap", "type": "text", "text": "Only declared files. No network.", "x": 960, "y": 540, "fontSize": 96, "fontWeight": 700, "color": "#f4f6fb",
-        "keyframes": [ { "t": 0.2, "opacity": 0, "y": 576 }, { "t": 0.9, "opacity": 1, "y": 540, "ease": "outCubic" } ] }
-    ] }
+    {
+      "id": "title",
+      "duration": 2.5,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "t",
+          "type": "text",
+          "text": "How the SQL guard works",
+          "x": 960,
+          "y": 520,
+          "fontSize": 110,
+          "fontWeight": 800,
+          "keyframes": [
+            {
+              "t": 0.2,
+              "opacity": 0,
+              "y": 556
+            },
+            {
+              "t": 1,
+              "opacity": 1,
+              "y": 520,
+              "ease": "outCubic"
+            }
+          ],
+          "role": "title"
+        },
+        {
+          "id": "tline",
+          "type": "shape",
+          "shape": "line",
+          "x": 960,
+          "y": 620,
+          "width": 360,
+          "strokeWidth": 4,
+          "stroke": "#ff7f61",
+          "keyframes": [
+            {
+              "t": 0.8,
+              "draw": 0
+            },
+            {
+              "t": 1.5,
+              "draw": 1,
+              "ease": "inOutQuad"
+            }
+          ]
+        }
+      ],
+      "background": "art"
+    },
+    {
+      "id": "reject",
+      "duration": 3,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "card",
+          "type": "shape",
+          "shape": "rect",
+          "x": 960,
+          "y": 460,
+          "width": 1300,
+          "height": 240,
+          "radius": 28,
+          "fill": "#241a38",
+          "stroke": "#3a2d52",
+          "strokeWidth": 2,
+          "keyframes": [
+            {
+              "t": 0.2,
+              "opacity": 0,
+              "scale": 0.94
+            },
+            {
+              "t": 0.9,
+              "opacity": 1,
+              "scale": 1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "query",
+          "type": "text",
+          "text": "SELECT … FROM query('…')",
+          "x": 960,
+          "y": 460,
+          "fontSize": 64,
+          "fontWeight": 600,
+          "font": "mono",
+          "keyframes": [
+            {
+              "t": 0.5,
+              "opacity": 0
+            },
+            {
+              "t": 1.1,
+              "opacity": 1,
+              "ease": "outCubic"
+            }
+          ],
+          "role": "title"
+        },
+        {
+          "id": "strike",
+          "type": "shape",
+          "shape": "line",
+          "x": 960,
+          "y": 530,
+          "width": 960,
+          "strokeWidth": 6,
+          "stroke": "#ff7a93",
+          "keyframes": [
+            {
+              "t": 1.3,
+              "draw": 0
+            },
+            {
+              "t": 1.9,
+              "draw": 1,
+              "ease": "inOutQuad"
+            }
+          ]
+        },
+        {
+          "id": "label",
+          "type": "text",
+          "text": "rejected",
+          "x": 960,
+          "y": 700,
+          "fontSize": 80,
+          "fontWeight": 800,
+          "color": "#ff7a93",
+          "keyframes": [
+            {
+              "t": 1.7,
+              "opacity": 0,
+              "scale": 0.8
+            },
+            {
+              "t": 2.3,
+              "opacity": 1,
+              "scale": 1,
+              "ease": "outBack"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "layers",
+      "duration": 4,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "b1",
+          "type": "shape",
+          "shape": "rect",
+          "x": 960,
+          "y": 240,
+          "width": 760,
+          "height": 150,
+          "radius": 28,
+          "fill": "#241a38",
+          "stroke": "#ff7f61",
+          "strokeWidth": 3,
+          "keyframes": [
+            {
+              "t": 0.2,
+              "opacity": 0,
+              "scale": 0.92
+            },
+            {
+              "t": 0.8,
+              "opacity": 1,
+              "scale": 1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "b1t",
+          "type": "text",
+          "text": "Parse with DuckDB",
+          "x": 960,
+          "y": 240,
+          "fontSize": 56,
+          "fontWeight": 700,
+          "keyframes": [
+            {
+              "t": 0.4,
+              "opacity": 0
+            },
+            {
+              "t": 0.9,
+              "opacity": 1,
+              "ease": "outCubic"
+            }
+          ],
+          "role": "title"
+        },
+        {
+          "id": "l1",
+          "type": "shape",
+          "shape": "line",
+          "x": 960,
+          "y": 380,
+          "width": 130,
+          "rotate": 90,
+          "strokeWidth": 4,
+          "stroke": "#ff7f61",
+          "keyframes": [
+            {
+              "t": 0.9,
+              "draw": 0
+            },
+            {
+              "t": 1.4,
+              "draw": 1,
+              "ease": "inOutQuad"
+            }
+          ]
+        },
+        {
+          "id": "b2",
+          "type": "shape",
+          "shape": "rect",
+          "x": 960,
+          "y": 520,
+          "width": 760,
+          "height": 150,
+          "radius": 28,
+          "fill": "#241a38",
+          "stroke": "#ff7f61",
+          "strokeWidth": 3,
+          "keyframes": [
+            {
+              "t": 1.4,
+              "opacity": 0,
+              "scale": 0.92
+            },
+            {
+              "t": 2,
+              "opacity": 1,
+              "scale": 1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "b2t",
+          "type": "text",
+          "text": "Allowlist the tables",
+          "x": 960,
+          "y": 520,
+          "fontSize": 56,
+          "fontWeight": 700,
+          "keyframes": [
+            {
+              "t": 1.6,
+              "opacity": 0
+            },
+            {
+              "t": 2.1,
+              "opacity": 1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "l2",
+          "type": "shape",
+          "shape": "line",
+          "x": 960,
+          "y": 660,
+          "width": 130,
+          "rotate": 90,
+          "strokeWidth": 4,
+          "stroke": "#ff7f61",
+          "keyframes": [
+            {
+              "t": 2.1,
+              "draw": 0
+            },
+            {
+              "t": 2.6,
+              "draw": 1,
+              "ease": "inOutQuad"
+            }
+          ]
+        },
+        {
+          "id": "b3",
+          "type": "shape",
+          "shape": "rect",
+          "x": 960,
+          "y": 800,
+          "width": 760,
+          "height": 150,
+          "radius": 28,
+          "fill": "#241a38",
+          "stroke": "#ff7f61",
+          "strokeWidth": 3,
+          "keyframes": [
+            {
+              "t": 2.6,
+              "opacity": 0,
+              "scale": 0.92
+            },
+            {
+              "t": 3.2,
+              "opacity": 1,
+              "scale": 1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "b3t",
+          "type": "text",
+          "text": "Locked connection",
+          "x": 960,
+          "y": 800,
+          "fontSize": 56,
+          "fontWeight": 700,
+          "keyframes": [
+            {
+              "t": 2.8,
+              "opacity": 0
+            },
+            {
+              "t": 3.3,
+              "opacity": 1,
+              "ease": "outCubic"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "caption",
+      "duration": 2.5,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "cap",
+          "type": "text",
+          "text": "Only declared files. No network.",
+          "x": 960,
+          "y": 540,
+          "fontSize": 96,
+          "fontWeight": 700,
+          "keyframes": [
+            {
+              "t": 0.2,
+              "opacity": 0,
+              "y": 576
+            },
+            {
+              "t": 0.9,
+              "opacity": 1,
+              "y": 540,
+              "ease": "outCubic"
+            }
+          ],
+          "role": "title"
+        }
+      ],
+      "background": "art"
+    }
   ],
   "audio": [
-    { "src": "voice/title.wav", "scene": "title", "at": 0.3 },
-    { "src": "voice/reject.wav", "scene": "reject", "at": 0.3 },
-    { "src": "voice/layers.wav", "scene": "layers", "at": 0.3 },
-    { "src": "voice/caption.wav", "scene": "caption", "at": 0.3 }
-  ]
+    {
+      "src": "voice/title.wav",
+      "scene": "title",
+      "at": 0.3
+    },
+    {
+      "src": "voice/reject.wav",
+      "scene": "reject",
+      "at": 0.3
+    },
+    {
+      "src": "voice/layers.wav",
+      "scene": "layers",
+      "at": 0.3
+    },
+    {
+      "src": "voice/caption.wav",
+      "scene": "caption",
+      "at": 0.3
+    }
+  ],
+  "theme": "dusk"
 }

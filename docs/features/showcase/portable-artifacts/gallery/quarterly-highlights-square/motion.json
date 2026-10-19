@@ -1,40 +1,114 @@
 {
-  "size": [1080, 1080],
+  "size": [
+    1080,
+    1080
+  ],
   "fps": 30,
-  "background": "#0b0d12",
   "scenes": [
     {
       "id": "title",
       "duration": 3,
       "elements": [
-        { "id": "title-text", "type": "text", "text": "Q3 highlights", "x": 540, "y": 520,
-          "fontSize": 120, "fontWeight": 700, "color": "#ffffff", "maxWidth": 960,
+        {
+          "id": "title-text",
+          "type": "text",
+          "text": "Q3 highlights",
+          "x": 540,
+          "y": 520,
+          "fontSize": 120,
+          "fontWeight": 700,
+          "maxWidth": 960,
           "keyframes": [
-            { "t": 0.1, "opacity": 0, "y": 570 },
-            { "t": 0.8, "opacity": 1, "y": 520, "ease": "outCubic" } ] },
-        { "id": "title-rule", "type": "shape", "shape": "line", "x": 540, "y": 620, "width": 360,
-          "stroke": "#2dd4bf", "strokeWidth": 8,
+            {
+              "t": 0.1,
+              "opacity": 0,
+              "y": 570
+            },
+            {
+              "t": 0.8,
+              "opacity": 1,
+              "y": 520,
+              "ease": "outCubic"
+            }
+          ],
+          "role": "title"
+        },
+        {
+          "id": "title-rule",
+          "type": "shape",
+          "shape": "line",
+          "x": 540,
+          "y": 620,
+          "width": 360,
+          "stroke": "#ff7f61",
+          "strokeWidth": 8,
           "keyframes": [
-            { "t": 0.6, "draw": 0 },
-            { "t": 1.3, "draw": 1, "ease": "outCubic" } ] }
-      ]
+            {
+              "t": 0.6,
+              "draw": 0
+            },
+            {
+              "t": 1.3,
+              "draw": 1,
+              "ease": "outCubic"
+            }
+          ]
+        }
+      ],
+      "background": "art"
     },
     {
       "id": "revenue",
       "duration": 3,
       "transition": "fade",
       "elements": [
-        { "id": "rev-label", "type": "text", "text": "Revenue", "x": 540, "y": 400,
-          "fontSize": 56, "fontWeight": 500, "color": "#c9cfdd",
+        {
+          "id": "rev-label",
+          "type": "text",
+          "text": "Revenue",
+          "x": 540,
+          "y": 400,
+          "fontSize": 56,
+          "fontWeight": 500,
           "keyframes": [
-            { "t": 0, "opacity": 0, "y": 440 },
-            { "t": 0.6, "opacity": 1, "y": 400, "ease": "outCubic" } ] },
-        { "id": "rev-counter", "type": "counter", "from": 0, "to": 42.1, "decimals": 1,
-          "prefix": "$", "suffix": "M", "x": 540, "y": 560,
-          "fontSize": 200, "fontWeight": 800, "color": "#2dd4bf",
+            {
+              "t": 0,
+              "opacity": 0,
+              "y": 440
+            },
+            {
+              "t": 0.6,
+              "opacity": 1,
+              "y": 400,
+              "ease": "outCubic"
+            }
+          ],
+          "role": "title"
+        },
+        {
+          "id": "rev-counter",
+          "type": "counter",
+          "from": 0,
+          "to": 42.1,
+          "decimals": 1,
+          "prefix": "$",
+          "suffix": "M",
+          "x": 540,
+          "y": 560,
+          "fontSize": 200,
+          "fontWeight": 800,
           "keyframes": [
-            { "t": 0.3, "value": 0 },
-            { "t": 2.2, "value": 42.1, "ease": "outCubic" } ] }
+            {
+              "t": 0.3,
+              "value": 0
+            },
+            {
+              "t": 2.2,
+              "value": 42.1,
+              "ease": "outCubic"
+            }
+          ]
+        }
       ]
     },
     {
@@ -42,27 +116,92 @@
       "duration": 4,
       "transition": "fade",
       "elements": [
-        { "id": "chart-title", "type": "text", "text": "Signups by quarter", "x": 540, "y": 150,
-          "fontSize": 72, "fontWeight": 700, "color": "#f4f6fb", "maxWidth": 960,
+        {
+          "id": "chart-title",
+          "type": "text",
+          "text": "Signups by quarter",
+          "x": 540,
+          "y": 150,
+          "fontSize": 72,
+          "fontWeight": 700,
+          "maxWidth": 960,
           "keyframes": [
-            { "t": 0, "opacity": 0, "y": 186 },
-            { "t": 0.6, "opacity": 1, "y": 150, "ease": "outCubic" } ] },
-        { "id": "signups-chart", "type": "chart", "x": 540, "y": 620, "width": 900, "height": 700,
+            {
+              "t": 0,
+              "opacity": 0,
+              "y": 186
+            },
+            {
+              "t": 0.6,
+              "opacity": 1,
+              "y": 150,
+              "ease": "outCubic"
+            }
+          ],
+          "role": "title"
+        },
+        {
+          "id": "signups-chart",
+          "type": "chart",
+          "x": 540,
+          "y": 620,
+          "width": 900,
+          "height": 700,
           "vegaLite": {
-            "mark": { "type": "bar", "cornerRadiusEnd": 6 },
-            "data": { "values": [
-              { "quarter": "Q1", "signups": 1200 },
-              { "quarter": "Q2", "signups": 1850 },
-              { "quarter": "Q3", "signups": 2400 } ] },
+            "mark": {
+              "type": "bar",
+              "cornerRadiusEnd": 6
+            },
+            "data": {
+              "values": [
+                {
+                  "quarter": "Q1",
+                  "signups": 1200
+                },
+                {
+                  "quarter": "Q2",
+                  "signups": 1850
+                },
+                {
+                  "quarter": "Q3",
+                  "signups": 2400
+                }
+              ]
+            },
             "encoding": {
-              "x": { "field": "quarter", "type": "ordinal", "sort": null, "title": null,
-                     "axis": { "labelFontSize": 28 } },
-              "y": { "field": "signups", "type": "quantitative", "title": "Signups" } }
+              "x": {
+                "field": "quarter",
+                "type": "ordinal",
+                "sort": null,
+                "title": null,
+                "axis": {
+                  "labelFontSize": 28
+                }
+              },
+              "y": {
+                "field": "signups",
+                "type": "quantitative",
+                "title": "Signups"
+              }
+            }
           },
           "keyframes": [
-            { "t": 0.4, "reveal": 0, "opacity": 0 },
-            { "t": 0.7, "opacity": 1 },
-            { "t": 3.2, "reveal": 1, "ease": "inOutCubic" } ] }
+            {
+              "t": 0.4,
+              "reveal": 0,
+              "opacity": 0
+            },
+            {
+              "t": 0.7,
+              "opacity": 1
+            },
+            {
+              "t": 3.2,
+              "reveal": 1,
+              "ease": "inOutCubic"
+            }
+          ]
+        }
       ]
     },
     {
@@ -70,18 +209,55 @@
       "duration": 2,
       "transition": "fade",
       "elements": [
-        { "id": "thanks-text", "type": "text", "text": "Thank you, team", "x": 540, "y": 540,
-          "fontSize": 104, "fontWeight": 700, "color": "#ffffff", "maxWidth": 960,
+        {
+          "id": "thanks-text",
+          "type": "text",
+          "text": "Thank you, team",
+          "x": 540,
+          "y": 540,
+          "fontSize": 104,
+          "fontWeight": 700,
+          "maxWidth": 960,
           "keyframes": [
-            { "t": 0, "opacity": 0, "y": 580 },
-            { "t": 0.7, "opacity": 1, "y": 540, "ease": "outCubic" } ] }
-      ]
+            {
+              "t": 0,
+              "opacity": 0,
+              "y": 580
+            },
+            {
+              "t": 0.7,
+              "opacity": 1,
+              "y": 540,
+              "ease": "outCubic"
+            }
+          ],
+          "role": "title"
+        }
+      ],
+      "background": "art"
     }
   ],
   "audio": [
-    { "src": "voice/title.wav", "scene": "title", "at": 0.3 },
-    { "src": "voice/revenue.wav", "scene": "revenue", "at": 0.3 },
-    { "src": "voice/signups.wav", "scene": "signups", "at": 0.3 },
-    { "src": "voice/thanks.wav", "scene": "thanks", "at": 0.3 }
-  ]
+    {
+      "src": "voice/title.wav",
+      "scene": "title",
+      "at": 0.3
+    },
+    {
+      "src": "voice/revenue.wav",
+      "scene": "revenue",
+      "at": 0.3
+    },
+    {
+      "src": "voice/signups.wav",
+      "scene": "signups",
+      "at": 0.3
+    },
+    {
+      "src": "voice/thanks.wav",
+      "scene": "thanks",
+      "at": 0.3
+    }
+  ],
+  "theme": "dusk"
 }

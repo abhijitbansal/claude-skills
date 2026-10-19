@@ -268,7 +268,7 @@
       "title": "A make-motion video renders from JSON",
       "label": "Rendered clip",
       "video": "clip.mp4",
-      "poster": "clip-poster.png",
+      "poster": "clip-poster.jpg",
       "caption": "A 4 second make-motion video rendered from a JSON spec. The first scene shows the heading One JSON file, one video, and the second counts up to 18."
     },
     {
