@@ -13,8 +13,8 @@ export const BUNDLE_FILE = path.join(SKILL_DIR, 'template', 'vendor', 'scene-run
 
 const KB = 1024;
 // Page ceiling = ceil((bundle + 512 KB scene data + 256 KB fonts/chrome) / 64 KB) * 64 KB.
-// Bundle measured 547.2 KB (560330 bytes incl. header) on 2026-10-19 with the Task 2 placeholder runtime; it grows as Tasks 7/8/10 add modules.
-export const MAX_PAGE_BYTES = Math.ceil((560330 + 512 * KB + 256 * KB) / (64 * KB)) * 64 * KB; // 21 * 64 KB = 1344 KB
+// Bundle measured 585.7 KB (599734 bytes incl. header) on 2026-10-19 with the Task 7 runtime core (render, theme, loop, controls); it grows as Tasks 8/10 add modules.
+export const MAX_PAGE_BYTES = Math.ceil((599734 + 512 * KB + 256 * KB) / (64 * KB)) * 64 * KB; // 22 * 64 KB = 1408 KB
 
 const HEADER_RE = /^\/\* make-scene runtime; sources sha256:([0-9a-f]{64}); three@(\S+); MIT \(see THIRD_PARTY_NOTICES\.md\) \*\//;
 
