@@ -1,40 +1,51 @@
 #!/usr/bin/env node
-// node scripts/check.mjs <motion.json> [--json]
+// node scripts/check.mjs <motion.json> [--json] [--theme <name>]
 // Seeks the real render page to every contact-sheet moment of every scene (sheetTimes) and reads each element's box
-// and opacity from the DOM. Fails on: a visible text element outside the safe area once it has settled; two visible
-// text boxes overlapping at the same moment; a scene with every element invisible at its last frame.
+// and opacity from the DOM. Fails on: a visible text or counter outside the safe area once it has settled; two visible
+// text or counter boxes overlapping once both have settled; a scene with every element invisible at its last frame.
+// A box wholly off the canvas has left the frame: it is never clipped and overlaps nothing.
+// --theme: the theme render.mjs --theme would draw a spec that names none in (a spec's own `theme` wins).
 // exit 0 ok or skipped (no browser), 1 problems (or an invalid spec), 2 usage/IO
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec, withDefaults, UsageError as SpecUsageError } from './lib/spec.mjs';
-import { printResult } from '../shared/errors.mjs';
+import { printResult, didYouMean } from '../shared/errors.mjs';
+import { listThemes } from '../shared/theme.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
 import { sheetTimes } from './lib/sheet.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
 
-const USAGE = 'node scripts/check.mjs <motion.json> [--json]';
-const OPTIONS = { json: { type: 'boolean' } };
+const USAGE = 'node scripts/check.mjs <motion.json> [--json] [--theme <name>]';
+const OPTIONS = { json: { type: 'boolean' }, theme: { type: 'string' } };
+const READY_MS = 15000; // the page must build its stage within this, or the check fails instead of hanging
+const CHECKED = new Set(['text', 'counter']); // rendered text: the element types rules 1 and 2 judge
 const SAFE_MARGIN_PX = 60; // at 1080 px on the canvas's short side; scaled by short side / 1080
 const SAFE_REFERENCE_SIDE = 1080;
 const SUBPIXEL_PX = 0.5; // a box edge this close to the safe line is on it
 const VISIBLE_OPACITY = 0.05; // rendered opacity (element x scene) above this counts as visible
 const OVERLAP_TOLERANCE_PX = 2; // an intersection this thin on either axis is a shared edge, not an overlap
 const GEOMETRY = ['x', 'y', 'scale', 'rotate']; // keyframed props that move or resize a box (opacity does not)
+const POSE = [...GEOMETRY, 'opacity']; // ... and, for overlaps, the ones that fade it in or out too
 const EPSILON = 1e-6;
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
+// A page error surfaces as "page.evaluate: Error: <message>"; the crash line keeps only the message.
+const crashLine = (e) => firstLine(e).replace(/^(page|frame)\.\w+: (Error: )?/, '');
 // The safe-area margin on every side: 60 px at 1080 on the short side (the rule comes from a 1080x1080 canvas), so
 // 1920x1080, 1080x1350 and 1080x1080 all get 60 px and 3840x2160 gets 120.
 export const safeMargin = (size) => (SAFE_MARGIN_PX * Math.min(size[0], size[1])) / SAFE_REFERENCE_SIDE;
 const skipHint = () => `ask the user, then run: ${doctorCommand('--for', 'check', '--fix', 'chromium')}`;
 
-// Scene-local second at which the element's box stops moving: its last x/y/scale/rotate keyframe (0 if it never moves).
-// The safe-area rule judges an element only from then on, so an entrance from off-canvas is not a finding, but where
-// it lands is. sheetTimes samples every landing + 0.1 s, so every element gets at least one settled moment; the
-// scene's last frame always counts as settled (an element still moving there never settles on screen).
-const settledAt = (el) => Math.max(0, ...el.keyframes.filter((kf) => GEOMETRY.some((p) => kf[p] !== undefined)).map((kf) => kf.t));
+// Scene-local second of the element's last keyframe that sets one of `props` (0 if none does).
+// The safe-area rule judges an element only once its box stops moving (GEOMETRY), so an entrance from off-canvas is
+// not a finding, but where it lands is. The overlap rule judges a pair only once both have also stopped fading (POSE),
+// so a cross-fade swap in one spot is not a finding, and the verdict never hangs on a sample landing mid-motion.
+// sheetTimes samples every landing + 0.1 s, so every element gets at least one settled moment; the scene's last frame
+// always counts as settled (an element still moving there never settles on screen).
+const settledAt = (el, props) => Math.max(0, ...el.keyframes.filter((kf) => props.some((p) => kf[p] !== undefined)).map((kf) => kf.t));
+const isSettled = (from, t, n, samples) => t >= from - EPSILON || n === samples.length - 1;
 
 // Runs in the page: seek to `sec`, then each element of scene layer `index` as {id, opacity, box} in canvas pixels.
 // Rendered opacity multiplies the element's and every ancestor's up to the stage (the scene fade); a hidden layer is 0.
@@ -56,19 +67,21 @@ const measure = ([sec, index]) => {
 
 const at = (t) => `${t.toFixed(2)}s`;
 const isVisible = (m) => m.opacity > VISIBLE_OPACITY;
+const onCanvas = ({ box }, size) => box.right > 0 && box.left < size[0] && box.bottom > 0 && box.top < size[1];
+const isShown = (m, size) => isVisible(m) && onCanvas(m, size); // seen in the frame, at least in part
 
 function safeAreaProblems(scene, i, samples, margin, size) {
   const problems = [];
   scene.elements.forEach((el, j) => {
-    if (el.type !== 'text') return;
-    const from = settledAt(el);
+    if (!CHECKED.has(el.type)) return;
+    const from = settledAt(el, GEOMETRY);
     for (const [n, { t, els }] of samples.entries()) {
       const { box } = els[j];
-      if (!isVisible(els[j]) || (t < from - EPSILON && n !== samples.length - 1)) continue;
+      if (!isShown(els[j], size) || !isSettled(from, t, n, samples)) continue;
       const edges = [['top', margin - box.top], ['bottom', box.bottom - (size[1] - margin)], ['left', margin - box.left], ['right', box.right - (size[0] - margin)]]
         .filter(([, by]) => by > SUBPIXEL_PX).map(([edge]) => edge);
       if (!edges.length) continue;
-      problems.push({ path: `scenes[${i}].elements[${j}]`, message: `text "${el.id}" leaves the safe area (${edges.join(', ')}) at ${at(t)}` });
+      problems.push({ path: `scenes[${i}].elements[${j}]`, message: `${el.type} "${el.id}" leaves the safe area (${edges.join(', ')}) at ${at(t)}` });
       return;
     }
   });
@@ -78,13 +91,17 @@ function safeAreaProblems(scene, i, samples, margin, size) {
 const overlaps = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > OVERLAP_TOLERANCE_PX
   && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > OVERLAP_TOLERANCE_PX;
 
-function overlapProblems(scene, i, samples) {
+function overlapProblems(scene, i, samples, size) {
   const problems = [];
-  const texts = scene.elements.map((el, j) => ({ el, j })).filter(({ el }) => el.type === 'text');
+  const texts = scene.elements.map((el, j) => ({ el, j, from: settledAt(el, POSE) })).filter(({ el }) => CHECKED.has(el.type));
   for (const [b, second] of texts.entries()) {
     for (const first of texts.slice(0, b)) {
-      const hit = samples.find(({ els }) => isVisible(els[first.j]) && isVisible(els[second.j]) && overlaps(els[first.j].box, els[second.j].box));
-      if (hit) problems.push({ path: `scenes[${i}].elements[${second.j}]`, message: `text "${second.el.id}" overlaps text "${first.el.id}" at ${at(hit.t)}` });
+      const from = Math.max(first.from, second.from);
+      const hit = samples.find(({ t, els }, n) => isSettled(from, t, n, samples)
+        && isShown(els[first.j], size) && isShown(els[second.j], size) && overlaps(els[first.j].box, els[second.j].box));
+      if (hit) {
+        problems.push({ path: `scenes[${i}].elements[${second.j}]`, message: `${second.el.type} "${second.el.id}" overlaps ${first.el.type} "${first.el.id}" at ${at(hit.t)}` });
+      }
     }
   }
   return problems;
@@ -107,12 +124,32 @@ async function sampleScene(page, scene, index, start, fps) {
   return samples;
 }
 
+// Wait until the page has built its stage (window.__motion.ready), at most `ms`: a page that never gets there fails the
+// check with a clear message instead of hanging. A failed build rejects `ready` and surfaces its own message.
+export async function waitReady(page, ms = READY_MS) {
+  const work = (async () => {
+    await page.waitForFunction(() => window.__motion, null, { timeout: 0 });
+    await page.evaluate(() => window.__motion.ready);
+  })();
+  work.catch(() => {}); // after a timeout, closing the browser rejects whatever was in flight
+  let timer;
+  const seconds = Number((ms / 1000).toFixed(2));
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`the page did not become ready within ${seconds} s (any page error is printed above)`)), ms);
+  });
+  try {
+    await Promise.race([work, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function inspect(browser, spec, server) {
   const page = await browser.newPage({ viewport: { width: spec.size[0], height: spec.size[1] }, deviceScaleFactor: 1 });
+  page.on('pageerror', (e) => process.stderr.write(`page error: ${e.message}\n`));
   await guardNetwork(page, new URL(server.url).origin, (url) => process.stderr.write(`blocked network request: ${url}\n`));
   await page.goto(server.url);
-  await page.waitForFunction(() => window.__motion);
-  await page.evaluate(() => window.__motion.ready);
+  await waitReady(page);
   const starts = await page.evaluate(() => window.__motion.sceneStarts);
   const margin = safeMargin(spec.size);
   const problems = [];
@@ -120,12 +157,12 @@ async function inspect(browser, spec, server) {
   for (const [i, scene] of spec.scenes.entries()) {
     const samples = await sampleScene(page, scene, i, starts[i], spec.fps);
     moments += samples.length;
-    problems.push(...safeAreaProblems(scene, i, samples, margin, spec.size), ...overlapProblems(scene, i, samples), ...emptyEndProblems(scene, i, samples));
+    problems.push(...safeAreaProblems(scene, i, samples, margin, spec.size), ...overlapProblems(scene, i, samples, spec.size), ...emptyEndProblems(scene, i, samples));
   }
   return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems };
 }
 
-async function checkSpec(specPath, spec, env) {
+async function checkSpec(specPath, spec, { env, theme }) {
   if (env.PA_NO_BROWSER === '1') return { status: 'skipped', reason: 'PA_NO_BROWSER=1' };
   let browser;
   try {
@@ -133,13 +170,21 @@ async function checkSpec(specPath, spec, env) {
   } catch (e) {
     return { status: 'skipped', reason: firstLine(e) };
   }
-  const server = await startServer({ specPath, mode: 'render' });
+  let server;
   try {
+    server = await startServer({ specPath, mode: 'render', theme });
     return await inspect(browser, spec, server);
   } finally {
     await browser.close().catch(() => {});
-    await server.close();
+    await server?.close();
   }
+}
+
+function checkTheme(name) {
+  const themes = listThemes();
+  if (themes.includes(name)) return;
+  const near = didYouMean(name, themes);
+  throw new UsageError(`--theme: unknown theme ${JSON.stringify(name)}; ${near ? `did you mean ${JSON.stringify(near)}?` : `available: ${themes.join(', ')}`}`);
 }
 
 function report(result, json) {
@@ -147,13 +192,14 @@ function report(result, json) {
   if (json) {
     const body = status === 'skipped' ? { ok: true, skipped: true, reason: result.reason, hint: skipHint() }
       : status === 'ok' ? { ok: true, scenes: result.scenes, moments: result.moments }
-        : { ok: false, errors: problems };
+        : { ok: false, ...(result.crashed ? { crashed: true } : {}), errors: problems };
     process.stdout.write(`${JSON.stringify(body)}\n`);
   } else if (status === 'skipped') process.stdout.write(`check: skipped (no browser: ${result.reason}; ${skipHint()})\n`);
   else if (status === 'ok') process.stdout.write(`check: ok (${result.scenes} scene${result.scenes === 1 ? '' : 's'}, ${result.moments} moments)\n`);
   else {
     for (const p of problems) process.stdout.write(p.path ? `${p.path}: ${p.message}\n` : `${p.message}\n`);
-    process.stdout.write(`check: ${problems.length} problem${problems.length === 1 ? '' : 's'}\n`);
+    // A crash is not a spec problem: its line stands alone, with no tally to "fix".
+    if (!result.crashed) process.stdout.write(`check: ${problems.length} problem${problems.length === 1 ? '' : 's'}\n`);
   }
 }
 
@@ -163,13 +209,16 @@ async function main(argv) {
     const { values, positionals } = parseCli(argv, OPTIONS, USAGE);
     json = values.json === true;
     if (positionals.length !== 1) throw new UsageError(`expected one motion.json; usage: ${USAGE}`);
+    if (values.theme !== undefined) checkTheme(values.theme);
     const { spec: raw, dir } = loadSpec(positionals[0]);
     const valid = validateSpec(raw, { dir });
     if (!valid.ok) {
       printResult(valid, { json, label: positionals[0] });
       return 1;
     }
-    const result = await checkSpec(path.resolve(positionals[0]), withDefaults(raw), process.env);
+    // The theme the page draws decides the title presets (and so the settle times): the spec's own, else --theme.
+    const spec = withDefaults(raw.theme === undefined && values.theme !== undefined ? { ...raw, theme: values.theme } : raw);
+    const result = await checkSpec(path.resolve(positionals[0]), spec, { env: process.env, theme: values.theme });
     report(result, json);
     return result.status === 'failed' ? 1 : 0;
   } catch (e) {
@@ -177,7 +226,7 @@ async function main(argv) {
       exitUsage(e, { json });
       return 2;
     }
-    report({ status: 'failed', problems: [{ path: '', message: `check crashed: ${firstLine(e)}` }] }, json); // never a stack trace
+    report({ status: 'failed', crashed: true, problems: [{ path: '', message: `check crashed: ${crashLine(e)}` }] }, json); // never a stack trace
     return 1;
   }
 }

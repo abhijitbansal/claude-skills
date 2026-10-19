@@ -94,6 +94,7 @@ Hunk goes between the intro paragraph and the plugin table.
 - New `scripts/check.mjs` (mirrors make-diagram's): text outside the safe area (60 px at 1080 wide, scaled), overlapping visible text boxes, a scene whose elements are all invisible at its end. **No "frame 0 never empty" rule** (it fails nearly every shipped spec because of `fade` and opacity-0 starts). Skips cleanly without a browser.
 - SKILL.md step 4 gains the look-then-check checklist. Prove `check.mjs` fires: feed it a title at `y: 10` and a spec that fades everything out (RED), then clean specs (GREEN). Add Playwright Chromium to the make-motion CI step (D5).
 - Cut for now: `--at`, `--every/--from/--to`.
+- Amended (ruled 2026-10-19): safe area = 60 * min(w,h) / 1080 px on every side (60 px at 1080 on the short side), not width-scaled; the skip line matches make-diagram's: `check: skipped (no browser: <reason>; <doctor hint>)`.
 
 ### P5 — Motion-design reference and named eases · small–medium · risk low
 

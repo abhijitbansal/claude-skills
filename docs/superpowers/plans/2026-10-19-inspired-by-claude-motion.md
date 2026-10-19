@@ -180,7 +180,7 @@ Branch `feat/motion-review-loop`. Working dir `plugins/portable-artifacts/skills
 - Modify: `SKILL.md` (step 4), `scripts/doctor.mjs` (`--for check`), `.github/workflows/test.yml:85-87`, `.claude-plugin/plugin.json`
 
 **Interfaces:**
-- Produces: `node scripts/check.mjs <motion.json> [--json]`; exit 0 clean, 1 findings, 2 usage; skips cleanly (exit 0, prints `skipped: no browser`) without Playwright. Findings, each `scenes[i].elements[j]: <message>`: text outside the safe area (60 px at 1080 wide, scaled by `size[0]/1080`) at any sheet time; two visible `text` boxes overlapping at the same sheet time; a scene whose elements all have opacity 0 at its last frame. **No frame-0 rule.**
+- Produces: `node scripts/check.mjs <motion.json> [--json]`; exit 0 clean, 1 findings, 2 usage; skips cleanly (exit 0, prints `check: skipped (no browser: <reason>; <doctor hint>)`, make-diagram's wording) without Playwright. Findings, each `scenes[i].elements[j]: <message>`: text outside the safe area (safe area = 60 * min(w,h) / 1080 (ruled 2026-10-19); first written as `size[0]/1080`) at any sheet time; two visible `text` boxes overlapping at the same sheet time; a scene whose elements all have opacity 0 at its last frame. **No frame-0 rule.**
 
 - [ ] **Step 1: RED fixtures:** `test/fixtures/bad-safe-area.json` (title `y: 10` at 1080p), `bad-empty-end.json` (everything fades to 0), `bad-overlap.json`. Test asserts exit 1 and the exact message for each; and `'every spec in references/examples passes with exit 0'` (RED until the rule set is right).
 - [ ] **Step 2: RED run**, **Step 3: Implement** (reuse `startServer`, `launchBrowser`, `sheetTimes` from Task 8), **Step 4: GREEN**.
@@ -205,7 +205,7 @@ Branch `feat/motion-taste`.
 
 - [ ] **Step 1: Failing tests:** validate accepts the four names and rejects `enterr` with a did-you-mean; `timeline` shows `land` exceeds 1 mid-way and `enter` is not linear (sample 0.25 → value ≠ 0.25); presets: `exit:true` adds an exit that starts ≥ `0.9×duration`, not on the last scene, not when author keyframes exist; without `exit` output is unchanged (golden frames in `theme-render.test.mjs` stay GREEN).
 - [ ] **Step 2: RED**, **Step 3: Implement**, **Step 4: GREEN** (full `npm test`).
-- [ ] **Step 5: Write `motion-design.md`** (paraphrased from claude-motion, one credit line "Timing numbers adapted from whaleyxbt/claude-motion, MIT"): entrance 0.6–0.9 s `enter`; exit about half, `exit`; stagger 0.09 s per word, 0.2–0.25 s per item; hold ≥ 1 s + 0.25 s per word beyond three and ≥ 2 s on the closing frame; safe area 60 px at 1080 wide; one accent colour; linear only for continuous motion; one hero moment. Do not claim anything is enforced beyond what `check.mjs` checks. Bump the plugin patch version. **Commit** `feat(make-motion): motion-design reference, named eases, opt-in exits`.
+- [ ] **Step 5: Write `motion-design.md`** (paraphrased from claude-motion, one credit line "Timing numbers adapted from whaleyxbt/claude-motion, MIT"): entrance 0.6–0.9 s `enter`; exit about half, `exit`; stagger 0.09 s per word, 0.2–0.25 s per item; hold ≥ 1 s + 0.25 s per word beyond three and ≥ 2 s on the closing frame; safe area 60 px at 1080 on the short side (60 * min(w,h) / 1080, ruled 2026-10-19); one accent colour; linear only for continuous motion; one hero moment. Do not claim anything is enforced beyond what `check.mjs` checks. Bump the plugin patch version. **Commit** `feat(make-motion): motion-design reference, named eases, opt-in exits`.
 
 ---
 

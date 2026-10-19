@@ -6,7 +6,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
-import { safeMargin } from '../scripts/check.mjs';
+import * as checkModule from '../scripts/check.mjs';
+
+const { safeMargin } = checkModule;
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CHECK = path.join(root, 'scripts/check.mjs');
@@ -21,10 +23,11 @@ async function skipUnlessBrowser(t) {
   return !browserPresent;
 }
 
-// A one-scene spec in a temp folder.
-function specFile(elements, { size = [1920, 1080], duration = 2 } = {}) {
+// A one-scene spec in a temp folder; `files` maps extra file names to their contents.
+function specFile(elements, { size = [1920, 1080], duration = 2, files = {} } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'motion-check-'));
   const file = path.join(dir, 'motion.json');
+  for (const [name, body] of Object.entries(files)) writeFileSync(path.join(dir, name), body);
   writeFileSync(file, JSON.stringify({ size, fps: 30, scenes: [{ id: 's', duration, elements }] }));
   return file;
 }
@@ -147,4 +150,83 @@ test('an invalid spec exits 1 with the validation errors, before any browser sta
   const r = check([file], { PA_NO_BROWSER: '1' });
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /scenes\[0\]\.elements\[0\]/);
+});
+
+// ---- review round 1 ------------------------------------------------------------------------------
+
+test('ok-crossfade: a text swap in one spot (one fades out as the other fades in) is not an overlap', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([path.join(FIXTURES, 'ok-crossfade.json')]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+test('ok-slide-out: an opaque exit that leaves the canvas entirely is gone, not clipped', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([path.join(FIXTURES, 'ok-slide-out.json')]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+test('a box only partly off the canvas still leaves the safe area', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  // "Hello" at x 1900 straddles the right edge.
+  const r = check([specFile([{ id: 'edge', type: 'text', text: 'Hello', x: 1900, y: 540, fontSize: 64 }])]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.deepEqual(lines(r.stdout), ['scenes[0].elements[0]: text "edge" leaves the safe area (right) at 0.10s', 'check: 1 problem']);
+});
+
+test('counters are checked like text: the safe area and overlaps', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const high = check([specFile([{ id: 'big', type: 'counter', to: 42, x: 960, y: 5, fontSize: 96 }])]);
+  assert.equal(high.status, 1, high.stdout + high.stderr);
+  assert.deepEqual(lines(high.stdout), ['scenes[0].elements[0]: counter "big" leaves the safe area (top) at 0.10s', 'check: 1 problem']);
+  const onTop = check([specFile([
+    { id: 'label', type: 'text', text: 'Revenue', x: 960, y: 540, fontSize: 64 },
+    { id: 'num', type: 'counter', to: 42, x: 960, y: 550, fontSize: 64 },
+  ])]);
+  assert.equal(onTop.status, 1, onTop.stdout + onTop.stderr);
+  assert.deepEqual(lines(onTop.stdout), ['scenes[0].elements[1]: counter "num" overlaps text "label" at 0.10s', 'check: 1 problem']);
+});
+
+test('a crash prints "check crashed: ..." alone (no tally) and JSON says crashed', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  // A .png that is not an image passes validation (the file exists) but the page cannot decode it.
+  const file = specFile([{ id: 'pic', type: 'image', src: 'broken.png', x: 960, y: 540, width: 200, height: 200 }], { files: { 'broken.png': 'not a png' } });
+  const r = check([file]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.deepEqual(lines(r.stdout), ['check crashed: image failed to load: broken.png']);
+  const json = check([file, '--json']);
+  assert.equal(json.status, 1);
+  assert.deepEqual(JSON.parse(json.stdout), { ok: false, crashed: true, errors: [{ path: '', message: 'check crashed: image failed to load: broken.png' }] });
+});
+
+test('waitReady: a page that never becomes ready fails fast with a clear message', async () => {
+  const stuck = { waitForFunction: async () => {}, evaluate: () => new Promise(() => {}) };
+  const started = Date.now();
+  await assert.rejects(checkModule.waitReady(stuck, 50), /the page did not become ready within 0\.05 s/);
+  assert.ok(Date.now() - started < 2000);
+});
+
+test('--theme draws a spec that names no theme in that theme (poster slams the title in by 0.5 s)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([path.join(FIXTURES, 'bad-safe-area.json'), '--theme', 'poster']);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.deepEqual(lines(r.stdout), ['scenes[0].elements[0]: text "title" leaves the safe area (top) at 0.60s', 'check: 1 problem']);
+});
+
+test('--theme reaches the page: the same title is 950 px wide in dusk, 762 px in poster (measured)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  // Right edge at x + width / 2: dusk 1905 (past the 1860 safe line), poster 1811 (inside).
+  const file = specFile([{ id: 'title', type: 'text', role: 'title', text: 'Quarterly results', x: 1430, y: 540, fontSize: 120 }]);
+  const dusk = check([file]);
+  assert.equal(dusk.status, 1, dusk.stdout + dusk.stderr);
+  assert.match(dusk.stdout, /text "title" leaves the safe area \(right\)/);
+  const poster = check([file, '--theme', 'poster']);
+  assert.equal(poster.status, 0, poster.stdout + poster.stderr);
+});
+
+test('--theme: an unknown name or a missing value exits 2', () => {
+  for (const args of [['--theme', 'nope'], ['--theme']]) {
+    const r = check([path.join(FIXTURES, 'bad-safe-area.json'), ...args], { PA_NO_BROWSER: '1' });
+    assert.equal(r.status, 2, `${JSON.stringify(args)}: ${r.stdout}${r.stderr}`);
+  }
 });
