@@ -47,19 +47,23 @@ function dashboardIn(t, queries, charts) {
   return dir;
 }
 
-dtest('bar golden', async () => {
-  const graph = await lift('revenue-by-region');
-  assertGraph(graph);
-  assert.equal(graph.kind, 'chart');
-  assert.equal(graph.fallback.kind, 'svg');
-  assert.ok(graph.fallback.svg.startsWith('<svg') && graph.fallback.svgDark.startsWith('<svg'), 'a light and a dark drawing');
-  const golden = path.join(GOLDEN_DIR, 'lift-bar.json');
-  if (process.env.UPDATE_GOLDEN === '1') {
-    fs.mkdirSync(GOLDEN_DIR, { recursive: true });
-    fs.writeFileSync(golden, layout(goldenOf(graph)));
-  }
-  assert.deepEqual(JSON.parse(JSON.stringify(goldenOf(graph))), JSON.parse(fs.readFileSync(golden, 'utf8')));
-});
+// Bar and donut goldens (UPDATE_GOLDEN=1 rewrites them).
+for (const [name, chart, kind] of [['bar', 'revenue-by-region', 'box'], ['donut', 'share', 'tube']]) {
+  dtest(`${name} golden`, async () => {
+    const graph = await lift(chart);
+    assertGraph(graph);
+    assert.equal(graph.kind, 'chart');
+    assert.equal(graph.fallback.kind, 'svg');
+    assert.ok(graph.fallback.svg.startsWith('<svg') && graph.fallback.svgDark.startsWith('<svg'), 'a light and a dark drawing');
+    assert.ok(kind === 'tube' ? graph.tubes.length > 0 : graph.batches.some((b) => b.shape === kind));
+    const golden = path.join(GOLDEN_DIR, `lift-${name}.json`);
+    if (process.env.UPDATE_GOLDEN === '1') {
+      fs.mkdirSync(GOLDEN_DIR, { recursive: true });
+      fs.writeFileSync(golden, layout(goldenOf(graph)));
+    }
+    assert.deepEqual(JSON.parse(JSON.stringify(goldenOf(graph))), JSON.parse(fs.readFileSync(golden, 'utf8')));
+  });
+}
 
 dtest('same input same bytes', async () => {
   for (const id of ['revenue-by-region', 'trend', 'heat', 'share']) {
@@ -83,6 +87,37 @@ dtest('bar: towers rise from zero in proportion to the value, every value exact 
   assert.ok(g.labels.some((l) => l.text === '2,000'), 'value ticks');
   assert.deepEqual(g.fallback.columns, ['region', 'revenue']);
   assert.equal(g.fallback.rows.length, 4);
+});
+
+dtest('rows that share a bar stack there: the tower is their sum and every row is reachable', async (t) => {
+  const dir = dashboardIn(t, {
+    raw: 'SELECT region, amount FROM sales',
+    raw_product: 'SELECT region, product, amount FROM sales',
+  }, [
+    { id: 'raw', title: 'Raw', query: 'raw', kind: 'bar', x: 'region', y: 'amount' },
+    { id: 'lanes', title: 'Lanes', query: 'raw_product', kind: 'grouped-bar', x: 'region', y: 'amount', color: 'product' },
+  ]);
+  const g = await lift('raw', {}, DASHBOARD, dir);
+  assert.equal(g.items.length, 40, 'a row is an item');
+  const towers = g.batches[0].instances;
+  assert.equal(towers.length, 40, 'and a segment');
+  const column = (x) => towers.filter((i) => i[0] === x);
+  const east = column(towers.find((i) => g.items[i[6]].label === 'East')[0]);
+  const sum = east.reduce((n, i) => n + g.items[i[6]].value, 0);
+  assert.equal(sum, 6150, 'East adds up as the 2D chart does');
+  const spans = east.map((i) => [i[1] - i[4] / 2, i[1] + i[4] / 2]).sort((a, b) => a[0] - b[0]);
+  assert.ok(Math.abs(spans[0][0]) < 0.002 && spans.every((s, k) => k === 0 || Math.abs(s[0] - spans[k - 1][1]) < 0.003), 'segments are contiguous from 0');
+  const total = spans.at(-1)[1];
+  const south = column(towers.find((i) => g.items[i[6]].label === 'South')[0]);
+  const southTotal = Math.max(...south.map((i) => i[1] + i[4] / 2));
+  assert.ok(Math.abs(total / 6150 - southTotal / 5127) < 0.002, 'tower height is proportional to the sum');
+  assert.ok(g.labels.some((l) => l.text === '8,000'), 'the axis reaches the stacked total');
+  const grouped = await lift('lanes', {}, DASHBOARD, dir);
+  const all = grouped.batches.flatMap((b) => b.instances).filter((i) => i[6] >= 0);
+  const home = all.find((i) => grouped.items[i[6]].label === 'East · Gizmo');
+  const lane = all.filter((i) => i[0] === home[0] && i[2] === home[2]);
+  assert.ok(lane.length > 1, 'East Gizmo has several rows in its lane');
+  assert.equal(lane.reduce((n, i) => n + grouped.items[i[6]].value, 0), 4896, 'and they add up to the lane total');
 });
 
 dtest('negative values go below the floor, and the floor is drawn at 0', async () => {
@@ -304,6 +339,18 @@ dtest('degenerate data yields a finite graph: one row, all zeros, empty result',
   }
   const zeros = await lift('zeros', {}, DASHBOARD, dir);
   assert.ok(zeros.batches[0].instances.every((i) => i[4] > 0), 'a zero value is a visible marker');
+});
+
+dtest('category text that looks like a Vega id is not renumbered; the ids stay deterministic', async (t) => {
+  const dir = dashboardIn(t, { q: "SELECT 'clip7' AS region, 5.0 AS revenue UNION ALL SELECT 'gradient_3', 3.0 UNION ALL SELECT 'url(#clip9)', 1.0" }, [{ id: 'c', title: 'C', query: 'q', kind: 'bar', x: 'region', y: 'revenue' }]);
+  const one = await lift('c', {}, DASHBOARD, dir);
+  const two = await lift('c', {}, DASHBOARD, dir);
+  for (const svg of [one.fallback.svg, one.fallback.svgDark]) {
+    assert.ok(svg.includes('>clip7<') && svg.includes('>gradient_3<') && svg.includes('>url(#clip9)<'), 'the labels keep their text');
+    assert.ok(/id="[^"]*clip0"/.test(svg), 'real ids are renumbered from 0');
+  }
+  assert.equal(one.fallback.svg, two.fallback.svg);
+  assert.equal(one.fallback.svgDark, two.fallback.svgDark);
 });
 
 dtest('hostile labels stay text: the graph carries them verbatim and the page escapes them', async (t) => {

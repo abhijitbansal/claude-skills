@@ -1,7 +1,8 @@
 // bar, stacked-bar, grouped-bar and histogram as box towers. Towers rise from the floor (y = 0) in
 // proportion to the value, or hang below it for a negative one. Stacked bars stack in one column (positive
 // values up from 0, negative down); grouped bars stand in one lane per colour; a histogram is a row of
-// touching towers, one per bin.
+// touching towers, one per bin. Rows that share a tower's place (the same x, and for grouped bars the same
+// colour) stack there, each its own item, as the 2D chart adds them up: no row hides behind another.
 import { displayValue, groupColour } from '../lib/palette.mjs';
 import { orderOf } from './dashboard-data.mjs';
 import { MIN_MARK, WIDTH, focusCollector, frameOf, lanesOf, legendOf, slotsOf, valueAxis } from './dashboard-frame.mjs';
@@ -23,15 +24,17 @@ function tower(x, z, w, d, height, base = 0) {
   return { box: [x, height < 0 ? base - length / 2 : base + length / 2, z, w, length, d], top: height < 0 ? base - length : base + length };
 }
 
-// [lo, hi] of what the towers reach: stacked columns add up, positive and negative apart.
+// The tower a row belongs to: its x column, and for grouped bars its colour lane too.
+const columnOf = (kind, p) => (kind === 'grouped-bar' ? `${p.x}\u0000${p.color}` : p.x);
+
+// [lo, hi] of what the towers reach: rows in one column add up, positive and negative apart.
 function reach(model) {
-  const values = model.points.map((p) => p.y);
-  if (model.kind !== 'stacked-bar') return [Math.min(0, ...values), Math.max(0, ...values)];
   const up = new Map();
   const down = new Map();
   for (const p of model.points) {
     const sums = p.y >= 0 ? up : down;
-    sums.set(p.x, (sums.get(p.x) ?? 0) + p.y);
+    const key = columnOf(model.kind, p);
+    sums.set(key, (sums.get(key) ?? 0) + p.y);
   }
   return [Math.min(0, ...down.values()), Math.max(0, ...up.values())];
 }
@@ -45,7 +48,6 @@ export function barsPart(model, { units, niceStep }) {
   const names = roles.color === undefined ? [roles.y] : model.groupNames;
   const groupOf = new Map(names.map((n, i) => [n, i]));
   const grouped = kind === 'grouped-bar';
-  const stacked = kind === 'stacked-bar';
   const lane = lanesOf(grouped ? names.length : 1);
   const axis = valueAxis(...reach(model), niceStep);
   const w = Math.min(MAX_TOWER, slot * TOWER_SHARE);
@@ -58,9 +60,10 @@ export function barsPart(model, { units, niceStep }) {
     const x = at(xIndex.get(p.x));
     const z = lane.z(grouped ? g : 0);
     const height = p.y * axis.k;
-    const sums = stack.get(p.x) ?? { up: 0, down: 0 };
-    const { box, top } = tower(x, z, w, d, height, stacked ? (p.y >= 0 ? sums.up : sums.down) : 0);
-    if (stacked && p.y !== 0) stack.set(p.x, p.y >= 0 ? { ...sums, up: sums.up + height } : { ...sums, down: sums.down + height });
+    const column = columnOf(kind, p);
+    const sums = stack.get(column) ?? { up: 0, down: 0 };
+    const { box } = tower(x, z, w, d, height, p.y >= 0 ? sums.up : sums.down);
+    if (p.y !== 0) stack.set(column, p.y >= 0 ? { ...sums, up: sums.up + height } : { ...sums, down: sums.down + height });
     batches[g].instances.push([...box, idx]);
     const label = roles.color === undefined ? p.x : `${p.x} · ${p.color}`;
     const place = [x, box[1], z];

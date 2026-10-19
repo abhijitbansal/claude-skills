@@ -80,9 +80,15 @@ async function fetchChart({ dashboard, chart }, { dir, allowOutside, siblingRoot
 
 // Vega numbers its clip paths and gradients from counters that live as long as the process, so one drawing differs
 // between two builds in it. Renumbered from 0 in order of appearance, a page's bytes depend on its spec alone.
+// Only ids and their references in attributes are touched (id="...", ="url(#...)", href="#..."); text a chart shows is left alone.
+const ID_CONTEXT = /(\bid="|="url\(#|href="#)([^"')]*?)(clip|gradient_)(\d+)(?=["')])/g;
 function steadyIds(svg) {
   const order = { clip: new Map(), gradient_: new Map() };
-  return svg.replace(/(clip|gradient_)(\d+)/g, (_, family, n) => `${family}${order[family].get(n) ?? order[family].set(n, order[family].size).get(n)}`);
+  return svg.replace(ID_CONTEXT, (_, lead, before, family, n) => {
+    const seen = order[family];
+    if (!seen.has(n)) seen.set(n, seen.size);
+    return `${lead}${before}${family}${seen.get(n)}`;
+  });
 }
 
 // ---- the graph ------------------------------------------------------------------------
