@@ -113,6 +113,7 @@ test('a deck shows the fallback table only: no runtime, no mount script, no canv
   assert.ok(!html.includes('data-pa-scene'));
   assert.ok(!html.includes('PS.mountScene'));
   assert.match(html, /\.sc-fb-static \{/, 'the table is styled');
+  assert.match(html, /<div class="sc-fallback sc-fb-static"[^>]* tabindex="0">/, 'focusable, so slides.js lets the arrows scroll it');
 });
 
 test('print shows the table, not the frame', async () => {
@@ -225,6 +226,33 @@ test('missing make-scene gives install command', async () => {
     return true;
   });
   assert.match((await page.buildPage(doc([text]), { dir: root })).html, /<!doctype html>/, 'a page with no scene never needs it');
+});
+
+// ---- per-scene css ------------------------------------------------------------------------------
+
+test('each scene css ships once: the chrome once, a lift fallback css per distinct extra', async () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-fakesc-')));
+  made.push(root);
+  const copy = path.join(root, 'make-explainer');
+  fs.mkdirSync(copy);
+  for (const name of ['scripts', 'shared', 'template', 'references', 'package.json']) fs.cpSync(path.join(SKILL, name), path.join(copy, name), { recursive: true });
+  fs.symlinkSync(path.join(SKILL, 'node_modules'), path.join(copy, 'node_modules'));
+  const api = path.join(root, 'make-scene/scripts/lib/api.mjs');
+  fs.mkdirSync(path.dirname(api), { recursive: true });
+  fs.writeFileSync(api, `const CHROME = '.fake-chrome{}';
+export const sceneCss = () => CHROME;
+export const validateSpec = async () => ({ ok: true, errors: [] });
+export const buildScene = async (spec, { idPrefix }) => ({
+  html: '<div class="pa-scene" id="' + idPrefix + '" data-pa-scene><script type="application/json">{}</script></div>',
+  css: CHROME + (spec.extra ? '\\n' + spec.extra : ''), runtime: 'window.PAScene={mountScene(){}};', fallbackHtml: '', bytes: 1,
+});
+`);
+  const page = await import(pathToFileURL(path.join(copy, 'scripts/lib/page.mjs')).href);
+  const { html } = await page.buildPage(doc([section({ extra: '.lift-a{}' }), section({ extra: '.lift-b{}' }), section({ extra: '.lift-a{}' }), section({})]), { dir: root });
+  const n = (s) => html.split(s).length - 1;
+  assert.equal(n('.fake-chrome{}'), 1);
+  assert.equal(n('.lift-a{}'), 1);
+  assert.equal(n('.lift-b{}'), 1);
 });
 
 // ---- doctor ---------------------------------------------------------------------------------
