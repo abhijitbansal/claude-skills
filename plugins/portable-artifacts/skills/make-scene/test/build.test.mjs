@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { build, resolveScenePath } from '../scripts/build.mjs';
+import { WORLDS } from '../scripts/worlds/index.mjs';
 import { MAX_PAGE_BYTES } from '../scripts/lib/bundle.mjs';
 import { PINNED_ENV, ROWS, tempDir, writeScene } from './helpers/scene-fixtures.mjs';
 
@@ -196,4 +197,24 @@ test('a lift spec is a clear error until its module exists', async (t) => {
   assert.equal(result.ok, false);
   assert.equal(result.errors[0].path, 'lift');
   assert.match(result.errors[0].message, /not available yet/);
+});
+
+test('a world that fails to build is a "not available" row; the page is still written and the build succeeds', async (t) => {
+  const file = writeScene(t, { ...BASE, world: 'city' });
+  const out = tempDir(t);
+  const real = WORLDS.forest;
+  WORLDS.forest = () => {
+    throw new Error('forest exploded\nsecond line');
+  };
+  t.after(() => {
+    WORLDS.forest = real;
+  });
+  const result = await build(file, { env: env(out) });
+  assert.equal(result.ok, true);
+  assert.ok(fs.existsSync(result.out), 'the page exists');
+  const forest = result.alternatives.find((a) => a.world === 'forest');
+  assert.equal(forest.eligible, false);
+  assert.match(result.table, /forest\s+\| not available: forest exploded\s+\| 0\s+\| —/);
+  assert.doesNotMatch(result.table.split('\n').find((l) => l.startsWith('forest')), /--world|second line/);
+  assert.ok(result.alternatives.find((a) => a.world === 'galaxy').eligible, 'the other worlds are unaffected');
 });

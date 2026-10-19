@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 export const FIXTURES = new URL('../fixtures/', import.meta.url);
-export const PINNED_ENV = { SOURCE_DATE_EPOCH: '1760832000' }; // 2025-10-19
+export const PINNED_ENV = { SOURCE_DATE_EPOCH: '1792368000' }; // 2026-10-19
 
 const ROWS = [
   { group: 'api', t: '2026-W30', value: 12, label: 'api W30' },

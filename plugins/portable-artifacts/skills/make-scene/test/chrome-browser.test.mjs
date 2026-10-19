@@ -120,3 +120,46 @@ test('PNG export downloads a real image of the current frame, even when the loop
   assert.equal(bytes.subarray(1, 4).toString(), 'PNG');
   assert.ok(bytes.length > 5000, `a rendered frame, not a blank canvas (${bytes.length} bytes)`);
 });
+
+test('hovering a planet shows that planet, never the link whose hover tube encloses it', async (t) => {
+  if (!browser) return t.skip(skipReason);
+  // Seven systems, every pair linked: links cross over many planets, so a hit tube is often nearer than the planet behind it.
+  const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+  const rows = names.flatMap((group, g) => [1, 2, 3, 4, 5].map((step) => ({ group, t: step, value: 3 + ((g * 5 + step * 3) % 9) })));
+  const links = names.flatMap((from, i) => names.slice(i + 1).map((to) => ({ from, to, value: i + 2 })));
+  const dir = tempDir(t);
+  const file = writeScene(t, { title: 'Hover planets', world: 'galaxy', units: 'calls', data: { file: 'rows.json' } }, { rows, links });
+  const built = await build(file, { out: `${dir}/page.html`, env: { ...PINNED_ENV, PA_OUTPUT_DIR: dir } });
+  assert.equal(built.ok, true);
+  const context = await browser.newContext({ viewport: { width: 1000, height: 700 } });
+  t.after(() => context.close());
+  const page = await context.newPage();
+  await page.goto(`file://${built.out}`);
+  await page.waitForTimeout(600);
+  const result = await page.evaluate(async () => {
+    // A second, static mount of the same graph (reduced motion: planets sit at their time-0 pose) to read the api.
+    const graph = JSON.parse(document.querySelector('script[type="application/json"]').textContent);
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:0;top:0;width:1000px;height:700px;z-index:99';
+    host.innerHTML = '<div data-scene-canvas style="position:absolute;inset:0"></div><div data-scene-fallback></div>';
+    document.body.append(host);
+    const api = PAScene.mountScene(host, graph, { reducedMotion: true });
+    await new Promise((r) => setTimeout(r, 400));
+    const rect = api.canvas.getBoundingClientRect();
+    const planets = graph.anim.orbits.flatMap((o) => graph.batches.find((b) => b.id === o.batch).instances);
+    const seen = planets.map((p) => {
+      const at = api.project(p[0], p[1], p[2]);
+      if (!at.visible) return null;
+      const hit = api.pickHit(rect.left + at.x, rect.top + at.y);
+      return { want: p[6], item: hit.item, tube: hit.tube };
+    }).filter(Boolean);
+    return { total: planets.length, seen, state: host.dataset.sceneState };
+  });
+  if (result.state !== 'ready') return t.skip('WebGL unavailable in this Chromium');
+  assert.ok(result.seen.length >= 25, `most of the ${result.total} planets are on screen (${result.seen.length})`);
+  const links_ = result.seen.filter((s) => s.tube >= 0);
+  assert.deepEqual(links_, [], 'no planet reads as a link');
+  assert.ok(result.seen.every((s) => s.item >= 0), 'every planet reads as an item');
+  const exact = result.seen.filter((s) => s.item === s.want).length;
+  assert.ok(exact >= result.seen.length - 2, `the planet itself (not a neighbour) is hit: ${exact}/${result.seen.length}`);
+});

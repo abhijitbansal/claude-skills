@@ -13,7 +13,7 @@ const shellArg = (s) => (SAFE_ARG.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'
 
 function row(alt, { current, pageBytes, skillDir, specPath }) {
   const isCurrent = alt.world === current;
-  if (!alt.eligible) return [alt.world, notAvailable(alt.needs), '0', '—', '—', ''];
+  if (!alt.eligible) return [alt.world, alt.unavailable === undefined ? notAvailable(alt.needs) : `not available: ${alt.unavailable}`, '0', '—', '—', ''];
   const size = isCurrent ? kb(pageBytes) : `~${kb(alt.estBytes)}`;
   const render = alt.weight === 'heavy' ? `heavy; ${HEAVY_NOTE}` : alt.weight;
   const command = isCurrent ? '' : `node ${shellArg(`${skillDir}/scripts/build.mjs`)} ${shellArg(specPath)} --world ${alt.world}`;

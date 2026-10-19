@@ -54,8 +54,14 @@ async function alternativesFor({ spec, dir, theme, built, bytes }) {
       rows.push({ world, eligible: false, needs: fit[world].needs, reason: reasons[world], estBytes: 0, weight: '' });
       continue;
     }
-    const other = world === built.world ? built : await buildScene({ ...spec, world }, { dir, theme, idPrefix: ID_PREFIX });
-    rows.push({ world, eligible: true, reason: reasons[world], estBytes: bytes - built.bytes + other.bytes, weight: renderWeight(other.graph) });
+    try {
+      const other = world === built.world ? built : await buildScene({ ...spec, world }, { dir, theme, idPrefix: ID_PREFIX });
+      rows.push({ world, eligible: true, reason: reasons[world], estBytes: bytes - built.bytes + other.bytes, weight: renderWeight(other.graph) });
+    } catch (e) {
+      // The page is already written: a world that fails to build is a row that says so, never a failed build.
+      const why = String(e?.message ?? e).split('\n')[0];
+      rows.push({ world, eligible: false, unavailable: why, reason: `not available: ${why}`, estBytes: 0, weight: '' });
+    }
   }
   return rows;
 }

@@ -290,8 +290,14 @@ function mount(host, graph, opts = {}) {
         if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) return NO_HIT;
         camera.updateMatrixWorld();
         raycaster.setFromCamera(ndc, camera);
-        const [hit] = raycaster.intersectObjects(built.pickables, false);
-        return hit ? { item: built.itemAt(hit), tube: built.tubeAt(hit) } : NO_HIT;
+        // A link's hit tube is fat and invisible, so it must not hide what it encloses: data under the point
+        // (a planet, a building) wins over a link, even when the link's tube is nearer.
+        const hits = raycaster.intersectObjects(built.pickables, false);
+        const data = hits.find((h) => built.tubeAt(h) < 0 && built.itemAt(h) >= 0);
+        if (data) return { item: built.itemAt(data), tube: -1 };
+        const [nearest] = hits;
+        if (nearest && built.tubeAt(nearest) >= 0) return { item: built.itemAt(nearest), tube: built.tubeAt(nearest) };
+        return NO_HIT; // nothing, or decoration (a star) in front of any link
       },
       /** Item index under a viewport point, or -1. */
       pick(clientX, clientY) {

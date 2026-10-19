@@ -90,7 +90,7 @@ test('same spec same bytes', async () => {
   const a = await page(citySpec(), { env: PINNED_ENV });
   const b = await page(citySpec(), { env: PINNED_ENV });
   assert.equal(a.html, b.html);
-  const other = await page(citySpec(), { env: { SOURCE_DATE_EPOCH: '1760918400' } });
+  const other = await page(citySpec(), { env: { SOURCE_DATE_EPOCH: '1792454400' } });
   assert.notEqual(other.html, a.html, 'the build date is the only thing that moves');
 });
 
@@ -103,7 +103,7 @@ test('chrome: title, subtitle, theme toggle, favicon, generator and provenance',
   assert.ok(html.includes('data-theme-toggle'));
   assert.match(html, /<link rel="icon" type="image\/svg\+xml"/);
   assert.match(html, /<meta name="generator" content="portable-artifacts make-scene; model=haiku; effort=low; agent=test">/);
-  assert.match(html, /<p class="pa-provenance"[^>]*>make-scene · haiku · low effort · test · 19 Oct 2025<\/p>/);
+  assert.match(html, /<p class="pa-provenance"[^>]*>make-scene · haiku · low effort · test · 19 Oct 2026<\/p>/);
   assert.match(html, /PAScene\.initAll\(\{\s*globalKeys:\s*true\s*\}\)/);
 });
 

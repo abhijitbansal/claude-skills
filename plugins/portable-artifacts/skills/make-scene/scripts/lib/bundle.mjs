@@ -13,8 +13,8 @@ export const BUNDLE_FILE = path.join(SKILL_DIR, 'template', 'vendor', 'scene-run
 
 const KB = 1024;
 // Page ceiling = ceil((bundle + 512 KB scene data + 256 KB fonts/chrome) / 64 KB) * 64 KB.
-// Bundle measured 600.6 KB (614986 bytes incl. header) on 2026-10-19 with the Task 8 chrome (tooltip, legend, Explore, tour, labels, export); it grows as Task 10 adds modules.
-export const MAX_PAGE_BYTES = Math.ceil((614986 + 512 * KB + 256 * KB) / (64 * KB)) * 64 * KB; // 22 * 64 KB = 1408 KB
+// Bundle measured 600.7 KB (615101 bytes incl. header) on 2026-10-19 with the Task 8 chrome (tooltip, legend, Explore, tour, labels, export); it grows as Task 10 adds modules.
+export const MAX_PAGE_BYTES = Math.ceil((615101 + 512 * KB + 256 * KB) / (64 * KB)) * 64 * KB; // 22 * 64 KB = 1408 KB
 
 const HEADER_RE = /^\/\* make-scene runtime; sources sha256:([0-9a-f]{64}); three@(\S+); MIT \(see THIRD_PARTY_NOTICES\.md\) \*\//;
 
