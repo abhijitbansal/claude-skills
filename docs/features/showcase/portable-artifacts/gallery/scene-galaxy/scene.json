@@ -1,0 +1,26 @@
+{
+  "title": "Services and their calls",
+  "subtitle": "One star per service; planets are endpoints, trails are calls",
+  "world": "galaxy",
+  "theme": "dusk",
+  "data": {
+    "rows": [
+      { "group": "api", "t": 1, "value": 40, "label": "api /orders" },
+      { "group": "api", "t": 2, "value": 25, "label": "api /users" },
+      { "group": "web", "t": 1, "value": 30, "label": "web /home" },
+      { "group": "web", "t": 2, "value": 12, "label": "web /cart" },
+      { "group": "billing", "t": 1, "value": 15, "label": "billing /charge" },
+      { "group": "search", "t": 1, "value": 20, "label": "search /query" }
+    ]
+  },
+  "links": [
+    { "from": "web", "to": "api", "value": 120 },
+    { "from": "api", "to": "billing", "value": 40 },
+    { "from": "web", "to": "search", "value": 65 }
+  ],
+  "units": "calls per second",
+  "tour": [
+    { "title": "Everything starts at web", "focus": ["web"], "caption": "Two trails leave the storefront." },
+    { "title": "Billing sits behind the API", "focus": ["billing"] }
+  ]
+}
