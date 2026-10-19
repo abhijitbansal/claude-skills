@@ -25,8 +25,11 @@ test('card inks: the text colour on each flavor\'s solid fill passes 4.5:1 in bo
 });
 
 test('card inks guardrail: the same check reports an unsafe pair and a missing theme', () => {
-  const bad = { press: { light: ['accent', 'surface'], dark: ['text', 'page'] }, nope: { light: ['text', 'page'] } };
-  assert.deepEqual(cardInkProblems(bad, loaded, contrastRatio), ['press light: surface on accent is 4.03:1', 'nope light: page on text is 0.00:1']);
+  const bad = { press: { light: ['page', 'surface'], dark: ['text', 'page'] }, nope: { light: ['text', 'page'] } };
+  const light = loaded.press.light;
+  const unsafe = `press light: surface on page is ${contrastRatio(light.surface, light.page).toFixed(2)}:1`;
+  assert.ok(contrastRatio(light.surface, light.page) < 4.5, 'the fixture pair must stay unsafe');
+  assert.deepEqual(cardInkProblems(bad, loaded, contrastRatio), [unsafe, 'nope light: page on text is 0.00:1']);
 });
 
 test('flavorVars: light on :root, dark under both dark selectors; empty for classic', () => {
