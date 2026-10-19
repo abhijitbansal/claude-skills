@@ -175,3 +175,26 @@ test('assertGraph rejects a surface size without exactly 3 finite numbers; final
   raw.surfaces = [{ id: 's0', nx: 2, nz: 2, size: [10, 6], heights: [0, 0, 0, 0], bands: [], cells: [] }];
   assert.throws(() => finalizeGraph(raw), /surfaces\[0\]\.size/);
 });
+
+test('finalizeGraph bounds include every orbit disc (centre +/- max r in x and z)', () => {
+  const g = sample();
+  g.anim = { sway: [], orbits: [{ batch: 'b0', center: [4, 1, -2], r: [1.5, 6], phase: [0, 1], speed: [1, 1] }] };
+  const out = finalizeGraph(g);
+  assert.equal(out.bounds.max[0], 10);
+  assert.equal(out.bounds.min[0], -2);
+  assert.equal(out.bounds.max[2], 4);
+  assert.equal(out.bounds.min[2], -8);
+  assert.equal(out.bounds.max[1], 2, 'orbits are flat: y is untouched');
+});
+
+test('assertGraph checks optional tube label/display and fallback.links', () => {
+  const ok = finalizeGraph({ ...sample(), tubes: [{ id: 'e0', points: [[0, 0, 0], [1, 0, 0]], radius: 0.05, colour: 'text2', item: null, label: 'a → b', display: '3 commits' }],
+    fallback: { ...tableFallback([]), links: { columns: ['from', 'to', 'value'], rows: [['a', 'b', '3 commits']] } } });
+  assert.doesNotThrow(() => assertGraph(ok));
+  const tube = (extra) => ({ ...ok, tubes: [{ ...ok.tubes[0], ...extra }] });
+  assert.throws(() => assertGraph(tube({ label: 5 })), /tubes\[0\]\.label/);
+  assert.throws(() => assertGraph(tube({ display: 5 })), /tubes\[0\]\.display/);
+  assert.throws(() => assertGraph({ ...ok, fallback: { ...ok.fallback, links: { columns: ['from', 'to', 'value'], rows: [['a', 'b']] } } }), /fallback\.links\.rows\[0\]/);
+  assert.throws(() => assertGraph({ ...ok, fallback: { ...ok.fallback, links: { columns: ['x'], rows: [] } } }), /fallback\.links\.columns/);
+  assert.doesNotThrow(() => assertGraph({ ...ok, tubes: [{ ...ok.tubes[0], label: undefined, display: undefined }], fallback: tableFallback([]) }));
+});

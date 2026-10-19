@@ -63,6 +63,11 @@ function boundsOf(g) {
   };
   for (const b of g.batches) for (const i of b.instances) grow(i, [i[3] / 2, i[4] / 2, i[5] / 2]);
   for (const t of g.tubes) for (const p of t.points) grow(p, [t.radius, t.radius, t.radius]);
+  // Orbiting instances sweep a flat disc around the centre; take the widest one.
+  for (const o of g.anim?.orbits ?? []) {
+    const reach = o.r.reduce((m, r) => Math.max(m, r), 0);
+    grow(o.center, [reach, 0, reach]);
+  }
   g.surfaces.forEach((s, i) => {
     if (!isSize(s.size)) fail(`surfaces[${i}].size`, 'expected [sx, sz, sy]: exactly 3 finite numbers');
     const [sx, sz, sy] = s.size;
@@ -147,6 +152,27 @@ function checkSurfaces(g) {
   });
 }
 
+function checkTubes(g) {
+  g.tubes.forEach((t, i) => {
+    for (const k of ['label', 'display']) {
+      if (t[k] !== undefined && typeof t[k] !== 'string') fail(`tubes[${i}].${k}`, 'expected a string when present');
+    }
+  });
+}
+
+const LINK_COLUMNS = ['from', 'to', 'value'];
+
+function checkLinkTable(links) {
+  if (links === undefined) return;
+  if (JSON.stringify(links.columns) !== JSON.stringify(LINK_COLUMNS)) fail('fallback.links.columns', `expected ${JSON.stringify(LINK_COLUMNS)}`);
+  if (!Array.isArray(links.rows)) fail('fallback.links.rows', 'expected an array');
+  links.rows.forEach((row, i) => {
+    if (!Array.isArray(row) || row.length !== LINK_COLUMNS.length || !row.every((c) => typeof c === 'string')) {
+      fail(`fallback.links.rows[${i}]`, 'expected [from, to, value] as 3 strings');
+    }
+  });
+}
+
 /** Structural check of a finished graph; throws InternalError naming the path. */
 export function assertGraph(g) {
   if (g?.v !== 1) fail('v', 'expected 1');
@@ -162,9 +188,11 @@ export function assertGraph(g) {
   });
   checkBatches(g);
   checkSurfaces(g);
+  checkTubes(g);
   for (const [key, view] of Object.entries(g.focus ?? {})) {
     if (key !== key.toLowerCase()) fail(`focus.${key}`, 'key is not lowercase');
     if (!isView(view)) fail(`focus.${key}`, 'position and target must be 3 finite numbers');
   }
   if (!Array.isArray(g.fallback?.rows)) fail('fallback.rows', 'expected an array');
+  checkLinkTable(g.fallback.links);
 }

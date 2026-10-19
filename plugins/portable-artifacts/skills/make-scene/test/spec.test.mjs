@@ -352,6 +352,14 @@ test('top-level links: shape-checked and must name groups', async () => {
   assert.match(errorAt(neg, 'links[0].value').message, /negative/);
 });
 
+test('a link from a group to itself is rejected', async () => {
+  const links = [{ from: 'api', to: 'web' }, { from: 'api', to: 'web' }, { from: 'web', to: 'api' }, { from: 'api', to: 'api' }];
+  const r = await check(scene({ links }));
+  assert.equal(r.ok, false);
+  assert.equal(errorAt(r, 'links[3]').message, '"api" links to itself; a link needs two different groups');
+  assert.equal(r.errors.length, 1);
+});
+
 test('file source: rows and links load, rows are validated', async () => {
   const spec = { title: 'T', data: { file: 'rows.json' } };
   const data = loadData(spec, FIX);

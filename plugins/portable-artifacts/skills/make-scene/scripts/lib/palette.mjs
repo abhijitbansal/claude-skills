@@ -38,17 +38,22 @@ export function groupsFrom(rows) {
   return [...groupIndex(rows).keys()].map((name, i) => ({ name, colour: groupColour(i) }));
 }
 
+/** "<value> <units>" with en-US digit grouping (just the number when units is empty): the one value formatter. */
+export function displayValue(value, units) {
+  const shown = NUMBER_FORMAT.format(value);
+  return units ? `${shown} ${units}` : shown;
+}
+
 /** items[]: item i is rows[i]. display is "<value> <units>" with en-US digit grouping. */
 export function itemsFrom(rows, units) {
   const index = groupIndex(rows);
   return rows.map((r, i) => {
-    const shown = NUMBER_FORMAT.format(r.value);
     const item = {
       id: `i${i}`,
       label: typeof r.label === 'string' && r.label !== '' ? r.label : r.t === undefined ? r.group : `${r.group} · ${r.t}`,
       group: index.get(r.group),
       value: r.value,
-      display: units ? `${shown} ${units}` : shown,
+      display: displayValue(r.value, units),
     };
     if (r.t !== undefined) item.t = String(r.t);
     return item;

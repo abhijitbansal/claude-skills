@@ -64,6 +64,9 @@ export function checkLinks(errors, links, base, groups) {
     for (const end of ['from', 'to']) {
       if (!groups.includes(l[end])) errors.push({ path: pathJoin(p, end), message: notAGroup(l[end], groups) });
     }
+    if (l.from === l.to && groups.includes(l.from)) {
+      errors.push({ path: p, message: `${q(l.from)} links to itself; a link needs two different groups` });
+    }
     checkNegative(errors, l.value, pathJoin(p, 'value'));
   });
 }

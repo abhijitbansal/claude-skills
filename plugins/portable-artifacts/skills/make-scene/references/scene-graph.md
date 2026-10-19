@@ -15,13 +15,14 @@ Every world/lift module returns this object; the browser runtime consumes exactl
   "items":  [ { "id": "i0", "label": "api · W30", "group": 0, "t": "2026-W30", "value": 12, "display": "12 commits" } ],
   "batches": [ { "id": "b0", "shape": "box|cylinder|sphere|icosa|cone|disc", "colour": "<ColourRef>", "emissive": null, "flat": false,
                  "instances": [ [0,0,0, 1,1,1, 0] ] } ],
-  "tubes":   [ { "id": "e0", "points": [[0,0,0],[1,0,0]], "radius": 0.06, "colour": "<ColourRef>", "item": null } ],
+  "tubes":   [ { "id": "e0", "points": [[0,0,0],[1,0,0]], "radius": 0.06, "colour": "<ColourRef>", "item": null, "label": "api → web", "display": "6 commits" } ],
   "surfaces":[ { "id": "s0", "nx": 2, "nz": 2, "size": [10,6,4], "heights": [0,0,0,0], "bands": [ { "below": 0.9, "colour": "#d8c38a" } ], "cells": [0] } ],
   "labels":  [ { "text": "api", "at": [0,0,0], "size": 0.6 } ],
   "anim":    { "sway": ["b1"], "orbits": [ { "batch": "b2", "center": [0,0,0], "r": [1.4], "phase": [0.3], "speed": [0.7] } ] },
   "focus":   { "api": { "position": [0,0,0], "target": [0,0,0] } },
   "tour":    [ { "title": "…", "caption": "…", "focus": "api", "path": null, "reverse": false } ],
-  "fallback": { "kind": "table|svg", "columns": ["group","t","value"], "rows": [["api","2026-W30","12"]], "svg": null }
+  "fallback": { "kind": "table|svg", "columns": ["group","t","value"], "rows": [["api","2026-W30","12"]], "svg": null,
+                "links": { "columns": ["from","to","value"], "rows": [["api","web","6 commits"]] } }
 }
 ```
 
@@ -44,4 +45,9 @@ These pin down what the contract leaves open. The runtime must read them the sam
 - **City layout.** Districts (groups) are rows along z in order of first appearance. Within a row, buildings go along x by `t` (numbers numerically, then strings, no locale), with one shared column per distinct `t`. Duplicate `(group, t)` rows take neighbouring slots and are never summed. Rows with no `t` follow, tallest first. Height is `0.15 + value / max * 9`; value 0 draws a flat 0.05 marker.
 - **Group colours.** Groups 0–7 are `cat1`…`cat8`. Groups 8–15 are `{ base: "#ffffff", tint: catN, share: 0.6 }` (lighter step) and 16–23 are `{ base: "#000000", tint: catN, share: 0.6 }` (darker step), so all 24 are distinct.
 - **Focus.** One entry per group name and per non-empty row label, keys lowercased (own keys, so a group named `constructor` or `__proto__` still has one); a group wins over a label of the same name.
+- **Tubes and links.** A galaxy link is one tube. `tubes[].label` (optional) is `"<from> → <to>"`; `tubes[].display` (optional) is the link's exact value through the same formatter as `items[].display` (digit grouping, then units), and is omitted when the link has no value. `fallback.links` (optional, galaxy only, present when there is at least one drawn link) is a second table `{ columns: ["from","to","value"], rows: [[from, to, valueText]] }` of 3 strings per row; `valueText` is `""` without a value. Links are between two different groups; the validator rejects `from === to`, and the galaxy skips one defensively. `assertGraph` checks these fields.
+- **Orbits.** `anim.orbits[k]` animates the instances of batch `batch`, one entry per planet batch; `center`, `r[]`, `phase[]` and `speed[]` run parallel to that batch's `instances`. At time `T` seconds the angle is `φ = phase + speed * T` (radians; `speed` is radians per second, `0.9 / sqrt(r)`), and the position is `x = cx + r·cos φ`, `z = cz + r·sin φ`, `y` unchanged. With +y up, increasing φ turns clockwise seen from +y (counter-clockwise seen from below). The stored instance `[x, y, z, …]` is already the time-0 position (`T = 0`), so a static render needs no animation. `r` is `1.4 + rank * pitch` with `pitch = min(0.32, 6.6 / max(1, n − 1))` for `n` planets in the system, so no orbit exceeds r = 8. Phases are seeded from `seedFrom("<group>|<row index>")`, never random.
+- **Bounds.** `bounds` also covers each orbit disc: `center ± max(r)` in x and z.
+- **Sway.** `anim.sway` lists the id of every leaf batch (one entry per `icosa` batch), and only those; trunk and branch batches stay still.
+- **Emissive density.** For city windows, `density` is the share of lit windows (0..1). For a galaxy star it is `1`: the whole sphere is self-lit, and the runtime must not treat it as a window mask.
 - **Tour.** Worlds return `tour: []`. The build step fills it from the spec's beats.

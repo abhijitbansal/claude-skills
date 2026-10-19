@@ -292,6 +292,43 @@ test('galaxy: links become tubes between stars', () => {
   for (const t of g.tubes) assert.ok(t.points.length >= 3);
 });
 
+test('galaxy: tubes name their ends and show the exact value; the fallback lists links', () => {
+  const g = WORLDS.galaxy(fixture(), SPEC);
+  assert.deepEqual(g.tubes.map((t) => t.label), ['api → web', 'web → db', 'db → docs']);
+  assert.deepEqual(g.tubes.map((t) => t.display), ['6 tasks', '2 tasks', undefined]);
+  assert.ok(!('display' in g.tubes[2]), 'no value, no display');
+  assert.deepEqual(g.fallback.links, {
+    columns: ['from', 'to', 'value'],
+    rows: [['api', 'web', '6 tasks'], ['web', 'db', '2 tasks'], ['db', 'docs', '']],
+  });
+  const exact = WORLDS.galaxy({ rows: [{ group: 'a', value: 1 }, { group: 'b', value: 1 }], links: [{ from: 'a', to: 'b', value: 12345.6789 }] }, { units: 'x' });
+  assert.equal(exact.tubes[0].display, '12,345.6789 x');
+  assert.equal(WORLDS.galaxy({ rows: [{ group: 'a', value: 1 }], links: [] }, SPEC).fallback.links, undefined);
+  assert.equal(WORLDS.forest(fixture(), SPEC).fallback.links, undefined);
+});
+
+test('galaxy: bounds cover every orbit disc', () => {
+  const g = WORLDS.galaxy(fixture(), SPEC);
+  for (const o of g.anim.orbits) {
+    const reach = Math.max(...o.r);
+    assert.ok(g.bounds.max[0] >= o.center[0] + reach - 1e-3 && g.bounds.min[0] <= o.center[0] - reach + 1e-3);
+    assert.ok(g.bounds.max[2] >= o.center[2] + reach - 1e-3 && g.bounds.min[2] <= o.center[2] - reach + 1e-3);
+  }
+});
+
+test('galaxy: no system reaches past r = 8, however many rows a group has', () => {
+  const rows = Array.from({ length: 2000 }, (_, i) => ({ group: 'a', t: i, value: i % 9 }));
+  const g = WORLDS.galaxy({ rows, links: [] }, SPEC);
+  const r = g.anim.orbits[0].r;
+  assert.equal(r.length, 2000);
+  assert.ok(Math.max(...r) <= 8, `max r ${Math.max(...r)}`);
+  assert.equal(r[0], 1.4);
+  assert.ok(r.every((x, i) => i === 0 || x > r[i - 1]), 'ranks stay ordered');
+  assert.deepEqual(finite(g), []);
+  const few = WORLDS.galaxy({ rows: rows.slice(0, 3), links: [] }, SPEC).anim.orbits[0].r;
+  assert.deepEqual(few, [1.4, 1.72, 2.04], 'small systems keep the 0.32 pitch');
+});
+
 test('galaxy: a link from a group to itself is skipped, no links means no tubes', () => {
   const rows = [{ group: 'a', t: 1, value: 1 }, { group: 'b', t: 1, value: 1 }];
   assert.equal(WORLDS.galaxy({ rows, links: [{ from: 'a', to: 'a' }] }, SPEC).tubes.length, 0);
@@ -303,4 +340,5 @@ test('galaxy: the default camera frames the whole orbit disc', () => {
   const reach = Math.max(...g.anim.orbits.map((o) => Math.max(...o.r)));
   const dist = Math.hypot(...g.camera.position.map((p, a) => p - g.camera.target[a]));
   assert.ok(dist > reach, 'camera sits outside every orbit');
+  assert.deepEqual(g.camera.target, g.bounds.min.map((lo, a) => Math.round(((lo + g.bounds.max[a]) / 2) * 1000) / 1000));
 });
