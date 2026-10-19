@@ -16,11 +16,11 @@
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
 
-  var GLIDE_MS = 600; // the camera's glide to a story (hop or focus) beat
-  var DOT_MS = 1200; // the dot along a hop's edge
-  var HOLD_MS = 2500; // then the caption holds...
-  var HOLD_PER_CHAR_MS = 40; // ...longer for a longer caption...
-  var HOLD_MAX_MS = 6000; // ...up to this
+  var GLIDE_MS = 450; // the camera's glide to a story (hop or focus) beat
+  var DOT_MS = 900; // the dot along a hop's edge
+  var HOLD_MS = 1800; // then the caption holds...
+  var HOLD_PER_CHAR_MS = 30; // ...longer for a longer caption...
+  var HOLD_MAX_MS = 4500; // ...up to this
   var SPEEDS = [0.5, 1, 1.5, 2];
   var DOT_RADIUS = 5;
 

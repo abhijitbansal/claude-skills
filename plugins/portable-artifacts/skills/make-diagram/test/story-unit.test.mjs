@@ -73,7 +73,7 @@ function load(data) {
   return { story, moves, timers, frames, dot };
 }
 
-test('a step beat glides at the camera default (300 ms) and a story beat at 600 ms; both divide by the speed', () => {
+test('a step beat glides at the camera default (300 ms) and a story beat at 450 ms; both divide by the speed', () => {
   const steps = load(STEPS);
   steps.story.present(0);
   assert.deepEqual(steps.moves.at(-1), { ms: 300 }, 'the camera is asked for its own pace');
@@ -84,10 +84,25 @@ test('a step beat glides at the camera default (300 ms) and a story beat at 600 
 
   const hops = load(HOPS);
   hops.story.present(0);
-  assert.deepEqual([hops.moves.at(-1), hops.timers.at(-1).ms], [{ ms: 600 }, 600]);
+  assert.deepEqual([hops.moves.at(-1), hops.timers.at(-1).ms], [{ ms: 450 }, 450]);
   hops.story.setSpeed(2);
   hops.story.goTo(1);
-  assert.deepEqual([hops.moves.at(-1), hops.timers.at(-1).ms], [{ ms: 300 }, 300]);
+  assert.deepEqual([hops.moves.at(-1), hops.timers.at(-1).ms], [{ ms: 225 }, 225]);
+});
+
+test('a 160-character caption holds 1800 + 30*160 = 4500 ms at 1x, divided by the speed', () => {
+  const caption = 'x'.repeat(160);
+  const data = { ...HOPS, beats: [beat('step', { title: 'One', ids: ['a'], reveal: ['a'], caption })] };
+  const { story, timers } = load(data);
+  story.present(0);
+  story.play();
+  timers.at(-1).fn(); // the glide is over: a step beat goes straight to its hold
+  assert.equal(timers.at(-1).ms, 4500, 'the hold timer is armed with 1800 + 30*160');
+  const fast = load(data);
+  fast.story.setSpeed(2);
+  fast.story.play();
+  fast.timers.at(-1).fn();
+  assert.equal(fast.timers.at(-1).ms, 2250, 'at 2x the hold halves');
 });
 
 test('the dot is placed on the first point of its edge before it shows, and on the last point for a reverse hop', () => {
@@ -119,7 +134,7 @@ test('reframe keeps the running beat: the camera glides to the same target again
   story.reframe();
   assert.equal(timers.length, before, 'no new timer: the beat under way keeps its clock');
   assert.equal(moves.length, 2, 'one more camera move');
-  assert.deepEqual(moves.at(-1), { ms: 600 }, 'a story beat re-glides at its own pace (a jump would cut the entry glide short)');
+  assert.deepEqual(moves.at(-1), { ms: 450 }, 'a story beat re-glides at its own pace (a jump would cut the entry glide short)');
   assert.equal(story.isPlaying(), true);
   assert.equal(story.index(), 0);
   const steps = load(STEPS);

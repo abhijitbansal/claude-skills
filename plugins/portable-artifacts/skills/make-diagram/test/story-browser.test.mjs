@@ -328,7 +328,7 @@ test('the dot travels along the hop edge from its start, and backwards for a rev
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
   await page.keyboard.press('p');
-  for (let i = 0; i < 3; i++) await page.click('[data-pa-speed]'); // 0.5×: glide 1200 ms, dot 2400 ms
+  for (let i = 0; i < 3; i++) await page.click('[data-pa-speed]'); // 0.5×: glide 900 ms, dot 1800 ms
   assert.equal(await page.textContent('[data-pa-speed]'), '0.5×');
   const shopper = await centreOf(page, 'shopper');
   const app = await centreOf(page, 'app');
@@ -381,7 +381,7 @@ test('the dot appears on the start of the new edge, never where the previous bea
   await context.close();
 });
 
-test('a pointer on the canvas pauses: click, wheel and drag; the beat stays', async (t) => {
+test('press and drag on the canvas pause playback; the beat stays', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
   await page.keyboard.press('p');
@@ -391,10 +391,6 @@ test('a pointer on the canvas pauses: click, wheel and drag; the beat stays', as
   await page.mouse.click(c.x, c.y + 60);
   assert.equal(await playing(page), false, 'a click pauses');
   assert.equal(await count(page), '1 / 9');
-  await page.keyboard.press('Space');
-  await page.mouse.move(c.x, c.y + 60);
-  await page.mouse.wheel(0, 120);
-  assert.equal(await playing(page), false, 'the wheel pauses');
   await page.keyboard.press('Space');
   await page.mouse.move(c.x, c.y + 200);
   await page.mouse.down();
@@ -410,6 +406,24 @@ test('a pointer on the canvas pauses: click, wheel and drag; the beat stays', as
   await page.keyboard.press('x');
   assert.equal(await playing(page), false, 'any other key but Space pauses');
   assert.equal(await page.locator('.pa-dot.pa-dot-on').count(), 0, 'pausing hides the dot');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('the wheel zooms and playback keeps running', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.keyboard.press('p');
+  const c = await stageCentre(page);
+  await page.keyboard.press('Space');
+  assert.equal(await playing(page), true);
+  const zoomOf = () => page.evaluate(() => Number(document.getElementById('pa-stage').dataset.zoom));
+  const before = await zoomOf();
+  await page.mouse.move(c.x, c.y + 60);
+  await page.mouse.wheel(0, -240);
+  await page.waitForFunction((z) => Number(document.getElementById('pa-stage').dataset.zoom) !== z, before, { timeout: 5000 });
+  assert.notEqual(await zoomOf(), before, 'the wheel zoomed the camera');
+  assert.equal(await playing(page), true, 'the wheel does not pause');
   assert.deepEqual(problems, []);
   await context.close();
 });
@@ -519,7 +533,7 @@ test('a one-beat story plays to its end at once and loops when asked', async (t)
   const { page, problems, context } = await openPage(buildPage(spec, { name: 'one-beat-play' }).url);
   await page.keyboard.press('p');
   await page.click('[data-pa-speed]');
-  await page.click('[data-pa-speed]'); // 2×: glide 300, dot 600, hold 1250
+  await page.click('[data-pa-speed]'); // 2×: glide 225, dot 450, hold 900
   await page.evaluate(() => document.activeElement.blur()); // a focused button would take Space itself
   await page.keyboard.press('Space');
   await waitPlaying(page, false);
@@ -563,7 +577,7 @@ test('a resize while the dot travels keeps the beat playing: the dot stays on an
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
   await page.keyboard.press('p');
-  for (let i = 0; i < 3; i++) await page.click('[data-pa-speed]'); // 0.5×: glide 1200 ms, dot 2400 ms
+  for (let i = 0; i < 3; i++) await page.click('[data-pa-speed]'); // 0.5×: glide 900 ms, dot 1800 ms
   await page.evaluate(() => document.activeElement.blur());
   await page.keyboard.press('Space');
   await waitDotOn(page);

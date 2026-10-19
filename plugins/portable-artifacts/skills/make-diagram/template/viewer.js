@@ -281,7 +281,6 @@
     stage.addEventListener('dblclick', function () { if (!story.isPresenting()) camera.fit(); });
     stage.addEventListener('wheel', function (e) {
       e.preventDefault();
-      story.pause();
       var r = stage.getBoundingClientRect();
       var dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
       camera.zoomAt(Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);
