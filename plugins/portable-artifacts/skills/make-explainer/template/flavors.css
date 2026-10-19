@@ -62,8 +62,8 @@ html[data-flavor] .theme-toggle { background: var(--surface); }
   html[data-flavor] .hero > .theme-toggle { grid-column: 3; grid-row: 1; }
 }
 
-/* the verdict card: a solid fill drawn on a pseudo-element, so the text never moves (dusk tilts only the fill) */
-html[data-flavor] .hero-tldr { grid-column: 1 / -1; position: relative; isolation: isolate; margin: var(--sp-7) 0 0; max-width: none; padding: var(--sp-6) var(--sp-6); background: none; border: 0; border-radius: 0; color: var(--card-fg); }
+/* cards sit above the film grain (z 60) so their text reads at its token ratio; the verdict card: a solid fill drawn on a pseudo-element, so the text never moves (dusk tilts only the fill) */
+html[data-flavor] .hero-tldr { grid-column: 1 / -1; position: relative; z-index: 61; isolation: isolate; margin: var(--sp-7) 0 0; max-width: none; padding: var(--sp-6) var(--sp-6); background: none; border: 0; border-radius: 0; color: var(--card-fg); }
 html[data-flavor] .hero-tldr::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--card-bg); border-radius: var(--r-card); }
 :root[data-flavor="dusk"] .hero-tldr::before { border-radius: var(--r-card) var(--r-card) var(--r-card) 4px; transform: rotate(-1.1deg); box-shadow: 8px 10px 0 var(--text); }
 :root[data-flavor="press"] .hero-tldr::before { box-shadow: 6px 6px 0 var(--accent); }
@@ -86,6 +86,8 @@ html[data-flavor] .hero-tldr .points { padding-left: 1.1em; }
 html[data-flavor] .layout { padding-top: var(--sp-6); }
 html[data-flavor] .sections { counter-reset: sec; }
 html[data-flavor] .sec { position: relative; isolation: isolate; }
+/* a section's own stacking context would pin its step markers under the grain; lift the sections that have them */
+html[data-flavor] .sec:has(.step) { z-index: 61; }
 html[data-flavor] .sec:has(> .sec-title) { counter-increment: sec; }
 html[data-flavor] .sec + .sec { margin-top: var(--sp-8); }
 html[data-flavor] .sec-title { max-width: 22em; font-size: clamp(28px, 1.2vw + 20px, 40px); line-height: 1.02; font-weight: var(--head-weight); letter-spacing: var(--head-track); text-transform: var(--head-case); }
@@ -157,7 +159,7 @@ html[data-flavor] .verdict { margin-top: var(--sp-5); }
 
 /* ---- steps and timeline ----------------------------------------------------------------------------- */
 html[data-flavor] .step { padding-left: 56px; padding-bottom: var(--sp-5); }
-html[data-flavor] .step::before { width: 38px; height: 38px; border: 0; font-family: var(--font-display); font-weight: var(--head-weight); font-size: var(--fs-md); background: var(--card-bg); color: var(--card-fg); }
+html[data-flavor] .step::before { z-index: 61; width: 38px; height: 38px; border: 0; font-family: var(--font-display); font-weight: var(--head-weight); font-size: var(--fs-md); background: var(--card-bg); color: var(--card-fg); }
 :root[data-flavor="dusk"] .step::before { border-radius: 50% 50% 50% 6px; }
 :root[data-flavor="press"] .step::before { background: none; color: var(--accent); font-size: var(--fs-xl); border-radius: 0; place-items: start; }
 :root[data-flavor="poster"] .step::before { border-radius: 0; }
