@@ -9,3 +9,11 @@ export function exitInternal(error, { json = false } = {}) {
   else process.stderr.write(`${message}\n`);
   process.exitCode = 1;
 }
+
+/** A broken invariant inside the tool (not a problem with the user's spec). */
+export class InternalError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'InternalError';
+  }
+}
