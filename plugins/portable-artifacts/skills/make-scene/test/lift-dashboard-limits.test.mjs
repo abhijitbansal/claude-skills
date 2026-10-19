@@ -150,14 +150,14 @@ dtest('histogram: a 1e-15 spread round 0.123456789012345 is one bin (it used to 
   assert.equal(items.length, 1);
   assert.equal(counted(items), 2);
   // make-dashboard's own Vega drawing cannot bin this (a NaN step), so the fallback is the table alone.
-  assert.deepEqual([fallback, hasSvg], hasSvg ? ['svg', true] : ['table', false]);
+  assert.deepEqual([fallback, hasSvg], ['table', false]);
 });
 
 dtest('histogram: 33.333333333333336 and 33.33333333333333 are one bin, not 66,678', (t) => {
   const { items, fallback, hasSvg } = lifted(histogramOf(t, ['33.333333333333336', '33.33333333333333']));
   assert.equal(items.length, 1);
   assert.equal(counted(items), 2);
-  assert.deepEqual([fallback, hasSvg], hasSvg ? ['svg', true] : ['table', false]);
+  assert.deepEqual([fallback, hasSvg], ['table', false]);
 });
 
 dtest('histogram: -1e-11, 0 and 1e-11 count all three rows, in bins with distinct readable labels', (t) => {

@@ -18,6 +18,8 @@ const SCRIPTS = fileURLToPath(new URL('../scripts/', import.meta.url));
 const VALIDATE = path.join(SCRIPTS, 'validate.mjs');
 const BUILD = path.join(SCRIPTS, 'build.mjs');
 const CAP_MESSAGE = /^the page is \d+ KB; the limit is 1408 KB - use fewer rows or fewer groups$/;
+// validate says which measure it used: the heaviest theme's page plus room for the provenance stamp.
+const VALIDATE_CAP_MESSAGE = /^the page is \d+ KB in the heaviest theme \(\w+, with room for provenance\); the limit is 1408 KB - use fewer rows or fewer groups$/;
 const HEAP_MB = 256;
 const TIMEOUT_MS = 120_000;
 
@@ -44,7 +46,7 @@ const capKb = (message) => Number(/is (\d+) KB/.exec(message)[1]);
 function sameCapError(validate, build) {
   assert.equal(validate.length, 1);
   assert.equal(validate[0].path, build[0].path);
-  assert.match(validate[0].message, CAP_MESSAGE);
+  assert.match(validate[0].message, VALIDATE_CAP_MESSAGE);
   assert.ok(capKb(validate[0].message) >= capKb(build[0].message), `${validate[0].message} vs ${build[0].message}`);
 }
 
@@ -66,7 +68,7 @@ test('validate rejects one group of 2000 rows in a forest, and accepts the same 
   const forest = specIn(t, { title: 'F', world: 'forest', data: { rows } });
   const refused = validated(forest.file);
   assert.equal(refused.status, 1, JSON.stringify(refused.result));
-  assert.match(refused.result.errors[0].message, CAP_MESSAGE);
+  assert.match(refused.result.errors[0].message, VALIDATE_CAP_MESSAGE);
   const city = specIn(t, { title: 'C', world: 'city', data: { rows } });
   assert.deepEqual(validated(city.file).result, { ok: true, errors: [] });
 });
@@ -94,9 +96,12 @@ test('validate rejects a page that is under the cap in dusk but over it in the h
   const maxBytes = Math.floor((dusk + heaviest) / 2);
   const result = await pageErrors(SMALL_CITY, { dir, maxBytes });
   assert.equal(result.ok, false, `dusk is ${dusk} bytes, the cap ${maxBytes}, the heaviest theme ${heaviest}`);
-  assert.match(result.errors[0].message, /^the page is \d+ KB; the limit is \d+ KB - use fewer rows or fewer groups$/);
+  assert.match(result.errors[0].message, /^the page is \d+ KB in the heaviest theme \(\w+, with room for provenance\); the limit is \d+ KB - use fewer rows or fewer groups$/);
   const shown = Number(/is (\d+) KB/.exec(result.errors[0].message)[1]);
   assert.ok(Math.abs(shown - heaviest / 1024) <= 2, `the message cites the heaviest size (${shown} KB vs ${heaviest / 1024})`);
+  const sizes = await Promise.all(listThemes().map(async (theme) => [theme, await bytesIn(theme)]));
+  const [heaviestTheme] = sizes.reduce((a, b) => (b[1] > a[1] ? b : a));
+  assert.match(result.errors[0].message, new RegExp(`heaviest theme \\(${heaviestTheme},`), `the message names the heaviest theme (${heaviestTheme})`);
 });
 
 test('whatever build accepts or rejects for a theme and stamp, validate has already rejected it', async (t) => {

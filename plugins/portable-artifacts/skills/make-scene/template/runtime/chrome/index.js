@@ -28,7 +28,7 @@ export function createChrome(host, graph, opts = {}) {
   let api = null;
   let unwatch = null;
   let unviewable = null;
-  let exploreOpener = null; // the toolbar button that opened a panel (null: a key did), so closing it gives focus back
+  let exploreOpener = null; // the toolbar button that had focus when a panel opened (null: none did), so closing it gives focus back
   let tourOpener = null;
 
   const status = h('p', { class: 'sc-status', role: 'status', hidden: true });
@@ -47,6 +47,8 @@ export function createChrome(host, graph, opts = {}) {
   const labels = createLabels({ host, graph });
   // A panel that held focus has just hidden: focus goes back to the button that opened it, else to the canvas, never to the page.
   const focusBack = (opener) => (opener ?? api?.canvas)?.focus();
+  // The toolbar button that has focus now, by click or by an E or P key pressed on it; null when focus is anywhere else.
+  const focusedButton = () => (toolbar.contains(doc.activeElement) ? doc.activeElement : null);
   const fly = (key, instant = false) => api?.flyTo(key, { instant: instant || reduced() });
   const explore = createExplore({
     host,
@@ -55,7 +57,7 @@ export function createChrome(host, graph, opts = {}) {
     onToggle: (open, { hadFocus = false } = {}) => {
       tooltip.hide();
       exploreButton.setAttribute('aria-pressed', String(open));
-      if (open) exploreOpener = doc.activeElement === exploreButton ? exploreButton : null;
+      if (open) exploreOpener = focusedButton();
       else if (hadFocus) focusBack(exploreOpener);
       api?.wake('chrome');
     },
@@ -83,7 +85,7 @@ export function createChrome(host, graph, opts = {}) {
   function openTour(play = false) {
     if (!transport) return;
     tooltip.hide();
-    if (!transport.isShown()) tourOpener = doc.activeElement === tourButton ? tourButton : null;
+    if (!transport.isShown()) tourOpener = focusedButton();
     transport.show();
     host.classList.add('sc-touring');
     tourButton.setAttribute('aria-pressed', 'true');

@@ -273,8 +273,10 @@ test('a scene lifting a postgres or mysql dashboard is refused as an explainer c
       dash.sources.warehouse = { type, env: 'SCENE_NET_URL' };
       fs.writeFileSync(file, JSON.stringify(dash));
       const lifted = { title: 'Sales', lift: { dashboard: 'sales.dashboard.json', chart: 'by-region' } };
-      const message = `source "warehouse" is ${type}, a network source; explainer charts read local files only (no network at build or view time) — export the query to CSV or Parquet and point a file source at it (in sales.dashboard.json)`;
+      const inline = `source "warehouse" is ${type}, a network source; explainer charts read local files only (no network at build or view time) — export the query to CSV or Parquet and point a file source at it (in sales.dashboard.json)`;
       for (const scene of [lifted, 'lifted.scene.json']) {
+        // a scene given as a file names the file, like every other error from it
+        const message = inline + (typeof scene === 'string' ? ` (in ${scene})` : '');
         fs.writeFileSync(path.join(dir, 'lifted.scene.json'), JSON.stringify(lifted));
         const spec = doc([text, section(scene)]);
         const [first, ...more] = await errorsOf(spec, dir);
@@ -323,18 +325,24 @@ test('a scene lifting a dashboard ref the chart gate refuses is refused with its
     for (const [kind, dashboard] of Object.entries(refs)) {
       const [chartError] = await errorsOf(doc([{ type: 'chart', dashboard, chart: 'by-region' }]), dir);
       assert.match(chartError.message, pattern[kind], `the chart gate refuses the ${kind} ref`);
-      const spec = doc([text, section({ title: 'Sales', lift: { dashboard, chart: 'by-region' } })]);
-      const [first, ...more] = await errorsOf(spec, dir);
-      assert.equal(more.length, 0, `${kind}: one error`);
-      assert.equal(first.path, 'sections[1].scene.lift.dashboard', kind);
-      assert.equal(first.message, chartError.message, `${kind}: the chart gate's message`);
-      assert.doesNotMatch(first.message, /Connection refused|ECONNREFUSED/);
-      await assert.rejects(buildPage(spec, { dir }), (e) => {
-        assert.ok(e instanceof BuildError);
-        assert.equal(e.errors[0].path, 'sections[1].scene.lift.dashboard');
-        assert.equal(e.errors[0].message, chartError.message);
-        return true;
-      });
+      const lifted = { title: 'Sales', lift: { dashboard, chart: 'by-region' } };
+      fs.writeFileSync(path.join(dir, 'lifted.scene.json'), JSON.stringify(lifted));
+      for (const scene of [lifted, 'lifted.scene.json']) {
+        // a scene given as a file names the file, like every other error from it
+        const message = chartError.message + (typeof scene === 'string' ? ` (in ${scene})` : '');
+        const spec = doc([text, section(scene)]);
+        const [first, ...more] = await errorsOf(spec, dir);
+        assert.equal(more.length, 0, `${kind}: one error`);
+        assert.equal(first.path, 'sections[1].scene.lift.dashboard', kind);
+        assert.equal(first.message, message, `${kind}: the chart gate's message`);
+        assert.doesNotMatch(first.message, /Connection refused|ECONNREFUSED/);
+        await assert.rejects(buildPage(spec, { dir }), (e) => {
+          assert.ok(e instanceof BuildError);
+          assert.equal(e.errors[0].path, 'sections[1].scene.lift.dashboard');
+          assert.equal(e.errors[0].message, message);
+          return true;
+        });
+      }
     }
   } finally {
     if (saved === undefined) delete process.env.SCENE_NET_URL;

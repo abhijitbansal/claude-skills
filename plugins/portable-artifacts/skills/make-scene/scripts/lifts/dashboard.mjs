@@ -71,7 +71,7 @@ async function fetchChart({ dashboard, chart }, { dir, allowOutside, siblingRoot
     if (bad) return { errors: [{ path: AT_CHART, message: bad }] };
     const data = await lib.pipeline.chartData(file, chart, { allowOutside });
     if (!data.ok) return { errors: reported(data.errors, dashboard, relative) };
-    return { lib, chart: data.chart, result: data.result, view: data.view };
+    return { lib, chart: data.chart, result: data.result, view: data.view, file };
   } catch (e) {
     if (isUsageError(e)) return { errors: [{ path: AT, message: `${relative(e.message)} (in ${dashboard})` }] };
     throw e;
@@ -141,23 +141,27 @@ export async function liftDashboard(source, { dir = process.cwd(), theme, idPref
 }
 
 // The one Vega failure that is expected: a number format built from a NaN step (`invalid format: ,.NaN~f`) when the
-// values are too close together for the axis. Vega logs it, then fails later with an unrelated TypeError.
-const KNOWN_VEGA_FAILURE = /invalid format/;
+// values are too close together for the axis. Vega logs it, then fails later with an unrelated TypeError. Any other
+// `invalid format: ,.2f` is a real error.
+const KNOWN_VEGA_FAILURE = /invalid format: [^\n]*NaN/;
 const noted = new Set();
 
-// One line on stderr per chart and process, however often the drawing is tried (validate draws once per theme).
-function noteTable(chartId) {
-  const line = `note: ${chartId}: drawn as a table in the fallback because its values are too close together for a 2D chart`;
-  if (noted.has(line)) return;
-  noted.add(line);
-  process.stderr.write(`${line}\n`);
+// What console.error was given, as one text (an Error counts with its stack, so the failure's stack lines match too).
+const loggedText = (args) => args.map((a) => (a instanceof Error ? a.stack ?? String(a) : String(a))).join(' ');
+
+// One line on stderr per dashboard and chart and process, however often the drawing is tried (validate draws once per theme).
+function noteTable(file, chartId) {
+  const key = `${file}\0${chartId}`;
+  if (noted.has(key)) return;
+  noted.add(key);
+  process.stderr.write(`note: ${chartId}: drawn as a table in the fallback because its values are too close together for a 2D chart\n`);
 }
 
 // make-dashboard's own 2D drawing of the chart. Vega cannot lay out some extreme data (values equal to float noise
 // make a NaN bin step); the 3D scene is still sound, so the fallback is then the plotted table alone (null). Only
 // that known failure is caught; anything else is a real error and propagates. Vega's logger writes its stack to
-// console.error: it is held back while drawing, and shown again unless it was the known failure.
-async function drawing({ lib, view, result, chart }, theme, idPrefix) {
+// console.error: it is held back while drawing, and shown again, except for the known failure's own lines.
+async function drawing({ lib, view, result, chart, file }, theme, idPrefix) {
   const logged = [];
   const consoleError = console.error;
   console.error = (...args) => { logged.push(args); };
@@ -165,13 +169,15 @@ async function drawing({ lib, view, result, chart }, theme, idPrefix) {
   try {
     return await lib.renderThemedSvgs(view, result.rows, theme, { idPrefix: `${idPrefix ?? 'ch'}-` });
   } catch (e) {
-    known = logged.some((args) => KNOWN_VEGA_FAILURE.test(args.map(String).join(' ')));
+    known = logged.some((args) => KNOWN_VEGA_FAILURE.test(loggedText(args)));
     if (!known) throw e;
     return null;
   } finally {
     console.error = consoleError;
-    if (known) noteTable(chart.id);
-    else for (const args of logged) consoleError(...args);
+    if (known) noteTable(file, chart.id);
+    for (const args of logged) {
+      if (!known || !/invalid format/.test(loggedText(args))) consoleError(...args);
+    }
   }
 }
 

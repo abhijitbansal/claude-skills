@@ -249,6 +249,42 @@ test('F13: closing the Tour or Explore returns focus to the button that opened i
   assert.equal(await focused(page), 'CANVAS', 'no opener button: the canvas');
 });
 
+// Tab until `label` has focus (the toolbar buttons are the first stops of the scene).
+async function tabTo(page, label) {
+  await page.focus('canvas');
+  for (let i = 0; i < 12 && (await focused(page)) !== `BUTTON:${label}`; i++) await page.keyboard.press('Tab');
+  assert.equal(await focused(page), `BUTTON:${label}`, `Tab reached ${label}`);
+}
+
+test('L11: a panel opened by the E key while a toolbar button has focus gives focus back to that button, not the canvas', async (t) => {
+  const ctx = await openWorld(t, 'city', { reducedMotion: 'reduce' }, { spec: { tour: [{ title: 'One', focus: ['api'], caption: 'a' }, { title: 'Two', focus: ['web'], caption: 'b' }] } });
+  if (!ctx) return;
+  const { page } = ctx;
+  // E with focus on Full screen, then Esc: focus stays on Full screen.
+  await tabTo(page, 'Full screen');
+  await page.keyboard.press('e');
+  await page.keyboard.press('Escape');
+  assert.equal(await focused(page), 'BUTTON:Full screen', 'E then Esc -> Full screen');
+  // E, move into the panel, close it with its Close button: focus goes back to Full screen (the old code said the canvas).
+  await tabTo(page, 'Full screen');
+  await page.keyboard.press('e');
+  await page.getByRole('button', { name: 'Close Explore (E)' }).focus();
+  await page.keyboard.press('Escape');
+  assert.equal(await focused(page), 'BUTTON:Full screen', 'E, into the panel, Esc -> Full screen');
+  // P from Full screen opens the tour; its Close button gives focus back to Full screen.
+  await tabTo(page, 'Full screen');
+  await page.keyboard.press('p');
+  await page.getByRole('button', { name: 'Close' }).last().focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await focused(page), 'BUTTON:Full screen', 'P, Tour Close -> Full screen');
+  // No toolbar button had focus: the canvas.
+  await page.focus('canvas');
+  await page.keyboard.press('p');
+  await page.getByRole('button', { name: 'Close' }).last().focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await focused(page), 'CANVAS', 'P from the canvas -> the canvas');
+});
+
 // ---- F14: an embedded scene lets the page scroll --------------------------------------------------------------------
 
 test('F14: embedded, a wheel over the scene scrolls the page; the canvas lets the browser pan vertically', async (t) => {

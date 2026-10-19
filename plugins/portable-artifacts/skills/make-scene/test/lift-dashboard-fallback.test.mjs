@@ -99,6 +99,41 @@ dtest('the known Vega format failure is a table-only fallback: no ERROR lines, e
   assert.match(lines[0], NOTE);
 });
 
+dtest('an invalid-format failure that is not the NaN-step one (",.2f") is rethrown, so the build fails; a NaN one still falls back', async (t) => {
+  const bad = fakeSiblings(t, `export async function renderThemedSvgs() {
+  console.error('ERROR Error: invalid format: ,.2f');
+  throw new TypeError("Cannot read properties of undefined (reading 'marktype')");
+}`);
+  const { error, lines } = await stderrOf(() => liftDashboard({ dashboard: DASHBOARD, chart: 'v-spread' }, { dir: histogramDir(t), theme: THEME, siblingRoot: bad }));
+  assert.match(String(error?.message), /marktype/, 'the drawing failure stops the build');
+  assert.ok(lines.some((l) => /invalid format: ,\.2f/.test(l)), `Vega's own line is kept: ${lines.join(' | ')}`);
+  assert.equal(lines.some((l) => /^note:/.test(l)), false, 'no table-fallback note for a failure that is not the NaN one');
+  const nan = fakeSiblings(t, VEGA_FORMAT_FAILURE);
+  const { result } = await stderrOf(() => liftDashboard({ dashboard: DASHBOARD, chart: 'v-spread' }, { dir: histogramDir(t), theme: THEME, siblingRoot: nan }));
+  assert.equal(result.fallback.kind, 'table');
+});
+
+dtest('an unrelated console.error logged during a degenerate drawing still reaches stderr; only the Vega failure lines are dropped', async (t) => {
+  const siblingRoot = fakeSiblings(t, `export async function renderThemedSvgs() {
+  console.error('WARN something else went wrong while drawing');
+  console.error('ERROR Error: invalid format: ,.NaN~f\\n    at formatSpecifier (d3-format)');
+  throw new TypeError("Cannot read properties of undefined (reading 'marktype')");
+}`);
+  const { result, lines } = await stderrOf(() => liftDashboard({ dashboard: DASHBOARD, chart: 'v-spread' }, { dir: histogramDir(t), theme: THEME, siblingRoot }));
+  assert.equal(result.fallback.kind, 'table');
+  assert.ok(lines.includes('WARN something else went wrong while drawing'), `the unrelated line is replayed: ${lines.join(' | ')}`);
+  assert.equal(lines.some((l) => /invalid format|formatSpecifier/.test(l)), false, `the Vega failure is dropped: ${lines.join(' | ')}`);
+  assert.equal(lines.filter((l) => /^note:/.test(l)).length, 1, lines.join(' | '));
+});
+
+dtest('two dashboards with the same chart id print two notes, one each', async (t) => {
+  const siblingRoot = fakeSiblings(t, VEGA_FORMAT_FAILURE);
+  const { lines } = await stderrOf(async () => {
+    for (const dir of [histogramDir(t), histogramDir(t)]) await liftDashboard({ dashboard: DASHBOARD, chart: 'v-spread' }, { dir, theme: THEME, siblingRoot });
+  });
+  assert.equal(lines.filter((l) => NOTE.test(l)).length, 2, lines.join(' | '));
+});
+
 dtest('build.mjs on values too close together for a 2D chart prints no Vega stack and one note line', (t) => {
   const dir = histogramDir(t, ['33.333333333333336', '33.33333333333333']);
   fs.writeFileSync(path.join(dir, 'scene.json'), JSON.stringify({ title: 'Close', lift: { dashboard: DASHBOARD, chart: 'v-spread' } }));

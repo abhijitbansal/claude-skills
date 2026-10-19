@@ -14,10 +14,14 @@ const ID_PREFIX = 'sc';
 // cannot see them. Longest stamp (three 60-character fields) vs none, measured on a dusk city page: +408 bytes.
 export const PROVENANCE_HEADROOM_BYTES = 1024;
 
-/** The spec error for a page of `bytes` over `maxBytes`, else null. */
-export function capError(bytes, maxBytes = MAX_PAGE_BYTES) {
+/**
+ * The spec error for a page of `bytes` over `maxBytes`, else null. `measure` (validate's) names how the size was found:
+ * the heaviest theme's page plus provenance headroom, so a reader can tell it from a build's own page.
+ */
+export function capError(bytes, maxBytes = MAX_PAGE_BYTES, { measure } = {}) {
   if (bytes <= maxBytes) return null;
-  return { path: '', message: `the page is ${Math.round(bytes / KB)} KB; the limit is ${Math.round(maxBytes / KB)} KB - use fewer rows or fewer groups` };
+  const how = measure ? ` in the heaviest theme (${measure.theme}, with room for provenance)` : '';
+  return { path: '', message: `the page is ${Math.round(bytes / KB)} KB${how}; the limit is ${Math.round(maxBytes / KB)} KB - use fewer rows or fewer groups` };
 }
 
 /**
@@ -32,25 +36,27 @@ export async function buildPage(spec, { dir, allowOutside = false, env = process
 }
 
 /**
- * The size validate compares with the cap: the page in the heaviest theme (every theme `build.mjs --theme` takes)
- * plus PROVENANCE_HEADROOM_BYTES. A world ignores the theme, so it is built once and rendered in each theme; a lift's
- * 2D fallback is drawn in the theme's colours, so a lift is built once per theme.
+ * The size validate compares with the cap: { bytes, theme }, the page in the heaviest theme (every theme `build.mjs
+ * --theme` takes) plus PROVENANCE_HEADROOM_BYTES, and that theme's name. A world ignores the theme, so it is built
+ * once and rendered in each theme; a lift's 2D fallback is drawn in the theme's colours, so a lift is built once per theme.
  */
-export async function heaviestPageBytes(spec, { dir, allowOutside = false, env = process.env } = {}) {
+export async function heaviestPage(spec, { dir, allowOutside = false, env = process.env } = {}) {
   const sizes = [];
   if (spec.lift === undefined) {
     const built = await buildScene(spec, { dir, theme: themeFor(spec), idPrefix: ID_PREFIX, allowOutside });
-    for (const name of listThemes()) sizes.push(Buffer.byteLength(renderPage(spec, built, { theme: loadTheme(name), env })));
+    for (const name of listThemes()) sizes.push({ theme: name, bytes: Buffer.byteLength(renderPage(spec, built, { theme: loadTheme(name), env })) });
   } else {
-    for (const name of listThemes()) sizes.push((await buildPage({ ...spec, theme: name }, { dir, allowOutside, env })).bytes);
+    for (const name of listThemes()) sizes.push({ theme: name, bytes: (await buildPage({ ...spec, theme: name }, { dir, allowOutside, env })).bytes });
   }
-  return Math.max(...sizes) + PROVENANCE_HEADROOM_BYTES;
+  const heaviest = sizes.reduce((a, b) => (b.bytes > a.bytes ? b : a));
+  return { bytes: heaviest.bytes + PROVENANCE_HEADROOM_BYTES, theme: heaviest.theme };
 }
 
 /** { ok, errors } for the page the spec builds: the cap, or a content problem only the build finds. */
 export async function pageErrors(spec, { dir, allowOutside = false, env = process.env, maxBytes = MAX_PAGE_BYTES } = {}) {
   try {
-    const over = capError(await heaviestPageBytes(spec, { dir, allowOutside, env }), maxBytes);
+    const heaviest = await heaviestPage(spec, { dir, allowOutside, env });
+    const over = capError(heaviest.bytes, maxBytes, { measure: heaviest });
     return { ok: over === null, errors: over === null ? [] : [over] };
   } catch (e) {
     if (e instanceof SceneError) return { ok: false, errors: e.errors };
