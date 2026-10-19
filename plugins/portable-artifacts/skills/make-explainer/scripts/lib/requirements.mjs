@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ALL, nodeVersion, nodeModules, devDeps, sisterSkill, ffmpeg, browser } from '../../shared/doctor.mjs';
 
-const SECTION_SISTERS = { diagram: 'make-diagram', chart: 'make-dashboard', motion: 'make-motion' };
+const SECTION_SISTERS = { diagram: 'make-diagram', chart: 'make-dashboard', motion: 'make-motion', scene: 'make-scene' };
 
 // make-motion renders the video: ffmpeg may be make-motion's own ffmpeg-static, and the browser is required.
 const motionDir = (ctx) => path.join(path.dirname(ctx.skillDir), 'make-motion');

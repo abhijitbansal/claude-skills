@@ -123,6 +123,7 @@ export const SECTION_SCHEMAS = {
     caption: text,
     interactive: { type: 'boolean' },
   }),
+  scene: section('scene', ['scene'], { scene: { type: ['string', 'object'] }, caption: text }),
   motion: section('motion', [], { video: text, spec: text, poster: text, caption: text }),
   image: section('image', ['src', 'alt'], { src: text, alt: text, caption: text }),
 };

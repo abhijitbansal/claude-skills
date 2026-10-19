@@ -207,10 +207,10 @@ export function assetConflicts(assetsDir, assets) {
 }
 
 // The reference fields of a section: the only strings in a spec that name a file the build reads.
-const PATH_FIELDS = { image: ['src'], motion: ['video', 'poster', 'spec'], diagram: ['diagram'], chart: ['dashboard'] };
+const PATH_FIELDS = { image: ['src'], motion: ['video', 'poster', 'spec'], diagram: ['diagram'], chart: ['dashboard'], scene: ['scene'] };
 
 /**
- * The files the spec points at (image src, motion video/poster/spec, diagram and chart files), resolved against the
+ * The files the spec points at (image src, motion video/poster/spec, diagram, scene and chart files), resolved against the
  * spec's folder. The caller passes these to syncAssets as `protect`: a file this build reads is never pruned.
  * Prose that happens to spell a path is not one.
  */

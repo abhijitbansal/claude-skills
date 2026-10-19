@@ -66,7 +66,7 @@ export const isSlides = (spec) => spec.mode === 'slides' || spec.preset === 'sli
 const TYPE_LABELS = {
   tldr: 'TL;DR', text: 'Text', kpis: 'KPIs', cards: 'Cards', table: 'Table', risks: 'Risks', files: 'Files', steps: 'Steps',
   timeline: 'Timeline', compare: 'Comparison', callout: 'Note', code: 'Code', details: 'Details', checklist: 'Checklist',
-  diagram: 'Diagram', chart: 'Chart', motion: 'Video', image: 'Image',
+  diagram: 'Diagram', scene: 'Scene', chart: 'Chart', motion: 'Video', image: 'Image',
 };
 const typeLabel = (type) => TYPE_LABELS[type] ?? `${type[0].toUpperCase()}${type.slice(1)}`;
 export const slideTitle = (section) => (section.title === undefined ? typeLabel(section.type) : plain(section.title));

@@ -12,6 +12,7 @@ import { quoteArg } from '../../shared/doctor.mjs';
 import { EXPLAINER_THEME } from './default-theme.mjs';
 import { itemKey } from './render/checklist.mjs';
 import { readDiagramSpec, reportDiagramErrors, inPageTheme } from './diagram-source.mjs';
+import { readSceneSpec, reportSceneErrors, MAX_SCENE_SECTIONS } from './scene-source.mjs';
 import { chartMode, loadChartSource, INLINE_CHART_FIELDS } from './chart-source.mjs';
 import { LIMITS } from './schema.mjs';
 import { readVideo, readPoster, readMotionSpec, reportMotionErrors } from './motion-source.mjs';
@@ -118,6 +119,34 @@ registerCheck('diagram', async ({ section, path: at, dir, spec }) => {
   }];
   const result = await api.validateSpec(inPageTheme(source.spec, spec.theme));
   return [...reportDiagramErrors(result.errors, where, source.file), ...warnings];
+});
+
+// scene: at most MAX_SCENE_SECTIONS per page (each holds a WebGL context); the embedded spec (inline, or a file in
+// the spec folder) must pass make-scene's own validation under the page's theme, with its errors re-pathed under the
+// section's `scene` field. The scene's own `theme` is ignored (a warning says so). A blank string is already
+// reported by the section's own check.
+registerCheck('scene', async ({ section, path: at, dir, spec }) => {
+  const where = pathJoin(at, 'scene');
+  const nth = spec.sections.slice(0, spec.sections.indexOf(section) + 1).filter((s) => s.type === 'scene').length;
+  const errors = nth <= MAX_SCENE_SECTIONS ? [] : [{ path: at, message: `scene section ${nth}; a page holds at most ${MAX_SCENE_SECTIONS} scene sections (each one is a WebGL context) — drop one or build a separate page` }];
+  if (typeof section.scene === 'string' && section.scene.trim() === '') return errors;
+  const source = readSceneSpec(section.scene, dir);
+  if (source.error) return [...errors, { path: where, message: source.error }];
+  let api;
+  try {
+    api = await loadSibling('make-scene', 'scripts/lib/api.mjs');
+  } catch (e) {
+    if (!(e instanceof SiblingError)) throw e;
+    return [...errors, { path: where, message: e.message }];
+  }
+  const pageTheme = spec.theme ?? EXPLAINER_THEME;
+  const warnings = source.spec.theme === undefined ? [] : [{
+    path: pathJoin(where, 'theme'),
+    message: `ignored — the page theme (${JSON.stringify(pageTheme)}) is used; remove it or change the explainer's theme${source.file ? ` (in ${source.file})` : ''}`,
+    warning: true,
+  }];
+  const result = await api.validateSpec(inPageTheme(source.spec, spec.theme), { dir: source.dir });
+  return [...errors, ...reportSceneErrors(result.errors, where, source.file), ...warnings];
 });
 
 // chart: the chart a section describes must be one make-dashboard can draw. Inline rows are

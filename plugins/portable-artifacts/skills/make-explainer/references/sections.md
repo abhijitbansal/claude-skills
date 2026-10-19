@@ -2,7 +2,7 @@
 
 Every section has `type`, an optional `id`, an optional `title` and an optional `label`. A `title` is a claim a reader can agree or disagree with ("Search now ignores case"), not a label ("Overview"). The `label` is that short name ("Eval results", at most 4 words): the contents list shows it, and it sits as a small eyebrow above the heading (and above the slide heading in a deck). The label shows on every section that renders a heading (any section with a `title`, except a `callout`) and on a leading tldr's hero card even without a title. A `callout` draws its own heading and never shows a label; a section without a `title` shows no label and is not listed in the contents. Limits are in [schema.md](schema.md). Fields marked `*` are required. Closed sets: `tone` is `neutral` `accent` `good` `warn` `bad` unless the section says otherwise.
 
-On a page, a `tldr` that comes first (and is not the only section) is drawn inside the hero, under the title, as its summary card; its `label` is the card's heading, and the `title` then names the card for screen readers only. Visual sections (`kpis`, `cards`, `compare`, `diagram`, `chart`) alternate onto a surface band, starting with the first: the 1st, 3rd and so on.
+On a page, a `tldr` that comes first (and is not the only section) is drawn inside the hero, under the title, as its summary card; its `label` is the card's heading, and the `title` then names the card for screen readers only. Visual sections (`kpis`, `cards`, `compare`, `diagram`, `chart`, `scene`) alternate onto a surface band, starting with the first: the 1st, 3rd and so on.
 
 In slides mode each section is one slide (the title is the slide heading) and must fit the budget in schema.md; split a section that does not.
 
@@ -48,6 +48,17 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 - The page theme wins: a `theme` inside the diagram is ignored, with a warning.
 - Hover traces edges. A Present button opens make-diagram's whole viewer in an overlay: Play story (the transport, chapter and beat chips, the travelling dot), Explore (a side panel for a node or edge, Find, shift-click routes) and full screen. In a deck the keys belong to the overlay while it is open; Esc closes the panel, then leaves full screen, then closes the overlay.
 - Needs the `make-diagram` skill next to this one.
+
+## Scene
+
+`scene`: `scene`* and `caption`. `scene` is either a make-scene spec written inline as an object, or a path to a `.json` file in the explainer's folder (at most 1 MB; a data file it names resolves next to it). The full make-scene rules apply and its errors are reported under the section (`sections[2].scene.world: …`).
+
+- The page theme wins: a `theme` inside the scene is ignored, with a warning.
+- The scene sits in a 16:9 frame (at least 18rem tall) and starts only when it is about to scroll into view; orbit, hover, Explore, a tour and PNG export come from make-scene. Until it starts, and wherever WebGL is unavailable, the frame shows the scene's data table.
+- Decks and print show that data table instead (a deck ships no 3D runtime).
+- At most 4 scene sections per page (each one is a WebGL context); validate reports the fifth. Scene sections alternate onto the surface band like `diagram` and `chart`.
+- The page's content security policy does not change; make-scene needs nothing new.
+- Needs the `make-scene` skill next to this one (only a spec with a `scene` section asks for it).
 
 ## Chart
 

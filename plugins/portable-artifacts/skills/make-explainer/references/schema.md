@@ -34,7 +34,8 @@ Every section has `type` (required), an optional `id` (`^[a-z][a-z0-9-]*$`, uniq
 | `checklist.key` | `^[a-z0-9][a-z0-9._-]*$`, at most 80 characters, unique in the file |
 | `image.src` | png, jpg, webp or svg, at most 1.5 MB |
 | `motion.video` | `.mp4`, at most 50 MB |
-| `diagram` file, `motion.spec` file | `.json`, at most 1 MB |
+| `diagram` file, `scene` file, `motion.spec` file | `.json`, at most 1 MB |
+| `scene` sections | at most 4 per page |
 | Text length | Soft caps, warnings only: title 8 words, label 4, paragraph 3 sentences or 60 words, text section 120, card text 30, list item 20, page prose 900, tldr 3 points |
 
 Slides mode adds a budget to each section (errors): at most 6 points (tldr points, `- ` list lines, items of list-like sections, compare points, checklist items), 8 table rows, 12 code lines and 80 words of prose (the title, the label and captions do not count).
@@ -47,7 +48,7 @@ Validate also fails on a `TODO:` or lorem ipsum anywhere, on headings ending in 
 
 ## File references
 
-`diagram`, `chart.dashboard`, `motion.video`, `motion.spec`, `motion.poster` and `image.src` are paths relative to the `explainer.json` folder. Absolute paths, `..`, symlinks and missing files are errors that name the fix. Charts read local files only.
+`diagram`, `scene`, `chart.dashboard`, `motion.video`, `motion.spec`, `motion.poster` and `image.src` are paths relative to the `explainer.json` folder. Absolute paths, `..`, symlinks and missing files are errors that name the fix. Charts read local files only.
 
 ## Output
 
@@ -67,7 +68,7 @@ Environment: `PA_OUTPUT_DIR` (default output folder), `PA_MOTION_TIMEOUT_MS` (ho
 |---|---|
 | `gather.mjs git [--base <branch>] [--repo <folder>] [--out <file>] [--json]` | Without `--base`: `main`, then `master`, preferring origin's copy when it is ahead. Prints (or writes to `--out`) facts about the checked-out branch as JSON: branch, base, commits, changed files with line counts and renames, test files, date. Committed work only. |
 | `scaffold.mjs <recap\|checklist\|concept\|slides> [--facts facts.json] [--title <text>] [--out <file>]` | A starter `explainer.json`, printed or written to `--out`. Facts fill numbers, files, commits and folders; every sentence is a `TODO:` string. |
-| `validate.mjs <explainer.json> [--json]` | Schema, limits, prose lint, slide budget, file references and the embedded diagram, chart and motion checks. |
+| `validate.mjs <explainer.json> [--json]` | Schema, limits, prose lint, slide budget, file references and the embedded diagram, scene, chart and motion checks. |
 | `build.mjs <explainer.json> [--out <file.html\|dir>] [--theme <name>] [--image-api <https-endpoint>] [--model <m>] [--effort <e>] [--agent <a>] [--json]` | Validates, then writes the page. `--image-api` is optional and off by default: see "Hero image from an image API" below. |
 | `check.mjs <page.html> [--json]` | Optional headless check of a built page at 1280 and 390 px: console errors and warnings, sideways scrolling, elements wider than the page, content clipped sideways inside a slide, a deck's last slide reachable by arrow keys with the counter reading N / N, and each diagram's viewer mounting and its Present overlay opening and closing on Esc. Exit 0 ok or skipped (no browser), 1 problems, 2 usage. Needs Playwright and a browser (full `npm ci`); `PA_CHECK_TIMEOUT_MS` shortens the 60 s cap. |
 

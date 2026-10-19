@@ -7,7 +7,7 @@ sections; local scripts validate it, lint the prose and render it. Works with
 any agent that can run shell commands. Nothing leaves your machine
 unless you opt in with `--image-api` (see below).
 
-- **One spec, `explainer.json`**: a title and 1 to 40 sections of 18 types.
+- **One spec, `explainer.json`**: a title and 1 to 40 sections of 19 types.
   The agent never writes HTML, CSS, SVG or script; the spec accepts none of
   them, and text fields take only a small markdown subset.
 - **Facts come from scripts**: `gather.mjs git` reads a branch (commits, files
@@ -43,8 +43,10 @@ unless you opt in with `--image-api` (see below).
   code lines, 80 words).
 - **Embeds other skills**: a `diagram` section draws a make-diagram figure with
   hover tracing and a Present mode; a `chart` section draws a make-dashboard
-  chart as static SVG with a data table; a `motion` section plays an MP4 or
-  renders a make-motion spec.
+  chart as static SVG with a data table; a `scene` section embeds a make-scene
+  3D scene (orbit it, hover for exact values) that starts only when scrolled
+  into view, and shows a data table in decks and print; a `motion` section
+  plays an MP4 or renders a make-motion spec.
 
 > Agents: the instructions you follow are in [`SKILL.md`](SKILL.md). This
 > README is for people.
@@ -79,7 +81,8 @@ page, so keep the two together.
   them under `portableArtifacts.requires`). `npx skills add` does not resolve
   that list, so name all three:
   `npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram make-dashboard`.
-  Without them a spec with no diagram, chart or icon still builds; with one
+  A `scene` section needs **`make-scene`** the same way, and only a spec with
+  one asks for it. Without them a spec with no diagram, chart, scene or icon still builds; with one
   missing, validate prints that exact command.
 - `motion` sections that point at an existing `.mp4` need nothing more. Rendering
   a make-motion `spec` also needs the optional **`make-motion`** skill beside it,
@@ -95,7 +98,7 @@ page, so keep the two together.
 
 `tldr`, `text`, `kpis`, `cards`, `table`, `risks`, `files`, `steps`,
 `timeline`, `compare`, `callout`, `code`, `details`, `checklist`, `diagram`,
-`chart`, `motion`, `image`. Every field and limit:
+`chart`, `scene`, `motion`, `image`. Every field and limit:
 [`references/sections.md`](references/sections.md) and
 [`references/schema.md`](references/schema.md). The banned-phrase list:
 [`references/style.md`](references/style.md). One working example per preset:

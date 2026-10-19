@@ -1,0 +1,15 @@
+/* scene sections */
+/* the card: a fixed 16:9 frame (never shorter than a phone can use), holding make-scene's host */
+.sc-fig { width: min(100%, 64rem); margin: 0 auto; display: grid; gap: 10px; }
+.sc-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; min-height: 18rem; overflow: hidden; background: var(--page); border: 1px solid var(--line); border-radius: 10px; }
+.sc-frame .pa-scene { position: absolute; inset: 0; width: auto; height: auto; min-height: 0; }
+.sc-fig figcaption { max-width: 66ch; color: var(--text-3); font-size: var(--fs-sm); }
+/* a deck: the table only, scrolling inside its own box when it is long */
+.sc-fallback.sc-fb-static { position: static; inset: auto; max-height: 50vh; border: 1px solid var(--line); border-radius: 10px; }
+
+@media print {
+  .sc-fig { break-inside: avoid; }
+  .sc-frame { aspect-ratio: auto; min-height: 0; overflow: visible; border: 0; }
+  .sc-frame .pa-scene { position: static; }
+  .sc-fallback.sc-fb-static { max-height: none; overflow: visible; border: 0; }
+}

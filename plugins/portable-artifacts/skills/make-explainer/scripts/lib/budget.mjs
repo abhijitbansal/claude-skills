@@ -25,7 +25,7 @@ const COUNTED_KEYS = new Set(['text', 'lead', 'body', 'note', 'points', 'items',
 const BACKSTOP_KEYS = new Set(['text', 'intro', 'onFail', 'note', 'caption', 'alt']);
 const ALWAYS_BACKSTOP = new Set(['caption', 'alt']);
 const BACKSTOP_WORDS = 120;
-const NO_TITLE_CAP = new Set(['diagram', 'chart', 'motion']);
+const NO_TITLE_CAP = new Set(['diagram', 'chart', 'motion', 'scene']);
 const SECTION_CAP_TYPES = new Set(['text', 'details', 'callout']);
 const CARD_TYPES = new Set(['cards', 'steps']);
 const LIST_KEYS = new Set(['points', 'items', 'risk', 'mitigation']);
@@ -116,7 +116,7 @@ function titleWarnings(section, at) {
       }
     }
   };
-  // An embedded diagram, chart or motion spec has its own title; only the section's own title is capped.
+  // An embedded diagram, chart, motion or scene spec has its own title; only the section's own title is capped.
   if (NO_TITLE_CAP.has(section.type)) {
     if (typeof section.title === 'string' && words(section.title) > SOFT_CAPS.titleWords) {
       out.push(warn(pathJoin(at, 'title'), `title is ${words(section.title)} words; keep it to ${SOFT_CAPS.titleWords} — state the finding, move detail into the text`));

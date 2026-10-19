@@ -16,14 +16,14 @@ const text = (t = 'Body.') => ({ type: 'text', text: t });
 const ONE_NODE = { type: 'flow', nodes: [{ id: 'a', label: 'A' }] };
 const errorsOf = async (spec, opts = { dir: FIXTURES }) => (await validateSpec(spec, opts)).errors;
 const section = (type, patch) => ({ ...fixture().sections.find((s) => s.type === type), ...patch });
-const TYPE_LIST = '"tldr", "text", "kpis", "cards", "table", "risks", "files", "steps", "timeline", "compare", "callout", "code", "details", "checklist", "diagram", "chart", "motion", "image"';
+const TYPE_LIST = '"tldr", "text", "kpis", "cards", "table", "risks", "files", "steps", "timeline", "compare", "callout", "code", "details", "checklist", "diagram", "chart", "scene", "motion", "image"';
 
 test('the all-types fixture is valid with no warnings', async () => {
   const r = await validateSpec(fixture(), { dir: FIXTURES });
   assert.deepEqual(r, { ok: true, errors: [], warnings: [] });
 });
 
-test('every section type has a schema (the fixture covers all 18)', () => {
+test('every section type has a schema (the fixture covers all 19)', () => {
   assert.deepEqual(fixture().sections.map((s) => s.type), TYPE_LIST.replaceAll('"', '').split(', '));
 });
 
