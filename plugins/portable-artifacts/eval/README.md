@@ -9,12 +9,14 @@ what the host left behind.
 (cd ../skills/make-dashboard && npm ci)
 (cd ../skills/make-diagram && npm ci --omit=dev)
 (cd ../skills/make-explainer && npm ci --omit=dev)   # also needs make-diagram and make-dashboard installed
+(cd ../skills/make-scene && npm ci --omit=dev)       # also needs make-diagram and make-dashboard installed
 (cd ../skills/make-motion && npm ci && npx playwright install chromium)
 
 node run-eval.mjs --skill dashboard --host claude --limit 3
 node run-eval.mjs --skill motion --host codex --only q3-counter,edit-existing
 node run-eval.mjs --skill diagram --host claude --only checkout-path,edit-existing
 node run-eval.mjs --skill explainer --host claude --model haiku --only recap-from-repo,edit-existing
+node run-eval.mjs --skill scene --host claude --model haiku --only city-inline,edit-switch-forest
 node run-eval.mjs --skill dashboard --host codex-oss --model gemma4
 ```
 
@@ -28,7 +30,8 @@ optional `modelArgs` and a `check` command.
 1. Copies the skill (without `node_modules`, which is symlinked back to
    the original), `fixtures/data/`, and the seed spec for edit prompts
    into a temp dir. A skill that loads sibling skills (`explainer` needs
-   `make-diagram` and `make-dashboard`) gets those copied beside it. A prompt
+   `make-diagram` and `make-dashboard`; so does `scene`, for its lift prompts)
+   gets those copied beside it. A prompt
    marked `"repo": true` also gets `./repo`, a small git repository (`main`,
    then `feat/search` with three commits) for `gather.mjs` to read.
 2. Runs the host with the prompt *"Read `skills/<skill>/SKILL.md` and
@@ -36,7 +39,7 @@ optional `modelArgs` and a `check` command.
    `EVAL_LOG` is set, so every `validate.mjs` call the host makes adds a
    line to a log, which is how retries are counted.
 3. Scores the result. The harness reruns `validate` and the output step
-   (`build` for dashboards, diagrams and explainers, `render --contact-sheet` for motion) itself,
+   (`build` for dashboards, diagrams, explainers and scenes, `render --contact-sheet` for motion) itself,
    so a host whose sandbox blocked commands is still scored on its spec.
 
 | Metric | Meaning |
@@ -52,6 +55,18 @@ Results go to `results/<timestamp>/<host>-<skill>/`: `results.json`,
 page or contact-sheet PNGs. A person does the visual check by opening
 those PNGs and pages. `results/` is gitignored, except for summaries
 copied to `results/summary-*.md`.
+
+## Scene prompts
+
+`prompts/scene.json` has ten prompts for `make-scene`: one per world (city
+from inline numbers, forest with sub-teams, galaxy from
+`data/service_calls.json`, terrain from `data/web_traffic.csv`), commits per
+folder from `./repo`, a diagram lift (`data/orders.diagram.json`), a
+dashboard lift (`data/units.dashboard.json`, a bar chart), and three edit
+prompts. The lift inputs ride in `fixtures/data/` because a seed can only
+become the spec itself. Edit prompts start from `fixtures/seeds/scene.json`
+(a city with no tour) or `scene-tour.json` (the same city with a two-beat
+tour, for the rename). The pass bar for a billed run is 90% valid.
 
 ## Tests
 

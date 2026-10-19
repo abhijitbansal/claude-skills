@@ -1,0 +1,46 @@
+{
+  "title": "Orders service",
+  "subtitle": "How an order reaches the database",
+  "type": "architecture",
+  "nodes": [
+    {
+      "id": "web",
+      "label": "Web app",
+      "kind": "client"
+    },
+    {
+      "id": "api",
+      "label": "Orders API",
+      "kind": "service"
+    },
+    {
+      "id": "db",
+      "label": "Orders DB",
+      "kind": "database",
+      "icon": "brand:postgresql"
+    },
+    {
+      "id": "mail",
+      "label": "Email provider",
+      "kind": "external"
+    }
+  ],
+  "edges": [
+    {
+      "from": "web",
+      "to": "api",
+      "label": "posts order"
+    },
+    {
+      "from": "api",
+      "to": "db",
+      "label": "writes order"
+    },
+    {
+      "from": "api",
+      "to": "mail",
+      "label": "sends receipt",
+      "style": "async"
+    }
+  ]
+}

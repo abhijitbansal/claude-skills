@@ -132,6 +132,7 @@ Same as above but instead of scaffolding, runs `capture.sh` to absorb live state
 | `make-diagram` | "draw the checkout request path", `/make-diagram` | Writes a `diagram.json` topology (architecture, flow, sequence or state), validates it with a layout and geometry lint, builds one offline HTML diagram with zoom, hover tracing and a `P` presentation mode. See [portable-artifacts USAGE](plugins/portable-artifacts/USAGE.md). |
 | `make-explainer` | "recap this branch with a test checklist", "explain our cache as a deck", `/make-explainer` | Gathers git facts, scaffolds an `explainer.json` of typed sections (recap, checklist, concept or slides), fills it in, validates it with a prose lint and builds one offline HTML page or deck; embeds make-diagram figures, make-dashboard charts and video. Needs make-diagram and make-dashboard beside it. See [portable-artifacts USAGE](plugins/portable-artifacts/USAGE.md). |
 | `make-motion` | "make an 8s explainer video …", `/make-motion` | Writes a `motion.json` scene spec, self-checks via contact-sheet PNGs, previews locally, renders a deterministic MP4 (Playwright + ffmpeg). |
+| `make-scene` | "show commits per week per folder as a 3D city", "lift this diagram into 3D", `/make-scene` | Writes a `scene.json` spec (rows for a city, forest, galaxy or terrain, or a diagram or dashboard chart to lift, plus a camera tour), validates it, builds one offline three.js page, then shows the alternatives table (the other worlds, with the one-line command to switch at no model cost). See [portable-artifacts USAGE](plugins/portable-artifacts/USAGE.md). |
 
 ## Files Claude reads automatically
 
@@ -259,4 +260,4 @@ adapters/install.sh all
 
 Re-run after adding skills; the script is idempotent and prunes links it created for removed skills.
 
-`make-dashboard` / `make-diagram` / `make-explainer` / `make-motion` additionally need `npm ci` in their skill folders; `node plugins/portable-artifacts/bin/install.mjs <host>` handles that (plus Gemini and project-scoped installs).
+`make-dashboard` / `make-diagram` / `make-explainer` / `make-motion` / `make-scene` additionally need `npm ci` in their skill folders; `node plugins/portable-artifacts/bin/install.mjs <host>` handles that (plus Gemini and project-scoped installs).

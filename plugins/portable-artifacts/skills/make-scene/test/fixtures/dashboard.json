@@ -1,0 +1,29 @@
+{
+  "title": "Regional sales",
+  "sources": { "sales": { "type": "csv", "path": "data/sales.csv" } },
+  "queries": {
+    "by_region": "SELECT region, SUM(amount) AS revenue FROM sales GROUP BY 1 ORDER BY 1",
+    "vs_target": "SELECT region, SUM(amount) - 5000 AS vs_target FROM sales GROUP BY 1 ORDER BY 1",
+    "by_region_product": "SELECT region, product, SUM(amount) AS revenue FROM sales GROUP BY 1, 2 ORDER BY 1, 2",
+    "by_quarter": "SELECT date_trunc('quarter', date) AS quarter, region, SUM(amount) AS revenue FROM sales GROUP BY 1, 2 ORDER BY 1, 2",
+    "by_quarter_total": "SELECT date_trunc('quarter', date) AS quarter, SUM(amount) AS revenue FROM sales GROUP BY 1 ORDER BY 1",
+    "orders": "SELECT product, units, amount FROM sales",
+    "sizes": "SELECT product, region, SUM(units) AS units, SUM(amount) AS revenue, COUNT(*) AS orders FROM sales GROUP BY 1, 2 ORDER BY 1, 2",
+    "amounts": "SELECT amount FROM sales"
+  },
+  "charts": [
+    { "id": "revenue-by-region", "title": "Revenue by region", "query": "by_region", "kind": "bar", "x": "region", "y": "revenue" },
+    { "id": "vs-target", "title": "Revenue against a 5000 target", "query": "vs_target", "kind": "bar", "x": "region", "y": "vs_target" },
+    { "id": "stacked", "title": "Revenue by region and product", "query": "by_region_product", "kind": "stacked-bar", "x": "region", "y": "revenue", "color": "product" },
+    { "id": "grouped", "title": "Revenue by region and product, grouped", "query": "by_region_product", "kind": "grouped-bar", "x": "region", "y": "revenue", "color": "product" },
+    { "id": "trend", "title": "Quarterly revenue by region", "query": "by_quarter", "kind": "line", "x": "quarter", "y": "revenue", "color": "region" },
+    { "id": "trend-area", "title": "Quarterly revenue", "query": "by_quarter_total", "kind": "area", "x": "quarter", "y": "revenue" },
+    { "id": "orders", "title": "Units against amount", "query": "orders", "kind": "scatter", "x": "units", "y": "amount", "color": "product" },
+    { "id": "bubbles", "title": "Units against revenue, sized by orders", "query": "sizes", "kind": "bubble", "x": "units", "y": "revenue", "size": "orders", "color": "product" },
+    { "id": "heat", "title": "Revenue by region and product", "query": "by_region_product", "kind": "heatmap", "x": "region", "y": "product", "value": "revenue" },
+    { "id": "amounts", "title": "Order amounts", "query": "amounts", "kind": "histogram", "value": "amount" },
+    { "id": "spread", "title": "Spread of order amounts", "query": "amounts", "kind": "boxplot", "value": "amount" },
+    { "id": "share", "title": "Share of revenue", "query": "by_region", "kind": "donut", "x": "region", "y": "revenue", "format": "currency" },
+    { "id": "custom", "title": "Hand-written chart", "query": "by_region", "vegaLite": { "mark": "bar", "encoding": { "x": { "field": "region", "type": "nominal" }, "y": { "field": "revenue", "type": "quantitative" } } } }
+  ]
+}

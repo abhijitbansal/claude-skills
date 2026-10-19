@@ -1,0 +1,8 @@
+{
+  "title": "Units by product",
+  "sources": { "sales": { "type": "csv", "path": "sales.csv" } },
+  "queries": { "units_by_product": "SELECT product, SUM(units) AS units FROM sales GROUP BY 1 ORDER BY 2 DESC" },
+  "charts": [
+    { "id": "units", "title": "Gadget sells the most units", "query": "units_by_product", "kind": "bar", "x": "product", "y": "units" }
+  ]
+}

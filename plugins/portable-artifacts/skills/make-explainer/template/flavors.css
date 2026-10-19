@@ -86,6 +86,8 @@ html[data-flavor] .hero-tldr .points { padding-left: 1.1em; }
 html[data-flavor] .layout { padding-top: var(--sp-6); }
 html[data-flavor] .sections { counter-reset: sec; }
 html[data-flavor] .sec { position: relative; isolation: isolate; }
+/* isolation would trap make-scene's full-screen fallback (.sc-fill, fixed) under the later sections: the section carrying it rejoins the page's stack, on top */
+html[data-flavor] .sec:has(.pa-scene.sc-fill) { isolation: auto; z-index: 2147483000; }
 html[data-flavor] .sec:has(> .sec-title) { counter-increment: sec; }
 html[data-flavor] .sec + .sec { margin-top: var(--sp-8); }
 html[data-flavor] .sec-title { max-width: 22em; font-size: clamp(28px, 1.2vw + 20px, 40px); line-height: 1.02; font-weight: var(--head-weight); letter-spacing: var(--head-track); text-transform: var(--head-case); }

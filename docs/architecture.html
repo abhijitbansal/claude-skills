@@ -104,7 +104,7 @@ flowchart TD
   CW["core-workflow<br/><small>19 skills · 4 cmds · 2 agents · 1 hook</small>"]
   SW["second-wind<br/><small>skill wrapper</small>"]
   PC["prompt-craft<br/><small>7 skills · 6 hooks</small>"]
-  PA["portable-artifacts<br/><small>4 skills · installer</small>"]
+  PA["portable-artifacts<br/><small>5 skills · installer</small>"]
   TB["test-board<br/><small>test-run band</small>"]
   SC["session-compass<br/><small>compass band · /compass pane</small>"]
   WIND[("tools/second-wind<br/>wind.py")]
@@ -199,13 +199,14 @@ flowchart TD
           </div>
       <div class="card pcard go reveal">
         <h3><code>portable-artifacts</code></h3>
-        <p class="sub">dashboards + diagrams + explainer pages + animated videos, offline</p>
+        <p class="sub">dashboards + diagrams + explainer pages + 3D scenes + animated videos, offline</p>
         <ul>
           <li><strong>/make-dashboard</strong> — prompt + data file → SQL + Vega-Lite spec → one static HTML page; every chart shows its SQL and refresh time</li>
           <li><strong>/make-diagram</strong> — prompt → JSON topology → ELK-laid-out HTML diagram; zoom, a story player, an Explore panel, full screen</li>
-          <li><strong>/make-explainer</strong> — prompt → typed JSON sections → one HTML page or slide deck: branch recap, concept explainer, test checklist with saved progress; embeds diagrams, charts and video</li>
+          <li><strong>/make-explainer</strong> — prompt → typed JSON sections → one HTML page or slide deck: branch recap, concept explainer, test checklist with saved progress; embeds diagrams, charts, 3D scenes and video</li>
           <li><strong>/make-motion</strong> — prompt → scene spec → live preview + deterministic 1080p MP4; silent unless you ask for sound, then music from your file or a voiceover synthesised locally with Kokoro</li>
-          <li><strong>bin/install.mjs</strong> — copies all four skills into Claude Code, Codex, Copilot or Gemini CLI skill directories</li>
+          <li><strong>/make-scene</strong> — prompt → JSON spec → one offline three.js page: a city, forest, galaxy or terrain from your data, or a diagram or dashboard chart lifted into 3D, with a camera tour; the build offers the other worlds</li>
+          <li><strong>bin/install.mjs</strong> — copies all five skills into Claude Code, Codex, Copilot or Gemini CLI skill directories</li>
         </ul>
       </div>
     </div>
@@ -289,7 +290,7 @@ flowchart TD
     </div>
     <div class="foot-meta">
       <span class="lic">MIT licensed</span>
-      <span>8 plugins · 91 skills · 17 commands · 2 agents · 7 hooks · 1 CLI · 1 Copilot extension</span>
+      <span>8 plugins · 92 skills · 17 commands · 2 agents · 7 hooks · 1 CLI · 1 Copilot extension</span>
       <span>Tested on macOS &amp; Ubuntu</span>
     </div>
   </div>

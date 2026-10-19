@@ -37,6 +37,15 @@ export const SKILLS = {
     outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/build.mjs'), spec, '--out', path.join(work, 'out/explainer.html')],
     artifacts: ['out/explainer.html'],
   },
+  scene: {
+    dir: 'make-scene',
+    spec: 'scene.json',
+    // A lift loads make-diagram or make-dashboard, resolved as ../<name> beside the skill.
+    siblings: ['make-diagram', 'make-dashboard'],
+    // Build into <work>/out; success = out/scene.html exists.
+    outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/build.mjs'), spec, '--out', path.join(work, 'out/scene.html')],
+    artifacts: ['out/scene.html'],
+  },
 };
 
 // A prompt with `"repo": true` gets a small git repository at <work>/repo: `main`, then the branch

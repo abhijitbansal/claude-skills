@@ -37,7 +37,7 @@
     {
       "name": "portable-artifacts",
       "source": "./plugins/portable-artifacts",
-      "description": "Host-agnostic, offline, open-source artifact skills: static SQL + Vega-Lite dashboards with per-chart provenance, ELK-laid-out diagrams, HTML explainer pages and slide decks from typed sections, and spec-driven animated videos rendered to MP4"
+      "description": "Host-agnostic, offline, open-source artifact skills: static SQL + Vega-Lite dashboards with per-chart provenance, ELK-laid-out diagrams, HTML explainer pages and slide decks from typed sections, interactive 3D scenes (a city, forest, galaxy or terrain from your data, or a diagram or chart lifted into 3D), and spec-driven animated videos rendered to MP4"
     },
     {
       "name": "test-board",

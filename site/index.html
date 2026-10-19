@@ -19,7 +19,7 @@
 <meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="claude-skills — plugins for Claude Code, mined from real sessions. 8 plugins, 91 skills, 17 commands.">
+<meta property="og:image:alt" content="claude-skills — plugins for Claude Code, mined from real sessions. 8 plugins, 92 skills, 17 commands.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="claude-skills — plugins for Claude Code">
 <meta name="twitter:description" content="iOS from chat, offline dashboards and videos, session mods above the prompt, overnight auto-resume. One copy command to install.">
@@ -57,7 +57,7 @@
       <p class="hint">Paste it into Claude Code, then <code>/plugin install &lt;name&gt;@claude-skills</code> for any plugin below. The skills also port to Codex and Copilot CLI.</p>
     </div>
     <div class="inventory" aria-label="Repository at a glance">
-      <span>8 plugins · 91 skills · 17 commands · 2 agents · 7 hooks · 1 CLI · 1 Copilot extension</span>
+      <span>8 plugins · 92 skills · 17 commands · 2 agents · 7 hooks · 1 CLI · 1 Copilot extension</span>
       <span>Tested on macOS and Ubuntu</span>
       <span>Markdown, shell and stdlib Python; portable-artifacts and the Cache Clock report need Node</span>
     </div>
@@ -67,7 +67,7 @@
   <section id="spotlight">
     <div class="eyebrow">Spotlight</div>
     <h2 class="title">A cost guard for Copilot, two lines above the prompt, and artifacts any agent can build.</h2>
-    <p class="section-lead">The newest work: a Copilot extension, two mods and four artifact skills. All of them run locally, and each is one line to install.</p>
+    <p class="section-lead">The newest work: a Copilot extension, two mods and five artifact skills. All of them run locally, and each is one line to install.</p>
 
     <article class="spot" id="cache-clock">
       <div class="spot-media media-stack">
@@ -142,15 +142,15 @@
         </figure>
       </div>
       <div class="spot-text">
-        <p class="tagline">portable-artifacts · /make-dashboard · /make-diagram · /make-explainer · /make-motion</p>
-        <h3>Dashboards, diagrams, explainers and videos, built offline by any agent</h3>
-        <p><code>/make-dashboard</code> turns a data file into one self-contained HTML page of KPI tiles and charts, and every chart expands to show its SQL, row count and refresh time. <code>/make-diagram</code> turns a prompt into an architecture diagram, flowchart, sequence or state diagram as one offline page with zoom, a story player, an Explore panel and full screen. <code>/make-explainer</code> turns a branch, an idea or a plan into one offline page or slide deck of typed sections (a verdict, numbers, files changed, a timeline, a test checklist that remembers its ticks), embedding diagrams, charts and clips, and a linter rejects filler phrases and leftover placeholders before it builds. <code>/make-motion</code> turns a prompt into a live preview with a scrubber and a deterministic 1080p MP4, silent unless you ask for sound, then music from your file or a locally synthesised voiceover. Each page also carries a favicon, an icon theme toggle (except the make-motion preview) and a line saying which model, effort level and agent wrote it. Each skill's doctor reports anything missing before the first build. Tested live on this branch in Claude Code and GitHub Copilot CLI, and in an earlier eval on Codex CLI; Gemini CLI install paths are checked against its docs, not run live.</p>
+        <p class="tagline">portable-artifacts · /make-dashboard · /make-diagram · /make-explainer · /make-motion · /make-scene</p>
+        <h3>Dashboards, diagrams, explainers, 3D scenes and videos, built offline by any agent</h3>
+        <p><code>/make-dashboard</code> turns a data file into one self-contained HTML page of KPI tiles and charts, and every chart expands to show its SQL, row count and refresh time. <code>/make-diagram</code> turns a prompt into an architecture diagram, flowchart, sequence or state diagram as one offline page with zoom, a story player, an Explore panel and full screen. <code>/make-explainer</code> turns a branch, an idea or a plan into one offline page or slide deck of typed sections (a verdict, numbers, files changed, a timeline, a test checklist that remembers its ticks), embedding diagrams, charts, 3D scenes and clips, and a linter rejects filler phrases and leftover placeholders before it builds. <code>/make-motion</code> turns a prompt into a live preview with a scrubber and a deterministic 1080p MP4, silent unless you ask for sound, then music from your file or a locally synthesised voiceover. <code>/make-scene</code> turns your data into an explorable 3D city, forest, galaxy or terrain, or lifts a diagram or chart into 3D, with a camera tour, as one offline page. Each page also carries a favicon, an icon theme toggle (except the make-motion preview) and a line saying which model, effort level and agent wrote it. Each skill's doctor reports anything missing before the first build. Tested live on this branch in Claude Code and GitHub Copilot CLI, and in an earlier eval on Codex CLI; Gemini CLI install paths are checked against its docs, not run live; make-scene passed its eval with 10/10 valid builds in one eval run (Claude Haiku in Claude Code, median 1.5 validate runs; <a href="https://github.com/abhijitbansal/claude-skills/blob/main/plugins/portable-artifacts/eval/results/summary-scene-2026-10-19.md">results</a>).</p>
         <ol class="howlist" aria-label="How portable-artifacts works">
           <li><b>Offline, and the same result every time.</b> After a one-time install nothing touches the network except your own data files (and an image service, only if you opt in to make-explainer's <code>--image-api</code>), and the same spec always produces the same page or video (the build date in the page footer and a dashboard's refresh time aside). A spec that tries to reach the network is rejected.</li>
           <li><b>The model's whole job is one small JSON file.</b> Writing a spec that matches a schema is easy work, so this runs on small and local models too. A mistake comes back as a precise message, for example <code>charts[0].query: "rev_by_regin" not found; did you mean "rev_by_region"?</code>, and the agent fixes one field instead of regenerating everything.</li>
           <li><b>Scripts do the rest.</b> Plain Node scripts validate the spec, build the HTML page, run the preview and render the MP4. "Slow down scene 2" changes one field, so everything else stays exactly as it was. Needs Node 20; make-motion also needs Chromium and ffmpeg, and fetches the Kokoro voice model once if you ask for narration.</li>
         </ol>
-        <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> install portable-artifacts@claude-skills</code><button class="copy" data-copy="/plugin install portable-artifacts@claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">npx</span> skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion</code><button class="copy" data-copy="npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion">copy</button></div></div>
+        <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> install portable-artifacts@claude-skills</code><button class="copy" data-copy="/plugin install portable-artifacts@claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">npx</span> skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene</code><button class="copy" data-copy="npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene">copy</button></div></div>
         <div class="links">
           <a href="../docs/features/portable-artifacts.html#showcase">See the showcase</a>
           <a href="../docs/features/portable-artifacts.html#gallery">Gallery: dashboards, videos, explainers, diagrams</a>
@@ -270,7 +270,7 @@
       <article class="prow compact">
         <div class="name">
           <h3><a href="../docs/catalog.html">Everything, searchable</a></h3>
-          <span class="meta">91 skills · 17 commands · agents · hooks · CLI</span>
+          <span class="meta">92 skills · 17 commands · agents · hooks · CLI</span>
         </div>
         <p class="what">The catalog lists every skill, command, agent, hook and CLI tool with a search box and type filters, each linked back to the plugin it ships in. <a href="../docs/catalog.html">Open the catalog</a></p>
       </article>

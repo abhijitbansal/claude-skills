@@ -89,6 +89,11 @@ jobs:
       - name: make-diagram
         working-directory: plugins/portable-artifacts/skills/make-diagram
         run: npm ci && npx playwright install --with-deps chromium && npm test
+      # lift tests use make-diagram's and make-dashboard's node_modules, so this runs after both
+      - name: make-scene
+        working-directory: plugins/portable-artifacts/skills/make-scene
+        run: npm ci && npx playwright install --with-deps chromium && npm test
+      # make-explainer's scene test needs make-scene's node_modules, so it runs after make-scene
       - name: make-explainer
         working-directory: plugins/portable-artifacts/skills/make-explainer
         run: npm ci && npx playwright install --with-deps chromium && npm test

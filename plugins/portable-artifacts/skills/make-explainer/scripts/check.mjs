@@ -29,6 +29,14 @@ const MAX_CLIPPED = 3;
 const MAX_OVERLAYS = 5;
 const TIMED_OUT = Symbol('timed out');
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
+// Chromium on a GPU machine reports its own GL driver performance hints ("GPU stall due to ReadPixels") as warnings;
+// they say nothing about the page, so they are the one warning a check lets through.
+const GL_DRIVER_PERFORMANCE_HINT = /^\[\.WebGL-[^\]]*\]GL Driver Message \([^)]*Performance/;
+/** True when a console message of this type is a problem with the page: every error, and every warning except a GL driver performance hint. */
+export function isConsoleProblem(type, text) {
+  if (type === 'error') return true;
+  return type === 'warning' && !GL_DRIVER_PERFORMANCE_HINT.test(text);
+}
 const article = (word) => (/^[aeiou]/i.test(word) ? 'an' : 'a');
 
 // Runs in the page. Two lists of elements that stick out sideways:
@@ -170,7 +178,7 @@ async function checkViewport(browser, url, viewport) {
     page.setDefaultTimeout(ACTION_MS);
     page.setDefaultNavigationTimeout(ACTION_MS);
     page.on('console', (m) => {
-      if (m.type() === 'error' || m.type() === 'warning') problems.push(`${label}: console ${m.type()}: ${m.text()}`);
+      if (isConsoleProblem(m.type(), m.text())) problems.push(`${label}: console ${m.type()}: ${m.text()}`);
     });
     page.on('pageerror', (e) => problems.push(`${label}: page error: ${e.message}`));
     page.on('dialog', (d) => { problems.push(`${label}: the page opened ${article(d.type())} ${d.type()} dialog`); d.dismiss(); });

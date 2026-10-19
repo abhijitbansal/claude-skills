@@ -37,7 +37,7 @@ function relativeTo(dir) {
 
 // A dashboard with a postgres or mysql source reads the network when it runs. Looked at before anything runs;
 // a dashboard that is not JSON is left for make-dashboard to report.
-async function networkSourceError(abs, section) {
+export async function networkSourceError(abs, section) {
   let sources;
   try {
     sources = JSON.parse(fs.readFileSync(abs, 'utf8'))?.sources;

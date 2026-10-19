@@ -49,10 +49,10 @@ test('a section label does not count toward the slide word budget', () => {
 
 // ---- review round 1 -----------------------------------------------------------------------
 
-test('the band set is exactly kpis, cards, compare, diagram and chart', async () => {
+test('the band set is exactly kpis, cards, compare, diagram, chart and scene', async () => {
   const { SECTIONS } = await import('../scripts/lib/sections.mjs');
   const banded = Object.entries(SECTIONS).filter(([, def]) => def.band).map(([type]) => type).sort();
-  assert.deepEqual(banded, ['cards', 'chart', 'compare', 'diagram', 'kpis']);
+  assert.deepEqual(banded, ['cards', 'chart', 'compare', 'diagram', 'kpis', 'scene']);
 });
 
 test('the band starts on the first visual section and alternates (1st, 3rd, ...)', async () => {

@@ -165,6 +165,11 @@ function checkSection(s, i, errors, state) {
         errors.push({ path: pathJoin(at, 'diagram'), message: wordSchemaMessage });
       }
       break;
+    case 'scene':
+      if (typeof s.scene === 'string' && !new RegExp(NON_SPACE).test(s.scene)) {
+        errors.push({ path: pathJoin(at, 'scene'), message: wordSchemaMessage });
+      }
+      break;
     case 'chart': checkChart(s, at, errors); break;
     case 'motion':
       if (s.video === undefined && s.spec === undefined) {

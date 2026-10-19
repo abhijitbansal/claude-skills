@@ -35,6 +35,7 @@ const HOSTILE = {
   motion: { type: 'motion', video: 'demo.mp4', poster: 'poster.png', caption: P },
   diagram: { type: 'diagram', caption: P, diagram: { title: P, type: 'flow', nodes: [{ id: 'a', label: P }, { id: 'b', label: P, note: P }], edges: [{ from: 'a', to: 'b', label: P }] } },
   chart: { type: 'chart', title: P, caption: P, kind: 'bar', x: 'cat', y: 'n', data: [{ cat: P, n: 1 }, { cat: 'b', n: 2 }] },
+  scene: { type: 'scene', caption: P, scene: { title: 'Commits', world: 'city', data: { rows: [{ group: P, t: P, value: 3 }, { group: 'b', t: 'y', value: 2 }] } } },
   checklist: { type: 'checklist', key: 'k', intro: P, onFail: P, groups: [{ title: P, items: [{ text: P, note: P, tag: 'visual' }] }] },
 };
 

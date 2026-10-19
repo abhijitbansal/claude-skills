@@ -21,8 +21,9 @@ import * as checklist from './render/checklist.mjs';
 import * as diagram from './render/diagram.mjs';
 import * as chart from './render/chart.mjs';
 import * as motion from './render/motion.mjs';
+import * as scene from './render/scene.mjs';
 
-const MODULES = { tldr, text, kpis, cards, table, risks, files, steps, timeline, compare, callout, code, details, image, checklist, diagram, chart, motion };
+const MODULES = { tldr, text, kpis, cards, table, risks, files, steps, timeline, compare, callout, code, details, image, checklist, diagram, chart, motion, scene };
 
 export const SECTIONS = Object.freeze(Object.fromEntries(
   Object.entries(MODULES).map(([type, m]) => [type, Object.freeze({ render: m.render, ownHeading: m.ownHeading === true, band: m.band === true, assets: m.assets, prepare: m.prepare, page: m.page, check: m.check })]),

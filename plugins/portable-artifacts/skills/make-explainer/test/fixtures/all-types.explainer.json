@@ -22,6 +22,7 @@
     { "type": "checklist", "title": "Manual tests", "key": "feat-visual-artifacts", "intro": "Tick as you go.", "onFail": "Note the step and file an issue.", "groups": [{ "title": "Install", "items": [{ "text": "Skill installs", "tag": "device", "note": "fresh machine" }] }] },
     { "type": "diagram", "title": "How it connects", "diagram": { "title": "x", "type": "flow", "nodes": [{ "id": "a", "label": "A" }, { "id": "b", "label": "B" }], "edges": [{ "from": "a", "to": "b" }] }, "caption": "Overview" },
     { "type": "chart", "title": "Growth", "data": [{ "a": "Q1", "b": 2 }], "kind": "bar", "x": "a", "y": "b", "caption": "Counts" },
+    { "type": "scene", "title": "Commit city", "scene": { "title": "Commits", "world": "city", "data": { "rows": [{ "group": "api", "t": "W1", "value": 3 }, { "group": "web", "t": "W1", "value": 2 }] } }, "caption": "By folder" },
     { "type": "motion", "title": "Demo", "video": "demo.mp4", "poster": "poster.png", "caption": "Walkthrough" },
     { "type": "image", "title": "Screenshot", "src": "pixel.png", "alt": "A single pixel", "caption": "Tiny" }
   ]

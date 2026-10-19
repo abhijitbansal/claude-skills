@@ -1,0 +1,24 @@
+{
+  "title": "Password reset",
+  "type": "flow",
+  "direction": "down",
+  "groups": [ { "id": "email", "label": "Email" } ],
+  "nodes": [
+    { "id": "begin", "label": "Start", "kind": "start" },
+    { "id": "ask", "label": "Enter email address", "kind": "io" },
+    { "id": "known", "label": "Account exists?", "kind": "decision" },
+    { "id": "send", "label": "Send reset link", "group": "email" },
+    { "id": "wait", "label": "Wait for click", "kind": "wait", "group": "email" },
+    { "id": "check", "label": "Verify token", "kind": "subprocess" },
+    { "id": "done", "label": "Password changed", "kind": "end" }
+  ],
+  "edges": [
+    { "from": "begin", "to": "ask" },
+    { "from": "ask", "to": "known" },
+    { "from": "known", "to": "send", "label": "yes" },
+    { "from": "known", "to": "ask", "label": "no", "style": "dashed" },
+    { "from": "send", "to": "wait" },
+    { "from": "wait", "to": "check" },
+    { "from": "check", "to": "done" }
+  ]
+}

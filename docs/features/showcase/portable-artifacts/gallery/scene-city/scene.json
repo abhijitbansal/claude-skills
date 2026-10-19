@@ -1,0 +1,172 @@
+{
+  "title": "Commits per folder, last 6 weeks",
+  "subtitle": "One block per folder and week; height is commits",
+  "world": "city",
+  "theme": "dusk",
+  "data": {
+    "rows": [
+      {
+        "group": "api",
+        "t": "2026-W30",
+        "value": 12
+      },
+      {
+        "group": "api",
+        "t": "2026-W31",
+        "value": 7
+      },
+      {
+        "group": "api",
+        "t": "2026-W32",
+        "value": 18
+      },
+      {
+        "group": "api",
+        "t": "2026-W33",
+        "value": 9
+      },
+      {
+        "group": "api",
+        "t": "2026-W34",
+        "value": 14
+      },
+      {
+        "group": "api",
+        "t": "2026-W35",
+        "value": 11
+      },
+      {
+        "group": "web",
+        "t": "2026-W30",
+        "value": 5
+      },
+      {
+        "group": "web",
+        "t": "2026-W31",
+        "value": 9
+      },
+      {
+        "group": "web",
+        "t": "2026-W32",
+        "value": 22
+      },
+      {
+        "group": "web",
+        "t": "2026-W33",
+        "value": 14
+      },
+      {
+        "group": "web",
+        "t": "2026-W34",
+        "value": 17
+      },
+      {
+        "group": "web",
+        "t": "2026-W35",
+        "value": 20
+      },
+      {
+        "group": "docs",
+        "t": "2026-W30",
+        "value": 2
+      },
+      {
+        "group": "docs",
+        "t": "2026-W31",
+        "value": 4
+      },
+      {
+        "group": "docs",
+        "t": "2026-W32",
+        "value": 3
+      },
+      {
+        "group": "docs",
+        "t": "2026-W33",
+        "value": 6
+      },
+      {
+        "group": "docs",
+        "t": "2026-W34",
+        "value": 5
+      },
+      {
+        "group": "docs",
+        "t": "2026-W35",
+        "value": 8
+      },
+      {
+        "group": "infra",
+        "t": "2026-W30",
+        "value": 8
+      },
+      {
+        "group": "infra",
+        "t": "2026-W31",
+        "value": 3
+      },
+      {
+        "group": "infra",
+        "t": "2026-W32",
+        "value": 6
+      },
+      {
+        "group": "infra",
+        "t": "2026-W33",
+        "value": 15
+      },
+      {
+        "group": "infra",
+        "t": "2026-W34",
+        "value": 10
+      },
+      {
+        "group": "infra",
+        "t": "2026-W35",
+        "value": 4
+      },
+      {
+        "group": "mobile",
+        "t": "2026-W31",
+        "value": 6
+      },
+      {
+        "group": "mobile",
+        "t": "2026-W32",
+        "value": 11
+      },
+      {
+        "group": "mobile",
+        "t": "2026-W33",
+        "value": 8
+      },
+      {
+        "group": "mobile",
+        "t": "2026-W34",
+        "value": 19
+      },
+      {
+        "group": "mobile",
+        "t": "2026-W35",
+        "value": 13
+      }
+    ]
+  },
+  "units": "commits",
+  "tour": [
+    {
+      "title": "The API leads early",
+      "focus": [
+        "api"
+      ],
+      "caption": "Most commits land here in the first weeks."
+    },
+    {
+      "title": "Web spikes in week 32",
+      "focus": [
+        "web"
+      ],
+      "caption": "The redesign landed."
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<!--@GENERATOR-->
+<!--@FAVICON-->
+<title><!--@TITLE--></title>
+<script>
+// Apply the saved theme before first paint (no flash). Storage may throw.
+(function () { try { var t = window.localStorage.getItem('pa-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {} })();
+</script>
+<style id="pa-theme-css">
+<!--@THEME-->
+</style>
+<style id="pa-scene-css">
+<!--@SCENE_CSS-->
+</style>
+<style>
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; background: var(--page); color: var(--text); font: var(--fs-sm)/1.4 var(--font); -webkit-text-size-adjust: 100%; }
+.bar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.titles { min-width: 0; }
+h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); overflow-wrap: anywhere; }
+.sub { margin: 2px 0 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.tools { flex: none; display: flex; gap: 6px; align-items: center; }
+.tool { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; cursor: pointer; color: var(--text-2); font: inherit; line-height: 1.3; }
+@media (hover: hover) and (pointer: fine) { .tool:hover { color: var(--text); background: var(--accent-soft); } }
+.tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tools .tool[data-theme-toggle] { min-width: 30px; min-height: 0; padding: 4px 6px; }
+main { flex: 1 1 0; min-height: 0; position: relative; }
+main .pa-scene { position: absolute; inset: 0; width: auto; height: auto; min-height: 0; }
+.foot { flex: none; padding: 4px 16px; background: var(--surface); border-top: 1px solid var(--line); }
+.pa-provenance { margin: 0; color: var(--text-3); font-size: var(--fs-xs); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media print { body { display: block; height: auto; overflow: visible; } main { position: static; } main .pa-scene { position: static; } .tools { display: none; } }
+</style>
+<style><!--@TOGGLE_CSS--></style>
+</head>
+<body>
+<header class="bar">
+<div class="titles">
+<h1><!--@TITLE--></h1>
+<!--@SUBTITLE-->
+</div>
+<div class="tools">
+<button type="button" class="tool" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><!--@TOGGLE_ICONS--></button>
+<script><!--@TOGGLE_JS--></script>
+</div>
+</header>
+<main>
+<!--@SCENE-->
+</main>
+<footer class="foot">
+<!--@PROVENANCE-->
+</footer>
+<script><!--@RUNTIME--></script>
+<script>if (window.PAScene) PAScene.initAll({ globalKeys: true });</script>
+</body>
+</html>
