@@ -254,7 +254,7 @@ test('CLI writes { rows } and the pasted data line validates beside scene.json',
   } finally { repo.cleanup(); fs.rmSync(outDir, { recursive: true, force: true }); }
 });
 
-test('CLI --out with .. prints the bare file name, not the .. path', () => {
+test('CLI --out with .. prints the bare file name, and that line validates beside scene.json', async () => {
   const repo = fixtureRepo();
   const outDir = tmp('scene-rows-up-');
   fs.mkdirSync(path.join(outDir, 'sub'));
@@ -265,6 +265,11 @@ test('CLI --out with .. prints the bare file name, not the .. path', () => {
     assert.ok(fs.existsSync(path.join(outDir, 'up-rows.json')));
     assert.match(r.stdout, /"data": \{ "file": "up-rows\.json" \}/);
     assert.doesNotMatch(r.stdout, /"file": "[^"]*\.\./);
+    const pasted = /"data": (\{ "file": "[^"]+" \})/.exec(r.stdout);
+    assert.ok(pasted, 'prints a data line');
+    fs.writeFileSync(path.join(outDir, 'scene.json'), JSON.stringify({ title: 'History', data: JSON.parse(pasted[1]) }));
+    const { spec, dir } = loadSpec(path.join(outDir, 'scene.json'));
+    assert.deepEqual((await validateSpec(spec, { dir })).errors, []);
   } finally { repo.cleanup(); fs.rmSync(outDir, { recursive: true, force: true }); }
 });
 
@@ -284,30 +289,39 @@ test('CLI default output is ./scene-rows.json in the current directory', () => {
 test('folders named with quotes, backslashes and tabs come back exact', () => {
   const repo = fixtureRepo();
   try {
-    repo.commit('2026-10-14T10:00:00Z', 'we"ird/a.js', 'tab\tdir/b.js', 'back\\slash/c.js', 'sp ace/d.js', 'caf\u00e9/e.js');
+    repo.commit('2026-10-14T10:00:00Z', 'we"ird/a.js', 'tab\tdir/b.js', 'back\\slash/c.js', 'sp ace/d.js', 'caf\u00e9/e.js', 'new\nline/f.js');
     const rows = historyRows({ repo: repo.dir, weeks: 2, depth: 1, now: NOW });
-    assert.deepEqual(groupsOf(rows).sort(), ['back\\slash', 'caf\u00e9', 'sp ace', 'tab\tdir', 'we"ird']);
+    assert.deepEqual(groupsOf(rows).sort(), ['back\\slash', 'caf\u00e9', 'new\nline', 'sp ace', 'tab\tdir', 'we"ird']);
     assert.equal(valueOf(rows, 'we"ird', '2026-W42'), 1);
     assert.equal(valueOf(rows, 'tab\tdir', '2026-W42'), 1);
   } finally { repo.cleanup(); }
 });
 
-test('inherited GIT_DIR and GIT_CONFIG_PARAMETERS do not change the result', () => {
-  const repo = fixtureRepo();
-  const decoy = fixtureRepo();
-  try {
-    repo.commit(new Date().toISOString(), 'src/a.js');
-    decoy.commit(new Date().toISOString(), 'decoy/z.js');
-    const hostile = {
-      GIT_DIR: path.join(decoy.dir, '.git'),
-      GIT_WORK_TREE: decoy.dir,
-      // makes any git that reads it refuse to run: "repository version 99"
-      GIT_CONFIG_PARAMETERS: "'core.repositoryformatversion=99'",
-      GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.repositoryformatversion', GIT_CONFIG_VALUE_0: '99',
-    };
-    const out = path.join(repo.dir, 'o.json');
-    const r = runCli(['git', '--repo', repo.dir, '--weeks', '2', '--out', out], { env: { ...process.env, ...hostile } });
-    assert.equal(r.status, 0, r.stderr);
-    assert.deepEqual(groupsOf(JSON.parse(fs.readFileSync(out, 'utf8')).rows), ['src']);
-  } finally { repo.cleanup(); decoy.cleanup(); }
+// Each case breaks or changes an UNSCRUBBED `git log` (verified by hand: bad object HEAD, not a git repository,
+// or the root commit losing its files), so it only passes while the child's environment is cleaned.
+const HOSTILE = (decoy, empty) => ({
+  'GIT_DIR and GIT_WORK_TREE at another repo': { env: { GIT_DIR: path.join(decoy, '.git'), GIT_WORK_TREE: decoy } },
+  'GIT_OBJECT_DIRECTORY at an empty folder': { env: { GIT_OBJECT_DIRECTORY: empty } },
+  'GIT_CEILING_DIRECTORIES above a --repo subfolder': { subfolder: true, ceiling: true },
+  'GIT_CONFIG_PARAMETERS log.showRoot=false': { env: { GIT_CONFIG_PARAMETERS: "'log.showRoot=false'" } },
+  'GIT_CONFIG_COUNT/KEY_0/VALUE_0 log.showRoot=false': { env: { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'log.showRoot', GIT_CONFIG_VALUE_0: 'false' } },
 });
+
+for (const name of Object.keys(HOSTILE('', ''))) {
+  test(`inherited ${name} does not change the result`, () => {
+    const repo = fixtureRepo();
+    const decoy = fixtureRepo();
+    const empty = tmp('scene-rows-empty-');
+    try {
+      repo.commit(new Date().toISOString(), 'src/a.js'); // the root commit: log.showRoot=false would strip its files
+      decoy.commit(new Date().toISOString(), 'decoy/z.js');
+      const { env = {}, subfolder = false, ceiling = false } = HOSTILE(decoy.dir, empty)[name];
+      if (ceiling) env.GIT_CEILING_DIRECTORIES = repo.dir;
+      const target = subfolder ? path.join(repo.dir, 'src') : repo.dir;
+      const out = path.join(repo.dir, 'o.json');
+      const r = runCli(['git', '--repo', target, '--weeks', '2', '--out', out], { env: { ...process.env, ...env } });
+      assert.equal(r.status, 0, r.stderr);
+      assert.deepEqual(groupsOf(JSON.parse(fs.readFileSync(out, 'utf8')).rows), ['src']);
+    } finally { repo.cleanup(); decoy.cleanup(); fs.rmSync(empty, { recursive: true, force: true }); }
+  });
+}
