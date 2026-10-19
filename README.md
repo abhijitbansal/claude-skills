@@ -12,6 +12,41 @@ Skills, plugins, and tools for AI agents — one repo, usable from **Claude Code
 auto-resume** orchestrator that keeps overnight runs alive (`second-wind`),
 **token-optimized CLI output** (`cartoon`), and Linear PM automation.
 
+<p align="center">
+  <a href="https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery"><img src="docs/features/img/portable-artifacts/launch-announcement.gif" width="640" alt="A launch announcement clip: the title Lumen 2.0 scales in over the tagline Search that keeps up, a counter runs from 1 to 3 with the suffix x faster under the caption Median query time vs 1.0, three feature labels (Offline index, Typo-tolerant, Private by default) appear one after another, and the end card reads Available today."></a>
+</p>
+
+Made by an agent from this prompt with `/make-motion`: JSON in, MP4 out, offline.
+
+```text
+Make a 10-second launch announcement, 1920x1080: scene 1 the product name "Lumen 2.0" scales in with the tagline "Search that keeps up"; scene 2 a counter from 1 to 3 with the suffix "x faster" and the caption "Median query time vs 1.0"; scene 3 three feature labels (Offline index, Typo-tolerant, Private by default) appear one after another; end on "Available today".
+```
+
+Install it with `/plugin install portable-artifacts@claude-skills`. These three came from the same plugin, each linked to its page:
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/gallery/delivery-diagram/dusk/index.html"><img src="docs/features/img/portable-artifacts/diagram-story.gif" alt="A food delivery architecture diagram playing its story: step 1, the customer taps place order, lights the edge from Customer to Mobile app, then step 2 moves on to the edge from Mobile app to API gateway, with the caption and step chips below, a Pause button, and a small ring beside Next that fills while a step holds."></a><br>
+      <sub><code>/make-diagram</code>: a diagram that plays its own story</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/growth-dashboard.html"><img src="docs/features/img/portable-artifacts/growth-dashboard.jpg" alt="A Growth overview dashboard: three KPI tiles (total revenue, units sold, signup conversion rate) above bar charts of revenue by region and signup conversion rate by channel, a line chart of monthly revenue and a line chart of daily sessions by channel."></a><br>
+      <sub><code>/make-dashboard</code>: two CSV files in, one offline dashboard out</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/gallery/explainer-deck/index.html"><img src="docs/features/showcase/portable-artifacts/gallery/explainer-deck/thumb.jpg" alt="The title slide of the Portable Artifacts Deck: the title and a short subtitle in a card over a warm sunset landscape, with date, branch and repo tags."></a><br>
+      <sub><code>/make-explainer</code>: a slide deck as one HTML file</sub>
+    </td>
+  </tr>
+</table>
+
+The dashboard came from this prompt:
+
+```text
+Build a "Growth overview" dashboard from data/sales.csv and data/web_traffic.csv: KPI tiles for total revenue, units sold and overall signup conversion rate; revenue by region; the monthly revenue trend; daily sessions by channel; and signup conversion rate by channel.
+```
+
 | Plugin | What you get |
 | --- | --- |
 | `ios-dev` | iOS feedback loop: simulator build + screenshot delivered to your phone, device builds, TestFlight/App Store release automation |
