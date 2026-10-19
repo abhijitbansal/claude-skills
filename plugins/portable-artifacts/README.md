@@ -37,7 +37,7 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
   loop.
 - **Targeted edits** — a change is one field in the spec, never regenerated
   code, so everything else stays exactly the same.
-- **Reproducible** — the same spec always produces the same page or video. What varies is the provenance date in the footer, the day you build (set `SOURCE_DATE_EPOCH` to pin it), and a dashboard's refresh time.
+- **Reproducible** — the same spec always produces the same page or video. What varies is the provenance date in the footer, the day you build (set `SOURCE_DATE_EPOCH` to pin it), and a dashboard's refresh time. A hero image from `--image-api` comes from your service, so it can differ between builds.
 - **Offline** — after a one-time install nothing touches the network except
   your own data sources. Specs that try (remote chart data, `url()` colours)
   are rejected, and the outputs carry a strict CSP. The one exception is

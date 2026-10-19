@@ -1,5 +1,5 @@
 // Fits a fact (a branch name, a commit subject, a folder) into a spec field so the starter passes
-// validation on everything except real TODO placeholders: emoji dropped, banned phrases replaced,
+// validation on everything except real TODO placeholders: emoji dropped (kept out of scaffolded facts even though the lint now allows them), banned phrases replaced,
 // "TODO:" and "lorem ipsum" rewritten so only scaffold's own placeholders carry them, heading
 // punctuation fixed, and the text cut at a word boundary to the schema's limit.
 import { EMOJI, EMOJI_SEQUENCE, loadBannedPhrases } from './lint.mjs';
@@ -16,7 +16,7 @@ const literalReplacement = (advice) => {
   return m ? JSON.parse(m[1]) : '';
 };
 
-/** Rewrites what the prose lint would reject. `heading`: also drops a trailing "!". */
+/** Rewrites what the prose lint would reject, and drops emoji from scaffolded facts. `heading`: also drops a trailing "!". */
 export function cleanText(text, { heading = false } = {}) {
   // A sequence that is only a text symbol (an arrow, play) is not emoji and stays; anything the lint
   // would flag goes, whole. What the sequence pass cannot see (a keycap mark, a stray tag) goes last.

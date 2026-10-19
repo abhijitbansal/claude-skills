@@ -2,7 +2,8 @@
 // layout and type treatment its theme was drawn with: dusk (soft, tilted card,
 // outlined numerals), press (print: drop caps, marginal numerals), poster
 // (condensed caps, hard rules, registration marks). The four older themes are
-// `classic`: they keep the page exactly as it was, with no flavor stylesheet.
+// `classic`: they get no flavor stylesheet and keep the earlier look (the page still carries
+// data-flavor="classic" and the footer theme line).
 // The deck (slides.html) uses the same function so both layouts agree.
 
 export const FLAVORS = Object.freeze(['dusk', 'press', 'poster']);

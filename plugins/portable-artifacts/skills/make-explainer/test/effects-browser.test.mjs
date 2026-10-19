@@ -39,19 +39,18 @@ test('dusk deck cover: frosted by default; with reduced transparency no blur and
   await plain.context.close();
 });
 
-// ---- text on solid card fills under the film grain ---------------------------------------------------
-// The grain is a fixed overlay (flavors.css body::before), which the token pairs in flavor.test.mjs cannot see.
-// Sections and cards paint above it, so their text reads at its token ratio; the headroom makes a
-// lost lift (dusk light reads 4.58 under the grain) fail instead of scraping past 4.5.
+// ---- text under the film grain ---------------------------------------------------------------------------
+// The grain is a fixed overlay above the whole page (flavors.css body::before), which the token pairs in
+// flavor.test.mjs cannot see. Every text box on a flat ground is measured (p05 of its pixels) with the grain on;
+// the headroom keeps a token drift from scraping past 4.5. Text on art or other non-flat grounds is skipped,
+// so the skipped count is capped to notice text quietly leaving the check.
 const FLAVORS = ['dusk', 'press', 'poster'];
 const MODES = ['light', 'dark'];
-const CARD_MIN = 4.5;
+const TEXT_MIN = 4.5;
 const HEADROOM = 0.15;
-const UNLIFT = 'html[data-flavor] .hero-tldr, html[data-flavor] .step::before, html[data-flavor] .sec { z-index: auto !important; }';
+const MAX_SKIPPED = 16;
 
-const cardsOf = (results) => results.filter((r) => r.card);
-
-test(`text on a flat ground reads >= ${CARD_MIN} + ${HEADROOM}:1 under the grain in every flavor and mode (p05 of each box)`, async (t) => {
+test(`text on a flat ground reads >= ${TEXT_MIN} + ${HEADROOM}:1 under the grain in every flavor and mode`, async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const problems = [];
   for (const theme of FLAVORS) {
@@ -59,11 +58,11 @@ test(`text on a flat ground reads >= ${CARD_MIN} + ${HEADROOM}:1 under the grain
       const { url } = buildFile(exampleFile(example), { theme, name: `grain-${example}-${theme}` });
       const inks = new Set();
       for (const mode of MODES) {
-        const { results, page } = await grainContrast(url, { colorScheme: mode });
+        const { results, skipped, page } = await grainContrast(url, { colorScheme: mode });
         inks.add(page);
-        const cards = cardsOf(results);
-        assert.ok(cards.length > 0, `${theme} ${example} ${mode}: no card text measured`);
-        for (const r of results) if (r.ratio < CARD_MIN + HEADROOM) problems.push(`${theme} ${example} ${mode}: ${r.what} ${r.ratio.toFixed(2)}:1`);
+        assert.ok(results.some((r) => r.card), `${theme} ${example} ${mode}: no card text measured`);
+        assert.ok(skipped <= MAX_SKIPPED, `${theme} ${example} ${mode}: ${skipped} text boxes skipped (cap ${MAX_SKIPPED})`);
+        for (const r of results) if (r.ratio < TEXT_MIN + HEADROOM) problems.push(`${theme} ${example} ${mode}: ${r.what} ${r.ratio.toFixed(2)}:1`);
       }
       assert.equal(inks.size, 2, `${theme} ${example}: light and dark drew different pages`);
     }
@@ -71,10 +70,10 @@ test(`text on a flat ground reads >= ${CARD_MIN} + ${HEADROOM}:1 under the grain
   assert.deepEqual(problems, []);
 });
 
-test('the grain measurement sees the grain: strong grain over text left under it reads below 4.5:1', async (t) => {
+test('the grain measurement sees the grain: a strong grain drops text below 4.5:1', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { url } = buildFile(exampleFile('recap'), { theme: 'dusk', name: 'grain-proof' });
-  const { results } = await grainContrast(url, { colorScheme: 'light', grainOp: 0.3, css: UNLIFT });
+  const { results } = await grainContrast(url, { colorScheme: 'light', grainOp: 0.3 });
   const worst = Math.min(...results.map((r) => r.ratio));
-  assert.ok(worst < CARD_MIN, `expected the forced grain to break the text, got ${worst.toFixed(2)}:1`);
+  assert.ok(worst < TEXT_MIN, `expected the forced grain to break the text, got ${worst.toFixed(2)}:1`);
 });
