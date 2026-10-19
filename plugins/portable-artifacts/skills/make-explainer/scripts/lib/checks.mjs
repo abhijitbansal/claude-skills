@@ -11,8 +11,8 @@ import { loadSibling, SiblingError, siblingDir } from './siblings.mjs';
 import { quoteArg } from '../../shared/doctor.mjs';
 import { EXPLAINER_THEME } from './default-theme.mjs';
 import { itemKey } from './render/checklist.mjs';
-import { readDiagramSpec, reportDiagramErrors, inPageTheme } from './diagram-source.mjs';
-import { readSceneSpec, reportSceneErrors, MAX_SCENE_SECTIONS } from './scene-source.mjs';
+import { readDiagramSpec, reportDiagramErrors, inPageTheme, repath } from './diagram-source.mjs';
+import { readSceneSpec, reportSceneErrors, sceneNetworkError, MAX_SCENE_SECTIONS } from './scene-source.mjs';
 import { chartMode, loadChartSource, INLINE_CHART_FIELDS } from './chart-source.mjs';
 import { LIMITS } from './schema.mjs';
 import { readVideo, readPoster, readMotionSpec, reportMotionErrors } from './motion-source.mjs';
@@ -145,6 +145,15 @@ registerCheck('scene', async ({ section, path: at, dir, spec }) => {
     message: `ignored — the page theme (${JSON.stringify(pageTheme)}) is used; remove it or change the explainer's theme${source.file ? ` (in ${source.file})` : ''}`,
     warning: true,
   }];
+  // Before make-scene runs the dashboard: a network source would be connected to.
+  let network;
+  try {
+    network = await sceneNetworkError(source.spec, source.dir);
+  } catch (e) {
+    if (!(e instanceof SiblingError)) throw e;
+    return [...errors, { path: where, message: e.message }];
+  }
+  if (network) return [...errors, { path: repath(where, network.path), message: network.message }, ...warnings];
   const result = await api.validateSpec(inPageTheme(source.spec, spec.theme), { dir: source.dir });
   return [...errors, ...reportSceneErrors(result.errors, where, source.file), ...warnings];
 });

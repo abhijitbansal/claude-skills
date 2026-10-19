@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSpec } from '../scripts/lib/spec.mjs';
 import { buildPage, BuildError, contentSecurityPolicy } from '../scripts/lib/page.mjs';
+import { build as buildFile } from '../scripts/build.mjs';
 import { SCENE_MAX_BYTES } from '../scripts/lib/scene-source.mjs';
 import { requirementsFor } from '../scripts/lib/requirements.mjs';
 import { ALL } from '../shared/doctor.mjs';
@@ -226,6 +227,50 @@ test('missing make-scene gives install command', async () => {
     return true;
   });
   assert.match((await page.buildPage(doc([text]), { dir: root })).html, /<!doctype html>/, 'a page with no scene never needs it');
+});
+
+// ---- network sources -----------------------------------------------------------------------------
+
+// A scene lifted from a dashboard with a database source must be refused like a chart section on it is,
+// before make-scene runs the dashboard (which would open the connection). The URL points at a closed port:
+// a refusal that says "Connection refused" means a connection was attempted.
+test('a scene lifting a postgres or mysql dashboard is refused as an explainer chart is, with no connection attempted', async () => {
+  const saved = process.env.SCENE_NET_URL;
+  process.env.SCENE_NET_URL = 'postgresql://user:pw@127.0.0.1:1/db';
+  try {
+    for (const type of ['postgres', 'mysql']) {
+      const dir = folder();
+      fs.cpSync(path.join(SKILL, 'test/fixtures/chart'), dir, { recursive: true });
+      const file = path.join(dir, 'sales.dashboard.json');
+      const dash = JSON.parse(fs.readFileSync(file, 'utf8'));
+      dash.sources.warehouse = { type, env: 'SCENE_NET_URL' };
+      fs.writeFileSync(file, JSON.stringify(dash));
+      const lifted = { title: 'Sales', lift: { dashboard: 'sales.dashboard.json', chart: 'by-region' } };
+      const message = `source "warehouse" is ${type}, a network source; explainer charts read local files only (no network at build or view time) — export the query to CSV or Parquet and point a file source at it (in sales.dashboard.json)`;
+      for (const scene of [lifted, 'lifted.scene.json']) {
+        fs.writeFileSync(path.join(dir, 'lifted.scene.json'), JSON.stringify(lifted));
+        const spec = doc([text, section(scene)]);
+        const [first, ...more] = await errorsOf(spec, dir);
+        assert.equal(more.length, 0, 'one error');
+        assert.equal(first.path, 'sections[1].scene.lift.dashboard');
+        assert.equal(first.message, message);
+        await assert.rejects(buildPage(spec, { dir }), (e) => {
+          assert.ok(e instanceof BuildError);
+          assert.equal(e.errors[0].path, 'sections[1].scene.lift.dashboard');
+          assert.equal(e.errors[0].message, message);
+          return true;
+        });
+        const file2 = path.join(dir, 'doc.explainer.json');
+        fs.writeFileSync(file2, JSON.stringify(spec));
+        const result = await buildFile(file2, { out: path.join(dir, 'out.html') });
+        assert.equal(result.ok, false);
+        assert.equal(result.errors[0].message, message);
+      }
+    }
+  } finally {
+    if (saved === undefined) delete process.env.SCENE_NET_URL;
+    else process.env.SCENE_NET_URL = saved;
+  }
 });
 
 // ---- per-scene css ------------------------------------------------------------------------------

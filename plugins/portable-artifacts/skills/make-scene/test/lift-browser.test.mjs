@@ -10,6 +10,7 @@ import { GRID, MIN_COLOURS } from '../scripts/lib/canvas-shot.mjs';
 import { distinctColours } from '../scripts/lib/png.mjs';
 import { canvasPng, launchBrowser } from './helpers/browser.mjs';
 import { PINNED_ENV, tempDir } from './helpers/scene-fixtures.mjs';
+import { consoleProblem, skipUnlessReady } from './helpers/webgl.mjs';
 
 const FIX = new URL('./fixtures/', import.meta.url);
 
@@ -38,14 +39,11 @@ async function open(t, diagram, { reducedMotion = 'no-preference', viewport = { 
   t.after(() => context.close());
   const page = await context.newPage();
   const problems = [];
-  page.on('console', (m) => { if (m.type() === 'error') problems.push(m.text()); });
+  page.on('console', (m) => { const problem = consoleProblem(m); if (problem) problems.push(problem); }); // a mount that falls back to the table warns
   page.on('pageerror', (e) => problems.push(e.message));
   await page.goto(`${pathToFileURL(built.out).href}?test=1`);
   await page.waitForFunction(() => document.querySelector('[data-pa-scene]').dataset.sceneState !== 'loading', null, { timeout: 10000 });
-  if ((await page.evaluate(() => document.querySelector('[data-pa-scene]').dataset.sceneState)) !== 'ready') {
-    t.skip('WebGL unavailable in this Chromium');
-    return null;
-  }
+  if (await skipUnlessReady(t, page, assert)) return null;
   return { page, problems };
 }
 

@@ -1,11 +1,12 @@
 // Smoke tests for the page chrome in a real page: tooltip, Explore, tour keys, text-only labels, PNG export.
-// Skips itself without Chromium or WebGL (the full browser matrix is Task 9's).
+// Skips itself without Chromium or WebGL2 (the full browser matrix is Task 9's).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { build } from '../scripts/build.mjs';
 import { loadTheme, themeCss } from '../shared/theme.mjs';
 import { PINNED_ENV, tempDir, writeScene } from './helpers/scene-fixtures.mjs';
+import { consoleProblem, skipWithoutWebgl2, skipUnlessReady } from './helpers/webgl.mjs';
 
 const ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 const HOSTILE = '<img src=x onerror=window.PWNED=1>';
@@ -41,13 +42,11 @@ async function open(t, { reducedMotion = 'no-preference' } = {}) {
   t.after(() => context.close());
   const page = await context.newPage();
   const problems = [];
+  page.on('console', (m) => { const problem = consoleProblem(m); if (problem) problems.push(problem); }); // a mount that falls back to the table warns
   page.on('pageerror', (e) => problems.push(e.message));
   await page.goto(`file://${built.out}`);
   await page.waitForTimeout(600);
-  if ((await page.evaluate(() => document.querySelector('[data-pa-scene]').dataset.sceneState)) !== 'ready') {
-    t.skip('WebGL unavailable in this Chromium');
-    return null;
-  }
+  if (await skipUnlessReady(t, page, assert)) return null;
   return { page, problems };
 }
 
@@ -157,7 +156,8 @@ test('hovering a planet shows that planet, never the link whose hover tube enclo
     }).filter(Boolean);
     return { total: planets.length, seen, state: host.dataset.sceneState };
   });
-  if (result.state !== 'ready') return t.skip('WebGL unavailable in this Chromium');
+  if (await skipWithoutWebgl2(t, page)) return;
+  assert.equal(result.state, 'ready', 'WebGL2 is available, so the second mount must be ready');
   assert.ok(result.seen.length >= 25, `most of the ${result.total} planets are on screen (${result.seen.length})`);
   const links_ = result.seen.filter((s) => s.tube >= 0);
   assert.deepEqual(links_, [], 'no planet reads as a link');
@@ -200,7 +200,8 @@ test('decoration in front hides the data behind it; unobstructed data still read
     const at = (x, y, z) => { const p = api.project(x, y, z); return api.pickHit(rect.left + p.x, rect.top + p.y); };
     return { state: host.dataset.sceneState, hidden: at(0, 0, -2), front: at(0, 0, 2), clear: at(6, 0, 0) };
   }, graph);
-  if (result.state !== 'ready') return t.skip('WebGL unavailable in this Chromium');
+  if (await skipWithoutWebgl2(t, page)) return;
+  assert.equal(result.state, 'ready', 'WebGL2 is available, so the mount must be ready');
   assert.deepEqual(result.hidden, { item: -1, tube: -1 }, 'the data box behind the decoration is not hoverable through it');
   assert.deepEqual(result.front, { item: -1, tube: -1 }, 'the decoration itself has no tooltip');
   assert.deepEqual(result.clear, { item: 1, tube: -1 }, 'unobstructed data reads');

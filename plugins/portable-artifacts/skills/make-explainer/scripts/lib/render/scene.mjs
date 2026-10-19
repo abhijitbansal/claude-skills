@@ -6,8 +6,8 @@
 // result in ctx.scenes.items, and render() reads it.
 import fs from 'node:fs';
 import { loadSibling } from '../siblings.mjs';
-import { readSceneSpec, reportSceneErrors } from '../scene-source.mjs';
-import { inPageTheme } from '../diagram-source.mjs';
+import { readSceneSpec, reportSceneErrors, sceneNetworkError } from '../scene-source.mjs';
+import { inPageTheme, repath } from '../diagram-source.mjs';
 import { SectionErrors } from '../section-errors.mjs';
 import { inline } from './ui.mjs';
 
@@ -27,6 +27,8 @@ export async function prepare(section, ctx, i) {
   const source = readSceneSpec(section.scene, ctx.dir);
   if (source.error) throw new SectionErrors([{ path: 'scene', message: source.error }]);
   const api = await loadSibling('make-scene', 'scripts/lib/api.mjs');
+  const network = await sceneNetworkError(source.spec, source.dir);
+  if (network) throw new SectionErrors([{ path: repath('scene', network.path), message: network.message }]);
   const spec = inPageTheme(source.spec);
   const checked = await api.validateSpec(spec, { dir: source.dir });
   if (!checked.ok) throw new SectionErrors(reportSceneErrors(checked.errors, 'scene', source.file));

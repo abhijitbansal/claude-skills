@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolveRef } from './paths.mjs';
 import { repath } from './diagram-source.mjs';
+import { DASHBOARD_EXTS, networkSourceError } from './chart-source.mjs';
 
 export const SCENE_EXTS = ['.json'];
 export const SCENE_MAX_BYTES = 1024 * 1024;
@@ -39,4 +40,20 @@ export function readSceneSpec(scene, dir) {
 /** make-scene errors ([{ path, message }], "" for the whole spec) under `base`; a file's errors also name the file. */
 export function reportSceneErrors(errors, base, file) {
   return errors.map((e) => ({ path: repath(base, e.path), message: file ? `${e.message} (in ${file})` : e.message }));
+}
+
+/**
+ * A scene lifted from a dashboard with a postgres or mysql source would open a connection when make-scene
+ * validates or builds it. The explainer's chart gate (the same message) looks at the dashboard first.
+ * -> { path, message } under the scene ("lift.dashboard"), or null for no lift, a local dashboard, a path make-scene
+ * reports itself, or a dashboard that is not JSON. `dir` is where the scene's own paths resolve. Throws SiblingError
+ * when make-dashboard is not installed (only reached for a dashboard that declares sources).
+ */
+export async function sceneNetworkError(spec, dir) {
+  const dashboard = spec.lift?.dashboard;
+  if (typeof dashboard !== 'string') return null;
+  const ref = resolveRef(dir, dashboard, { exts: DASHBOARD_EXTS });
+  if (ref.error) return null;
+  const error = await networkSourceError(ref.abs, { dashboard });
+  return error && { ...error, path: 'lift.dashboard' };
 }

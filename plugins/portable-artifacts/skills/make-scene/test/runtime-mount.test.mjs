@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { loadTheme, themeCss } from '../shared/theme.mjs';
 import { BUNDLE_FILE } from '../scripts/lib/bundle.mjs';
+import { consoleProblem, skipUnlessReady } from './helpers/webgl.mjs';
 
 const GOLDEN = new URL('./golden/city.json', import.meta.url);
 const ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
@@ -44,19 +45,14 @@ async function open(t, options = {}) {
   t.after(() => context.close());
   const page = await context.newPage();
   const logs = [];
-  page.on('console', (m) => {
-    if (m.type() === 'error') logs.push(m.text());
-  });
+  page.on('console', (m) => { const problem = consoleProblem(m); if (problem) logs.push(problem); });
   page.on('pageerror', (e) => logs.push(`pageerror: ${e.message}`));
   await page.setContent(pageHtml(options));
   await page.evaluate((reduced) => {
     window.API = PAScene.mount(document.getElementById('host'), GRAPH, { reducedMotion: reduced });
   }, options.reducedMotion ?? true);
   await page.waitForTimeout(300);
-  if ((await page.evaluate(() => document.getElementById('host').dataset.sceneState)) !== 'ready') {
-    t.skip('WebGL unavailable in this Chromium');
-    return null;
-  }
+  if (await skipUnlessReady(t, page, assert, '#host')) return null;
   return { page, logs };
 }
 
@@ -149,7 +145,7 @@ test('a throw during mount releases what was built: no live loop, context lost, 
   assert.equal(result.state, 'fallback');
   assert.ok(result.lost === true || result.lost === 'no-context');
   assert.deepEqual(result.errors, []);
-  assert.deepEqual(logs, []);
+  assert.deepEqual(logs, ["warning: make-scene: showing the table instead of the 3D view (Cannot read properties of undefined (reading 'min'))"], 'the fallback says why, as a warning');
 });
 
 test('a throw inside a frame falls back and cleans up without uncaught errors', async (t) => {
@@ -164,7 +160,7 @@ test('a throw inside a frame falls back and cleans up without uncaught errors', 
   assert.equal(await page.evaluate(() => document.getElementById('host').dataset.sceneState), 'fallback');
   assert.equal(await display(page, 'canvas'), 'none');
   assert.deepEqual(await page.evaluate(() => errors), []);
-  assert.deepEqual(logs, []);
+  assert.deepEqual(logs, ['warning: make-scene: showing the table instead of the 3D view (boom)'], 'the fallback says why, as a warning');
 });
 
 test('destroy() releases the GL context and removes the canvas; calling it twice is safe', async (t) => {

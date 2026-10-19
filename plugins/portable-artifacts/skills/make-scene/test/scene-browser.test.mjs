@@ -1,5 +1,5 @@
 // Full-page browser tests on built pages: every world draws, the theme re-tints, hover reads exact values as text,
-// the tour plays, no WebGL shows the table, reduced motion holds still. Each skips without Chromium (or without WebGL).
+// the tour plays, no WebGL shows the table, reduced motion holds still. Each skips without Chromium (or without WebGL2).
 // Already covered elsewhere, not repeated here:
 //   context loss shows fallback -> runtime-mount.test.mjs "context loss hides canvas, wrapper and controls and shows the fallback"
 // Canvas pixels are read from a Playwright element screenshot decoded in Node: the canvas has no preserveDrawingBuffer.
@@ -11,6 +11,7 @@ import { distinctColours } from '../scripts/lib/png.mjs';
 import {
   HOSTILE, WORLDS, buildWorldPage, canvasHash, canvasPng, demoRows, launchBrowser,
 } from './helpers/browser.mjs';
+import { consoleProblem, skipUnlessReady } from './helpers/webgl.mjs';
 
 const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 390, height: 780 }];
 const NO_WEBGL_ARGS = ['--disable-webgl', '--disable-gpu'];
@@ -28,7 +29,7 @@ after(async () => {
   await browser?.close();
 });
 
-// Opens a built page with the test hook (?test=1); null (after skipping) when there is no browser or WebGL does not run.
+// Opens a built page with the test hook (?test=1); null (after skipping) when there is no browser or no WebGL2. With WebGL2 the scene must be ready.
 async function open(t, world, { viewport = VIEWPORTS[0], build = {}, search = '?test=1', ...contextOptions } = {}) {
   if (!browser) return t.skip(skipReason) ?? null;
   const { file } = await buildWorldPage(t, world, build);
@@ -36,14 +37,11 @@ async function open(t, world, { viewport = VIEWPORTS[0], build = {}, search = '?
   t.after(() => context.close());
   const page = await context.newPage();
   const problems = [];
-  page.on('console', (m) => { if (m.type() === 'error') problems.push(m.text()); });
+  page.on('console', (m) => { const problem = consoleProblem(m); if (problem) problems.push(problem); }); // a mount that falls back to the table warns
   page.on('pageerror', (e) => problems.push(e.message));
   await page.goto(`${pathToFileURL(file).href}${search}`);
   await page.waitForFunction(() => document.querySelector('[data-pa-scene]').dataset.sceneState !== 'loading', null, { timeout: 10000 });
-  if ((await page.evaluate(() => document.querySelector('[data-pa-scene]').dataset.sceneState)) !== 'ready') {
-    t.skip('WebGL unavailable in this Chromium');
-    return null;
-  }
+  if (await skipUnlessReady(t, page, assert)) return null;
   return { page, problems };
 }
 
@@ -289,20 +287,33 @@ for (const world of ['galaxy', 'city', 'terrain']) {
 }
 
 test('a viewer who has moved the camera keeps it when the viewport turns; the overview distance still follows', async (t) => {
-  const ctx = await open(t, 'galaxy', { viewport: { width: 780, height: 390 }, reducedMotion: 'reduce' });
+  const landscape = { width: 780, height: 390 };
+  const ctx = await open(t, 'galaxy', { viewport: landscape, reducedMotion: 'reduce' });
   if (!ctx) return;
   const { page } = ctx;
-  const spot = () => page.evaluate(() => { const p = window.PAScene.__scene.project(0, 0, 0); return [Math.round(p.x), Math.round(p.y)]; });
+  // Where three world points off the orbit centre land on screen: the camera's pose, read through its projection.
+  const pose = () => page.evaluate(() => [[3, 0, 0], [0, 2, 0], [0, 0, 3]].map(([x, y, z]) => {
+    const p = window.PAScene.__scene.project(x, y, z);
+    return [Math.round(p.x), Math.round(p.y)];
+  }));
+  const untouched = await pose();
   await page.mouse.move(300, 200);
   await page.mouse.down();
   await page.mouse.move(340, 200, { steps: 4 });
   await page.mouse.up();
   await page.waitForTimeout(600);
-  const before_ = await spot();
+  const dragged = await pose();
+  assert.notDeepEqual(dragged, untouched, 'the drag moved the camera');
   await page.setViewportSize({ width: 390, height: 780 });
   await page.waitForTimeout(800);
-  const after_ = await spot();
-  assert.notDeepEqual(before_, after_, 'the canvas resized, so the projection moved');
   const e = await screenExtent(page);
   assert.ok(Number.isFinite(e.x0) && e.w === 390, 'the scene still draws');
+  // Turning back to the first size shows the camera where the viewer left it: a refit that ignored the viewer would have
+  // moved it to the portrait framing and then to the default landscape one.
+  await page.setViewportSize(landscape);
+  await page.waitForTimeout(800);
+  // A few pixels of slack: the zoom range follows the overview distance and can nudge a camera that sits at its edge.
+  const after_ = await pose();
+  const off = after_.flatMap(([x, y], i) => [Math.abs(x - dragged[i][0]), Math.abs(y - dragged[i][1])]);
+  assert.ok(Math.max(...off) <= 4, `the viewer's camera survived both turns: ${JSON.stringify(dragged)} -> ${JSON.stringify(after_)}`);
 });
