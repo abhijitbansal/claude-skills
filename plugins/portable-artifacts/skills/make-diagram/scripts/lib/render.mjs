@@ -6,7 +6,7 @@ import { lineHeight } from '../../shared/text.mjs';
 import { KINDS, family } from './kinds.mjs';
 import { fonts, GROUP_LABEL_INSET } from './sizes.mjs';
 import { legendSvg } from './legend.mjs';
-import { anchorEdges, roundedPath } from './edges.mjs';
+import { anchorEdges, roundedPath, curvedRoute } from './edges.mjs';
 import { esc, num, textLines, markerDefs, shareBrandIcons } from './svg.mjs';
 import { shapeSvg, boxContent, outsideContent, plateSvg, edgeSvg, nodeOpen } from './parts.mjs';
 import { renderSequence } from './render-sequence.mjs';
@@ -36,6 +36,11 @@ function graphNodeSvg(n, specNode, type, f) {
   return `${nodeOpen(n, kind, specNode.label, family(type, kind))}${shapeSvg(n.shape, n)}${content}</g>`;
 }
 
+// The label plate re-centred on the curve's midpoint (kept where ELK put it when there is none).
+function onCurve(label, mid) {
+  return mid ? { ...label, x: mid.x - label.width / 2, y: mid.y - label.height / 2 } : label;
+}
+
 function renderGraph(raw, spec, theme, prefix) {
   const g = anchorEdges(raw);
   const f = fonts(theme);
@@ -43,12 +48,14 @@ function renderGraph(raw, spec, theme, prefix) {
   const groups = [...g.groups].sort((a, b) => a.depth - b.depth).map((x) => groupSvg(x, f, laneOf.has(x.id) ? laneOf.get(x.id) : null));
   // An edge takes its from-node's colour family (none when it leaves a group).
   const famOf = new Map(spec.nodes.map((n) => [n.id, family(spec.type, n.kind)]));
-  const edges = g.edges.map((e) => edgeSvg({ ...e, d: roundedPath(e.points), heads: EDGE_ARROW[e.style], family: famOf.get(e.from) }, prefix));
+  // Bézier wires; a self loop keeps its small rounded corners and its plate beside the loop.
+  const routes = g.edges.map((e) => (e.from === e.to ? { d: roundedPath(e.points), mid: null } : curvedRoute(e.points)));
+  const edges = g.edges.map((e, i) => edgeSvg({ ...e, d: routes[i].d, heads: EDGE_ARROW[e.style], family: famOf.get(e.from) }, prefix));
   // Nodes are emitted in layer order: the DOM order is the Tab order.
   const rank = new Map(raw.layers.flat().map((id, i) => [id, i]));
   const nodes = g.nodes.map((n, i) => ({ id: n.id, svg: graphNodeSvg(n, spec.nodes[i], spec.type, f) }))
     .sort((a, b) => rank.get(a.id) - rank.get(b.id)).map((n) => n.svg);
-  const labels = g.edges.filter((e) => e.label).map((e) => plateSvg(e.id, e.label, f));
+  const labels = g.edges.map((e, i) => (e.label ? plateSvg(e.id, onCurve(e.label, routes[i].mid), f) : '')).filter(Boolean);
   return { width: g.width, height: g.height, body: [...groups, ...edges, ...nodes, ...labels, legendSvg(g.legend, f)].join(''), counts: `${g.nodes.length} nodes and ${g.edges.length} edges` };
 }
 

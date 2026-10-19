@@ -1,5 +1,6 @@
 // Edge geometry for the renderer: ends moved onto the drawn outline, and the
-// orthogonal polyline turned into a path with rounded corners.
+// orthogonal polyline turned into a path with rounded corners (sequence
+// messages, self loops) or into Bézier curves (graph edges, curvedRoute).
 //
 // ELK attaches an edge to the node's bounding box. For shapes that do not fill
 // their box (diamond, stadium, dots, hexagon, parallelogram, cylinder) the
@@ -101,4 +102,64 @@ export function roundedPath(points, r = EDGE_CORNER_RADIUS) {
     d += `L${num(p.x - inn.x * cut)} ${num(p.y - inn.y * cut)}Q${num(p.x)} ${num(p.y)} ${num(p.x + out.x * cut)} ${num(p.y + out.y * cut)}`;
   }
   return d;
+}
+
+// ---- Bézier routes ------------------------------------------------------------
+
+export const FALLBACK_CORNER_RADIUS = 24; // corner radius on routes too long for one curve
+const BEND_PULL = 0.6; // how far along each leg of an L its control points sit
+
+const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+const point = (p) => ({ x: round2(p.x), y: round2(p.y) });
+const pair = (p) => `${num(p.x)} ${num(p.y)}`;
+
+function cubicAt(p0, c1, c2, p3, t) {
+  const u = 1 - t;
+  const w = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+  return { x: w[0] * p0.x + w[1] * c1.x + w[2] * c2.x + w[3] * p3.x, y: w[0] * p0.y + w[1] * c1.y + w[2] * c2.y + w[3] * p3.y };
+}
+
+// The route without repeated points, nor points in the middle of a straight run.
+function corners(points) {
+  const pts = dropRepeats(points);
+  return pts.filter((p, i) => {
+    if (i === 0 || i === pts.length - 1) return true;
+    const inn = unit(pts[i - 1], p);
+    const out = unit(p, pts[i + 1]);
+    return Math.abs(inn.x * out.y - inn.y * out.x) > 1e-6 || inn.x * out.x + inn.y * out.y < 0;
+  });
+}
+
+// The point half way along the polyline.
+function halfway(pts) {
+  const lens = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y));
+  let left = lens.reduce((a, b) => a + b, 0) / 2;
+  for (let i = 0; i < lens.length; i++) {
+    if (left <= lens[i]) return lerp(pts[i], pts[i + 1], left / lens[i]);
+    left -= lens[i];
+  }
+  return pts.at(-1);
+}
+
+/**
+ * Path data for a graph edge's anchored route, drawn as Bézier curves, and
+ * `mid`, the point half way along it (where its label plate is centred).
+ * A straight run is a line; an L is one cubic bend; a Z is one cubic whose
+ * control points are its two inner corners, so it stays inside the channel
+ * between the layers; a longer route keeps its waypoints and rounds its
+ * corners at FALLBACK_CORNER_RADIUS. Each curve leaves along the first segment
+ * and arrives along the last, so the arrow heads keep their direction.
+ */
+export function curvedRoute(points) {
+  const pts = corners(points);
+  if (pts.length < 2) return { d: pts.length ? `M${pair(pts[0])}` : '', mid: pts.length ? point(pts[0]) : null };
+  const [p0, p1, p2, p3] = pts;
+  if (pts.length === 2) return { d: `M${pair(p0)}L${pair(p1)}`, mid: point(lerp(p0, p1, 0.5)) };
+  if (pts.length === 3) {
+    const c1 = lerp(p0, p1, BEND_PULL);
+    const c2 = lerp(p2, p1, BEND_PULL);
+    return { d: `M${pair(p0)}C${pair(c1)} ${pair(c2)} ${pair(p2)}`, mid: point(cubicAt(p0, c1, c2, p2, 0.5)) };
+  }
+  if (pts.length === 4) return { d: `M${pair(p0)}C${pair(p1)} ${pair(p2)} ${pair(p3)}`, mid: point(cubicAt(p0, p1, p2, p3, 0.5)) };
+  return { d: roundedPath(pts, FALLBACK_CORNER_RADIUS), mid: point(halfway(pts)) };
 }

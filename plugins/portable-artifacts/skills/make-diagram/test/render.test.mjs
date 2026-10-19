@@ -24,21 +24,61 @@ const ids = (svg) => [...svg.matchAll(/ id="([^"]*)"/g)].map((m) => m[1]);
 const attr = (tag, name) => tag.match(new RegExp(` ${name}="([^"]*)"`))?.[1];
 const tagsOf = (svg, re) => [...svg.matchAll(re)].map((m) => m[0]);
 
-// A tiny path-data reader: the end point of every command (M, L, Q, A, H, V).
+// A tiny path-data reader: the end point of every command (M, L, Q, C, A, H, V).
 function pathPoints(d) {
   const pts = [];
   let cur = { x: 0, y: 0 };
-  for (const [, cmd, args] of d.matchAll(/([MLQAHVZ])([^MLQAHVZ]*)/g)) {
+  for (const [, cmd, args] of d.matchAll(/([MLQCAHVZ])([^MLQCAHVZ]*)/g)) {
     const n = args.trim() === '' ? [] : args.trim().split(/[\s,]+/).map(Number);
     if (cmd === 'H') cur = { x: n[0], y: cur.y };
     else if (cmd === 'V') cur = { x: cur.x, y: n[0] };
     else if (cmd === 'A') cur = { x: n[5], y: n[6] };
     else if (cmd === 'Q') cur = { x: n[2], y: n[3] };
+    else if (cmd === 'C') cur = { x: n[4], y: n[5] };
     else if (cmd !== 'Z') cur = { x: n[0], y: n[1] };
     if (cmd !== 'Z') pts.push(cur);
   }
   return pts;
 }
+
+// Points along a wire's path data (M, L, Q and C only): SAMPLES per drawing command,
+// computed from the Bézier equations, so the drawn curve is checked, not the route.
+const SAMPLES = 40;
+function sampleWire(d) {
+  const out = [];
+  let cur = null;
+  for (const [, cmd, args] of d.matchAll(/([MLQC])([^MLQC]*)/g)) {
+    const n = args.trim().split(/[\s,]+/).map(Number);
+    const ctrl = [];
+    for (let i = 0; i < n.length; i += 2) ctrl.push({ x: n[i], y: n[i + 1] });
+    if (cmd === 'M') { cur = ctrl[0]; out.push(cur); continue; }
+    const pts = [cur, ...ctrl];
+    for (let k = 1; k <= SAMPLES; k++) out.push(bezier(pts, k / SAMPLES));
+    cur = ctrl.at(-1);
+  }
+  return out;
+}
+// de Casteljau: a line, a quadratic or a cubic at t
+function bezier(pts, t) {
+  let p = pts;
+  while (p.length > 1) p = p.slice(1).map((b, i) => ({ x: p[i].x + (b.x - p[i].x) * t, y: p[i].y + (b.y - p[i].y) * t }));
+  return p[0];
+}
+const inside = (p, r) => p.x > r.x && p.x < r.x + r.width && p.y > r.y && p.y < r.y + r.height;
+const rectsOverlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+const wires = (svg) => tagsOf(svg, /<g class="pa-edge [^>]*><path class="pa-wire" d="[^"]*"/g).map((t) => ({ id: attr(t, 'data-id'), d: t.match(/ d="([^"]*)"/)[1] }));
+const plates = (svg) => new Map(tagsOf(svg, /<g class="pa-edge-label" data-edge="[^"]*"><rect [^>]*>/g).map((t) => [attr(t, 'data-edge'), ['x', 'y', 'width', 'height'].reduce((r, k) => ({ ...r, [k]: Number(attr(t.slice(t.indexOf('<rect')), k)) }), {})]));
+const GRAPHS = ['architecture', 'flow', 'state', 'story'];
+
+// The stretch of a sampled wire between 20 % and 80 % of its length.
+function middle(pts) {
+  const at = [0];
+  for (let i = 1; i < pts.length; i++) at.push(at[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+  const len = at.at(-1);
+  return pts.filter((_, i) => at[i] >= 0.2 * len && at[i] <= 0.8 * len);
+}
+const SHARED = 1; // px: two sampled points this close are one shared point
+const shareAPoint = (a, b) => a.some((p) => b.some((q) => Math.hypot(p.x - q.x, p.y - q.y) < SHARED));
 
 // ---- goldens ----------------------------------------------------------------
 
@@ -162,6 +202,90 @@ test('an edge path ends where the anchored route ends, on the drawn outline', as
     assert.deepEqual(pts.at(-1), anchored.edges[i].points.at(-1));
   });
   assert.ok(anchored.edges.some((e, i) => JSON.stringify(e.points) !== JSON.stringify(geometry.edges[i].points)), 'the example has ends that moved');
+});
+
+test('the curve checks catch what they guard against', () => {
+  const diagonal = sampleWire('M0 0C0 0 100 100 100 100');
+  assert.ok(diagonal.some((p) => inside(p, { x: 40, y: 40, width: 20, height: 20 })), 'a box on the curve is entered');
+  assert.ok(!sampleWire('M0 0C0 50 100 50 100 100').some((p) => inside(p, { x: 0, y: 70, width: 20, height: 30 })), 'a box beside the curve is not');
+  assert.ok(shareAPoint(middle(sampleWire('M0 0L100 0')), middle(sampleWire('M0 0C30 0 70 0 100 0'))), 'two wires on one lane share points');
+  assert.ok(!shareAPoint(middle(sampleWire('M0 0L100 0')), middle(sampleWire('M0 10L100 10'))), 'two lanes 10 px apart do not');
+});
+
+test('no sampled curve point of any example enters a node box', async () => {
+  for (const name of GRAPHS) {
+    const { svg, geometry } = await draw(example(name));
+    const all = wires(svg);
+    assert.equal(all.length, geometry.edges.length, name);
+    all.forEach(({ id, d }) => {
+      const e = geometry.edges.find((x) => x.id === id);
+      for (const n of geometry.nodes.filter((x) => x.id !== e.from && x.id !== e.to)) {
+        const hit = sampleWire(d).find((p) => inside(p, n));
+        assert.equal(hit, undefined, `${name}: edge ${id} (${e.from} -> ${e.to}) enters node ${n.id} at ${JSON.stringify(hit)}`);
+      }
+    });
+  }
+});
+
+test('each edge label plate is centred on its curve midpoint and overlaps no node box', async () => {
+  let centred = 0;
+  for (const name of GRAPHS) {
+    const { svg, geometry } = await draw(example(name));
+    const anchored = anchorEdges(geometry);
+    const byEdge = plates(svg);
+    const drawn = new Map(wires(svg).map((w) => [w.id, w.d]));
+    for (const e of anchored.edges.filter((x) => x.label)) {
+      const plate = byEdge.get(e.id);
+      assert.ok(plate, `${name}: edge ${e.id} draws its plate`);
+      for (const n of geometry.nodes) assert.ok(!rectsOverlap(plate, n), `${name}: plate of ${e.id} (${JSON.stringify(plate)}) overlaps node ${n.id}`);
+      if (e.from === e.to) continue; // a self loop keeps its plate beside the loop
+      // the midpoint, from the drawn path: a line's centre, one cubic at t = 0.5, or half way along a longer route's waypoints
+      const d = drawn.get(e.id);
+      const cmds = d.match(/[LQC]/g);
+      let mid;
+      if (cmds.length === 1) {
+        const [p0, ...rest] = pathPoints(d);
+        const n = d.slice(d.indexOf(cmds[0]) + 1).trim().split(/[\s,]+/).map(Number);
+        const ctrl = [];
+        for (let i = 0; i < n.length; i += 2) ctrl.push({ x: n[i], y: n[i + 1] });
+        assert.equal(rest.length, 1);
+        mid = bezier([p0, ...ctrl], 0.5);
+      } else {
+        const pts = e.points;
+        const lens = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y));
+        let left = lens.reduce((a, b) => a + b, 0) / 2;
+        const i = lens.findIndex((l) => (left -= l) <= 0);
+        const t = (lens[i] + left) / lens[i];
+        mid = { x: pts[i].x + (pts[i + 1].x - pts[i].x) * t, y: pts[i].y + (pts[i + 1].y - pts[i].y) * t };
+      }
+      const centre = { x: plate.x + plate.width / 2, y: plate.y + plate.height / 2 };
+      assert.ok(Math.hypot(centre.x - mid.x, centre.y - mid.y) <= 0.02, `${name}: plate of ${e.id} centred at ${JSON.stringify(centre)}, curve midpoint ${JSON.stringify(mid)}`);
+      assert.equal(plate.width, e.label.width, 'the plate keeps its measured size');
+      assert.equal(plate.height, e.label.height);
+      centred += 1;
+    }
+  }
+  assert.ok(centred >= 10, `labelled edges checked: ${centred}`);
+});
+
+test('edges between the same two layers do not share a sampled point in their middle 60%', async () => {
+  let pairs = 0;
+  for (const name of GRAPHS) {
+    const { svg, geometry } = await draw(example(name));
+    const layerOf = new Map(geometry.layers.flatMap((ids, i) => ids.map((id) => [id, i])));
+    // a group end (no layer of its own) matches any layer, so its edge is compared with its neighbours
+    const same = (a, b) => a === undefined || b === undefined || a === b;
+    const drawn = new Map(wires(svg).map((w) => [w.id, middle(sampleWire(w.d))]));
+    const edges = geometry.edges.filter((e) => e.from !== e.to);
+    edges.forEach((a, i) => edges.slice(i + 1).forEach((b) => {
+      const [af, at, bf, bt] = [a.from, a.to, b.from, b.to].map((id) => layerOf.get(id));
+      const parallel = (same(af, bf) && same(at, bt)) || (same(af, bt) && same(at, bf));
+      if (!parallel) return;
+      pairs += 1;
+      assert.ok(!shareAPoint(drawn.get(a.id), drawn.get(b.id)), `${name}: edges ${a.id} (${a.from} -> ${a.to}) and ${b.id} (${b.from} -> ${b.to}) share a point in their middle 60%`);
+    }));
+  }
+  assert.ok(pairs >= 4, `pairs checked: ${pairs}`);
 });
 
 test('node outlines are the shared shape primitives', async () => {
