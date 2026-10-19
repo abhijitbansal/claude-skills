@@ -36,16 +36,18 @@ export function loadSpec(file) {
 
 // ---- lift hooks ---------------------------------------------------------
 
+const LIFT_KINDS = ['diagram', 'dashboard'];
 const liftChecks = new Map();
 
 /**
  * Register the sibling check for a lift kind ('diagram' | 'dashboard'):
- * async (spec, { dir, allowOutside }) => [{ path, message }]. Passing no
- * function removes it.
+ * async (spec, { dir, allowOutside }) => [{ path, message }]. Throws a
+ * TypeError for any other kind or a non-function.
  */
 export function registerLiftCheck(kind, fn) {
-  if (fn === undefined) liftChecks.delete(kind);
-  else liftChecks.set(kind, fn);
+  if (!LIFT_KINDS.includes(kind)) throw new TypeError(`registerLiftCheck: kind must be ${LIFT_KINDS.map(q).join(' or ')}, got ${q(kind)}`);
+  if (typeof fn !== 'function') throw new TypeError(`registerLiftCheck: the ${q(kind)} check must be a function`);
+  liftChecks.set(kind, fn);
 }
 
 // ---- helpers ------------------------------------------------------------

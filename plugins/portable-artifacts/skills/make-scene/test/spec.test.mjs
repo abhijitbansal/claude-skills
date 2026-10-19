@@ -59,11 +59,52 @@ test('csv without columns needs headers named after the fields', async () => {
   assert.match(errorAt(r, 'data.columns.group').message, /no column "group"/);
 });
 
-test('csv value that is not a number is an error', async () => {
+const csvSpec = (name, text, columns = { group: 'g', value: 'v' }) => {
   const dir = tmp();
-  fs.writeFileSync(path.join(dir, 'bad.csv'), 'g,v\na,12\nb,lots\n');
-  const r = await validateSpec(scene({ data: { csv: 'bad.csv', columns: { group: 'g', value: 'v' } } }), { dir });
-  assert.match(errorAt(r, 'data.csv.rows[1].value').message, /must be number/);
+  fs.writeFileSync(path.join(dir, name), text);
+  return { dir, spec: scene({ data: { csv: name, columns } }) };
+};
+
+test('csv value that is not a number names column, line and cell', async () => {
+  const { dir, spec } = csvSpec('bad.csv', 'g,v\na,12\nb,lots\n');
+  const r = await validateSpec(spec, { dir });
+  assert.deepEqual(r.errors, [{ path: 'data.csv', message: 'column "v" line 3 has "lots", not a number; map columns.value to a numeric column' }]);
+  fs.rmSync(dir, { recursive: true });
+});
+
+test('csv line numbers count blank lines, quoted newlines and the header', async () => {
+  const { dir, spec } = csvSpec('lines.csv', 'g,v\n\n"x\ny",1\nb,oops\n');
+  const r = await validateSpec(spec, { dir });
+  assert.match(r.errors[0].message, /^column "v" line 5 has "oops"/);
+  fs.rmSync(dir, { recursive: true });
+});
+
+test('csv Infinity, NaN and empty value cells are rejected like text', async () => {
+  const { dir, spec } = csvSpec('odd.csv', 'g,v\na,Infinity\nb,NaN\nc,\nd,-Infinity\ne,4\n');
+  const r = await validateSpec(spec, { dir });
+  assert.deepEqual(r.errors.map((e) => e.message), [
+    'column "v" line 2 has "Infinity", not a number; map columns.value to a numeric column',
+    'column "v" line 3 has "NaN", not a number; map columns.value to a numeric column',
+    'column "v" line 4 is empty, not a number; map columns.value to a numeric column',
+    'column "v" line 5 has "-Infinity", not a number; map columns.value to a numeric column',
+  ]);
+  fs.rmSync(dir, { recursive: true });
+});
+
+test('csv value errors are capped at ten plus a count', async () => {
+  const { dir, spec } = csvSpec('many.csv', `g,v\n${Array.from({ length: 13 }, () => 'a,x').join('\n')}\n`);
+  const r = await validateSpec(spec, { dir });
+  assert.equal(r.errors.length, 11);
+  assert.equal(r.errors[10].message, '… and 3 more non-numeric value cells');
+  fs.rmSync(dir, { recursive: true });
+});
+
+test('csv unterminated quote reports the line it opened on', async () => {
+  const { dir, spec } = csvSpec('open.csv', 'g,v\na,1\n"b,2\nc,3\n');
+  const r = await validateSpec(spec, { dir });
+  assert.equal(r.errors.length, 1);
+  assert.equal(r.errors[0].path, 'data.csv');
+  assert.match(r.errors[0].message, /unterminated quote starting on line 3/);
   fs.rmSync(dir, { recursive: true });
 });
 
@@ -127,10 +168,20 @@ test('lift shape: exactly one key, dashboard needs chart, inline diagram is not 
 test('lift checks registered by sibling tasks run with spec, dir and allowOutside', async () => {
   const calls = [];
   registerLiftCheck('diagram', async (spec, ctx) => { calls.push(ctx); return [{ path: 'lift.diagram', message: 'sibling says no' }]; });
-  const r = await check({ title: 'T', lift: { diagram: { title: 'x' } } }, { allowOutside: true });
-  assert.deepEqual(r.errors, [{ path: 'lift.diagram', message: 'sibling says no' }]);
-  assert.deepEqual(calls, [{ dir: FIX, allowOutside: true }]);
-  registerLiftCheck('diagram', undefined);
+  try {
+    const r = await check({ title: 'T', lift: { diagram: { title: 'x' } } }, { allowOutside: true });
+    assert.deepEqual(r.errors, [{ path: 'lift.diagram', message: 'sibling says no' }]);
+    assert.deepEqual(calls, [{ dir: FIX, allowOutside: true }]);
+  } finally {
+    registerLiftCheck('diagram', async () => []);
+  }
+});
+
+test('registerLiftCheck throws TypeError for an unknown kind or a non-function', () => {
+  assert.throws(() => registerLiftCheck('diagrm', async () => []), (e) => e instanceof TypeError && /kind must be "diagram" or "dashboard", got "diagrm"/.test(e.message));
+  assert.throws(() => registerLiftCheck(undefined, async () => []), TypeError);
+  assert.throws(() => registerLiftCheck('diagram', undefined), (e) => e instanceof TypeError && /must be a function/.test(e.message));
+  assert.throws(() => registerLiftCheck('dashboard', 'nope'), TypeError);
 });
 
 test('world, links and columns do not apply to a lift', async () => {

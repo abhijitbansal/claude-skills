@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { didYouMean } from '../../shared/errors.mjs';
-import { parseCsv } from './csv.mjs';
+import { parseCsvLines } from './csv.mjs';
 import { COLUMN_FIELDS } from './schema.mjs';
 
 const q = (v) => JSON.stringify(v);
@@ -104,27 +104,47 @@ function csvColumns(header, columns = {}) {
 }
 
 const NUMERIC = /^-?\d+(\.\d+)?$/;
+const MAX_CELL_ERRORS = 10;
+
+// The value column must hold finite numbers. Name the column, the file line
+// and the cell, so the message alone says what to fix.
+function valueCell(cell, column, line, problems) {
+  const n = cell === '' ? Number.NaN : Number(cell);
+  if (Number.isFinite(n)) return n;
+  const what = cell === '' ? 'is empty' : `has ${q(cell)}`;
+  problems.push({ path: 'data.csv', message: `column ${q(column)} line ${line} ${what}, not a number; map columns.value to a numeric column` });
+  return n;
+}
 
 function readCsv(ref, dir, columns) {
   let table;
   try {
-    table = parseCsv(readText(ref, dir, 'data.csv'));
+    table = parseCsvLines(readText(ref, dir, 'data.csv'));
   } catch (e) {
     if (e instanceof DataError) throw e;
     throw new DataError([{ path: 'data.csv', message: `${q(ref)}: ${e.message}` }]);
   }
-  if (table.length === 0) throw new DataError([{ path: 'data.csv', message: `${q(ref)} is empty; the first line must be the column headers` }]);
-  const [header, ...lines] = table.map((r, i) => (i === 0 ? r.map((c) => c.trim()) : r));
+  if (table.rows.length === 0) throw new DataError([{ path: 'data.csv', message: `${q(ref)} is empty; the first line must be the column headers` }]);
+  const [headerRow, ...body] = table.rows;
+  const header = headerRow.map((c) => c.trim());
+  const bodyLines = table.lines.slice(1);
   const map = csvColumns(header, columns);
-  const rows = lines.map((cells) => {
+  const problems = [];
+  const rows = body.map((cells, i) => {
     const row = {};
     for (const { field, column } of map) {
       const cell = (cells[header.indexOf(column)] ?? '').trim();
-      if (field === 'value') row.value = cell === '' ? Number.NaN : Number(cell);
+      if (field === 'value') row.value = valueCell(cell, column, bodyLines[i], problems);
       else if (cell !== '') row[field] = cell;
     }
     return row;
   });
+  if (problems.length > 0) {
+    const shown = problems.slice(0, MAX_CELL_ERRORS);
+    const more = problems.length - shown.length;
+    if (more > 0) shown.push({ path: 'data.csv', message: `… and ${more} more non-numeric value cells` });
+    throw new DataError(shown);
+  }
   // A time column that is all numbers sorts as numbers, not as text.
   const ts = rows.filter((r) => r.t !== undefined);
   if (ts.length > 0 && ts.every((r) => NUMERIC.test(r.t))) for (const r of ts) r.t = Number(r.t);
