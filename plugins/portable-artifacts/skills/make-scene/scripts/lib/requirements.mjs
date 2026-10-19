@@ -18,7 +18,10 @@ export const targets = ['check'];
 export function requirementsFor(target) {
   const base = [nodeVersion(20), nodeModules()];
   // check.mjs needs playwright (a devDependency) and a browser.
-  if (target === ALL || target === 'check') return [...base, devDeps({ size: '≈54 MB', required: true }), browser({ required: true })];
+  const checkNeeds = [...base, devDeps({ size: '≈54 MB', required: true }), browser({ required: true })];
+  // ALL also lists both sister skills, so `--fix make-diagram` works without --for.
+  if (target === ALL) return [...checkNeeds, sisterSkill('make-diagram'), sisterSkill('make-dashboard')];
+  if (target === 'check') return checkNeeds;
   if (typeof target === 'string' && target.endsWith('.json')) return [...base, ...specNeeds(target)];
   return base;
 }

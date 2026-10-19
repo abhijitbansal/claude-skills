@@ -42,10 +42,14 @@ test('dashboard lift spec needs make-dashboard', async () => {
 test('check target needs browser and dev deps', async () => {
   const requirementsFor = await loadRequirements();
   const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
-  for (const t of ['check', ALL]) {
-    const reqs = requirementsFor(t);
-    assert.deepEqual(idsOf(reqs), ['node', 'node_modules', 'dev_deps', 'chromium']);
-    assert.deepEqual(reqs.map((r) => r.required), [true, true, true, true]);
-  }
+  const check = requirementsFor('check');
+  assert.deepEqual(idsOf(check), ['node', 'node_modules', 'dev_deps', 'chromium']);
+  assert.deepEqual(check.map((r) => r.required), [true, true, true, true]);
   assert.deepEqual(idsOf(requirementsFor(undefined)), ['node', 'node_modules']);
+});
+
+test('ALL adds both sister skills so --fix works without --for', async () => {
+  const requirementsFor = await loadRequirements();
+  const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
+  assert.deepEqual(idsOf(requirementsFor(ALL)), ['node', 'node_modules', 'dev_deps', 'chromium', 'make-diagram', 'make-dashboard']);
 });

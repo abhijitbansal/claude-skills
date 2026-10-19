@@ -17,7 +17,7 @@ const GLYPHS = {
   'make-diagram': '<path class="s" d="M11 11l4 9M21 11l-4 9M12 9h8"/><circle class="g" cx="9" cy="9" r="3.5"/><circle class="g" cx="23" cy="9" r="3.5"/><circle class="g" cx="16" cy="23" r="3.5"/>',
   'make-explainer': '<rect class="g" x="9" y="6" width="14" height="20" rx="2"/><path class="l" d="M12 12h8M12 16h8M12 20h5"/>',
   'make-motion': '<path class="g" d="M12 8.5v15l12-7.5Z"/>',
-  'make-scene': '<path class="g" d="M16 5l5 2.5-5 2.5-5-2.5Z"/><path class="g" d="M16 12l7 3.5-7 3.5-7-3.5Z"/><path class="g" d="M16 21l9 4.5-9 4.5-9-4.5Z"/><path class="s" d="M11 9.5v2M21 9.5v2M9 17.5v2M23 17.5v2"/>',
+  'make-scene': '<path class="g" d="M16 5.4l8 4-8 4-8-4Z"/><path class="g" d="M8 10.6l7.6 3.8v3.2L8 13.8ZM24 10.6l-7.6 3.8v3.2l7.6-3.8Z"/><path class="g" d="M8 15l7.6 3.8V22L8 18.2ZM24 15l-7.6 3.8V22l7.6-3.8Z"/><path class="g" d="M8 19.4l7.6 3.8v3.2L8 22.6ZM24 19.4l-7.6 3.8v3.2l7.6-3.8Z"/>',
 };
 
 export function faviconSvg(skill, theme) {
