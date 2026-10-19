@@ -129,7 +129,7 @@ test('an invisible text is never flagged for the safe area or overlaps', async (
 test('without a browser the check skips cleanly with exit 0 and names the doctor', () => {
   const r = check([path.join(EXAMPLES, 'q3-revenue.json')], { PA_NO_BROWSER: '1' });
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.match(r.stdout, /^check: skipped: no browser \(PA_NO_BROWSER=1; ask the user, then run: node \S*doctor\.mjs\S* --for check --fix chromium\)\n$/);
+  assert.match(r.stdout, /^check: skipped \(no browser: PA_NO_BROWSER=1; ask the user, then run: node \S*doctor\.mjs\S* --for check --fix chromium\)\n$/);
   const json = check([path.join(EXAMPLES, 'q3-revenue.json'), '--json'], { PA_NO_BROWSER: '1' });
   assert.equal(json.status, 0);
   assert.equal(JSON.parse(json.stdout).skipped, true);

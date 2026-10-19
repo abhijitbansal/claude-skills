@@ -375,7 +375,7 @@ preset in `references/examples/`.
    one tiled, timestamped sheet per scene (up to 11 moments plus a phone-width copy). The agent looks at each one and fixes clipping,
    overlaps or unreadable text, then runs `check.mjs motion.json`, which
    reports text outside the safe area (60 px at 1080 on the short side), overlapping text and a scene that ends
-   with nothing visible (it prints `check: skipped: no browser (…)` and exits 0
+   with nothing visible (it prints `check: skipped (no browser: …)` and exits 0
    without a browser).
 4. Offers `preview.mjs motion.json --open`, a local page with a scrubber,
    play/pause, scene markers and frame-by-frame arrow keys. It reloads
@@ -508,7 +508,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `dashboard: source "x" is postgres, a network source; explainer charts read local files only` | A build never uses the network. Export the query to CSV or Parquet and point a file source at it |
 | `gather.mjs` prints `… is not a git repository` or `base "x" does not exist` (with the branches that do) | Pass `--repo <folder inside the repository>` and a real `--base <branch>` |
 | `make-motion cannot render this spec: it needs ffmpeg and a Chromium browser` | Install both (see the README requirements), or render the clip first and use `video` with the `.mp4` |
-| `check: skipped (no browser: …)` from make-diagram or make-explainer (`check: skipped: no browser (…)` from make-motion) | Expected without Playwright or Chromium; the page is still built. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci` then `npx playwright install chromium` inside the skill folder |
+| `check: skipped (no browser: …)` from make-diagram, make-explainer or make-motion | Expected without Playwright or Chromium; the page is still built. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci` then `npx playwright install chromium` inside the skill folder |
 | `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |
 | `kokoro-js is not installed` | `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` (voiceover only; `npm ci` removes it) |
 | `audio[0].src: ffmpeg cannot decode …` | The file is not a valid audio file. Re-export it as mp3 or wav |

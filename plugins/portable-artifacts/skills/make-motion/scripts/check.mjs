@@ -149,7 +149,7 @@ function report(result, json) {
       : status === 'ok' ? { ok: true, scenes: result.scenes, moments: result.moments }
         : { ok: false, errors: problems };
     process.stdout.write(`${JSON.stringify(body)}\n`);
-  } else if (status === 'skipped') process.stdout.write(`check: skipped: no browser (${result.reason}; ${skipHint()})\n`);
+  } else if (status === 'skipped') process.stdout.write(`check: skipped (no browser: ${result.reason}; ${skipHint()})\n`);
   else if (status === 'ok') process.stdout.write(`check: ok (${result.scenes} scene${result.scenes === 1 ? '' : 's'}, ${result.moments} moments)\n`);
   else {
     for (const p of problems) process.stdout.write(p.path ? `${p.path}: ${p.message}\n` : `${p.message}\n`);
