@@ -75,7 +75,7 @@ const FLAT_SHARE = 0.25; // ...and lower than this share of its length is a flat
  */
 export function alignToStrip(dir, points, aspect) {
   if (aspect >= PORTRAIT_ASPECT || points.length === 0) return dir;
-  const span = [0, 1, 2].map((a) => Math.max(...points.map((p) => p[a])) - Math.min(...points.map((p) => p[a])));
+  const span = [0, 1, 2].map((a) => points.reduce((m, p) => Math.max(m, p[a]), -Infinity) - points.reduce((m, p) => Math.min(m, p[a]), Infinity));
   const [dx, dy, dz] = span;
   const long = Math.max(dx, dz);
   if (long < STRIP_RATIO * Math.min(dx, dz) || dy > FLAT_SHARE * long) return dir;

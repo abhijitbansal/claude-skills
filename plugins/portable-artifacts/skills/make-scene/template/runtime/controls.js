@@ -29,12 +29,14 @@ export function createControls({ camera, dom, target, polarMax, polarMin = 0, di
   controls.minPolarAngle = polarMin;
   controls.target.copy(target);
   let sawInput = false;
+  let moved = false; // the camera has been taken from its first framing (input or a fly-to)
   let tween = null;
   controls.autoRotate = !reducedMotion();
   controls.update();
 
   const settle = (reason) => {
     sawInput = true;
+    moved = true;
     controls.autoRotate = false;
     tween = null;
     onInput(reason);
@@ -68,6 +70,7 @@ export function createControls({ camera, dom, target, polarMax, polarMin = 0, di
     /** Ease the camera to a view (or cut, when instant or reduced motion). */
     flyTo(view, { instant = false } = {}) {
       controls.autoRotate = false;
+      moved = true;
       const to = { position: new Vector3(...view.position), target: new Vector3(...view.target) };
       if (instant || reducedMotion()) {
         tween = null;
@@ -79,6 +82,13 @@ export function createControls({ camera, dom, target, polarMax, polarMin = 0, di
       }
       onInput('fly');
     },
+    /** True until the viewer (or a tour) first moves the camera. */
+    untouched: () => !moved,
+    /** The overview is now `distance` away: zoom limits follow it. */
+    setRange(distanceNow) {
+      controls.minDistance = distanceNow * 0.15;
+      controls.maxDistance = distanceNow * 4;
+    },
     /** Advance one frame. Returns { damping, tween, autoRotate } for isBusy(). */
     update(nowMs, dtSeconds) {
       if (tween) {
@@ -89,8 +99,8 @@ export function createControls({ camera, dom, target, polarMax, polarMin = 0, di
         controls.target.lerpVectors(tween.from.target, tween.to.target, e);
         if (k >= 1) tween = null;
       }
-      const moved = controls.update(Math.min(MAX_DT, dtSeconds));
-      return { damping: moved, tween: tween !== null, autoRotate: controls.autoRotate };
+      const damping = controls.update(Math.min(MAX_DT, dtSeconds));
+      return { damping, tween: tween !== null, autoRotate: controls.autoRotate };
     },
     /** The viewer switched reduced motion on: stop drifting. (Switching off does not restart it.) */
     applyReducedMotion() {

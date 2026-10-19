@@ -221,7 +221,7 @@ for (const world of WORLDS) {
   });
 }
 
-test('labels: a long label is cut with an ellipsis and keeps its full text in a title; no two visible labels overlap', async (t) => {
+test('labels: a long label is cut with an ellipsis; no two visible labels overlap', async (t) => {
   const long = (n) => `District ${n} of the infrastructure and platform reliability work`.slice(0, 48);
   const rows = demoRows((group) => group).map((row) => ({ ...row, group: long(['api', 'web', 'db'].indexOf(row.group) + 1) }));
   const ctx = await open(t, 'city', { viewport: VIEWPORTS[1], reducedMotion: 'reduce', build: { rows } });
@@ -230,11 +230,10 @@ test('labels: a long label is cut with an ellipsis and keeps its full text in a 
   const labels = await ctx.page.evaluate(() => [...document.querySelectorAll('.sc-label')].map((el) => {
     const r = el.getBoundingClientRect();
     const s = getComputedStyle(el);
-    return { hidden: el.hidden, text: el.textContent, title: el.getAttribute('title'), left: r.left, right: r.right, top: r.top, bottom: r.bottom, overflow: s.textOverflow };
+    return { hidden: el.hidden, text: el.textContent, left: r.left, right: r.right, top: r.top, bottom: r.bottom, overflow: s.textOverflow };
   }));
   const shown = labels.filter((l) => !l.hidden);
   assert.ok(shown.length >= 1, 'at least one label is drawn');
-  for (const l of labels) assert.equal(l.title, l.text, 'the full text is in the title attribute');
   for (const l of shown) {
     assert.ok(l.right - l.left <= 0.4 * 390 + 1, `a label is at most 40vw wide (${(l.right - l.left).toFixed(0)}px)`);
     assert.equal(l.overflow, 'ellipsis');
@@ -261,4 +260,38 @@ test('the first tour beat of a city keeps its target in the middle of the frame 
     return { x: p.x / api.canvas.clientWidth, y: p.y / api.canvas.clientHeight, visible: p.visible };
   });
   assert.ok(at.visible && Math.abs(at.x - 0.5) <= 0.3 && Math.abs(at.y - 0.5) <= 0.3, `the target is in the middle 60%: ${JSON.stringify(at)}`);
+});
+
+for (const world of ['galaxy', 'city', 'terrain']) {
+  test(`${world}: turning a phone from landscape to portrait re-frames an untouched view`, async (t) => {
+    const ctx = await open(t, world, { viewport: { width: 780, height: 390 }, reducedMotion: 'reduce' });
+    if (!ctx) return;
+    const { page } = ctx;
+    await page.waitForTimeout(400);
+    await page.setViewportSize({ width: 390, height: 780 });
+    await page.waitForTimeout(800);
+    const e = await screenExtent(page);
+    const at = `${world} after rotating: ${JSON.stringify(e)}`;
+    assert.ok(e.x0 >= -2 && e.y0 >= -2 && e.x1 <= e.w + 2 && e.y1 <= e.h + 2, `${at}; nothing is cropped`);
+    assert.ok(Math.max((e.x1 - e.x0) / e.w, (e.y1 - e.y0) / e.h) >= 0.6, `${at}; and it still fills the frame`);
+  });
+}
+
+test('a viewer who has moved the camera keeps it when the viewport turns; the overview distance still follows', async (t) => {
+  const ctx = await open(t, 'galaxy', { viewport: { width: 780, height: 390 }, reducedMotion: 'reduce' });
+  if (!ctx) return;
+  const { page } = ctx;
+  const spot = () => page.evaluate(() => { const p = window.PAScene.__scene.project(0, 0, 0); return [Math.round(p.x), Math.round(p.y)]; });
+  await page.mouse.move(300, 200);
+  await page.mouse.down();
+  await page.mouse.move(340, 200, { steps: 4 });
+  await page.mouse.up();
+  await page.waitForTimeout(600);
+  const before_ = await spot();
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.waitForTimeout(800);
+  const after_ = await spot();
+  assert.notDeepEqual(before_, after_, 'the canvas resized, so the projection moved');
+  const e = await screenExtent(page);
+  assert.ok(Number.isFinite(e.x0) && e.w === 390, 'the scene still draws');
 });

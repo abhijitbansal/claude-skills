@@ -1,5 +1,5 @@
-// Terrain: a (group x t) grid of values, upsampled 5x with Catmull-Rom (clamped to 0..1; it passes through every data
-// cell) into one height-field surface. The data sits inside a ring of empty cells at height 0, so the land slopes down
+// Terrain: a (group x t) grid of values, upsampled 5x with monotone cubic (PCHIP: it passes through every data cell and
+// never rises above the higher of the two cells it runs between) into one height-field surface. The data sits inside a ring of empty cells at height 0, so the land slopes down
 // to the sea on every side and reads as an island. Heights are normalized to 0..1 (the largest value is 1); bands and
 // sea level are in the same units.
 import { emptyGraph, finalizeGraph, tableFallback } from '../lib/graph.mjs';
@@ -33,10 +33,19 @@ const clamp = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
 const keyOfT = (t) => `${typeof t}:${t}`;
 const pitchOf = (n, range) => Math.min(MAX_PITCH, clamp(n * UNIT, range) / Math.max(n - 1, 1));
 
-// Uniform Catmull-Rom through p1 (t = 0) and p2 (t = 1); exactly p1 at t = 0.
-const spline = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+// Monotone cubic Hermite (PCHIP) from p1 (t = 0) to p2 (t = 1), tangents from the neighbours p0 and p3: a tangent is the
+// harmonic mean of the slopes either side, and zero at a peak, a dip or an edge, so the curve stays between p1 and p2 and
+// is exactly p1 at t = 0.
+const tangent = (before, after) => (before * after <= 0 ? 0 : (2 * before * after) / (before + after));
+function spline(p0, p1, p2, p3, t) {
+  const m1 = tangent(p1 - p0, p2 - p1);
+  const m2 = tangent(p2 - p1, p3 - p2);
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * p1 + (t3 - 2 * t2 + t) * m1 + (-2 * t3 + 3 * t2) * p2 + (t3 - t2) * m2;
+}
 
-// Bicubic Catmull-Rom sample of a rows x cols grid at (gz, tx) in cell units, indices clamped at the edges.
+// Separable monotone-cubic sample of a rows x cols grid at (gz, tx) in cell units, indices clamped at the edges.
 function sample(values, rows, cols, gz, tx) {
   const x1 = Math.min(Math.floor(tx), cols - 1);
   const z1 = Math.min(Math.floor(gz), rows - 1);

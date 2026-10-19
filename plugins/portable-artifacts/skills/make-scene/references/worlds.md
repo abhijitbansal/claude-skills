@@ -32,15 +32,15 @@ A district per group, laid out as rows. Buildings stand along the street in `t` 
 
 ## forest
 
-One tree per root group on a meadow. Its rows are branches that spiral up the trunk in `t` order (row order without `t`); each branch ends in a leaf cluster sized by value. A group with `parent` grows as a smaller sub-tree on a limb of its parent's tree. Leaves sway gently. Use it for a hierarchy or for parts that belong to a whole, such as skills per squad with sub-teams. Without any `parent`, every group is its own tree. Example: `examples/forest.scene.json`.
+One tree per root group on a meadow. Its rows are branches that spiral up the trunk in `t` order (row order without `t`); each branch ends in a leaf cluster whose size is its value (a minimum size for zero), ringed by two smaller puffs of the same colour so the crown reads full. Lower branches reach out further than higher ones, so the top cluster crowns the trunk. A group with `parent` grows as a smaller sub-tree on a limb of its parent's tree. Leaves sway gently. Use it for a hierarchy or for parts that belong to a whole, such as skills per squad with sub-teams. Without any `parent`, every group is its own tree. Example: `examples/forest.scene.json`.
 
 ## galaxy
 
-One star per group, self-lit. Planets orbit it, one per row, at a radius set by `t` rank (value rank without `t`), size set by value. Each link is a light trail between two stars with its value readable on hover. A planet's position in its orbit is seeded from its group and row, so the same spec gives the same scene. Use it for linked things: services and calls, people and who they talk to. Without `links` the stars drift as a cluster. Example: `examples/galaxy.scene.json`.
+One star per group, self-lit. Planets orbit it, one per row, at a radius set by `t` rank (value rank without `t`), size set by value, on a faint orbit ring. Each link is a light trail between two stars with its value readable on hover. A planet's position in its orbit is seeded from its group and row, so the same spec gives the same scene. Use it for linked things: services and calls, people and who they talk to. Without `links` the stars drift as a cluster. Example: `examples/galaxy.scene.json`.
 
 ## terrain
 
-A group by `t` grid interpolated into a landscape. Groups run along one axis and sorted `t` along the other; elevation is value, a sea level marks the low values and colour bands follow height. It needs `t` on every row and exactly one row per `(group, t)`; a missing cell sits at zero. Use it for a dense grid of numbers, such as a measurement per row and column position. A grid of dates or weeks is recommended as a city; ask for terrain with `--world terrain`. Example: `examples/terrain.scene.json`.
+A group by `t` grid interpolated smoothly into an island. Groups run along one axis and sorted `t` along the other; elevation is value, every data cell is exactly its value, and the land slopes down to the sea all round the edge (the grid sits inside a margin of empty sea cells). A sea level marks the low values and colour bands follow height. It needs `t` on every row and exactly one row per `(group, t)`; a missing cell sits at zero. Use it for a dense grid of numbers, such as a measurement per row and column position. A grid of dates or weeks is recommended as a city; ask for terrain with `--world terrain`. Example: `examples/terrain.scene.json`.
 
 ## Lifts
 

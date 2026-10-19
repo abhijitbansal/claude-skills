@@ -1,6 +1,6 @@
 // Graph labels[] (3D text) as an HTML overlay: each is projected from its world point after every draw,
 // positioned with a transform, and hidden when it is behind the camera, off the frame, or overlaps a nearer
-// label. A long label is cut with an ellipsis (the full text stays in its title attribute). Text only (textContent).
+// label. A long label is cut with an ellipsis (the Explore list shows the full text). Text only (textContent).
 import { h } from './dom.js';
 import { hiddenByOverlap } from './overlap.js';
 
@@ -24,7 +24,7 @@ export function createLabels({ host, graph }) {
   const space = graph.env?.sky === 'space';
   const entries = (graph.labels ?? []).map((label) => ({
     label,
-    el: h('span', { class: 'sc-label', text: label.text, title: label.text, hidden: true }),
+    el: h('span', { class: 'sc-label', text: label.text, hidden: true }),
     shown: null, // { x, y, px } as last written; null while hidden
     width100: null, // the text's width at MEASURE_PX
   }));

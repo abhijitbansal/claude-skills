@@ -10,6 +10,7 @@ import { readPalette, watchTheme } from './theme.js';
 
 const FOV = 45;
 const NEAR = 0.1;
+const REFIT_LOG_ASPECT = Math.log(1.15); // re-frame when the aspect changes by more than 15%
 const MAX_DT = 0.1; // seconds of animation time per frame
 const CANVAS_ATTRS = { antialias: true, alpha: false, powerPreference: 'high-performance' };
 const REDUCED_QUERY = '(prefers-reduced-motion: reduce)';
@@ -32,16 +33,15 @@ function original(el) {
 
 /**
  * Frame the scene: keep the graph camera's side of the target (lifted to at least a 3/4 elevation) and put the camera
- * exactly as far back as the scene's own points need for this aspect, in or out. Returns the distance.
+ * exactly as far back as the scene's own points need for this aspect, in or out. Returns { position, distance }.
  */
-function fitCamera(camera, graph, aspect) {
+function frameOf(graph, aspect) {
   const target = graph.camera.target;
   const from = graph.camera.position.map((c, i) => c - target[i]);
   const points = framePoints(graph);
   const dir = alignToStrip(viewDirection(from), points, aspect);
   const distance = fitDistance(points, target, dir, { fov: (FOV * Math.PI) / 180, aspect });
-  camera.position.set(target[0] + dir[0] * distance, target[1] + dir[1] * distance, target[2] + dir[2] * distance);
-  return distance;
+  return { position: [target[0] + dir[0] * distance, target[1] + dir[1] * distance, target[2] + dir[2] * distance], distance };
 }
 
 function inert(canvas) {
@@ -142,8 +142,11 @@ function mount(host, graph, opts = {}) {
     const built = buildObjects(graph, readPalette(doc.documentElement, win));
     undo.push(() => built.dispose());
     camera.far = built.extent.far;
-    camera.position.set(...graph.camera.position);
-    const fitted = fitCamera(camera, graph, Math.max(1, container.clientWidth || host.clientWidth) / Math.max(1, container.clientHeight || host.clientHeight));
+    const hostAspect = () => Math.max(1, container.clientWidth || host.clientWidth) / Math.max(1, container.clientHeight || host.clientHeight);
+    let fitAspect = hostAspect();
+    const first = frameOf(graph, fitAspect);
+    let fitted = first.distance;
+    camera.position.set(...first.position);
     built.setFit(fitted);
     scene.add(built.root);
     scene.background = built.background;
@@ -174,6 +177,21 @@ function mount(host, graph, opts = {}) {
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      if (controlsApi && Math.abs(Math.log(camera.aspect / fitAspect)) > REFIT_LOG_ASPECT) refit();
+    }
+
+    // The viewport changed shape (a phone turned, a host that was 0 x 0 got its size): frame the scene again. A camera the
+    // viewer has not touched moves to the new fit; one they have stays, but the overview distance (fog, focus ceiling, zoom range) follows.
+    function refit() {
+      fitAspect = camera.aspect;
+      const next = frameOf(graph, fitAspect);
+      fitted = next.distance;
+      built.setFit(fitted);
+      controlsApi.setRange(fitted);
+      if (controlsApi.untouched()) {
+        camera.position.set(...next.position);
+        controlsApi.controls.update();
+      }
     }
 
     const frameHooks = new Set();

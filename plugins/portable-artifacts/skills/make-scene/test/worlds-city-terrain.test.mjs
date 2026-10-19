@@ -274,6 +274,20 @@ test('terrain focus: no other row of land stands between the camera and a row, o
   assert.ok(checked > g.groups.length, 'labelled cells were checked too');
 });
 
+test('terrain: between two equal cells flanked by zeros the land never rises above them, and data cells stay exact', () => {
+  // One row 0, 4, 4, 0, 8: the ridge of two 4s (0.5 of the max) must not bulge above 0.5 (a Catmull-Rom would reach 0.5625).
+  const rows = [0, 4, 4, 0, 8].map((value, i) => ({ group: 'a', t: i + 1, value }));
+  const [s] = WORLDS.terrain({ rows, links: [] }, SPEC).surfaces;
+  const row = 1 * 5 * s.nx; // the single group's row; data column ti is vertex (ti + 1) * 5
+  const at = (ix) => s.heights[row + ix];
+  for (let ix = 10; ix <= 15; ix++) assert.ok(at(ix) <= 0.5 + 1e-3, `vertex ${ix}: ${at(ix)}`);
+  [0, 0.5, 0.5, 0, 1].forEach((h, ti) => assert.ok(Math.abs(at((ti + 1) * 5) - h) < 1e-3, `data column ${ti}`));
+  // the same across rows: two equal rows between zero rows, with a taller one elsewhere
+  const cross = WORLDS.terrain({ rows: [0, 4, 4, 0, 8].map((value, i) => ({ group: `g${i}`, t: 1, value })), links: [] }, SPEC).surfaces[0];
+  const col = (iz) => cross.heights[iz * cross.nx + 5];
+  for (let iz = 10; iz <= 15; iz++) assert.ok(col(iz) <= 0.5 + 1e-3, `row vertex ${iz}: ${col(iz)}`);
+});
+
 test('terrain: bands, sea level and the world size', () => {
   const rows = [
     { group: 'a', t: 1, value: 0 }, { group: 'a', t: 2, value: 10 },

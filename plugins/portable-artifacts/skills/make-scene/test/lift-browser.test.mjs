@@ -142,3 +142,26 @@ test('hovering an edge reads its label and its ends; hovering a node reads its d
   assert.deepEqual(await hoverAt([db[0], db[1] + db[4] / 2, db[2]]), { label: 'Orders DB', display: 'database' });
   assert.deepEqual(ctx.problems, []);
 });
+
+test('a lifted diagram turned from landscape to portrait is re-framed, looking down its length', async (t) => {
+  const ctx = await open(t, 'architecture.diagram.json', { viewport: { width: 780, height: 390 }, reducedMotion: 'reduce' });
+  if (!ctx) return;
+  const { page } = ctx;
+  await page.waitForTimeout(400);
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.waitForTimeout(800);
+  const e = await page.evaluate(() => {
+    const graph = JSON.parse(document.querySelector('script[type="application/json"]').textContent);
+    const api = window.PAScene.__scene;
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const b of graph.batches) for (const [x, y, z, sx, sy, sz] of b.instances) {
+      for (const dx of [-sx / 2, sx / 2]) for (const dy of [-sy / 2, sy / 2]) for (const dz of [-sz / 2, sz / 2]) {
+        const p = api.project(x + dx, y + dy, z + dz);
+        x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y);
+      }
+    }
+    return { w: api.canvas.clientWidth, h: api.canvas.clientHeight, x0, y0, x1, y1 };
+  });
+  assert.ok(e.x0 >= -2 && e.y0 >= -2 && e.x1 <= e.w + 2 && e.y1 <= e.h + 2, `nothing is cropped: ${JSON.stringify(e)}`);
+  assert.ok((e.y1 - e.y0) / e.h >= 0.45, `the strip climbs the screen (${((e.y1 - e.y0) / e.h).toFixed(2)} of the height)`);
+});
