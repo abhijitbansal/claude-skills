@@ -1,5 +1,5 @@
 // One make-dashboard chart as the lift reads it: the rows that can be drawn, the category values in the
-// order they first appear (temporal ones sorted), and the problems that make a chart un-liftable.
+// order the 2D chart shows them, and the problems that make a chart un-liftable.
 // Pure: make-dashboard's own helpers arrive in `lib` ({ KINDS, classOf, temporalUnit }).
 import { LIMITS } from '../lib/schema.mjs';
 
@@ -21,11 +21,17 @@ export function kindError(chart, KINDS) {
     : `boxplot charts cannot be lifted; ${list}`;
 }
 
-/** First-appearance order; a temporal axis sorts (ISO text sorts as time does). */
+/** The x axis of a bar or line chart as make-dashboard draws it: nominal x keeps query order (sort: null), a temporal axis sorts (ISO text sorts as time does). */
 export const orderOf = (values, temporal) => {
   const seen = [...new Set(values)];
   return temporal ? seen.sort() : seen;
 };
+
+/**
+ * Ascending order, as Vega-Lite sorts a colour scale's domain and a heatmap's band axes (sort: true in the compiled
+ * chart, a plain `<` on text): so colour i here is the 2D chart's colour i, and its stack and donut follow it.
+ */
+export const sortedOf = (values) => [...new Set(values)].sort();
 
 // The text of a category or table cell. A date column prints at the precision the dashboard's own axis uses.
 function textReader(isTemporal, values, temporalUnit) {
@@ -77,7 +83,7 @@ export function readChart({ chart, result }, lib) {
   if (errors.length > 0) return { errors: errors.slice(0, 1) };
 
   const groupRole = roles.color !== undefined ? 'color' : chart.kind === 'donut' ? 'x' : null;
-  const groupNames = groupRole === null ? [] : orderOf(points.map((p) => p[groupRole]), groupRole === 'x' && temporal('x'));
+  const groupNames = groupRole === null ? [] : sortedOf(points.map((p) => p[groupRole]));
   if (groupNames.length > LIMITS.groups) {
     return { errors: [{ path: 'lift.chart', message: `${roles[groupRole]} has ${groupNames.length} values; a lift takes at most ${LIMITS.groups} groups; fold the rest into "Other" in SQL` }] };
   }

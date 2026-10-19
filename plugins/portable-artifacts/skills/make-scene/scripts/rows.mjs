@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // node scripts/rows.mjs git [--weeks 12] [--depth 1] [--repo <dir>] [--out <rows.json>]
-// Writes { "rows": [...] } (commits per top-level folder per ISO week) for a scene's data.file.
+// Writes { "rows": [...] } (commits per top-level folder per ISO week) for a scene's data.file. A --repo inside a
+// larger repository counts that folder alone, grouped by the folders inside it (one stderr note says so).
 // exit 0 written, 2 usage/IO
 import fs from 'node:fs';
 import path from 'node:path';

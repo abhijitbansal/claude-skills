@@ -13,10 +13,9 @@ import { buildScene, SceneError } from './lib/api.mjs';
 import { MAX_PAGE_BYTES, SKILL_DIR } from './lib/bundle.mjs';
 import { costTable } from './lib/cost.mjs';
 import { exitInternal } from './lib/internal-error.mjs';
-import { renderPage } from './lib/page.mjs';
+import { buildPage, capError } from './lib/page-size.mjs';
 import { eligibility, recommend, renderWeight } from './lib/recommend.mjs';
 import { loadData } from './lib/rows.mjs';
-import { themeFor } from './lib/theme.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
 import { resolveOutput } from '../shared/output.mjs';
@@ -31,8 +30,8 @@ const OPTIONS = {
   json: { type: 'boolean' },
   ...PROVENANCE_OPTIONS,
 };
-const KB = 1024;
 const ID_PREFIX = 'sc';
+const OVER_CAP = 'over the page limit';
 
 /** Where the page goes: `out` (a .html file, or a folder), else $PA_OUTPUT_DIR, else ~/.agent/scenes; always <slug-of-title>.html in a folder. */
 export function resolveScenePath({ out, title, env = process.env, home = os.homedir() }) {
@@ -46,7 +45,7 @@ const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 
 // One entry per world, best fit first. Sizes of the other worlds are measured by building them:
 // this page, minus this world's fragment, plus theirs.
-async function alternativesFor({ spec, dir, theme, built, bytes }) {
+async function alternativesFor({ spec, dir, theme, built, bytes, maxBytes }) {
   const data = loadData(spec, dir);
   const { ranked, reasons } = recommend(data);
   const fit = eligibility(data);
@@ -58,7 +57,13 @@ async function alternativesFor({ spec, dir, theme, built, bytes }) {
     }
     try {
       const other = world === built.world ? built : await buildScene({ ...spec, world }, { dir, theme, idPrefix: ID_PREFIX });
-      rows.push({ world, eligible: true, reason: reasons[world], estBytes: bytes - built.bytes + other.bytes, weight: renderWeight(other.graph) });
+      const estBytes = bytes - built.bytes + other.bytes;
+      // A world whose page is over the cap cannot be built: listed, with the reason and no command to run.
+      if (estBytes > maxBytes) {
+        rows.push({ world, eligible: false, unavailable: OVER_CAP, reason: `not available: ${OVER_CAP}`, estBytes, weight: '' });
+        continue;
+      }
+      rows.push({ world, eligible: true, reason: reasons[world], estBytes, weight: renderWeight(other.graph) });
     } catch (e) {
       // The page is already written: a world that fails to build is a row that says so, never a failed build.
       const why = String(e?.message ?? e).split('\n')[0];
@@ -90,28 +95,23 @@ export async function build(file, { out, theme, world, model, effort, agent, env
   const checked = await validateSpec(spec, { dir, allowOutside });
   if (!checked.ok) return { ok: false, errors: checked.errors };
 
-  const pageTheme = themeFor(spec);
-  let built;
-  let html;
+  let page;
   try {
-    built = await buildScene(spec, { dir, theme: pageTheme, idPrefix: ID_PREFIX, allowOutside });
-    html = renderPage(spec, built, { theme: pageTheme, env });
+    page = await buildPage(spec, { dir, allowOutside, env });
   } catch (e) {
     if (e instanceof SceneError) return { ok: false, errors: e.errors };
     throw e;
   }
-  const bytes = Buffer.byteLength(html);
-  if (bytes > maxBytes) {
-    const message = `the page is ${Math.round(bytes / KB)} KB; the limit is ${Math.round(maxBytes / KB)} KB - use fewer rows or fewer groups`;
-    return { ok: false, errors: [{ path: '', message }] };
-  }
+  const { built, html, bytes, theme: pageTheme } = page;
+  const over = capError(bytes, maxBytes);
+  if (over) return { ok: false, errors: [over] };
   const target = resolveScenePath({ out, title: spec.title, env });
   writeFile(target, html);
   const rewroteSpec = world !== undefined && loaded.world !== world;
   if (rewroteSpec) writeFile(path.resolve(file), `${JSON.stringify({ ...loaded, world }, null, 2)}\n`);
 
   // A lift is never second-guessed: it has no other worlds to offer.
-  const alternatives = spec.lift === undefined ? await alternativesFor({ spec, dir, theme: pageTheme, built, bytes }) : [];
+  const alternatives = spec.lift === undefined ? await alternativesFor({ spec, dir, theme: pageTheme, built, bytes, maxBytes }) : [];
   const table = costTable({
     specText: fs.readFileSync(file, 'utf8'),
     current: built.world,

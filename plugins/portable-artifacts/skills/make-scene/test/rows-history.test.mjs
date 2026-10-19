@@ -182,6 +182,82 @@ test('long folder names are cut to the 48-character group limit', () => {
   } finally { repo.cleanup(); }
 });
 
+test('long folder paths keep their tail, so distinct folders stay distinct groups', () => {
+  const repo = fixtureRepo();
+  try {
+    const base = 'plugins/portable-artifacts/skills/make-scene';
+    repo.commit('2026-10-14T10:00:00Z', `${base}/test/a.mjs`, `${base}/template/b.js`); // one commit touches both
+    repo.commit('2026-10-15T10:00:00Z', `${base}/test/c.mjs`);
+    const rows = historyRows({ repo: repo.dir, weeks: 2, depth: 5, now: NOW });
+    const groups = groupsOf(rows);
+    assert.equal(groups.length, 2, `test/ and template/ are two groups: ${groups.join(' | ')}`);
+    assert.ok(groups.every((g) => [...g].length <= 48), 'each name fits the 48-character limit');
+    assert.ok(groups.every((g) => g.startsWith('…/')), 'cut from the left');
+    const test = groups.find((g) => g.endsWith('/make-scene/test'));
+    const template = groups.find((g) => g.endsWith('/make-scene/template'));
+    assert.ok(test && template, `the tail survives: ${groups.join(' | ')}`);
+    assert.equal(valueOf(rows, test, '2026-W42'), 2, 'test/ counts its own two commits');
+    assert.equal(valueOf(rows, template, '2026-W42'), 1, 'template/ counts its own commit');
+  } finally { repo.cleanup(); }
+});
+
+test('two folders whose shortened names collide stay separate, deterministically', () => {
+  const repo = fixtureRepo();
+  try {
+    repo.commit('2026-10-14T10:00:00Z', `${'a'.repeat(45)}/shared/f.js`);
+    repo.commit('2026-10-15T10:00:00Z', `${'b'.repeat(45)}/shared/f.js`, `${'b'.repeat(45)}/shared/g.js`);
+    const one = historyRows({ repo: repo.dir, weeks: 2, depth: 2, now: NOW });
+    const groups = groupsOf(one);
+    assert.equal(groups.length, 2, `not merged: ${groups.join(' | ')}`);
+    assert.ok(groups.every((g) => [...g].length <= 48));
+    assert.deepEqual(historyRows({ repo: repo.dir, weeks: 2, depth: 2, now: NOW }), one, 'the same input gives the same names');
+    assert.deepEqual(groups.map((g) => valueOf(one, g, '2026-W42')).sort(), [1, 1], 'one commit each');
+  } finally { repo.cleanup(); }
+});
+
+test('a --repo subfolder counts only that folder, grouped by the folders inside it, with one note', () => {
+  const repo = fixtureRepo();
+  try {
+    repo.commit('2026-10-14T10:00:00Z', 'pkg/api/a.js', 'pkg/api/b.js', 'pkg/ui/c.js', 'other/q.js');
+    repo.commit('2026-10-15T10:00:00Z', 'pkg/api/d.js');
+    repo.commit('2026-10-16T10:00:00Z', 'other/r.js'); // outside pkg: not counted
+    repo.commit('2026-10-17T10:00:00Z', 'pkg/README.md'); // directly in pkg
+    const notes = [];
+    const rows = historyRows({ repo: path.join(repo.dir, 'pkg'), weeks: 2, depth: 1, now: NOW, warn: (m) => notes.push(m) });
+    assert.deepEqual(groupsOf(rows).sort(), ['(root)', 'api', 'ui']);
+    assert.equal(valueOf(rows, 'api', '2026-W42'), 2);
+    assert.equal(valueOf(rows, 'ui', '2026-W42'), 1);
+    assert.equal(valueOf(rows, '(root)', '2026-W42'), 1);
+    assert.equal(notes.length, 1, notes.join(' | '));
+    assert.match(notes[0], /pkg/);
+    assert.match(notes[0], /only/);
+  } finally { repo.cleanup(); }
+});
+
+test('from the repository root nothing changes and no folder note is printed', () => {
+  const repo = fixtureRepo();
+  try {
+    repo.commit('2026-10-14T10:00:00Z', 'pkg/api/a.js', 'other/q.js');
+    const notes = [];
+    const rows = historyRows({ repo: repo.dir, weeks: 2, depth: 1, now: NOW, warn: (m) => notes.push(m) });
+    assert.deepEqual(groupsOf(rows).sort(), ['other', 'pkg']);
+    assert.deepEqual(notes, []);
+  } finally { repo.cleanup(); }
+});
+
+test('CLI: --repo at a subfolder writes that folder\'s groups and prints one stderr note naming it', () => {
+  const repo = fixtureRepo();
+  try {
+    repo.commit(new Date().toISOString(), 'pkg/api/a.js', 'other/q.js');
+    const out = path.join(repo.dir, 'o.json');
+    const r = runCli(['git', '--repo', path.join(repo.dir, 'pkg'), '--weeks', '2', '--out', out]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(groupsOf(JSON.parse(fs.readFileSync(out, 'utf8')).rows), ['api']);
+    assert.equal(r.stderr.trim().split('\n').length, 1, r.stderr);
+    assert.match(r.stderr, /pkg/);
+  } finally { repo.cleanup(); }
+});
+
 test('output validates as a data.file for the scene validator', async () => {
   const repo = fixtureRepo();
   const out = tmp('scene-rows-out-');
@@ -321,7 +397,8 @@ for (const name of Object.keys(HOSTILE('', ''))) {
       const out = path.join(repo.dir, 'o.json');
       const r = runCli(['git', '--repo', target, '--weeks', '2', '--out', out], { env: { ...process.env, ...env } });
       assert.equal(r.status, 0, r.stderr);
-      assert.deepEqual(groupsOf(JSON.parse(fs.readFileSync(out, 'utf8')).rows), ['src']);
+      // A --repo subfolder counts only that folder, grouped inside it: src/a.js is a file directly in src.
+      assert.deepEqual(groupsOf(JSON.parse(fs.readFileSync(out, 'utf8')).rows), [subfolder ? '(root)' : 'src']);
     } finally { repo.cleanup(); decoy.cleanup(); fs.rmSync(empty, { recursive: true, force: true }); }
   });
 }

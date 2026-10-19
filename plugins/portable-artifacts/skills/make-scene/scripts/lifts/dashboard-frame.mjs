@@ -26,7 +26,19 @@ const VIEW_MIN = 9;
 const VIEW_PER_UNIT = 1.3;
 const VIEW_MARGIN = 5;
 
-const clean = (v) => Number(v.toFixed(10));
+const TICK_DIGITS = 15; // significant digits: float noise (0.30000000000000004) goes, and a tiny step keeps its own scale
+const MAX_TICKS = 100; // a hard stop: nice steps give about ten, so more means the axis maths failed
+
+/** Round away float noise at a relative precision, so a step of 1e-12 and a step of 1e6 are cleaned alike. */
+export const clean = (v) => Number(v.toPrecision(TICK_DIGITS));
+
+/** The values cannot be laid out on an axis (too large, too small, or too many ticks). The lift adds the chart's name. */
+export class AxisError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'AxisError';
+  }
+}
 
 /** The lanes of a plot with `count` series: { depth, z(i), pitch }. One series sits at z = 0. */
 export function lanesOf(count) {
@@ -41,14 +53,22 @@ export function lanesOf(count) {
 export function valueAxis(lo, hi, niceStep, { integer = false } = {}) {
   const low = Math.min(0, lo);
   const high = Math.max(0, hi);
+  const reachNote = `the values run from ${low} to ${high}`;
+  if (!Number.isFinite(high - low)) throw new AxisError(`${reachNote}, which is too large to lay out an axis; scale them in SQL`);
   const nice = high - low > 0 ? niceStep((high - low) / TICK_TARGET) : 1;
   const step = integer ? Math.max(1, nice) : nice;
-  const top = clean(Math.ceil(high / step) * step);
-  const bottom = clean(Math.floor(low / step) * step);
+  if (!(step > 0) || !Number.isFinite(step)) throw new AxisError(`${reachNote}, which is too small or too large to lay out an axis; scale them in SQL`);
+  // Ticks are whole multiples of the step: counted by index, so a step far below the values' digits cannot stall the loop.
+  const first = Math.floor(low / step);
+  const last = Math.ceil(high / step);
+  if (last - first + 1 > MAX_TICKS) throw new AxisError(`${reachNote}, which needs ${last - first + 1} ticks of ${step}; the limit is ${MAX_TICKS}; scale the values in SQL`);
+  const bottom = clean(first * step);
+  const top = clean(last * step);
   const reach = Math.max(top, -bottom, step);
-  const ticks = [];
-  for (let v = bottom; v <= top + step / 2; v = clean(v + step)) ticks.push(v);
-  return { lo: bottom, hi: top === bottom ? bottom + step : top, step, ticks, k: HEIGHT / reach, negative: bottom < 0 };
+  const k = HEIGHT / reach;
+  if (![bottom, top, reach, k].every(Number.isFinite) || k <= 0) throw new AxisError(`${reachNote}, which is too large or too small to lay out an axis; scale them in SQL`);
+  const ticks = Array.from({ length: last - first + 1 }, (_, i) => clean((first + i) * step));
+  return { lo: bottom, hi: top === bottom ? bottom + step : top, step, ticks, k, negative: bottom < 0 };
 }
 
 /** Evenly spaced slots along x: { slot, at(i) } for `n` categories. */

@@ -180,7 +180,7 @@ dtest('scatter and bubble are spheres: bubble area follows size', async () => {
   assert.equal(itemsAt(scatter, 'sphere').length, 40);
   assert.equal(scatter.items[0].display, 'units 11 · amount 214.5');
   assert.equal(scatter.items[0].value, 214.5);
-  assert.deepEqual(scatter.groups.map((x) => x.name), ['Widget', 'Gadget', 'Gizmo']);
+  assert.deepEqual(scatter.groups.map((x) => x.name), ['Gadget', 'Gizmo', 'Widget'], 'colours ascend by name, as the 2D chart assigns them (the query lists Widget first)');
   const bubbles = await lift('bubbles');
   const spheres = itemsAt(bubbles, 'sphere');
   const diameter = (i) => spheres.find((s) => s[6] === i)[3];

@@ -13,7 +13,7 @@ Common to every scene: auto-orbit on open (stops at the first touch), drag, scro
 3. Every row has a plain numeric `t` (`1`, `2.5`; not a date, week, month, quarter or year string) and the group by `t` grid is at least 60% filled, with one row per group and `t`: terrain.
 4. Otherwise: city. This includes a full grid of dates, months or weeks, such as commits per folder per week: time reads as a city. Terrain is still listed as an eligible alternative.
 
-Then it prints the alternatives table. A world the data cannot feed shows "not available: needs ..." with no switch command. A lift is never second-guessed and has no alternatives.
+Then it prints the alternatives table. A world the data cannot feed shows "not available: needs ...", and a world whose page would be over the page limit shows "not available: over the page limit"; neither has a switch command. A lift is never second-guessed and has no alternatives.
 
 ## Field mapping
 

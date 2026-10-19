@@ -5,7 +5,7 @@
 // colour) stack there, each its own item, as the 2D chart adds them up: no row hides behind another.
 import { displayValue, groupColour } from '../lib/palette.mjs';
 import { orderOf } from './dashboard-data.mjs';
-import { MIN_MARK, WIDTH, focusCollector, frameOf, lanesOf, legendOf, slotsOf, valueAxis } from './dashboard-frame.mjs';
+import { AxisError, MIN_MARK, WIDTH, clean, focusCollector, frameOf, lanesOf, legendOf, slotsOf, valueAxis } from './dashboard-frame.mjs';
 
 const MAX_TOWER = 1.4;
 const TOWER_SHARE = 0.7; // of its slot
@@ -14,7 +14,8 @@ const BIN_DEPTH = 1.2;
 const LANE_FILL = 0.8;
 const MAX_BINS = 20; // as the dashboard's own histogram
 const BIN_EPSILON = 1e-9;
-const clean = (v) => Number(v.toFixed(10));
+const MAX_BIN_COUNT = 100; // a hard stop: nice steps give at most 22 bins
+const FLAT_SHARE = 1e-9; // values this close together, relative to their size, are one value plus float noise
 
 const emptyBatch = (id, colour) => ({ id, shape: 'box', colour, emissive: null, flat: false, instances: [] });
 
@@ -53,17 +54,25 @@ export function barsPart(model, { units, niceStep }) {
   const w = Math.min(MAX_TOWER, slot * TOWER_SHARE);
   const d = grouped ? Math.max(0.2, lane.pitch * LANE_FILL) : w;
   const batches = names.map((_, g) => emptyBatch(`b${g}`, groupColour(g)));
+  const groupAt = (p) => (roles.color === undefined ? 0 : groupOf.get(p.color));
+  // Stacked as the 2D chart stacks: the last colour from the floor up (Vega-Lite sorts a stack descending by colour),
+  // rows of one colour in row order. Rows that share a column and colour add up in that order.
   const stack = new Map();
-  const [xFocus, colourFocus, itemFocus] = [focusCollector(), focusCollector(), focusCollector()];
-  const items = points.map((p, idx) => {
-    const g = roles.color === undefined ? 0 : groupOf.get(p.color);
-    const x = at(xIndex.get(p.x));
-    const z = lane.z(grouped ? g : 0);
-    const height = p.y * axis.k;
+  const bases = new Array(points.length);
+  points.map((_, idx) => idx).sort((a, b) => groupAt(points[b]) - groupAt(points[a]) || a - b).forEach((idx) => {
+    const p = points[idx];
     const column = columnOf(kind, p);
     const sums = stack.get(column) ?? { up: 0, down: 0 };
-    const { box } = tower(x, z, w, d, height, p.y >= 0 ? sums.up : sums.down);
+    bases[idx] = p.y >= 0 ? sums.up : sums.down;
+    const height = p.y * axis.k;
     if (p.y !== 0) stack.set(column, p.y >= 0 ? { ...sums, up: sums.up + height } : { ...sums, down: sums.down + height });
+  });
+  const [xFocus, colourFocus, itemFocus] = [focusCollector(), focusCollector(), focusCollector()];
+  const items = points.map((p, idx) => {
+    const g = groupAt(p);
+    const x = at(xIndex.get(p.x));
+    const z = lane.z(grouped ? g : 0);
+    const { box } = tower(x, z, w, d, p.y * axis.k, bases[idx]);
     batches[g].instances.push([...box, idx]);
     const label = roles.color === undefined ? p.x : `${p.x} · ${p.color}`;
     const place = [x, box[1], z];
@@ -88,14 +97,24 @@ export function barsPart(model, { units, niceStep }) {
   };
 }
 
-// The histogram's bins: nice edges, at most MAX_BINS of them, counting the rows in each.
+// The histogram's bins: nice edges, at most MAX_BINS of them, counting the rows in each. Values that differ by
+// float noise only (a spread under FLAT_SHARE of their size) are one bin; every row is counted in a valid bin.
 function binned(values, niceStep) {
   if (values.length === 0) return { start: 0, step: 1, counts: [] };
   const [min, max] = [Math.min(...values), Math.max(...values)];
-  const step = niceStep(max > min ? (max - min) / MAX_BINS : Math.abs(min) / MAX_BINS || 1 / MAX_BINS);
-  const start = clean(Math.floor(min / step) * step);
-  const counts = new Array(Math.floor((max - start) / step + BIN_EPSILON) + 1).fill(0);
-  for (const v of values) counts[Math.min(counts.length - 1, Math.floor((v - start) / step + BIN_EPSILON))] += 1;
+  const range = max - min;
+  const scale = Math.max(Math.abs(min), Math.abs(max));
+  if (!Number.isFinite(range)) throw new AxisError(`the values run from ${min} to ${max}, which is too wide to bin; scale them in SQL`);
+  const flat = range <= scale * FLAT_SHARE;
+  const step = niceStep(flat ? scale / MAX_BINS || 1 / MAX_BINS : range / MAX_BINS);
+  if (!(step > 0) || !Number.isFinite(step)) throw new AxisError(`the values run from ${min} to ${max}, which is too small or too large to bin; scale them in SQL`);
+  let start = clean(Math.floor(min / step) * step);
+  if (flat && max >= start + step) start = min; // the noise straddles an edge: keep it in one bin
+  const wanted = flat ? 1 : Math.floor((max - start) / step + BIN_EPSILON) + 1;
+  if (wanted > MAX_BIN_COUNT) throw new AxisError(`the values need ${wanted} bins; the limit is ${MAX_BIN_COUNT}; scale them in SQL`);
+  if (!Number.isFinite(start + wanted * step)) throw new AxisError(`the values run from ${min} to ${max}, which is too large to bin; scale them in SQL`);
+  const counts = new Array(wanted).fill(0);
+  for (const v of values) counts[Math.min(wanted - 1, Math.max(0, Math.floor((v - start) / step + BIN_EPSILON)))] += 1;
   return { start, step, counts };
 }
 
@@ -105,20 +124,22 @@ export function histogramPart(model, { niceStep }) {
   const { slot, at } = slotsOf(counts.length);
   const axis = valueAxis(0, Math.max(0, ...counts), niceStep, { integer: true });
   const edge = (j) => clean(start + j * step);
+  const edges = Array.from({ length: counts.length + 1 }, (_, j) => displayValue(edge(j), ''));
+  if (counts.length > 0 && edges.some((text, j) => j > 0 && text === edges[j - 1])) throw new AxisError('the values are too close together to label their bins; scale them in SQL');
   const lane = lanesOf(1);
   const batch = emptyBatch('b0', groupColour(0));
   const itemFocus = focusCollector();
   const items = counts.map((count, j) => {
     const { box } = tower(at(j), 0, slot * BIN_SHARE, BIN_DEPTH, count * axis.k);
     batch.instances.push([...box, j]);
-    const label = `${displayValue(edge(j), '')} – ${displayValue(edge(j + 1), '')}`;
+    const label = `${edges[j]} – ${edges[j + 1]}`;
     itemFocus.add(label, [at(j), box[1], 0]);
     return { id: `i${j}`, label, group: 0, value: count, display: `${count} ${count === 1 ? 'row' : 'rows'}` };
   });
   const frame = frameOf({
     axis,
     depth: lane.depth,
-    xTicks: Array.from({ length: counts.length + 1 }, (_, j) => ({ text: displayValue(edge(j), ''), x: -WIDTH / 2 + j * slot })),
+    xTicks: edges.map((text, j) => ({ text, x: -WIDTH / 2 + j * slot })),
     titles: { x: model.roles.value, y: 'count' },
     lane,
     firstBatch: 1,

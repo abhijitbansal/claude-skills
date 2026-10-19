@@ -13,7 +13,7 @@ import { SceneError } from '../lib/scene-error.mjs';
 import { registerLiftCheck } from '../lib/spec.mjs';
 import { loadSibling } from '../lib/siblings.mjs';
 import { kindError, readChart } from './dashboard-data.mjs';
-import { VIEW_DIRECTION, focusOf } from './dashboard-frame.mjs';
+import { AxisError, VIEW_DIRECTION, focusOf } from './dashboard-frame.mjs';
 import { barsPart, histogramPart } from './dashboard-bars.mjs';
 import { linesPart, scatterPart } from './dashboard-series.mjs';
 import { donutPart, heatmapPart } from './dashboard-surface.mjs';
@@ -96,9 +96,19 @@ function steadyIds(svg) {
 // Currency charts say so; any other chart is plain numbers unless the scene spec gives units.
 const unitsFor = (chart, units) => units ?? (chart.format === 'currency' ? CURRENCY_UNITS : '');
 
+// The part for a chart; values that cannot be laid out on an axis are a spec error that names the chart.
+function partOf(model, lib, units) {
+  try {
+    return PARTS[model.kind](model, { units, niceStep: lib.niceStep });
+  } catch (e) {
+    if (e instanceof AxisError) throw new SceneError([{ path: AT_CHART, message: `chart ${JSON.stringify(model.chart.id)}: ${e.message}` }]);
+    throw e;
+  }
+}
+
 /** The scene graph (without its 2D drawing) of a read chart; also { part } for the callers that need the focus. */
 function graphOf(model, lib, units, plotted) {
-  const part = PARTS[model.kind](model, { units, niceStep: lib.niceStep });
+  const part = partOf(model, lib, units);
   const g = emptyGraph('chart', { title: model.chart.title, units });
   g.groups = part.groups;
   g.items = part.items;
@@ -125,8 +135,19 @@ export async function liftDashboard(source, { dir = process.cwd(), theme, idPref
   const model = readChart(got, got.lib);
   if (model.errors.length > 0) throw new SceneError(model.errors);
   const { graph } = graphOf(model, got.lib, unitsFor(got.chart, units), model.table);
-  const svgs = await got.lib.renderThemedSvgs(got.view, got.result.rows, theme, { idPrefix: `${idPrefix ?? 'ch'}-` });
+  const svgs = await drawing(got, theme, idPrefix);
+  if (svgs === null) return { ...graph, fallback: { ...graph.fallback, kind: 'table' } };
   return { ...graph, fallback: { ...graph.fallback, svg: steadyIds(svgs.light.wide), svgDark: steadyIds(svgs.dark.wide) } };
+}
+
+// make-dashboard's own 2D drawing of the chart. Vega cannot lay out some extreme data (values equal to float noise
+// make a NaN bin step); the 3D scene is still sound, so the fallback is then the plotted table alone (null).
+async function drawing({ lib, view, result }, theme, idPrefix) {
+  try {
+    return await lib.renderThemedSvgs(view, result.rows, theme, { idPrefix: `${idPrefix ?? 'ch'}-` });
+  } catch {
+    return null;
+  }
 }
 
 // ---- the validator hook -----------------------------------------------------------------
@@ -155,7 +176,12 @@ export async function dashboardLiftCheck(scene, { dir, allowOutside = false }, {
   if (got.errors) return got.errors;
   const model = readChart(got, got.lib);
   if (model.errors.length > 0) return model.errors;
-  return checkTourFocus(scene, graphOf(model, got.lib, '', model.table));
+  try {
+    return checkTourFocus(scene, graphOf(model, got.lib, '', model.table));
+  } catch (e) {
+    if (e instanceof SceneError) return e.errors;
+    throw e;
+  }
 }
 
 registerLiftCheck('dashboard', (scene, ctx) => dashboardLiftCheck(scene, ctx));
