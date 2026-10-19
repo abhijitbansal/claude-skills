@@ -118,7 +118,7 @@ need `npm ci` in each skill folder. Their own installer does that and covers Gem
 project-scoped installs too:
 `node plugins/portable-artifacts/bin/install.mjs <claude|codex|copilot|gemini|agents> [--project .]`
 — see [plugins/portable-artifacts/USAGE.md](plugins/portable-artifacts/USAGE.md).
-With [`npx skills`](https://github.com/vercel-labs/skills): `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene`. That does not resolve dependencies: `make-explainer` needs `make-diagram` and `make-dashboard` installed beside it (and `make-scene` too, to lift a diagram or a chart), so name them as shown.
+With [`npx skills`](https://github.com/vercel-labs/skills): `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene`. That does not resolve dependencies: `make-explainer` needs `make-diagram` and `make-dashboard` installed beside it (and `make-scene` for a `scene` section), and `make-scene` needs them to lift a diagram or a chart, so name them as shown.
 
 ### Cartoon (token-optimized CLI output)
 

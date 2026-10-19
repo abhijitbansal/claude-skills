@@ -16,9 +16,20 @@ export function notAvailable(needs) {
   return `not available: needs ${needs.replace(/^\w+ needs /, '')}`;
 }
 
+// A calendar or sequence label (2026-07-14, 2026-W30): reads as time, so a block per row (city) fits it best.
+function isCalendar(t) {
+  return typeof t === 'string' && TIME_LIKE.test(t);
+}
+
 function isTimeLike(t) {
   if (typeof t === 'number') return Number.isFinite(t);
   return typeof t === 'string' && (TIME_LIKE.test(t) || /^-?\d+(\.\d+)?$/.test(t));
+}
+
+// Every row has a plain number for t (not a date or week): a surface over two numeric axes.
+function hasNumericT(rows) {
+  const plain = (t) => (typeof t === 'number' ? Number.isFinite(t) : typeof t === 'string' && /^-?\d+(\.\d+)?$/.test(t) && !isCalendar(t));
+  return rows.length > 0 && rows.every((r) => plain(r.t));
 }
 
 /** Share of the group x t grid that has a row, or null when no row has a time. */
@@ -34,7 +45,8 @@ function pickFirst({ rows, links }, elig) {
   if (links.length > 0) return 'galaxy';
   if (rows.some((r) => r.parent !== undefined)) return 'forest';
   const fill = gridFill(rows);
-  if (fill !== null && fill >= TERRAIN_FILL && elig.terrain.ok) return 'terrain';
+  // Dates and weeks always read as time: city first, terrain stays listed when eligible. Terrain leads only for a dense numeric grid.
+  if (fill !== null && fill >= TERRAIN_FILL && elig.terrain.ok && hasNumericT(rows)) return 'terrain';
   return 'city';
 }
 

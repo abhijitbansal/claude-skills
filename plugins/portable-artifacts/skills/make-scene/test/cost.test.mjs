@@ -40,6 +40,12 @@ test('command text is node <skill-dir>/scripts/build.mjs <spec> --world <w>', ()
   assert.ok(line.includes(`node ${SKILL}/scripts/build.mjs scene.json --world forest`));
 });
 
+test('flags the build was given are repeated, quoted, after --world', () => {
+  const t = table({ flags: { out: '/tmp/my pages', theme: 'press', allowOutside: true } });
+  assert.ok(lineOf(t, 'forest').includes(`scene.json --world forest --out '/tmp/my pages' --theme press --allow-outside`));
+  assert.ok(lineOf(table(), 'forest').trimEnd().endsWith('--world forest'));
+});
+
 test('the current world is marked and has no switch command', () => {
   const line = lineOf(table(), 'city');
   assert.match(line, /current/);

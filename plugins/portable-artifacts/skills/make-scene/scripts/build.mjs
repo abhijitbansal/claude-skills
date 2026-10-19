@@ -116,6 +116,7 @@ export async function build(file, { out, theme, world, model, effort, agent, env
     pageBytes: bytes,
     skillDir: path.resolve(SKILL_DIR),
     specPath: path.resolve(file),
+    flags: { out: out && path.resolve(out), theme, allowOutside },
     alternatives,
   });
   return { ok: true, out: target, bytes, world: built.world, alternatives, table, rewroteSpec };

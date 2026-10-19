@@ -138,8 +138,8 @@ need only `npm ci --omit=dev`).
 
 **`make-explainer` needs `make-diagram` and `make-dashboard` next to it** to
 draw diagrams, charts and card icons (and `make-motion` to render a motion spec;
-an existing `.mp4` needs nothing). `make-scene` needs `make-diagram` only to lift a
-diagram into 3D and `make-dashboard` only to lift a chart; a plain world needs neither. `npx skills add` does not resolve
+an existing `.mp4` needs nothing). `make-scene` lists both as requirements (the installer pulls them in), but uses `make-diagram` only to lift a
+diagram into 3D and `make-dashboard` only to lift a chart; a plain world needs neither. `make-explainer` needs `make-scene` only for a `scene` section. `npx skills add` does not resolve
 dependencies, so name them:
 
 ```bash
@@ -250,7 +250,7 @@ Each skill folder also has its own README.
 
 ## Tested hosts
 
-Tested live on this branch: **Claude Code**, and **GitHub Copilot CLI 1.0.98** (one non-interactive run per skill on 2026-10-15, plus reruns of the doctor install path; the browser check and the ask-first consent prompt were not exercised there). An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**: dashboard 10/10, motion 6/10, the last four motion prompts stopped by the account's usage limit ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)). **Gemini CLI**: install paths verified against its documentation, not run live.
+Tested live on this branch: **Claude Code**, and **GitHub Copilot CLI 1.0.98** (one non-interactive run per skill on 2026-10-15, plus reruns of the doctor install path; the browser check and the ask-first consent prompt were not exercised there). An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**: dashboard 10/10, motion 6/10, the last four motion prompts stopped by the account's usage limit ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)). **Gemini CLI**: install paths verified against its documentation, not run live. **make-scene**: eval pending.
 
 Details:
 [`eval/results/summary-portability-copilot-2026-10-15.md`](eval/results/summary-portability-copilot-2026-10-15.md)

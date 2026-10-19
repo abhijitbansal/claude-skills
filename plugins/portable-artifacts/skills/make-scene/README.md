@@ -60,7 +60,7 @@ and tells you where the page is. Default output folder is `~/.agent/scenes/`
 | `city` | district | position along the street | building height | a time or sequence per group |
 | `forest` | tree (`parent` grows a sub-tree) | branch height | leaf size | hierarchies |
 | `galaxy` | star (`links` draw trails) | orbit radius | planet size | linked things |
-| `terrain` | row of the grid | column of the grid | elevation | a dense group by time grid |
+| `terrain` | row of the grid | column of the grid | elevation | a dense group by number grid (a dated grid starts as a city) |
 | `lift.diagram` | | | | an existing `diagram.json` as blocks and tubes |
 | `lift.dashboard` | | | | one chart as towers, ribbons, spheres or a surface |
 

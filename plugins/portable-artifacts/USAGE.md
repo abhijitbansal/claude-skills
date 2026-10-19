@@ -94,7 +94,7 @@ not exercised. An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**:
 dashboard 10/10, motion 6/10, with the last four motion prompts stopped by the
 account's usage limit ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)).
 **Gemini CLI**: its install paths were checked against its documentation on
-2026-10-15 and not run live. Results:
+2026-10-15 and not run live. **make-scene**: eval pending. Results:
 [`eval/results/summary-portability-copilot-2026-10-15.md`](eval/results/summary-portability-copilot-2026-10-15.md)
 and [`eval/results/summary-install-targets-2026-10-15.md`](eval/results/summary-install-targets-2026-10-15.md).
 
@@ -450,8 +450,9 @@ is value), `forest` (a tree per group, branches by `t`, leaf size is value; a
 `parent` grows a sub-tree), `galaxy` (a star per group, planets by `t`, links
 draw light trails) and `terrain` (a group by `t` grid as a landscape; needs `t`
 on every row and one row per group and `t`). The build picks the one that fits
-the data (links: galaxy; parents: forest; a mostly full time grid: terrain;
-else city) unless the spec sets `world`.
+the data (links: galaxy; parents: forest; a mostly full grid of plain numbers: terrain;
+else city, so dates and weeks, even a full grid, start as a city and offer
+terrain as an alternative) unless the spec sets `world`.
 
 **Lifts** (instead of `data`): `{ "diagram": "flow.diagram.json" }` redraws a
 make-diagram diagram as blocks and tubes on a floor and replays its stories
@@ -462,7 +463,8 @@ hand-written Vega-Lite charts are not liftable. A lift needs make-diagram or
 make-dashboard installed beside make-scene.
 
 **Switching costs no model tokens.** Pick another row of the table and run its
-command, which is the same build with `--world <world>`. It rewrites `world` in
+command, which is the same build (same `--out`, `--theme` and
+`--allow-outside`) with `--world <world>`. It rewrites `world` in
 `scene.json` and builds again.
 
 **Data rules.** One source: `data.rows`, `data.file` or `data.csv` with

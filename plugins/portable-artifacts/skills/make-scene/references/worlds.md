@@ -10,8 +10,8 @@ Common to every scene: auto-orbit on open (stops at the first touch), drag, scro
 
 1. `links` present: galaxy.
 2. Any row has `parent`: forest.
-3. Every row has a time-like `t` (a year, `2026-07`, `2026-07-14`, `2026-W30`, `2026-Q3` or a number) and the group by `t` grid is at least 60% filled: terrain.
-4. Otherwise: city.
+3. Every row has a plain numeric `t` (`1`, `2.5`; not a date, week, month, quarter or year string) and the group by `t` grid is at least 60% filled, with one row per group and `t`: terrain.
+4. Otherwise: city. This includes a full grid of dates, months or weeks, such as commits per folder per week: time reads as a city. Terrain is still listed as an eligible alternative.
 
 Then it prints the alternatives table. A world the data cannot feed shows "not available: needs ..." with no switch command. A lift is never second-guessed and has no alternatives.
 
@@ -40,7 +40,7 @@ One star per group, self-lit. Planets orbit it, one per row, at a radius set by 
 
 ## terrain
 
-A group by `t` grid interpolated into a landscape. Groups run along one axis and sorted `t` along the other; elevation is value, a sea level marks the low values and colour bands follow height. It needs `t` on every row and exactly one row per `(group, t)`; a missing cell sits at zero. Use it for a dense grid, such as a metric per region per month. Example: `examples/terrain.scene.json`.
+A group by `t` grid interpolated into a landscape. Groups run along one axis and sorted `t` along the other; elevation is value, a sea level marks the low values and colour bands follow height. It needs `t` on every row and exactly one row per `(group, t)`; a missing cell sits at zero. Use it for a dense grid of numbers, such as a measurement per row and column position. A grid of dates or weeks is recommended as a city; ask for terrain with `--world terrain`. Example: `examples/terrain.scene.json`.
 
 ## Lifts
 
@@ -64,9 +64,9 @@ A group by `t` grid interpolated into a landscape. Groups run along one axis and
 | `heatmap` | a terrain-like surface (no negative values) |
 | `donut` | a ring of tube arcs, clockwise from 12 o'clock |
 
-Boxplot and `vegaLite` charts cannot be lifted. Needs make-dashboard installed beside this skill. Example: `examples/lift-dashboard.scene.json` (with `examples/dashboard.json` and `examples/data/sales.csv`).
+Boxplot and `vegaLite` charts cannot be lifted. A heatmap value, a donut `y` and a bubble `size` must be 0 or more. Needs make-dashboard installed beside this skill. Example: `examples/lift-dashboard.scene.json` (with `examples/dashboard.json` and `examples/data/sales.csv`).
 
 ## Picking one
 
-- Linked things: galaxy. Hierarchy: forest. Dense grid over time: terrain. Anything else over time or sequence: city.
-- Do not choose a world for looks. Switching is free of model tokens: `build.mjs scene.json --world <world>`.
+- Linked things: galaxy. Hierarchy: forest. Dense numeric grid: terrain. Anything over time or sequence, dated grids included: city (terrain is one switch away).
+- Do not choose a world for looks. Switching is free of model tokens: the printed command is the same build (same `--out`, `--theme`, `--allow-outside`) with `--world <world>`.

@@ -26,7 +26,7 @@ If it reports anything missing, tell the user in one message: each item, why it 
 
 1. Get the data. Rows you already have go in `data.rows`. A CSV goes in `data.csv` with `columns`. Commits per top-level folder per week come from `node <skill-dir>/scripts/rows.mjs git --weeks 12` (options `--depth N`, `--repo DIR`, `--out FILE`), which writes `scene-rows.json`: use it as `"data": { "file": "scene-rows.json" }`. Never retype or reshape generated rows.
 2. Write `scene.json`. Copy the closest file in `<skill-dir>/references/examples/` (`city`, `forest`, `galaxy`, `terrain`, `lift-diagram`, `lift-dashboard`). Every field is in `<skill-dir>/references/schema.md`; what each world does is in `<skill-dir>/references/worlds.md`. Set `world` to your pick, or leave it out and the build picks the best fit.
-3. `node <skill-dir>/scripts/validate.mjs scene.json`. Fix every line it prints (a JSON path, the problem, the fix) and rerun until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage error. Add `--allow-outside` only if the user wants data from outside the project folder.
+3. `node <skill-dir>/scripts/validate.mjs scene.json`. Fix every line it prints (a JSON path, the problem, the fix) and rerun until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage error. Add `--allow-outside` (to validate and to build) only if the user wants data from outside the project folder.
 4. Set `generatedBy` to the model you are running as, your effort level if you know it, and your host (for example Claude Code, Codex, Copilot CLI, Gemini CLI). Never guess; leave out any field you do not know. `--model`, `--effort` and `--agent` on the build override it. `node <skill-dir>/scripts/build.mjs scene.json` prints the HTML path and an alternatives table. Default folder is `~/.agent/scenes/` (or the folder in the `PA_OUTPUT_DIR` environment variable); `--out <file.html|dir>` picks another (inside a project pass `--out ./<name>.html` so the page lands there); `--theme dusk|press|poster|paper|blueprint|ink|editorial` overrides the theme (default `dusk`).
 5. First run `node <skill-dir>/scripts/doctor.mjs --json --for check`, then `node <skill-dir>/scripts/check.mjs <printed path>` opens the page at desktop and phone width and fails on console errors, overflow, a blank canvas or a tour that cannot finish. It needs Playwright and a browser (`doctor --for check` reports and installs them, after the user agrees); without them it skips cleanly (exit 0).
 6. Report: the HTML path, one line on what the scene shows, the alternatives table, and "drag to orbit, hover for exact values, Play (or Space) runs the tour, `F` is full screen".
@@ -35,7 +35,7 @@ For a change ("rename the title", "add a beat for the spike"), edit only those f
 
 ## Recommend, build, then offer
 
-The build prints an alternatives table: each world, why it fits (or "not available: needs ..."), the page size, a render weight and the exact command to switch. Show the table the build printed to the user verbatim, unchanged, then ask if they want another world. Switching is free of model tokens: run the printed command, which is the same build with `--world <world>`. It rewrites `world` in `scene.json` and builds again. A lift has no alternatives.
+The build prints an alternatives table: each world, why it fits (or "not available: needs ..."), the page size, a render weight and the exact command to switch. Show the table the build printed to the user verbatim, unchanged, then ask if they want another world. Switching is free of model tokens: run the printed command, which is the same build (same `--out`, `--theme` and `--allow-outside`) with `--world <world>`. It rewrites `world` in `scene.json` and builds again. A lift has no alternatives.
 
 ## Data rules
 
@@ -49,10 +49,10 @@ Each row is `{ "group", "t", "value", "label", "parent" }`; only `group` and `va
 
 ## Worlds
 
-- `city`: a district per group, buildings by `t`, height is value. The default for a time or sequence.
+- `city`: a district per group, buildings by `t`, height is value. Picked first for dates and weeks, and for anything else that does not fit another world.
 - `forest`: a tree per group, branches by `t`, leaf size is value. Fits `parent` hierarchies.
 - `galaxy`: a star per group, planets by `t` rank, size is value. Fits `links`.
-- `terrain`: a group by `t` grid as a landscape, height is value. Fits a mostly full grid.
+- `terrain`: a group by `t` grid as a landscape, height is value. Picked first only for a mostly full grid (60% or more of group by `t` filled) whose `t` is a plain number, not a date or week; a dated grid still lists it as an alternative.
 
 If an explicit `world` cannot show the data, validate names the worlds that can.
 

@@ -72,8 +72,10 @@ test('no world uses top recommendation', async (t) => {
   const linked = await build(withLinks, { env: env(tempDir(t)) });
   assert.equal(linked.world, 'galaxy', 'links -> galaxy');
   assert.equal(JSON.parse(read(withLinks)).world, undefined, 'a plain build does not write the world back');
-  const grid = writeScene(t, BASE);
-  assert.equal((await build(grid, { env: env(tempDir(t)) })).world, 'terrain', 'a filled group x t grid -> terrain');
+  const weekly = writeScene(t, BASE);
+  assert.equal((await build(weekly, { env: env(tempDir(t)) })).world, 'city', 'a filled weekly grid is time -> city');
+  const numeric = writeScene(t, BASE, { rows: [1, 2].flatMap((n) => ['api', 'web'].map((group) => ({ group, t: n, value: n + 1 }))) });
+  assert.equal((await build(numeric, { env: env(tempDir(t)) })).world, 'terrain', 'a filled numeric group x t grid -> terrain');
   const plain = writeScene(t, BASE, { rows: [{ group: 'api', value: 3 }, { group: 'web', value: 4 }] });
   assert.equal((await build(plain, { env: env(tempDir(t)) })).world, 'city', 'rows without a time -> city');
 });
@@ -111,6 +113,18 @@ test('default output is PA_OUTPUT_DIR or ~/.agent/scenes', async (t) => {
   const run = cli([file], { home });
   assert.equal(run.status, 0, run.stderr);
   assert.ok(fs.existsSync(path.join(home, '.agent', 'scenes', 'commits-per-folder.html')), run.stdout);
+});
+
+test('the switch command repeats --out, --theme and --allow-outside the build was given', async (t) => {
+  const file = writeScene(t, BASE);
+  const dir = tempDir(t);
+  const out = path.join(dir, 'my pages');
+  const result = await build(file, { out, theme: 'press', allowOutside: true, env: env(tempDir(t)) });
+  const forest = result.table.split('\n').find((l) => l.startsWith('forest'));
+  assert.ok(forest.includes(`${file} --world forest --out '${out}' --theme press --allow-outside`), forest);
+  const plain = await build(file, { env: env(tempDir(t)) });
+  const line = plain.table.split('\n').find((l) => l.startsWith('forest'));
+  assert.ok(line.trimEnd().endsWith('--world forest'), line);
 });
 
 test('same spec same bytes', async (t) => {

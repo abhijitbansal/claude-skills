@@ -75,7 +75,7 @@ Instead of `data`, exactly one of:
 | `{ "diagram": "flow.diagram.json" }` | A path to a make-diagram `diagram.json`, or the diagram object inline. Any of its four types. |
 | `{ "dashboard": "dashboard.json", "chart": "<chart id>" }` | One chart of a make-dashboard dashboard. `chart` is required with `dashboard` and not allowed with `diagram`. |
 
-A lift takes no `world` and no top-level `links`. Liftable dashboard kinds: bar, stacked-bar, grouped-bar, histogram, line, area, scatter, bubble, heatmap, donut. A boxplot or a `vegaLite` chart is rejected with that list. A heatmap cannot hold a negative value. Lifting needs make-diagram or make-dashboard installed beside this skill (`doctor.mjs --for scene.json` checks).
+A lift takes no `world` and no top-level `links`. Liftable dashboard kinds: bar, stacked-bar, grouped-bar, histogram, line, area, scatter, bubble, heatmap, donut. A boxplot or a `vegaLite` chart is rejected with that list. A heatmap value, a donut `y` and a bubble `size` must be 0 or more. Lifting needs make-diagram or make-dashboard installed beside this skill (`doctor.mjs --for scene.json` checks).
 
 ## `tour`
 

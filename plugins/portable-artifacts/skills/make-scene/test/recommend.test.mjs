@@ -23,19 +23,36 @@ test('parent ranks forest first', () => {
   assert.equal(recommend({ rows, links: [] }).ranked[0], 'forest');
 });
 
-test('dense grid ranks terrain first', () => {
-  const { ranked, reasons } = recommend({ rows: grid(WEEKS), links: [] });
-  assert.equal(ranked[0], 'terrain');
-  assert.match(reasons.terrain, /grid/);
+test('a dense weekly grid ranks city first and still lists terrain as eligible', () => {
+  const rows = grid(WEEKS);
+  const { ranked, reasons } = recommend({ rows, links: [] });
+  assert.equal(ranked[0], 'city');
+  assert.equal(eligibility({ rows, links: [] }).terrain.ok, true);
+  assert.deepEqual(ranked, ['city', 'forest', 'galaxy', 'terrain']);
+  assert.match(reasons.terrain, /^group x t grid is 100% filled$/);
 });
 
-test('numeric t counts as time-like for terrain', () => {
-  assert.equal(recommend({ rows: grid([1, 2, 3, 4]), links: [] }).ranked[0], 'terrain');
+test('dates and months rank city first even when the grid is dense', () => {
+  assert.equal(recommend({ rows: grid(['2026-07-01', '2026-07-08', '2026-07-15']), links: [] }).ranked[0], 'city');
+  assert.equal(recommend({ rows: grid(['2026-01', '2026-02', '2026-03']), links: [] }).ranked[0], 'city');
+  assert.equal(recommend({ rows: grid(['2024', '2025', '2026']), links: [] }).ranked[0], 'city');
+});
+
+test('a dense numeric grid ranks terrain first', () => {
+  const { ranked, reasons } = recommend({ rows: grid([1, 2, 3, 4]), links: [] });
+  assert.equal(ranked[0], 'terrain');
+  assert.match(reasons.terrain, /grid is 100% filled: a surface fits/);
+  assert.equal(recommend({ rows: grid(['1', '2', '3', '4']), links: [] }).ranked[0], 'terrain');
+});
+
+test('a numeric grid with one dated t falls back to city', () => {
+  const rows = [...grid([1, 2, 3]), { group: 'a', t: '2026-W01', value: 1 }];
+  assert.equal(recommend({ rows, links: [] }).ranked[0], 'city');
 });
 
 test('sparse grid does not pick terrain', () => {
-  // 4 groups x 5 weeks, keep 8 of 20 cells (40%)
-  const rows = grid(WEEKS, (gi, ti) => (gi + ti) % 5 >= 2);
+  // 4 groups x 5 numbers, keep 8 of 20 cells (40%)
+  const rows = grid([1, 2, 3, 4, 5], (gi, ti) => (gi + ti) % 5 >= 2);
   assert.ok(rows.length / 20 < TERRAIN_FILL);
   const { ranked } = recommend({ rows, links: [] });
   assert.equal(ranked[0], 'city');
@@ -75,13 +92,13 @@ test('remaining eligible worlds follow in fixed order, ineligible last', () => {
 });
 
 test('every ranked world has a reason', () => {
-  const { ranked, reasons } = recommend({ rows: grid(WEEKS), links: [] });
+  const { ranked, reasons } = recommend({ rows: grid([1, 2, 3]), links: [] });
   for (const w of ranked) assert.equal(typeof reasons[w], 'string');
   assert.deepEqual(Object.keys(reasons).sort(), [...ranked].sort());
 });
 
 test('duplicate group x t cells make terrain ineligible even when dense', () => {
-  const rows = [...grid(WEEKS), { group: 'a', t: '2026-W01', value: 9 }];
+  const rows = [...grid([1, 2, 3, 4, 5]), { group: 'a', t: 1, value: 9 }];
   const { ranked } = recommend({ rows, links: [] });
   assert.notEqual(ranked[0], 'terrain');
   assert.equal(ranked.at(-1), 'terrain');
@@ -129,6 +146,6 @@ test('terrain reason with no rows has no null in it', () => {
   assert.match(reasons.terrain, /numeric or time-like/);
 });
 
-test('terrain reason reports the fill percentage for a time grid', () => {
-  assert.equal(recommend({ rows: grid(WEEKS), links: [] }).reasons.terrain, 'group x t grid is 100% filled: a surface fits');
+test('terrain reason reports the fill percentage for a numeric grid', () => {
+  assert.equal(recommend({ rows: grid([1, 2, 3, 4, 5]), links: [] }).reasons.terrain, 'group x t grid is 100% filled: a surface fits');
 });
