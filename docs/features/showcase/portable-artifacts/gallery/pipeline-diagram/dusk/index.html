@@ -187,6 +187,18 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 .tool[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
 @supports (color: color-mix(in srgb, red, red)) { .tool[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); } }
 .tool:disabled { opacity: 0.6; cursor: default; }
+/* The play button is an icon (a 40 px hit area); its svg paints in currentColor, so each theme and the light/dark toggle recolor it. */
+.tool.pa-play { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; padding: 0; }
+.pa-playicon { display: inline-flex; }
+.pa-playicon svg { display: block; }
+/* The hold ring (transport.js): decorative, and absolutely placed so it never moves a control. Next reserves a slot for it on its right (a circle of 14 px); in Play it circles the icon. The arc runs in the accent over a faint currentColor track. */
+.tool[data-pa-next] { position: relative; padding-right: 28px; }
+.pa-ring { position: absolute; width: 14px; height: 14px; pointer-events: none; }
+.tool[data-pa-next] > .pa-ring { right: 8px; top: 50%; margin-top: -7px; }
+.tool.pa-play > .pa-ring { inset: 2px; width: auto; height: auto; }
+.pa-ring svg { display: block; width: 100%; height: 100%; }
+.pa-ring-track { opacity: .25; }
+.pa-ring-arc { stroke: var(--accent); }
 /* Full screen, real (the root element is :fullscreen) or the window-filling fallback (.pa-fill on the root, when the browser refused, as inside a sandboxed iframe): the same chrome goes, the canvas takes the room; the tabs, Fit, Find, the chapters and the way out stay. Any root works, the page's or a dialog's (fullscreen.js marks it data-pa-full-root). */
 .pa-fill .titles, [data-pa-full-root]:fullscreen .titles, .pa-fill [data-act]:not([data-act="fit"]), [data-pa-full-root]:fullscreen [data-act]:not([data-act="fit"]), .pa-fill .zoom-label, [data-pa-full-root]:fullscreen .zoom-label, .pa-fill .grp-export, [data-pa-full-root]:fullscreen .grp-export, .pa-fill [data-export], [data-pa-full-root]:fullscreen [data-export], .pa-fill [data-theme-toggle], [data-pa-full-root]:fullscreen [data-theme-toggle] { display: none; }
 .zoom-label { min-width: 3.2em; text-align: center; color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
@@ -338,7 +350,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 <p class="export-error" data-export-error role="alert" hidden></p>
 <div class="body">
 <main class="stage" id="pa-stage">
-<svg xmlns="http://www.w3.org/2000/svg" class="pa-diagram pa-type-architecture" viewBox="0 0 1105 1616" role="graphics-document" aria-labelledby="d-title d-desc"><title id="d-title">How a request becomes a finished page</title><desc id="d-desc">The portable-artifacts pipeline, from one request to one offline HTML page. architecture diagram with 10 nodes and 10 edges.</desc><defs><marker id="d-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-fill" d="M0 0.5L8 4L0 7.5Z"/></marker><marker id="d-arrow-open" viewBox="0 0 8 8" refX="7.4" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-open" d="M0.8 0.8L7.4 4L0.8 7.2"/></marker></defs><g class="pa-group" data-id="buildtime" data-depth="0" data-lane="0"><rect class="pa-group-box" x="170" y="749" width="911" height="602" rx="6"/><rect class="pa-lane" x="170" y="755" width="4" height="590" rx="2"/><text class="pa-group-label" text-anchor="start"><tspan x="182" y="772.85">Build-time pieces</tspan></text></g><g class="pa-edge pa-edge-solid" data-id="edge-0" data-from="request" data-to="agent" data-family="person"><path class="pa-wire" d="M192 108L192 272" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-1" data-from="agent" data-to="spec" data-family="service"><path class="pa-wire" d="M224 344L224 362Q224 368 230 368L529.1 368Q535.1 368 535.1 374L535.1 508" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-2" data-from="spec" data-to="validate" data-family="service"><path class="pa-wire" d="M535.1 580L535.1 797" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="edge-3" data-from="validate" data-to="agent" data-family="service"><path class="pa-wire" d="M503.1 869L503.1 891Q503.1 897 497.1 897L200 897Q194 897 194 903L194 1374Q194 1380 188 1380L166 1380Q160 1380 160 1374L160 344" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-4" data-from="validate" data-to="build" data-family="service"><path class="pa-wire" d="M567.1 869L567.1 983Q567.1 989 573.1 989L758.5 989Q764.5 989 764.5 995L764.5 1037" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-5" data-from="build" data-to="elk" data-family="service"><path class="pa-wire" d="M748.2 1091L748.2 1109Q748.2 1115 742.2 1115L367 1115Q361 1115 361 1121L361 1255" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="edge-6" data-from="build" data-to="dashboard" data-family="service"><path class="pa-wire" d="M772.6 1091L772.6 1119Q772.6 1125 766.6 1125L674 1125Q668 1125 668 1131L668 1255" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="edge-7" data-from="build" data-to="motion" data-family="service"><path class="pa-wire" d="M821.4 1091L821.4 1109Q821.4 1115 827.4 1115L944 1115Q950 1115 950 1121L950 1255" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-8" data-from="themes" data-to="build" data-family="data"><path class="pa-wire" d="M805.1 873L805.1 1037" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-9" data-from="build" data-to="page" data-family="service"><path class="pa-wire" d="M797 1091L797 1520" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-node pa-kind-user pa-family-person pa-tone-neutral" data-id="request" tabindex="0" role="graphics-symbol" aria-label="Person&#39;s request: user"><path class="pa-shape pa-shape-rounded-rect" d="M113 54L271 54A8 8 0 0 1 279 62L279 100A8 8 0 0 1 271 108L113 108A8 8 0 0 1 105 100L105 62A8 8 0 0 1 113 54Z"/><rect class="pa-tile" x="119.42" y="67" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="133.42" y="87.3">🙋</text><text class="pa-type" text-anchor="middle"><tspan x="211" y="74.19">USER</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="211" y="93.55">Person&#39;s request</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="agent" tabindex="0" role="graphics-symbol" aria-label="Claude Haiku agent: service"><path class="pa-shape pa-shape-rounded-rect" d="M104 272L280 272A8 8 0 0 1 288 280L288 336A8 8 0 0 1 280 344L104 344A8 8 0 0 1 96 336L96 280A8 8 0 0 1 104 272Z"/><rect class="pa-tile" x="110.36" y="294" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="124.36" y="314.3">🤖</text><text class="pa-type" text-anchor="middle"><tspan x="211" y="293.04">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="211" y="312.4">Claude Haiku agent</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="211" y="329.81">Writes JSON only</tspan></text></g><g class="pa-node pa-kind-other pa-family-service pa-tone-neutral" data-id="spec" tabindex="0" role="graphics-symbol" aria-label="JSON spec file: other"><path class="pa-shape pa-shape-rounded-rect" d="M463.1 508L607.1 508A8 8 0 0 1 615.1 516L615.1 572A8 8 0 0 1 607.1 580L463.1 580A8 8 0 0 1 455.1 572L455.1 516A8 8 0 0 1 463.1 508Z"/><rect class="pa-tile" x="469.97" y="530" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="483.97" y="550.3">📄</text><text class="pa-type" text-anchor="middle"><tspan x="554.1" y="529.04">OTHER</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="554.1" y="548.4">JSON spec file</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="554.1" y="565.81">diagram.json</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="validate" tabindex="0" role="graphics-symbol" aria-label="validate.mjs: service"><path class="pa-shape pa-shape-rounded-rect" d="M447.1 797L623.1 797A8 8 0 0 1 631.1 805L631.1 861A8 8 0 0 1 623.1 869L447.1 869A8 8 0 0 1 439.1 861L439.1 805A8 8 0 0 1 447.1 797Z"/><rect class="pa-tile" x="453.4" y="819" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="467.4" y="839.3">✅</text><text class="pa-type" text-anchor="middle"><tspan x="554.1" y="818.04">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="554.1" y="837.4">validate.mjs</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="554.1" y="854.81">Names the exact fix</tspan></text></g><g class="pa-node pa-kind-storage pa-family-data pa-tone-neutral" data-id="themes" tabindex="0" role="graphics-symbol" aria-label="Shared themes: storage"><path class="pa-shape pa-shape-cylinder" d="M663.1 795A142 6 0 0 1 947.1 795L947.1 867A142 6 0 0 1 663.1 867Z"/><path class="pa-decor" d="M663.1 795A142 6 0 0 0 947.1 795"/><rect class="pa-tile" x="677.2" y="817" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="691.2" y="837.3">🎨</text><text class="pa-type" text-anchor="middle"><tspan x="824.1" y="816.04">STORAGE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="824.1" y="835.4">Shared themes</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="824.1" y="852.81">dusk, press, poster and four more</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="build" tabindex="0" role="graphics-symbol" aria-label="build.mjs: service"><path class="pa-shape pa-shape-rounded-rect" d="M731.8 1037L837.8 1037A8 8 0 0 1 845.8 1045L845.8 1083A8 8 0 0 1 837.8 1091L731.8 1091A8 8 0 0 1 723.8 1083L723.8 1045A8 8 0 0 1 731.8 1037Z"/><rect class="pa-tile" x="737.86" y="1050" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="751.86" y="1070.3">🏗️</text><text class="pa-type" text-anchor="middle"><tspan x="803.8" y="1057.19">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="803.8" y="1076.55">build.mjs</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="elk" tabindex="0" role="graphics-symbol" aria-label="ELK layout engine: service"><path class="pa-shape pa-shape-rounded-rect" d="M213 1255L509 1255A8 8 0 0 1 517 1263L517 1319A8 8 0 0 1 509 1327L213 1327A8 8 0 0 1 205 1319L205 1263A8 8 0 0 1 213 1255Z"/><rect class="pa-tile" x="219.9" y="1277" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="233.9" y="1297.3">🧭</text><text class="pa-type" text-anchor="middle"><tspan x="380" y="1276.04">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="380" y="1295.4">ELK layout engine</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="380" y="1312.81">Runs locally, computes every position</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="dashboard" tabindex="0" role="graphics-symbol" aria-label="make-dashboard renderer: service"><path class="pa-shape pa-shape-rounded-rect" d="M557 1255L779 1255A8 8 0 0 1 787 1263L787 1319A8 8 0 0 1 779 1327L557 1327A8 8 0 0 1 549 1319L549 1263A8 8 0 0 1 557 1255Z"/><rect class="pa-tile" x="563.18" y="1277" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="577.18" y="1297.3">📊</text><text class="pa-type" text-anchor="middle"><tspan x="687" y="1276.04">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="687" y="1295.4">make-dashboard renderer</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="687" y="1312.81">Draws chart cards</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="motion" tabindex="0" role="graphics-symbol" aria-label="make-motion renderer: service"><path class="pa-shape pa-shape-rounded-rect" d="M851 1255L1049 1255A8 8 0 0 1 1057 1263L1057 1319A8 8 0 0 1 1049 1327L851 1327A8 8 0 0 1 843 1319L843 1263A8 8 0 0 1 851 1255Z"/><rect class="pa-tile" x="857.43" y="1277" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="871.43" y="1297.3">🎬</text><text class="pa-type" text-anchor="middle"><tspan x="969" y="1276.04">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="969" y="1295.4">make-motion renderer</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="969" y="1312.81">Renders MP4 video</tspan></text></g><g class="pa-node pa-kind-client pa-family-service pa-tone-good" data-id="page" tabindex="0" role="graphics-symbol" aria-label="Offline HTML page: client"><path class="pa-shape pa-shape-rounded-rect" d="M709 1520L885 1520A8 8 0 0 1 893 1528L893 1584A8 8 0 0 1 885 1592L709 1592A8 8 0 0 1 701 1584L701 1528A8 8 0 0 1 709 1520Z"/><rect class="pa-tile" x="715.3" y="1542" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="729.3" y="1562.3">🌐</text><text class="pa-type" text-anchor="middle"><tspan x="816" y="1541.04">CLIENT</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="816" y="1560.4">Offline HTML page</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="816" y="1577.81">No network requests</tspan></text></g><g class="pa-edge-label" data-edge="edge-0"><rect class="pa-edge-plate" x="66" y="180" width="120" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="126" y="194.2">asks for a diagram</tspan></text></g><g class="pa-edge-label" data-edge="edge-1"><rect class="pa-edge-plate" x="542.1" y="416" width="94" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="589.1" y="430.2">writes one file</tspan></text></g><g class="pa-edge-label" data-edge="edge-2"><rect class="pa-edge-plate" x="542.1" y="652" width="76" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="580.1" y="666.2">is checked</tspan></text></g><g class="pa-edge-label" data-edge="edge-3"><rect class="pa-edge-plate" x="24" y="534" width="130" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="89" y="548.2">returns the exact fix</tspan></text></g><g class="pa-edge-label" data-edge="edge-4"><rect class="pa-edge-plate" x="437.1" y="945" width="124" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="499.1" y="959.2">passes the spec on</tspan></text></g><g class="pa-edge-label" data-edge="edge-5"><rect class="pa-edge-plate" x="257" y="1163" width="98" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="306" y="1177.2">asks for layout</tspan></text></g><g class="pa-edge-label" data-edge="edge-6"><rect class="pa-edge-plate" x="536" y="1163" width="126" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="599" y="1177.2">renders chart cards</tspan></text></g><g class="pa-edge-label" data-edge="edge-7"><rect class="pa-edge-plate" x="808" y="1163" width="136" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="876" y="1177.2">renders video scenes</tspan></text></g><g class="pa-edge-label" data-edge="edge-8"><rect class="pa-edge-plate" x="693.1" y="945" width="106" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="746.1" y="959.2">supplies colours</tspan></text></g><g class="pa-edge-label" data-edge="edge-9"><rect class="pa-edge-plate" x="661" y="1428" width="130" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="726" y="1442.2">writes one HTML file</tspan></text></g><g class="pa-legend" aria-hidden="true"><rect class="pa-swatch pa-family-person" x="561.3" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="579.3" y="37.85">1 user</tspan></text><rect class="pa-swatch pa-family-service" x="627.5" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="645.5" y="37.85">6 service</tspan></text><rect class="pa-swatch pa-family-service" x="708.3" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="726.3" y="37.85">1 other</tspan></text><rect class="pa-swatch pa-family-data" x="779.6" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="797.6" y="37.85">1 storage</tspan></text><rect class="pa-swatch pa-family-service" x="863.1" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="881.1" y="37.85">1 client</tspan></text><g class="pa-legend-sample pa-edge-solid"><path class="pa-wire" d="M934.6 34L958.6 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="964.6" y="37.85">call</tspan></text><g class="pa-legend-sample pa-edge-dashed"><path class="pa-wire" d="M997.4 34L1021.4 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="1027.4" y="37.85">secondary</tspan></text></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" class="pa-diagram pa-type-architecture" viewBox="0 0 1105 1616" role="graphics-document" aria-labelledby="d-title d-desc"><title id="d-title">How a request becomes a finished page</title><desc id="d-desc">The portable-artifacts pipeline, from one request to one offline HTML page. architecture diagram with 10 nodes and 10 edges.</desc><defs><marker id="d-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-fill" d="M0 0.5L8 4L0 7.5Z"/></marker><marker id="d-arrow-open" viewBox="0 0 8 8" refX="7.4" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-open" d="M0.8 0.8L7.4 4L0.8 7.2"/></marker></defs><g class="pa-group" data-id="buildtime" data-depth="0" data-lane="0"><rect class="pa-group-box" x="170" y="749" width="911" height="602" rx="6"/><rect class="pa-lane" x="170" y="755" width="4" height="590" rx="2"/><text class="pa-group-label" text-anchor="start"><tspan x="182" y="772.85">Build-time pieces</tspan></text></g><g class="pa-edge pa-edge-solid" data-id="edge-0" data-from="request" data-to="agent" data-family="person"><path class="pa-wire" d="M192 108L192 272" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-1" data-from="agent" data-to="spec" data-family="service"><path class="pa-wire" d="M224 344C224 368 535.1 368 535.1 508" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-2" data-from="spec" data-to="validate" data-family="service"><path class="pa-wire" d="M535.1 580L535.1 797" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="edge-3" data-from="validate" data-to="agent" data-family="service"><path class="pa-wire" d="M503.1 869L503.1 883Q503.1 897 489.1 897L218 897Q194 897 194 921L194 1363Q194 1380 177 1380L177 1380Q160 1380 160 1363L160 344" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-4" data-from="validate" data-to="build" data-family="service"><path class="pa-wire" d="M567.1 869C567.1 989 764.5 989 764.5 1037" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-5" data-from="build" data-to="elk" data-family="service"><path class="pa-wire" d="M748.2 1091C748.2 1115 361 1115 361 1255" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="edge-6" data-from="build" data-to="dashboard" data-family="service"><path class="pa-wire" d="M772.6 1091C772.6 1125 668 1125 668 1255" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-dashed" data-id="edge-7" data-from="build" data-to="motion" data-family="service"><path class="pa-wire" d="M821.4 1091C821.4 1115 950 1115 950 1255" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-8" data-from="themes" data-to="build" data-family="data"><path class="pa-wire" d="M805.1 873L805.1 1037" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-9" data-from="build" data-to="page" data-family="service"><path class="pa-wire" d="M797 1091L797 1520" fill="none" marker-end="url(#d-arrow)"/></g><g class="pa-node pa-kind-user pa-family-person pa-tone-neutral" data-id="request" tabindex="0" role="graphics-symbol" aria-label="Person&#39;s request: user"><path class="pa-shape pa-shape-rounded-rect" d="M113 54L271 54A8 8 0 0 1 279 62L279 100A8 8 0 0 1 271 108L113 108A8 8 0 0 1 105 100L105 62A8 8 0 0 1 113 54Z"/><rect class="pa-tile" x="119.42" y="67" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="133.42" y="87.3">🙋</text><text class="pa-type" text-anchor="middle"><tspan x="211" y="74.19">USER</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="211" y="93.55">Person&#39;s request</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="agent" tabindex="0" role="graphics-symbol" aria-label="Claude Haiku agent: service"><path class="pa-shape pa-shape-rounded-rect" d="M104 272L280 272A8 8 0 0 1 288 280L288 336A8 8 0 0 1 280 344L104 344A8 8 0 0 1 96 336L96 280A8 8 0 0 1 104 272Z"/><rect class="pa-tile" x="110.36" y="294" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="124.36" y="314.3">🤖</text><text class="pa-type" text-anchor="middle"><tspan x="211" y="293.04">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="211" y="312.4">Claude Haiku agent</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="211" y="329.81">Writes JSON only</tspan></text></g><g class="pa-node pa-kind-other pa-family-service pa-tone-neutral" data-id="spec" tabindex="0" role="graphics-symbol" aria-label="JSON spec file: other"><path class="pa-shape pa-shape-rounded-rect" d="M463.1 508L607.1 508A8 8 0 0 1 615.1 516L615.1 572A8 8 0 0 1 607.1 580L463.1 580A8 8 0 0 1 455.1 572L455.1 516A8 8 0 0 1 463.1 508Z"/><rect class="pa-tile" x="469.97" y="530" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="483.97" y="550.3">📄</text><text class="pa-type" text-anchor="middle"><tspan x="554.1" y="529.04">OTHER</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="554.1" y="548.4">JSON spec file</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="554.1" y="565.81">diagram.json</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="validate" tabindex="0" role="graphics-symbol" aria-label="validate.mjs: service"><path class="pa-shape pa-shape-rounded-rect" d="M447.1 797L623.1 797A8 8 0 0 1 631.1 805L631.1 861A8 8 0 0 1 623.1 869L447.1 869A8 8 0 0 1 439.1 861L439.1 805A8 8 0 0 1 447.1 797Z"/><rect class="pa-tile" x="453.4" y="819" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="467.4" y="839.3">✅</text><text class="pa-type" text-anchor="middle"><tspan x="554.1" y="818.04">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="554.1" y="837.4">validate.mjs</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="554.1" y="854.81">Names the exact fix</tspan></text></g><g class="pa-node pa-kind-storage pa-family-data pa-tone-neutral" data-id="themes" tabindex="0" role="graphics-symbol" aria-label="Shared themes: storage"><path class="pa-shape pa-shape-cylinder" d="M663.1 795A142 6 0 0 1 947.1 795L947.1 867A142 6 0 0 1 663.1 867Z"/><path class="pa-decor" d="M663.1 795A142 6 0 0 0 947.1 795"/><rect class="pa-tile" x="677.2" y="817" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="691.2" y="837.3">🎨</text><text class="pa-type" text-anchor="middle"><tspan x="824.1" y="816.04">STORAGE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="824.1" y="835.4">Shared themes</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="824.1" y="852.81">dusk, press, poster and four more</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="build" tabindex="0" role="graphics-symbol" aria-label="build.mjs: service"><path class="pa-shape pa-shape-rounded-rect" d="M731.8 1037L837.8 1037A8 8 0 0 1 845.8 1045L845.8 1083A8 8 0 0 1 837.8 1091L731.8 1091A8 8 0 0 1 723.8 1083L723.8 1045A8 8 0 0 1 731.8 1037Z"/><rect class="pa-tile" x="737.86" y="1050" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="751.86" y="1070.3">🏗️</text><text class="pa-type" text-anchor="middle"><tspan x="803.8" y="1057.19">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="803.8" y="1076.55">build.mjs</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="elk" tabindex="0" role="graphics-symbol" aria-label="ELK layout engine: service"><path class="pa-shape pa-shape-rounded-rect" d="M213 1255L509 1255A8 8 0 0 1 517 1263L517 1319A8 8 0 0 1 509 1327L213 1327A8 8 0 0 1 205 1319L205 1263A8 8 0 0 1 213 1255Z"/><rect class="pa-tile" x="219.9" y="1277" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="233.9" y="1297.3">🧭</text><text class="pa-type" text-anchor="middle"><tspan x="380" y="1276.04">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="380" y="1295.4">ELK layout engine</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="380" y="1312.81">Runs locally, computes every position</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="dashboard" tabindex="0" role="graphics-symbol" aria-label="make-dashboard renderer: service"><path class="pa-shape pa-shape-rounded-rect" d="M557 1255L779 1255A8 8 0 0 1 787 1263L787 1319A8 8 0 0 1 779 1327L557 1327A8 8 0 0 1 549 1319L549 1263A8 8 0 0 1 557 1255Z"/><rect class="pa-tile" x="563.18" y="1277" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="577.18" y="1297.3">📊</text><text class="pa-type" text-anchor="middle"><tspan x="687" y="1276.04">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="687" y="1295.4">make-dashboard renderer</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="687" y="1312.81">Draws chart cards</tspan></text></g><g class="pa-node pa-kind-service pa-family-service pa-tone-neutral" data-id="motion" tabindex="0" role="graphics-symbol" aria-label="make-motion renderer: service"><path class="pa-shape pa-shape-rounded-rect" d="M851 1255L1049 1255A8 8 0 0 1 1057 1263L1057 1319A8 8 0 0 1 1049 1327L851 1327A8 8 0 0 1 843 1319L843 1263A8 8 0 0 1 851 1255Z"/><rect class="pa-tile" x="857.43" y="1277" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="871.43" y="1297.3">🎬</text><text class="pa-type" text-anchor="middle"><tspan x="969" y="1276.04">SERVICE</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="969" y="1295.4">make-motion renderer</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="969" y="1312.81">Renders MP4 video</tspan></text></g><g class="pa-node pa-kind-client pa-family-service pa-tone-good" data-id="page" tabindex="0" role="graphics-symbol" aria-label="Offline HTML page: client"><path class="pa-shape pa-shape-rounded-rect" d="M709 1520L885 1520A8 8 0 0 1 893 1528L893 1584A8 8 0 0 1 885 1592L709 1592A8 8 0 0 1 701 1584L701 1528A8 8 0 0 1 709 1520Z"/><rect class="pa-tile" x="715.3" y="1542" width="28" height="28" rx="7"/><text class="pa-emoji" text-anchor="middle" x="729.3" y="1562.3">🌐</text><text class="pa-type" text-anchor="middle"><tspan x="816" y="1541.04">CLIENT</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="816" y="1560.4">Offline HTML page</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="816" y="1577.81">No network requests</tspan></text></g><g class="pa-edge-label" data-edge="edge-0"><rect class="pa-edge-plate" x="132" y="180" width="120" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="192" y="194.2">asks for a diagram</tspan></text></g><g class="pa-edge-label" data-edge="edge-1"><rect class="pa-edge-plate" x="358.17" y="379.84" width="94" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="405.17" y="394.04">writes one file</tspan></text></g><g class="pa-edge-label" data-edge="edge-2"><rect class="pa-edge-plate" x="497.1" y="678.5" width="76" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="535.1" y="692.7">is checked</tspan></text></g><g class="pa-edge-label" data-edge="edge-3"><rect class="pa-edge-plate" x="95" y="1079.17" width="130" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="160" y="1093.37">returns the exact fix</tspan></text></g><g class="pa-edge-label" data-edge="edge-4"><rect class="pa-edge-plate" x="561.16" y="948.38" width="124" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="623.16" y="962.58">passes the spec on</tspan></text></g><g class="pa-edge-label" data-edge="edge-5"><rect class="pa-edge-plate" x="481.95" y="1124.82" width="98" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="530.95" y="1139.02">asks for layout</tspan></text></g><g class="pa-edge-label" data-edge="edge-6"><rect class="pa-edge-plate" x="634.92" y="1148.69" width="126" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="697.92" y="1162.89">renders chart cards</tspan></text></g><g class="pa-edge-label" data-edge="edge-7"><rect class="pa-edge-plate" x="845.34" y="1141.97" width="136" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="913.34" y="1156.17">renders video scenes</tspan></text></g><g class="pa-edge-label" data-edge="edge-8"><rect class="pa-edge-plate" x="752.1" y="945" width="106" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="805.1" y="959.2">supplies colours</tspan></text></g><g class="pa-edge-label" data-edge="edge-9"><rect class="pa-edge-plate" x="732" y="1338.4" width="130" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="797" y="1352.6">writes one HTML file</tspan></text></g><g class="pa-legend" aria-hidden="true"><rect class="pa-swatch pa-family-person" x="561.3" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="579.3" y="37.85">1 user</tspan></text><rect class="pa-swatch pa-family-service" x="627.5" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="645.5" y="37.85">6 service</tspan></text><rect class="pa-swatch pa-family-service" x="708.3" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="726.3" y="37.85">1 other</tspan></text><rect class="pa-swatch pa-family-data" x="779.6" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="797.6" y="37.85">1 storage</tspan></text><rect class="pa-swatch pa-family-service" x="863.1" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="881.1" y="37.85">1 client</tspan></text><g class="pa-legend-sample pa-edge-solid"><path class="pa-wire" d="M934.6 34L958.6 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="964.6" y="37.85">call</tspan></text><g class="pa-legend-sample pa-edge-dashed"><path class="pa-wire" d="M997.4 34L1021.4 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="1027.4" y="37.85">secondary</tspan></text></g></svg>
 <div class="legend" data-pa-legend aria-hidden="true"><span class="lg"><i class="lg-sw lg-sw-person"></i>1 user</span><span class="lg"><i class="lg-sw lg-sw-service"></i>6 service</span><span class="lg"><i class="lg-sw lg-sw-service"></i>1 other</span><span class="lg"><i class="lg-sw lg-sw-data"></i>1 storage</span><span class="lg"><i class="lg-sw lg-sw-service"></i>1 client</span><span class="lg"><i class="lg-wire lg-wire-solid"></i>call</span><span class="lg"><i class="lg-wire lg-wire-dashed"></i>secondary</span></div>
 <div class="tip" data-pa-tip role="tooltip" hidden></div>
 </main>
@@ -360,7 +372,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 <div class="transport" role="group" aria-label="Transport">
 <button type="button" class="tool" data-pa-prev-chapter title="Previous chapter">Prev chapter</button>
 <button type="button" class="tool" data-pa-prev title="Previous beat (Left)">Prev</button>
-<button type="button" class="tool" data-pa-play title="Play or pause (Space)">Play</button>
+<button type="button" class="tool pa-play" data-pa-play aria-label="Play" title="Play or pause (Space)"><span class="pa-playicon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path d="M7 4.5v15l13-7.5z"/></svg></span></button>
 <button type="button" class="tool" data-pa-next title="Next beat (Right)">Next</button>
 <button type="button" class="tool" data-pa-next-chapter title="Next chapter">Next chapter</button>
 <input type="range" class="scrub" data-pa-scrub min="0" max="0" step="1" value="0" aria-label="Beat" list="pa-ticks">
@@ -1040,7 +1052,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 // edge and lights the edge; a focus beat fits and lights its ids (a group
 // lights its members); everything else dims. A step beat (from the older
 // steps[] form) reveals what it shows and hides the rest, as before, with no
-// dimming. Playing runs each beat as glide (600 ms for a story beat, the
+// dimming. Playing runs each beat as glide (450 ms for a story beat, the
 // camera's own glide for a step beat), then (a hop, motion allowed) the dot,
 // then a hold, and moves on; every duration divides by the speed; reduced
 // motion drops the dot and the glide. Registered as PADiagram.story and
@@ -1053,11 +1065,11 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
 
-  var GLIDE_MS = 600; // the camera's glide to a story (hop or focus) beat
-  var DOT_MS = 1200; // the dot along a hop's edge
-  var HOLD_MS = 2500; // then the caption holds...
-  var HOLD_PER_CHAR_MS = 40; // ...longer for a longer caption...
-  var HOLD_MAX_MS = 6000; // ...up to this
+  var GLIDE_MS = 450; // the camera's glide to a story (hop or focus) beat
+  var DOT_MS = 900; // the dot along a hop's edge
+  var HOLD_MS = 1800; // then the caption holds...
+  var HOLD_PER_CHAR_MS = 30; // ...longer for a longer caption...
+  var HOLD_MAX_MS = 4500; // ...up to this
   var SPEEDS = [0.5, 1, 1.5, 2];
   var DOT_RADIUS = 5;
 
@@ -1238,7 +1250,14 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
     var seenNow = null; // what the current step beat reveals, for reframe
     var run = 0; // bumps on every goTo, pause and exit, so a stale timer or frame does nothing
     var timer = 0;
+    var inHold = false; // a hold reported to hooks.onHold and not yet ended
+    function endHold() {
+      if (!inHold) return;
+      inHold = false;
+      if (hooks.onHoldEnd) hooks.onHoldEnd();
+    }
     function cancelRun() {
+      endHold();
       run += 1;
       if (timer) global.clearTimeout(timer);
       timer = 0;
@@ -1269,12 +1288,17 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       camera.unfit();
       camera.moveTo(targetOf(beat, seen), { ms: glide });
       var hold = function () {
-        later(token, holdMs(beat), function () {
+        if (token !== run) return; // a dot frame that outlived its run
+        var ms = holdMs(beat);
+        later(token, ms, function () {
+          endHold();
           if (!playing) return;
           if (stepIndex < beats.length - 1) goTo(stepIndex + 1);
           else if (loop) goTo(0);
           else pause();
         });
+        // only a hold armed while playing is reported: one armed while paused never moves on
+        if (playing) { inHold = true; if (hooks.onHold) hooks.onHold(ms); }
       };
       later(token, instant ? 0 : glide, function () {
         if (beat.kind === 'hop' && !instant) travel(beat, DOT_MS / speed, hold); else hold();
@@ -1392,12 +1416,30 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 // jump), data-pa-scrub (an <input type="range"> with aria-valuetext
 // "Beat n of N") and data-pa-ticks (its <datalist>), data-pa-prev,
 // data-pa-next, data-pa-prev-chapter, data-pa-next-chapter, data-pa-exit,
-// data-pa-play (its label reads Play or Pause),
+// data-pa-play (an icon button: aria-label reads Play or Pause, and its
+// span.pa-playicon holds the svg paint() swaps),
 // data-pa-speed (0.5× ... 2×), data-pa-loop (aria-pressed). Text goes in as
-// textContent, never markup.
+// textContent, never markup (the play icon and ring svgs are the constant exceptions).
+//
+// The returned object also has hold(ms) and holdEnd(), which the story's
+// onHold / onHoldEnd hooks call: a span.pa-ring (aria-hidden) fills over ms inside
+// the control that fires next, Next, or Play on the last beat with loop on, and
+// is absent on the last beat with loop off. paint() re-places a running ring but
+// never restarts it.
 (function (global) {
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
+
+  // The play button's icon: a triangle while paused, two bars while playing.
+  // Both use currentColor, so every theme and the light/dark toggle recolor them.
+  var PLAY_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path d="M7 4.5v15l13-7.5z"/></svg>';
+  var PAUSE_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><rect x="6" y="4.5" width="4.2" height="15" rx="1"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1"/></svg>';
+
+  // The hold ring: a track and an arc of pathLength 100; the arc's dash offset
+  // runs 100 (empty) to 0 (full). The arc colour and the ring's size come from CSS.
+  var RING_SVG = '<svg viewBox="0 0 24 24" focusable="false"><circle class="pa-ring-track" cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3"/><circle class="pa-ring-arc" cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" transform="rotate(-90 12 12)"/></svg>';
+  var RING_EMPTY = 100;
+  var RING_STATIC = 50; // reduced motion: half filled, a cue that the story moves on, no motion
 
   var pad2 = function (n) { return (n < 10 ? '0' : '') + n; };
 
@@ -1461,6 +1503,69 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       button.disabled = off;
     }
 
+    // The icon span ships in the page's markup; one is added if an embedder left it out.
+    function paintPlay(button, playing) {
+      var icon = button.querySelector('.pa-playicon');
+      if (!icon) {
+        icon = doc.createElement('span');
+        icon.className = 'pa-playicon';
+        icon.setAttribute('aria-hidden', 'true');
+        button.appendChild(icon);
+      }
+      icon.innerHTML = playing ? PAUSE_SVG : PLAY_SVG;
+      button.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    }
+
+    // ---- the hold ring ------------------------------------------------------------------
+    var ring = null;
+    var arc = null;
+    var ringAnimation = null;
+    var holding = false; // between hold() and holdEnd(): paint() may place the ring only then
+    var reducedMotion = function () {
+      return !!(global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    };
+    // Where the ring belongs: the control that fires next. Nothing follows the last beat unless it loops.
+    function ringTarget() {
+      if (story.index() < story.count() - 1) return part('data-pa-next');
+      return story.loop() ? part('data-pa-play') : null;
+    }
+    // Moves a ring that is running; leaves it be when the target did not change.
+    function placeRing() {
+      if (!ring || !holding) return;
+      var to = ringTarget();
+      if (to === ring.parentNode) return;
+      if (ring.parentNode) ring.parentNode.removeChild(ring);
+      if (to) to.appendChild(ring);
+    }
+    // Ends the animation and takes the ring away. It runs while the story still reports
+    // playing (the hook fires inside cancelRun), so it never repaints: onStep does that.
+    function holdEnd() {
+      if (ringAnimation) ringAnimation.cancel();
+      ringAnimation = null;
+      holding = false;
+      if (ring && ring.parentNode) ring.parentNode.removeChild(ring);
+    }
+    function hold(ms) {
+      holdEnd();
+      if (!(ms > 0)) return;
+      if (!ring) {
+        ring = doc.createElement('span');
+        ring.className = 'pa-ring';
+        ring.setAttribute('aria-hidden', 'true');
+        ring.innerHTML = RING_SVG;
+        arc = ring.querySelector('.pa-ring-arc');
+      }
+      if (!arc) return;
+      holding = true;
+      if (reducedMotion() || !arc.animate) {
+        arc.setAttribute('stroke-dashoffset', String(RING_STATIC));
+      } else {
+        arc.setAttribute('stroke-dashoffset', String(RING_EMPTY));
+        ringAnimation = arc.animate([{ strokeDashoffset: RING_EMPTY }, { strokeDashoffset: 0 }], { duration: ms, easing: 'linear', fill: 'forwards' });
+      }
+      placeRing();
+    }
+
     function paint() {
       var presenting = story.isPresenting();
       if (caption) caption.hidden = !presenting;
@@ -1477,7 +1582,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       disable(part('data-pa-prev'), i === 0);
       disable(part('data-pa-next'), i === n - 1);
       var play = part('data-pa-play');
-      if (play) play.textContent = story.isPlaying() ? 'Pause' : 'Play';
+      if (play) paintPlay(play, story.isPlaying());
       var speed = part('data-pa-speed');
       if (speed) {
         speed.textContent = story.speed() + '×';
@@ -1491,6 +1596,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       }
       mark(beatChips, beatRow, i);
       mark(chapterChips, chaptersEl, story.chapter());
+      placeRing();
     }
     function wire(name, fn) {
       var b = part(name);
@@ -1514,7 +1620,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
       });
     }
     paint();
-    return { paint: paint };
+    return { paint: paint, hold: hold, holdEnd: holdEnd };
   };
 })(window);
 
@@ -1654,10 +1760,15 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
     var camera = PADiagram.camera(stage, svg, data, { onApply: emit });
     var trace = PADiagram.trace(svg, data, els, { isOff: function () { return story.isPresenting(); } });
     // Entering Play drops the selection and the route (the panel hides with them); each beat repaints the chrome.
-    var story = PADiagram.story(stage, svg, data, els, camera, { onStep: function () {
-      if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
-      transport.paint(); trace.refresh(); panel.paint(); emit();
-    } });
+    var story = PADiagram.story(stage, svg, data, els, camera, {
+      onStep: function () {
+        if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
+        transport.paint(); trace.refresh(); panel.paint(); emit();
+      },
+      // the transport shows the hold as a progress ring
+      onHold: function (ms) { transport.hold(ms); },
+      onHoldEnd: function () { transport.holdEnd(); },
+    });
     var transport = PADiagram.transport({ caption: options.caption || null, chapters: options.chapters || null }, data, story);
     var panel = PADiagram.panel({ panel: options.panel || null, tip: options.tip || null, found: options.found || null }, data, els, trace, {
       isOff: function () { return story.isPresenting(); },
@@ -1858,7 +1969,6 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
     stage.addEventListener('dblclick', function () { if (!story.isPresenting()) camera.fit(); });
     stage.addEventListener('wheel', function (e) {
       e.preventDefault();
-      story.pause();
       var r = stage.getBoundingClientRect();
       var dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
       camera.zoomAt(Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);
