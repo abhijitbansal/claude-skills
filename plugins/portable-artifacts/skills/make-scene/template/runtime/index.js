@@ -3,6 +3,7 @@
 import { PerspectiveCamera, Raycaster, Scene, Vector2, Vector3, WebGLRenderer } from 'three';
 import { createControls } from './controls.js';
 import { createLoop, isBusy, pixelRatio } from './loop.js';
+import { createChrome } from './chrome/index.js';
 import { buildObjects } from './render.js';
 import { readPalette, watchTheme } from './theme.js';
 
@@ -17,6 +18,17 @@ const COARSE_QUERY = '(pointer: coarse)';
 const SR_ONLY = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap';
 
 const noop = () => {};
+const NO_HIT = Object.freeze({ item: -1, tube: -1 });
+const OUT_OF_VIEW = Object.freeze({ x: 0, y: 0, scale: 0, visible: false });
+const OFF_SCREEN_MARGIN = 1.05; // NDC: labels just outside the frame still project, so they slide in
+
+// What the author wrote on an element, captured the first time we touch it. A destroyed mount leaves
+// the element hidden or sr-only, so a later mount on the same host must not read that as the original.
+const originals = new WeakMap();
+function original(el) {
+  if (!originals.has(el)) originals.set(el, { display: el.style.display, cssText: el.style.cssText });
+  return originals.get(el);
+}
 
 /** Dolly the camera straight back from the scene's centre until its bounding sphere fits the view (never moves it closer). */
 function fitCamera(camera, extent, aspect) {
@@ -29,11 +41,15 @@ function fitCamera(camera, extent, aspect) {
 }
 
 function inert(canvas) {
-  return { destroy: noop, flyTo: () => false, pick: () => -1, renderNow: noop, wake: noop, canvas };
+  return {
+    destroy: noop, flyTo: () => false, pick: () => -1, pickHit: () => NO_HIT, project: () => OUT_OF_VIEW,
+    onFrame: () => noop, renderNow: noop, wake: noop, canvas,
+  };
 }
 
 /**
- * mount(host, graph, opts?) -> { destroy(), flyTo(focusKey, { instant }), pick(clientX, clientY), renderNow(), wake(), canvas }
+ * mount(host, graph, opts?) -> { destroy(), flyTo(focusKey, { instant }), pick(clientX, clientY), pickHit(clientX, clientY),
+ *   project(x, y, z), onFrame(fn), renderNow(), wake(), canvas }
  *
  * host contains an optional [data-scene-canvas] (where the canvas goes; the host itself if absent), a
  * [data-scene-fallback] element (the semantic table/svg: fully visible until the first good frame and again
@@ -54,20 +70,22 @@ function mount(host, graph, opts = {}) {
   Object.assign(canvas.style, { display: 'block', width: '100%', height: '100%', touchAction: 'none' });
 
   // Hiding goes through inline display: an author `display` on these elements would beat the [hidden] attribute.
-  const fallbackStyle = fallback?.style.cssText ?? '';
+  // Showing puts back what the author wrote (original), never a blank that would hand control to the stylesheet.
   const setDisplay = (el, on, shown) => {
-    el.style.display = on ? shown : 'none';
+    el.style.display = on ? shown ?? original(el).display : 'none';
   };
+  for (const el of [fallback, container !== host ? container : null, ...controlEls]) if (el) original(el);
   const show = (state) => {
     host.dataset.sceneState = state;
     const broken = state === 'fallback';
     if (fallback) {
+      const { cssText } = original(fallback);
       fallback.hidden = false;
-      fallback.style.cssText = state === 'ready' ? `${fallbackStyle};${SR_ONLY}` : fallbackStyle;
+      fallback.style.cssText = state === 'ready' ? `${cssText};${SR_ONLY}` : cssText;
     }
     setDisplay(canvas, !broken, 'block');
-    if (container !== host) setDisplay(container, !broken, '');
-    for (const el of controlEls) setDisplay(el, !broken, '');
+    if (container !== host) setDisplay(container, !broken);
+    for (const el of controlEls) setDisplay(el, !broken);
   };
   show('loading');
   container.appendChild(canvas);
@@ -130,6 +148,7 @@ function mount(host, graph, opts = {}) {
     const distance = Math.max(1, camera.position.distanceTo(target));
     const raycaster = new Raycaster();
     const ndc = new Vector2();
+    const projected = new Vector3();
     let animClock = 0;
     let lastTs = null;
     let ready = false;
@@ -150,11 +169,21 @@ function mount(host, graph, opts = {}) {
       camera.updateProjectionMatrix();
     }
 
+    const frameHooks = new Set();
     function draw() {
       renderer.render(scene, camera);
       if (!ready && !lost && !gl.isContextLost()) {
         ready = true;
         show('ready');
+      }
+      for (const hook of frameHooks) {
+        try {
+          hook();
+        } catch (err) {
+          // A broken overlay must not take the scene down: drop it and say so once.
+          frameHooks.delete(hook);
+          console.warn(`make-scene: a frame hook failed and was removed (${err?.message ?? err})`);
+        }
       }
     }
 
@@ -253,16 +282,40 @@ function mount(host, graph, opts = {}) {
         controlsApi.flyTo(graph.focus[key], { instant });
         return true;
       },
-      /** Item index under a viewport point, or -1 (nothing, decoration, or a cell with no row). */
-      pick(clientX, clientY) {
+      /** { item, tube } under a viewport point: graph.items / graph.tubes indices, -1 for none (nothing, decoration, a cell with no row). */
+      pickHit(clientX, clientY) {
         const rect = canvas.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return -1;
+        if (rect.width === 0 || rect.height === 0) return NO_HIT;
         ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -(((clientY - rect.top) / rect.height) * 2 - 1));
-        if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) return -1;
+        if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) return NO_HIT;
         camera.updateMatrixWorld();
         raycaster.setFromCamera(ndc, camera);
         const [hit] = raycaster.intersectObjects(built.pickables, false);
-        return hit ? built.itemAt(hit) : -1;
+        return hit ? { item: built.itemAt(hit), tube: built.tubeAt(hit) } : NO_HIT;
+      },
+      /** Item index under a viewport point, or -1. */
+      pick(clientX, clientY) {
+        return api.pickHit(clientX, clientY).item;
+      },
+      /**
+       * World point -> { x, y, scale, visible } in CSS pixels from the canvas's top-left, as of the last draw.
+       * `scale` is pixels per world unit at that depth; `visible` is false behind the camera or far outside the frame.
+       */
+      project(x, y, z) {
+        projected.set(x, y, z).applyMatrix4(camera.matrixWorldInverse);
+        const depth = -projected.z;
+        if (depth <= camera.near) return OUT_OF_VIEW;
+        projected.applyMatrix4(camera.projectionMatrix);
+        const w = canvas.clientWidth;
+        const h = canvas.clientHeight;
+        const visible = Math.abs(projected.x) <= OFF_SCREEN_MARGIN && Math.abs(projected.y) <= OFF_SCREEN_MARGIN;
+        const scale = h / 2 / (Math.tan((camera.fov * Math.PI) / 360) * depth);
+        return { x: (projected.x + 1) * 0.5 * w, y: (1 - projected.y) * 0.5 * h, scale, visible };
+      },
+      /** Run fn after every draw (the loop's frames and renderNow). Returns the unsubscribe. */
+      onFrame(fn) {
+        frameHooks.add(fn);
+        return () => frameHooks.delete(fn);
       },
       /** Draw synchronously (e.g. before canvas.toDataURL for a PNG export). */
       renderNow() {
@@ -274,6 +327,7 @@ function mount(host, graph, opts = {}) {
       destroy() {
         cleanup();
         canvas.remove();
+        show('fallback'); // the host goes back to what it was before mount: table visible, controls hidden
       },
     };
     api.renderNow();
@@ -284,4 +338,38 @@ function mount(host, graph, opts = {}) {
   }
 }
 
-window.PAScene = { mount };
+/**
+ * mountScene(host, graph, opts?) -> the mount() api. Mounts the 3D view and the chrome around it (tooltip, legend,
+ * Explore, tour, full screen, PNG export, text labels). opts.globalKeys listens for E, F, P, Space and the
+ * arrows on the whole document (a single-scene page); by default only while focus is inside `host`.
+ */
+function mountScene(host, graph, opts = {}) {
+  const chrome = createChrome(host, graph, opts);
+  const api = mount(host, graph, opts);
+  chrome.bind(api);
+  return {
+    ...api,
+    destroy() {
+      chrome.destroy();
+      api.destroy();
+    },
+  };
+}
+
+/** Mount every [data-pa-scene] host that carries its graph in a <script type="application/json"> child. */
+function initAll(opts = {}) {
+  const mounted = [];
+  for (const host of document.querySelectorAll('[data-pa-scene]')) {
+    const data = host.querySelector('script[type="application/json"]');
+    if (!data || host.dataset.sceneInit) continue;
+    host.dataset.sceneInit = '1';
+    try {
+      mounted.push(mountScene(host, JSON.parse(data.textContent), opts));
+    } catch (err) {
+      console.warn(`make-scene: showing the table instead of the 3D view (${err?.message ?? err})`);
+    }
+  }
+  return mounted;
+}
+
+window.PAScene = { mount, mountScene, initAll };

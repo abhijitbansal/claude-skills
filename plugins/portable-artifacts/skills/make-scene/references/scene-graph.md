@@ -1,6 +1,6 @@
 ## Shared contract: scene graph v1
 
-Every world/lift module returns this object; the browser runtime consumes exactly this. Colour values are a **ColourRef**: a theme token name (`cat1`…`cat8`, `page`, `surface`, `text`, `text2`, `line`, `grid`, `accent`, `good`, `warn`, `bad`, `glow`), a `#rrggbb` hex, or `{ "base": "#rrggbb", "tint": <token>, "share": 0..1 }` (mixed at runtime, so it follows the theme toggle).
+Every world/lift module returns this object; the browser runtime consumes exactly this. Colour values are a **ColourRef**: a theme token name (`cat1`…`cat8`, `page`, `surface`, `text`, `text2`, `line`, `grid`, `accent`, `good`, `warn`, `bad`, `glow`), a `#rrggbb` hex, or `{ "base": "#rrggbb", "tint": <token>, "share": 0..1 }` (mixed at runtime, so it follows the theme toggle). In the mix, `share` is the fraction of the theme `tint` mixed INTO the fixed `base`: `0` is exactly `base`, `1` is exactly the tint, per 8-bit channel. A world keeps its identity this way: the forest meadow is a green `base` with 30% of the page surface, and group steps are the category colour at 60% over white (lighter) or black (darker).
 
 ```json
 {
@@ -50,4 +50,7 @@ These pin down what the contract leaves open. The runtime must read them the sam
 - **Bounds.** `bounds` also covers each orbit disc: `center ± max(r)` in x and z.
 - **Sway.** `anim.sway` lists the id of every leaf batch (one entry per `icosa` batch), and only those; trunk and branch batches stay still.
 - **Emissive density.** For city windows, `density` is the share of lit windows (0..1). For a galaxy star it is `1`: the whole sphere is self-lit, and the runtime must not treat it as a window mask.
-- **Tour.** Worlds return `tour: []`. The build step fills it from the spec's beats.
+- **Tour.** Worlds return `tour: []`. The build step fills it from the spec's beats: `focus` is the first of the beat's focus entries (lowercased) that is a key of `graph.focus`, else its first entry; `caption` is `""` when the beat has none; `path` is `null` and `reverse` is `false` (diagram stories use them later). A beat whose focus is not a key shows its caption and leaves the camera where it is.
+- **Labels.** `labels[]` is drawn by the page as HTML text over the canvas, never as 3D geometry: each label is projected from `at` after every frame, sized from `size` and its depth (clamped to a readable range), and hidden when it is behind the camera or off the frame. They are not occluded by the scene. The PNG export paints them onto the saved image.
+- **Tooltip.** An item shows `label` and `display`. A tube with `label` or `display` shows those (a link's value is readable exactly); a tube is hoverable when it has either or an `item`.
+- **Fallback.** `fallback.rows` is a table of strings (`columns` names them) and `fallback.links` a second one. A lift adds `fallback.svg` (its 2D drawing), optionally `fallback.svgDark` (the dark-theme drawing: both ship and the page theme chooses, as in make-explainer's charts) and `fallback.css` (styles for that svg, included once on the page). The data block that carries the graph in the page leaves `fallback` out: the runtime never reads it.

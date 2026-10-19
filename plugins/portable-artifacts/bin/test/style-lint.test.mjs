@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 const SKILLS = fileURLToPath(new URL('../../skills/', import.meta.url));
 const SOURCES = ['make-explainer/template/base.css', 'make-explainer/template/flavors.css', 'make-explainer/template/chart.css', 'make-explainer/template/diagram.css',
   'make-explainer/template/motion.css', 'make-explainer/template/slides.html', 'make-explainer/template/page.html',
-  'make-diagram/template/viewer.html', 'make-diagram/scripts/lib/css.mjs', 'make-dashboard/template/page.html', 'make-motion/template/styles.css'];
+  'make-diagram/template/viewer.html', 'make-diagram/scripts/lib/css.mjs', 'make-dashboard/template/page.html', 'make-motion/template/styles.css',
+  'make-scene/template/page.css', 'make-scene/template/page.html'];
 
 export const findUnderlines = (css) => [...css.matchAll(/text-decoration(?:-line)?\s*:\s*[^;}]*underline/g)].map((m) => m[0]);
 export const findFontFamilies = (css) => [...css.matchAll(/font-family\s*:\s*([^;}]+)/g)].map((m) => m[1].trim());

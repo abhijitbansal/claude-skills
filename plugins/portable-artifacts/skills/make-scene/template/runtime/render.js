@@ -3,7 +3,7 @@
 import {
   AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, CatmullRomCurve3, CircleGeometry, Color, ConeGeometry,
   CylinderGeometry, DirectionalLight, Float32BufferAttribute, Fog, Group, HemisphereLight, IcosahedronGeometry,
-  InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, PlaneGeometry, Points, PointsMaterial, Quaternion,
+  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, Points, PointsMaterial, Quaternion,
   SphereGeometry, TubeGeometry, Vector3,
 } from 'three';
 import { resolveColour } from './colour.js';
@@ -22,6 +22,9 @@ const SWAY_AMPLITUDE = 0.06; // fraction of a leaf cluster's width
 const WINDOW_CELL = 0.36; // world units per window cell, before fitting to the wall
 const NO_ROTATION = new Quaternion();
 const SKY_SPACE = 'space';
+const PICK_TUBE_FACTOR = 4; // hover radius of a link, in link radii
+const PICK_TUBE_MIN_SHARE = 0.004; // ...and at least this share of the scene's diagonal
+const PICK_MATERIAL = new MeshBasicMaterial(); // never drawn (the pick meshes are invisible); raycasting needs a material
 
 // FNV-1a + mulberry32, copied from shared/art.mjs (the runtime cannot import Node shared files).
 function seedFrom(text) {
@@ -119,7 +122,7 @@ export function surfaceCellAt(surface, point) {
 }
 
 /**
- * buildObjects(graph, palette) -> { root, background, fog, pickables, retint, animate, animated, itemAt, extent, dispose }
+ * buildObjects(graph, palette) -> { root, background, fog, pickables, retint, animate, animated, itemAt, tubeAt, extent, dispose }
  * palette = { dark: boolean, readVar(cssVar) -> colour string } (see theme.js).
  * `background` and `fog` are mutated in place by retint, so the caller assigns them to its Scene once.
  */
@@ -252,17 +255,25 @@ export function buildObjects(graph, palette) {
     });
   }
 
-  // Tubes (galaxy links; optional label/display belong to the tooltip, Task 8)
-  for (const tube of graph.tubes ?? []) {
+  // Tubes (galaxy links). A tube is hoverable when it carries an item or its own label/display (the tooltip
+  // shows them); a hidden, fatter twin takes the hits, since a 0.06 radius is a few pixels wide on screen.
+  (graph.tubes ?? []).forEach((tube, ti) => {
     const curve = new CatmullRomCurve3(tube.points.map((p) => new Vector3(p[0], p[1], p[2])));
-    const geometry = new TubeGeometry(curve, Math.max(12, tube.points.length * 12), tube.radius, 8, false);
+    const segments = Math.max(12, tube.points.length * 12);
+    const geometry = new TubeGeometry(curve, segments, tube.radius, 8, false);
     const material = new MeshStandardMaterial({ roughness: 0.6, metalness: 0.1 });
     const mesh = new Mesh(track(geometry, material), material);
-    mesh.userData = { kind: 'tube', item: Number.isInteger(tube.item) ? tube.item : -1 };
     root.add(mesh);
-    if (mesh.userData.item >= 0) pickables.push(mesh);
     tints.push(() => material.color.copy(colourOf(tube.colour)));
-  }
+    const item = Number.isInteger(tube.item) ? tube.item : -1;
+    if (item < 0 && tube.label === undefined && tube.display === undefined) return;
+    const reach = Math.max(tube.radius * PICK_TUBE_FACTOR, extent.diag * PICK_TUBE_MIN_SHARE);
+    const pick = new Mesh(track(new TubeGeometry(curve, segments, reach, 4, false)), PICK_MATERIAL);
+    pick.visible = false;
+    pick.userData = { kind: 'tube', item, tube: ti };
+    root.add(pick);
+    pickables.push(pick);
+  });
 
   // Surfaces (terrain) and water
   for (const surface of graph.surfaces ?? []) {
@@ -352,6 +363,11 @@ export function buildObjects(graph, palette) {
     animated: animators.length > 0,
     animate(t) {
       for (const step of animators) step(t);
+    },
+    /** graph.tubes index for a raycast hit on a link, else -1. */
+    tubeAt(hit) {
+      const data = hit.object.userData;
+      return data.kind === 'tube' ? data.tube : -1;
     },
     /** Item index for a raycast hit, or -1 (decoration, or a cell with no row). */
     itemAt(hit) {

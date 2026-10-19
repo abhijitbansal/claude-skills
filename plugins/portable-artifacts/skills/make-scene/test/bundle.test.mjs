@@ -30,7 +30,17 @@ test('bundle is one classic script', () => {
   assert.doesNotThrow(() => new vm.Script(text), 'bundle must parse as a classic script');
 });
 
-test('bundle defines PAScene.mount', (t) => {
+test('bundle is safe to inline: no script terminator and no HTML comment opener', () => {
+  const text = readBundle();
+  // page.mjs also escapes these (inlineCode), but an escaped bundle is a changed bundle: keep the source clean.
+  assert.ok(!/<\/script/i.test(text), 'bundle contains "</script", which would end the inline <script>');
+  assert.ok(!text.includes('<!--'), 'bundle contains "<!--", which opens an HTML comment inside the inline <script>');
+  // Guardrail proof: the same check fires on bad input.
+  assert.ok(/<\/script/i.test(`${text}\n"</SCRIPT>"`));
+  assert.ok(`${text}"<!--"`.includes('<!--'));
+});
+
+test('bundle defines PAScene.mount, mountScene and initAll', (t) => {
   const text = readBundle();
   const window = {};
   const sandbox = { window, globalThis: window, self: window, console, navigator: { userAgent: 'node' } };
@@ -41,7 +51,7 @@ test('bundle defines PAScene.mount', (t) => {
     assert.match(text, /PAScene/);
     return;
   }
-  assert.equal(typeof window.PAScene?.mount, 'function');
+  for (const name of ['mount', 'mountScene', 'initAll']) assert.equal(typeof window.PAScene?.[name], 'function', name);
 });
 
 test('MAX_PAGE_BYTES is a whole number of 64 KB steps with room for the bundle', () => {

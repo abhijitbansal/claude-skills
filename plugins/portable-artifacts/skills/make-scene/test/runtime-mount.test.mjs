@@ -25,14 +25,14 @@ after(async () => {
 });
 
 // wrapper: true puts the canvas in a [data-scene-canvas] element, false mounts straight into the host.
-function pageHtml({ wrapper, graph = fs.readFileSync(GOLDEN, 'utf8') }) {
+function pageHtml({ wrapper, graph = fs.readFileSync(GOLDEN, 'utf8'), inlineDisplay = false }) {
   const bundle = fs.readFileSync(BUNDLE_FILE, 'utf8');
   const inner = wrapper
     ? '<div id="cv" data-scene-canvas style="position:absolute;inset:0"></div>'
     : '';
   return `<!doctype html><html><head><meta charset="utf-8"><style>${themeCss(loadTheme('dusk'))}
     #host{position:relative;width:640px;height:400px} #fb{display:block;background:#eee} #ctl{display:flex}</style></head>
-    <body><div id="host">${inner}<div id="fb" data-scene-fallback>table</div><div id="ctl" data-scene-controls>controls</div></div>
+    <body><div id="host">${inner}<div id="fb" data-scene-fallback>table</div><div id="ctl" data-scene-controls${inlineDisplay ? ' style="display:inline-block"' : ''}>controls</div></div>
     <script>${bundle.replaceAll('</script', '<\\/script')}</script>
     <script>window.GRAPH=${graph};window.errors=[];window.addEventListener('error',e=>errors.push(e.message));
     window.docKeys=[];document.addEventListener('keydown',e=>docKeys.push(e.key));</script></body></html>`;
@@ -158,5 +158,46 @@ test('destroy() releases the GL context and removes the canvas; calling it twice
   assert.deepEqual(after, { attached: false, lost: true });
   await page.waitForTimeout(300);
   assert.deepEqual(await page.evaluate(() => errors), []);
+  assert.deepEqual(logs, []);
+});
+
+test('an author inline display on the controls survives mount, context loss and restore (N1)', async (t) => {
+  const ctx = await open(t, { wrapper: false, inlineDisplay: true });
+  if (!ctx) return;
+  const { page } = ctx;
+  assert.equal(await display(page, '#ctl'), 'inline-block');
+  await page.evaluate(() => {
+    window.EXT = API.canvas.getContext('webgl2').getExtension('WEBGL_lose_context');
+    EXT.loseContext();
+  });
+  await page.waitForTimeout(200);
+  assert.equal(await display(page, '#ctl'), 'none');
+  await page.evaluate(() => EXT.restoreContext());
+  await page.waitForTimeout(400);
+  assert.equal(await display(page, '#ctl'), 'inline-block', 'the author display is restored, not cleared');
+});
+
+test('destroy() restores the fallback and hides the controls; the same host can be mounted again (N2)', async (t) => {
+  const ctx = await open(t, { wrapper: false, inlineDisplay: true });
+  if (!ctx) return;
+  const { page, logs } = ctx;
+  const state = await page.evaluate(async () => {
+    const host = document.getElementById('host');
+    const fb = document.getElementById('fb');
+    const ctl = document.getElementById('ctl');
+    const during = { fb: fb.getAttribute('style'), ctl: ctl.style.display };
+    API.destroy();
+    const destroyed = { fb: fb.getAttribute('style'), ctl: getComputedStyle(ctl).display, state: host.dataset.sceneState };
+    window.API = PAScene.mount(host, GRAPH, { reducedMotion: true });
+    await new Promise((r) => setTimeout(r, 400));
+    return { during, destroyed, again: { state: host.dataset.sceneState, ctl: getComputedStyle(ctl).display, fbStyle: fb.getAttribute('style') } };
+  });
+  assert.match(state.during.fb, /position:\s*absolute/, 'sr-only while running');
+  assert.equal(state.destroyed.fb ?? '', '', 'fallback inline style is exactly what the author wrote (nothing)');
+  assert.equal(state.destroyed.ctl, 'none');
+  assert.equal(state.destroyed.state, 'fallback');
+  assert.equal(state.again.state, 'ready');
+  assert.equal(state.again.ctl, 'inline-block');
+  assert.match(state.again.fbStyle, /position:\s*absolute/);
   assert.deepEqual(logs, []);
 });
