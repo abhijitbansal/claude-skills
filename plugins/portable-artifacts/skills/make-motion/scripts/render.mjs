@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--contact-sheet]
-// --theme: a shared theme for a spec that names none (a spec's own `theme` wins).
+// --theme: a shared theme for a spec that names none (a spec's own `theme` wins). The first stdout line names
+// the theme drawn: `theme: <name>`.
 // --model/--effort/--agent override the spec's generatedBy; they are stamped into the MP4 comment/artist tags.
 // With --contact-sheet, --out is a directory; PNGs go to <out>/contact/<scene-id>.png.
 import { spawn } from 'node:child_process';
@@ -15,6 +16,7 @@ import { findFfmpeg, encodeArgs, probeAudio, probeGraph } from './lib/ffmpeg.mjs
 import { resolveAsset } from './lib/paths.mjs';
 import { withGeneratedBy, provenanceText, buildDate } from '../shared/provenance.mjs';
 import { resolveAudio } from '../template/audio.mjs';
+import { MOTION_THEME } from './lib/default-theme.mjs';
 
 const CONTACT_POINT = 0.85;
 const PROGRESS_STEPS = 10;
@@ -108,7 +110,7 @@ async function plan(opts) {
   const defaultOut = opts.contact ? path.join(dir, 'out') : path.join(dir, 'out', `${name}.mp4`);
   const ffmpeg = opts.contact ? null : await findFfmpeg();
   return {
-    theme: opts.theme, spec, specPath, fps, frames, total, contact: opts.contact, size: opts.size ?? spec.size,
+    theme: opts.theme, themeName: loaded.theme ?? opts.theme ?? MOTION_THEME, spec, specPath, fps, frames, total, contact: opts.contact, size: opts.size ?? spec.size,
     out: path.resolve(opts.out ?? defaultOut), ffmpeg,
     metadata: { comment: provenanceText('make-motion', spec.generatedBy, buildDate()), artist: spec.generatedBy?.model },
     audio: opts.contact ? [] : planAudio(spec, dir, ffmpeg, fps),
@@ -200,6 +202,7 @@ async function openPage(p, server, state) {
 async function main() {
   const p = await plan(parseArgs(process.argv.slice(2)));
   if (!p) return 1;
+  process.stdout.write(`theme: ${p.themeName}\n`);
   const state = { encoder: null, browser: null, partial: null, exiting: false };
   installSignalHandlers(state);
   const server = await startServer({ specPath: p.specPath, mode: 'render', theme: p.theme });

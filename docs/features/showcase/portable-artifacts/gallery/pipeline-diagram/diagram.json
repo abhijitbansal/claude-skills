@@ -17,7 +17,7 @@
     { "id": "elk", "label": "ELK layout engine", "kind": "service", "group": "buildtime", "emoji": "🧭", "note": "Runs locally, computes every position" },
     { "id": "dashboard", "label": "make-dashboard renderer", "kind": "service", "group": "buildtime", "emoji": "📊", "note": "Draws chart cards" },
     { "id": "motion", "label": "make-motion renderer", "kind": "service", "group": "buildtime", "emoji": "🎬", "note": "Renders MP4 video" },
-    { "id": "themes", "label": "Shared themes", "kind": "storage", "group": "buildtime", "emoji": "🎨", "note": "paper, blueprint, ink, editorial" },
+    { "id": "themes", "label": "Shared themes", "kind": "storage", "group": "buildtime", "emoji": "🎨", "note": "dusk, press, poster and four more" },
     { "id": "page", "label": "Offline HTML page", "kind": "client", "tone": "good", "emoji": "🌐", "note": "No network requests", "detail": "Inline CSS, fonts and icons behind a strict CSP. The same spec and versions give the same bytes." }
   ],
   "edges": [
@@ -49,7 +49,7 @@
       "beats": [
         { "title": "The spec passes to build", "from": "validate", "to": "build" },
         { "title": "ELK lays everything out", "from": "build", "to": "elk", "caption": "Every position comes from the layout engine, on this machine." },
-        { "title": "Themes supply the colours", "from": "themes", "to": "build", "caption": "paper, blueprint, ink or editorial: one spec, four looks." },
+        { "title": "Themes supply the colours", "from": "themes", "to": "build", "caption": "dusk, press, poster or any of four more: one spec, any look." },
         { "title": "Charts and video have their own renderers", "focus": ["dashboard", "motion"], "caption": "An explainer asks for them; a plain diagram never does." },
         { "title": "One offline HTML page", "from": "build", "to": "page", "caption": "Opens in any browser with no network; the CSP blocks requests." }
       ]

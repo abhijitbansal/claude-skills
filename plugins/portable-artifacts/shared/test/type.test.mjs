@@ -8,6 +8,8 @@ test('every token is emitted with its spec value', () => {
     '--fs-xs': '12px', '--fs-sm': '14px', '--fs-base': '17px', '--fs-md': '21px', '--fs-lg': '27px', '--fs-xl': '34px',
     '--fs-hero': 'clamp(40px, 6vw, 60px)', '--lh-body': '1.6', '--lh-head': '1.15', '--lh-hero': '1.05',
     '--track-display': '-0.02em', '--track-hero': '-0.03em',
+    '--fs-display': 'clamp(2.5rem, 1.25rem + 4.2vw, 4.75rem)', '--fs-numeral': 'clamp(4.5rem, 2rem + 9vw, 9rem)',
+    '--sp-1': '4px', '--sp-2': '8px', '--sp-3': '12px', '--sp-4': '16px', '--sp-5': '24px', '--sp-6': '32px', '--sp-7': '48px', '--sp-8': '72px', '--sp-9': '112px',
   });
   for (const [k, v] of Object.entries(TYPE_TOKENS)) assert.ok(typeCss().includes(`${k}:${v}`), k);
 });

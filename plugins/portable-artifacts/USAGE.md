@@ -122,7 +122,7 @@ from your project folder):
 - **Chart kinds:** bar, stacked-bar, grouped-bar, line, area, scatter, bubble, heatmap, histogram, boxplot and donut. The agent names the columns and the build writes the chart. Raw Vega-Lite still works for anything else. Reference: `make-dashboard/references/kinds.md`.
 - **Views:** each card can switch between alternate views (sorted, share, 100%, area, boxplot, …) and a sortable Table view; `pair: true` shows two side by side.
 - **Export:** every card has an Export menu for PNG, SVG and CSV.
-- **Themes:** `paper` (default), `blueprint`, `editorial`, `ink`. Ask for one, or pass `--theme <name>` to `build.mjs`. The page also has an icon toggle that cycles Auto, Light and Dark.
+- **Themes:** `paper` (default), `blueprint`, `editorial`, `ink`, and the newer `dusk`, `press` and `poster` (see the [README](README.md#themes-and-art)). Ask for one, or pass `--theme <name>` to `build.mjs`. The page also has an icon toggle that cycles Auto, Light and Dark.
 - **Live reload:** see below.
 
 **Open the result:** double-click `dist/index.html` (it is one
@@ -185,8 +185,9 @@ your project folder):
    fixes each `path: message` line until it prints `valid`.
 4. `build.mjs diagram.json` writes one offline HTML file and prints its path.
    The default folder is `~/.agent/diagrams/` (set `PA_OUTPUT_DIR`, or pass
-   `--out file.html` or `--out dir`). `--theme paper|blueprint|ink|editorial`
-   overrides the spec's theme.
+   `--out file.html` or `--out dir`). `--theme <name>` overrides the spec's
+   theme: `blueprint` (default), `paper`, `ink`, `editorial`, `dusk`, `press`
+   or `poster`.
 5. `check.mjs <page>` opens the page at 1440 and 390 px and reports overflow,
    console errors, text that leaves its box and a node under the legend
    overlay. It needs Playwright and a browser (a full `npm ci` plus
@@ -253,16 +254,19 @@ your project folder):
    Section titles state the finding ("Search now ignores case"), not a label.
 4. `validate.mjs explainer.json` checks the schema and limits, file references,
    the embedded diagrams and charts, and the prose rules. It fails on leftover
-   `TODO:` text, emoji, filler phrases ("leverage", "seamless", "delve"), titles
+   `TODO:` text, filler phrases ("leverage", "seamless", "delve"), titles
    numbered like `01` or ending in `!`, and (for slides) a slide with more
    than 6 points, 8 table rows, 12 code lines or 80 words. Each line is a JSON
-   path, the problem and the fix; text over the soft caps only warns (exit 0): title 8 words, label 4 words, paragraph 3 sentences or 60 words, text section 120 words, card text 30 words, list item 20 words, page prose 900 words, `tldr` 3 points. Each warning names the section; resolve them before building where you can.
+   path, the problem and the fix; text over the soft caps only warns (exit 0): title 8 words, label 4 words, paragraph 3 sentences or 60 words, text section 120 words, card text 30 words, list item 20 words, page prose 900 words, `tldr` 3 points. Emoji are allowed; dense emoji only warn: a prose string with 3 or more at more than 1 per 40 characters, or a section title with more than 3. Each warning names the section; resolve them before building where you can.
 5. `build.mjs explainer.json` writes one HTML file and prints its path. The
    default folder is `~/.agent/diagrams/` (set `PA_OUTPUT_DIR`, or pass
-   `--out file.html` or `--out dir`). `--theme paper|blueprint|ink|editorial`
-   overrides the spec's theme; `--model`, `--effort` and `--agent` set the
+   `--out file.html` or `--out dir`). `--theme <name>` overrides the spec's
+   theme: `dusk` (default), `press`, `poster`, `paper`, `blueprint`, `ink` or
+   `editorial` (see [Choosing a theme](#choosing-a-theme)); `--model`, `--effort` and `--agent` set the
    provenance stamp (see [section 6](#6-what-every-page-carries)). A video or an interactive chart adds a
    `<name>.assets/` folder beside the page: keep them together.
+   `--image-api <https-endpoint>` is an optional extra described
+   [below](#optional-hero-image); without it the build never uses the network.
 6. Optionally runs `check.mjs <page>`, which opens the page at 1280 and 390 px and
    fails on console errors or warnings, sideways scrolling, a deck that cannot
    reach its last slide with the arrow keys, or a diagram Present overlay that
@@ -314,6 +318,43 @@ arrow keys, Space, Page Up and Page Down, Home and End; `O` opens an outline,
 `#slide-3` opens slide 3, the last slide is remembered, and printing gives one
 slide per page.
 
+### Choosing a theme
+
+make-explainer and make-motion share these rules:
+
+1. A theme you name wins: `--theme poster`, or "use poster" in the prompt.
+2. Otherwise the agent picks one from the prompt and says which and why in one
+   line: `press` for dense docs, long reads, changelogs and branch recaps;
+   `poster` for launch decks, pitches, demos and energetic clips; `dusk` for
+   everything else, or when it is unclear.
+3. If the prompt fits two themes equally, the agent asks once and lists the
+   three with a one-line feel each (`dusk` soft and warm, `press` calm print,
+   `poster` loud and condensed). If it cannot ask, it uses `dusk`.
+
+`paper`, `blueprint`, `ink` and `editorial` still work, but only when you name
+them. In `dusk`, `press` and `poster` the page hero and a deck's title and
+closing slides carry procedural art drawn from the title: no network, and the
+same title gives the same picture.
+
+### Optional hero image
+
+`build.mjs explainer.json --image-api <https-endpoint>` swaps the page hero's
+art for a picture from an image service you choose. It is off by default.
+Before you use it:
+
+- **Data leaves your machine.** The page title and subtitle are sent to that
+  host; the build says so on stderr before it sends.
+- **It may cost money.** Each build with the flag is one request your service
+  may bill. Rebuild without the flag to stop.
+- **Your key**, in `PA_IMAGE_API_KEY`. It is never written to the page.
+- **Page hero only**, and only in `dusk`, `press` or `poster`. A deck or an
+  older theme is refused (exit 2) before anything is sent.
+
+Any failure stops the build with exit 2; there is no silent fallback. The
+picture is inlined, so the page stays one offline file. The request and reply
+format is in `make-explainer/references/schema.md` ("Hero image from an image
+API").
+
 **Reference:** every field is in `make-explainer/references/schema.md` and
 `sections.md`, the banned phrases in `style.md`, and one working file per
 preset in `references/examples/`.
@@ -345,6 +386,16 @@ background colour.
 
 **Charts in videos** are Vega-Lite specs with inline `data.values`. Animate
 `reveal` from 0 to 1 for a left-to-right wipe.
+
+**Theme.** The agent picks it as in [Choosing a theme](#choosing-a-theme) and
+writes it as the spec's `theme`. A spec without one renders in `dusk`. The
+theme's dark colours and fonts are the defaults; any colour the spec sets
+itself still wins. `render.mjs --theme <name>` fills in only for a spec that
+names none. A `text` with `"role": "title"` uses the theme's display font and,
+with no keyframes of its own, gets the theme's entrance (`dusk` rises, `press`
+inks in, `poster` slams). A scene with `"background": "art"` draws the theme's
+procedural art behind its elements, seeded by the scene id.
+`references/examples/launch-title.json` uses both.
 
 **Audio is opt-in.** The agent adds `audio` tracks only when you ask for
 sound ("with background music from music.mp3", "with a voiceover reading
@@ -396,9 +447,13 @@ is set in the spec, a dashboard refresh keeps the original author; a stamp passe
 only as flags is not kept by a refresh run without them. A dashboard also shows its
 refresh time. Set `SOURCE_DATE_EPOCH` to pin the footer date for a reproducible build.
 
-**Type.** Geist and Geist Mono on every generated page (the make-motion preview UI and the unthemed video keep Inter and JetBrains Mono), with a serif display face only in the
-`editorial` theme (Newsreader headings, Atkinson Hyperlegible body) and Bricolage
-Grotesque headings in `ink`. Links in running text are underlined; buttons,
+**Type.** The theme sets the fonts, all bundled, so nothing is fetched: `dusk`
+Funnel Display, Host Grotesk and Commit Mono; `press` Young Serif, Schibsted
+Grotesk and JetBrains Mono; `poster` Big Shoulders Display, Familjen Grotesk
+and Martian Mono; `paper` and `blueprint` Geist and Geist Mono; `ink` Bricolage
+Grotesque headings over Geist; `editorial` Newsreader headings and an Atkinson
+Hyperlegible body. The make-motion preview and video use the spec's theme
+(`dusk` when it names none). Links in running text are underlined; buttons,
 navigation and cards are not.
 
 ## 7. Asking for changes
@@ -441,7 +496,8 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `generatedBy.model: must match pattern "^[A-Za-z0-9 ._:/()+-]+$"` (or a 61-character value) | The `--model`, `--effort` or `--agent` flag, or the spec's `generatedBy`, has a character outside the allowed set or is longer than 60. Shorten it or drop the odd character |
 | `sections[3].title: warning: title is 12 words; keep it to 8` (or label, paragraph, card, list item) | A soft cap. It does not block the build. Shorten the text or convert it (a long `text` into `cards` or `steps`) |
 | `sections[3].text: still has a TODO placeholder` | A scaffold sentence was left in. Replace every `TODO: …` with real prose, or delete the section |
-| `banned phrase "leverage"; replace it with "use"` (or `contains emoji`, `heading ends with "!"`) | Reword as the message says. The full list is `make-explainer/references/style.md` |
+| `banned phrase "leverage"; replace it with "use"` (or `heading ends with "!"`) | Reword as the message says. The full list is `make-explainer/references/style.md` |
+| `sections[0].text: warning: 4 emoji in 25 characters of prose; keep it under 1 per 40 → cut some, say it in words` (or `title has 4 emoji; keep it to 3`) | A soft warning; the build still runs. Keep an emoji or two and say the rest in words |
 | `slide has 7 points; the limit is 6 — split this section into two slides` | In a deck each section is one slide: at most 6 points, 8 table rows, 12 code lines and 80 words. Split it |
 | `make-diagram skill not found next to make-explainer (looked in …); install it with: npx --yes skills@1.7.2 add … -y` (or make-dashboard, make-motion) | The embedded diagram, chart, icon or motion spec needs that sibling skill in the folder next to `make-explainer`. Run the printed command, or `node plugins/portable-artifacts/bin/install.mjs <host> --skills make-explainer` |
 | `… is installed but its dependencies are missing` | Run `npm ci --omit=dev` inside the named sibling skill's folder |

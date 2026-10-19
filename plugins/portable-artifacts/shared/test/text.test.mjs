@@ -180,6 +180,27 @@ test('metrics.json keys are sorted and nothing extra is shipped', () => {
   assert.deepEqual(new Set(keys), used);
 });
 
+test("every shipped theme's body and mono faces have metrics", () => {
+  const faces = ['Host Grotesk|400', 'Host Grotesk|700', 'Schibsted Grotesk|400', 'Schibsted Grotesk|700',
+    'Familjen Grotesk|400', 'Familjen Grotesk|700', 'Commit Mono|400', 'JetBrains Mono|400', 'Martian Mono|400'];
+  for (const key of faces) {
+    assert.ok(key in METRICS, `metrics.json is missing ${key}`);
+    const [family, weight] = key.split('|');
+    const w = measure('Hello', { family, weight: Number(weight), size: 14 });
+    assert.ok(Number.isFinite(w) && w > 0, `${key}: measure('Hello') = ${w}`);
+  }
+  for (const name of listThemes()) {
+    const theme = loadTheme(name);
+    for (const role of ['body', 'mono']) {
+      const { family, weights } = theme.fonts[role];
+      for (const weight of Object.keys(weights)) {
+        const w = measure('Hello', { family, weight: Number(weight), size: 14 });
+        assert.ok(Number.isFinite(w) && w > 0, `${name}.${role} ${family}|${weight}`);
+      }
+    }
+  }
+});
+
 function range(a, b) {
   return Array.from({ length: b - a + 1 }, (_, i) => a + i);
 }

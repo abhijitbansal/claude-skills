@@ -2,7 +2,8 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildSpec, buildFile, exampleFile, haveBrowser, openPage, closeSharedBrowser, scratchDir } from './helpers/browser.mjs';
+import { buildSpec, buildFile, exampleFile, haveBrowser, openPage, closeSharedBrowser, scratchDir, DECK_CONTRAST_JS } from './helpers/browser.mjs';
+import { SCRIM } from '../scripts/lib/flavor.mjs';
 
 after(closeSharedBrowser);
 
@@ -700,5 +701,201 @@ test('slide announcements still reach the deck live region when the runtime hook
   await page.keyboard.press('ArrowRight');
   assert.equal(await page.locator('[role=status]').count(), 1);
   assert.equal(await page.locator('[role=status]').textContent(), 'Slide 2 of 5: Topic 1');
+  await context.close();
+});
+
+// ---- flavored decks: contrast on every slide, focus rings, no sideways overflow -------------------
+
+const FLAVORS = ['dusk', 'press', 'poster'];
+const MODES = ['light', 'dark'];
+// Every section kind a deck commonly closes on, with emoji in a title, a point and a callout, and a dense table last.
+const KINDS = (theme) => ({
+  title: 'Cache clock: the per-project rollout 🚀', subtitle: 'Read the [design note](https://example.com/notes) and run `cache-clock init` first', mode: 'slides', theme,
+  meta: { date: '2026-10-17', branch: 'feat/cache-clock' },
+  sections: [
+    { type: 'tldr', title: 'Warm caches are now a decision', label: 'In short', text: 'Every project gets its own cache clock, so a cold send is visible first.', points: ['One clock per repo ✅', 'A prompt before any cold send', 'Zero keep-alive scripts'], tone: 'good' },
+    { type: 'kpis', title: 'Fewer cold sends in eleven days', label: 'Impact', items: [{ label: 'Cold sends', value: '-94%', delta: '-61 pts', tone: 'good', note: 'across [6 repos](https://example.com/r)' }, { label: 'Hit rate', value: '87%', delta: '+26', tone: 'good' }, { label: 'Prompts', value: '212', note: 'per week' }] },
+    { type: 'compare', title: 'Global timer versus a clock per project', label: 'Before / after', columns: [{ title: 'Global timer', tone: 'warn', points: ['One timer for every window', 'Manual reset'] }, { title: 'Per project ✅', tone: 'good', points: ['One clock per repo', 'Re-reads on focus'] }] },
+    { type: 'risks', title: 'Two risks remain open', items: [{ risk: 'Clock drifts after sleep', severity: 'medium', mitigation: 'Re-read the TTL on wake', owner: 'Platform' }, { risk: 'Prompt fatigue', severity: 'low', mitigation: 'Batch prompts' }] },
+    { type: 'files', title: 'Three files carry the change', items: [{ path: 'src/clock/project.ts', change: 'added', add: 120, del: 0 }, { path: 'src/clock/global.ts', change: 'deleted', add: 0, del: 88 }, { path: 'src/prompt.ts', change: 'modified', add: 34, del: 6 }] },
+    { type: 'timeline', title: 'Six weeks from spike to default', items: [{ date: '2026-09-01', title: 'Spike', text: 'One repo.' }, { date: '2026-10-01', title: 'Default', text: 'On for everyone.' }] },
+    { type: 'code', title: 'One flag turns it on', language: 'bash', code: 'cache-clock init --project .\ncache-clock status' },
+    { type: 'checklist', title: 'Before the next release', key: 'kinds-release', groups: [{ title: 'Device', items: [{ text: 'Sleep and wake the laptop', tag: 'device' }, { text: 'Switch repos quickly' }] }] },
+    ...['info', 'warn', 'good', 'bad'].map((tone) => ({ type: 'callout', tone, title: `A ${tone} note`, text: 'Read the [design note](https://example.com/notes) first. 🌱' })),
+    { type: 'table', title: 'Where the time went', columns: ['Repo', 'Cold sends', 'Hit rate'], rows: [['web', 3, '91%'], ['api', 5, '86%'], ['mobile', 2, '89%'], ['infra', 7, '79%'], ['docs', 0, '97%'], ['tools', 4, '84%']], caption: 'Eleven days after the default flipped.' },
+  ],
+});
+const flavoredDecks = (theme) => [
+  ['example', buildFile(exampleFile('slides'), { theme, name: `slides-${theme}` })],
+  ['kinds', buildSpec(KINDS(theme), { name: `kinds-${theme}` })],
+];
+
+test('flavored decks: every slide\'s text reads at 4.5:1 on its ground, art slides included, in light and dark', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const theme of FLAVORS) {
+    for (const [name, built] of flavoredDecks(theme)) {
+      for (const colorScheme of MODES) {
+        const { page, problems, context } = await openPage(built.url, { colorScheme, width: 1280, height: 720 });
+        await page.addScriptTag({ content: DECK_CONTRAST_JS });
+        const found = await page.evaluate(() => [
+          ...window.__deck.textProblems(document.querySelector('[data-deck]'), 4.5),
+          ...window.__deck.textProblems(document.querySelector('.deck-bar'), 4.5),
+        ]);
+        assert.deepEqual(found, [], `${theme} ${name} ${colorScheme}`);
+        // The title slide's ground is the proven scrim (flavor.mjs SCRIM) or a solid card fill, never thinner.
+        const alpha = await page.evaluate(() => window.__deck.parse(getComputedStyle(document.querySelector('.slide-cover .slide-inner')).backgroundColor)[3]);
+        assert.ok([SCRIM.alpha, 1].includes(Math.round(alpha * 100) / 100), `${theme} ${colorScheme}: title slide ground alpha ${alpha}`);
+        assert.deepEqual(problems, []);
+        await context.close();
+      }
+    }
+  }
+});
+
+test('flavored decks: the outline and every focusable on every slide shows a ring at 3:1 on its ground', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const theme of FLAVORS) {
+    for (const [name, built] of flavoredDecks(theme)) {
+      for (const colorScheme of MODES) {
+        const { page, context } = await openPage(built.url, { colorScheme, width: 1280, height: 720 });
+        await page.addScriptTag({ content: DECK_CONTRAST_JS });
+        const total = await page.evaluate(() => document.querySelectorAll('section.slide').length);
+        const found = new Set();
+        const visited = new Set();
+        const tabRound = async (presses) => {
+          for (let i = 0; i < presses; i++) {
+            await page.keyboard.press('Tab');
+            const r = await page.evaluate(() => {
+              const a = document.activeElement;
+              if (!a || a === document.body || a.matches('.slide') || !a.matches(':focus-visible')) return null;
+              return { key: (a.closest('.slide')?.id ?? 'chrome') + a.outerHTML.slice(0, 80), problem: window.__deck.ringProblem(a, 3) };
+            });
+            if (!r) continue;
+            visited.add(r.key);
+            if (r.problem) found.add(r.problem);
+          }
+        };
+        for (let n = 1; n <= total; n++) {
+          if (n > 1) { await page.keyboard.press('Escape'); await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('ArrowRight'); }
+          assert.equal(await current(page), n, `${theme} ${name}: the keys reached slide ${n}`);
+          await tabRound(8);
+        }
+        assert.equal(await current(page), total, `${theme} ${name}: the last slide was reached and tabbed through`);
+        if (name === 'kinds') assert.ok([...visited].some((k) => k.startsWith('slide-1<a')), `${theme} ${colorScheme}: Tab reached the link on the title slide`);
+        await page.keyboard.press('o');
+        await tabRound(6);
+        await page.keyboard.press('Escape');
+        assert.ok(visited.size >= 4, `${theme} ${name} ${colorScheme}: tabbing reached the controls and slide content (${visited.size})`);
+        assert.deepEqual([...found], [], `${theme} ${name} ${colorScheme}`);
+        await context.close();
+      }
+    }
+  }
+});
+
+const VIEWPORTS = [[1280, 720], [375, 667], [1024, 768]];
+test('flavored decks: no sideways scroll and no clipped text at 16:9, 4:3 and phone portrait', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const theme of FLAVORS) {
+    for (const [name, built] of flavoredDecks(theme)) {
+      for (const colorScheme of MODES) {
+        for (const [width, height] of VIEWPORTS) {
+          const { page, context } = await openPage(built.url, { colorScheme, width, height });
+          const bad = await page.evaluate(() => {
+            const out = [];
+            const doc = document.documentElement;
+            if (doc.scrollWidth > doc.clientWidth + 1) out.push(`page scrolls sideways: ${doc.scrollWidth} > ${doc.clientWidth}`);
+            for (const slide of document.querySelectorAll('section.slide')) {
+              const box = slide.getBoundingClientRect();
+              if (slide.scrollWidth > slide.clientWidth + 1) out.push(`${slide.id} is wider than the screen`);
+              for (const el of slide.querySelectorAll('*')) {
+                if (el.closest('.tablewrap, pre, .sr-only, svg, .slide-art, video')) continue;
+                const r = el.getBoundingClientRect();
+                if (r.width === 0) continue;
+                if (r.right > box.right + 1 || r.left < box.left - 1) out.push(`${slide.id} ${el.tagName}.${el.className} pokes out (${Math.round(r.left)}..${Math.round(r.right)})`);
+                const cs = getComputedStyle(el);
+                if (cs.overflowX !== 'visible' && el.scrollWidth > el.clientWidth + 1 && el.textContent.trim()) out.push(`${slide.id} ${el.tagName}.${el.className} clips its text`);
+              }
+            }
+            return out;
+          });
+          assert.deepEqual(bad, [], `${theme} ${name} ${colorScheme} ${width}x${height}`);
+          await context.close();
+        }
+      }
+    }
+  }
+});
+
+test('flavored decks: the arrow keys reach the last slide and it is scrolled into view', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const theme of FLAVORS) {
+    const { url } = buildFile(exampleFile('slides'), { theme, name: `reach-${theme}` });
+    const { page, problems, context } = await openPage(url, { width: 1280, height: 720 });
+    const total = await page.evaluate(() => document.querySelectorAll('section.slide').length);
+    for (let i = 1; i < total; i++) await page.keyboard.press('ArrowRight');
+    assert.equal(await current(page), total, theme);
+    assert.equal(await aligned(page, total), true, theme);
+    assert.equal(await page.evaluate((n) => !document.getElementById(`slide-${n}`).inert, total), true);
+    assert.deepEqual(problems, []);
+    await context.close();
+  }
+});
+
+test('flavored decks: the arriving slide\'s rise ends fully opaque and in place when motion is allowed', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const theme of FLAVORS) {
+    const { url } = buildFile(exampleFile('slides'), { theme, name: `rise-${theme}` });
+    const { page, context } = await openPage(url, { width: 1280, height: 720, reducedMotion: 'no-preference' });
+    await page.keyboard.press('ArrowRight');
+    await settled(page, 2);
+    const name = await page.evaluate(() => getComputedStyle(document.querySelector('#slide-2 > .slide-inner')).animationName);
+    assert.equal(name, 'deck-rise', `${theme}: the slide rises in`);
+    await page.waitForFunction(() => document.querySelector('#slide-2 > .slide-inner').getAnimations().every((a) => a.playState === 'finished'));
+    const end = await page.evaluate(() => { const cs = getComputedStyle(document.querySelector('#slide-2 > .slide-inner')); return [cs.opacity, cs.transform]; });
+    assert.deepEqual(end, ['1', 'none'], theme);
+    await context.close();
+  }
+});
+
+test('flavored decks print flat: no art, shadows, blur or fills, and the title sits where a classic deck puts it', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const printed = async (url) => {
+    const { page, context } = await openPage(url, { width: 1280, height: 720 });
+    await page.emulateMedia({ media: 'print' });
+    const r = await page.evaluate(() => {
+      const css = (sel, prop) => getComputedStyle(document.querySelector(sel))[prop];
+      const last = `#slide-${document.querySelectorAll('section.slide').length} > .slide-inner`;
+      return {
+        art: [...document.querySelectorAll('.slide-art')].map((a) => getComputedStyle(a).display),
+        coverTop: css('#slide-1 > .slide-inner', 'marginTop'),
+        coverFill: css('#slide-1 > .slide-inner', 'backgroundColor'),
+        coverBlur: css('#slide-1 > .slide-inner', 'backdropFilter'),
+        coverShadow: css('#slide-1 > .slide-inner', 'boxShadow'),
+        lastFill: css(last, 'backgroundColor'),
+        lastShadow: css(last, 'boxShadow'),
+      };
+    });
+    await context.close();
+    return r;
+  };
+  const classic = await printed(buildFile(exampleFile('slides'), { theme: 'paper', name: 'print-paper' }).url);
+  for (const theme of FLAVORS) {
+    const r = await printed(buildFile(exampleFile('slides'), { theme, name: `print-${theme}` }).url);
+    assert.deepEqual(r.art, ['none', 'none'], theme);
+    assert.equal(r.coverTop, classic.coverTop, `${theme}: the title's print offset matches paper`);
+    for (const k of ['coverFill', 'lastFill']) assert.equal(r[k], 'rgba(0, 0, 0, 0)', `${theme} ${k}`);
+    for (const k of ['coverShadow', 'lastShadow']) assert.equal(r[k], 'none', `${theme} ${k}`);
+    assert.equal(r.coverBlur, 'none', theme);
+  }
+});
+
+test('poster file slides: paths and stats take the deck\'s projection scale, not the page\'s fixed 13px', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { url } = buildSpec(KINDS('poster'), { name: 'poster-files' });
+  const { page, context } = await openPage(url, { width: 1280, height: 720 });
+  const sizes = await page.evaluate(() => [...document.querySelectorAll('.slide-files :is(.path, .dir, .stat)')].map((el) => parseFloat(getComputedStyle(el).fontSize)));
+  assert.ok(sizes.length > 0);
+  assert.ok(sizes.every((px) => px > 13), `sizes ${sizes}`);
   await context.close();
 });

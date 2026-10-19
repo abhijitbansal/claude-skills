@@ -139,12 +139,12 @@ test('/assets answers 404, not 500, while the spec is temporarily invalid JSON',
 test('vendor routes and template serve 200', () => withServer(async (srv) => {
   for (const p of ['/vendor/animejs/anime.esm.js', '/vendor/vega/vega.min.js', '/vendor/vega-lite/vega-lite.min.js',
     '/vendor/vega-util/index.js', '/vendor/vega-interpreter/vega-interpreter.js',
-    '/vendor/fonts/inter-latin-700-normal.woff2', '/vendor/fonts/inter-cyrillic-400-normal.woff2',
-    '/vendor/fonts/jetbrains-mono-latin-400-normal.woff2', '/vendor/fonts/jetbrains-mono-greek-400-normal.woff2',
     '/template/renderer.mjs', '/template/timeline.mjs', '/template/defaults.mjs', '/template/styles.css']) {
     assert.equal((await get(srv.url, p)).status, 200, p);
   }
   assert.equal((await get(srv.url, '/vendor/fonts/..%2f..%2fpackage.json')).status, 404);
+  // the old Inter / JetBrains Mono default look is gone: every font now comes from /theme/fonts
+  assert.equal((await get(srv.url, '/vendor/fonts/inter-latin-700-normal.woff2')).status, 404);
   assert.equal((await get(srv.url, '/template/../scripts/lib/spec.mjs')).status, 404);
   assert.equal((await get(srv.url, '/template/..%2fscripts%2flib%2fspec.mjs')).status, 404);
   assert.equal((await get(srv.url, '/nope')).status, 404);
@@ -239,12 +239,27 @@ test('/theme/<name>.json and .css serve a shared theme, fonts come from the sync
   assert.match(css.headers['content-type'], /text\/css/);
   assert.match(css.body, /@font-face\{font-family:"Geist";font-style:normal;font-weight:600;font-display:block;src:url\(\/theme\/fonts\/geist-sans-latin-600-normal\.woff2\) format\("woff2"\)\}/);
   assert.match(css.body, /@font-face\{font-family:"Geist Mono"/);
-  assert.match(css.body, /#stage\{--sans:"Geist", -apple-system, 'Segoe UI', sans-serif;--mono:"Geist Mono", ui-monospace, Menlo, Consolas, monospace\}/);
+  // the font roles and the dark colour tokens sit on :root, so the preview chrome draws with them too
+  assert.match(css.body, /:root\{--display:"Bricolage Grotesque", [^;]+;--sans:"Geist", -apple-system, 'Segoe UI', sans-serif;--mono:"Geist Mono", ui-monospace, Menlo, Consolas, monospace;/);
+  assert.match(css.body, /@font-face\{font-family:"Bricolage Grotesque";font-style:normal;font-weight:600;font-display:block;src:url\(\/theme\/fonts\/bricolage-grotesque-latin-600-normal\.woff2\)/, 'the display role is offered for role:title text');
+  assert.ok(css.body.includes(`--page:${theme.dark.page};`) && css.body.includes(`--accent:${theme.dark.accent};`), 'dark colour tokens');
   assert.ok(!css.body.includes('data:'), 'the page CSP allows fonts from self only');
-  assert.ok(!css.body.includes('Bricolage'), 'the display role is not used, so its font is not offered');
   const font = await get(srv.url, '/theme/fonts/geist-sans-latin-600-normal.woff2');
   assert.equal(font.status, 200);
   assert.equal(font.headers['content-type'], 'font/woff2');
+}));
+
+test('a new theme\'s display font is served from /theme/fonts like the body and mono fonts', () => withServer(async (srv) => {
+  for (const [name, file] of [['dusk', 'funnel-display-latin-700-normal.woff2'], ['press', 'young-serif-latin-400-normal.woff2'], ['poster', 'big-shoulders-display-latin-900-normal.woff2']]) {
+    const css = await get(srv.url, `/theme/${name}.css`);
+    assert.ok(css.body.includes(`src:url(/theme/fonts/${file}) format("woff2")`), `${name} offers ${file}`);
+    const font = await get(srv.url, `/theme/fonts/${file}`);
+    assert.equal(font.status, 200, file);
+    assert.equal(font.headers['content-type'], 'font/woff2');
+  }
+  for (const p of ['/theme/fonts/..%2Ffonts%2Ffunnel-display-latin-700-normal.woff2', '/theme/fonts/%2e%2e%2ffunnel-display-latin-700-normal.woff2']) {
+    assert.equal((await get(srv.url, p)).status, 404, p);
+  }
 }));
 
 test('theme routes refuse unknown names, traversal and anything but a woff2', () => withServer(async (srv) => {
@@ -256,6 +271,45 @@ test('theme routes refuse unknown names, traversal and anything but a woff2', ()
     '/theme/fonts/geist-sans-latin-600-normal.woff2%00', '/theme/fonts/.woff2', '/theme/fonts/%5cgeist-sans-latin-600-normal.woff2']) {
     assert.equal((await get(srv.url, p)).status, 404, p);
   }
+}));
+
+// ---- art ------------------------------------------------------------------------------------
+
+test('/art/<scene>.svg draws the scene art: seeded by the scene id, in the spec theme, at the canvas size', () => withServer(async (srv, f) => {
+  const doc = (extra = {}) => ({ size: [640, 360], scenes: [
+    { id: 'open', duration: 1, background: 'art', elements: [] },
+    { id: 'flat', duration: 1, background: '#112233', elements: [] },
+    { id: 'two words', duration: 1, background: 'art', elements: [] },
+  ], ...extra });
+  writeFileSync(f.specPath, JSON.stringify(doc()));
+  const a = await get(srv.url, '/art/open.svg');
+  assert.equal(a.status, 200);
+  assert.equal(a.headers['content-type'], 'image/svg+xml');
+  assert.match(a.body, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 640 360" width="640" height="360"/);
+  assert.match(a.body, /data-art="dusk"/, 'no theme: dusk art');
+  assert.equal((await get(srv.url, '/art/open.svg')).body, a.body, 'same spec, same bytes');
+  assert.notEqual((await get(srv.url, '/art/two%20words.svg')).body, a.body, 'another scene id, another seed');
+  writeFileSync(f.specPath, JSON.stringify(doc({ theme: 'poster' })));
+  assert.match((await get(srv.url, '/art/open.svg')).body, /data-art="poster"/);
+  for (const p of ['/art/flat.svg', '/art/nope.svg', '/art/..%2Fm.json', '/art/open.png', '/art/open.svg/x']) {
+    assert.equal((await get(srv.url, p)).status, 404, p);
+  }
+  writeFileSync(f.specPath, '{ not json');
+  assert.equal((await get(srv.url, '/art/open.svg')).status, 404, 'an unreadable spec has no art');
+}));
+
+test('/art follows the render --theme for a spec without one', async () => {
+  const f = fixture();
+  writeFileSync(f.specPath, JSON.stringify({ size: [64, 64], scenes: [{ id: 's', duration: 1, background: 'art', elements: [] }] }));
+  const srv = await startServer({ specPath: f.specPath, mode: 'render', theme: 'press' });
+  try { assert.match((await get(srv.url, '/art/s.svg')).body, /data-art="press"/); } finally { await srv.close(); }
+});
+
+test('GET / links the theme stylesheet (dusk without a theme) after the page styles', () => withServer(async (srv, f) => {
+  const plain = await get(srv.url, '/');
+  assert.match(plain.body, /<link rel="stylesheet" href="\/template\/styles\.css">\n<link id="theme-css" rel="stylesheet" href="\/theme\/dusk\.css">/);
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('one'), theme: 'poster' }));
+  assert.match((await get(srv.url, '/')).body, /href="\/theme\/poster\.css"/);
 }));
 
 test('/spec.json gets the render theme only when the server was given one and the spec has none', async () => {

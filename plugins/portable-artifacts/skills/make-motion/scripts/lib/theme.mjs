@@ -1,12 +1,18 @@
 // A spec's `theme` (a shared theme name) as what the render page needs: the theme's own JSON, and a
-// stylesheet that offers the body and mono fonts from the synced shared/fonts. Fonts are linked by
-// URL, not embedded: the page's CSP allows fonts from the local server only.
+// stylesheet that offers the display, body and mono fonts from the synced shared/fonts and the
+// theme's dark colour tokens. Fonts are linked by URL, not embedded: the page's CSP allows fonts
+// from the local server only.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadTheme } from '../../shared/theme.mjs';
 
 export const FONTS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../shared/fonts');
-const ROLES = [['body', '--sans'], ['mono', '--mono']];
+// display: `role: "title"` text; body: all other text, counters and charts; mono: `font: "mono"`.
+const ROLES = [['display', '--display'], ['body', '--sans'], ['mono', '--mono']];
+const HEX = /^#[0-9a-f]{6}$/i;
+// The preview chrome's corner shape per theme: dusk's soft pills (the styles.css default), press's
+// letterpress near-square, poster's hard edge.
+const UI_RADIUS = Object.freeze({ press: '3px', poster: '0' });
 
 /** -> the theme JSON, or null for an unknown name. */
 export function themeData(name) {
@@ -17,7 +23,11 @@ export function themeData(name) {
   }
 }
 
-/** @font-face rules for the body and mono fonts, then the two font variables on the stage. */
+/**
+ * @font-face rules for the three font roles, then the font variables and the theme's dark colour
+ * tokens (`--page`, `--surface`, `--text`, `--accent`, ...) on :root, so the stage and the preview
+ * chrome both draw with them.
+ */
 export function themeCss(theme) {
   const faces = [];
   const seen = new Set();
@@ -29,6 +39,9 @@ export function themeCss(theme) {
       faces.push(`@font-face{font-family:"${family}";font-style:normal;font-weight:${weight};font-display:block;src:url(/theme/fonts/${file}) format("woff2")}`);
     }
   }
-  const vars = ROLES.map(([role, name]) => `${name}:"${theme.fonts[role].family}", ${theme.fonts[role].fallback}`).join(';');
-  return `${faces.join('\n')}\n#stage{${vars}}\n`;
+  const fonts = ROLES.map(([role, name]) => `${name}:"${theme.fonts[role].family}", ${theme.fonts[role].fallback}`);
+  // Theme files are checked by shared/test; a non-hex token still never reaches the stylesheet.
+  const colours = Object.entries(theme.dark).filter(([, v]) => HEX.test(v)).map(([k, v]) => `--${k}:${v}`);
+  const shape = Object.hasOwn(UI_RADIUS, theme.name) ? [`--ui-radius:${UI_RADIUS[theme.name]}`] : [];
+  return `${faces.join('\n')}\n:root{${[...fonts, ...colours, ...shape].join(';')}}\n`;
 }

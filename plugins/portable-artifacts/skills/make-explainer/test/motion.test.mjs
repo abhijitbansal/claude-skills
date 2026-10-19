@@ -236,7 +236,7 @@ test('the slug is URL-encoded in the src, like the chart links', async () => {
 test('slides mode embeds the video too, named after the slide', async () => {
   const dir = folder();
   const { html, assets } = await buildPage(doc([text, video()], { mode: 'slides' }), { dir, out: out(dir) });
-  assert.match(html, /<section class="slide slide-motion" id="slide-3"/);
+  assert.match(html, /<section class="slide slide-motion(?: slide-has-art)?" id="slide-3"/);
   assert.match(html, /src="page\.assets\/slide-3\.mp4"/);
   assert.equal(path.basename(assets[0].to), 'slide-3.mp4');
 });

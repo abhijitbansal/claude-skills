@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec } from '../scripts/lib/spec.mjs';
 import { buildPage } from '../scripts/lib/page.mjs';
 import { build } from '../scripts/build.mjs';
-import { lintText } from '../scripts/lib/lint.mjs';
+import { lintText, EMOJI } from '../scripts/lib/lint.mjs';
 import { svgProblem } from '../scripts/lib/image.mjs';
 import { SECTIONS } from '../scripts/lib/sections.mjs';
 import { fit, cleanText } from '../scripts/lib/fit.mjs';
@@ -84,14 +84,14 @@ test('banned phrases are still reported in link labels and plain prose next to c
   assert.deepEqual(errors('An unclosed `tick leverage stays prose'), ['banned phrase "leverage"; replace it with "use"']);
 });
 
-test('table cells are data, not prose: no banned-phrase error, but emoji and placeholders still fail', async () => {
+test('table cells are data, not prose: no banned-phrase error, but placeholders still fail and emoji is allowed', async () => {
   const table = (rows, extra = {}) => ({ type: 'table', columns: ['Command', 'Note'], rows, ...extra });
   assert.deepEqual(await errorsOf(doc([table([['git leverage', 'uses utilize']])])), []);
   const bad = await errorsOf(doc([table([['ok', 'TODO: fill']])]));
   assert.equal(bad.length, 1);
   assert.match(bad[0], /^sections\[0\]\.rows\[0\]\[1\]: still has a TODO placeholder/);
   const emoji = await errorsOf(doc([table([['ok', 'done \u{1F680}']])]));
-  assert.match(emoji[0], /^sections\[0\]\.rows\[0\]\[1\]: contains emoji/);
+  assert.deepEqual(emoji, []);
 });
 
 test('captions and table headers are prose: a banned phrase there is still an error, and the fix is to reword', async () => {
@@ -225,11 +225,12 @@ test('text-presentation symbols are allowed', () => {
   }
 });
 
-test('emoji-presentation characters, and symbols followed by VS16, stay errors', () => {
+test('emoji-presentation characters, and symbols followed by VS16, still match EMOJI but are never lint errors', () => {
   for (const t of ['rocket \u{1F680}', 'done ✅', 'ok ✨', 'star ⭐', 'no ❌', 'arrow ↔️', 'heart ❤️', 'play ▶️', 'info ℹ️', 'flag \u{1F1FA}\u{1F1F8}', 'key 1️⃣', 'hand ☝\u{1F3FD}', 'family \u{1F468}‍\u{1F469}‍\u{1F467}', 'spider \u{1F577}']) {
-    assert.equal(emojiErrors(t).length, 1, t);
+    assert.equal(t.match(EMOJI)?.length > 0, true, t);
+    assert.deepEqual(emojiErrors(t), [], t);
   }
-  assert.equal(emojiErrors('© ® ™').length, 0);
+  assert.equal('© ® ™'.match(EMOJI), null);
 });
 
 // ---- 8. motion child env ---------------------------------------------------------------------

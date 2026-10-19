@@ -160,7 +160,7 @@ test('top-level limits state the value and the limit', async () => {
   assert.equal((await validateSpec(doc(Array.from({ length: 40 }, () => text())), { dir: FIXTURES })).ok, true);
   assert.deepEqual(await errorsOf(doc([text()], { theme: 'papr' })), [{ path: 'theme', message: 'unknown theme "papr"; did you mean "paper"?' }]);
   assert.deepEqual(await errorsOf(doc([text()], { theme: 'zzzzzzzzzz' })), [
-    { path: 'theme', message: 'unknown theme "zzzzzzzzzz"; available: blueprint, editorial, ink, paper' },
+    { path: 'theme', message: 'unknown theme "zzzzzzzzzz"; available: blueprint, dusk, editorial, ink, paper, poster, press' },
   ]);
 });
 
@@ -389,7 +389,6 @@ test('style lint runs on prose with the path of each string', async () => {
   ], { subtitle: 'Lorem ipsum' });
   assert.deepEqual(await errorsOf(spec), [
     { path: 'sections[0].title', message: 'heading ends with "!"; drop the exclamation mark and state the claim plainly' },
-    { path: 'sections[0].text', message: 'contains emoji "🚀"; remove it and say it in words' },
     { path: 'sections[0].text', message: 'banned phrase "leverage"; replace it with "use"' },
     { path: 'sections[1].items[0].title', message: 'banned phrase "Seamless"; replace it with "smooth"' },
     { path: 'subtitle', message: 'still has lorem ipsum placeholder text — replace it with real content' },

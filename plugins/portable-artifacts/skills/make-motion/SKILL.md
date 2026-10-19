@@ -28,7 +28,7 @@ Run every step yourself, in this same turn, with your shell or file tools. Do no
 3. `node <skill-dir>/scripts/validate.mjs motion.json` — fix every line it prints (`<json.path>: <message>`, with did-you-mean) and re-run until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage/IO error.
 4. Self-check: `node <skill-dir>/scripts/render.mjs motion.json --contact-sheet` writes `out/contact/<scene-id>.png` next to the spec (one frame per scene, at 85% of its duration). Look at each PNG: clipped text, invisible elements, overlaps, wrong fonts. Fix the spec and repeat.
 5. `node <skill-dir>/scripts/preview.mjs motion.json [--open]` prints a localhost URL with scrubber, play/pause, scene markers, Space and arrow keys. The page reloads when the file changes. It plays the audio tracks in sync (approximate; M mutes); the MP4 timing is exact.
-6. Set `generatedBy` to the model you are running as, your effort level if you know it, and your host (for example Claude Code, Codex, Copilot CLI, Gemini CLI). Never guess; leave out any field you do not know. `--model`, `--effort` and `--agent` on render.mjs override it. `node <skill-dir>/scripts/render.mjs motion.json [--out out/video.mp4] [--fps 30] [--size 1920x1080] [--model <m>] [--effort <e>] [--agent <a>]` writes the MP4 (H.264, yuv420p; AAC audio when the spec has tracks). It prints the path and frame count. The provenance goes into the MP4's `comment` and `artist` tags, and the preview page shows the same line in a footer.
+6. Set `generatedBy` to the model you are running as, your effort level if you know it, and your host (for example Claude Code, Codex, Copilot CLI, Gemini CLI). Never guess; leave out any field you do not know. `--model`, `--effort` and `--agent` on render.mjs override it. `node <skill-dir>/scripts/render.mjs motion.json [--out out/video.mp4] [--fps 30] [--size 1920x1080] [--model <m>] [--effort <e>] [--agent <a>]` writes the MP4 (H.264, yuv420p; AAC audio when the spec has tracks). It prints the theme it drew (`theme: <name>`, first line), then the path and frame count. The provenance goes into the MP4's `comment` and `artist` tags, and the preview page shows the same line in a footer.
 
 When asked for a change ("slow scene 2", "make the title blue"), edit only the fields the request names in `motion.json`, then validate again. Do not rewrite the spec from scratch.
 
@@ -52,17 +52,28 @@ When done, report the spec path, the MP4 path with its duration and size, and on
 }
 ```
 
-- Root: `size` (default 1920x1080), `fps` (24, 25, 30, 60), `background`, optional `generatedBy` (`{ model?, effort?, agent? }`), optional `theme` (a shared theme name: `paper`, `ink`, `blueprint`, `editorial` — its dark colours and body/mono fonts become the defaults; omit it for the default look), `scenes` (1–50, total ≤ 120 s). Only `scenes` is required.
+- Root: `size` (default 1920x1080), `fps` (24, 25, 30, 60), `background`, optional `generatedBy` (`{ model?, effort?, agent? }`), optional `theme` (a shared theme name: `dusk`, `press`, `poster`, `paper`, `ink`, `blueprint`, `editorial` — its dark colours and fonts become the defaults; omit it for `dusk`), `scenes` (1–50, total ≤ 120 s). Only `scenes` is required.
 - Audio track (optional root `audio` array, up to 20): `src` (relative to the spec, inside the spec folder; mp3, wav, m4a, aac, ogg or flac), `at` (seconds from the video start, default 0), `scene` (a scene `id`; `at` is then relative to that scene's start, so lengthening an earlier scene keeps a voiceover aligned), `duration` (trim, seconds), `volume` (0–1, default 1), `fadeIn` / `fadeOut` (seconds). `fadeOut` anchors to the `duration` trim or the video end; a clip that ends earlier gets no fade. No `loop`: a short music file just stops.
-- Scene: `id`, `duration` (0.2–60 s), `elements`, optional `background`, `transition` (`none` or `fade`, a 0.4 s fade-in). Only one scene is visible at a time; scenes play back to back.
+- Scene: `id`, `duration` (0.2–60 s), `elements`, optional `background` (a colour, or `"art"` for the theme's seeded art full-bleed behind the elements), `transition` (`none` or `fade`, a 0.4 s fade-in). Only one scene is visible at a time; scenes play back to back.
 - Every element: `id` (unique in the whole spec), `type`, `x`, `y` (canvas pixels; the anchor is the element centre), optional `opacity`, `scale`, `rotate` (degrees), `keyframes`.
-- Types: `text`, `counter` (`from`, `to`, `decimals`, `prefix`, `suffix`; animate `value`), `shape` (`rect`, `ellipse`, `line`; a line is horizontal of length `width`, use `rotate` to angle it; animate `draw` 0–1), `image` (`src` relative to the spec), `chart` (`vegaLite` with inline `data.values`, `width`, `height`; animate `reveal` 0–1 for a left-to-right wipe).
+- Types: `text` (optional `"role": "title"`: the theme's display font and, without `keyframes`, its kinetic entrance), `counter` (`from`, `to`, `decimals`, `prefix`, `suffix`; animate `value`), `shape` (`rect`, `ellipse`, `line`; a line is horizontal of length `width`, use `rotate` to angle it; animate `draw` 0–1), `image` (`src` relative to the spec), `chart` (`vegaLite` with inline `data.values`, `width`, `height`; animate `reveal` 0–1 for a left-to-right wipe).
 - Keyframe: `t` (seconds inside the scene, sorted, ≤ scene duration), optional `ease`, plus any animatable props for that type. Per property: it holds the first keyframe's value before it, interpolates to each later keyframe using that keyframe's `ease`, and holds the last value after. A property missing from a keyframe is interpolated across it. Frame *i* samples t = i/fps, so put the final keyframe at least one frame (1/fps s) before the scene end. A counter with no `value` keyframes counts from→to over min(2 s, 80% of the scene) with outCubic.
 - Eases: `linear`, or `in|out|inOut` + `Quad|Cubic|Quart|Back|Elastic|Bounce|Sine|Expo|Circ`. Prefer `outCubic` / `outQuad` for entrances.
 
+## Choosing a theme
+
+Seven themes exist; `dusk` is the default. Pick one (the spec's theme field, or `--theme <name>` on the render) in this order:
+
+1. A theme the user names ("use poster") wins. Use it as given: write it as the spec's theme field. On the render, `--theme <name>` only fills in for a spec that names none, so a theme already in the spec wins over the flag.
+2. Otherwise infer it from the prompt and say which theme and why in one line. Dense docs, long reads, changelogs and branch recaps: `press`. Launch decks, pitches, demos and energetic clips: `poster`. Everything else, or unclear: `dusk`.
+3. If the prompt is genuinely split between two themes, ask the user once and list all three with a one-line feel each: `dusk` is soft, warm and playful; `press` is print editorial, calm and long-form; `poster` is loud, condensed and high-energy.
+4. If you cannot ask, use `dusk`.
+
+The older themes `paper`, `blueprint`, `ink` and `editorial` stay available by name; use one only when the user names it.
+
 ## Style defaults
 
-Dark background, Inter for text, JetBrains Mono for `"font": "mono"`, 1920x1080 sizes (titles 72–120 px, body 40–48 px, captions ≥ 28 px). Charts get a dark theme automatically; put a Vega-Lite `config` in the chart to override it. Keep entrances short (0.5–0.9 s), stagger elements by 0.2–0.4 s, and stay under 15 s unless asked. Fonts are bundled; never use CDN URLs. Charts must carry inline data (`data.values`, or `datasets` + `data.name`); any `url` in a chart spec is rejected. Colours must be hex, rgb()/hsl() or named.
+The `dusk` theme when the spec names none: its dark page colour, Host Grotesk for text, Commit Mono for `"font": "mono"`, Funnel Display for `role: "title"`; 1920x1080 sizes (titles 72–120 px, body 40–48 px, captions ≥ 28 px). Charts get a dark theme automatically; put a Vega-Lite `config` in the chart to override it. Keep entrances short (0.5–0.9 s), stagger elements by 0.2–0.4 s, and stay under 15 s unless asked. Fonts are bundled; never use CDN URLs. Charts must carry inline data (`data.values`, or `datasets` + `data.name`); any `url` in a chart spec is rejected. Colours must be hex, rgb()/hsl() or named.
 
 ## Degraded mode
 

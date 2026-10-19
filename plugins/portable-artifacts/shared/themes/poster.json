@@ -1,0 +1,100 @@
+{
+  "name": "poster",
+  "label": "Poster",
+  "fonts": {
+    "display": {
+      "family": "Big Shoulders Display",
+      "fallback": "'Arial Narrow', 'Helvetica Neue', sans-serif",
+      "weights": {
+        "900": "big-shoulders-display-latin-900-normal.woff2"
+      }
+    },
+    "body": {
+      "family": "Familjen Grotesk",
+      "fallback": "-apple-system, 'Segoe UI', sans-serif",
+      "weights": {
+        "400": "familjen-grotesk-latin-400-normal.woff2",
+        "700": "familjen-grotesk-latin-700-normal.woff2"
+      }
+    },
+    "mono": {
+      "family": "Martian Mono",
+      "fallback": "ui-monospace, Menlo, Consolas, monospace",
+      "weights": {
+        "400": "martian-mono-latin-400-normal.woff2"
+      }
+    }
+  },
+  "light": {
+    "page": "#dedbd2",
+    "surface": "#eceae2",
+    "text": "#0d0e0c",
+    "text2": "#383930",
+    "text3": "#4f5047",
+    "line": "#b4b1a4",
+    "grid": "#cfccc1",
+    "accent": "#475c00",
+    "accentSoft": "#d6d8c2",
+    "warn": "#764d00",
+    "good": "#2b6100",
+    "bad": "#a12a06",
+    "cat1": "#6d8c00",
+    "cat2": "#c8400d",
+    "cat3": "#b8860b",
+    "cat4": "#1f7f9a",
+    "cat5": "#c4456f",
+    "cat6": "#5c7a5c",
+    "cat7": "#6b4fc0",
+    "cat8": "#7a5230",
+    "seq1": "#e6ecc4",
+    "seq2": "#cfe08a",
+    "seq3": "#b2cc4a",
+    "seq4": "#8aa81c",
+    "seq5": "#6a8500",
+    "seq6": "#4f6600",
+    "seq7": "#2f3d00",
+    "kindPerson": "#a82c06",
+    "kindService": "#1a6580",
+    "kindData": "#8a3a8a",
+    "kindQueue": "#2f6b00",
+    "kindExternal": "#53544b",
+    "kindDecision": "#3d4a9a",
+    "glow": "#b9d93a"
+  },
+  "dark": {
+    "page": "#0d0e0c",
+    "surface": "#161713",
+    "text": "#ecebe4",
+    "text2": "#c4c4b8",
+    "text3": "#9c9d92",
+    "line": "#34352d",
+    "grid": "#23241e",
+    "accent": "#c6f432",
+    "accentSoft": "#2f3617",
+    "warn": "#f2c14e",
+    "good": "#8ee05a",
+    "bad": "#ff6a4a",
+    "cat1": "#c6f432",
+    "cat2": "#ff5a1f",
+    "cat3": "#f2c14e",
+    "cat4": "#5ec8e5",
+    "cat5": "#ff8fb1",
+    "cat6": "#8aa38a",
+    "cat7": "#b59aff",
+    "cat8": "#d2a679",
+    "seq1": "#1d2410",
+    "seq2": "#34430f",
+    "seq3": "#55700f",
+    "seq4": "#7d9f14",
+    "seq5": "#a3cc1c",
+    "seq6": "#c6f432",
+    "seq7": "#eaffa0",
+    "kindPerson": "#ff8a5c",
+    "kindService": "#5ec8e5",
+    "kindData": "#d79aff",
+    "kindQueue": "#8ee05a",
+    "kindExternal": "#a8a99d",
+    "kindDecision": "#a0aaff",
+    "glow": "#c6f432"
+  }
+}

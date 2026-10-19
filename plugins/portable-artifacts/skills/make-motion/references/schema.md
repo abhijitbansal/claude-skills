@@ -7,16 +7,16 @@ Validate with `node scripts/validate.mjs motion.json`. Unknown properties are er
 |---|---|---|---|
 | `size` | `[w, h]` ints 16–3840 | `[1920, 1080]` | logical canvas; `render --size` rescales output |
 | `fps` | 24 \| 25 \| 30 \| 60 | 30 | |
-| `background` | CSS colour | `#0b0d12` (the theme's page colour with `theme`) | |
-| `theme` | shared theme name (`paper`, `ink`, `blueprint`, `editorial`) | none | optional; see below |
+| `background` | CSS colour | the theme's page colour | |
+| `theme` | shared theme name (`dusk`, `press`, `poster`, `paper`, `ink`, `blueprint`, `editorial`) | `dusk` | optional; see below |
 | `generatedBy` | `{ model?, effort?, agent? }`, each 1–60 chars of `A-Za-z0-9 ._:/()+-` | none | provenance; shown in the preview footer and written to the MP4 `comment`/`artist` tags; missing fields read "not reported" |
 | `scenes` | array, 1–50 | required | total duration ≤ 120 s |
 
 ### theme
-Without `theme` the look is the default one (dark background, Inter, JetBrains Mono). With it, the theme's **dark** colours and fonts become the defaults: `background` is its page colour, text is its text colour, shapes without a `fill` or `stroke` use its accent, charts take its palette and axis colours, `sans` text uses its body font and `"font": "mono"` its mono font (display fonts are not used). A weight the theme font does not ship is mapped to the nearest one it does (no synthetic bold), mono default included. Anything the spec sets itself (`background`, `color`, `fill`, a chart `config`) still wins. Fonts come from the skill's bundled `shared/fonts`, no network. An unknown name is an error with a did-you-mean.
+Without `theme` the spec draws as `dusk` (`render --theme` can pick another for a spec that names none). The theme's **dark** colours and fonts become the defaults: `background` is its page colour, text is its text colour, shapes without a `fill` or `stroke` use its accent, charts take its palette and axis colours, `sans` text uses its body font, `"font": "mono"` its mono font and `"role": "title"` text its display font. A weight the theme font does not ship is mapped to the nearest one it does (no synthetic bold), mono default included. Anything the spec sets itself (`background`, `color`, `fill`, a chart `config`) still wins. Fonts come from the skill's bundled `shared/fonts`, no network. An unknown name is an error with a did-you-mean.
 
 ## Scene
-`id` (string, globally unique), `duration` (0.2–60 s), `elements` (array), optional `background`, `transition` (`none` default | `fade`: scene opacity 0→1 over min(0.4 s, duration)).
+`id` (string, globally unique), `duration` (0.2–60 s), `elements` (array), optional `background` (a CSS colour, or `"art"`: the theme's seeded art, drawn full-bleed behind the elements in dark mode at the canvas size and seeded by the scene `id`, so the same spec always gets the same art; a light page-colour scrim dims it and text and counters on it get a soft page-colour halo), `transition` (`none` default | `fade`: scene opacity 0→1 over min(0.4 s, duration)).
 Scenes play sequentially; scene *n* starts at the sum of earlier durations. Only the active scene is drawn.
 
 ## Audio
@@ -36,19 +36,21 @@ Common: `id` (unique across scenes and elements), `type`, `x`, `y` (required), `
 
 | type | extra fields | animatable props |
 |---|---|---|
-| `text` | `text` (req), `fontSize` (48), `fontWeight` 400\|500\|600\|700\|800 (600), `color` (#fff), `align` left\|center\|right (center), `maxWidth`, `font` sans\|mono | opacity x y scale rotate |
+| `text` | `text` (req), `role` (`title` only; see below), `fontSize` (48), `fontWeight` 400\|500\|600\|700\|800 (600), `color` (the theme's text colour), `align` left\|center\|right (center), `maxWidth`, `font` sans\|mono | opacity x y scale rotate |
 | `counter` | `to` (req), `from` (0), `decimals` (0), `prefix`, `suffix`, + text styling | + `value` (starts at `from`) |
 | `shape` | `shape` rect\|ellipse\|line (req), `width`, `height`, `radius`, `fill`, `stroke`, `strokeWidth` | + `draw` 0–1 (stroke reveal; default 1) |
 | `image` | `src` (req, relative to the spec file; must stay inside the spec folder, be a regular file, no symlinks out, no dotfiles), `width`, `height` (req), `fit` contain\|cover\|fill | opacity x y scale rotate |
 | `chart` | `vegaLite` (req, with inline `data.values`), `width`, `height` (req) | + `reveal` 0–1 (left-to-right wipe; default 1) |
 
+Title role: a `text` with `"role": "title"` uses the theme's display font (also with `"font": "mono"`; the weight maps to the one the display font ships). When it has **no** `keyframes` it gets the theme's kinetic entrance: `dusk` **rise** (fades in and rises 0.35 × `fontSize` into place, 0.9 s), `press` **ink-in** (fades in while settling from 104% scale, no movement, 1.1 s), `poster` **slam** (snaps in from 135% scale with an `outBack` landing, 0.5 s). A preset is a plain function of the scene duration and `fps`, compressed to end at least one frame before a short scene's end, so renders stay reproducible. Any `keyframes` (an empty list too) turn it off. `paper`, `ink`, `blueprint` and `editorial` have no preset.
+
 Counter default: a counter with **no** `value` keyframes counts `from` → `to` from t=0 to `min(2, 0.8 × scene duration)` seconds with `outCubic`. Add any `value` keyframe to take control of the timing.
 
-Colours (`background`, scene `background`, `color`, `fill`, `stroke`) must be hex (`#rgb`, `#rrggbb`, with optional alpha), `rgb()/rgba()/hsl()/hsla()` or a named CSS colour. `url(...)`, `var(...)` and anything else is rejected.
+Colours (`background`, scene `background` other than `"art"`, `color`, `fill`, `stroke`) must be hex (`#rgb`, `#rrggbb`, with optional alpha), `rgb()/rgba()/hsl()/hsla()` or a named CSS colour. `url(...)`, `var(...)` and anything else is rejected.
 
-Shape notes: a `line` has length `width`, thickness `strokeWidth` and is horizontal; angle it with `rotate`. To grow a vertical bar upward from a baseline, use a line with `"rotate": 270` and animate `draw` 0→1. `fill` defaults to white for rect/ellipse unless only a `stroke` is given.
+Shape notes: a `line` has length `width`, thickness `strokeWidth` and is horizontal; angle it with `rotate`. To grow a vertical bar upward from a baseline, use a line with `"rotate": 270` and animate `draw` 0→1. `fill` defaults to the theme accent for rect/ellipse unless only a `stroke` is given.
 
-Chart notes: data must be inline: `data.values`, or `datasets` plus `data: {name}`. Any `url` key anywhere in the Vega-Lite spec (remote `data.url`, lookup `from.data.url`, image-mark `url`) is rejected; the renderer also blocks all non-local network requests. Do not set `width`/`height` inside `vegaLite`; the element's are used. Fonts, dark axes and a teal default colour are applied through a built-in Vega-Lite `config`; your own `config` keys override it. The chart is rendered to SVG once at load.
+Chart notes: data must be inline: `data.values`, or `datasets` plus `data: {name}`. Any `url` key anywhere in the Vega-Lite spec (remote `data.url`, lookup `from.data.url`, image-mark `url`) is rejected; the renderer also blocks all non-local network requests. Do not set `width`/`height` inside `vegaLite`; the element's are used. The theme's fonts, axis colours, accent and palette are applied through a built-in Vega-Lite `config`; your own `config` keys override it. The chart is rendered to SVG once at load.
 
 ## Keyframes
 `{ "t": seconds, "ease": name, <prop>: value, ... }`
@@ -68,7 +70,8 @@ Chart notes: data must be inline: `data.values`, or `datasets` plus `data: {name
 - `audio[0].fadeOut: fadeIn 1s + fadeOut 2.5s exceed the 3s the track plays (from 2s to the video end at 5s)`
 - `scenes[0].elements[1].src: file not found: pic.png` (also `must stay inside the spec folder`, `hidden files are not allowed`)
 - `scenes[0].elements[0].vegaLite.layer[1].data.url: remote data is not allowed — inline data.values`
-- `background: must be a CSS colour (hex, rgb(), rgba(), hsl(), hsla() or a named colour)`
+- `background: must be a CSS colour (hex, rgb(), rgba(), hsl(), hsla() or a named colour)` (for `"art"` on the root: `; "art" is only valid as a scene background`)
+- `scenes[0].elements[0].role: unknown role "heading"; did you mean "title"?`
 - `scenes[0].elements[0].vegaLite.data.values: required — chart needs inline data.values`
 
 ## CLI

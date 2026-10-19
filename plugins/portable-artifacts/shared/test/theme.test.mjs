@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_THEME, TOKENS, listThemes, loadTheme, themeCss, fontPayloadBytes, ThemeError } from '../theme.mjs';
 
-test('four candidate themes ship, paper is the default', () => {
-  assert.deepEqual(listThemes(), ['blueprint', 'editorial', 'ink', 'paper']);
+test('seven themes ship, paper is the default', () => {
+  assert.deepEqual(listThemes(), ['blueprint', 'dusk', 'editorial', 'ink', 'paper', 'poster', 'press']);
   assert.equal(DEFAULT_THEME, 'paper');
 });
 
@@ -42,7 +42,7 @@ test('kind hues and the glow are tokens with their own CSS variables', () => {
   for (const v of ['--k-data', '--k-queue', '--k-external', '--k-decision']) assert.ok(css.includes(`${v}:`), v);
 });
 
-test('themes use the Geist type system; editorial takes the serif display', () => {
+test('type systems: Geist for paper/blueprint/ink, serif editorial, and the dusk, press and poster pairings', () => {
   const fam = (t, role) => loadTheme(t).fonts[role].family;
   for (const t of ['paper', 'blueprint']) {
     assert.equal(fam(t, 'display'), 'Geist');
@@ -52,5 +52,14 @@ test('themes use the Geist type system; editorial takes the serif display', () =
   assert.equal(fam('ink', 'body'), 'Geist');
   assert.equal(fam('editorial', 'display'), 'Newsreader');
   assert.equal(fam('editorial', 'body'), 'Atkinson Hyperlegible');
-  for (const t of listThemes()) assert.equal(fam(t, 'mono'), 'Geist Mono');
+  for (const t of ['paper', 'blueprint', 'ink', 'editorial']) assert.equal(fam(t, 'mono'), 'Geist Mono');
+  assert.equal(fam('dusk', 'display'), 'Funnel Display');
+  assert.equal(fam('dusk', 'body'), 'Host Grotesk');
+  assert.equal(fam('dusk', 'mono'), 'Commit Mono');
+  assert.equal(fam('press', 'display'), 'Young Serif');
+  assert.equal(fam('press', 'body'), 'Schibsted Grotesk');
+  assert.equal(fam('press', 'mono'), 'JetBrains Mono');
+  assert.equal(fam('poster', 'display'), 'Big Shoulders Display');
+  assert.equal(fam('poster', 'body'), 'Familjen Grotesk');
+  assert.equal(fam('poster', 'mono'), 'Martian Mono');
 });

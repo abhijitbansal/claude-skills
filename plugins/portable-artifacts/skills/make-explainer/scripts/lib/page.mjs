@@ -5,7 +5,8 @@
 // escapeHtml.
 import fs from 'node:fs';
 import path from 'node:path';
-import { themeCss, loadTheme, DEFAULT_THEME } from '../../shared/theme.mjs';
+import { themeCss, loadTheme } from '../../shared/theme.mjs';
+import { EXPLAINER_THEME } from './default-theme.mjs';
 import { pathJoin } from '../../shared/errors.mjs';
 import { META_KEYS } from './schema.mjs';
 import { SECTIONS } from './sections.mjs';
@@ -18,9 +19,16 @@ import { faviconLink } from '../../shared/icons.mjs';
 import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
 import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mjs';
 import { esc, inline, headingInline, plain, rawText, toneClass } from './render/ui.mjs';
+import { flavorFor, flavorVars, scrimVar, CLASSIC } from './flavor.mjs';
+import { artSvg } from '../../shared/art.mjs';
+import { dataUri } from './image.mjs';
 
 const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), slides: new URL('../../template/slides.html', import.meta.url) };
 const BASE_CSS = new URL('../../template/base.css', import.meta.url);
+const FLAVOR_CSS = new URL('../../template/flavors.css', import.meta.url);
+const DECK_FLAVOR_CSS = new URL('../../template/deck-flavors.css', import.meta.url);
+const ART = { width: 1280, height: 720 };
+const SLIDE_ART = { width: 1920, height: 1080 };
 const SLIDES_JS = new URL('../../template/slides.js', import.meta.url);
 const PA_LIB = new URL('../../template/pa-lib.js', import.meta.url);
 const RUNTIME = new URL('../../template/runtime.js', import.meta.url);
@@ -186,6 +194,19 @@ function altFlags(sections) {
   return sections.map((s) => SECTIONS[s.type].band && visual++ % 2 === 0);
 }
 
+// Procedural art for one slot: one drawing per colour mode, the stylesheet shows the one that matches.
+function artPair(theme, seed, size) {
+  const drawing = (mode) => artSvg({ theme: theme.name, seed, ...size, mode }).replace(/^<svg /, `<svg class="art-${mode}" `);
+  return `${drawing('light')}${drawing('dark')}`;
+}
+
+// The hero's art, seeded from the title. Decorative, so hidden from assistive tech.
+// With a returned image (build.mjs --image-api) it replaces the procedural pair.
+function heroArt(spec, theme, image) {
+  const inner = image ? `<img src="${dataUri(image)}" alt="" role="presentation">` : artPair(theme, spec.title, ART);
+  return `<div class="hero-art" aria-hidden="true">${inner}</div>`;
+}
+
 // The page layout: hero pieces, the contents list and the sections.
 function pageParts(spec, ctx, ids) {
   const titleIds = headingIds(ids);
@@ -210,32 +231,46 @@ function pageParts(spec, ctx, ids) {
   };
 }
 
-// The slide layout: the whole deck is one marker.
-function deckParts(spec, ctx) {
+// The slide layout: the whole deck is one marker. A flavored deck's first and last slides get full-bleed art,
+// seeded from the title and the slide number so the two drawings (and their svg ids) differ.
+function deckParts(spec, ctx, flavored) {
   const rendered = spec.sections.map((section, i) => {
     const def = SECTIONS[section.type];
     return { section, ownHeading: def.ownHeading, body: renderBody(section, i, def, ctx) };
   });
-  return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug, footerHtml: ctx.footer }) };
+  const artFor = flavored ? (n) => artPair(ctx.theme, `${spec.title}${n}`, SLIDE_ART) : undefined;
+  return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug, footerHtml: ctx.footer, artFor }) };
+}
+
+const readCss = (url) => fs.readFileSync(url, 'utf8').replace(/\n$/, '');
+
+// Stylesheets after the template's own: the page gets the flavor sheet; a deck gets it too (its section
+// treatments are shared) plus the deck sheet and the scrim. Classic gets nothing.
+function flavorSheets(flavor, slides) {
+  if (flavor === CLASSIC) return '';
+  if (!slides) return `<style>\n${readCss(FLAVOR_CSS)}\n</style>`;
+  return `<style>\n${readCss(FLAVOR_CSS)}\n${scrimVar(flavor)}\n${readCss(DECK_FLAVOR_CSS)}\n</style>`;
 }
 
 /**
  * The finished page for a validated spec.
  * `dir` is the spec's folder (file references resolve against it), `theme`
  * overrides spec.theme, `out` is the destination (file.html or directory; the
- * default output rules apply when omitted).
+ * default output rules apply when omitted), `heroImage` ({ mime, bytes }, or an async function of `{ assets }` returning one, called last) replaces the page hero's
+ * procedural art.
  * -> { html, assets: [{ from, to } or { content, to }] } with absolute paths; nothing is written.
  * Throws BuildError (path + message list) when a section cannot be rendered.
  */
-export async function buildPage(spec, { dir = process.cwd(), theme, out, env = process.env } = {}) {
+export async function buildPage(spec, { dir = process.cwd(), theme, out, env = process.env, heroImage } = {}) {
   const problems = unsupported(spec);
   if (problems.length > 0) throw new BuildError(problems);
-  const themeData = loadTheme(theme ?? spec.theme ?? DEFAULT_THEME);
+  const themeData = loadTheme(theme ?? spec.theme ?? EXPLAINER_THEME);
   const target = resolveOutput({ out, title: spec.title, env });
   const slug = pageSlug(target);
   const slides = isSlides(spec);
   const ids = sectionIds(spec.sections);
-  const footer = `<footer class="pa-footer">${provenanceHtml('make-explainer', spec.generatedBy, buildDate(env))}</footer>`;
+  const flavor = flavorFor(themeData.name);
+  const footer = `<footer class="pa-footer">${provenanceHtml('make-explainer', spec.generatedBy, buildDate(env))}<p class="pa-theme">Theme: ${esc(themeData.name)}</p></footer>`;
   const ctx = {
     theme: themeData,
     dir,
@@ -255,7 +290,8 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     if (def.prepare) await prepareSection(section, i, def, ctx);
     if (def.assets) assets.push(...(await def.assets(section, ctx)).map((a) => ({ ...a, at: `sections[${i}]` })));
   }
-  const layout = slides ? deckParts(spec, ctx) : pageParts(spec, ctx, ids);
+  const flavored = flavor !== CLASSIC;
+  const layout = slides ? deckParts(spec, ctx, flavored) : pageParts(spec, ctx, ids);
 
   const parts = {
     CSP: esc(contentSecurityPolicy(spec)),
@@ -266,8 +302,11 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     TOGGLE_CSS,
     TOGGLE_JS: inlineCode(TOGGLE_JS),
     FOOTER: footer,
-    THEME: themeCss(themeData),
+    THEME: flavored ? `${themeCss(themeData)}\n${flavorVars(flavor)}` : themeCss(themeData),
     BASECSS: fs.readFileSync(BASE_CSS, 'utf8').replace(/\n$/, ''),
+    FLAVOR: flavor,
+    FLAVORCSS: flavorSheets(flavor, slides),
+    HEROART: flavored && !slides ? heroArt(spec, themeData, typeof heroImage === 'function' ? undefined : heroImage) : '',
     ...layout,
     ...sectionPageParts(spec, ctx),
     PALIB: inlineCode(fs.readFileSync(PA_LIB, 'utf8')),
@@ -275,6 +314,11 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     RUNTIME: inlineCode(fs.readFileSync(RUNTIME, 'utf8')),
   };
   // One pass: a value that contains "<!--@X-->" is never substituted again.
-  const html = fs.readFileSync(TEMPLATES[ctx.mode], 'utf8').replace(/<!--@(\w+)-->/g, (_, key) => parts[key] ?? '');
-  return { html, assets };
+  const template = fs.readFileSync(TEMPLATES[ctx.mode], 'utf8');
+  const fill = (values) => template.replace(/<!--@(\w+)-->/g, (_, key) => values[key] ?? '');
+  const html = fill(parts);
+  // Everything that can throw has run. Only now may a provider be asked for the image (it may call the network);
+  // the hero art is then swapped in by a pure string operation.
+  const image = typeof heroImage === 'function' && parts.HEROART !== '' ? await heroImage({ assets }) : undefined;
+  return { html: image ? fill({ ...parts, HEROART: heroArt(spec, themeData, image) }) : html, assets };
 }

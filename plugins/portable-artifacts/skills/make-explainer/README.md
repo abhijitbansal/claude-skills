@@ -4,7 +4,8 @@
 recap, a diff review, a concept or plan explainer, an interactive test
 checklist or a presentation. The agent fills a small JSON document of typed
 sections; local scripts validate it, lint the prose and render it. Works with
-any agent that can run shell commands. Nothing leaves your machine.
+any agent that can run shell commands. Nothing leaves your machine
+unless you opt in with `--image-api` (see below).
 
 - **One spec, `explainer.json`**: a title and 1 to 40 sections of 18 types.
   The agent never writes HTML, CSS, SVG or script; the spec accepts none of
@@ -15,7 +16,7 @@ any agent that can run shell commands. Nothing leaves your machine.
   agent replaces each `TODO:` with prose, and validation fails until it has.
 - **Checked before you see it**: schema and limits, file references (inside
   the spec folder, no symlinks), embedded diagrams and charts through their own
-  skills' validators, and a prose lint that rejects emoji, filler such as
+  skills' validators, and a prose lint that rejects filler such as
   "seamless" or "leverage", numbered titles and placeholder text.
 - **Presets**: `recap`, `checklist`, `concept`, `slides`.
 - **Stamped**: a favicon, an icon theme toggle and a provenance footer (model,
@@ -26,9 +27,14 @@ any agent that can run shell commands. Nothing leaves your machine.
   takes a `label` of up to 4 words for the contents list; validation warns (never
   fails) over the soft caps: title 8 words, label 4, paragraph 3 sentences or 60
   words, text section 120, card text 30, list item 20, page prose 900, tl;dr 3 points.
-- **A page worth opening**: themed (four themes, light and dark), a
+- **A page worth opening**: themed (seven themes, light and dark; `dusk` by default), a
   contents list from four sections up, copy buttons on code, print styles,
-  reduced motion respected, no network at build or view time.
+  reduced motion respected, no network at build or view time
+  (unless you opt in with `--image-api`, see below).
+- **Optional hero image**: `--image-api <https-endpoint>` swaps the page hero's
+  art for a picture from your own image service. Off by default. It sends the
+  page title and subtitle to that host, needs your key in `PA_IMAGE_API_KEY`, and
+  may cost money; the endpoint contract is in `references/schema.md`.
 - **Checklists remember**: ticks are saved in the browser, with a progress bar,
   per-group tallies and a reset that asks first.
 - **Slides**: one section per slide, arrow keys and Space, `O` for an outline,

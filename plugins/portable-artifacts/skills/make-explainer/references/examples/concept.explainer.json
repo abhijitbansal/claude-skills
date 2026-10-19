@@ -80,7 +80,7 @@
         },
         {
           "title": "Plain prose",
-          "text": "A lint rejects emoji, filler phrases and placeholder text before the page exists.",
+          "text": "A lint rejects filler phrases and placeholder text before the page exists.",
           "icon": "lucide:pen",
           "tag": "lint"
         },

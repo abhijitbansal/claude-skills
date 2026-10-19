@@ -29,17 +29,28 @@ If it reports anything missing, tell the user in one message: each item, why it 
    - No preset fits: write `explainer.json` from the section list below. Details of every field: `<skill-dir>/references/schema.md` and `sections.md`; ready-made files in `<skill-dir>/references/examples/`.
 2. Fill the file. A scaffold marks every sentence for you with `TODO: …`; replace each one with real prose from the facts and from reading the changed files. Facts (numbers, files, commits) are already correct: do not retype them. Delete a section you cannot fill. Set `generatedBy` to the model you are running as, your effort level if you know it, and your host (for example Claude Code, Codex, Copilot CLI, Gemini CLI). Never guess; leave out any field you do not know. `--model`, `--effort` and `--agent` on the build override it.
 3. Once the spec exists, rerun `node <skill-dir>/scripts/doctor.mjs --json --for explainer.json` and handle anything new (make-diagram, make-dashboard or make-motion for `diagram`, `chart` and `motion` sections) as in "Before the first build". Then `node <skill-dir>/scripts/validate.mjs explainer.json`. Fix every line it prints (a JSON path, the problem, the fix) and rerun until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage error. Warnings do not block, but resolve the budget warnings (too many words in a title, label, paragraph, card, list or page) before building where you can, and report any you leave.
-4. `node <skill-dir>/scripts/build.mjs explainer.json` prints the HTML path. Default folder is `~/.agent/diagrams/` (or the folder in the `PA_OUTPUT_DIR` environment variable); `--out <file.html|dir>` picks another; `--theme paper|blueprint|ink|editorial` overrides the theme; `--json` prints machine-readable results. Sections with files (video, interactive chart) add a `<name>.assets/` folder next to the page: keep the two together.
+4. `node <skill-dir>/scripts/build.mjs explainer.json` prints the theme it used (`theme: <name>`) and the HTML path. Default folder is `~/.agent/diagrams/` (or the folder in the `PA_OUTPUT_DIR` environment variable); `--out <file.html|dir>` picks another; `--theme dusk|press|poster|paper|blueprint|ink|editorial` overrides the theme (`dusk` is the default); `--json` prints machine-readable results. Sections with files (video, interactive chart) add a `<name>.assets/` folder next to the page: keep the two together.
 5. Optional check: first run `node <skill-dir>/scripts/doctor.mjs --json --for check` (it installs the check tools after the user agrees), then `node <skill-dir>/scripts/check.mjs <printed path>` opens the page at desktop and phone width and fails on console errors, sideways scrolling, a deck that cannot reach its last slide, or a diagram Present overlay that will not close. It needs Playwright and a browser (a full `npm ci`; `doctor --for check` reports and installs both, after the user agrees); without them it prints `check: skipped` and exits 0.
 6. Report: the HTML path, one line on what it shows, and the validate warnings you left.
 
 For a change ("rename the card", "add a risk"), edit only those fields, then validate and build again.
 
+## Choosing a theme
+
+Seven themes exist; `dusk` is the default. Pick one (the spec's theme field, or `--theme <name>`) in this order:
+
+1. An explicit `--theme <name>` or a phrase from the user ("use poster") wins. Use it as given.
+2. Otherwise infer it from the prompt and say which theme and why in one line. Dense docs, long reads, changelogs and branch recaps: `press`. Launch decks, pitches, demos and energetic clips: `poster`. Everything else, or unclear: `dusk`.
+3. If the prompt is genuinely split between two themes, ask the user once and list all three with a one-line feel each: `dusk` is soft, warm and playful; `press` is print editorial, calm and long-form; `poster` is loud, condensed and high-energy.
+4. If you cannot ask, use `dusk`.
+
+The older themes `paper`, `blueprint`, `ink` and `editorial` stay available by name; use one only when the user names it.
+
 ## Writing rules
 
 - A section `title` states the finding ("Search now ignores case"), never a label ("Overview", "Changes"). Same for the page title.
 - `label` ≤ 4 words for the contents list; `title` states the finding in ≤ 8 words. A label shows on every section that renders a heading (any section with a `title`, except a `callout`) and on a leading tldr's hero card even without a title. A `callout` never shows it, and a section without a `title` is not listed in the contents.
-- Plain words. Validate rejects emoji, filler such as "leverage", "seamless" and "delve" (full list in `<skill-dir>/references/style.md`), titles ending in `!`, titles numbered "01", and any leftover `TODO:` or lorem ipsum. Text over the soft caps warns (title 8 words, label 4, paragraph 3 sentences or 60 words, text section 120, card text 30, list item 20, page prose 900, tldr 3 points).
+- Plain words. Validate warns when emoji get dense (a prose string with at least 3 emoji and more than 1 per 40 characters, or a title with more than 3) and rejects filler such as "leverage", "seamless" and "delve" (full list in `<skill-dir>/references/style.md`), titles ending in `!`, titles numbered "01", and any leftover `TODO:` or lorem ipsum. Text over the soft caps warns (title 8 words, label 4, paragraph 3 sentences or 60 words, text section 120, card text 30, list item 20, page prose 900, tldr 3 points).
 - Use the section that fits the content: numbers as `kpis`, a list of files as `files`, a sequence as `steps`, options as `compare`. A wall of `text` is the last resort.
 - Checklist: always supply `intro` (validate only warns when it is missing). Fill it with the "What's in this branch" summary that lists every feature and every review-cycle fix the branch delivers, and what automated tests already cover, so the tester needs no PR. Tag the review-cycle fixes `regression`, device-only items `device`.
 - Slides: each section is one slide, so keep it small: at most 6 points, 8 table rows, 12 code lines and 80 words, otherwise validate fails and says to split it. Keys in the deck: arrows or Space, `O` for the outline.

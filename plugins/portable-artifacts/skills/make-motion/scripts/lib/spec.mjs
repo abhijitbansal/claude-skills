@@ -31,7 +31,7 @@ export const ANIMATABLE = {
 const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes'];
 const TEXT_STYLE = ['fontSize', 'fontWeight', 'color', 'align', 'maxWidth', 'font'];
 const FIELDS = {
-  text: [...COMMON, 'text', ...TEXT_STYLE],
+  text: [...COMMON, 'text', 'role', ...TEXT_STYLE],
   counter: [...COMMON, 'from', 'to', 'decimals', 'prefix', 'suffix', ...TEXT_STYLE],
   shape: [...COMMON, 'shape', 'width', 'height', 'radius', 'fill', 'stroke', 'strokeWidth'],
   image: [...COMMON, 'src', 'width', 'height', 'fit'],
@@ -68,6 +68,7 @@ const element = {
     x: num, y: num, opacity: unit, scale: num, rotate: num,
     keyframes: { type: 'array', items: keyframe },
     text: { type: 'string' },
+    role: { type: 'string' },
     fontSize: { type: 'number', minimum: 1 },
     fontWeight: { enum: [400, 500, 600, 700, 800] },
     color,
@@ -216,9 +217,26 @@ function isCssColor(value) {
   return HEX_COLOR.test(v) || FUNC_COLOR.test(v) || CSS_NAMED.has(v.toLowerCase());
 }
 
+const COLOUR_MESSAGE = 'must be a CSS colour (hex, rgb(), rgba(), hsl(), hsla() or a named colour)';
 function checkColor(obj, key, base, errors) {
   if (obj[key] === undefined || isCssColor(obj[key])) return;
-  errors.push({ path: pathJoin(base, key), message: 'must be a CSS colour (hex, rgb(), rgba(), hsl(), hsla() or a named colour)' });
+  const art = obj[key] === ART_BACKGROUND ? `; "${ART_BACKGROUND}" is only valid as a scene background` : '';
+  errors.push({ path: pathJoin(base, key), message: COLOUR_MESSAGE + art });
+}
+
+// A scene background is a colour or "art": the theme's seeded art, drawn full-bleed behind the elements.
+export const ART_BACKGROUND = 'art';
+function checkSceneBackground(scene, base, errors) {
+  if (scene.background !== ART_BACKGROUND) checkColor(scene, 'background', base, errors);
+}
+
+// `role` marks a text's job. Only "title" exists (display font, the theme's kinetic preset), so any
+// other value is a near miss for it.
+const ROLES = ['title'];
+function checkRole(el, base, errors) {
+  if (el.role === undefined || ROLES.includes(el.role)) return;
+  const near = didYouMean(el.role, ROLES) ?? (ROLES.length === 1 ? ROLES[0] : null);
+  errors.push({ path: pathJoin(base, 'role'), message: `unknown role ${JSON.stringify(el.role)}; ${near ? `did you mean ${JSON.stringify(near)}?` : `allowed: ${ROLES.join(', ')}`}` });
 }
 
 const REMOTE_DATA = 'remote data is not allowed — inline data.values';
@@ -314,12 +332,13 @@ function checkElement(el, base, scene, dir, errors) {
     if (el[key] === undefined) errors.push({ path: pathJoin(base, key), message: `required for type ${el.type}` });
   }
   checkKeyframes(el, base, scene.duration, errors);
+  if (el.type === 'text') checkRole(el, base, errors);
   for (const key of ['color', 'fill', 'stroke']) checkColor(el, key, base, errors);
   if (el.type === 'image' && typeof el.src === 'string') checkAssetPath(el.src, pathJoin(base, 'src'), dir, errors);
   if (el.type === 'chart' && el.vegaLite) checkChart(el, base, errors);
 }
 
-// A theme is a name from the shared themes; its dark colours and body/mono fonts become the defaults.
+// A theme is a name from the shared themes; its dark colours and fonts become the defaults.
 function checkTheme(spec, errors) {
   if (spec.theme === undefined) return;
   const themes = listThemes();
@@ -335,7 +354,7 @@ export function validateSpec(spec, { dir = process.cwd() } = {}) {
   checkTheme(spec, errors);
   checkColor(spec, 'background', '', errors);
   spec.scenes.forEach((scene, si) => {
-    checkColor(scene, 'background', `scenes[${si}]`, errors);
+    checkSceneBackground(scene, `scenes[${si}]`, errors);
     scene.elements.forEach((el, ei) => checkElement(el, `scenes[${si}].elements[${ei}]`, scene, dir, errors));
   });
   const total = spec.scenes.reduce((a, s) => a + s.duration, 0);

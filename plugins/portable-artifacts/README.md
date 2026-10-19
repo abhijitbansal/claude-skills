@@ -8,12 +8,12 @@ an account or a particular model:
 
 | Skill | You say | You get |
 |---|---|---|
-| [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + charts (11 kinds, alternate views, a sortable Table, PNG/SVG/CSV export, four themes). Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh, or `serve.mjs --watch` for live reload — no LLM involved. |
+| [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + charts (11 kinds, alternate views, a sortable Table, PNG/SVG/CSV export, seven themes with `paper` by default). Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh, or `serve.mjs --watch` for live reload — no LLM involved. |
 | [`make-diagram`](skills/make-diagram/) | "Draw the checkout request path from the browser to the orders DB" | One self-contained HTML diagram (architecture, flowchart, sequence or state) laid out with ELK: zoom, hover tracing, a story player (named chapters of beats with a travelling dot), an Explore panel, full screen and export. The agent writes a small JSON topology; scripts do the rest. |
-| [`make-explainer`](skills/make-explainer/) | "Recap this branch with a manual test checklist" | One self-contained HTML page or slide deck made of typed sections (verdict, numbers, files changed, timeline, risks, comparisons, tick-and-remember checklists, slides), with make-diagram figures, make-dashboard charts and make-motion clips embedded when asked. A script reads the git branch for the facts; the agent writes the prose; a linter rejects emoji, filler phrases and leftover placeholders before the page is built. |
+| [`make-explainer`](skills/make-explainer/) | "Recap this branch with a manual test checklist" | One self-contained HTML page or slide deck made of typed sections (verdict, numbers, files changed, timeline, risks, comparisons, tick-and-remember checklists, slides), with make-diagram figures, make-dashboard charts and make-motion clips embedded when asked. A script reads the git branch for the facts; the agent writes the prose; a linter rejects filler phrases and leftover placeholders before the page is built, and warns when emoji get dense. |
 | [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. Silent unless you ask for sound: `audio` tracks (music, voiceover, SFX) are added only when the prompt asks, and narration is synthesised locally with Kokoro. "Slow scene 2" changes one field, not the whole video. |
 
-[**See them in action**](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#showcase): a real dashboard and video an agent generated from one prompt each, with the prompts and specs.
+[**See them in action**](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#showcase): a real dashboard and video an agent generated from one prompt each, with the prompts and specs. The [gallery](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery) has a Theme switch that shows every explainer, deck, diagram and clip in `dusk`, `press` and `poster`.
 
 <p>
   <img src="../../docs/features/img/portable-artifacts/dashboard-light.jpg" alt="A make-dashboard page: four KPI tiles and four charts, each with a Query disclosure" width="49%">
@@ -37,19 +37,74 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
   loop.
 - **Targeted edits** — a change is one field in the spec, never regenerated
   code, so everything else stays exactly the same.
-- **Reproducible** — the same spec always produces the same page or video. What varies is the provenance date in the footer, the day you build (set `SOURCE_DATE_EPOCH` to pin it), and a dashboard's refresh time.
+- **Reproducible** — the same spec always produces the same page or video. What varies is the provenance date in the footer, the day you build (set `SOURCE_DATE_EPOCH` to pin it), and a dashboard's refresh time. A hero image from `--image-api` comes from your service, so it can differ between builds.
 - **Offline** — after a one-time install nothing touches the network except
   your own data sources. Specs that try (remote chart data, `url()` colours)
-  are rejected, and the outputs carry a strict CSP.
+  are rejected, and the outputs carry a strict CSP. The one exception is
+  opt-in: make-explainer's `--image-api` flag sends a page's title and
+  subtitle to an image service you name (see [Themes and art](#themes-and-art)).
 - **Stamped** — every page has a favicon, an icon theme toggle (Auto, Light,
   Dark; not on the make-motion preview) and a provenance line: the model,
   effort level and agent that wrote the spec, from the spec's `generatedBy`
   field or the `--model`, `--effort` and `--agent` build flags. A field the
   agent does not know reads "not reported"; nothing is guessed. The make-motion
   MP4 carries it in its `comment` tag, and the model in `artist` when it is reported.
-- **Easy to read** — Geist on every generated page; the make-motion preview UI and unthemed video keep Inter and JetBrains Mono, and the explainer opens with a
-  hero and TL;DR card, short section `label`s in its contents list and soft text
-  caps that warn (never fail) when a title, paragraph or card runs long.
+- **Themed** — every page and video uses one of seven shared themes, and the
+  theme sets the type. make-explainer pages and decks and make-motion clips use
+  `dusk` unless you or the prompt pick another; make-dashboard keeps `paper`
+  and make-diagram `blueprint`. See [Themes and art](#themes-and-art).
+- **Easy to read** — the explainer opens with a hero and TL;DR card, short
+  section `label`s in its contents list and soft text caps that warn (never
+  fail) when a title, paragraph or card runs long.
+
+## Themes and art
+
+Seven themes live in the shared folder, each with its own light and dark
+colours. Every skill accepts every theme by name (the spec's `theme` field or
+`--theme <name>`); only the default differs.
+
+| Theme | Display / body / mono | Look | Suits |
+|---|---|---|---|
+| `dusk` | Funnel Display / Host Grotesk / Commit Mono | aubergine to peach, coral and mint, film grain, tilted cards | anything; the default for make-explainer and make-motion |
+| `press` | Young Serif / Schibsted Grotesk / JetBrains Mono | bone paper, ink and vermilion, marginal numerals | dense docs, long reads, changelogs, branch recaps |
+| `poster` | Big Shoulders Display / Familjen Grotesk / Martian Mono | near-black, acid lime and orange, condensed caps, halftone | launch decks, pitches, demos, energetic clips |
+| `paper`, `blueprint`, `ink`, `editorial` | Geist and Geist Mono; `ink` has Bricolage Grotesque headings, `editorial` Newsreader headings and an Atkinson Hyperlegible body | the earlier looks | when you name one; `paper` is make-dashboard's default, `blueprint` make-diagram's |
+
+**How make-explainer and make-motion pick a theme.** A theme you name wins
+(`--theme poster`, or "use poster" in the prompt). Otherwise the agent picks
+one from the prompt and tells you which and why in one line: `press` for dense
+docs, long reads, changelogs and branch recaps, `poster` for launch decks,
+pitches, demos and energetic clips, `dusk` for everything else. If the prompt
+fits two themes equally, it asks you once, with a one-line feel for each of the
+three; if it cannot ask, it uses `dusk`. The older themes are used only when
+you name them.
+
+**Art.** `dusk`, `press` and `poster` draw procedural SVG art seeded from the
+title (in make-motion, from the scene id): blobs and orbs with grain in
+`dusk`, halftone and contour lines in `press`, halftone grids and registration
+marks in `poster`. The same seed always gives the same picture, and nothing is
+fetched. It fills the explainer page hero, a deck's title and closing slides,
+and a make-motion scene with `"background": "art"`.
+make-motion also gives a `"role": "title"` text the theme's display font and,
+when it has no keyframes, an entrance per theme: `dusk` rises, `press` inks
+in, `poster` slams.
+
+**Emoji** are allowed in explainer text. Validation warns, and never fails,
+when a prose string has 3 or more emoji at more than 1 per 40 characters, or a
+section title has more than 3.
+
+**Optional hero image (make-explainer page only).** `build.mjs --image-api
+<https-endpoint>` replaces the page hero's art with a picture from an image
+service you run or pay for. It is off by default. With the flag:
+
+- the page title and subtitle **leave your machine** and go to that host;
+- the build needs your key in `PA_IMAGE_API_KEY`;
+- each build is one request, which **your service may bill**;
+- it works on a `dusk`, `press` or `poster` page; a deck or an older theme is
+  refused before anything is sent.
+
+The endpoint contract is in
+[`make-explainer/references/schema.md`](skills/make-explainer/references/schema.md#hero-image-from-an-image-api).
 
 ## Install
 
@@ -222,8 +277,8 @@ Everything this plugin depends on is open source:
 | [ELK](https://github.com/kieler/elkjs) (`elkjs`) | EPL-2.0 |
 | [Lucide](https://lucide.dev) icons | ISC |
 | [Simple Icons](https://simpleicons.org) brand marks | CC0-1.0 |
-| Geist, Geist Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible (latin subsets, via Fontsource) | OFL-1.1 |
-| Inter, JetBrains Mono (make-motion default look, via Fontsource) | OFL-1.1 |
+| Funnel Display, Host Grotesk, Commit Mono, Young Serif, Schibsted Grotesk, JetBrains Mono, Big Shoulders Display, Familjen Grotesk, Martian Mono, Geist, Geist Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible (latin subsets, via Fontsource) | OFL-1.1 |
+| Inter (`@fontsource/inter`, still pinned in make-motion's `package.json`, no longer used) | OFL-1.1 |
 | ffmpeg (system binary, not vendored) | LGPL/GPL |
 | [Kokoro](https://github.com/hexgrad/kokoro) TTS (`kokoro-js`, installed on demand) | Apache-2.0 |
 

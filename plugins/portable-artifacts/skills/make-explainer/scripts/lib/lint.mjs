@@ -1,4 +1,4 @@
-// Deterministic prose lint. Errors: placeholders (TODO:, lorem ipsum), emoji,
+// Deterministic prose lint. Errors: placeholders (TODO:, lorem ipsum),
 // banned phrases (references/style.md), headings ending in "!", numbered
 // section titles. Length is not linted here: soft caps live in budget.mjs.
 import fs from 'node:fs';
@@ -18,18 +18,18 @@ export function lintPlaceholders(text, path) {
 
 // ---- emoji ------------------------------------------------------------
 
-// Emoji only. Characters that default to emoji presentation (rockets, check-mark buttons, flags, skin-tone
+// Emoji are allowed; density is a soft warning in budget.mjs (emojiDensityWarnings). Characters that default to emoji presentation (rockets, check-mark buttons, flags, skin-tone
 // modifiers), any pictograph the author forced into emoji form with VS16 (U+FE0F), astral pictographs, tag
 // characters and keycaps. Symbols that default to text presentation (arrows, play, info, hearts, check marks)
 // are ordinary typography and pass, as do the copyright, registered and trade mark signs.
 export const EMOJI = /\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F|(?=[\u{10000}-\u{10FFFF}])\p{Extended_Pictographic}|[\u{E0020}-\u{E007F}]|\u20E3/gu;
 
-function lintEmoji(text, path) {
-  const found = [...new Set(text.match(EMOJI) ?? [])];
-  if (found.length === 0) return [];
-  const shown = found.slice(0, 3).map(q).join(', ');
-  return [{ path, message: `contains emoji ${shown}${found.length > 3 ? ', …' : ''}; remove ${found.length > 1 ? 'them' : 'it'} and say it in words` }];
-}
+// An emoji sequence: a pictograph or regional indicator, its selectors / skin tone / tag modifiers, and more of
+// the same joined by U+200D. Removing it removes its joiners and selectors with it, while the same characters
+// in other scripts (a Devanagari conjunct, Persian text) are left alone.
+const PICTOGRAPH = '\\p{Extended_Pictographic}|\\p{Regional_Indicator}';
+const MODIFIERS = '[\\uFE0E\\uFE0F\\u{1F3FB}-\\u{1F3FF}\\u{E0020}-\\u{E007F}]*';
+export const EMOJI_SEQUENCE = new RegExp(`(?:${PICTOGRAPH})${MODIFIERS}(?:\\u200D(?:${PICTOGRAPH})${MODIFIERS})*`, 'gu');
 
 // ---- banned phrases ---------------------------------------------------
 
@@ -89,13 +89,12 @@ function lintHeading(text, path, sectionTitle) {
  * Lint one prose string. `heading`: the string is a heading (title, summary).
  * `sectionTitle`: it is a section's title (also rejects "01 ..." numbering).
  * `banned: false`: the string is data written as the reader should see it (a table cell), so the
- * banned-phrase rule is skipped; placeholders and emoji still apply.
+ * banned-phrase rule is skipped; placeholders still apply.
  * -> { errors }, each [{ path, message }].
  */
 export function lintText(text, path, { heading = false, sectionTitle = false, banned: checkBanned = true } = {}) {
   const errors = [
     ...lintPlaceholders(text, path),
-    ...lintEmoji(text, path),
     ...(checkBanned ? lintBanned(text, path) : []),
     ...(heading ? lintHeading(text, path, sectionTitle) : []),
   ];

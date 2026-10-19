@@ -10,7 +10,7 @@ Every section type and its fields: [sections.md](sections.md). Banned phrases: [
 | `subtitle` | string | At most 140 characters. |
 | `preset` | `recap` `checklist` `concept` `slides` `none` | Default `none`. A label only: it selects slides mode (`slides`) and turns on the checklist `intro` warning (`checklist`). |
 | `mode` | `page` `slides` | Default `page`; `preset: "slides"` implies slides. `preset: "slides"` with `mode: "page"` is an error. |
-| `theme` | `paper` `blueprint` `ink` `editorial` | Default `paper`. Each has light and dark variants; the page follows the reader's setting and has a Theme toggle. |
+| `theme` | `dusk` `press` `poster` `paper` `blueprint` `ink` `editorial` | Default `dusk`. `SKILL.md` ("Choosing a theme") says which to pick. Each has light and dark variants; the page follows the reader's setting and has a Theme toggle. |
 | `generatedBy` | object | Keys `model`, `effort`, `agent`; each 1-60 characters of letters, digits, spaces and `. _ : / ( ) + -`. Shown in the page footer and a `<meta name="generator">` tag; a missing field reads "not reported". The `--model`, `--effort` and `--agent` flags of `build.mjs` override it. |
 | `meta` | object | Keys `date`, `branch`, `repo`, `author`, `version`, `status`; each value at most 60 characters. Shown as chips under the title. |
 | `sections` | array, required | 1 to 40 sections, see below. |
@@ -41,7 +41,7 @@ Slides mode adds a budget to each section (errors): at most 6 points (tldr point
 
 ## Text
 
-Markdown-lite in every prose field: paragraphs split by a blank line, `**bold**`, `*italic*`, `` `code` ``, `[text](https://…)` (http and https only), and `- ` lists. Everything else, including `<tags>`, is shown as text. No emoji anywhere. A string must contain a non-space character.
+Markdown-lite in every prose field: paragraphs split by a blank line, `**bold**`, `*italic*`, `` `code` ``, `[text](https://…)` (http and https only), and `- ` lists. Everything else, including `<tags>`, is shown as text. Emoji are allowed; validate warns if they get dense (see style.md). A string must contain a non-space character.
 
 Validate also fails on a `TODO:` or lorem ipsum anywhere, on headings ending in `!`, and on section titles numbered like `01` (a leading zero digit; "3 files changed" is fine).
 
@@ -68,5 +68,15 @@ Environment: `PA_OUTPUT_DIR` (default output folder), `PA_MOTION_TIMEOUT_MS` (ho
 | `gather.mjs git [--base <branch>] [--repo <folder>] [--out <file>] [--json]` | Without `--base`: `main`, then `master`, preferring origin's copy when it is ahead. Prints (or writes to `--out`) facts about the checked-out branch as JSON: branch, base, commits, changed files with line counts and renames, test files, date. Committed work only. |
 | `scaffold.mjs <recap\|checklist\|concept\|slides> [--facts facts.json] [--title <text>] [--out <file>]` | A starter `explainer.json`, printed or written to `--out`. Facts fill numbers, files, commits and folders; every sentence is a `TODO:` string. |
 | `validate.mjs <explainer.json> [--json]` | Schema, limits, prose lint, slide budget, file references and the embedded diagram, chart and motion checks. |
-| `build.mjs <explainer.json> [--out <file.html\|dir>] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--json]` | Validates, then writes the page. |
+| `build.mjs <explainer.json> [--out <file.html\|dir>] [--theme <name>] [--image-api <https-endpoint>] [--model <m>] [--effort <e>] [--agent <a>] [--json]` | Validates, then writes the page. `--image-api` is optional and off by default: see "Hero image from an image API" below. |
 | `check.mjs <page.html> [--json]` | Optional headless check of a built page at 1280 and 390 px: console errors and warnings, sideways scrolling, elements wider than the page, content clipped sideways inside a slide, a deck's last slide reachable by arrow keys with the counter reading N / N, and each diagram's viewer mounting and its Present overlay opening and closing on Esc. Exit 0 ok or skipped (no browser), 1 problems, 2 usage. Needs Playwright and a browser (full `npm ci`); `PA_CHECK_TIMEOUT_MS` shortens the 60 s cap. |
+
+## Hero image from an image API
+
+`build.mjs --image-api <endpoint>` replaces the page hero's procedural art with a picture made by your own image service. It is off by default; without the flag the build never touches the network. It affects the page hero of a `dusk`, `press` or `poster` page only: a slide deck or a classic-theme page (`paper`, `blueprint`, `ink`, `editorial`) is refused with exit 2 before anything is sent.
+
+- **What leaves the machine**: the page title and subtitle (joined, at most 400 characters) go to the endpoint's host. The build prints `image-api: sending the title and subtitle to <host> (leaves this machine)` on stderr before it sends.
+- **Key**: your own key, in the environment variable `PA_IMAGE_API_KEY` (sent as `authorization: Bearer <key>`). The build fails with exit 2 when it is missing. Never put the key in a spec, a config file or an example; it is never written to the page.
+- **Cost**: each build with the flag is one request to your service and may be billed by it. Rebuild without the flag to avoid repeat calls.
+- **Endpoint contract**: an `https` URL without credentials, no redirects followed. The build POSTs JSON `{"prompt": "...", "width": 1280, "height": 720}` with `content-type: application/json`. The endpoint must answer HTTP 200 with the picture itself as the body, `content-type` `image/png`, `image/jpeg` or `image/webp`, up to 8 MiB, and the bytes must really be that format (SVG, HTML and JSON replies are refused). It must answer within 60 seconds.
+- **Failure**: any problem fails the build with exit 2 and a message that names the fix; there is no silent fallback to the procedural art. The image is inlined as a `data:` URI, so the finished page stays a single offline file.

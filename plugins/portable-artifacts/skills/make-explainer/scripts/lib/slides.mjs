@@ -72,25 +72,28 @@ const typeLabel = (type) => TYPE_LABELS[type] ?? `${type[0].toUpperCase()}${type
 export const slideTitle = (section) => (section.title === undefined ? typeLabel(section.type) : plain(section.title));
 
 // A section's own id is a deep link (#<id>), kept in data-sid: the element id stays slide-N.
-function slide(n, total, title, classes, inner, sid, footer = '') {
+// `art` is a decorative full-bleed drawing (flavored decks, first and last slide only), '' for none.
+function slide(n, total, title, classes, inner, sid, footer = '', art = '') {
   const link = sid === undefined ? '' : ` data-sid="${esc(sid)}"`;
-  return `<section class="slide ${classes}" id="slide-${n}"${link} tabindex="-1" aria-label="Slide ${n} of ${total}: ${title}">
+  const cls = art ? `${classes} slide-has-art` : classes;
+  const layer = art ? `\n<div class="slide-art" aria-hidden="true">${art}</div>` : '';
+  return `<section class="slide ${cls}" id="slide-${n}"${link} tabindex="-1" aria-label="Slide ${n} of ${total}: ${title}">${layer}
 <div class="slide-inner">
 ${inner}
 </div>${footer}
 </section>`;
 }
 
-function cover(spec, total, metaHtml) {
+function cover(spec, total, metaHtml, art) {
   const subtitle = spec.subtitle === undefined ? '' : `\n<p class="subtitle">${inline(spec.subtitle)}</p>`;
-  return slide(1, total, plain(spec.title), 'slide-cover', `<h1>${inline(spec.title)}</h1>${subtitle}${metaHtml ? `\n${metaHtml}` : ''}`);
+  return slide(1, total, plain(spec.title), 'slide-cover', `<h1>${inline(spec.title)}</h1>${subtitle}${metaHtml ? `\n${metaHtml}` : ''}`, undefined, '', art);
 }
 
-function sectionSlide({ section, body, ownHeading }, n, total, footer = '') {
+function sectionSlide({ section, body, ownHeading }, n, total, footer = '', art = '') {
   const hasHeading = section.title !== undefined && !ownHeading;
   const eyebrow = hasHeading && section.label !== undefined ? `<p class="slide-eyebrow pa-label">${plain(section.label)}</p>\n` : '';
   const heading = hasHeading ? `${eyebrow}<h2 class="slide-title" id="slide-${n}-title">${headingInline(section.title)}</h2>\n` : '';
-  return slide(n, total, slideTitle(section), `slide-${section.type}`, `${heading}${body}`, section.id, footer);
+  return slide(n, total, slideTitle(section), `slide-${section.type}`, `${heading}${body}`, section.id, footer, art);
 }
 
 function outline(titles, sids) {
@@ -119,10 +122,15 @@ function chrome(total) {
  * The deck markup for the template's DECK marker.
  * `rendered` = [{ section, body, ownHeading }] in order (bodies already rendered),
  * `metaHtml` = the title slide's meta list ('' when none), `slug` keys the saved position.
+ * `artFor(n)` = the decorative drawing for slide n (only asked for the first and the last slide); omit it for no art.
  */
-export function renderDeck({ spec, rendered, metaHtml, slug, footerHtml = '' }) {
+export function renderDeck({ spec, rendered, metaHtml, slug, footerHtml = '', artFor = () => '' }) {
   const total = rendered.length + 1;
-  const slides = [cover(spec, total, metaHtml), ...rendered.map((r, i) => sectionSlide(r, i + 2, total, i === rendered.length - 1 ? `\n${footerHtml}` : ''))];
+  const last = (i) => i === rendered.length - 1;
+  const slides = [
+    cover(spec, total, metaHtml, artFor(1)),
+    ...rendered.map((r, i) => sectionSlide(r, i + 2, total, last(i) ? `\n${footerHtml}` : '', last(i) ? artFor(total) : '')),
+  ];
   const titles = [plain(spec.title), ...rendered.map((r) => slideTitle(r.section))];
   const sids = [undefined, ...rendered.map((r) => r.section.id)];
   return `<main id="content" class="deck" data-deck data-slug="${esc(slug)}" data-total="${total}" data-current="1">

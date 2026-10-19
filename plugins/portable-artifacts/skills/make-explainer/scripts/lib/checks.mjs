@@ -9,7 +9,7 @@ import { pathJoin } from '../../shared/errors.mjs';
 import { readImage } from './image.mjs';
 import { loadSibling, SiblingError, siblingDir } from './siblings.mjs';
 import { quoteArg } from '../../shared/doctor.mjs';
-import { DEFAULT_THEME } from '../../shared/theme.mjs';
+import { EXPLAINER_THEME } from './default-theme.mjs';
 import { itemKey } from './render/checklist.mjs';
 import { readDiagramSpec, reportDiagramErrors, inPageTheme } from './diagram-source.mjs';
 import { chartMode, loadChartSource, INLINE_CHART_FIELDS } from './chart-source.mjs';
@@ -110,7 +110,7 @@ registerCheck('diagram', async ({ section, path: at, dir, spec }) => {
   if (typeof api.validateSpec !== 'function') {
     return [{ path: where, message: `make-diagram is too old (no validateSpec in api.mjs); update it: reinstall with npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill make-diagram -y, then run npm ci --omit=dev --prefix ${quoteArg(siblingDir('make-diagram'))}` }];
   }
-  const pageTheme = spec.theme ?? DEFAULT_THEME;
+  const pageTheme = spec.theme ?? EXPLAINER_THEME;
   const warnings = source.spec.theme === undefined ? [] : [{
     path: pathJoin(where, 'theme'),
     message: `ignored — the page theme (${JSON.stringify(pageTheme)}) is used; remove it or change the explainer's theme${source.file ? ` (in ${source.file})` : ''}`,

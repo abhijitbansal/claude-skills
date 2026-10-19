@@ -15,6 +15,9 @@ const SNIFF = {
   'image/svg+xml': (b) => /<svg[\s>]/i.test(b.toString('utf8', 0, Math.min(b.length, 4096))),
 };
 
+/** True when `bytes` start like a `mime` image (png, jpeg, webp or svg). */
+export const sniffsAs = (mime, bytes) => SNIFF[mime]?.(bytes) === true;
+
 // Whole-text scan, on purpose: a tag-by-tag scan can be hidden by a ">" inside a
 // quoted attribute value. Strict means a few harmless files are refused (for
 // example text that mentions "onclick ="); export a png for those.

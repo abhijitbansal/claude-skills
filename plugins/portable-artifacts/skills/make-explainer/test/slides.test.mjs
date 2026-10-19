@@ -35,7 +35,7 @@ test('slides mode builds: a title slide first, then one numbered slide per secti
     ['slide-4', 'Slide 4 of 4: Claim 3'],
   ]);
   assert.equal((html.match(/<h1>/g) ?? []).length, 1);
-  assert.match(html, /<section class="slide slide-cover" id="slide-1"[^>]*>[\s\S]*<h1>Deck<\/h1>[\s\S]*Sub[\s\S]*2026-10-12/);
+  assert.match(html, /<section class="slide slide-cover(?: slide-has-art)?" id="slide-1"[^>]*>[\s\S]*<h1>Deck<\/h1>[\s\S]*Sub[\s\S]*2026-10-12/);
   assert.match(html, /<h2 class="slide-title" id="slide-2-title">Claim 1<\/h2>/);
   assert.match(html, /<main[^>]*data-deck[^>]*data-slug="deck"[^>]*data-total="4"/);
 });
@@ -120,6 +120,104 @@ test('a renderer that throws, and a type with no renderer, are BuildErrors at th
     assert.deepEqual(e.errors.map((x) => x.path), ['sections[1].type']);
     return true;
   });
+});
+
+// ---- flavored decks: art slides, data-flavor, the classic deck untouched -------------------
+
+const EXAMPLES = fileURLToPath(new URL('../references/examples/', import.meta.url));
+const GOLDEN = fileURLToPath(new URL('./golden/slides.body.html', import.meta.url));
+const exampleSpec = () => JSON.parse(fs.readFileSync(path.join(EXAMPLES, 'slides.explainer.json'), 'utf8'));
+const example = (theme) => buildPage(exampleSpec(), { dir: EXAMPLES, out: OUT, theme, env: { SOURCE_DATE_EPOCH: '1792000000' } });
+// One chunk per slide: the section's own tag, then its markup up to the next slide (or the end of <main>).
+const slideChunks = (html) => html.slice(0, html.indexOf('</main>')).split(/(?=<section class="slide[ "])/).slice(1);
+const slideHeads = (html) => [...html.matchAll(/<section class="slide[^"]*" (id="slide-\d+"(?: data-sid="[^"]*")?) tabindex="-1" aria-label="([^"]+)">/g)].map((m) => [m[1], m[2]]);
+const flavorOf = (html) => html.match(/^<!doctype html>\n<html lang="en" data-flavor="([^"]*)">/)?.[1];
+const FLAVORED = ['dusk', 'press', 'poster'];
+
+test('a flavored deck puts full-bleed art on the first and last slides only, in a light and a dark drawing', async () => {
+  for (const theme of FLAVORED) {
+    const { html } = await example(theme);
+    const chunks = slideChunks(html);
+    assert.equal(chunks.length, 11);
+    assert.deepEqual(chunks.map((c) => c.includes('<div class="slide-art"')), chunks.map((_, i) => i === 0 || i === chunks.length - 1), theme);
+    for (const c of [chunks[0], chunks.at(-1)]) {
+      const art = c.match(/<div class="slide-art" aria-hidden="true">([\s\S]*?)<\/div>/);
+      assert.ok(art, `${theme}: the art is hidden from assistive tech`);
+      assert.match(art[1], /^<svg class="art-light" [\s\S]*<\/svg><svg class="art-dark" [\s\S]*<\/svg>$/);
+    }
+    assert.ok(!/url\(\s*['"]?https?:/i.test(html), `${theme}: no external url()`);
+    assert.ok(!html.includes('url(http'), theme);
+  }
+});
+
+test('the first and last slides seed different drawings, so their svg ids never collide', async () => {
+  const { html } = await example('dusk');
+  const found = ids(html);
+  assert.equal(new Set(found).size, found.length, `duplicate ids: ${found.filter((x, i) => found.indexOf(x) !== i)}`);
+});
+
+test('data-flavor on <html>: dusk by default, the theme name for press and poster, classic for the older themes', async () => {
+  assert.equal(flavorOf((await build(deck([text(1)]))).html), 'dusk');
+  assert.equal(flavorOf((await build(deck([text(1)]), { theme: 'press' })).html), 'press');
+  assert.equal(flavorOf((await build(deck([text(1)]), { theme: 'poster' })).html), 'poster');
+  for (const theme of ['paper', 'blueprint', 'ink', 'editorial']) assert.equal(flavorOf((await build(deck([text(1)]), { theme })).html), 'classic', theme);
+});
+
+test('a classic deck gets no art and no flavor stylesheet', async () => {
+  for (const theme of ['paper', 'ink']) {
+    const { html } = await build(deck([text(1), text(2)]), { theme });
+    assert.ok(!html.includes('slide-art'), theme);
+    assert.ok(!html.includes('/* deck flavors */'), theme);
+    assert.ok(!html.includes('/* flavors */'), theme);
+    assert.ok(!html.includes('--scrim'), theme);
+  }
+  const { html } = await example(undefined); // the example names paper
+  assert.equal(flavorOf(html), 'classic');
+  assert.ok(!html.includes('slide-art'));
+});
+
+test('a flavored deck carries the page flavor sheet, the deck flavor sheet and the scrim', async () => {
+  const { html } = await build(deck([text(1)]), { theme: 'poster' });
+  assert.ok(html.includes('/* flavors */'));
+  assert.ok(html.includes('/* deck flavors */'));
+  assert.match(html, /--scrim:color-mix\(in srgb, var\(--page\) \d+%, transparent\)/);
+});
+
+test('flavored decks keep the golden deck\'s slides, ids, labels and outline entries', async () => {
+  const golden = slideHeads(fs.readFileSync(GOLDEN, 'utf8'));
+  assert.equal(golden.length, 11, 'precondition: the golden is the 11-slide example');
+  for (const theme of FLAVORED) {
+    const { html } = await example(theme);
+    assert.deepEqual(slideHeads(html), golden, theme);
+    const dialog = html.match(/<dialog[^>]*data-outline[^>]*>[\s\S]*?<\/dialog>/)[0];
+    const entries = [...dialog.matchAll(/<a href="#([^"]+)" data-slide="(\d+)">([^<]*)<\/a>/g)].map((m) => [m[2], m[3]]);
+    assert.deepEqual(entries, golden.map(([, label], i) => [String(i + 1), label.replace(/^Slide \d+ of \d+: /, '')]), theme);
+  }
+});
+
+// Words a reader sees in a slide's prose, the way slideBudget counts them: not the slide title or label, captions,
+// chips, the code bar or tables and code (those have their own limits).
+const proseWords = (chunk) => chunk
+  .replace(/<(h2|caption|figcaption|table|pre|button|svg)\b[\s\S]*?<\/\1>/g, ' ')
+  .replace(/<p class="slide-eyebrow[\s\S]*?<\/p>/g, ' ')
+  .replace(/<span class="chip[\s\S]*?<\/span><\/span>/g, ' ')
+  .replace(/<[^>]+>/g, ' ')
+  .split(/\s+/).filter((w) => /\w/.test(w)).length;
+
+test('no slide of a flavored deck holds more than the slide budget: 6 points, 8 rows, 12 code lines, 80 words', async () => {
+  for (const theme of FLAVORED) {
+    const { html } = await example(theme);
+    slideChunks(html).forEach((c, i) => {
+      if (i === 0) return; // the title slide is the spec head, not a section
+      const at = `${theme} slide ${i + 1}`;
+      assert.ok((c.match(/<li\b/g) ?? []).length <= 6, `${at}: points`);
+      const body = c.match(/<tbody>([\s\S]*?)<\/tbody>/)?.[1] ?? '';
+      assert.ok((body.match(/<tr\b/g) ?? []).length <= 8, `${at}: rows`);
+      const code = c.match(/<pre[^>]*><code>([\s\S]*?)<\/code><\/pre>/)?.[1];
+      if (code) assert.ok(code.replace(/\n+$/, '').split('\n').length <= 12, `${at}: code lines`);
+      assert.ok(proseWords(c.replace(/<footer class="pa-footer">[\s\S]*?<\/footer>/, '')) <= 80, `${at}: ${proseWords(c)} words`);
+    });
+  }
 });
 
 // ---- pa-lib: slide helpers (pure) -------------------------------------------------------

@@ -22,12 +22,10 @@ test('lorem ipsum is an error, case-insensitive', () => {
   assert.deepEqual(errorsOf('LOREM   IPSUM'), expected);
 });
 
-test('emoji is an error and names what it found', () => {
-  assert.deepEqual(errorsOf('Shipped 🚀'), [{ path: P, message: 'contains emoji "🚀"; remove it and say it in words' }]);
-  assert.deepEqual(errorsOf('Done ✅ and 🙂'), [{ path: P, message: 'contains emoji "✅", "🙂"; remove them and say it in words' }]);
-  assert.deepEqual(errorsOf('🙂 🙃 😀 😁'), [{ path: P, message: 'contains emoji "🙂", "🙃", "😀", …; remove them and say it in words' }]);
-  assert.equal(errorsOf('Flag 🇺🇸').length, 1);
-  assert.equal(errorsOf('Key 1️⃣').length, 1);
+test('emoji is allowed: lint never reports it (density is a budget warning)', () => {
+  assert.deepEqual(errorsOf('Launch 🚀 day'), []);
+  assert.deepEqual(errorsOf('Done ✅ and 🙂, flag 🇺🇸, key 1️⃣'), []);
+  assert.deepEqual(errorsOf('🙂 🙃 😀 😁'), []);
 });
 
 test('text symbols are not emoji', () => {
@@ -93,7 +91,6 @@ test('several problems in one string are all reported', () => {
   const r = lintText('TODO: delve 🚀', P);
   assert.deepEqual(r.errors.map((e) => e.message), [
     'still has a TODO placeholder — replace it with real content',
-    'contains emoji "🚀"; remove it and say it in words',
     'banned phrase "delve"; replace it with "dig into"',
   ]);
 });

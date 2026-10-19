@@ -1,0 +1,142 @@
+{
+  "size": [
+    1920,
+    1080
+  ],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "launch",
+      "duration": 4.5,
+      "background": "art",
+      "elements": [
+        {
+          "id": "kicker",
+          "type": "text",
+          "text": "Introducing",
+          "x": 960,
+          "y": 330,
+          "fontSize": 40,
+          "fontWeight": 400,
+          "keyframes": [
+            {
+              "t": 0,
+              "opacity": 0
+            },
+            {
+              "t": 0.5,
+              "opacity": 1,
+              "ease": "outCubic"
+            }
+          ]
+        },
+        {
+          "id": "headline",
+          "type": "text",
+          "role": "title",
+          "text": "Northwind 2.0",
+          "x": 960,
+          "y": 470,
+          "fontSize": 168,
+          "fontWeight": 700
+        },
+        {
+          "id": "speedup",
+          "type": "counter",
+          "from": 0,
+          "to": 38,
+          "prefix": "+",
+          "suffix": "% faster builds",
+          "x": 960,
+          "y": 650,
+          "fontSize": 56,
+          "fontWeight": 700,
+          "keyframes": [
+            {
+              "t": 0.9,
+              "opacity": 0,
+              "value": 0
+            },
+            {
+              "t": 1.2,
+              "opacity": 1,
+              "ease": "outCubic"
+            },
+            {
+              "t": 2.6,
+              "value": 38,
+              "ease": "outCubic"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "numbers",
+      "duration": 3.5,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "chart-title",
+          "type": "text",
+          "role": "title",
+          "text": "Build time, minutes",
+          "x": 960,
+          "y": 170,
+          "fontSize": 88,
+          "fontWeight": 700
+        },
+        {
+          "id": "builds",
+          "type": "chart",
+          "x": 960,
+          "y": 600,
+          "width": 1400,
+          "height": 640,
+          "vegaLite": {
+            "data": {
+              "values": [
+                {
+                  "release": "1.8",
+                  "minutes": 21
+                },
+                {
+                  "release": "1.9",
+                  "minutes": 19
+                },
+                {
+                  "release": "2.0",
+                  "minutes": 13
+                }
+              ]
+            },
+            "mark": "bar",
+            "encoding": {
+              "x": {
+                "field": "release",
+                "type": "nominal",
+                "title": null
+              },
+              "y": {
+                "field": "minutes",
+                "type": "quantitative",
+                "title": null
+              }
+            }
+          },
+          "keyframes": [
+            {
+              "t": 0.3,
+              "reveal": 0
+            },
+            {
+              "t": 1.6,
+              "reveal": 1,
+              "ease": "outCubic"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
