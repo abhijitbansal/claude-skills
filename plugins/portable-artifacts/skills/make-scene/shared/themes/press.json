@@ -1,0 +1,100 @@
+{
+  "name": "press",
+  "label": "Press",
+  "fonts": {
+    "display": {
+      "family": "Young Serif",
+      "fallback": "Georgia, 'Times New Roman', serif",
+      "weights": {
+        "400": "young-serif-latin-400-normal.woff2"
+      }
+    },
+    "body": {
+      "family": "Schibsted Grotesk",
+      "fallback": "-apple-system, 'Segoe UI', sans-serif",
+      "weights": {
+        "400": "schibsted-grotesk-latin-400-normal.woff2",
+        "700": "schibsted-grotesk-latin-700-normal.woff2"
+      }
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "fallback": "ui-monospace, Menlo, Consolas, monospace",
+      "weights": {
+        "400": "jetbrains-mono-latin-400-normal.woff2"
+      }
+    }
+  },
+  "light": {
+    "page": "#f1ece1",
+    "surface": "#e7dfcd",
+    "text": "#17140f",
+    "text2": "#4d463a",
+    "text3": "#5e5749",
+    "line": "#d6ceba",
+    "grid": "#e4ddcc",
+    "accent": "#a62a16",
+    "accentSoft": "#e3c7b4",
+    "warn": "#75510e",
+    "good": "#1f4d3a",
+    "bad": "#a8200d",
+    "cat1": "#c8321a",
+    "cat2": "#1f4d3a",
+    "cat3": "#d99a1e",
+    "cat4": "#2f5f8a",
+    "cat5": "#7a4a6b",
+    "cat6": "#6b6354",
+    "cat7": "#1f7f86",
+    "cat8": "#7a4a26",
+    "seq1": "#f6ead4",
+    "seq2": "#eecf9f",
+    "seq3": "#e6ad76",
+    "seq4": "#dc8456",
+    "seq5": "#c8532f",
+    "seq6": "#8e2a18",
+    "seq7": "#4a140b",
+    "kindPerson": "#963c0a",
+    "kindService": "#1f5f7a",
+    "kindData": "#6b3f8a",
+    "kindQueue": "#1f4d3a",
+    "kindExternal": "#5a5446",
+    "kindDecision": "#3b4a9a",
+    "glow": "#c8321a"
+  },
+  "dark": {
+    "page": "#13100c",
+    "surface": "#1d1913",
+    "text": "#efe7d6",
+    "text2": "#cdc3ad",
+    "text3": "#a89d86",
+    "line": "#3a352b",
+    "grid": "#2b261e",
+    "accent": "#ff7350",
+    "accentSoft": "#3d261c",
+    "warn": "#e3ac45",
+    "good": "#7fc09f",
+    "bad": "#ff6b5e",
+    "cat1": "#ff7350",
+    "cat2": "#7fc09f",
+    "cat3": "#e3ac45",
+    "cat4": "#7fb0e0",
+    "cat5": "#c796b8",
+    "cat6": "#a39a85",
+    "cat7": "#6fd0d4",
+    "cat8": "#e2d3b0",
+    "seq1": "#2a1d14",
+    "seq2": "#4a2616",
+    "seq3": "#6e2f19",
+    "seq4": "#93381c",
+    "seq5": "#d0532f",
+    "seq6": "#f08a5e",
+    "seq7": "#fbc9a4",
+    "kindPerson": "#e3ac45",
+    "kindService": "#7fb0e0",
+    "kindData": "#c796b8",
+    "kindQueue": "#7fc09f",
+    "kindExternal": "#a39a85",
+    "kindDecision": "#9aa6e8",
+    "glow": "#ff7350"
+  }
+}

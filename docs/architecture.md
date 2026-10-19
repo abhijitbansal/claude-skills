@@ -20,7 +20,7 @@ flowchart TD
   CW["core-workflow — 18 skills · 4 cmds · 2 agents · 1 hook"]
   SW["second-wind — skill wrapper"]
   PC["prompt-craft — 7 skills · 6 hooks"]
-  PA["portable-artifacts — 4 skills · installer"]
+  PA["portable-artifacts — 5 skills · installer"]
   TB["test-board — test-run band"]
   SC["session-compass — compass band · /compass pane"]
   WIND[("tools/second-wind/wind.py")]

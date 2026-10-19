@@ -2,7 +2,7 @@
 // Shared SVG icons: the theme toggle's three states and one favicon per skill.
 // Zero dependencies; every skill gets a copy through bin/sync-shared.mjs.
 
-export const SKILLS = ['make-dashboard', 'make-diagram', 'make-explainer', 'make-motion'];
+export const SKILLS = ['make-dashboard', 'make-diagram', 'make-explainer', 'make-motion', 'make-scene'];
 
 const icon = (body) =>
   `<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
@@ -17,6 +17,7 @@ const GLYPHS = {
   'make-diagram': '<path class="s" d="M11 11l4 9M21 11l-4 9M12 9h8"/><circle class="g" cx="9" cy="9" r="3.5"/><circle class="g" cx="23" cy="9" r="3.5"/><circle class="g" cx="16" cy="23" r="3.5"/>',
   'make-explainer': '<rect class="g" x="9" y="6" width="14" height="20" rx="2"/><path class="l" d="M12 12h8M12 16h8M12 20h5"/>',
   'make-motion': '<path class="g" d="M12 8.5v15l12-7.5Z"/>',
+  'make-scene': '<path class="g" d="M16 5l5 2.5-5 2.5-5-2.5Z"/><path class="g" d="M16 12l7 3.5-7 3.5-7-3.5Z"/><path class="g" d="M16 21l9 4.5-9 4.5-9-4.5Z"/><path class="s" d="M11 9.5v2M21 9.5v2M9 17.5v2M23 17.5v2"/>',
 };
 
 export function faviconSvg(skill, theme) {
