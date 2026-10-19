@@ -47,7 +47,10 @@ function reasonFor(world, { rows, links }, elig, first) {
   if (world === 'forest') {
     return rows.some((r) => r.parent !== undefined) ? 'rows have parents: a hierarchy of trees' : 'no parents: every row stands as its own tree';
   }
-  if (world === 'terrain') return `group x t grid is ${pct}% filled${first === 'terrain' ? ': a surface fits' : ''}`;
+  if (world === 'terrain') {
+    if (fill === null) return 'a surface needs t to be numeric or time-like, so the grid has no order';
+    return `group x t grid is ${pct}% filled${first === 'terrain' ? ': a surface fits' : ''}`;
+  }
   if (first === 'city') return hasT ? 'time or sequence: one block per row' : 'default: one block per row';
   return 'one block per row';
 }
@@ -66,11 +69,11 @@ export function recommend(data) {
   return { ranked, reasons };
 }
 
-/** Bucket a scene graph v1 by what the GPU draws: instances + tube segments + surface cells. */
+/** Bucket a scene graph v1 by what the GPU draws: instances + tube segments + surface data cells. */
 export function renderWeight(graph) {
   const instances = (graph.batches ?? []).reduce((n, b) => n + b.instances.length, 0);
   const segments = (graph.tubes ?? []).reduce((n, t) => n + Math.max(0, t.points.length - 1), 0);
-  const cells = (graph.surfaces ?? []).reduce((n, s) => n + s.nx * s.nz, 0);
+  const cells = (graph.surfaces ?? []).reduce((n, s) => n + s.cells.length, 0);
   const total = instances + segments + cells;
   if (total < LIGHT_MAX) return 'light';
   if (total < MEDIUM_MAX) return 'medium';

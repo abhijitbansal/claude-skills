@@ -66,3 +66,13 @@ test('header columns are named', () => {
   const header = table().split('\n')[1];
   assert.equal(header.split('|').map((c) => c.trim()).join('|'), 'world|fit|switch tokens|page size|render|command');
 });
+
+test('a skill dir with a space is quoted as part of the script path', () => {
+  const t = table({ skillDir: '/Users/Jane Doe/skills/make-scene' });
+  assert.ok(lineOf(t, 'forest').includes("node '/Users/Jane Doe/skills/make-scene/scripts/build.mjs' scene.json --world forest"));
+});
+
+test('arguments starting with a dash are quoted', () => {
+  const t = table({ specPath: '-x.json' });
+  assert.ok(lineOf(t, 'forest').includes("build.mjs '-x.json' --world forest"));
+});

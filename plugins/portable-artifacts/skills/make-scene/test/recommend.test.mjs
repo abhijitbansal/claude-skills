@@ -99,14 +99,36 @@ test('weight sums instances, tube segments and surface cells', () => {
   const graph = {
     batches: [{ instances: new Array(1000).fill([]) }, { instances: new Array(500).fill([]) }],
     tubes: [{ points: new Array(701).fill([]) }, { points: new Array(1).fill([]) }],
-    surfaces: [{ nx: 10, nz: 80 }],
+    surfaces: [{ nx: 11, nz: 81, cells: new Array(800).fill(0) }],
   };
   // 1500 + 700 + 0 + 800 = 3000
   assert.equal(renderWeight(graph), 'medium');
-  graph.surfaces[0].nz = 79; // 2999
+  graph.surfaces[0].cells.pop(); // 2999
   assert.equal(renderWeight(graph), 'light');
 });
 
 test('weight tolerates missing arrays', () => {
   assert.equal(renderWeight({}), 'light');
+});
+
+test('weight counts a surface by its data cells, not its vertices', () => {
+  // 55x55 vertices = 3025 (would be medium); 54x54 cells = 2916 (light)
+  const surfaces = [{ nx: 55, nz: 55, cells: new Array(54 * 54).fill(0) }];
+  assert.equal(renderWeight({ surfaces }), 'light');
+});
+
+test('terrain reason says so when t is not numeric or time-like', () => {
+  const rows = [{ group: 'a', t: 'alpha', value: 1 }, { group: 'b', t: 'beta', value: 2 }];
+  const { reasons } = recommend({ rows, links: [] });
+  assert.equal(reasons.terrain, 'a surface needs t to be numeric or time-like, so the grid has no order');
+});
+
+test('terrain reason with no rows has no null in it', () => {
+  const { reasons } = recommend({ rows: [], links: [] });
+  assert.doesNotMatch(reasons.terrain, /null|NaN|undefined/);
+  assert.match(reasons.terrain, /numeric or time-like/);
+});
+
+test('terrain reason reports the fill percentage for a time grid', () => {
+  assert.equal(recommend({ rows: grid(WEEKS), links: [] }).reasons.terrain, 'group x t grid is 100% filled: a surface fits');
 });
