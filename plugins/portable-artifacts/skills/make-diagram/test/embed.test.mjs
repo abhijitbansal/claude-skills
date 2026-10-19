@@ -11,14 +11,14 @@ import { launchBrowser, haveBrowser, scratchDir, example } from './helpers/brows
 let browser;
 after(() => browser?.close());
 
-async function embedPage(spec) {
+async function embedPage(spec, beforeMount = '') {
   const out = await buildDiagram(spec);
   const html = `<!doctype html><meta charset="utf-8"><title>embed</title>
 <style>${out.css}
 html,body{margin:0;height:100%}#stage{position:relative;width:900px;height:600px}#stage>svg{position:absolute;inset:0;width:100%;height:100%}</style>
 <div id="stage">${out.svg}</div>
 <script>${viewerRuntime()}</script>
-<script>window.ctl = PADiagram.mount(document.getElementById('stage'), ${JSON.stringify(out.data).replaceAll('<', '\\u003c')}, {});</script>`;
+<script>${beforeMount}window.ctl = PADiagram.mount(document.getElementById('stage'), ${JSON.stringify(out.data).replaceAll('<', '\\u003c')}, {});</script>`;
   const file = path.join(fs.mkdtempSync(path.join(scratchDir(), 'embed-')), 'embed.html');
   fs.writeFileSync(file, html);
   browser ??= await launchBrowser();
@@ -56,6 +56,30 @@ test('a sequence mounts the same way', async (t) => {
   assert.equal(await page.locator('.pa-edge[data-id="m5"].pa-hidden').count(), 1);
   await page.evaluate(() => window.ctl.goTo(2));
   assert.equal(await page.locator('.pa-edge[data-id="m5"].pa-hidden').count(), 0);
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+test('the viewer forwards the story hold hooks to the transport: hold(ms) on play, holdEnd() on pause', async (t) => {
+  if (!(await haveBrowser())) return t.skip('no browser');
+  // Task 4's transport gains hold/holdEnd; until then a spy wraps the factory and adds them.
+  const spy = `window.holdLog = []; var make = PADiagram.transport; PADiagram.transport = function () {
+    var tr = make.apply(this, arguments);
+    tr.hold = function (ms) { window.holdLog.push(['hold', ms]); };
+    tr.holdEnd = function () { window.holdLog.push(['end']); };
+    return tr;
+  };`;
+  const { page, problems } = await embedPage(example('architecture'), spy);
+  await page.evaluate(() => window.ctl.present(0));
+  assert.deepEqual(await page.evaluate(() => window.holdLog), [], 'a paused beat reports no hold');
+  await page.evaluate(() => { const st = document.getElementById('stage'); st.tabIndex = 0; st.focus(); });
+  await page.keyboard.press('Space'); // play
+  await page.waitForFunction(() => window.holdLog.length > 0, null, { timeout: 5000 });
+  const [first] = await page.evaluate(() => window.holdLog);
+  assert.equal(first[0], 'hold');
+  assert.ok(first[1] >= 1800 && first[1] <= 4500, `hold ms ${first[1]} within HOLD_MS..HOLD_MAX_MS`);
+  await page.keyboard.press('Space'); // pause
+  assert.equal((await page.evaluate(() => window.holdLog)).filter((e) => e[0] === 'end').length, 1, 'pausing ends the hold once');
   assert.deepEqual(problems, []);
   await page.close();
 });

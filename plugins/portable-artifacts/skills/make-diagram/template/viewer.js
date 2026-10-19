@@ -77,10 +77,15 @@
     var camera = PADiagram.camera(stage, svg, data, { onApply: emit });
     var trace = PADiagram.trace(svg, data, els, { isOff: function () { return story.isPresenting(); } });
     // Entering Play drops the selection and the route (the panel hides with them); each beat repaints the chrome.
-    var story = PADiagram.story(stage, svg, data, els, camera, { onStep: function () {
-      if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
-      transport.paint(); trace.refresh(); panel.paint(); emit();
-    } });
+    var story = PADiagram.story(stage, svg, data, els, camera, {
+      onStep: function () {
+        if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
+        transport.paint(); trace.refresh(); panel.paint(); emit();
+      },
+      // the transport shows the hold as a progress ring (hold/holdEnd arrive with it)
+      onHold: function (ms) { if (transport.hold) transport.hold(ms); },
+      onHoldEnd: function () { if (transport.holdEnd) transport.holdEnd(); },
+    });
     var transport = PADiagram.transport({ caption: options.caption || null, chapters: options.chapters || null }, data, story);
     var panel = PADiagram.panel({ panel: options.panel || null, tip: options.tip || null, found: options.found || null }, data, els, trace, {
       isOff: function () { return story.isPresenting(); },

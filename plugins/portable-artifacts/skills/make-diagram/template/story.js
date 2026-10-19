@@ -201,7 +201,14 @@
     var seenNow = null; // what the current step beat reveals, for reframe
     var run = 0; // bumps on every goTo, pause and exit, so a stale timer or frame does nothing
     var timer = 0;
+    var inHold = false; // a hold reported to hooks.onHold and not yet ended
+    function endHold() {
+      if (!inHold) return;
+      inHold = false;
+      if (hooks.onHoldEnd) hooks.onHoldEnd();
+    }
     function cancelRun() {
+      endHold();
       run += 1;
       if (timer) global.clearTimeout(timer);
       timer = 0;
@@ -232,7 +239,11 @@
       camera.unfit();
       camera.moveTo(targetOf(beat, seen), { ms: glide });
       var hold = function () {
-        later(token, holdMs(beat), function () {
+        var ms = holdMs(beat);
+        // only a hold that will advance is reported: one armed while paused never moves on
+        if (playing) { inHold = true; if (hooks.onHold) hooks.onHold(ms); }
+        later(token, ms, function () {
+          endHold();
           if (!playing) return;
           if (stepIndex < beats.length - 1) goTo(stepIndex + 1);
           else if (loop) goTo(0);
