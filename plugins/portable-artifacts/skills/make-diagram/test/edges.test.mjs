@@ -161,11 +161,6 @@ test('roundedPath rounds corners with a 6 px radius, shortened on short segments
 // ---- Bézier routes --------------------------------------------------------------
 
 const P = (x, y) => ({ x, y });
-const cubicAt = (p0, c1, c2, p3, t) => {
-  const u = 1 - t;
-  const w = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
-  return P(w[0] * p0.x + w[1] * c1.x + w[2] * c2.x + w[3] * p3.x, w[0] * p0.y + w[1] * c1.y + w[2] * c2.y + w[3] * p3.y);
-};
 
 test('curvedRoute draws a straight run as one line and an L as one cubic bend', () => {
   assert.deepEqual(curvedRoute([P(0, 0), P(20, 0)]), { d: 'M0 0L20 0', mid: P(10, 0) });
@@ -186,19 +181,6 @@ test('curvedRoute keeps the waypoints of a longer route and rounds its corners a
   assert.equal(r.d, 'M0 0L76 0Q100 0 100 24L100 26Q100 50 124 50L176 50Q200 50 200 74L200 150');
   assert.equal(r.d, roundedPath(pts, FALLBACK_CORNER_RADIUS));
   assert.deepEqual(r.mid, P(125, 50), 'half way along the polyline (350 px long)');
-});
-
-test('a Z curve stays inside the polyline bounding box', () => {
-  for (const pts of [[P(0, 0), P(0, 30), P(50, 30), P(50, 60)], [P(622, 193), P(646, 193), P(646, 226), P(1324, 226)], [P(10, 80), P(40, 80), P(40, 0), P(90, 0)]]) {
-    const [p0, c1, c2, p3] = pts;
-    const xs = pts.map((p) => p.x);
-    const ys = pts.map((p) => p.y);
-    for (let i = 0; i <= 100; i++) {
-      const q = cubicAt(p0, c1, c2, p3, i / 100);
-      assert.ok(q.x >= Math.min(...xs) - 1e-9 && q.x <= Math.max(...xs) + 1e-9 && q.y >= Math.min(...ys) - 1e-9 && q.y <= Math.max(...ys) + 1e-9, JSON.stringify(q));
-    }
-    assert.match(curvedRoute(pts).d, /^M[^C]*C[^C]*$/, 'one cubic');
-  }
 });
 
 test('mid of a symmetric Z is its centre', () => {

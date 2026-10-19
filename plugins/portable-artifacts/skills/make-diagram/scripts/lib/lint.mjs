@@ -6,6 +6,8 @@ import { measure } from '../../shared/text.mjs';
 import { LIMITS } from './schema.mjs';
 import { fonts, textRoom, MAX_LABEL_LINES, MAX_WIDENED_TEXT_WIDTH } from './sizes.mjs';
 import { NOTE_PAD_X } from './layout-sequence.mjs';
+import { anchorEdges } from './edges.mjs';
+import { drawnEdges } from './curves.mjs';
 
 const TOLERANCE = 0.5; // px: rounding noise that is not an overlap or an overflow
 
@@ -66,13 +68,14 @@ function nodeOverlapErrors(g) {
   return errors;
 }
 
+// The plates as render.mjs draws them (on a curve, or in ELK's slot), not ELK's boxes.
 function edgeLabelErrors(g) {
   const errors = [];
-  g.edges.forEach((e, i) => {
-    if (!e.label) return;
-    const hit = g.nodes.findIndex((n) => extents(n).some((r) => overlaps(e.label, r)));
+  drawnEdges(anchorEdges(g)).forEach(({ plate }, i) => {
+    if (!plate) return;
+    const hit = g.nodes.findIndex((n) => extents(n).some((r) => overlaps(plate, r)));
     if (hit >= 0) {
-      errors.push({ path: `edges[${i}].label`, message: `label ${q(e.label.text)} overlaps node ${q(g.nodes[hit].id)} (nodes[${hit}]); shorten the label or move the nodes apart` });
+      errors.push({ path: `edges[${i}].label`, message: `label ${q(plate.text)} overlaps node ${q(g.nodes[hit].id)} (nodes[${hit}]); shorten the label or move the nodes apart` });
     }
   });
   return errors;
