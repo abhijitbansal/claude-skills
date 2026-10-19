@@ -64,6 +64,7 @@ Every phase under `plugins/portable-artifacts/**` bumps `.claude-plugin/plugin.j
 - `transport.js` creates the ring around the icon button. The play/pause icon is its own child so `paint()` cannot erase the ring. Re-parent only when the parent changes, so speed/loop changes do not restart the animation. Prefer WAAPI `el.animate()` with explicit `cancel()` over class toggling.
 - Ring lives on `data-pa-next`; on the last beat it moves to `data-pa-play` only when loop is on. No ring when playback will just stop.
 - Reduced motion: no animation, but a stepped/static indicator still shows time left.
+- Amended (as built, 2026-10-19): under reduced motion the ring is a static half ring while a step holds, a cue that the story moves on; it does not show time left.
 - make-explainer inherits it through `viewerRuntime()`; only `template/diagram.css` sizing changes.
 - Tests (RED first): story-unit fake clock (play fires `onHold(ms)` once; speed divides; pause/goTo fires `onHoldEnd`; paused `goTo` fires nothing); transport-unit (ring survives `paint()`; the fake element gains `classList` and `style`); story-browser (visible in Play, absent in Explore and under reduced motion). Look at a screenshot in dusk dark and paper light.
 
@@ -77,6 +78,7 @@ Every phase under `plugins/portable-artifacts/**` bumps `.claude-plugin/plugin.j
 - Regenerate goldens with `PA_WRITE_GOLDEN=1`, stated as intentional. Regenerate the four gallery diagram sets (delivery, incident, oauth, pipeline) **with their `thumb.jpg`**. Leave cache-clock pages (archify) alone.
 - No `lines` root field: Bézier is the default look. A rounded-corner fallback flag is added only if the parallel-edge mitigation fails.
 - Screenshots of the examples in dusk and paper are viewed before the PR; the owner sees them before merge.
+- Amended (as built, 2026-10-19): the fallback is safety-first, per edge. An edge is drawn as a Bézier only when the curve stays 4 px (`CLEARANCE`) from every node it does not join and from every plate, and its label plate (if any) finds a place on the curve; otherwise it keeps today's drawing (the orthogonal route with radius-6 corners and ELK's own plate). Self loops and sequence messages are never curved.
 
 ### P3 — README samples · small · risk low
 
@@ -95,12 +97,14 @@ Hunk goes between the intro paragraph and the plugin table.
 - SKILL.md step 4 gains the look-then-check checklist. Prove `check.mjs` fires: feed it a title at `y: 10` and a spec that fades everything out (RED), then clean specs (GREEN). Add Playwright Chromium to the make-motion CI step (D5).
 - Cut for now: `--at`, `--every/--from/--to`.
 - Amended (ruled 2026-10-19): safe area = 60 * min(w,h) / 1080 px on every side (60 px at 1080 on the short side), not width-scaled; the skip line matches make-diagram's: `check: skipped (no browser: <reason>; <doctor hint>)`.
+- Amended (as built, 2026-10-19): a contact sheet shows at most 11 moments plus the phone tile (12 tiles), and prints a note on stderr when it drops moments; `check.mjs` judges all moments. It judges an element only in a hold (not inside a tween of a prop the rule cares about: geometry for the safe area, geometry and opacity for overlaps), plus the scene's last frame; a box wholly off the canvas is gone, not clipped; text and counters are both checked; a title whose `exit` preset was applied counts as present for the empty-ending rule.
 
 ### P5 — Motion-design reference and named eases · small–medium · risk low
 
 - `references/motion-design.md`: entrance 0.6–0.9 s, exits about half, stagger 0.09 s words / 0.2–0.25 s items, reading holds (1 s + 0.25 s per word beyond three, 2 s on the closing frame), safe area, one accent, linear only for continuous motion, one hero moment. One credit line for claude-motion.
 - Named eases `enter`, `exit`, `move`, `land` in `template/timeline.mjs` via `import { cubicBezier } from 'animejs'` (functions, never strings: strings are silently linear). Confirm the **browser** bundle (`/vendor/animejs/anime.esm.js`) exports it and that the y=1.12 overshoot works. Update the `spec.mjs` enum, `schema.md` ease line and the SKILL.md ease line.
 - Exit presets are **opt-in** (`exit` on a titled element), start after 0.9 × duration, never on the last scene, so posters and 85 % contact frames are never half faded.
+- Amended (ruled 2026-10-19): when the full exit (half the entrance) does not fit after 0.9 × duration, it starts at 0.9 × duration and is shortened to land one frame before the scene end; it is dropped only when the entrance has not finished by then. `check.mjs` treats a title whose exit was applied as leaving on purpose (a hand-keyframed fade-out that empties a scene is still reported).
 - Hold lint is deferred until the bundled examples comply (two of four would warn today).
 
 ### P6 — docs/architecture.html rebuilt with make-diagram · medium · risk medium · approved by the owner (D1)

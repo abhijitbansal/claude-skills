@@ -59,7 +59,7 @@ Chart notes: data must be inline: `data.values`, or `datasets` plus `data: {name
 - `t` is relative to the scene start, sorted ascending, ≤ scene duration.
 - Per property the track is built from the keyframes that set it: before the first, the value is that keyframe's value; between two, it interpolates using the **destination** keyframe's `ease` (default `linear`); after the last, it holds. Properties no keyframe sets keep the element's base value.
 - Sampling: frame *i* shows time *i / fps*, so the last frame is one frame **before** the scene/video end. Put the final keyframe at least one frame (1/fps s) before the scene end, or it is never shown fully.
-- `ease`: `linear`, or `in|out|inOut` × `Quad|Cubic|Quart|Back|Elastic|Bounce|Sine|Expo|Circ`, or a named ease: `enter` (cubic-bezier 0.16, 1, 0.3, 1: fast out, soft settle, for entrances), `exit` (0.6, 0, 0.9, 0.35: slow start, accelerating away), `move` (0.65, 0, 0.35, 1: symmetric, for a move between two places), `land` (0.55, 0, 0.2, 1.12: overshoots about 1% just before it lands; one hero moment per clip). See `motion-design.md`.
+- `ease`: `linear`, or `in|out|inOut` × `Quad|Cubic|Quart|Back|Elastic|Bounce|Sine|Expo|Circ`, or a named ease: `enter` (cubic-bezier 0.16, 1, 0.3, 1: fast out, soft settle, for entrances), `exit` (0.6, 0, 0.9, 0.35: slow start, accelerating away), `move` (0.65, 0, 0.35, 1: symmetric, for a move between two places), `land` (0.55, 0, 0.2, 1.12: overshoots about 1% just before it lands; one hero moment per clip; never on a counter's `value`, where the number would show past its target). See `motion-design.md`.
 
 ## Cross-field errors (examples)
 - `scenes[1].elements[0].id: duplicate id "title" (first used at scenes[0].elements[0].id)`

@@ -73,7 +73,7 @@ The older themes `paper`, `blueprint`, `ink` and `editorial` stay available by n
 
 ## Style defaults
 
-The `dusk` theme when the spec names none: its dark page colour, Host Grotesk for text, Commit Mono for `"font": "mono"`, Funnel Display for `role: "title"`; 1920x1080 sizes (titles 72–120 px, body 40–48 px, captions ≥ 28 px). Charts get a dark theme automatically; put a Vega-Lite `config` in the chart to override it. Keep entrances short (0.5–0.9 s), stagger elements by 0.2–0.4 s, and stay under 15 s unless asked. For timing, holds, the named eases and `"exit": true` (a titled text's opt-in exit before a scene cut), read `<skill-dir>/references/motion-design.md`. Fonts are bundled; never use CDN URLs. Charts must carry inline data (`data.values`, or `datasets` + `data.name`); any `url` in a chart spec is rejected. Colours must be hex, rgb()/hsl() or named.
+The `dusk` theme when the spec names none: its dark page colour, Host Grotesk for text, Commit Mono for `"font": "mono"`, Funnel Display for `role: "title"`; 1920x1080 sizes (titles 72–120 px, body 40–48 px, captions ≥ 28 px). Charts get a dark theme automatically; put a Vega-Lite `config` in the chart to override it. Keep entrances 0.6–0.9 s, stagger 0.09 s per word or 0.2–0.25 s per list item, and stay under 15 s unless asked. For timing, holds, the named eases and `"exit": true` (a titled text's opt-in exit before a scene cut), read `<skill-dir>/references/motion-design.md`. Fonts are bundled; never use CDN URLs. Charts must carry inline data (`data.values`, or `datasets` + `data.name`); any `url` in a chart spec is rejected. Colours must be hex, rgb()/hsl() or named.
 
 ## Degraded mode
 

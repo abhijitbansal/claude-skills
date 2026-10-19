@@ -6,11 +6,11 @@ Timing numbers adapted from whaleyxbt/claude-motion, MIT.
 
 ## Entrances and exits
 
-- **Entrances take 0.6–0.9 s** with the `enter` ease: the element covers most of its way early and settles softly. A title with `"role": "title"` and no keyframes already gets its theme's entrance (dusk rise 0.9 s, press ink-in 1.1 s, poster slam 0.5 s).
+- **Entrances take 0.6–0.9 s** with the `enter` ease: the element covers most of its way early and settles softly. A title with `"role": "title"` and no keyframes already gets its theme's entrance (dusk rise 0.9 s, press ink-in 1.1 s, poster slam 0.5 s); ink-in and slam sit outside the range on purpose, as the slow and the snappy character of their themes.
 - **Exits take about half as long as the entrance** with the `exit` ease: they start slowly and speed away, so the eye has already let go. Fade out, or move a short way and fade; do not fly text across the frame.
 - **Moves from one place to another** use `move` (symmetric: eases in and out).
 - **Linear is only for continuous motion**: a slow drift, a progress bar, a ticker. Never for an entrance or an exit.
-- **`land` overshoots about 1 % before it settles.** Use it for at most one moment per clip, the hero moment, never as the default.
+- **`land` overshoots about 1 % before it settles.** Use it for at most one moment per clip, the hero moment, never as the default. Never use `land` on a counter's `value`: the number would show past its target (1,009 for a count to 1,000) for several frames.
 
 ## Opt-in title exits: `"exit": true`
 
@@ -44,7 +44,7 @@ Holds are not checked by `check.mjs`. Count them yourself from the keyframe time
 
 - **Safe area: 60 px at 1080 on the short side**, on every side (60 × min(width, height) / 1080: 60 px at 1920x1080, 1080x1080 and 1080x1920, 120 px at 3840x2160). Keep text and counters inside it while they are still. `check.mjs` reports visible text or a counter outside it while it is not moving.
 - **One accent colour.** The theme's accent marks the one thing that matters in a scene (the number, the highlighted bar). Everything else uses the text colours.
-- **One hero moment per clip.** Pick the beat the clip is about and give it the biggest type, the accent, and the `land` ease if any. Other beats stay quieter.
+- **One hero moment per clip.** Pick the beat the clip is about and give it the biggest type, the accent, and the `land` ease if any (on its position or scale, never on a counter's `value`). Other beats stay quieter.
 
 ## What `check.mjs` checks
 

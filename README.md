@@ -22,20 +22,22 @@ Made by an agent from this prompt with `/make-motion`: JSON in, MP4 out, offline
 Make a 10-second launch announcement, 1920x1080: scene 1 the product name "Lumen 2.0" scales in with the tagline "Search that keeps up"; scene 2 a counter from 1 to 3 with the suffix "x faster" and the caption "Median query time vs 1.0"; scene 3 three feature labels (Offline index, Typo-tolerant, Private by default) appear one after another; end on "Available today".
 ```
 
-Install it with `/plugin install portable-artifacts@claude-skills`. These three came from the same plugin, each linked to its page:
+Install it in Claude Code: after `/plugin marketplace add abhijitbansal/claude-skills`, run `/plugin install portable-artifacts@claude-skills`. These three came from the same plugin, each linked to its page:
 
 <table>
   <tr>
-    <td align="center" width="33%">
-      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/gallery/delivery-diagram/dusk/index.html"><img src="docs/features/img/portable-artifacts/diagram-story.gif" alt="A food delivery architecture diagram playing its story: step 1, the customer taps place order, lights the edge from Customer to Mobile app, then step 2 moves on to the edge from Mobile app to API gateway, with the caption and step chips below, a Pause button, and a small ring beside Next that fills while a step holds."></a><br>
+    <td align="center" valign="top" colspan="2">
+      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/gallery/delivery-diagram/dusk/index.html"><img src="docs/features/img/portable-artifacts/diagram-story.gif" width="700" height="450" alt="A food delivery diagram playing its story: steps 1 to 3 each light one edge, the third a curve to Orders service, with the caption, step chips, and a ring by Next that fills while a step holds."></a><br>
       <sub><code>/make-diagram</code>: a diagram that plays its own story</sub>
     </td>
-    <td align="center" width="33%">
-      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/growth-dashboard.html"><img src="docs/features/img/portable-artifacts/growth-dashboard.jpg" alt="A Growth overview dashboard: three KPI tiles (total revenue, units sold, signup conversion rate) above bar charts of revenue by region and signup conversion rate by channel, a line chart of monthly revenue and a line chart of daily sessions by channel."></a><br>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="50%">
+      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/growth-dashboard.html"><img src="docs/features/img/portable-artifacts/growth-dashboard.jpg" alt="A Growth overview dashboard: three KPI tiles (total revenue, units sold, signup conversion rate) above bar charts of revenue by region and signup conversion rate by channel, a line chart of monthly revenue and a line chart of daily sessions by channel." width="400" height="533"></a><br>
       <sub><code>/make-dashboard</code>: two CSV files in, one offline dashboard out</sub>
     </td>
-    <td align="center" width="33%">
-      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/gallery/explainer-deck/index.html"><img src="docs/features/showcase/portable-artifacts/gallery/explainer-deck/thumb.jpg" alt="The title slide of the Portable Artifacts Deck: the title and a short subtitle in a card over a warm sunset landscape, with date, branch and repo tags."></a><br>
+    <td align="center" valign="top" width="50%">
+      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/gallery/explainer-deck/index.html"><img src="docs/features/showcase/portable-artifacts/gallery/explainer-deck/thumb.jpg" alt="The title slide of the Portable Artifacts Deck: the title and a short subtitle in a card over a warm sunset landscape, with date, branch and repo tags." width="400" height="225"></a><br>
       <sub><code>/make-explainer</code>: a slide deck as one HTML file</sub>
     </td>
   </tr>

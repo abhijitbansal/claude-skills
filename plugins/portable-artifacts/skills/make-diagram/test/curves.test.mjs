@@ -61,6 +61,17 @@ test('a clear route keeps its curve and centres its plate half way along it', ()
   assert.equal(edge.plate.text, 'calls');
 });
 
+test('a self loop is never curved: it keeps its radius-6 corners and ELK\'s plate beside the loop', () => {
+  // out of a's right side, over the top and back down into it; open space all round, so a curve would be clear
+  const loop = [{ x: 140, y: 118 }, { x: 170, y: 118 }, { x: 170, y: 70 }, { x: 110, y: 70 }, { x: 110, y: 100 }];
+  const plate = { text: 'retry', x: 176, y: 80, width: 40, height: 20 };
+  const geometry = { ...geometryWith([]), edges: [{ id: 'edge-0', from: 'a', to: 'a', points: loop, style: 'solid', both: false, label: plate }] };
+  const [edge] = drawnEdges(geometry);
+  assert.equal(edge.curved, false);
+  assert.equal(edge.d, roundedPath(loop));
+  assert.deepEqual(edge.plate, plate);
+});
+
 test('a plate that cannot sit half way moves along the curve before the edge gives up its curve', () => {
   const pts = sampleWire(curvedRoute(ROUTE).d);
   const half = along(pts, 0.5);
