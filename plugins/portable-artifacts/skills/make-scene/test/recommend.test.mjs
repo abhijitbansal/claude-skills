@@ -134,10 +134,15 @@ test('weight counts a surface by its data cells, not its vertices', () => {
   assert.equal(renderWeight({ surfaces }), 'light');
 });
 
-test('terrain reason says so when t is not numeric or time-like', () => {
-  const rows = [{ group: 'a', t: 'alpha', value: 1 }, { group: 'b', t: 'beta', value: 2 }];
-  const { reasons } = recommend({ rows, links: [] });
-  assert.equal(reasons.terrain, 'a surface needs t to be numeric or time-like, so the grid has no order');
+test('terrain reason says what happens when t is text, without "needs"', () => {
+  for (const [a, b] of [['alpha', 'beta'], ['Q1', 'Q2']]) {
+    const rows = [{ group: 'x', t: a, value: 1 }, { group: 'x', t: b, value: 2 }];
+    const { ranked, reasons } = recommend({ rows, links: [] });
+    assert.equal(reasons.terrain, 't is text: columns follow text order');
+    assert.doesNotMatch(reasons.terrain, /needs/);
+    assert.ok(!reasons.terrain.startsWith('not available'), 'terrain is eligible here');
+    assert.ok(ranked.includes('terrain'));
+  }
 });
 
 test('terrain reason with no rows has no null in it', () => {

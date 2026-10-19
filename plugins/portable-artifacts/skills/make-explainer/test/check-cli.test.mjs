@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { buildFile, buildSpec, exampleFile, haveBrowser, scratchDir } from './helpers/browser.mjs';
-import { checkPage } from '../scripts/check.mjs';
+import { checkPage, isConsoleProblem } from '../scripts/check.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CHECK = path.join(ROOT, 'scripts/check.mjs');
@@ -151,4 +151,14 @@ test('a check that outlives its cap is a failure, not a hang', async (t) => {
   const r = cli([built.file], { PA_CHECK_TIMEOUT_MS: '1' });
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /check: timed out after 0\.001 s/);
+});
+
+// ---- chromium GL driver hints are not page problems ---------------------------------------------
+
+test('a GL driver performance message is not a console problem, any other warning still is', () => {
+  const stall = '[.WebGL-0x1234abcd]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels';
+  assert.equal(isConsoleProblem('warning', stall), false);
+  assert.equal(isConsoleProblem('warning', 'careful'), true);
+  assert.equal(isConsoleProblem('warning', '[.WebGL-0x1]GL Driver Message (OpenGL, Other, X, High): something else'), true);
+  assert.equal(isConsoleProblem('error', stall), true, 'an error of that shape is still an error');
 });

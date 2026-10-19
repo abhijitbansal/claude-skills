@@ -18,7 +18,7 @@ with any agent that can run shell commands. Nothing leaves your machine.
   exact value; an Explore list and a data table carry the rest. Without WebGL
   the page falls back to the table (or the 2D drawing for a lift).
 - **Deterministic**: the same spec and versions give byte-identical pages
-  (`SOURCE_DATE_EPOCH` pins the build day). No `Math.random` anywhere.
+  (`SOURCE_DATE_EPOCH` pins the build day). The layout uses no `Math.random`; the same spec gives the same bytes.
 - **Light on the machine**: instanced geometry, rendering pauses off-screen,
   in a hidden tab and when idle; reduced motion turns off orbit and sway.
 - **Embeddable**: make-explainer pages take a `scene` section (up to 4 per

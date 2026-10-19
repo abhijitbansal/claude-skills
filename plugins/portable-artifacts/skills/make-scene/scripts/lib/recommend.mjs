@@ -60,7 +60,8 @@ function reasonFor(world, { rows, links }, elig, first) {
     return rows.some((r) => r.parent !== undefined) ? 'rows have parents: a hierarchy of trees' : 'no parents: every row stands as its own tree';
   }
   if (world === 'terrain') {
-    if (fill === null) return 'a surface needs t to be numeric or time-like, so the grid has no order';
+    // Eligible terrain with no fill: t is text (or there are no rows), so the columns simply follow text order.
+    if (fill === null) return rows.length > 0 ? 't is text: columns follow text order' : 'a surface needs t to be numeric or time-like, so the grid has no order';
     return `group x t grid is ${pct}% filled${first === 'terrain' ? ': a surface fits' : ''}`;
   }
   if (first === 'city') return hasT ? 'time or sequence: one block per row' : 'default: one block per row';

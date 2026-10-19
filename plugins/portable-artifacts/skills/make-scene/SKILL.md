@@ -64,7 +64,7 @@ If an explicit `world` cannot show the data, validate names the worlds that can.
 
 ## Tour
 
-`tour` is up to 12 beats `{ "title", "caption", "focus" }`: title up to 48 characters, caption up to 160, `focus` a list of group names or row labels (case-insensitive), or for a diagram lift node ids. A dashboard lift focuses an x value, colour value or label. Write 3 to 6 beats that point at the real story in the data. Set `autoplay` to `true` to start the tour on open (ignored under reduced motion).
+`tour` is up to 12 beats `{ "title", "caption", "focus" }`: title up to 48 characters, caption up to 160, `focus` a list of group names or row labels (case-insensitive), or for a diagram lift a node, group or participant id. A dashboard lift focuses an x value, colour value or label. Write 3 to 6 beats that point at the real story in the data. Set `autoplay` to `true` to start the tour on open (ignored under reduced motion).
 
 ## Degraded mode
 

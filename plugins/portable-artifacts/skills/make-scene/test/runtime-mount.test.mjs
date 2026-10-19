@@ -98,6 +98,28 @@ test('while the 3D view works the fallback is visually hidden but still in the a
   assert.deepEqual(style, { hidden: false, display: 'block', position: 'absolute', width: '1px', height: '1px', overflow: 'hidden' });
 });
 
+test('the canvas announces that the arrow keys orbit', async (t) => {
+  const ctx = await open(t, { wrapper: false });
+  if (!ctx) return;
+  assert.equal(await ctx.page.getAttribute('canvas', 'aria-keyshortcuts'), 'ArrowLeft ArrowRight ArrowUp ArrowDown');
+});
+
+test('a resize does not allocate a new pointer media query', async (t) => {
+  const ctx = await open(t, { wrapper: false });
+  if (!ctx) return;
+  const { page } = ctx;
+  await page.evaluate(() => {
+    window.coarseQueries = 0;
+    const original = window.matchMedia.bind(window);
+    window.matchMedia = (q) => { if (q.includes('pointer')) window.coarseQueries += 1; return original(q); };
+  });
+  for (const width of [700, 520, 400]) {
+    await page.evaluate((w) => { document.getElementById('host').style.width = `${w}px`; }, width);
+    await page.evaluate(() => window.API.renderNow());
+  }
+  assert.equal(await page.evaluate(() => window.coarseQueries), 0);
+});
+
 test('only the arrow keys are consumed: other keys reach the document', async (t) => {
   const ctx = await open(t, { wrapper: false, reducedMotion: false });
   if (!ctx) return;

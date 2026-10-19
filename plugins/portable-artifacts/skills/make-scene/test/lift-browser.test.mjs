@@ -40,7 +40,7 @@ async function open(t, diagram, { reducedMotion = 'no-preference', viewport = { 
   const problems = [];
   page.on('console', (m) => { if (m.type() === 'error') problems.push(m.text()); });
   page.on('pageerror', (e) => problems.push(e.message));
-  await page.goto(`${pathToFileURL(built.out).href}?test`);
+  await page.goto(`${pathToFileURL(built.out).href}?test=1`);
   await page.waitForFunction(() => document.querySelector('[data-pa-scene]').dataset.sceneState !== 'loading', null, { timeout: 10000 });
   if ((await page.evaluate(() => document.querySelector('[data-pa-scene]').dataset.sceneState)) !== 'ready') {
     t.skip('WebGL unavailable in this Chromium');

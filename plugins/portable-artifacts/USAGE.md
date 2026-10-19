@@ -94,7 +94,7 @@ not exercised. An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**:
 dashboard 10/10, motion 6/10, with the last four motion prompts stopped by the
 account's usage limit ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)).
 **Gemini CLI**: its install paths were checked against its documentation on
-2026-10-15 and not run live. **make-scene**: 10/10 valid builds on the first run (Claude Haiku on the Claude Code, median 1.5 validate runs, median 40 s)
+2026-10-15 and not run live. **make-scene**: 10/10 valid builds on the first run (Claude Haiku in Claude Code, median 1.5 validate runs, median 40 s)
 ([`eval/results/summary-scene-2026-10-19.md`](eval/results/summary-scene-2026-10-19.md)). Results:
 [`eval/results/summary-portability-copilot-2026-10-15.md`](eval/results/summary-portability-copilot-2026-10-15.md)
 and [`eval/results/summary-install-targets-2026-10-15.md`](eval/results/summary-install-targets-2026-10-15.md).

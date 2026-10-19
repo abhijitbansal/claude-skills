@@ -36,7 +36,9 @@ const ID_PREFIX = 'sc';
 
 /** Where the page goes: `out` (a .html file, or a folder), else $PA_OUTPUT_DIR, else ~/.agent/scenes; always <slug-of-title>.html in a folder. */
 export function resolveScenePath({ out, title, env = process.env, home = os.homedir() }) {
-  const folder = out || env.PA_OUTPUT_DIR ? out : path.join(home, '.agent', 'scenes');
+  // resolveOutput itself reads $PA_OUTPUT_DIR, so the scenes folder is passed only when neither is given.
+  const hasDestination = Boolean(out) || Boolean(env.PA_OUTPUT_DIR);
+  const folder = hasDestination ? out : path.join(home, '.agent', 'scenes');
   return resolveOutput({ out: folder, title, fallback: 'scene', env, home });
 }
 

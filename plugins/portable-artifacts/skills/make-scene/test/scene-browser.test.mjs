@@ -28,8 +28,8 @@ after(async () => {
   await browser?.close();
 });
 
-// Opens a built page with the test hook (?test); null (after skipping) when there is no browser or WebGL does not run.
-async function open(t, world, { viewport = VIEWPORTS[0], build = {}, ...contextOptions } = {}) {
+// Opens a built page with the test hook (?test=1); null (after skipping) when there is no browser or WebGL does not run.
+async function open(t, world, { viewport = VIEWPORTS[0], build = {}, search = '?test=1', ...contextOptions } = {}) {
   if (!browser) return t.skip(skipReason) ?? null;
   const { file } = await buildWorldPage(t, world, build);
   const context = await browser.newContext({ viewport, ...contextOptions });
@@ -38,7 +38,7 @@ async function open(t, world, { viewport = VIEWPORTS[0], build = {}, ...contextO
   const problems = [];
   page.on('console', (m) => { if (m.type() === 'error') problems.push(m.text()); });
   page.on('pageerror', (e) => problems.push(e.message));
-  await page.goto(`${pathToFileURL(file).href}?test`);
+  await page.goto(`${pathToFileURL(file).href}${search}`);
   await page.waitForFunction(() => document.querySelector('[data-pa-scene]').dataset.sceneState !== 'loading', null, { timeout: 10000 });
   if ((await page.evaluate(() => document.querySelector('[data-pa-scene]').dataset.sceneState)) !== 'ready') {
     t.skip('WebGL unavailable in this Chromium');
@@ -85,6 +85,17 @@ test('theme toggle re-tints the canvas', async (t) => {
   await page.waitForTimeout(400);
   assert.notEqual(await canvasHash(page), before_, 'the sampled pixels changed');
   assert.deepEqual(ctx.problems, []);
+});
+
+test('the test hook is on only for ?test=1', async (t) => {
+  for (const search of ['', '?test', '?test=0']) {
+    const ctx = await open(t, 'city', { search });
+    if (!ctx) return;
+    assert.equal(await ctx.page.evaluate(() => typeof window.PAScene.__project), 'undefined', `no hook for "${search}"`);
+  }
+  const ctx = await open(t, 'city');
+  if (!ctx) return;
+  assert.equal(await ctx.page.evaluate(() => typeof window.PAScene.__project), 'function', 'hook on for ?test=1');
 });
 
 test('hover shows exact value: the tooltip reads the item display as text', async (t) => {

@@ -71,6 +71,7 @@ function mount(host, graph, opts = {}) {
   canvas.tabIndex = 0;
   canvas.setAttribute('role', 'img');
   canvas.setAttribute('aria-label', String(graph.title ?? ''));
+  canvas.setAttribute('aria-keyshortcuts', 'ArrowLeft ArrowRight ArrowUp ArrowDown'); // the arrows orbit (controls.js)
   Object.assign(canvas.style, { display: 'block', width: '100%', height: '100%', touchAction: 'none' });
 
   // Hiding goes through inline display: an author `display` on these elements would beat the [hidden] attribute.
@@ -153,6 +154,7 @@ function mount(host, graph, opts = {}) {
     scene.fog = built.fog;
 
     const reducedQuery = win.matchMedia(REDUCED_QUERY);
+    const coarseQuery = win.matchMedia(COARSE_QUERY);
     const isReduced = () => opts.reducedMotion ?? reducedQuery.matches;
     const target = new Vector3(...graph.camera.target);
     const distance = Math.max(1, camera.position.distanceTo(target));
@@ -169,7 +171,7 @@ function mount(host, graph, opts = {}) {
     function resize() {
       const w = Math.max(1, container.clientWidth || host.clientWidth);
       const h = Math.max(1, container.clientHeight || host.clientHeight);
-      const ratio = pixelRatio(win.devicePixelRatio, win.matchMedia(COARSE_QUERY).matches);
+      const ratio = pixelRatio(win.devicePixelRatio, coarseQuery.matches);
       const key = `${w}x${h}@${ratio}`;
       if (key === size) return;
       size = key;
@@ -407,7 +409,7 @@ function mountScene(host, graph, opts = {}) {
 }
 
 /**
- * Test hook, only when the page URL has ?test: window.PAScene.__project(itemIndex) -> { x, y } viewport point on top of
+ * Test hook, only when the page URL has ?test=1: window.PAScene.__project(itemIndex) -> { x, y } viewport point on top of
  * the first drawn instance of that item (the first scene on the page), or null. The browser tests hover it.
  * window.PAScene.__scene is that scene's api (the tests read its travelling light).
  */
@@ -425,7 +427,7 @@ function exposeProjection(graph, api) {
 /** Mount every [data-pa-scene] host that carries its graph in a <script type="application/json"> child. */
 function initAll(opts = {}) {
   const mounted = [];
-  const hooked = new URLSearchParams(window.location.search).has('test');
+  const hooked = new URLSearchParams(window.location.search).get('test') === '1';
   for (const host of document.querySelectorAll('[data-pa-scene]')) {
     const data = host.querySelector('script[type="application/json"]');
     if (!data || host.dataset.sceneInit) continue;
