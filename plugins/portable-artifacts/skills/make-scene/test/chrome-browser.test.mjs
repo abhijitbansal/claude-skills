@@ -2,7 +2,9 @@
 // Skips itself without Chromium or WebGL (the full browser matrix is Task 9's).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { build } from '../scripts/build.mjs';
+import { loadTheme, themeCss } from '../shared/theme.mjs';
 import { PINNED_ENV, tempDir, writeScene } from './helpers/scene-fixtures.mjs';
 
 const ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
@@ -162,4 +164,42 @@ test('hovering a planet shows that planet, never the link whose hover tube enclo
   assert.ok(result.seen.every((s) => s.item >= 0), 'every planet reads as an item');
   const exact = result.seen.filter((s) => s.item === s.want).length;
   assert.ok(exact >= result.seen.length - 2, `the planet itself (not a neighbour) is hit: ${exact}/${result.seen.length}`);
+});
+
+test('decoration in front hides the data behind it; unobstructed data still reads', async (t) => {
+  if (!browser) return t.skip(skipReason);
+  const golden = JSON.parse(fs.readFileSync(new URL('./golden/city.json', import.meta.url), 'utf8'));
+  // Camera on +z looking at the origin. A decoration box (item -1) stands in front of a data box (item 0);
+  // a second data box stands clear to one side.
+  const graph = {
+    ...golden,
+    bounds: { min: [-8, -2, -4], max: [8, 2, 4] },
+    camera: { position: [0, 0, 30], target: [0, 0, 0] },
+    items: [{ id: 'i0', label: 'behind', group: 0, value: 1, display: '1' }, { id: 'i1', label: 'clear', group: 0, value: 2, display: '2' }],
+    batches: [
+      { id: 'front', shape: 'box', colour: 'cat1', emissive: null, flat: false, instances: [[0, 0, 2, 3, 3, 1, -1]] },
+      { id: 'data', shape: 'box', colour: 'cat2', emissive: null, flat: false, instances: [[0, 0, -2, 2, 2, 2, 0], [6, 0, 0, 2, 2, 2, 1]] },
+    ],
+    tubes: [], surfaces: [], labels: [], anim: { sway: [], orbits: [] }, focus: {}, tour: [],
+  };
+  const context = await browser.newContext({ viewport: { width: 800, height: 600 } });
+  t.after(() => context.close());
+  const page = await context.newPage();
+  await page.setContent(`<!doctype html><style>${themeCss(loadTheme('dusk'))}</style><body></body>`);
+  await page.addScriptTag({ content: fs.readFileSync(new URL('../template/vendor/scene-runtime.min.js', import.meta.url), 'utf8') });
+  const result = await page.evaluate(async (g) => {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:0;top:0;width:800px;height:600px';
+    host.innerHTML = '<div data-scene-canvas style="position:absolute;inset:0"></div><div data-scene-fallback></div>';
+    document.body.append(host);
+    const api = PAScene.mount(host, g, { reducedMotion: true });
+    await new Promise((r) => setTimeout(r, 400));
+    const rect = api.canvas.getBoundingClientRect();
+    const at = (x, y, z) => { const p = api.project(x, y, z); return api.pickHit(rect.left + p.x, rect.top + p.y); };
+    return { state: host.dataset.sceneState, hidden: at(0, 0, -2), front: at(0, 0, 2), clear: at(6, 0, 0) };
+  }, graph);
+  if (result.state !== 'ready') return t.skip('WebGL unavailable in this Chromium');
+  assert.deepEqual(result.hidden, { item: -1, tube: -1 }, 'the data box behind the decoration is not hoverable through it');
+  assert.deepEqual(result.front, { item: -1, tube: -1 }, 'the decoration itself has no tooltip');
+  assert.deepEqual(result.clear, { item: 1, tube: -1 }, 'unobstructed data reads');
 });
