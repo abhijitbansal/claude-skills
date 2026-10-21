@@ -83,16 +83,17 @@ test('--for voiceover asks for kokoro; plain does not; --for check is accepted a
 
 test('requirementsFor check: node, node_modules and a required browser; no ffmpeg (check.mjs captures no video)', async () => {
   const requirementsFor = await loadRequirements();
-  assert.deepEqual(idsOf(requirementsFor('check')), ['node', 'node_modules', 'chromium']);
+  assert.deepEqual(idsOf(requirementsFor('check')), ['node', 'node_modules', 'chromium', 'builder_agent']);
   assert.equal(requirementsFor('check')[2].required, true);
+  assert.equal(requirementsFor('check')[3].required, false, 'the agent file is optional');
 });
 
 test('requirementsFor: rendering always needs ffmpeg and a required browser; ALL adds kokoro', async () => {
   const requirementsFor = await loadRequirements();
   const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
-  assert.deepEqual(idsOf(requirementsFor(undefined)), ['node', 'node_modules', 'ffmpeg', 'chromium']);
+  assert.deepEqual(idsOf(requirementsFor(undefined)), ['node', 'node_modules', 'ffmpeg', 'chromium', 'builder_agent']);
   assert.equal(requirementsFor(undefined)[3].required, true);
-  assert.deepEqual(idsOf(requirementsFor(ALL)), ['node', 'node_modules', 'ffmpeg', 'chromium', 'kokoro']);
+  assert.deepEqual(idsOf(requirementsFor(ALL)), ['node', 'node_modules', 'ffmpeg', 'chromium', 'kokoro', 'builder_agent']);
 });
 
 test('install hints name the doctor with its real path and the missing item id', async () => {
@@ -150,4 +151,37 @@ test('the doctor command in hints quotes a path with spaces, as the shared helpe
   const { doctorCommand } = await import(pathToFileURL(path.join(dir, 'scripts/lib/doctor-hint.mjs')).href);
   assert.equal(doctorCommand(), `node ${quoteArg(path.join(fs.realpathSync(dir), 'scripts/doctor.mjs'))}`);
   assert.match(doctorCommand(), /^node ["']/);
+});
+
+// The optional artifact-builder agent file: reported only where Copilot or Codex exists, never a failure on its own.
+test('builder_agent is an optional requirement in every target, and a missing agent file keeps exit 0', async () => {
+  const requirementsFor = await loadRequirements();
+  const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
+  for (const t of [undefined, ALL]) {
+    const b = requirementsFor(t).find((r) => r.id === 'builder_agent');
+    assert.ok(b, `builder_agent for ${String(t)}`);
+    assert.equal(b.required, false);
+  }
+  const home = tmp('doctor-home-');
+  const cwd = tmp('doctor-cwd-');
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  const doctor = () => spawnSync(process.execPath, [path.join(SKILL, 'scripts/doctor.mjs'), '--json'], { encoding: 'utf8', env, cwd });
+  const read = (r) => JSON.parse(r.stdout);
+  const consistent = (r) => {
+    const out = read(r);
+    assert.equal(out.ok, out.missing.filter((m) => m.required).length === 0, 'ok ignores optional misses');
+    assert.equal(r.status, out.ok ? 0 : 1, 'an optional miss alone must not exit 1');
+    return out;
+  };
+  // Neither ~/.copilot nor ~/.codex: Claude Code or Gemini, nothing to report.
+  assert.equal(consistent(doctor()).missing.some((m) => m.id === 'builder_agent'), false, 'not reported without a Copilot or Codex folder');
+  // ~/.codex exists, no agent file: a missing optional.
+  fs.mkdirSync(path.join(home, '.codex'));
+  const miss = consistent(doctor()).missing.find((m) => m.id === 'builder_agent');
+  assert.ok(miss, 'reported once ~/.codex exists');
+  assert.equal(miss.required, false);
+  assert.match(miss.fix.manual.darwin, /install\.mjs copilot --agents-only/);
+  fs.mkdirSync(path.join(home, '.codex/agents'));
+  fs.writeFileSync(path.join(home, '.codex/agents/artifact-builder.toml'), 'name = "artifact-builder"\n');
+  assert.equal(consistent(doctor()).missing.some((m) => m.id === 'builder_agent'), false, 'present once the file exists');
 });

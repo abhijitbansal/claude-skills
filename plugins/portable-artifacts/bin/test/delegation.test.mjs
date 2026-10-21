@@ -4,12 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Hosts cannot pin a model from SKILL.md, so four skills tell the running agent to hand
-// the work to the cheap `artifact-builder` agent. make-motion is decided in a later task.
+// Hosts cannot pin a model from SKILL.md, so every skill tells the running agent to hand
+// the work to the cheap `artifact-builder` agent (make-motion joined after its Copilot gate passed).
 const SKILLS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../skills');
 const read = (skill) => fs.readFileSync(path.join(SKILLS, skill, 'SKILL.md'), 'utf8');
 const HEADING = '## Cheaper model';
-const DELEGATING = ['make-dashboard', 'make-diagram', 'make-explainer', 'make-scene'];
+const DELEGATING = ['make-dashboard', 'make-diagram', 'make-explainer', 'make-motion', 'make-scene'];
 
 // The text under `## Cheaper model`, up to the next `## ` heading.
 function section(md) {
@@ -34,12 +34,13 @@ for (const skill of DELEGATING) {
   });
 }
 
-test('the Cheaper model text is identical in all four skills', () => {
+test('the Cheaper model text is identical in all five skills', () => {
   const texts = DELEGATING.map((s) => section(read(s)));
   assert.ok(texts[0], 'section exists');
   for (const t of texts.slice(1)) assert.equal(t, texts[0]);
 });
 
-test('make-motion has no Cheaper model section yet (its gate decides)', () => {
-  assert.equal(section(read('make-motion')), null);
+test('make-motion runs on the cheap model: frontmatter model: haiku', () => {
+  const front = read('make-motion').match(/^---\n([\s\S]*?)\n---/)[1];
+  assert.match(front, /^model: haiku$/m);
 });

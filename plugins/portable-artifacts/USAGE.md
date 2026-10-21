@@ -100,6 +100,42 @@ account's usage limit ([`summary-full-2026-10-10.md`](eval/results/summary-full-
 [`eval/results/summary-portability-copilot-2026-10-15.md`](eval/results/summary-portability-copilot-2026-10-15.md)
 and [`eval/results/summary-install-targets-2026-10-15.md`](eval/results/summary-install-targets-2026-10-15.md).
 
+### Cheaper model on Copilot and Codex
+
+Writing a spec is a small job, so every skill can run on a cheap model. Hosts differ in how you get that:
+
+| Host | Mechanism | File | Deterministic or advisory |
+|---|---|---|---|
+| Copilot CLI | `copilot --agent artifact-builder` runs the whole session on the agent's model | `~/.copilot/agents/artifact-builder.agent.md` (project scope: `.github/agents`) | Deterministic. Verified on Copilot CLI 1.0.98: its log shows `Using model "claude-haiku-5.5" from custom agent "artifact-builder"` |
+| VS Code Copilot Chat | Pick `artifact-builder` in the agent picker | the same `.agent.md` file | Deterministic, not tested here |
+| Copilot CLI or VS Code, skill hand-off | The skill's "Cheaper model" section tells the running agent to start `artifact-builder` with a self-contained brief | the same `.agent.md` file | Advisory: the main agent may choose not to |
+| Codex | `~/.codex/agents/artifact-builder.toml` (model `gpt-6-luna`, low reasoning effort), or the `default_subagent_model` key under `[agents]` in Codex config | `~/.codex/agents/artifact-builder.toml` (project scope: `.codex/agents`) | Config-level. Written from the Codex docs, not run live |
+| Claude Code | `model: haiku` and `effort: low` in each `SKILL.md` frontmatter; already honoured | none (no agent file) | Honoured by Claude Code itself |
+| Gemini CLI | nothing | none | none |
+
+Install the agent file with one of these (add `--project <dir>` for project scope, and use `codex` or `agents` in place of `copilot` for those hosts):
+
+```bash
+node plugins/portable-artifacts/bin/install.mjs copilot
+node plugins/portable-artifacts/bin/install.mjs copilot --agents-only
+```
+
+The first command installs the skills and the agent. The second writes only the agent file, for users whose skills came another way (for example `npx skills`). An existing agent file is kept unless you pass `--force`. `node <skill-dir>/scripts/doctor.mjs` reports a missing agent file as an optional item, and only where `~/.copilot` or `~/.codex` exists.
+
+What was measured, on Copilot CLI 1.0.98, 2026-10-21 (results: [`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md)), running `copilot -p "<prompt>" --allow-all-tools --agent artifact-builder`:
+
+| Run | Valid builds | Model |
+|---|---|---|
+| make-motion, all 10 prompts | 10/10 (validate runs 1-4, median 2; 26-57 s per case) | `claude-haiku-5.5` reported for 9 of 10; the edit case did not set `generatedBy` |
+| dashboard, diagram, explainer, scene (9 runs) | 9/9 | `claude-haiku-5.5` reported for all 9 |
+| Copilot's own logs, all 19 runs | 19 lines `Using model "claude-haiku-5.5" from custom agent "artifact-builder"` | the default would have been `claude-sonnet-5.5` |
+
+The skill hand-off is advisory. In the one live trial (make-explainer on the default model, no retries), the main agent did hand off and the sub-agent ran on `claude-haiku-5.5` and obeyed the loop guard, but the sub-agent hit `Permission denied because no interactive user response was available` on both its tools when reading the skill file. That skill was a `--link` symlink pointing outside the project; the cause was not verified and a copy install was not tried. The main agent said so and built the page itself (validate passed, 34 s). So the hand-off happened and the fallback worked, but the cheap model did not do the work in that run.
+
+Cost: only that one trial was measured, at 18.7 AI Credits (about $0.19 at 1 credit = $0.01; 432k input tokens, 353k of them cached, 4.2k output tokens). The cost of the smoke and motion runs was not measured. Claude Haiku 5.5 is listed at $0.10 / $0.50 per 1M input / output tokens; the default model's price was not looked up here, so no saving is claimed.
+
+Not tested: Codex (no account; the files come from the Codex docs), VS Code Copilot Chat, and a copy install for the hand-off trial.
+
 ## 2. Dashboards with make-dashboard
 
 **Ask:**

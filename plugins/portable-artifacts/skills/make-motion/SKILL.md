@@ -2,6 +2,8 @@
 name: make-motion
 description: Use when the user wants a short animated explainer video (titles, counters, shapes, charts, images with keyframed motion) previewed locally and exported to MP4, with music or a voiceover only when asked; spec-driven, offline, open source, works with any agent that can run shell commands.
 argument-hint: what to make, e.g. an 8s clip with Q3 revenue up 18% then a bar chart of Q1-Q3
+model: haiku
+effort: low
 ---
 
 # make-motion
@@ -11,6 +13,21 @@ You write one JSON file, `motion.json`. Scripts validate it, preview it in a bro
 Run every command from the project folder (where `motion.json` lives), using the full path to the scripts. Image paths resolve relative to the spec file. If the request is empty, ask what the video should say, how long it should be, and the size (default 1920x1080, 30 fps).
 
 **Audio is opt-in.** Add `audio` tracks only when the prompt asks for sound (music, soundtrack, voiceover, narration, "read it aloud", a sound effect) or the user confirms when you ask. Never add audio to a prompt that does not mention it. When the prompt is about sound but unclear (for example "make it feel polished" with an mp3 in the folder), ask one question before writing the spec. Music and sound effects are files the user supplies; a voiceover can be synthesised with `voice.mjs` (workflow step 2) when the prompt asks for narration without giving a file.
+
+## Cheaper model
+
+Skip this section if you are running in Claude Code (it already runs this skill on the model named in the frontmatter), or if `artifact-builder` is not in your list of available agents. Otherwise, if you can start another agent, start the `artifact-builder` agent to do the work, unless you are already artifact-builder. If you are already artifact-builder, skip the rest of this section and do the work yourself.
+
+Give it a self-contained brief. It has no memory of this conversation, so the brief must say:
+
+1. What to build, and every fact and choice from this conversation that affects it (data, names, wording, theme, what the user asked for and what they ruled out).
+2. This skill directory: the full path of the folder that holds this SKILL.md.
+3. The spec path: where it should write the JSON spec.
+4. Optionally, an output folder for the build (it passes this to the build script as `--out`).
+
+Relay only the output path it returns. Do not repeat its work.
+
+If the `artifact-builder` agent is not installed, or you cannot start another agent, continue with the steps below yourself.
 
 ## Before the first build
 
