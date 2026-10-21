@@ -23,6 +23,7 @@
   "copilot": {
     "cmd": ["copilot", "-p", "{prompt}", "--allow-all-tools"],
     "modelArgs": ["--model", "{model}"],
+    "agentArgs": ["--agent", "{agent}"],
     "check": ["copilot", "--version"]
   }
 }

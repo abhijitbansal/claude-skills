@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SKILLS, buildPrompt, expandCmd, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules, createFixtureRepo, prepareWorkdir, copySkill } from '../lib.mjs';
+import { spawnSync } from 'node:child_process';
+import { SKILLS, buildPrompt, expandCmd, readReportedModel, readSpecModel, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules, createFixtureRepo, prepareWorkdir, copySkill } from '../lib.mjs';
 
 const made = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-eval-test-')); made.push(d); return d; };
@@ -402,4 +403,125 @@ test('createFixtureRepo says what to upgrade when git cannot init a branch name'
   try {
     assert.throws(() => createFixtureRepo(dir), /git init .*failed: unknown switch b \(git 2\.28 or newer is needed for init -b\)/);
   } finally { process.env.PATH = prev; }
+});
+
+test('expandCmd adds agentArgs only when an agent is given', () => {
+  const host = { cmd: ['h', '{prompt}'], modelArgs: ['--model', '{model}'], agentArgs: ['--agent', '{agent}'] };
+  assert.deepEqual(expandCmd(host, { prompt: 'p', cwd: '/w' }), ['h', 'p']);
+  assert.deepEqual(expandCmd(host, { prompt: 'p', cwd: '/w', agent: 'artifact-builder' }), ['h', 'p', '--agent', 'artifact-builder']);
+  assert.deepEqual(expandCmd(host, { prompt: 'p', cwd: '/w', model: 'm', agent: 'a' }), ['h', 'p', '--model', 'm', '--agent', 'a']);
+});
+
+test('expandCmd ignores an agent for a host without agentArgs (run-eval rejects it earlier)', () => {
+  assert.deepEqual(expandCmd({ cmd: ['h', '{prompt}'] }, { prompt: 'p', cwd: '/w', agent: 'a' }), ['h', 'p']);
+});
+
+test('hosts.json: only copilot defines agentArgs', () => {
+  const hosts = readJson('hosts.json');
+  assert.deepEqual(hosts.copilot.agentArgs, ['--agent', '{agent}']);
+  assert.deepEqual(Object.keys(hosts).filter((h) => hosts[h].agentArgs), ['copilot']);
+});
+
+test('run-eval: --agent on a host without agentArgs is a usage error before any host runs', () => {
+  const r = spawnSync('node', [path.join(evalDir, 'run-eval.mjs'), '--skill', 'dashboard', '--host', 'claude', '--agent', 'artifact-builder'], { encoding: 'utf8' });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /host "claude" has no agentArgs/);
+  assert.match(r.stderr, /\[--agent name\]/);
+});
+
+test('run-eval: --agent needs a non-empty name', () => {
+  const r = spawnSync('node', [path.join(evalDir, 'run-eval.mjs'), '--skill', 'dashboard', '--host', 'copilot', '--agent', ''], { encoding: 'utf8' });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /--agent needs a name/);
+});
+
+const pageWith = (model) => `<!doctype html><html><head><meta name="generator" content="portable-artifacts make-dashboard; model=${model}; effort=low; agent=copilot"></head><body></body></html>`;
+
+test('readReportedModel reads generatedBy.model from the generator meta of a built page', () => {
+  const d = tmp();
+  fs.writeFileSync(path.join(d, 'index.html'), pageWith('Claude Haiku 5.5'));
+  assert.equal(readReportedModel(path.join(d, 'index.html')), 'Claude Haiku 5.5');
+});
+
+test('readReportedModel gives "-" for "not reported", a page without the meta, a missing file or a non-page', () => {
+  const d = tmp();
+  fs.writeFileSync(path.join(d, 'a.html'), pageWith('not reported'));
+  fs.writeFileSync(path.join(d, 'b.html'), '<html></html>');
+  fs.writeFileSync(path.join(d, 'c.png'), 'x');
+  assert.equal(readReportedModel(path.join(d, 'a.html')), '-');
+  assert.equal(readReportedModel(path.join(d, 'b.html')), '-');
+  assert.equal(readReportedModel(path.join(d, 'nope.html')), '-');
+  assert.equal(readReportedModel(path.join(d, 'c.png')), '-');
+});
+
+test('scoreRun records the model reported by the built page, "-" when the output carries none', async () => {
+  const skill = fakeSkill();
+  fs.writeFileSync(path.join(skill, 'scripts/build.mjs'), `
+    import fs from 'node:fs';
+    fs.mkdirSync(process.argv[4], { recursive: true });
+    fs.writeFileSync(process.argv[4] + '/index.html', ${JSON.stringify(pageWith('GPT-5.4 nano'))});
+  `);
+  const work = tmp();
+  fs.writeFileSync(path.join(work, 'spec.json'), '{"ok": true}');
+  assert.equal((await scoreRun({ work, skillCfg: cfg, skillDir: skill })).model, 'GPT-5.4 nano');
+  const bare = tmp();
+  fs.writeFileSync(path.join(bare, 'spec.json'), '{"ok": true}');
+  assert.equal((await scoreRun({ work: bare, skillCfg: cfg, skillDir: fakeSkill() })).model, '-');
+  assert.equal((await scoreRun({ work: tmp(), skillCfg: cfg, skillDir: fakeSkill() })).model, '-');
+});
+
+test('readSpecModel reads generatedBy.model from the saved spec, "-" when absent or unreadable', () => {
+  const d = tmp();
+  const w = (name, text) => { fs.writeFileSync(path.join(d, name), text); return path.join(d, name); };
+  assert.equal(readSpecModel(w('a.json', '{"generatedBy":{"model":"Claude Haiku 5.5","effort":"low"}}')), 'Claude Haiku 5.5');
+  assert.equal(readSpecModel(w('b.json', '{"title":"x"}')), '-');
+  assert.equal(readSpecModel(w('c.json', '{"generatedBy":{"model":""}}')), '-');
+  assert.equal(readSpecModel(w('d.json', '{"generatedBy":"gpt"}')), '-');
+  assert.equal(readSpecModel(w('e.json', 'not json')), '-');
+  assert.equal(readSpecModel(path.join(d, 'nope.json')), '-');
+});
+
+test('scoreRun: motion-style case, the spec reports a model and the output has no page or MP4', async () => {
+  const skill = fakeSkill();
+  const pngCfg = { ...cfg, artifacts: ['out'], outputCmd: (s, spec, work) => [path.join(s, 'scripts/png.mjs'), path.join(work, 'out')] };
+  fs.writeFileSync(path.join(skill, 'scripts/png.mjs'), `
+    import fs from 'node:fs';
+    fs.mkdirSync(process.argv[2], { recursive: true });
+    fs.writeFileSync(process.argv[2] + '/sheet.png', 'x');
+  `);
+  const work = tmp();
+  fs.writeFileSync(path.join(work, 'spec.json'), '{"ok": true, "generatedBy": {"model": "GPT-5.4 nano"}}');
+  const s = await scoreRun({ work, skillCfg: pngCfg, skillDir: skill });
+  assert.equal(s.outputOk, true);
+  assert.equal(s.model, 'GPT-5.4 nano');
+});
+
+test('scoreRun: the spec model wins over the page, an invalid spec still reports it, the page fills in when the spec has none', async () => {
+  const skill = fakeSkill();
+  fs.writeFileSync(path.join(skill, 'scripts/build.mjs'), `
+    import fs from 'node:fs';
+    fs.mkdirSync(process.argv[4], { recursive: true });
+    fs.writeFileSync(process.argv[4] + '/index.html', ${JSON.stringify(pageWith('Page Model'))});
+  `);
+  const score = async (spec) => {
+    const work = tmp();
+    fs.writeFileSync(path.join(work, 'spec.json'), JSON.stringify(spec));
+    return scoreRun({ work, skillCfg: cfg, skillDir: skill });
+  };
+  assert.equal((await score({ ok: true, generatedBy: { model: 'Spec Model' } })).model, 'Spec Model');
+  assert.equal((await score({ ok: true })).model, 'Page Model');
+  const bad = await score({ ok: false, generatedBy: { model: 'Spec Model' } });
+  assert.equal(bad.finalValid, false);
+  assert.equal(bad.model, 'Spec Model');
+});
+
+test('summarize has a "model reported" column and names the agent', () => {
+  const md = summarize([
+    { id: 'a', specExists: true, finalValid: true, validateRuns: 1, outputOk: true, seconds: 3, errors: [], model: 'Claude Haiku 5.5' },
+    { id: 'b', specExists: false, finalValid: false, validateRuns: 0, outputOk: false, seconds: 3, errors: [] },
+  ], { host: 'copilot', skill: 'dashboard', agent: 'artifact-builder' });
+  assert.match(md, /\| seconds \| model reported \| notes \|/);
+  assert.match(md, /\| a \| ✓ \| ✓ \| 1 \| ✓ \| 3 \| Claude Haiku 5\.5 \|/);
+  assert.match(md, /\| b \| ✗ \| ✗ \| 0 \| ✗ \| 3 \| - \|/);
+  assert.match(md, /artifact-builder/);
 });

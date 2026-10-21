@@ -18,12 +18,22 @@ node run-eval.mjs --skill diagram --host claude --only checkout-path,edit-existi
 node run-eval.mjs --skill explainer --host claude --model haiku --only recap-from-repo,edit-existing
 node run-eval.mjs --skill scene --host claude --model haiku --only city-inline,edit-switch-forest
 node run-eval.mjs --skill dashboard --host codex-oss --model gemma4
+node run-eval.mjs --skill explainer --host copilot --agent artifact-builder --model "Claude Haiku 5.5"
 ```
 
 Hosts are defined in `hosts.json`: `claude`, `codex`, `codex-oss`
 (Ollama via `codex exec --oss`), `gemini` and `copilot`. To add a host,
 add an entry with a `cmd` template (`{prompt}`, `{cwd}`, `{model}`), plus
-optional `modelArgs` and a `check` command.
+optional `modelArgs`, `agentArgs` and a `check` command.
+
+`--agent <name>` runs the host through a named custom agent. It works only
+for a host with `agentArgs` (today `copilot`: `--agent {agent}`); any other
+host exits with `host "<x>" has no agentArgs`. Install the agent first (the
+plugin installer writes `artifact-builder.agent.md` for Copilot).
+`summary.md` has a `model reported` column: the `generatedBy.model` the
+agent wrote into its saved spec (every skill asks for it, motion included),
+else the one the built page carries (its `generator` meta tag), else `-`.
+It is what the agent self-reported, not a check of which model ran.
 
 ## What a run does
 
