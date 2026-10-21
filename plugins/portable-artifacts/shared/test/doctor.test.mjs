@@ -668,6 +668,7 @@ test("builderAgent: manual-only fix names the install command for copilot, codex
   const text = f.manual.darwin;
   assert.match(text, /node <path-to-claude-skills>\/plugins\/portable-artifacts\/bin\/install\.mjs copilot --agents-only/);
   assert.match(text, /install\.mjs codex --agents-only/);
+  assert.match(text, /<path-to-claude-skills> is a local checkout \(or clone the repo\)/);
   assert.match(text, /\bagents\b[^.]*both/);
   assert.deepEqual(Object.keys(f.manual).sort(), ["darwin", "linux", "win32"]);
 });

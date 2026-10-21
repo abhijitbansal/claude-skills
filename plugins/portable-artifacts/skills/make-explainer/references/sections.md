@@ -2,6 +2,8 @@
 
 Every section has `type`, an optional `id`, an optional `title` and an optional `label`. A `title` is a claim a reader can agree or disagree with ("Search now ignores case"), not a label ("Overview"). The `label` is that short name ("Eval results", at most 4 words): the contents list shows it, and it sits as a small eyebrow above the heading (and above the slide heading in a deck). The label shows on every section that renders a heading (any section with a `title`, except a `callout`) and on a leading tldr's hero card even without a title. A `callout` draws its own heading and never shows a label; a section without a `title` shows no label and is not listed in the contents. Limits are in [schema.md](schema.md). Fields marked `*` are required. Closed sets: `tone` is `neutral` `accent` `good` `warn` `bad` unless the section says otherwise.
 
+Numbers with a percent sign or unit (`87%`, `1,204 ms`, `$4.2k`) are kept on one line when the page is built. Write `1,000 ms` with comma grouping: `1 000 ms` binds only `000 ms`. The binder is for percent and unit tokens, not arbitrary number-noun pairs such as `12 files`. A KPI value is one line when it fits its tile and wraps inside it when it does not (validate warns above 12 characters; move the words to `note`).
+
 On a page, a `tldr` that comes first (and is not the only section) is drawn inside the hero, under the title, as its summary card; its `label` is the card's heading, and the `title` then names the card for screen readers only. Visual sections (`kpis`, `cards`, `compare`, `diagram`, `chart`, `scene`) alternate onto a surface band, starting with the first: the 1st, 3rd and so on.
 
 In slides mode each section is one slide (the title is the slide heading) and must fit the budget in schema.md; split a section that does not.
@@ -53,7 +55,7 @@ Five types for a plan a reviewer answers on the page (`preset: "plan"`; SKILL.md
 | `review` | `items[]`* (1-5): `point`*, `why`*, `target` | "Review these first": the places to look hardest. `target` is the explicit `id` of the section it points at (not this review); the page links to it. Not answered. |
 | `verdict` | `text` | The overall control: Approve, Approve with changes or Not yet, the reviewer's name, and the Copy answers and Download `plan-answers.json` buttons. At most one, and it must be the last section. Give it an `id`, a `title` and a `label` (the scaffold uses `verdict` and "Your verdict") so it is listed in the contents and has a stable link. |
 
-- Answers save in the reader's browser under the plan's `key` as they go; a plan edited since the last visit starts fresh, with a notice. Blocked storage is tolerated and stated.
+- Answers save in the reader's browser under the plan's `key` as they go; a plan edited since the answers were saved shows a notice and no saved answers; the first new answer replaces the old entry. Blocked storage is tolerated and stated.
 - In a deck the controls do not run: a slide shows the question, the options with the recommendation, and a note that answers are collected in the page version.
 - Limits on a plan page: 2-5 options per decision, 1-5 review items.
 

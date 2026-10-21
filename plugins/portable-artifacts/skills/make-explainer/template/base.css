@@ -131,6 +131,10 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 .kpis:has(.kpi-wide) { display: flex; flex-wrap: wrap; }
 .kpis:has(.kpi-wide) > .kpi { flex: 1 1 9.5rem; }
 .kpis:has(.kpi-wide) > .kpi-wide { flex: 2 1 17rem; }
+/* A value too long for even the narrowest wide tile at --fs-md (.kpi-long, KPI_LONG_CHARS in
+   scripts/lib/render/kpis.mjs) cannot be one line: it wraps inside its tile at the same size, and may break
+   anywhere (an unbroken string, a long identifier), instead of widening the tile and the page. */
+.kpi-long .kpi-value { white-space: normal; overflow-wrap: anywhere; }
 .kpi-value { --kpi-fit: max(var(--fs-md), calc(100cqi / (var(--n, 8) * 0.7))); order: -1; margin-bottom: 6px; font: 600 var(--fs-xl)/var(--lh-head) var(--font-display); font-size: min(var(--fs-xl), var(--kpi-fit)); letter-spacing: var(--track-display); font-variant-numeric: tabular-nums; white-space: nowrap; overflow-wrap: break-word; }
 .kpi-delta { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--tc, var(--text-2)); }
 .kpi-note { margin-top: 6px; color: var(--text-3); font-size: var(--fs-xs); }

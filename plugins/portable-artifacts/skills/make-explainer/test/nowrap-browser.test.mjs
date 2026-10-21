@@ -96,12 +96,58 @@ for (const theme of ['mono', 'brief']) {
   });
 }
 
-test('the KPI tile holds a long value on one line and sizes it down instead of spilling', async (t) => {
+// ---- a KPI value that cannot be one line wraps inside its tile ---------------------------------
+
+// Everything a long value can break: a tile or value wider than its box, a page that scrolls sideways, and text
+// whose glyphs are drawn outside the tile (a deck clips sideways, so the first two cannot see that in a slide).
+const spillAt = async (page, width) => {
+  await page.setViewportSize({ width, height: 900 });
+  return {
+    tile: (await overflowProblems(page, '.kpi')).map((o) => o.text),
+    value: (await overflowProblems(page, '.kpi-value')).map((o) => o.text),
+    pageScrolls: await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
+    outside: await page.evaluate(() => [...document.querySelectorAll('.kpi-value')].filter((v) => {
+      const tile = v.closest('.kpi').getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(v);
+      return [...range.getClientRects()].some((r) => r.width > 0 && (r.left < tile.left - 1 || r.right > tile.right + 1));
+    }).map((v) => v.textContent)),
+  };
+};
+const CLEAN = { tile: [], value: [], pageScrolls: false, outside: [] };
+
+const LONG_FIXTURES = ['nowrap-kpi-long.explainer.json', 'nowrap-kpi-long-slides.explainer.json'];
+for (const theme of [undefined, 'dusk', 'press', 'poster', 'mono', 'brief']) {
+  test(`a KPI value of 37, 40 and 67 characters wraps inside its tile at 320, 390 and 1280 (${theme ?? 'paper'})`, async (t) => {
+    if (await skipUnlessBrowser(t)) return;
+    for (const name of LONG_FIXTURES) {
+      const { url } = buildFile(fixture(name), { theme });
+      const { page, problems, context } = await openPage(url);
+      for (const width of [320, 390, 1280]) assert.deepEqual(await spillAt(page, width), CLEAN, `${name} at ${width}px`);
+      assert.equal(await page.locator('.kpi-long').count() >= 2, true, `${name} marks its long values`);
+      assert.deepEqual(problems, []);
+      await context.close();
+    }
+  });
+}
+
+test('check passes a page whose KPI values are too long for one line', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const name of LONG_FIXTURES) {
+    const built = buildFile(fixture(name));
+    const result = await checkPage(built.file);
+    assert.deepEqual(result.problems, [], name);
+    const cli = spawnSync(process.execPath, [CHECK, built.file], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '' } });
+    assert.equal(cli.status, 0, cli.stdout + cli.stderr);
+  }
+});
+
+test('a KPI value that fits is held on one line and sized from its tile', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { url } = buildFile(fixture('nowrap.explainer.json'));
   const { page, context } = await openPage(url, { width: 390 });
   const style = await page.evaluate(() => {
-    const el = [...document.querySelectorAll('.kpi-value')].find((v) => v.textContent.startsWith('On track'));
+    const el = [...document.querySelectorAll('.kpi-value')].find((v) => v.textContent.startsWith('1,204 ms'));
     const cs = getComputedStyle(el);
     return { whiteSpace: cs.whiteSpace, containerType: getComputedStyle(el.parentElement).containerType, tileOwnsWidth: el.scrollWidth <= el.clientWidth + 1 };
   });

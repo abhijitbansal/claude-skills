@@ -369,7 +369,7 @@ export function builderAgent() {
     check: (ctx) => BUILDER_AGENT_DIRS(ctx).some((dir) => BUILDER_AGENT_FILES.some((f) => ctx.exists(pp(ctx).join(dir, f)))),
     fix: () => ({
       auto: null,
-      manual: manualAll(`${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both; add --project <dir> to install into one repo`),
+      manual: manualAll(`${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both; add --project <dir> to install into one repo; <path-to-claude-skills> is a local checkout (or clone the repo)`),
     }),
     needsSudo: () => false,
   };

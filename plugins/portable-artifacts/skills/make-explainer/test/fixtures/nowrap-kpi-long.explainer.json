@@ -1,0 +1,26 @@
+{
+  "title": "Long KPI values",
+  "preset": "recap",
+  "mode": "page",
+  "theme": "paper",
+  "sections": [
+    {
+      "type": "kpis",
+      "title": "Words in the value",
+      "items": [
+        { "label": "Cache hits", "value": "87%" },
+        { "label": "Vendor", "value": "Waiting on the vendor security review" },
+        { "label": "Release", "value": "Blocked until the legal team signs off the data processing addendum" },
+        { "label": "Build", "value": "A1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6Q7R8S9T0" },
+        { "label": "Budget", "value": "$4.2k" }
+      ]
+    },
+    {
+      "type": "kpis",
+      "title": "A long value alone",
+      "items": [
+        { "label": "Vendor", "value": "Waiting on the vendor security review" }
+      ]
+    }
+  ]
+}

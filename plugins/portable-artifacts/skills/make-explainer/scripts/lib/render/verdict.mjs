@@ -26,7 +26,7 @@ const controls = `<div class="plan-verdict-foot">
 </div>
 <p class="plan-status" data-plan-status role="status"></p>
 <p class="plan-flag" data-plan-unsaved hidden>${chip(["Answers won't be saved in this browser", 'info', 'neutral'])}</p>
-<p class="plan-flag" data-plan-stale hidden>${chip(['The plan changed since your last visit; earlier answers were cleared', 'warn', 'warn'])}</p>`;
+<p class="plan-flag" data-plan-stale hidden>${chip(['The plan changed since these answers were saved; the saved answers no longer match it and are not shown. Your first new answer replaces them.', 'warn', 'warn'])}</p>`;
 
 export function render(section, ctx) {
   if (isDeck(ctx)) {
