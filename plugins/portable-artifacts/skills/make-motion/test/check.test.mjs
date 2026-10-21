@@ -40,6 +40,7 @@ for (const name of readdirSync(EXAMPLES).filter((f) => f.endsWith('.json'))) {
     const r = check([path.join(EXAMPLES, name)]);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.match(r.stdout, /^check: ok \(\d+ scenes?, \d+ moments\)\n$/);
+    assert.equal(r.stderr, '', 'a shipped example carries no warning, or the warning gets ignored');
   });
 }
 
