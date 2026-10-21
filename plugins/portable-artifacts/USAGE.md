@@ -384,12 +384,14 @@ preset in `references/examples/`.
    `--theme` as the render, if any), which reports text or counters outside the safe area
    (60 px at 1080 on the short side) while they are not moving, overlapping text or counters
    and a scene that ends with nothing visible (it prints `check: skipped (no browser: …)` and exits 0
-   without a browser).
+   without a browser). It also warns on stderr, without failing, when the first
+   frame (the video's thumbnail) is blank.
 4. Offers `preview.mjs motion.json --open`, a local page with a scrubber,
    play/pause, scene markers and frame-by-frame arrow keys. It reloads
    whenever `motion.json` changes, and shows validation errors in the page.
 5. `render.mjs motion.json` writes `out/motion.mp4` (1920×1080, 30 fps,
-   H.264, plus AAC audio when the spec has `audio` tracks).
+   H.264, plus AAC audio when the spec has `audio` tracks or `cues`; with audio it
+   ends by printing `audio: <n> LUFS integrated, true peak <n> dBTP`).
 
 **Other sizes:** set `"size": [1080, 1080]` in the spec for a square social
 clip, or override at render time with `--size 1280x720 --fps 24`. If the
@@ -409,6 +411,21 @@ inks in, `poster` slams). A scene with `"background": "art"` draws the theme's
 procedural art behind its elements, seeded by the scene id.
 `references/examples/launch-title.json` uses both.
 
+**Polish.** A shape `fill`/`stroke` or a text `color` can name a theme token
+(`surface`, `line`, `accent`, `accentSoft`, `good`, `bad`, `warn`, `text`, `text2`,
+`text3`, `cat1`..`cat6`) instead of a hex, so a theme change recolours it. A rect with
+`"elevated": true` is a card (a lifted fill and a 1 px inner highlight); a line takes
+`"cap": "round"` and `"arrow": "end"`. Charts default to about five ticks per axis, no
+tick marks, no y-axis line, no vertical gridlines, bars with rounded ends and a gap, and
+4 px round lines with ringed points. `"transition": "crossfade"` on a scene (or at the
+root, as the default) fades it in over the previous scene, which stays fully visible beneath, over 0.4 s.
+`"typing": true` on a text types it out at 0.035 s per character with a caret.
+
+**Texture is opt-in.** A root `"texture": { "vignette": true, "grain": 0.08 }` darkens the
+corners and lays static film grain (0 to 0.15) over each scene, the same every render. It
+slows rendering: measured at 1920x1080 on one Apple-silicon Mac, about 17 to 33 ms per frame
+with none, 42 ms with the vignette, 100 ms with grain and 187 ms with both.
+
 **Audio is opt-in.** The agent adds `audio` tracks only when you ask for
 sound ("with background music from music.mp3", "with a voiceover reading
 it"); a prompt that says nothing about sound renders silent, as before.
@@ -420,7 +437,11 @@ mixes the tracks into the MP4 as AAC stereo; the preview plays them in sync
 file you supply. For narration the agent runs
 `voice.mjs "<text>" --out voice/<scene>.wav` (Kokoro, local, 28 voices,
 `--voice af_heart` by default) after asking once to install `kokoro-js`
-(about 250 MB plus a 90 MB model downloaded a single time).
+(about 250 MB plus a 90 MB model downloaded a single time). Short UI sounds need no
+file: a root `cues` array (up to 30 of `pop`, `click`, `whoosh`, `chime`, `impact`, each
+with `at`, or `scene` plus `at`, and optional `volume`, `pan` and `note`) is synthesised at
+render time, the same bytes every time, and mixed in with any tracks; the preview does not
+play cues.
 
 ## 6. 3D scenes with make-scene
 

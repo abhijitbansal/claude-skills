@@ -1,7 +1,7 @@
 {
   "name": "portable-artifacts",
   "description": "Host-agnostic, offline, open-source artifact skills: make-dashboard (prompt -> SQL + 11 chart kinds -> static HTML with per-chart SQL provenance, 7 themes, export and live reload), make-diagram (prompt -> JSON topology -> ELK-laid-out HTML diagram with zoom, hover tracing, a story player, an Explore panel and full screen), make-explainer (prompt -> typed sections -> one HTML page or slide deck: branch recap, concept explainer, saved-progress test checklist, slides; embeds diagrams, charts, 3D scenes and video), make-motion (prompt -> scene spec -> local preview + MP4) and make-scene (prompt -> JSON spec -> offline three.js page: a city, forest, galaxy or terrain from your rows, or a diagram or dashboard chart lifted into 3D, with a camera tour). Work with any agent that can read files and run shell commands.",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "author": {
     "name": "Abhijit Bansal",
     "url": "https://github.com/abhijitbansal"

@@ -20,7 +20,22 @@ shell commands.
 - **Self-check for models**: `--contact-sheet` writes one tiled, timestamped PNG
   per scene, so a model that can read images can review its own work before
   rendering; `check.mjs` then flags text or counters outside the safe area, overlapping text
-  and a scene that ends with nothing visible.
+  and a scene that ends with nothing visible, and warns (exit stays 0) when the first
+  frame, the video's thumbnail, is blank.
+- **Polished by default**: charts draw with about five ticks per axis, no tick marks, no
+  y-axis line and no vertical gridlines, bars with rounded ends and a gap, 4 px round
+  lines and ringed points. Shapes and text take **theme colour tokens**
+  (`"fill": "surface"`, `"color": "accent"`) that follow the theme, rects can be
+  `elevated` cards, and lines can have round caps and an arrow head.
+- **Scene crossfade**: `"transition": "crossfade"` fades the new scene in over the
+  previous one (which stays fully visible beneath) over 0.4 s; a root `transition` sets the default.
+- **Procedural sound cues**: a `cues` array (`pop`, `click`, `whoosh`, `chime`, `impact`)
+  is synthesised locally with no files and no extra dependency, deterministically, and
+  mixed in; after any render with audio, `render.mjs` prints the integrated loudness and
+  true peak. Opt-in: no `cues`, no sound.
+- **Texture and typing**: an opt-in root `texture` adds a vignette and static film grain
+  (measured cost below), and `"typing": true` types a line out at 0.035 s per character
+  with a caret.
 - **Stamped**: the preview has a favicon, a `<meta name="generator">` and a provenance footer (model, effort
   and agent from the spec's `generatedBy`; "not reported" when unknown; `preview.mjs`
   takes no flags), and the MP4 carries the same in its metadata (`render.mjs` also
@@ -75,14 +90,23 @@ and in Codex `$make-motion …`.
 
 | Element `type` | Key fields | Animatable |
 |---|---|---|
-| `text` | `text`, `role` (`title`: display font, plus the theme's entrance when it has no `keyframes`), `fontSize`, `fontWeight`, `color`, `align`, `maxWidth`, `font` (`sans`/`mono`) | `opacity x y scale rotate` |
+| `text` | `text`, `role` (`title`: display font, plus the theme's entrance when it has no `keyframes`), `fontSize`, `fontWeight`, `color`, `align`, `maxWidth`, `font` (`sans`/`mono`; mono wins over the title role), `typing` | `opacity x y scale rotate` (+ `value`, the characters typed, with `typing`) |
 | `counter` | `from`, `to`, `decimals`, `prefix`, `suffix` + text styling | + `value` (with no `value` keyframes it counts from→to automatically) |
-| `shape` | `shape` (`rect`/`ellipse`/`line`), `width`, `height`, `radius`, `fill`, `stroke`, `strokeWidth` | + `draw` (0–1 stroke reveal) |
+| `shape` | `shape` (`rect`/`ellipse`/`line`), `width`, `height`, `radius`, `fill`, `stroke`, `strokeWidth`, `elevated` (rect), `cap` and `arrow` (line) | + `draw` (0–1 stroke reveal) |
 | `image` | `src` (relative to the spec), `width`, `height`, `fit` | `opacity x y scale rotate` |
 | `chart` | `vegaLite` with inline `data.values`, `width`, `height` | + `reveal` (0–1 left-to-right wipe) |
 
 A scene's `background` is a CSS colour or `"art"`: the theme's seeded art,
-full-bleed behind the elements and seeded by the scene `id`.
+full-bleed behind the elements and seeded by the scene `id`. A shape `fill` or
+`stroke` and a text `color` may be a theme token (`surface`, `line`, `accent`,
+`accentSoft`, `good`, `bad`, `warn`, `text`, `text2`, `text3`, `cat1`..`cat6`) instead of
+a colour; it resolves to the active theme's dark colour.
+
+Root-level options (all off unless set): `transition` (`none`, `fade` or `crossfade`, the
+default for every scene), `cues` (up to 30 sound cues, timed from the video or a scene
+start), `texture` (`vignette`, and `grain` from 0 to 0.15). Texture costs render time, measured
+on 1920x1080 frames (seek plus PNG screenshot, headless Chromium, one Apple-silicon Mac): about
+17 to 33 ms per frame with none, 42 ms with the vignette, 100 ms with grain and 187 ms with both.
 
 Keyframes are `{ "t": seconds-in-scene, "ease": "outCubic", …props }`. Each
 property holds its value before its first keyframe, interpolates between
@@ -98,11 +122,11 @@ examples in [`references/examples/`](references/examples/).
 | `validate.mjs <spec>` | Schema plus cross-field checks (unique ids, keyframe times, per-type props, image and audio paths, audio scene/start/fade fits, chart compile, no remote URLs) | `--json` |
 | `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` |
 | `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. The MP4 timing is exact | `--open` |
-| `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--contact-sheet` |
-| `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen. An element that has left the frame entirely is gone, not clipped. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
+| `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks or `cues`, followed by one `audio: … LUFS integrated, true peak … dBTP` line) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--contact-sheet` |
+| `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen. An element that has left the frame entirely is gone, not clipped. It also warns on stderr (never a failure) when the first scene shows nothing at t = 0. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
 | `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover>`, `--fix <id[,id]>` |
 
-Limits: up to 50 scenes and 120 s in total, up to 20 audio tracks; fps is 24, 25, 30 or 60; each side
+Limits: up to 50 scenes and 120 s in total, up to 20 audio tracks and 30 cues; fps is 24, 25, 30 or 60; each side
 is 16–3840 px. Frame *i* samples `t = i / fps`, so put a final keyframe at
 least one frame before the scene ends.
 

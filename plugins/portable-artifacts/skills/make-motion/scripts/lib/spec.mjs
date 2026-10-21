@@ -7,11 +7,11 @@ import { formatAjvErrors, pathJoin, didYouMean } from '../../shared/errors.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { resolveAsset } from './paths.mjs';
-import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, trackStart } from '../../template/audio.mjs';
+import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, PITCHED_CUES, MAX_CUES, NOTE_PATTERN, trackStart } from '../../template/audio.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
-import { EASE_CURVES } from '../../template/defaults.mjs';
+import { EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE, typingLength } from '../../template/defaults.mjs';
 
 export class UsageError extends Error {}
 
@@ -32,9 +32,9 @@ export const ANIMATABLE = {
 const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes'];
 const TEXT_STYLE = ['fontSize', 'fontWeight', 'color', 'align', 'maxWidth', 'font'];
 const FIELDS = {
-  text: [...COMMON, 'text', 'role', 'exit', ...TEXT_STYLE],
+  text: [...COMMON, 'text', 'role', 'exit', 'typing', ...TEXT_STYLE],
   counter: [...COMMON, 'from', 'to', 'decimals', 'prefix', 'suffix', ...TEXT_STYLE],
-  shape: [...COMMON, 'shape', 'width', 'height', 'radius', 'fill', 'stroke', 'strokeWidth'],
+  shape: [...COMMON, 'shape', 'width', 'height', 'radius', 'fill', 'stroke', 'strokeWidth', 'elevated', 'cap', 'arrow'],
   image: [...COMMON, 'src', 'width', 'height', 'fit'],
   chart: [...COMMON, 'vegaLite', 'width', 'height'],
 };
@@ -71,6 +71,7 @@ const element = {
     text: { type: 'string' },
     role: { type: 'string' },
     exit: { type: 'boolean' },
+    typing: { type: 'boolean' },
     fontSize: { type: 'number', minimum: 1 },
     fontWeight: { enum: [400, 500, 600, 700, 800] },
     color,
@@ -86,12 +87,22 @@ const element = {
     radius: { type: 'number', minimum: 0 },
     fill: color, stroke: color,
     strokeWidth: { type: 'number', minimum: 0 },
+    elevated: { type: 'boolean' },
+    cap: { enum: ['round'] },
+    arrow: { enum: ['end'] },
     src: { type: 'string', minLength: 1 },
     fit: { enum: ['contain', 'cover', 'fill'] },
     vegaLite: { type: 'object' },
   },
 };
 const seconds = { type: 'number', minimum: 0 };
+const transition = { enum: ['none', 'fade', 'crossfade'] };
+export const MAX_GRAIN = 0.15;
+const texture = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { vignette: { type: 'boolean' }, grain: { type: 'number', minimum: 0, maximum: MAX_GRAIN } },
+};
 const audioTrack = {
   type: 'object',
   additionalProperties: false,
@@ -106,12 +117,26 @@ const audioTrack = {
     fadeOut: seconds,
   },
 };
+const cue = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['cue', 'at'],
+  properties: {
+    cue: { enum: [...CUE_NAMES] },
+    scene: { type: 'string', minLength: 1 },
+    at: seconds,
+    volume: unit,
+    pan: { type: 'number', minimum: -1, maximum: 1 },
+    note: { type: 'string' },
+  },
+};
 export const SCHEMA = {
   type: 'object',
   additionalProperties: false,
   required: ['scenes'],
   properties: {
     audio: { type: 'array', maxItems: MAX_AUDIO_TRACKS, items: audioTrack },
+    cues: { type: 'array', maxItems: MAX_CUES, items: cue },
     size: {
       type: 'array', minItems: 2, maxItems: 2,
       items: { type: 'integer', minimum: 16, maximum: 3840 },
@@ -119,6 +144,8 @@ export const SCHEMA = {
     fps: { enum: [24, 25, 30, 60] },
     background: color,
     theme: { type: 'string', minLength: 1 },
+    transition,
+    texture,
     generatedBy: GENERATED_BY_SCHEMA,
     scenes: {
       type: 'array', minItems: 1, maxItems: 50,
@@ -130,7 +157,7 @@ export const SCHEMA = {
           id: { type: 'string', minLength: 1 },
           duration: { type: 'number', minimum: 0.2, maximum: 60 },
           background: color,
-          transition: { enum: ['none', 'fade'] },
+          transition,
           elements: { type: 'array', items: element },
         },
       },
@@ -173,14 +200,15 @@ function checkIds(spec, errors) {
 }
 
 function checkKeyframes(el, base, sceneDuration, errors) {
-  const allowed = ANIMATABLE[el.type];
+  const allowed = el.type === 'text' && el.typing ? [...ANIMATABLE.text, 'value'] : ANIMATABLE[el.type]; // a typing text's `value` is its character count
+  const typingHint = el.type === 'text' && !el.typing ? ' (value needs "typing": true)' : '';
   (el.keyframes ?? []).forEach((kf, i) => {
     const at = pathJoin(pathJoin(base, 'keyframes'), i);
     for (const prop of Object.keys(kf)) {
       if (prop === 't' || prop === 'ease' || allowed.includes(prop)) continue;
       errors.push({
         path: pathJoin(at, prop),
-        message: `not animatable on ${el.type}; animatable: ${allowed.join(', ')}`,
+        message: `not animatable on ${el.type}; animatable: ${allowed.join(', ')}${prop === 'value' ? typingHint : ''}`,
       });
     }
     const prev = el.keyframes[i - 1];
@@ -220,10 +248,12 @@ function isCssColor(value) {
 }
 
 const COLOUR_MESSAGE = 'must be a CSS colour (hex, rgb(), rgba(), hsl(), hsla() or a named colour)';
-function checkColor(obj, key, base, errors) {
-  if (obj[key] === undefined || isCssColor(obj[key])) return;
+// `tokens`: the field also takes a theme colour token (shape fill/stroke, text colour), not a background.
+function checkColor(obj, key, base, errors, { tokens = false } = {}) {
+  if (obj[key] === undefined || isCssColor(obj[key]) || (tokens && COLOR_TOKENS.includes(obj[key]))) return;
   const art = obj[key] === ART_BACKGROUND ? `; "${ART_BACKGROUND}" is only valid as a scene background` : '';
-  errors.push({ path: pathJoin(base, key), message: COLOUR_MESSAGE + art });
+  const token = tokens ? ` or a theme token: ${COLOR_TOKENS.join(', ')}` : '';
+  errors.push({ path: pathJoin(base, key), message: COLOUR_MESSAGE + token + art });
 }
 
 // A scene background is a colour or "art": the theme's seeded art, drawn full-bleed behind the elements.
@@ -299,9 +329,30 @@ function checkFades(track, start, total, base, errors) {
   errors.push({ path: pathJoin(base, 'fadeOut'), message: `fadeIn ${fadeIn}s + fadeOut ${fadeOut}s exceed the ${plays}s the track plays (from ${start}s to ${until})` });
 }
 
+const totalSeconds = (spec) => spec.scenes.reduce((a, s) => a + s.duration, 0);
+
+// Where an audio track or a cue starts must exist: its `scene` must be one of the spec's, it must start before the video
+// ends, and (`inScene`, for cues) its `at` must lie inside that scene, or it would play in a later one unannounced.
+// Pushes the error and returns false when it does not.
+function checkStart(item, spec, base, errors, { inScene = false } = {}) {
+  const scene = item.scene === undefined ? undefined : spec.scenes.find((s) => s.id === item.scene);
+  if (item.scene !== undefined && !scene) {
+    errors.push({ path: pathJoin(base, 'scene'), message: `scene "${item.scene}" not found; scenes: ${spec.scenes.map((s) => s.id).join(', ')}` });
+    return false;
+  }
+  if (inScene && scene && item.at >= scene.duration) {
+    errors.push({ path: pathJoin(base, 'at'), message: `${item.at}s is past the end of scene "${scene.id}", which lasts ${scene.duration}s; use a smaller at, or put the cue in a later scene` });
+    return false;
+  }
+  const start = trackStart(item, spec);
+  if (start < totalSeconds(spec)) return true;
+  const how = scene ? ` (scene "${scene.id}" + ${item.at ?? 0}s)` : '';
+  errors.push({ path: pathJoin(base, 'at'), message: `starts at ${start}s${how}, but the video ends at ${totalSeconds(spec)}s` });
+  return false;
+}
+
 function checkAudio(spec, dir, errors) {
-  const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
-  const sceneIds = spec.scenes.map((s) => s.id);
+  const total = totalSeconds(spec);
   (spec.audio ?? []).forEach((track, i) => {
     const base = `audio[${i}]`;
     const ext = path.extname(track.src).slice(1).toLowerCase();
@@ -309,21 +360,69 @@ function checkAudio(spec, dir, errors) {
       const list = `${AUDIO_EXTENSIONS.slice(0, -1).join(', ')} or ${AUDIO_EXTENSIONS.at(-1)}`;
       errors.push({ path: pathJoin(base, 'src'), message: `unsupported audio format "${path.extname(track.src)}"; use ${list}` });
     }
-    if (track.scene !== undefined && !sceneIds.includes(track.scene)) {
-      errors.push({ path: pathJoin(base, 'scene'), message: `scene "${track.scene}" not found; scenes: ${sceneIds.join(', ')}` });
-      return;
-    }
-    const start = trackStart(track, spec);
-    if (start >= total) {
-      const how = track.scene === undefined ? '' : ` (scene "${track.scene}" + ${track.at ?? 0}s)`;
-      errors.push({ path: pathJoin(base, 'at'), message: `starts at ${start}s${how}, but the video ends at ${total}s` });
-      return;
-    }
-    checkFades(track, start, total, base, errors);
+    if (!checkStart(track, spec, base, errors)) return;
+    checkFades(track, trackStart(track, spec), total, base, errors);
   });
 }
 
-function checkElement(el, base, scene, dir, errors) {
+// `elevated` belongs to rects, `cap` and `arrow` to lines.
+const SHAPE_ONLY = { elevated: 'rect', cap: 'line', arrow: 'line' };
+function checkShapeStyle(el, base, errors) {
+  for (const [key, shape] of Object.entries(SHAPE_ONLY)) {
+    if (el[key] !== undefined && el[key] !== false && el.shape !== shape) errors.push({ path: pathJoin(base, key), message: `only valid on a ${shape} shape` });
+  }
+  if (el.shape === 'line') checkLineLength(el, base, errors);
+}
+
+// An arrow head takes ARROW_HEAD_LENGTH stroke widths off the line and a round cap half a stroke width at each end: the
+// line must be longer than what they use, or it would vanish or run backwards.
+function checkLineLength(el, base, errors) {
+  const stroke = el.strokeWidth ?? DEFAULT_LINE_STROKE;
+  const width = el.width ?? DEFAULT_SHAPE_SIZE;
+  const round = el.cap === 'round';
+  const arrow = el.arrow === 'end';
+  const minimum = (arrow ? ARROW_HEAD_LENGTH * stroke : 0) + (round ? (arrow ? 0.5 : 1) * stroke : 0);
+  if (!(arrow || round) || width > minimum) return;
+  const what = arrow ? `an arrow${round ? ' and a round cap' : ''}` : 'a round cap';
+  errors.push({ path: pathJoin(base, 'width'), message: `${width} is too short for ${what} with strokeWidth ${stroke}; the width must be more than ${minimum}` });
+}
+
+// A cue is timed like an audio track (`scene` + `at`); a `note` tunes only the pitched cues.
+function checkCues(spec, errors) {
+  (spec.cues ?? []).forEach((c, i) => {
+    const base = `cues[${i}]`;
+    if (c.note !== undefined && !NOTE_PATTERN.test(c.note)) {
+      errors.push({ path: pathJoin(base, 'note'), message: 'must be a note name such as A4, C#5 or Bb3 (A-G, optional # or b, octave 0-8)' });
+    } else if (c.note !== undefined && !PITCHED_CUES.includes(c.cue)) {
+      errors.push({ path: pathJoin(base, 'note'), message: `${c.cue} has no pitch; note is for ${PITCHED_CUES.slice(0, -1).join(', ')} and ${PITCHED_CUES.at(-1)}` });
+    }
+    checkStart(c, spec, base, errors, { inScene: true });
+  });
+}
+
+// A typing text with no `value` keyframes types at a fixed pace from the scene start; it must finish (a frame before
+// the scene ends, so its last frame shows the whole line) or the video would cut it off silently.
+const TYPING_FALLBACK_FPS = 30;
+const CENTISECONDS = 100;
+function checkTyping(el, base, scene, fps, errors) {
+  if (!el.typing || typeof el.text !== 'string' || el.keyframes?.some((kf) => kf.value !== undefined)) return;
+  const chars = typingLength(el.text);
+  const takes = chars * TYPING_SECONDS_PER_CHAR;
+  const needs = takes + 1 / fps;
+  if (needs <= scene.duration) return;
+  errors.push({ path: pathJoin(base, 'text'), message: `typing ${chars} characters takes ${takes.toFixed(2)}s but scene "${scene.id}" lasts ${scene.duration}s (it must finish a frame before the scene ends at ${fps} fps); shorten the text or lengthen the scene to at least ${Math.ceil(needs * CENTISECONDS) / CENTISECONDS}s` });
+}
+
+// The typing errors of `spec` at frame rate `fps`: render.mjs asks again with its --fps, which overrides the spec's.
+export function typingErrors(spec, fps) {
+  const errors = [];
+  spec.scenes.forEach((scene, si) => scene.elements.forEach((el, ei) => {
+    if (el.type === 'text') checkTyping(el, `scenes[${si}].elements[${ei}]`, scene, fps, errors);
+  }));
+  return errors;
+}
+
+function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS) {
   const fields = FIELDS[el.type];
   for (const key of Object.keys(el)) {
     if (!fields.includes(key)) {
@@ -334,8 +433,9 @@ function checkElement(el, base, scene, dir, errors) {
     if (el[key] === undefined) errors.push({ path: pathJoin(base, key), message: `required for type ${el.type}` });
   }
   checkKeyframes(el, base, scene.duration, errors);
-  if (el.type === 'text') checkRole(el, base, errors);
-  for (const key of ['color', 'fill', 'stroke']) checkColor(el, key, base, errors);
+  if (el.type === 'text') { checkRole(el, base, errors); checkTyping(el, base, scene, fps, errors); }
+  for (const key of ['color', 'fill', 'stroke']) checkColor(el, key, base, errors, { tokens: true });
+  if (el.type === 'shape') checkShapeStyle(el, base, errors);
   if (el.type === 'image' && typeof el.src === 'string') checkAssetPath(el.src, pathJoin(base, 'src'), dir, errors);
   if (el.type === 'chart' && el.vegaLite) checkChart(el, base, errors);
 }
@@ -357,12 +457,16 @@ export function validateSpec(spec, { dir = process.cwd() } = {}) {
   checkColor(spec, 'background', '', errors);
   spec.scenes.forEach((scene, si) => {
     checkSceneBackground(scene, `scenes[${si}]`, errors);
-    scene.elements.forEach((el, ei) => checkElement(el, `scenes[${si}].elements[${ei}]`, scene, dir, errors));
+    if (si === 0 && scene.transition === 'crossfade') {
+      errors.push({ path: 'scenes[0].transition', message: 'crossfade needs a previous scene to fade in over; use "fade" or "none" on the first scene' });
+    }
+    scene.elements.forEach((el, ei) => checkElement(el, `scenes[${si}].elements[${ei}]`, scene, dir, errors, spec.fps));
   });
   const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
   if (total > MAX_TOTAL_SECONDS) {
     errors.push({ path: 'scenes', message: `total duration ${total}s exceeds the ${MAX_TOTAL_SECONDS}s limit` });
   }
   checkAudio(spec, dir, errors);
+  checkCues(spec, errors);
   return { ok: errors.length === 0, errors };
 }

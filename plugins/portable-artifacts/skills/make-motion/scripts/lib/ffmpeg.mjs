@@ -85,6 +85,22 @@ function firstStderrLine(r) {
   return (r.stderr ?? '').split('\n').find((l) => l.trim()) ?? r.error?.message ?? `ffmpeg exited ${r.status}`;
 }
 
+const LOUDNESS_FILTER = 'ebur128=peak=true';
+const dbValue = (text) => (text === '-inf' ? -Infinity : Number(text));
+
+/** { lufs, truePeak } from an ffmpeg `ebur128` summary on stderr (-Infinity for silence), or null when it has none. */
+export function parseLoudness(stderr) {
+  const lufs = [...stderr.matchAll(/\bI:\s+(-?[\d.]+|-inf) LUFS/g)].at(-1);
+  const peak = [...stderr.matchAll(/True peak:\s+Peak:\s+(-?[\d.]+|-inf) dBFS/g)].at(-1);
+  return lufs && peak ? { lufs: dbValue(lufs[1]), truePeak: dbValue(peak[1]) } : null;
+}
+
+// Integrated loudness and true peak of `file`'s first audio stream; null when ffmpeg cannot measure it. A report, not a gate.
+export function measureLoudness(ffmpegPath, file) {
+  const r = spawnSync(ffmpegPath, ['-hide_banner', '-nostats', '-i', file, '-map', '0:a:0', '-af', LOUDNESS_FILTER, '-f', 'null', '-'], { encoding: 'utf8' });
+  return r.status === 0 ? parseLoudness(r.stderr ?? '') : null;
+}
+
 // null when ffmpeg accepts the mix graph, else the first stderr line. `args` overrides for tests.
 export function probeGraph(ffmpegPath, plan, args = preflightArgs(plan)) {
   return firstStderrLine(spawnSync(ffmpegPath, args, { encoding: 'utf8' }));

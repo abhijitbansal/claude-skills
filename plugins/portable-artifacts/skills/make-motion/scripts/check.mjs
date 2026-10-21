@@ -5,12 +5,17 @@
 // visible text or counter boxes overlapping while neither is moving or fading; a scene with nothing on screen at its
 // last frame (a title whose `exit` preset was applied left on purpose and counts as present). A box wholly off the canvas
 // has left the frame: it is never clipped, overlaps nothing, and is not on screen.
+// A warning (never a failure; exit stays 0) when the first scene shows nothing at t = 0: stderr, or `warnings` in --json.
+// A scene is judged on its own layer, so the outgoing scene of a crossfade is not part of the incoming scene's own
+// checks (the incoming scene's first 0.4 s are sampled, from the 0.1 s first look on). Instead each crossfade window is
+// sampled at its midpoint, and a visible text or counter of the incoming scene that overlaps one of the outgoing scene
+// there is a warning (never a failure).
 // --theme: the theme render.mjs --theme would draw a spec that names none in (a spec's own `theme` wins).
 // exit 0 ok or skipped (no browser), 1 problems (or an invalid spec), 2 usage/IO
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadSpec, validateSpec, withDefaults, UsageError as SpecUsageError } from './lib/spec.mjs';
+import { loadSpec, validateSpec, withDefaults, ART_BACKGROUND, UsageError as SpecUsageError } from './lib/spec.mjs';
 import { printResult, didYouMean } from '../shared/errors.mjs';
 import { listThemes } from '../shared/theme.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
@@ -66,14 +71,19 @@ const measure = ([sec, index]) => {
     for (let n = node; n && n !== stage; n = n.parentElement) opacity *= Number(getComputedStyle(n).opacity);
     const r = node.getBoundingClientRect();
     const box = { left: (r.left - s.left) * k, top: (r.top - s.top) * k, right: (r.right - s.left) * k, bottom: (r.bottom - s.top) * k };
-    return { id: node.dataset.id, opacity, box };
+    // Nothing drawn yet: a chart at reveal 0, a line (or unfilled shape) at draw 0 (a filled shape shows its fill), or a
+    // typing text with no characters typed (its caret alone is not content).
+    const mark = node.querySelector(':scope > svg > :first-child');
+    const untyped = node.querySelector(':scope > .typed')?.textContent === '';
+    const undrawn = untyped || node.dataset.reveal === '0' || (mark !== null && mark.getAttribute('stroke-dashoffset') === '1' && (mark.tagName === 'line' || mark.getAttribute('fill') === 'none'));
+    return { id: node.dataset.id, opacity, box, undrawn };
   });
 };
 
 const at = (t) => `${t.toFixed(2)}s`;
 const isVisible = (m) => m.opacity > VISIBLE_OPACITY;
 const onCanvas = ({ box }, size) => box.right > 0 && box.left < size[0] && box.bottom > 0 && box.top < size[1];
-const isShown = (m, size) => isVisible(m) && onCanvas(m, size); // seen in the frame, at least in part
+const isShown = (m, size) => isVisible(m) && onCanvas(m, size) && !m.undrawn; // seen in the frame, at least in part
 
 function safeAreaProblems(scene, i, samples, margin, size) {
   const problems = [];
@@ -111,11 +121,51 @@ function overlapProblems(scene, i, samples, size) {
   return problems;
 }
 
+// What an element looks like before its first keyframe: the first opacity keyframe's value (the preset a title gets is
+// one), else its own opacity; and whether a drawing or reveal property starts at 0.
+const startsInvisible = (el) => (el.keyframes.find((kf) => kf.opacity !== undefined)?.opacity ?? el.opacity) <= VISIBLE_OPACITY;
+const startsUndrawn = (el) => ['draw', 'reveal'].some((p) => el.keyframes.find((kf) => kf[p] !== undefined)?.[p] === 0);
+const startsEmpty = (el) => Boolean(el.typing) && (el.keyframes.find((kf) => kf.value !== undefined)?.value ?? 0) === 0;
+const quoted = (els) => els.map((el) => `"${el.id}"`).join(', ');
+
+// Frame 0 is the video's first frame and so its thumbnail: a warning when the first scene shows nothing there. An art
+// background is on screen at t = 0, so it counts. The message names what keeps the frame blank.
+function frameZeroWarnings(scene, els, size) {
+  if (scene.background === ART_BACKGROUND || !scene.elements.length || els.some((m) => isShown(m, size))) return [];
+  const invisible = scene.elements.filter(startsInvisible);
+  const undrawn = scene.elements.filter(startsUndrawn);
+  const empty = scene.elements.filter(startsEmpty);
+  const causes = [
+    scene.transition === 'fade' && 'the scene fades in from the background ("fade" on scene 1)',
+    invisible.length && `${quoted(invisible)} ${invisible.length === 1 ? 'has' : 'have'} an opacity 0 first keyframe${invisible.some((el) => el.role === 'title') ? " (a title's theme entrance starts at 0)" : ''}`,
+    undrawn.length && `${quoted(undrawn)} ${undrawn.length === 1 ? 'starts' : 'start'} undrawn (draw or reveal 0)`,
+    empty.length && `${quoted(empty)} ${empty.length === 1 ? 'starts' : 'start'} empty (a typing text types from no characters)`,
+  ].filter(Boolean);
+  const why = causes.length ? causes.join('; ') : 'every element is off the canvas';
+  return [{ path: 'scenes[0]', message: `scene "${scene.id}" shows nothing at ${at(0)}: the first frame, the video's thumbnail, is blank; ${why}. Show something at t = 0, or accept a blank thumbnail` }];
+}
+
 // A title whose `exit` preset was applied (withDefaults marks it `exitPreset`) left on purpose: it counts as present.
 function emptyEndProblems(scene, i, samples, size) {
   const last = samples[samples.length - 1];
   if (!scene.elements.length || last.els.some((m, j) => isShown(m, size) || scene.elements[j].exitPreset)) return [];
   return [{ path: `scenes[${i}]`, message: `scene "${scene.id}" ends with nothing on screen: every element is invisible or off the canvas (at ${at(last.t)})` }];
+}
+
+// The two layers of a crossfade are both on screen at the window's midpoint: warn about text over text.
+async function crossfadeWarnings(page, spec, fade, size) {
+  const mid = (fade.start + fade.end) / 2;
+  const outgoing = await page.evaluate(measure, [mid, fade.from]);
+  const incoming = await page.evaluate(measure, [mid, fade.to]);
+  const from = spec.scenes[fade.from];
+  const to = spec.scenes[fade.to];
+  const texts = (scene, els) => els.map((m, j) => ({ m, el: scene.elements[j], j })).filter(({ m, el }) => CHECKED.has(el.type) && isShown(m, size));
+  const old = texts(from, outgoing);
+  return texts(to, incoming).flatMap((now) => {
+    const under = old.find((o) => overlaps(o.m.box, now.m.box));
+    if (!under) return [];
+    return [{ path: `scenes[${fade.to}].elements[${now.j}]`, message: `${now.el.type} "${now.el.id}" overlaps ${under.el.type} "${under.el.id}" of the outgoing scene "${from.id}" during the crossfade at ${at(mid)}; move one of them, or let the outgoing text exit first` }];
+  });
 }
 
 async function sampleScene(page, scene, index, start, fps) {
@@ -158,13 +208,15 @@ async function inspect(browser, spec, server) {
   const starts = await page.evaluate(() => window.__motion.sceneStarts);
   const margin = safeMargin(spec.size);
   const problems = [];
+  const warnings = frameZeroWarnings(spec.scenes[0], await page.evaluate(measure, [0, 0]), spec.size);
   let moments = 0;
   for (const [i, scene] of spec.scenes.entries()) {
     const samples = await sampleScene(page, scene, i, starts[i], spec.fps);
     moments += samples.length;
     problems.push(...safeAreaProblems(scene, i, samples, margin, spec.size), ...overlapProblems(scene, i, samples, spec.size), ...emptyEndProblems(scene, i, samples, spec.size));
   }
-  return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems };
+  for (const fade of await page.evaluate(() => window.__motion.crossfades)) warnings.push(...await crossfadeWarnings(page, spec, fade, spec.size));
+  return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings };
 }
 
 async function checkSpec(specPath, spec, { env, theme }) {
@@ -193,13 +245,17 @@ function checkTheme(name) {
 }
 
 function report(result, json) {
-  const { status, problems = [] } = result;
+  const { status, problems = [], warnings = [] } = result;
+  const noted = warnings.length ? { warnings } : {};
   if (json) {
     const body = status === 'skipped' ? { ok: true, skipped: true, reason: result.reason, hint: skipHint() }
-      : status === 'ok' ? { ok: true, scenes: result.scenes, moments: result.moments }
-        : { ok: false, ...(result.crashed ? { crashed: true } : {}), errors: problems };
+      : status === 'ok' ? { ok: true, scenes: result.scenes, moments: result.moments, ...noted }
+        : { ok: false, ...(result.crashed ? { crashed: true } : {}), errors: problems, ...noted };
     process.stdout.write(`${JSON.stringify(body)}\n`);
-  } else if (status === 'skipped') process.stdout.write(`check: skipped (no browser: ${result.reason}; ${skipHint()})\n`);
+    return;
+  }
+  for (const w of warnings) process.stderr.write(`warning: ${w.path}: ${w.message}\n`); // stderr: stdout stays the verdict alone
+  if (status === 'skipped') process.stdout.write(`check: skipped (no browser: ${result.reason}; ${skipHint()})\n`);
   else if (status === 'ok') process.stdout.write(`check: ok (${result.scenes} scene${result.scenes === 1 ? '' : 's'}, ${result.moments} moments)\n`);
   else {
     for (const p of problems) process.stdout.write(p.path ? `${p.path}: ${p.message}\n` : `${p.message}\n`);
