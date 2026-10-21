@@ -28,6 +28,26 @@ test('findTokens reports offsets inside a sentence', () => {
   ]);
 });
 
+test('findTokens pins current behaviour: attached units, true minus, astral offsets, glued suffixes', () => {
+  assert.deepEqual(findTokens('1,204ms').map((t) => t.text), ['1,204ms']);
+  assert.deepEqual(findTokens('dropped −5 % today').map((t) => t.text), ['−5 %']);
+  const text = '😀 87% and 😀 3 ms';
+  const found = findTokens(text);
+  assert.deepEqual(found.map((t) => text.slice(t.start, t.end)), ['87%', '3 ms']);
+  // Intentional: %/× need no word boundary after them, so a glued suffix still binds the token.
+  assert.deepEqual(findTokens('50%off').map((t) => t.text), ['50%']);
+  assert.deepEqual(findTokens('3×4').map((t) => t.text), ['3×']);
+});
+
+test('findTokens stays linear on long digit-comma runs (no quadratic backtracking)', () => {
+  for (const input of ['1,'.repeat(20000), '1' + ',1'.repeat(100000) + 'q']) {
+    const started = performance.now();
+    findTokens(input);
+    const ms = performance.now() - started;
+    assert.ok(ms < 50, `took ${ms.toFixed(0)} ms on ${input.length} chars`);
+  }
+});
+
 test('bindWithNbsp swaps the space inside each token and nothing else', () => {
   assert.equal(bindWithNbsp('up 1,204 ms and 87 %'), `up 1,204${NBSP}ms and 87${NBSP}%`);
   assert.equal(bindWithNbsp('12 files and 87%'), '12 files and 87%');

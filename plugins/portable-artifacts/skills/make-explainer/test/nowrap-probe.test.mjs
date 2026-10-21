@@ -1,7 +1,9 @@
+// Runs against the synced copy of shared/nowrap-probe.mjs. It lives here, not in shared/test/,
+// because CI runs shared/test before `npm ci`, when no browser is installed and every case would skip.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { nowrapProblems, overflowProblems } from '../nowrap-probe.mjs';
-import { launchBrowser, haveBrowser } from '../../skills/make-explainer/test/helpers/browser.mjs';
+import { nowrapProblems, overflowProblems } from '../shared/nowrap-probe.mjs';
+import { launchBrowser, haveBrowser } from './helpers/browser.mjs';
 
 const skip = !(await haveBrowser()) && 'no browser available';
 let browser;
@@ -30,6 +32,11 @@ test('nowrapProblems honours the root selector', { skip }, async () => {
   await page.setContent('<body style="margin:0;font:16px/1.4 monospace"><div id="a" style="width:120px">aaaa 1,204 ms</div><div id="b" style="width:120px">fine</div></body>');
   assert.deepEqual(await nowrapProblems(page, { root: '#b' }), []);
   assert.equal((await nowrapProblems(page, { root: '#a' })).length, 1);
+});
+
+test('nowrapProblems does not see a token split across inline elements (documented limit)', { skip }, async () => {
+  await page.setContent(para('aaaa <b>1,204</b> ms'));
+  assert.deepEqual(await nowrapProblems(page), []);
 });
 
 test('overflowProblems flags content wider than its box and not a short one', { skip }, async () => {

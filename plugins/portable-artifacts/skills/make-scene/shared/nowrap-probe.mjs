@@ -5,7 +5,10 @@ import { TOKEN_PATTERN } from './nowrap.mjs';
 
 /**
  * Tokens in text nodes under `root` (default body) that render on more than one line.
- * Returns [{ text, lines }]; a token held by white-space:nowrap or U+00A0 is not reported.
+ * Returns [{ text, lines }]; a token held by white-space:nowrap is not reported, and one already bound with
+ * U+00A0 is not matched at all (the pattern wants a plain space).
+ * Limit: the pattern runs on each text node alone, so a token split across inline elements
+ * (`<b>1,204</b> ms`, `<span>87</span>%`) is never found.
  */
 export async function nowrapProblems(page, { root = 'body' } = {}) {
   return page.evaluate(({ pattern, rootSelector }) => {
