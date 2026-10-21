@@ -370,6 +370,42 @@ test('a crossfade does not hide a real problem in the incoming scene: an overlap
   assert.match(r.stdout, /^scenes\[1\]\.elements\[1\]: text "two" overlaps text "one"/m);
 });
 
+// ---- frame-0 warning: causes and what counts as shown (review follow-up) ------------------------
+
+const warningOf = (r) => r.stderr.split('\n').find((l) => l.startsWith('warning: scenes[0]')) ?? '';
+const blankFrame = (extra = {}) => scenesFile([{ id: 'intro', duration: 2, ...extra.scene, elements: extra.elements ?? [word('hello')] }]);
+const lineAt = (draw) => ({ id: 'rule', type: 'shape', shape: 'line', x: 960, y: 540, width: 600, strokeWidth: 12, keyframes: [{ t: 0, draw }, { t: 1, draw: 1 }] });
+
+test('the warning names its cause: a fading scene, an opacity 0 first keyframe, or the theme title entrance', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const fade = warningOf(check([blankFrame({ scene: { transition: 'fade' } })]));
+  assert.match(fade, /the scene fades in from the background \("fade" on scene 1\)/);
+  const entrance = warningOf(check([blankFrame({ elements: [word('late', { keyframes: [{ t: 0, opacity: 0 }, { t: 0.5, opacity: 1 }] })] })]));
+  assert.match(entrance, /"late" has an opacity 0 first keyframe/);
+  assert.doesNotMatch(entrance, /fade/);
+  const title = warningOf(check([blankFrame({ elements: [word('headline', { role: 'title' })] })]));
+  assert.match(title, /"headline" has an opacity 0 first keyframe \(a title's theme entrance starts at 0\)/);
+  assert.doesNotMatch(title, /"fade"/);
+});
+
+test('an art background is on screen at t = 0, so a first scene of late elements over art does not warn', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([blankFrame({ scene: { background: 'art' }, elements: [word('late', { keyframes: [{ t: 0, opacity: 0 }, { t: 0.5, opacity: 1 }] })] })]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(r.stderr, '');
+});
+
+test('a line at draw 0 and a chart at reveal 0 are not on screen at t = 0; a filled rect at draw 0 is', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  assert.match(warningOf(check([blankFrame({ elements: [lineAt(0)] })])), /"rule" starts undrawn/);
+  const chart = { id: 'bars', type: 'chart', x: 960, y: 540, width: 800, height: 400, keyframes: [{ t: 0, reveal: 0 }, { t: 1, reveal: 1 }],
+    vegaLite: { data: { values: [{ a: 'x', b: 1 }, { a: 'y', b: 2 }] }, mark: 'bar', encoding: { x: { field: 'a', type: 'nominal' }, y: { field: 'b', type: 'quantitative' } } } };
+  assert.match(warningOf(check([blankFrame({ elements: [chart] })])), /"bars" starts undrawn/);
+  assert.equal(check([blankFrame({ elements: [lineAt(0.5)] })]).stderr, '', 'a half-drawn line is on screen');
+  const card = { id: 'card', type: 'shape', shape: 'rect', x: 960, y: 540, width: 400, height: 200, keyframes: [{ t: 0, draw: 0 }, { t: 1, draw: 1 }] };
+  assert.equal(check([blankFrame({ elements: [card] })]).stderr, '', 'a filled rect shows its fill at draw 0');
+});
+
 // ---- typing text (P4) ----------------------------------------------------------------------------
 
 test('a typing text is judged by its full box: a short line passes while it is still being typed', async (t) => {
@@ -382,7 +418,7 @@ test('a typing text is judged by its full box: a short line passes while it is s
 test('a typing text wider than the safe area is flagged at once, not only when its last character arrives', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const text = 'a long line that runs right across the whole frame and out past both safe margins of it';
-  const r = check([scenesFile([{ id: 'type', duration: 3, elements: [word('line', { text, typing: true, fontSize: 72 })] }])]);
+  const r = check([scenesFile([{ id: 'type', duration: 4, elements: [word('line', { text, typing: true, fontSize: 72 })] }])]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /^scenes\[0\]\.elements\[0\]: text "line" leaves the safe area \(left, right\) at 0\.10s/m);
 });

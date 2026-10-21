@@ -69,14 +69,17 @@ const measure = ([sec, index]) => {
     for (let n = node; n && n !== stage; n = n.parentElement) opacity *= Number(getComputedStyle(n).opacity);
     const r = node.getBoundingClientRect();
     const box = { left: (r.left - s.left) * k, top: (r.top - s.top) * k, right: (r.right - s.left) * k, bottom: (r.bottom - s.top) * k };
-    return { id: node.dataset.id, opacity, box };
+    // Nothing drawn yet: a chart at reveal 0, or a line (or unfilled shape) at draw 0. A filled shape shows its fill.
+    const mark = node.querySelector(':scope > svg > :first-child');
+    const undrawn = node.dataset.reveal === '0' || (mark !== null && mark.getAttribute('stroke-dashoffset') === '1' && (mark.tagName === 'line' || mark.getAttribute('fill') === 'none'));
+    return { id: node.dataset.id, opacity, box, undrawn };
   });
 };
 
 const at = (t) => `${t.toFixed(2)}s`;
 const isVisible = (m) => m.opacity > VISIBLE_OPACITY;
 const onCanvas = ({ box }, size) => box.right > 0 && box.left < size[0] && box.bottom > 0 && box.top < size[1];
-const isShown = (m, size) => isVisible(m) && onCanvas(m, size); // seen in the frame, at least in part
+const isShown = (m, size) => isVisible(m) && onCanvas(m, size) && !m.undrawn; // seen in the frame, at least in part
 
 function safeAreaProblems(scene, i, samples, margin, size) {
   const problems = [];
@@ -114,10 +117,25 @@ function overlapProblems(scene, i, samples, size) {
   return problems;
 }
 
-// Frame 0 is the video's first frame and so its thumbnail: a warning when the first scene shows nothing there.
+// What an element looks like before its first keyframe: the first opacity keyframe's value (the preset a title gets is
+// one), else its own opacity; and whether a drawing or reveal property starts at 0.
+const startsInvisible = (el) => (el.keyframes.find((kf) => kf.opacity !== undefined)?.opacity ?? el.opacity) <= VISIBLE_OPACITY;
+const startsUndrawn = (el) => ['draw', 'reveal'].some((p) => el.keyframes.find((kf) => kf[p] !== undefined)?.[p] === 0);
+const quoted = (els) => els.map((el) => `"${el.id}"`).join(', ');
+
+// Frame 0 is the video's first frame and so its thumbnail: a warning when the first scene shows nothing there. An art
+// background is on screen at t = 0, so it counts. The message names what keeps the frame blank.
 function frameZeroWarnings(scene, els, size) {
-  if (!scene.elements.length || els.some((m) => isShown(m, size))) return [];
-  return [{ path: 'scenes[0]', message: `scene "${scene.id}" shows nothing at ${at(0)}: the first frame, the video's thumbnail, is blank; start something visible and do not use "fade" on scene 1` }];
+  if (scene.background === 'art' || !scene.elements.length || els.some((m) => isShown(m, size))) return [];
+  const invisible = scene.elements.filter(startsInvisible);
+  const undrawn = scene.elements.filter(startsUndrawn);
+  const causes = [
+    scene.transition === 'fade' && 'the scene fades in from the background ("fade" on scene 1)',
+    invisible.length && `${quoted(invisible)} ${invisible.length === 1 ? 'has' : 'have'} an opacity 0 first keyframe${invisible.some((el) => el.role === 'title') ? " (a title's theme entrance starts at 0)" : ''}`,
+    undrawn.length && `${quoted(undrawn)} ${undrawn.length === 1 ? 'starts' : 'start'} undrawn (draw or reveal 0)`,
+  ].filter(Boolean);
+  const why = causes.length ? causes.join('; ') : 'every element is off the canvas';
+  return [{ path: 'scenes[0]', message: `scene "${scene.id}" shows nothing at ${at(0)}: the first frame, the video's thumbnail, is blank; ${why}. Show something at t = 0, or accept a blank thumbnail` }];
 }
 
 // A title whose `exit` preset was applied (withDefaults marks it `exitPreset`) left on purpose: it counts as present.

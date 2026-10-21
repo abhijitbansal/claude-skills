@@ -372,7 +372,10 @@ function makeApply({ scenes, parts }, built) {
       node.style.opacity = String(s.opacity);
       if (drawNode) drawNode.setAttribute('stroke-dashoffset', String(1 - s.draw));
       if (arrowNode) arrowNode.setAttribute('opacity', s.draw >= ARROW_DRAW_SHOWN ? '1' : '0');
-      if (el.type === 'chart') node.style.maskImage = revealMask(s.reveal);
+      if (el.type === 'chart') {
+        node.style.maskImage = revealMask(s.reveal);
+        node.dataset.reveal = String(s.reveal); // check.mjs: a chart at reveal 0 is not on screen
+      }
       if (format) node.textContent = format(s.value);
       if (typing) setTyping(typing, s.value, sec);
     }
