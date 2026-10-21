@@ -20,6 +20,17 @@ test('render: a hostile --model exits 1 before ffmpeg is needed and writes nothi
   assert.deepEqual(readdirSync(dir), []);
 });
 
+test('render: a typing text that fits at the spec fps but not at --fps is refused before anything renders, naming the fix', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'rf-'));
+  // 27 characters take 0.945 s; at 30 fps the last frame is 1/30 s before the 1 s scene ends, at 10 fps 1/10 s.
+  const motion = { size: [160, 90], fps: 30, scenes: [{ id: 's', duration: 1, elements: [{ id: 't', type: 'text', text: 'x'.repeat(27), typing: true, x: 80, y: 45, fontSize: 20 }] }] };
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify(motion));
+  const slow = spawnSync(process.execPath, [RENDER, path.join(dir, 'm.json'), '--out', path.join(dir, 'o.mp4'), '--fps', '10'], { encoding: 'utf8' });
+  assert.equal(slow.status, 1, slow.stdout + slow.stderr);
+  assert.match(slow.stdout + slow.stderr, /scenes\[0\]\.elements\[0\]\.text: typing 27 characters takes 0\.95s but scene "s" lasts 1s .*at 10 fps\); shorten the text or lengthen the scene to at least 1\.05s/);
+  assert.deepEqual(readdirSync(dir), ['m.json'], 'nothing was written');
+});
+
 test('render: an unknown option exits 2', () => {
   assert.equal(run(['--modle', 'x']).status, 2);
 });

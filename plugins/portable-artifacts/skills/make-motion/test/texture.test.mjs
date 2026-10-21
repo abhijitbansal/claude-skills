@@ -126,7 +126,7 @@ test('a typing text that cannot finish inside its scene is an error naming the f
   const long = 'x'.repeat(100);
   const motion = spec({}, [label('a', { text: long, typing: true })]);
   motion.scenes[0].duration = 1;
-  assert.deepEqual(errs(motion), ['scenes[0].elements[0].text: typing 100 characters takes 3.50s but scene "one" lasts 1s (it must finish a frame before the scene ends); shorten the text or lengthen the scene to at least 3.54s']);
+  assert.deepEqual(errs(motion), ['scenes[0].elements[0].text: typing 100 characters takes 3.50s but scene "one" lasts 1s (it must finish a frame before the scene ends at 30 fps); shorten the text or lengthen the scene to at least 3.54s']);
   motion.scenes[0].duration = 3.54;
   assert.deepEqual(errs(motion), []);
   motion.scenes[0].duration = 1;

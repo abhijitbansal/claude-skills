@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { loadSpec, validateSpec, withDefaults, UsageError } from './lib/spec.mjs';
+import { loadSpec, validateSpec, typingErrors, withDefaults, UsageError } from './lib/spec.mjs';
 import { printResult, didYouMean } from '../shared/errors.mjs';
 import { listThemes } from '../shared/theme.mjs';
 import { startServer } from './lib/server.mjs';
@@ -111,6 +111,12 @@ async function plan(opts) {
   const spec = withDefaults(raw);
   const specPath = path.resolve(opts.spec);
   const fps = opts.fps ?? spec.fps;
+  // --fps replaces the spec's frame rate after validation, and a typing text's last frame depends on it.
+  const slow = opts.fps === undefined ? [] : typingErrors(raw, fps);
+  if (slow.length) {
+    printResult({ ok: false, errors: slow }, { label: opts.spec });
+    return null;
+  }
   const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
   const frames = Math.round(total * fps);
   if (!opts.contact && frames < 1) throw new UsageError(`spec is too short for ${fps} fps: no frames to render`);

@@ -329,9 +329,30 @@ function checkFades(track, start, total, base, errors) {
   errors.push({ path: pathJoin(base, 'fadeOut'), message: `fadeIn ${fadeIn}s + fadeOut ${fadeOut}s exceed the ${plays}s the track plays (from ${start}s to ${until})` });
 }
 
+const totalSeconds = (spec) => spec.scenes.reduce((a, s) => a + s.duration, 0);
+
+// Where an audio track or a cue starts must exist: its `scene` must be one of the spec's, it must start before the video
+// ends, and (`inScene`, for cues) its `at` must lie inside that scene, or it would play in a later one unannounced.
+// Pushes the error and returns false when it does not.
+function checkStart(item, spec, base, errors, { inScene = false } = {}) {
+  const scene = item.scene === undefined ? undefined : spec.scenes.find((s) => s.id === item.scene);
+  if (item.scene !== undefined && !scene) {
+    errors.push({ path: pathJoin(base, 'scene'), message: `scene "${item.scene}" not found; scenes: ${spec.scenes.map((s) => s.id).join(', ')}` });
+    return false;
+  }
+  if (inScene && scene && item.at >= scene.duration) {
+    errors.push({ path: pathJoin(base, 'at'), message: `${item.at}s is past the end of scene "${scene.id}", which lasts ${scene.duration}s; use a smaller at, or put the cue in a later scene` });
+    return false;
+  }
+  const start = trackStart(item, spec);
+  if (start < totalSeconds(spec)) return true;
+  const how = scene ? ` (scene "${scene.id}" + ${item.at ?? 0}s)` : '';
+  errors.push({ path: pathJoin(base, 'at'), message: `starts at ${start}s${how}, but the video ends at ${totalSeconds(spec)}s` });
+  return false;
+}
+
 function checkAudio(spec, dir, errors) {
-  const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
-  const sceneIds = spec.scenes.map((s) => s.id);
+  const total = totalSeconds(spec);
   (spec.audio ?? []).forEach((track, i) => {
     const base = `audio[${i}]`;
     const ext = path.extname(track.src).slice(1).toLowerCase();
@@ -339,17 +360,8 @@ function checkAudio(spec, dir, errors) {
       const list = `${AUDIO_EXTENSIONS.slice(0, -1).join(', ')} or ${AUDIO_EXTENSIONS.at(-1)}`;
       errors.push({ path: pathJoin(base, 'src'), message: `unsupported audio format "${path.extname(track.src)}"; use ${list}` });
     }
-    if (track.scene !== undefined && !sceneIds.includes(track.scene)) {
-      errors.push({ path: pathJoin(base, 'scene'), message: `scene "${track.scene}" not found; scenes: ${sceneIds.join(', ')}` });
-      return;
-    }
-    const start = trackStart(track, spec);
-    if (start >= total) {
-      const how = track.scene === undefined ? '' : ` (scene "${track.scene}" + ${track.at ?? 0}s)`;
-      errors.push({ path: pathJoin(base, 'at'), message: `starts at ${start}s${how}, but the video ends at ${total}s` });
-      return;
-    }
-    checkFades(track, start, total, base, errors);
+    if (!checkStart(track, spec, base, errors)) return;
+    checkFades(track, trackStart(track, spec), total, base, errors);
   });
 }
 
@@ -377,8 +389,6 @@ function checkLineLength(el, base, errors) {
 
 // A cue is timed like an audio track (`scene` + `at`); a `note` tunes only the pitched cues.
 function checkCues(spec, errors) {
-  const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
-  const sceneIds = spec.scenes.map((s) => s.id);
   (spec.cues ?? []).forEach((c, i) => {
     const base = `cues[${i}]`;
     if (c.note !== undefined && !NOTE_PATTERN.test(c.note)) {
@@ -386,19 +396,7 @@ function checkCues(spec, errors) {
     } else if (c.note !== undefined && !PITCHED_CUES.includes(c.cue)) {
       errors.push({ path: pathJoin(base, 'note'), message: `${c.cue} has no pitch; note is for ${PITCHED_CUES.slice(0, -1).join(', ')} and ${PITCHED_CUES.at(-1)}` });
     }
-    if (c.scene !== undefined && !sceneIds.includes(c.scene)) {
-      errors.push({ path: pathJoin(base, 'scene'), message: `scene "${c.scene}" not found; scenes: ${sceneIds.join(', ')}` });
-      return;
-    }
-    const scene = c.scene === undefined ? undefined : spec.scenes.find((s) => s.id === c.scene);
-    if (scene && c.at >= scene.duration) {
-      errors.push({ path: pathJoin(base, 'at'), message: `${c.at}s is past the end of scene "${scene.id}", which lasts ${scene.duration}s; use a smaller at, or put the cue in a later scene` });
-      return;
-    }
-    const start = trackStart(c, spec);
-    if (start >= total) {
-      errors.push({ path: pathJoin(base, 'at'), message: `starts at ${start}s, but the video ends at ${total}s` });
-    }
+    checkStart(c, spec, base, errors, { inScene: true });
   });
 }
 
@@ -412,7 +410,16 @@ function checkTyping(el, base, scene, fps, errors) {
   const takes = chars * TYPING_SECONDS_PER_CHAR;
   const needs = takes + 1 / fps;
   if (needs <= scene.duration) return;
-  errors.push({ path: pathJoin(base, 'text'), message: `typing ${chars} characters takes ${takes.toFixed(2)}s but scene "${scene.id}" lasts ${scene.duration}s (it must finish a frame before the scene ends); shorten the text or lengthen the scene to at least ${Math.ceil(needs * CENTISECONDS) / CENTISECONDS}s` });
+  errors.push({ path: pathJoin(base, 'text'), message: `typing ${chars} characters takes ${takes.toFixed(2)}s but scene "${scene.id}" lasts ${scene.duration}s (it must finish a frame before the scene ends at ${fps} fps); shorten the text or lengthen the scene to at least ${Math.ceil(needs * CENTISECONDS) / CENTISECONDS}s` });
+}
+
+// The typing errors of `spec` at frame rate `fps`: render.mjs asks again with its --fps, which overrides the spec's.
+export function typingErrors(spec, fps) {
+  const errors = [];
+  spec.scenes.forEach((scene, si) => scene.elements.forEach((el, ei) => {
+    if (el.type === 'text') checkTyping(el, `scenes[${si}].elements[${ei}]`, scene, fps, errors);
+  }));
+  return errors;
 }
 
 function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS) {

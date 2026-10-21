@@ -90,12 +90,13 @@ Chart notes: data must be inline: `data.values`, or `datasets` plus `data: {name
 - `scenes[0].elements[0].keyframes[2].t: 5 exceeds scene duration 3`
 - `scenes[0].elements[0].keyframes[0].value: not animatable on text; animatable: opacity, x, y, scale, rotate (value needs "typing": true)`
 - `texture.grain: must be <= 0.15`
+- `scenes[0].elements[0].text: typing 100 characters takes 3.50s but scene "one" lasts 1s (it must finish a frame before the scene ends at 30 fps); shorten the text or lengthen the scene to at least 3.54s` (render.mjs asks again with its `--fps`, which replaces the spec's)
 - `scenes: total duration 121s exceeds the 120s limit`
 - `audio[0].src: unsupported audio format ".wma"; use mp3, wav, m4a, aac, ogg or flac`
 - `audio[1].scene: scene "outro" not found; scenes: intro, chart`
 - `audio[1].at: starts at 9s (scene "chart" + 4s), but the video ends at 8s`
 - `cues[1].cue: must be one of "pop", "click", "whoosh", "chime", "impact"; did you mean "chime"?`
-- `cues[0].at: starts at 4s (scene "two" + 2s), but the video ends at 4s`
+- `cues[0].at: 2s is past the end of scene "two", which lasts 2s; use a smaller at, or put the cue in a later scene`
 - `cues[0].note: click has no pitch; note is for pop, chime and impact`
 - `audio[0].fadeOut: fadeIn 1s + fadeOut 2.5s exceed the 3s the track plays (from 2s to the video end at 5s)`
 - `scenes[0].elements[1].src: file not found: pic.png` (also `must stay inside the spec folder`, `hidden files are not allowed`)
