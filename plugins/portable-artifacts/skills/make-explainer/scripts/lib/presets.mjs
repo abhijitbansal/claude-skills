@@ -6,8 +6,6 @@ import { PRESETS, LIMITS } from './schema.mjs';
 import { prose, fit, pathText } from './fit.mjs';
 import { slugify } from '../../shared/output.mjs';
 
-export const PRESET_NAMES = PRESETS.filter((p) => p !== 'none');
-
 const MAX_FILES = 200;
 const MAX_TIMELINE = 20;
 const MAX_FOLDERS = 10;
@@ -235,6 +233,9 @@ function slides(facts, title) {
 }
 
 const BUILDERS = { recap, checklist, concept, slides };
+
+// The presets scaffold can start: a preset is listed once it has a builder.
+export const PRESET_NAMES = PRESETS.filter((p) => Object.hasOwn(BUILDERS, p));
 
 /** Starter spec for a preset: facts is gather.mjs output (or null), title overrides the TODO title. */
 export function scaffold(preset, { facts = null, title } = {}) {

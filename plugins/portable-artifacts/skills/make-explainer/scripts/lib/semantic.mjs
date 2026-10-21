@@ -49,6 +49,16 @@ export function checkTop(spec, errors) {
     const themes = listThemes();
     if (!themes.includes(spec.theme)) errors.push({ path: 'theme', message: `unknown theme ${q(spec.theme)}; ${suggestion(spec.theme, themes)}` });
   }
+  if (spec.key !== undefined) checkKey(errors, spec.key, 'key');
+}
+
+// A storage namespace (a checklist's ticks, a plan's answers): KEY_PATTERN and the checklist key limit.
+function checkKey(errors, key, at) {
+  if (!KEY_PATTERN.test(key)) {
+    errors.push({ path: at, message: `key ${q(key)} is invalid; use lowercase letters, digits, . - and _, starting with a letter or digit` });
+  } else if ([...key].length > LIMITS.checklistKey) {
+    errors.push({ path: at, message: `key is ${[...key].length} characters; the limit is ${LIMITS.checklistKey} — shorten it` });
+  }
 }
 
 // ---- ids --------------------------------------------------------------
@@ -123,11 +133,7 @@ function checkChart(s, at, errors) {
 
 function checkChecklist(s, at, errors, keys) {
   const keyAt = pathJoin(at, 'key');
-  if (!KEY_PATTERN.test(s.key)) {
-    errors.push({ path: keyAt, message: `key ${q(s.key)} is invalid; use lowercase letters, digits, . - and _, starting with a letter or digit` });
-  } else if ([...s.key].length > LIMITS.checklistKey) {
-    errors.push({ path: keyAt, message: `key is ${[...s.key].length} characters; the limit is ${LIMITS.checklistKey} — shorten it` });
-  }
+  checkKey(errors, s.key, keyAt);
   if (keys.has(s.key)) errors.push({ path: keyAt, message: `duplicate checklist key ${q(s.key)}; first used at ${keys.get(s.key)}; rename one so their ticks stay apart` });
   else keys.set(s.key, keyAt);
   count(errors, s.groups, at, 'groups', [1, Infinity]);
@@ -180,13 +186,63 @@ function checkSection(s, i, errors, state) {
         errors.push({ path: at, message: 'a motion section needs video (an .mp4 path) or spec (a motion.json path); add one' });
       }
       break;
+    case 'decision': checkDecision(s, at, errors); break;
+    case 'review': checkReview(s, at, errors, state.ids); break;
+    case 'verdict': checkVerdict(i, at, errors, state); break;
     default:
   }
 }
 
+// ---- plan mode --------------------------------------------------------
+
+const PLAN_ITEM_TYPES = new Set(['decision', 'approval', 'question']);
+
+// A field that names an option must name one exactly: answers carry the label.
+function checkOptionRef(s, field, at, errors, labels) {
+  const value = s[field];
+  if (value === undefined || labels.includes(value)) return;
+  const hint = didYouMean(value, labels);
+  const fix = hint ? `did you mean ${q(hint)}?` : `use one option label exactly: ${labels.map(q).join(', ')}`;
+  errors.push({ path: pathJoin(at, field), message: `${field} ${q(value)} is not an option label; ${fix}` });
+}
+
+function checkDecision(s, at, errors) {
+  count(errors, s.options, at, 'options', LIMITS.planOptions, 'keep the strongest options');
+  const seen = new Map();
+  s.options.forEach((o, oi) => {
+    const labelAt = pathJoin(pathJoin(pathJoin(at, 'options'), oi), 'label');
+    if (seen.has(o.label)) errors.push({ path: labelAt, message: `duplicate option label ${q(o.label)}; first used at ${seen.get(o.label)}; give each option its own label` });
+    else seen.set(o.label, labelAt);
+  });
+  const labels = s.options.map((o) => o.label);
+  checkOptionRef(s, 'recommended', at, errors, labels);
+  checkOptionRef(s, 'default', at, errors, labels);
+}
+
+// A review item points at a section by its explicit id (generated ids are not known until the build).
+function checkReview(s, at, errors, ids) {
+  count(errors, s.items, at, 'items', LIMITS.reviewItems, 'keep the places that need the hardest look');
+  s.items.forEach((item, j) => {
+    if (item.target === undefined || ids.includes(item.target)) return;
+    const hint = didYouMean(item.target, ids);
+    const fix = hint ? `did you mean ${q(hint)}?` : `set an explicit id on the section it points to; ids: ${ids.length > 0 ? ids.join(', ') : '(none)'}`;
+    errors.push({ path: pathJoin(pathJoin(pathJoin(at, 'items'), j), 'target'), message: `target ${q(item.target)} matches no section id; ${fix}` });
+  });
+}
+
+function checkVerdict(i, at, errors, state) {
+  if (i !== state.last) errors.push({ path: at, message: 'the verdict must be the last section; move it to the end' });
+  if (state.verdictAt !== undefined) errors.push({ path: at, message: `only one verdict per page; the first is at ${state.verdictAt}; remove this one` });
+  else state.verdictAt = at;
+}
+
 export function checkSections(spec, errors) {
-  const state = { checklistKeys: new Map() };
+  const ids = spec.sections.map((s) => s.id).filter((id) => id !== undefined);
+  const state = { checklistKeys: new Map(), ids, last: spec.sections.length - 1, verdictAt: undefined };
   spec.sections.forEach((s, i) => checkSection(s, i, errors, state));
+  if (spec.preset === 'plan' && !spec.sections.some((s) => PLAN_ITEM_TYPES.has(s.type))) {
+    errors.push({ path: 'sections', message: 'a plan needs at least one decision, approval or question' });
+  }
 }
 
 /** Advice that never blocks a build: -> [{ path, message }]. */

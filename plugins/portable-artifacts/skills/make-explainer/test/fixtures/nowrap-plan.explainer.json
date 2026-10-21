@@ -1,0 +1,12 @@
+{
+  "title": "Plan with numbers in every answerable part",
+  "preset": "plan",
+  "key": "nowrap-plan",
+  "sections": [
+    { "type": "review", "title": "Review these first", "items": [{ "point": "The cache cuts p95 from 1,204 ms to 87 ms", "why": "Memory grows by +12 % at 4.2k requests per second.", "target": "cache" }] },
+    { "type": "decision", "id": "cache", "title": "Cache", "question": "Do we cache rendered pages for 15 min at a cost of 1.2 GB per node?", "options": [{ "label": "Cache for 15 min and keep 1.2 GB per node", "pros": ["p95 drops by 1,204 ms on a cold start", "Saves $4.2k a month"], "cons": ["Uses +12 % memory at peak", "Adds 640 px of settings UI"] }, { "label": "No cache, spend 3 d on query plans", "pros": ["0 KB extra memory"], "cons": ["p95 stays at 1,204 ms"] }], "recommended": "Cache for 15 min and keep 1.2 GB per node", "why": "It removes 93% of the wait for 12 MB of code; the memory budget allows +12 % today.", "default": "No cache, spend 3 d on query plans" },
+    { "type": "approval", "id": "budget", "title": "Budget", "item": "Approve $4.2k a month for 2 GB nodes", "why": "Cuts 1,204 ms from the slowest 5% of requests.", "impact": "+12 % memory, 87% fewer timeouts", "owner": "Platform, 3 d" },
+    { "type": "question", "id": "window", "title": "Window", "text": "Is a 15 min staleness window acceptable for pages that change every 30 s?", "default": "Yes, up to 15 min" },
+    { "type": "verdict", "text": "Ship the cache at 1.2 GB per node with a 15 min window?" }
+  ]
+}

@@ -16,14 +16,14 @@ const text = (t = 'Body.') => ({ type: 'text', text: t });
 const ONE_NODE = { type: 'flow', nodes: [{ id: 'a', label: 'A' }] };
 const errorsOf = async (spec, opts = { dir: FIXTURES }) => (await validateSpec(spec, opts)).errors;
 const section = (type, patch) => ({ ...fixture().sections.find((s) => s.type === type), ...patch });
-const TYPE_LIST = '"tldr", "text", "kpis", "cards", "table", "risks", "files", "steps", "timeline", "compare", "callout", "code", "details", "checklist", "diagram", "chart", "scene", "motion", "image"';
+const TYPE_LIST = '"tldr", "text", "kpis", "cards", "table", "risks", "files", "steps", "timeline", "compare", "callout", "code", "details", "checklist", "diagram", "chart", "scene", "motion", "image", "decision", "approval", "question", "review", "verdict"';
 
 test('the all-types fixture is valid with no warnings', async () => {
   const r = await validateSpec(fixture(), { dir: FIXTURES });
   assert.deepEqual(r, { ok: true, errors: [], warnings: [] });
 });
 
-test('every section type has a schema (the fixture covers all 19)', () => {
+test('every section type has a schema (the fixture covers all 24)', () => {
   assert.deepEqual(fixture().sections.map((s) => s.type), TYPE_LIST.replaceAll('"', '').split(', '));
 });
 
@@ -54,7 +54,7 @@ test('root shape errors', async () => {
 test('unknown top-level property gets did-you-mean, or the allowed list', async () => {
   assert.deepEqual(await errorsOf({ ...doc([text()]), titel: 'x' }), [{ path: 'titel', message: 'unknown property; did you mean "title"?' }]);
   assert.deepEqual(await errorsOf({ ...doc([text()]), zzzzzz: 1 }), [
-    { path: 'zzzzzz', message: 'unknown property; allowed: title, subtitle, preset, mode, theme, generatedBy, meta, sections' },
+    { path: 'zzzzzz', message: 'unknown property; allowed: title, subtitle, preset, key, mode, theme, generatedBy, meta, sections' },
   ]);
   assert.deepEqual(await errorsOf({ title: 'x', section: [text()] }), [
     { path: 'section', message: 'unknown property; did you mean "sections"?' },
@@ -63,7 +63,7 @@ test('unknown top-level property gets did-you-mean, or the allowed list', async 
 
 test('closed sets: preset, mode and meta keys', async () => {
   assert.deepEqual(await errorsOf(doc([text()], { preset: 'recapp' })), [
-    { path: 'preset', message: 'must be one of "recap", "checklist", "concept", "slides", "none"; did you mean "recap"?' },
+    { path: 'preset', message: 'must be one of "recap", "checklist", "concept", "slides", "plan", "none"; did you mean "recap"?' },
   ]);
   assert.deepEqual(await errorsOf(doc([text()], { mode: 'slide' })), [
     { path: 'mode', message: 'must be one of "page", "slides"; did you mean "slides"?' },

@@ -7,7 +7,7 @@ import { pathJoin } from '../../shared/errors.mjs';
 const NON_PROSE = new Set([
   'type', 'id', 'key', 'src', 'path', 'code', 'language', 'diagram', 'scene', 'dashboard', 'chart', 'video', 'spec', 'poster',
   'data', 'kind', 'x', 'y', 'color', 'format', 'icon', 'tone', 'tag', 'status', 'change', 'severity', 'align',
-  'theme', 'preset', 'mode', 'meta',
+  'theme', 'preset', 'mode', 'meta', 'recommended', 'default', 'target',
 ]);
 const HEADING_KEYS = new Set(['title', 'summary']);
 

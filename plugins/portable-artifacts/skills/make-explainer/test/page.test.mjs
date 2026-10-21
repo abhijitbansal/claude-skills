@@ -254,15 +254,15 @@ const unthemed = (spec) => {
 const heroArt = (html) => html.match(/<div class="hero-art"[^>]*>[\s\S]*?<\/div>/g) ?? [];
 
 test('flavor: the default theme is dusk; --theme press and poster set their own flavor', async () => {
-  assert.match((await build(unthemed(CONCEPT), { dir: EXAMPLES })).html, /<html lang="en" data-flavor="dusk">/);
-  assert.match((await build(CONCEPT, { dir: EXAMPLES, theme: 'press' })).html, /<html lang="en" data-flavor="press">/);
-  assert.match((await build(CONCEPT, { dir: EXAMPLES, theme: 'poster' })).html, /<html lang="en" data-flavor="poster">/);
+  assert.match((await build(unthemed(CONCEPT), { dir: EXAMPLES })).html, /<html lang="en" data-flavor="dusk"[ >]/);
+  assert.match((await build(CONCEPT, { dir: EXAMPLES, theme: 'press' })).html, /<html lang="en" data-flavor="press"[ >]/);
+  assert.match((await build(CONCEPT, { dir: EXAMPLES, theme: 'poster' })).html, /<html lang="en" data-flavor="poster"[ >]/);
 });
 
 test('flavor: the four older themes keep their look under the classic flavor, with no hero art', async () => {
   for (const theme of ['paper', 'blueprint', 'ink', 'editorial']) {
     const { html } = await build(CONCEPT, { dir: EXAMPLES, theme });
-    assert.match(html, /<html lang="en" data-flavor="classic">/, theme);
+    assert.match(html, /<html lang="en" data-flavor="classic"[ >]/, theme);
     assert.deepEqual(heroArt(html), [], theme);
     assert.ok(!html.includes('/* flavors */'), `${theme}: no flavor stylesheet`);
   }

@@ -84,6 +84,18 @@ test('slides: no token wraps and no KPI value spills its tile at 390 and 1280', 
   await context.close();
 });
 
+for (const theme of ['mono', 'brief']) {
+  test(`plan page in the ${theme} theme: no token in a decision, approval, question, review or verdict wraps, 320 to 480 and 1280`, async (t) => {
+    if (await skipUnlessBrowser(t)) return;
+    const { url } = buildFile(fixture('nowrap-plan.explainer.json'), { theme });
+    const { page, problems, context } = await openPage(url);
+    assert.ok((await page.locator('.plan-item .nw').count()) >= 10, 'the plan items hold bound tokens');
+    assert.deepEqual(await failuresAcross(page, [...SWEEP, 1280]), []);
+    assert.deepEqual(problems, []);
+    await context.close();
+  });
+}
+
 test('the KPI tile holds a long value on one line and sizes it down instead of spilling', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { url } = buildFile(fixture('nowrap.explainer.json'));

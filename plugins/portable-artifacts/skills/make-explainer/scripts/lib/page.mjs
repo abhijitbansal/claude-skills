@@ -111,19 +111,20 @@ async function prepareSection(section, i, def, ctx) {
   }
 }
 
-// Stylesheets and scripts a section type ships once per page, only when the page has one.
+// Stylesheets and scripts a section type ships once per page, only when the page has one. Types that ship the
+// same stylesheet or script (the answerable plan types) share one copy.
 function sectionPageParts(spec, ctx) {
-  const css = [];
-  const js = [];
+  const css = new Set();
+  const js = new Set();
   for (const type of new Set(spec.sections.map((s) => s.type))) {
     const part = SECTIONS[type].page?.(ctx);
     if (!part) continue;
-    css.push(part.css);
-    js.push(...part.js);
+    css.add(part.css);
+    for (const code of part.js) js.add(code);
   }
   return {
-    SECTIONCSS: css.length > 0 ? `<style>\n${css.join('\n')}\n</style>` : '',
-    SECTIONJS: js.map((code) => `<script>\n${inlineCode(code)}\n</script>`).join('\n'),
+    SECTIONCSS: css.size > 0 ? `<style>\n${[...css].join('\n')}\n</style>` : '',
+    SECTIONJS: [...js].map((code) => `<script>\n${inlineCode(code)}\n</script>`).join('\n'),
   };
 }
 
@@ -153,6 +154,18 @@ function renderHeroTldr(section, id, titleId, ctx) {
   const tone = section.tone === undefined ? '' : ` ${toneClass(section.tone)}`;
   return `<div class="hero-tldr${tone}" id="${esc(id)}" role="region"${labelled}>\n${eyebrow(section)}${title}${body}\n</div>`;
 }
+
+// Plan mode: the sections a reader answers. A page that has one carries the plan's key (the answers' storage
+// namespace) and its hash on <html>; the hash is a placeholder until the answers validator fills it.
+const PLAN_ITEM_TYPES = new Set(['decision', 'approval', 'question', 'verdict']);
+const planAttrs = (spec, slides) => (slides || !spec.sections.some((s) => PLAN_ITEM_TYPES.has(s.type))
+  ? ''
+  : ` data-plan-key="${esc(spec.key ?? '')}" data-plan-hash=""`);
+
+// Review links name the section they point at: explicit id -> title (or label).
+const linkTargets = (sections) => new Map(sections
+  .filter((s) => s.id !== undefined && (s.title ?? s.label) !== undefined)
+  .map((s) => [s.id, s.title ?? s.label]));
 
 function renderMeta(meta) {
   const entries = META_KEYS.filter((k) => meta?.[k] !== undefined);
@@ -282,6 +295,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     icons: await loadIcons(spec),
     env,
     footer,
+    targets: linkTargets(spec.sections),
   };
 
   const assets = [];
@@ -305,6 +319,8 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     THEME: flavored ? `${themeCss(themeData)}\n${flavorVars(flavor)}` : themeCss(themeData),
     BASECSS: fs.readFileSync(BASE_CSS, 'utf8').replace(/\n$/, ''),
     FLAVOR: flavor,
+    THEMENAME: esc(themeData.name),
+    PLANATTRS: planAttrs(spec, slides),
     FLAVORCSS: flavorSheets(flavor, slides),
     HEROART: flavored && !slides ? heroArt(spec, themeData, typeof heroImage === 'function' ? undefined : heroImage) : '',
     ...layout,

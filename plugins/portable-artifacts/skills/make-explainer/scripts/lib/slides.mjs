@@ -1,8 +1,8 @@
 // Slides mode: each section is one slide, so each gets a content budget.
 // Points: tldr points, "- " list lines in markdown fields, items of list-like
-// sections, compare points, checklist items. Words: every prose string of the
-// section except its own title, its label and captions (tables and code have their own
-// limits).
+// sections, compare points, checklist items, decision options and review items.
+// Words: every prose string of the section except its own title, its label and
+// captions (tables and code have their own limits).
 // The deck: a title slide from the spec head, then one slide per section, plus
 // the progress bar, counter, outline dialog and the live region the runtime uses.
 import { pathJoin } from '../../shared/errors.mjs';
@@ -19,13 +19,15 @@ export function codeLines(code) {
   return code.replace(/\n+$/, '').split('\n').length;
 }
 
-function pointCount(s) {
+export function pointCount(s) {
   switch (s.type) {
     case 'tldr': return s.points?.length ?? 0;
     case 'text': case 'details': return listLines(s.text);
     case 'kpis': case 'cards': case 'steps': case 'timeline': case 'risks': case 'files': return s.items.length;
     case 'compare': return sum(s.columns.map((c) => c.points.length));
     case 'checklist': return sum(s.groups.map((g) => g.items.length));
+    case 'decision': return s.options.length;
+    case 'review': return s.items.length;
     default: return 0;
   }
 }
@@ -67,6 +69,7 @@ const TYPE_LABELS = {
   tldr: 'TL;DR', text: 'Text', kpis: 'KPIs', cards: 'Cards', table: 'Table', risks: 'Risks', files: 'Files', steps: 'Steps',
   timeline: 'Timeline', compare: 'Comparison', callout: 'Note', code: 'Code', details: 'Details', checklist: 'Checklist',
   diagram: 'Diagram', scene: 'Scene', chart: 'Chart', motion: 'Video', image: 'Image',
+  decision: 'Decision', approval: 'Approval', question: 'Open question', verdict: 'Verdict', review: 'Review these first',
 };
 const typeLabel = (type) => TYPE_LABELS[type] ?? `${type[0].toUpperCase()}${type.slice(1)}`;
 export const slideTitle = (section) => (section.title === undefined ? typeLabel(section.type) : plain(section.title));

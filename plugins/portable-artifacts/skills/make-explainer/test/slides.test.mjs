@@ -131,7 +131,7 @@ const example = (theme) => buildPage(exampleSpec(), { dir: EXAMPLES, out: OUT, t
 // One chunk per slide: the section's own tag, then its markup up to the next slide (or the end of <main>).
 const slideChunks = (html) => html.slice(0, html.indexOf('</main>')).split(/(?=<section class="slide[ "])/).slice(1);
 const slideHeads = (html) => [...html.matchAll(/<section class="slide[^"]*" (id="slide-\d+"(?: data-sid="[^"]*")?) tabindex="-1" aria-label="([^"]+)">/g)].map((m) => [m[1], m[2]]);
-const flavorOf = (html) => html.match(/^<!doctype html>\n<html lang="en" data-flavor="([^"]*)">/)?.[1];
+const flavorOf = (html) => html.match(/^<!doctype html>\n<html lang="en" data-flavor="([^"]*)"[ >]/)?.[1];
 const FLAVORED = ['dusk', 'press', 'poster'];
 
 test('a flavored deck puts full-bleed art on the first and last slides only, in a light and a dark drawing', async () => {
