@@ -3,6 +3,8 @@
 **Dashboards, diagrams, explainer pages, 3D scenes and animated videos from a prompt — built locally, offline,
 from open-source parts, by any coding agent.**
 
+What changed in each release: [`CHANGELOG.md`](CHANGELOG.md).
+
 Five agent skills that do what hosted "artifact" features do, without a cloud,
 an account or a particular model:
 
