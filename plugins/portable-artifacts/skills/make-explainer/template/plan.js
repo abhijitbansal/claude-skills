@@ -24,6 +24,8 @@
   var TEXT_SAVE_MS = 250; // typing is saved this long after the last key
   var REVOKE_MS = 1000; // a download's object URL is released this long after the click
   var statusTimer = 0;
+  var speakTimer = 0;
+  var frame = 0;
 
   function part(box, name) { return box ? box.querySelector('[' + name + ']') : null; }
   function radios(box) { return [].slice.call(box.querySelectorAll('input[type=radio]')); }
@@ -166,9 +168,10 @@
     saveTimer = 0;
     var base = freshEntry();
     var entry = base ? merged(base) : everything();
-    dirtyIds = Object.create(null);
-    dirtyVerdict = false;
+    // What failed to save stays dirty, so the next write carries it and the note stays until one holds.
     if (PA.saveStore(local, storeKey, JSON.stringify(entry))) {
+      dirtyIds = Object.create(null);
+      dirtyVerdict = false;
       if (canSave) hide(unsaved);
     } else {
       show(unsaved);
@@ -230,15 +233,23 @@
 
   // ---- export: copy and download ---------------------------------------------------
   var status = part(verdictBox, 'data-plan-status');
-  // Cleared first, then set on the next frame, so the same message said twice is announced twice.
+  // Cleared first, then set on the next frame, so the same message said twice is announced twice. One pending
+  // frame and one clear timer at a time: a later call cancels the earlier ones. A hidden tab never runs frames,
+  // so there (or with no requestAnimationFrame) it is set on a zero timer instead.
   function say(message) {
     if (!status) return;
     window.clearTimeout(statusTimer);
+    window.clearTimeout(speakTimer);
+    if (frame && window.cancelAnimationFrame) window.cancelAnimationFrame(frame);
+    frame = 0;
     status.textContent = '';
-    window.requestAnimationFrame(function () {
+    var speak = function () {
+      frame = 0;
       status.textContent = message;
       statusTimer = window.setTimeout(function () { status.textContent = ''; }, STATUS_MS);
-    });
+    };
+    if (window.requestAnimationFrame && !document.hidden) frame = window.requestAnimationFrame(speak);
+    else speakTimer = window.setTimeout(speak, 0);
   }
   // Copy: one line, easy to paste into a chat. Download: the same data, pretty-printed.
   function copyText() { return JSON.stringify(PA.planExport()); }

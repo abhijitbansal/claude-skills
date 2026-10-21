@@ -256,6 +256,88 @@ test('the not-saved note hides again when a later write succeeds', async (t) => 
   await context.close();
 });
 
+const failWrites = (page) => page.evaluate(() => { window.__set = Storage.prototype.setItem; Storage.prototype.setItem = () => { throw new DOMException('full', 'QuotaExceededError'); }; });
+const allowWrites = (page) => page.evaluate(() => { Storage.prototype.setItem = window.__set; });
+
+test('an answer whose write failed is saved by the next write that holds, and only then does the note go', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built().url);
+  await pick(page, 'budget', 'approve'); // an entry exists, so later writes merge into it
+  await failWrites(page);
+  await pick(page, 'storage', 'A save server');
+  assert.equal(await page.locator('[data-plan-unsaved]').isVisible(), true);
+  await allowWrites(page);
+  await pick(page, 'theme', 'Mono');
+  assert.equal(await page.locator('[data-plan-unsaved]').isHidden(), true);
+  await page.reload();
+  await page.waitForFunction(() => window.paReady === true);
+  const [storage, theme, budget] = (await exported(page)).answers;
+  assert.deepEqual([storage.choice, theme.choice, budget.choice], ['A save server', 'Mono', 'approve'], 'A was never stored by its own write, yet comes back');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('while writes keep failing, the not-saved note stays', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(built().url);
+  await failWrites(page);
+  await pick(page, 'storage', 'A save server');
+  await pick(page, 'theme', 'Mono');
+  assert.equal(await page.locator('[data-plan-unsaved]').isVisible(), true);
+  assert.deepEqual((await exported(page)).answers.slice(0, 2).map((a) => a.choice), ['A save server', 'Mono']);
+  await context.close();
+});
+
+test('a cleared textarea and a cleared comment stay cleared after a reload', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(built().url);
+  const owner = page.locator(`${item('owner')} [data-answer]`);
+  const note = page.locator(`${item('storage')} [data-comment]`);
+  await pick(page, 'storage', 'A save server');
+  await owner.fill('Dana');
+  await note.fill('Maybe');
+  await settle(page);
+  await owner.fill('');
+  await note.fill('');
+  await settle(page);
+  await page.reload();
+  await page.waitForFunction(() => window.paReady === true);
+  const [storage, , , own] = (await exported(page)).answers;
+  assert.deepEqual([own.answered, own.text], [false, 'The author'], 'back to the default state');
+  assert.deepEqual([storage.choice, storage.comment], ['A save server', null]);
+  assert.equal(await owner.inputValue(), '');
+  await context.close();
+});
+
+test('typing is saved at once when the page becomes hidden (no reload needed)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(built().url);
+  await page.locator(`${item('owner')} [data-answer]`).fill('hidden soon');
+  const saved = await page.evaluate((k) => {
+    Object.defineProperty(document, 'hidden', { get: () => true, configurable: true });
+    Object.defineProperty(document, 'visibilityState', { get: () => 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    return localStorage.getItem(k);
+  }, STORE);
+  assert.equal(JSON.parse(saved).answers.owner.text, 'hidden soon');
+  await context.close();
+});
+
+test('two quick Copy clicks end with the message showing, and it clears once after the delay', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const init = () => { Object.defineProperty(navigator, 'clipboard', { value: { writeText: () => Promise.resolve() }, configurable: true }); };
+  const { page, context } = await openPage(built().url, { init });
+  await page.evaluate(() => { window.__texts = []; new MutationObserver(() => window.__texts.push(document.querySelector('[data-plan-status]').textContent)).observe(document.querySelector('[data-plan-status]'), { childList: true, characterData: true, subtree: true }); });
+  await page.evaluate(() => { const b = document.querySelector('[data-plan-copy]'); b.click(); b.click(); });
+  await said(page, 'copied');
+  await page.waitForTimeout(1500);
+  assert.match(await page.locator('[data-plan-status]').textContent(), /copied/i, 'still showing; no early clear from the first click');
+  await page.waitForFunction(() => document.querySelector('[data-plan-status]').textContent === '');
+  const texts = await page.evaluate(() => window.__texts);
+  assert.equal(texts.filter((x) => /copied/i.test(x)).length, 1, 'set once, not twice');
+  await context.close();
+});
+
 test('Copy answers writes compact one-line JSON to the clipboard and says so', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const init = () => { window.__copied = []; Object.defineProperty(navigator, 'clipboard', { value: { writeText: (s) => { window.__copied.push(s); return Promise.resolve(); } }, configurable: true }); };
@@ -383,7 +465,7 @@ test('two tabs answering different items keep both (writes merge by item)', asyn
   const init = () => window.addEventListener('storage', (e) => e.stopImmediatePropagation(), true);
   const two = await openPage(url, { context: one.context, init });
   await pick(one.page, 'storage', 'A save server');
-  await one.page.waitForTimeout(200);
+  await two.page.waitForFunction((k) => localStorage.getItem(k) !== null, STORE); // tab one's write has landed
   await pick(two.page, 'theme', 'Mono');
   await one.page.reload();
   await one.page.waitForFunction(() => window.paReady === true);
