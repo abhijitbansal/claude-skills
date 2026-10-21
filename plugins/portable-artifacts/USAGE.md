@@ -418,7 +418,7 @@ procedural art behind its elements, seeded by the scene id.
 `"cap": "round"` and `"arrow": "end"`. Charts default to about five ticks per axis, no
 tick marks, no y-axis line, no vertical gridlines, bars with rounded ends and a gap, and
 4 px round lines with ringed points. `"transition": "crossfade"` on a scene (or at the
-root, as the default) fades the previous scene out under it over 0.4 s.
+root, as the default) fades it in over the previous scene, which stays fully visible beneath, over 0.4 s.
 `"typing": true` on a text types it out at 0.035 s per character with a caret.
 
 **Texture is opt-in.** A root `"texture": { "vignette": true, "grain": 0.08 }` darkens the

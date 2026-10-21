@@ -51,3 +51,20 @@ async function openPage(motion, size) {
     return { page, problems, done };
   } catch (e) { await done(); throw e; }
 }
+
+// Mean luma (0-255) of a PNG, decoded in a browser page.
+export async function meanLuma(png) {
+  const browser = await launchBrowser({ quiet: true });
+  try {
+    const page = await browser.newPage();
+    return await page.evaluate(async (url) => {
+      const img = new Image(); img.src = url; await img.decode();
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
+      const d = ctx.getImageData(0, 0, c.width, c.height).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+      return sum / (d.length / 4);
+    }, `data:image/png;base64,${png.toString('base64')}`);
+  } finally { await browser.close(); }
+}

@@ -27,8 +27,8 @@ shell commands.
   lines and ringed points. Shapes and text take **theme colour tokens**
   (`"fill": "surface"`, `"color": "accent"`) that follow the theme, rects can be
   `elevated` cards, and lines can have round caps and an arrow head.
-- **Scene crossfade**: `"transition": "crossfade"` fades the previous scene out under the
-  new one over 0.4 s; a root `transition` sets the default.
+- **Scene crossfade**: `"transition": "crossfade"` fades the new scene in over the
+  previous one (which stays fully visible beneath) over 0.4 s; a root `transition` sets the default.
 - **Procedural sound cues**: a `cues` array (`pop`, `click`, `whoosh`, `chime`, `impact`)
   is synthesised locally with no files and no extra dependency, deterministically, and
   mixed in; after any render with audio, `render.mjs` prints the integrated loudness and

@@ -453,7 +453,7 @@ export function validateSpec(spec, { dir = process.cwd() } = {}) {
   spec.scenes.forEach((scene, si) => {
     checkSceneBackground(scene, `scenes[${si}]`, errors);
     if (si === 0 && scene.transition === 'crossfade') {
-      errors.push({ path: 'scenes[0].transition', message: 'crossfade needs a previous scene to fade out; use "fade" or "none" on the first scene' });
+      errors.push({ path: 'scenes[0].transition', message: 'crossfade needs a previous scene to fade in over; use "fade" or "none" on the first scene' });
     }
     scene.elements.forEach((el, ei) => checkElement(el, `scenes[${si}].elements[${ei}]`, scene, dir, errors, spec.fps));
   });

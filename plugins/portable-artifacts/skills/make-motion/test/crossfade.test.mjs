@@ -1,9 +1,9 @@
-// P2: `transition: "crossfade"`: the previous scene stays under the new one and fades out over 0.4 s.
+// P2: `transition: "crossfade"`: the previous scene stays fully on screen while the new one fades in over it for 0.4 s.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTimeline, seekTo } from '../template/timeline.mjs';
 import { validateSpec, withDefaults } from '../scripts/lib/spec.mjs';
-import { haveBrowser, probed } from './render-probe.mjs';
+import { haveBrowser, probed, framed, meanLuma } from './render-probe.mjs';
 
 const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} !~ ${b}`);
 const label = (id, extra = {}) => ({ id, type: 'text', text: id, x: 240, y: 135, fontSize: 40, ...extra });
@@ -15,15 +15,16 @@ const errs = (motion) => validateSpec(motion).errors.map((e) => `${e.path}: ${e.
 
 // ---- timeline ----------------------------------------------------------------------------------
 
-test('crossfade: the new scene fades in as the previous fades out, over 0.4 s from the cut', () => {
+test('crossfade: the new scene fades in over the previous one, which stays at full opacity, for 0.4 s from the cut', () => {
   const { timeline, states, crossfades } = buildTimeline({ scenes: scenes({ transition: 'crossfade' }) });
   assert.deepEqual(crossfades, [{ from: 0, to: 1, start: 3, end: 3.4 }]);
   const at = (sec) => { seekTo(timeline, sec); return [states.get('scene:s1').opacity, states.get('scene:s2').opacity]; };
   assert.deepEqual(at(2.9), [1, 0]);
   const [outgoing, incoming] = at(3.2);
-  near(outgoing, 0.5); near(incoming, 0.5);
-  assert.deepEqual(at(3.5), [0, 1]);
-  assert.deepEqual(at(2.9), [1, 0], 'seeking back restores the previous scene');
+  assert.equal(outgoing, 1, 'fading both layers would let the stage colour show through mid-fade');
+  near(incoming, 0.5);
+  assert.deepEqual(at(3.5), [1, 1]);
+  assert.deepEqual(at(2.9), [1, 0], 'seeking back restores the incoming scene to hidden');
 });
 
 test('no transition and fade leave crossfades empty and the opacities as they were', () => {
@@ -58,7 +59,7 @@ test('transition accepts crossfade on a scene (not the first) and as a root defa
 });
 
 test('an explicit crossfade on the first scene is an error, a root default is not', () => {
-  assert.deepEqual(errs({ scenes: scenes({}, { transition: 'crossfade' }) }), ['scenes[0].transition: crossfade needs a previous scene to fade out; use "fade" or "none" on the first scene']);
+  assert.deepEqual(errs({ scenes: scenes({}, { transition: 'crossfade' }) }), ['scenes[0].transition: crossfade needs a previous scene to fade in over; use "fade" or "none" on the first scene']);
   assert.deepEqual(errs({ transition: 'crossfade', scenes: scenes() }), []);
 });
 
@@ -89,7 +90,8 @@ test('mid-crossfade frame has both scene layers visible, the old one beneath; be
   const found = await probed({ size: [480, 270], scenes: scenes({ transition: 'crossfade' }) }, layers);
   assert.deepEqual(found.before, [1, null]);
   assert.equal(found.mid.length, 2);
-  assert.ok(found.mid.every((o) => o !== null && Math.abs(o - 0.5) < 1e-6), `both half-visible: ${found.mid}`);
+  assert.equal(found.mid[0], 1, 'the old scene is at full opacity beneath');
+  assert.ok(Math.abs(found.mid[1] - 0.5) < 1e-6, `the new scene is half in: ${found.mid}`);
   assert.deepEqual(found.after, [null, 1]);
   return undefined;
 });
@@ -98,5 +100,15 @@ test('without a transition the page shows one layer at every moment, as before',
   if (!(await haveBrowser())) return t.skip('browser unavailable');
   const found = await probed({ size: [480, 270], scenes: scenes() }, layers);
   assert.deepEqual(found, { before: [1, null], mid: [null, 1], after: [null, 1] });
+  return undefined;
+});
+
+test('two scenes with the same opaque background keep the same mean luma through the crossfade (no dip to the stage colour)', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const white = (id, extra = {}) => ({ id, duration: 2, background: '#ffffff', elements: [], ...extra });
+  const motion = { size: [160, 90], scenes: [white('a'), white('b', { transition: 'crossfade' })] };
+  const luma = [];
+  for (const sec of [1.5, 2.1, 2.2, 2.3, 2.6]) luma.push(await meanLuma(await framed(motion, sec)));
+  assert.ok(luma.every((l) => Math.abs(l - 255) < 1), `mean luma through the window: ${luma}`);
   return undefined;
 });

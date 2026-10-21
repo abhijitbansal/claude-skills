@@ -72,12 +72,9 @@ export function buildTimeline(input) {
     if (fadesIn) {
       const duration = Math.min(FADE_SECONDS, scene.duration) * MS;
       timeline.add(sceneState, { opacity: { from: 0, to: 1, duration }, composition: 'none' }, start * MS);
-      if (blends) {
-        // The one extra track: the previous scene fades out while this one fades in, both layers on screen.
-        const previous = states.get(`scene:${spec.scenes[si - 1].id}`);
-        timeline.add(previous, { opacity: { from: 1, to: 0, duration }, composition: 'none' }, start * MS);
-        crossfades.push({ from: si - 1, to: si, start, end: start + duration / MS });
-      }
+      // The previous scene is not faded: it stays at full opacity under the incoming one until the window ends, so
+      // the stage colour never shows through (two layers fading together would dip towards it).
+      if (blends) crossfades.push({ from: si - 1, to: si, start, end: start + duration / MS });
     }
 
     for (const el of scene.elements) {
