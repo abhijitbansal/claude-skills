@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { cueWav, writeCueTracks, synthesiseCues, noteHz, SAMPLE_RATE } from '../scripts/lib/cues.mjs';
 import { CUE_NAMES, MAX_CUES, resolveCues } from '../template/audio.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
-import { findFfmpeg, parseLoudness } from '../scripts/lib/ffmpeg.mjs';
+import { findFfmpeg, parseLoudness, encodeArgs } from '../scripts/lib/ffmpeg.mjs';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -96,7 +96,7 @@ test('writeCueTracks gives one WAV file and one mix track per cue, clamped to th
   const tracks = writeCueTracks(spec({ cues: [{ cue: 'pop', at: 0.1, volume: 0.3 }, { cue: 'whoosh', scene: 'two', at: 1.8 }] }), dir);
   assert.equal(tracks.length, 2);
   assert.deepEqual(readdirSync(dir).sort(), ['cue-0-pop.wav', 'cue-1-whoosh.wav']);
-  assert.ok(tracks.every((t) => existsSync(t.file) && t.fadeIn === 0 && t.fadeOut === 0));
+  assert.ok(tracks.every((t) => existsSync(t.file) && t.fadeIn === 0 && t.fadeOut === 0.005), 'every cue gets a 5 ms fade-out, so a cue cut at the video end cannot click');
   assert.equal(tracks[0].volume, 0.3);
   assert.equal(tracks[1].start, 3.8);
   assert.equal(tracks[1].end, 4, 'the whoosh is longer than the 0.2 s left, so it is cut at the video end');
@@ -115,6 +115,13 @@ test('synthesiseCues makes its own temp folder, returns it with the tracks, and 
   assert.equal(readdirSync(scratch).length, before, 'a failed synthesis leaves no folder behind');
 });
 
+test('the mix fades every cue out over its last 5 ms, so one cut by the video end does not end in a click', () => {
+  const tracks = writeCueTracks(spec({ cues: [{ cue: 'whoosh', scene: 'two', at: 1.9 }] }), tmp('cue-fade-'));
+  const args = encodeArgs({ fps: 10, out: 'x.mp4', audio: tracks, duration: 4 });
+  const graph = args[args.indexOf('-filter_complex') + 1];
+  assert.match(graph, /afade=t=out:st=0\.095:d=0\.005/, graph);
+});
+
 // ---- validation --------------------------------------------------------------------------------
 
 test('valid cues pass', () => {
@@ -127,7 +134,8 @@ test('an unknown cue gets a did-you-mean, and a bad at, scene, volume, pan or no
   assert.deepEqual(errs(spec({ cues: [{ cue: 'pop' }] })), ['cues[0].at: required']);
   assert.deepEqual(errs(spec({ cues: [{ cue: 'pop', at: 4 }] })), ['cues[0].at: starts at 4s, but the video ends at 4s']);
   assert.deepEqual(errs(spec({ cues: [{ cue: 'pop', scene: 'three', at: 0 }] })), ['cues[0].scene: scene "three" not found; scenes: one, two']);
-  assert.deepEqual(errs(spec({ cues: [{ cue: 'pop', scene: 'two', at: 2 }] })), ['cues[0].at: starts at 4s (scene "two" + 2s), but the video ends at 4s']);
+  assert.deepEqual(errs(spec({ cues: [{ cue: 'pop', scene: 'two', at: 2 }] })), ['cues[0].at: 2s is past the end of scene "two", which lasts 2s; use a smaller at, or put the cue in a later scene']);
+  assert.deepEqual(errs(spec({ cues: [{ cue: 'pop', scene: 'one', at: 3 }] })), ['cues[0].at: 3s is past the end of scene "one", which lasts 2s; use a smaller at, or put the cue in a later scene'], 'it would have played in the next scene');
   assert.ok(errs(spec({ cues: [{ cue: 'pop', at: 0, volume: 2 }] }))[0].startsWith('cues[0].volume:'));
   assert.ok(errs(spec({ cues: [{ cue: 'pop', at: 0, pan: 1.5 }] }))[0].startsWith('cues[0].pan:'));
   assert.deepEqual(errs(spec({ cues: [{ cue: 'chime', at: 0, note: 'H9' }] })), ['cues[0].note: must be a note name such as A4, C#5 or Bb3 (A-G, optional # or b, octave 0-8)']);

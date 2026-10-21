@@ -392,10 +392,14 @@ function checkCues(spec, errors) {
       errors.push({ path: pathJoin(base, 'scene'), message: `scene "${c.scene}" not found; scenes: ${sceneIds.join(', ')}` });
       return;
     }
+    const scene = c.scene === undefined ? undefined : spec.scenes.find((s) => s.id === c.scene);
+    if (scene && c.at >= scene.duration) {
+      errors.push({ path: pathJoin(base, 'at'), message: `${c.at}s is past the end of scene "${scene.id}", which lasts ${scene.duration}s; use a smaller at, or put the cue in a later scene` });
+      return;
+    }
     const start = trackStart(c, spec);
     if (start >= total) {
-      const how = c.scene === undefined ? '' : ` (scene "${c.scene}" + ${c.at}s)`;
-      errors.push({ path: pathJoin(base, 'at'), message: `starts at ${start}s${how}, but the video ends at ${total}s` });
+      errors.push({ path: pathJoin(base, 'at'), message: `starts at ${start}s, but the video ends at ${total}s` });
     }
   });
 }

@@ -130,7 +130,8 @@ export function cueWav({ cue, note, pan = 0 }) {
 
 /**
  * Writes one WAV per cue of `spec` into `dir` and returns the mix tracks for them ({ file, start, end, volume,
- * fadeIn, fadeOut }, the shape resolveAudio gives): timed like audio tracks, `end` clamped to the video end.
+ * fadeIn, fadeOut }, the shape resolveAudio gives): timed like audio tracks, `end` clamped to the video end, and a
+ * 5 ms fade-out on every cue so one the video ends in the middle of still falls to silence.
  */
 export function writeCueTracks(spec, dir) {
   const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
@@ -139,7 +140,7 @@ export function writeCueTracks(spec, dir) {
     const file = path.join(dir, `cue-${i}-${cue}.wav`);
     writeFileSync(file, wav);
     const seconds = (wav.length - 44) / 4 / SAMPLE_RATE;
-    return { file, start, end: Math.min(total, start + seconds), volume, fadeIn: 0, fadeOut: 0 };
+    return { file, start, end: Math.min(total, start + seconds), volume, fadeIn: 0, fadeOut: TAIL_SECONDS }; // the mix trims a cue at the video end: this fade keeps that cut from clicking
   });
 }
 

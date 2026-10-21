@@ -36,7 +36,7 @@ Optional root `audio` array, up to 20 tracks. Tracks mix over the whole video; c
 
 ## Texture
 Optional root `texture`: `vignette` (boolean, default off) darkens the corners with one radial-gradient layer over the scenes (clear to 55 % of the way out, 0.55 black at the corners); `grain` (0–0.15, default 0 = off) lays one static layer of monochrome film grain over each scene, as an SVG `feTurbulence` seeded from the scene `id` and never re-seeded, so the same spec renders byte-identical frames. A higher `grain` is stronger. Unknown keys are errors with a did-you-mean. Specs without `texture` render as before.
-**Cost, measured:** the render loop (seek plus PNG screenshot, 1920x1080, 90 frames, Playwright Chromium on one Apple-silicon Mac, two rounds) took about 17 to 33 ms per frame with no texture, about 42 ms with `vignette`, about 84 ms with `grain` and about 184 ms with both. A 30 s clip at 30 fps (900 frames) therefore costs about 1 minute more with grain and about 2.5 minutes more with both. Texture applies to every scene; leave it off for long renders you do not need it on.
+**Cost, measured:** the render loop (seek plus PNG screenshot, 1920x1080, 90 frames, Playwright Chromium on one Apple-silicon Mac, two rounds) took about 17 to 33 ms per frame with no texture, about 42 ms with `vignette`, about 84 ms with `grain` and about 184 ms with both. A 30 s clip at 30 fps (900 frames) therefore costs about 1 minute more with grain and about 2.5 minutes more with both. Texture applies to every scene; leave it off for long renders you do not need it on. Each scene carries its own full-frame grain bitmap (one per scene at the canvas size), so a spec with very many scenes at 4K holds a lot of memory in the page; keep `grain` for short or few-scene clips there.
 
 ## Cues
 Optional root `cues` array, up to 30: short sounds the renderer synthesises, no file needed. Opt-in: a spec with no `cues` renders exactly as before, and a spec with neither `audio` nor `cues` stays silent. Cues are mixed through the same graph as `audio` tracks; contact sheets and the preview ignore them.
@@ -48,7 +48,7 @@ Optional root `cues` array, up to 30: short sounds the renderer synthesises, no 
 | `volume` | 0–1 | 1 | literal gain on a cue that peaks at -6 dBFS (0.5); the mix is not normalised |
 | `pan` | -1..1 | 0 | equal-power: the centre is unity in both channels, a hard pan is 3 dB louder in its channel |
 | `note` | `A`-`G`, optional `#` or `b`, octave 0-8 | per cue | tunes `pop` (default E5), `chime` (A5) and `impact` (F2); an error on `click` and `whoosh`, which are noise |
-The sounds are pure functions of the cue: noise is seeded, so the same spec gives the same WAV bytes and the same MP4. A cue longer than the time left is cut at the video end.
+The sounds are pure functions of the cue: noise is seeded, so the same spec gives the same WAV bytes and the same MP4. A cue longer than the time left is cut at the video end, and every cue is faded out over its last 5 ms in the mix so a cut one cannot click. With `scene`, `at` must be inside that scene (a smaller `at`, or a later scene, is the fix the validator names); a cue never spills into the next scene.
 
 ## Elements
 Common: `id` (unique across scenes and elements), `type`, `x`, `y` (required), `opacity` (0–1, default 1), `scale` (1), `rotate` (deg, 0), `keyframes`.
