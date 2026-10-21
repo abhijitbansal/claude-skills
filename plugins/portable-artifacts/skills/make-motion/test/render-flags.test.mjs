@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, chmodSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
 
@@ -49,4 +49,24 @@ test('render: --model/--effort/--agent reach the ffmpeg metadata args', async (t
   assert.ok(args.some((a) => /^comment=make-motion · Claude Opus 5\.5 · high effort · Claude Code · /.test(a)), args.join('|'));
   assert.ok(args.includes('artist=Claude Opus 5.5'));
   assert.ok(existsSync(path.join(dir, 'o.mp4')));
+});
+
+// A fake ffmpeg whose mix probe takes a while: render.mjs has written the cue folder and is blocked inside it, which is
+// when an interrupt used to kill the process with no handler installed and leave the folder behind.
+test('render: an interrupt while the cue folder exists removes it (exit 130, no motion-cues-* left)', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'rf-'));
+  const scratch = mkdtempSync(path.join(tmpdir(), 'rf-tmp-'));
+  const slow = path.join(dir, 'ffmpeg');
+  writeFileSync(slow, '#!/bin/sh\nsleep 2\n');
+  chmodSync(slow, 0o755);
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify({ size: [160, 90], scenes: [{ id: 's', duration: 1, elements: [] }], cues: [{ cue: 'pop', at: 0 }] }));
+  const child = spawn(process.execPath, [RENDER, path.join(dir, 'm.json'), '--out', path.join(dir, 'o.mp4')], { env: { ...process.env, FFMPEG_PATH: slow, TMPDIR: scratch } });
+  const closed = new Promise((resolve) => child.on('close', (code, signal) => resolve({ code, signal })));
+  const deadline = Date.now() + 10000;
+  while (!readdirSync(scratch).some((f) => f.startsWith('motion-cues-')) && Date.now() < deadline) await new Promise((r) => { setTimeout(r, 25); });
+  assert.ok(readdirSync(scratch).some((f) => f.startsWith('motion-cues-')), 'the cue folder was written');
+  child.kill('SIGINT');
+  const { code, signal } = await closed;
+  assert.deepEqual([code, signal], [130, null], 'the handler ran and exited 130');
+  assert.deepEqual(readdirSync(scratch), [], 'the cue folder is gone');
 });

@@ -80,7 +80,7 @@ function partialPath(out) {
 
 // Resolve each audio track to an absolute file and fail before the browser launches if ffmpeg cannot decode one.
 // Cues are synthesised into a temp folder (`cueDir`, removed by cleanup) and join the mix as more tracks.
-function planAudio(spec, dir, ffmpeg, fps) {
+function planAudio(spec, dir, ffmpeg, fps, state) {
   const files = resolveAudio(spec).map((track, i) => {
     const { file } = resolveAsset(dir, track.src); // the path the validator already accepted (normalised, realpath)
     const problem = probeAudio(ffmpeg, file);
@@ -88,19 +88,21 @@ function planAudio(spec, dir, ffmpeg, fps) {
     return { ...track, file };
   });
   const { dir: cueDir, tracks } = synthesiseCues(spec, os.tmpdir());
+  state.cueDir = cueDir; // recorded at once: the signal handlers (installed before planning) remove it on an interrupt
   const audio = [...files, ...tracks];
   if (audio.length) {
     const problem = probeGraph(ffmpeg, { fps, audio }); // an old ffmpeg without amix normalize / adelay all fails here, not at frame 1
     if (problem) {
       if (cueDir) rmSync(cueDir, { recursive: true, force: true });
+      state.cueDir = null;
       throw new Error(`audio: ffmpeg rejected the mix (needs ffmpeg >= 4.4): ${problem}`);
     }
   }
-  return { audio, cueDir };
+  return { audio };
 }
 
 // Validate the spec and work out every input before launching anything.
-async function plan(opts) {
+async function plan(opts, state) {
   const { spec: loaded, dir } = loadSpec(opts.spec);
   const raw = withGeneratedBy(loaded, { model: opts.model, effort: opts.effort, agent: opts.agent });
   const result = validateSpec(raw, { dir });
@@ -127,7 +129,7 @@ async function plan(opts) {
     theme: opts.theme, themeName: loaded.theme ?? opts.theme ?? MOTION_THEME, spec, specPath, fps, frames, total, contact: opts.contact, size: opts.size ?? spec.size,
     out: path.resolve(opts.out ?? defaultOut), ffmpeg,
     metadata: { comment: provenanceText('make-motion', spec.generatedBy, buildDate()), artist: spec.generatedBy?.model },
-    ...(opts.contact ? { audio: [], cueDir: null } : planAudio(spec, dir, ffmpeg, fps)),
+    ...(opts.contact ? { audio: [] } : planAudio(spec, dir, ffmpeg, fps, state)),
   };
 }
 
@@ -237,11 +239,13 @@ async function openPage(p, server, state) {
 }
 
 async function main() {
-  const p = await plan(parseArgs(process.argv.slice(2)));
+  // The handlers go in before planning: planning writes the cue folder, and an interrupt with no handler would kill the
+  // process and leave it behind.
+  const state = { encoder: null, browser: null, partial: null, cueDir: null, exiting: false };
+  installSignalHandlers(state);
+  const p = await plan(parseArgs(process.argv.slice(2)), state);
   if (!p) return 1;
   process.stdout.write(`theme: ${p.themeName}\n`);
-  const state = { encoder: null, browser: null, partial: null, cueDir: p.cueDir, exiting: false };
-  installSignalHandlers(state);
   let server;
   try {
     server = await startServer({ specPath: p.specPath, mode: 'render', theme: p.theme });
