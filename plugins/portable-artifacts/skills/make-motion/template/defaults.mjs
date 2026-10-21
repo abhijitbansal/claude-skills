@@ -2,6 +2,10 @@
 // No `background` default: the page fills it from the theme's page colour (see renderer fetchSpec).
 const DEFAULTS = Object.freeze({ size: [1920, 1080], fps: 30 });
 export const FADE_SECONDS = 0.4;
+export const TYPING_SECONDS_PER_CHAR = 0.035;
+
+// How many characters a `typing` text types: code points, so an emoji is one.
+export const typingLength = (text) => Array.from(text).length;
 
 // make-motion's default theme (scripts/lib/default-theme.mjs re-exports it). The shared
 // DEFAULT_THEME stays `paper` for make-dashboard.

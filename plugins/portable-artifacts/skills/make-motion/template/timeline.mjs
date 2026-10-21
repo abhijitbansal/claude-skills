@@ -1,7 +1,7 @@
 // Pure, DOM-free: compiles a motion spec into one paused anime.js timeline that
 // animates a plain state object per element. Runs unchanged in Node and the browser.
 import { createTimeline, cubicBezier } from 'animejs';
-import { withDefaults, FADE_SECONDS, EASE_CURVES } from './defaults.mjs';
+import { withDefaults, FADE_SECONDS, EASE_CURVES, TYPING_SECONDS_PER_CHAR, typingLength } from './defaults.mjs';
 
 const MS = 1000;
 const MIN_SEGMENT_MS = 1;
@@ -25,9 +25,16 @@ function counterDefaultTrack(el, sceneDuration) {
   return [{ t: 0, value: el.from ?? 0, ease: 'linear' }, { t: seconds, value: el.to, ease: 'outCubic' }];
 }
 
+// A `typing` text types its characters from the start of its scene at TYPING_SECONDS_PER_CHAR each.
+function typingDefaultTrack(el) {
+  const chars = typingLength(el.text);
+  return [{ t: 0, value: 0, ease: 'linear' }, { t: chars * TYPING_SECONDS_PER_CHAR, value: chars, ease: 'linear' }];
+}
+
 function elementTrack(el, prop, sceneDuration) {
   const points = track(el.keyframes, prop);
   if (prop === 'value' && el.type === 'counter' && !points.length) return counterDefaultTrack(el, sceneDuration);
+  if (prop === 'value' && el.type === 'text' && el.typing && !points.length) return typingDefaultTrack(el);
   return points;
 }
 

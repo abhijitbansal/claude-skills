@@ -11,6 +11,7 @@ Validate with `node scripts/validate.mjs motion.json`. Unknown properties are er
 | `theme` | shared theme name (`dusk`, `press`, `poster`, `paper`, `ink`, `blueprint`, `editorial`) | `dusk` | optional; see below |
 | `generatedBy` | `{ model?, effort?, agent? }`, each 1–60 chars of `A-Za-z0-9 ._:/()+-` | none | provenance; shown in the preview footer and written to the MP4 `comment`/`artist` tags; missing fields read "not reported" |
 | `cues` | array, up to 30 | none | procedural sound cues; see Cues below |
+| `texture` | `{ vignette?, grain? }` | none (off) | film texture over the whole video; see Texture below |
 | `transition` | `none` \| `fade` \| `crossfade` | `none` | the default for every scene that sets no `transition`; a root `crossfade` leaves the first scene a plain start |
 | `scenes` | array, 1–50 | required | total duration ≤ 120 s |
 
@@ -33,6 +34,10 @@ Optional root `audio` array, up to 20 tracks. Tracks mix over the whole video; c
 | `fadeIn` | seconds ≥ 0 | 0 | from the track start |
 | `fadeOut` | seconds ≥ 0 | 0 | ends at the `duration` trim, else at the video end. `fadeIn + fadeOut` must fit in the time the track plays. A clip that ends earlier gets no fade (the file length is never probed). No `loop`: a short file just stops |
 
+## Texture
+Optional root `texture`: `vignette` (boolean, default off) darkens the corners with one radial-gradient layer over the scenes (clear to 55 % of the way out, 0.55 black at the corners); `grain` (0–0.15, default 0 = off) lays one static layer of monochrome film grain over each scene, as an SVG `feTurbulence` seeded from the scene `id` and never re-seeded, so the same spec renders byte-identical frames. A higher `grain` is stronger. Unknown keys are errors with a did-you-mean. Specs without `texture` render as before.
+**Cost, measured:** the render loop (seek plus PNG screenshot, 1920x1080, 90 frames, Playwright Chromium on one Apple-silicon Mac, two rounds) took about 17 to 33 ms per frame with no texture, about 42 ms with `vignette`, about 84 ms with `grain` and about 184 ms with both. A 30 s clip at 30 fps (900 frames) therefore costs about 1 minute more with grain and about 2.5 minutes more with both. Texture applies to every scene; leave it off for long renders you do not need it on.
+
 ## Cues
 Optional root `cues` array, up to 30: short sounds the renderer synthesises, no file needed. Opt-in: a spec with no `cues` renders exactly as before, and a spec with neither `audio` nor `cues` stays silent. Cues are mixed through the same graph as `audio` tracks; contact sheets and the preview ignore them.
 | field | type | default | notes |
@@ -50,7 +55,7 @@ Common: `id` (unique across scenes and elements), `type`, `x`, `y` (required), `
 
 | type | extra fields | animatable props |
 |---|---|---|
-| `text` | `text` (req), `role` (`title` only; see below), `exit` (boolean, false; see below), `fontSize` (48), `fontWeight` 400\|500\|600\|700\|800 (600), `color` (the theme's text colour), `align` left\|center\|right (center), `maxWidth`, `font` sans\|mono | opacity x y scale rotate |
+| `text` | `text` (req), `role` (`title` only; see below), `exit` (boolean, false; see below), `typing` (boolean, false; see below), `fontSize` (48), `fontWeight` 400\|500\|600\|700\|800 (600), `color` (the theme's text colour), `align` left\|center\|right (center), `maxWidth`, `font` sans\|mono | opacity x y scale rotate (+ `value` when `typing`) |
 | `counter` | `to` (req), `from` (0), `decimals` (0), `prefix`, `suffix`, + text styling | + `value` (starts at `from`) |
 | `shape` | `shape` rect\|ellipse\|line (req), `width`, `height`, `radius`, `fill`, `stroke`, `strokeWidth`, `elevated` (rect only), `cap` and `arrow` (line only) | + `draw` 0–1 (stroke reveal; default 1) |
 | `image` | `src` (req, relative to the spec file; must stay inside the spec folder, be a regular file, no symlinks out, no dotfiles), `width`, `height` (req), `fit` contain\|cover\|fill | opacity x y scale rotate |
@@ -59,6 +64,8 @@ Common: `id` (unique across scenes and elements), `type`, `x`, `y` (required), `
 Title role: a `text` with `"role": "title"` uses the theme's display font (the weight maps to the one the display font ships). `"font": "mono"` wins over the role: a mono title draws in the mono font, still with the entrance preset below. When it has **no** `keyframes` it gets the theme's kinetic entrance: `dusk` **rise** (fades in and rises 0.35 × `fontSize` into place, 0.9 s), `press` **ink-in** (fades in while settling from 104% scale, no movement, 1.1 s), `poster` **slam** (snaps in from 135% scale with an `outBack` landing, 0.5 s). A preset is a plain function of the scene duration and `fps`, compressed to end at least one frame before a short scene's end, so renders stay reproducible. Any `keyframes` (an empty list too) turn it off. `paper`, `ink`, `blueprint` and `editorial` have no preset.
 
 Exit (opt-in): `"exit": true` on such a title also gives it the theme's exit, with the `exit` ease: `rise` fades as it drops 0.35 × `fontSize`, `ink-in` fades as it grows back to 104%, `slam` fades as it snaps down to 85%. The exit takes half the entrance (0.45 / 0.55 / 0.25 s) and lands one frame before the scene end, but never starts before 90% of the scene (a shorter scene gets a shorter exit, so the 85% contact frame always shows the title fully in). It is skipped on the spec's last scene, when the entrance has not landed by 90% of the scene, and whenever the title has its own `keyframes`. Without `exit` nothing changes.
+
+Typing (opt-in): `"typing": true` on a `text` reveals its characters one at a time, 0.035 s each, from the start of its scene, with a caret after the last typed character (a thin bar; solid while typing, blinking every 0.5 s once the text is complete). Counted in code points, so an emoji is one character. The element's box is always the full text: the untyped rest keeps its space but is not drawn, so a centred line does not shift as it fills and `check.mjs` judges its final box from the first frame. Its animatable `value` is the number of characters typed: with no `value` keyframes it runs 0 → N from t=0 at 0.035 s per character; add any `value` keyframe to take control of the start and pace (as on a counter's `value`). `typing` on any other element type is an error, and so is a `value` keyframe on a text without it.
 
 Counter default: a counter with **no** `value` keyframes counts `from` → `to` from t=0 to `min(2, 0.8 × scene duration)` seconds with `outCubic`. Add any `value` keyframe to take control of the timing.
 
@@ -81,6 +88,8 @@ Chart notes: data must be inline: `data.values`, or `datasets` plus `data: {name
 - `scenes[1].elements[0].id: duplicate id "title" (first used at scenes[0].elements[0].id)`
 - `scenes[0].elements[0].keyframes[1].draw: not animatable on text; animatable: opacity, x, y, scale, rotate`
 - `scenes[0].elements[0].keyframes[2].t: 5 exceeds scene duration 3`
+- `scenes[0].elements[0].keyframes[0].value: not animatable on text; animatable: opacity, x, y, scale, rotate (value needs "typing": true)`
+- `texture.grain: must be <= 0.15`
 - `scenes: total duration 121s exceeds the 120s limit`
 - `audio[0].src: unsupported audio format ".wma"; use mp3, wav, m4a, aac, ogg or flac`
 - `audio[1].scene: scene "outro" not found; scenes: intro, chart`

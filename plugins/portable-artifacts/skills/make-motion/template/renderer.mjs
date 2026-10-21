@@ -1,7 +1,7 @@
 // Browser renderer: builds the stage DOM from the spec and exposes
 // window.__motion for the preview UI and the Playwright frame loop.
 import { buildTimeline, seekTo } from './timeline.mjs';
-import { withDefaults, resolveColor } from './defaults.mjs';
+import { withDefaults, resolveColor, typingLength } from './defaults.mjs';
 import { resolveAudio } from './audio.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 
@@ -13,6 +13,12 @@ const ELEVATED_LIFT = 6; // percent of the text colour an elevated fill moves to
 const ARROW_LENGTH = 3; // an arrow head is this many stroke widths long...
 const ARROW_HALF_WIDTH = 1.5; // ...and this many stroke widths either side of the line
 const ARROW_DRAW_SHOWN = 0.98; // the head appears once the line is drawn this far
+const VIGNETTE = 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)'; // clear in the middle, 0.55 black at the corners
+const GRAIN_FREQUENCY = 0.8; // feTurbulence base frequency of the film grain, in 1/px
+const GRAIN_OCTAVES = 2;
+const GRAIN_SEED_RANGE = 65536;
+const CARET_BLINK_SECONDS = 0.5; // once a typing text is complete its caret blinks at this half-period
+const TYPING_EPSILON = 1e-6; // a count of 4 reached exactly at t = 4 x 0.035 s must not read as 3.9999999
 const REVEAL_EDGE = 8; // percent of a chart's width the reveal wipe fades over
 
 // Vega-Lite sizes shared by every theme; themedLook adds the theme's fonts and colours. A spec's own
@@ -157,6 +163,29 @@ async function renderChart(el, look) {
   return holder.firstElementChild;
 }
 
+// A `typing` text: the typed characters, a caret, then the untyped rest kept in the layout but not drawn, so the
+// element's box is the full text at every moment and does not shift as it fills.
+function typingParts(node, el) {
+  const chars = Array.from(el.text);
+  const typed = document.createElement('span');
+  typed.className = 'typed';
+  const caret = document.createElement('span');
+  caret.className = 'caret';
+  const rest = document.createElement('span');
+  rest.className = 'rest';
+  rest.style.visibility = 'hidden';
+  node.append(typed, caret, rest);
+  return { chars, total: typingLength(el.text), typed, caret, rest };
+}
+
+function setTyping({ chars, total, typed, caret, rest }, value, sec) {
+  const n = Math.min(total, Math.max(0, Math.floor(value + TYPING_EPSILON)));
+  typed.textContent = chars.slice(0, n).join('');
+  rest.textContent = chars.slice(n).join('');
+  const blinkOn = Math.floor(sec / CARET_BLINK_SECONDS) % 2 === 0;
+  caret.style.visibility = n < total || blinkOn ? 'visible' : 'hidden';
+}
+
 function buildElement(el, look) {
   const node = document.createElement('div');
   node.className = `el ${el.type}`;
@@ -165,7 +194,8 @@ function buildElement(el, look) {
   switch (el.type) {
     case 'text':
       textStyle(node, el, look);
-      node.textContent = el.text;
+      if (el.typing) part.typing = typingParts(node, el);
+      else node.textContent = el.text;
       break;
     case 'counter':
       textStyle(node, el, look);
@@ -213,6 +243,41 @@ function artLayer(scene) {
   return { holder, loaded: img.decode().catch(() => { throw new Error(`art failed to load for scene "${scene.id}"`); }) };
 }
 
+// One over-the-scenes layer: darkened corners.
+function vignetteLayer() {
+  const layer = document.createElement('div');
+  layer.className = 'vignette';
+  layer.style.cssText = 'position:absolute;inset:0;pointer-events:none';
+  layer.style.background = VIGNETTE;
+  return layer;
+}
+
+// FNV-1a of the scene id as a feTurbulence seed: the same id always draws the same noise (as the art does).
+function sceneSeed(id) {
+  let h = 0x811c9dc5;
+  for (const byte of new TextEncoder().encode(id)) h = Math.imul(h ^ byte, 0x01000193);
+  return (h >>> 0) % GRAIN_SEED_RANGE;
+}
+
+// One static film-grain layer for a scene: monochrome fractal noise (stretched to three times its contrast around mid-grey) whose alpha is `amount`, an SVG feTurbulence
+// loaded as an image (decoded once, seeded from the scene id and never changed: a seed change in the page does not
+// repaint). The alpha is in the noise itself, not a CSS opacity, which costs more per frame.
+async function grainLayer(scene, size, amount) {
+  const [w, h] = size;
+  const seed = sceneSeed(scene.id);
+  const markup = `<svg xmlns="${SVG_NS}" width="${w}" height="${h}"><filter id="g" x="0" y="0" width="${w}" height="${h}" filterUnits="userSpaceOnUse">`
+    + `<feTurbulence type="fractalNoise" baseFrequency="${GRAIN_FREQUENCY}" numOctaves="${GRAIN_OCTAVES}" seed="${seed}" stitchTiles="stitch"/>`
+    + `<feColorMatrix type="matrix" values="1 1 1 0 -1  1 1 1 0 -1  1 1 1 0 -1  0 0 0 0 ${amount}"/></filter>`
+    + `<rect width="${w}" height="${h}" filter="url(#g)"/></svg>`;
+  const img = new Image();
+  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
+  await img.decode().catch(() => { throw new Error(`grain failed to draw for scene "${scene.id}"`); });
+  img.className = 'grain';
+  img.dataset.seed = String(seed);
+  img.style.cssText = `position:absolute;left:0;top:0;width:${w}px;height:${h}px;pointer-events:none`;
+  return img;
+}
+
 async function buildStage(spec, look) {
   const stage = document.createElement('div');
   stage.id = 'stage';
@@ -222,6 +287,7 @@ async function buildStage(spec, look) {
   const scenes = [];
   const parts = [];
   const pending = [];
+  const grain = spec.texture?.grain ?? 0;
   for (const scene of spec.scenes) {
     const layer = document.createElement('div');
     layer.className = 'scene';
@@ -240,9 +306,11 @@ async function buildStage(spec, look) {
       }
       if (part.img) pending.push(part.img.decode().catch(() => { throw new Error(`image failed to load: ${el.src}`); }));
     }
+    if (grain > 0) pending.push(grainLayer(scene, spec.size, grain).then((canvas) => layer.append(canvas)));
     stage.append(layer);
     scenes.push({ scene, layer });
   }
+  if (spec.texture?.vignette) stage.append(vignetteLayer());
   await Promise.all(pending);
   return { stage, scenes, parts };
 }
@@ -298,7 +366,7 @@ function makeApply({ scenes, parts }, built) {
       layer.style.display = i === active || i === outgoing ? 'block' : 'none';
       layer.style.opacity = String(states.get(`scene:${scene.id}`).opacity);
     });
-    for (const { node, el, drawNode, arrowNode, format } of parts) {
+    for (const { node, el, drawNode, arrowNode, format, typing } of parts) {
       const s = states.get(el.id);
       node.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
       node.style.opacity = String(s.opacity);
@@ -306,6 +374,7 @@ function makeApply({ scenes, parts }, built) {
       if (arrowNode) arrowNode.setAttribute('opacity', s.draw >= ARROW_DRAW_SHOWN ? '1' : '0');
       if (el.type === 'chart') node.style.maskImage = revealMask(s.reveal);
       if (format) node.textContent = format(s.value);
+      if (typing) setTyping(typing, s.value, sec);
     }
   };
 }

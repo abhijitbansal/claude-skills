@@ -32,7 +32,7 @@ export const ANIMATABLE = {
 const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes'];
 const TEXT_STYLE = ['fontSize', 'fontWeight', 'color', 'align', 'maxWidth', 'font'];
 const FIELDS = {
-  text: [...COMMON, 'text', 'role', 'exit', ...TEXT_STYLE],
+  text: [...COMMON, 'text', 'role', 'exit', 'typing', ...TEXT_STYLE],
   counter: [...COMMON, 'from', 'to', 'decimals', 'prefix', 'suffix', ...TEXT_STYLE],
   shape: [...COMMON, 'shape', 'width', 'height', 'radius', 'fill', 'stroke', 'strokeWidth', 'elevated', 'cap', 'arrow'],
   image: [...COMMON, 'src', 'width', 'height', 'fit'],
@@ -71,6 +71,7 @@ const element = {
     text: { type: 'string' },
     role: { type: 'string' },
     exit: { type: 'boolean' },
+    typing: { type: 'boolean' },
     fontSize: { type: 'number', minimum: 1 },
     fontWeight: { enum: [400, 500, 600, 700, 800] },
     color,
@@ -96,6 +97,12 @@ const element = {
 };
 const seconds = { type: 'number', minimum: 0 };
 const transition = { enum: ['none', 'fade', 'crossfade'] };
+export const MAX_GRAIN = 0.15;
+const texture = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { vignette: { type: 'boolean' }, grain: { type: 'number', minimum: 0, maximum: MAX_GRAIN } },
+};
 const audioTrack = {
   type: 'object',
   additionalProperties: false,
@@ -138,6 +145,7 @@ export const SCHEMA = {
     background: color,
     theme: { type: 'string', minLength: 1 },
     transition,
+    texture,
     generatedBy: GENERATED_BY_SCHEMA,
     scenes: {
       type: 'array', minItems: 1, maxItems: 50,
@@ -192,14 +200,15 @@ function checkIds(spec, errors) {
 }
 
 function checkKeyframes(el, base, sceneDuration, errors) {
-  const allowed = ANIMATABLE[el.type];
+  const allowed = el.type === 'text' && el.typing ? [...ANIMATABLE.text, 'value'] : ANIMATABLE[el.type]; // a typing text's `value` is its character count
+  const typingHint = el.type === 'text' && !el.typing ? ' (value needs "typing": true)' : '';
   (el.keyframes ?? []).forEach((kf, i) => {
     const at = pathJoin(pathJoin(base, 'keyframes'), i);
     for (const prop of Object.keys(kf)) {
       if (prop === 't' || prop === 'ease' || allowed.includes(prop)) continue;
       errors.push({
         path: pathJoin(at, prop),
-        message: `not animatable on ${el.type}; animatable: ${allowed.join(', ')}`,
+        message: `not animatable on ${el.type}; animatable: ${allowed.join(', ')}${prop === 'value' ? typingHint : ''}`,
       });
     }
     const prev = el.keyframes[i - 1];

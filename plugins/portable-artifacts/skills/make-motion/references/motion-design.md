@@ -52,6 +52,12 @@ Holds are not checked by `check.mjs`. Count them yourself from the keyframe time
 - **Not on scene 1.** `fade` on the first scene makes frame 0, the video's thumbnail, blank; `crossfade` there is an error. `check.mjs` warns when scene 1 shows nothing at t = 0.
 - **Keep the outgoing text clear of the incoming text's position** (or end it with an `exit`): for the 0.4 s both are half-visible, and two lines in one spot read as a smear.
 
+## Texture and typing
+
+- **Texture is a look, not a default.** `texture.vignette` suits a single focal subject (a title, a card) and does nothing for a full-bleed chart; `texture.grain` 0.05–0.10 reads as film, above 0.12 as noise. Both cost render time (see schema.md), so keep them off for long clips unless asked.
+- **Type short lines.** `"typing": true` at 0.035 s per character runs a 30-character command in about a second; past about 60 characters it becomes a wait. Give the line the scene's first beat, or delay it with `value` keyframes, and hold the finished line for the reading time below.
+- **Place the full line, not the typed part.** The element's `x` is the centre of the whole text, so the line grows rightward from its left edge; the first characters appear left of `x`.
+
 ## Sound cues
 
 Cues (`"cues"` in the spec) are opt-in sound design for a clip that is meant to have sound; a silent clip stays silent.

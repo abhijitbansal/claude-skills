@@ -369,3 +369,20 @@ test('a crossfade does not hide a real problem in the incoming scene: an overlap
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /^scenes\[1\]\.elements\[1\]: text "two" overlaps text "one"/m);
 });
+
+// ---- typing text (P4) ----------------------------------------------------------------------------
+
+test('a typing text is judged by its full box: a short line passes while it is still being typed', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([scenesFile([{ id: 'type', duration: 3, elements: [word('line', { text: 'npm run build', typing: true })] }])]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(r.stderr, '', 'frame 0 shows the caret, not nothing, but a typing text with no characters yet is still a visible box');
+});
+
+test('a typing text wider than the safe area is flagged at once, not only when its last character arrives', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const text = 'a long line that runs right across the whole frame and out past both safe margins of it';
+  const r = check([scenesFile([{ id: 'type', duration: 3, elements: [word('line', { text, typing: true, fontSize: 72 })] }])]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /^scenes\[0\]\.elements\[0\]: text "line" leaves the safe area \(left, right\) at 0\.10s/m);
+});
