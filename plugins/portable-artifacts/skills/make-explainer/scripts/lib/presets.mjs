@@ -241,7 +241,7 @@ function slides(facts, title) {
 // verdict" and deep-linked as #verdict.
 const VERDICT_TITLE = 'Approve, change or stop this plan';
 const VERDICT_LABEL = 'Your verdict';
-const OPTION_A =todo('option A, the one you recommend, ≤ 8 words');
+const OPTION_A = todo('option A, the one you recommend, ≤ 8 words');
 const OPTION_B = todo('option B, ≤ 8 words');
 const OPTION_C = todo('option C: what happens if nobody decides, ≤ 8 words');
 

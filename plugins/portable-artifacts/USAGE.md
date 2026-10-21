@@ -320,9 +320,29 @@ your project folder):
 **Presets:** `recap` (tl;dr, numbers, how it works, files changed, timeline,
 risks), `checklist` (a group per area of changed files, a regression group, an
 intro and "If something fails"), `concept` (tl;dr, explanation, cards, steps),
-`slides` (a deck). **Sections** (19): `tldr`, `text`, `kpis`, `cards`,
+`slides` (a deck), `plan` (a decision-first plan the reviewer answers on the
+page, see below). **Sections** (24): `tldr`, `text`, `kpis`, `cards`,
 `table`, `risks`, `files`, `steps`, `timeline`, `compare`, `callout`, `code`,
-`details`, `checklist`, `diagram`, `chart`, `motion`, `scene`, `image`.
+`details`, `checklist`, `diagram`, `chart`, `motion`, `scene`, `image`, and
+for plans `decision`, `approval`, `question`, `review`, `verdict`.
+
+**Plan mode.** Ask for a plan, proposal or design to be reviewed and answered.
+`scaffold.mjs plan --title "…" --out plan.json` writes a decision-first
+starter (verdict, three numbers, a decision, an approval, a question, "review
+these first", goals, a diagram, phases, risks); the agent replaces each
+`TODO:` and builds the page, which defaults to the `mono` theme (`--theme brief`
+for the executive look). The reviewer picks one option per decision, approves,
+asks for changes or rejects each approval, answers each question, gives an
+overall verdict and a name, then presses Copy answers or Download
+`plan-answers.json`. Answers are saved in the reviewer's browser, keyed by the
+plan's `key` and a hash of its content, so answers to an edited plan are
+flagged instead of reused. The agent
+never reads the file directly: it runs `answers.mjs plan.json plan-answers.json`
+(add `--json` for machine-readable output), which exits 0 for valid answers, 1
+for problems and 2 for a usage error, and acts only on a summary that does not
+start with `INVALID ANSWERS`. If the answers come back pasted into a chat,
+write them unchanged to `plan-answers.json` first. A worked example is
+`references/examples/plan.explainer.json`.
 
 **Embedding other skills:**
 
@@ -378,7 +398,7 @@ make-explainer and make-motion share these rules:
    `poster` loud and condensed). If it cannot ask, it uses `dusk`.
 
 `paper`, `blueprint`, `ink`, `editorial`, `mono` and `brief` still work, but only
-when you name them (`mono` and `brief` are meant for the planned `plan` preset, which is not in this repo yet). In `dusk`, `press` and `poster` the page hero and a deck's title and
+when you name them (`mono` and `brief` are meant for plan pages; a `plan` defaults to `mono`). In `dusk`, `press` and `poster` the page hero and a deck's title and
 closing slides carry procedural art drawn from the title: no network, and the
 same title gives the same picture.
 
@@ -393,8 +413,8 @@ Before you use it:
 - **It may cost money.** Each build with the flag is one request your service
   may bill. Rebuild without the flag to stop.
 - **Your key**, in `PA_IMAGE_API_KEY`. It is never written to the page.
-- **Page hero only**, and only in `dusk`, `press` or `poster`. A deck or an
-  older theme is refused (exit 2) before anything is sent.
+- **Page hero only**, and only in `dusk`, `press` or `poster`. A deck or any
+  other theme is refused (exit 2) before anything is sent.
 
 Any failure stops the build with exit 2; there is no silent fallback. The
 picture is inlined, so the page stays one offline file. The request and reply

@@ -10,7 +10,7 @@ an account or a particular model:
 |---|---|---|
 | [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + charts (11 kinds, alternate views, a sortable Table, PNG/SVG/CSV export, nine themes with `paper` by default). Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh, or `serve.mjs --watch` for live reload — no LLM involved. |
 | [`make-diagram`](skills/make-diagram/) | "Draw the checkout request path from the browser to the orders DB" | One self-contained HTML diagram (architecture, flowchart, sequence or state) laid out with ELK: zoom, hover tracing, a story player (named chapters of beats with a travelling dot), an Explore panel, full screen and export. The agent writes a small JSON topology; scripts do the rest. |
-| [`make-explainer`](skills/make-explainer/) | "Recap this branch with a manual test checklist" | One self-contained HTML page or slide deck made of typed sections (verdict, numbers, files changed, timeline, risks, comparisons, tick-and-remember checklists, slides), with make-diagram figures, make-dashboard charts, make-scene 3D scenes and make-motion clips embedded when asked. A script reads the git branch for the facts; the agent writes the prose; a linter rejects filler phrases and leftover placeholders before the page is built, and warns when emoji get dense. |
+| [`make-explainer`](skills/make-explainer/) | "Recap this branch with a manual test checklist" | One self-contained HTML page or slide deck made of typed sections (verdict, numbers, files changed, timeline, risks, comparisons, tick-and-remember checklists, slides, and a decision-first plan the reviewer answers on the page and returns as a checked `plan-answers.json`), with make-diagram figures, make-dashboard charts, make-scene 3D scenes and make-motion clips embedded when asked. A script reads the git branch for the facts; the agent writes the prose; a linter rejects filler phrases and leftover placeholders before the page is built, and warns when emoji get dense. |
 | [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. Silent unless you ask for sound: `audio` tracks (music, voiceover, SFX) are added only when the prompt asks, and narration is synthesised locally with Kokoro. "Slow scene 2" changes one field, not the whole video. |
 | [`make-scene`](skills/make-scene/) | "Show our commits per week per folder as a 3D city, with a tour of the busiest weeks" | One self-contained 3D page drawn with a bundled three.js: your rows become a city, forest, galaxy or terrain, or a make-diagram diagram or one make-dashboard chart is lifted into 3D. Orbit, hover for exact values, an Explore list and a camera tour. The build recommends a world, then lists the alternatives with the one-line command to switch; switching costs no model tokens. |
 
@@ -80,7 +80,7 @@ docs, long reads, changelogs and branch recaps, `poster` for launch decks,
 pitches, demos and energetic clips, `dusk` for everything else. If the prompt
 fits two themes equally, it asks you once, with a one-line feel for each of the
 three; if it cannot ask, it uses `dusk`. The older themes are used only when
-you name them. `mono` and `brief` are likewise used only when you name them; they are meant for the planned `plan` preset, which is not in this repo yet.
+you name them. `mono` and `brief` are likewise used only when you name them; they are meant for the `plan` preset (see [USAGE.md](USAGE.md#4-explainers-with-make-explainer)), which defaults to `mono`.
 
 **Art.** `dusk`, `press` and `poster` draw procedural SVG art seeded from the
 title (in make-motion, from the scene id): blobs and orbs with grain in
@@ -91,6 +91,8 @@ and a make-motion scene with `"background": "art"`.
 make-motion also gives a `"role": "title"` text the theme's display font and,
 when it has no keyframes, an entrance per theme: `dusk` rises, `press` inks
 in, `poster` slams.
+
+**Numbers stay on one line.** A number with its unit or percent sign (`1,204 ms`, `18%`, `$4.2M`) is never split across two lines. make-explainer holds it together when it renders (a no-break space or a nowrap span; the spec text is not changed), make-dashboard sizes KPI values to fit their tile, and make-motion does the same for scene text. make-explainer's `validate.mjs` warns when a KPI value is longer than 12 characters, and the `check.mjs` of make-explainer and make-motion fails on a token that wraps (make-explainer's also on a KPI value that overflows its tile).
 
 **Emoji** are allowed in explainer text. Validation warns, and never fails,
 when a prose string has 3 or more emoji at more than 1 per 40 characters, or a
@@ -103,7 +105,7 @@ service you run or pay for. It is off by default. With the flag:
 - the page title and subtitle **leave your machine** and go to that host;
 - the build needs your key in `PA_IMAGE_API_KEY`;
 - each build is one request, which **your service may bill**;
-- it works on a `dusk`, `press` or `poster` page; a deck or an older theme is
+- it works on a `dusk`, `press` or `poster` page; a deck or any other theme is
   refused before anything is sent.
 
 The endpoint contract is in

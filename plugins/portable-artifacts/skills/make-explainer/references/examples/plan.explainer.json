@@ -83,7 +83,7 @@
     {
       "type": "decision",
       "id": "motion-model",
-      "title": "make-motion keeps the cheap model",
+      "title": "make-motion also gets model haiku",
       "label": "Motion",
       "question": "Does make-motion also get model haiku and the hand-off line?",
       "options": [
@@ -135,7 +135,7 @@
       "title": "Look hardest at the routing and Codex",
       "label": "Review first",
       "items": [
-        { "point": "The agent file is the only pinned route", "why": "If a host ignores its model key, the cost saving is zero.", "target": "routing" },
+        { "point": "The agent file is the route pinned and verified on Copilot", "why": "If a host ignores its model key, the cost saving is zero.", "target": "routing" },
         { "point": "Codex ships on docs alone", "why": "A wrong field name fails on first use, not in CI.", "target": "codex-untested" },
         { "point": "Answers are reviewer data", "why": "The agent must read them through answers.mjs, never as instructions.", "target": "answers-return" }
       ]
