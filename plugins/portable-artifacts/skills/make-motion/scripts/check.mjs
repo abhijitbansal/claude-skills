@@ -3,7 +3,8 @@
 // Seeks the real render page to every contact-sheet moment of every scene (sheetTimes) and reads each element's box
 // and opacity from the DOM. Fails on: a visible text or counter outside the safe area while it is not moving; two
 // visible text or counter boxes overlapping while neither is moving or fading; a scene with nothing on screen at its
-// last frame (a title whose `exit` preset was applied left on purpose and counts as present). A box wholly off the canvas
+// last frame (a title whose `exit` preset was applied left on purpose and counts as present); a number-plus-unit token
+// ("1,204 ms", "87%") drawn across more than one line, reported once per scene. A box wholly off the canvas
 // has left the frame: it is never clipped, overlaps nothing, and is not on screen.
 // --theme: the theme render.mjs --theme would draw a spec that names none in (a spec's own `theme` wins).
 // exit 0 ok or skipped (no browser), 1 problems (or an invalid spec), 2 usage/IO
@@ -17,6 +18,7 @@ import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
 import { sheetTimes } from './lib/sheet.mjs';
+import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
 
 const USAGE = 'node scripts/check.mjs <motion.json> [--json] [--theme <name>]';
@@ -118,13 +120,21 @@ function emptyEndProblems(scene, i, samples, size) {
   return [{ path: `scenes[${i}]`, message: `scene "${scene.id}" ends with nothing on screen: every element is invisible or off the canvas (at ${at(last.t)})` }];
 }
 
+// A number-plus-unit token that wraps at any sampled moment, once per distinct token, at the first moment it was seen.
+// The renderer binds tokens with U+00A0 (template/renderer.mjs), so this fires only when that binding is lost.
+export function wrapProblems(scene, i, samples) {
+  const first = new Map();
+  for (const { t, wraps } of samples) for (const { text } of wraps) if (!first.has(text)) first.set(text, t);
+  return [...first].map(([text, t]) => ({ path: `scenes[${i}]`, message: `a number-plus-unit token wraps across lines: "${text}" at ${at(t)}` }));
+}
+
 async function sampleScene(page, scene, index, start, fps) {
   const samples = [];
   for (const t of sheetTimes(scene, fps)) {
     const els = await page.evaluate(measure, [start + t, index]);
     const ids = els.map((m) => m.id).join();
     if (ids !== scene.elements.map((el) => el.id).join()) throw new Error(`scene "${scene.id}": the page shows elements ${ids}, not the spec's`);
-    samples.push({ t, els });
+    samples.push({ t, els, wraps: await nowrapProblems(page, { root: '#stage' }) });
   }
   return samples;
 }
@@ -162,7 +172,7 @@ async function inspect(browser, spec, server) {
   for (const [i, scene] of spec.scenes.entries()) {
     const samples = await sampleScene(page, scene, i, starts[i], spec.fps);
     moments += samples.length;
-    problems.push(...safeAreaProblems(scene, i, samples, margin, spec.size), ...overlapProblems(scene, i, samples, spec.size), ...emptyEndProblems(scene, i, samples, spec.size));
+    problems.push(...safeAreaProblems(scene, i, samples, margin, spec.size), ...overlapProblems(scene, i, samples, spec.size), ...emptyEndProblems(scene, i, samples, spec.size), ...wrapProblems(scene, i, samples));
   }
   return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems };
 }

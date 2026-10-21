@@ -4,6 +4,7 @@ import { buildTimeline, seekTo } from './timeline.mjs';
 import { withDefaults } from './defaults.mjs';
 import { resolveAudio } from './audio.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
+import { bindWithNbsp } from '/shared/nowrap.mjs'; // served by server.mjs; the token regex lives only in shared/
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const MODE = document.querySelector('meta[name="motion-mode"]')?.content ?? 'preview';
@@ -136,7 +137,7 @@ function buildElement(el, look) {
   switch (el.type) {
     case 'text':
       textStyle(node, el, look);
-      node.textContent = el.text;
+      node.textContent = bindWithNbsp(el.text); // render time only: the spec keeps its plain spaces
       break;
     case 'counter':
       textStyle(node, el, look);

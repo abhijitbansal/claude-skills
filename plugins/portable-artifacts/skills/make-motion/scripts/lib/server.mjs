@@ -18,6 +18,7 @@ import { artSvg } from '../../shared/art.mjs';
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NODE_MODULES = path.join(SKILL_ROOT, 'node_modules');
 const TEMPLATE_DIR = path.join(SKILL_ROOT, 'template');
+const NOWRAP_MODULE = path.join(SKILL_ROOT, 'shared/nowrap.mjs'); // the one shared module the render page imports
 const WATCH_DEBOUNCE_MS = 100;
 const SSE_KEEPALIVE_MS = 15000;
 
@@ -209,6 +210,7 @@ function route(ctx, req, res) {
   if (pathname === '/spec.json') return serveSpec(ctx, res);
   if (pathname === '/events') return serveEvents(ctx, req, res);
   if (pathname.startsWith('/template/')) return serveUnder(res, TEMPLATE_DIR, pathname.slice('/template/'.length));
+  if (pathname === '/shared/nowrap.mjs') return sendFile(res, NOWRAP_MODULE);
   if (pathname.startsWith('/assets/')) return serveAsset(ctx, req, res, pathname.slice('/assets/'.length));
   if (pathname.startsWith('/theme/fonts/')) return serveThemeFont(res, pathname.slice('/theme/fonts/'.length));
   const artRoute = /^\/art\/([^/]+)\.svg$/.exec(pathname);
