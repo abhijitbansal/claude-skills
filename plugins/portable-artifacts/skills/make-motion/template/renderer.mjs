@@ -1,7 +1,7 @@
 // Browser renderer: builds the stage DOM from the spec and exposes
 // window.__motion for the preview UI and the Playwright frame loop.
 import { buildTimeline, seekTo } from './timeline.mjs';
-import { withDefaults, resolveColor, graphemes, typingLength, ARROW_HEAD_LENGTH } from './defaults.mjs';
+import { withDefaults, resolveColor, graphemes, typingLength, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE } from './defaults.mjs';
 import { resolveAudio } from './audio.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 
@@ -99,9 +99,9 @@ function textStyle(node, el, look) {
 }
 
 function makeShape(el, look) {
-  const sw = el.strokeWidth ?? (el.shape === 'line' ? 4 : 0);
-  const w = el.width ?? 100;
-  const h = el.shape === 'line' ? sw : (el.height ?? 100);
+  const sw = el.strokeWidth ?? (el.shape === 'line' ? DEFAULT_LINE_STROKE : 0);
+  const w = el.width ?? DEFAULT_SHAPE_SIZE;
+  const h = el.shape === 'line' ? sw : (el.height ?? DEFAULT_SHAPE_SIZE);
   const svg = svgEl('svg', { width: w, height: h, viewBox: `0 0 ${w} ${h}` });
   const common = { pathLength: 1, 'stroke-dasharray': 1, 'stroke-dashoffset': 0 };
   const paint = (value) => resolveColor(value, look.colors);
@@ -206,7 +206,7 @@ function buildElement(el, look) {
       break;
     case 'shape': {
       const s = makeShape(el, look);
-      Object.assign(part, { drawNodes: s.drawNodes, arrowNode: s.arrowNode, roundCap: s.roundCap && { radius: (el.strokeWidth ?? 4) / 2, length: s.lineLength } });
+      Object.assign(part, { drawNodes: s.drawNodes, arrowNode: s.arrowNode, roundCap: s.roundCap && { radius: (el.strokeWidth ?? DEFAULT_LINE_STROKE) / 2, length: s.lineLength } });
       node.style.width = px(s.width);
       node.style.height = px(s.height);
       node.append(s.root);
@@ -375,8 +375,9 @@ function makeApply({ scenes, parts }, built) {
       node.style.opacity = String(s.opacity);
       for (const drawNode of drawNodes ?? []) drawNode.setAttribute('stroke-dashoffset', String(1 - s.draw));
       // A round cap draws a dot of the stroke's width the moment the dash has any length: keep the line hidden until
-      // the drawn length is more than a cap radius, so the stroke grows from a stub instead of popping in as a dot.
-      if (roundCap) drawNodes[0].style.visibility = s.draw * roundCap.length > roundCap.radius ? 'visible' : 'hidden';
+      // the drawn length is more than a cap radius, so the stroke grows from a stub instead of popping in as a dot. A
+      // line shorter than that (the validator allows them) still shows once fully drawn.
+      if (roundCap) drawNodes[0].style.visibility = s.draw >= 1 || s.draw * roundCap.length > roundCap.radius ? 'visible' : 'hidden';
       if (arrowNode) arrowNode.setAttribute('opacity', s.draw >= ARROW_DRAW_SHOWN ? '1' : '0');
       if (el.type === 'chart') {
         node.style.maskImage = revealMask(s.reveal);

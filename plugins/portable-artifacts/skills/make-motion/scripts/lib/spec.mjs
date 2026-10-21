@@ -11,7 +11,7 @@ import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, PITCHED_CUES, MAX_CUES, 
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
-import { EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, ARROW_HEAD_LENGTH, typingLength } from '../../template/defaults.mjs';
+import { EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE, typingLength } from '../../template/defaults.mjs';
 
 export class UsageError extends Error {}
 
@@ -355,8 +355,6 @@ function checkAudio(spec, dir, errors) {
 
 // `elevated` belongs to rects, `cap` and `arrow` to lines.
 const SHAPE_ONLY = { elevated: 'rect', cap: 'line', arrow: 'line' };
-const DEFAULT_LINE_WIDTH = 100;
-const DEFAULT_LINE_STROKE = 4;
 function checkShapeStyle(el, base, errors) {
   for (const [key, shape] of Object.entries(SHAPE_ONLY)) {
     if (el[key] !== undefined && el[key] !== false && el.shape !== shape) errors.push({ path: pathJoin(base, key), message: `only valid on a ${shape} shape` });
@@ -368,7 +366,7 @@ function checkShapeStyle(el, base, errors) {
 // line must be longer than what they use, or it would vanish or run backwards.
 function checkLineLength(el, base, errors) {
   const stroke = el.strokeWidth ?? DEFAULT_LINE_STROKE;
-  const width = el.width ?? DEFAULT_LINE_WIDTH;
+  const width = el.width ?? DEFAULT_SHAPE_SIZE;
   const round = el.cap === 'round';
   const arrow = el.arrow === 'end';
   const minimum = (arrow ? ARROW_HEAD_LENGTH * stroke : 0) + (round ? (arrow ? 0.5 : 1) * stroke : 0);

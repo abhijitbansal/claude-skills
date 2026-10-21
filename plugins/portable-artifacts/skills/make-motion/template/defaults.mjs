@@ -4,6 +4,9 @@ const DEFAULTS = Object.freeze({ size: [1920, 1080], fps: 30 });
 export const FADE_SECONDS = 0.4;
 export const TYPING_SECONDS_PER_CHAR = 0.035;
 export const ARROW_HEAD_LENGTH = 3; // an arrow head is this many stroke widths long
+// What a shape draws with when its spec gives no size: one source for the page and the validator's line-length minimums.
+export const DEFAULT_SHAPE_SIZE = 100; // width and height
+export const DEFAULT_LINE_STROKE = 4;
 
 // A `typing` text's characters as a reader counts them: grapheme clusters, so an emoji, a ZWJ sequence, a flag or a
 // letter with a combining accent is one character and is never typed in halves.

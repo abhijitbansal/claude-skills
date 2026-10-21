@@ -164,6 +164,40 @@ test('a round-cap line stays hidden until the drawn length passes its cap, then 
   return undefined;
 });
 
+test('a round-cap line too short for the dot rule still shows once fully drawn (widths the validator accepts)', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const draw = [{ t: 0, draw: 0 }, { t: 1, draw: 1 }];
+  const motion = spec([
+    { id: 'short', type: 'shape', shape: 'line', x: 100, y: 60, width: 5, strokeWidth: 4, cap: 'round', keyframes: draw },
+    line({ id: 'both', y: 200, width: 36, cap: 'round', arrow: 'end', keyframes: draw }),
+  ]);
+  assert.deepEqual(errs(motion), []);
+  const found = await probed(motion, () => {
+    const read = (id) => getComputedStyle(document.querySelector(`[data-id="${id}"] line`)).visibility;
+    window.__motion.seek(0.5);
+    const mid = [read('short'), read('both')];
+    window.__motion.seek(1.5);
+    return { mid, end: [read('short'), read('both')] };
+  });
+  assert.deepEqual(found.end, ['visible', 'visible']);
+  assert.deepEqual(found.mid, ['hidden', 'hidden'], 'while it is still shorter than a cap it stays hidden');
+  return undefined;
+});
+
+test('the default line stroke and shape size are one shared constant: the validator and the page agree', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  // No strokeWidth and no width: the validator's minimum uses the same defaults the page draws with.
+  const m = spec([{ id: 'plain', type: 'shape', shape: 'line', x: 100, y: 60, cap: 'round', arrow: 'end' }]);
+  assert.deepEqual(errs(m), []);
+  const found = await probed(m, () => {
+    const node = document.querySelector('[data-id="plain"] line');
+    return { sw: node.getAttribute('stroke-width'), length: Number(node.getAttribute('x2')) - Number(node.getAttribute('x1')) };
+  });
+  assert.equal(found.sw, '4');
+  assert.equal(found.length, 100 - 12 - 2, 'width 100, a 12 px head, and a 2 px cap inset at the start');
+  return undefined;
+});
+
 test('a butt-cap line is never hidden by draw: only round caps make a dot', async (t) => {
   if (!(await haveBrowser())) return t.skip('browser unavailable');
   const found = await probed(spec([line({ keyframes: [{ t: 0, draw: 0 }, { t: 1, draw: 1 }] })]), () => {
