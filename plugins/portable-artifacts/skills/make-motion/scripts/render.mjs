@@ -5,7 +5,7 @@
 // --model/--effort/--agent override the spec's generatedBy; they are stamped into the MP4 comment/artist tags.
 // With --contact-sheet, --out is a directory; one tiled, timestamped PNG per scene goes to <out>/contact/<scene-id>.png.
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { loadSpec, validateSpec, withDefaults, UsageError } from './lib/spec.mjs';
@@ -14,7 +14,7 @@ import { listThemes } from '../shared/theme.mjs';
 import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
 import { findFfmpeg, encodeArgs, probeAudio, probeGraph, measureLoudness } from './lib/ffmpeg.mjs';
-import { writeCueTracks } from './lib/cues.mjs';
+import { synthesiseCues } from './lib/cues.mjs';
 import { resolveAsset } from './lib/paths.mjs';
 import { withGeneratedBy, provenanceText, buildDate } from '../shared/provenance.mjs';
 import { resolveAudio } from '../template/audio.mjs';
@@ -87,8 +87,8 @@ function planAudio(spec, dir, ffmpeg, fps) {
     if (problem) throw new Error(`audio[${i}].src: ffmpeg cannot decode ${track.src}: ${problem}`);
     return { ...track, file };
   });
-  const cueDir = spec.cues?.length ? mkdtempSync(path.join(os.tmpdir(), 'motion-cues-')) : null;
-  const audio = [...files, ...(cueDir ? writeCueTracks(spec, cueDir) : [])];
+  const { dir: cueDir, tracks } = synthesiseCues(spec, os.tmpdir());
+  const audio = [...files, ...tracks];
   if (audio.length) {
     const problem = probeGraph(ffmpeg, { fps, audio }); // an old ffmpeg without amix normalize / adelay all fails here, not at frame 1
     if (problem) {
@@ -236,8 +236,9 @@ async function main() {
   process.stdout.write(`theme: ${p.themeName}\n`);
   const state = { encoder: null, browser: null, partial: null, cueDir: p.cueDir, exiting: false };
   installSignalHandlers(state);
-  const server = await startServer({ specPath: p.specPath, mode: 'render', theme: p.theme });
+  let server;
   try {
+    server = await startServer({ specPath: p.specPath, mode: 'render', theme: p.theme });
     const page = await openPage(p, server, state);
     const info = await page.evaluate(() => ({ sceneStarts: window.__motion.sceneStarts }));
     await (p.contact ? renderContactSheets(page, p, info, state.browser) : renderVideo(page, p, state));
@@ -246,8 +247,8 @@ async function main() {
     if (state.exiting) return new Promise(() => {}); // the signal handler owns the exit
     throw e;
   } finally {
-    if (!state.exiting) await cleanup(state);
-    await server.close();
+    if (!state.exiting) await cleanup(state); // also removes the cue folder when the server never started
+    await server?.close();
   }
 }
 

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { cueWav, writeCueTracks, noteHz, SAMPLE_RATE } from '../scripts/lib/cues.mjs';
+import { cueWav, writeCueTracks, synthesiseCues, noteHz, SAMPLE_RATE } from '../scripts/lib/cues.mjs';
 import { CUE_NAMES, MAX_CUES, resolveCues } from '../template/audio.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
 import { findFfmpeg, parseLoudness } from '../scripts/lib/ffmpeg.mjs';
@@ -101,6 +101,18 @@ test('writeCueTracks gives one WAV file and one mix track per cue, clamped to th
   assert.equal(tracks[1].start, 3.8);
   assert.equal(tracks[1].end, 4, 'the whoosh is longer than the 0.2 s left, so it is cut at the video end');
   assert.deepEqual(writeCueTracks(spec(), tmp('cue-none-')), []);
+});
+
+test('synthesiseCues makes its own temp folder, returns it with the tracks, and removes it if a cue cannot be written', () => {
+  const scratch = tmp('cue-scratch-');
+  const made = synthesiseCues(spec({ cues: [{ cue: 'pop', at: 0 }] }), scratch);
+  assert.equal(path.dirname(made.dir), scratch);
+  assert.equal(made.tracks.length, 1);
+  assert.ok(existsSync(made.tracks[0].file));
+  assert.equal(synthesiseCues(spec(), scratch).dir, null, 'no cues: no folder');
+  const before = readdirSync(scratch).length;
+  assert.throws(() => synthesiseCues(spec({ cues: [{ cue: 'pop', at: 0 }, { cue: 'bogus', at: 1 }] }), scratch));
+  assert.equal(readdirSync(scratch).length, before, 'a failed synthesis leaves no folder behind');
 });
 
 // ---- validation --------------------------------------------------------------------------------

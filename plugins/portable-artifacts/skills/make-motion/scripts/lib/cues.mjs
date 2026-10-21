@@ -1,6 +1,6 @@
 // Procedural sound cues: five small synthesisers, each a pure function of its parameters, written as 16-bit
 // stereo WAV with Buffer. No dependencies; noise comes from a seeded generator, so the same cue is the same bytes.
-import { writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { resolveCues } from '../../template/audio.mjs';
 
@@ -141,4 +141,20 @@ export function writeCueTracks(spec, dir) {
     const seconds = (wav.length - 44) / 4 / SAMPLE_RATE;
     return { file, start, end: Math.min(total, start + seconds), volume, fadeIn: 0, fadeOut: 0 };
   });
+}
+
+/**
+ * The cue tracks of `spec` written into a new folder under `parent`: { dir, tracks }, or { dir: null, tracks: [] }
+ * when the spec has no cues. If writing fails the folder is removed before the error propagates, so only a
+ * successful call leaves a folder for the caller to clean up.
+ */
+export function synthesiseCues(spec, parent) {
+  if (!spec.cues?.length) return { dir: null, tracks: [] };
+  const dir = mkdtempSync(path.join(parent, 'motion-cues-'));
+  try {
+    return { dir, tracks: writeCueTracks(spec, dir) };
+  } catch (e) {
+    rmSync(dir, { recursive: true, force: true });
+    throw e;
+  }
 }
