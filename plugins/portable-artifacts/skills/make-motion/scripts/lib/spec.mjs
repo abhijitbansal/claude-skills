@@ -11,7 +11,7 @@ import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, PITCHED_CUES, MAX_CUES, 
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
-import { EASE_CURVES, COLOR_TOKENS } from '../../template/defaults.mjs';
+import { EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, typingLength } from '../../template/defaults.mjs';
 
 export class UsageError extends Error {}
 
@@ -384,7 +384,20 @@ function checkCues(spec, errors) {
   });
 }
 
-function checkElement(el, base, scene, dir, errors) {
+// A typing text with no `value` keyframes types at a fixed pace from the scene start; it must finish (a frame before
+// the scene ends, so its last frame shows the whole line) or the video would cut it off silently.
+const TYPING_FALLBACK_FPS = 30;
+const CENTISECONDS = 100;
+function checkTyping(el, base, scene, fps, errors) {
+  if (!el.typing || typeof el.text !== 'string' || el.keyframes?.some((kf) => kf.value !== undefined)) return;
+  const chars = typingLength(el.text);
+  const takes = chars * TYPING_SECONDS_PER_CHAR;
+  const needs = takes + 1 / fps;
+  if (needs <= scene.duration) return;
+  errors.push({ path: pathJoin(base, 'text'), message: `typing ${chars} characters takes ${takes.toFixed(2)}s but scene "${scene.id}" lasts ${scene.duration}s (it must finish a frame before the scene ends); shorten the text or lengthen the scene to at least ${Math.ceil(needs * CENTISECONDS) / CENTISECONDS}s` });
+}
+
+function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS) {
   const fields = FIELDS[el.type];
   for (const key of Object.keys(el)) {
     if (!fields.includes(key)) {
@@ -395,7 +408,7 @@ function checkElement(el, base, scene, dir, errors) {
     if (el[key] === undefined) errors.push({ path: pathJoin(base, key), message: `required for type ${el.type}` });
   }
   checkKeyframes(el, base, scene.duration, errors);
-  if (el.type === 'text') checkRole(el, base, errors);
+  if (el.type === 'text') { checkRole(el, base, errors); checkTyping(el, base, scene, fps, errors); }
   for (const key of ['color', 'fill', 'stroke']) checkColor(el, key, base, errors, { tokens: true });
   if (el.type === 'shape') checkShapeStyle(el, base, errors);
   if (el.type === 'image' && typeof el.src === 'string') checkAssetPath(el.src, pathJoin(base, 'src'), dir, errors);
@@ -422,7 +435,7 @@ export function validateSpec(spec, { dir = process.cwd() } = {}) {
     if (si === 0 && scene.transition === 'crossfade') {
       errors.push({ path: 'scenes[0].transition', message: 'crossfade needs a previous scene to fade out; use "fade" or "none" on the first scene' });
     }
-    scene.elements.forEach((el, ei) => checkElement(el, `scenes[${si}].elements[${ei}]`, scene, dir, errors));
+    scene.elements.forEach((el, ei) => checkElement(el, `scenes[${si}].elements[${ei}]`, scene, dir, errors, spec.fps));
   });
   const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
   if (total > MAX_TOTAL_SECONDS) {
