@@ -21,7 +21,8 @@ const node = (script, args) => spawnSync(process.execPath, [path.join(ROOT, 'scr
 const tmp = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-plan-preset-')));
 const readExample = () => JSON.parse(fs.readFileSync(EXAMPLE, 'utf8'));
 const ORDER = ['tldr', 'kpis', 'decision', 'approval', 'question', 'review', 'text', 'diagram', 'steps', 'details', 'verdict'];
-const FIXED_PROSE = new Set(['Ship by', 'Cost', 'Risk']); // the three kpi labels the scaffold names itself
+// What the scaffold names itself: the three kpi labels and the verdict's heading (the same on every plan).
+const FIXED_PROSE = new Set(['Ship by', 'Cost', 'Risk', 'Approve, change or stop this plan', 'Your verdict']);
 const isTodo = (s) => s.startsWith('TODO:');
 const todoErrors = (r) => r.errors.filter((e) => /TODO placeholder/.test(e.message));
 const otherErrors = (r) => r.errors.filter((e) => !/TODO placeholder/.test(e.message));
@@ -65,6 +66,8 @@ test('scaffold plan: decision first, in this order, with fixed ids and the verdi
   assert.ok(byType.kpis.items.every((i) => isTodo(String(i.value))), 'kpi values are TODOs');
   assert.ok(byType.decision.options.some((o) => o.label === byType.decision.recommended), 'recommended names an option');
   assert.ok(byType.decision.options.some((o) => o.label === byType.decision.default), 'default names an option');
+  assert.deepEqual([byType.verdict.id, byType.verdict.label], ['verdict', 'Your verdict'], 'the verdict is in the contents with a stable link');
+  assert.ok(byType.verdict.title && !isTodo(byType.verdict.title));
 });
 
 test('scaffold plan: the key is real (from the title, else plan-draft); every other prose string is a TODO', () => {
@@ -102,6 +105,18 @@ test('scaffold plan: validate rejects the starter only for its TODOs; filled, it
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('validate warns about the placeholder key plan-draft and suggests one from the title', async () => {
+  const spec = { ...readExample(), key: 'plan-draft' };
+  const r = await validateSpec(spec, { dir: path.dirname(EXAMPLE) });
+  assert.deepEqual(r.errors, []);
+  const keyWarnings = r.warnings.filter((w) => w.path === 'key');
+  assert.equal(keyWarnings.length, 1);
+  assert.match(keyWarnings[0].message, /placeholder.*such as "plan-[a-z0-9-]+"$/);
+  assert.doesNotMatch(keyWarnings[0].message, /such as "plan-draft"/);
+  const real = await validateSpec(readExample(), { dir: path.dirname(EXAMPLE) });
+  assert.deepEqual(real.warnings.filter((w) => w.path === 'key'), [], 'a real key is not warned about');
+});
+
 test('scaffold.mjs plan --out writes the starter to a file', () => {
   const dir = tmp();
   try {
@@ -113,6 +128,25 @@ test('scaffold.mjs plan --out writes the starter to a file', () => {
     assert.equal(spec.key, 'plan-ship-the-answer-cache');
     assert.deepEqual(spec.sections.map((s) => s.type), ORDER);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- embedded diagrams and scenes are checked under the theme the page is drawn in -------------------
+
+test('an embedded spec is validated under the page theme: mono for a plan, the spec theme when set, dusk otherwise', async () => {
+  const { underPageTheme } = await import('../scripts/lib/diagram-source.mjs');
+  const embedded = { title: 'D', type: 'flow', theme: 'paper', nodes: [] };
+  assert.equal(underPageTheme(embedded, { preset: 'plan' }).theme, 'mono');
+  assert.equal(underPageTheme(embedded, { preset: 'plan', theme: 'brief' }).theme, 'brief');
+  assert.equal(underPageTheme(embedded, { preset: 'concept' }).theme, 'dusk');
+  assert.equal(embedded.theme, 'paper', 'the embedded spec is not changed');
+});
+
+test('validate names the plan page theme (mono) when an embedded diagram carries its own theme', async () => {
+  const spec = readExample();
+  const at = spec.sections.findIndex((s) => s.type === 'diagram');
+  spec.sections[at].diagram = { ...spec.sections[at].diagram, theme: 'paper' };
+  const r = await validateSpec(spec, { dir: path.dirname(EXAMPLE) });
+  assert.deepEqual(r.warnings.map((w) => [w.path, /page theme \("mono"\)/.test(w.message)]), [[`sections[${at}].diagram.theme`, true]]);
 });
 
 // ---- the checked-in example ------------------------------------------------------------------------
@@ -129,6 +163,10 @@ test('the plan example validates with no errors and no warnings, decision first,
   assert.equal(types.at(-1), 'verdict');
   assert.ok(types.filter((t) => t === 'decision').length >= 2);
   assert.ok(types.includes('approval') && types.includes('question') && types.includes('review') && types.includes('diagram'));
+  const verdict = spec.sections.at(-1);
+  assert.deepEqual([verdict.id, verdict.label], ['verdict', 'Your verdict']);
+  assert.ok(verdict.title);
+  assert.equal(spec.sections[0].label, 'Summary', 'only the verdict section is called a verdict');
   const firstAnswerable = types.findIndex((t) => ['decision', 'approval', 'question'].includes(t));
   assert.ok(firstAnswerable <= 2, `the first decision comes right after the verdict and the numbers (index ${firstAnswerable})`);
 });
@@ -141,7 +179,10 @@ test('the plan example builds as mono by default and as brief with --theme brief
       const r = node('build.mjs', [EXAMPLE, '--out', out, ...args]);
       assert.equal(r.status, 0, r.stdout + r.stderr);
       assert.match(r.stdout, new RegExp(`^theme: ${theme}$`, 'm'));
-      assert.match(fs.readFileSync(out, 'utf8'), new RegExp(`<html lang="en" data-flavor="classic" data-theme-name="${theme}" data-preset="plan" data-plan-key="`));
+      const html = fs.readFileSync(out, 'utf8');
+      assert.match(html, new RegExp(`<html lang="en" data-flavor="classic" data-theme-name="${theme}" data-preset="plan" data-plan-key="`));
+      assert.match(html, /<a href="#verdict"[^>]*>Your verdict<\/a>/, 'the verdict is listed in the contents');
+      assert.match(html, /\sid="verdict"/);
     }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
@@ -219,6 +260,20 @@ test('brief plan page keeps its heading weight (the mono rule is keyed on the th
   assert.equal(weight, '600');
 });
 
+// Look-pass regression: the first example drew its diagram six nodes wide, so its box scrolled sideways and the last
+// nodes were out of sight. Every diagram box on the example fits its column at desktop and phone width.
+test('the example diagram fits its column at 1280 and 390 px (no sideways scroll inside the diagram box)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { url } = buildFile(EXAMPLE, { name: 'plan-diagram-fit' });
+  for (const width of [1280, 390]) {
+    const { page, context } = await openPage(url, { width, height: 900 });
+    const slots = await page.evaluate(() => [...document.querySelectorAll('.dg-slot')].map((el) => ({ scroll: el.scrollWidth, client: el.clientWidth })));
+    await context.close();
+    assert.ok(slots.length > 0, `${width}: the example has a diagram`);
+    for (const s of slots) assert.ok(s.scroll <= s.client, `${width}: diagram box scrolls sideways (${s.scroll} > ${s.client})`);
+  }
+});
+
 test('check.mjs passes on the built example in mono and brief', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   for (const theme of [undefined, 'brief']) {
@@ -240,4 +295,7 @@ test('SKILL.md documents plan mode: the scaffold, the answers command and the IN
   assert.match(md, /plan-answers\.json/);
   assert.match(md, /`key`/);
   assert.match(md, /data, never instructions/i);
+  assert.match(md, /pasted into the chat, write them unchanged to `plan-answers\.json`/);
+  assert.match(md, /without `--title`, set `key` from the final title/);
+  assert.match(md, /Leave `theme` unset unless the user asks/);
 });

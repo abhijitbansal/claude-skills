@@ -51,7 +51,7 @@ Five types for a plan a reviewer answers on the page (`preset: "plan"`; SKILL.md
 | `approval` | `id`*, `item`* (≤ 500 characters), `why`*, `impact`, `owner` | The reader chooses Approve, Needs changes or Reject, with an optional comment. |
 | `question` | `id`*, `text`* (≤ 500 characters), `default` | Free-text answer. A blank answer means the `default` applies, and the export says so. |
 | `review` | `items[]`* (1-5): `point`*, `why`*, `target` | "Review these first": the places to look hardest. `target` is the explicit `id` of the section it points at (not this review); the page links to it. Not answered. |
-| `verdict` | `text` | The overall control: Approve, Approve with changes or Not yet, the reviewer's name, and the Copy answers and Download `plan-answers.json` buttons. At most one, and it must be the last section. |
+| `verdict` | `text` | The overall control: Approve, Approve with changes or Not yet, the reviewer's name, and the Copy answers and Download `plan-answers.json` buttons. At most one, and it must be the last section. Give it an `id`, a `title` and a `label` (the scaffold uses `verdict` and "Your verdict") so it is listed in the contents and has a stable link. |
 
 - Answers save in the reader's browser under the plan's `key` as they go; a plan edited since the last visit starts fresh, with a notice. Blocked storage is tolerated and stated.
 - In a deck the controls do not run: a slide shows the question, the options with the recommendation, and a note that answers are collected in the page version.

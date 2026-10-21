@@ -7,7 +7,7 @@ sections; local scripts validate it, lint the prose and render it. Works with
 any agent that can run shell commands. Nothing leaves your machine
 unless you opt in with `--image-api` (see below).
 
-- **One spec, `explainer.json`**: a title and 1 to 40 sections of 19 types.
+- **One spec, `explainer.json`**: a title and 1 to 40 sections of 24 types.
   The agent never writes HTML, CSS, SVG or script; the spec accepts none of
   them, and text fields take only a small markdown subset.
 - **Facts come from scripts**: `gather.mjs git` reads a branch (commits, files
@@ -18,7 +18,7 @@ unless you opt in with `--image-api` (see below).
   the spec folder, no symlinks), embedded diagrams and charts through their own
   skills' validators, and a prose lint that rejects filler such as
   "seamless" or "leverage", numbered titles and placeholder text.
-- **Presets**: `recap`, `checklist`, `concept`, `slides`.
+- **Presets**: `recap`, `checklist`, `concept`, `slides`, `plan`.
 - **Stamped**: a favicon, an icon theme toggle and a provenance footer (model,
   effort, agent from `generatedBy` or `--model`/`--effort`/`--agent`; "not
   reported" when unknown). `scripts/doctor.mjs` reports missing sister skills
@@ -27,7 +27,7 @@ unless you opt in with `--image-api` (see below).
   takes a `label` of up to 4 words for the contents list; validation warns (never
   fails) over the soft caps: title 8 words, label 4, paragraph 3 sentences or 60
   words, text section 120, card text 30, list item 20, page prose 900, tl;dr 3 points.
-- **A page worth opening**: themed (nine themes, light and dark; `dusk` by default), a
+- **A page worth opening**: themed (nine themes, light and dark; `dusk` by default, `mono` for a plan), a
   contents list from four sections up, copy buttons on code, print styles,
   reduced motion respected, no network at build or view time
   (unless you opt in with `--image-api`, see below).
@@ -98,7 +98,8 @@ page, so keep the two together.
 
 `tldr`, `text`, `kpis`, `cards`, `table`, `risks`, `files`, `steps`,
 `timeline`, `compare`, `callout`, `code`, `details`, `checklist`, `diagram`,
-`chart`, `scene`, `motion`, `image`. Every field and limit:
+`chart`, `scene`, `motion`, `image`, and for plans `decision`, `approval`,
+`question`, `review`, `verdict`. Every field and limit:
 [`references/sections.md`](references/sections.md) and
 [`references/schema.md`](references/schema.md). The banned-phrase list:
 [`references/style.md`](references/style.md). One working example per preset:
@@ -112,6 +113,7 @@ page, so keep the two together.
 | `checklist` | `gather.mjs` facts | one group per area of changed files, a regression group, an intro and "If something fails" |
 | `concept` | an empty skeleton | tl;dr, explanation, cards, steps |
 | `slides` | an empty skeleton | a deck of cover, tl;dr, cards, steps and a closing slide |
+| `plan` | an empty skeleton | decision first: summary, three numbers, a decision, an approval and a question the reviewer answers on the page, review pointers, goals, a diagram, phases, risks and the verdict with Copy / Download answers; `mono` theme by default; check the answers with `scripts/answers.mjs` |
 
 ## Tests
 

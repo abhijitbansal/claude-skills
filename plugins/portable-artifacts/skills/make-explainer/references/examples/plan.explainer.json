@@ -1,6 +1,6 @@
 {
-  "title": "Three render fixes, one PR, three calls to make",
-  "subtitle": "Numbers on one line, a cheap model outside Claude Code, plans answered in the page.",
+  "title": "One PR: one-line numbers, cheap models, plan pages",
+  "subtitle": "Numbers stay on one line, render work can run on a cheap model in Copilot and Codex, and plans are answered in the page.",
   "preset": "plan",
   "key": "plan-render-skills-oct-2026",
   "meta": {
@@ -11,23 +11,23 @@
   "sections": [
     {
       "type": "tldr",
-      "title": "One PR, once three calls are made",
-      "label": "The verdict",
-      "text": "All three are built and tested. Three calls, two approvals and one question decide what the PR promises.",
+      "title": "Built; three calls and two approvals left",
+      "label": "Summary",
+      "text": "All three workstreams are built. Codex is untested and plan mode is in review; the calls below decide what the PR promises.",
       "points": [
         "A browser check fails when a number splits from its unit.",
-        "Copilot used Claude Haiku 5.5 in 19 of 19 logged runs.",
-        "Answers come back as a file the agent checks first."
+        "Copilot CLI ran the agent file's model in 19 of 19 logged runs.",
+        "Codex is untested; Claude Code was not measured."
       ],
-      "tone": "good"
+      "tone": "warn"
     },
     {
       "type": "kpis",
-      "title": "One PR, cents per run, one untested host",
+      "title": "One PR, one cost sample, one untested host",
       "label": "Numbers",
       "items": [
-        { "label": "Ship by", "value": "1 PR", "note": "one branch, three workstreams" },
-        { "label": "Cost", "value": "$0.19", "note": "one measured hand-off on Copilot" },
+        { "label": "Ships as", "value": "1 PR", "note": "one branch, three workstreams" },
+        { "label": "Cost", "value": "$0.19", "note": "one trial; the hand-off failed and the main model finished" },
         { "label": "Risk", "value": "Medium", "note": "Codex files ship untested", "tone": "warn" }
       ]
     },
@@ -40,23 +40,23 @@
       "options": [
         {
           "label": "Pinned agent file plus a hand-off line",
-          "pros": ["The host reads the model from the file, not from the prompt", "Copilot logs showed claude-haiku-5.5 in 19 of 19 runs"],
+          "pros": ["Copilot's logs show the file's model ran in 19 of 19 runs", "Codex has a second route: `default_subagent_model` in its config"],
           "cons": ["One more file per host for the installer to write"]
         },
         {
           "label": "Hand-off line in SKILL.md only",
           "pros": ["No new files"],
-          "cons": ["Nothing pins the model; the hand-off agent runs on the default"]
+          "cons": ["Nothing names a model, so a started agent runs on the default"]
         },
         {
           "label": "Leave it on the user's default model",
           "pros": ["Zero work"],
-          "cons": ["Every render runs on the expensive model, as today"]
+          "cons": ["Every render runs on the default model, as today"]
         }
       ],
       "recommended": "Pinned agent file plus a hand-off line",
-      "why": "No host but Claude Code reads `model:` from SKILL.md, so a line alone changes nothing. An agent file is the one place Copilot and Codex take a model from, and the Copilot logs prove it works.",
-      "default": "Leave it on the user's default model"
+      "why": "Copilot's logs show the agent file's model is used: claude-haiku-5.5 in 19 of 19 runs. The skill hand-off itself was tried once; the started agent was refused file access and the main model finished. This option is built, so if nobody answers it ships as is.",
+      "default": "Pinned agent file plus a hand-off line"
     },
     {
       "type": "decision",
@@ -77,7 +77,7 @@
         }
       ],
       "recommended": "Copy or download plan-answers.json",
-      "why": "A server breaks the one rule every page keeps: no network. One paste is a small price, and the file carries a plan hash so stale answers are refused.",
+      "why": "A server breaks the one rule every page keeps: no network. The file carries a plan hash, so answers to an edited plan are refused. This option is built, so if nobody answers it ships as is.",
       "default": "Copy or download plan-answers.json"
     },
     {
@@ -85,22 +85,22 @@
       "id": "motion-model",
       "title": "make-motion keeps the cheap model",
       "label": "Motion",
-      "question": "Does make-motion run on the cheap model like the other four skills?",
+      "question": "Does make-motion also get model haiku and the hand-off line?",
       "options": [
         {
-          "label": "Yes: keep model haiku and the hand-off",
-          "pros": ["10 of 10 motion specs were valid and built on Haiku 5.5"],
-          "cons": ["Measured on Copilot CLI only"]
+          "label": "Yes: model haiku and the hand-off line",
+          "pros": ["10 of 10 motion specs were valid and built through the agent file"],
+          "cons": ["Measured on Copilot CLI only; Claude Code not measured"]
         },
         {
           "label": "No: motion stays on the default model",
-          "pros": ["No risk to the hardest spec format"],
-          "cons": ["Motion costs the most tokens and gains the most from the switch"]
+          "pros": ["No change to the hardest spec format"],
+          "cons": ["Drops a gate it passed: 10 of 10 against a bar of 8"]
         }
       ],
-      "recommended": "Yes: keep model haiku and the hand-off",
-      "why": "The gate was 8 of 10 valid and built; it scored 10 of 10. The rule was set before the run, so it decides.",
-      "default": "No: motion stays on the default model"
+      "recommended": "Yes: model haiku and the hand-off line",
+      "why": "The bar, set before the run, was 8 of 10 valid and built; Copilot CLI scored 10 of 10. Claude Code reads `model: haiku` from the frontmatter itself, and that path was not measured. This option is built, so if nobody answers it ships as is.",
+      "default": "Yes: model haiku and the hand-off line"
     },
     {
       "type": "approval",
@@ -109,7 +109,7 @@
       "label": "Installer",
       "item": "The installer writes artifact-builder to the user's Copilot and Codex agent folders by default.",
       "why": "A user-level file works in every repo; `--project` writes into one repo instead. It never overwrites an existing file unless `--force` is passed.",
-      "impact": "Two new files outside the repo on install",
+      "impact": "One file per host outside the repo; the agents host writes both",
       "owner": "Installer"
     },
     {
@@ -144,7 +144,7 @@
       "type": "text",
       "title": "Three goals, and what the PR leaves alone",
       "label": "Scope",
-      "text": "Goals:\n\n- No number, percentage or number-plus-unit token splits across two lines.\n- Render skills run on a cheap model in Copilot and Codex, not only Claude Code.\n- A plan page a reviewer answers in place, with answers the agent can check.\n\nNon-goals:\n\n- Reflowing ordinary prose or changing stored spec text.\n- Guaranteeing the hand-off: no host lets a skill force another agent.\n- A save server or any new npm dependency."
+      "text": "Goals:\n\n- No number, percentage or number-plus-unit token splits across two lines.\n- Render skills can run on a cheap model in Copilot and Codex, not only Claude Code.\n- A plan page a reviewer answers in place, with answers the agent can check.\n\nNon-goals:\n\n- Reflowing ordinary prose or changing stored spec text.\n- Guaranteeing the hand-off: no host lets a skill force another agent.\n- A save server or any new npm dependency."
     },
     {
       "type": "diagram",
@@ -176,7 +176,7 @@
       "label": "Phases",
       "items": [
         { "title": "Numbers stay on one line", "text": "CSS and a build step bind tokens; check.mjs fails on a split token or a spilled KPI.", "status": "done" },
-        { "title": "Cheap model outside Claude Code", "text": "Agent files for Copilot and Codex, installer, doctor check and the hand-off line.", "status": "done" },
+        { "title": "Cheap model outside Claude Code", "text": "Agent files for Copilot and Codex, installer, doctor check and the hand-off line. Codex is untested.", "status": "done" },
         { "title": "Plan mode", "text": "Five section types, two themes, the answer runtime, answers.mjs and this example.", "status": "doing" }
       ]
     },
@@ -189,6 +189,9 @@
     },
     {
       "type": "verdict",
+      "id": "verdict",
+      "title": "Approve, change or stop this plan",
+      "label": "Your verdict",
       "text": "Ship the three workstreams as one PR, with the calls above?"
     }
   ]

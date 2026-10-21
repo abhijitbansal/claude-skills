@@ -2,8 +2,8 @@
 <a class="skip" href="#content">Skip to content</a>
 <header class="hero">
 <div class="mast-text">
-<h1>Three render fixes, one PR, three calls to make</h1>
-<p class="subtitle">Numbers on one line, a cheap model outside Claude Code, plans answered in the page.</p>
+<h1>One PR: one-line numbers, cheap models, plan pages</h1>
+<p class="subtitle">Numbers stay on one line, render work can run on a cheap model in Copilot and Codex, and plans are answered in the page.</p>
 <dl class="meta">
 <div class="m-date"><dt>Date</dt><dd>2026-10-21</dd></div>
 <div class="m-repo"><dt>Repo</dt><dd>claude-skills</dd></div>
@@ -12,16 +12,16 @@
 </div>
 <button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><span class="pa-ti pa-ti-auto"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-light"><svg data-sibling-svg></svg></span><span class="pa-ti pa-ti-dark"><svg data-sibling-svg></svg></span></button>
 <script>/* shared theme toggle */</script>
-<div class="hero-tldr tone-good" id="one-pr-once-three-calls-are-made" role="region" aria-labelledby="one-pr-once-three-calls-are-made-title">
-<p class="sec-eyebrow pa-label">The verdict</p>
-<h2 class="hero-tldr-title sr-only" id="one-pr-once-three-calls-are-made-title">One PR, once three calls are made</h2>
-<div class="tldr tone-good">
-<p class="tldr-tone"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span></p>
-<p class="lead">All three are built and tested. Three calls, two approvals and one question decide what the PR promises.</p>
+<div class="hero-tldr tone-warn" id="built-three-calls-and-two-approvals-left" role="region" aria-labelledby="built-three-calls-and-two-approvals-left-title">
+<p class="sec-eyebrow pa-label">Summary</p>
+<h2 class="hero-tldr-title sr-only" id="built-three-calls-and-two-approvals-left-title">Built; three calls and two approvals left</h2>
+<div class="tldr tone-warn">
+<p class="tldr-tone"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Caution</span></span></p>
+<p class="lead">All three workstreams are built. Codex is untested and plan mode is in review; the calls below decide what the PR promises.</p>
 <ul class="points">
 <li>A browser check fails when a number splits from its unit.</li>
-<li>Copilot used Claude Haiku 5.5 in 19 of 19 logged runs.</li>
-<li>Answers come back as a file the agent checks first.</li>
+<li>Copilot CLI ran the agent file&#39;s model in 19 of 19 logged runs.</li>
+<li>Codex is untested; Claude Code was not measured.</li>
 </ul>
 </div>
 </div>
@@ -31,8 +31,8 @@
 <details open>
 <summary>Contents</summary>
 <ol>
-<li><a href="#one-pr-once-three-calls-are-made">The verdict</a></li>
-<li><a href="#one-pr-cents-per-run-one-untested-host">Numbers</a></li>
+<li><a href="#built-three-calls-and-two-approvals-left">Summary</a></li>
+<li><a href="#one-pr-one-cost-sample-one-untested-host">Numbers</a></li>
 <li><a href="#routing">Cheap model</a></li>
 <li><a href="#answers-return">Answers</a></li>
 <li><a href="#motion-model">Motion</a></li>
@@ -44,49 +44,50 @@
 <li><a href="#out-as-a-page-back-as-a-file">Answer loop</a></li>
 <li><a href="#two-phases-done-plan-mode-in-review">Phases</a></li>
 <li><a href="#four-risks-each-with-a-guard">Risks</a></li>
+<li><a href="#verdict">Your verdict</a></li>
 </ol>
 </details>
 </nav>
 <main id="content" class="sections">
-<section class="sec sec-kpis sec-alt" id="one-pr-cents-per-run-one-untested-host" aria-labelledby="one-pr-cents-per-run-one-untested-host-title">
+<section class="sec sec-kpis sec-alt" id="one-pr-one-cost-sample-one-untested-host" aria-labelledby="one-pr-one-cost-sample-one-untested-host-title">
 <p class="sec-eyebrow pa-label">Numbers</p>
-<h2 class="sec-title" id="one-pr-cents-per-run-one-untested-host-title">One PR, cents per run, one untested host<a class="anchor" href="#one-pr-cents-per-run-one-untested-host" aria-label="Link to this section: One PR, cents per run, one untested host">#</a></h2>
+<h2 class="sec-title" id="one-pr-one-cost-sample-one-untested-host-title">One PR, one cost sample, one untested host<a class="anchor" href="#one-pr-one-cost-sample-one-untested-host" aria-label="Link to this section: One PR, one cost sample, one untested host">#</a></h2>
 <dl class="kpis">
-<div class="kpi tone-neutral"><dt>Ship by</dt><dd class="kpi-value" style="--n: 4">1 PR</dd><dd class="kpi-note">one branch, three workstreams</dd></div>
-<div class="kpi tone-neutral"><dt>Cost</dt><dd class="kpi-value" style="--n: 5">$0.19</dd><dd class="kpi-note">one measured hand-off on Copilot</dd></div>
+<div class="kpi tone-neutral"><dt>Ships as</dt><dd class="kpi-value" style="--n: 4">1 PR</dd><dd class="kpi-note">one branch, three workstreams</dd></div>
+<div class="kpi tone-neutral"><dt>Cost</dt><dd class="kpi-value" style="--n: 5">$0.19</dd><dd class="kpi-note">one trial; the hand-off failed and the main model finished</dd></div>
 <div class="kpi tone-warn"><dt>Risk</dt><dd class="kpi-value" style="--n: 6">Medium</dd><dd class="kpi-delta"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Caution</span></span></dd><dd class="kpi-note">Codex files ship untested</dd></div>
 </dl>
 </section>
 <section class="sec sec-decision" id="routing" aria-labelledby="routing-title">
 <p class="sec-eyebrow pa-label">Cheap model</p>
 <h2 class="sec-title" id="routing-title">Pin the cheap model with an agent file<a class="anchor" href="#routing" aria-label="Link to this section: Pin the cheap model with an agent file">#</a></h2>
-<div class="plan-item plan-decision" data-plan-item data-id="routing" data-kind="decision" data-question="How does the render work reach a cheap model on Copilot and Codex?" data-default="Leave it on the user&#39;s default model">
+<div class="plan-item plan-decision" data-plan-item data-id="routing" data-kind="decision" data-question="How does the render work reach a cheap model on Copilot and Codex?" data-default="Pinned agent file plus a hand-off line">
 <p class="plan-kicker"><span class="plan-num" aria-hidden="true"></span><span class="plan-kind">Decision needed</span></p>
 <fieldset class="plan-set">
 <legend class="plan-q">How does the render work reach a cheap model on Copilot and Codex?</legend>
 <div class="plan-opts">
 <label class="plan-opt is-rec"><input type="radio" name="plan-routing" value="Pinned agent file plus a hand-off line" data-recommended="true" aria-labelledby="pl_routing_1_label pl_routing_1_rec" aria-describedby="pl_routing_1_pc"><span class="plan-opt-body"><span class="plan-opt-head"><span class="plan-opt-label" id="pl_routing_1_label">Pinned agent file plus a hand-off line</span><span id="pl_routing_1_rec"><span class="chip tone-accent"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg><span>Recommended</span></span></span></span><ul class="plan-pc" id="pl_routing_1_pc">
-<li class="plan-pro"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span><span class="sr-only">Pro: </span>The host reads the model from the file, not from the prompt</span></li>
-<li class="plan-pro"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span><span class="sr-only">Pro: </span>Copilot logs showed claude-haiku-5.5 in 19 of 19 runs</span></li>
+<li class="plan-pro"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span><span class="sr-only">Pro: </span>Copilot&#39;s logs show the file&#39;s model ran in 19 of 19 runs</span></li>
+<li class="plan-pro"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span><span class="sr-only">Pro: </span>Codex has a second route: <code>default_subagent_model</code> in its config</span></li>
 <li class="plan-con"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8h10"/></svg><span><span class="sr-only">Con: </span>One more file per host for the installer to write</span></li>
 </ul></span></label>
 <label class="plan-opt"><input type="radio" name="plan-routing" value="Hand-off line in SKILL.md only" data-recommended="false" aria-labelledby="pl_routing_2_label" aria-describedby="pl_routing_2_pc"><span class="plan-opt-body"><span class="plan-opt-head"><span class="plan-opt-label" id="pl_routing_2_label">Hand-off line in SKILL.md only</span></span><ul class="plan-pc" id="pl_routing_2_pc">
 <li class="plan-pro"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span><span class="sr-only">Pro: </span>No new files</span></li>
-<li class="plan-con"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8h10"/></svg><span><span class="sr-only">Con: </span>Nothing pins the model; the hand-off agent runs on the default</span></li>
+<li class="plan-con"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8h10"/></svg><span><span class="sr-only">Con: </span>Nothing names a model, so a started agent runs on the default</span></li>
 </ul></span></label>
 <label class="plan-opt"><input type="radio" name="plan-routing" value="Leave it on the user&#39;s default model" data-recommended="false" aria-labelledby="pl_routing_3_label" aria-describedby="pl_routing_3_pc"><span class="plan-opt-body"><span class="plan-opt-head"><span class="plan-opt-label" id="pl_routing_3_label">Leave it on the user&#39;s default model</span></span><ul class="plan-pc" id="pl_routing_3_pc">
 <li class="plan-pro"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span><span class="sr-only">Pro: </span>Zero work</span></li>
-<li class="plan-con"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8h10"/></svg><span><span class="sr-only">Con: </span>Every render runs on the expensive model, as today</span></li>
+<li class="plan-con"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8h10"/></svg><span><span class="sr-only">Con: </span>Every render runs on the default model, as today</span></li>
 </ul></span></label>
 </div>
 </fieldset>
 <details class="plan-why" open>
 <summary>Why Pinned agent file plus a hand-off line</summary>
 <div class="plan-why-body prose">
-<p>No host but Claude Code reads <code>model:</code> from SKILL.md, so a line alone changes nothing. An agent file is the one place Copilot and Codex take a model from, and the Copilot logs prove it works.</p>
+<p>Copilot&#39;s logs show the agent file&#39;s model is used: claude-haiku-5.5 in 19 of 19 runs. The skill hand-off itself was tried once; the started agent was refused file access and the main model finished. This option is built, so if nobody answers it ships as is.</p>
 </div>
 </details>
-<p class="plan-default"><span class="plan-default-k">If nobody answers:</span> Leave it on the user&#39;s default model</p>
+<p class="plan-default"><span class="plan-default-k">If nobody answers:</span> Pinned agent file plus a hand-off line</p>
 <label class="plan-field"><span class="plan-field-label">Comment or override (optional)<span class="sr-only">: How does the render work reach a cheap model on Copilot and Codex?</span></span><textarea class="plan-text" data-comment rows="2" placeholder=" "></textarea></label>
 </div>
 </section>
@@ -112,7 +113,7 @@
 <details class="plan-why" open>
 <summary>Why Copy or download plan-answers.json</summary>
 <div class="plan-why-body prose">
-<p>A server breaks the one rule every page keeps: no network. One paste is a small price, and the file carries a plan hash so stale answers are refused.</p>
+<p>A server breaks the one rule every page keeps: no network. The file carries a plan hash, so answers to an edited plan are refused. This option is built, so if nobody answers it ships as is.</p>
 </div>
 </details>
 <p class="plan-default"><span class="plan-default-k">If nobody answers:</span> Copy or download plan-answers.json</p>
@@ -122,29 +123,29 @@
 <section class="sec sec-decision" id="motion-model" aria-labelledby="motion-model-title">
 <p class="sec-eyebrow pa-label">Motion</p>
 <h2 class="sec-title" id="motion-model-title">make-motion keeps the cheap model<a class="anchor" href="#motion-model" aria-label="Link to this section: make-motion keeps the cheap model">#</a></h2>
-<div class="plan-item plan-decision" data-plan-item data-id="motion-model" data-kind="decision" data-question="Does make-motion run on the cheap model like the other four skills?" data-default="No: motion stays on the default model">
+<div class="plan-item plan-decision" data-plan-item data-id="motion-model" data-kind="decision" data-question="Does make-motion also get model haiku and the hand-off line?" data-default="Yes: model haiku and the hand-off line">
 <p class="plan-kicker"><span class="plan-num" aria-hidden="true"></span><span class="plan-kind">Decision needed</span></p>
 <fieldset class="plan-set">
-<legend class="plan-q">Does make-motion run on the cheap model like the other four skills?</legend>
+<legend class="plan-q">Does make-motion also get model haiku and the hand-off line?</legend>
 <div class="plan-opts">
-<label class="plan-opt is-rec"><input type="radio" name="plan-motion-model" value="Yes: keep model haiku and the hand-off" data-recommended="true" aria-labelledby="pl_motion-model_1_label pl_motion-model_1_rec" aria-describedby="pl_motion-model_1_pc"><span class="plan-opt-body"><span class="plan-opt-head"><span class="plan-opt-label" id="pl_motion-model_1_label">Yes: keep model haiku and the hand-off</span><span id="pl_motion-model_1_rec"><span class="chip tone-accent"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg><span>Recommended</span></span></span></span><ul class="plan-pc" id="pl_motion-model_1_pc">
-<li class="plan-pro"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span><span class="sr-only">Pro: </span>10 of 10 motion specs were valid and built on Haiku 5.5</span></li>
-<li class="plan-con"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8h10"/></svg><span><span class="sr-only">Con: </span>Measured on Copilot CLI only</span></li>
+<label class="plan-opt is-rec"><input type="radio" name="plan-motion-model" value="Yes: model haiku and the hand-off line" data-recommended="true" aria-labelledby="pl_motion-model_1_label pl_motion-model_1_rec" aria-describedby="pl_motion-model_1_pc"><span class="plan-opt-body"><span class="plan-opt-head"><span class="plan-opt-label" id="pl_motion-model_1_label">Yes: model haiku and the hand-off line</span><span id="pl_motion-model_1_rec"><span class="chip tone-accent"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg><span>Recommended</span></span></span></span><ul class="plan-pc" id="pl_motion-model_1_pc">
+<li class="plan-pro"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span><span class="sr-only">Pro: </span>10 of 10 motion specs were valid and built through the agent file</span></li>
+<li class="plan-con"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8h10"/></svg><span><span class="sr-only">Con: </span>Measured on Copilot CLI only; Claude Code not measured</span></li>
 </ul></span></label>
 <label class="plan-opt"><input type="radio" name="plan-motion-model" value="No: motion stays on the default model" data-recommended="false" aria-labelledby="pl_motion-model_2_label" aria-describedby="pl_motion-model_2_pc"><span class="plan-opt-body"><span class="plan-opt-head"><span class="plan-opt-label" id="pl_motion-model_2_label">No: motion stays on the default model</span></span><ul class="plan-pc" id="pl_motion-model_2_pc">
-<li class="plan-pro"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span><span class="sr-only">Pro: </span>No risk to the hardest spec format</span></li>
-<li class="plan-con"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8h10"/></svg><span><span class="sr-only">Con: </span>Motion costs the most tokens and gains the most from the switch</span></li>
+<li class="plan-pro"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg><span><span class="sr-only">Pro: </span>No change to the hardest spec format</span></li>
+<li class="plan-con"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8h10"/></svg><span><span class="sr-only">Con: </span>Drops a gate it passed: 10 of 10 against a bar of 8</span></li>
 </ul></span></label>
 </div>
 </fieldset>
 <details class="plan-why" open>
-<summary>Why Yes: keep model haiku and the hand-off</summary>
+<summary>Why Yes: model haiku and the hand-off line</summary>
 <div class="plan-why-body prose">
-<p>The gate was 8 of 10 valid and built; it scored 10 of 10. The rule was set before the run, so it decides.</p>
+<p>The bar, set before the run, was 8 of 10 valid and built; Copilot CLI scored 10 of 10. Claude Code reads <code>model: haiku</code> from the frontmatter itself, and that path was not measured. This option is built, so if nobody answers it ships as is.</p>
 </div>
 </details>
-<p class="plan-default"><span class="plan-default-k">If nobody answers:</span> No: motion stays on the default model</p>
-<label class="plan-field"><span class="plan-field-label">Comment or override (optional)<span class="sr-only">: Does make-motion run on the cheap model like the other four skills?</span></span><textarea class="plan-text" data-comment rows="2" placeholder=" "></textarea></label>
+<p class="plan-default"><span class="plan-default-k">If nobody answers:</span> Yes: model haiku and the hand-off line</p>
+<label class="plan-field"><span class="plan-field-label">Comment or override (optional)<span class="sr-only">: Does make-motion also get model haiku and the hand-off line?</span></span><textarea class="plan-text" data-comment rows="2" placeholder=" "></textarea></label>
 </div>
 </section>
 <section class="sec sec-approval" id="user-agent-folders" aria-labelledby="user-agent-folders-title">
@@ -157,7 +158,7 @@
 <div class="plan-body prose">
 <p>A user-level file works in every repo; <code>--project</code> writes into one repo instead. It never overwrites an existing file unless <code>--force</code> is passed.</p>
 </div>
-<dl class="plan-facts"><div><dt>Impact</dt><dd>Two new files outside the repo on install</dd></div><div><dt>Owner</dt><dd>Installer</dd></div></dl>
+<dl class="plan-facts"><div><dt>Impact</dt><dd>One file per host outside the repo; the agents host writes both</dd></div><div><dt>Owner</dt><dd>Installer</dd></div></dl>
 <div class="plan-choices">
 <label class="plan-choice tone-good"><input type="radio" name="plan-user-agent-folders" value="approve"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg><span>Approve</span></label>
 <label class="plan-choice tone-warn"><input type="radio" name="plan-user-agent-folders" value="changes"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none"/></svg><span>Needs changes</span></label>
@@ -225,7 +226,7 @@
 <p>Goals:</p>
 <ul>
 <li>No number, percentage or number-plus-unit token splits across two lines.</li>
-<li>Render skills run on a cheap model in Copilot and Codex, not only Claude Code.</li>
+<li>Render skills can run on a cheap model in Copilot and Codex, not only Claude Code.</li>
 <li>A plan page a reviewer answers in place, with answers the agent can check.</li>
 </ul>
 <p>Non-goals:</p>
@@ -297,7 +298,7 @@
 </li>
 <li class="step">
 <div class="step-head"><strong class="step-title">Cheap model outside Claude Code</strong><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg><span>Done</span></span></div>
-<p>Agent files for Copilot and Codex, installer, doctor check and the hand-off line.</p>
+<p>Agent files for Copilot and Codex, installer, doctor check and the hand-off line. Codex is untested.</p>
 </li>
 <li class="step">
 <div class="step-head"><strong class="step-title">Plan mode</strong><span class="chip tone-accent"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none"/></svg><span>In progress</span></span></div>
@@ -320,7 +321,9 @@
 </div>
 </details>
 </section>
-<section class="sec sec-verdict" id="section-14">
+<section class="sec sec-verdict" id="verdict" aria-labelledby="verdict-title">
+<p class="sec-eyebrow pa-label">Your verdict</p>
+<h2 class="sec-title" id="verdict-title">Approve, change or stop this plan<a class="anchor" href="#verdict" aria-label="Link to this section: Approve, change or stop this plan">#</a></h2>
 <div class="plan-item plan-verdict" data-plan-item data-kind="verdict" data-question="Overall verdict">
 <p class="plan-kicker"><span class="plan-num" aria-hidden="true"></span><span class="plan-kind">Your verdict</span></p>
 <fieldset class="plan-set">

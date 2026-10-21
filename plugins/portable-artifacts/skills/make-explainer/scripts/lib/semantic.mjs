@@ -5,7 +5,7 @@ import { didYouMean, pathJoin } from '../../shared/errors.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { ID_PATTERN, KEY_PATTERN, LIMITS, META_KEYS, NON_SPACE } from './schema.mjs';
 import { codeLines } from './slides.mjs';
-import { suggestedPlanKey } from './plan-hash.mjs';
+import { suggestedPlanKey, DRAFT_PLAN_KEY } from './plan-hash.mjs';
 
 const q = (v) => JSON.stringify(v);
 const MAX_LISTED = 12;
@@ -283,6 +283,9 @@ export function checkSections(spec, errors) {
 /** Advice that never blocks a build: -> [{ path, message }]. */
 export function warnSections(spec) {
   const warnings = [];
+  if (spec.key === DRAFT_PLAN_KEY) {
+    warnings.push({ path: 'key', message: `${q(DRAFT_PLAN_KEY)} is the scaffold's placeholder, shared by every untitled draft (their saved answers would collide); set it from the title, such as ${q(suggestedPlanKey(spec))}` });
+  }
   spec.sections.forEach((s, i) => {
     const at = pathJoin('sections', i);
     if (s.type === 'checklist' && s.intro === undefined && spec.preset === 'checklist') {

@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { PRESETS, LIMITS } from './schema.mjs';
 import { prose, fit, pathText } from './fit.mjs';
 import { slugify } from '../../shared/output.mjs';
-import { planKey } from './plan-hash.mjs';
+import { planKey, DRAFT_PLAN_KEY } from './plan-hash.mjs';
 
 const MAX_FILES = 200;
 const MAX_TIMELINE = 20;
@@ -237,8 +237,11 @@ function slides(facts, title) {
 // What needs an answer comes straight after the verdict and the three numbers; the plan itself, the phases and the
 // risks follow for whoever wants them. Ids are fixed so the review items can point at them. An option label and
 // the `recommended` / `default` that name it are the same TODO string, so filling one placeholder fills all three.
-const DRAFT_KEY = 'plan-draft';
-const OPTION_A = todo('option A, the one you recommend, ≤ 8 words');
+// The verdict is the same call on every plan, so its heading is fixed: it is listed in the contents as "Your
+// verdict" and deep-linked as #verdict.
+const VERDICT_TITLE = 'Approve, change or stop this plan';
+const VERDICT_LABEL = 'Your verdict';
+const OPTION_A =todo('option A, the one you recommend, ≤ 8 words');
 const OPTION_B = todo('option B, ≤ 8 words');
 const OPTION_C = todo('option C: what happens if nobody decides, ≤ 8 words');
 
@@ -281,10 +284,10 @@ function plan(facts, title) {
     title: title ?? todo('the plan as one finding; aim for ≤ 8 words'),
     subtitle: todo('one line: what ships, by when, and what you need from the reader'),
     preset: 'plan',
-    key: title === undefined ? DRAFT_KEY : planKey({ title, sections: [] }),
+    key: title === undefined ? DRAFT_PLAN_KEY : planKey({ title, sections: [] }),
     ...meta(facts, ['date', 'repo', 'branch']),
     sections: [
-      tldr(['what ships and by when', 'what it costs', 'the decision you need from the reader']),
+      { ...tldr(['what ships and by when', 'what it costs', 'the decision you need from the reader']), title: todo("the plan's bottom line as one finding, ≤ 8 words") },
       {
         type: 'kpis',
         title: todo('the plan in three numbers, ≤ 8 words'),
@@ -343,7 +346,7 @@ function plan(facts, title) {
         summary: todo('the risks in one line'),
         text: todo('each risk as a "- " list item with how it is handled'),
       },
-      { type: 'verdict', text: todo('the overall question: ship this plan as written?') },
+      { type: 'verdict', id: 'verdict', title: VERDICT_TITLE, label: VERDICT_LABEL, text: todo('the overall question: ship this plan as written?') },
     ],
   };
 }

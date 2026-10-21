@@ -36,5 +36,8 @@ export function planKey(spec) {
   return spec.key ?? titleKey(spec);
 }
 
+/** The key `scaffold.mjs plan` writes when it has no title: a placeholder every untitled draft shares. */
+export const DRAFT_PLAN_KEY = 'plan-draft';
+
 /** The key to suggest when a plan has none. */
 export const suggestedPlanKey = (spec) => titleKey(spec);
