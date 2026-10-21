@@ -24,7 +24,7 @@ const MAX_ID = 80;
 const MAX_LABEL = 500;
 const MAX_QUESTION = 2000;
 const MAX_TEXT = 20000;
-const MAX_SHOWN = 20; // errors and warnings returned; the rest are counted in one line
+const MAX_SHOWN = 20; // errors and warnings listed in the result; errorCount and warningCount hold the true totals
 const ARTICLES = { decision: 'a decision', approval: 'an approval', question: 'a question' };
 
 const nullable = (schema) => ({ ...schema, type: [schema.type, 'null'] });
@@ -63,8 +63,9 @@ const collapse = (text) => String(text).replace(/\s+/g, ' ').trim();
 // JSON escapes the controls below U+0020. Everything else a reader cannot see, or that reorders or hides text from
 // a person but not from a model, is written out as a code point: format (zero-width, bidi, soft hyphen, word
 // joiner, Unicode tags, the byte order mark), private-use, unassigned and control characters, the line and
-// paragraph separators and the variation selectors. Letters, digits, punctuation and emoji stay as they are.
-const INVISIBLE = /[\p{Cf}\p{Co}\p{Cn}\p{Cc}\u2028\u2029\ufe00-\ufe0f\u{E0100}-\u{E01EF}]/gu;
+// paragraph separators and every variation selector (U+FE00-FE0F, U+E0100-E01EF and the Mongolian free ones,
+// U+180B-180D and U+180F). Letters, digits, punctuation and emoji stay as they are.
+const INVISIBLE = /[\p{Cf}\p{Co}\p{Cn}\p{Cc}\u2028\u2029\p{Variation_Selector}]/gu;
 const BMP = 0xffff;
 const hex = (code, width) => code.toString(16).padStart(width, '0');
 const escapeInvisible = (text) => text.replace(INVISIBLE, (c) => {

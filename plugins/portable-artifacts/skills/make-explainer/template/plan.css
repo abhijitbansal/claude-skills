@@ -128,6 +128,11 @@ main { counter-reset: plan-item; }
 [data-theme-name="mono"] .plan-why summary, [data-theme-name="mono"] .plan-default-k { font-size: var(--fs-xs); color: var(--accent); }
 [data-theme-name="mono"] .plan-item .chip { border-radius: 2px; }
 [data-theme-name="mono"] .plan-item strong { color: var(--accent); }
+/* A plan page in mono: the same rule for the whole page (title, section titles, the hero, kpi values, tables,
+   chips). Every weight is the one the theme ships, nothing is synthesized, and bold prose is marked by colour. */
+html[data-preset="plan"][data-theme-name="mono"] { font-synthesis: none; }
+html[data-preset="plan"][data-theme-name="mono"] :is(body, body *) { font-weight: 400; }
+html[data-preset="plan"][data-theme-name="mono"] :is(strong, b) { color: var(--accent); }
 
 /* brief: an executive memo. Soft corners, generous space, large serif numerals, a calmer frame. */
 [data-theme-name="brief"] .plan-item { --plan-r: 10px; --plan-gap: 22px; --plan-pad: 30px; --plan-num: var(--fs-xl); }

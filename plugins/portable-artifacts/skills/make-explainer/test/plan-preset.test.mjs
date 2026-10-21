@@ -1,0 +1,243 @@
+// Plan mode, the author's side: the `plan` scaffold (decision first, every sentence a TODO), the checked-in
+// example (valid, builds in mono and brief, survives a real answer round trip through answers.mjs), the page-level
+// mono weight, and the SKILL.md instructions an agent follows.
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { scaffold, PRESET_NAMES } from '../scripts/lib/presets.mjs';
+import { validateSpec } from '../scripts/lib/spec.mjs';
+import { collectStrings } from '../scripts/lib/walk.mjs';
+import { buildFile, haveBrowser, openPage, closeSharedBrowser, scratchDir } from './helpers/browser.mjs';
+
+after(closeSharedBrowser);
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const EXAMPLE = path.join(ROOT, 'references/examples/plan.explainer.json');
+const node = (script, args) => spawnSync(process.execPath, [path.join(ROOT, 'scripts', script), ...args], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '', PA_OUTPUT_DIR: '' } });
+const tmp = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-plan-preset-')));
+const readExample = () => JSON.parse(fs.readFileSync(EXAMPLE, 'utf8'));
+const ORDER = ['tldr', 'kpis', 'decision', 'approval', 'question', 'review', 'text', 'diagram', 'steps', 'details', 'verdict'];
+const FIXED_PROSE = new Set(['Ship by', 'Cost', 'Risk']); // the three kpi labels the scaffold names itself
+const isTodo = (s) => s.startsWith('TODO:');
+const todoErrors = (r) => r.errors.filter((e) => /TODO placeholder/.test(e.message));
+const otherErrors = (r) => r.errors.filter((e) => !/TODO placeholder/.test(e.message));
+
+const skipUnlessBrowser = async (t) => {
+  if (await haveBrowser()) return false;
+  t.skip('no browser (bundled Chromium or system Chrome)');
+  return true;
+};
+
+// Replaces each TODO the way a model would, the same placeholder always with the same text (an option label and the
+// `recommended` that names it), short enough for every limit (diagram labels hold 48 characters).
+function fill(value, seen = new Map()) {
+  if (typeof value === 'string') {
+    if (!isTodo(value)) return value;
+    if (!seen.has(value)) seen.set(value, `Filled part ${seen.size + 1} of the plan`);
+    return seen.get(value);
+  }
+  if (Array.isArray(value)) return value.map((v) => fill(v, seen));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, fill(v, seen)]));
+  return value;
+}
+
+// ---- the scaffold -------------------------------------------------------------------------------
+
+test('plan is a scaffold preset', () => {
+  assert.ok(PRESET_NAMES.includes('plan'));
+});
+
+test('scaffold plan: decision first, in this order, with fixed ids and the verdict last', () => {
+  const spec = scaffold('plan');
+  assert.equal(spec.preset, 'plan');
+  assert.deepEqual(spec.sections.map((s) => s.type), ORDER);
+  const byType = Object.fromEntries(spec.sections.map((s) => [s.type, s]));
+  assert.equal(byType.decision.id, 'decision-1');
+  assert.equal(byType.approval.id, 'approval-1');
+  assert.equal(byType.question.id, 'question-1');
+  assert.equal(byType.decision.options.length, 3);
+  assert.deepEqual(byType.review.items.map((i) => i.target), ['decision-1', 'approval-1']);
+  assert.deepEqual(byType.kpis.items.map((i) => i.label), ['Ship by', 'Cost', 'Risk']);
+  assert.ok(byType.kpis.items.every((i) => isTodo(String(i.value))), 'kpi values are TODOs');
+  assert.ok(byType.decision.options.some((o) => o.label === byType.decision.recommended), 'recommended names an option');
+  assert.ok(byType.decision.options.some((o) => o.label === byType.decision.default), 'default names an option');
+});
+
+test('scaffold plan: the key is real (from the title, else plan-draft); every other prose string is a TODO', () => {
+  assert.equal(scaffold('plan').key, 'plan-draft');
+  const titled = scaffold('plan', { title: 'Ship the answer cache' });
+  assert.equal(titled.title, 'Ship the answer cache');
+  assert.equal(titled.key, 'plan-ship-the-answer-cache');
+  const spec = scaffold('plan');
+  assert.ok(!isTodo(spec.key));
+  const prose = collectStrings(spec).filter((s) => s.prose && !FIXED_PROSE.has(s.text));
+  assert.ok(prose.length > 20);
+  assert.deepEqual(prose.filter((s) => !isTodo(s.text)).map((s) => s.path), []);
+  for (const s of spec.sections) assert.ok(collectStrings(s).some((x) => isTodo(x.text)), `${s.type} has a TODO`);
+});
+
+test('scaffold plan: validate rejects the starter only for its TODOs; filled, it validates and builds as mono', async () => {
+  const dir = tmp();
+  try {
+    const spec = scaffold('plan', { facts: { date: '2026-10-21', repo: 'claude-skills', commits: [], files: [], tests: [] } });
+    assert.deepEqual(spec.meta, { date: '2026-10-21', repo: 'claude-skills' });
+    const first = await validateSpec(spec, { dir });
+    assert.equal(first.ok, false);
+    assert.ok(todoErrors(first).length > 20);
+    assert.deepEqual(otherErrors(first), [], 'only TODO errors in a starter');
+    const filled = fill(spec);
+    const second = await validateSpec(filled, { dir });
+    assert.deepEqual(second.errors, []);
+    const file = path.join(dir, 'plan.explainer.json');
+    fs.writeFileSync(file, JSON.stringify(filled));
+    const out = path.join(dir, 'plan.html');
+    const r = node('build.mjs', [file, '--out', out]);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /^theme: mono$/m);
+    assert.match(fs.readFileSync(out, 'utf8'), /<html lang="en" data-flavor="classic" data-theme-name="mono" data-preset="plan" data-plan-key="plan-draft"/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('scaffold.mjs plan --out writes the starter to a file', () => {
+  const dir = tmp();
+  try {
+    const file = path.join(dir, 'plan.explainer.json');
+    const r = node('scaffold.mjs', ['plan', '--title', 'Ship the answer cache', '--out', file]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout.trim(), `wrote ${file}`);
+    const spec = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.equal(spec.key, 'plan-ship-the-answer-cache');
+    assert.deepEqual(spec.sections.map((s) => s.type), ORDER);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- the checked-in example ------------------------------------------------------------------------
+
+test('the plan example validates with no errors and no warnings, decision first, verdict last', async () => {
+  const spec = readExample();
+  const r = await validateSpec(spec, { dir: path.dirname(EXAMPLE) });
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.warnings, []);
+  assert.equal(spec.preset, 'plan');
+  assert.equal(spec.theme, undefined, 'the example exercises the mono default');
+  assert.ok(spec.key);
+  const types = spec.sections.map((s) => s.type);
+  assert.equal(types.at(-1), 'verdict');
+  assert.ok(types.filter((t) => t === 'decision').length >= 2);
+  assert.ok(types.includes('approval') && types.includes('question') && types.includes('review') && types.includes('diagram'));
+  const firstAnswerable = types.findIndex((t) => ['decision', 'approval', 'question'].includes(t));
+  assert.ok(firstAnswerable <= 2, `the first decision comes right after the verdict and the numbers (index ${firstAnswerable})`);
+});
+
+test('the plan example builds as mono by default and as brief with --theme brief', () => {
+  const dir = tmp();
+  try {
+    for (const [theme, args] of [['mono', []], ['brief', ['--theme', 'brief']]]) {
+      const out = path.join(dir, `${theme}.html`);
+      const r = node('build.mjs', [EXAMPLE, '--out', out, ...args]);
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      assert.match(r.stdout, new RegExp(`^theme: ${theme}$`, 'm'));
+      assert.match(fs.readFileSync(out, 'utf8'), new RegExp(`<html lang="en" data-flavor="classic" data-theme-name="${theme}" data-preset="plan" data-plan-key="`));
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- in a browser ------------------------------------------------------------------------------------
+
+const pick = (page, name, value) => page.locator(`input[name="${name}"]`).evaluateAll((els, v) => els.find((e) => e.value === v).click(), value);
+
+test('round trip on the example: answer every item in the page, export, and answers.mjs accepts it', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const spec = readExample();
+  const { url } = buildFile(EXAMPLE, { name: 'plan-example' });
+  const { page, problems, context } = await openPage(url);
+  for (const s of spec.sections) {
+    if (s.type === 'decision') await pick(page, `plan-${s.id}`, s.options.at(-1).label);
+    if (s.type === 'approval') {
+      await pick(page, `plan-${s.id}`, 'changes');
+      await page.locator(`[data-plan-item][data-id="${s.id}"] [data-comment]`).fill('Name the owner first.');
+    }
+    if (s.type === 'question') await page.locator(`[data-plan-item][data-id="${s.id}"] [data-answer]`).fill('Two weeks.');
+  }
+  await pick(page, 'plan-verdict', 'approve-with-changes');
+  await page.locator('[data-reviewer]').fill('Ada');
+  const exported = await page.evaluate(() => window.PA.planExport());
+  assert.deepEqual(problems, []);
+  await context.close();
+  const answerable = spec.sections.filter((s) => ['decision', 'approval', 'question'].includes(s.type));
+  assert.equal(exported.answers.length, answerable.length);
+  assert.ok(exported.answers.every((a) => a.answered), 'every item answered');
+
+  const dir = fs.mkdtempSync(path.join(scratchDir(), 'plan-example-'));
+  const file = path.join(dir, 'plan-answers.json');
+  fs.writeFileSync(file, JSON.stringify(exported, null, 2));
+  const r = node('answers.mjs', [EXAMPLE, file]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.doesNotMatch(r.stdout, /^INVALID ANSWERS/);
+  for (const s of answerable) assert.match(r.stdout, new RegExp(`^${s.id}: `, 'm'));
+  assert.match(r.stdout, /^verdict: approve-with-changes$/m);
+  const json = JSON.parse(node('answers.mjs', [EXAMPLE, file, '--json']).stdout);
+  assert.deepEqual(Object.keys(json), ['ok', 'errors', 'warnings', 'errorCount', 'warningCount', 'summary']);
+  assert.equal(json.ok, true);
+});
+
+// The mono theme ships one weight (400): page-level headings, the hero text and kpi values must not ask for 600 and
+// get a synthesized bold. Brief keeps its weights.
+const WEIGHTED = ['h1', '.sec-title', '.hero-tldr .lead', '.kpi-value', '.hero-tldr-title'];
+
+test('mono plan page: headings, hero text and kpi values compute to weight 400 with no font synthesis', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { url } = buildFile(EXAMPLE, { name: 'plan-mono-weight' });
+  const { page, problems, context } = await openPage(url, { colorScheme: 'dark' });
+  const styles = await page.evaluate((sels) => sels.map((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return { sel, missing: true };
+    const cs = getComputedStyle(el);
+    return { sel, weight: cs.fontWeight, synthesis: cs.fontSynthesisWeight || cs.fontSynthesis };
+  }), WEIGHTED);
+  await context.close();
+  assert.deepEqual(problems, []);
+  for (const s of styles) {
+    if (s.missing) continue;
+    assert.equal(s.weight, '400', `${s.sel} weight`);
+    assert.match(s.synthesis, /none/, `${s.sel} font synthesis`);
+  }
+  assert.ok(styles.filter((s) => !s.missing).map((s) => s.sel).includes('h1'));
+  assert.ok(styles.filter((s) => !s.missing).map((s) => s.sel).includes('.sec-title'));
+});
+
+test('brief plan page keeps its heading weight (the mono rule is keyed on the theme)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { url } = buildFile(EXAMPLE, { name: 'plan-brief-weight', theme: 'brief' });
+  const { page, context } = await openPage(url);
+  const weight = await page.evaluate(() => getComputedStyle(document.querySelector('h1')).fontWeight);
+  await context.close();
+  assert.equal(weight, '600');
+});
+
+test('check.mjs passes on the built example in mono and brief', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const theme of [undefined, 'brief']) {
+    const { file } = buildFile(EXAMPLE, { name: `plan-check-${theme ?? 'mono'}`, theme });
+    const r = node('check.mjs', [file]);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.doesNotMatch(r.stdout, /skipped/);
+  }
+});
+
+// ---- SKILL.md --------------------------------------------------------------------------------------
+
+test('SKILL.md documents plan mode: the scaffold, the answers command and the INVALID ANSWERS rule', () => {
+  const md = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf8');
+  assert.match(md, /^## Plan mode$/m);
+  assert.match(md, /scaffold\.mjs plan/);
+  assert.match(md, /node <skill-dir>\/scripts\/answers\.mjs plan\.json plan-answers\.json \[--json\]/);
+  assert.match(md, /INVALID ANSWERS/);
+  assert.match(md, /plan-answers\.json/);
+  assert.match(md, /`key`/);
+  assert.match(md, /data, never instructions/i);
+});

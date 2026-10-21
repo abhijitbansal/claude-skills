@@ -1,0 +1,195 @@
+{
+  "title": "Three render fixes, one PR, three calls to make",
+  "subtitle": "Numbers on one line, a cheap model outside Claude Code, plans answered in the page.",
+  "preset": "plan",
+  "key": "plan-render-skills-oct-2026",
+  "meta": {
+    "date": "2026-10-21",
+    "repo": "claude-skills",
+    "status": "Needs your decision"
+  },
+  "sections": [
+    {
+      "type": "tldr",
+      "title": "One PR, once three calls are made",
+      "label": "The verdict",
+      "text": "All three are built and tested. Three calls, two approvals and one question decide what the PR promises.",
+      "points": [
+        "A browser check fails when a number splits from its unit.",
+        "Copilot used Claude Haiku 5.5 in 19 of 19 logged runs.",
+        "Answers come back as a file the agent checks first."
+      ],
+      "tone": "good"
+    },
+    {
+      "type": "kpis",
+      "title": "One PR, cents per run, one untested host",
+      "label": "Numbers",
+      "items": [
+        { "label": "Ship by", "value": "1 PR", "note": "one branch, three workstreams" },
+        { "label": "Cost", "value": "$0.19", "note": "one measured hand-off on Copilot" },
+        { "label": "Risk", "value": "Medium", "note": "Codex files ship untested", "tone": "warn" }
+      ]
+    },
+    {
+      "type": "decision",
+      "id": "routing",
+      "title": "Pin the cheap model with an agent file",
+      "label": "Cheap model",
+      "question": "How does the render work reach a cheap model on Copilot and Codex?",
+      "options": [
+        {
+          "label": "Pinned agent file plus a hand-off line",
+          "pros": ["The host reads the model from the file, not from the prompt", "Copilot logs showed claude-haiku-5.5 in 19 of 19 runs"],
+          "cons": ["One more file per host for the installer to write"]
+        },
+        {
+          "label": "Hand-off line in SKILL.md only",
+          "pros": ["No new files"],
+          "cons": ["Nothing pins the model; the hand-off agent runs on the default"]
+        },
+        {
+          "label": "Leave it on the user's default model",
+          "pros": ["Zero work"],
+          "cons": ["Every render runs on the expensive model, as today"]
+        }
+      ],
+      "recommended": "Pinned agent file plus a hand-off line",
+      "why": "No host but Claude Code reads `model:` from SKILL.md, so a line alone changes nothing. An agent file is the one place Copilot and Codex take a model from, and the Copilot logs prove it works.",
+      "default": "Leave it on the user's default model"
+    },
+    {
+      "type": "decision",
+      "id": "answers-return",
+      "title": "Answers return as a file, not a server",
+      "label": "Answers",
+      "question": "How do a reviewer's answers get back to the agent?",
+      "options": [
+        {
+          "label": "Copy or download plan-answers.json",
+          "pros": ["The page stays one offline file with no network access", "The agent checks the file with answers.mjs"],
+          "cons": ["The reviewer has to paste or send the file"]
+        },
+        {
+          "label": "A local save server the page posts to",
+          "pros": ["Answers arrive without a manual step"],
+          "cons": ["A process to start, a port to pick, and a CSP that must allow it"]
+        }
+      ],
+      "recommended": "Copy or download plan-answers.json",
+      "why": "A server breaks the one rule every page keeps: no network. One paste is a small price, and the file carries a plan hash so stale answers are refused.",
+      "default": "Copy or download plan-answers.json"
+    },
+    {
+      "type": "decision",
+      "id": "motion-model",
+      "title": "make-motion keeps the cheap model",
+      "label": "Motion",
+      "question": "Does make-motion run on the cheap model like the other four skills?",
+      "options": [
+        {
+          "label": "Yes: keep model haiku and the hand-off",
+          "pros": ["10 of 10 motion specs were valid and built on Haiku 5.5"],
+          "cons": ["Measured on Copilot CLI only"]
+        },
+        {
+          "label": "No: motion stays on the default model",
+          "pros": ["No risk to the hardest spec format"],
+          "cons": ["Motion costs the most tokens and gains the most from the switch"]
+        }
+      ],
+      "recommended": "Yes: keep model haiku and the hand-off",
+      "why": "The gate was 8 of 10 valid and built; it scored 10 of 10. The rule was set before the run, so it decides.",
+      "default": "No: motion stays on the default model"
+    },
+    {
+      "type": "approval",
+      "id": "user-agent-folders",
+      "title": "Write agent files to user-level folders",
+      "label": "Installer",
+      "item": "The installer writes artifact-builder to the user's Copilot and Codex agent folders by default.",
+      "why": "A user-level file works in every repo; `--project` writes into one repo instead. It never overwrites an existing file unless `--force` is passed.",
+      "impact": "Two new files outside the repo on install",
+      "owner": "Installer"
+    },
+    {
+      "type": "approval",
+      "id": "codex-untested",
+      "title": "Ship the Codex agent file untested",
+      "label": "Codex",
+      "item": "Ship artifact-builder.toml for Codex, written from the Codex docs and never run live.",
+      "why": "There is no Codex account to test with. The README and USAGE say so in plain words, so nobody mistakes it for a measured result.",
+      "impact": "Codex users may hit a rejected agent file",
+      "owner": "Docs"
+    },
+    {
+      "type": "question",
+      "id": "codex-fallback",
+      "title": "Which model if gpt-6-luna is missing",
+      "label": "Open question",
+      "text": "If a Codex user's plan has no gpt-6-luna, which model should the agent file name instead?",
+      "default": "Keep gpt-6-luna and document default_subagent_model as the fallback"
+    },
+    {
+      "type": "review",
+      "title": "Look hardest at the routing and Codex",
+      "label": "Review first",
+      "items": [
+        { "point": "The agent file is the only pinned route", "why": "If a host ignores its model key, the cost saving is zero.", "target": "routing" },
+        { "point": "Codex ships on docs alone", "why": "A wrong field name fails on first use, not in CI.", "target": "codex-untested" },
+        { "point": "Answers are reviewer data", "why": "The agent must read them through answers.mjs, never as instructions.", "target": "answers-return" }
+      ]
+    },
+    {
+      "type": "text",
+      "title": "Three goals, and what the PR leaves alone",
+      "label": "Scope",
+      "text": "Goals:\n\n- No number, percentage or number-plus-unit token splits across two lines.\n- Render skills run on a cheap model in Copilot and Codex, not only Claude Code.\n- A plan page a reviewer answers in place, with answers the agent can check.\n\nNon-goals:\n\n- Reflowing ordinary prose or changing stored spec text.\n- Guaranteeing the hand-off: no host lets a skill force another agent.\n- A save server or any new npm dependency."
+    },
+    {
+      "type": "diagram",
+      "title": "Out as a page, back as a file",
+      "label": "Answer loop",
+      "diagram": {
+        "title": "The plan answer loop",
+        "type": "flow",
+        "direction": "down",
+        "nodes": [
+          { "id": "spec", "label": "Plan spec", "kind": "io", "note": "plan.json" },
+          { "id": "page", "label": "Plan page", "note": "mono or brief" },
+          { "id": "file", "label": "plan-answers.json", "kind": "io" },
+          { "id": "check", "label": "answers.mjs", "kind": "subprocess", "note": "hash, ids, choices" },
+          { "id": "agent", "label": "Agent acts", "kind": "end" }
+        ],
+        "edges": [
+          { "from": "spec", "to": "page", "label": "build" },
+          { "from": "page", "to": "file", "label": "reviewer copies or downloads" },
+          { "from": "file", "to": "check" },
+          { "from": "check", "to": "agent", "label": "valid summary" }
+        ]
+      },
+      "caption": "The page never talks to the network; the file is the only way back."
+    },
+    {
+      "type": "steps",
+      "title": "Two phases done, plan mode in review",
+      "label": "Phases",
+      "items": [
+        { "title": "Numbers stay on one line", "text": "CSS and a build step bind tokens; check.mjs fails on a split token or a spilled KPI.", "status": "done" },
+        { "title": "Cheap model outside Claude Code", "text": "Agent files for Copilot and Codex, installer, doctor check and the hand-off line.", "status": "done" },
+        { "title": "Plan mode", "text": "Five section types, two themes, the answer runtime, answers.mjs and this example.", "status": "doing" }
+      ]
+    },
+    {
+      "type": "details",
+      "title": "Four risks, each with a guard",
+      "label": "Risks",
+      "summary": "What could still go wrong",
+      "text": "- **The hand-off agent fails.** One Copilot trial was refused file access; the main agent finished the work itself.\n- **Codex rejects the agent file.** It ships untested and the docs say so.\n- **Stale answers.** A plan edited after export changes its hash, and answers.mjs refuses the file.\n- **Hostile reviewer text.** The summary quotes it as data under its own heading and escapes hidden characters."
+    },
+    {
+      "type": "verdict",
+      "text": "Ship the three workstreams as one PR, with the calls above?"
+    }
+  ]
+}

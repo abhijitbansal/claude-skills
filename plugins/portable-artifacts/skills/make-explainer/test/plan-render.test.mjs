@@ -238,7 +238,7 @@ const PLAN_JS_MARK = PLAN_JS.split('\n')[0];
 
 test('a built plan page: the theme name, the plan key and the plan hash on <html>; plan.css and plan.js once', async () => {
   const { html } = await build(plan([decision(), approval(), question(), review(), verdict()]));
-  assert.match(html, /<html lang="en" data-flavor="classic" data-theme-name="mono" data-plan-key="plan-mode" data-plan-hash="[0-9a-f]{12}">/);
+  assert.match(html, /<html lang="en" data-flavor="classic" data-theme-name="mono" data-preset="plan" data-plan-key="plan-mode" data-plan-hash="[0-9a-f]{12}">/);
   assert.equal(html.split(PLAN_CSS_MARK).length - 1, 1, 'plan.css once');
   assert.equal(html.split(PLAN_JS_MARK).length - 1, 1, 'plan.js once');
   assert.match(html, /<a class="plan-review-go" href="#storage">/);
@@ -263,7 +263,7 @@ test('a plan as a deck: no inputs, no plan runtime, no plan attributes, the note
   assert.ok(!html.includes('<textarea'));
   assert.ok(!html.includes(PLAN_JS_MARK));
   assert.ok(!html.includes('data-plan-key'));
-  assert.match(html, /<html lang="en" data-flavor="classic" data-theme-name="mono">/);
+  assert.match(html, /<html lang="en" data-flavor="classic" data-theme-name="mono" data-preset="plan">/);
   assert.equal(html.split('Answers are collected in the page version.').length - 1, 4);
 });
 

@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { themeCss, loadTheme } from '../../shared/theme.mjs';
-import { EXPLAINER_THEME } from './default-theme.mjs';
+import { specTheme } from './default-theme.mjs';
 import { pathJoin } from '../../shared/errors.mjs';
 import { META_KEYS } from './schema.mjs';
 import { SECTIONS } from './sections.mjs';
@@ -293,7 +293,7 @@ function flavorSheets(flavor, slides) {
 export async function buildPage(spec, { dir = process.cwd(), theme, out, env = process.env, heroImage } = {}) {
   const problems = unsupported(spec);
   if (problems.length > 0) throw new BuildError(problems);
-  const themeData = loadTheme(theme ?? spec.theme ?? EXPLAINER_THEME);
+  const themeData = loadTheme(theme ?? specTheme(spec));
   const target = resolveOutput({ out, title: spec.title, env });
   const slug = pageSlug(target);
   const slides = isSlides(spec);
@@ -336,6 +336,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     BASECSS: fs.readFileSync(BASE_CSS, 'utf8').replace(/\n$/, ''),
     FLAVOR: flavor,
     THEMENAME: esc(themeData.name),
+    PRESETATTR: spec.preset === undefined ? '' : ` data-preset="${esc(spec.preset)}"`,
     PLANATTRS: planAttrs(spec, slides),
     FLAVORCSS: flavorSheets(flavor, slides),
     HEROART: flavored && !slides ? heroArt(spec, themeData, typeof heroImage === 'function' ? undefined : heroImage) : '',

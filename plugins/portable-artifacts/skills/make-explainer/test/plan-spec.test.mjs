@@ -48,8 +48,8 @@ test('plan is a preset and the limits carry the plan counts', () => {
   assert.deepEqual(LIMITS.reviewItems, [1, 5]);
 });
 
-test('scaffold lists only the presets it can build (plan arrives with its builder)', () => {
-  assert.deepEqual(PRESET_NAMES, ['recap', 'checklist', 'concept', 'slides']);
+test('scaffold lists every preset it can build, plan included', () => {
+  assert.deepEqual(PRESET_NAMES, ['recap', 'checklist', 'concept', 'slides', 'plan']);
 });
 
 // ---- required fields ------------------------------------------------------------------------------
@@ -331,10 +331,10 @@ test('slides: a question default counts toward the word budget, a decision defau
   assert.deepEqual(deck(decision({ default: long })), []);
 });
 
-test('scaffold: plan says it has no starter yet (exit 2)', () => {
+test('scaffold: plan has a starter (exit 0, preset plan)', () => {
   const r = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/scaffold.mjs', import.meta.url)), 'plan'], { encoding: 'utf8' });
-  assert.equal(r.status, 2);
-  assert.match(r.stderr, /^plan has no starter yet; write the spec by hand or pick one of recap, checklist, concept, slides/);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(JSON.parse(r.stdout).preset, 'plan');
 });
 
 test('slides: untitled plan sections are named after their type', () => {

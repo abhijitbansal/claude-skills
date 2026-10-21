@@ -12,7 +12,7 @@ import { fit, cleanText } from '../scripts/lib/fit.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const node = (script, args, env = {}) => spawnSync(process.execPath, [path.join(ROOT, 'scripts', script), ...args], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '', ...env } });
-const PRESET_NAMES = ['recap', 'checklist', 'concept', 'slides'];
+const PRESET_NAMES = ['recap', 'checklist', 'concept', 'slides', 'plan'];
 
 function sandbox() {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-scaffold-')));
@@ -41,11 +41,18 @@ function scaffold(preset, { facts, title, dir } = {}) {
   return JSON.parse(r.stdout);
 }
 
-/** Replaces every "TODO: ..." string with distinct real prose, the way a model would. */
-function fillTodos(value, counter = { n: 0 }) {
-  if (typeof value === 'string') return value.startsWith('TODO:') ? `Filled ${++counter.n}: this field now holds a real sentence.` : value;
-  if (Array.isArray(value)) return value.map((v) => fillTodos(v, counter));
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, fillTodos(v, counter)]));
+/**
+ * Replaces every "TODO: ..." string with distinct real prose, the way a model would. The same placeholder gets the
+ * same text (a plan's option label and the `recommended` / `default` that name it must stay equal).
+ */
+function fillTodos(value, seen = new Map()) {
+  if (typeof value === 'string') {
+    if (!value.startsWith('TODO:')) return value;
+    if (!seen.has(value)) seen.set(value, `Filled ${seen.size + 1}: this field now holds a real sentence.`);
+    return seen.get(value);
+  }
+  if (Array.isArray(value)) return value.map((v) => fillTodos(v, seen));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, fillTodos(v, seen)]));
   return value;
 }
 
@@ -359,7 +366,7 @@ test('a long branch, a long title, an emoji subject and a TODO subject: only rea
     tests: [],
   };
   try {
-    for (const preset of ['recap', 'checklist', 'concept', 'slides']) {
+    for (const preset of PRESET_NAMES) {
       const spec = scaffold(preset, { facts, dir });
       const first = await validateSpec(spec, { dir });
       assert.deepEqual(only(first), [], `${preset}: only TODO errors may remain`);
@@ -464,7 +471,7 @@ test('--title "" is refused instead of producing an empty title', () => {
 });
 
 test('every titled TODO section carries a label TODO and a short-title prompt', () => {
-  for (const preset of ['recap', 'checklist', 'concept', 'slides']) {
+  for (const preset of PRESET_NAMES) {
     const spec = scaffold(preset);
     for (const s of spec.sections.filter((x) => typeof x.title === 'string' && x.title.startsWith('TODO:'))) {
       assert.equal(s.label, 'TODO: 2-4 word label', `${preset} ${s.type}`);

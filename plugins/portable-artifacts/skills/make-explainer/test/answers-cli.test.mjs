@@ -152,6 +152,7 @@ test('wrong argument count or an unknown flag exits 2 with the usage', () => {
     const r = run(...args);
     assert.equal(r.status, 2, args.join(' '));
     assert.match(r.stderr, /usage: node scripts\/answers\.mjs <plan\.json> <answers\.json> \[--json\]/);
+    assert.match(r.stderr, /--json prints \{ ok, errors, warnings, errorCount, warningCount, summary \}/, 'the usage names the --json shape');
   }
 });
 

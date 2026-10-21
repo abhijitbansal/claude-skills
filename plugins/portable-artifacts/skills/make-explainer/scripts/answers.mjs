@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // node scripts/answers.mjs <plan.json> <answers.json> [--json]
+// --json prints one line: { ok, errors, warnings, errorCount, warningCount, summary }.
 // Check a plan-answers/1 file (from the plan page's Copy or Download) against its plan and print a summary.
 // exit 0 ok (warnings are printed), 1 the plan or the answers have errors, 2 usage/IO
 import fs from 'node:fs';
@@ -7,7 +8,7 @@ import { loadSpec, validateSpec, exitSpecUsage } from './lib/spec.mjs';
 import { checkAnswers } from './lib/answers.mjs';
 import { UsageError, parseCli } from '../shared/cli.mjs';
 
-const USAGE = 'node scripts/answers.mjs <plan.json> <answers.json> [--json]';
+const USAGE = 'node scripts/answers.mjs <plan.json> <answers.json> [--json] (--json prints { ok, errors, warnings, errorCount, warningCount, summary })';
 const OPTIONS = { json: { type: 'boolean' } };
 const MAX_ANSWERS_BYTES = 2 * 1024 * 1024; // a real file is a few kilobytes
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;

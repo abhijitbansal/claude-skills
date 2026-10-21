@@ -41,6 +41,22 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 - `onFail` (markdown-lite) replaces the default "If something fails" advice.
 - Tag a bug fixed during review `regression`, a hardware-only step `device`.
 
+## Plan mode
+
+Five types for a plan a reviewer answers on the page (`preset: "plan"`; SKILL.md "Plan mode" has the workflow). `decision`, `approval` and `question` require an `id` (`^[a-z][a-z0-9-]*$`, at most 80 characters, unique on the page, not `verdict` or `plan-verdict`): the answers file keys on it. Any page with one of them needs a root `key` and a `verdict` as its last section.
+
+| Type | Fields | Notes |
+|---|---|---|
+| `decision` | `id`*, `question`* (≤ 500 characters), `options[]`* (2-5): `label`* (≤ 200 characters, unique ignoring case, no leading or trailing space), `pros[]`, `cons[]`; `recommended`* (one option label exactly), `why`*, `default` (one option label exactly) | The reader picks one option or writes an override in the comment box. `recommended` gets a Recommended chip; `why` says why, with the number that decides it; `default` is what happens if nobody answers. One line per option. |
+| `approval` | `id`*, `item`* (≤ 500 characters), `why`*, `impact`, `owner` | The reader chooses Approve, Needs changes or Reject, with an optional comment. |
+| `question` | `id`*, `text`* (≤ 500 characters), `default` | Free-text answer. A blank answer means the `default` applies, and the export says so. |
+| `review` | `items[]`* (1-5): `point`*, `why`*, `target` | "Review these first": the places to look hardest. `target` is the explicit `id` of the section it points at (not this review); the page links to it. Not answered. |
+| `verdict` | `text` | The overall control: Approve, Approve with changes or Not yet, the reviewer's name, and the Copy answers and Download `plan-answers.json` buttons. At most one, and it must be the last section. |
+
+- Answers save in the reader's browser under the plan's `key` as they go; a plan edited since the last visit starts fresh, with a notice. Blocked storage is tolerated and stated.
+- In a deck the controls do not run: a slide shows the question, the options with the recommendation, and a note that answers are collected in the page version.
+- Limits on a plan page: 2-5 options per decision, 1-5 review items.
+
 ## Diagram
 
 `diagram`: `diagram`* and `caption`. `diagram` is either a make-diagram spec written inline as an object, or a path to a `.json` file in the explainer's folder (at most 1 MB). The full make-diagram rules apply, geometry lint included, and its errors are reported under the section (`sections[2].diagram.nodes[0].label: …`).
@@ -83,4 +99,4 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 
 ## Which section for what
 
-Verdict first (`tldr`), then numbers (`kpis`), then the story (`text`, `steps`, `timeline`), the evidence (`files`, `table`, `chart`, `diagram`), what could go wrong (`risks`, `callout`), and last what to do by hand (`checklist`). A recap is `tldr`, `kpis`, `text`, `files`, `timeline`, `risks`; a concept page is `tldr`, `text`, `cards`, `steps`; a deck is one claim per section.
+Verdict first (`tldr`), then numbers (`kpis`), then the story (`text`, `steps`, `timeline`), the evidence (`files`, `table`, `chart`, `diagram`), what could go wrong (`risks`, `callout`), and last what to do by hand (`checklist`). A recap is `tldr`, `kpis`, `text`, `files`, `timeline`, `risks`; a concept page is `tldr`, `text`, `cards`, `steps`; a deck is one claim per section. A plan is decision first: `tldr`, `kpis`, the `decision`, `approval` and `question` sections, `review`, then `text` (goals and non-goals), `diagram`, `steps`, `details` (risks) and `verdict` last.

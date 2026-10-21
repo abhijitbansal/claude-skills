@@ -408,6 +408,12 @@ test('Unicode tags, variation selectors, word joiners and soft hyphens are writt
   assert.match(names.errors[0].path, /unsafe property name/);
 });
 
+test('Mongolian free variation selectors (U+180B-U+180D, U+180F) are written as code points, never raw', () => {
+  const spec = plan();
+  const line = checkAnswers(spec, answersFor(spec, { reviewer: 'A᠋B᠌C᠍D᠏E' })).summary.split('\n').find((l) => l.startsWith('reviewer:'));
+  assert.equal(line, 'reviewer: "A\\u180bB\\u180cC\\u180dD\\u180fE"');
+});
+
 test('ordinary letters, accents and emoji stay readable in reviewer text', () => {
   const spec = plan();
   const r = checkAnswers(spec, answersFor(spec, { reviewer: 'Zoë 🚀 café' }));
