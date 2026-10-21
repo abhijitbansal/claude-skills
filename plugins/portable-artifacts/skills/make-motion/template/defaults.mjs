@@ -3,6 +3,7 @@
 const DEFAULTS = Object.freeze({ size: [1920, 1080], fps: 30 });
 export const FADE_SECONDS = 0.4;
 export const TYPING_SECONDS_PER_CHAR = 0.035;
+export const ARROW_HEAD_LENGTH = 3; // an arrow head is this many stroke widths long
 
 // A `typing` text's characters as a reader counts them: grapheme clusters, so an emoji, a ZWJ sequence, a flag or a
 // letter with a combining accent is one character and is never typed in halves.

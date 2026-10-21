@@ -11,7 +11,7 @@ import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, PITCHED_CUES, MAX_CUES, 
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
-import { EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, typingLength } from '../../template/defaults.mjs';
+import { EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, ARROW_HEAD_LENGTH, typingLength } from '../../template/defaults.mjs';
 
 export class UsageError extends Error {}
 
@@ -355,10 +355,26 @@ function checkAudio(spec, dir, errors) {
 
 // `elevated` belongs to rects, `cap` and `arrow` to lines.
 const SHAPE_ONLY = { elevated: 'rect', cap: 'line', arrow: 'line' };
+const DEFAULT_LINE_WIDTH = 100;
+const DEFAULT_LINE_STROKE = 4;
 function checkShapeStyle(el, base, errors) {
   for (const [key, shape] of Object.entries(SHAPE_ONLY)) {
-    if (el[key] !== undefined && el.shape !== shape) errors.push({ path: pathJoin(base, key), message: `only valid on a ${shape} shape` });
+    if (el[key] !== undefined && el[key] !== false && el.shape !== shape) errors.push({ path: pathJoin(base, key), message: `only valid on a ${shape} shape` });
   }
+  if (el.shape === 'line') checkLineLength(el, base, errors);
+}
+
+// An arrow head takes ARROW_HEAD_LENGTH stroke widths off the line and a round cap half a stroke width at each end: the
+// line must be longer than what they use, or it would vanish or run backwards.
+function checkLineLength(el, base, errors) {
+  const stroke = el.strokeWidth ?? DEFAULT_LINE_STROKE;
+  const width = el.width ?? DEFAULT_LINE_WIDTH;
+  const round = el.cap === 'round';
+  const arrow = el.arrow === 'end';
+  const minimum = (arrow ? ARROW_HEAD_LENGTH * stroke : 0) + (round ? (arrow ? 0.5 : 1) * stroke : 0);
+  if (!(arrow || round) || width > minimum) return;
+  const what = arrow ? `an arrow${round ? ' and a round cap' : ''}` : 'a round cap';
+  errors.push({ path: pathJoin(base, 'width'), message: `${width} is too short for ${what} with strokeWidth ${stroke}; the width must be more than ${minimum}` });
 }
 
 // A cue is timed like an audio track (`scene` + `at`); a `note` tunes only the pitched cues.

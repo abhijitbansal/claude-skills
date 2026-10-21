@@ -150,6 +150,59 @@ test('a line without arrow draws no path node', async (t) => {
   return undefined;
 });
 
+// ---- review follow-ups: caps, arrows, elevated ------------------------------------------------
+
+test('a round-cap line stays hidden until the drawn length passes its cap, then shows; draw 0 is blank', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const found = await probed(spec([line({ cap: 'round', keyframes: [{ t: 0, draw: 0 }, { t: 1, draw: 1 }] })]), () => {
+    const node = document.querySelector('.el.shape line');
+    const at = (sec) => { window.__motion.seek(sec); return getComputedStyle(node).visibility; };
+    // width 200, stroke 10: the cap is 5 px and the line 190 px long, so draw 0.015 draws 2.85 px
+    return { zero: at(0), tiny: at(0.015), cap: at(0.026), some: at(0.05), done: at(1.5) };
+  });
+  assert.deepEqual(found, { zero: 'hidden', tiny: 'hidden', cap: 'hidden', some: 'visible', done: 'visible' });
+  return undefined;
+});
+
+test('a butt-cap line is never hidden by draw: only round caps make a dot', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const found = await probed(spec([line({ keyframes: [{ t: 0, draw: 0 }, { t: 1, draw: 1 }] })]), () => {
+    const node = document.querySelector('.el.shape line');
+    window.__motion.seek(0.015);
+    return getComputedStyle(node).visibility;
+  });
+  assert.equal(found, 'visible');
+  return undefined;
+});
+
+test('an arrow or round cap needs a line longer than its head and caps, and the error names the minimum width', () => {
+  assert.deepEqual(errs(spec([line({ arrow: 'end', width: 20 })])), ['scenes[0].elements[0].width: 20 is too short for an arrow with strokeWidth 10; the width must be more than 30']);
+  assert.deepEqual(errs(spec([line({ arrow: 'end', cap: 'round', width: 32 })])), ['scenes[0].elements[0].width: 32 is too short for an arrow and a round cap with strokeWidth 10; the width must be more than 35']);
+  assert.deepEqual(errs(spec([line({ cap: 'round', width: 8 })])), ['scenes[0].elements[0].width: 8 is too short for a round cap with strokeWidth 10; the width must be more than 10']);
+  assert.deepEqual(errs(spec([line({ arrow: 'end', cap: 'round', width: 36 })])), []);
+  assert.deepEqual(errs(spec([line({ arrow: 'end', width: undefined })])), [], 'the default width of 100 clears a 10 px stroke');
+});
+
+test('elevated follows draw, is left off a stroke-only rect, and elevated: false is fine on any shape', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  assert.deepEqual(errs(spec([{ ...rect({ shape: 'ellipse' }), elevated: false }, { ...line(), elevated: false }])), []);
+  const found = await probed(spec([
+    rect({ id: 'card', elevated: true, fill: '#202020', keyframes: [{ t: 0, draw: 0 }, { t: 1, draw: 1 }] }),
+    rect({ id: 'frame', x: 300, elevated: true, stroke: '#ffffff', strokeWidth: 2 }),
+  ]), () => {
+    const offsets = () => [...document.querySelectorAll('[data-id="card"] svg > *')].map((n) => n.getAttribute('stroke-dashoffset'));
+    window.__motion.seek(0);
+    const start = offsets();
+    window.__motion.seek(1.5);
+    return { start, end: offsets(), frameNodes: document.querySelectorAll('[data-id="frame"] svg > *').length, frameFill: document.querySelector('[data-id="frame"] rect').getAttribute('fill') };
+  });
+  assert.deepEqual(found.start, ['1', '1'], 'the highlight is undrawn with the stroke');
+  assert.deepEqual(found.end, ['0', '0']);
+  assert.equal(found.frameNodes, 1, 'no highlight on a stroke-only rect');
+  assert.equal(found.frameFill, 'none');
+  return undefined;
+});
+
 // ---- mono precedence ---------------------------------------------------------------------------
 
 test('font mono wins over role title: the mono face, mono weight and no title class', async (t) => {

@@ -1,7 +1,7 @@
 // Browser renderer: builds the stage DOM from the spec and exposes
 // window.__motion for the preview UI and the Playwright frame loop.
 import { buildTimeline, seekTo } from './timeline.mjs';
-import { withDefaults, resolveColor, graphemes, typingLength } from './defaults.mjs';
+import { withDefaults, resolveColor, graphemes, typingLength, ARROW_HEAD_LENGTH } from './defaults.mjs';
 import { resolveAudio } from './audio.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 
@@ -10,8 +10,7 @@ const MODE = document.querySelector('meta[name="motion-mode"]')?.content ?? 'pre
 const SCENE_END_EPSILON = 1e-9;
 const ELEVATED_HIGHLIGHT = 'rgba(255,255,255,.06)'; // the 1 px inset edge of an `elevated` rect
 const ELEVATED_LIFT = 6; // percent of the text colour an elevated fill moves toward
-const ARROW_LENGTH = 3; // an arrow head is this many stroke widths long...
-const ARROW_HALF_WIDTH = 1.5; // ...and this many stroke widths either side of the line
+const ARROW_HALF_WIDTH = 1.5; // an arrow head reaches this many stroke widths either side of the line (it is ARROW_HEAD_LENGTH long)
 const ARROW_DRAW_SHOWN = 0.98; // the head appears once the line is drawn this far
 const VIGNETTE = 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)'; // clear in the middle, 0.55 black at the corners
 const GRAIN_FREQUENCY = 0.8; // feTurbulence base frequency of the film grain, in 1/px
@@ -70,7 +69,6 @@ function themedLook(theme) {
       font: sans,
       range: { category: [c.cat1, c.cat2, c.cat3, c.cat4, c.cat5, c.cat6] },
       mark: { color: c.accent },
-      line: { color: c.accent },
       bar: { ...VEGA_CONFIG.bar, color: c.accent },
       line: { ...VEGA_CONFIG.line, color: c.accent },
       point: { ...VEGA_CONFIG.point, color: c.accent, stroke: c.page }, // the ring keeps dots apart where they meet
@@ -110,11 +108,14 @@ function makeShape(el, look) {
   const extras = [];
   let node;
   let arrowNode = null;
+  let lineLength = 0; // a line's drawn length at draw 1, for the round-cap dot rule in makeApply
+  let highlight = null;
   if (el.shape === 'line') {
     const colour = paint(el.stroke ?? el.fill) ?? look.shape;
-    const head = el.arrow === 'end' ? Math.min(sw * ARROW_LENGTH, w) : 0;
+    const head = el.arrow === 'end' ? Math.min(sw * ARROW_HEAD_LENGTH, w) : 0;
     const round = el.cap === 'round';
     const pad = round ? Math.min(sw / 2, w / 2) : 0; // a round cap overshoots its end by half the stroke width
+    lineLength = Math.max(0, w - (head || pad) - pad);
     node = svgEl('line', { x1: pad, y1: h / 2, x2: w - (head || pad), y2: h / 2, stroke: colour, 'stroke-width': sw, ...(round && { 'stroke-linecap': 'round' }), ...common });
     if (head) {
       const half = sw * ARROW_HALF_WIDTH;
@@ -129,14 +130,16 @@ function makeShape(el, look) {
     node = el.shape === 'ellipse'
       ? svgEl('ellipse', { cx: w / 2, cy: h / 2, rx: Math.max(0, w / 2 - inset), ry: Math.max(0, h / 2 - inset), ...attrs })
       : svgEl('rect', { x: inset, y: inset, width: Math.max(0, w - sw), height: Math.max(0, h - sw), rx: el.radius ?? 0, ...attrs });
-    if (el.elevated) {
-      // A 1 px highlight just inside the edge, drawn after the rect; a drop shadow would not show on a dark page.
+    if (el.elevated && base !== 'none') {
+      // A 1 px highlight just inside the edge, drawn after the rect and drawn in with it; a drop shadow would not show on
+      // a dark page, and a stroke-only rect has no fill to lift, so it gets none.
       const edge = sw + 0.5;
-      extras.push(svgEl('rect', { x: edge, y: edge, width: Math.max(0, w - 2 * edge), height: Math.max(0, h - 2 * edge), rx: Math.max(0, (el.radius ?? 0) - edge), fill: 'none', stroke: ELEVATED_HIGHLIGHT, 'stroke-width': 1 }));
+      highlight = svgEl('rect', { x: edge, y: edge, width: Math.max(0, w - 2 * edge), height: Math.max(0, h - 2 * edge), rx: Math.max(0, (el.radius ?? 0) - edge), fill: 'none', stroke: ELEVATED_HIGHLIGHT, 'stroke-width': 1, ...common });
+      extras.push(highlight);
     }
   }
   svg.append(node, ...extras);
-  return { root: svg, drawNode: node, arrowNode, width: w, height: h };
+  return { root: svg, drawNodes: highlight ? [node, highlight] : [node], arrowNode, lineLength, roundCap: el.cap === 'round', width: w, height: h };
 }
 
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -203,7 +206,7 @@ function buildElement(el, look) {
       break;
     case 'shape': {
       const s = makeShape(el, look);
-      Object.assign(part, { drawNode: s.drawNode, arrowNode: s.arrowNode });
+      Object.assign(part, { drawNodes: s.drawNodes, arrowNode: s.arrowNode, roundCap: s.roundCap && { radius: (el.strokeWidth ?? 4) / 2, length: s.lineLength } });
       node.style.width = px(s.width);
       node.style.height = px(s.height);
       node.append(s.root);
@@ -366,11 +369,14 @@ function makeApply({ scenes, parts }, built) {
       layer.style.display = i === active || i === outgoing ? 'block' : 'none';
       layer.style.opacity = String(states.get(`scene:${scene.id}`).opacity);
     });
-    for (const { node, el, drawNode, arrowNode, format, typing } of parts) {
+    for (const { node, el, drawNodes, arrowNode, roundCap, format, typing } of parts) {
       const s = states.get(el.id);
       node.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
       node.style.opacity = String(s.opacity);
-      if (drawNode) drawNode.setAttribute('stroke-dashoffset', String(1 - s.draw));
+      for (const drawNode of drawNodes ?? []) drawNode.setAttribute('stroke-dashoffset', String(1 - s.draw));
+      // A round cap draws a dot of the stroke's width the moment the dash has any length: keep the line hidden until
+      // the drawn length is more than a cap radius, so the stroke grows from a stub instead of popping in as a dot.
+      if (roundCap) drawNodes[0].style.visibility = s.draw * roundCap.length > roundCap.radius ? 'visible' : 'hidden';
       if (arrowNode) arrowNode.setAttribute('opacity', s.draw >= ARROW_DRAW_SHOWN ? '1' : '0');
       if (el.type === 'chart') {
         node.style.maskImage = revealMask(s.reveal);
