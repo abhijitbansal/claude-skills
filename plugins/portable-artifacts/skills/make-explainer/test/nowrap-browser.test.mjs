@@ -5,7 +5,8 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
-import path from 'node:path';import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { checkPage } from '../scripts/check.mjs';
 import { buildFile, haveBrowser, openPage, closeSharedBrowser } from './helpers/browser.mjs';
 import { nowrapProblems, overflowProblems } from '../shared/nowrap-probe.mjs';
@@ -107,6 +108,41 @@ test('the probes fire: a value sized for fewer characters than it has spills its
   assert.deepEqual(await nowrapProblems(page, { root: '.kpis' }), [], 'and it still has not wrapped');
   await context.close();
 });
+
+// ---- the grid keeps its shape around a wide value --------------------------------------------
+
+// For each KPI grid holding a wide value: the rows its tiles form, as [{ top, filled }], where `filled` is
+// the share of the grid's width the row's tiles and gaps take. A hole beside short tiles shows as a low share.
+const rowFill = (page) => page.evaluate(() => [...document.querySelectorAll('.kpis')]
+  .filter((grid) => grid.querySelector('.kpi-wide'))
+  .map((grid) => {
+    const g = grid.getBoundingClientRect();
+    const rows = new Map();
+    for (const tile of grid.querySelectorAll('.kpi')) {
+      const r = tile.getBoundingClientRect();
+      const row = rows.get(Math.round(r.top)) ?? { right: 0, left: Infinity };
+      rows.set(Math.round(r.top), { right: Math.max(row.right, r.right), left: Math.min(row.left, r.left) });
+    }
+    return { title: grid.closest('section')?.querySelector('h2')?.textContent, rows: [...rows.values()].map((r) => (r.right - r.left) / g.width) };
+  }));
+
+for (const theme of [undefined, 'dusk', 'press', 'poster']) {
+  test(`a wide KPI value leaves no hole in its grid rows at 1280 and 390 (${theme ?? 'paper'})`, async (t) => {
+    if (await skipUnlessBrowser(t)) return;
+    const { url } = buildFile(fixture('nowrap-kpi-mix.explainer.json'), { theme });
+    const { page, context } = await openPage(url);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const grids = await rowFill(page);
+      assert.equal(grids.length, 2, 'the two sections that hold a wide value');
+      for (const { title, rows } of grids) {
+        for (const share of rows) assert.ok(share >= 0.95, `${title} at ${width}px: a row fills ${Math.round(share * 100)}% of the grid`);
+      }
+      assert.deepEqual(await overflowProblems(page, '.kpi-value'), [], `no spill at ${width}px`);
+    }
+    await context.close();
+  });
+}
 
 // ---- scripts/check.mjs ----------------------------------------------------------------------
 

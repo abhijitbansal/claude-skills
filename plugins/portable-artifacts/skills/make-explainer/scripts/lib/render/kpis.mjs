@@ -9,6 +9,10 @@ const valueText = (value) => (typeof value === 'number' ? NUMBER_FORMAT.format(v
 // The value is one line, sized from its tile's width: --n (its length) tells the CSS how many characters
 // must fit. A value longer than KPI_WIDE_CHARS would not fit a small tile even at the smallest size, so its
 // tile takes the whole row.
+// The layout limit (10) is deliberately lower than the advice in semantic.mjs (warn above 12): 11 and 12
+// characters are legal but no longer fit a small tile, so they get the wide tile without a warning.
+// --n counts code points; wide glyphs (CJK, emoji, capitals) may run wider than the CSS's 0.7em-per-character
+// assumption, and scripts/check.mjs reports any value that still spills its tile.
 const KPI_WIDE_CHARS = 10;
 
 // A visual section: every second one on a page sits on the surface band.

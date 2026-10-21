@@ -9,6 +9,8 @@ import { codeLines } from './slides.mjs';
 const q = (v) => JSON.stringify(v);
 const MAX_LISTED = 12;
 // A KPI value longer than this draws a warning (not an error): the tile is narrow and the value stays on one line.
+// (The renderer gives a value above 10 characters a wide tile, render/kpis.mjs; the two thresholds are deliberate:
+// layout at >10, advice at >12.)
 const KPI_VALUE_ADVISED = 12;
 
 function suggestion(value, candidates) {
