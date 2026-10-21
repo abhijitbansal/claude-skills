@@ -163,7 +163,7 @@ from your project folder):
 - **Chart kinds:** bar, stacked-bar, grouped-bar, line, area, scatter, bubble, heatmap, histogram, boxplot and donut. The agent names the columns and the build writes the chart. Raw Vega-Lite still works for anything else. Reference: `make-dashboard/references/kinds.md`.
 - **Views:** each card can switch between alternate views (sorted, share, 100%, area, boxplot, …) and a sortable Table view; `pair: true` shows two side by side.
 - **Export:** every card has an Export menu for PNG, SVG and CSV.
-- **Themes:** `paper` (default), `blueprint`, `editorial`, `ink`, and the newer `dusk`, `press` and `poster` (see the [README](README.md#themes-and-art)). Ask for one, or pass `--theme <name>` to `build.mjs`. The page also has an icon toggle that cycles Auto, Light and Dark.
+- **Themes:** `paper` (default), `blueprint`, `editorial`, `ink`, the newer `dusk`, `press` and `poster`, and the plan-page themes `mono` and `brief` (see the [README](README.md#themes-and-art)). Ask for one, or pass `--theme <name>` to `build.mjs`. The page also has an icon toggle that cycles Auto, Light and Dark.
 - **Live reload:** see below.
 
 **Open the result:** double-click `dist/index.html` (it is one
@@ -227,8 +227,8 @@ your project folder):
 4. `build.mjs diagram.json` writes one offline HTML file and prints its path.
    The default folder is `~/.agent/diagrams/` (set `PA_OUTPUT_DIR`, or pass
    `--out file.html` or `--out dir`). `--theme <name>` overrides the spec's
-   theme: `blueprint` (default), `paper`, `ink`, `editorial`, `dusk`, `press`
-   or `poster`.
+   theme: `blueprint` (default), `paper`, `ink`, `editorial`, `dusk`, `press`,
+   `poster`, `mono` or `brief`.
 5. `check.mjs <page>` opens the page at 1440 and 390 px and reports overflow,
    console errors, text that leaves its box and a node under the legend
    overlay. It needs Playwright and a browser (a full `npm ci` plus
@@ -302,8 +302,8 @@ your project folder):
 5. `build.mjs explainer.json` writes one HTML file and prints its path. The
    default folder is `~/.agent/diagrams/` (set `PA_OUTPUT_DIR`, or pass
    `--out file.html` or `--out dir`). `--theme <name>` overrides the spec's
-   theme: `dusk` (default), `press`, `poster`, `paper`, `blueprint`, `ink` or
-   `editorial` (see [Choosing a theme](#choosing-a-theme)); `--model`, `--effort` and `--agent` set the
+   theme: `dusk` (default), `press`, `poster`, `paper`, `blueprint`, `ink`,
+   `editorial`, `mono` or `brief` (see [Choosing a theme](#choosing-a-theme)); `--model`, `--effort` and `--agent` set the
    provenance stamp (see [section 7](#7-what-every-page-carries)). A video or an interactive chart adds a
    `<name>.assets/` folder beside the page: keep them together.
    `--image-api <https-endpoint>` is an optional extra described
@@ -377,8 +377,8 @@ make-explainer and make-motion share these rules:
    three with a one-line feel each (`dusk` soft and warm, `press` calm print,
    `poster` loud and condensed). If it cannot ask, it uses `dusk`.
 
-`paper`, `blueprint`, `ink` and `editorial` still work, but only when you name
-them. In `dusk`, `press` and `poster` the page hero and a deck's title and
+`paper`, `blueprint`, `ink`, `editorial`, `mono` and `brief` still work, but only
+when you name them (`mono` and `brief` are intended for plan pages; the preset arrives in a later change). In `dusk`, `press` and `poster` the page hero and a deck's title and
 closing slides carry procedural art drawn from the title: no network, and the
 same title gives the same picture.
 
@@ -567,7 +567,8 @@ Funnel Display, Host Grotesk and Commit Mono; `press` Young Serif, Schibsted
 Grotesk and JetBrains Mono; `poster` Big Shoulders Display, Familjen Grotesk
 and Martian Mono; `paper` and `blueprint` Geist and Geist Mono; `ink` Bricolage
 Grotesque headings over Geist; `editorial` Newsreader headings and an Atkinson
-Hyperlegible body. The make-motion preview and video use the spec's theme
+Hyperlegible body; `mono` JetBrains Mono throughout; `brief` Newsreader headings,
+an Atkinson Hyperlegible body and Geist Mono. The make-motion preview and video use the spec's theme
 (`dusk` when it names none). Links in running text are underlined; buttons,
 navigation and cards are not.
 

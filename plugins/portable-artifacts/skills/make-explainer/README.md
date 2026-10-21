@@ -27,7 +27,7 @@ unless you opt in with `--image-api` (see below).
   takes a `label` of up to 4 words for the contents list; validation warns (never
   fails) over the soft caps: title 8 words, label 4, paragraph 3 sentences or 60
   words, text section 120, card text 30, list item 20, page prose 900, tl;dr 3 points.
-- **A page worth opening**: themed (seven themes, light and dark; `dusk` by default), a
+- **A page worth opening**: themed (nine themes, light and dark; `dusk` by default), a
   contents list from four sections up, copy buttons on code, print styles,
   reduced motion respected, no network at build or view time
   (unless you opt in with `--image-api`, see below).

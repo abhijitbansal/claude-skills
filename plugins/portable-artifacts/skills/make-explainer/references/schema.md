@@ -10,7 +10,7 @@ Every section type and its fields: [sections.md](sections.md). Banned phrases: [
 | `subtitle` | string | At most 140 characters. |
 | `preset` | `recap` `checklist` `concept` `slides` `none` | Default `none`. A label only: it selects slides mode (`slides`) and turns on the checklist `intro` warning (`checklist`). |
 | `mode` | `page` `slides` | Default `page`; `preset: "slides"` implies slides. `preset: "slides"` with `mode: "page"` is an error. |
-| `theme` | `dusk` `press` `poster` `paper` `blueprint` `ink` `editorial` | Default `dusk`. `SKILL.md` ("Choosing a theme") says which to pick. Each has light and dark variants; the page follows the reader's setting and has a Theme toggle. |
+| `theme` | `dusk` `press` `poster` `paper` `blueprint` `ink` `editorial` `mono` `brief` | Default `dusk`. `SKILL.md` ("Choosing a theme") says which to pick. Each has light and dark variants; the page follows the reader's setting and has a Theme toggle. |
 | `generatedBy` | object | Keys `model`, `effort`, `agent`; each 1-60 characters of letters, digits, spaces and `. _ : / ( ) + -`. Shown in the page footer and a `<meta name="generator">` tag; a missing field reads "not reported". The `--model`, `--effort` and `--agent` flags of `build.mjs` override it. |
 | `meta` | object | Keys `date`, `branch`, `repo`, `author`, `version`, `status`; each value at most 60 characters. Shown as chips under the title. |
 | `sections` | array, required | 1 to 40 sections, see below. |
@@ -74,7 +74,7 @@ Environment: `PA_OUTPUT_DIR` (default output folder), `PA_MOTION_TIMEOUT_MS` (ho
 
 ## Hero image from an image API
 
-`build.mjs --image-api <endpoint>` replaces the page hero's procedural art with a picture made by your own image service. It is off by default; without the flag the build never touches the network. It affects the page hero of a `dusk`, `press` or `poster` page only: a slide deck or a classic-theme page (`paper`, `blueprint`, `ink`, `editorial`) is refused with exit 2 before anything is sent.
+`build.mjs --image-api <endpoint>` replaces the page hero's procedural art with a picture made by your own image service. It is off by default; without the flag the build never touches the network. It affects the page hero of a `dusk`, `press` or `poster` page only: a slide deck or a classic-theme page (`paper`, `blueprint`, `ink`, `editorial`, `mono`, `brief`) is refused with exit 2 before anything is sent.
 
 - **What leaves the machine**: the page title and subtitle (joined, at most 400 characters) go to the endpoint's host. The build prints `image-api: sending the title and subtitle to <host> (leaves this machine)` on stderr before it sends.
 - **Key**: your own key, in the environment variable `PA_IMAGE_API_KEY` (sent as `authorization: Bearer <key>`). The build fails with exit 2 when it is missing. Never put the key in a spec, a config file or an example; it is never written to the page.

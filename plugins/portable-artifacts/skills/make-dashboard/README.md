@@ -19,8 +19,9 @@ by any agent that can run shell commands.
   share, 100%, area/line, ...), a sortable Table view and PNG, SVG and CSV
   export. Raw Vega-Lite still works for anything else.
 - **Themes**: `paper` (default), `blueprint`, `editorial`, `ink`, and the newer
-  `dusk`, `press` and `poster`; the page also
-  toggles Auto, Light and Dark.
+  `dusk`, `press` and `poster`, plus `mono` (terminal console, near-black with
+  a green accent) and `brief` (executive, warm white with a burgundy accent); the
+  page also toggles Auto, Light and Dark.
 - **Live reload**: `serve.mjs --watch dashboard.json` rebuilds when you save the
   spec or the data and reloads the page.
 - **Refresh is a rebuild**: rerun `build.mjs` (from cron, launchd or by hand).
@@ -75,7 +76,7 @@ monthly trend from data/sales.csv."* In Claude Code or Copilot you can call
 | `queries` | One SQL `SELECT` per name. Alias every aggregate; chart fields are those aliases |
 | `kpis` | Number tiles: `query`, `field`, `format` = `number`, `currency`, `percent` or `compact` |
 | `charts` | Each has exactly one of `kind` (+ role columns `x`, `y`, `color`, `size`, `value`, optional `format`, `views`, `pair`) or raw `vegaLite` (a Vega-Lite spec **without `data`**). `width` = `full` or `half` |
-| `theme` | `paper` (default), `blueprint`, `editorial`, `ink`, `dusk`, `press`, `poster` |
+| `theme` | `paper` (default), `blueprint`, `editorial`, `ink`, `dusk`, `press`, `poster`, `mono`, `brief` |
 | `maxRows` | Row cap applied to every query (default 5000, max 100000) |
 
 The full reference is in [`references/schema.md`](references/schema.md), every kind

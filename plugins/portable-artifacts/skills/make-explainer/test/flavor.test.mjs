@@ -5,9 +5,9 @@ import { loadTheme, listThemes } from '../shared/theme.mjs';
 import { contrastRatio, mixHex } from '../shared/contrast.mjs';
 
 // Every shipped theme must be classified: a new theme file fails here until it is listed as a flavor or as classic.
-const LEGACY = ['blueprint', 'editorial', 'ink', 'paper'];
+const LEGACY = ['blueprint', 'brief', 'editorial', 'ink', 'mono', 'paper'];
 
-test('flavorFor: the three new themes are their own flavor; every other theme is classic', () => {
+test('flavorFor: the three new themes are their own flavor; every other theme (brief and mono included) is classic', () => {
   assert.deepEqual(FLAVORS, ['dusk', 'press', 'poster']);
   for (const name of ['dusk', 'press', 'poster']) {
     assert.ok(listThemes().includes(name), `${name} ships`);

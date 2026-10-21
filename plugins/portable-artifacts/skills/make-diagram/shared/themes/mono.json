@@ -1,0 +1,99 @@
+{
+  "name": "mono",
+  "label": "Mono",
+  "fonts": {
+    "display": {
+      "family": "JetBrains Mono",
+      "fallback": "ui-monospace, Menlo, Consolas, monospace",
+      "weights": {
+        "400": "jetbrains-mono-latin-400-normal.woff2"
+      }
+    },
+    "body": {
+      "family": "JetBrains Mono",
+      "fallback": "ui-monospace, Menlo, Consolas, monospace",
+      "weights": {
+        "400": "jetbrains-mono-latin-400-normal.woff2"
+      }
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "fallback": "ui-monospace, Menlo, Consolas, monospace",
+      "weights": {
+        "400": "jetbrains-mono-latin-400-normal.woff2"
+      }
+    }
+  },
+  "light": {
+    "page": "#f2f4f6",
+    "surface": "#ffffff",
+    "text": "#0c1117",
+    "text2": "#3b4552",
+    "text3": "#586473",
+    "line": "#d5dbe2",
+    "grid": "#e4e8ed",
+    "accent": "#0b7a43",
+    "accentSoft": "#dcf1e5",
+    "warn": "#9a5b06",
+    "good": "#2f7d12",
+    "bad": "#b42318",
+    "cat1": "#2a78d6",
+    "cat2": "#eb6834",
+    "cat3": "#1baf7a",
+    "cat4": "#eda100",
+    "cat5": "#e87ba4",
+    "cat6": "#008300",
+    "cat7": "#4a3aa7",
+    "cat8": "#e34948",
+    "seq1": "#d3efdf",
+    "seq2": "#b2d1c0",
+    "seq3": "#90b4a1",
+    "seq4": "#6f9682",
+    "seq5": "#4d7862",
+    "seq6": "#2c5b43",
+    "seq7": "#0a3d24",
+    "kindPerson": "#a3480a",
+    "kindService": "#0e7490",
+    "kindData": "#6d28d9",
+    "kindQueue": "#0f766e",
+    "kindExternal": "#56677b",
+    "kindDecision": "#4338ca",
+    "glow": "#0b7a43"
+  },
+  "dark": {
+    "page": "#080a0d",
+    "surface": "#0e1217",
+    "text": "#dbe2ea",
+    "text2": "#a7b2be",
+    "text3": "#8590a0",
+    "line": "#242c37",
+    "grid": "#171d25",
+    "accent": "#3ddc84",
+    "accentSoft": "#0f2a1c",
+    "warn": "#ffb02e",
+    "good": "#a3e635",
+    "bad": "#ff6b6b",
+    "cat1": "#3987e5",
+    "cat2": "#d95926",
+    "cat3": "#199e70",
+    "cat4": "#c98500",
+    "cat5": "#d55181",
+    "cat6": "#008300",
+    "cat7": "#9085e9",
+    "cat8": "#e66767",
+    "seq1": "#14472d",
+    "seq2": "#2c6346",
+    "seq3": "#457f5f",
+    "seq4": "#5d9b79",
+    "seq5": "#75b792",
+    "seq6": "#8ed3ab",
+    "seq7": "#a6efc4",
+    "kindPerson": "#f5a524",
+    "kindService": "#38bdf8",
+    "kindData": "#a78bfa",
+    "kindQueue": "#2dd4bf",
+    "kindExternal": "#94a3b8",
+    "kindDecision": "#818cf8",
+    "glow": "#6ff0a8"
+  }
+}

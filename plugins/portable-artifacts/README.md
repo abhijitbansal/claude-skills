@@ -8,7 +8,7 @@ an account or a particular model:
 
 | Skill | You say | You get |
 |---|---|---|
-| [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + charts (11 kinds, alternate views, a sortable Table, PNG/SVG/CSV export, seven themes with `paper` by default). Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh, or `serve.mjs --watch` for live reload — no LLM involved. |
+| [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + charts (11 kinds, alternate views, a sortable Table, PNG/SVG/CSV export, nine themes with `paper` by default). Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh, or `serve.mjs --watch` for live reload — no LLM involved. |
 | [`make-diagram`](skills/make-diagram/) | "Draw the checkout request path from the browser to the orders DB" | One self-contained HTML diagram (architecture, flowchart, sequence or state) laid out with ELK: zoom, hover tracing, a story player (named chapters of beats with a travelling dot), an Explore panel, full screen and export. The agent writes a small JSON topology; scripts do the rest. |
 | [`make-explainer`](skills/make-explainer/) | "Recap this branch with a manual test checklist" | One self-contained HTML page or slide deck made of typed sections (verdict, numbers, files changed, timeline, risks, comparisons, tick-and-remember checklists, slides), with make-diagram figures, make-dashboard charts, make-scene 3D scenes and make-motion clips embedded when asked. A script reads the git branch for the facts; the agent writes the prose; a linter rejects filler phrases and leftover placeholders before the page is built, and warns when emoji get dense. |
 | [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. Silent unless you ask for sound: `audio` tracks (music, voiceover, SFX) are added only when the prompt asks, and narration is synthesised locally with Kokoro. "Slow scene 2" changes one field, not the whole video. |
@@ -50,7 +50,7 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
   field or the `--model`, `--effort` and `--agent` build flags. A field the
   agent does not know reads "not reported"; nothing is guessed. The make-motion
   MP4 carries it in its `comment` tag, and the model in `artist` when it is reported.
-- **Themed** — every page and video uses one of seven shared themes, and the
+- **Themed** — every page and video uses one of nine shared themes, and the
   theme sets the type. make-explainer pages and decks and make-motion clips use
   `dusk` unless you or the prompt pick another; make-dashboard keeps `paper`
   and make-diagram `blueprint`. See [Themes and art](#themes-and-art).
@@ -60,7 +60,7 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
 
 ## Themes and art
 
-Seven themes live in the shared folder, each with its own light and dark
+Nine themes live in the shared folder, each with its own light and dark
 colours. Every skill accepts every theme by name (the spec's `theme` field or
 `--theme <name>`); only the default differs.
 
@@ -70,6 +70,8 @@ colours. Every skill accepts every theme by name (the spec's `theme` field or
 | `press` | Young Serif / Schibsted Grotesk / JetBrains Mono | bone paper, ink and vermilion, marginal numerals | dense docs, long reads, changelogs, branch recaps |
 | `poster` | Big Shoulders Display / Familjen Grotesk / Martian Mono | near-black, acid lime and orange, condensed caps, halftone | launch decks, pitches, demos, energetic clips |
 | `paper`, `blueprint`, `ink`, `editorial` | Geist and Geist Mono; `ink` has Bricolage Grotesque headings, `editorial` Newsreader headings and an Atkinson Hyperlegible body | the earlier looks | when you name one; `paper` is make-dashboard's default, `blueprint` make-diagram's |
+| `mono` | JetBrains Mono for display, body and mono | terminal and engineering console: near-black page, one green accent, cool grey lines; no art | technical and plan pages; intended for plan pages (preset arrives in a later change) |
+| `brief` | Newsreader / Atkinson Hyperlegible / Geist Mono | executive: warm white page, deep burgundy accent, generous contrast, calm and spacious; no art | decision briefs and sign-off pages; intended for plan pages (preset arrives in a later change) |
 
 **How make-explainer and make-motion pick a theme.** A theme you name wins
 (`--theme poster`, or "use poster" in the prompt). Otherwise the agent picks
@@ -78,7 +80,7 @@ docs, long reads, changelogs and branch recaps, `poster` for launch decks,
 pitches, demos and energetic clips, `dusk` for everything else. If the prompt
 fits two themes equally, it asks you once, with a one-line feel for each of the
 three; if it cannot ask, it uses `dusk`. The older themes are used only when
-you name them.
+you name them. `mono` and `brief` are likewise used only when you name them.
 
 **Art.** `dusk`, `press` and `poster` draw procedural SVG art seeded from the
 title (in make-motion, from the scene id): blobs and orbs with grain in

@@ -96,7 +96,7 @@ Queries have a 30 s limit (`--timeout <seconds>` on build).
   Raw `vegaLite` (any Vega-Lite spec **without `data`**) still works for anything the kinds don't cover.
 - Chart titles state the finding ("North drives half of revenue"), not the field names.
 - `views` picks alternate views (e.g. `["sorted", "table"]`); `pair: true` puts the primary view and a second (switchable) view side by side. Order follows the query, so write `ORDER BY`.
-- `theme`: `paper` (default), `blueprint`, `editorial`, `ink`, `dusk`, `press`, `poster`. Never set colours, `config`, `width` or `autosize` in `vegaLite`.
+- `theme`: `paper` (default), `blueprint`, `editorial`, `ink`, `dusk`, `press`, `poster`, `mono`, `brief`. Never set colours, `config`, `width` or `autosize` in `vegaLite`.
 - Full kind reference (roles, views, rules, errors): `references/kinds.md`.
 - Raw `vegaLite` dates are UTC strings: use `"type": "temporal"` with `utc…` time units (`utcyearmonth`).
 - Aim for few, clear charts: bar for magnitude, line for change over time, colour only for a real category (max 8).

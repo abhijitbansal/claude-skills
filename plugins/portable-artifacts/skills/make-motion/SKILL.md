@@ -69,7 +69,7 @@ When done, report the spec path, the MP4 path with its duration and size, and on
 }
 ```
 
-- Root: `size` (default 1920x1080), `fps` (24, 25, 30, 60), `background`, optional `generatedBy` (`{ model?, effort?, agent? }`), optional `theme` (a shared theme name: `dusk`, `press`, `poster`, `paper`, `ink`, `blueprint`, `editorial` — its dark colours and fonts become the defaults; omit it for `dusk`), `scenes` (1–50, total ≤ 120 s). Only `scenes` is required.
+- Root: `size` (default 1920x1080), `fps` (24, 25, 30, 60), `background`, optional `generatedBy` (`{ model?, effort?, agent? }`), optional `theme` (a shared theme name: `dusk`, `press`, `poster`, `paper`, `ink`, `blueprint`, `editorial`, `mono`, `brief` — its dark colours and fonts become the defaults; omit it for `dusk`), `scenes` (1–50, total ≤ 120 s). Only `scenes` is required.
 - Audio track (optional root `audio` array, up to 20): `src` (relative to the spec, inside the spec folder; mp3, wav, m4a, aac, ogg or flac), `at` (seconds from the video start, default 0), `scene` (a scene `id`; `at` is then relative to that scene's start, so lengthening an earlier scene keeps a voiceover aligned), `duration` (trim, seconds), `volume` (0–1, default 1), `fadeIn` / `fadeOut` (seconds). `fadeOut` anchors to the `duration` trim or the video end; a clip that ends earlier gets no fade. No `loop`: a short music file just stops.
 - Scene: `id`, `duration` (0.2–60 s), `elements`, optional `background` (a colour, or `"art"` for the theme's seeded art full-bleed behind the elements), `transition` (`none` or `fade`, a 0.4 s fade-in). Only one scene is visible at a time; scenes play back to back.
 - Every element: `id` (unique in the whole spec), `type`, `x`, `y` (canvas pixels; the anchor is the element centre), optional `opacity`, `scale`, `rotate` (degrees), `keyframes`.
@@ -79,14 +79,14 @@ When done, report the spec path, the MP4 path with its duration and size, and on
 
 ## Choosing a theme
 
-Seven themes exist; `dusk` is the default. Pick one (the spec's theme field, or `--theme <name>` on the render) in this order:
+Nine themes exist; `dusk` is the default. Pick one (the spec's theme field, or `--theme <name>` on the render) in this order:
 
 1. A theme the user names ("use poster") wins. Use it as given: write it as the spec's theme field. On the render, `--theme <name>` only fills in for a spec that names none, so a theme already in the spec wins over the flag.
 2. Otherwise infer it from the prompt and say which theme and why in one line. Dense docs, long reads, changelogs and branch recaps: `press`. Launch decks, pitches, demos and energetic clips: `poster`. Everything else, or unclear: `dusk`.
 3. If the prompt is genuinely split between two themes, ask the user once and list all three with a one-line feel each: `dusk` is soft, warm and playful; `press` is print editorial, calm and long-form; `poster` is loud, condensed and high-energy.
 4. If you cannot ask, use `dusk`.
 
-The older themes `paper`, `blueprint`, `ink` and `editorial` stay available by name; use one only when the user names it.
+The older themes `paper`, `blueprint`, `ink` and `editorial` stay available by name; use one only when the user names it. Two more are available by name only: `mono` (terminal and engineering console, near-black with a green accent) and `brief` (executive, warm white with a burgundy accent); both are intended for plan pages (preset arrives in a later change).
 
 ## Style defaults
 

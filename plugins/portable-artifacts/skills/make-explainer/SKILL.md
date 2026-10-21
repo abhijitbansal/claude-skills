@@ -44,7 +44,7 @@ If it reports anything missing, tell the user in one message: each item, why it 
    - No preset fits: write `explainer.json` from the section list below. Details of every field: `<skill-dir>/references/schema.md` and `sections.md`; ready-made files in `<skill-dir>/references/examples/`.
 2. Fill the file. A scaffold marks every sentence for you with `TODO: …`; replace each one with real prose from the facts and from reading the changed files. Facts (numbers, files, commits) are already correct: do not retype them. Delete a section you cannot fill. Set `generatedBy` to the model you are running as, your effort level if you know it, and your host (for example Claude Code, Codex, Copilot CLI, Gemini CLI). Never guess; leave out any field you do not know. `--model`, `--effort` and `--agent` on the build override it.
 3. Once the spec exists, rerun `node <skill-dir>/scripts/doctor.mjs --json --for explainer.json` and handle anything new (make-diagram, make-dashboard, make-scene or make-motion for `diagram`, `chart`, `scene` and `motion` sections) as in "Before the first build". Then `node <skill-dir>/scripts/validate.mjs explainer.json`. Fix every line it prints (a JSON path, the problem, the fix) and rerun until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage error. Warnings do not block, but resolve the budget warnings (too many words in a title, label, paragraph, card, list or page) before building where you can, and report any you leave.
-4. `node <skill-dir>/scripts/build.mjs explainer.json` prints the theme it used (`theme: <name>`) and the HTML path. Default folder is `~/.agent/diagrams/` (or the folder in the `PA_OUTPUT_DIR` environment variable); `--out <file.html|dir>` picks another; `--theme dusk|press|poster|paper|blueprint|ink|editorial` overrides the theme (`dusk` is the default); `--json` prints machine-readable results. Sections with files (video, interactive chart) add a `<name>.assets/` folder next to the page: keep the two together.
+4. `node <skill-dir>/scripts/build.mjs explainer.json` prints the theme it used (`theme: <name>`) and the HTML path. Default folder is `~/.agent/diagrams/` (or the folder in the `PA_OUTPUT_DIR` environment variable); `--out <file.html|dir>` picks another; `--theme dusk|press|poster|paper|blueprint|ink|editorial|mono|brief` overrides the theme (`dusk` is the default); `--json` prints machine-readable results. Sections with files (video, interactive chart) add a `<name>.assets/` folder next to the page: keep the two together.
 5. Optional check: first run `node <skill-dir>/scripts/doctor.mjs --json --for check` (it installs the check tools after the user agrees), then `node <skill-dir>/scripts/check.mjs <printed path>` opens the page at desktop and phone width and fails on console errors, sideways scrolling, a deck that cannot reach its last slide, or a diagram Present overlay that will not close. It needs Playwright and a browser (a full `npm ci`; `doctor --for check` reports and installs both, after the user agrees); without them it prints `check: skipped` and exits 0.
 6. Report: the HTML path, one line on what it shows, and the validate warnings you left.
 
@@ -52,14 +52,14 @@ For a change ("rename the card", "add a risk"), edit only those fields, then val
 
 ## Choosing a theme
 
-Seven themes exist; `dusk` is the default. Pick one (the spec's theme field, or `--theme <name>`) in this order:
+Nine themes exist; `dusk` is the default. Pick one (the spec's theme field, or `--theme <name>`) in this order:
 
 1. An explicit `--theme <name>` or a phrase from the user ("use poster") wins. Use it as given.
 2. Otherwise infer it from the prompt and say which theme and why in one line. Dense docs, long reads, changelogs and branch recaps: `press`. Launch decks, pitches, demos and energetic clips: `poster`. Everything else, or unclear: `dusk`.
 3. If the prompt is genuinely split between two themes, ask the user once and list all three with a one-line feel each: `dusk` is soft, warm and playful; `press` is print editorial, calm and long-form; `poster` is loud, condensed and high-energy.
 4. If you cannot ask, use `dusk`.
 
-The older themes `paper`, `blueprint`, `ink` and `editorial` stay available by name; use one only when the user names it.
+The older themes `paper`, `blueprint`, `ink` and `editorial` stay available by name; use one only when the user names it. Two more are available by name only: `mono` (terminal and engineering console, near-black with a green accent) and `brief` (executive, warm white with a burgundy accent); both are intended for plan pages (preset arrives in a later change).
 
 ## Writing rules
 
