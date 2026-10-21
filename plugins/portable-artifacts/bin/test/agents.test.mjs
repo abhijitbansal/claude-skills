@@ -1,17 +1,25 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AGENT_NAME, agentFile } from '../agents.mjs';
+import { AGENT_NAME, agentFile, INSTRUCTIONS, tomlString } from '../agents.mjs';
 
-const BODY_PHRASES = [
+const PHRASES = [
   /SKILL\.md/,
-  /spec JSON/i,
-  /validate/i,
-  /build/i,
-  /output path/i,
-  /last line/i,
-  /already `?artifact-builder`?/,
-  /not delegate/i,
+  /spec JSON/,
+  /build script/,
+  /validate script/,
+  /last line/,
+  /already artifact-builder/,
+  /Do not delegate/,
+  /--out/,
+  /exactly as SKILL\.md shows/,
+  /fails? after 2 fix attempts/,
+  /Never report an output path for a build that did not run/,
 ];
+
+function checkBody(body) {
+  assert.ok(body.includes(INSTRUCTIONS), 'body contains INSTRUCTIONS exactly');
+  for (const p of PHRASES) assert.match(body, p);
+}
 
 test('AGENT_NAME is artifact-builder', () => {
   assert.equal(AGENT_NAME, 'artifact-builder');
@@ -26,7 +34,8 @@ test('copilot agent file has cheap model list and frontmatter', () => {
   const desc = content.match(/^description: (.+)$/m);
   assert.ok(desc, 'single-line description');
   assert.ok(!desc[1].includes(': ') && !desc[1].includes(' #'), 'strict-YAML-safe description');
-  for (const p of BODY_PHRASES) assert.match(content, p);
+  checkBody(content.slice(content.indexOf('\n---\n', 4) + 5));
+  assert.ok(!/^tools:/m.test(content), 'no tools key');
 });
 
 test('codex agent file has luna model, low effort, safe literal block', () => {
@@ -41,7 +50,12 @@ test('codex agent file has luna model, low effort, safe literal block', () => {
   const close = inner.lastIndexOf("'''");
   assert.ok(close >= 0);
   assert.ok(!inner.slice(0, close).includes("'''"));
-  for (const p of BODY_PHRASES) assert.match(content, p);
+  checkBody(inner.slice(0, close));
+  assert.ok(!/^(sandbox_mode|tools)\b/m.test(content), 'no sandbox_mode or tools');
+});
+
+test('tomlString escapes quotes, backslashes and newlines', () => {
+  assert.equal(tomlString('a"b\\c\nd'), '"a\\"b\\\\c\\nd"');
 });
 
 test('unknown host throws', () => {
