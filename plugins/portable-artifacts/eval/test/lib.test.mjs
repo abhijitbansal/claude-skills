@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { SKILLS, buildPrompt, expandCmd, readReportedModel, readSpecModel, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules, createFixtureRepo, prepareWorkdir, copySkill } from '../lib.mjs';
+import { SKILLS, buildPrompt, expandCmd, readSpecModel, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules, createFixtureRepo, prepareWorkdir, copySkill } from '../lib.mjs';
 
 const made = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-eval-test-')); made.push(d); return d; };
@@ -422,52 +422,41 @@ test('hosts.json: only copilot defines agentArgs', () => {
   assert.deepEqual(Object.keys(hosts).filter((h) => hosts[h].agentArgs), ['copilot']);
 });
 
+// Runs the real run-eval.mjs with PATH pointing only at fake `claude` and `copilot` executables that record
+// a marker and exit 1, plus --only __none__ so no prompt can run. If a usage check ever slid below the host
+// check, the marker file would appear (and no real host or billed command could run).
+function runEvalWithFakeHosts(args) {
+  const bin = tmp();
+  const marker = path.join(bin, 'host-launched.txt');
+  for (const name of ['claude', 'copilot']) {
+    fs.writeFileSync(path.join(bin, name), `#!/bin/sh\necho "${name} $*" >> "${marker}"\nexit 1\n`, { mode: 0o755 });
+  }
+  const r = spawnSync(process.execPath, [path.join(evalDir, 'run-eval.mjs'), '--skill', 'dashboard', '--only', '__none__', ...args], {
+    encoding: 'utf8', env: { ...process.env, PATH: bin },
+  });
+  return { r, hostLaunched: fs.existsSync(marker) };
+}
+
 test('run-eval: --agent on a host without agentArgs is a usage error before any host runs', () => {
-  const r = spawnSync('node', [path.join(evalDir, 'run-eval.mjs'), '--skill', 'dashboard', '--host', 'claude', '--agent', 'artifact-builder'], { encoding: 'utf8' });
+  const { r, hostLaunched } = runEvalWithFakeHosts(['--host', 'claude', '--agent', 'artifact-builder']);
   assert.equal(r.status, 2);
   assert.match(r.stderr, /host "claude" has no agentArgs/);
   assert.match(r.stderr, /\[--agent name\]/);
+  assert.equal(hostLaunched, false, 'no host executable may be launched');
 });
 
 test('run-eval: --agent needs a non-empty name', () => {
-  const r = spawnSync('node', [path.join(evalDir, 'run-eval.mjs'), '--skill', 'dashboard', '--host', 'copilot', '--agent', ''], { encoding: 'utf8' });
+  const { r, hostLaunched } = runEvalWithFakeHosts(['--host', 'copilot', '--agent', '']);
   assert.equal(r.status, 2);
   assert.match(r.stderr, /--agent needs a name/);
+  assert.equal(hostLaunched, false, 'no host executable may be launched');
 });
 
-const pageWith = (model) => `<!doctype html><html><head><meta name="generator" content="portable-artifacts make-dashboard; model=${model}; effort=low; agent=copilot"></head><body></body></html>`;
-
-test('readReportedModel reads generatedBy.model from the generator meta of a built page', () => {
-  const d = tmp();
-  fs.writeFileSync(path.join(d, 'index.html'), pageWith('Claude Haiku 5.5'));
-  assert.equal(readReportedModel(path.join(d, 'index.html')), 'Claude Haiku 5.5');
-});
-
-test('readReportedModel gives "-" for "not reported", a page without the meta, a missing file or a non-page', () => {
-  const d = tmp();
-  fs.writeFileSync(path.join(d, 'a.html'), pageWith('not reported'));
-  fs.writeFileSync(path.join(d, 'b.html'), '<html></html>');
-  fs.writeFileSync(path.join(d, 'c.png'), 'x');
-  assert.equal(readReportedModel(path.join(d, 'a.html')), '-');
-  assert.equal(readReportedModel(path.join(d, 'b.html')), '-');
-  assert.equal(readReportedModel(path.join(d, 'nope.html')), '-');
-  assert.equal(readReportedModel(path.join(d, 'c.png')), '-');
-});
-
-test('scoreRun records the model reported by the built page, "-" when the output carries none', async () => {
-  const skill = fakeSkill();
-  fs.writeFileSync(path.join(skill, 'scripts/build.mjs'), `
-    import fs from 'node:fs';
-    fs.mkdirSync(process.argv[4], { recursive: true });
-    fs.writeFileSync(process.argv[4] + '/index.html', ${JSON.stringify(pageWith('GPT-5.4 nano'))});
-  `);
-  const work = tmp();
-  fs.writeFileSync(path.join(work, 'spec.json'), '{"ok": true}');
-  assert.equal((await scoreRun({ work, skillCfg: cfg, skillDir: skill })).model, 'GPT-5.4 nano');
-  const bare = tmp();
-  fs.writeFileSync(path.join(bare, 'spec.json'), '{"ok": true}');
-  assert.equal((await scoreRun({ work: bare, skillCfg: cfg, skillDir: fakeSkill() })).model, '-');
-  assert.equal((await scoreRun({ work: tmp(), skillCfg: cfg, skillDir: fakeSkill() })).model, '-');
+test('the fake host executables really are what runs: a valid --agent reaches the host check', () => {
+  const { r, hostLaunched } = runEvalWithFakeHosts(['--host', 'copilot', '--agent', 'artifact-builder']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /host "copilot" not available/);
+  assert.equal(hostLaunched, true);
 });
 
 test('readSpecModel reads generatedBy.model from the saved spec, "-" when absent or unreadable', () => {
@@ -479,6 +468,27 @@ test('readSpecModel reads generatedBy.model from the saved spec, "-" when absent
   assert.equal(readSpecModel(w('d.json', '{"generatedBy":"gpt"}')), '-');
   assert.equal(readSpecModel(w('e.json', 'not json')), '-');
   assert.equal(readSpecModel(path.join(d, 'nope.json')), '-');
+  assert.equal(readSpecModel(w('f.json', '{"generatedBy":{"model":" \\n\\t "}}')), '-');
+});
+
+test('readSpecModel treats the model as untrusted: whitespace collapses and the length is capped', () => {
+  const d = tmp();
+  const w = (name, model) => { fs.writeFileSync(path.join(d, name), JSON.stringify({ generatedBy: { model } })); return path.join(d, name); };
+  assert.equal(readSpecModel(w('a.json', 'Haiku\n| fake | row |\r\n\tx')), 'Haiku | fake | row | x');
+  const long = readSpecModel(w('b.json', 'm'.repeat(5000)));
+  assert.equal(long.length, 80);
+  assert.ok(long.endsWith('…'));
+  assert.equal(readSpecModel(w('c.json', 'x'.repeat(80))), 'x'.repeat(80));
+});
+
+test('summary.md keeps one table row per case even when the reported model is hostile', async () => {
+  const work = tmp();
+  fs.writeFileSync(path.join(work, 'spec.json'), JSON.stringify({ ok: true, generatedBy: { model: 'Haiku\n| fake | row | ✓ |\n' + 'z'.repeat(5000) } }));
+  const s = await scoreRun({ work, skillCfg: cfg, skillDir: fakeSkill() });
+  const md = summarize([{ id: 'a', seconds: 1, ...s }, { id: 'b', seconds: 1, ...s }], { host: 'copilot', skill: 'dashboard' });
+  const tableRows = md.split('\n').filter((l) => l.startsWith('| '));
+  assert.equal(tableRows.length, 1 + 2, 'header plus one row per case');
+  assert.ok(tableRows.every((l) => l.length < 400));
 });
 
 test('scoreRun: motion-style case, the spec reports a model and the output has no page or MP4', async () => {
@@ -496,20 +506,15 @@ test('scoreRun: motion-style case, the spec reports a model and the output has n
   assert.equal(s.model, 'GPT-5.4 nano');
 });
 
-test('scoreRun: the spec model wins over the page, an invalid spec still reports it, the page fills in when the spec has none', async () => {
-  const skill = fakeSkill();
-  fs.writeFileSync(path.join(skill, 'scripts/build.mjs'), `
-    import fs from 'node:fs';
-    fs.mkdirSync(process.argv[4], { recursive: true });
-    fs.writeFileSync(process.argv[4] + '/index.html', ${JSON.stringify(pageWith('Page Model'))});
-  `);
+test('scoreRun: the model comes from the spec only (an invalid spec still reports it; no spec or no model is "-")', async () => {
   const score = async (spec) => {
     const work = tmp();
-    fs.writeFileSync(path.join(work, 'spec.json'), JSON.stringify(spec));
-    return scoreRun({ work, skillCfg: cfg, skillDir: skill });
+    if (spec) fs.writeFileSync(path.join(work, 'spec.json'), JSON.stringify(spec));
+    return scoreRun({ work, skillCfg: cfg, skillDir: fakeSkill() });
   };
   assert.equal((await score({ ok: true, generatedBy: { model: 'Spec Model' } })).model, 'Spec Model');
-  assert.equal((await score({ ok: true })).model, 'Page Model');
+  assert.equal((await score({ ok: true })).model, '-');
+  assert.equal((await score(null)).model, '-');
   const bad = await score({ ok: false, generatedBy: { model: 'Spec Model' } });
   assert.equal(bad.finalValid, false);
   assert.equal(bad.model, 'Spec Model');

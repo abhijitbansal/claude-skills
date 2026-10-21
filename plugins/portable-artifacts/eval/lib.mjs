@@ -146,24 +146,21 @@ export function expandCmd(host, { prompt, cwd, model, agent }) {
 }
 
 // The model the agent wrote into its saved spec (generatedBy.model). Every skill's SKILL.md asks for it,
-// so this works for all five skills, motion included. '-' when absent, empty or the file is not JSON.
+// so this works for all five skills, motion included. The text is untrusted, so whitespace (newlines
+// included) collapses to single spaces and the value is capped at MAX_MODEL_CHARS: one table row per case.
+// '-' when absent, blank after cleaning, or the file is not JSON. The harness's own rebuilt page is not
+// a source: it is built from this spec without --model, so it never carries more than the spec does.
+const MAX_MODEL_CHARS = 80;
 export function readSpecModel(specPath) {
   try {
     const model = JSON.parse(fs.readFileSync(specPath, 'utf8'))?.generatedBy?.model;
-    return typeof model === 'string' && model.trim() ? model.trim() : '-';
+    if (typeof model !== 'string') return '-';
+    const clean = model.replace(/\s+/g, ' ').trim();
+    if (!clean) return '-';
+    return clean.length > MAX_MODEL_CHARS ? `${clean.slice(0, MAX_MODEL_CHARS - 1)}…` : clean;
   } catch {
     return '-';
   }
-}
-
-// The model a built page says generated it (generatedBy.model), read from the
-// <meta name="generator"> that every make-* page embeds. '-' when the file is
-// missing, is not a page, or the agent reported no model.
-const GENERATOR_MODEL = /<meta name="generator" content="[^"]*?; model=([^;"]+)/;
-export function readReportedModel(file) {
-  if (!file.endsWith('.html') || !fs.existsSync(file)) return '-';
-  const found = GENERATOR_MODEL.exec(fs.readFileSync(file, 'utf8'))?.[1].trim();
-  return found && found !== 'not reported' ? found : '-';
 }
 
 export function run(argv, { cwd, env, timeoutMs = 0, logFile } = {}) {
@@ -247,7 +244,7 @@ export async function scoreRun({ work, skillCfg, skillDir, seedSpec, outputTimeo
     errors: [],
     outputOk: false,
     changedPaths: null,
-    model: '-', // generatedBy.model the agent self-reported: from the saved spec, else the built page; '-' if neither has one
+    model: '-', // generatedBy.model the agent self-reported in its saved spec; '-' if none
   };
   if (!score.specExists) return score;
   score.model = readSpecModel(specPath);
@@ -277,8 +274,6 @@ export async function scoreRun({ work, skillCfg, skillDir, seedSpec, outputTimeo
     if (!fs.existsSync(p)) return false;
     return fs.statSync(p).isDirectory() ? fs.readdirSync(p, { recursive: true }).some((f) => String(f).endsWith('.png')) : true;
   });
-  const page = skillCfg.artifacts.find((a) => a.endsWith('.html'));
-  if (score.model === '-' && score.outputOk && page) score.model = readReportedModel(path.join(work, page));
   return score;
 }
 

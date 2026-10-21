@@ -32,8 +32,9 @@ host exits with `host "<x>" has no agentArgs`. Install the agent first (the
 plugin installer writes `artifact-builder.agent.md` for Copilot).
 `summary.md` has a `model reported` column: the `generatedBy.model` the
 agent wrote into its saved spec (every skill asks for it, motion included),
-else the one the built page carries (its `generator` meta tag), else `-`.
-It is what the agent self-reported, not a check of which model ran.
+or `-` when it wrote none. It is what the agent self-reported, not a check
+of which model ran. (The harness rebuilds each page from the spec without
+`--model`, so the page carries nothing the spec does not.)
 
 ## What a run does
 
