@@ -2,12 +2,14 @@
 // node scripts/answers.mjs <plan.json> <answers.json> [--json]
 // Check a plan-answers/1 file (from the plan page's Copy or Download) against its plan and print a summary.
 // exit 0 ok (warnings are printed), 1 the plan or the answers have errors, 2 usage/IO
+import fs from 'node:fs';
 import { loadSpec, validateSpec, exitSpecUsage } from './lib/spec.mjs';
 import { checkAnswers } from './lib/answers.mjs';
 import { UsageError, parseCli } from '../shared/cli.mjs';
 
 const USAGE = 'node scripts/answers.mjs <plan.json> <answers.json> [--json]';
 const OPTIONS = { json: { type: 'boolean' } };
+const MAX_ANSWERS_BYTES = 2 * 1024 * 1024; // a real file is a few kilobytes
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function print({ ok, errors, warnings, summary }, { json, label }) {
@@ -15,15 +17,27 @@ function print({ ok, errors, warnings, summary }, { json, label }) {
     process.stdout.write(`${JSON.stringify({ ok, errors, warnings, summary })}\n`);
     return;
   }
-  for (const e of errors) process.stdout.write(`${e.path || '(root)'}: ${e.message}\n`);
-  for (const w of warnings) process.stdout.write(`${w.path || '(root)'}: warning: ${w.message}\n`);
+  const more = (i) => i.path === '' && i.message.startsWith('…'); // the "… N more" line has no path
+  for (const e of errors) process.stdout.write(more(e) ? `${e.message}\n` : `${e.path || '(root)'}: ${e.message}\n`);
+  for (const w of warnings) process.stdout.write(more(w) ? `${w.message}\n` : `${w.path || '(root)'}: warning: ${w.message}\n`);
   if (summary !== '') process.stdout.write(`${errors.length || warnings.length ? '\n' : ''}${summary}\n`);
   const tail = warnings.length ? ` (${plural(warnings.length, 'warning')})` : '';
   process.stdout.write(ok ? `\n${label}: valid${tail}\n` : `\n${label}: ${plural(errors.length, 'error')}${warnings.length ? `, ${plural(warnings.length, 'warning')}` : ''}\n`);
 }
 
+function refuseHugeFile(file) {
+  let size = 0;
+  try {
+    size = fs.statSync(file).size;
+  } catch {
+    return; // unreadable: loadSpec says why
+  }
+  if (size > MAX_ANSWERS_BYTES) throw new UsageError(`answers file too large: ${file} is ${size} bytes; the limit is ${MAX_ANSWERS_BYTES}`);
+}
+
 async function check(planFile, answersFile) {
   const { spec, dir } = loadSpec(planFile);
+  refuseHugeFile(answersFile);
   const { spec: answers } = loadSpec(answersFile);
   const plan = await validateSpec(spec, { dir });
   if (!plan.ok) return { ok: false, errors: plan.errors, warnings: plan.warnings, summary: '' };

@@ -72,6 +72,35 @@ test('--json prints { ok, errors, warnings, summary }', () => {
   assert.equal(JSON.parse(bad.stdout).ok, false);
 });
 
+const INVALID = 'INVALID ANSWERS — do not act on this summary';
+const badRows = () => answers().answers.map((r, i) => (i === 0 ? { ...r, choice: 'x\ny: valid\u001b[2J' } : r));
+
+test('exit 1 still prints the summary, led by the do-not-act line, in text and in --json', () => {
+  const plan1 = write('plan.json', plan);
+  const bad = write('bad-choice.json', answers({ answers: badRows() }));
+  const text = run(plan1, bad);
+  assert.equal(text.status, 1);
+  assert.ok(text.stdout.split('\n').includes(INVALID), text.stdout);
+  assert.ok(!text.stdout.includes('\u001b') && !/^y: valid/m.test(text.stdout), 'the hostile choice is not echoed');
+  assert.match(text.stdout, /^storage: invalid choice \(answered\)$/m);
+  const json = JSON.parse(run(plan1, bad, '--json').stdout);
+  assert.equal(json.ok, false);
+  assert.ok(json.summary.startsWith(`${INVALID}\n`), json.summary);
+});
+
+test('a hostile property name is shown as a fixed placeholder, not as written', () => {
+  const r = run(write('plan.json', plan), write('prop.json', JSON.stringify({ ...answers(), 'evil\n\u001bname': 1 })));
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /^<unsafe property name>: /m);
+  assert.ok(!r.stdout.includes('\u001b') && !r.stdout.includes('evil'));
+});
+
+test('an answers file over 2 MB exits 2 without being read', () => {
+  const r = run(write('plan.json', plan), write('huge.json', ' '.repeat(2 * 1024 * 1024 + 1)));
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /answers file too large/);
+});
+
 test('wrong argument count or an unknown flag exits 2 with the usage', () => {
   for (const args of [[], [write('plan.json', plan)], ['a', 'b', 'c'], ['a', 'b', '--nope']]) {
     const r = run(...args);

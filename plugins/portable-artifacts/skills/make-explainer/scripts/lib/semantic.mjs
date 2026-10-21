@@ -38,6 +38,9 @@ function count(errors, arr, base, field, [min, max], fix = 'cut some or split th
 
 // ---- top level --------------------------------------------------------
 
+// A page with questions to answer saves and exports its answers under the plan's key, so such a spec needs one.
+const ANSWERABLE_TYPES = new Set(['decision', 'approval', 'question']);
+
 export function checkTop(spec, errors) {
   length(errors, spec, 'title', '', LIMITS.title);
   length(errors, spec, 'subtitle', '', LIMITS.subtitle);
@@ -51,7 +54,7 @@ export function checkTop(spec, errors) {
     if (!themes.includes(spec.theme)) errors.push({ path: 'theme', message: `unknown theme ${q(spec.theme)}; ${suggestion(spec.theme, themes)}` });
   }
   if (spec.key !== undefined) checkKey(errors, spec.key, 'key');
-  else if (spec.preset === 'plan') {
+  else if (spec.preset === 'plan' || spec.sections.some((s) => ANSWERABLE_TYPES.has(s.type))) {
     errors.push({ path: 'key', message: `a plan needs a key (answers are saved and checked under it); add "key": ${q(suggestedPlanKey(spec))}` });
   }
 }
