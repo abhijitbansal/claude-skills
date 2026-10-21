@@ -22,6 +22,7 @@ import { esc, inline, headingInline, plain, rawText, toneClass } from './render/
 import { flavorFor, flavorVars, scrimVar, CLASSIC } from './flavor.mjs';
 import { artSvg } from '../../shared/art.mjs';
 import { dataUri } from './image.mjs';
+import { planHash, planKey } from './plan-hash.mjs';
 
 const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), slides: new URL('../../template/slides.html', import.meta.url) };
 const BASE_CSS = new URL('../../template/base.css', import.meta.url);
@@ -156,11 +157,11 @@ function renderHeroTldr(section, id, titleId, ctx) {
 }
 
 // Plan mode: the sections a reader answers. A page that has one carries the plan's key (the answers' storage
-// namespace) and its hash on <html>; the hash is a placeholder until the answers validator fills it.
+// namespace) and its hash on <html>; the answers validator (answers.mjs) recomputes both from the spec.
 const PLAN_ITEM_TYPES = new Set(['decision', 'approval', 'question', 'verdict']);
 const planAttrs = (spec, slides) => (slides || !spec.sections.some((s) => PLAN_ITEM_TYPES.has(s.type))
   ? ''
-  : ` data-plan-key="${esc(spec.key ?? '')}" data-plan-hash=""`);
+  : ` data-plan-key="${esc(planKey(spec))}" data-plan-hash="${planHash(spec)}"`);
 
 // Review links name the section they point at: explicit id -> link text as escaped HTML. The title or label when
 // there is one, else the start of its question, item or text as plain text, cut at a word near LINK_CHARS.

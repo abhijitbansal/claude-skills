@@ -62,7 +62,7 @@ test('unanswered items export answered false, with the default as choice or text
   const file = await exported(page);
   assert.equal(file.schema, 'plan-answers/1');
   assert.equal(file.planKey, 'plan-test');
-  assert.equal(file.planHash, '');
+  assert.match(file.planHash, /^[0-9a-f]{12}$/);
   assert.equal(file.reviewer, '');
   assert.equal(file.verdict, null);
   assert.deepEqual(file.answers, [
@@ -125,7 +125,7 @@ test('choosing, typing and a verdict survive a reload under pa-plan:<key> as { h
   await settle(page);
   const before = await exported(page);
   const saved = JSON.parse(await stored(page));
-  assert.equal(saved.hash, '');
+  assert.equal(saved.hash, before.planHash);
   assert.deepEqual(saved.answers.storage, { choice: 'A save server', comment: 'Only if cheap' });
   assert.deepEqual(saved.answers.owner, { text: 'Dana' });
   await page.reload();
@@ -163,7 +163,7 @@ test('the first answer after a stale load replaces the old entry, and a reload s
   const old = JSON.stringify({ hash: 'old-hash', answers: { storage: { choice: 'A save server' } } });
   const { page, context } = await openPage(built().url, { seed: { [STORE]: old } });
   await pick(page, 'theme', 'Mono');
-  assert.deepEqual(JSON.parse(await stored(page)), { hash: '', answers: { theme: { choice: 'Mono' } }, verdict: null, reviewer: '' });
+  assert.deepEqual(JSON.parse(await stored(page)), { hash: (await exported(page)).planHash, answers: { theme: { choice: 'Mono' } }, verdict: null, reviewer: '' });
   await page.reload();
   await page.waitForFunction(() => window.paReady === true);
   assert.equal(await page.locator('[data-plan-stale]').isHidden(), true);
@@ -190,7 +190,7 @@ test('a page hash that matches the saved hash keeps the answers; a changed page 
   const { file, html } = built();
   const withHash = (hash) => {
     const out = path.join(path.dirname(file), `hash-${hash}.html`);
-    fs.writeFileSync(out, html.replace('data-plan-hash=""', `data-plan-hash="${hash}"`));
+    fs.writeFileSync(out, html.replace(/data-plan-hash="[0-9a-f]*"/, `data-plan-hash="${hash}"`));
     return pathToFileURL(out).href;
   };
   const same = JSON.stringify({ hash: 'abc123', answers: { storage: { choice: 'A save server' } } });
@@ -207,10 +207,12 @@ test('a page hash that matches the saved hash keeps the answers; a changed page 
 
 test('junk in storage, or a saved choice that is no longer an option, is ignored without an error', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const proto = '{"hash":"","answers":{"__proto__":{"choice":"A save server"},"storage":{"choice":"Gone"},"owner":{"text":7}}}';
+  const { url, html } = built();
+  const hash = /data-plan-hash="([0-9a-f]+)"/.exec(html)[1];
+  const proto = `{"hash":"${hash}","answers":{"__proto__":{"choice":"A save server"},"storage":{"choice":"Gone"},"owner":{"text":7}}}`;
   const cases = [['not json', false], ['[]', false], ['null', false], ['{}', true], [proto, false]];
   for (const [raw, notice] of cases) {
-    const { page, problems, context } = await openPage(built().url, { seed: { [STORE]: raw } });
+    const { page, problems, context } = await openPage(url, { seed: { [STORE]: raw } });
     assert.equal(await page.locator('input[name="plan-storage"]:checked').count(), 0, raw);
     assert.equal(await page.locator(`${item('owner')} [data-answer]`).inputValue(), '', raw);
     assert.equal(await page.locator('[data-plan-stale]').isVisible(), notice, raw);

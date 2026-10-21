@@ -201,7 +201,7 @@ test('answerable items need a verdict section, in any preset', async () => {
   const msg = 'a plan with decisions, approvals or questions needs a verdict section (it holds the Export buttons); add one as the last section';
   for (const one of [decision(), approval(), question()]) {
     assert.deepEqual(await errorsOf({ title: 'T', sections: [one] }), [{ path: 'sections', message: msg }], one.type);
-    assert.deepEqual(await errorsOf({ title: 'T', preset: 'plan', sections: [one] }), [{ path: 'sections', message: msg }], one.type);
+    assert.deepEqual(await errorsOf({ title: 'T', preset: 'plan', key: 'plan-t', sections: [one] }), [{ path: 'sections', message: msg }], one.type);
   }
   assert.deepEqual(await errorsOf({ title: 'T', sections: [{ type: 'text', text: 'x' }, review({ items: [{ point: 'p', why: 'w.' }] })] }), [], 'a review alone needs none');
 });
@@ -232,9 +232,9 @@ test('plan types are accepted outside the plan preset', async () => {
 
 // ---- root key -------------------------------------------------------------------------------------
 
-test('key: optional on any preset; validated by pattern and length', async () => {
+test('key: optional on any preset but plan; validated by pattern and length', async () => {
   assert.deepEqual(await errorsOf({ title: 'T', sections: [{ type: 'text', text: 'x' }] , key: 'release-2.1' }), []);
-  assert.deepEqual(await errorsOf(plan([decision()], { key: undefined })), [], 'not required yet (Task 14 makes it required for plan)');
+  assert.deepEqual((await errorsOf(plan([decision()], { key: undefined }))).map((e) => e.path), ['key'], 'required for preset plan');
   assert.deepEqual(await errorsOf(plan([decision()], { key: 'Bad Key' })), [
     { path: 'key', message: 'key "Bad Key" is invalid; use lowercase letters, digits, . - and _, starting with a letter or digit' },
   ]);

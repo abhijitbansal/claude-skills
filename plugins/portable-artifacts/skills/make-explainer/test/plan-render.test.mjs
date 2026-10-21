@@ -236,20 +236,20 @@ const build = (spec) => buildPage(spec, { dir: FIXTURES, out: OUT });
 const PLAN_CSS_MARK = PLAN_CSS.split('\n')[0];
 const PLAN_JS_MARK = PLAN_JS.split('\n')[0];
 
-test('a built plan page: the theme name, the plan key and an empty hash on <html>; plan.css and plan.js once', async () => {
+test('a built plan page: the theme name, the plan key and the plan hash on <html>; plan.css and plan.js once', async () => {
   const { html } = await build(plan([decision(), approval(), question(), review(), verdict()]));
-  assert.match(html, /<html lang="en" data-flavor="classic" data-theme-name="mono" data-plan-key="plan-mode" data-plan-hash="">/);
+  assert.match(html, /<html lang="en" data-flavor="classic" data-theme-name="mono" data-plan-key="plan-mode" data-plan-hash="[0-9a-f]{12}">/);
   assert.equal(html.split(PLAN_CSS_MARK).length - 1, 1, 'plan.css once');
   assert.equal(html.split(PLAN_JS_MARK).length - 1, 1, 'plan.js once');
   assert.match(html, /<a class="plan-review-go" href="#storage">/);
 });
 
-test('a page with no plan items has no plan attributes, and a key-less plan writes an empty key', async () => {
+test('a page with no plan items has no plan attributes, and a key-less plan writes a key derived from its title', async () => {
   const plain = (await build({ title: 'T', sections: [{ type: 'text', text: 'x' }] })).html;
   assert.match(plain, /<html lang="en" data-flavor="dusk" data-theme-name="dusk">/);
   assert.ok(!plain.includes('data-plan-key'));
   const keyless = (await build(plan([question()], { key: undefined }))).html;
-  assert.match(keyless, /data-plan-key="" data-plan-hash=""/);
+  assert.match(keyless, /data-plan-key="plan-plan" data-plan-hash="[0-9a-f]{12}"/);
 });
 
 test('a hostile key cannot leave its attribute', async () => {

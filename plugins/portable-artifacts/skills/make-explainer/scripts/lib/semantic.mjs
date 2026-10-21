@@ -5,6 +5,7 @@ import { didYouMean, pathJoin } from '../../shared/errors.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { ID_PATTERN, KEY_PATTERN, LIMITS, META_KEYS, NON_SPACE } from './schema.mjs';
 import { codeLines } from './slides.mjs';
+import { suggestedPlanKey } from './plan-hash.mjs';
 
 const q = (v) => JSON.stringify(v);
 const MAX_LISTED = 12;
@@ -50,6 +51,9 @@ export function checkTop(spec, errors) {
     if (!themes.includes(spec.theme)) errors.push({ path: 'theme', message: `unknown theme ${q(spec.theme)}; ${suggestion(spec.theme, themes)}` });
   }
   if (spec.key !== undefined) checkKey(errors, spec.key, 'key');
+  else if (spec.preset === 'plan') {
+    errors.push({ path: 'key', message: `a plan needs a key (answers are saved and checked under it); add "key": ${q(suggestedPlanKey(spec))}` });
+  }
 }
 
 // A storage namespace (a checklist's ticks, a plan's answers): KEY_PATTERN and the checklist key limit.
