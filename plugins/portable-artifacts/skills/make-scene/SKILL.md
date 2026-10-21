@@ -12,11 +12,11 @@ You write one JSON file, `scene.json`: a title, then either `data` (rows that be
 
 Run every command from the project folder (where `scene.json` lives), using the full path to the scripts. If the request is empty, ask what to show.
 
-Run every step yourself, in this same turn. Do not end your reply after showing the JSON: keep going until validate prints `valid` and the HTML exists.
+Run every step yourself (or hand off as the Cheaper model section says), in this same turn. Do not end your reply after showing the JSON: keep going until validate prints `valid` and the HTML exists.
 
 ## Cheaper model
 
-If your host did not already run this skill on a cheaper model, and you can start another agent, start the `artifact-builder` agent to do the work, unless you are already artifact-builder. If you are already artifact-builder, skip the rest of this section and do the work yourself.
+Skip this section if you are running in Claude Code (it already runs this skill on the model named in the frontmatter), or if `artifact-builder` is not in your list of available agents. Otherwise, if you can start another agent, start the `artifact-builder` agent to do the work, unless you are already artifact-builder. If you are already artifact-builder, skip the rest of this section and do the work yourself.
 
 Give it a self-contained brief. It has no memory of this conversation, so the brief must say:
 

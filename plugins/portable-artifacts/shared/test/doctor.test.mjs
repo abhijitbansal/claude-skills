@@ -635,7 +635,9 @@ test('KOKORO_PIN is exported and used by the kokoro fix', async () => {
 // --- builderAgent: the optional artifact-builder agent file ---
 
 const AGENT_DIRS = ["/h/.copilot/agents", "/h/.codex/agents", "/p/.github/agents", "/p/.codex/agents"];
-const agentCtx = (files = []) => ctx({ homedir: "/h", cwd: "/p", exists: (p) => files.includes(p) });
+// files: existing agent files; dirs: other existing folders (the host's home folder is what makes the requirement apply).
+const agentCtx = (files = [], dirs = ["/h/.codex"]) => ctx({ homedir: "/h", cwd: "/p", exists: (p) => files.includes(p) || dirs.includes(p) });
+const EMPTY_HOME = [];
 
 test("builderAgent: false on an empty home and cwd; optional with the shared requirement fields", async () => {
   const b = builderAgent();
@@ -682,6 +684,37 @@ test("builderAgent: a missing agent file is optional and never makes doctor exit
   assert.match(run.out, /install\.mjs copilot --agents-only/);
   const json = JSON.parse((await runMain(["--json"], mainOpts({ requirementsFor: () => [builderAgent()] }), { ctx: agentCtx() })).out);
   assert.equal(json.ok, true);
+});
+
+test("builderAgent: not reported at all when neither ~/.copilot nor ~/.codex exists (Claude Code, Gemini)", async () => {
+  const empty = agentCtx([], EMPTY_HOME);
+  assert.equal(builderAgent().applies(empty), false);
+  assert.deepEqual(await diagnose([builderAgent()], empty), { ok: true, missing: [] });
+  const opts = mainOpts({ requirementsFor: () => [nodeVersion(1), builderAgent()] });
+  const human = await runMain([], opts, { ctx: empty });
+  assert.equal(human.code, 0);
+  assert.match(human.out, /ok: everything make-motion needs is installed/);
+  assert.doesNotMatch(human.out, /builder_agent/);
+  const json = JSON.parse((await runMain(["--json"], opts, { ctx: empty })).out);
+  assert.deepEqual(json, { ok: true, missing: [] });
+});
+
+test("builderAgent: ~/.codex or ~/.copilot present without the file is a missing optional, exit 0", async () => {
+  for (const dir of ["/h/.codex", "/h/.copilot"]) {
+    const c = agentCtx([], [dir]);
+    assert.equal(builderAgent().applies(c), true, dir);
+    const { ok, missing } = await diagnose([builderAgent()], c);
+    assert.equal(ok, true);
+    assert.deepEqual(missing.map((m) => [m.id, m.required]), [["builder_agent", false]]);
+    const human = await runMain([], mainOpts({ requirementsFor: () => [nodeVersion(1), builderAgent()] }), { ctx: c });
+    assert.equal(human.code, 0);
+    assert.match(human.out, /missing \(optional\): builder_agent — .*Run: node <path-to-claude-skills>/);
+  }
+});
+
+test("builderAgent: ~/.copilot present and the file installed is not missing", async () => {
+  const c = agentCtx(["/h/.copilot/agents/artifact-builder.agent.md"], ["/h/.copilot"]);
+  assert.deepEqual(await diagnose([builderAgent()], c), { ok: true, missing: [] });
 });
 
 test("builderAgent: --fix builder_agent prints the manual command and runs nothing", async () => {

@@ -25,7 +25,7 @@ for (const skill of DELEGATING) {
     const md = read(skill);
     const body = section(md);
     assert.ok(body, `missing "${HEADING}" heading`);
-    for (const phrase of ['artifact-builder', 'self-contained brief', 'skill directory', 'unless you are already artifact-builder', 'spec path', 'output folder']) {
+    for (const phrase of ['artifact-builder', 'self-contained brief', 'skill directory', 'unless you are already artifact-builder', 'spec path', 'output folder', 'Claude Code', 'list of available agents']) {
       assert.ok(body.includes(phrase), `${skill}: section lacks "${phrase}"`);
     }
     assert.equal(md.split(`\n${HEADING}\n`).length, 2, 'exactly one section');

@@ -73,7 +73,7 @@ test('--for check on a fresh copy asks for dev_deps; node_modules keeps --omit=d
   assert.equal(dev.size, '≈118 MB');
 });
 
-// The optional artifact-builder agent file: reported when absent, never a failure on its own.
+// The optional artifact-builder agent file: reported only where Copilot or Codex exists, never a failure on its own.
 test('builder_agent is an optional requirement in every target, and a missing agent file keeps exit 0', async () => {
   const requirementsFor = await loadRequirements();
   const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
@@ -85,15 +85,23 @@ test('builder_agent is an optional requirement in every target, and a missing ag
   const home = tmp('doctor-home-');
   const cwd = tmp('doctor-cwd-');
   const env = { ...process.env, HOME: home, USERPROFILE: home };
-  const doctor = () => JSON.parse(spawnSync(process.execPath, [path.join(SKILL, 'scripts/doctor.mjs'), '--json'], { encoding: 'utf8', env, cwd }).stdout);
-  const r = spawnSync(process.execPath, [path.join(SKILL, 'scripts/doctor.mjs'), '--json'], { encoding: 'utf8', env, cwd });
-  const out = JSON.parse(r.stdout);
-  const miss = out.missing.find((m) => m.id === 'builder_agent');
-  assert.ok(miss, 'reported on an empty home and cwd');
+  const doctor = () => spawnSync(process.execPath, [path.join(SKILL, 'scripts/doctor.mjs'), '--json'], { encoding: 'utf8', env, cwd });
+  const read = (r) => JSON.parse(r.stdout);
+  const consistent = (r) => {
+    const out = read(r);
+    assert.equal(out.ok, out.missing.filter((m) => m.required).length === 0, 'ok ignores optional misses');
+    assert.equal(r.status, out.ok ? 0 : 1, 'an optional miss alone must not exit 1');
+    return out;
+  };
+  // Neither ~/.copilot nor ~/.codex: Claude Code or Gemini, nothing to report.
+  assert.equal(consistent(doctor()).missing.some((m) => m.id === 'builder_agent'), false, 'not reported without a Copilot or Codex folder');
+  // ~/.codex exists, no agent file: a missing optional.
+  fs.mkdirSync(path.join(home, '.codex'));
+  const miss = consistent(doctor()).missing.find((m) => m.id === 'builder_agent');
+  assert.ok(miss, 'reported once ~/.codex exists');
   assert.equal(miss.required, false);
   assert.match(miss.fix.manual.darwin, /install\.mjs copilot --agents-only/);
-  if (out.missing.every((m) => m.id === 'builder_agent')) assert.equal(r.status, 0, 'the missing agent alone must not exit 1');
-  fs.mkdirSync(path.join(home, '.codex/agents'), { recursive: true });
+  fs.mkdirSync(path.join(home, '.codex/agents'));
   fs.writeFileSync(path.join(home, '.codex/agents/artifact-builder.toml'), 'name = "artifact-builder"\n');
-  assert.equal(doctor().missing.some((m) => m.id === 'builder_agent'), false, 'present once the file exists');
+  assert.equal(consistent(doctor()).missing.some((m) => m.id === 'builder_agent'), false, 'present once the file exists');
 });

@@ -344,6 +344,10 @@ export function kokoro() {
 // The cheap-model `artifact-builder` agent file the skills hand their build to. Optional: a missing file
 // never fails doctor, and there is no auto fix (it is written by the plugin's installer, not by npm).
 // Doctor does not know its host, so it looks in every host folder, user level and project level.
+// It applies only where Copilot or Codex plausibly exists (~/.copilot or ~/.codex is there): on a
+// Claude Code or Gemini machine no agent file is ever installed, so nothing is reported at all.
+// Limit: project level means the current folder, not the git root.
+const BUILDER_AGENT_HOST_DIRS = ['.copilot', '.codex'];
 const BUILDER_AGENT_FILES = ['artifact-builder.agent.md', 'artifact-builder.toml'];
 const BUILDER_AGENT_DIRS = (ctx) => {
   const P = pp(ctx);
@@ -360,20 +364,24 @@ export function builderAgent() {
     why: 'lets the skill hand the build to a cheaper model (the artifact-builder agent file for Copilot or Codex)',
     required: false,
     size: '≈2 KB',
+    // diagnose() skips a requirement whose applies(ctx) is false: not missing, not listed.
+    applies: (ctx) => BUILDER_AGENT_HOST_DIRS.some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d))),
     check: (ctx) => BUILDER_AGENT_DIRS(ctx).some((dir) => BUILDER_AGENT_FILES.some((f) => ctx.exists(pp(ctx).join(dir, f)))),
     fix: () => ({
       auto: null,
-      manual: manualAll(`run \`${install} copilot --agents-only\` for Copilot or \`${install} codex --agents-only\` for Codex (\`agents\` writes both; add --project <dir> to install into one repo)`),
+      manual: manualAll(`${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both; add --project <dir> to install into one repo`),
     }),
     needsSudo: () => false,
   };
 }
 
 // { ok, missing, info? }. info lists present items that carry a platform hint.
+// A requirement with an applies(ctx) predicate that returns false is left out entirely.
 export async function diagnose(requirements, ctx) {
   const missing = [];
   const info = [];
   for (const r of requirements) {
+    if (r.applies && !r.applies(ctx)) continue;
     if (await r.check(ctx)) {
       const hint = r.presentInfo?.(ctx);
       if (hint) info.push({ id: r.id, note: hint.note, sudoHint: hint.sudoHint });
