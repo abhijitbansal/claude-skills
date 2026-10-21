@@ -45,9 +45,17 @@ const inlineScript = (code) => `<script>${escapeInline(code)}</script>`;
 const utc = (iso) => iso.slice(0, 16).replace('T', ' ');
 const timeTag = (iso, text) => `<time datetime="${escapeHtml(iso)}" data-t="${text}">${escapeHtml(text === 'hm' ? iso.slice(11, 16) + ' UTC' : `${utc(iso)} UTC`)}</time>`;
 
+// The value is one line, sized from its tile's width: --n (its length in code points) tells the CSS how many
+// characters must fit. A value longer than KPI_WIDE_CHARS would not fit a small tile even at the smallest
+// size, so its tile takes a wider share of the row. The style attribute comes first so that class="kpi-value">
+// still directly precedes the value text.
+const KPI_WIDE_CHARS = 10;
+
 function kpiTile(kpi, results) {
-  const value = results[kpi.query]?.rows[0]?.[kpi.field];
-  return `<div class="kpi" id="kpi-${escapeHtml(kpi.id)}"><div class="kpi-label">${escapeHtml(kpi.title)}</div><div class="kpi-value">${escapeHtml(formatValue(value, kpi.format))}</div></div>`;
+  const value = formatValue(results[kpi.query]?.rows[0]?.[kpi.field], kpi.format);
+  const chars = [...value].length;
+  const wide = chars > KPI_WIDE_CHARS ? ' kpi-wide' : '';
+  return `<div class="kpi${wide}" id="kpi-${escapeHtml(kpi.id)}"><div class="kpi-label">${escapeHtml(kpi.title)}</div><div style="--n: ${chars}" class="kpi-value">${escapeHtml(value)}</div></div>`;
 }
 
 function dataTable(res) {
