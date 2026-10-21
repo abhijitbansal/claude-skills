@@ -94,6 +94,7 @@ export function checkIds(spec, errors) {
     if (PLAN_ITEM_TYPES.has(s.type) && RESERVED_ITEM_IDS.has(s.id)) {
       errors.push({ path: at, message: `id ${q(s.id)} is reserved for the plan's verdict; pick another id, such as "${s.id}-call"` });
     }
+    if (PLAN_ITEM_TYPES.has(s.type)) length(errors, s, 'id', pathJoin('sections', i), LIMITS.planId);
     if (seen.has(s.id)) errors.push({ path: at, message: `duplicate id ${q(s.id)}; first used at ${seen.get(s.id)}; rename one` });
     else seen.set(s.id, at);
   });
@@ -202,6 +203,8 @@ function checkSection(s, i, errors, state) {
       }
       break;
     case 'decision': checkDecision(s, at, errors); break;
+    case 'approval': length(errors, s, 'item', at, LIMITS.planQuestion); break;
+    case 'question': length(errors, s, 'text', at, LIMITS.planQuestion); break;
     case 'review': checkReview(s, at, errors, state.ids); break;
     case 'verdict': checkVerdict(i, at, errors, state); break;
     default:
@@ -233,7 +236,9 @@ function checkOptionLabels(s, at, errors) {
 }
 
 function checkDecision(s, at, errors) {
+  length(errors, s, 'question', at, LIMITS.planQuestion);
   count(errors, s.options, at, 'options', LIMITS.planOptions, 'keep the strongest options');
+  s.options.forEach((o, oi) => length(errors, o, 'label', pathJoin(pathJoin(at, 'options'), oi), LIMITS.planLabel));
   checkOptionLabels(s, at, errors);
   const labels = s.options.map((o) => o.label);
   checkOptionRef(s, 'recommended', at, errors, labels);

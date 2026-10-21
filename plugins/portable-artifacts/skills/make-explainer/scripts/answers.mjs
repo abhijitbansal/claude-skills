@@ -12,37 +12,44 @@ const OPTIONS = { json: { type: 'boolean' } };
 const MAX_ANSWERS_BYTES = 2 * 1024 * 1024; // a real file is a few kilobytes
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-function print({ ok, errors, warnings, summary }, { json, label }) {
+// `errors` and `warnings` are the entries shown; the counts are the true totals (see checkAnswers).
+function print({ ok, errors, warnings, errorCount, warningCount, summary }, { json, label }) {
   if (json) {
-    process.stdout.write(`${JSON.stringify({ ok, errors, warnings, summary })}\n`);
+    process.stdout.write(`${JSON.stringify({ ok, errors, warnings, errorCount, warningCount, summary })}\n`);
     return;
   }
-  const more = (i) => i.path === '' && i.message.startsWith('…'); // the "… N more" line has no path
-  for (const e of errors) process.stdout.write(more(e) ? `${e.message}\n` : `${e.path || '(root)'}: ${e.message}\n`);
-  for (const w of warnings) process.stdout.write(more(w) ? `${w.message}\n` : `${w.path || '(root)'}: warning: ${w.message}\n`);
-  if (summary !== '') process.stdout.write(`${errors.length || warnings.length ? '\n' : ''}${summary}\n`);
-  const tail = warnings.length ? ` (${plural(warnings.length, 'warning')})` : '';
-  process.stdout.write(ok ? `\n${label}: valid${tail}\n` : `\n${label}: ${plural(errors.length, 'error')}${warnings.length ? `, ${plural(warnings.length, 'warning')}` : ''}\n`);
+  const hidden = (count, shown) => (count > shown.length ? `… ${count - shown.length} more\n` : '');
+  for (const e of errors) process.stdout.write(`${e.path || '(root)'}: ${e.message}\n`);
+  process.stdout.write(hidden(errorCount, errors));
+  for (const w of warnings) process.stdout.write(`${w.path || '(root)'}: warning: ${w.message}\n`);
+  process.stdout.write(hidden(warningCount, warnings));
+  if (summary !== '') process.stdout.write(`${errorCount || warningCount ? '\n' : ''}${summary}\n`);
+  const tail = warningCount ? ` (${plural(warningCount, 'warning')})` : '';
+  process.stdout.write(ok ? `\n${label}: valid${tail}\n` : `\n${label}: ${plural(errorCount, 'error')}${warningCount ? `, ${plural(warningCount, 'warning')}` : ''}\n`);
 }
 
-function refuseHugeFile(file) {
-  let size = 0;
+// A named pipe or a device would block or never end; refuse before opening anything. A file that cannot be
+// examined is left to loadSpec, which says why.
+function requireRegularFile(file, maxBytes) {
+  let info;
   try {
-    size = fs.statSync(file).size;
+    info = fs.statSync(file);
   } catch {
-    return; // unreadable: loadSpec says why
+    return;
   }
-  if (size > MAX_ANSWERS_BYTES) throw new UsageError(`answers file too large: ${file} is ${size} bytes; the limit is ${MAX_ANSWERS_BYTES}`);
+  if (!info.isFile()) throw new UsageError(`not a regular file: ${file}`);
+  if (maxBytes !== undefined && info.size > maxBytes) throw new UsageError(`answers file too large: ${file} is ${info.size} bytes; the limit is ${maxBytes}`);
 }
 
 async function check(planFile, answersFile) {
+  requireRegularFile(planFile);
+  requireRegularFile(answersFile, MAX_ANSWERS_BYTES);
   const { spec, dir } = loadSpec(planFile);
-  refuseHugeFile(answersFile);
   const { spec: answers } = loadSpec(answersFile);
   const plan = await validateSpec(spec, { dir });
-  if (!plan.ok) return { ok: false, errors: plan.errors, warnings: plan.warnings, summary: '' };
-  const result = checkAnswers(spec, answers);
-  return { ok: result.errors.length === 0, ...result };
+  if (!plan.ok) return { ok: false, errors: plan.errors, warnings: plan.warnings, errorCount: plan.errors.length, warningCount: plan.warnings.length, summary: '' };
+  const checked = checkAnswers(spec, answers);
+  return { ok: checked.errorCount === 0, ...checked };
 }
 
 const argv = process.argv.slice(2);

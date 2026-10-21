@@ -247,6 +247,36 @@ test('key: required with preset plan or any decision, approval or question; othe
   assert.deepEqual(await errorsOf(plan([decision()], { key: 3 })), [{ path: 'key', message: 'must be string' }]);
 });
 
+// ---- what the answers file carries has plan-side limits -------------------------------------------------
+
+test('item ids, questions and option labels are limited so the exported answers file is always accepted', async () => {
+  const id = 'i'.repeat(LIMITS.planId + 1);
+  const long = (n) => `${'w'.repeat(n)}`;
+  for (const make of [decision, approval, question]) {
+    assert.deepEqual(await errorsOf(plan([make({ id })])), [
+      { path: 'sections[0].id', message: `id is ${LIMITS.planId + 1} characters; the limit is ${LIMITS.planId} — shorten it` },
+    ], make().type);
+    assert.deepEqual(await errorsOf(plan([make({ id: 'i'.repeat(LIMITS.planId) })])), [], `${make().type} id at the limit`);
+  }
+  const over = LIMITS.planQuestion + 1;
+  assert.deepEqual(await errorsOf(plan([decision({ question: long(over) })])), [
+    { path: 'sections[0].question', message: `question is ${over} characters; the limit is ${LIMITS.planQuestion} — shorten it` },
+  ]);
+  assert.deepEqual(await errorsOf(plan([approval({ item: long(over) })])), [
+    { path: 'sections[0].item', message: `item is ${over} characters; the limit is ${LIMITS.planQuestion} — shorten it` },
+  ]);
+  assert.deepEqual(await errorsOf(plan([question({ text: long(over) })])), [
+    { path: 'sections[0].text', message: `text is ${over} characters; the limit is ${LIMITS.planQuestion} — shorten it` },
+  ]);
+  const label = long(LIMITS.planLabel + 1);
+  const withLabel = decision({ options: [{ label }, { label: 'Other' }], recommended: 'Other' });
+  assert.deepEqual(await errorsOf(plan([withLabel])), [
+    { path: 'sections[0].options[0].label', message: `label is ${LIMITS.planLabel + 1} characters; the limit is ${LIMITS.planLabel} — shorten it` },
+  ]);
+  const atLimit = decision({ options: [{ label: long(LIMITS.planLabel) }, { label: 'Other' }], recommended: 'Other' });
+  assert.deepEqual(await errorsOf(plan([atLimit])), []);
+});
+
 // ---- walk / lint ----------------------------------------------------------------------------------
 
 test('recommended, a decision\'s default and target are not prose; a question\'s default is', () => {

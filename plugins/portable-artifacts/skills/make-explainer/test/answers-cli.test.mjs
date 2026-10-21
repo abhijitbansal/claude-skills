@@ -62,9 +62,10 @@ test('an invalid plan exits 1 with the plan\'s own errors', () => {
   assert.match(r.stdout, /^key: /m);
 });
 
-test('--json prints { ok, errors, warnings, summary }', () => {
+test('--json prints { ok, errors, warnings, errorCount, warningCount, summary }', () => {
   const ok = JSON.parse(run(write('plan.json', plan), write('ok.json', answers()), '--json').stdout);
-  assert.deepEqual(Object.keys(ok), ['ok', 'errors', 'warnings', 'summary']);
+  assert.deepEqual(Object.keys(ok), ['ok', 'errors', 'warnings', 'errorCount', 'warningCount', 'summary']);
+  assert.equal(ok.errorCount, 0);
   assert.equal(ok.ok, true);
   assert.match(ok.summary, /storage: A save server \(override\)/);
   const bad = run(write('plan.json', plan), write('bad.json', answers({ verdict: 'maybe' })), '--json');
@@ -99,6 +100,51 @@ test('an answers file over 2 MB exits 2 without being read', () => {
   const r = run(write('plan.json', plan), write('huge.json', ' '.repeat(2 * 1024 * 1024 + 1)));
   assert.equal(r.status, 2);
   assert.match(r.stderr, /answers file too large/);
+});
+
+test('the trailer and --json report the true totals when the lists are cut at 20', () => {
+  const ghosts = Array.from({ length: 30 }, (_, i) => ({ id: `ghost-${i}`, kind: 'question', answered: true, text: 'x' }));
+  const plan1 = write('plan.json', plan);
+  const file = write('ghosts.json', answers({ answers: ghosts }));
+  const text = run(plan1, file);
+  assert.equal(text.status, 1);
+  assert.match(text.stdout, /^… 10 more$/m);
+  assert.match(text.stdout, /: 30 errors(?:, \d+ warnings?)?$/m);
+  const json = JSON.parse(run(plan1, file, '--json').stdout);
+  assert.equal(json.errors.length, 20);
+  assert.equal(json.errorCount, 30);
+  assert.ok(json.errors.every((e) => e.path !== ''), 'no pseudo-entry in the list');
+});
+
+test('hidden characters in the file never reach stdout raw, in text or --json', () => {
+  const smuggled = 'A\u{E0041}B\u2060C\u00adD\u180eE\ufe0fF\u{E0100}G';
+  const plan1 = write('plan.json', plan);
+  const file = write('smuggled.json', answers({ planKey: smuggled, reviewer: smuggled }));
+  const hidden = /[\p{Cf}\p{Co}\p{Cn}\p{Cc}\p{Zl}\p{Zp}\p{Variation_Selector}]/u;
+  for (const args of [[plan1, file], [plan1, file, '--json']]) {
+    const r = run(...args);
+    assert.equal(r.status, 1);
+    assert.ok(!hidden.test(r.stdout.replace(/\n/g, '')), JSON.stringify(r.stdout));
+    assert.match(r.stdout, /\\u\{e0041\}/);
+  }
+});
+
+test('a directory, and a named pipe, are refused before anything is read', (t) => {
+  const planFile = write('plan.json', plan);
+  const asDir = run(planFile, dir);
+  assert.equal(asDir.status, 2);
+  assert.match(asDir.stderr, /not a regular file/);
+  const fifo = path.join(dir, 'pipe.json');
+  const made = spawnSync('mkfifo', [fifo]);
+  if (made.status !== 0) {
+    t.diagnostic('mkfifo unavailable; skipping the named-pipe case');
+    return;
+  }
+  for (const args of [[planFile, fifo], [fifo, planFile]]) {
+    const r = spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', timeout: 10000 });
+    assert.equal(r.status, 2, `${args.join(' ')} ${r.stderr}`);
+    assert.match(r.stderr, /not a regular file/);
+  }
 });
 
 test('wrong argument count or an unknown flag exits 2 with the usage', () => {

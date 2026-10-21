@@ -25,7 +25,6 @@ const MAX_LABEL = 500;
 const MAX_QUESTION = 2000;
 const MAX_TEXT = 20000;
 const MAX_SHOWN = 20; // errors and warnings returned; the rest are counted in one line
-const MAX_RAW_ERRORS = 1000;
 const ARTICLES = { decision: 'a decision', approval: 'an approval', question: 'a question' };
 
 const nullable = (schema) => ({ ...schema, type: [schema.type, 'null'] });
@@ -55,16 +54,23 @@ const ANSWERS_FILE_SCHEMA = {
     planHash: str(MAX_LABEL),
     reviewer: str(MAX_TEXT),
     verdict: { enum: [...VERDICTS, null] },
-    answers: { type: 'array', maxItems: MAX_ROWS, items: ROW_SCHEMA },
+    answers: { type: 'array', items: ROW_SCHEMA }, // the row limit is checked first, by oversizedRows
   },
 };
 const validateFile = new Ajv({ allErrors: true, strict: true, verbose: true }).compile(ANSWERS_FILE_SCHEMA);
 
 const collapse = (text) => String(text).replace(/\s+/g, ' ').trim();
-// JSON escapes control characters below U+0020; these are invisible or reorder text on a terminal or in a
-// model's view (C1 controls, zero-width and bidi marks, the byte order mark), so they are written as \uXXXX too.
-const INVISIBLE = /[\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g;
-const escapeInvisible = (text) => text.replace(INVISIBLE, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+// JSON escapes the controls below U+0020. Everything else a reader cannot see, or that reorders or hides text from
+// a person but not from a model, is written out as a code point: format (zero-width, bidi, soft hyphen, word
+// joiner, Unicode tags, the byte order mark), private-use, unassigned and control characters, the line and
+// paragraph separators and the variation selectors. Letters, digits, punctuation and emoji stay as they are.
+const INVISIBLE = /[\p{Cf}\p{Co}\p{Cn}\p{Cc}\u2028\u2029\ufe00-\ufe0f\u{E0100}-\u{E01EF}]/gu;
+const BMP = 0xffff;
+const hex = (code, width) => code.toString(16).padStart(width, '0');
+const escapeInvisible = (text) => text.replace(INVISIBLE, (c) => {
+  const code = c.codePointAt(0);
+  return code > BMP ? `\\u{${hex(code, 5)}}` : `\\u${hex(code, 4)}`;
+});
 /** Reviewer text as one quoted JSON string of at most `limit` characters: no newline, no way to close the quotes. */
 function quoted(text, limit) {
   const flat = collapse(text);
@@ -184,7 +190,7 @@ function summarise(spec, file, { items, matched }) {
 // Ajv puts the file's own property names into paths and its own data into did-you-mean hints; neither may reach a
 // report as the file wrote it (newlines, escape codes, megabytes).
 function safeAjvErrors(raw) {
-  return raw.slice(0, MAX_RAW_ERRORS).map((e) => {
+  return raw.map((e) => {
     const name = e.params?.additionalProperty;
     if (typeof name === 'string' && !NAME_SAFE.test(name)) return { ...e, params: { ...e.params, additionalProperty: UNSAFE_NAME } };
     if (typeof e.data === 'string' && e.data.length > ECHO_CHARS) return { ...e, data: e.data.slice(0, ECHO_CHARS) };
@@ -192,31 +198,43 @@ function safeAjvErrors(raw) {
   });
 }
 
-// The first MAX_SHOWN issues, then one line counting the rest.
-function capped(issues, truncated = false) {
-  if (issues.length <= MAX_SHOWN && !truncated) return issues;
-  const more = issues.length - MAX_SHOWN;
-  return [...issues.slice(0, MAX_SHOWN), { path: '', message: `… ${more}${truncated ? '+' : ''} more` }];
+// The result: the first MAX_SHOWN real errors and warnings, with the true totals beside them (the caller says how
+// many are hidden; there is no pseudo-entry in the lists).
+function result(errors, warnings, summary) {
+  return {
+    errors: errors.slice(0, MAX_SHOWN),
+    warnings: warnings.slice(0, MAX_SHOWN),
+    errorCount: errors.length,
+    warningCount: warnings.length,
+    summary,
+  };
+}
+
+// More rows than the limit: the file is cut to the limit before Ajv sees it, and the row count is the FIRST error.
+function oversizedRows(answers) {
+  const rows = answers?.answers;
+  if (answers === null || typeof answers !== 'object' || !Array.isArray(rows) || rows.length <= MAX_ROWS) return null;
+  return { error: { path: 'answers', message: `answers has ${rows.length} rows; the limit is ${MAX_ROWS}` }, cut: { ...answers, answers: rows.slice(0, MAX_ROWS) } };
 }
 
 /**
- * Check an answers file against its plan. -> { errors, warnings, summary }, each issue { path, message }.
- * `summary` is plain text for the agent that acts on the answers; it is empty when the file is not plan-answers/1,
- * and starts with a line saying not to act on it when the file has errors.
+ * Check an answers file against its plan.
+ * -> { errors, warnings, errorCount, warningCount, summary }. `errors` and `warnings` hold the first 20 real
+ * entries { path, message }; `errorCount` and `warningCount` are the true totals. `summary` is plain text for the
+ * agent that acts on the answers; it is empty when the file is not plan-answers/1, and starts with a line saying
+ * not to act on it when the file has errors.
  */
 export function checkAnswers(spec, answers) {
-  if (!validateFile(answers)) {
-    const raw = validateFile.errors;
-    return { errors: capped(formatAjvErrors(safeAjvErrors(raw)), raw.length > MAX_RAW_ERRORS), warnings: [], summary: '' };
+  const big = oversizedRows(answers);
+  const shape = big?.cut ?? answers;
+  if (!validateFile(shape)) {
+    return result([...(big ? [big.error] : []), ...formatAjvErrors(safeAjvErrors(validateFile.errors))], [], '');
   }
+  if (big) return result([big.error], [], '');
   const sink = { errors: [], warnings: [], seen: new Set() };
   checkIdentity(spec, answers, sink.errors);
   const matches = matchRows(spec, answers.answers, sink);
   if (answers.reviewer.trim() === '') sink.warnings.push({ path: 'reviewer', message: 'the reviewer name is empty; the file does not say who answered' });
   const summary = summarise(spec, answers, matches);
-  return {
-    errors: capped(sink.errors),
-    warnings: capped(sink.warnings),
-    summary: sink.errors.length > 0 ? `${INVALID_PREFIX}\n${summary}` : summary,
-  };
+  return result(sink.errors, sink.warnings, sink.errors.length > 0 ? `${INVALID_PREFIX}\n${summary}` : summary);
 }

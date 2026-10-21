@@ -38,6 +38,10 @@ export const LIMITS = Object.freeze({
   chartRows: 500,
   checklistKey: 80,
   planOptions: [2, 5],
+  // What the answers file carries back (answers.mjs bounds it): an item's id, the question it asks, an option's label.
+  planId: 80,
+  planQuestion: 500,
+  planLabel: 200,
   reviewItems: [1, 5],
 });
 
