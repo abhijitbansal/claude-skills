@@ -71,6 +71,8 @@ test('the five cues are distinct sounds', () => {
 
 test('note sets the pitch of pop, chime and impact; pan places the cue between the channels', () => {
   assert.notEqual(sha(cueWav({ cue: 'chime', note: 'C5' })), sha(cueWav({ cue: 'chime' })));
+  assert.throws(() => noteHz('H9'), /not a note name: "H9"/);
+  assert.throws(() => noteHz(undefined), /not a note name/);
   assert.ok(Math.abs(noteHz('A4') - 440) < 1e-9);
   assert.ok(Math.abs(noteHz('C4') - 261.6256) < 1e-3);
   assert.ok(Math.abs(noteHz('Bb3') - 233.0819) < 1e-3);

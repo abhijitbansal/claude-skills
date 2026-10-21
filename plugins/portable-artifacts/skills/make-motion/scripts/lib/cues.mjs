@@ -27,7 +27,9 @@ function mulberry32(seed) {
 
 /** "A4" -> 440, "C#5", "Bb3": equal temperament, A4 = 440 Hz. */
 export function noteHz(note) {
-  const [, letter, accidental = '', octave] = /^([A-G])([#b]?)(\d)$/.exec(note);
+  const parts = /^([A-G])([#b]?)(\d)$/.exec(note ?? '');
+  if (!parts) throw new Error(`not a note name: ${JSON.stringify(note)} (use A-G, an optional # or b, and an octave 0-8, such as A4 or C#5)`);
+  const [, letter, accidental = '', octave] = parts;
   const semitone = SEMITONES[letter] + (accidental === '#' ? 1 : accidental === 'b' ? -1 : 0);
   return A4_HZ * 2 ** ((semitone + 12 * (Number(octave) + 1) - A4_MIDI) / 12);
 }

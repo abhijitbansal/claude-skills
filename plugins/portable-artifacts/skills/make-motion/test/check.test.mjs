@@ -423,13 +423,22 @@ test('a line at draw 0 and a chart at reveal 0 are not on screen at t = 0; a fil
   assert.equal(check([blankFrame({ elements: [card] })]).stderr, '', 'a filled rect shows its fill at draw 0');
 });
 
+test('a typing text at zero characters (only its caret on screen) does not count as shown at t = 0', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([blankFrame({ elements: [word('cmd', { text: 'npm run build', typing: true })] })]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(warningOf(r), /"cmd" starts empty \(a typing text types from no characters\)/);
+  const shown = check([blankFrame({ elements: [word('cmd', { text: 'npm run build', typing: true }), word('lead')] })]);
+  assert.equal(shown.stderr, '', 'another visible element keeps the frame from being blank');
+});
+
 // ---- typing text (P4) ----------------------------------------------------------------------------
 
 test('a typing text is judged by its full box: a short line passes while it is still being typed', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const r = check([scenesFile([{ id: 'type', duration: 3, elements: [word('line', { text: 'npm run build', typing: true })] }])]);
+  const r = check([scenesFile([{ id: 'type', duration: 3, elements: [word('line', { text: 'npm run build', typing: true }), word('lead', { y: 300 })] }])]);
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.equal(r.stderr, '', 'frame 0 shows the caret, not nothing, but a typing text with no characters yet is still a visible box');
+  assert.equal(r.stderr, '', 'no safe-area or overlap finding while the line is partly typed, and frame 0 has the other element');
 });
 
 test('a typing text wider than the safe area is flagged at once, not only when its last character arrives', async (t) => {

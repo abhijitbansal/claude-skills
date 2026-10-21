@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadSpec, validateSpec, withDefaults, UsageError as SpecUsageError } from './lib/spec.mjs';
+import { loadSpec, validateSpec, withDefaults, ART_BACKGROUND, UsageError as SpecUsageError } from './lib/spec.mjs';
 import { printResult, didYouMean } from '../shared/errors.mjs';
 import { listThemes } from '../shared/theme.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
@@ -71,9 +71,11 @@ const measure = ([sec, index]) => {
     for (let n = node; n && n !== stage; n = n.parentElement) opacity *= Number(getComputedStyle(n).opacity);
     const r = node.getBoundingClientRect();
     const box = { left: (r.left - s.left) * k, top: (r.top - s.top) * k, right: (r.right - s.left) * k, bottom: (r.bottom - s.top) * k };
-    // Nothing drawn yet: a chart at reveal 0, or a line (or unfilled shape) at draw 0. A filled shape shows its fill.
+    // Nothing drawn yet: a chart at reveal 0, a line (or unfilled shape) at draw 0 (a filled shape shows its fill), or a
+    // typing text with no characters typed (its caret alone is not content).
     const mark = node.querySelector(':scope > svg > :first-child');
-    const undrawn = node.dataset.reveal === '0' || (mark !== null && mark.getAttribute('stroke-dashoffset') === '1' && (mark.tagName === 'line' || mark.getAttribute('fill') === 'none'));
+    const untyped = node.querySelector(':scope > .typed')?.textContent === '';
+    const undrawn = untyped || node.dataset.reveal === '0' || (mark !== null && mark.getAttribute('stroke-dashoffset') === '1' && (mark.tagName === 'line' || mark.getAttribute('fill') === 'none'));
     return { id: node.dataset.id, opacity, box, undrawn };
   });
 };
@@ -123,18 +125,21 @@ function overlapProblems(scene, i, samples, size) {
 // one), else its own opacity; and whether a drawing or reveal property starts at 0.
 const startsInvisible = (el) => (el.keyframes.find((kf) => kf.opacity !== undefined)?.opacity ?? el.opacity) <= VISIBLE_OPACITY;
 const startsUndrawn = (el) => ['draw', 'reveal'].some((p) => el.keyframes.find((kf) => kf[p] !== undefined)?.[p] === 0);
+const startsEmpty = (el) => Boolean(el.typing) && (el.keyframes.find((kf) => kf.value !== undefined)?.value ?? 0) === 0;
 const quoted = (els) => els.map((el) => `"${el.id}"`).join(', ');
 
 // Frame 0 is the video's first frame and so its thumbnail: a warning when the first scene shows nothing there. An art
 // background is on screen at t = 0, so it counts. The message names what keeps the frame blank.
 function frameZeroWarnings(scene, els, size) {
-  if (scene.background === 'art' || !scene.elements.length || els.some((m) => isShown(m, size))) return [];
+  if (scene.background === ART_BACKGROUND || !scene.elements.length || els.some((m) => isShown(m, size))) return [];
   const invisible = scene.elements.filter(startsInvisible);
   const undrawn = scene.elements.filter(startsUndrawn);
+  const empty = scene.elements.filter(startsEmpty);
   const causes = [
     scene.transition === 'fade' && 'the scene fades in from the background ("fade" on scene 1)',
     invisible.length && `${quoted(invisible)} ${invisible.length === 1 ? 'has' : 'have'} an opacity 0 first keyframe${invisible.some((el) => el.role === 'title') ? " (a title's theme entrance starts at 0)" : ''}`,
     undrawn.length && `${quoted(undrawn)} ${undrawn.length === 1 ? 'starts' : 'start'} undrawn (draw or reveal 0)`,
+    empty.length && `${quoted(empty)} ${empty.length === 1 ? 'starts' : 'start'} empty (a typing text types from no characters)`,
   ].filter(Boolean);
   const why = causes.length ? causes.join('; ') : 'every element is off the canvas';
   return [{ path: 'scenes[0]', message: `scene "${scene.id}" shows nothing at ${at(0)}: the first frame, the video's thumbnail, is blank; ${why}. Show something at t = 0, or accept a blank thumbnail` }];
@@ -155,8 +160,9 @@ async function crossfadeWarnings(page, spec, fade, size) {
   const from = spec.scenes[fade.from];
   const to = spec.scenes[fade.to];
   const texts = (scene, els) => els.map((m, j) => ({ m, el: scene.elements[j], j })).filter(({ m, el }) => CHECKED.has(el.type) && isShown(m, size));
+  const old = texts(from, outgoing);
   return texts(to, incoming).flatMap((now) => {
-    const under = texts(from, outgoing).find((old) => overlaps(old.m.box, now.m.box));
+    const under = old.find((o) => overlaps(o.m.box, now.m.box));
     if (!under) return [];
     return [{ path: `scenes[${fade.to}].elements[${now.j}]`, message: `${now.el.type} "${now.el.id}" overlaps ${under.el.type} "${under.el.id}" of the outgoing scene "${from.id}" during the crossfade at ${at(mid)}; move one of them, or let the outgoing text exit first` }];
   });
