@@ -7,7 +7,7 @@ import { formatAjvErrors, pathJoin, didYouMean } from '../../shared/errors.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { resolveAsset } from './paths.mjs';
-import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, trackStart } from '../../template/audio.mjs';
+import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, PITCHED_CUES, MAX_CUES, NOTE_PATTERN, trackStart } from '../../template/audio.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
@@ -110,12 +110,26 @@ const audioTrack = {
     fadeOut: seconds,
   },
 };
+const cue = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['cue', 'at'],
+  properties: {
+    cue: { enum: [...CUE_NAMES] },
+    scene: { type: 'string', minLength: 1 },
+    at: seconds,
+    volume: unit,
+    pan: { type: 'number', minimum: -1, maximum: 1 },
+    note: { type: 'string' },
+  },
+};
 export const SCHEMA = {
   type: 'object',
   additionalProperties: false,
   required: ['scenes'],
   properties: {
     audio: { type: 'array', maxItems: MAX_AUDIO_TRACKS, items: audioTrack },
+    cues: { type: 'array', maxItems: MAX_CUES, items: cue },
     size: {
       type: 'array', minItems: 2, maxItems: 2,
       items: { type: 'integer', minimum: 16, maximum: 3840 },
@@ -338,6 +352,29 @@ function checkShapeStyle(el, base, errors) {
   }
 }
 
+// A cue is timed like an audio track (`scene` + `at`); a `note` tunes only the pitched cues.
+function checkCues(spec, errors) {
+  const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
+  const sceneIds = spec.scenes.map((s) => s.id);
+  (spec.cues ?? []).forEach((c, i) => {
+    const base = `cues[${i}]`;
+    if (c.note !== undefined && !NOTE_PATTERN.test(c.note)) {
+      errors.push({ path: pathJoin(base, 'note'), message: 'must be a note name such as A4, C#5 or Bb3 (A-G, optional # or b, octave 0-8)' });
+    } else if (c.note !== undefined && !PITCHED_CUES.includes(c.cue)) {
+      errors.push({ path: pathJoin(base, 'note'), message: `${c.cue} has no pitch; note is for ${PITCHED_CUES.slice(0, -1).join(', ')} and ${PITCHED_CUES.at(-1)}` });
+    }
+    if (c.scene !== undefined && !sceneIds.includes(c.scene)) {
+      errors.push({ path: pathJoin(base, 'scene'), message: `scene "${c.scene}" not found; scenes: ${sceneIds.join(', ')}` });
+      return;
+    }
+    const start = trackStart(c, spec);
+    if (start >= total) {
+      const how = c.scene === undefined ? '' : ` (scene "${c.scene}" + ${c.at}s)`;
+      errors.push({ path: pathJoin(base, 'at'), message: `starts at ${start}s${how}, but the video ends at ${total}s` });
+    }
+  });
+}
+
 function checkElement(el, base, scene, dir, errors) {
   const fields = FIELDS[el.type];
   for (const key of Object.keys(el)) {
@@ -383,5 +420,6 @@ export function validateSpec(spec, { dir = process.cwd() } = {}) {
     errors.push({ path: 'scenes', message: `total duration ${total}s exceeds the ${MAX_TOTAL_SECONDS}s limit` });
   }
   checkAudio(spec, dir, errors);
+  checkCues(spec, errors);
   return { ok: errors.length === 0, errors };
 }

@@ -52,6 +52,16 @@ Holds are not checked by `check.mjs`. Count them yourself from the keyframe time
 - **Not on scene 1.** `fade` on the first scene makes frame 0, the video's thumbnail, blank; `crossfade` there is an error. `check.mjs` warns when scene 1 shows nothing at t = 0.
 - **Keep the outgoing text clear of the incoming text's position** (or end it with an `exit`): for the 0.4 s both are half-visible, and two lines in one spot read as a smear.
 
+## Sound cues
+
+Cues (`"cues"` in the spec) are opt-in sound design for a clip that is meant to have sound; a silent clip stays silent.
+
+- **One `impact` and one riser (`whoosh`) per clip.** Put the `whoosh` just before the hero moment and the `impact` on it, so the sound marks the beat the clip is about. More than that stops being emphasis.
+- **Continuous motion stays silent.** A drift, a counter running up or a chart reveal needs no sound; cue the arrival (a `pop` or `chime` when a card lands or a number settles), not the travel.
+- **A `pop` or `click` per list item only when the items are staggered 0.2 s or more apart**; faster than that reads as a buzz.
+- **Anchor with `scene` and `at`** so retiming an earlier scene keeps the sound on its beat.
+- **Keep the level where it is.** Cues peak at -6 dBFS; use `volume` 0.4–0.8 under a voiceover. The loudness line after a render tells you where the mix landed.
+
 ## Shapes and charts
 
 - **Cards, not hex.** Draw a card as a `rect` with `"fill": "surface"`, `"stroke": "line"` and `"elevated": true`; the theme tokens keep the border visible on dark themes and follow a theme change.

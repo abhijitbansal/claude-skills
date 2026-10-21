@@ -5,14 +5,16 @@
 // --model/--effort/--agent override the spec's generatedBy; they are stamped into the MP4 comment/artist tags.
 // With --contact-sheet, --out is a directory; one tiled, timestamped PNG per scene goes to <out>/contact/<scene-id>.png.
 import { spawn } from 'node:child_process';
-import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { loadSpec, validateSpec, withDefaults, UsageError } from './lib/spec.mjs';
 import { printResult, didYouMean } from '../shared/errors.mjs';
 import { listThemes } from '../shared/theme.mjs';
 import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
-import { findFfmpeg, encodeArgs, probeAudio, probeGraph } from './lib/ffmpeg.mjs';
+import { findFfmpeg, encodeArgs, probeAudio, probeGraph, measureLoudness } from './lib/ffmpeg.mjs';
+import { writeCueTracks } from './lib/cues.mjs';
 import { resolveAsset } from './lib/paths.mjs';
 import { withGeneratedBy, provenanceText, buildDate } from '../shared/provenance.mjs';
 import { resolveAudio } from '../template/audio.mjs';
@@ -77,18 +79,24 @@ function partialPath(out) {
 }
 
 // Resolve each audio track to an absolute file and fail before the browser launches if ffmpeg cannot decode one.
+// Cues are synthesised into a temp folder (`cueDir`, removed by cleanup) and join the mix as more tracks.
 function planAudio(spec, dir, ffmpeg, fps) {
-  const audio = resolveAudio(spec).map((track, i) => {
+  const files = resolveAudio(spec).map((track, i) => {
     const { file } = resolveAsset(dir, track.src); // the path the validator already accepted (normalised, realpath)
     const problem = probeAudio(ffmpeg, file);
     if (problem) throw new Error(`audio[${i}].src: ffmpeg cannot decode ${track.src}: ${problem}`);
     return { ...track, file };
   });
+  const cueDir = spec.cues?.length ? mkdtempSync(path.join(os.tmpdir(), 'motion-cues-')) : null;
+  const audio = [...files, ...(cueDir ? writeCueTracks(spec, cueDir) : [])];
   if (audio.length) {
     const problem = probeGraph(ffmpeg, { fps, audio }); // an old ffmpeg without amix normalize / adelay all fails here, not at frame 1
-    if (problem) throw new Error(`audio: ffmpeg rejected the mix (needs ffmpeg >= 4.4): ${problem}`);
+    if (problem) {
+      if (cueDir) rmSync(cueDir, { recursive: true, force: true });
+      throw new Error(`audio: ffmpeg rejected the mix (needs ffmpeg >= 4.4): ${problem}`);
+    }
   }
-  return audio;
+  return { audio, cueDir };
 }
 
 // Validate the spec and work out every input before launching anything.
@@ -113,7 +121,7 @@ async function plan(opts) {
     theme: opts.theme, themeName: loaded.theme ?? opts.theme ?? MOTION_THEME, spec, specPath, fps, frames, total, contact: opts.contact, size: opts.size ?? spec.size,
     out: path.resolve(opts.out ?? defaultOut), ffmpeg,
     metadata: { comment: provenanceText('make-motion', spec.generatedBy, buildDate()), artist: spec.generatedBy?.model },
-    audio: opts.contact ? [] : planAudio(spec, dir, ffmpeg, fps),
+    ...(opts.contact ? { audio: [], cueDir: null } : planAudio(spec, dir, ffmpeg, fps)),
   };
 }
 
@@ -184,12 +192,22 @@ async function renderVideo(page, p, state) {
   renameSync(state.partial, p.out);
   state.partial = null;
   process.stdout.write(`${p.out}\n${p.frames} frames @ ${p.fps} fps, ${p.size.join('x')}\n`);
+  if (p.audio.length) reportLoudness(p.ffmpeg, p.out);
+}
+
+// One line after any render with audio: how loud the mix came out. Information only; it never fails a render.
+function reportLoudness(ffmpeg, file) {
+  const level = measureLoudness(ffmpeg, file);
+  if (!level) return process.stderr.write('audio: loudness could not be measured\n');
+  const db = (n, unit) => (Number.isFinite(n) ? `${n.toFixed(1)} ${unit}` : `silent (${unit})`);
+  return process.stdout.write(`audio: ${db(level.lufs, 'LUFS')} integrated, true peak ${db(level.truePeak, 'dBTP')}\n`);
 }
 
 async function cleanup(state) {
   await state.encoder?.kill();
   await state.browser?.close().catch(() => {});
   if (state.partial) rmSync(state.partial, { force: true });
+  if (state.cueDir) rmSync(state.cueDir, { recursive: true, force: true });
 }
 
 function installSignalHandlers(state) {
@@ -216,7 +234,7 @@ async function main() {
   const p = await plan(parseArgs(process.argv.slice(2)));
   if (!p) return 1;
   process.stdout.write(`theme: ${p.themeName}\n`);
-  const state = { encoder: null, browser: null, partial: null, exiting: false };
+  const state = { encoder: null, browser: null, partial: null, cueDir: p.cueDir, exiting: false };
   installSignalHandlers(state);
   const server = await startServer({ specPath: p.specPath, mode: 'render', theme: p.theme });
   try {
