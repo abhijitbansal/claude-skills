@@ -424,7 +424,7 @@ root, as the default) fades it in over the previous scene, which stays fully vis
 **Texture is opt-in.** A root `"texture": { "vignette": true, "grain": 0.08 }` darkens the
 corners and lays static film grain (0 to 0.15) over each scene, the same every render. It
 slows rendering: measured at 1920x1080 on one Apple-silicon Mac, about 17 to 33 ms per frame
-with none, 42 ms with the vignette, 84 ms with grain and 184 ms with both.
+with none, 42 ms with the vignette, 100 ms with grain and 187 ms with both.
 
 **Audio is opt-in.** The agent adds `audio` tracks only when you ask for
 sound ("with background music from music.mp3", "with a voiceover reading

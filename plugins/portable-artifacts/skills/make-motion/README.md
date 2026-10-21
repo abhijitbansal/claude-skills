@@ -106,7 +106,7 @@ Root-level options (all off unless set): `transition` (`none`, `fade` or `crossf
 default for every scene), `cues` (up to 30 sound cues, timed from the video or a scene
 start), `texture` (`vignette`, and `grain` from 0 to 0.15). Texture costs render time, measured
 on 1920x1080 frames (seek plus PNG screenshot, headless Chromium, one Apple-silicon Mac): about
-17 to 33 ms per frame with none, 42 ms with the vignette, 84 ms with grain and 184 ms with both.
+17 to 33 ms per frame with none, 42 ms with the vignette, 100 ms with grain and 187 ms with both.
 
 Keyframes are `{ "t": seconds-in-scene, "ease": "outCubic", …props }`. Each
 property holds its value before its first keyframe, interpolates between

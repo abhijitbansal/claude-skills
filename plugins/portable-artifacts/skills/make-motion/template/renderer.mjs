@@ -13,6 +13,7 @@ const ELEVATED_LIFT = 6; // percent of the text colour an elevated fill moves to
 const ARROW_HALF_WIDTH = 1.5; // an arrow head reaches this many stroke widths either side of the line (it is ARROW_HEAD_LENGTH long)
 const ARROW_DRAW_SHOWN = 0.98; // the head appears once the line is drawn this far
 const VIGNETTE = 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)'; // clear in the middle, 0.55 black at the corners
+const GRAIN_GAIN = 4; // `texture.grain` times this is the noise's alpha (0.15 gives 0.6)
 const GRAIN_FREQUENCY = 0.8; // feTurbulence base frequency of the film grain, in 1/px
 const GRAIN_OCTAVES = 2;
 const GRAIN_SEED_RANGE = 65536;
@@ -262,22 +263,26 @@ function sceneSeed(id) {
   return (h >>> 0) % GRAIN_SEED_RANGE;
 }
 
-// One static film-grain layer for a scene: monochrome fractal noise (stretched to three times its contrast around mid-grey) whose alpha is `amount`, an SVG feTurbulence
-// loaded as an image (decoded once, seeded from the scene id and never changed: a seed change in the page does not
-// repaint). The alpha is in the noise itself, not a CSS opacity, which costs more per frame.
+// One static film-grain layer for a scene: monochrome fractal noise, stretched to three times its contrast around
+// mid-grey, drawn with the `overlay` blend so it is luminance-neutral (mid-grey noise leaves the average colour of what is
+// under it unchanged, dark or light; a plain alpha blend would wash dark themes milky). It is an SVG feTurbulence loaded
+// as an image (filtered in sRGB: the default linear space would lift the mean of the noise), decoded once, seeded from the scene id and never changed (a seed change in the page does not repaint);
+// its strength is the noise's alpha, `amount` x GRAIN_GAIN. The layer sits on the stage, over every scene, because
+// a blend inside a scene layer (a group of its own) would see only that layer's elements, not what is beneath it.
+// makeApply shows it with its scene and at that scene's opacity.
 async function grainLayer(scene, size, amount) {
   const [w, h] = size;
   const seed = sceneSeed(scene.id);
-  const markup = `<svg xmlns="${SVG_NS}" width="${w}" height="${h}"><filter id="g" x="0" y="0" width="${w}" height="${h}" filterUnits="userSpaceOnUse">`
+  const markup = `<svg xmlns="${SVG_NS}" width="${w}" height="${h}"><filter id="g" x="0" y="0" width="${w}" height="${h}" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">`
     + `<feTurbulence type="fractalNoise" baseFrequency="${GRAIN_FREQUENCY}" numOctaves="${GRAIN_OCTAVES}" seed="${seed}" stitchTiles="stitch"/>`
-    + `<feColorMatrix type="matrix" values="1 1 1 0 -1  1 1 1 0 -1  1 1 1 0 -1  0 0 0 0 ${amount}"/></filter>`
+    + `<feColorMatrix type="matrix" values="1 1 1 0 -1  1 1 1 0 -1  1 1 1 0 -1  0 0 0 0 ${Math.min(1, amount * GRAIN_GAIN)}"/></filter>`
     + `<rect width="${w}" height="${h}" filter="url(#g)"/></svg>`;
   const img = new Image();
   img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
   await img.decode().catch(() => { throw new Error(`grain failed to draw for scene "${scene.id}"`); });
   img.className = 'grain';
   img.dataset.seed = String(seed);
-  img.style.cssText = `position:absolute;left:0;top:0;width:${w}px;height:${h}px;pointer-events:none`;
+  img.style.cssText = `position:absolute;left:0;top:0;width:${w}px;height:${h}px;pointer-events:none;mix-blend-mode:overlay;display:none`;
   return img;
 }
 
@@ -309,12 +314,14 @@ async function buildStage(spec, look) {
       }
       if (part.img) pending.push(part.img.decode().catch(() => { throw new Error(`image failed to load: ${el.src}`); }));
     }
-    if (grain > 0) pending.push(grainLayer(scene, spec.size, grain).then((canvas) => layer.append(canvas)));
     stage.append(layer);
-    scenes.push({ scene, layer });
+    const entry = { scene, layer, grain: null };
+    if (grain > 0) pending.push(grainLayer(scene, spec.size, grain).then((img) => { entry.grain = img; }));
+    scenes.push(entry);
   }
-  if (spec.texture?.vignette) stage.append(vignetteLayer());
   await Promise.all(pending);
+  for (const { grain: img } of scenes) if (img) stage.append(img); // over the scenes, under the vignette
+  if (spec.texture?.vignette) stage.append(vignetteLayer());
   return { stage, scenes, parts };
 }
 
@@ -365,9 +372,13 @@ function makeApply({ scenes, parts }, built) {
     const active = activeScene(sceneStarts, sec);
     // During a crossfade the previous scene's layer stays up beneath the active one.
     const outgoing = crossfades.find((c) => c.to === active && sec < c.end)?.from;
-    scenes.forEach(({ scene, layer }, i) => {
+    scenes.forEach(({ scene, layer, grain }, i) => {
       layer.style.display = i === active || i === outgoing ? 'block' : 'none';
       layer.style.opacity = String(states.get(`scene:${scene.id}`).opacity);
+      if (grain) {
+        grain.style.display = layer.style.display;
+        grain.style.opacity = layer.style.opacity;
+      }
     });
     for (const { node, el, drawNodes, arrowNode, roundCap, format, typing } of parts) {
       const s = states.get(el.id);

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTimeline, seekTo } from '../template/timeline.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
-import { haveBrowser, probed, framed } from './render-probe.mjs';
+import { haveBrowser, probed, framed, meanLuma } from './render-probe.mjs';
 
 const label = (id, extra = {}) => ({ id, type: 'text', text: id, x: 240, y: 135, fontSize: 40, ...extra });
 const spec = (extra = {}, elements = [label('a')]) => ({
@@ -38,8 +38,8 @@ const layers = () => {
   return {
     vignette: vignette.length,
     vignetteCss: vignette[0]?.style.background ?? '',
-    grain: stage.querySelectorAll('.scene > .grain').length,
-    seeds: [...stage.querySelectorAll('.scene > .grain')].map((n) => n.dataset.seed),
+    grain: stage.querySelectorAll(':scope > .grain').length,
+    seeds: [...stage.querySelectorAll(':scope > .grain')].map((n) => n.dataset.seed),
     inElements: stage.querySelectorAll('.el .grain, .el .vignette').length,
   };
 };
@@ -78,6 +78,32 @@ test('the same spec with grain and vignette renders byte-identical frames; the t
   assert.ok(first.equals(second), 'two renders of one frame are the same bytes');
   assert.ok(!first.equals(await framed(spec(), 0.5)), 'texture is visible');
   assert.ok(!first.equals(await framed(spec({ texture: { vignette: true } }), 0.5)), 'grain is visible on its own');
+  return undefined;
+});
+
+test('grain is luminance-neutral: the mean luma stays within a point of the grain-free frame at the strongest setting, while the pixels differ', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const bare = spec({}, []);
+  const grainy = spec({ texture: { grain: 0.15 } }, []);
+  const [plain, noisy] = [await framed(bare, 0.5), await framed(grainy, 0.5)];
+  assert.ok(!plain.equals(noisy), 'the grain is drawn');
+  const [a, b] = [await meanLuma(plain), await meanLuma(noisy)];
+  assert.ok(Math.abs(a - b) < 1, `mean luma ${a.toFixed(1)} without grain, ${b.toFixed(1)} with grain 0.15`);
+  for (const theme of ['paper', 'press']) {
+    const [x, y] = [await framed({ ...bare, theme }, 0.5), await framed({ ...grainy, theme }, 0.5)];
+    const [lx, ly] = [await meanLuma(x), await meanLuma(y)];
+    assert.ok(Math.abs(lx - ly) < 1, `${theme}: ${lx.toFixed(1)} vs ${ly.toFixed(1)}`);
+  }
+  return undefined;
+});
+
+test('grain across a crossfade does not wash the frame: mid-window luma stays at the grain-free value', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const scenes = [{ id: 'one', duration: 2, elements: [] }, { id: 'two', duration: 2, transition: 'crossfade', elements: [] }];
+  const bare = { size: [160, 90], scenes };
+  const grainy = { ...bare, texture: { grain: 0.15 } };
+  const [a, b] = [await meanLuma(await framed(bare, 2.2)), await meanLuma(await framed(grainy, 2.2))];
+  assert.ok(Math.abs(a - b) < 1, `mid-crossfade luma ${a.toFixed(1)} without grain, ${b.toFixed(1)} with`);
   return undefined;
 });
 
