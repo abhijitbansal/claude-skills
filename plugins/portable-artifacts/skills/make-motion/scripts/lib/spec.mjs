@@ -11,7 +11,7 @@ import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, trackStart } from '../../template/a
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
-import { EASE_CURVES } from '../../template/defaults.mjs';
+import { EASE_CURVES, COLOR_TOKENS } from '../../template/defaults.mjs';
 
 export class UsageError extends Error {}
 
@@ -34,7 +34,7 @@ const TEXT_STYLE = ['fontSize', 'fontWeight', 'color', 'align', 'maxWidth', 'fon
 const FIELDS = {
   text: [...COMMON, 'text', 'role', 'exit', ...TEXT_STYLE],
   counter: [...COMMON, 'from', 'to', 'decimals', 'prefix', 'suffix', ...TEXT_STYLE],
-  shape: [...COMMON, 'shape', 'width', 'height', 'radius', 'fill', 'stroke', 'strokeWidth'],
+  shape: [...COMMON, 'shape', 'width', 'height', 'radius', 'fill', 'stroke', 'strokeWidth', 'elevated', 'cap', 'arrow'],
   image: [...COMMON, 'src', 'width', 'height', 'fit'],
   chart: [...COMMON, 'vegaLite', 'width', 'height'],
 };
@@ -86,6 +86,9 @@ const element = {
     radius: { type: 'number', minimum: 0 },
     fill: color, stroke: color,
     strokeWidth: { type: 'number', minimum: 0 },
+    elevated: { type: 'boolean' },
+    cap: { enum: ['round'] },
+    arrow: { enum: ['end'] },
     src: { type: 'string', minLength: 1 },
     fit: { enum: ['contain', 'cover', 'fill'] },
     vegaLite: { type: 'object' },
@@ -220,10 +223,12 @@ function isCssColor(value) {
 }
 
 const COLOUR_MESSAGE = 'must be a CSS colour (hex, rgb(), rgba(), hsl(), hsla() or a named colour)';
-function checkColor(obj, key, base, errors) {
-  if (obj[key] === undefined || isCssColor(obj[key])) return;
+// `tokens`: the field also takes a theme colour token (shape fill/stroke, text colour), not a background.
+function checkColor(obj, key, base, errors, { tokens = false } = {}) {
+  if (obj[key] === undefined || isCssColor(obj[key]) || (tokens && COLOR_TOKENS.includes(obj[key]))) return;
   const art = obj[key] === ART_BACKGROUND ? `; "${ART_BACKGROUND}" is only valid as a scene background` : '';
-  errors.push({ path: pathJoin(base, key), message: COLOUR_MESSAGE + art });
+  const token = tokens ? ` or a theme token: ${COLOR_TOKENS.join(', ')}` : '';
+  errors.push({ path: pathJoin(base, key), message: COLOUR_MESSAGE + token + art });
 }
 
 // A scene background is a colour or "art": the theme's seeded art, drawn full-bleed behind the elements.
@@ -323,6 +328,14 @@ function checkAudio(spec, dir, errors) {
   });
 }
 
+// `elevated` belongs to rects, `cap` and `arrow` to lines.
+const SHAPE_ONLY = { elevated: 'rect', cap: 'line', arrow: 'line' };
+function checkShapeStyle(el, base, errors) {
+  for (const [key, shape] of Object.entries(SHAPE_ONLY)) {
+    if (el[key] !== undefined && el.shape !== shape) errors.push({ path: pathJoin(base, key), message: `only valid on a ${shape} shape` });
+  }
+}
+
 function checkElement(el, base, scene, dir, errors) {
   const fields = FIELDS[el.type];
   for (const key of Object.keys(el)) {
@@ -335,7 +348,8 @@ function checkElement(el, base, scene, dir, errors) {
   }
   checkKeyframes(el, base, scene.duration, errors);
   if (el.type === 'text') checkRole(el, base, errors);
-  for (const key of ['color', 'fill', 'stroke']) checkColor(el, key, base, errors);
+  for (const key of ['color', 'fill', 'stroke']) checkColor(el, key, base, errors, { tokens: true });
+  if (el.type === 'shape') checkShapeStyle(el, base, errors);
   if (el.type === 'image' && typeof el.src === 'string') checkAssetPath(el.src, pathJoin(base, 'src'), dir, errors);
   if (el.type === 'chart' && el.vegaLite) checkChart(el, base, errors);
 }

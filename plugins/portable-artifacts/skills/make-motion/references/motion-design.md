@@ -46,6 +46,13 @@ Holds are not checked by `check.mjs`. Count them yourself from the keyframe time
 - **One accent colour.** The theme's accent marks the one thing that matters in a scene (the number, the highlighted bar). Everything else uses the text colours.
 - **One hero moment per clip.** Pick the beat the clip is about and give it the biggest type, the accent, and the `land` ease if any (on its position or scale, never on a counter's `value`). Other beats stay quieter.
 
+## Shapes and charts
+
+- **Cards, not hex.** Draw a card as a `rect` with `"fill": "surface"`, `"stroke": "line"` and `"elevated": true`; the theme tokens keep the border visible on dark themes and follow a theme change.
+- **Bars are a `chart`, not thick `line`s.** A chart gets the rounded ends, the band gap and the axes for free; a row of thick lines needs all of it by hand. A thick `line` that stays a line takes `"cap": "round"`, and a pointer takes `"arrow": "end"`.
+- **Drop an axis title that repeats the chart title** (`"title": null` on the axis): the title above already says it.
+- **No long dead holds on a chart scene.** The chart reveal plus a short stagger is the motion; after that a 5 s stare reads as a frozen frame. Cut to the next scene once the figure has been read (see Reading holds).
+
 ## What `check.mjs` checks
 
 Run `node <skill-dir>/scripts/check.mjs motion.json` after looking at the contact sheets. It reports only:

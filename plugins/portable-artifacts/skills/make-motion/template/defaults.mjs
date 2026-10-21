@@ -7,6 +7,13 @@ export const FADE_SECONDS = 0.4;
 // DEFAULT_THEME stays `paper` for make-dashboard.
 export const MOTION_THEME = 'dusk';
 
+// Theme colour tokens a shape `fill`/`stroke` or a text `color` may name instead of a hex; each resolves to the
+// active theme's dark colour of that name (see renderer themedLook).
+export const COLOR_TOKENS = Object.freeze(['surface', 'line', 'accent', 'accentSoft', 'good', 'bad', 'warn', 'text', 'text2', 'text3', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5', 'cat6']);
+
+// `value` as a colour: a token becomes the theme's colour, anything else (already validated) passes through.
+export const resolveColor = (value, colors) => (COLOR_TOKENS.includes(value) ? colors[value] : value);
+
 // Per-theme kinetic type for `role: "title"` text that sets no keyframes. Themes not listed
 // (paper, ink, blueprint, editorial) get no preset.
 export const TYPE_PRESETS = Object.freeze({ dusk: 'rise', press: 'ink-in', poster: 'slam' });

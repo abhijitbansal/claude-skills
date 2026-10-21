@@ -1,23 +1,32 @@
 // Browser renderer: builds the stage DOM from the spec and exposes
 // window.__motion for the preview UI and the Playwright frame loop.
 import { buildTimeline, seekTo } from './timeline.mjs';
-import { withDefaults } from './defaults.mjs';
+import { withDefaults, resolveColor } from './defaults.mjs';
 import { resolveAudio } from './audio.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const MODE = document.querySelector('meta[name="motion-mode"]')?.content ?? 'preview';
 const SCENE_END_EPSILON = 1e-9;
+const ELEVATED_HIGHLIGHT = 'rgba(255,255,255,.06)'; // the 1 px inset edge of an `elevated` rect
+const ELEVATED_LIFT = 6; // percent of the text colour an elevated fill moves toward
+const ARROW_LENGTH = 3; // an arrow head is this many stroke widths long...
+const ARROW_HALF_WIDTH = 1.5; // ...and this many stroke widths either side of the line
+const ARROW_DRAW_SHOWN = 0.98; // the head appears once the line is drawn this far
+const REVEAL_EDGE = 8; // percent of a chart's width the reveal wipe fades over
 
 // Vega-Lite sizes shared by every theme; themedLook adds the theme's fonts and colours. A spec's own
 // `config` overrides both.
 const VEGA_CONFIG = {
   background: null,
   view: { stroke: null },
-  bar: { cornerRadiusEnd: 6 },
-  point: { filled: true, size: 120 },
+  bar: { cornerRadiusEnd: 10 },
+  line: { strokeWidth: 4, strokeCap: 'round', strokeJoin: 'round' },
+  point: { filled: true, size: 120, strokeWidth: 3 },
+  scale: { bandPaddingInner: 0.3 },
   axis: { labelFontSize: 24, titleFontSize: 26, titleFontWeight: 500, labelPadding: 10, titlePadding: 18, tickSize: 8 },
-  axisX: { labelAngle: 0, labelPadding: 14 },
+  axisX: { labelAngle: 0, labelPadding: 14, ticks: false },
+  axisY: { tickCount: 5, domain: false, ticks: false },
   legend: { labelFontSize: 22, titleFontSize: 22 },
   title: { fontSize: 32 },
 };
@@ -32,9 +41,9 @@ function nearestWeight(asked, shipped) {
   return best;
 }
 
-// Which font role a text or counter draws with: `role: "title"` text uses the display font (even with
-// `font: "mono"`), `font: "mono"` the mono font, everything else the body font.
-const fontKind = (el) => (el.role === 'title' ? 'display' : el.font === 'mono' ? 'mono' : 'sans');
+// Which font role a text or counter draws with: `font: "mono"` the mono font (even on `role: "title"`),
+// other `role: "title"` text the display font, everything else the body font.
+const fontKind = (el) => (el.font === 'mono' ? 'mono' : el.role === 'title' ? 'display' : 'sans');
 const shippedWeights = (font) => Object.keys(font.weights).map(Number).sort((a, b) => a - b);
 
 // The spec's theme (dusk when it names none) as what the page draws with: its fonts and dark colours.
@@ -46,7 +55,7 @@ function themedLook(theme) {
   const shipped = { display: shippedWeights(theme.fonts.display), sans: shippedWeights(theme.fonts.body), mono: shippedWeights(theme.fonts.mono) };
   const weight = (kind, asked) => nearestWeight(asked, shipped[kind]);
   return {
-    weight,
+    weight, colors: c,
     text: c.text, shape: c.accent, background: c.page,
     fonts: { display: quote(theme.fonts.display.family), sans, mono: quote(theme.fonts.mono.family) },
     chartFace: sans,
@@ -57,7 +66,8 @@ function themedLook(theme) {
       mark: { color: c.accent },
       line: { color: c.accent },
       bar: { ...VEGA_CONFIG.bar, color: c.accent },
-      point: { ...VEGA_CONFIG.point, color: c.accent },
+      line: { ...VEGA_CONFIG.line, color: c.accent },
+      point: { ...VEGA_CONFIG.point, color: c.accent, stroke: c.page }, // the ring keeps dots apart where they meet
       axis: { ...VEGA_CONFIG.axis, domainColor: c.line, tickColor: c.line, gridColor: c.grid, labelColor: ink, titleColor: axisTitle, labelFont: sans, titleFont: sans, labelFontWeight: weight('sans', 400), titleFontWeight: weight('sans', VEGA_CONFIG.axis.titleFontWeight) },
       legend: { ...VEGA_CONFIG.legend, labelColor: ink, titleColor: axisTitle, labelFont: sans, labelFontWeight: weight('sans', 400), titleFontWeight: weight('sans', 700) },
       title: { ...VEGA_CONFIG.title, color: c.text, font: sans, fontWeight: weight('sans', 700) },
@@ -76,11 +86,12 @@ const assetUrl = (src) => `/assets/${src.split('/').map(encodeURIComponent).join
 function textStyle(node, el, look) {
   node.style.fontSize = px(el.fontSize ?? 48);
   node.style.fontWeight = String(look.weight(fontKind(el), el.fontWeight ?? 600));
-  node.style.color = el.color ?? look.text;
+  node.style.color = resolveColor(el.color, look.colors) ?? look.text;
   node.style.textAlign = el.align ?? 'center';
   if (el.maxWidth) node.style.maxWidth = px(el.maxWidth);
-  if (el.role === 'title') node.classList.add('title');
-  else if (el.font === 'mono') node.classList.add('mono');
+  const kind = fontKind(el);
+  if (kind === 'display') node.classList.add('title');
+  else if (kind === 'mono') node.classList.add('mono');
 }
 
 function makeShape(el, look) {
@@ -89,19 +100,37 @@ function makeShape(el, look) {
   const h = el.shape === 'line' ? sw : (el.height ?? 100);
   const svg = svgEl('svg', { width: w, height: h, viewBox: `0 0 ${w} ${h}` });
   const common = { pathLength: 1, 'stroke-dasharray': 1, 'stroke-dashoffset': 0 };
+  const paint = (value) => resolveColor(value, look.colors);
+  const extras = [];
   let node;
+  let arrowNode = null;
   if (el.shape === 'line') {
-    node = svgEl('line', { x1: 0, y1: h / 2, x2: w, y2: h / 2, stroke: el.stroke ?? el.fill ?? look.shape, 'stroke-width': sw, ...common });
+    const colour = paint(el.stroke ?? el.fill) ?? look.shape;
+    const head = el.arrow === 'end' ? Math.min(sw * ARROW_LENGTH, w) : 0;
+    const round = el.cap === 'round';
+    const pad = round ? Math.min(sw / 2, w / 2) : 0; // a round cap overshoots its end by half the stroke width
+    node = svgEl('line', { x1: pad, y1: h / 2, x2: w - (head || pad), y2: h / 2, stroke: colour, 'stroke-width': sw, ...(round && { 'stroke-linecap': 'round' }), ...common });
+    if (head) {
+      const half = sw * ARROW_HALF_WIDTH;
+      arrowNode = svgEl('path', { d: `M${w - head} ${h / 2 - half}L${w} ${h / 2}L${w - head} ${h / 2 + half}Z`, fill: colour, opacity: 0 });
+      extras.push(arrowNode);
+    }
   } else {
-    const fill = el.fill ?? (el.stroke ? 'none' : look.shape);
+    const base = paint(el.fill) ?? (el.stroke ? 'none' : look.shape);
+    const fill = el.elevated && base !== 'none' ? `color-mix(in srgb, ${base}, ${look.colors.text} ${ELEVATED_LIFT}%)` : base;
     const inset = sw / 2;
-    const attrs = { fill, stroke: el.stroke ?? 'none', 'stroke-width': sw, ...common };
+    const attrs = { fill, stroke: paint(el.stroke) ?? 'none', 'stroke-width': sw, ...common };
     node = el.shape === 'ellipse'
       ? svgEl('ellipse', { cx: w / 2, cy: h / 2, rx: Math.max(0, w / 2 - inset), ry: Math.max(0, h / 2 - inset), ...attrs })
       : svgEl('rect', { x: inset, y: inset, width: Math.max(0, w - sw), height: Math.max(0, h - sw), rx: el.radius ?? 0, ...attrs });
+    if (el.elevated) {
+      // A 1 px highlight just inside the edge, drawn after the rect; a drop shadow would not show on a dark page.
+      const edge = sw + 0.5;
+      extras.push(svgEl('rect', { x: edge, y: edge, width: Math.max(0, w - 2 * edge), height: Math.max(0, h - 2 * edge), rx: Math.max(0, (el.radius ?? 0) - edge), fill: 'none', stroke: ELEVATED_HIGHLIGHT, 'stroke-width': 1 }));
+    }
   }
-  svg.append(node);
-  return { root: svg, drawNode: node, width: w, height: h };
+  svg.append(node, ...extras);
+  return { root: svg, drawNode: node, arrowNode, width: w, height: h };
 }
 
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -144,7 +173,7 @@ function buildElement(el, look) {
       break;
     case 'shape': {
       const s = makeShape(el, look);
-      Object.assign(part, { drawNode: s.drawNode });
+      Object.assign(part, { drawNode: s.drawNode, arrowNode: s.arrowNode });
       node.style.width = px(s.width);
       node.style.height = px(s.height);
       node.append(s.root);
@@ -252,6 +281,13 @@ function activeScene(starts, sec) {
   return idx;
 }
 
+// The chart reveal as a left-to-right wipe whose front fades over REVEAL_EDGE percent instead of cutting hard.
+function revealMask(reveal) {
+  if (reveal >= 1) return 'none';
+  const front = reveal * (100 + REVEAL_EDGE); // reveal 0 puts the whole edge left of the chart, 1 right of it
+  return `linear-gradient(to right, #000 ${front - REVEAL_EDGE}%, transparent ${front}%)`;
+}
+
 function makeApply({ scenes, parts }, built) {
   const { states, sceneStarts } = built;
   return (sec) => {
@@ -260,12 +296,13 @@ function makeApply({ scenes, parts }, built) {
       layer.style.display = i === active ? 'block' : 'none';
       layer.style.opacity = String(states.get(`scene:${scene.id}`).opacity);
     });
-    for (const { node, el, drawNode, format } of parts) {
+    for (const { node, el, drawNode, arrowNode, format } of parts) {
       const s = states.get(el.id);
       node.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
       node.style.opacity = String(s.opacity);
       if (drawNode) drawNode.setAttribute('stroke-dashoffset', String(1 - s.draw));
-      if (el.type === 'chart') node.style.clipPath = `inset(0 ${(1 - s.reveal) * 100}% 0 0)`;
+      if (arrowNode) arrowNode.setAttribute('opacity', s.draw >= ARROW_DRAW_SHOWN ? '1' : '0');
+      if (el.type === 'chart') node.style.maskImage = revealMask(s.reveal);
       if (format) node.textContent = format(s.value);
     }
   };
