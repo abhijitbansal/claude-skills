@@ -481,7 +481,7 @@ function stampSheet(text) {
 
 function makeMotion(spec, built, apply, audio) {
   return {
-    duration: built.duration, fps: spec.fps, size: spec.size, sceneStarts: built.sceneStarts,
+    duration: built.duration, fps: spec.fps, size: spec.size, sceneStarts: built.sceneStarts, crossfades: built.crossfades,
     sceneIds: spec.scenes.map((s) => s.id), audio,
     seek(sec) {
       const t = Math.min(Math.max(0, sec), built.duration);

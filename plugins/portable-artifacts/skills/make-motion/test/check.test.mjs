@@ -349,15 +349,32 @@ test('a first scene whose only element enters later (opacity 0 at t = 0) warns, 
   assert.match(r.stderr, /^warning: scenes\[0\]: scene "intro" shows nothing at 0\.00s/);
 });
 
-test('a crossfade pair is green: the old scene under the new one is not an overlap, and nothing else is reported', async (t) => {
+test('a crossfade pair whose texts sit in different places is green', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const r = check([scenesFile([
-    { id: 'a', duration: 2, elements: [word('first')] },
-    { id: 'b', duration: 2, transition: 'crossfade', elements: [word('second')] },
+    { id: 'a', duration: 2, elements: [word('first', { y: 300 })] },
+    { id: 'b', duration: 2, transition: 'crossfade', elements: [word('second', { y: 760 })] },
   ])]);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /^check: ok \(2 scenes, \d+ moments\)\n$/);
   assert.equal(r.stderr, '');
+});
+
+test('texts of the outgoing and incoming scene that overlap inside a crossfade are a warning, not a failure', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const pair = (transition) => scenesFile([
+    { id: 'a', duration: 2, elements: [word('first')] },
+    { id: 'b', duration: 2, transition, elements: [word('second')] },
+  ]);
+  const r = check([pair('crossfade')]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /^check: ok /);
+  assert.match(r.stderr, /^warning: scenes\[1\]\.elements\[0\]: text "second" overlaps text "first" of the outgoing scene "a" during the crossfade at 2\.20s; move one of them, or let the outgoing text exit first\n$/);
+  const json = JSON.parse(check([pair('crossfade'), '--json']).stdout);
+  assert.equal(json.ok, true);
+  assert.equal(json.warnings.length, 1);
+  assert.equal(json.warnings[0].path, 'scenes[1].elements[0]');
+  assert.equal(check([pair('none')]).stderr, '', 'a hard cut has no window');
 });
 
 test('a crossfade does not hide a real problem in the incoming scene: an overlap inside it is still reported', async (t) => {

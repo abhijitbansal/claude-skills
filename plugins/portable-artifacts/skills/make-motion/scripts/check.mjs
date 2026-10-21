@@ -6,8 +6,10 @@
 // last frame (a title whose `exit` preset was applied left on purpose and counts as present). A box wholly off the canvas
 // has left the frame: it is never clipped, overlaps nothing, and is not on screen.
 // A warning (never a failure; exit stays 0) when the first scene shows nothing at t = 0: stderr, or `warnings` in --json.
-// Scene crossfades need no special handling: each scene is judged on its own layer, and the outgoing layer is only
-// on screen during the next scene's first 0.4 s, which the checks never sample.
+// A scene is judged on its own layer, so the outgoing scene of a crossfade is not part of the incoming scene's own
+// checks (the incoming scene's first 0.4 s are sampled, from the 0.1 s first look on). Instead each crossfade window is
+// sampled at its midpoint, and a visible text or counter of the incoming scene that overlaps one of the outgoing scene
+// there is a warning (never a failure).
 // --theme: the theme render.mjs --theme would draw a spec that names none in (a spec's own `theme` wins).
 // exit 0 ok or skipped (no browser), 1 problems (or an invalid spec), 2 usage/IO
 import fs from 'node:fs';
@@ -145,6 +147,21 @@ function emptyEndProblems(scene, i, samples, size) {
   return [{ path: `scenes[${i}]`, message: `scene "${scene.id}" ends with nothing on screen: every element is invisible or off the canvas (at ${at(last.t)})` }];
 }
 
+// The two layers of a crossfade are both on screen at the window's midpoint: warn about text over text.
+async function crossfadeWarnings(page, spec, fade, size) {
+  const mid = (fade.start + fade.end) / 2;
+  const outgoing = await page.evaluate(measure, [mid, fade.from]);
+  const incoming = await page.evaluate(measure, [mid, fade.to]);
+  const from = spec.scenes[fade.from];
+  const to = spec.scenes[fade.to];
+  const texts = (scene, els) => els.map((m, j) => ({ m, el: scene.elements[j], j })).filter(({ m, el }) => CHECKED.has(el.type) && isShown(m, size));
+  return texts(to, incoming).flatMap((now) => {
+    const under = texts(from, outgoing).find((old) => overlaps(old.m.box, now.m.box));
+    if (!under) return [];
+    return [{ path: `scenes[${fade.to}].elements[${now.j}]`, message: `${now.el.type} "${now.el.id}" overlaps ${under.el.type} "${under.el.id}" of the outgoing scene "${from.id}" during the crossfade at ${at(mid)}; move one of them, or let the outgoing text exit first` }];
+  });
+}
+
 async function sampleScene(page, scene, index, start, fps) {
   const samples = [];
   for (const t of sheetTimes(scene, fps)) {
@@ -192,6 +209,7 @@ async function inspect(browser, spec, server) {
     moments += samples.length;
     problems.push(...safeAreaProblems(scene, i, samples, margin, spec.size), ...overlapProblems(scene, i, samples, spec.size), ...emptyEndProblems(scene, i, samples, spec.size));
   }
+  for (const fade of await page.evaluate(() => window.__motion.crossfades)) warnings.push(...await crossfadeWarnings(page, spec, fade, spec.size));
   return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings };
 }
 
