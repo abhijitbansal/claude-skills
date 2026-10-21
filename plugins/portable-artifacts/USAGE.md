@@ -328,8 +328,9 @@ for plans `decision`, `approval`, `question`, `review`, `verdict`.
 
 **Plan mode.** Ask for a plan, proposal or design to be reviewed and answered.
 `scaffold.mjs plan --title "…" --out plan.json` writes a decision-first
-starter (verdict, three numbers, a decision, an approval, a question, "review
-these first", goals, a diagram, phases, risks); the agent replaces each
+starter: a summary, three numbers, a decision, an approval, a question,
+"review these first", goals, a diagram, phases and risks, and last the
+reviewer's overall verdict control; the agent replaces each
 `TODO:` and builds the page, which defaults to the `mono` theme (`--theme brief`
 for the executive look). The reviewer picks one option per decision, approves,
 asks for changes or rejects each approval, answers each question, gives an
