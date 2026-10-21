@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { validateSpec } from '../scripts/lib/spec.mjs';
 import { LIMITS, PRESETS } from '../scripts/lib/schema.mjs';
 import { collectStrings } from '../scripts/lib/walk.mjs';
@@ -28,7 +29,10 @@ const approval = (patch = {}) => ({ type: 'approval', id: 'ship-themes', item: '
 const question = (patch = {}) => ({ type: 'question', id: 'owner', text: 'Who owns the rollout?', ...patch });
 const verdict = (patch = {}) => ({ type: 'verdict', ...patch });
 const review = (patch = {}) => ({ type: 'review', items: [{ point: 'The storage choice', why: 'It decides the export.', target: 'storage' }], ...patch });
-const plan = (sections, extra = {}) => ({ title: 'Plan mode for the explainer', preset: 'plan', key: 'plan-mode', sections, ...extra });
+// A plan with answerable items needs a verdict (it holds the Export buttons): the helper ends every plan with one
+// unless the test placed its own. The rule itself is tested on specs built without the helper.
+const withVerdict = (sections) => (sections.some((s) => s.type === 'verdict') ? sections : [...sections, verdict()]);
+const plan = (sections, extra = {}) => ({ title: 'Plan mode for the explainer', preset: 'plan', key: 'plan-mode', sections: withVerdict(sections), ...extra });
 
 // ---- the minimal valid plan ---------------------------------------------------------------------
 
@@ -143,9 +147,17 @@ test('default, when set, must equal an option label', async () => {
   assert.match(errors[0].message, /^default "Nothing" is not an option label; .*"Browser storage", "A save server"/);
 });
 
-test('two options with one label are an error (answers key on the label)', async () => {
-  const errors = await errorsOf(plan([decision({ options: [{ label: 'Same' }, { label: 'Same' }], recommended: 'Same' })]));
-  assert.deepEqual(errors, [{ path: 'sections[0].options[1].label', message: 'duplicate option label "Same"; first used at sections[0].options[0].label; give each option its own label' }]);
+test('two options with one label are an error, ignoring case (answers key on the label)', async () => {
+  const errors = await errorsOf(plan([decision({ options: [{ label: 'Same' }, { label: 'same' }], recommended: 'Same' })]));
+  assert.deepEqual(errors, [{ path: 'sections[0].options[1].label', message: 'duplicate option label "same": it matches "Same" at sections[0].options[0].label (labels are compared ignoring case); give each option its own label' }]);
+});
+
+test('an option label with a leading or trailing space is an error', async () => {
+  const errors = await errorsOf(plan([decision({ options: [{ label: ' Lead' }, { label: 'Trail ' }], recommended: ' Lead' })]));
+  assert.deepEqual(errors, [
+    { path: 'sections[0].options[0].label', message: 'label " Lead" starts or ends with a space; trim it' },
+    { path: 'sections[0].options[1].label', message: 'label "Trail " starts or ends with a space; trim it' },
+  ]);
 });
 
 test('ids are unique across decision, approval and question', async () => {
@@ -180,6 +192,33 @@ test('a review target without a matching id lists the ids there are', async () =
   assert.match(errors[0].message, /^target "zzzzzzzz" matches no section id; set an explicit id on the section it points to; ids: storage$/);
 });
 
+test('a review target must not be the review itself', async () => {
+  const errors = await errorsOf(plan([decision(), review({ id: 'look', items: [{ point: 'p', why: 'w.', target: 'look' }] })]));
+  assert.deepEqual(errors, [{ path: 'sections[1].items[0].target', message: 'target "look" is this review section itself; point it at the section to review' }]);
+});
+
+test('answerable items need a verdict section, in any preset', async () => {
+  const msg = 'a plan with decisions, approvals or questions needs a verdict section (it holds the Export buttons); add one as the last section';
+  for (const one of [decision(), approval(), question()]) {
+    assert.deepEqual(await errorsOf({ title: 'T', sections: [one] }), [{ path: 'sections', message: msg }], one.type);
+    assert.deepEqual(await errorsOf({ title: 'T', preset: 'plan', sections: [one] }), [{ path: 'sections', message: msg }], one.type);
+  }
+  assert.deepEqual(await errorsOf({ title: 'T', sections: [{ type: 'text', text: 'x' }, review({ items: [{ point: 'p', why: 'w.' }] })] }), [], 'a review alone needs none');
+});
+
+test('ids reserved by plan mode: "verdict" on an answerable item, "plan-verdict" on any section', async () => {
+  for (const make of [decision, approval, question]) {
+    assert.deepEqual(await errorsOf(plan([make({ id: 'verdict' })])), [
+      { path: 'sections[0].id', message: 'id "verdict" is reserved for the plan\'s verdict; pick another id, such as "verdict-call"' },
+    ], make().type);
+  }
+  assert.deepEqual(await errorsOf(plan([{ type: 'tldr', id: 'verdict', text: 'Ready.' }, decision()])), [], 'a tldr keeps the id the examples use');
+  for (const s of [{ type: 'text', id: 'plan-verdict', text: 'x' }, decision({ id: 'plan-verdict' })]) {
+    const errors = await errorsOf(plan([s, ...(s.type === 'text' ? [decision()] : [])]));
+    assert.deepEqual(errors, [{ path: 'sections[0].id', message: 'id "plan-verdict" is reserved by the page; pick another id, such as "overview"' }], s.type);
+  }
+});
+
 test('a plan needs at least one decision, approval or question', async () => {
   assert.deepEqual(await errorsOf(plan([{ type: 'text', text: 'Only words.' }, verdict()])), [
     { path: 'sections', message: 'a plan needs at least one decision, approval or question' },
@@ -207,12 +246,12 @@ test('key: optional on any preset; validated by pattern and length', async () =>
 
 // ---- walk / lint ----------------------------------------------------------------------------------
 
-test('recommended, default and target are not prose', () => {
+test('recommended, a decision\'s default and target are not prose; a question\'s default is', () => {
   const strings = collectStrings(plan([decision({ default: 'A save server' }), question({ default: 'Leave it' }), review()]));
   const byPath = Object.fromEntries(strings.map((s) => [s.path, s.prose]));
   assert.equal(byPath['sections[0].recommended'], false);
   assert.equal(byPath['sections[0].default'], false);
-  assert.equal(byPath['sections[1].default'], false);
+  assert.equal(byPath['sections[1].default'], true, 'a question default is a sentence the reader sees');
   assert.equal(byPath['sections[2].items[0].target'], false);
   assert.equal(byPath['sections[0].question'], true);
   assert.equal(byPath['sections[0].options[0].label'], true);
@@ -220,8 +259,15 @@ test('recommended, default and target are not prose', () => {
 });
 
 test('a placeholder in a non-prose plan field is still caught', async () => {
-  const errors = await errorsOf(plan([question({ default: 'TODO: decide' })]));
-  assert.deepEqual(errors, [{ path: 'sections[0].default', message: 'still has a TODO placeholder — replace it with real content' }]);
+  const errors = await errorsOf(plan([decision({ options: [{ label: 'TODO: pick' }, { label: 'B' }], recommended: 'B', default: 'TODO: pick' })]));
+  assert.ok(errors.some((e) => e.path === 'sections[0].default' && e.message.startsWith('still has a TODO placeholder')), JSON.stringify(errors));
+});
+
+test('a question default is linted as prose', async () => {
+  const errors = await errorsOf(plan([question({ default: 'We leverage the author' })]));
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].path, 'sections[0].default');
+  assert.match(errors[0].message, /^banned phrase "leverage"/);
 });
 
 // ---- slides ---------------------------------------------------------------------------------------
@@ -241,6 +287,21 @@ test('slides: a decision whose options push it past the word budget is an error'
   const errors = slideBudget({ title: 'Deck', mode: 'slides', sections: [decision({ options: opts, recommended: 'Option 1' })] });
   assert.equal(errors.length, 1);
   assert.match(errors[0].message, /^slide has \d+ words; the limit is 80/);
+});
+
+test('slides: a question default counts toward the word budget, a decision default does not', () => {
+  const long = Array.from({ length: 85 }, (_, i) => `w${i}`).join(' ');
+  const deck = (s) => slideBudget({ title: 'Deck', mode: 'slides', sections: [s] });
+  assert.equal(deck(question({ default: long })).length, 1);
+  assert.match(deck(question({ default: long }))[0].message, /^slide has 89 words; the limit is 80/);
+  // slideBudget alone (no semantic pass): a long decision default is not counted, so the slide stays in budget.
+  assert.deepEqual(deck(decision({ default: long })), []);
+});
+
+test('scaffold: plan says it has no starter yet (exit 2)', () => {
+  const r = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/scaffold.mjs', import.meta.url)), 'plan'], { encoding: 'utf8' });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /^plan has no starter yet; write the spec by hand or pick one of recap, checklist, concept, slides/);
 });
 
 test('slides: untitled plan sections are named after their type', () => {

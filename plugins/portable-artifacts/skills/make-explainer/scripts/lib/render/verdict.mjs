@@ -5,7 +5,8 @@ import { page, isDeck, planItem, staticItem, kicker, choices } from './plan-ui.m
 
 export { page };
 
-// The radio group name is fixed: a verdict needs no id, and a fixed name cannot meet an item's.
+// The radio group name is fixed (a verdict needs no id). Items are "plan-<id>" and the id "verdict" is reserved on
+// them, so the groups never meet. The container has no data-id: the runtime finds the verdict by data-kind.
 const NAME = 'plan-verdict';
 const QUESTION = 'Overall verdict';
 const ANSWERS = [
@@ -17,7 +18,7 @@ const ANSWERS = [
 const prompt = (section) => (section.text === undefined ? 'Your overall verdict on this plan' : inline(section.text));
 
 const controls = `<div class="plan-verdict-foot">
-<label class="plan-field plan-reviewer"><span class="plan-field-label">Your name</span><input type="text" class="plan-input" data-reviewer autocomplete="name"></label>
+<label class="plan-field plan-reviewer"><span class="plan-field-label">Your name</span><input type="text" class="plan-input" data-reviewer autocomplete="name" placeholder=" "></label>
 <div class="plan-actions">
 <button type="button" class="btn plan-btn" data-plan-copy>Copy answers</button>
 <button type="button" class="btn plan-btn" data-plan-download>Download plan-answers.json</button>
@@ -32,7 +33,7 @@ export function render(section, ctx) {
     const list = ANSWERS.map(([, word]) => `<li>${word}</li>`).join('');
     return staticItem('verdict', `${kicker('Your verdict')}\n<p class="plan-q">${prompt(section)}</p>\n<ul class="plan-verdict-static">${list}</ul>`);
   }
-  return planItem('verdict', section.id ?? 'verdict', QUESTION, `${kicker('Your verdict')}
+  return planItem('verdict', { question: QUESTION }, `${kicker('Your verdict')}
 <fieldset class="plan-set">
 <legend class="plan-q">${prompt(section)}</legend>
 ${choices(NAME, ANSWERS)}

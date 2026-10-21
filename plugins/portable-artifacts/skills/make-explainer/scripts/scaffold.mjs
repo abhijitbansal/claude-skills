@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import { emit } from './lib/write-out.mjs';
 import { scaffold, PRESET_NAMES } from './lib/presets.mjs';
-import { CHANGES } from './lib/schema.mjs';
+import { CHANGES, PRESETS } from './lib/schema.mjs';
 import { didYouMean } from '../shared/errors.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 
@@ -72,6 +72,7 @@ function presetFrom(positionals) {
   if (positionals.length > 1) throw new UsageError(`expected one preset, got ${positionals.length} (${list}); usage: ${USAGE}`);
   const [preset] = positionals;
   if (PRESET_NAMES.includes(preset)) return preset;
+  if (PRESETS.includes(preset) && preset !== 'none') throw new UsageError(`${preset} has no starter yet; write the spec by hand or pick one of ${list}`);
   const guess = didYouMean(preset, PRESET_NAMES);
   throw new UsageError(`unknown preset "${preset}"; it must be one of ${list}${guess ? `; did you mean "${guess}"?` : ''}`);
 }

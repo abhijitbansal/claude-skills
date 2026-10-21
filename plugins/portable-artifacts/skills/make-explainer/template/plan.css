@@ -64,7 +64,7 @@ main { counter-reset: plan-item; }
 .plan-choice input[type="radio"] { margin: 0; accent-color: var(--tc); }
 .plan-choice .gl { color: var(--tc); }
 .plan-choice:hover { border-color: var(--tc); }
-.plan-choice:has(input:checked) { border-color: var(--tc); box-shadow: 0 0 0 1px var(--tc); background: var(--accent-soft); }
+.plan-choice:has(input:checked) { border-color: var(--tc); box-shadow: 0 0 0 1px var(--tc); background: var(--page); background: color-mix(in srgb, var(--tc) 12%, var(--page)); }
 
 /* free text */
 .plan-field { display: grid; gap: 6px; margin: var(--plan-gap) 0 0; }
@@ -81,7 +81,7 @@ main { counter-reset: plan-item; }
 .plan-btn { min-height: 44px; padding: 8px 16px; border-color: var(--text-3); color: var(--text); font-size: var(--fs-sm); font-weight: 600; }
 .plan-btn:hover { border-color: var(--accent); }
 .plan-status { margin: 10px 0 0; color: var(--text-2); font-size: var(--fs-sm); }
-.plan-status:empty { display: none; }
+.plan-status:empty { margin: 0; }
 .plan-flag { margin: 10px 0 0; }
 .plan-flag .chip { white-space: normal; }
 
@@ -127,6 +127,7 @@ main { counter-reset: plan-item; }
 [data-theme-name="mono"] .plan-kicker, [data-theme-name="mono"] .plan-default-k, [data-theme-name="mono"] .plan-why summary { text-transform: uppercase; letter-spacing: 0.08em; }
 [data-theme-name="mono"] .plan-why summary, [data-theme-name="mono"] .plan-default-k { font-size: var(--fs-xs); color: var(--accent); }
 [data-theme-name="mono"] .plan-item .chip { border-radius: 2px; }
+[data-theme-name="mono"] .plan-item strong { color: var(--accent); }
 
 /* brief: an executive memo. Soft corners, generous space, large serif numerals, a calmer frame. */
 [data-theme-name="brief"] .plan-item { --plan-r: 10px; --plan-gap: 22px; --plan-pad: 30px; --plan-num: var(--fs-xl); }
@@ -141,7 +142,10 @@ main { counter-reset: plan-item; }
   [data-theme-name="brief"] .plan-opt { padding: 14px; }
 }
 
+/* print: keep each option and answer chip whole; drop the export controls and any box left empty (the blank
+   placeholder makes an empty box match :placeholder-shown) */
 @media print {
-  .plan-item { break-inside: avoid; }
+  .plan-opt, .plan-choice { break-inside: avoid; }
   .plan-actions, .plan-flag, .plan-status { display: none !important; }
+  .plan-field:has(:placeholder-shown), .plan-text:placeholder-shown { display: none; }
 }

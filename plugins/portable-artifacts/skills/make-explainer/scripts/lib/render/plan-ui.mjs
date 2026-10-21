@@ -1,7 +1,9 @@
 // Building blocks shared by the plan section renderers (decision, approval, question, verdict).
 // The answer runtime (template/plan.js) reads the markup these write, so the attribute names are a contract:
-// a container [data-plan-item] with data-id, data-kind and data-question, radios named after the item, and
-// <textarea data-answer> / <textarea data-comment> for free text. Attribute values hold the raw spec text
+// a container [data-plan-item] with data-kind, data-question, data-id (not on the verdict: the runtime finds it by
+// data-kind) and data-default (decision and question), radios named "plan-<id>" (the verdict's are "plan-verdict";
+// the id "verdict" is reserved on items, so the groups never meet), and <textarea data-answer> /
+// <textarea data-comment> for free text. Attribute values hold the raw spec text
 // escaped with esc(), so getAttribute() and input.value give back the exact string the spec holds.
 import fs from 'node:fs';
 import { esc, glyph } from './ui.mjs';
@@ -17,12 +19,23 @@ export function page(ctx) {
 
 export const isDeck = (ctx) => ctx.mode === 'slides';
 
-/** The answerable item: what the runtime binds and exports. */
-export function planItem(kind, id, question, inner) {
-  return `<div class="plan-item plan-${kind}" data-plan-item data-id="${esc(id)}" data-kind="${kind}" data-question="${esc(question)}">
+/**
+ * The answerable item: what the runtime binds and exports. `attrs` = { id?, question, default? }; `default` is
+ * written (empty when the spec has none) only when the key is present, so decision and question always carry it.
+ */
+export function planItem(kind, attrs, inner) {
+  const id = attrs.id === undefined ? '' : ` data-id="${esc(attrs.id)}"`;
+  const fallback = Object.hasOwn(attrs, 'default') ? ` data-default="${esc(attrs.default ?? '')}"` : '';
+  return `<div class="plan-item plan-${kind}" data-plan-item${id} data-kind="${kind}" data-question="${esc(attrs.question)}"${fallback}>
 ${inner}
 </div>`;
 }
+
+/** An item's radio group name. Prefixed, so an item id never meets another radio group on the page. */
+export const radioName = (id) => `plan-${id}`;
+
+/** An element id inside an item. The underscore keeps it apart from section and heading ids (ID_PATTERN has none). */
+export const partId = (id, ...parts) => esc(['pl', id, ...parts].join('_'));
 
 /** The deck form: the same content, no controls, and where to answer instead. */
 export function staticItem(kind, inner) {
@@ -44,5 +57,9 @@ export function choices(name, options) {
   return `<div class="plan-choices">\n${rows.join('\n')}\n</div>`;
 }
 
-/** An optional free-text comment, exported with the item. */
-export const commentBox = (label) => `<label class="plan-field"><span class="plan-field-label">${label}</span><textarea class="plan-text" data-comment rows="2"></textarea></label>`;
+/**
+ * An optional free-text comment, exported with the item. `about` (escaped plain text, the item's question) is read
+ * to screen readers only, so a form-field list tells the comment boxes apart. The blank placeholder lets print hide
+ * an empty box (:placeholder-shown).
+ */
+export const commentBox = (label, about) => `<label class="plan-field"><span class="plan-field-label">${label}<span class="sr-only">: ${about}</span></span><textarea class="plan-text" data-comment rows="2" placeholder=" "></textarea></label>`;

@@ -162,10 +162,25 @@ const planAttrs = (spec, slides) => (slides || !spec.sections.some((s) => PLAN_I
   ? ''
   : ` data-plan-key="${esc(spec.key ?? '')}" data-plan-hash=""`);
 
-// Review links name the section they point at: explicit id -> title (or label).
+// Review links name the section they point at: explicit id -> link text as escaped HTML. The title or label when
+// there is one, else the start of its question, item or text as plain text, cut at a word near LINK_CHARS.
+const LINK_CHARS = 60;
+function clip(text) {
+  const flat = rawText(text).replace(/\s+/g, ' ').trim();
+  if ([...flat].length <= LINK_CHARS) return esc(flat);
+  const cut = [...flat].slice(0, LINK_CHARS).join('');
+  const space = cut.lastIndexOf(' ');
+  return `${esc((space > LINK_CHARS / 2 ? cut.slice(0, space) : cut).replace(/[\s,.;:]+$/, ''))}…`;
+}
+function linkText(s) {
+  const name = s.title ?? s.label;
+  if (name !== undefined) return headingInline(name);
+  const words = [s.question, s.item, s.text].find((x) => typeof x === 'string');
+  return words === undefined ? undefined : clip(words);
+}
 const linkTargets = (sections) => new Map(sections
-  .filter((s) => s.id !== undefined && (s.title ?? s.label) !== undefined)
-  .map((s) => [s.id, s.title ?? s.label]));
+  .filter((s) => s.id !== undefined && linkText(s) !== undefined)
+  .map((s) => [s.id, linkText(s)]));
 
 function renderMeta(meta) {
   const entries = META_KEYS.filter((k) => meta?.[k] !== undefined);

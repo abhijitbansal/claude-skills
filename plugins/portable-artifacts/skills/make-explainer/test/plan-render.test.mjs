@@ -45,14 +45,23 @@ const attr = (s, name) => s.match(new RegExp(`\\s${name}="([^"]*)"`))?.[1];
 
 test('decision: a plan-item container carries the id, the kind and the escaped question', () => {
   const html = render(decision({ question: 'Pick "one" <b>now</b>' }));
-  assert.match(html, /^<div class="plan-item plan-decision" data-plan-item data-id="storage" data-kind="decision" data-question="Pick &quot;one&quot; &lt;b&gt;now&lt;\/b&gt;">/);
+  assert.match(html, /^<div class="plan-item plan-decision" data-plan-item data-id="storage" data-kind="decision" data-question="Pick &quot;one&quot; &lt;b&gt;now&lt;\/b&gt;" data-default="">/);
+});
+
+test('decision and question carry data-default: escaped when set, empty when not; approval has none', () => {
+  assert.match(render(decision({ default: 'A save server' })), /^<div [^>]*data-default="A save server">/);
+  assert.match(render(decision({ options: [{ label: HOSTILE }, { label: 'B' }], recommended: 'B', default: HOSTILE })), new RegExp(`^<div [^>]*data-default="${HOSTILE_ESC}">`));
+  assert.match(render(question({ default: HOSTILE })), new RegExp(`^<div [^>]*data-default="${HOSTILE_ESC}">`));
+  assert.match(render(question({ default: undefined })), /^<div [^>]*data-default="">/);
+  assert.ok(!/^<div [^>]*data-default/.test(render(approval())));
+  assert.ok(!/^<div [^>]*data-default/.test(render(verdict())));
 });
 
 test('decision: every option is a radio named after the id, its value the label; only the recommended one is marked', () => {
   const html = render(decision());
   const r = radios(html);
   assert.equal(r.length, 3);
-  assert.deepEqual(r.map((a) => attr(a, 'name')), ['storage', 'storage', 'storage']);
+  assert.deepEqual(r.map((a) => attr(a, 'name')), ['plan-storage', 'plan-storage', 'plan-storage']);
   assert.deepEqual(r.map((a) => attr(a, 'value')), ['Browser storage', 'A save server', 'Both']);
   assert.deepEqual(r.map((a) => attr(a, 'data-recommended')), ['true', 'false', 'false']);
   assert.equal((html.match(/>Recommended</g) ?? []).length, 1, 'one Recommended chip');
@@ -64,6 +73,24 @@ test('decision: the why sits in an open <details>, pros and cons are listed with
   assert.match(html, /<details class="plan-why" open>\s*<summary>[^]*?<\/summary>[^]*?Nothing to deploy/);
   assert.match(html, /<li class="plan-pro">[^]*?<span><span class="sr-only">Pro: <\/span>No server<\/span><\/li>/);
   assert.match(html, /<li class="plan-con">[^]*?<span><span class="sr-only">Con: <\/span>One device only<\/span><\/li>/);
+});
+
+test('decision: a radio is named by its label (and the Recommended chip) and described by its pros and cons', () => {
+  const html = render(decision());
+  const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+  const [first, second, third] = radios(html);
+  assert.equal(attr(first, 'aria-labelledby'), 'pl_storage_1_label pl_storage_1_rec');
+  assert.equal(attr(first, 'aria-describedby'), 'pl_storage_1_pc');
+  assert.equal(attr(second, 'aria-labelledby'), 'pl_storage_2_label');
+  assert.equal(attr(third, 'aria-describedby'), undefined, 'no pros or cons, no description');
+  for (const ref of ['pl_storage_1_label', 'pl_storage_1_rec', 'pl_storage_1_pc', 'pl_storage_2_label']) assert.ok(ids.has(ref), ref);
+  assert.match(html, /<span class="plan-opt-label" id="pl_storage_1_label">Browser storage<\/span>/);
+});
+
+test('comment boxes name their item for screen readers', () => {
+  assert.match(render(decision()), /Comment or override \(optional\)<span class="sr-only">: Where do answers live\?<\/span>/);
+  assert.match(render(approval()), /Comment \(optional\)<span class="sr-only">: Ship the two plan themes<\/span>/);
+  assert.ok(!render(approval({ item: HOSTILE })).includes('<img'));
 });
 
 test('decision: the default is stated when set, and a comment box takes an override', () => {
@@ -108,7 +135,7 @@ test('approval: three radios approve | changes | reject, a comment box, impact a
   assert.match(html, /^<div class="plan-item plan-approval" data-plan-item data-id="themes" data-kind="approval" data-question="Ship the two plan themes">/);
   const r = radios(html);
   assert.deepEqual(r.map((a) => attr(a, 'value')), ['approve', 'changes', 'reject']);
-  assert.deepEqual(r.map((a) => attr(a, 'name')), ['themes', 'themes', 'themes']);
+  assert.deepEqual(r.map((a) => attr(a, 'name')), ['plan-themes', 'plan-themes', 'plan-themes']);
   for (const word of ['Approve', 'Needs changes', 'Reject']) assert.ok(html.includes(`<span>${word}</span>`), word);
   assert.match(html, /<textarea[^>]*data-comment/);
   assert.match(html, /Impact<\/dt><dd>Every skill can use them<\/dd>/);
@@ -123,7 +150,7 @@ test('approval: hostile item, why, impact and owner appear only escaped', () => 
 
 test('question: a free-text answer box named by the question, the default stated', () => {
   const html = render(question());
-  assert.match(html, /^<div class="plan-item plan-question" data-plan-item data-id="owner" data-kind="question" data-question="Who owns the rollout\?">/);
+  assert.match(html, /^<div class="plan-item plan-question" data-plan-item data-id="owner" data-kind="question" data-question="Who owns the rollout\?" data-default="The author owns it">/);
   assert.match(html, /<textarea[^>]*data-answer[^>]*aria-label="Answer: Who owns the rollout\?"[^>]*><\/textarea>/);
   assert.match(html, /blank answer[^]*?The author owns it/i);
   assert.equal(radios(html).length, 0);
@@ -138,7 +165,7 @@ test('question: hostile text and default appear only escaped', () => {
 
 test('verdict: three radios approve | approve-with-changes | not-yet, a reviewer name input and the export controls', () => {
   const html = render(verdict());
-  assert.match(html, /^<div class="plan-item plan-verdict" data-plan-item data-id="verdict" data-kind="verdict" data-question="Overall verdict">/);
+  assert.match(html, /^<div class="plan-item plan-verdict" data-plan-item data-kind="verdict" data-question="Overall verdict">/);
   const r = radios(html);
   assert.deepEqual(r.map((a) => attr(a, 'value')), ['approve', 'approve-with-changes', 'not-yet']);
   assert.deepEqual(r.map((a) => attr(a, 'name')), ['plan-verdict', 'plan-verdict', 'plan-verdict']);
@@ -150,9 +177,9 @@ test('verdict: three radios approve | approve-with-changes | not-yet, a reviewer
   assert.match(html, /data-plan-stale hidden/);
 });
 
-test('verdict: an explicit id is the data-id; hostile text is escaped', () => {
+test('verdict: no data-id even with an explicit id (the runtime keys it by data-kind); hostile text is escaped', () => {
   const html = render(verdict({ id: 'overall', text: HOSTILE }));
-  assert.match(html, /data-id="overall"/);
+  assert.ok(!html.includes('data-id'), html);
   assert.ok(!html.includes('<img') && !html.includes('</script>'), html);
 });
 
@@ -196,12 +223,12 @@ test('slides: a hostile decision stays escaped', () => {
 
 // ---- page parts -----------------------------------------------------------------------------------
 
-test('page(): the four interactive types ship plan.css and plan.js; a deck gets the css only', () => {
+test('page(): the four interactive types ship plan.css and plan.js; a deck gets the css only; review ships the css', () => {
   for (const type of ['decision', 'approval', 'question', 'verdict']) {
     assert.deepEqual(SECTIONS[type].page(pageCtx), { css: PLAN_CSS.replace(/\n$/, ''), js: [PLAN_JS] }, type);
     assert.deepEqual(SECTIONS[type].page(slidesCtx), { css: PLAN_CSS.replace(/\n$/, ''), js: [] }, type);
   }
-  assert.equal(SECTIONS.review.page, undefined);
+  assert.deepEqual(SECTIONS.review.page(pageCtx), { css: PLAN_CSS.replace(/\n$/, ''), js: [] });
 });
 
 const plan = (sections, extra = {}) => ({ title: 'Plan', preset: 'plan', key: 'plan-mode', theme: 'mono', sections, ...extra });
@@ -238,4 +265,38 @@ test('a plan as a deck: no inputs, no plan runtime, no plan attributes, the note
   assert.ok(!html.includes('data-plan-key'));
   assert.match(html, /<html lang="en" data-flavor="classic" data-theme-name="mono">/);
   assert.equal(html.split('Answers are collected in the page version.').length - 1, 4);
+});
+
+test('a page with a review and no answerable item ships plan.css once and no plan.js or plan attributes', async () => {
+  const { html } = await build({ title: 'T', sections: [{ type: 'text', id: 'notes', title: 'Notes', text: 'x' }, review({ items: [{ point: 'p', why: 'w', target: 'notes' }] })] });
+  assert.equal(html.split(PLAN_CSS_MARK).length - 1, 1);
+  assert.ok(!html.includes(PLAN_JS_MARK));
+  assert.ok(!html.includes('data-plan-key'));
+});
+
+test('two items never share a radio group: each name belongs to one item', async () => {
+  const { html } = await build(plan([decision({ id: 'verdict-call' }), approval({ id: 'storage' }), question(), verdict()]));
+  const groups = new Map();
+  for (const m of html.matchAll(/<div class="plan-item [^"]*" data-plan-item[^>]*>[^]*?(?=<div class="plan-item |<\/main>)/g)) {
+    for (const r of radios(m[0])) {
+      const name = attr(r, 'name');
+      groups.set(name, (groups.get(name) ?? new Set()).add(m.index));
+    }
+  }
+  assert.deepEqual([...groups.keys()].sort(), ['plan-storage', 'plan-verdict', 'plan-verdict-call']);
+  for (const [name, owners] of groups) assert.equal(owners.size, 1, name);
+});
+
+test('review links fall back to the start of the target question when it has no title or label', async () => {
+  const long = 'Should every reviewer answer every question before the plan can move on to the build phase at all?';
+  const { html } = await build(plan([decision({ id: 'short', question: 'Keep it <short>?' }), decision({ id: 'long', question: long }), review({ items: [{ point: 'a', why: 'b', target: 'short' }, { point: 'c', why: 'd', target: 'long' }] }), verdict()]));
+  assert.match(html, /href="#short"><span>Go to Keep it &lt;short&gt;\?<\/span>/);
+  const text = html.match(/href="#long"><span>Go to ([^<]*)<\/span>/)[1];
+  assert.ok(text.endsWith('…') && text.length <= 62, text);
+  assert.ok(long.startsWith(text.slice(0, -1)), text);
+});
+
+test('slides: a question with no default says nothing about blank answers', () => {
+  assert.ok(!render(question({ default: undefined }), slidesCtx).includes('blank answer'));
+  assert.ok(render(question({ default: undefined })).includes('A blank answer leaves it open.'));
 });

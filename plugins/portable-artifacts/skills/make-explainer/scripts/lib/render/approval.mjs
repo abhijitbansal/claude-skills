@@ -1,7 +1,7 @@
 // approval: one item to approve, ask changes on, or reject, with why, impact and owner. Read only in a deck.
-import { inline } from './ui.mjs';
+import { inline, plain } from './ui.mjs';
 import { renderMarkdown } from '../markdown.mjs';
-import { page, isDeck, planItem, staticItem, kicker, choices, commentBox } from './plan-ui.mjs';
+import { page, isDeck, planItem, staticItem, kicker, choices, commentBox, radioName } from './plan-ui.mjs';
 
 export { page };
 
@@ -25,11 +25,11 @@ ${renderMarkdown(section.why)}
 
 export function render(section, ctx) {
   if (isDeck(ctx)) return staticItem('approval', `${kicker('Approval needed')}\n<p class="plan-q">${inline(section.item)}</p>\n${body(section)}`);
-  return planItem('approval', section.id, section.item, `${kicker('Approval needed')}
+  return planItem('approval', { id: section.id, question: section.item }, `${kicker('Approval needed')}
 <fieldset class="plan-set">
 <legend class="plan-q">${inline(section.item)}</legend>
 ${body(section)}
-${choices(section.id, ANSWERS)}
+${choices(radioName(section.id), ANSWERS)}
 </fieldset>
-${commentBox('Comment (optional)')}`);
+${commentBox('Comment (optional)', plain(section.item))}`);
 }

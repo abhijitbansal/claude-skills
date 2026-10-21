@@ -65,8 +65,13 @@ function checkKey(errors, key, at) {
 
 // Ids the page itself emits, so a section id must not equal one: <main id="content"> (page.html and
 // slides.mjs), the deck's "outline-title" and "slide-N" / "slide-N-title", and the chart SVGs' "chN-..." ids.
-// Diagram ids ("dg_N-...") hold an underscore, which ID_PATTERN already refuses.
-const RESERVED_IDS = [/^content$/, /^outline-title$/, /^slide-\d+(?:-title)?$/, /^ch\d+-/];
+// Diagram ids ("dg_N-...") hold an underscore, which ID_PATTERN already refuses. "plan-verdict" is the verdict's
+// radio group name.
+const RESERVED_IDS = [/^content$/, /^outline-title$/, /^slide-\d+(?:-title)?$/, /^ch\d+-/, /^plan-verdict$/];
+// An answerable item's radios are named "plan-<id>", so its id must not be "verdict" (the verdict's group). Only these
+// three types: a tldr may keep the id "verdict" (the examples use it).
+const PLAN_ITEM_TYPES = new Set(['decision', 'approval', 'question']);
+const RESERVED_ITEM_IDS = new Set(['verdict']);
 
 export function checkIds(spec, errors) {
   const seen = new Map();
@@ -78,6 +83,9 @@ export function checkIds(spec, errors) {
     }
     if (RESERVED_IDS.some((re) => re.test(s.id))) {
       errors.push({ path: at, message: `id ${q(s.id)} is reserved by the page; pick another id, such as "overview"` });
+    }
+    if (PLAN_ITEM_TYPES.has(s.type) && RESERVED_ITEM_IDS.has(s.id)) {
+      errors.push({ path: at, message: `id ${q(s.id)} is reserved for the plan's verdict; pick another id, such as "${s.id}-call"` });
     }
     if (seen.has(s.id)) errors.push({ path: at, message: `duplicate id ${q(s.id)}; first used at ${seen.get(s.id)}; rename one` });
     else seen.set(s.id, at);
@@ -195,8 +203,6 @@ function checkSection(s, i, errors, state) {
 
 // ---- plan mode --------------------------------------------------------
 
-const PLAN_ITEM_TYPES = new Set(['decision', 'approval', 'question']);
-
 // A field that names an option must name one exactly: answers carry the label.
 function checkOptionRef(s, field, at, errors, labels) {
   const value = s[field];
@@ -206,14 +212,22 @@ function checkOptionRef(s, field, at, errors, labels) {
   errors.push({ path: pathJoin(at, field), message: `${field} ${q(value)} is not an option label; ${fix}` });
 }
 
-function checkDecision(s, at, errors) {
-  count(errors, s.options, at, 'options', LIMITS.planOptions, 'keep the strongest options');
+// Labels are what a reader picks and what the export carries: no edge spaces, and no two that differ only in case.
+function checkOptionLabels(s, at, errors) {
   const seen = new Map();
   s.options.forEach((o, oi) => {
     const labelAt = pathJoin(pathJoin(pathJoin(at, 'options'), oi), 'label');
-    if (seen.has(o.label)) errors.push({ path: labelAt, message: `duplicate option label ${q(o.label)}; first used at ${seen.get(o.label)}; give each option its own label` });
-    else seen.set(o.label, labelAt);
+    if (o.label !== o.label.trim()) errors.push({ path: labelAt, message: `label ${q(o.label)} starts or ends with a space; trim it` });
+    const folded = o.label.trim().toLowerCase();
+    const first = seen.get(folded);
+    if (first) errors.push({ path: labelAt, message: `duplicate option label ${q(o.label)}: it matches ${q(first.label)} at ${first.at} (labels are compared ignoring case); give each option its own label` });
+    else seen.set(folded, { label: o.label, at: labelAt });
   });
+}
+
+function checkDecision(s, at, errors) {
+  count(errors, s.options, at, 'options', LIMITS.planOptions, 'keep the strongest options');
+  checkOptionLabels(s, at, errors);
   const labels = s.options.map((o) => o.label);
   checkOptionRef(s, 'recommended', at, errors, labels);
   checkOptionRef(s, 'default', at, errors, labels);
@@ -223,6 +237,10 @@ function checkDecision(s, at, errors) {
 function checkReview(s, at, errors, ids) {
   count(errors, s.items, at, 'items', LIMITS.reviewItems, 'keep the places that need the hardest look');
   s.items.forEach((item, j) => {
+    if (item.target !== undefined && item.target === s.id) {
+      errors.push({ path: pathJoin(pathJoin(pathJoin(at, 'items'), j), 'target'), message: `target ${q(item.target)} is this review section itself; point it at the section to review` });
+      return;
+    }
     if (item.target === undefined || ids.includes(item.target)) return;
     const hint = didYouMean(item.target, ids);
     const fix = hint ? `did you mean ${q(hint)}?` : `set an explicit id on the section it points to; ids: ${ids.length > 0 ? ids.join(', ') : '(none)'}`;
@@ -240,8 +258,13 @@ export function checkSections(spec, errors) {
   const ids = spec.sections.map((s) => s.id).filter((id) => id !== undefined);
   const state = { checklistKeys: new Map(), ids, last: spec.sections.length - 1, verdictAt: undefined };
   spec.sections.forEach((s, i) => checkSection(s, i, errors, state));
-  if (spec.preset === 'plan' && !spec.sections.some((s) => PLAN_ITEM_TYPES.has(s.type))) {
+  const answerable = spec.sections.some((s) => PLAN_ITEM_TYPES.has(s.type));
+  if (spec.preset === 'plan' && !answerable) {
     errors.push({ path: 'sections', message: 'a plan needs at least one decision, approval or question' });
+  }
+  // The verdict holds the Export buttons: without it the answers cannot leave the page.
+  if (answerable && state.verdictAt === undefined) {
+    errors.push({ path: 'sections', message: 'a plan with decisions, approvals or questions needs a verdict section (it holds the Export buttons); add one as the last section' });
   }
 }
 
