@@ -104,8 +104,8 @@ test('ui: plain strips markup and stays escaped; rawText unescapes; unknown glyp
 test('table: numeric columns right-align, the first column is a row header, caption is a real caption', () => {
   const html = SECTIONS.table.render({ type: 'table', columns: ['Name', 'KB', 'Note'], rows: [['a', 410, 'x'], ['b', '1,200', 'y']], caption: 'Sizes' }, ctx);
   assert.match(html, /<th scope="row" class="a-l">a<\/th>/);
-  assert.match(html, /<td class="a-r">410<\/td>/);
-  assert.match(html, /<td class="a-r">1,200<\/td>/);
+  assert.match(html, /<td class="a-r nw">410<\/td>/);
+  assert.match(html, /<td class="a-r nw">1,200<\/td>/);
   assert.match(html, /<td class="a-l">x<\/td>/);
   assert.match(html, /<caption>Sizes<\/caption>/);
   assert.match(html, /role="region" aria-label="Sizes" tabindex="0"/);
@@ -114,7 +114,7 @@ test('table: numeric columns right-align, the first column is a row header, capt
 test('table: explicit align wins over detection', () => {
   const html = SECTIONS.table.render({ type: 'table', columns: ['A', 'B'], rows: [['x', 1]], align: ['center', 'left'] }, ctx);
   assert.match(html, /<th scope="row" class="a-c">x<\/th>/);
-  assert.match(html, /<td class="a-l">1<\/td>/);
+  assert.match(html, /<td class="a-l nw">1<\/td>/);
 });
 
 test('risks and steps: status is a word and a shape, not colour', () => {

@@ -153,7 +153,7 @@ test('a failed build removes nothing', async () => {
 // ---- 4. KPI numbers --------------------------------------------------------------------------
 
 const ctx = { dir: FIXTURES, icons: null, theme: null, mode: 'page', slug: 'page', assetsDir: FIXTURES, idFor: () => 'sec' };
-const kpiValues = (items) => [...SECTIONS.kpis.render({ type: 'kpis', items }, ctx).matchAll(/<dd class="kpi-value">([^<]*)<\/dd>/g)].map((m) => m[1]);
+const kpiValues = (items) => [...SECTIONS.kpis.render({ type: 'kpis', items }, ctx).matchAll(/<dd class="kpi-value"[^>]*>([^<]*)<\/dd>/g)].map((m) => m[1]);
 
 test('KPI numbers render with thousands separators from 10,000; strings are shown as written', () => {
   assert.deepEqual(

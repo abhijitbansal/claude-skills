@@ -8,6 +8,8 @@ import { codeLines } from './slides.mjs';
 
 const q = (v) => JSON.stringify(v);
 const MAX_LISTED = 12;
+// A KPI value longer than this draws a warning (not an error): the tile is narrow and the value stays on one line.
+const KPI_VALUE_ADVISED = 12;
 
 function suggestion(value, candidates) {
   const hint = didYouMean(value, candidates);
@@ -188,11 +190,23 @@ export function checkSections(spec, errors) {
 /** Advice that never blocks a build: -> [{ path, message }]. */
 export function warnSections(spec) {
   const warnings = [];
-  if (spec.preset !== 'checklist') return warnings;
   spec.sections.forEach((s, i) => {
-    if (s.type === 'checklist' && s.intro === undefined) {
-      warnings.push({ path: pathJoin(pathJoin('sections', i), 'intro'), message: 'add a "What\'s in this branch" summary (features and review-cycle fixes) — testers need the context' });
+    const at = pathJoin('sections', i);
+    if (s.type === 'checklist' && s.intro === undefined && spec.preset === 'checklist') {
+      warnings.push({ path: pathJoin(at, 'intro'), message: 'add a "What\'s in this branch" summary (features and review-cycle fixes) — testers need the context' });
     }
+    if (s.type === 'kpis') warnLongKpiValues(s, at, warnings);
   });
   return warnings;
+}
+
+// A KPI tile is narrow and holds its value on one line, so words belong in `note`. A number is never long.
+function warnLongKpiValues(section, at, warnings) {
+  section.items.forEach((item, j) => {
+    if (typeof item.value !== 'string') return;
+    const n = [...item.value].length;
+    if (n > KPI_VALUE_ADVISED) {
+      warnings.push({ path: pathJoin(pathJoin(pathJoin(at, 'items'), j), 'value'), message: `KPI value is ${n} characters; keep it to ${KPI_VALUE_ADVISED} or move words to note` });
+    }
+  });
 }

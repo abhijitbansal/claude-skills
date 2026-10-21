@@ -53,7 +53,8 @@ html, body { height: 100%; overflow: hidden; }
   .deck-progress > span { transition: width 0.25s ease; }
 }
 .deck-controls { display: flex; align-items: center; gap: 10px; max-width: 76rem; margin: 0 auto; padding: 8px 24px; }
-.deck-count { margin-left: auto; color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.deck-count { margin-left: auto; color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nw { white-space: nowrap; }
 .deck-controls .btn { padding: 4px 12px; font-size: var(--fs-sm); }
 .slide .pa-footer { width: 100%; max-width: 60rem; margin: 24px auto 0; padding: 12px 0 0; }
 .key { display: inline-block; min-width: 1.4em; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-3); font-size: var(--fs-xs); line-height: 1.5; text-align: center; }

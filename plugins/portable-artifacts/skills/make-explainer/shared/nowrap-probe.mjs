@@ -7,6 +7,7 @@ import { TOKEN_PATTERN } from './nowrap.mjs';
  * Tokens in text nodes under `root` (default body) that render on more than one line.
  * Returns [{ text, lines }]; a token held by white-space:nowrap is not reported, and one already bound with
  * U+00A0 is not matched at all (the pattern wants a plain space).
+ * Text inside code, pre, kbd and samp is skipped: tokens there are not bound by the explainer and may wrap by design.
  * Limit: the pattern runs on each text node alone, so a token split across inline elements
  * (`<b>1,204</b> ms`, `<span>87</span>%`) is never found.
  */
@@ -18,7 +19,7 @@ export async function nowrapProblems(page, { root = 'body' } = {}) {
     const found = [];
     const walker = document.createTreeWalker(top, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (node.parentElement?.closest('script, style')) continue;
+      if (node.parentElement?.closest('script, style, code, pre, kbd, samp')) continue;
       for (const m of node.data.matchAll(re)) {
         const range = document.createRange();
         range.setStart(node, m.index);

@@ -6,6 +6,11 @@ import { esc, inline, toneChip, toneClass } from './ui.mjs';
 const NUMBER_FORMAT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 20, useGrouping: 'min2' });
 const valueText = (value) => (typeof value === 'number' ? NUMBER_FORMAT.format(value) : String(value));
 
+// The value is one line, sized from its tile's width: --n (its length) tells the CSS how many characters
+// must fit. A value longer than KPI_WIDE_CHARS would not fit a small tile even at the smallest size, so its
+// tile takes the whole row.
+const KPI_WIDE_CHARS = 10;
+
 // A visual section: every second one on a page sits on the surface band.
 export const band = true;
 
@@ -13,7 +18,10 @@ export function render(section) {
   const items = section.items.map((k) => {
     const delta = k.delta === undefined && !toneChip(k.tone) ? '' : `<dd class="kpi-delta">${toneChip(k.tone)}${k.delta === undefined ? '' : `<span>${esc(k.delta)}</span>`}</dd>`;
     const note = k.note === undefined ? '' : `<dd class="kpi-note">${inline(k.note)}</dd>`;
-    return `<div class="kpi ${toneClass(k.tone)}"><dt>${inline(k.label)}</dt><dd class="kpi-value">${esc(valueText(k.value))}</dd>${delta}${note}</div>`;
+    const value = valueText(k.value);
+    const chars = [...value].length;
+    const wide = chars > KPI_WIDE_CHARS ? ' kpi-wide' : '';
+    return `<div class="kpi ${toneClass(k.tone)}${wide}"><dt>${inline(k.label)}</dt><dd class="kpi-value" style="--n: ${chars}">${esc(value)}</dd>${delta}${note}</div>`;
   });
   return `<dl class="kpis">\n${items.join('\n')}\n</dl>`;
 }

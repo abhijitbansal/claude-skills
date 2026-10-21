@@ -2,10 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderMarkdown, renderInline, escapeHtml } from '../scripts/lib/markdown.mjs';
 
-const ALLOWED_TAGS = new Set(['p', 'ul', 'li', 'strong', 'em', 'code', 'a']);
+const ALLOWED_TAGS = new Set(['p', 'ul', 'li', 'strong', 'em', 'code', 'a', 'span']);
 const A_TAG = /^<a href="https?:\/\/[^"<>\s]+" rel="noopener noreferrer">$/;
 
-// Structural safety: only the allowed tags, anchors carry only href + rel, and
+// Structural safety: only the allowed tags, anchors carry only href + rel, a span is only ever the nowrap hold, and
 // no `<` or `>` outside a tag.
 function assertInert(html) {
   const tags = html.match(/<[^>]*>/g) ?? [];
@@ -13,7 +13,8 @@ function assertInert(html) {
     const name = /^<\/?([a-z0-9]+)/.exec(tag)?.[1];
     assert.ok(ALLOWED_TAGS.has(name), `unexpected tag ${tag} in ${html}`);
     if (name === 'a' && !tag.startsWith('</')) assert.match(tag, A_TAG, html);
-    if (name !== 'a') assert.match(tag, /^<\/?[a-z]+>$/, `attributes on ${tag}`);
+    if (name === 'span' && !tag.startsWith('</')) assert.equal(tag, '<span class="nw">');
+    else if (name !== 'a') assert.match(tag, /^<\/?[a-z]+>$/, `attributes on ${tag}`);
   }
   assert.equal(html.replace(/<[^>]*>/g, '').match(/[<>]/g), null, `stray angle bracket in ${html}`);
 }

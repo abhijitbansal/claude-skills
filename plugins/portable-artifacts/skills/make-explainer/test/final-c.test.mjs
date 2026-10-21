@@ -179,7 +179,7 @@ test('a build will not write through a symlink at an asset\'s destination', asyn
 // ---- 2. KPI grouping starts at 10,000 ------------------------------------------------------------
 
 const ctx = { dir: FIXTURES, icons: null, theme: null, mode: 'page', slug: 'page', assetsDir: FIXTURES, idFor: () => 'sec' };
-const kpiValues = (values) => [...SECTIONS.kpis.render({ type: 'kpis', items: values.map((value, i) => ({ label: `l${i}`, value })) }, ctx).matchAll(/<dd class="kpi-value">([^<]*)<\/dd>/g)].map((m) => m[1]);
+const kpiValues = (values) => [...SECTIONS.kpis.render({ type: 'kpis', items: values.map((value, i) => ({ label: `l${i}`, value })) }, ctx).matchAll(/<dd class="kpi-value"[^>]*>([^<]*)<\/dd>/g)].map((m) => m[1]);
 
 test('KPI integers get thousands separators from 10,000 only; a year stays a year', () => {
   assert.deepEqual(kpiValues([2026, 1107, 9999, 10000, 51301, 1234567, -9999, -10000, 0, 7]), ['2026', '1107', '9999', '10,000', '51,301', '1,234,567', '-9999', '-10,000', '0', '7']);

@@ -20,9 +20,10 @@ export function render(section) {
   const align = alignments(section);
   const head = section.columns.map((c, i) => `<th scope="col" class="a-${align[i]}">${inline(c)}</th>`).join('');
   const rows = section.rows.map((row) => {
+    // A number, or any cell in a right-aligned (numeric) column, is held on one line.
     const cells = row.map((v, i) => (i === 0
       ? `<th scope="row" class="a-${align[i]}">${cell(v)}</th>`
-      : `<td class="a-${align[i]}">${cell(v)}</td>`));
+      : `<td class="a-${align[i]}${align[i] === 'r' || isNumeric(v) ? ' nw' : ''}">${cell(v)}</td>`));
     return `<tr>${cells.join('')}</tr>`;
   });
   const label = plain(section.caption ?? section.title ?? 'Table');

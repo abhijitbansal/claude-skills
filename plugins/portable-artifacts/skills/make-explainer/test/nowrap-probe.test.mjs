@@ -34,6 +34,17 @@ test('nowrapProblems honours the root selector', { skip }, async () => {
   assert.equal((await nowrapProblems(page, { root: '#a' })).length, 1);
 });
 
+test('nowrapProblems skips text inside code, pre, kbd and samp, and still reports the same text outside them', { skip }, async () => {
+  for (const tag of ['code', 'pre', 'kbd', 'samp']) {
+    await page.setContent(para(`aaaa <${tag}>1,204 ms</${tag}>`));
+    assert.deepEqual(await nowrapProblems(page), [], tag);
+  }
+  await page.setContent(para('aaaa <code><b>1,204 ms</b></code>'));
+  assert.deepEqual(await nowrapProblems(page), [], 'nested inside code');
+  await page.setContent(para('aaaa <span>1,204 ms</span>'));
+  assert.deepEqual(await nowrapProblems(page), [{ text: '1,204 ms', lines: 2 }]);
+});
+
 test('nowrapProblems does not see a token split across inline elements (documented limit)', { skip }, async () => {
   await page.setContent(para('aaaa <b>1,204</b> ms'));
   assert.deepEqual(await nowrapProblems(page), []);
