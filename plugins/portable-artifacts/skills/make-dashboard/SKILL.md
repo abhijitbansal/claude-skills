@@ -12,6 +12,21 @@ You write one JSON spec (`dashboard.json`: sources, SQL queries, KPIs, charts as
 Scripts validate it and build a single offline `index.html`. Every chart card shows its SQL,
 row count and refresh time. No network, no LLM at build time.
 
+## Cheaper model
+
+If your host did not already run this skill on a cheaper model, and you can start another agent, start the `artifact-builder` agent to do the work, unless you are already artifact-builder. If you are already artifact-builder, skip the rest of this section and do the work yourself.
+
+Give it a self-contained brief. It has no memory of this conversation, so the brief must say:
+
+1. What to build, and every fact and choice from this conversation that affects it (data, names, wording, theme, what the user asked for and what they ruled out).
+2. This skill directory: the full path of the folder that holds this SKILL.md.
+3. The spec path: where it should write the JSON spec.
+4. Optionally, an output folder for the build (it passes this to the build script as `--out`).
+
+Relay only the output path it returns. Do not repeat its work.
+
+If the `artifact-builder` agent is not installed, or you cannot start another agent, continue with the steps below yourself.
+
 ## Before the first build
 
 `<skill-dir>` is the folder containing this SKILL.md. Run `node <skill-dir>/scripts/doctor.mjs --json` (add `--for <spec.json>` once the spec exists, `--for voiceover` for a voiceover (make-motion), `--for check` before `check.mjs` (skills that have one)). It needs only Node.

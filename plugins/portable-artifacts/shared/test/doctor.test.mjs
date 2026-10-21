@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { roundTrip } from './helpers/cmdsim.mjs';
-import { nodeVersion, nodeModules, devDeps, sisterSkill, ffmpeg, browser, kokoro, quoteArg, diagnose, runFixes, doctorMain, ALL, cmdQuote } from '../doctor.mjs';
+import { nodeVersion, nodeModules, devDeps, sisterSkill, builderAgent, ffmpeg, browser, kokoro, quoteArg, diagnose, runFixes, doctorMain, ALL, cmdQuote } from '../doctor.mjs';
 
 const ctx = (over = {}) => ({
   platform: 'darwin', env: {}, skillDir: '/s/make-motion', nodeVersion: '24.7.0',
@@ -630,4 +630,66 @@ test('KOKORO_PIN is exported and used by the kokoro fix', async () => {
   const { KOKORO_PIN } = await import('../doctor.mjs');
   const { missing } = await diagnose([kokoro()], ctx());
   assert.ok(missing[0].fix.auto.includes(KOKORO_PIN));
+});
+
+// --- builderAgent: the optional artifact-builder agent file ---
+
+const AGENT_DIRS = ["/h/.copilot/agents", "/h/.codex/agents", "/p/.github/agents", "/p/.codex/agents"];
+const agentCtx = (files = []) => ctx({ homedir: "/h", cwd: "/p", exists: (p) => files.includes(p) });
+
+test("builderAgent: false on an empty home and cwd; optional with the shared requirement fields", async () => {
+  const b = builderAgent();
+  assert.equal(b.id, "builder_agent");
+  assert.equal(b.required, false);
+  assert.equal(b.needsSudo(agentCtx()), false);
+  assert.equal(typeof (typeof b.why === "function" ? b.why(agentCtx()) : b.why), "string");
+  assert.equal(typeof b.rank, "number");
+  assert.equal(typeof b.size, "string");
+  assert.equal(await b.check(agentCtx()), false);
+});
+
+for (const dir of AGENT_DIRS) {
+  for (const file of ["artifact-builder.agent.md", "artifact-builder.toml"]) {
+    test(`builderAgent: ${file} in ${dir} counts as installed`, async () => {
+      assert.equal(await builderAgent().check(agentCtx([`${dir}/${file}`])), true);
+    });
+  }
+}
+
+test("builderAgent: another file in an agents folder does not count", async () => {
+  assert.equal(await builderAgent().check(agentCtx(["/h/.copilot/agents/other.agent.md", "/h/.codex/agents/artifact-builder.md"])), false);
+});
+
+test("builderAgent: manual-only fix names the install command for copilot, codex and agents", () => {
+  const f = builderAgent().fix(agentCtx());
+  assert.equal(f.auto, null);
+  const text = f.manual.darwin;
+  assert.match(text, /node <path-to-claude-skills>\/plugins\/portable-artifacts\/bin\/install\.mjs copilot --agents-only/);
+  assert.match(text, /install\.mjs codex --agents-only/);
+  assert.match(text, /\bagents\b[^.]*both/);
+  assert.deepEqual(Object.keys(f.manual).sort(), ["darwin", "linux", "win32"]);
+});
+
+test("builderAgent: a missing agent file is optional and never makes doctor exit 1", async () => {
+  const r = await diagnose([builderAgent()], agentCtx());
+  assert.equal(r.ok, true);
+  assert.equal(r.missing[0].id, "builder_agent");
+  assert.equal(r.missing[0].required, false);
+  assert.equal(r.missing[0].fix.auto, null);
+  const run = await runMain([], mainOpts({ requirementsFor: () => [nodeVersion(1), builderAgent()] }), { ctx: agentCtx() });
+  assert.equal(run.code, 0);
+  assert.match(run.out, /missing \(optional\): builder_agent — /);
+  assert.match(run.out, /install\.mjs copilot --agents-only/);
+  const json = JSON.parse((await runMain(["--json"], mainOpts({ requirementsFor: () => [builderAgent()] }), { ctx: agentCtx() })).out);
+  assert.equal(json.ok, true);
+});
+
+test("builderAgent: --fix builder_agent prints the manual command and runs nothing", async () => {
+  const ran = [];
+  const res = await runFixes(["builder_agent"], [builderAgent()], agentCtx(), (...a) => { ran.push(a); return { status: 0 }; });
+  assert.deepEqual(ran, []);
+  assert.equal(res[0].id, "builder_agent");
+  assert.equal(res[0].ok, false);
+  assert.equal(res[0].refused, "no automatic fix");
+  assert.match(res[0].manual, /install\.mjs copilot --agents-only/);
 });

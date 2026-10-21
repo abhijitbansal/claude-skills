@@ -341,6 +341,34 @@ export function kokoro() {
   };
 }
 
+// The cheap-model `artifact-builder` agent file the skills hand their build to. Optional: a missing file
+// never fails doctor, and there is no auto fix (it is written by the plugin's installer, not by npm).
+// Doctor does not know its host, so it looks in every host folder, user level and project level.
+const BUILDER_AGENT_FILES = ['artifact-builder.agent.md', 'artifact-builder.toml'];
+const BUILDER_AGENT_DIRS = (ctx) => {
+  const P = pp(ctx);
+  const home = ctx.homedir ?? os.homedir();
+  const cwd = ctx.cwd ?? process.cwd();
+  return [P.join(home, '.copilot', 'agents'), P.join(home, '.codex', 'agents'), P.join(cwd, '.github', 'agents'), P.join(cwd, '.codex', 'agents')];
+};
+
+export function builderAgent() {
+  const install = 'node <path-to-claude-skills>/plugins/portable-artifacts/bin/install.mjs';
+  return {
+    id: 'builder_agent',
+    rank: RANK.other,
+    why: 'lets the skill hand the build to a cheaper model (the artifact-builder agent file for Copilot or Codex)',
+    required: false,
+    size: '≈2 KB',
+    check: (ctx) => BUILDER_AGENT_DIRS(ctx).some((dir) => BUILDER_AGENT_FILES.some((f) => ctx.exists(pp(ctx).join(dir, f)))),
+    fix: () => ({
+      auto: null,
+      manual: manualAll(`run \`${install} copilot --agents-only\` for Copilot or \`${install} codex --agents-only\` for Codex (\`agents\` writes both; add --project <dir> to install into one repo)`),
+    }),
+    needsSudo: () => false,
+  };
+}
+
 // { ok, missing, info? }. info lists present items that carry a platform hint.
 export async function diagnose(requirements, ctx) {
   const missing = [];

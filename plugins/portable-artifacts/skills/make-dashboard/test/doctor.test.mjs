@@ -58,8 +58,8 @@ test('--fix with an unknown id reports it instead of installing anything', () =>
 test('requirementsFor: plain and the real ALL need no browser (nothing here uses one)', async () => {
   const requirementsFor = await loadRequirements();
   const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
-  assert.deepEqual(idsOf(requirementsFor()), ['node', 'node_modules']);
-  assert.deepEqual(idsOf(requirementsFor(ALL)), ['node', 'node_modules']);
+  assert.deepEqual(idsOf(requirementsFor()), ['node', 'node_modules', 'builder_agent']);
+  assert.deepEqual(idsOf(requirementsFor(ALL)), ['node', 'node_modules', 'builder_agent']);
 });
 
 test('a build missing its vendored chart libraries prints the npm ci command', () => {
@@ -80,4 +80,29 @@ test('a build missing its vendored chart libraries prints the npm ci command', (
   assert.notEqual(r.status, 0);
   assert.ok((r.stdout + r.stderr).includes(`run npm ci --omit=dev --prefix ${quoteArg(fs.realpathSync(dir))}`), r.stdout + r.stderr);
   assert.doesNotMatch(r.stdout + r.stderr, /\(doctor:/);
+});
+
+// The optional artifact-builder agent file: reported when absent, never a failure on its own.
+test('builder_agent is an optional requirement in every target, and a missing agent file keeps exit 0', async () => {
+  const requirementsFor = await loadRequirements();
+  const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
+  for (const t of [undefined, ALL]) {
+    const b = requirementsFor(t).find((r) => r.id === 'builder_agent');
+    assert.ok(b, `builder_agent for ${String(t)}`);
+    assert.equal(b.required, false);
+  }
+  const home = tmp('doctor-home-');
+  const cwd = tmp('doctor-cwd-');
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  const doctor = () => JSON.parse(spawnSync(process.execPath, [path.join(SKILL, 'scripts/doctor.mjs'), '--json'], { encoding: 'utf8', env, cwd }).stdout);
+  const r = spawnSync(process.execPath, [path.join(SKILL, 'scripts/doctor.mjs'), '--json'], { encoding: 'utf8', env, cwd });
+  const out = JSON.parse(r.stdout);
+  const miss = out.missing.find((m) => m.id === 'builder_agent');
+  assert.ok(miss, 'reported on an empty home and cwd');
+  assert.equal(miss.required, false);
+  assert.match(miss.fix.manual.darwin, /install\.mjs copilot --agents-only/);
+  if (out.missing.every((m) => m.id === 'builder_agent')) assert.equal(r.status, 0, 'the missing agent alone must not exit 1');
+  fs.mkdirSync(path.join(home, '.codex/agents'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.codex/agents/artifact-builder.toml'), 'name = "artifact-builder"\n');
+  assert.equal(doctor().missing.some((m) => m.id === 'builder_agent'), false, 'present once the file exists');
 });

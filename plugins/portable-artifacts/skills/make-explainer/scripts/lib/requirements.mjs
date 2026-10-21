@@ -1,7 +1,7 @@
 // What this skill needs, per doctor target. Side-effect free: imports only built-ins and ../../shared/.
 import fs from 'node:fs';
 import path from 'node:path';
-import { ALL, nodeVersion, nodeModules, devDeps, sisterSkill, ffmpeg, browser } from '../../shared/doctor.mjs';
+import { ALL, nodeVersion, nodeModules, devDeps, sisterSkill, ffmpeg, browser, builderAgent } from '../../shared/doctor.mjs';
 
 const SECTION_SISTERS = { diagram: 'make-diagram', chart: 'make-dashboard', motion: 'make-motion', scene: 'make-scene' };
 
@@ -28,9 +28,11 @@ function specNeeds(specFile) {
 export const targets = ['check'];
 export function requirementsFor(target) {
   const base = [nodeVersion(20), nodeModules()];
+  // Optional in every target: the cheap-model agent file the SKILL.md may hand the build to.
+  const agent = builderAgent();
   // check.mjs needs playwright (a devDependency) and a browser.
-  if (target === ALL) return [...base, devDeps({ size: '≈19 MB', required: true }), browser({ required: true }), ...Object.values(SECTION_SISTERS).map(sisterSkill), ...motionNeeds()];
-  if (target === 'check') return [...base, devDeps({ size: '≈19 MB', required: true }), browser({ required: true })];
-  if (typeof target === 'string' && target.endsWith('.json')) return [...base, ...specNeeds(target)];
-  return base;
+  if (target === ALL) return [...base, devDeps({ size: '≈19 MB', required: true }), browser({ required: true }), ...Object.values(SECTION_SISTERS).map(sisterSkill), ...motionNeeds(), agent];
+  if (target === 'check') return [...base, devDeps({ size: '≈19 MB', required: true }), browser({ required: true }), agent];
+  if (typeof target === 'string' && target.endsWith('.json')) return [...base, ...specNeeds(target), agent];
+  return [...base, agent];
 }

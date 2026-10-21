@@ -57,10 +57,10 @@ test('--fix with an unknown id reports it instead of installing anything', () =>
 test('requirementsFor: check and ALL add dev_deps and the browser; plain does not', async () => {
   const requirementsFor = await loadRequirements();
   const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
-  assert.deepEqual(idsOf(requirementsFor(undefined)), ['node', 'node_modules']);
+  assert.deepEqual(idsOf(requirementsFor(undefined)), ['node', 'node_modules', 'builder_agent']);
   for (const t of ['check', ALL]) {
-    assert.deepEqual(idsOf(requirementsFor(t)), ['node', 'node_modules', 'dev_deps', 'chromium']);
-    assert.deepEqual(requirementsFor(t).map((r) => r.required), [true, true, true, true], 'check.mjs skips without a browser, so ok must be false');
+    assert.deepEqual(idsOf(requirementsFor(t)), ['node', 'node_modules', 'dev_deps', 'chromium', 'builder_agent']);
+    assert.deepEqual(requirementsFor(t).map((r) => r.required), [true, true, true, true, false], 'check.mjs skips without a browser, so ok must be false');
   }
 });
 
@@ -71,4 +71,29 @@ test('--for check on a fresh copy asks for dev_deps; node_modules keeps --omit=d
   assert.doesNotMatch(dev.fix.auto, /--omit=dev/);
   assert.match(dev.notes, /dev dependencies/);
   assert.equal(dev.size, '≈118 MB');
+});
+
+// The optional artifact-builder agent file: reported when absent, never a failure on its own.
+test('builder_agent is an optional requirement in every target, and a missing agent file keeps exit 0', async () => {
+  const requirementsFor = await loadRequirements();
+  const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
+  for (const t of [undefined, ALL]) {
+    const b = requirementsFor(t).find((r) => r.id === 'builder_agent');
+    assert.ok(b, `builder_agent for ${String(t)}`);
+    assert.equal(b.required, false);
+  }
+  const home = tmp('doctor-home-');
+  const cwd = tmp('doctor-cwd-');
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  const doctor = () => JSON.parse(spawnSync(process.execPath, [path.join(SKILL, 'scripts/doctor.mjs'), '--json'], { encoding: 'utf8', env, cwd }).stdout);
+  const r = spawnSync(process.execPath, [path.join(SKILL, 'scripts/doctor.mjs'), '--json'], { encoding: 'utf8', env, cwd });
+  const out = JSON.parse(r.stdout);
+  const miss = out.missing.find((m) => m.id === 'builder_agent');
+  assert.ok(miss, 'reported on an empty home and cwd');
+  assert.equal(miss.required, false);
+  assert.match(miss.fix.manual.darwin, /install\.mjs copilot --agents-only/);
+  if (out.missing.every((m) => m.id === 'builder_agent')) assert.equal(r.status, 0, 'the missing agent alone must not exit 1');
+  fs.mkdirSync(path.join(home, '.codex/agents'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.codex/agents/artifact-builder.toml'), 'name = "artifact-builder"\n');
+  assert.equal(doctor().missing.some((m) => m.id === 'builder_agent'), false, 'present once the file exists');
 });
