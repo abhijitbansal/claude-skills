@@ -9,7 +9,7 @@ import { launchBrowser } from '../scripts/lib/browser.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { bindWithNbsp, findTokens } from '../shared/nowrap.mjs';
 import { nowrapProblems } from '../shared/nowrap-probe.mjs';
-import { wrapProblems } from '../scripts/check.mjs';
+import { main as checkMain, wrapProblems } from '../scripts/check.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CHECK = path.join(root, 'scripts/check.mjs');
@@ -30,6 +30,10 @@ function specFile(elements, { size = [1920, 1080] } = {}) {
   writeFileSync(file, JSON.stringify({ size, fps: 30, scenes: [{ id: 's', duration: 2, elements }] }));
   return file;
 }
+
+// The expected render: only the space inside each token found by the shared pattern becomes U+00A0.
+const withTokenSpacesBound = (text) => findTokens(text).reduceRight(
+  (acc, tok) => acc.slice(0, tok.start) + tok.text.replace(' ', '\u00a0') + acc.slice(tok.end), text);
 
 const narrowToken = () => specFile([{ id: 'latency', type: 'text', text: TOKEN_TEXT, x: 960, y: 540, fontSize: 120, maxWidth: 300 }]);
 
@@ -58,6 +62,36 @@ test('check guardrail: a plain-space token that wraps is reported once per scene
   } finally {
     await browser.close();
   }
+});
+
+test('check end to end: with the NBSP binding undone on the page, the real check path reports the wrap and exits 1', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  // `prepare` is check.mjs's test seam: it runs on the ready render page before sampling. Here it asserts the page
+  // has the #stage the wrap probe is rooted at, then swaps U+00A0 back to a plain space in the rendered text.
+  const prepare = async (page) => {
+    assert.equal(await page.evaluate(() => document.querySelectorAll('#stage').length), 1, 'the render page has one #stage');
+    const swapped = await page.evaluate(() => [...document.querySelectorAll('#stage .el.text')].map((n) => {
+      n.textContent = n.textContent.replaceAll('\u00a0', ' ');
+      return n.textContent;
+    }));
+    assert.deepEqual(swapped, [TOKEN_TEXT], 'the binding was present and is now undone');
+  };
+  const out = [];
+  const realWrite = process.stdout.write;
+  process.stdout.write = (chunk, ...rest) => (typeof chunk === 'string' ? (out.push(chunk), true) : realWrite.call(process.stdout, chunk, ...rest)); // the test runner's own output is not a string
+  let code;
+  try {
+    code = await checkMain([narrowToken(), '--json'], { prepare });
+  } finally {
+    process.stdout.write = realWrite;
+  }
+  const body = JSON.parse(out.join(''));
+  assert.equal(code, 1, out.join(''));
+  assert.equal(body.ok, false);
+  const wrapped = body.errors.filter((e) => e.message.startsWith(MESSAGE));
+  assert.equal(wrapped.length, 1, 'one problem per token per scene, however many moments see it');
+  assert.equal(wrapped[0].path, 'scenes[0]');
+  assert.match(wrapped[0].message, /"1,204 ms" at \d+\.\d\ds$/);
 });
 
 test('wrapProblems: distinct tokens each report once; no wraps report nothing', () => {
@@ -98,7 +132,7 @@ test('rendered text element textContent: unchanged without a token; only the tok
         for (const el of texts) {
           const hasToken = findTokens(el.text).length > 0;
           tokenSpecs += hasToken ? 1 : 0;
-          if (hasToken) assert.equal(rendered[el.id], el.text.replace(/(\d[\d.,]*) (ms|min|KB|MB|GB|TB|px|%|×)/g, '$1 $2'), `${file}: ${el.id}`);
+          if (hasToken) assert.equal(rendered[el.id], withTokenSpacesBound(el.text), `${file}: ${el.id}`);
           else assert.equal(rendered[el.id], el.text, `${file}: ${el.id}`);
         }
         await page.close();

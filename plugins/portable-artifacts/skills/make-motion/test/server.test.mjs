@@ -148,6 +148,10 @@ test('vendor routes and template serve 200', () => withServer(async (srv) => {
   assert.equal((await get(srv.url, '/template/../scripts/lib/spec.mjs')).status, 404);
   assert.equal((await get(srv.url, '/template/..%2fscripts%2flib%2fspec.mjs')).status, 404);
   assert.equal((await get(srv.url, '/shared/art.mjs')).status, 404, 'only nowrap.mjs is served from shared/');
+  for (const p of ['/shared/', '/shared', '/shared/nowrap.mjs/', '/shared/..%2fscripts%2flib%2fspec.mjs', '/shared/../scripts/lib/spec.mjs']) {
+    assert.equal((await get(srv.url, p)).status, 404, p);
+  }
+  assert.equal((await get(srv.url, '/shared/nowrap.mjs?x=1')).status, 200, 'a query string is ignored');
   assert.equal((await get(srv.url, '/nope')).status, 404);
 }));
 
@@ -375,3 +379,16 @@ test('render mode serves the footer markup but the page never shows it', () => w
   const r = await get(srv.url, '/');
   assert.match(r.body, /<footer class="pa-footer">/);
 }, 'render'));
+
+test('a missing shared/nowrap.mjs answers 404 with the fix, naming no absolute path', async () => {
+  const f = fixture();
+  const srv = await startServer({ specPath: f.specPath, mode: 'render', nowrapModule: path.join(f.parent, 'gone', 'nowrap.mjs') });
+  try {
+    const r = await get(srv.url, '/shared/nowrap.mjs');
+    assert.equal(r.status, 404);
+    assert.equal(r.body, 'shared/nowrap.mjs is missing: run node bin/sync-shared.mjs');
+    assert.ok(!r.body.includes(f.parent), 'no absolute path leaks');
+  } finally {
+    await srv.close();
+  }
+});

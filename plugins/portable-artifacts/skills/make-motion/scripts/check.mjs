@@ -4,7 +4,7 @@
 // and opacity from the DOM. Fails on: a visible text or counter outside the safe area while it is not moving; two
 // visible text or counter boxes overlapping while neither is moving or fading; a scene with nothing on screen at its
 // last frame (a title whose `exit` preset was applied left on purpose and counts as present); a number-plus-unit token
-// ("1,204 ms", "87%") drawn across more than one line, reported once per scene. A box wholly off the canvas
+// ("1,204 ms", "87%") drawn across more than one line, reported once per token per scene. A box wholly off the canvas
 // has left the frame: it is never clipped, overlaps nothing, and is not on screen.
 // --theme: the theme render.mjs --theme would draw a spec that names none in (a spec's own `theme` wins).
 // exit 0 ok or skipped (no browser), 1 problems (or an invalid spec), 2 usage/IO
@@ -159,12 +159,15 @@ export async function waitReady(page, ms = READY_MS) {
   }
 }
 
-async function inspect(browser, spec, server) {
+// `prepare(page)`: an optional hook run once the page is ready and before any sampling (tests use it to undo the
+// renderer's U+00A0 binding, so the wrap rule can be shown firing through the real sampling, report and exit code).
+async function inspect(browser, spec, server, prepare) {
   const page = await browser.newPage({ viewport: { width: spec.size[0], height: spec.size[1] }, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => process.stderr.write(`page error: ${e.message}\n`));
   await guardNetwork(page, new URL(server.url).origin, (url) => process.stderr.write(`blocked network request: ${url}\n`));
   await page.goto(server.url);
   await waitReady(page);
+  await prepare?.(page);
   const starts = await page.evaluate(() => window.__motion.sceneStarts);
   const margin = safeMargin(spec.size);
   const problems = [];
@@ -177,7 +180,7 @@ async function inspect(browser, spec, server) {
   return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems };
 }
 
-async function checkSpec(specPath, spec, { env, theme }) {
+async function checkSpec(specPath, spec, { env, theme, prepare }) {
   if (env.PA_NO_BROWSER === '1') return { status: 'skipped', reason: 'PA_NO_BROWSER=1' };
   let browser;
   try {
@@ -188,7 +191,7 @@ async function checkSpec(specPath, spec, { env, theme }) {
   let server;
   try {
     server = await startServer({ specPath, mode: 'render', theme });
-    return await inspect(browser, spec, server);
+    return await inspect(browser, spec, server, prepare);
   } finally {
     await browser.close().catch(() => {});
     await server?.close();
@@ -218,7 +221,7 @@ function report(result, json) {
   }
 }
 
-async function main(argv) {
+export async function main(argv, { prepare } = {}) {
   let json = argv.includes('--json');
   try {
     const { values, positionals } = parseCli(argv, OPTIONS, USAGE);
@@ -233,7 +236,7 @@ async function main(argv) {
     }
     // The theme the page draws decides the title presets (and so the settle times): the spec's own, else --theme.
     const spec = withDefaults(raw.theme === undefined && values.theme !== undefined ? { ...raw, theme: values.theme } : raw);
-    const result = await checkSpec(path.resolve(positionals[0]), spec, { env: process.env, theme: values.theme });
+    const result = await checkSpec(path.resolve(positionals[0]), spec, { env: process.env, theme: values.theme, prepare });
     report(result, json);
     return result.status === 'failed' ? 1 : 0;
   } catch (e) {
