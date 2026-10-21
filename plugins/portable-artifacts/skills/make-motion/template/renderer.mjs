@@ -13,6 +13,7 @@ const ELEVATED_LIFT = 6; // percent of the text colour an elevated fill moves to
 const ARROW_HALF_WIDTH = 1.5; // an arrow head reaches this many stroke widths either side of the line (it is ARROW_HEAD_LENGTH long)
 const ARROW_DRAW_SHOWN = 0.98; // the head appears once the line is drawn this far
 const VIGNETTE = 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)'; // clear in the middle, 0.55 black at the corners
+const POINT_RING_WIDTH = 3;
 const GRAIN_GAIN = 4; // `texture.grain` times this is the noise's alpha (0.15 gives 0.6)
 const GRAIN_FREQUENCY = 0.8; // feTurbulence base frequency of the film grain, in 1/px
 const GRAIN_OCTAVES = 2;
@@ -28,7 +29,7 @@ const VEGA_CONFIG = {
   view: { stroke: null },
   bar: { cornerRadiusEnd: 10 },
   line: { strokeWidth: 4, strokeCap: 'round', strokeJoin: 'round' },
-  point: { filled: true, size: 120, strokeWidth: 3 },
+  point: { filled: true, size: 120 },
   scale: { bandPaddingInner: 0.3 },
   axis: { labelFontSize: 24, titleFontSize: 26, titleFontWeight: 500, labelPadding: 10, titlePadding: 18, tickSize: 8 },
   axisX: { labelAngle: 0, labelPadding: 14, ticks: false, grid: false, tickCount: 5 },
@@ -72,7 +73,7 @@ function themedLook(theme) {
       mark: { color: c.accent },
       bar: { ...VEGA_CONFIG.bar, color: c.accent },
       line: { ...VEGA_CONFIG.line, color: c.accent },
-      point: { ...VEGA_CONFIG.point, color: c.accent, stroke: c.page }, // the ring keeps dots apart where they meet
+      point: { ...VEGA_CONFIG.point, color: c.accent },
       axis: { ...VEGA_CONFIG.axis, domainColor: c.line, tickColor: c.line, gridColor: c.grid, labelColor: ink, titleColor: axisTitle, labelFont: sans, titleFont: sans, labelFontWeight: weight('sans', 400), titleFontWeight: weight('sans', VEGA_CONFIG.axis.titleFontWeight) },
       legend: { ...VEGA_CONFIG.legend, labelColor: ink, titleColor: axisTitle, labelFont: sans, labelFontWeight: weight('sans', 400), titleFontWeight: weight('sans', 700) },
       title: { ...VEGA_CONFIG.title, color: c.text, font: sans, fontWeight: weight('sans', 700) },
@@ -152,6 +153,17 @@ function mergeConfig(base, extra = {}) {
   return out;
 }
 
+// A page-colour ring keeps filled points apart where they meet. It is drawn on the rendered SVG, not set in the config:
+// a config `stroke` is also what a hollow point (`filled: false`) is drawn with, so it would make those invisible.
+function ringFilledPoints(root, ring) {
+  for (const dot of root.querySelectorAll('.mark-symbol path')) {
+    const filled = dot.getAttribute('fill') && dot.getAttribute('fill') !== 'none';
+    if (!filled || dot.getAttribute('stroke')) continue;
+    dot.setAttribute('stroke', ring);
+    dot.setAttribute('stroke-width', String(POINT_RING_WIDTH));
+  }
+}
+
 async function renderChart(el, look) {
   const vl = el.vegaLite;
   const config = mergeConfig(look.vega, vl.config);
@@ -164,6 +176,7 @@ async function renderChart(el, look) {
   view.finalize();
   const holder = document.createElement('div');
   holder.innerHTML = svgText;
+  ringFilledPoints(holder, look.background);
   return holder.firstElementChild;
 }
 

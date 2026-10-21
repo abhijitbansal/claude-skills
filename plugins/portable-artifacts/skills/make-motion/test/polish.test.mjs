@@ -308,6 +308,20 @@ test('chart defaults: a quantitative x axis has a handful of whole-number ticks 
   return undefined;
 });
 
+test('hollow points (filled: false) keep their accent outline: the page-colour ring is only for filled points', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const hollow = { ...LINE, mark: { type: 'point', filled: false } };
+  const found = await probed(spec([chart('hollow', hollow), chart('solid', { ...LINE, mark: { type: 'point', filled: true } }, { y: 200 })]), () => {
+    const dot = (id) => { const n = document.querySelector(`[data-id="${id}"] svg .mark-symbol path`); return { fill: n.getAttribute('fill'), stroke: n.getAttribute('stroke'), width: n.getAttribute('stroke-width') }; };
+    return { hollow: dot('hollow'), solid: dot('solid'), page: getComputedStyle(document.querySelector('#stage')).backgroundColor };
+  });
+  const page = loadTheme('dusk').dark.page.toLowerCase();
+  assert.notEqual(found.hollow.stroke?.toLowerCase(), page, 'a hollow point outlined in the page colour would be invisible');
+  assert.equal(found.hollow.stroke?.toLowerCase(), loadTheme('dusk').dark.accent.toLowerCase());
+  assert.equal(found.solid.stroke?.toLowerCase(), page, 'a filled point keeps its page-colour ring');
+  return undefined;
+});
+
 test('chart reveal is a soft mask edge, not a hard clip, and is off once fully revealed', async (t) => {
   if (!(await haveBrowser())) return t.skip('browser unavailable');
   const found = await probed(spec([chart('c', BARS, { keyframes: [{ t: 0, reveal: 0 }, { t: 1, reveal: 1 }] })]), () => {
