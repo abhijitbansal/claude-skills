@@ -86,7 +86,7 @@ Nine themes exist; `dusk` is the default. Pick one (the spec's theme field, or `
 3. If the prompt is genuinely split between two themes, ask the user once and list all three with a one-line feel each: `dusk` is soft, warm and playful; `press` is print editorial, calm and long-form; `poster` is loud, condensed and high-energy.
 4. If you cannot ask, use `dusk`.
 
-The older themes `paper`, `blueprint`, `ink` and `editorial` stay available by name; use one only when the user names it. Two more are available by name only: `mono` (terminal and engineering console, near-black with a green accent) and `brief` (executive, warm white with a burgundy accent); both are intended for plan pages (preset arrives in a later change).
+The older themes `paper`, `blueprint`, `ink` and `editorial` stay available by name; use one only when the user names it. Two more are available by name only: `mono` (terminal and engineering console, dark mode near-black with a cyan accent) and `brief` (executive, warm white with a burgundy accent); both are intended for plan pages (preset arrives in a later change).
 
 ## Style defaults
 

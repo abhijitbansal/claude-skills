@@ -19,8 +19,8 @@ by any agent that can run shell commands.
   share, 100%, area/line, ...), a sortable Table view and PNG, SVG and CSV
   export. Raw Vega-Lite still works for anything else.
 - **Themes**: `paper` (default), `blueprint`, `editorial`, `ink`, and the newer
-  `dusk`, `press` and `poster`, plus `mono` (terminal console, near-black with
-  a green accent) and `brief` (executive, warm white with a burgundy accent); the
+  `dusk`, `press` and `poster`, plus `mono` (terminal console, dark mode near-black
+  with a cyan accent) and `brief` (executive, warm white with a burgundy accent); the
   page also toggles Auto, Light and Dark.
 - **Live reload**: `serve.mjs --watch dashboard.json` rebuilds when you save the
   spec or the data and reloads the page.

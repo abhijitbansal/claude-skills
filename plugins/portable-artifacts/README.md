@@ -70,8 +70,8 @@ colours. Every skill accepts every theme by name (the spec's `theme` field or
 | `press` | Young Serif / Schibsted Grotesk / JetBrains Mono | bone paper, ink and vermilion, marginal numerals | dense docs, long reads, changelogs, branch recaps |
 | `poster` | Big Shoulders Display / Familjen Grotesk / Martian Mono | near-black, acid lime and orange, condensed caps, halftone | launch decks, pitches, demos, energetic clips |
 | `paper`, `blueprint`, `ink`, `editorial` | Geist and Geist Mono; `ink` has Bricolage Grotesque headings, `editorial` Newsreader headings and an Atkinson Hyperlegible body | the earlier looks | when you name one; `paper` is make-dashboard's default, `blueprint` make-diagram's |
-| `mono` | JetBrains Mono for display, body and mono | terminal and engineering console: near-black page, one green accent, cool grey lines; no art | technical and plan pages; intended for plan pages (preset arrives in a later change) |
-| `brief` | Newsreader / Atkinson Hyperlegible / Geist Mono | executive: warm white page, deep burgundy accent, generous contrast, calm and spacious; no art | decision briefs and sign-off pages; intended for plan pages (preset arrives in a later change) |
+| `mono` | JetBrains Mono for display, body and mono | terminal and engineering console: in dark mode a near-black page, one cyan accent and cool grey lines; a clean light mode; no art. Regular weight only (no bold face); bold text is synthesized by the browser | technical pages and plans |
+| `brief` | Newsreader / Atkinson Hyperlegible / Geist Mono | executive: warm white page, deep burgundy accent, high contrast, calm; no art | decision briefs and sign-off pages |
 
 **How make-explainer and make-motion pick a theme.** A theme you name wins
 (`--theme poster`, or "use poster" in the prompt). Otherwise the agent picks
@@ -80,7 +80,7 @@ docs, long reads, changelogs and branch recaps, `poster` for launch decks,
 pitches, demos and energetic clips, `dusk` for everything else. If the prompt
 fits two themes equally, it asks you once, with a one-line feel for each of the
 three; if it cannot ask, it uses `dusk`. The older themes are used only when
-you name them. `mono` and `brief` are likewise used only when you name them.
+you name them. `mono` and `brief` are likewise used only when you name them; they are meant for the planned `plan` preset, which is not in this repo yet.
 
 **Art.** `dusk`, `press` and `poster` draw procedural SVG art seeded from the
 title (in make-motion, from the scene id): blobs and orbs with grain in

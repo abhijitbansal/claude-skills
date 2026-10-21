@@ -378,7 +378,7 @@ make-explainer and make-motion share these rules:
    `poster` loud and condensed). If it cannot ask, it uses `dusk`.
 
 `paper`, `blueprint`, `ink`, `editorial`, `mono` and `brief` still work, but only
-when you name them (`mono` and `brief` are intended for plan pages; the preset arrives in a later change). In `dusk`, `press` and `poster` the page hero and a deck's title and
+when you name them (`mono` and `brief` are meant for the planned `plan` preset, which is not in this repo yet). In `dusk`, `press` and `poster` the page hero and a deck's title and
 closing slides carry procedural art drawn from the title: no network, and the
 same title gives the same picture.
 
@@ -567,7 +567,7 @@ Funnel Display, Host Grotesk and Commit Mono; `press` Young Serif, Schibsted
 Grotesk and JetBrains Mono; `poster` Big Shoulders Display, Familjen Grotesk
 and Martian Mono; `paper` and `blueprint` Geist and Geist Mono; `ink` Bricolage
 Grotesque headings over Geist; `editorial` Newsreader headings and an Atkinson
-Hyperlegible body; `mono` JetBrains Mono throughout; `brief` Newsreader headings,
+Hyperlegible body; `mono` JetBrains Mono throughout, in regular weight only (no bold face, so bold text is synthesized by the browser); `brief` Newsreader headings,
 an Atkinson Hyperlegible body and Geist Mono. The make-motion preview and video use the spec's theme
 (`dusk` when it names none). Links in running text are underlined; buttons,
 navigation and cards are not.
