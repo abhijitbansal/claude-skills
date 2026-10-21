@@ -51,17 +51,26 @@ export function buildTimeline(input) {
   const states = new Map();
   const sceneOf = new Map();
   const sceneStarts = [];
+  const crossfades = []; // {from, to, start, end}: scene `from` stays visible under scene `to` until `end` (seconds)
   let cursor = 0;
 
   spec.scenes.forEach((scene, si) => {
     const start = cursor;
     sceneStarts.push(start);
 
-    const sceneState = { opacity: scene.transition === 'fade' ? 0 : 1 };
+    const blends = scene.transition === 'crossfade' && si > 0; // the first scene has nothing to fade out
+    const fadesIn = scene.transition === 'fade' || blends;
+    const sceneState = { opacity: fadesIn ? 0 : 1 };
     states.set(`scene:${scene.id}`, sceneState);
-    if (scene.transition === 'fade') {
+    if (fadesIn) {
       const duration = Math.min(FADE_SECONDS, scene.duration) * MS;
       timeline.add(sceneState, { opacity: { from: 0, to: 1, duration }, composition: 'none' }, start * MS);
+      if (blends) {
+        // The one extra track: the previous scene fades out while this one fades in, both layers on screen.
+        const previous = states.get(`scene:${spec.scenes[si - 1].id}`);
+        timeline.add(previous, { opacity: { from: 1, to: 0, duration }, composition: 'none' }, start * MS);
+        crossfades.push({ from: si - 1, to: si, start, end: start + duration / MS });
+      }
     }
 
     for (const el of scene.elements) {
@@ -78,7 +87,7 @@ export function buildTimeline(input) {
     cursor += scene.duration;
   });
 
-  return { timeline, states, duration: cursor, sceneStarts, sceneOf };
+  return { timeline, states, duration: cursor, sceneStarts, sceneOf, crossfades };
 }
 
 // Seek to `sec` seconds. Deterministic: same input time gives the same state.

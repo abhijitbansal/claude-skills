@@ -1,45 +1,15 @@
 // P1 polish: theme colour tokens, elevated rects, round-cap and arrow lines, mono beating the title role,
 // and the sharper chart defaults. Validation tests are pure; render tests need a browser and skip without one.
-import { test, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { launchBrowser } from '../scripts/lib/browser.mjs';
-import { startServer } from '../scripts/lib/server.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
 import { loadTheme } from '../shared/theme.mjs';
-
-const made = [];
-after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
-async function haveBrowser() {
-  try { await (await launchBrowser({ quiet: true })).close(); return true; } catch { return false; }
-}
+import { haveBrowser, probed } from './render-probe.mjs';
 
 const spec = (elements, extra = {}) => ({ size: [480, 270], scenes: [{ id: 's', duration: 2, elements }], ...extra });
 const errs = (motion) => validateSpec(motion).errors.map((e) => `${e.path}: ${e.message}`);
 const rect = (extra = {}) => ({ id: 'r', type: 'shape', shape: 'rect', x: 100, y: 100, width: 120, height: 60, ...extra });
 const line = (extra = {}) => ({ id: 'l', type: 'shape', shape: 'line', x: 240, y: 135, width: 200, strokeWidth: 10, ...extra });
-
-// Draw `motion` on the render page and return what `probe` (run in the page) found.
-async function probed(motion, probe) {
-  const dir = mkdtempSync(path.join(tmpdir(), 'polish-'));
-  made.push(dir);
-  writeFileSync(path.join(dir, 'm.json'), JSON.stringify(motion));
-  const srv = await startServer({ specPath: path.join(dir, 'm.json'), mode: 'render' });
-  const browser = await launchBrowser({ quiet: true });
-  try {
-    const page = await browser.newPage();
-    const problems = [];
-    page.on('pageerror', (e) => problems.push(e.message));
-    await page.goto(srv.url);
-    await page.waitForFunction(() => window.__motion);
-    await page.evaluate(() => window.__motion.ready);
-    const found = await page.evaluate(probe);
-    assert.deepEqual(problems, []);
-    return found;
-  } finally { await browser.close(); await srv.close(); }
-}
 
 // ---- colour tokens: validation -----------------------------------------------------------------
 
@@ -236,6 +206,18 @@ test('chart defaults: wider band gap, rounder bars; line 4 px round; points ring
   assert.equal(found.join, 'round');
   assert.equal(found.ring.toLowerCase(), loadTheme('dusk').dark.page.toLowerCase(), 'the ring is the page colour');
   assert.equal(found.ringWidth, '3');
+  return undefined;
+});
+
+test('chart defaults: a quantitative x axis has a handful of whole-number ticks and no vertical gridlines', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const found = await probed(spec([chart('lines', LINE)]), () => ({
+    grid: document.querySelectorAll('.el.chart svg .role-axis-grid').length,
+    labels: [...document.querySelectorAll('.el.chart svg g.role-axis[aria-label^="X-axis"] .role-axis-label text')].map((n) => n.textContent),
+  }));
+  assert.equal(found.grid, 1, 'only the y gridlines remain');
+  assert.ok(found.labels.length >= 3 && found.labels.length <= 8, `x labels: ${found.labels}`);
+  assert.ok(found.labels.every((l) => /^\d+$/.test(l)), `whole numbers only: ${found.labels}`);
   return undefined;
 });
 

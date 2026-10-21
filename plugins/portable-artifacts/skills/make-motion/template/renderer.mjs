@@ -25,7 +25,7 @@ const VEGA_CONFIG = {
   point: { filled: true, size: 120, strokeWidth: 3 },
   scale: { bandPaddingInner: 0.3 },
   axis: { labelFontSize: 24, titleFontSize: 26, titleFontWeight: 500, labelPadding: 10, titlePadding: 18, tickSize: 8 },
-  axisX: { labelAngle: 0, labelPadding: 14, ticks: false },
+  axisX: { labelAngle: 0, labelPadding: 14, ticks: false, grid: false, tickCount: 5 },
   axisY: { tickCount: 5, domain: false, ticks: false },
   legend: { labelFontSize: 22, titleFontSize: 22 },
   title: { fontSize: 32 },
@@ -289,11 +289,13 @@ function revealMask(reveal) {
 }
 
 function makeApply({ scenes, parts }, built) {
-  const { states, sceneStarts } = built;
+  const { states, sceneStarts, crossfades } = built;
   return (sec) => {
     const active = activeScene(sceneStarts, sec);
+    // During a crossfade the previous scene's layer stays up beneath the active one.
+    const outgoing = crossfades.find((c) => c.to === active && sec < c.end)?.from;
     scenes.forEach(({ scene, layer }, i) => {
-      layer.style.display = i === active ? 'block' : 'none';
+      layer.style.display = i === active || i === outgoing ? 'block' : 'none';
       layer.style.opacity = String(states.get(`scene:${scene.id}`).opacity);
     });
     for (const { node, el, drawNode, arrowNode, format } of parts) {

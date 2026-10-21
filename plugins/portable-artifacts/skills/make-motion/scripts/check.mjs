@@ -5,6 +5,9 @@
 // visible text or counter boxes overlapping while neither is moving or fading; a scene with nothing on screen at its
 // last frame (a title whose `exit` preset was applied left on purpose and counts as present). A box wholly off the canvas
 // has left the frame: it is never clipped, overlaps nothing, and is not on screen.
+// A warning (never a failure; exit stays 0) when the first scene shows nothing at t = 0: stderr, or `warnings` in --json.
+// Scene crossfades need no special handling: each scene is judged on its own layer, and the outgoing layer is only
+// on screen during the next scene's first 0.4 s, which the checks never sample.
 // --theme: the theme render.mjs --theme would draw a spec that names none in (a spec's own `theme` wins).
 // exit 0 ok or skipped (no browser), 1 problems (or an invalid spec), 2 usage/IO
 import fs from 'node:fs';
@@ -111,6 +114,12 @@ function overlapProblems(scene, i, samples, size) {
   return problems;
 }
 
+// Frame 0 is the video's first frame and so its thumbnail: a warning when the first scene shows nothing there.
+function frameZeroWarnings(scene, els, size) {
+  if (!scene.elements.length || els.some((m) => isShown(m, size))) return [];
+  return [{ path: 'scenes[0]', message: `scene "${scene.id}" shows nothing at ${at(0)}: the first frame, the video's thumbnail, is blank; start something visible and do not use "fade" on scene 1` }];
+}
+
 // A title whose `exit` preset was applied (withDefaults marks it `exitPreset`) left on purpose: it counts as present.
 function emptyEndProblems(scene, i, samples, size) {
   const last = samples[samples.length - 1];
@@ -158,13 +167,14 @@ async function inspect(browser, spec, server) {
   const starts = await page.evaluate(() => window.__motion.sceneStarts);
   const margin = safeMargin(spec.size);
   const problems = [];
+  const warnings = frameZeroWarnings(spec.scenes[0], await page.evaluate(measure, [0, 0]), spec.size);
   let moments = 0;
   for (const [i, scene] of spec.scenes.entries()) {
     const samples = await sampleScene(page, scene, i, starts[i], spec.fps);
     moments += samples.length;
     problems.push(...safeAreaProblems(scene, i, samples, margin, spec.size), ...overlapProblems(scene, i, samples, spec.size), ...emptyEndProblems(scene, i, samples, spec.size));
   }
-  return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems };
+  return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings };
 }
 
 async function checkSpec(specPath, spec, { env, theme }) {
@@ -193,13 +203,17 @@ function checkTheme(name) {
 }
 
 function report(result, json) {
-  const { status, problems = [] } = result;
+  const { status, problems = [], warnings = [] } = result;
+  const noted = warnings.length ? { warnings } : {};
   if (json) {
     const body = status === 'skipped' ? { ok: true, skipped: true, reason: result.reason, hint: skipHint() }
-      : status === 'ok' ? { ok: true, scenes: result.scenes, moments: result.moments }
-        : { ok: false, ...(result.crashed ? { crashed: true } : {}), errors: problems };
+      : status === 'ok' ? { ok: true, scenes: result.scenes, moments: result.moments, ...noted }
+        : { ok: false, ...(result.crashed ? { crashed: true } : {}), errors: problems, ...noted };
     process.stdout.write(`${JSON.stringify(body)}\n`);
-  } else if (status === 'skipped') process.stdout.write(`check: skipped (no browser: ${result.reason}; ${skipHint()})\n`);
+    return;
+  }
+  for (const w of warnings) process.stderr.write(`warning: ${w.path}: ${w.message}\n`); // stderr: stdout stays the verdict alone
+  if (status === 'skipped') process.stdout.write(`check: skipped (no browser: ${result.reason}; ${skipHint()})\n`);
   else if (status === 'ok') process.stdout.write(`check: ok (${result.scenes} scene${result.scenes === 1 ? '' : 's'}, ${result.moments} moments)\n`);
   else {
     for (const p of problems) process.stdout.write(p.path ? `${p.path}: ${p.message}\n` : `${p.message}\n`);

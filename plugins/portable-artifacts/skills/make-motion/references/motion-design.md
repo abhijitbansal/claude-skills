@@ -46,6 +46,12 @@ Holds are not checked by `check.mjs`. Count them yourself from the keyframe time
 - **One accent colour.** The theme's accent marks the one thing that matters in a scene (the number, the highlighted bar). Everything else uses the text colours.
 - **One hero moment per clip.** Pick the beat the clip is about and give it the biggest type, the accent, and the `land` ease if any (on its position or scale, never on a counter's `value`). Other beats stay quieter.
 
+## Scene changes
+
+- **A hard cut is the default.** Between related scenes (the same chart, the next step of a list) a hard cut reads as continuous; a `"transition": "crossfade"` (0.4 s, the previous scene fading out under the new one) suits a change of subject. Set root `"transition": "crossfade"` to make it the default and put `"transition": "none"` on the scenes that should cut.
+- **Not on scene 1.** `fade` on the first scene makes frame 0, the video's thumbnail, blank; `crossfade` there is an error. `check.mjs` warns when scene 1 shows nothing at t = 0.
+- **Keep the outgoing text clear of the incoming text's position** (or end it with an `exit`): for the 0.4 s both are half-visible, and two lines in one spot read as a smear.
+
 ## Shapes and charts
 
 - **Cards, not hex.** Draw a card as a `rect` with `"fill": "surface"`, `"stroke": "line"` and `"elevated": true`; the theme tokens keep the border visible on dark themes and follow a theme change.
@@ -61,4 +67,4 @@ Run `node <skill-dir>/scripts/check.mjs motion.json` after looking at the contac
 - two visible texts or counters overlapping while neither is moving or fading;
 - a scene that ends with nothing on screen (a title leaving through an applied `exit: true` counts as intended).
 
-It does not check timing, holds, stagger, eases, colour or what happens on the first frame of a scene.
+It also warns (exit stays 0) when the first scene shows nothing at t = 0. It does not check timing, holds, stagger, eases, colour or what happens at the start of later scenes, and it never looks at the outgoing scene during a crossfade.

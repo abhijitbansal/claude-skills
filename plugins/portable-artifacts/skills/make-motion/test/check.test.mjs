@@ -303,3 +303,68 @@ test('a lone title is judged normally when no exit preset was applied: dropped o
   assert.equal(own.status, 1, own.stdout + own.stderr);
   assert.match(own.stdout, /^scenes\[1\]: scene "b" ends with nothing on screen/m);
 });
+
+// ---- frame-0 warning and crossfades (P2) ---------------------------------------------------------
+
+// A spec in a temp folder from whole scenes.
+function scenesFile(scenes) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'motion-check-'));
+  const file = path.join(dir, 'motion.json');
+  writeFileSync(file, JSON.stringify({ size: [1920, 1080], fps: 30, scenes }));
+  return file;
+}
+const word = (id, extra = {}) => ({ id, type: 'text', text: id, x: 960, y: 540, fontSize: 64, ...extra });
+
+test('a first scene that fades in warns that frame 0 is blank, and still exits 0 with the same verdict line', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([scenesFile([{ id: 'intro', duration: 2, transition: 'fade', elements: [word('hello')] }])]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /^check: ok \(1 scene, \d+ moments\)\n$/);
+  assert.match(r.stderr, /^warning: scenes\[0\]: scene "intro" shows nothing at 0\.00s: the first frame, the video's thumbnail, is blank; /);
+});
+
+test('--json carries the frame-0 warning under warnings and leaves the key out when there is none', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const blank = JSON.parse(check([scenesFile([{ id: 'intro', duration: 2, transition: 'fade', elements: [word('hello')] }]), '--json']).stdout);
+  assert.equal(blank.ok, true);
+  assert.equal(blank.warnings.length, 1);
+  assert.equal(blank.warnings[0].path, 'scenes[0]');
+  assert.match(blank.warnings[0].message, /^scene "intro" shows nothing at 0\.00s/);
+  const shown = JSON.parse(check([scenesFile([{ id: 'intro', duration: 2, elements: [word('hello')] }]), '--json']).stdout);
+  assert.equal('warnings' in shown, false);
+});
+
+test('a first scene with a title already on screen at t = 0 does not warn', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([scenesFile([{ id: 'intro', duration: 2, elements: [word('hello')] }])]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(r.stderr, '');
+});
+
+test('a first scene whose only element enters later (opacity 0 at t = 0) warns, and is still not a failure', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([scenesFile([{ id: 'intro', duration: 2, elements: [word('late', { keyframes: [{ t: 0, opacity: 0 }, { t: 0.5, opacity: 1 }] })] }])]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stderr, /^warning: scenes\[0\]: scene "intro" shows nothing at 0\.00s/);
+});
+
+test('a crossfade pair is green: the old scene under the new one is not an overlap, and nothing else is reported', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([scenesFile([
+    { id: 'a', duration: 2, elements: [word('first')] },
+    { id: 'b', duration: 2, transition: 'crossfade', elements: [word('second')] },
+  ])]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /^check: ok \(2 scenes, \d+ moments\)\n$/);
+  assert.equal(r.stderr, '');
+});
+
+test('a crossfade does not hide a real problem in the incoming scene: an overlap inside it is still reported', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const r = check([scenesFile([
+    { id: 'a', duration: 2, elements: [word('first')] },
+    { id: 'b', duration: 2, transition: 'crossfade', elements: [word('one'), word('two')] },
+  ])]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /^scenes\[1\]\.elements\[1\]: text "two" overlaps text "one"/m);
+});

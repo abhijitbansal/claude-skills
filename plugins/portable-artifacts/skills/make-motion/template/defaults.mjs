@@ -124,8 +124,9 @@ export function withDefaults(spec) {
   out.fps ??= DEFAULTS.fps;
   out.theme ??= MOTION_THEME;
   out.audio = (out.audio ?? []).map((track) => ({ at: 0, volume: 1, fadeIn: 0, fadeOut: 0, ...track }));
+  const transition = out.transition ?? 'none';
   out.scenes.forEach((scene, si) => {
-    scene.transition ??= 'none';
+    scene.transition ??= si === 0 && transition === 'crossfade' ? 'none' : transition; // the first scene has nothing to fade out
     for (const el of scene.elements) {
       const preset = presetFor(el, out.theme, scene.duration, out.fps, si < out.scenes.length - 1);
       el.keyframes = preset.keyframes;

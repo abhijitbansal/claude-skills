@@ -95,6 +95,7 @@ const element = {
   },
 };
 const seconds = { type: 'number', minimum: 0 };
+const transition = { enum: ['none', 'fade', 'crossfade'] };
 const audioTrack = {
   type: 'object',
   additionalProperties: false,
@@ -122,6 +123,7 @@ export const SCHEMA = {
     fps: { enum: [24, 25, 30, 60] },
     background: color,
     theme: { type: 'string', minLength: 1 },
+    transition,
     generatedBy: GENERATED_BY_SCHEMA,
     scenes: {
       type: 'array', minItems: 1, maxItems: 50,
@@ -133,7 +135,7 @@ export const SCHEMA = {
           id: { type: 'string', minLength: 1 },
           duration: { type: 'number', minimum: 0.2, maximum: 60 },
           background: color,
-          transition: { enum: ['none', 'fade'] },
+          transition,
           elements: { type: 'array', items: element },
         },
       },
@@ -371,6 +373,9 @@ export function validateSpec(spec, { dir = process.cwd() } = {}) {
   checkColor(spec, 'background', '', errors);
   spec.scenes.forEach((scene, si) => {
     checkSceneBackground(scene, `scenes[${si}]`, errors);
+    if (si === 0 && scene.transition === 'crossfade') {
+      errors.push({ path: 'scenes[0].transition', message: 'crossfade needs a previous scene to fade out; use "fade" or "none" on the first scene' });
+    }
     scene.elements.forEach((el, ei) => checkElement(el, `scenes[${si}].elements[${ei}]`, scene, dir, errors));
   });
   const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
