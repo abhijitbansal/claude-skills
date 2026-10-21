@@ -156,3 +156,32 @@ test('text without typing is drawn as before: plain text content, no spans', asy
   assert.deepEqual(found, { text: 'a', spans: 0 });
   return undefined;
 });
+
+test('a wrapped typing text lays out identically at every typed count: same box height, same line for every character', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const wrapped = spec({}, [label('a', { text: 'Hello wonderful world', typing: true, maxWidth: 260, fontSize: 40 })]);
+  const found = await probed(wrapped, () => {
+    const node = document.querySelector('[data-id="a"]');
+    const tops = () => {
+      const out = [];
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+        for (let i = 0; i < text.length; i++) {
+          const range = document.createRange();
+          range.setStart(text, i);
+          range.setEnd(text, i + 1);
+          out.push(Math.round(range.getBoundingClientRect().top));
+        }
+      }
+      return out;
+    };
+    return Array.from({ length: 22 }, (_, n) => {
+      window.__motion.seek(n * 0.035 + 0.001);
+      return { height: Math.round(node.getBoundingClientRect().height), tops: tops().join(',') };
+    });
+  });
+  assert.equal(new Set(found.map((f) => f.height)).size, 1, `heights: ${found.map((f) => f.height)}`);
+  assert.equal(new Set(found.map((f) => f.tops)).size, 1, 'every character stays on its line while typing');
+  assert.ok(new Set(found[0].tops.split(',')).size > 1, 'the text really wraps in this setup');
+  return undefined;
+});
