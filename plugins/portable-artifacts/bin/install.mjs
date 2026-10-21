@@ -45,7 +45,7 @@ const AGENT_HOSTS = { copilot: ['copilot'], codex: ['codex'], agents: ['copilot'
 
 export function agentTargetsFor(host, scope, { home, proj }) {
   const base = scope === 'user' ? home : proj;
-  return (AGENT_HOSTS[host] ?? []).map((h) => ({ host: h, dir: path.join(base, AGENT_DIRS[h][scope]) }));
+  return (Object.hasOwn(AGENT_HOSTS, host) ? AGENT_HOSTS[host] : []).map((h) => ({ host: h, dir: path.join(base, AGENT_DIRS[h][scope]) }));
 }
 
 export class UsageError extends Error {}
@@ -162,7 +162,7 @@ function parse(argv) {
     throw new UsageError(e.message);
   }
   const [host] = parsed.positionals;
-  if (!HOSTS[host]) throw new UsageError(`unknown host "${host ?? ''}"; use one of: ${Object.keys(HOSTS).join(', ')}`);
+  if (!Object.hasOwn(HOSTS, host)) throw new UsageError(`unknown host "${host ?? ''}"; use one of: ${Object.keys(HOSTS).join(', ')}`);
   const all = fs.readdirSync(SKILLS_SRC).filter((d) => fs.existsSync(path.join(SKILLS_SRC, d, 'SKILL.md')));
   if (parsed.values.project === '') throw new UsageError('--project needs a directory');
   if (parsed.values['agents-only']) {
@@ -192,6 +192,29 @@ function preflight(plan, dstRoot, { force }) {
   });
 }
 
+// Write one agent file without ever following a symlink at the target (lstat, not exists).
+// Returns 'written', 'kept' (something is already there and force is off) or 'not-file' (a directory etc.).
+// A symlink under force is unlinked, never written through, so its target is untouched.
+function writeAgentFile(dir, file, content, force) {
+  let st = null;
+  try {
+    st = fs.lstatSync(file);
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
+  if (st && !st.isSymbolicLink() && !st.isFile()) return 'not-file';
+  if (st && !force) return 'kept';
+  if (st) fs.unlinkSync(file);
+  fs.mkdirSync(dir, { recursive: true });
+  try {
+    fs.writeFileSync(file, content, { flag: 'wx' }); // wx: lose a create race by keeping, not overwriting
+  } catch (e) {
+    if (e.code === 'EEXIST') return 'kept';
+    throw e;
+  }
+  return 'written';
+}
+
 // Write each agent file; an existing one is kept unless force. Returns true if any write failed (main decides whether that is fatal).
 function installAgents(targets, { force }) {
   let failed = false;
@@ -199,13 +222,12 @@ function installAgents(targets, { force }) {
     const { fileName, content } = agentFile(host);
     const file = path.join(dir, fileName);
     try {
-      if (fs.existsSync(file) && !force) {
-        process.stdout.write(`agent: kept existing ${file}\n`);
-        continue;
-      }
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(file, content);
-      process.stdout.write(`agent: ${file}\n`);
+      const result = writeAgentFile(dir, file, content, force);
+      if (result === 'kept') process.stdout.write(`agent: kept existing ${file}\n`);
+      else if (result === 'not-file') {
+        failed = true;
+        process.stderr.write(`install: agent: ${file} is not a file\n`);
+      } else process.stdout.write(`agent: ${file}\n`);
     } catch (e) {
       failed = true;
       process.stderr.write(`install: agent: could not write ${file} (${e.message})\n`);
@@ -217,10 +239,11 @@ function installAgents(targets, { force }) {
 function main() {
   const opts = parse(process.argv.slice(2));
   const scope = opts.project ? 'project' : 'user';
-  const dirs = targetsFor(opts.host, scope, { home: os.homedir(), proj: path.resolve(opts.project ?? '.') });
+  const ctx = { home: os.homedir(), proj: path.resolve(opts.project ?? '.') };
+  const dirs = targetsFor(opts.host, scope, ctx);
   const h = HOSTS[opts.host];
   if (opts['agents-only']) {
-    const targets = agentTargetsFor(opts.host, scope, { home: os.homedir(), proj: path.resolve(opts.project ?? '.') });
+    const targets = agentTargetsFor(opts.host, scope, ctx);
     if (!targets.length) {
       process.stdout.write(`no agent file for ${opts.host}\n`);
       return;
@@ -244,7 +267,7 @@ function main() {
     }
     process.stdout.write(`installed ${skill} -> ${dst}\n  invoke: ${h.invoke(skill)} <what to make>\n`);
   }
-  installAgents(agentTargetsFor(opts.host, scope, { home: os.homedir(), proj: path.resolve(opts.project ?? '.') }), { force: opts.force });
+  installAgents(agentTargetsFor(opts.host, scope, ctx), { force: opts.force });
   if (plan.some((p) => p.skill === 'make-motion')) {
     process.stdout.write('make-motion also needs ffmpeg on PATH and, once: npx playwright install chromium (run in the skill folder)\n');
   }

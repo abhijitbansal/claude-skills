@@ -479,6 +479,91 @@ test('--agents-only writes just the agent file even when the skills are already 
   assert.doesNotMatch(r.stdout, /installed /);
 });
 
+test('--agents-only with an unwritable agent dir fails: exit 1, warning, no agent line', { skip: process.getuid?.() === 0 && 'root ignores file modes' }, () => {
+  const home = tmp();
+  const proj = tmp();
+  const agentsDir = path.join(proj, '.github/agents');
+  fs.mkdirSync(agentsDir, { recursive: true });
+  fs.chmodSync(agentsDir, 0o555);
+  try {
+    const r = runRaw(['copilot', '--project', proj, '--agents-only'], home);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /could not write/);
+    assert.doesNotMatch(r.stdout, /agent:/);
+    assert.equal(fs.existsSync(copilotAgent(proj)), false);
+  } finally {
+    fs.chmodSync(agentsDir, 0o755);
+  }
+});
+
+// A symlink at the target path must never be written through.
+function agentsDirWithTarget(proj) {
+  const dir = path.join(proj, '.github/agents');
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, 'artifact-builder.agent.md');
+}
+
+test('a dangling symlink at the agent path is kept and its target is not created', () => {
+  const home = tmp();
+  const proj = tmp();
+  const outside = path.join(tmp(), 'victim.md');
+  const file = agentsDirWithTarget(proj);
+  fs.symlinkSync(outside, file);
+  const r = runRaw(['copilot', '--project', proj, '--agents-only'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.split('\n').includes(`agent: kept existing ${file}`), r.stdout);
+  assert.equal(fs.existsSync(outside), false);
+  assert.ok(fs.lstatSync(file).isSymbolicLink());
+});
+
+test('a symlink to a real file is kept without --force; --force replaces the link, not the file it points to', () => {
+  const home = tmp();
+  const proj = tmp();
+  const real = path.join(tmp(), 'precious.md');
+  fs.writeFileSync(real, 'precious');
+  const file = agentsDirWithTarget(proj);
+  fs.symlinkSync(real, file);
+  const r1 = runRaw(['copilot', '--project', proj, '--agents-only'], home);
+  assert.equal(r1.status, 0, r1.stderr);
+  assert.ok(r1.stdout.split('\n').includes(`agent: kept existing ${file}`), r1.stdout);
+  assert.ok(fs.lstatSync(file).isSymbolicLink());
+  assert.equal(fs.readFileSync(real, 'utf8'), 'precious');
+  const r2 = runRaw(['copilot', '--project', proj, '--agents-only', '--force'], home);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.equal(fs.readFileSync(real, 'utf8'), 'precious');
+  assert.equal(fs.lstatSync(file).isSymbolicLink(), false);
+  assert.equal(fs.readFileSync(file, 'utf8'), agentFile('copilot').content);
+});
+
+test('a directory at the agent path is neither kept nor overwritten: warn, exit 0 in an install, 1 with --agents-only', () => {
+  const home = tmp();
+  const proj = tmp();
+  const file = agentsDirWithTarget(proj);
+  fs.mkdirSync(file);
+  fs.writeFileSync(path.join(file, 'inside.txt'), 'x');
+  for (const force of [[], ['--force']]) {
+    const only = runRaw(['copilot', '--project', proj, '--agents-only', ...force], home);
+    assert.equal(only.status, 1, only.stderr);
+    assert.match(only.stderr, /agent: .*artifact-builder\.agent\.md is not a file/);
+    assert.doesNotMatch(only.stdout, /agent:/);
+  }
+  const full = runInstall(['copilot', '--project', proj, '--skills', 'make-motion'], home);
+  assert.equal(full.status, 0, full.stderr);
+  assert.match(full.stderr, /is not a file/);
+  assert.ok(fs.existsSync(path.join(proj, '.github/skills/make-motion/SKILL.md')));
+  assert.ok(fs.statSync(file).isDirectory());
+  assert.ok(fs.existsSync(path.join(file, 'inside.txt')));
+});
+
+test('inherited object keys are not hosts: constructor and toString are usage errors (exit 2)', () => {
+  const home = tmp();
+  for (const host of ['constructor', 'toString', '__proto__']) {
+    assert.equal(runInstall([host], home).status, 2, host);
+    assert.equal(runRaw([host, '--agents-only'], home).status, 2, host);
+  }
+  assert.deepEqual(agentTargetsFor('constructor', 'user', { home: '/h', proj: '/p' }), []);
+});
+
 test('--agents-only installs no skills', () => {
   const home = tmp();
   const proj = tmp();
