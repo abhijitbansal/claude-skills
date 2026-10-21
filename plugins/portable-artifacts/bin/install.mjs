@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Install the portable-artifacts skills into another agent host's skill dir.
 //   node bin/install.mjs <claude|codex|copilot|gemini|agents> [--project <dir>] [--skills a,b] [--link] [--force] [--no-deps]
+//   node bin/install.mjs <host> [--project <dir>] --agents-only [--force]   (agent file only: no skills, no preflight, no npm)
+// codex, copilot and agents also get the cheap-model artifact-builder agent file (kept if present unless --force).
 // Each host reads SKILL.md folders from its own documented locations; the
 // skill itself is the slash command there (/name, or $name in Codex).
 // A skill's package.json "portableArtifacts": {"requires": [...]} pulls in sibling skills first.
@@ -10,6 +12,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { agentFile } from './agents.mjs';
 
 const SKILLS_SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../skills');
 const SKIP = new Set(['node_modules', 'test', 'dist', 'out', '.cache']);
@@ -30,6 +33,19 @@ export function targetsFor(host, scope, { home, proj }) {
     skills: path.join(base, h[scope]),
     commands: h.commands ? path.join(base, h.commands) : null,
   };
+}
+
+// Custom-agent folders: the artifact-builder agent file goes where Copilot and Codex read agents.
+// claude and gemini get none; the shared "agents" host gets both.
+const AGENT_DIRS = {
+  copilot: { user: '.copilot/agents', project: '.github/agents' },
+  codex: { user: '.codex/agents', project: '.codex/agents' },
+};
+const AGENT_HOSTS = { copilot: ['copilot'], codex: ['codex'], agents: ['copilot', 'codex'] };
+
+export function agentTargetsFor(host, scope, { home, proj }) {
+  const base = scope === 'user' ? home : proj;
+  return (AGENT_HOSTS[host] ?? []).map((h) => ({ host: h, dir: path.join(base, AGENT_DIRS[h][scope]) }));
 }
 
 export class UsageError extends Error {}
@@ -139,6 +155,7 @@ function parse(argv) {
         link: { type: 'boolean', default: false },
         force: { type: 'boolean', default: false },
         'no-deps': { type: 'boolean', default: false },
+        'agents-only': { type: 'boolean', default: false },
       },
     });
   } catch (e) {
@@ -148,6 +165,10 @@ function parse(argv) {
   if (!HOSTS[host]) throw new UsageError(`unknown host "${host ?? ''}"; use one of: ${Object.keys(HOSTS).join(', ')}`);
   const all = fs.readdirSync(SKILLS_SRC).filter((d) => fs.existsSync(path.join(SKILLS_SRC, d, 'SKILL.md')));
   if (parsed.values.project === '') throw new UsageError('--project needs a directory');
+  if (parsed.values['agents-only']) {
+    const clash = [parsed.values.skills !== undefined && '--skills', parsed.values.link && '--link', parsed.values['no-deps'] && '--no-deps'].filter(Boolean);
+    if (clash.length) throw new UsageError(`--agents-only cannot be combined with ${clash.join(', ')}`);
+  }
   const skills = parsed.values.skills ? [...new Set(parsed.values.skills.split(','))] : all;
   const unknown = skills.filter((s) => !all.includes(s));
   if (unknown.length) throw new UsageError(`unknown skill(s): ${unknown.join(', ')}; available: ${all.join(', ')}`);
@@ -171,11 +192,43 @@ function preflight(plan, dstRoot, { force }) {
   });
 }
 
+// Write each agent file; an existing one is kept unless force. Returns true if any write failed (main decides whether that is fatal).
+function installAgents(targets, { force }) {
+  let failed = false;
+  for (const { host, dir } of targets) {
+    const { fileName, content } = agentFile(host);
+    const file = path.join(dir, fileName);
+    try {
+      if (fs.existsSync(file) && !force) {
+        process.stdout.write(`agent: kept existing ${file}\n`);
+        continue;
+      }
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(file, content);
+      process.stdout.write(`agent: ${file}\n`);
+    } catch (e) {
+      failed = true;
+      process.stderr.write(`install: agent: could not write ${file} (${e.message})\n`);
+    }
+  }
+  return failed;
+}
+
 function main() {
   const opts = parse(process.argv.slice(2));
   const scope = opts.project ? 'project' : 'user';
   const dirs = targetsFor(opts.host, scope, { home: os.homedir(), proj: path.resolve(opts.project ?? '.') });
   const h = HOSTS[opts.host];
+  if (opts['agents-only']) {
+    const targets = agentTargetsFor(opts.host, scope, { home: os.homedir(), proj: path.resolve(opts.project ?? '.') });
+    if (!targets.length) {
+      process.stdout.write(`no agent file for ${opts.host}\n`);
+      return;
+    }
+    // The agent file is the whole job here, so a failed write is a failed run.
+    if (installAgents(targets, { force: opts.force })) process.exitCode = 1;
+    return;
+  }
   const plan = preflight(expandRequires(opts.skills), dirs.skills, { force: opts.force });
   for (const { skill, requiredBy, keep } of plan) {
     if (keep) process.stdout.write(`${skill} already installed (required by ${requiredBy})\n`);
@@ -191,6 +244,7 @@ function main() {
     }
     process.stdout.write(`installed ${skill} -> ${dst}\n  invoke: ${h.invoke(skill)} <what to make>\n`);
   }
+  installAgents(agentTargetsFor(opts.host, scope, { home: os.homedir(), proj: path.resolve(opts.project ?? '.') }), { force: opts.force });
   if (plan.some((p) => p.skill === 'make-motion')) {
     process.stdout.write('make-motion also needs ffmpeg on PATH and, once: npx playwright install chromium (run in the skill folder)\n');
   }

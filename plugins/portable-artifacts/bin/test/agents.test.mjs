@@ -12,6 +12,7 @@ const PHRASES = [
   /Do not delegate/,
   /--out/,
   /exactly as SKILL\.md shows/,
+  /fix the spec and rerun it, up to 2 times/,
   /fails? after 2 fix attempts/,
   /Never report an output path for a build that did not run/,
 ];
