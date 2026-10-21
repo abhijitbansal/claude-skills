@@ -4,8 +4,11 @@ const DEFAULTS = Object.freeze({ size: [1920, 1080], fps: 30 });
 export const FADE_SECONDS = 0.4;
 export const TYPING_SECONDS_PER_CHAR = 0.035;
 
-// How many characters a `typing` text types: code points, so an emoji is one.
-export const typingLength = (text) => Array.from(text).length;
+// A `typing` text's characters as a reader counts them: grapheme clusters, so an emoji, a ZWJ sequence, a flag or a
+// letter with a combining accent is one character and is never typed in halves.
+const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' });
+export const graphemes = (text) => Array.from(GRAPHEMES.segment(text), (part) => part.segment);
+export const typingLength = (text) => graphemes(text).length;
 
 // make-motion's default theme (scripts/lib/default-theme.mjs re-exports it). The shared
 // DEFAULT_THEME stays `paper` for make-dashboard.

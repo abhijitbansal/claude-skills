@@ -119,8 +119,12 @@ test('typing counts characters up at 0.035 s each from the scene start, and hold
   near(built.states.get('a').value, 11);
 });
 
-test('typing counts code points, not UTF-16 units', () => {
+test('typing counts what a reader sees as one character: emoji, ZWJ sequences, flags and accents are one each', () => {
+  const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}';
   assert.equal(count(typed({ text: 'a\u{1F600}b' }), 1), 3);
+  assert.equal(count(typed({ text: `x${family}y` }), 1), 3, 'a ZWJ family is one character');
+  assert.equal(count(typed({ text: 'a\u{1F1EB}\u{1F1F7}b' }), 1), 3, 'a flag is one character');
+  assert.equal(count(typed({ text: 'cafe\u0301' }), 1), 4, 'a decomposed accent stays with its letter');
 });
 
 test('value keyframes take control of the timing, as on a counter', () => {
@@ -195,5 +199,16 @@ test('a wrapped typing text lays out identically at every typed count: same box 
   assert.equal(new Set(found.map((f) => f.height)).size, 1, `heights: ${found.map((f) => f.height)}`);
   assert.equal(new Set(found.map((f) => f.tops)).size, 1, 'every character stays on its line while typing');
   assert.ok(new Set(found[0].tops.split(',')).size > 1, 'the text really wraps in this setup');
+  return undefined;
+});
+
+test('typing never shows half a character: a ZWJ family and a decomposed accent appear whole', async (t) => {
+  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}';
+  const found = await probed(spec({}, [label('a', { text: `${family}e\u0301x`, typing: true })]), () => {
+    const typedText = (n) => { window.__motion.seek(n * 0.035 + 0.001); return document.querySelector('[data-id="a"] .typed').textContent; };
+    return [typedText(1), typedText(2)];
+  });
+  assert.deepEqual(found, [family, `${family}e\u0301`]);
   return undefined;
 });

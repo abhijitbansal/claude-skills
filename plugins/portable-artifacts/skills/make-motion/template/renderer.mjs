@@ -1,7 +1,7 @@
 // Browser renderer: builds the stage DOM from the spec and exposes
 // window.__motion for the preview UI and the Playwright frame loop.
 import { buildTimeline, seekTo } from './timeline.mjs';
-import { withDefaults, resolveColor, typingLength } from './defaults.mjs';
+import { withDefaults, resolveColor, graphemes, typingLength } from './defaults.mjs';
 import { resolveAudio } from './audio.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 
@@ -166,7 +166,7 @@ async function renderChart(el, look) {
 // A `typing` text: the typed characters, a caret, then the untyped rest kept in the layout but not drawn, so the
 // element's box is the full text at every moment and does not shift as it fills.
 function typingParts(node, el) {
-  const chars = Array.from(el.text);
+  const chars = graphemes(el.text);
   const typed = document.createElement('span');
   typed.className = 'typed';
   const caret = document.createElement('span');
