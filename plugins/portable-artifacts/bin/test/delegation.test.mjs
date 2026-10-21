@@ -43,4 +43,5 @@ test('the Cheaper model text is identical in all five skills', () => {
 test('make-motion runs on the cheap model: frontmatter model: haiku', () => {
   const front = read('make-motion').match(/^---\n([\s\S]*?)\n---/)[1];
   assert.match(front, /^model: haiku$/m);
+  assert.match(front, /^effort: low$/m);
 });

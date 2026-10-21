@@ -40,7 +40,7 @@ Source for every table: the harness's own `summary.md` per run (raw files in the
 | scene | city-inline | ✓ | ✓ | 2 | ✓ | 27 | claude-haiku-5.5 |
 | scene | forest-parent | ✓ | ✓ | 1 | ✓ | 22 | claude-haiku-5.5 |
 
-Validate runs per case ranged from 1 to 3 in these tables.
+Validate runs per case ranged from 1 to 3 in the smoke table above.
 
 ### Motion gate: all 10 prompts
 
@@ -98,5 +98,5 @@ Measured for this trial: 34 s, 18.7 AI Credits (about $0.19 at 1 credit = $0.01)
 - VS Code Copilot Chat (the agent picker and skill hand-off there).
 - Copilot CLI `--agent` selection by any route other than the `--agent` flag.
 - A copy (non-link) install for the delegation trial, so the permission denial above is unexplained.
-- Claude Code and Gemini: they get no agent file. Claude Code reads `model: haiku` from the SKILL.md frontmatter; that path was covered by the earlier make-scene run ([`summary-scene-2026-10-19.md`](summary-scene-2026-10-19.md)), not by this one.
+- Claude Code and Gemini: they get no agent file. Claude Code is documented to apply a skill's `model:` frontmatter; that was not measured here. The earlier make-scene run ([`summary-scene-2026-10-19.md`](summary-scene-2026-10-19.md)) pinned Haiku with `--model haiku`, which is a different path from the frontmatter key. Motion on Haiku in Claude Code itself was not measured either (the gate above measured Copilot's claude-haiku-5.5).
 - A baseline of the same prompts on Copilot's default model: the motion gate passed, so the planned no-agent comparison run was not made.

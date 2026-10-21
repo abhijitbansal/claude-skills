@@ -107,10 +107,10 @@ Writing a spec is a small job, so every skill can run on a cheap model. Hosts di
 | Host | Mechanism | File | Deterministic or advisory |
 |---|---|---|---|
 | Copilot CLI | `copilot --agent artifact-builder` runs the whole session on the agent's model | `~/.copilot/agents/artifact-builder.agent.md` (project scope: `.github/agents`) | Deterministic. Verified on Copilot CLI 1.0.98: its log shows `Using model "claude-haiku-5.5" from custom agent "artifact-builder"` |
-| VS Code Copilot Chat | Pick `artifact-builder` in the agent picker | the same `.agent.md` file | Deterministic, not tested here |
-| Copilot CLI or VS Code, skill hand-off | The skill's "Cheaper model" section tells the running agent to start `artifact-builder` with a self-contained brief | the same `.agent.md` file | Advisory: the main agent may choose not to |
+| VS Code Copilot Chat | Pick `artifact-builder` in the agent picker | the same `.agent.md` file | Deterministic per docs; not tested here |
+| Copilot CLI or VS Code, skill hand-off (VS Code untested) | The skill's "Cheaper model" section tells the running agent to start `artifact-builder` with a self-contained brief | the same `.agent.md` file | Advisory: the main agent may choose not to |
 | Codex | `~/.codex/agents/artifact-builder.toml` (model `gpt-6-luna`, low reasoning effort), or the `default_subagent_model` key under `[agents]` in Codex config | `~/.codex/agents/artifact-builder.toml` (project scope: `.codex/agents`) | Config-level. Written from the Codex docs, not run live |
-| Claude Code | `model: haiku` and `effort: low` in each `SKILL.md` frontmatter; already honoured | none (no agent file) | Honoured by Claude Code itself |
+| Claude Code | `model: haiku` and `effort: low` in each `SKILL.md` frontmatter, per Claude Code's skill docs | none (no agent file) | Claude Code feature; not measured here |
 | Gemini CLI | nothing | none | none |
 
 Install the agent file with one of these (add `--project <dir>` for project scope, and use `codex` or `agents` in place of `copilot` for those hosts):
@@ -133,6 +133,8 @@ What was measured, on Copilot CLI 1.0.98, 2026-10-21 (results: [`summary-routing
 The skill hand-off is advisory. In the one live trial (make-explainer on the default model, no retries), the main agent did hand off and the sub-agent ran on `claude-haiku-5.5` and obeyed the loop guard, but the sub-agent hit `Permission denied because no interactive user response was available` on both its tools when reading the skill file. That skill was a `--link` symlink pointing outside the project; the cause was not verified and a copy install was not tried. The main agent said so and built the page itself (validate passed, 34 s). So the hand-off happened and the fallback worked, but the cheap model did not do the work in that run.
 
 Cost: only that one trial was measured, at 18.7 AI Credits (about $0.19 at 1 credit = $0.01; 432k input tokens, 353k of them cached, 4.2k output tokens). The cost of the smoke and motion runs was not measured. Claude Haiku 5.5 is listed at $0.10 / $0.50 per 1M input / output tokens; the default model's price was not looked up here, so no saving is claimed.
+
+`model: haiku` in make-motion's frontmatter changes the model Claude Code uses for it. make-motion on Haiku in Claude Code itself was not measured: the motion gate measured Copilot's `claude-haiku-5.5`.
 
 Not tested: Codex (no account; the files come from the Codex docs), VS Code Copilot Chat, and a copy install for the hand-off trial.
 

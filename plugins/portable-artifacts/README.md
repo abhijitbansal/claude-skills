@@ -224,14 +224,14 @@ PowerShell refuses `npx.ps1` (scripts disabled), run `npx.cmd playwright install
 
 ## Cheaper model on Copilot and Codex
 
-These skills write a small JSON spec; a cheap model can do that. Claude Code reads `model: haiku` from each `SKILL.md`. Copilot and Codex cannot pin a model from a skill, so the installer also writes a small `artifact-builder` agent file that names the cheap model, and each skill tells the running agent to hand the work to it. Two ways to use it: pick the agent yourself (`copilot --agent artifact-builder`, deterministic) or let the skill hand off (advisory: the main agent may not do it).
+These skills write a small JSON spec; a cheap model can do that. Per the hosts' docs, Claude Code reads `model: haiku` from each `SKILL.md` (not measured here), while Copilot and Codex cannot pin a model from a skill, so the installer also writes a small `artifact-builder` agent file that names the cheap model, and each skill tells the running agent to hand the work to it. Two ways to use it: pick the agent yourself (`copilot --agent artifact-builder`, deterministic) or let the skill hand off (advisory: the main agent may not do it).
 
 ```bash
 node plugins/portable-artifacts/bin/install.mjs copilot
 node plugins/portable-artifacts/bin/install.mjs copilot --agents-only
 ```
 
-The first line installs the skills and the agent; the second writes only the agent, for skills you installed another way. Measured on Copilot CLI 1.0.98 on 2026-10-21: all 10 motion prompts and 9 runs across the other four skills built a valid page on `claude-haiku-5.5`, and Copilot's own logs confirm the model. Codex files were written from the Codex docs and not run live; the skill hand-off worked once in a single trial but its sub-agent was denied permission and the main agent finished the job. Full table, per-host mechanism and the cost statement: [USAGE.md](USAGE.md#cheaper-model-on-copilot-and-codex); results: [`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md).
+The first line installs the skills and the agent; the second writes only the agent, for skills you installed another way. Measured on Copilot CLI 1.0.98 on 2026-10-21: all 10 motion prompts and 9 runs across the other four skills built a valid page on `claude-haiku-5.5`, and Copilot's own logs confirm the model. Codex files were written from the Codex docs and not run live; the skill handed off once in a single trial, but its sub-agent was denied permission and the main agent finished the work. Adding `model: haiku` to make-motion changes the model Claude Code uses for it; make-motion on Haiku in Claude Code itself was not measured (the gate measured Copilot's `claude-haiku-5.5`). Full table, per-host mechanism and the cost statement: [USAGE.md](USAGE.md#cheaper-model-on-copilot-and-codex); results: [`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md).
 
 ## Usage
 
