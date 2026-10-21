@@ -35,9 +35,9 @@ const SPEC = {
   charts: [{ id: 'c1', title: 'Revenue', query: 'rev', vegaLite: { mark: 'bar', encoding: { x: { field: 'region', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } } } }],
 };
 
-async function open(theme, width) {
+async function open(theme, width, spec = SPEC) {
   browser ??= await launchBrowser();
-  const { out } = buildProject(SPEC, { theme });
+  const { out } = buildProject(spec, { theme });
   const context = await browser.newContext({ viewport: { width, height: 900 }, colorScheme: 'light' });
   const page = await context.newPage();
   const problems = [];
@@ -99,12 +99,73 @@ test('the KPI tile is a size container and its value is held to one line', async
   const { page, context } = await open(undefined, 390);
   try {
     const style = await page.evaluate(() => {
-      const el = document.querySelector('#kpi-k-long .kpi-value');
-      return { whiteSpace: getComputedStyle(el).whiteSpace, containerType: getComputedStyle(el.parentElement).containerType, n: el.style.getPropertyValue('--n') };
+      const el = document.querySelector('#kpi-k-ms .kpi-value');
+      const long = document.querySelector('#kpi-k-long');
+      return { whiteSpace: getComputedStyle(el).whiteSpace, containerType: getComputedStyle(el.parentElement).containerType, n: el.style.getPropertyValue('--n'),
+        longN: long.querySelector('.kpi-value').style.getPropertyValue('--n'), longClass: long.className };
     });
     assert.equal(style.whiteSpace, 'nowrap');
     assert.equal(style.containerType, 'inline-size');
-    assert.equal(style.n, '22');
+    assert.equal(style.n, '8');
+    assert.equal(style.longN, '22');
+    assert.equal(style.longClass, 'kpi kpi-wide kpi-long', 'a value too long for any tile may wrap');
+  } finally {
+    await context.close();
+  }
+});
+
+// ---- values that cannot fit one line, and values just past a short tile's width ------------------
+
+const SPACED = 'Insufficient data for the chosen regions';
+const UNBROKEN = 'ABCDEFGHIJ'.repeat(4);
+const TEN = '$1,234,567';
+const mixed = (extra) => {
+  const queries = { rev: SPEC.queries.rev, pct: literal('87%'), ms: literal('1,204 ms'), ...Object.fromEntries(extra.map(([id, text]) => [id, literal(text)])) };
+  const kpis = [{ id: 'k-pct', title: 'Pass rate', query: 'pct', field: 'v' }, { id: 'k-ms', title: 'Latency', query: 'ms', field: 'v' },
+    ...extra.map(([id, , title]) => ({ id: `k-${id}`, title, query: id, field: 'v' }))];
+  return { ...SPEC, queries, kpis };
+};
+
+// Each value's rendered line boxes that lie outside its tile.
+const clipped = (page) => page.evaluate(() => [...document.querySelectorAll('.kpi-value')].flatMap((el) => {
+  const tile = el.closest('.kpi').getBoundingClientRect();
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  return [...range.getClientRects()].filter((r) => r.left < tile.left - 1 || r.right > tile.right + 1).map(() => el.textContent);
+}));
+
+for (const [name, long] of [['with spaces', SPACED], ['unbroken', UNBROKEN]]) {
+  test(`a 40-character value ${name} wraps inside its tile instead of spilling, at 320, 390 and 1280px`, async (t) => {
+    if (!(await haveBrowser())) return t.skip('no browser');
+    assert.equal(long.length, 40);
+    const { page, context } = await open(undefined, 320, mixed([['long', long, 'Notes'], ['ten', TEN, 'Total']]));
+    try {
+      for (const width of [320, 390, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        assert.deepEqual(await overflowProblems(page, '.kpi-value'), [], `value spills at ${width}px`);
+        assert.deepEqual(await overflowProblems(page, '.kpi'), [], `tile spills at ${width}px`);
+        assert.deepEqual(await clipped(page), [], `value leaves its tile at ${width}px`);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `page scrolls sideways at ${width}px`);
+        assert.equal(await page.evaluate(() => document.querySelector('#kpi-k-long .kpi-value').textContent), long, 'the whole text is in the page');
+      }
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+test('a 10-character value fits its tile and leaves no hole, at 536 and 390px', async (t) => {
+  if (!(await haveBrowser())) return t.skip('no browser');
+  assert.equal(TEN.length, 10);
+  const { page, context } = await open(undefined, 536, mixed([['ten', TEN, 'Total'], ['up', '99.9%', 'Uptime']]));
+  try {
+    for (const width of [536, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert.deepEqual(await overflowProblems(page, '.kpi-value'), [], `spill at ${width}px`);
+      assert.deepEqual(await clipped(page), [], `clipped at ${width}px`);
+      const { rows } = await rowFill(page);
+      for (const share of rows) assert.ok(share >= 0.95, `a row fills ${Math.round(share * 100)}% of the section at ${width}px`);
+    }
   } finally {
     await context.close();
   }

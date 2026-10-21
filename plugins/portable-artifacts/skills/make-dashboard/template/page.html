@@ -38,12 +38,16 @@ button { font: inherit; color: inherit; }
    0.7em assumption. A value longer than the builder's limit gets a wide tile (.kpi-wide). Alone in the grid
    a wide tile takes the full row. A section that holds one switches from the equal-track grid to wrapping
    flex rows whose tiles grow to fill the row, so a wide tile never leaves a hole beside short ones; the
-   grid-column rule is the fallback where :has() is missing. */
+   grid-column rule is the fallback where :has() is missing. The wide tile's basis is 18rem (288px), the
+   narrowest section (a 320px viewport less the 16px page padding), so it is never narrower than that.
+   A value too long for even that tile at --fs-md (.kpi-long, see KPI_LONG_CHARS in scripts/lib/html.mjs)
+   cannot be one line: it wraps instead of spilling, at the same size. */
 .kpi-wide { grid-column: 1 / -1; }
 .kpis:has(.kpi-wide) { display: flex; flex-wrap: wrap; }
 .kpis:has(.kpi-wide) > .kpi { flex: 1 1 160px; }
-.kpis:has(.kpi-wide) > .kpi-wide { flex: 2 1 17rem; }
-.kpi-value { --kpi-fit: max(var(--fs-md), calc(100cqi / (var(--n, 8) * 0.7))); margin-top: 4px; font-size: min(var(--fs-lg), var(--kpi-fit)); line-height: var(--lh-head); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow-wrap: break-word; }
+.kpis:has(.kpi-wide) > .kpi-wide { flex: 2 1 18rem; }
+.kpi-value { --kpi-fit: max(var(--fs-md), calc(100cqi / (var(--n, 8) * 0.7))); margin-top: 4px; font-size: min(var(--fs-lg), var(--kpi-fit)); line-height: var(--lh-head); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kpi-long .kpi-value { white-space: normal; overflow-wrap: anywhere; }
 .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 @media (min-width: 900px) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

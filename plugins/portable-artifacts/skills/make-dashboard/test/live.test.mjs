@@ -106,13 +106,13 @@ test('--watch: CSV edit -> rebuilt; broken spec -> error and last good page stay
   await until(() => es.connected, { label: 'the event stream to connect' });
   fs.writeFileSync(csv, 'v\n41\n1\n');
   await until(() => es.seen.some((e) => e.event === 'rebuilt'), { label: 'a rebuilt event after the CSV edit' });
-  assert.match((await request(port)).body, /class="kpi-value">42</);
+  assert.match((await request(port)).body, /class="kpi-value"[^>]*>42</);
   fs.writeFileSync(csv, 'v\n"unterminated\n');  // half-written file
   await until(() => es.seen.some((e) => e.event === 'build-error'), { label: 'a build-error event for the half-written CSV' });
-  assert.match((await request(port)).body, /class="kpi-value">42</, 'last good page still served');
+  assert.match((await request(port)).body, /class="kpi-value"[^>]*>42</, 'last good page still served');
   fs.writeFileSync(csv, 'v\n50\n');
   await until(() => es.seen.filter((e) => e.event === 'rebuilt').length >= 2, { label: 'a second rebuilt event' });
-  assert.match((await request(port)).body, /class="kpi-value">50</);
+  assert.match((await request(port)).body, /class="kpi-value"[^>]*>50</);
   fs.writeFileSync(file, JSON.stringify({ ...spec, queries: { total: 'SELEC 1' } }));
   await until(() => es.seen.filter((e) => e.event === 'build-error').length >= 2, { label: 'a second build-error event' });
   const disk = fs.readFileSync(path.join(dir, 'dist/index.html'), 'utf8');
@@ -158,21 +158,21 @@ test('a vanished data folder is reported (event + stderr), then Rebuild now re-a
   fs.rmSync(path.join(dir, 'data'), { recursive: true });
   await until(() => es.seen.some((e) => e.event === 'build-error' && e.data.some((x) => x.path === 'watch')), { label: 'the watch build-error event' });
   assert.match(stderr(), /watch: watcher stopped: ENOENT; fix the folder and press Rebuild now/);
-  assert.match((await request(port)).body, /class="kpi-value">41</, 'last good page still served');
+  assert.match((await request(port)).body, /class="kpi-value"[^>]*>41</, 'last good page still served');
   fs.mkdirSync(path.join(dir, 'data'));
   fs.writeFileSync(csv, 'v\n7\n');
   const rebuilt = () => es.seen.filter((e) => e.event === 'rebuilt').length;
   const before = rebuilt();
   assert.equal((await request(port, { method: 'POST', path: '/rebuild', headers: { 'x-pa-token': token } })).status, 202);
   await until(() => rebuilt() > before, { label: 'the rebuild after Rebuild now' });
-  assert.match((await request(port)).body, /class="kpi-value">7</);
+  assert.match((await request(port)).body, /class="kpi-value"[^>]*>7</);
   const armed = rebuilt();
   let lastWrite = 0; // a watcher armed a moment ago may not hear the first write; write again until it does
   await until(() => {
     if (Date.now() - lastWrite > 700) { lastWrite = Date.now(); fs.writeFileSync(csv, 'v\n8\n'); }
     return rebuilt() > armed;
   }, { label: 'a rebuild from the re-armed watcher' });
-  assert.match((await request(port)).body, /class="kpi-value">8</, 'watching resumed');
+  assert.match((await request(port)).body, /class="kpi-value"[^>]*>8</, 'watching resumed');
 });
 
 test('a watcher problem after a GOOD build sends rebuilt then watch-warning, never build-error; later clients hear it too', async (t) => {
