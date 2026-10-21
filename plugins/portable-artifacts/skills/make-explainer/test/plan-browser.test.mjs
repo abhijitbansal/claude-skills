@@ -38,6 +38,9 @@ const built = (sections = BASE, extra = {}) => buildSpec(spec(sections, extra));
 const exported = (page) => page.evaluate(() => window.PA.planExport());
 const pick = (page, id, value) => page.locator(`input[name="plan-${id}"]`).evaluateAll((els, v) => els.find((e) => e.value === v).click(), value);
 const stored = (page) => page.evaluate((k) => localStorage.getItem(k), STORE);
+const TEXT_SETTLE_MS = 400; // typing is saved 250 ms after the last key
+const settle = (page) => page.waitForTimeout(TEXT_SETTLE_MS);
+const said = (page, pattern) => page.waitForFunction((src) => new RegExp(src, 'i').test(document.querySelector('[data-plan-status]').textContent), pattern);
 const item = (id) => `[data-plan-item][data-id="${id}"]`;
 
 test('a non-recommended option exports isRecommended false, the recommended one true', async (t) => {
@@ -119,6 +122,7 @@ test('choosing, typing and a verdict survive a reload under pa-plan:<key> as { h
   await page.locator(`${item('owner')} [data-answer]`).fill('Dana');
   await pick(page, 'verdict', 'not-yet');
   await page.locator('[data-reviewer]').fill('Ada');
+  await settle(page);
   const before = await exported(page);
   const saved = JSON.parse(await stored(page));
   assert.equal(saved.hash, '');
@@ -136,7 +140,7 @@ test('choosing, typing and a verdict survive a reload under pa-plan:<key> as { h
   await context.close();
 });
 
-test('saved answers whose hash differs are ignored, a notice says the plan changed, and the next save carries the new hash', async (t) => {
+test('saved answers whose hash differs are not applied and not wiped; a notice says the plan changed', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const old = JSON.stringify({ hash: 'old-hash', answers: { storage: { choice: 'A save server' } } });
   const { page, problems, context } = await openPage(built().url, { seed: { [STORE]: old } });
@@ -144,10 +148,41 @@ test('saved answers whose hash differs are ignored, a notice says the plan chang
   assert.equal((await exported(page)).answers[0].answered, false);
   assert.equal(await page.locator('[data-plan-stale]').isVisible(), true);
   assert.match(await page.locator('[data-plan-stale]').textContent(), /plan changed/i);
-  await pick(page, 'theme', 'Mono');
-  assert.deepEqual(JSON.parse(await stored(page)), { hash: '', answers: { theme: { choice: 'Mono' } }, verdict: null, reviewer: '' });
+  await settle(page);
+  assert.equal(await stored(page), old, 'nothing is written until the reader changes something');
+  await page.reload();
+  await page.waitForFunction(() => window.paReady === true);
+  assert.equal(await page.locator('[data-plan-stale]').isVisible(), true, 'still the old plan data, so the notice shows again');
+  assert.equal(await stored(page), old);
   assert.deepEqual(problems, []);
   await context.close();
+});
+
+test('the first answer after a stale load replaces the old entry, and a reload shows no notice', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const old = JSON.stringify({ hash: 'old-hash', answers: { storage: { choice: 'A save server' } } });
+  const { page, context } = await openPage(built().url, { seed: { [STORE]: old } });
+  await pick(page, 'theme', 'Mono');
+  assert.deepEqual(JSON.parse(await stored(page)), { hash: '', answers: { theme: { choice: 'Mono' } }, verdict: null, reviewer: '' });
+  await page.reload();
+  await page.waitForFunction(() => window.paReady === true);
+  assert.equal(await page.locator('[data-plan-stale]').isHidden(), true);
+  assert.equal(await page.locator('input[name="plan-theme"]:checked').inputValue(), 'Mono');
+  assert.equal(await page.locator('input[name="plan-storage"]:checked').count(), 0);
+  await context.close();
+});
+
+test('an object without a matching hash, even {}, counts as another plan: notice, not wiped', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const raw of ['{}', JSON.stringify({ answers: { storage: { choice: 'A save server' } } })]) {
+    const { page, problems, context } = await openPage(built().url, { seed: { [STORE]: raw } });
+    assert.equal(await page.locator('[data-plan-stale]').isVisible(), true, raw);
+    assert.equal(await page.locator('input[name="plan-storage"]:checked').count(), 0, raw);
+    await settle(page);
+    assert.equal(await stored(page), raw, raw);
+    assert.deepEqual(problems, [], raw);
+    await context.close();
+  }
 });
 
 test('a page hash that matches the saved hash keeps the answers; a changed page hash drops them', async (t) => {
@@ -172,10 +207,14 @@ test('a page hash that matches the saved hash keeps the answers; a changed page 
 
 test('junk in storage, or a saved choice that is no longer an option, is ignored without an error', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  for (const raw of ['not json', '[]', 'null', JSON.stringify({ hash: '', answers: { storage: { choice: 'Gone' }, owner: { text: 7 }, __proto__: { x: 1 } } })]) {
+  const proto = '{"hash":"","answers":{"__proto__":{"choice":"A save server"},"storage":{"choice":"Gone"},"owner":{"text":7}}}';
+  const cases = [['not json', false], ['[]', false], ['null', false], ['{}', true], [proto, false]];
+  for (const [raw, notice] of cases) {
     const { page, problems, context } = await openPage(built().url, { seed: { [STORE]: raw } });
     assert.equal(await page.locator('input[name="plan-storage"]:checked').count(), 0, raw);
     assert.equal(await page.locator(`${item('owner')} [data-answer]`).inputValue(), '', raw);
+    assert.equal(await page.locator('[data-plan-stale]').isVisible(), notice, raw);
+    assert.equal(await page.evaluate(() => ({}).choice === undefined && Object.prototype.choice === undefined), true, 'no prototype pollution');
     assert.deepEqual(problems, [], raw);
     await context.close();
   }
@@ -205,7 +244,19 @@ test('a write that fails after load shows the not-saved note', async (t) => {
   await context.close();
 });
 
-test('Copy answers writes the JSON to the clipboard and says so', async (t) => {
+test('the not-saved note hides again when a later write succeeds', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(built().url);
+  await page.evaluate(() => { window.__set = Storage.prototype.setItem; Storage.prototype.setItem = () => { throw new DOMException('full', 'QuotaExceededError'); }; });
+  await pick(page, 'theme', 'Mono');
+  assert.equal(await page.locator('[data-plan-unsaved]').isVisible(), true);
+  await page.evaluate(() => { Storage.prototype.setItem = window.__set; });
+  await pick(page, 'theme', 'Brief');
+  assert.equal(await page.locator('[data-plan-unsaved]').isHidden(), true);
+  await context.close();
+});
+
+test('Copy answers writes compact one-line JSON to the clipboard and says so', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const init = () => { window.__copied = []; Object.defineProperty(navigator, 'clipboard', { value: { writeText: (s) => { window.__copied.push(s); return Promise.resolve(); } }, configurable: true }); };
   const { page, problems, context } = await openPage(built().url, { init });
@@ -213,8 +264,9 @@ test('Copy answers writes the JSON to the clipboard and says so', async (t) => {
   await page.locator('[data-plan-copy]').click();
   const copied = await page.evaluate(() => window.__copied);
   assert.equal(copied.length, 1);
-  assert.deepEqual(JSON.parse(copied[0]), await exported(page));
-  assert.match(await page.locator('[data-plan-status]').textContent(), /copied/i);
+  assert.equal(copied[0], JSON.stringify(await exported(page)), 'one compact line');
+  assert.ok(!copied[0].includes('\n'));
+  await said(page, 'copied');
   assert.deepEqual(problems, []);
   await context.close();
 });
@@ -231,9 +283,34 @@ test('Copy answers falls back to selecting a readonly textarea when the clipboar
   await page.waitForFunction(() => window.__exec.length === 1);
   const [[name, tag, readOnly, value]] = await page.evaluate(() => window.__exec);
   assert.deepEqual([name, tag, readOnly], ['copy', 'TEXTAREA', true]);
-  assert.deepEqual(JSON.parse(value), await exported(page));
+  assert.equal(value, JSON.stringify(await exported(page)));
   assert.equal(await page.locator('textarea[readonly]').count(), 0, 'the helper textarea is removed');
-  assert.match(await page.locator('[data-plan-status]').textContent(), /copied/i);
+  await said(page, 'copied');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('with no clipboard API the fallback runs inside the click, and a repeated message is announced again', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const init = () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    window.__exec = [];
+    document.execCommand = (name) => { const a = document.activeElement; window.__exec.push([name, a && a.tagName, a && a.readOnly, a && a.value]); return true; };
+  };
+  const { page, problems, context } = await openPage(built().url, { init });
+  await pick(page, 'storage', 'A save server');
+  // One evaluate: click() runs the handler to its end before it returns, so a copy attempt seen right after it was synchronous.
+  const sync = await page.evaluate(() => { document.querySelector('[data-plan-copy]').click(); return window.__exec.length; });
+  assert.equal(sync, 1, 'the copy call is made before the click handler returns');
+  const [[name, tag, readOnly, value]] = await page.evaluate(() => window.__exec);
+  assert.deepEqual([name, tag, readOnly], ['copy', 'TEXTAREA', true]);
+  assert.equal(value, JSON.stringify(await exported(page)));
+  await said(page, 'copied');
+  await page.evaluate(() => { window.__texts = []; new MutationObserver(() => window.__texts.push(document.querySelector('[data-plan-status]').textContent)).observe(document.querySelector('[data-plan-status]'), { childList: true, characterData: true, subtree: true }); });
+  await page.locator('[data-plan-copy]').click();
+  await page.waitForFunction(() => window.__texts.some((x) => /copied/i.test(x)));
+  const texts = await page.evaluate(() => window.__texts);
+  assert.equal(texts[0], '', 'cleared first, then set again');
   assert.deepEqual(problems, []);
   await context.close();
 });
@@ -245,8 +322,11 @@ test('Download writes plan-answers.json whose contents equal PA.planExport()', a
   await pick(page, 'verdict', 'approve');
   const [download] = await Promise.all([page.waitForEvent('download'), page.locator('[data-plan-download]').click()]);
   assert.equal(download.suggestedFilename(), 'plan-answers.json');
-  const body = JSON.parse(fs.readFileSync(await download.path(), 'utf8'));
+  const text = fs.readFileSync(await download.path(), 'utf8');
+  const body = JSON.parse(text);
+  assert.equal(text, `${JSON.stringify(await exported(page), null, 2)}\n`, 'pretty-printed, two spaces');
   assert.deepEqual(body, await exported(page));
+  await said(page, 'download started');
   assert.equal(body.verdict, 'approve');
   assert.deepEqual(problems, []);
   await context.close();
@@ -269,6 +349,63 @@ test('a hostile option label and a 5,000 character comment round-trip unchanged'
   assert.equal(again.comment, long);
   assert.equal(again.isRecommended, false);
   await context.close();
+});
+
+test('a label with markdown, an ampersand and a script close comes back as the raw string', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const raw = '"</script> **A** & <b>B</b>';
+  const { page, problems, context } = await openPage(built([decision('raw', ['Plain', raw])]).url);
+  await pick(page, 'raw', raw);
+  assert.equal((await exported(page)).answers[0].choice, raw);
+  await page.reload();
+  await page.waitForFunction(() => window.paReady === true);
+  assert.equal((await exported(page)).answers[0].choice, raw);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('typing is saved when the page is left within the debounce window', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(built().url);
+  await page.locator(`${item('owner')} [data-answer]`).fill('quick');
+  await page.reload();
+  await page.waitForFunction(() => window.paReady === true);
+  assert.equal(await page.locator(`${item('owner')} [data-answer]`).inputValue(), 'quick');
+  await context.close();
+});
+
+test('two tabs answering different items keep both (writes merge by item)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const url = built().url;
+  const one = await openPage(url);
+  // Tab two swallows the storage event (a listener added before the page's own), so only the merge on write can
+  // keep tab one's answer.
+  const init = () => window.addEventListener('storage', (e) => e.stopImmediatePropagation(), true);
+  const two = await openPage(url, { context: one.context, init });
+  await pick(one.page, 'storage', 'A save server');
+  await one.page.waitForTimeout(200);
+  await pick(two.page, 'theme', 'Mono');
+  await one.page.reload();
+  await one.page.waitForFunction(() => window.paReady === true);
+  const file = await exported(one.page);
+  assert.deepEqual([file.answers[0].choice, file.answers[1].choice], ['A save server', 'Mono']);
+  assert.deepEqual([one.problems, two.problems], [[], []]);
+  await one.context.close();
+});
+
+test('an answer saved in another tab appears on this page without a reload', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const url = built().url;
+  const one = await openPage(url);
+  const two = await openPage(url, { context: one.context });
+  await pick(one.page, 'storage', 'Browser storage');
+  await one.page.locator(`${item('owner')} [data-answer]`).fill('from one');
+  await settle(one.page);
+  await two.page.waitForFunction(() => document.querySelector('input[name="plan-storage"]:checked') !== null);
+  assert.equal(await two.page.locator('input[name="plan-storage"]:checked').inputValue(), 'Browser storage');
+  assert.equal(await two.page.locator(`${item('owner')} [data-answer]`).inputValue(), 'from one');
+  assert.deepEqual([one.problems, two.problems], [[], []]);
+  await one.context.close();
 });
 
 test('selecting stays responsive: the option rows are not re-rendered', async (t) => {
