@@ -3,7 +3,8 @@
 // Opens a built page at 1280 and 390 px and fails on console errors or warnings, a page that scrolls
 // sideways, elements wider than the page (outside a scrolling region), content clipped sideways inside a
 // slide (a slide hides what overflows it, so the page-level checks cannot see that), a deck that cannot
-// reach its last slide with the arrow keys or whose counter disagrees, a diagram whose viewer did not mount,
+// reach its last slide with the arrow keys or whose counter disagrees, a number-plus-unit token that wraps
+// across two lines, a KPI value wider than its tile, a diagram whose viewer did not mount,
 // and a Present overlay that cannot be clicked, will not open or will not close on Esc. One probe that
 // crashes is reported as such and the rest of the viewport still runs.
 // exit 0 ok or skipped (no browser), 1 problems, 2 usage/IO
@@ -12,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchBrowser, BrowserUnavailable } from './lib/browser.mjs';
 import { skipHint } from './lib/doctor-hint.mjs';
+import { nowrapProblems, overflowProblems } from '../shared/nowrap-probe.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 
 const USAGE = 'node scripts/check.mjs <page.html> [--json]';
@@ -27,6 +29,7 @@ const OVERFLOW_TOLERANCE_PX = 1;
 const MAX_WIDE_ELEMENTS = 3;
 const MAX_CLIPPED = 3;
 const MAX_OVERLAYS = 5;
+const MAX_NUMBER_PROBLEMS = 3;
 const TIMED_OUT = Symbol('timed out');
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 // Chromium on a GPU machine reports its own GL driver performance hints ("GPU stall due to ReadPixels") as warnings;
@@ -103,6 +106,17 @@ async function checkDeck(page, label, problems, tally) {
   }
   const counter = await page.evaluate(() => document.querySelector('.deck-count').textContent.replace(/\s+/g, ' ').trim());
   if (counter !== `${total} / ${total}`) problems.push(`${label}: on the last slide the counter reads "${counter}", expected "${total} / ${total}"`);
+}
+
+// Numbers stay on one line: no number-plus-unit token ("87%", "1,204 ms") may span two lines, and no KPI
+// value may be wider than its tile (nowrap keeps it on one line, so a value that is too long spills instead).
+async function checkNumbers(page, label, problems) {
+  for (const { text } of (await nowrapProblems(page)).slice(0, MAX_NUMBER_PROBLEMS)) {
+    problems.push(`${label}: a number-plus-unit token wraps across lines: "${text}"`);
+  }
+  for (const { text } of (await overflowProblems(page, '.kpi-value')).slice(0, MAX_NUMBER_PROBLEMS)) {
+    problems.push(`${label}: a KPI value overflows its tile: "${text}"`);
+  }
 }
 
 // Is the centre of this element's box taken by something that is not the element or part of it?
@@ -198,6 +212,7 @@ async function checkViewport(browser, url, viewport) {
       for (const { what, width } of found.wide) problems.push(`${label}: ${what} is ${width}px wide, wider than the ${fit.innerW}px page`);
       for (const { slide, what, width } of found.clipped) problems.push(`${label}: slide ${slide}: ${what} is ${width}px wide and is clipped by the slide`);
     });
+    if (ok) ok = await probe(page, label, problems, 'one-line numbers', () => checkNumbers(page, label, problems));
     if (ok && await page.evaluate(deckState).catch(() => null)) ok = await probe(page, label, problems, 'deck', () => checkDeck(page, label, problems, tally));
     if (ok) await probe(page, label, problems, 'diagram overlay', () => checkOverlays(page, label, problems, tally));
     return result();

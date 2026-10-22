@@ -2,6 +2,8 @@
 name: make-motion
 description: Use when the user wants a short animated explainer video (titles, counters, shapes, charts, images with keyframed motion) previewed locally and exported to MP4, with music or a voiceover only when asked; spec-driven, offline, open source, works with any agent that can run shell commands.
 argument-hint: what to make, e.g. an 8s clip with Q3 revenue up 18% then a bar chart of Q1-Q3
+model: haiku
+effort: low
 ---
 
 # make-motion
@@ -11,6 +13,21 @@ You write one JSON file, `motion.json`. Scripts validate it, preview it in a bro
 Run every command from the project folder (where `motion.json` lives), using the full path to the scripts. Image paths resolve relative to the spec file. If the request is empty, ask what the video should say, how long it should be, and the size (default 1920x1080, 30 fps).
 
 **Audio is opt-in.** Add `audio` tracks only when the prompt asks for sound (music, soundtrack, voiceover, narration, "read it aloud", a sound effect, a click or a whoosh) or the user confirms when you ask. Never add audio to a prompt that does not mention it. When the prompt is about sound but unclear (for example "make it feel polished" with an mp3 in the folder), ask one question before writing the spec. Music and sound effects are files the user supplies; a voiceover can be synthesised with `voice.mjs` (workflow step 2) when the prompt asks for narration without giving a file. Short UI-style sounds need no file: the root `cues` array (below) synthesises them locally.
+
+## Cheaper model
+
+Skip this section if you are running in Claude Code (it already runs this skill on the model named in the frontmatter), or if `artifact-builder` is not in your list of available agents. Otherwise, if you can start another agent, start the `artifact-builder` agent to do the work, unless you are already artifact-builder. If you are already artifact-builder, skip the rest of this section and do the work yourself.
+
+Give it a self-contained brief. It has no memory of this conversation, so the brief must say:
+
+1. What to build, and every fact and choice from this conversation that affects it (data, names, wording, theme, what the user asked for and what they ruled out).
+2. This skill directory: the full path of the folder that holds this SKILL.md.
+3. The spec path: where it should write the JSON spec.
+4. Optionally, an output folder for the build (it passes this to the build script as `--out`).
+
+Relay only the output path it returns. Do not repeat its work.
+
+If the `artifact-builder` agent is not installed, or you cannot start another agent, continue with the steps below yourself.
 
 ## Before the first build
 
@@ -52,7 +69,7 @@ When done, report the spec path, the MP4 path with its duration and size, and on
 }
 ```
 
-- Root: `size` (default 1920x1080), `fps` (24, 25, 30, 60), `background`, optional `generatedBy` (`{ model?, effort?, agent? }`), optional `theme` (a shared theme name: `dusk`, `press`, `poster`, `paper`, `ink`, `blueprint`, `editorial` — its dark colours and fonts become the defaults; omit it for `dusk`), `scenes` (1–50, total ≤ 120 s). Only `scenes` is required.
+- Root: `size` (default 1920x1080), `fps` (24, 25, 30, 60), `background`, optional `generatedBy` (`{ model?, effort?, agent? }`), optional `theme` (a shared theme name: `dusk`, `press`, `poster`, `paper`, `ink`, `blueprint`, `editorial`, `mono`, `brief` — its dark colours and fonts become the defaults; omit it for `dusk`), `scenes` (1–50, total ≤ 120 s). Only `scenes` is required.
 - Audio track (optional root `audio` array, up to 20): `src` (relative to the spec, inside the spec folder; mp3, wav, m4a, aac, ogg or flac), `at` (seconds from the video start, default 0), `scene` (a scene `id`; `at` is then relative to that scene's start, so lengthening an earlier scene keeps a voiceover aligned), `duration` (trim, seconds), `volume` (0–1, default 1), `fadeIn` / `fadeOut` (seconds). `fadeOut` anchors to the `duration` trim or the video end; a clip that ends earlier gets no fade. No `loop`: a short music file just stops.
 - Sound cue (optional root `cues` array, up to 30; opt-in like `audio`, a spec without it has no cue and no audio change): `cue` (`pop`, `click`, `whoosh`, `chime` or `impact`), `at` (seconds, required), `scene` (a scene `id`; `at` is then relative to it, so retiming keeps the cue on its beat), `volume` (0–1, default 1, literal), `pan` (-1 left to 1 right), `note` (a pitch such as `A4` or `C#5`, for `pop`, `chime` and `impact` only). The sounds are generated deterministically at render time (the same spec gives the same audio), mixed with any `audio` tracks, and skipped by the preview. Use few: one `impact` and one `whoosh` riser per clip, and nothing under continuous motion (see `references/motion-design.md`). After a render with audio, `render.mjs` prints `audio: <n> LUFS integrated, true peak <n> dBTP`; it is information, not a gate.
 - Texture (optional root `texture`, off by default): `vignette` (true darkens the corners) and `grain` (0–0.15, static film grain per scene, seeded from the scene `id`, so renders stay identical). Both slow the render a lot (measured at 1080p: about 42 ms per frame for the vignette, 100 ms for grain, 187 ms for both, against 17–33 ms for none); add them only when the prompt asks for a filmic, grainy or vintage look.
@@ -64,14 +81,14 @@ When done, report the spec path, the MP4 path with its duration and size, and on
 
 ## Choosing a theme
 
-Seven themes exist; `dusk` is the default. Pick one (the spec's theme field, or `--theme <name>` on the render) in this order:
+Nine themes exist; `dusk` is the default. Pick one (the spec's theme field, or `--theme <name>` on the render) in this order:
 
 1. A theme the user names ("use poster") wins. Use it as given: write it as the spec's theme field. On the render, `--theme <name>` only fills in for a spec that names none, so a theme already in the spec wins over the flag.
 2. Otherwise infer it from the prompt and say which theme and why in one line. Dense docs, long reads, changelogs and branch recaps: `press`. Launch decks, pitches, demos and energetic clips: `poster`. Everything else, or unclear: `dusk`.
 3. If the prompt is genuinely split between two themes, ask the user once and list all three with a one-line feel each: `dusk` is soft, warm and playful; `press` is print editorial, calm and long-form; `poster` is loud, condensed and high-energy.
 4. If you cannot ask, use `dusk`.
 
-The older themes `paper`, `blueprint`, `ink` and `editorial` stay available by name; use one only when the user names it.
+The older themes `paper`, `blueprint`, `ink` and `editorial` stay available by name; use one only when the user names it. Two more are available by name only: `mono` (terminal and engineering console, dark mode near-black with a cyan accent) and `brief` (executive, warm white with a burgundy accent); `mono` and `brief` are the plan-page themes of make-explainer (see its Plan mode).
 
 ## Style defaults
 

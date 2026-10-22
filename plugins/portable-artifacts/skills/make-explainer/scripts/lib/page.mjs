@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { themeCss, loadTheme } from '../../shared/theme.mjs';
-import { EXPLAINER_THEME } from './default-theme.mjs';
+import { specTheme } from './default-theme.mjs';
 import { pathJoin } from '../../shared/errors.mjs';
 import { META_KEYS } from './schema.mjs';
 import { SECTIONS } from './sections.mjs';
@@ -22,6 +22,8 @@ import { esc, inline, headingInline, plain, rawText, toneClass } from './render/
 import { flavorFor, flavorVars, scrimVar, CLASSIC } from './flavor.mjs';
 import { artSvg } from '../../shared/art.mjs';
 import { dataUri } from './image.mjs';
+import { planHash, planKey } from './plan-hash.mjs';
+import { saveBlock } from './render/plan-ui.mjs';
 
 const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), slides: new URL('../../template/slides.html', import.meta.url) };
 const BASE_CSS = new URL('../../template/base.css', import.meta.url);
@@ -111,19 +113,20 @@ async function prepareSection(section, i, def, ctx) {
   }
 }
 
-// Stylesheets and scripts a section type ships once per page, only when the page has one.
+// Stylesheets and scripts a section type ships once per page, only when the page has one. Types that ship the
+// same stylesheet or script (the answerable plan types) share one copy.
 function sectionPageParts(spec, ctx) {
-  const css = [];
-  const js = [];
+  const css = new Set();
+  const js = new Set();
   for (const type of new Set(spec.sections.map((s) => s.type))) {
     const part = SECTIONS[type].page?.(ctx);
     if (!part) continue;
-    css.push(part.css);
-    js.push(...part.js);
+    css.add(part.css);
+    for (const code of part.js) js.add(code);
   }
   return {
-    SECTIONCSS: css.length > 0 ? `<style>\n${css.join('\n')}\n</style>` : '',
-    SECTIONJS: js.map((code) => `<script>\n${inlineCode(code)}\n</script>`).join('\n'),
+    SECTIONCSS: css.size > 0 ? `<style>\n${[...css].join('\n')}\n</style>` : '',
+    SECTIONJS: [...js].map((code) => `<script>\n${inlineCode(code)}\n</script>`).join('\n'),
   };
 }
 
@@ -154,6 +157,34 @@ function renderHeroTldr(section, id, titleId, ctx) {
   return `<div class="hero-tldr${tone}" id="${esc(id)}" role="region"${labelled}>\n${eyebrow(section)}${title}${body}\n</div>`;
 }
 
+// Plan mode: the sections a reader answers. A page that has one carries the plan's key (the answers' storage
+// namespace) and its hash on <html>; the answers validator (answers.mjs) recomputes both from the spec.
+const PLAN_ITEM_TYPES = new Set(['decision', 'approval', 'question', 'verdict']);
+const hasPlanItems = (spec) => spec.sections.some((s) => PLAN_ITEM_TYPES.has(s.type));
+const planAttrs = (spec, slides) => (slides || !hasPlanItems(spec)
+  ? ''
+  : ` data-plan-key="${esc(planKey(spec))}" data-plan-hash="${planHash(spec)}"`);
+
+// Review links name the section they point at: explicit id -> link text as escaped HTML. The title or label when
+// there is one, else the start of its question, item or text as plain text, cut at a word near LINK_CHARS.
+const LINK_CHARS = 60;
+function clip(text) {
+  const flat = rawText(text).replace(/\s+/g, ' ').trim();
+  if ([...flat].length <= LINK_CHARS) return esc(flat);
+  const cut = [...flat].slice(0, LINK_CHARS).join('');
+  const space = cut.lastIndexOf(' ');
+  return `${esc((space > LINK_CHARS / 2 ? cut.slice(0, space) : cut).replace(/[\s,.;:]+$/, ''))}…`;
+}
+function linkText(s) {
+  const name = s.title ?? s.label;
+  if (name !== undefined) return headingInline(name);
+  const words = [s.question, s.item, s.text].find((x) => typeof x === 'string');
+  return words === undefined ? undefined : clip(words);
+}
+const linkTargets = (sections) => new Map(sections
+  .filter((s) => s.id !== undefined && linkText(s) !== undefined)
+  .map((s) => [s.id, linkText(s)]));
+
 function renderMeta(meta) {
   const entries = META_KEYS.filter((k) => meta?.[k] !== undefined);
   if (entries.length === 0) return '';
@@ -161,10 +192,11 @@ function renderMeta(meta) {
   return `<dl class="meta">\n${items.join('\n')}\n</dl>`;
 }
 
-function renderToc(entries) {
+// `extra` is a block that rides along under the list (a plan page's Save button), so it is as sticky as the list.
+function renderToc(entries, extra = '') {
   if (entries.length < TOC_MIN) return '';
   const items = entries.map(({ id, title, label }) => `<li><a href="#${esc(id)}">${plain(label ?? title)}</a></li>`);
-  return `<nav class="toc" aria-label="Contents">\n<details open>\n<summary>Contents</summary>\n<ol>\n${items.join('\n')}\n</ol>\n</details>\n</nav>`;
+  return `<nav class="toc" aria-label="Contents">\n<details open>\n<summary>Contents</summary>\n<ol>\n${items.join('\n')}\n</ol>\n</details>${extra === '' ? '' : `\n${extra}`}\n</nav>`;
 }
 
 async function loadIcons(spec) {
@@ -219,14 +251,16 @@ function pageParts(spec, ctx, ids) {
   const tocEntries = spec.sections
     .map((s, i) => ({ id: ids[i], title: s.title, label: s.label, own: SECTIONS[s.type].ownHeading }))
     .filter((e) => e.title !== undefined && !e.own);
-  const toc = renderToc(tocEntries);
+  const answerable = hasPlanItems(spec);
+  const toc = renderToc(tocEntries, answerable ? saveBlock() : '');
   return {
     BODYCLASS: toc ? 'has-toc' : '',
     H1: inline(spec.title),
     SUBTITLE: spec.subtitle === undefined ? '' : `<p class="subtitle">${inline(spec.subtitle)}</p>`,
     META: renderMeta(spec.meta),
     HEROTLDR: heroTldr ? renderHeroTldr(spec.sections[0], ids[0], titleIds[0], ctx) : '',
-    TOC: toc,
+    // No contents list to sit in: the Save button stands alone (fixed to the corner by CSS).
+    TOC: toc || (answerable ? saveBlock({ solo: true }) : ''),
     SECTIONS: rendered.filter(Boolean).join('\n'),
   };
 }
@@ -264,7 +298,7 @@ function flavorSheets(flavor, slides) {
 export async function buildPage(spec, { dir = process.cwd(), theme, out, env = process.env, heroImage } = {}) {
   const problems = unsupported(spec);
   if (problems.length > 0) throw new BuildError(problems);
-  const themeData = loadTheme(theme ?? spec.theme ?? EXPLAINER_THEME);
+  const themeData = loadTheme(theme ?? specTheme(spec));
   const target = resolveOutput({ out, title: spec.title, env });
   const slug = pageSlug(target);
   const slides = isSlides(spec);
@@ -282,6 +316,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     icons: await loadIcons(spec),
     env,
     footer,
+    targets: linkTargets(spec.sections),
   };
 
   const assets = [];
@@ -305,6 +340,9 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     THEME: flavored ? `${themeCss(themeData)}\n${flavorVars(flavor)}` : themeCss(themeData),
     BASECSS: fs.readFileSync(BASE_CSS, 'utf8').replace(/\n$/, ''),
     FLAVOR: flavor,
+    THEMENAME: esc(themeData.name),
+    PRESETATTR: spec.preset === undefined ? '' : ` data-preset="${esc(spec.preset)}"`,
+    PLANATTRS: planAttrs(spec, slides),
     FLAVORCSS: flavorSheets(flavor, slides),
     HEROART: flavored && !slides ? heroArt(spec, themeData, typeof heroImage === 'function' ? undefined : heroImage) : '',
     ...layout,

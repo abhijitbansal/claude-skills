@@ -2,6 +2,8 @@
 
 Every section has `type`, an optional `id`, an optional `title` and an optional `label`. A `title` is a claim a reader can agree or disagree with ("Search now ignores case"), not a label ("Overview"). The `label` is that short name ("Eval results", at most 4 words): the contents list shows it, and it sits as a small eyebrow above the heading (and above the slide heading in a deck). The label shows on every section that renders a heading (any section with a `title`, except a `callout`) and on a leading tldr's hero card even without a title. A `callout` draws its own heading and never shows a label; a section without a `title` shows no label and is not listed in the contents. Limits are in [schema.md](schema.md). Fields marked `*` are required. Closed sets: `tone` is `neutral` `accent` `good` `warn` `bad` unless the section says otherwise.
 
+Numbers with a percent sign or unit (`87%`, `1,204 ms`, `$4.2k`) are kept on one line when the page is built. Write `1,000 ms` with comma grouping: `1 000 ms` binds only `000 ms`. The binder is for percent and unit tokens, not arbitrary number-noun pairs such as `12 files`. A KPI value is one line when it fits its tile and wraps inside it when it does not (validate warns above 12 characters; move the words to `note`).
+
 On a page, a `tldr` that comes first (and is not the only section) is drawn inside the hero, under the title, as its summary card; its `label` is the card's heading, and the `title` then names the card for screen readers only. Visual sections (`kpis`, `cards`, `compare`, `diagram`, `chart`, `scene`) alternate onto a surface band, starting with the first: the 1st, 3rd and so on.
 
 In slides mode each section is one slide (the title is the slide heading) and must fit the budget in schema.md; split a section that does not.
@@ -40,6 +42,22 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 - `intro` (markdown-lite) is shown open at the top as "What's in this branch": list every feature and every review-cycle fix the branch delivers, and what automated tests already cover. With `preset: "checklist"`, leaving it out is a validate warning.
 - `onFail` (markdown-lite) replaces the default "If something fails" advice.
 - Tag a bug fixed during review `regression`, a hardware-only step `device`.
+
+## Plan mode
+
+Five types for a plan a reviewer answers on the page (`preset: "plan"`; SKILL.md "Plan mode" has the workflow). `decision`, `approval` and `question` require an `id` (`^[a-z][a-z0-9-]*$`, at most 80 characters, unique on the page, not `verdict` or `plan-verdict`): the answers file keys on it. Any page with one of them needs a root `key` and a `verdict` as its last section.
+
+| Type | Fields | Notes |
+|---|---|---|
+| `decision` | `id`*, `question`* (≤ 500 characters), `options[]`* (2-5): `label`* (≤ 200 characters, unique ignoring case, no leading or trailing space), `pros[]`, `cons[]`; `recommended`* (one option label exactly), `why`*, `default` (one option label exactly) | The reader picks one option or writes an override in the comment box. `recommended` gets a Recommended chip; `why` says why, with the number that decides it; `default` is what happens if nobody answers. One line per option. |
+| `approval` | `id`*, `item`* (≤ 500 characters), `why`*, `impact`, `owner` | The reader chooses Approve, Needs changes or Reject, with an optional comment. |
+| `question` | `id`*, `text`* (≤ 500 characters), `default` | Free-text answer. A blank answer means the `default` applies, and the export says so. |
+| `review` | `items[]`* (1-5): `point`*, `why`*, `target` | "Review these first": the places to look hardest. `target` is the explicit `id` of the section it points at (not this review); the page links to it. Not answered. |
+| `verdict` | `text` | The overall control: Approve, Approve with changes or Not yet, the reviewer's name, and the Copy answers and Download `plan-answers.json` buttons. (The page also gets a Save as HTML button in the sticky contents menu; it is not a section.) At most one, and it must be the last section. Give it an `id`, a `title` and a `label` (the scaffold uses `verdict` and "Your verdict") so it is listed in the contents and has a stable link. |
+
+- Answers save in the reader's browser under the plan's `key` as they go; a plan edited since the answers were saved shows a notice and no saved answers; the first new answer replaces the old entry. Blocked storage is tolerated and stated.
+- In a deck the controls do not run: a slide shows the question, the options with the recommendation, and a note that answers are collected in the page version.
+- Limits on a plan page: 2-5 options per decision, 1-5 review items.
 
 ## Diagram
 
@@ -83,4 +101,4 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 
 ## Which section for what
 
-Verdict first (`tldr`), then numbers (`kpis`), then the story (`text`, `steps`, `timeline`), the evidence (`files`, `table`, `chart`, `diagram`), what could go wrong (`risks`, `callout`), and last what to do by hand (`checklist`). A recap is `tldr`, `kpis`, `text`, `files`, `timeline`, `risks`; a concept page is `tldr`, `text`, `cards`, `steps`; a deck is one claim per section.
+Verdict first (`tldr`), then numbers (`kpis`), then the story (`text`, `steps`, `timeline`), the evidence (`files`, `table`, `chart`, `diagram`), what could go wrong (`risks`, `callout`), and last what to do by hand (`checklist`). A recap is `tldr`, `kpis`, `text`, `files`, `timeline`, `risks`; a concept page is `tldr`, `text`, `cards`, `steps`; a deck is one claim per section. A plan is decision first: `tldr`, `kpis`, the `decision`, `approval` and `question` sections, `review`, then `text` (goals and non-goals), `diagram`, `steps`, `details` (risks) and `verdict` last.

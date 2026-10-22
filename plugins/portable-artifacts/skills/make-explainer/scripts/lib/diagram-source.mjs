@@ -3,6 +3,7 @@
 // by the validation check and the renderer.
 import fs from 'node:fs';
 import { resolveRef } from './paths.mjs';
+import { specTheme } from './default-theme.mjs';
 
 export const DIAGRAM_EXTS = ['.json'];
 export const DIAGRAM_MAX_BYTES = 1024 * 1024;
@@ -44,3 +45,6 @@ export function inPageTheme(diagramSpec, theme) {
   const { theme: _embedded, ...rest } = diagramSpec;
   return theme === undefined ? rest : { ...rest, theme };
 }
+
+/** An embedded spec as validate should check it: under the theme the page is drawn in (`specTheme`), as the build draws it. */
+export const underPageTheme = (embeddedSpec, pageSpec) => inPageTheme(embeddedSpec, specTheme(pageSpec));

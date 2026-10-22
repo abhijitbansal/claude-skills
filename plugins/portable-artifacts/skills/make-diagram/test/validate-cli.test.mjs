@@ -95,7 +95,16 @@ test('a broken EVAL_LOG path never changes the outcome', () => {
 
 // ---- a bug inside the tool is one line, not a stack trace -------------------
 
-const PRELOAD = fileURLToPath(new URL('./fixtures/crash-preload.mjs', import.meta.url));
+// `node --import <data: URL>` makes every read of make-diagram's default theme (blueprint) throw, a stand-in
+// for a bug inside the build that is not a spec or usage error. It is built here from a string so no
+// standalone file that patches Node's fs ships inside the skill folder.
+const CRASH_SOURCE = `import fs from 'node:fs';
+const read = fs.readFileSync;
+fs.readFileSync = function patched(file, ...rest) {
+  if (String(file).endsWith('blueprint.json')) throw new Error('boom\\n  at somewhere');
+  return read.call(this, file, ...rest);
+};`;
+const PRELOAD = `data:text/javascript,${encodeURIComponent(CRASH_SOURCE)}`;
 const BUILD = fileURLToPath(new URL('../scripts/build.mjs', import.meta.url));
 
 for (const [name, script] of [['validate', VALIDATE], ['build', BUILD]]) {

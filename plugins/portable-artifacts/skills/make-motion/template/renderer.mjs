@@ -4,6 +4,7 @@ import { buildTimeline, seekTo } from './timeline.mjs';
 import { withDefaults, resolveColor, graphemes, typingLength, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE } from './defaults.mjs';
 import { resolveAudio } from './audio.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
+import { bindWithNbsp } from '/shared/nowrap.mjs'; // served by server.mjs; the token regex lives only in shared/
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const MODE = document.querySelector('meta[name="motion-mode"]')?.content ?? 'preview';
@@ -183,7 +184,7 @@ async function renderChart(el, look) {
 // A `typing` text: the typed characters, a caret, then the untyped rest kept in the layout but not drawn, so the
 // element's box is the full text at every moment and does not shift as it fills.
 function typingParts(node, el) {
-  const chars = graphemes(el.text);
+  const chars = graphemes(bindWithNbsp(el.text)); // same length as el.text, so the typing count is unchanged
   const typed = document.createElement('span');
   typed.className = 'typed';
   const caret = document.createElement('span');
@@ -212,7 +213,7 @@ function buildElement(el, look) {
     case 'text':
       textStyle(node, el, look);
       if (el.typing) part.typing = typingParts(node, el);
-      else node.textContent = el.text;
+      else node.textContent = bindWithNbsp(el.text); // render time only: the spec keeps its plain spaces
       break;
     case 'counter':
       textStyle(node, el, look);

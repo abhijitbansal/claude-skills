@@ -12,7 +12,7 @@ import { normalisedBody, emptySiblingSvgs } from './helpers/golden.mjs';
 // after reading the diff, and say in the commit why the markup moved.
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const BUILD = path.join(ROOT, 'scripts/build.mjs');
-const PRESETS = ['recap', 'checklist', 'concept', 'slides'];
+const PRESETS = ['recap', 'checklist', 'concept', 'slides', 'plan'];
 
 for (const preset of PRESETS) {
   test(`golden: body markup of the ${preset} example is unchanged`, () => {

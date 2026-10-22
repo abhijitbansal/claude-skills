@@ -10,9 +10,9 @@ an account or a particular model:
 
 | Skill | You say | You get |
 |---|---|---|
-| [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + charts (11 kinds, alternate views, a sortable Table, PNG/SVG/CSV export, seven themes with `paper` by default). Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh, or `serve.mjs --watch` for live reload — no LLM involved. |
+| [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + charts (11 kinds, alternate views, a sortable Table, PNG/SVG/CSV export, nine themes with `paper` by default). Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh, or `serve.mjs --watch` for live reload — no LLM involved. |
 | [`make-diagram`](skills/make-diagram/) | "Draw the checkout request path from the browser to the orders DB" | One self-contained HTML diagram (architecture, flowchart, sequence or state) laid out with ELK: zoom, hover tracing, a story player (named chapters of beats with a travelling dot), an Explore panel, full screen and export. The agent writes a small JSON topology; scripts do the rest. |
-| [`make-explainer`](skills/make-explainer/) | "Recap this branch with a manual test checklist" | One self-contained HTML page or slide deck made of typed sections (verdict, numbers, files changed, timeline, risks, comparisons, tick-and-remember checklists, slides), with make-diagram figures, make-dashboard charts, make-scene 3D scenes and make-motion clips embedded when asked. A script reads the git branch for the facts; the agent writes the prose; a linter rejects filler phrases and leftover placeholders before the page is built, and warns when emoji get dense. |
+| [`make-explainer`](skills/make-explainer/) | "Recap this branch with a manual test checklist" | One self-contained HTML page or slide deck made of typed sections (verdict, numbers, files changed, timeline, risks, comparisons, tick-and-remember checklists, slides, and a decision-first plan the reviewer answers on the page and returns as a checked `plan-answers.json` or as the page saved with the answers inside), with make-diagram figures, make-dashboard charts, make-scene 3D scenes and make-motion clips embedded when asked. A script reads the git branch for the facts; the agent writes the prose; a linter rejects filler phrases and leftover placeholders before the page is built, and warns when emoji get dense. |
 | [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. Silent unless you ask for sound: `audio` tracks (music, voiceover, SFX) and procedural `cues` (pop, click, whoosh, chime, impact, synthesised locally) are added only when the prompt asks, and narration is synthesised locally with Kokoro. Theme colour tokens, elevated cards, round-cap and arrow lines, polished chart defaults, scene crossfade, an opt-in vignette and film grain, and typed-out text. "Slow scene 2" changes one field, not the whole video. |
 | [`make-scene`](skills/make-scene/) | "Show our commits per week per folder as a 3D city, with a tour of the busiest weeks" | One self-contained 3D page drawn with a bundled three.js: your rows become a city, forest, galaxy or terrain, or a make-diagram diagram or one make-dashboard chart is lifted into 3D. Orbit, hover for exact values, an Explore list and a camera tour. The build recommends a world, then lists the alternatives with the one-line command to switch; switching costs no model tokens. |
 
@@ -52,7 +52,7 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
   field or the `--model`, `--effort` and `--agent` build flags. A field the
   agent does not know reads "not reported"; nothing is guessed. The make-motion
   MP4 carries it in its `comment` tag, and the model in `artist` when it is reported.
-- **Themed** — every page and video uses one of seven shared themes, and the
+- **Themed** — every page and video uses one of nine shared themes, and the
   theme sets the type. make-explainer pages and decks and make-motion clips use
   `dusk` unless you or the prompt pick another; make-dashboard keeps `paper`
   and make-diagram `blueprint`. See [Themes and art](#themes-and-art).
@@ -62,7 +62,7 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
 
 ## Themes and art
 
-Seven themes live in the shared folder, each with its own light and dark
+Nine themes live in the shared folder, each with its own light and dark
 colours. Every skill accepts every theme by name (the spec's `theme` field or
 `--theme <name>`); only the default differs.
 
@@ -72,6 +72,8 @@ colours. Every skill accepts every theme by name (the spec's `theme` field or
 | `press` | Young Serif / Schibsted Grotesk / JetBrains Mono | bone paper, ink and vermilion, marginal numerals | dense docs, long reads, changelogs, branch recaps |
 | `poster` | Big Shoulders Display / Familjen Grotesk / Martian Mono | near-black, acid lime and orange, condensed caps, halftone | launch decks, pitches, demos, energetic clips |
 | `paper`, `blueprint`, `ink`, `editorial` | Geist and Geist Mono; `ink` has Bricolage Grotesque headings, `editorial` Newsreader headings and an Atkinson Hyperlegible body | the earlier looks | when you name one; `paper` is make-dashboard's default, `blueprint` make-diagram's |
+| `mono` | JetBrains Mono for display, body and mono | terminal and engineering console: in dark mode a near-black page, one cyan accent and cool grey lines; a clean light mode; no art. Regular weight only (no bold face); bold text is synthesized by the browser | technical pages and plans |
+| `brief` | Newsreader / Atkinson Hyperlegible / Geist Mono | executive: warm white page, deep burgundy accent, high contrast, calm; no art | decision briefs and sign-off pages |
 
 **How make-explainer and make-motion pick a theme.** A theme you name wins
 (`--theme poster`, or "use poster" in the prompt). Otherwise the agent picks
@@ -80,7 +82,7 @@ docs, long reads, changelogs and branch recaps, `poster` for launch decks,
 pitches, demos and energetic clips, `dusk` for everything else. If the prompt
 fits two themes equally, it asks you once, with a one-line feel for each of the
 three; if it cannot ask, it uses `dusk`. The older themes are used only when
-you name them.
+you name them. `mono` and `brief` are likewise used only when you name them; they are meant for the `plan` preset (see [USAGE.md](USAGE.md#4-explainers-with-make-explainer)), which defaults to `mono`.
 
 **Art.** `dusk`, `press` and `poster` draw procedural SVG art seeded from the
 title (in make-motion, from the scene id): blobs and orbs with grain in
@@ -91,6 +93,8 @@ and a make-motion scene with `"background": "art"`.
 make-motion also gives a `"role": "title"` text the theme's display font and,
 when it has no keyframes, an entrance per theme: `dusk` rises, `press` inks
 in, `poster` slams.
+
+**Numbers stay on one line.** A number with its unit or percent sign (`1,204 ms`, `18%`, `$4.2M`) is kept on one line, in a different way per skill. make-explainer wraps each token in a no-wrap span when it renders (the spec text is not changed); its `validate.mjs` warns when a KPI value is longer than 12 characters, and its `check.mjs` fails on a token that wraps or a KPI value that overflows its tile. make-dashboard sets KPI values to no-wrap and sizes them to fit the tile; a value longer than 17 characters may wrap instead of spilling, and make-dashboard has no wrap check. make-motion keeps a token together with a no-break space when it renders a text element, and its `check.mjs` fails on a token that wraps.
 
 **Emoji** are allowed in explainer text. Validation warns, and never fails,
 when a prose string has 3 or more emoji at more than 1 per 40 characters, or a
@@ -103,7 +107,7 @@ service you run or pay for. It is off by default. With the flag:
 - the page title and subtitle **leave your machine** and go to that host;
 - the build needs your key in `PA_IMAGE_API_KEY`;
 - each build is one request, which **your service may bill**;
-- it works on a `dusk`, `press` or `poster` page; a deck or an older theme is
+- it works on a `dusk`, `press` or `poster` page; a deck or any other theme is
   refused before anything is sent.
 
 The endpoint contract is in
@@ -224,6 +228,17 @@ make-motion skill folder, so it matches the Playwright version `npm ci` installe
 On Windows, open a new terminal after `winget` so `node` and `ffmpeg` are on `PATH`. If
 PowerShell refuses `npx.ps1` (scripts disabled), run `npx.cmd playwright install chromium`.
 
+## Cheaper model on Copilot and Codex
+
+These skills write a small JSON spec; a cheap model can do that. Per the hosts' docs, Claude Code reads `model: haiku` from each `SKILL.md` (not measured here), while Copilot and Codex cannot pin a model from a skill, so the installer also writes a small `artifact-builder` agent file that names the cheap model, and each skill tells the running agent to hand the work to it. Two ways to use it: pick the agent yourself (`copilot --agent artifact-builder`, deterministic) or let the skill hand off (advisory: the main agent may not do it).
+
+```bash
+node plugins/portable-artifacts/bin/install.mjs copilot
+node plugins/portable-artifacts/bin/install.mjs copilot --agents-only
+```
+
+The first line installs the skills and the agent; the second writes only the agent, for skills you installed another way. Installed with `npx skills add` (skill folders only, no `bin/`)? Each skill carries its own writer: when `~/.copilot` or `~/.codex` exists, the skill's doctor reports the missing agent file as an optional item and, once you agree, `node <skill-dir>/scripts/doctor.mjs --fix builder_agent` writes it at user level (an existing file is kept). A host may need a new session before it lists the agent. Measured on Copilot CLI 1.0.98 on 2026-10-21: all 10 motion prompts and 9 runs across the other four skills built a valid page on `claude-haiku-5.5`, and Copilot's own logs confirm the model. Codex files were written from the Codex docs and not run live; the skill handed off once in a single trial, but its sub-agent was denied permission and the main agent finished the work. Adding `model: haiku` to make-motion changes the model Claude Code uses for it; make-motion on Haiku in Claude Code itself was not measured (the gate measured Copilot's `claude-haiku-5.5`). Full table, per-host mechanism and the cost statement: [USAGE.md](USAGE.md#cheaper-model-on-copilot-and-codex); results: [`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md).
+
 ## Usage
 
 Full walkthroughs, spec reference and troubleshooting: **[USAGE.md](USAGE.md)**.
@@ -252,7 +267,7 @@ Each skill folder also has its own README.
 
 ## Tested hosts
 
-Tested live on this branch: **Claude Code**, and **GitHub Copilot CLI 1.0.98** (one non-interactive run per skill on 2026-10-15, plus reruns of the doctor install path; the browser check and the ask-first consent prompt were not exercised there). An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**: dashboard 10/10, motion 6/10, the last four motion prompts stopped by the account's usage limit ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)). **Gemini CLI**: install paths verified against its documentation, not run live. **make-scene**: 10/10 valid builds on the first run (Claude Haiku in Claude Code, median 1.5 validate runs, median 40 s) ([`summary-scene-2026-10-19.md`](eval/results/summary-scene-2026-10-19.md)).
+Tested live on this branch: **Claude Code**, and **GitHub Copilot CLI 1.0.98** (one non-interactive run per skill on 2026-10-15, plus reruns of the doctor install path; the browser check and the ask-first consent prompt were not exercised there). A second Copilot CLI 1.0.98 run on 2026-10-21 drove the cheap-model `artifact-builder` agent: motion 10/10 valid builds, and 9/9 across dashboard, diagram, explainer and scene, with Copilot's logs showing `claude-haiku-5.5` for all 19 runs; one skill hand-off trial, where the sub-agent hit a permission denial and the main agent finished the job ([`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md)). An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**: dashboard 10/10, motion 6/10, the last four motion prompts stopped by the account's usage limit ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)). **Gemini CLI**: install paths verified against its documentation, not run live. **make-scene**: 10/10 valid builds on the first run (Claude Haiku in Claude Code, median 1.5 validate runs, median 40 s) ([`summary-scene-2026-10-19.md`](eval/results/summary-scene-2026-10-19.md)).
 
 Details:
 [`eval/results/summary-portability-copilot-2026-10-15.md`](eval/results/summary-portability-copilot-2026-10-15.md)

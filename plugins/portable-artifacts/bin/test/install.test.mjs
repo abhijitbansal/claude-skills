@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { targetsFor, HOSTS, expandRequires, UsageError } from '../install.mjs';
+import { targetsFor, agentTargetsFor, HOSTS, expandRequires, UsageError } from '../install.mjs';
+import { agentFile } from '../../shared/agents.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const installer = path.resolve(here, '../install.mjs');
@@ -114,6 +115,8 @@ function sandbox() {
   const root = tmp();
   fs.mkdirSync(path.join(root, 'bin'));
   fs.copyFileSync(installer, path.join(root, 'bin/install.mjs'));
+  fs.mkdirSync(path.join(root, 'shared'));
+  fs.copyFileSync(path.join(here, '../../shared/agents.mjs'), path.join(root, 'shared/agents.mjs'));
   fs.mkdirSync(path.join(root, 'skills/make-motion'), { recursive: true });
   fs.writeFileSync(path.join(root, 'skills/make-motion/SKILL.md'), '---\nname: make-motion\ndescription: fake\n---\n');
   return root;
@@ -236,6 +239,8 @@ function sandboxWith(spec) {
   const root = tmp();
   fs.mkdirSync(path.join(root, 'bin'));
   fs.copyFileSync(installer, path.join(root, 'bin/install.mjs'));
+  fs.mkdirSync(path.join(root, 'shared'));
+  fs.copyFileSync(path.join(here, '../../shared/agents.mjs'), path.join(root, 'shared/agents.mjs'));
   const skills = fakeSkills(spec);
   fs.renameSync(skills, path.join(root, 'skills'));
   return path.join(root, 'bin/install.mjs');
@@ -346,4 +351,273 @@ test('the make-motion hint also fires when make-motion is only pulled in as a re
   const r = runSandbox(script, ['claude', '--skills', 'a'], home);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /make-motion also needs ffmpeg/);
+});
+
+// --- artifact-builder agent files -----------------------------------------
+
+test('agentTargetsFor maps each host and scope to its agent dirs (claude and gemini get none)', () => {
+  const ctx = { home: '/h', proj: '/p' };
+  const copilot = (base, rel) => ({ host: 'copilot', dir: `${base}/${rel}` });
+  const codex = (base, rel) => ({ host: 'codex', dir: `${base}/${rel}` });
+  const table = [
+    ['claude', 'user', []],
+    ['claude', 'project', []],
+    ['gemini', 'user', []],
+    ['gemini', 'project', []],
+    ['copilot', 'user', [copilot('/h', '.copilot/agents')]],
+    ['copilot', 'project', [copilot('/p', '.github/agents')]],
+    ['codex', 'user', [codex('/h', '.codex/agents')]],
+    ['codex', 'project', [codex('/p', '.codex/agents')]],
+    ['agents', 'user', [copilot('/h', '.copilot/agents'), codex('/h', '.codex/agents')]],
+    ['agents', 'project', [copilot('/p', '.github/agents'), codex('/p', '.codex/agents')]],
+  ];
+  for (const [host, scope, want] of table) assert.deepEqual(agentTargetsFor(host, scope, ctx), want, `${host} ${scope}`);
+});
+
+const copilotAgent = (proj) => path.join(proj, '.github/agents/artifact-builder.agent.md');
+const codexAgent = (proj) => path.join(proj, '.codex/agents/artifact-builder.toml');
+
+test('copilot --project writes the builder agent file and prints its path', () => {
+  const home = tmp();
+  const proj = tmp();
+  const r = runInstall(['copilot', '--project', proj], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(copilotAgent(proj), 'utf8'), agentFile('copilot').content);
+  assert.equal(fs.existsSync(codexAgent(proj)), false);
+  assert.ok(r.stdout.split('\n').includes(`agent: ${copilotAgent(proj)}`), r.stdout);
+});
+
+test('codex --project writes only the codex builder agent file', () => {
+  const home = tmp();
+  const proj = tmp();
+  const r = runInstall(['codex', '--project', proj], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(codexAgent(proj), 'utf8'), agentFile('codex').content);
+  assert.equal(fs.existsSync(copilotAgent(proj)), false);
+});
+
+test('agents host writes both builder agent files', () => {
+  const home = tmp();
+  const proj = tmp();
+  const r = runInstall(['agents', '--project', proj], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.existsSync(copilotAgent(proj)));
+  assert.ok(fs.existsSync(codexAgent(proj)));
+});
+
+test('user-scope install writes the agent file under HOME', () => {
+  const home = tmp();
+  const r = runInstall(['agents', '--skills', 'make-motion'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.existsSync(path.join(home, '.copilot/agents/artifact-builder.agent.md')));
+  assert.ok(fs.existsSync(path.join(home, '.codex/agents/artifact-builder.toml')));
+});
+
+test('claude and gemini installs write no agent file', () => {
+  for (const host of ['claude', 'gemini']) {
+    const home = tmp();
+    const proj = tmp();
+    const r = runInstall([host, '--project', proj], home);
+    assert.equal(r.status, 0, `${host}: ${r.stderr}`);
+    assert.doesNotMatch(r.stdout, /agent:/, host);
+    assert.equal(fs.existsSync(path.join(proj, '.github/agents')), false, host);
+    assert.equal(fs.existsSync(path.join(proj, '.codex/agents')), false, host);
+    assert.equal(fs.existsSync(path.join(home, '.copilot/agents')), false, host);
+    assert.equal(fs.existsSync(path.join(home, '.codex/agents')), false, host);
+  }
+});
+
+test('an existing agent file is kept without --force and replaced with it', () => {
+  const home = tmp();
+  const proj = tmp();
+  const file = copilotAgent(proj);
+  assert.equal(runInstall(['copilot', '--project', proj, '--skills', 'make-motion'], home).status, 0);
+  fs.writeFileSync(file, 'hand edited');
+  // The skill dirs would make a second run refuse without --force; remove them to isolate the agent behaviour.
+  fs.rmSync(path.join(proj, '.github/skills'), { recursive: true, force: true });
+  const r2 = runInstall(['copilot', '--project', proj, '--skills', 'make-motion'], home);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.ok(r2.stdout.split('\n').includes(`agent: kept existing ${file}`), r2.stdout);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'hand edited');
+  const r3 = runInstall(['copilot', '--project', proj, '--skills', 'make-motion', '--force'], home);
+  assert.equal(r3.status, 0, r3.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), agentFile('copilot').content);
+  assert.ok(r3.stdout.split('\n').includes(`agent: ${file}`), r3.stdout);
+});
+
+test('an unwritable agent dir warns on stderr and the skills still install (exit 0)', { skip: process.getuid?.() === 0 && 'root ignores file modes' }, () => {
+  const home = tmp();
+  const proj = tmp();
+  const agentsDir = path.join(proj, '.github/agents');
+  fs.mkdirSync(agentsDir, { recursive: true });
+  fs.chmodSync(agentsDir, 0o555);
+  try {
+    const r = runInstall(['copilot', '--project', proj, '--skills', 'make-motion'], home);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /agent: could not write .*artifact-builder\.agent\.md/);
+    assert.ok(fs.existsSync(path.join(proj, '.github/skills/make-motion/SKILL.md')));
+    assert.equal(fs.existsSync(copilotAgent(proj)), false);
+  } finally {
+    fs.chmodSync(agentsDir, 0o755);
+  }
+});
+
+// --- --agents-only ----------------------------------------------------------
+
+// No automatic --no-deps here: --agents-only must reject it.
+const runRaw = (args, home) => spawnSync(process.execPath, [installer, ...args], {
+  encoding: 'utf8', env: { ...process.env, HOME: home },
+});
+
+test('--agents-only writes just the agent file even when the skills are already installed', () => {
+  const home = tmp();
+  const proj = tmp();
+  assert.equal(runInstall(['copilot', '--project', proj, '--skills', 'make-motion'], home).status, 0);
+  fs.rmSync(copilotAgent(proj), { force: true });
+  const r = runRaw(['copilot', '--project', proj, '--agents-only'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.split('\n').includes(`agent: ${copilotAgent(proj)}`), r.stdout);
+  assert.equal(fs.readFileSync(copilotAgent(proj), 'utf8'), agentFile('copilot').content);
+  assert.doesNotMatch(r.stdout, /installed /);
+});
+
+test('--agents-only with an unwritable agent dir fails: exit 1, warning, no agent line', { skip: process.getuid?.() === 0 && 'root ignores file modes' }, () => {
+  const home = tmp();
+  const proj = tmp();
+  const agentsDir = path.join(proj, '.github/agents');
+  fs.mkdirSync(agentsDir, { recursive: true });
+  fs.chmodSync(agentsDir, 0o555);
+  try {
+    const r = runRaw(['copilot', '--project', proj, '--agents-only'], home);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /could not write/);
+    assert.doesNotMatch(r.stdout, /agent:/);
+    assert.equal(fs.existsSync(copilotAgent(proj)), false);
+  } finally {
+    fs.chmodSync(agentsDir, 0o755);
+  }
+});
+
+// A symlink at the target path must never be written through.
+function agentsDirWithTarget(proj) {
+  const dir = path.join(proj, '.github/agents');
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, 'artifact-builder.agent.md');
+}
+
+test('a dangling symlink at the agent path is kept and its target is not created', () => {
+  const home = tmp();
+  const proj = tmp();
+  const outside = path.join(tmp(), 'victim.md');
+  const file = agentsDirWithTarget(proj);
+  fs.symlinkSync(outside, file);
+  const r = runRaw(['copilot', '--project', proj, '--agents-only'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.split('\n').includes(`agent: kept existing ${file}`), r.stdout);
+  assert.equal(fs.existsSync(outside), false);
+  assert.ok(fs.lstatSync(file).isSymbolicLink());
+});
+
+test('a symlink to a real file is kept without --force; --force replaces the link, not the file it points to', () => {
+  const home = tmp();
+  const proj = tmp();
+  const real = path.join(tmp(), 'precious.md');
+  fs.writeFileSync(real, 'precious');
+  const file = agentsDirWithTarget(proj);
+  fs.symlinkSync(real, file);
+  const r1 = runRaw(['copilot', '--project', proj, '--agents-only'], home);
+  assert.equal(r1.status, 0, r1.stderr);
+  assert.ok(r1.stdout.split('\n').includes(`agent: kept existing ${file}`), r1.stdout);
+  assert.ok(fs.lstatSync(file).isSymbolicLink());
+  assert.equal(fs.readFileSync(real, 'utf8'), 'precious');
+  const r2 = runRaw(['copilot', '--project', proj, '--agents-only', '--force'], home);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.equal(fs.readFileSync(real, 'utf8'), 'precious');
+  assert.equal(fs.lstatSync(file).isSymbolicLink(), false);
+  assert.equal(fs.readFileSync(file, 'utf8'), agentFile('copilot').content);
+});
+
+test('a directory at the agent path is neither kept nor overwritten: warn, exit 0 in an install, 1 with --agents-only', () => {
+  const home = tmp();
+  const proj = tmp();
+  const file = agentsDirWithTarget(proj);
+  fs.mkdirSync(file);
+  fs.writeFileSync(path.join(file, 'inside.txt'), 'x');
+  for (const force of [[], ['--force']]) {
+    const only = runRaw(['copilot', '--project', proj, '--agents-only', ...force], home);
+    assert.equal(only.status, 1, only.stderr);
+    assert.match(only.stderr, /agent: .*artifact-builder\.agent\.md is not a file/);
+    assert.doesNotMatch(only.stdout, /agent:/);
+  }
+  const full = runInstall(['copilot', '--project', proj, '--skills', 'make-motion'], home);
+  assert.equal(full.status, 0, full.stderr);
+  assert.match(full.stderr, /is not a file/);
+  assert.ok(fs.existsSync(path.join(proj, '.github/skills/make-motion/SKILL.md')));
+  assert.ok(fs.statSync(file).isDirectory());
+  assert.ok(fs.existsSync(path.join(file, 'inside.txt')));
+});
+
+test('inherited object keys are not hosts: constructor and toString are usage errors (exit 2)', () => {
+  const home = tmp();
+  for (const host of ['constructor', 'toString', '__proto__']) {
+    assert.equal(runInstall([host], home).status, 2, host);
+    assert.equal(runRaw([host, '--agents-only'], home).status, 2, host);
+  }
+  assert.deepEqual(agentTargetsFor('constructor', 'user', { home: '/h', proj: '/p' }), []);
+});
+
+test('--agents-only installs no skills', () => {
+  const home = tmp();
+  const proj = tmp();
+  const r = runRaw(['agents', '--project', proj, '--agents-only'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.existsSync(copilotAgent(proj)));
+  assert.ok(fs.existsSync(codexAgent(proj)));
+  assert.equal(fs.existsSync(path.join(proj, '.agents/skills')), false);
+  assert.equal(fs.existsSync(path.join(proj, '.github/skills')), false);
+});
+
+test('--agents-only keeps an existing agent file, and --force replaces it', () => {
+  const home = tmp();
+  const proj = tmp();
+  const file = copilotAgent(proj);
+  assert.equal(runRaw(['copilot', '--project', proj, '--agents-only'], home).status, 0);
+  fs.writeFileSync(file, 'hand edited');
+  const r2 = runRaw(['copilot', '--project', proj, '--agents-only'], home);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.ok(r2.stdout.split('\n').includes(`agent: kept existing ${file}`), r2.stdout);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'hand edited');
+  const r3 = runRaw(['copilot', '--project', proj, '--agents-only', '--force'], home);
+  assert.equal(r3.status, 0, r3.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), agentFile('copilot').content);
+});
+
+test('--agents-only works at user scope under HOME', () => {
+  const home = tmp();
+  const r = runRaw(['codex', '--agents-only'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.existsSync(path.join(home, '.codex/agents/artifact-builder.toml')));
+});
+
+test('--agents-only on claude or gemini says there is no agent file and exits 0', () => {
+  for (const host of ['claude', 'gemini']) {
+    const home = tmp();
+    const proj = tmp();
+    const r = runRaw([host, '--project', proj, '--agents-only'], home);
+    assert.equal(r.status, 0, `${host}: ${r.stderr}`);
+    assert.ok(r.stdout.split('\n').includes(`no agent file for ${host}`), r.stdout);
+    assert.equal(fs.readdirSync(proj).length, 0, host);
+  }
+});
+
+test('--agents-only with --skills, --link or --no-deps is a usage error naming the flags', () => {
+  const home = tmp();
+  const proj = tmp();
+  for (const flags of [['--skills', 'make-motion'], ['--link'], ['--no-deps'], ['--skills', 'make-motion', '--link']]) {
+    const r = runRaw(['copilot', '--project', proj, '--agents-only', ...flags], home);
+    assert.equal(r.status, 2, `${flags}: ${r.stderr}`);
+    for (const f of flags.filter((x) => x.startsWith('--'))) assert.ok(r.stderr.includes(f), `${f} in: ${r.stderr}`);
+    assert.match(r.stderr, /--agents-only/);
+  }
+  assert.equal(fs.readdirSync(proj).length, 0);
 });

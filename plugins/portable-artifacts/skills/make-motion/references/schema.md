@@ -8,7 +8,7 @@ Validate with `node scripts/validate.mjs motion.json`. Unknown properties are er
 | `size` | `[w, h]` ints 16–3840 | `[1920, 1080]` | logical canvas; `render --size` rescales output |
 | `fps` | 24 \| 25 \| 30 \| 60 | 30 | |
 | `background` | CSS colour | the theme's page colour | |
-| `theme` | shared theme name (`dusk`, `press`, `poster`, `paper`, `ink`, `blueprint`, `editorial`) | `dusk` | optional; see below |
+| `theme` | shared theme name (`dusk`, `press`, `poster`, `paper`, `ink`, `blueprint`, `editorial`, `mono`, `brief`) | `dusk` | optional; see below |
 | `generatedBy` | `{ model?, effort?, agent? }`, each 1–60 chars of `A-Za-z0-9 ._:/()+-` | none | provenance; shown in the preview footer and written to the MP4 `comment`/`artist` tags; missing fields read "not reported" |
 | `cues` | array, up to 30 | none | procedural sound cues; see Cues below |
 | `texture` | `{ vignette?, grain? }` | none (off) | film texture over the whole video; see Texture below |

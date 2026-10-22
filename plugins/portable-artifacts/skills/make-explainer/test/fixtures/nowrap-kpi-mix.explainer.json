@@ -1,0 +1,39 @@
+{
+  "title": "KPI grid shapes",
+  "preset": "recap",
+  "mode": "page",
+  "theme": "paper",
+  "sections": [
+    {
+      "type": "kpis",
+      "title": "Wide value in the middle",
+      "items": [
+        { "label": "Cache hits", "value": "87%" },
+        { "label": "Median latency", "value": "1,204 ms" },
+        { "label": "Status", "value": "On track for Q4 launch" },
+        { "label": "Budget", "value": "$4.2k" },
+        { "label": "Requests", "value": 123456789 }
+      ]
+    },
+    {
+      "type": "kpis",
+      "title": "Wide value first",
+      "items": [
+        { "label": "Requests", "value": 123456789 },
+        { "label": "Cache hits", "value": "87%" },
+        { "label": "Budget", "value": "$4.2k" }
+      ]
+    },
+    {
+      "type": "kpis",
+      "title": "Short values only",
+      "items": [
+        { "label": "Cache hits", "value": "87%" },
+        { "label": "Budget", "value": "$4.2k" },
+        { "label": "Errors", "value": 3 },
+        { "label": "Median latency", "value": "1,204 ms" },
+        { "label": "Commits", "value": 42 }
+      ]
+    }
+  ]
+}

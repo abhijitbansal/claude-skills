@@ -366,11 +366,65 @@ export function kokoro() {
   };
 }
 
+// The cheap-model `artifact-builder` agent file the skills hand their build to. Optional: a missing file
+// never fails doctor. The auto fix runs the skill's own shared/agents.mjs writer; the plugin's installer
+// (bin/install.mjs) writes the same file and is the way to a project-level install.
+// Doctor does not know its host, so it looks in every host folder, user level and project level.
+// It applies only where Copilot or Codex plausibly exists (~/.copilot or ~/.codex is there): on a
+// Claude Code or Gemini machine no agent file is ever installed, so nothing is reported at all.
+// Limit: project level means the current folder, not the git root.
+const BUILDER_AGENT_HOST_DIRS = ['.copilot', '.codex'];
+const BUILDER_AGENT_FILES = ['artifact-builder.agent.md', 'artifact-builder.toml'];
+const BUILDER_AGENT_FILE_FOR = { copilot: BUILDER_AGENT_FILES[0], codex: BUILDER_AGENT_FILES[1] };
+const BUILDER_AGENT_USER_HOSTS = [{ host: 'copilot', dotDir: '.copilot' }, { host: 'codex', dotDir: '.codex' }];
+const BUILDER_AGENT_DIRS = (ctx) => {
+  const P = pp(ctx);
+  const home = ctx.homedir ?? os.homedir();
+  const cwd = ctx.cwd ?? process.cwd();
+  return [P.join(home, '.copilot', 'agents'), P.join(home, '.codex', 'agents'), P.join(cwd, '.github', 'agents'), P.join(cwd, '.codex', 'agents')];
+};
+
+export function builderAgent() {
+  const install = 'node <path-to-claude-skills>/plugins/portable-artifacts/bin/install.mjs';
+  return {
+    id: 'builder_agent',
+    rank: RANK.other,
+    why: 'lets the skill hand the build to a cheaper model (the artifact-builder agent file for Copilot or Codex)',
+    required: false,
+    size: '≈2 KB',
+    // diagnose() skips a requirement whose applies(ctx) is false: not missing, not listed.
+    applies: (ctx) => BUILDER_AGENT_HOST_DIRS.some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d))),
+    check: (ctx) => BUILDER_AGENT_DIRS(ctx).some((dir) => BUILDER_AGENT_FILES.some((f) => ctx.exists(pp(ctx).join(dir, f)))),
+    // Auto fix: the skill's own copy of shared/agents.mjs writes the file into each host folder that
+    // exists (user level; an existing file is kept). That works for an `npx skills add` install,
+    // which has no bin/. The manual line offers that same writer first, then the installer (project-level install).
+    // The program is this process's own Node, not "node" from PATH: it may not be on PATH, and on Windows
+    // cmd.exe would look in the current (project) folder first.
+    fix: (ctx) => {
+      const P = pp(ctx);
+      const home = ctx.homedir ?? os.homedir();
+      const writer = P.join(ctx.skillDir, 'shared', 'agents.mjs');
+      const hosts = BUILDER_AGENT_USER_HOSTS.filter(({ dotDir }) => ctx.exists(P.join(home, dotDir)));
+      const auto = hosts.map(({ host, dotDir }) => [ctx.execPath ?? process.execPath, writer, 'write', host, P.join(home, dotDir, 'agents')]);
+      const files = hosts.map(({ host, dotDir }) => P.join(home, dotDir, 'agents', BUILDER_AGENT_FILE_FOR[host]));
+      const byHand = hosts.map(({ host, dotDir }) => `node ${writer} write ${host} ${P.join(home, dotDir, 'agents')}`);
+      return {
+        auto: auto.length ? auto : null,
+        manual: manualAll(`${byHand.length ? `${byHand.join(' ; ')} (this skill's own writer); or ` : ''}${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both; add --project <dir> to install into one repo; <path-to-claude-skills> is a local checkout (or clone the repo)`),
+        notes: `writes ${files.join(' and ')} (user level, outside this project; an existing file is kept)`,
+      };
+    },
+    needsSudo: () => false,
+  };
+}
+
 // { ok, missing, info? }. info lists present items that carry a platform hint.
+// A requirement with an applies(ctx) predicate that returns false is left out entirely.
 export async function diagnose(requirements, ctx) {
   const missing = [];
   const info = [];
   for (const r of requirements) {
+    if (r.applies && !r.applies(ctx)) continue;
     if (await r.check(ctx)) {
       const hint = r.presentInfo?.(ctx);
       if (hint) info.push({ id: r.id, note: hint.note, sudoHint: hint.sudoHint });

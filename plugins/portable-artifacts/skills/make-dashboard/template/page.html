@@ -29,9 +29,25 @@ button { font: inherit; color: inherit; }
 .theme-toggle { flex: none; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--text-2); }
 .theme-toggle:hover { color: var(--text); }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
-.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+/* the tile is a size container so the value can be sized from the tile's width (cqi) and never spills */
+.kpi { container-type: inline-size; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
 .kpi-label { color: var(--text-2); font-size: var(--fs-sm); }
-.kpi-value { margin-top: 4px; font-size: var(--fs-lg); line-height: var(--lh-head); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+/* the whole value is one line ("87%", "1,204 ms"). --n (its character count, set by the builder) gives the
+   size at which it just fills the tile: --kpi-fit = 100cqi / (n * 0.7em per character), never below --fs-md.
+   --fs-lg is the cap. --n counts code points, so wide glyphs (CJK, emoji, capitals) can run wider than the
+   0.7em assumption. A value longer than the builder's limit gets a wide tile (.kpi-wide). Alone in the grid
+   a wide tile takes the full row. A section that holds one switches from the equal-track grid to wrapping
+   flex rows whose tiles grow to fill the row, so a wide tile never leaves a hole beside short ones; the
+   grid-column rule is the fallback where :has() is missing. The wide tile's basis is 18rem (288px), the
+   narrowest section (a 320px viewport less the 16px page padding), so it is never narrower than that.
+   A value too long for even that tile at --fs-md (.kpi-long, see KPI_LONG_CHARS in scripts/lib/html.mjs)
+   cannot be one line: it wraps instead of spilling, at the same size. */
+.kpi-wide { grid-column: 1 / -1; }
+.kpis:has(.kpi-wide) { display: flex; flex-wrap: wrap; }
+.kpis:has(.kpi-wide) > .kpi { flex: 1 1 160px; }
+.kpis:has(.kpi-wide) > .kpi-wide { flex: 2 1 18rem; }
+.kpi-value { --kpi-fit: max(var(--fs-md), calc(100cqi / (var(--n, 8) * 0.7))); margin-top: 4px; font-size: min(var(--fs-lg), var(--kpi-fit)); line-height: var(--lh-head); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kpi-long .kpi-value { white-space: normal; overflow-wrap: anywhere; }
 .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 @media (min-width: 900px) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

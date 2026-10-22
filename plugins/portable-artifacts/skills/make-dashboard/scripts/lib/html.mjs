@@ -45,9 +45,22 @@ const inlineScript = (code) => `<script>${escapeInline(code)}</script>`;
 const utc = (iso) => iso.slice(0, 16).replace('T', ' ');
 const timeTag = (iso, text) => `<time datetime="${escapeHtml(iso)}" data-t="${text}">${escapeHtml(text === 'hm' ? iso.slice(11, 16) + ' UTC' : `${utc(iso)} UTC`)}</time>`;
 
+// The value is one line, sized from its tile's width: --n (its length in code points) tells the CSS how many
+// characters must fit. The thresholds come from the smallest size the CSS shrinks to, --fs-md = 21px, at an
+// assumed 0.7em (14.7px) per character, in a tile whose content box is its width less 16px padding and 1px
+// border on each side (34px):
+//   short tile   min width 160px -> 126px content -> 8 characters (8.57 rounded down)
+//   wide tile    min width 288px (a 320px viewport less 32px page padding) -> 254px content -> 17 characters (17.28)
+// A value over KPI_WIDE_CHARS would not fit a short tile at the smallest size, so its tile is wide. A value
+// over KPI_LONG_CHARS would not fit even a wide one, so it may wrap rather than spill.
+const KPI_WIDE_CHARS = 8;
+const KPI_LONG_CHARS = 17;
+
 function kpiTile(kpi, results) {
-  const value = results[kpi.query]?.rows[0]?.[kpi.field];
-  return `<div class="kpi" id="kpi-${escapeHtml(kpi.id)}"><div class="kpi-label">${escapeHtml(kpi.title)}</div><div class="kpi-value">${escapeHtml(formatValue(value, kpi.format))}</div></div>`;
+  const value = formatValue(results[kpi.query]?.rows[0]?.[kpi.field], kpi.format);
+  const chars = [...value].length;
+  const size = chars > KPI_LONG_CHARS ? ' kpi-wide kpi-long' : chars > KPI_WIDE_CHARS ? ' kpi-wide' : '';
+  return `<div class="kpi${size}" id="kpi-${escapeHtml(kpi.id)}"><div class="kpi-label">${escapeHtml(kpi.title)}</div><div class="kpi-value" style="--n: ${Math.max(1, chars)}">${escapeHtml(value)}</div></div>`;
 }
 
 function dataTable(res) {

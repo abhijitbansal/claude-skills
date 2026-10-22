@@ -12,7 +12,22 @@ You write one JSON file, `diagram.json`: a title, a type, nodes with edges (or p
 
 Run every command from the project folder (where `diagram.json` lives), using the full path to the scripts. If the request is empty, ask what to draw.
 
-Run every step yourself, in this same turn. Do not end your reply after showing the JSON: keep going until validate prints `valid` and the HTML exists.
+Run every step yourself (or hand off as the Cheaper model section says), in this same turn. Do not end your reply after showing the JSON: keep going until validate prints `valid` and the HTML exists.
+
+## Cheaper model
+
+Skip this section if you are running in Claude Code (it already runs this skill on the model named in the frontmatter), or if `artifact-builder` is not in your list of available agents. Otherwise, if you can start another agent, start the `artifact-builder` agent to do the work, unless you are already artifact-builder. If you are already artifact-builder, skip the rest of this section and do the work yourself.
+
+Give it a self-contained brief. It has no memory of this conversation, so the brief must say:
+
+1. What to build, and every fact and choice from this conversation that affects it (data, names, wording, theme, what the user asked for and what they ruled out).
+2. This skill directory: the full path of the folder that holds this SKILL.md.
+3. The spec path: where it should write the JSON spec.
+4. Optionally, an output folder for the build (it passes this to the build script as `--out`).
+
+Relay only the output path it returns. Do not repeat its work.
+
+If the `artifact-builder` agent is not installed, or you cannot start another agent, continue with the steps below yourself.
 
 ## Before the first build
 
@@ -25,7 +40,7 @@ If it reports anything missing, tell the user in one message: each item, why it 
 1. Pick the type and write `diagram.json` (examples below; every field in `<skill-dir>/references/schema.md`; ready-made files in `<skill-dir>/references/examples/`, `story.diagram.json` among them).
 2. Icons and emoji are optional. Find an icon: `node <skill-dir>/scripts/icons.mjs search <word>` prints refs like `lucide:database` or `brand:postgresql`. Use a ref exactly as printed. Skip icons if unsure: most kinds have a default icon (see `<skill-dir>/references/kinds.md`); flow `start`, `end`, `decision` and state `start`, `end`, `choice` are drawn as shapes and take no icon or emoji.
 3. `node <skill-dir>/scripts/validate.mjs diagram.json`. Fix every line it prints (a JSON path, the problem, the fix) and rerun until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage error.
-4. Set `generatedBy` to the model you are running as, your effort level if you know it, and your host (for example Claude Code, Codex, Copilot CLI, Gemini CLI). Never guess; leave out any field you do not know. `--model`, `--effort` and `--agent` on the build override it. `node <skill-dir>/scripts/build.mjs diagram.json` prints the HTML path. Default folder is `~/.agent/diagrams/` (or the folder in the `PA_OUTPUT_DIR` environment variable); `--out <file.html|dir>` picks another (inside a project pass `--out ./<name>.html` so the page lands there); `--theme dusk|press|poster|paper|blueprint|ink|editorial` overrides the theme (default `blueprint`).
+4. Set `generatedBy` to the model you are running as, your effort level if you know it, and your host (for example Claude Code, Codex, Copilot CLI, Gemini CLI). Never guess; leave out any field you do not know. `--model`, `--effort` and `--agent` on the build override it. `node <skill-dir>/scripts/build.mjs diagram.json` prints the HTML path. Default folder is `~/.agent/diagrams/` (or the folder in the `PA_OUTPUT_DIR` environment variable); `--out <file.html|dir>` picks another (inside a project pass `--out ./<name>.html` so the page lands there); `--theme dusk|press|poster|paper|blueprint|ink|editorial|mono|brief` overrides the theme (default `blueprint`).
 5. First run `node <skill-dir>/scripts/doctor.mjs --json --for check`, then `node <skill-dir>/scripts/check.mjs <printed path>` opens the page at desktop and phone width and fails on overflow, console errors or a node under the legend overlay. It needs Playwright and a browser (`doctor --for check` reports and installs them, after the user agrees); without them it skips cleanly (exit 0).
 6. Report: the HTML path, one line on what the diagram shows, and "Play story (or `P`) opens beat 1, Space plays it, `E` explores, `F` is full screen".
 

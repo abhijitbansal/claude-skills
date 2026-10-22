@@ -127,8 +127,8 @@ html[data-flavor] .sec:has(> .sec-title)::before { content: counter(sec, decimal
 html[data-flavor] .kpis { gap: var(--sp-5); grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
 :root[data-flavor="dusk"] .kpis { gap: var(--sp-3); }
 html[data-flavor] .kpi { background: none; border: 0; border-top: var(--rule-w) solid var(--text); border-radius: 0; padding: var(--sp-3) 0 0; }
-html[data-flavor] .kpi-value { margin-bottom: var(--sp-2); font-size: clamp(2.6rem, 1.6rem + 2.2vw, 4rem); line-height: 0.92; font-weight: var(--head-weight); letter-spacing: -0.04em; }
-:root[data-flavor="poster"] .kpi-value { letter-spacing: 0; font-size: clamp(3rem, 2rem + 2.6vw, 4.8rem); }
+html[data-flavor] .kpi-value { margin-bottom: var(--sp-2); font-size: min(clamp(2.6rem, 1.6rem + 2.2vw, 4rem), var(--kpi-fit)); line-height: 0.92; font-weight: var(--head-weight); letter-spacing: -0.04em; }
+:root[data-flavor="poster"] .kpi-value { letter-spacing: 0; font-size: min(clamp(3rem, 2rem + 2.6vw, 4.8rem), var(--kpi-fit)); }
 html[data-flavor] .kpi:first-child .kpi-value { color: var(--accent); }
 html[data-flavor] .kpi dt { font-family: var(--mono); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.08em; }
 :root[data-flavor="dusk"] .kpi { border: 0; border-radius: var(--r-card); padding: var(--sp-5); background: var(--surface); }

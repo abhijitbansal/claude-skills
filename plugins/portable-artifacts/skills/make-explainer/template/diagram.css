@@ -16,8 +16,9 @@
   gap: 10px 16px;
   align-items: start;
 }
-/* The slot is the card. Narrower than the diagram at its floor scale, it scrolls sideways inside itself. */
-.dg-slot { grid-column: 1 / -1; grid-row: 1; width: min(100%, var(--dg-card)); margin-inline: auto; overflow-x: auto; overflow-y: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+/* The slot is the card. Narrower than the diagram at its floor scale, it scrolls sideways inside itself. Its 1px
+   border sits outside the card width (box-sizing is border-box), so a diagram at its floor scale fits exactly. */
+.dg-slot { grid-column: 1 / -1; grid-row: 1; width: min(100%, calc(var(--dg-card) + 2px)); margin-inline: auto; overflow-x: auto; overflow-y: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
 .sec-alt .dg-slot { background: var(--page); }
 .dg-stage { position: relative; width: max(100%, var(--dg-floor-w)); aspect-ratio: var(--dg-pw) / var(--dg-ph); overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: pan-x pan-y pinch-zoom; }
 .dg-stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; }

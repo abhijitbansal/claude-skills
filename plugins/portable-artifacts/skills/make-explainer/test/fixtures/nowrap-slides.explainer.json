@@ -1,0 +1,33 @@
+{
+  "title": "Latency review",
+  "subtitle": "Numbers that must stay on one line",
+  "preset": "slides",
+  "theme": "paper",
+  "sections": [
+    {
+      "type": "kpis",
+      "title": "The numbers",
+      "items": [
+        { "label": "Cache hits", "value": "87%", "delta": "+12 %", "tone": "good", "note": "since the **last** run" },
+        { "label": "Median latency", "value": "1,204 ms", "note": "was 1,380 ms" },
+        { "label": "Budget", "value": "$4.2k" },
+        { "label": "Status", "value": "On track for Q4 launch" },
+        { "label": "Requests", "value": 123456789 }
+      ]
+    },
+    {
+      "type": "text",
+      "title": "What changed",
+      "text": "Latency fell to 1,204 ms (+12 %) after the change. The cache serves **87%** of reads."
+    },
+    {
+      "type": "table",
+      "title": "By endpoint",
+      "columns": ["Endpoint", "Latency", "Share"],
+      "rows": [
+        ["/search", "1,204 ms", "87%"],
+        ["/feed", "380 ms", "+12 %"]
+      ]
+    }
+  ]
+}

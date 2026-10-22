@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { SECTIONS } from '../scripts/lib/sections.mjs';
 import { loadSibling } from '../scripts/lib/siblings.mjs';
 import { loadTheme } from '../shared/theme.mjs';
-import { plain, rawText, glyph, toneChip } from '../scripts/lib/render/ui.mjs';
+import { plain, rawText, glyph, toneChip, chip } from '../scripts/lib/render/ui.mjs';
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 
@@ -37,6 +37,11 @@ const HOSTILE = {
   chart: { type: 'chart', title: P, caption: P, kind: 'bar', x: 'cat', y: 'n', data: [{ cat: P, n: 1 }, { cat: 'b', n: 2 }] },
   scene: { type: 'scene', caption: P, scene: { title: 'Commits', world: 'city', data: { rows: [{ group: P, t: P, value: 3 }, { group: 'b', t: 'y', value: 2 }] } } },
   checklist: { type: 'checklist', key: 'k', intro: P, onFail: P, groups: [{ title: P, items: [{ text: P, note: P, tag: 'visual' }] }] },
+  decision: { type: 'decision', id: 'd', question: P, options: [{ label: P, pros: [P], cons: [P] }, { label: 'b' }], recommended: P, why: P, default: P },
+  approval: { type: 'approval', id: 'a', item: P, why: P, impact: P, owner: P },
+  question: { type: 'question', id: 'q', text: P, default: P },
+  review: { type: 'review', items: [{ point: P, why: P, target: 'd' }] },
+  verdict: { type: 'verdict', text: P },
 };
 
 function countLeaves(value, target) {
@@ -99,13 +104,22 @@ test('ui: plain strips markup and stays escaped; rawText unescapes; unknown glyp
   assert.equal(toneChip('toString'), '');
 });
 
+test('ui: chip never puts an unexpected tone into the class attribute', () => {
+  assert.match(chip(['Ok', 'check', 'good']), /class="chip tone-good"/);
+  for (const bad of ['"><img src=x onerror=1>', 'good" onclick="1', 'Good', '', undefined, 'a b']) {
+    const out = chip(['Ok', 'check', bad]);
+    assert.match(out, /^<span class="chip tone-neutral">/, String(bad));
+    assert.ok(!out.includes('onclick') && !out.includes('<img'), String(bad));
+  }
+});
+
 // ---- behaviour of individual renderers --------------------------------------------
 
 test('table: numeric columns right-align, the first column is a row header, caption is a real caption', () => {
   const html = SECTIONS.table.render({ type: 'table', columns: ['Name', 'KB', 'Note'], rows: [['a', 410, 'x'], ['b', '1,200', 'y']], caption: 'Sizes' }, ctx);
   assert.match(html, /<th scope="row" class="a-l">a<\/th>/);
-  assert.match(html, /<td class="a-r">410<\/td>/);
-  assert.match(html, /<td class="a-r">1,200<\/td>/);
+  assert.match(html, /<td class="a-r nw">410<\/td>/);
+  assert.match(html, /<td class="a-r nw">1,200<\/td>/);
   assert.match(html, /<td class="a-l">x<\/td>/);
   assert.match(html, /<caption>Sizes<\/caption>/);
   assert.match(html, /role="region" aria-label="Sizes" tabindex="0"/);
@@ -114,7 +128,7 @@ test('table: numeric columns right-align, the first column is a row header, capt
 test('table: explicit align wins over detection', () => {
   const html = SECTIONS.table.render({ type: 'table', columns: ['A', 'B'], rows: [['x', 1]], align: ['center', 'left'] }, ctx);
   assert.match(html, /<th scope="row" class="a-c">x<\/th>/);
-  assert.match(html, /<td class="a-l">1<\/td>/);
+  assert.match(html, /<td class="a-l nw">1<\/td>/);
 });
 
 test('risks and steps: status is a word and a shape, not colour', () => {

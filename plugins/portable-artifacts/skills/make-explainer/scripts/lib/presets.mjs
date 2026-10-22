@@ -1,12 +1,11 @@
-// Starter specs for the four presets. Facts (from gather.mjs) fill what a script can know:
+// Starter specs for the five presets. Facts (from gather.mjs) fill what a script can know:
 // numbers, files, commits, folders. Every sentence is a "TODO: ..." string that validate
 // rejects until the model replaces it with prose.
 import { createHash } from 'node:crypto';
 import { PRESETS, LIMITS } from './schema.mjs';
 import { prose, fit, pathText } from './fit.mjs';
 import { slugify } from '../../shared/output.mjs';
-
-export const PRESET_NAMES = PRESETS.filter((p) => p !== 'none');
+import { planKey, DRAFT_PLAN_KEY } from './plan-hash.mjs';
 
 const MAX_FILES = 200;
 const MAX_TIMELINE = 20;
@@ -234,7 +233,128 @@ function slides(facts, title) {
   };
 }
 
-const BUILDERS = { recap, checklist, concept, slides };
+// ---- plan: decision first --------------------------------------------------------------------------
+// What needs an answer comes straight after the verdict and the three numbers; the plan itself, the phases and the
+// risks follow for whoever wants them. Ids are fixed so the review items can point at them. An option label and
+// the `recommended` / `default` that name it are the same TODO string, so filling one placeholder fills all three.
+// The verdict is the same call on every plan, so its heading is fixed: it is listed in the contents as "Your
+// verdict" and deep-linked as #verdict.
+const VERDICT_TITLE = 'Approve, change or stop this plan';
+const VERDICT_LABEL = 'Your verdict';
+const OPTION_A = todo('option A, the one you recommend, ≤ 8 words');
+const OPTION_B = todo('option B, ≤ 8 words');
+const OPTION_C = todo('option C: what happens if nobody decides, ≤ 8 words');
+
+const planDecision = () => ({
+  type: 'decision',
+  id: 'decision-1',
+  title: todo('the call to make, ≤ 8 words'),
+  label: LABEL,
+  question: todo('the decision as one question a reviewer can answer'),
+  options: [OPTION_A, OPTION_B, OPTION_C].map((label, n) => ({
+    label,
+    pros: [todo(`the main gain of option ${'ABC'[n]}, one line`)],
+    cons: [todo(`the main cost of option ${'ABC'[n]}, one line`)],
+  })),
+  recommended: OPTION_A,
+  why: todo('why you recommend it, in one or two sentences with the number that decides it'),
+  default: OPTION_C,
+});
+
+// A three-box placeholder: replace the labels with the real parts, add nodes and edges, or delete the section.
+const planDiagram = () => ({
+  type: 'diagram',
+  title: todo('what the architecture shows, ≤ 8 words'),
+  label: LABEL,
+  diagram: {
+    title: todo('diagram title, ≤ 6 words'),
+    type: 'flow',
+    direction: 'right',
+    nodes: [
+      { id: 'input', label: todo('first part, ≤ 4 words'), kind: 'start' },
+      { id: 'core', label: todo('the part that changes'), kind: 'subprocess' },
+      { id: 'output', label: todo('what comes out'), kind: 'end' },
+    ],
+    edges: [{ from: 'input', to: 'core' }, { from: 'core', to: 'output' }],
+  },
+});
+
+function plan(facts, title) {
+  return {
+    title: title ?? todo('the plan as one finding; aim for ≤ 8 words'),
+    subtitle: todo('one line: what ships, by when, and what you need from the reader'),
+    preset: 'plan',
+    key: title === undefined ? DRAFT_PLAN_KEY : planKey({ title, sections: [] }),
+    ...meta(facts, ['date', 'repo', 'branch']),
+    sections: [
+      { ...tldr(['what ships and by when', 'what it costs', 'the decision you need from the reader']), title: todo("the plan's bottom line as one finding, ≤ 8 words") },
+      {
+        type: 'kpis',
+        title: todo('the plan in three numbers, ≤ 8 words'),
+        label: LABEL,
+        items: [
+          { label: 'Ship by', value: todo('a date'), note: todo('what ships then') },
+          { label: 'Cost', value: todo('money, time or both'), note: todo('what the cost buys') },
+          { label: 'Risk', value: todo('low, medium or high'), note: todo('the main risk in a few words') },
+        ],
+      },
+      planDecision(),
+      {
+        type: 'approval',
+        id: 'approval-1',
+        title: todo('what needs a yes, ≤ 8 words'),
+        label: LABEL,
+        item: todo('the thing to approve, one line'),
+        why: todo('why it needs approval and what a yes unblocks'),
+        impact: todo('what changes for users, cost or schedule'),
+        owner: todo('who does the work'),
+      },
+      {
+        type: 'question',
+        id: 'question-1',
+        title: todo('the open question, ≤ 8 words'),
+        label: LABEL,
+        text: todo('one question you cannot answer yourself'),
+        default: todo('what you will assume if nobody answers'),
+      },
+      {
+        type: 'review',
+        title: todo('where to look hardest, ≤ 8 words'),
+        label: LABEL,
+        items: [
+          { point: todo('the riskiest choice, one line'), why: todo('why a reviewer should check it'), target: 'decision-1' },
+          { point: todo('the commitment that is hard to undo'), why: todo('what it costs if it is wrong'), target: 'approval-1' },
+        ],
+      },
+      {
+        type: 'text',
+        title: todo('what the plan does and does not do, ≤ 8 words'),
+        label: LABEL,
+        text: todo('goals as a short "- " list, then the non-goals as a second list'),
+      },
+      planDiagram(),
+      {
+        type: 'steps',
+        title: todo('the phases in order, ≤ 8 words'),
+        label: LABEL,
+        items: [1, 2, 3].map((n) => ({ title: todo(`phase ${n}`), text: todo(`what phase ${n} delivers and how you know it is done`) })),
+      },
+      {
+        type: 'details',
+        title: todo('what could go wrong, ≤ 8 words'),
+        label: LABEL,
+        summary: todo('the risks in one line'),
+        text: todo('each risk as a "- " list item with how it is handled'),
+      },
+      { type: 'verdict', id: 'verdict', title: VERDICT_TITLE, label: VERDICT_LABEL, text: todo('the overall question: ship this plan as written?') },
+    ],
+  };
+}
+
+const BUILDERS = { recap, checklist, concept, slides, plan };
+
+// The presets scaffold can start: a preset is listed once it has a builder.
+export const PRESET_NAMES = PRESETS.filter((p) => Object.hasOwn(BUILDERS, p));
 
 /** Starter spec for a preset: facts is gather.mjs output (or null), title overrides the TODO title. */
 export function scaffold(preset, { facts = null, title } = {}) {

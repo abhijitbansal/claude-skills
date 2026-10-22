@@ -5,9 +5,14 @@ import { didYouMean, pathJoin } from '../../shared/errors.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { ID_PATTERN, KEY_PATTERN, LIMITS, META_KEYS, NON_SPACE } from './schema.mjs';
 import { codeLines } from './slides.mjs';
+import { suggestedPlanKey, DRAFT_PLAN_KEY } from './plan-hash.mjs';
 
 const q = (v) => JSON.stringify(v);
 const MAX_LISTED = 12;
+// A KPI value longer than this draws a warning (not an error): the tile is narrow and the value stays on one line.
+// (The renderer gives a value above 10 characters a wide tile, render/kpis.mjs; the two thresholds are deliberate:
+// layout at >10, advice at >12.)
+const KPI_VALUE_ADVISED = 12;
 
 function suggestion(value, candidates) {
   const hint = didYouMean(value, candidates);
@@ -33,6 +38,9 @@ function count(errors, arr, base, field, [min, max], fix = 'cut some or split th
 
 // ---- top level --------------------------------------------------------
 
+// A page with questions to answer saves and exports its answers under the plan's key, so such a spec needs one.
+const ANSWERABLE_TYPES = new Set(['decision', 'approval', 'question']);
+
 export function checkTop(spec, errors) {
   length(errors, spec, 'title', '', LIMITS.title);
   length(errors, spec, 'subtitle', '', LIMITS.subtitle);
@@ -45,14 +53,32 @@ export function checkTop(spec, errors) {
     const themes = listThemes();
     if (!themes.includes(spec.theme)) errors.push({ path: 'theme', message: `unknown theme ${q(spec.theme)}; ${suggestion(spec.theme, themes)}` });
   }
+  if (spec.key !== undefined) checkKey(errors, spec.key, 'key');
+  else if (spec.preset === 'plan' || spec.sections.some((s) => ANSWERABLE_TYPES.has(s.type))) {
+    errors.push({ path: 'key', message: `a plan needs a key (answers are saved and checked under it); add "key": ${q(suggestedPlanKey(spec))}` });
+  }
+}
+
+// A storage namespace (a checklist's ticks, a plan's answers): KEY_PATTERN and the checklist key limit.
+function checkKey(errors, key, at) {
+  if (!KEY_PATTERN.test(key)) {
+    errors.push({ path: at, message: `key ${q(key)} is invalid; use lowercase letters, digits, . - and _, starting with a letter or digit` });
+  } else if ([...key].length > LIMITS.checklistKey) {
+    errors.push({ path: at, message: `key is ${[...key].length} characters; the limit is ${LIMITS.checklistKey} — shorten it` });
+  }
 }
 
 // ---- ids --------------------------------------------------------------
 
 // Ids the page itself emits, so a section id must not equal one: <main id="content"> (page.html and
 // slides.mjs), the deck's "outline-title" and "slide-N" / "slide-N-title", and the chart SVGs' "chN-..." ids.
-// Diagram ids ("dg_N-...") hold an underscore, which ID_PATTERN already refuses.
-const RESERVED_IDS = [/^content$/, /^outline-title$/, /^slide-\d+(?:-title)?$/, /^ch\d+-/];
+// Diagram ids ("dg_N-...") hold an underscore, which ID_PATTERN already refuses. "plan-verdict" is the verdict's
+// radio group name.
+const RESERVED_IDS = [/^content$/, /^outline-title$/, /^slide-\d+(?:-title)?$/, /^ch\d+-/, /^plan-verdict$/];
+// An answerable item's radios are named "plan-<id>", so its id must not be "verdict" (the verdict's group). Only these
+// three types: a tldr may keep the id "verdict" (the examples use it).
+const PLAN_ITEM_TYPES = new Set(['decision', 'approval', 'question']);
+const RESERVED_ITEM_IDS = new Set(['verdict']);
 
 export function checkIds(spec, errors) {
   const seen = new Map();
@@ -65,6 +91,10 @@ export function checkIds(spec, errors) {
     if (RESERVED_IDS.some((re) => re.test(s.id))) {
       errors.push({ path: at, message: `id ${q(s.id)} is reserved by the page; pick another id, such as "overview"` });
     }
+    if (PLAN_ITEM_TYPES.has(s.type) && RESERVED_ITEM_IDS.has(s.id)) {
+      errors.push({ path: at, message: `id ${q(s.id)} is reserved for the plan's verdict; pick another id, such as "${s.id}-call"` });
+    }
+    if (PLAN_ITEM_TYPES.has(s.type)) length(errors, s, 'id', pathJoin('sections', i), LIMITS.planId);
     if (seen.has(s.id)) errors.push({ path: at, message: `duplicate id ${q(s.id)}; first used at ${seen.get(s.id)}; rename one` });
     else seen.set(s.id, at);
   });
@@ -119,11 +149,7 @@ function checkChart(s, at, errors) {
 
 function checkChecklist(s, at, errors, keys) {
   const keyAt = pathJoin(at, 'key');
-  if (!KEY_PATTERN.test(s.key)) {
-    errors.push({ path: keyAt, message: `key ${q(s.key)} is invalid; use lowercase letters, digits, . - and _, starting with a letter or digit` });
-  } else if ([...s.key].length > LIMITS.checklistKey) {
-    errors.push({ path: keyAt, message: `key is ${[...s.key].length} characters; the limit is ${LIMITS.checklistKey} — shorten it` });
-  }
+  checkKey(errors, s.key, keyAt);
   if (keys.has(s.key)) errors.push({ path: keyAt, message: `duplicate checklist key ${q(s.key)}; first used at ${keys.get(s.key)}; rename one so their ticks stay apart` });
   else keys.set(s.key, keyAt);
   count(errors, s.groups, at, 'groups', [1, Infinity]);
@@ -176,23 +202,107 @@ function checkSection(s, i, errors, state) {
         errors.push({ path: at, message: 'a motion section needs video (an .mp4 path) or spec (a motion.json path); add one' });
       }
       break;
+    case 'decision': checkDecision(s, at, errors); break;
+    case 'approval': length(errors, s, 'item', at, LIMITS.planQuestion); break;
+    case 'question': length(errors, s, 'text', at, LIMITS.planQuestion); break;
+    case 'review': checkReview(s, at, errors, state.ids); break;
+    case 'verdict': checkVerdict(i, at, errors, state); break;
     default:
   }
 }
 
+// ---- plan mode --------------------------------------------------------
+
+// A field that names an option must name one exactly: answers carry the label.
+function checkOptionRef(s, field, at, errors, labels) {
+  const value = s[field];
+  if (value === undefined || labels.includes(value)) return;
+  const hint = didYouMean(value, labels);
+  const fix = hint ? `did you mean ${q(hint)}?` : `use one option label exactly: ${labels.map(q).join(', ')}`;
+  errors.push({ path: pathJoin(at, field), message: `${field} ${q(value)} is not an option label; ${fix}` });
+}
+
+// Labels are what a reader picks and what the export carries: no edge spaces, and no two that differ only in case.
+function checkOptionLabels(s, at, errors) {
+  const seen = new Map();
+  s.options.forEach((o, oi) => {
+    const labelAt = pathJoin(pathJoin(pathJoin(at, 'options'), oi), 'label');
+    if (o.label !== o.label.trim()) errors.push({ path: labelAt, message: `label ${q(o.label)} starts or ends with a space; trim it` });
+    const folded = o.label.trim().toLowerCase();
+    const first = seen.get(folded);
+    if (first) errors.push({ path: labelAt, message: `duplicate option label ${q(o.label)}: it matches ${q(first.label)} at ${first.at} (labels are compared ignoring case); give each option its own label` });
+    else seen.set(folded, { label: o.label, at: labelAt });
+  });
+}
+
+function checkDecision(s, at, errors) {
+  length(errors, s, 'question', at, LIMITS.planQuestion);
+  count(errors, s.options, at, 'options', LIMITS.planOptions, 'keep the strongest options');
+  s.options.forEach((o, oi) => length(errors, o, 'label', pathJoin(pathJoin(at, 'options'), oi), LIMITS.planLabel));
+  checkOptionLabels(s, at, errors);
+  const labels = s.options.map((o) => o.label);
+  checkOptionRef(s, 'recommended', at, errors, labels);
+  checkOptionRef(s, 'default', at, errors, labels);
+}
+
+// A review item points at a section by its explicit id (generated ids are not known until the build).
+function checkReview(s, at, errors, ids) {
+  count(errors, s.items, at, 'items', LIMITS.reviewItems, 'keep the places that need the hardest look');
+  s.items.forEach((item, j) => {
+    if (item.target !== undefined && item.target === s.id) {
+      errors.push({ path: pathJoin(pathJoin(pathJoin(at, 'items'), j), 'target'), message: `target ${q(item.target)} is this review section itself; point it at the section to review` });
+      return;
+    }
+    if (item.target === undefined || ids.includes(item.target)) return;
+    const hint = didYouMean(item.target, ids);
+    const fix = hint ? `did you mean ${q(hint)}?` : `set an explicit id on the section it points to; ids: ${ids.length > 0 ? ids.join(', ') : '(none)'}`;
+    errors.push({ path: pathJoin(pathJoin(pathJoin(at, 'items'), j), 'target'), message: `target ${q(item.target)} matches no section id; ${fix}` });
+  });
+}
+
+function checkVerdict(i, at, errors, state) {
+  if (i !== state.last) errors.push({ path: at, message: 'the verdict must be the last section; move it to the end' });
+  if (state.verdictAt !== undefined) errors.push({ path: at, message: `only one verdict per page; the first is at ${state.verdictAt}; remove this one` });
+  else state.verdictAt = at;
+}
+
 export function checkSections(spec, errors) {
-  const state = { checklistKeys: new Map() };
+  const ids = spec.sections.map((s) => s.id).filter((id) => id !== undefined);
+  const state = { checklistKeys: new Map(), ids, last: spec.sections.length - 1, verdictAt: undefined };
   spec.sections.forEach((s, i) => checkSection(s, i, errors, state));
+  const answerable = spec.sections.some((s) => PLAN_ITEM_TYPES.has(s.type));
+  if (spec.preset === 'plan' && !answerable) {
+    errors.push({ path: 'sections', message: 'a plan needs at least one decision, approval or question' });
+  }
+  // The verdict holds the Export buttons: without it the answers cannot leave the page.
+  if (answerable && state.verdictAt === undefined) {
+    errors.push({ path: 'sections', message: 'a plan with decisions, approvals or questions needs a verdict section (it holds the Export buttons); add one as the last section' });
+  }
 }
 
 /** Advice that never blocks a build: -> [{ path, message }]. */
 export function warnSections(spec) {
   const warnings = [];
-  if (spec.preset !== 'checklist') return warnings;
+  if (spec.key === DRAFT_PLAN_KEY) {
+    warnings.push({ path: 'key', message: `${q(DRAFT_PLAN_KEY)} is the scaffold's placeholder, shared by every untitled draft (their saved answers would collide); set it from the title, such as ${q(suggestedPlanKey(spec))}` });
+  }
   spec.sections.forEach((s, i) => {
-    if (s.type === 'checklist' && s.intro === undefined) {
-      warnings.push({ path: pathJoin(pathJoin('sections', i), 'intro'), message: 'add a "What\'s in this branch" summary (features and review-cycle fixes) — testers need the context' });
+    const at = pathJoin('sections', i);
+    if (s.type === 'checklist' && s.intro === undefined && spec.preset === 'checklist') {
+      warnings.push({ path: pathJoin(at, 'intro'), message: 'add a "What\'s in this branch" summary (features and review-cycle fixes) — testers need the context' });
     }
+    if (s.type === 'kpis') warnLongKpiValues(s, at, warnings);
   });
   return warnings;
+}
+
+// A KPI tile is narrow and holds its value on one line, so words belong in `note`. A number is never long.
+function warnLongKpiValues(section, at, warnings) {
+  section.items.forEach((item, j) => {
+    if (typeof item.value !== 'string') return;
+    const n = [...item.value].length;
+    if (n > KPI_VALUE_ADVISED) {
+      warnings.push({ path: pathJoin(pathJoin(pathJoin(at, 'items'), j), 'value'), message: `KPI value is ${n} characters; keep it to ${KPI_VALUE_ADVISED} or move words to note` });
+    }
+  });
 }

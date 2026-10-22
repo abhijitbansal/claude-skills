@@ -4,6 +4,31 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
+## [1.0.0] - 2026-10-22
+
+Numbers that stay on one line, cheaper-model routing on GitHub Copilot and Codex, and a plan preset for make-explainer.
+
+### Added and changed
+
+- **Numbers stay on one line.** A number with its unit or percent sign (`1,204 ms`, `18%`, `$4.2k`) is kept whole in
+  make-explainer pages and decks (each token in a no-wrap span), make-dashboard KPI values (no-wrap and sized to their
+  tile) and make-motion text (a no-break space in place of the space). The token pattern lives once, in
+  `shared/nowrap.mjs`. `check.mjs` in make-explainer and make-motion fails on a token that wraps. Typed-out make-motion text
+  is bound the same way.
+- **Cheaper model on Copilot and Codex (optional).** A small `artifact-builder` agent file (Haiku 5.5 on Copilot, falling
+  back to GPT-5.4 nano; `gpt-6-luna` on Codex) that builds from a finished spec. `node bin/install.mjs <copilot|codex|agents>`
+  writes it, and so does `doctor.mjs --fix builder_agent` for skills installed with `npx skills`, which copies only skill
+  folders. The doctor offers it only when `~/.copilot` or `~/.codex` exists and never writes through a symlink. Measured on
+  Copilot CLI 1.0.98: 19 of 19 runs logged `claude-haiku-5.5`; Codex and VS Code Copilot Chat were not tested.
+- **Plan mode (make-explainer).** The `plan` preset, with the `decision`, `approval`, `question`, `review` and `verdict`
+  sections, builds a page a reviewer answers in the browser. Copy answers or Download `plan-answers.json`, and
+  `scripts/answers.mjs` checks the file against the plan and refuses a summary marked invalid. **Save as HTML**, a sticky
+  button in the contents menu, downloads the page itself with the answers inside; `answers.mjs` reads that file too. A saved
+  page is a full web page, not inert data: open only files you trust. The `mono` and `brief` themes were added for it.
+- **Security scanner alerts.** The two skills.sh/Socket "anomaly" alerts on make-diagram and make-explainer are fixed (an
+  `fs`-patching test fixture was removed; a page chip tone is now checked against an allow-list). Scores change when
+  skills.sh scans again.
+
 ## [0.8.1] - 2026-10-22
 
 make-motion: voiceover dependencies on patched versions.

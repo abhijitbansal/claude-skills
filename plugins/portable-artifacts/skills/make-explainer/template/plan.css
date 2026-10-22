@@ -1,0 +1,181 @@
+/* plan.css: plan-mode sections (decision, approval, question, review, verdict) */
+/* Colours come only from the theme's tokens. Shape comes from four local properties (radius, gap, padding and the
+   numeral size) that the mono and brief themes set below, through data-theme-name on <html>. A decision is the
+   loudest thing on the page: an accent frame, its question at heading size, options as wide rows. Every status is a
+   glyph and a word; colour only repeats it. */
+main { counter-reset: plan-item; }
+.plan-item { --plan-r: 12px; --plan-gap: 16px; --plan-pad: 22px; --plan-num: var(--fs-lg); position: relative; max-width: 46rem; padding: var(--plan-pad); border: 1px solid var(--line); border-radius: var(--plan-r); background: var(--surface); }
+.plan-item [hidden] { display: none !important; }
+.plan-decision, .plan-approval, .plan-question { counter-increment: plan-item; }
+.plan-decision { --rule: 6px; border: 2px solid var(--accent); box-shadow: inset var(--rule) 0 0 var(--accent); padding-left: calc(var(--plan-pad) + var(--rule)); }
+.plan-verdict { border: 2px solid var(--text); }
+
+/* the kicker: a big running number and what is asked ("Decision needed") */
+.plan-kicker { display: flex; align-items: baseline; gap: 12px; margin: 0 0 10px; color: var(--accent); font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.plan-num::before { content: counter(plan-item, decimal-leading-zero); color: var(--text); font: 600 var(--plan-num)/1 var(--font-display); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.plan-verdict .plan-num { display: none; }
+
+.plan-q { display: block; margin: 0 0 var(--plan-gap); padding: 0; max-width: 34em; color: var(--text); font: 600 var(--fs-md)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); text-wrap: balance; overflow-wrap: anywhere; }
+.plan-decision .plan-q { font-size: var(--fs-lg); }
+.plan-set { min-width: 0; margin: 0; padding: 0; border: 0; }
+/* a floated legend lays out like a block (margins apply); what follows clears it */
+.plan-set > legend.plan-q { float: left; width: 100%; }
+.plan-set > legend + * { clear: both; }
+.plan-body > :first-child { margin-top: 0; }
+.plan-body { margin-bottom: var(--plan-gap); color: var(--text-2); }
+
+/* decision options: wide rows; the recommended one is framed in the accent, the chosen one filled */
+.plan-opts { display: grid; gap: 8px; }
+.plan-opt { display: flex; gap: 14px; align-items: flex-start; min-height: 44px; padding: 14px 16px; border: 1px solid var(--line); border-radius: max(2px, calc(var(--plan-r) - 4px)); background: var(--page); cursor: pointer; }
+.plan-opt:hover { border-color: var(--text-3); }
+.plan-opt.is-rec { border-color: var(--accent); }
+.plan-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
+.plan-opt-body { display: grid; flex: 1; gap: 6px; min-width: 0; }
+.plan-opt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.plan-opt-label { color: var(--text); font-size: var(--fs-md); font-weight: 600; line-height: var(--lh-head); overflow-wrap: anywhere; }
+.plan-pc { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; color: var(--text-2); font-size: var(--fs-sm); }
+.plan-pc li { display: flex; align-items: baseline; gap: 8px; overflow-wrap: anywhere; }
+.plan-pc .gl { position: relative; top: 2px; }
+.plan-pro .gl { color: var(--good); }
+.plan-con .gl { color: var(--bad); }
+
+/* radios: native, in the accent; the whole row shows the focus ring */
+.plan-item input[type="radio"] { flex: none; width: 1.15rem; height: 1.15rem; margin: 0.2rem 0 0; accent-color: var(--accent); cursor: pointer; }
+.plan-item :is(textarea, input[type="text"], button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.plan-item input[type="radio"]:focus-visible { outline: none; }
+.plan-opt:has(input:focus-visible), .plan-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* why, default */
+.plan-why { margin: var(--plan-gap) 0 0; border-top: 1px solid var(--line); }
+.plan-why summary { padding: 12px 0 6px; color: var(--text); font-weight: 600; cursor: pointer; overflow-wrap: anywhere; }
+.plan-why-body { color: var(--text-2); }
+.plan-default { margin: 12px 0 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.plan-default-k { color: var(--text); font-weight: 600; }
+
+/* approval facts */
+.plan-facts { display: flex; flex-wrap: wrap; gap: 6px 24px; margin: 0 0 var(--plan-gap); font-size: var(--fs-sm); }
+.plan-facts div { display: flex; gap: 8px; min-width: 0; }
+.plan-facts dt { color: var(--text-3); font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.9; }
+.plan-facts dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+
+/* approve / changes / reject and the verdict: a row of answer chips */
+.plan-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.plan-choice { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--line); border-radius: max(2px, calc(var(--plan-r) - 4px)); background: var(--page); color: var(--text); font-weight: 600; cursor: pointer; }
+.plan-choice input[type="radio"] { margin: 0; accent-color: var(--tc); }
+.plan-choice .gl { color: var(--tc); }
+.plan-choice:hover { border-color: var(--tc); }
+.plan-choice:has(input:checked) { border-color: var(--tc); box-shadow: 0 0 0 1px var(--tc); background: var(--page); background: color-mix(in srgb, var(--tc) 12%, var(--page)); }
+
+/* free text */
+.plan-field { display: grid; gap: 6px; margin: var(--plan-gap) 0 0; }
+.plan-field-label { color: var(--text-2); font-size: var(--fs-sm); font-weight: 600; }
+.plan-text, .plan-input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: max(2px, calc(var(--plan-r) - 6px)); background: var(--page); color: var(--text); font: inherit; font-size: var(--fs-base); }
+.plan-text { resize: vertical; }
+.plan-question .plan-text { min-height: 6rem; }
+.plan-text:hover, .plan-input:hover { border-color: var(--text-3); }
+
+/* the verdict bar: name and export side by side */
+.plan-verdict-foot { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; margin-top: var(--plan-gap); }
+.plan-reviewer { flex: 1 1 14rem; margin: 0; }
+.plan-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.plan-btn { min-height: 44px; padding: 8px 16px; border-color: var(--text-3); color: var(--text); font-size: var(--fs-sm); font-weight: 600; }
+.plan-btn:hover { border-color: var(--accent); }
+.plan-status { margin: 10px 0 0; color: var(--text-2); font-size: var(--fs-sm); }
+.plan-status:empty { margin: 0; }
+.plan-flag { margin: 10px 0 0; }
+.plan-flag .chip { white-space: normal; }
+
+/* review these first: numbered, each with why and a link down to the detail */
+.plan-review { display: grid; gap: 10px; max-width: 46rem; margin: 0; padding: 0; list-style: none; counter-reset: review; }
+.plan-review-item { counter-increment: review; position: relative; padding: 12px 16px 12px 56px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.plan-review-item::before { content: counter(review); position: absolute; left: 16px; top: 10px; width: 28px; color: var(--accent); font: 600 var(--fs-lg)/1 var(--font-display); font-variant-numeric: tabular-nums; text-align: center; }
+.plan-review-point { margin: 0; color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+.plan-review-why { margin: 2px 0 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.plan-review-go { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--accent); font-size: var(--fs-sm); font-weight: 600; overflow-wrap: anywhere; }
+.plan-review-go code { background: none; padding: 0; }
+
+/* the deck form: no controls */
+/* the indent holds a two-character numeral ("1.") inside the panel's text edge */
+.plan-opts-static { display: grid; gap: 6px; margin: 0 0 var(--plan-gap); padding-left: 2.2em; font-variant-numeric: tabular-nums; }
+.plan-opts-static li { padding-left: 4px; }
+.plan-opts-static .plan-opt-label { font-size: inherit; }
+.plan-opt-static.is-rec .chip { margin-left: 10px; vertical-align: 2px; }
+.plan-verdict-static { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding-left: 1.2em; }
+.plan-note { display: flex; align-items: center; gap: 8px; margin: var(--plan-gap) 0 0; color: var(--text-3); font-size: var(--fs-sm); }
+
+@media (max-width: 640px) {
+  .plan-item { --plan-pad: 16px; --plan-num: var(--fs-md); }
+  .plan-decision { --rule: 4px; }
+  .plan-decision .plan-q { font-size: var(--fs-md); }
+  .plan-opt { padding: 12px; gap: 10px; }
+  .plan-opt-label { font-size: var(--fs-base); }
+  .plan-choice { flex: 1 1 100%; }
+  .plan-actions, .plan-btn { flex: 1 1 100%; }
+  .plan-review-item { padding-left: 48px; }
+  .plan-review-item::before { left: 10px; }
+}
+
+/* mono: a terminal sheet. Sharp corners, tight spacing, monospace throughout. The theme ships one weight (400), so
+   nothing in a plan item asks for bold (no faux bold either): emphasis is case, tracking and colour. */
+[data-theme-name="mono"] .plan-item, [data-theme-name="mono"] .plan-review-item { --plan-r: 2px; --plan-gap: 12px; --plan-pad: 18px; border-radius: 2px; font-family: var(--mono); }
+[data-theme-name="mono"] :is(.plan-item, .plan-review) *, [data-theme-name="mono"] :is(.plan-num, .plan-review-item)::before { font-weight: 400; font-synthesis: none; }
+[data-theme-name="mono"] .plan-q, [data-theme-name="mono"] .plan-num::before, [data-theme-name="mono"] .plan-review-item::before { font-family: var(--mono); letter-spacing: -0.01em; }
+[data-theme-name="mono"] .plan-opt-label, [data-theme-name="mono"] .plan-review-point { color: var(--text); }
+[data-theme-name="mono"] .plan-opt, [data-theme-name="mono"] .plan-choice, [data-theme-name="mono"] .plan-text, [data-theme-name="mono"] .plan-input { border-radius: 2px; }
+[data-theme-name="mono"] .plan-opts { gap: 6px; }
+[data-theme-name="mono"] .plan-opt { padding: 10px 12px; }
+[data-theme-name="mono"] .plan-kicker, [data-theme-name="mono"] .plan-default-k, [data-theme-name="mono"] .plan-why summary { text-transform: uppercase; letter-spacing: 0.08em; }
+[data-theme-name="mono"] .plan-why summary, [data-theme-name="mono"] .plan-default-k { font-size: var(--fs-xs); color: var(--accent); }
+[data-theme-name="mono"] .plan-item .chip { border-radius: 2px; }
+[data-theme-name="mono"] .plan-item strong { color: var(--accent); }
+/* A plan page in mono: the same rule for the whole page (title, section titles, the hero, kpi values, tables,
+   chips). Every weight is the one the theme ships, nothing is synthesized, and bold prose is marked by colour. */
+html[data-preset="plan"][data-theme-name="mono"] { font-synthesis: none; }
+html[data-preset="plan"][data-theme-name="mono"] :is(body, body *) { font-weight: 400; }
+html[data-preset="plan"][data-theme-name="mono"] :is(strong, b) { color: var(--accent); }
+
+/* brief: an executive memo. Soft corners, generous space, large serif numerals, a calmer frame. */
+[data-theme-name="brief"] .plan-item { --plan-r: 10px; --plan-gap: 22px; --plan-pad: 30px; --plan-num: var(--fs-xl); }
+[data-theme-name="brief"] .plan-decision { --rule: 4px; border-width: 1px; }
+[data-theme-name="brief"] .plan-verdict { border-width: 1px; border-color: var(--accent); }
+[data-theme-name="brief"] .plan-opts { gap: 12px; }
+[data-theme-name="brief"] .plan-opt { padding: 18px 20px; }
+[data-theme-name="brief"] .plan-review-item { border-radius: 10px; padding-top: 16px; padding-bottom: 16px; }
+[data-theme-name="brief"] .plan-review-item::before { font-size: var(--fs-xl); top: 12px; }
+@media (max-width: 640px) {
+  [data-theme-name="brief"] .plan-item { --plan-pad: 18px; --plan-num: var(--fs-lg); }
+  [data-theme-name="brief"] .plan-opt { padding: 14px; }
+}
+
+/* Save as HTML: a block under the contents list, which is sticky on a wide screen. Below that width, and when the
+   page has no contents list (.plan-save-solo), the same block is a button fixed to the bottom corner, so it is in
+   reach wherever the reader is. */
+.plan-save { margin: 20px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line); }
+.plan-save-btn { width: 100%; }
+.plan-save-note { margin: 8px 0 0; color: var(--text-2); font-size: var(--fs-xs); line-height: 1.4; }
+.plan-save-status { margin: 6px 0 0; color: var(--text-2); font-size: var(--fs-xs); }
+.plan-save-status:empty { margin: 0; }
+.plan-save-solo { margin: 16px 0 0; }
+@media (max-width: 1099.98px) {
+  .plan-save { position: fixed; right: 16px; bottom: 16px; z-index: 40; margin: 0; padding: 0; border-top: 0; max-width: calc(100vw - 32px); }
+  .plan-save-btn { width: auto; background: var(--surface); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18); }
+  .plan-save-note { display: none; }
+  .plan-save-status { margin: 6px 0 0; padding: 4px 10px; background: var(--surface); border-radius: 6px; }
+  .plan-save-status:empty { display: none; }
+}
+.plan-save-solo { position: fixed; right: 16px; bottom: 16px; z-index: 40; margin: 0; padding: 0; border-top: 0; max-width: calc(100vw - 32px); }
+.plan-save-solo .plan-save-btn { width: auto; background: var(--surface); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18); }
+.plan-save-solo .plan-save-note { display: none; }
+/* a corner button would sit over the text being typed */
+@media (max-width: 1099.98px) {
+  body:has(textarea:focus, input[type="text"]:focus) .plan-save { display: none; }
+}
+body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: none; }
+
+/* print: keep each option and answer chip whole; drop the export controls and any box left empty (the blank
+   placeholder makes an empty box match :placeholder-shown) */
+@media print {
+  .plan-opt, .plan-choice { break-inside: avoid; }
+  .plan-actions, .plan-flag, .plan-status, .plan-save { display: none !important; }
+  .plan-field:has(:placeholder-shown), .plan-text:placeholder-shown { display: none; }
+}

@@ -15,7 +15,7 @@ import { syncAssets, assetConflicts, specInputs, WriteError } from './lib/assets
 import { SiblingError } from './lib/siblings.mjs';
 import { isSlides } from './lib/slides.mjs';
 import { flavorFor, CLASSIC } from './lib/flavor.mjs';
-import { EXPLAINER_THEME } from './lib/default-theme.mjs';
+import { specTheme } from './lib/default-theme.mjs';
 import { fetchHeroImage, heroPrompt, parseEndpoint, requireKey, ImageHookError, KEY_ENV } from './lib/image-hook.mjs';
 import { UsageError, parseCli } from '../shared/cli.mjs';
 import { PROVENANCE_OPTIONS, withGeneratedBy } from '../shared/provenance.mjs';
@@ -62,13 +62,13 @@ export async function build(file, { out, theme, model, effort, agent, imageApi, 
   // Assets and their manifest first, then the page (atomically), then the tidy-up of files this build no longer
   // writes (see assets.mjs): a failure anywhere names its path and leaves the previous page and files in place.
   syncAssets(assetsDir, built.assets, { protect: specInputs(spec, dir), publish: () => writePage(target, built.html) });
-  return { ok: true, out: target, theme: spec.theme ?? EXPLAINER_THEME, assets: built.assets.map((a) => a.to), bytes: Buffer.byteLength(built.html), warnings: checked.warnings };
+  return { ok: true, out: target, theme: specTheme(spec), assets: built.assets.map((a) => a.to), bytes: Buffer.byteLength(built.html), warnings: checked.warnings };
 }
 
 // Refusals that need no network: a deck, a classic theme, a bad endpoint or a missing key. Throws ImageHookError.
 function checkImageApi(spec, imageApi, env) {
   if (isSlides(spec)) throw new ImageHookError('--image-api only applies to explainer pages, not slide decks; drop the flag or build a page');
-  const theme = spec.theme ?? EXPLAINER_THEME;
+  const theme = specTheme(spec);
   if (flavorFor(theme) === CLASSIC) throw new ImageHookError(`--image-api needs a dusk, press or poster page (got ${theme}); pass --theme dusk or drop the flag`);
   parseEndpoint(imageApi);
   requireKey(env[KEY_ENV]);

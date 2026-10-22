@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_THEME, TOKENS, listThemes, loadTheme, themeCss, fontPayloadBytes, ThemeError } from '../theme.mjs';
 
-test('seven themes ship, paper is the default', () => {
-  assert.deepEqual(listThemes(), ['blueprint', 'dusk', 'editorial', 'ink', 'paper', 'poster', 'press']);
+test('nine themes ship, paper is the default', () => {
+  assert.deepEqual(listThemes(), ['blueprint', 'brief', 'dusk', 'editorial', 'ink', 'mono', 'paper', 'poster', 'press']);
   assert.equal(DEFAULT_THEME, 'paper');
 });
 
@@ -42,7 +42,7 @@ test('kind hues and the glow are tokens with their own CSS variables', () => {
   for (const v of ['--k-data', '--k-queue', '--k-external', '--k-decision']) assert.ok(css.includes(`${v}:`), v);
 });
 
-test('type systems: Geist for paper/blueprint/ink, serif editorial, and the dusk, press and poster pairings', () => {
+test('type systems: Geist for paper/blueprint/ink, serif editorial and brief, mono for mono, and the dusk, press and poster pairings', () => {
   const fam = (t, role) => loadTheme(t).fonts[role].family;
   for (const t of ['paper', 'blueprint']) {
     assert.equal(fam(t, 'display'), 'Geist');
@@ -62,4 +62,8 @@ test('type systems: Geist for paper/blueprint/ink, serif editorial, and the dusk
   assert.equal(fam('poster', 'display'), 'Big Shoulders Display');
   assert.equal(fam('poster', 'body'), 'Familjen Grotesk');
   assert.equal(fam('poster', 'mono'), 'Martian Mono');
+  for (const role of ['display', 'body', 'mono']) assert.equal(fam('mono', role), 'JetBrains Mono');
+  assert.equal(fam('brief', 'display'), 'Newsreader');
+  assert.equal(fam('brief', 'body'), 'Atkinson Hyperlegible');
+  assert.equal(fam('brief', 'mono'), 'Geist Mono');
 });

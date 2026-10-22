@@ -3,7 +3,7 @@
 // node_modules, the live spec, and the image and audio files the spec names.
 import http from 'node:http';
 import { createHash } from 'node:crypto';
-import { readFileSync, statSync, createReadStream, watch } from 'node:fs';
+import { readFileSync, statSync, existsSync, createReadStream, watch } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveAsset, resolveUrlPath } from './paths.mjs';
@@ -18,6 +18,8 @@ import { artSvg } from '../../shared/art.mjs';
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NODE_MODULES = path.join(SKILL_ROOT, 'node_modules');
 const TEMPLATE_DIR = path.join(SKILL_ROOT, 'template');
+const NOWRAP_MODULE = path.join(SKILL_ROOT, 'shared/nowrap.mjs'); // the one shared module the render page imports
+const NOWRAP_MISSING = 'shared/nowrap.mjs is missing: run node bin/sync-shared.mjs';
 const WATCH_DEBOUNCE_MS = 100;
 const SSE_KEEPALIVE_MS = 15000;
 
@@ -209,6 +211,7 @@ function route(ctx, req, res) {
   if (pathname === '/spec.json') return serveSpec(ctx, res);
   if (pathname === '/events') return serveEvents(ctx, req, res);
   if (pathname.startsWith('/template/')) return serveUnder(res, TEMPLATE_DIR, pathname.slice('/template/'.length));
+  if (pathname === '/shared/nowrap.mjs') return existsSync(ctx.nowrapModule) ? sendFile(res, ctx.nowrapModule) : reply(res, 404, NOWRAP_MISSING);
   if (pathname.startsWith('/assets/')) return serveAsset(ctx, req, res, pathname.slice('/assets/'.length));
   if (pathname.startsWith('/theme/fonts/')) return serveThemeFont(res, pathname.slice('/theme/fonts/'.length));
   const artRoute = /^\/art\/([^/]+)\.svg$/.exec(pathname);
@@ -281,9 +284,10 @@ function watchSpec(ctx) {
 }
 
 // `theme`: a shared theme name for specs that set none (render --theme).
-export async function startServer({ specPath, mode = 'preview', theme }) {
+// `nowrapModule`: the file served as /shared/nowrap.mjs (tests point it at a missing file).
+export async function startServer({ specPath, mode = 'preview', theme, nowrapModule = NOWRAP_MODULE }) {
   const specFile = path.resolve(specPath);
-  const ctx = { specFile, theme, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
+  const ctx = { specFile, theme, nowrapModule, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
   const watcher = watchSpec(ctx);
   const server = http.createServer((req, res) => handle(ctx, req, res));
   await new Promise((resolve, reject) => {

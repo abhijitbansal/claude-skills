@@ -1,8 +1,10 @@
 // Markdown-lite -> safe HTML. The only markup is: paragraphs, **bold**,
 // *italic*, `code`, [text](http(s)://url) and "- " lists. Everything else,
-// including raw HTML, is escaped text. Output tags: p ul li strong em code a.
+// including raw HTML, is escaped text. Output tags: p ul li strong em code a, and
+// span.nw around a number-plus-unit token (never inside code or a link url).
 // Links carry exactly href and rel="noopener noreferrer"; any other URL form
 // renders as plain text.
+import { findTokens } from '../../shared/nowrap.mjs';
 
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const MAX_DEPTH = 8;
@@ -49,20 +51,39 @@ function closeItalic(s, from) {
   return -1;
 }
 
+// A run of prose text -> escaped HTML, with each number-plus-unit token ("87%", "1,204 ms") held in a
+// nowrap span so a line break cannot separate it from its unit. The span keeps the token's own space.
+// The run is searched before it is escaped: the token pattern matches no character that escaping changes.
+function proseHtml(run) {
+  let out = '';
+  let last = 0;
+  for (const { start, end, text } of findTokens(run)) {
+    out += `${escapeHtml(run.slice(last, start))}<span class="nw">${escapeHtml(text)}</span>`;
+    last = end;
+  }
+  return out + escapeHtml(run.slice(last));
+}
+
 // One pass over `s`; each construct either matches completely or its opening
 // character is emitted as literal text. Nesting is structural (recursion on the
-// inner text), so the output is always well-formed.
+// inner text), so the output is always well-formed. Text between constructs is
+// gathered into a run and rendered by proseHtml; code and link urls never are.
 function inline(s, { links, depth, unlink = false }) {
-  if (depth > MAX_DEPTH) return escapeHtml(s);
+  if (depth > MAX_DEPTH) return proseHtml(s);
   const next = { links, depth: depth + 1, unlink };
   let out = '';
+  let run = '';
+  const emit = (html) => {
+    out += proseHtml(run) + html;
+    run = '';
+  };
   let i = 0;
   while (i < s.length) {
     const c = s[i];
     if (c === '`') {
       const end = s.indexOf('`', i + 1);
       if (end > i + 1) {
-        out += `<code>${escapeHtml(s.slice(i + 1, end))}</code>`;
+        emit(`<code>${escapeHtml(s.slice(i + 1, end))}</code>`);
         i = end + 1;
         continue;
       }
@@ -73,7 +94,7 @@ function inline(s, { links, depth, unlink = false }) {
         const url = end > 0 ? s.slice(close + 2, end) : '';
         if (end > 0 && safeUrl(url)) {
           const label = inline(s.slice(i + 1, close), { links: false, depth: depth + 1 });
-          out += unlink ? label : `<a href="${escapeHtml(url)}" rel="noopener noreferrer">${label}</a>`;
+          emit(unlink ? label : `<a href="${escapeHtml(url)}" rel="noopener noreferrer">${label}</a>`);
           i = end + 1;
           continue;
         }
@@ -81,22 +102,22 @@ function inline(s, { links, depth, unlink = false }) {
     } else if (c === '*' && s[i + 1] === '*') {
       const end = s.indexOf('**', i + 2);
       if (end > i + 2) {
-        out += `<strong>${inline(s.slice(i + 2, end), next)}</strong>`;
+        emit(`<strong>${inline(s.slice(i + 2, end), next)}</strong>`);
         i = end + 2;
         continue;
       }
     } else if (c === '*') {
       const end = closeItalic(s, i + 1);
       if (end > i + 1) {
-        out += `<em>${inline(s.slice(i + 1, end), next)}</em>`;
+        emit(`<em>${inline(s.slice(i + 1, end), next)}</em>`);
         i = end + 1;
         continue;
       }
     }
-    out += escapeHtml(c);
+    run += c;
     i += 1;
   }
-  return out;
+  return out + proseHtml(run);
 }
 
 const blank = (text) => ' '.repeat(text.length);

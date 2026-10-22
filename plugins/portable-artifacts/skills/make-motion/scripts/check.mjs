@@ -3,7 +3,8 @@
 // Seeks the real render page to every contact-sheet moment of every scene (sheetTimes) and reads each element's box
 // and opacity from the DOM. Fails on: a visible text or counter outside the safe area while it is not moving; two
 // visible text or counter boxes overlapping while neither is moving or fading; a scene with nothing on screen at its
-// last frame (a title whose `exit` preset was applied left on purpose and counts as present). A box wholly off the canvas
+// last frame (a title whose `exit` preset was applied left on purpose and counts as present); a number-plus-unit token
+// ("1,204 ms", "87%") drawn across more than one line, reported once per token per scene. A box wholly off the canvas
 // has left the frame: it is never clipped, overlaps nothing, and is not on screen.
 // A warning (never a failure; exit stays 0) when the first scene shows nothing at t = 0: stderr, or `warnings` in --json.
 // A scene is judged on its own layer, so the outgoing scene of a crossfade is not part of the incoming scene's own
@@ -22,6 +23,7 @@ import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
 import { sheetTimes } from './lib/sheet.mjs';
+import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
 
 const USAGE = 'node scripts/check.mjs <motion.json> [--json] [--theme <name>]';
@@ -152,6 +154,14 @@ function emptyEndProblems(scene, i, samples, size) {
   return [{ path: `scenes[${i}]`, message: `scene "${scene.id}" ends with nothing on screen: every element is invisible or off the canvas (at ${at(last.t)})` }];
 }
 
+// A number-plus-unit token that wraps at any sampled moment, once per distinct token, at the first moment it was seen.
+// The renderer binds tokens with U+00A0 (template/renderer.mjs), so this fires only when that binding is lost.
+export function wrapProblems(scene, i, samples) {
+  const first = new Map();
+  for (const { t, wraps } of samples) for (const { text } of wraps) if (!first.has(text)) first.set(text, t);
+  return [...first].map(([text, t]) => ({ path: `scenes[${i}]`, message: `a number-plus-unit token wraps across lines: "${text}" at ${at(t)}` }));
+}
+
 // The two layers of a crossfade are both on screen at the window's midpoint: warn about text over text.
 async function crossfadeWarnings(page, spec, fade, size) {
   const mid = (fade.start + fade.end) / 2;
@@ -174,7 +184,7 @@ async function sampleScene(page, scene, index, start, fps) {
     const els = await page.evaluate(measure, [start + t, index]);
     const ids = els.map((m) => m.id).join();
     if (ids !== scene.elements.map((el) => el.id).join()) throw new Error(`scene "${scene.id}": the page shows elements ${ids}, not the spec's`);
-    samples.push({ t, els });
+    samples.push({ t, els, wraps: await nowrapProblems(page, { root: '#stage' }) });
   }
   return samples;
 }
@@ -199,12 +209,15 @@ export async function waitReady(page, ms = READY_MS) {
   }
 }
 
-async function inspect(browser, spec, server) {
+// `prepare(page)`: an optional hook run once the page is ready and before any sampling (tests use it to undo the
+// renderer's U+00A0 binding, so the wrap rule can be shown firing through the real sampling, report and exit code).
+async function inspect(browser, spec, server, prepare) {
   const page = await browser.newPage({ viewport: { width: spec.size[0], height: spec.size[1] }, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => process.stderr.write(`page error: ${e.message}\n`));
   await guardNetwork(page, new URL(server.url).origin, (url) => process.stderr.write(`blocked network request: ${url}\n`));
   await page.goto(server.url);
   await waitReady(page);
+  await prepare?.(page);
   const starts = await page.evaluate(() => window.__motion.sceneStarts);
   const margin = safeMargin(spec.size);
   const problems = [];
@@ -213,13 +226,13 @@ async function inspect(browser, spec, server) {
   for (const [i, scene] of spec.scenes.entries()) {
     const samples = await sampleScene(page, scene, i, starts[i], spec.fps);
     moments += samples.length;
-    problems.push(...safeAreaProblems(scene, i, samples, margin, spec.size), ...overlapProblems(scene, i, samples, spec.size), ...emptyEndProblems(scene, i, samples, spec.size));
+    problems.push(...safeAreaProblems(scene, i, samples, margin, spec.size), ...overlapProblems(scene, i, samples, spec.size), ...emptyEndProblems(scene, i, samples, spec.size), ...wrapProblems(scene, i, samples));
   }
   for (const fade of await page.evaluate(() => window.__motion.crossfades)) warnings.push(...await crossfadeWarnings(page, spec, fade, spec.size));
   return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings };
 }
 
-async function checkSpec(specPath, spec, { env, theme }) {
+async function checkSpec(specPath, spec, { env, theme, prepare }) {
   if (env.PA_NO_BROWSER === '1') return { status: 'skipped', reason: 'PA_NO_BROWSER=1' };
   let browser;
   try {
@@ -230,7 +243,7 @@ async function checkSpec(specPath, spec, { env, theme }) {
   let server;
   try {
     server = await startServer({ specPath, mode: 'render', theme });
-    return await inspect(browser, spec, server);
+    return await inspect(browser, spec, server, prepare);
   } finally {
     await browser.close().catch(() => {});
     await server?.close();
@@ -264,7 +277,7 @@ function report(result, json) {
   }
 }
 
-async function main(argv) {
+export async function main(argv, { prepare } = {}) {
   let json = argv.includes('--json');
   try {
     const { values, positionals } = parseCli(argv, OPTIONS, USAGE);
@@ -279,7 +292,7 @@ async function main(argv) {
     }
     // The theme the page draws decides the title presets (and so the settle times): the spec's own, else --theme.
     const spec = withDefaults(raw.theme === undefined && values.theme !== undefined ? { ...raw, theme: values.theme } : raw);
-    const result = await checkSpec(path.resolve(positionals[0]), spec, { env: process.env, theme: values.theme });
+    const result = await checkSpec(path.resolve(positionals[0]), spec, { env: process.env, theme: values.theme, prepare });
     report(result, json);
     return result.status === 'failed' ? 1 : 0;
   } catch (e) {

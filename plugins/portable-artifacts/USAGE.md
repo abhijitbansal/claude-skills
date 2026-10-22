@@ -100,6 +100,53 @@ account's usage limit ([`summary-full-2026-10-10.md`](eval/results/summary-full-
 [`eval/results/summary-portability-copilot-2026-10-15.md`](eval/results/summary-portability-copilot-2026-10-15.md)
 and [`eval/results/summary-install-targets-2026-10-15.md`](eval/results/summary-install-targets-2026-10-15.md).
 
+### Cheaper model on Copilot and Codex
+
+Writing a spec is a small job, so every skill can run on a cheap model. Hosts differ in how you get that:
+
+| Host | Mechanism | File | Deterministic or advisory |
+|---|---|---|---|
+| Copilot CLI | `copilot --agent artifact-builder` runs the whole session on the agent's model | `~/.copilot/agents/artifact-builder.agent.md` (project scope: `.github/agents`) | Deterministic. Verified on Copilot CLI 1.0.98: its log shows `Using model "claude-haiku-5.5" from custom agent "artifact-builder"` |
+| VS Code Copilot Chat | Pick `artifact-builder` in the agent picker | the same `.agent.md` file | Deterministic per docs; not tested here |
+| Copilot CLI or VS Code, skill hand-off (VS Code untested) | The skill's "Cheaper model" section tells the running agent to start `artifact-builder` with a self-contained brief | the same `.agent.md` file | Advisory: the main agent may choose not to |
+| Codex | `~/.codex/agents/artifact-builder.toml` (model `gpt-6-luna`, low reasoning effort), or the `default_subagent_model` key under `[agents]` in Codex config | `~/.codex/agents/artifact-builder.toml` (project scope: `.codex/agents`) | Config-level. Written from the Codex docs, not run live |
+| Claude Code | `model: haiku` and `effort: low` in each `SKILL.md` frontmatter, per Claude Code's skill docs | none (no agent file) | Claude Code feature; not measured here |
+| Gemini CLI | nothing | none | none |
+
+Install the agent file with one of these (add `--project <dir>` for project scope, and use `codex` or `agents` in place of `copilot` for those hosts):
+
+```bash
+node plugins/portable-artifacts/bin/install.mjs copilot
+node plugins/portable-artifacts/bin/install.mjs copilot --agents-only
+```
+
+The first command installs the skills and the agent. The second writes only the agent file, for users whose skills came another way. An existing agent file is kept unless you pass `--force`.
+
+Installed with `npx skills add`, which copies skill folders only (no `bin/install.mjs`)? Use the doctor instead:
+
+```bash
+node <skill-dir>/scripts/doctor.mjs
+node <skill-dir>/scripts/doctor.mjs --fix builder_agent
+```
+
+The doctor reports a missing agent file as an optional item, and only where `~/.copilot` or `~/.codex` exists. `--fix builder_agent` runs the skill's own copy of `shared/agents.mjs`, which writes `~/.copilot/agents/artifact-builder.agent.md` and/or `~/.codex/agents/artifact-builder.toml` (user level, outside the project; an existing file is kept, never overwritten). The skill's workflow already tells the agent to ask you before running a doctor fix. Project-level install (`.github/agents`, `.codex/agents`) still needs `install.mjs --project`. A host may need a new session before it lists the new agent.
+
+What was measured, on Copilot CLI 1.0.98, 2026-10-21 (results: [`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md)), running `copilot -p "<prompt>" --allow-all-tools --agent artifact-builder`:
+
+| Run | Valid builds | Model |
+|---|---|---|
+| make-motion, all 10 prompts | 10/10 (validate runs 1-4, median 2; 26-57 s per case) | `claude-haiku-5.5` reported for 9 of 10; the edit case did not set `generatedBy` |
+| dashboard, diagram, explainer, scene (9 runs) | 9/9 | `claude-haiku-5.5` reported for all 9 |
+| Copilot's own logs, all 19 runs | 19 lines `Using model "claude-haiku-5.5" from custom agent "artifact-builder"` | the default would have been `claude-sonnet-5.5` |
+
+The skill hand-off is advisory. In the one live trial (make-explainer on the default model, no retries), the main agent did hand off and the sub-agent ran on `claude-haiku-5.5` and obeyed the loop guard, but the sub-agent hit `Permission denied because no interactive user response was available` on both its tools when reading the skill file. That skill was a `--link` symlink pointing outside the project; the cause was not verified and a copy install was not tried. The main agent said so and built the page itself (validate passed, 34 s). So the hand-off happened and the fallback worked, but the cheap model did not do the work in that run.
+
+Cost: only that one trial was measured, at 18.7 AI Credits (about $0.19 at 1 credit = $0.01; 432k input tokens, 353k of them cached, 4.2k output tokens). The cost of the smoke and motion runs was not measured. Claude Haiku 5.5 is listed at $0.10 / $0.50 per 1M input / output tokens; the default model's price was not looked up here, so no saving is claimed.
+
+`model: haiku` in make-motion's frontmatter changes the model Claude Code uses for it. make-motion on Haiku in Claude Code itself was not measured: the motion gate measured Copilot's `claude-haiku-5.5`.
+
+Not tested: Codex (no account; the files come from the Codex docs), VS Code Copilot Chat, and a copy install for the hand-off trial.
+
 ## 2. Dashboards with make-dashboard
 
 **Ask:**
@@ -125,7 +172,7 @@ from your project folder):
 - **Chart kinds:** bar, stacked-bar, grouped-bar, line, area, scatter, bubble, heatmap, histogram, boxplot and donut. The agent names the columns and the build writes the chart. Raw Vega-Lite still works for anything else. Reference: `make-dashboard/references/kinds.md`.
 - **Views:** each card can switch between alternate views (sorted, share, 100%, area, boxplot, …) and a sortable Table view; `pair: true` shows two side by side.
 - **Export:** every card has an Export menu for PNG, SVG and CSV.
-- **Themes:** `paper` (default), `blueprint`, `editorial`, `ink`, and the newer `dusk`, `press` and `poster` (see the [README](README.md#themes-and-art)). Ask for one, or pass `--theme <name>` to `build.mjs`. The page also has an icon toggle that cycles Auto, Light and Dark.
+- **Themes:** `paper` (default), `blueprint`, `editorial`, `ink`, the newer `dusk`, `press` and `poster`, and the plan-page themes `mono` and `brief` (see the [README](README.md#themes-and-art)). Ask for one, or pass `--theme <name>` to `build.mjs`. The page also has an icon toggle that cycles Auto, Light and Dark.
 - **Live reload:** see below.
 
 **Open the result:** double-click `dist/index.html` (it is one
@@ -189,8 +236,8 @@ your project folder):
 4. `build.mjs diagram.json` writes one offline HTML file and prints its path.
    The default folder is `~/.agent/diagrams/` (set `PA_OUTPUT_DIR`, or pass
    `--out file.html` or `--out dir`). `--theme <name>` overrides the spec's
-   theme: `blueprint` (default), `paper`, `ink`, `editorial`, `dusk`, `press`
-   or `poster`.
+   theme: `blueprint` (default), `paper`, `ink`, `editorial`, `dusk`, `press`,
+   `poster`, `mono` or `brief`.
 5. `check.mjs <page>` opens the page at 1440 and 390 px and reports overflow,
    console errors, text that leaves its box and a node under the legend
    overlay. It needs Playwright and a browser (a full `npm ci` plus
@@ -264,8 +311,8 @@ your project folder):
 5. `build.mjs explainer.json` writes one HTML file and prints its path. The
    default folder is `~/.agent/diagrams/` (set `PA_OUTPUT_DIR`, or pass
    `--out file.html` or `--out dir`). `--theme <name>` overrides the spec's
-   theme: `dusk` (default), `press`, `poster`, `paper`, `blueprint`, `ink` or
-   `editorial` (see [Choosing a theme](#choosing-a-theme)); `--model`, `--effort` and `--agent` set the
+   theme: `dusk` (default), `press`, `poster`, `paper`, `blueprint`, `ink`,
+   `editorial`, `mono` or `brief` (see [Choosing a theme](#choosing-a-theme)); `--model`, `--effort` and `--agent` set the
    provenance stamp (see [section 7](#7-what-every-page-carries)). A video or an interactive chart adds a
    `<name>.assets/` folder beside the page: keep them together.
    `--image-api <https-endpoint>` is an optional extra described
@@ -282,9 +329,42 @@ your project folder):
 **Presets:** `recap` (tl;dr, numbers, how it works, files changed, timeline,
 risks), `checklist` (a group per area of changed files, a regression group, an
 intro and "If something fails"), `concept` (tl;dr, explanation, cards, steps),
-`slides` (a deck). **Sections** (19): `tldr`, `text`, `kpis`, `cards`,
+`slides` (a deck), `plan` (a decision-first plan the reviewer answers on the
+page, see below). **Sections** (24): `tldr`, `text`, `kpis`, `cards`,
 `table`, `risks`, `files`, `steps`, `timeline`, `compare`, `callout`, `code`,
-`details`, `checklist`, `diagram`, `chart`, `motion`, `scene`, `image`.
+`details`, `checklist`, `diagram`, `chart`, `motion`, `scene`, `image`, and
+for plans `decision`, `approval`, `question`, `review`, `verdict`.
+
+**Plan mode.** Ask for a plan, proposal or design to be reviewed and answered.
+`scaffold.mjs plan --title "…" --out plan.json` writes a decision-first
+starter: a summary, three numbers, a decision, an approval, a question,
+"review these first", goals, a diagram, phases and risks, and last the
+reviewer's overall verdict control; the agent replaces each
+`TODO:` and builds the page, which defaults to the `mono` theme (`--theme brief`
+for the executive look). The reviewer picks one option per decision, approves,
+asks for changes or rejects each approval, answers each question, gives an
+overall verdict and a name, then presses Copy answers or Download
+`plan-answers.json`, or Save as HTML. Answers are saved in the reviewer's browser, keyed by the
+plan's `key` and a hash of its content, so answers to an edited plan are
+flagged instead of reused. **Save as HTML** is a button in the sticky contents
+menu on the left (a corner button on a phone, or on a page too short for a
+menu): it downloads `<key>-answered.html`, this same page with the answers put
+inside it. Opening that file shows the answers again, in any browser, with no
+storage needed, so it can be kept, shared with others or handed to the agent. If this
+browser already holds a newer answer for the same plan (or one written before saved
+pages existed), that answer wins; otherwise the file's answers are shown, and nothing
+is written to this browser until the reader changes something. The agent reads the
+answers as they were saved in the file, not what a browser shows later. The reviewer's
+theme choice is not baked into the file. A saved page is a full web page, not inert
+JSON: open one only if you trust whoever sent it, and give it to the agent only through
+`answers.mjs`. The agent
+never reads a file directly: it runs `answers.mjs plan.json plan-answers.json`
+or `answers.mjs plan.json <key>-answered.html`
+(add `--json` for machine-readable output), which exits 0 for valid answers, 1
+for problems and 2 for a usage error, and acts only on a summary that does not
+start with `INVALID ANSWERS`. If the answers come back pasted into a chat,
+write them unchanged to `plan-answers.json` first. A worked example is
+`references/examples/plan.explainer.json`.
 
 **Embedding other skills:**
 
@@ -339,8 +419,8 @@ make-explainer and make-motion share these rules:
    three with a one-line feel each (`dusk` soft and warm, `press` calm print,
    `poster` loud and condensed). If it cannot ask, it uses `dusk`.
 
-`paper`, `blueprint`, `ink` and `editorial` still work, but only when you name
-them. In `dusk`, `press` and `poster` the page hero and a deck's title and
+`paper`, `blueprint`, `ink`, `editorial`, `mono` and `brief` still work, but only
+when you name them (`mono` and `brief` are meant for plan pages; a `plan` defaults to `mono`). In `dusk`, `press` and `poster` the page hero and a deck's title and
 closing slides carry procedural art drawn from the title: no network, and the
 same title gives the same picture.
 
@@ -355,8 +435,8 @@ Before you use it:
 - **It may cost money.** Each build with the flag is one request your service
   may bill. Rebuild without the flag to stop.
 - **Your key**, in `PA_IMAGE_API_KEY`. It is never written to the page.
-- **Page hero only**, and only in `dusk`, `press` or `poster`. A deck or an
-  older theme is refused (exit 2) before anything is sent.
+- **Page hero only**, and only in `dusk`, `press` or `poster`. A deck or any
+  other theme is refused (exit 2) before anything is sent.
 
 Any failure stops the build with exit 2; there is no silent fallback. The
 picture is inlined, so the page stays one offline file. The request and reply
@@ -550,7 +630,8 @@ Funnel Display, Host Grotesk and Commit Mono; `press` Young Serif, Schibsted
 Grotesk and JetBrains Mono; `poster` Big Shoulders Display, Familjen Grotesk
 and Martian Mono; `paper` and `blueprint` Geist and Geist Mono; `ink` Bricolage
 Grotesque headings over Geist; `editorial` Newsreader headings and an Atkinson
-Hyperlegible body. The make-motion preview and video use the spec's theme
+Hyperlegible body; `mono` JetBrains Mono throughout, in regular weight only (no bold face, so bold text is synthesized by the browser); `brief` Newsreader headings,
+an Atkinson Hyperlegible body and Geist Mono. The make-motion preview and video use the spec's theme
 (`dusk` when it names none). Links in running text are underlined; buttons,
 navigation and cards are not.
 

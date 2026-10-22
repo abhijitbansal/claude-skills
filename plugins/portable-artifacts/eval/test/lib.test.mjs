@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SKILLS, buildPrompt, expandCmd, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules, createFixtureRepo, prepareWorkdir, copySkill } from '../lib.mjs';
+import { spawnSync } from 'node:child_process';
+import { SKILLS, buildPrompt, expandCmd, readSpecModel, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules, createFixtureRepo, prepareWorkdir, copySkill } from '../lib.mjs';
 
 const made = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-eval-test-')); made.push(d); return d; };
@@ -402,4 +403,130 @@ test('createFixtureRepo says what to upgrade when git cannot init a branch name'
   try {
     assert.throws(() => createFixtureRepo(dir), /git init .*failed: unknown switch b \(git 2\.28 or newer is needed for init -b\)/);
   } finally { process.env.PATH = prev; }
+});
+
+test('expandCmd adds agentArgs only when an agent is given', () => {
+  const host = { cmd: ['h', '{prompt}'], modelArgs: ['--model', '{model}'], agentArgs: ['--agent', '{agent}'] };
+  assert.deepEqual(expandCmd(host, { prompt: 'p', cwd: '/w' }), ['h', 'p']);
+  assert.deepEqual(expandCmd(host, { prompt: 'p', cwd: '/w', agent: 'artifact-builder' }), ['h', 'p', '--agent', 'artifact-builder']);
+  assert.deepEqual(expandCmd(host, { prompt: 'p', cwd: '/w', model: 'm', agent: 'a' }), ['h', 'p', '--model', 'm', '--agent', 'a']);
+});
+
+test('expandCmd ignores an agent for a host without agentArgs (run-eval rejects it earlier)', () => {
+  assert.deepEqual(expandCmd({ cmd: ['h', '{prompt}'] }, { prompt: 'p', cwd: '/w', agent: 'a' }), ['h', 'p']);
+});
+
+test('hosts.json: only copilot defines agentArgs', () => {
+  const hosts = readJson('hosts.json');
+  assert.deepEqual(hosts.copilot.agentArgs, ['--agent', '{agent}']);
+  assert.deepEqual(Object.keys(hosts).filter((h) => hosts[h].agentArgs), ['copilot']);
+});
+
+// Runs the real run-eval.mjs with PATH pointing only at fake `claude` and `copilot` executables that record
+// a marker and exit 1, plus --only __none__ so no prompt can run. If a usage check ever slid below the host
+// check, the marker file would appear (and no real host or billed command could run).
+function runEvalWithFakeHosts(args) {
+  const bin = tmp();
+  const marker = path.join(bin, 'host-launched.txt');
+  for (const name of ['claude', 'copilot']) {
+    fs.writeFileSync(path.join(bin, name), `#!/bin/sh\necho "${name} $*" >> "${marker}"\nexit 1\n`, { mode: 0o755 });
+  }
+  const r = spawnSync(process.execPath, [path.join(evalDir, 'run-eval.mjs'), '--skill', 'dashboard', '--only', '__none__', ...args], {
+    encoding: 'utf8', env: { ...process.env, PATH: bin },
+  });
+  return { r, hostLaunched: fs.existsSync(marker) };
+}
+
+test('run-eval: --agent on a host without agentArgs is a usage error before any host runs', () => {
+  const { r, hostLaunched } = runEvalWithFakeHosts(['--host', 'claude', '--agent', 'artifact-builder']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /host "claude" has no agentArgs/);
+  assert.match(r.stderr, /\[--agent name\]/);
+  assert.equal(hostLaunched, false, 'no host executable may be launched');
+});
+
+test('run-eval: --agent needs a non-empty name', () => {
+  const { r, hostLaunched } = runEvalWithFakeHosts(['--host', 'copilot', '--agent', '']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /--agent needs a name/);
+  assert.equal(hostLaunched, false, 'no host executable may be launched');
+});
+
+test('the fake host executables really are what runs: a valid --agent reaches the host check', () => {
+  const { r, hostLaunched } = runEvalWithFakeHosts(['--host', 'copilot', '--agent', 'artifact-builder']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /host "copilot" not available/);
+  assert.equal(hostLaunched, true);
+});
+
+test('readSpecModel reads generatedBy.model from the saved spec, "-" when absent or unreadable', () => {
+  const d = tmp();
+  const w = (name, text) => { fs.writeFileSync(path.join(d, name), text); return path.join(d, name); };
+  assert.equal(readSpecModel(w('a.json', '{"generatedBy":{"model":"Claude Haiku 5.5","effort":"low"}}')), 'Claude Haiku 5.5');
+  assert.equal(readSpecModel(w('b.json', '{"title":"x"}')), '-');
+  assert.equal(readSpecModel(w('c.json', '{"generatedBy":{"model":""}}')), '-');
+  assert.equal(readSpecModel(w('d.json', '{"generatedBy":"gpt"}')), '-');
+  assert.equal(readSpecModel(w('e.json', 'not json')), '-');
+  assert.equal(readSpecModel(path.join(d, 'nope.json')), '-');
+  assert.equal(readSpecModel(w('f.json', '{"generatedBy":{"model":" \\n\\t "}}')), '-');
+});
+
+test('readSpecModel treats the model as untrusted: whitespace collapses and the length is capped', () => {
+  const d = tmp();
+  const w = (name, model) => { fs.writeFileSync(path.join(d, name), JSON.stringify({ generatedBy: { model } })); return path.join(d, name); };
+  assert.equal(readSpecModel(w('a.json', 'Haiku\n| fake | row |\r\n\tx')), 'Haiku | fake | row | x');
+  const long = readSpecModel(w('b.json', 'm'.repeat(5000)));
+  assert.equal(long.length, 80);
+  assert.ok(long.endsWith('…'));
+  assert.equal(readSpecModel(w('c.json', 'x'.repeat(80))), 'x'.repeat(80));
+});
+
+test('summary.md keeps one table row per case even when the reported model is hostile', async () => {
+  const work = tmp();
+  fs.writeFileSync(path.join(work, 'spec.json'), JSON.stringify({ ok: true, generatedBy: { model: 'Haiku\n| fake | row | ✓ |\n' + 'z'.repeat(5000) } }));
+  const s = await scoreRun({ work, skillCfg: cfg, skillDir: fakeSkill() });
+  const md = summarize([{ id: 'a', seconds: 1, ...s }, { id: 'b', seconds: 1, ...s }], { host: 'copilot', skill: 'dashboard' });
+  const tableRows = md.split('\n').filter((l) => l.startsWith('| '));
+  assert.equal(tableRows.length, 1 + 2, 'header plus one row per case');
+  assert.ok(tableRows.every((l) => l.length < 400));
+});
+
+test('scoreRun: motion-style case, the spec reports a model and the output has no page or MP4', async () => {
+  const skill = fakeSkill();
+  const pngCfg = { ...cfg, artifacts: ['out'], outputCmd: (s, spec, work) => [path.join(s, 'scripts/png.mjs'), path.join(work, 'out')] };
+  fs.writeFileSync(path.join(skill, 'scripts/png.mjs'), `
+    import fs from 'node:fs';
+    fs.mkdirSync(process.argv[2], { recursive: true });
+    fs.writeFileSync(process.argv[2] + '/sheet.png', 'x');
+  `);
+  const work = tmp();
+  fs.writeFileSync(path.join(work, 'spec.json'), '{"ok": true, "generatedBy": {"model": "GPT-5.4 nano"}}');
+  const s = await scoreRun({ work, skillCfg: pngCfg, skillDir: skill });
+  assert.equal(s.outputOk, true);
+  assert.equal(s.model, 'GPT-5.4 nano');
+});
+
+test('scoreRun: the model comes from the spec only (an invalid spec still reports it; no spec or no model is "-")', async () => {
+  const score = async (spec) => {
+    const work = tmp();
+    if (spec) fs.writeFileSync(path.join(work, 'spec.json'), JSON.stringify(spec));
+    return scoreRun({ work, skillCfg: cfg, skillDir: fakeSkill() });
+  };
+  assert.equal((await score({ ok: true, generatedBy: { model: 'Spec Model' } })).model, 'Spec Model');
+  assert.equal((await score({ ok: true })).model, '-');
+  assert.equal((await score(null)).model, '-');
+  const bad = await score({ ok: false, generatedBy: { model: 'Spec Model' } });
+  assert.equal(bad.finalValid, false);
+  assert.equal(bad.model, 'Spec Model');
+});
+
+test('summarize has a "model reported" column and names the agent', () => {
+  const md = summarize([
+    { id: 'a', specExists: true, finalValid: true, validateRuns: 1, outputOk: true, seconds: 3, errors: [], model: 'Claude Haiku 5.5' },
+    { id: 'b', specExists: false, finalValid: false, validateRuns: 0, outputOk: false, seconds: 3, errors: [] },
+  ], { host: 'copilot', skill: 'dashboard', agent: 'artifact-builder' });
+  assert.match(md, /\| seconds \| model reported \| notes \|/);
+  assert.match(md, /\| a \| ✓ \| ✓ \| 1 \| ✓ \| 3 \| Claude Haiku 5\.5 \|/);
+  assert.match(md, /\| b \| ✗ \| ✗ \| 0 \| ✗ \| 3 \| - \|/);
+  assert.match(md, /artifact-builder/);
 });

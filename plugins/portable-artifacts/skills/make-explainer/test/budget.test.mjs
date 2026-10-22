@@ -76,8 +76,8 @@ test('every warning suggests a conversion', () => {
   for (const x of all) assert.match(x.message, /→|cards|steps|split|state the finding|name the topic/);
 });
 
-test('the four shipped examples are inside the caps', () => {
-  for (const n of ['recap', 'checklist', 'concept', 'slides']) {
+test('the five shipped examples are inside the caps', () => {
+  for (const n of ['recap', 'checklist', 'concept', 'slides', 'plan']) {
     const s = JSON.parse(fs.readFileSync(new URL(`../references/examples/${n}.explainer.json`, import.meta.url)));
     assert.deepEqual(warnBudget(s), [], n);
   }

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// node scripts/scaffold.mjs <recap|checklist|concept|slides> [--facts facts.json] [--title <text>] [--out <file>]
+// node scripts/scaffold.mjs <recap|checklist|concept|slides|plan> [--facts facts.json] [--title <text>] [--out <file>]
 // Prints a starter explainer.json on stdout. Facts (from gather.mjs) fill the numbers, files,
 // commits and folders; every sentence is a "TODO: ..." string that validate.mjs rejects until
 // it is replaced. Write it to a file with --out: scaffold.mjs recap --facts f.json --out explainer.json

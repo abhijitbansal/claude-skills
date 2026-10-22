@@ -9,9 +9,9 @@ import { pathJoin } from '../../shared/errors.mjs';
 import { readImage } from './image.mjs';
 import { loadSibling, SiblingError, siblingDir } from './siblings.mjs';
 import { quoteArg } from '../../shared/doctor.mjs';
-import { EXPLAINER_THEME } from './default-theme.mjs';
+import { specTheme } from './default-theme.mjs';
 import { itemKey } from './render/checklist.mjs';
-import { readDiagramSpec, reportDiagramErrors, inPageTheme } from './diagram-source.mjs';
+import { readDiagramSpec, reportDiagramErrors, underPageTheme } from './diagram-source.mjs';
 import { readSceneSpec, reportSceneErrors, sceneNetworkError, MAX_SCENE_SECTIONS } from './scene-source.mjs';
 import { chartMode, loadChartSource, INLINE_CHART_FIELDS } from './chart-source.mjs';
 import { LIMITS } from './schema.mjs';
@@ -111,13 +111,13 @@ registerCheck('diagram', async ({ section, path: at, dir, spec }) => {
   if (typeof api.validateSpec !== 'function') {
     return [{ path: where, message: `make-diagram is too old (no validateSpec in api.mjs); update it: reinstall with npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill make-diagram -y, then run npm ci --omit=dev --prefix ${quoteArg(siblingDir('make-diagram'))}` }];
   }
-  const pageTheme = spec.theme ?? EXPLAINER_THEME;
+  const pageTheme = specTheme(spec);
   const warnings = source.spec.theme === undefined ? [] : [{
     path: pathJoin(where, 'theme'),
     message: `ignored — the page theme (${JSON.stringify(pageTheme)}) is used; remove it or change the explainer's theme${source.file ? ` (in ${source.file})` : ''}`,
     warning: true,
   }];
-  const result = await api.validateSpec(inPageTheme(source.spec, spec.theme));
+  const result = await api.validateSpec(underPageTheme(source.spec, spec));
   return [...reportDiagramErrors(result.errors, where, source.file), ...warnings];
 });
 
@@ -139,7 +139,7 @@ registerCheck('scene', async ({ section, path: at, dir, spec }) => {
     if (!(e instanceof SiblingError)) throw e;
     return [...errors, { path: where, message: e.message }];
   }
-  const pageTheme = spec.theme ?? EXPLAINER_THEME;
+  const pageTheme = specTheme(spec);
   const warnings = source.spec.theme === undefined ? [] : [{
     path: pathJoin(where, 'theme'),
     message: `ignored — the page theme (${JSON.stringify(pageTheme)}) is used; remove it or change the explainer's theme${source.file ? ` (in ${source.file})` : ''}`,
@@ -154,7 +154,7 @@ registerCheck('scene', async ({ section, path: at, dir, spec }) => {
     return [...errors, { path: where, message: e.message }];
   }
   if (network) return [...errors, ...reportSceneErrors([network], where, source.file), ...warnings];
-  const result = await api.validateSpec(inPageTheme(source.spec, spec.theme), { dir: source.dir });
+  const result = await api.validateSpec(underPageTheme(source.spec, spec), { dir: source.dir });
   return [...errors, ...reportSceneErrors(result.errors, where, source.file), ...warnings];
 });
 

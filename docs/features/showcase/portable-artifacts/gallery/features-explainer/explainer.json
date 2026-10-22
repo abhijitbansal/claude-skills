@@ -1,0 +1,101 @@
+{
+  "title": "What portable-artifacts 1.0.0 adds",
+  "subtitle": "Four changes: what each does, how it was built, and what is still unproven",
+  "preset": "concept",
+  "generatedBy": { "model": "claude-haiku-5-5", "agent": "Claude Code" },
+  "sections": [
+    {
+      "type": "tldr",
+      "title": "Numbers hold, builds cost less, plans get answers",
+      "label": "The verdict",
+      "text": "This release adds one-line numbers, cheap-model routing, a plan mode and the docs for all three.",
+      "points": [
+        "Every test suite passed before release.",
+        "Copilot CLI ran Haiku 5.5 in 19 of 19 measured runs.",
+        "Codex and VS Code Copilot Chat are untested."
+      ],
+      "tone": "good"
+    },
+    {
+      "type": "kpis",
+      "title": "What the branch measured",
+      "label": "Numbers",
+      "items": [
+        { "label": "Plan tasks done", "value": "16" },
+        { "label": "Smoke runs passed", "value": "9 of 9" },
+        { "label": "Motion gate", "value": "10 of 10" },
+        { "label": "Runs on Haiku 5.5", "value": "19 of 19" },
+        { "label": "Themes now", "value": "9" },
+        { "label": "Plugin version", "value": "1.0.0" }
+      ]
+    },
+    {
+      "type": "cards",
+      "title": "Four features, one branch",
+      "label": "Features",
+      "columns": 2,
+      "items": [
+        { "title": "A. Numbers on one line", "text": "A number and its unit such as 42% or 1,204 ms no longer split across lines in explainers, decks, dashboards and motion." },
+        { "title": "B. Cheap-model routing", "text": "Skills hand the build to an artifact-builder agent that runs a cheaper model on Copilot and Codex." },
+        { "title": "C. Plan mode", "text": "A plan preset in make-explainer where reviewers answer decisions in the page and return a JSON file to the agent." },
+        { "title": "D. Docs and release", "text": "READMEs, feature pages and counts updated; plugin version raised from 0.8.1 to 1.0.0 for the CI guard." }
+      ]
+    },
+    {
+      "type": "text",
+      "title": "A: one token finder, many renderers",
+      "label": "A: how",
+      "text": "`shared/nowrap.mjs` finds number-plus-unit tokens and skips `code`, `pre`, `kbd` and `samp`. The explainer wraps each hit in a `nowrap` span; motion binds the gap with a non-breaking space through an exact-match server route.\n\nKPI tiles size their font by value length with container-query units. Long values wrap inside the tile instead of spilling. `check.mjs` measures a real browser and fails on a split or an overflow."
+    },
+    {
+      "type": "steps",
+      "title": "B: how the cheap model is picked",
+      "label": "B: how",
+      "items": [
+        { "title": "Generate agent files", "text": "`bin/agents.mjs` writes an artifact-builder agent: Haiku 5.5 with GPT-5.4 nano as fallback on Copilot, `gpt-6-luna` on Codex, low effort." },
+        { "title": "Install them", "text": "`bin/install.mjs` writes the files to the user-level agent folders; `--project` and `--agents-only` narrow it. After `npx skills add`, `doctor.mjs --fix builder_agent` writes the same files." },
+        { "title": "Tell the skill to hand off", "text": "All five SKILL.md files carry a Cheaper model block with a loop guard so the sub-agent does not delegate again." },
+        { "title": "Measure it", "text": "`eval/run-eval.mjs --agent` ran 9 smoke runs and the 10-prompt motion gate. Copilot logs confirmed Haiku in every run." }
+      ]
+    },
+    {
+      "type": "cards",
+      "title": "C: plan mode has four moving parts",
+      "label": "C: how",
+      "columns": 2,
+      "items": [
+        { "title": "Plan preset and sections", "text": "Five new section types: decision, approval, question, verdict and review, laid out decision-first with the verdict last." },
+        { "title": "Two themes", "text": "`mono` is techie with a cyan accent. `brief` is executive. The explainer now has 9 themes." },
+        { "title": "Page runtime", "text": "`plan.js` keeps answers in the browser and offers Copy, Download (`plan-answers.json`) and Save as HTML, a sticky button that saves the page with the answers inside." },
+        { "title": "Answer checker", "text": "`answers.mjs` validates the answers file, or a saved page, against a closed schema and quotes reviewer text only as data, never as instructions." }
+      ]
+    },
+    {
+      "type": "callout",
+      "tone": "warn",
+      "title": "What is still unproven",
+      "text": "Codex has no account here, so its agent file was written from docs only. The one hand-off trial reached Haiku, but the sub-agent was denied file access and the main model finished the work. Smoke and motion run costs were not measured."
+    },
+    {
+      "type": "risks",
+      "title": "Known gaps left open",
+      "label": "Gaps",
+      "items": [
+        { "risk": "Wide glyphs (W, M, CJK) under 16 characters can spill a KPI tile", "severity": "low", "mitigation": "check.mjs reports it." },
+        { "risk": "Stale-answers notice stays visible after the first new answer", "severity": "low", "mitigation": "Parked for a follow-up." },
+        { "risk": "`--force` in inline code breaks after the hyphen on every explainer page", "severity": "low", "mitigation": "Parked for a follow-up." },
+        { "risk": "docs/catalog.html search terms miss the new features", "severity": "low", "mitigation": "Parked for a follow-up." }
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "How the release was built",
+      "label": "Process",
+      "items": [
+        { "title": "Spec and plan", "text": "A design spec and a 16-task plan were written and committed under `docs/superpowers/`." },
+        { "title": "One agent per task", "text": "Each task went to a fresh implementer, then a spec and quality review, then fix rounds. The controller made every commit." },
+        { "title": "Whole-change review", "text": "The strongest model reviewed the whole change, one fix wave followed, and a scoped re-review came back clean." }
+      ]
+    }
+  ]
+}

@@ -24,7 +24,7 @@ The spec is a closed JSON object: an unknown property is an error, and the valid
 | `title` | string | Required, 1 to 120 characters. Also names the output file. |
 | `subtitle` | string | Optional, up to 160 characters. |
 | `world` | `city` `forest` `galaxy` `terrain` | Optional with `data`; leave it out and the build picks the best fit. Not allowed with `lift`. The data must be able to feed it (see Eligibility). |
-| `theme` | string | `dusk` (default), `press`, `poster`, `paper`, `blueprint`, `ink`, `editorial`. `build.mjs --theme` overrides it. |
+| `theme` | string | `dusk` (default), `press`, `poster`, `paper`, `blueprint`, `ink`, `editorial`, `mono`, `brief`. `build.mjs --theme` overrides it. |
 | `data` | object | Rows for a world. Exactly one of `data` or `lift`. |
 | `links` | array | Optional, data scenes only: `{ "from", "to", "value" }` between groups. Drawn by the galaxy. |
 | `lift` | object | An existing diagram or dashboard chart, instead of `data`. |

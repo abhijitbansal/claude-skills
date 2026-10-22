@@ -20,7 +20,8 @@
 :root[data-flavor] .slide .det summary { font-size: var(--fs-md); }
 :root[data-flavor="poster"] .slide .code pre { font-size: calc(var(--fs-sm) * 0.88); }
 /* numbers too: the deck scales them past the page's cap */
-:root[data-flavor] .slide .kpi-value { font-size: clamp(2.8rem, 1.2rem + 4.4vw, 6rem); }
+/* a slide's --fs-md is large and its tiles are padded, so the floor is --fs-sm: a value stays on one line inside its tile */
+:root[data-flavor] .slide .kpi-value { --kpi-fit: max(var(--fs-sm), calc(100cqi / (var(--n, 8) * 0.7))); font-size: min(clamp(2.8rem, 1.2rem + 4.4vw, 6rem), var(--kpi-fit)); }
 :root[data-flavor] .slide .step { padding-bottom: var(--sp-3); }
 /* the tldr's own box would stack a card on the slide: the slide is the card */
 :root[data-flavor] .slide-tldr .tldr { background: none; border: 0; border-radius: 0; padding: 0; }

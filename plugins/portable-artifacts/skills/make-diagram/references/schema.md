@@ -16,7 +16,7 @@ A field from the other family is an error, for example `direction: not allowed f
 | `title` | string | required | page title; also the output file name (`<slug>.html`) |
 | `subtitle` | string | none | one line under the title |
 | `type` | `architecture` \| `flow` \| `sequence` \| `state` | required | |
-| `theme` | `paper` \| `blueprint` \| `ink` \| `editorial` \| `dusk` \| `press` \| `poster` | `blueprint` | `build.mjs --theme` overrides it |
+| `theme` | `paper` \| `blueprint` \| `ink` \| `editorial` \| `dusk` \| `press` \| `poster` \| `mono` \| `brief` | `blueprint` | `build.mjs --theme` overrides it |
 | `generatedBy` | object `{ model?, effort?, agent? }` | none | who made the diagram, shown under the title and in the page's generator meta; each field is 1-60 characters of letters, digits, space and `. _ : / ( ) + -`; `build.mjs --model`, `--effort` and `--agent` override it; a missing field shows as "not reported" |
 | `direction` | `right` \| `down` | `right` (architecture, state), `down` (flow) | graph types only |
 | `animate` | boolean | `false` | start with edge-flow animation on; the toolbar toggle still works; off under reduced motion |

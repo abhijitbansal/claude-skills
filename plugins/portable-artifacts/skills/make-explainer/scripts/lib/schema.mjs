@@ -8,7 +8,7 @@ export const NON_SPACE = '\\S';
 export const ID_PATTERN = /^[a-z][a-z0-9-]*$/;
 export const KEY_PATTERN = /^[a-z0-9][a-z0-9._-]*$/;
 
-export const PRESETS = ['recap', 'checklist', 'concept', 'slides', 'none'];
+export const PRESETS = ['recap', 'checklist', 'concept', 'slides', 'plan', 'none'];
 export const MODES = ['page', 'slides'];
 export const META_KEYS = ['date', 'branch', 'repo', 'author', 'version', 'status'];
 export const TONES = ['neutral', 'accent', 'good', 'warn', 'bad'];
@@ -37,6 +37,12 @@ export const LIMITS = Object.freeze({
   codeLines: 120,
   chartRows: 500,
   checklistKey: 80,
+  planOptions: [2, 5],
+  // What the answers file carries back (answers.mjs bounds it): an item's id, the question it asks, an option's label.
+  planId: 80,
+  planQuestion: 500,
+  planLabel: 200,
+  reviewItems: [1, 5],
 });
 
 // Slide content budget (each section is one slide in slides mode).
@@ -126,6 +132,20 @@ export const SECTION_SCHEMAS = {
   scene: section('scene', ['scene'], { scene: { type: ['string', 'object'] }, caption: text }),
   motion: section('motion', [], { video: text, spec: text, poster: text, caption: text }),
   image: section('image', ['src', 'alt'], { src: text, alt: text, caption: text }),
+  // Plan mode. decision, approval and question require an id: answers key on it (unique across the page, checkIds).
+  decision: section('decision', ['id', 'question', 'options', 'recommended', 'why'], {
+    question: text,
+    options: items({ label: text, pros: list(text), cons: list(text) }, ['label']),
+    recommended: text,
+    why: text,
+    default: text,
+  }),
+  approval: section('approval', ['id', 'item', 'why'], { item: text, why: text, impact: text, owner: text }),
+  question: section('question', ['id', 'text'], { text, default: text }),
+  review: section('review', ['items'], {
+    items: items({ point: text, why: text, target: text }, ['point', 'why']),
+  }),
+  verdict: section('verdict', [], { text }),
 };
 
 export const TYPES = Object.keys(SECTION_SCHEMAS);
@@ -139,6 +159,7 @@ export const ROOT_SCHEMA = object(['title', 'sections'], {
   title: text,
   subtitle: text,
   preset: { enum: PRESETS },
+  key: text,
   mode: { enum: MODES },
   theme: text,
   generatedBy: GENERATED_BY_SCHEMA,

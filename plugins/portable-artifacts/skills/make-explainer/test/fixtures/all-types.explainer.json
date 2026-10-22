@@ -2,6 +2,7 @@
   "title": "feat/visual-artifacts: dashboards, diagrams and explainers",
   "subtitle": "What shipped, how it works, how to test it",
   "preset": "recap",
+  "key": "all-types",
   "mode": "page",
   "theme": "paper",
   "meta": { "date": "2026-10-12", "branch": "feat/visual-artifacts", "author": "Abhijit Bansal" },
@@ -24,6 +25,11 @@
     { "type": "chart", "title": "Growth", "data": [{ "a": "Q1", "b": 2 }], "kind": "bar", "x": "a", "y": "b", "caption": "Counts" },
     { "type": "scene", "title": "Commit city", "scene": { "title": "Commits", "world": "city", "data": { "rows": [{ "group": "api", "t": "W1", "value": 3 }, { "group": "web", "t": "W1", "value": 2 }] } }, "caption": "By folder" },
     { "type": "motion", "title": "Demo", "video": "demo.mp4", "poster": "poster.png", "caption": "Walkthrough" },
-    { "type": "image", "title": "Screenshot", "src": "pixel.png", "alt": "A single pixel", "caption": "Tiny" }
+    { "type": "image", "title": "Screenshot", "src": "pixel.png", "alt": "A single pixel", "caption": "Tiny" },
+    { "type": "decision", "id": "answer-store", "title": "Where answers live", "question": "Where should reviewer answers live?", "options": [{ "label": "Browser storage", "pros": ["No server"], "cons": ["One device only"] }, { "label": "A save server", "pros": ["Shared"], "cons": ["Something to run"] }], "recommended": "Browser storage", "why": "Nothing to deploy; the export carries the answers back.", "default": "Browser storage" },
+    { "type": "approval", "id": "ship-themes", "title": "Ship the themes", "item": "Ship the mono and brief themes", "why": "Both pass the contrast checks.", "impact": "Every skill can use them", "owner": "Design" },
+    { "type": "question", "id": "rollout-owner", "title": "Rollout owner", "text": "Who owns the rollout?", "default": "The branch author" },
+    { "type": "review", "title": "Review these first", "items": [{ "point": "The storage choice", "why": "It decides the export.", "target": "answer-store" }, { "point": "Theme contrast", "why": "Only a script checks it." }] },
+    { "type": "verdict", "title": "Verdict", "text": "Approve the branch as a whole." }
   ]
 }
