@@ -17,18 +17,7 @@
           "x": 960,
           "y": 330,
           "fontSize": 40,
-          "fontWeight": 400,
-          "keyframes": [
-            {
-              "t": 0,
-              "opacity": 0
-            },
-            {
-              "t": 0.5,
-              "opacity": 1,
-              "ease": "outCubic"
-            }
-          ]
+          "fontWeight": 400
         },
         {
           "id": "headline",

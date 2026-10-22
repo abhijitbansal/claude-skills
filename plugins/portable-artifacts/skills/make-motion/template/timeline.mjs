@@ -1,7 +1,7 @@
 // Pure, DOM-free: compiles a motion spec into one paused anime.js timeline that
 // animates a plain state object per element. Runs unchanged in Node and the browser.
 import { createTimeline, cubicBezier } from 'animejs';
-import { withDefaults, FADE_SECONDS, EASE_CURVES } from './defaults.mjs';
+import { withDefaults, FADE_SECONDS, EASE_CURVES, TYPING_SECONDS_PER_CHAR, typingLength } from './defaults.mjs';
 
 const MS = 1000;
 const MIN_SEGMENT_MS = 1;
@@ -25,9 +25,16 @@ function counterDefaultTrack(el, sceneDuration) {
   return [{ t: 0, value: el.from ?? 0, ease: 'linear' }, { t: seconds, value: el.to, ease: 'outCubic' }];
 }
 
+// A `typing` text types its characters from the start of its scene at TYPING_SECONDS_PER_CHAR each.
+function typingDefaultTrack(el) {
+  const chars = typingLength(el.text);
+  return [{ t: 0, value: 0, ease: 'linear' }, { t: chars * TYPING_SECONDS_PER_CHAR, value: chars, ease: 'linear' }];
+}
+
 function elementTrack(el, prop, sceneDuration) {
   const points = track(el.keyframes, prop);
   if (prop === 'value' && el.type === 'counter' && !points.length) return counterDefaultTrack(el, sceneDuration);
+  if (prop === 'value' && el.type === 'text' && el.typing && !points.length) return typingDefaultTrack(el);
   return points;
 }
 
@@ -51,17 +58,23 @@ export function buildTimeline(input) {
   const states = new Map();
   const sceneOf = new Map();
   const sceneStarts = [];
+  const crossfades = []; // {from, to, start, end}: scene `from` stays visible under scene `to` until `end` (seconds)
   let cursor = 0;
 
   spec.scenes.forEach((scene, si) => {
     const start = cursor;
     sceneStarts.push(start);
 
-    const sceneState = { opacity: scene.transition === 'fade' ? 0 : 1 };
+    const blends = scene.transition === 'crossfade' && si > 0; // the first scene has nothing to fade out
+    const fadesIn = scene.transition === 'fade' || blends;
+    const sceneState = { opacity: fadesIn ? 0 : 1 };
     states.set(`scene:${scene.id}`, sceneState);
-    if (scene.transition === 'fade') {
+    if (fadesIn) {
       const duration = Math.min(FADE_SECONDS, scene.duration) * MS;
       timeline.add(sceneState, { opacity: { from: 0, to: 1, duration }, composition: 'none' }, start * MS);
+      // The previous scene is not faded: it stays at full opacity under the incoming one until the window ends, so
+      // the stage colour never shows through (two layers fading together would dip towards it).
+      if (blends) crossfades.push({ from: si - 1, to: si, start, end: start + duration / MS });
     }
 
     for (const el of scene.elements) {
@@ -78,7 +91,7 @@ export function buildTimeline(input) {
     cursor += scene.duration;
   });
 
-  return { timeline, states, duration: cursor, sceneStarts, sceneOf };
+  return { timeline, states, duration: cursor, sceneStarts, sceneOf, crossfades };
 }
 
 // Seek to `sec` seconds. Deterministic: same input time gives the same state.

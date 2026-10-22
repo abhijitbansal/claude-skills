@@ -9,7 +9,6 @@
     {
       "id": "chart",
       "duration": 10,
-      "transition": "fade",
       "elements": [
         {
           "id": "title",
@@ -19,20 +18,7 @@
           "y": 150,
           "fontSize": 72,
           "fontWeight": 700,
-          "color": "#f4f6fb",
-          "keyframes": [
-            {
-              "t": 0.2,
-              "opacity": 0,
-              "y": 186
-            },
-            {
-              "t": 0.8999999999999999,
-              "opacity": 1,
-              "y": 150,
-              "ease": "outCubic"
-            }
-          ]
+          "color": "#f4f6fb"
         },
         {
           "id": "growth",

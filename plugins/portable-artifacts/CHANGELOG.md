@@ -1,0 +1,85 @@
+# Changelog
+
+All notable changes to the `portable-artifacts` plugin. Newest first; the version is the one in
+[`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
+Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
+
+## [0.8.0] - 2026-10-21
+
+make-motion: polish, crossfade, sound cues, texture and typing. Across the plugin: numbers that stay on one line,
+cheaper-model routing on GitHub Copilot and Codex, and a plan preset for make-explainer.
+
+### Across the plugin
+
+- **Numbers stay on one line.** A number with its unit or percent sign (`1,204 ms`, `18%`, `$4.2k`) is kept whole in
+  make-explainer pages and decks (each token in a no-wrap span), make-dashboard KPI values (no-wrap and sized to their
+  tile) and make-motion text (a no-break space in place of the space). The token pattern lives once, in
+  `shared/nowrap.mjs`. `check.mjs` in make-explainer and make-motion fails on a token that wraps. Typed-out make-motion text
+  is bound the same way.
+- **Cheaper model on Copilot and Codex (optional).** A small `artifact-builder` agent file (Haiku 5.5 on Copilot, falling
+  back to GPT-5.4 nano; `gpt-6-luna` on Codex) that builds from a finished spec. `node bin/install.mjs <copilot|codex|agents>`
+  writes it, and so does `doctor.mjs --fix builder_agent` for skills installed with `npx skills`, which copies only skill
+  folders. The doctor offers it only when `~/.copilot` or `~/.codex` exists and never writes through a symlink. Measured on
+  Copilot CLI 1.0.98: 19 of 19 runs logged `claude-haiku-5.5`; Codex and VS Code Copilot Chat were not tested.
+- **Plan mode (make-explainer).** The `plan` preset, with the `decision`, `approval`, `question`, `review` and `verdict`
+  sections, builds a page a reviewer answers in the browser. Copy answers or Download `plan-answers.json`, and
+  `scripts/answers.mjs` checks the file against the plan and refuses a summary marked invalid. **Save as HTML**, a sticky
+  button in the contents menu, downloads the page itself with the answers inside; `answers.mjs` reads that file too. A saved
+  page is a full web page, not inert data: open only files you trust. The `mono` and `brief` themes were added for it.
+- **Security scanner alerts.** The two skills.sh/Socket "anomaly" alerts on make-diagram and make-explainer are fixed (an
+  `fs`-patching test fixture was removed; a page chip tone is now checked against an allow-list). Scores change when
+  skills.sh scans again.
+
+### Added
+
+- **Theme colour tokens.** A shape `fill` or `stroke` and a text or counter `color` can name a token of the active theme
+  (`surface`, `line`, `accent`, `accentSoft`, `good`, `bad`, `warn`, `text`, `text2`, `text3`, `cat1` to `cat6`), so a theme
+  change recolours it. Backgrounds still take only colours; an unknown token is an error that lists the tokens.
+- **`elevated` rects.** A card: the fill moves 6 % toward the text colour and a 1 px inner highlight follows the edge
+  (drawn in with `draw`, omitted on a stroke-only rect).
+- **Round caps and arrows on lines.** `"cap": "round"` and `"arrow": "end"`. The validator names the minimum width a line
+  needs for them.
+- **Scene crossfade.** `"transition": "crossfade"` (also a root default): the new scene fades in over the previous one for
+  0.4 s while the previous one stays fully visible, so the stage colour never shows through (two white scenes keep a mean
+  luma of 255 through the window).
+- **Procedural sound cues.** A root `cues` array (up to 30) of `pop`, `click`, `whoosh`, `chime` and `impact`, synthesised
+  locally with no files and no new dependency, the same bytes every time, mixed with any `audio` tracks. Opt-in: a spec
+  without `cues` is unchanged. A render with audio now ends with one line, for example
+  `audio: -20.6 LUFS integrated, true peak -9.1 dBTP` (ffmpeg `ebur128`; a report, not a gate).
+- **Texture.** A root `texture` with `vignette` and a static `grain` (0 to 0.15), off by default. Grain is
+  luminance-neutral (the mean luma of a frame stays within 1 of the grain-free frame at 0.15 in dusk, paper and press).
+  Measured cost at 1920x1080 (seek plus PNG screenshot, 90 frames, headless Chromium on one Apple-silicon Mac): about
+  17 to 33 ms per frame with no texture, 42 ms with the vignette, 100 ms with grain and 187 ms with both.
+- **Typing text.** `"typing": true` types a line at 0.035 s per character with a caret, counted in graphemes; its box is
+  the full text at every moment, so it never reflows. `value` keyframes take over its pace; a line that cannot finish
+  inside its scene (also at `render.mjs --fps`) is an error naming the fix.
+- **`check.mjs` warnings** (exit stays 0): a blank first frame, which is the video's thumbnail (the message names the cause:
+  a `fade`, an opacity 0 first keyframe such as a title's theme entrance, an undrawn line or chart, an empty typing
+  text), and text of the outgoing and incoming scene that overlap inside a crossfade.
+- A new showcase clip in the gallery (`relay-teaser`) that uses these features.
+
+### Changed
+
+- **Calmer chart defaults.** About five ticks per axis, no tick marks, no y-axis line, no vertical gridlines, bars with
+  10 px rounded ends and a gap between them, 4 px lines with round caps and joins, filled points ringed in the page
+  colour (a hollow `filled: false` point keeps its outline), and a chart reveal with a soft edge.
+- `"font": "mono"` now wins over `"role": "title"` (a mono title draws in the mono font and keeps the entrance preset).
+- The four bundled `references/examples` show something at frame 0.
+- The dusk gallery clips `prompt-to-dashboard`, `sql-guard-explainer` and `quarterly-highlights-square` were re-rendered
+  from their committed specs.
+
+## [0.7.0] - 2026-10-19
+
+- make-scene: interactive 3D scenes (city, forest, galaxy, terrain) with diagram and dashboard lifts.
+
+## [0.6.0] - 2026-10-19
+
+- claude-motion-inspired diagram and motion upgrades; chrome-form-widgets folded in.
+
+## [0.5.0] - 2026-10-19
+
+- Design refresh with the `dusk`, `press` and `poster` themes.
+
+## [0.4.0] - 2026-10-15
+
+- make-dashboard v2, make-diagram and make-explainer.

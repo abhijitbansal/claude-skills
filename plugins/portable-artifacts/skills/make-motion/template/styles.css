@@ -27,6 +27,10 @@ body.preview #viewport { bottom: 108px; }
 .el svg { display: block; overflow: visible; }
 .el img { display: block; }
 .el.chart svg { width: 100%; height: 100%; }
+/* A typing text's caret: an empty inline marker with a thin bar absolutely positioned on it. It has no width and no
+   break opportunity, so the text wraps identically at every typed count. */
+.el .caret { position: relative; }
+.el .caret::after { content: ''; position: absolute; left: 0; top: 0.1em; height: 0.95em; border-left: 0.06em solid currentColor; }
 /* background: "art": the seeded art full-bleed under the elements, lightly dimmed by a page-colour scrim.
    Text and counters on art carry a soft page-colour halo that moves and scales with them, so the art
    stays vivid around the words and the words stay legible (sampled >= 4.5:1 behind the glyphs). */

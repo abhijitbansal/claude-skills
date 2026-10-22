@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, chmodSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
 
@@ -18,6 +18,17 @@ test('render: a hostile --model exits 1 before ffmpeg is needed and writes nothi
   assert.equal(r.status, 1, r.stderr);
   assert.match(r.stdout + r.stderr, /generatedBy\.model/);
   assert.deepEqual(readdirSync(dir), []);
+});
+
+test('render: a typing text that fits at the spec fps but not at --fps is refused before anything renders, naming the fix', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'rf-'));
+  // 27 characters take 0.945 s; at 30 fps the last frame is 1/30 s before the 1 s scene ends, at 10 fps 1/10 s.
+  const motion = { size: [160, 90], fps: 30, scenes: [{ id: 's', duration: 1, elements: [{ id: 't', type: 'text', text: 'x'.repeat(27), typing: true, x: 80, y: 45, fontSize: 20 }] }] };
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify(motion));
+  const slow = spawnSync(process.execPath, [RENDER, path.join(dir, 'm.json'), '--out', path.join(dir, 'o.mp4'), '--fps', '10'], { encoding: 'utf8' });
+  assert.equal(slow.status, 1, slow.stdout + slow.stderr);
+  assert.match(slow.stdout + slow.stderr, /scenes\[0\]\.elements\[0\]\.text: typing 27 characters takes 0\.95s but scene "s" lasts 1s .*at 10 fps\); shorten the text or lengthen the scene to at least 1\.05s/);
+  assert.deepEqual(readdirSync(dir), ['m.json'], 'nothing was written');
 });
 
 test('render: an unknown option exits 2', () => {
@@ -38,4 +49,24 @@ test('render: --model/--effort/--agent reach the ffmpeg metadata args', async (t
   assert.ok(args.some((a) => /^comment=make-motion · Claude Opus 5\.5 · high effort · Claude Code · /.test(a)), args.join('|'));
   assert.ok(args.includes('artist=Claude Opus 5.5'));
   assert.ok(existsSync(path.join(dir, 'o.mp4')));
+});
+
+// A fake ffmpeg whose mix probe takes a while: render.mjs has written the cue folder and is blocked inside it, which is
+// when an interrupt used to kill the process with no handler installed and leave the folder behind.
+test('render: an interrupt while the cue folder exists removes it (exit 130, no motion-cues-* left)', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'rf-'));
+  const scratch = mkdtempSync(path.join(tmpdir(), 'rf-tmp-'));
+  const slow = path.join(dir, 'ffmpeg');
+  writeFileSync(slow, '#!/bin/sh\nsleep 2\n');
+  chmodSync(slow, 0o755);
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify({ size: [160, 90], scenes: [{ id: 's', duration: 1, elements: [] }], cues: [{ cue: 'pop', at: 0 }] }));
+  const child = spawn(process.execPath, [RENDER, path.join(dir, 'm.json'), '--out', path.join(dir, 'o.mp4')], { env: { ...process.env, FFMPEG_PATH: slow, TMPDIR: scratch } });
+  const closed = new Promise((resolve) => child.on('close', (code, signal) => resolve({ code, signal })));
+  const deadline = Date.now() + 10000;
+  while (!readdirSync(scratch).some((f) => f.startsWith('motion-cues-')) && Date.now() < deadline) await new Promise((r) => { setTimeout(r, 25); });
+  assert.ok(readdirSync(scratch).some((f) => f.startsWith('motion-cues-')), 'the cue folder was written');
+  child.kill('SIGINT');
+  const { code, signal } = await closed;
+  assert.deepEqual([code, signal], [130, null], 'the handler ran and exited 130');
+  assert.deepEqual(readdirSync(scratch), [], 'the cue folder is gone');
 });

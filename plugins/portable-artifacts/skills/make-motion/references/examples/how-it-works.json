@@ -9,7 +9,6 @@
     {
       "id": "title",
       "duration": 2.5,
-      "transition": "fade",
       "elements": [
         {
           "id": "t",
@@ -19,20 +18,7 @@
           "y": 470,
           "fontSize": 120,
           "fontWeight": 800,
-          "color": "#f4f6fb",
-          "keyframes": [
-            {
-              "t": 0.2,
-              "opacity": 0,
-              "y": 506
-            },
-            {
-              "t": 1.0,
-              "opacity": 1,
-              "y": 470,
-              "ease": "outCubic"
-            }
-          ]
+          "color": "#f4f6fb"
         },
         {
           "id": "t2",

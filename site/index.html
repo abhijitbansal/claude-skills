@@ -66,10 +66,41 @@
   <!-- SPOTLIGHT -->
   <section id="spotlight">
     <div class="eyebrow">Spotlight</div>
-    <h2 class="title">A cost guard for Copilot, two lines above the prompt, and artifacts any agent can build.</h2>
-    <p class="section-lead">The newest work: a Copilot extension, two mods and five artifact skills. All of them run locally, and each is one line to install.</p>
+    <h2 class="title">Artifacts any agent can build, a cost guard for Copilot, and two lines above the prompt.</h2>
+    <p class="section-lead">The newest work: five artifact skills, a Copilot extension and two mods. All of them run locally, and each is one line to install.</p>
 
-    <article class="spot" id="cache-clock">
+    <article class="spot">
+      <div class="spot-media media-stack">
+        <figure>
+          <video id="pa-video" autoplay muted loop playsinline controls preload="metadata" poster="../docs/features/showcase/portable-artifacts/gallery/relay-teaser/poster.jpg" aria-label="A 12-second teaser rendered by make-motion for a build tool called Relay: a title and three raised cards joined by arrows that draw in, then a crossfade to a terminal card where a command types itself out and a green result appears, with a vignette, light film grain and four synthesised sound cues."><source src="../docs/features/showcase/portable-artifacts/gallery/relay-teaser/video.mp4" type="video/mp4"></video>
+          <figcaption><b>/make-motion</b> “12-second teaser for a build tool called Relay, 1920x1080, in the dusk theme …” — rendered to a 1080p MP4 from a JSON spec: raised cards joined by arrows, a crossfade into a typed terminal line, a vignette and a light film grain. Its four sound cues are generated at render time, with no audio file and no voiceover; it plays muted here, so unmute to hear them.</figcaption>
+        </figure>
+        <figure>
+          <a href="../docs/features/portable-artifacts.html#showcase-dashboard"><img src="../docs/features/img/portable-artifacts/growth-dashboard.jpg" alt="The Growth overview dashboard built by make-dashboard: four KPI tiles and four charts, each with a disclosure that shows its SQL" loading="lazy" width="1100" height="1465"></a>
+          <figcaption><b>/make-dashboard</b> “Growth overview from data/sales.csv and data/web_traffic.csv: KPI tiles, revenue by region …” — one self-contained HTML file.</figcaption>
+        </figure>
+      </div>
+      <div class="spot-text">
+        <p class="tagline">portable-artifacts · /make-dashboard · /make-diagram · /make-explainer · /make-motion · /make-scene</p>
+        <h3>Dashboards, diagrams, explainers, 3D scenes and videos, built offline by any agent</h3>
+        <p><code>/make-dashboard</code> turns a data file into one self-contained HTML page of KPI tiles and charts, and every chart expands to show its SQL, row count and refresh time. <code>/make-diagram</code> turns a prompt into an architecture diagram, flowchart, sequence or state diagram as one offline page with zoom, a story player, an Explore panel and full screen. <code>/make-explainer</code> turns a branch, an idea or a plan into one offline page or slide deck of typed sections (a verdict, numbers, files changed, a timeline, a test checklist that remembers its ticks), embedding diagrams, charts, 3D scenes and clips, and a linter rejects filler phrases and leftover placeholders before it builds. Its <code>plan</code> preset makes a page a reviewer answers in the browser (an option per decision, approve or changes, a verdict) and hands back as a checked <code>plan-answers.json</code>. Numbers and their units stay on one line, and on Copilot and Codex a build can run on a cheaper model through an optional agent file. <code>/make-motion</code> turns a prompt into a live preview with a scrubber and a deterministic 1080p MP4, silent unless you ask for sound, then music from your file or a locally synthesised voiceover. <code>/make-scene</code> turns your data into an explorable 3D city, forest, galaxy or terrain, or lifts a diagram or chart into 3D, with a camera tour, as one offline page. Each page also carries a favicon, an icon theme toggle (except the make-motion preview) and a line saying which model, effort level and agent wrote it. Each skill's doctor reports anything missing before the first build. Tested live on this branch in Claude Code and GitHub Copilot CLI, and in an earlier eval on Codex CLI; Gemini CLI install paths are checked against its docs, not run live; make-scene passed its eval with 10/10 valid builds in one eval run (Claude Haiku in Claude Code, median 1.5 validate runs; <a href="https://github.com/abhijitbansal/claude-skills/blob/main/plugins/portable-artifacts/eval/results/summary-scene-2026-10-19.md">results</a>).</p>
+        <ol class="howlist" aria-label="How portable-artifacts works">
+          <li><b>Offline, and the same result every time.</b> After a one-time install nothing touches the network except your own data files (and an image service, only if you opt in to make-explainer's <code>--image-api</code>), and the same spec always produces the same page or video (the build date in the page footer and a dashboard's refresh time aside). A spec that tries to reach the network is rejected.</li>
+          <li><b>The model's whole job is one small JSON file.</b> Writing a spec that matches a schema is easy work, so this runs on small and local models too. A mistake comes back as a precise message, for example <code>charts[0].query: "rev_by_regin" not found; did you mean "rev_by_region"?</code>, and the agent fixes one field instead of regenerating everything.</li>
+          <li><b>Scripts do the rest.</b> Plain Node scripts validate the spec, build the HTML page, run the preview and render the MP4. "Slow down scene 2" changes one field, so everything else stays exactly as it was. Needs Node 20; make-motion also needs Chromium and ffmpeg, and fetches the Kokoro voice model once if you ask for narration.</li>
+        </ol>
+        <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> install portable-artifacts@claude-skills</code><button class="copy" data-copy="/plugin install portable-artifacts@claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">npx</span> skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene</code><button class="copy" data-copy="npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene">copy</button></div></div>
+        <p style="margin-top:10px">Optional, on Copilot or Codex: a cheaper model for the builds. After an <code>npx skills</code> install, the skill's doctor offers to write a small <code>artifact-builder</code> agent file, or run it yourself (replace <code>&lt;skill-dir&gt;</code> with the installed skill folder):</p>
+        <div class="code cmds"><div class="cl"><code class="ct">node &lt;skill-dir&gt;/scripts/doctor.mjs --fix builder_agent</code><button class="copy" data-copy="node &lt;skill-dir&gt;/scripts/doctor.mjs --fix builder_agent">copy</button></div></div>
+        <div class="links">
+          <a href="../docs/features/portable-artifacts.html#showcase">See the showcase</a>
+          <a href="../docs/features/portable-artifacts.html#gallery">Gallery: dashboards, videos, explainers, plans, diagrams</a>
+          <a href="../docs/features/portable-artifacts.html">Full guide</a>
+        </div>
+      </div>
+    </article>
+
+    <article class="spot flip" id="cache-clock">
       <div class="spot-media media-stack">
         <figure>
           <video id="cc-video" autoplay muted loop playsinline controls preload="metadata" poster="../docs/features/showcase/cache-clock/poster.jpg" aria-label="A 17-second silent explainer: a cache write costs 25 times a read on Claude, the cache counts down to cold, and Cache Clock asks before the cold send, which costs 0 AI credits if you don't send."><source src="../docs/features/showcase/cache-clock/video.mp4" type="video/mp4"></video>
@@ -96,7 +127,7 @@
       </div>
     </article>
 
-    <article class="spot flip">
+    <article class="spot">
       <div class="spot-media">
         <div class="term" role="img" aria-label="A terminal after a pytest run. Two bands sit above the prompt: the session-compass band with the goal, the current step and the artifact count, and the test-board band with 40 passed, 3 failed, 1 skipped, three more failures than the previous run five minutes ago, the time it finished and a close button.">
           <div class="term-bar"><i></i><i></i><i></i><span>claude — claude-skills</span></div>
@@ -126,37 +157,6 @@
           <a href="../docs/features/mods.html">Session mods guide</a>
           <a href="https://github.com/abhijitbansal/claude-skills/tree/main/plugins/test-board">test-board source ↗</a>
           <a href="https://github.com/abhijitbansal/claude-skills/tree/main/plugins/session-compass">session-compass source ↗</a>
-        </div>
-      </div>
-    </article>
-
-    <article class="spot">
-      <div class="spot-media media-stack">
-        <figure>
-          <video id="pa-video" autoplay muted loop playsinline controls preload="metadata" poster="../docs/features/showcase/portable-artifacts/prompt-to-dashboard-poster.jpg" aria-label="A 15-second explainer video rendered by make-motion: a title, three step cards, a bar chart of validate errors per attempt and a counter, with a voiceover synthesised locally by Kokoro."><source src="../docs/features/showcase/portable-artifacts/prompt-to-dashboard.mp4" type="video/mp4"></video>
-          <figcaption><b>/make-motion</b> “15-second explainer, 1920x1080, titled ‘From prompt to dashboard’ …” — rendered to a 1080p MP4 from a JSON spec. Unmute for the voiceover, which a one-line follow-up asked for; audio is never added unasked.</figcaption>
-        </figure>
-        <figure>
-          <a href="../docs/features/portable-artifacts.html#showcase-dashboard"><img src="../docs/features/img/portable-artifacts/growth-dashboard.jpg" alt="The Growth overview dashboard built by make-dashboard: four KPI tiles and four charts, each with a disclosure that shows its SQL" loading="lazy" width="1100" height="1465"></a>
-          <figcaption><b>/make-dashboard</b> “Growth overview from data/sales.csv and data/web_traffic.csv: KPI tiles, revenue by region …” — one self-contained HTML file.</figcaption>
-        </figure>
-      </div>
-      <div class="spot-text">
-        <p class="tagline">portable-artifacts · /make-dashboard · /make-diagram · /make-explainer · /make-motion · /make-scene</p>
-        <h3>Dashboards, diagrams, explainers, 3D scenes and videos, built offline by any agent</h3>
-        <p><code>/make-dashboard</code> turns a data file into one self-contained HTML page of KPI tiles and charts, and every chart expands to show its SQL, row count and refresh time. <code>/make-diagram</code> turns a prompt into an architecture diagram, flowchart, sequence or state diagram as one offline page with zoom, a story player, an Explore panel and full screen. <code>/make-explainer</code> turns a branch, an idea or a plan into one offline page or slide deck of typed sections (a verdict, numbers, files changed, a timeline, a test checklist that remembers its ticks), embedding diagrams, charts, 3D scenes and clips, and a linter rejects filler phrases and leftover placeholders before it builds. Its <code>plan</code> preset makes a page a reviewer answers in the browser (an option per decision, approve or changes, a verdict) and hands back as a checked <code>plan-answers.json</code>. Numbers and their units stay on one line, and on Copilot and Codex a build can run on a cheaper model through an optional agent file. <code>/make-motion</code> turns a prompt into a live preview with a scrubber and a deterministic 1080p MP4, silent unless you ask for sound, then music from your file or a locally synthesised voiceover. <code>/make-scene</code> turns your data into an explorable 3D city, forest, galaxy or terrain, or lifts a diagram or chart into 3D, with a camera tour, as one offline page. Each page also carries a favicon, an icon theme toggle (except the make-motion preview) and a line saying which model, effort level and agent wrote it. Each skill's doctor reports anything missing before the first build. Tested live on this branch in Claude Code and GitHub Copilot CLI, and in an earlier eval on Codex CLI; Gemini CLI install paths are checked against its docs, not run live; make-scene passed its eval with 10/10 valid builds in one eval run (Claude Haiku in Claude Code, median 1.5 validate runs; <a href="https://github.com/abhijitbansal/claude-skills/blob/main/plugins/portable-artifacts/eval/results/summary-scene-2026-10-19.md">results</a>).</p>
-        <ol class="howlist" aria-label="How portable-artifacts works">
-          <li><b>Offline, and the same result every time.</b> After a one-time install nothing touches the network except your own data files (and an image service, only if you opt in to make-explainer's <code>--image-api</code>), and the same spec always produces the same page or video (the build date in the page footer and a dashboard's refresh time aside). A spec that tries to reach the network is rejected.</li>
-          <li><b>The model's whole job is one small JSON file.</b> Writing a spec that matches a schema is easy work, so this runs on small and local models too. A mistake comes back as a precise message, for example <code>charts[0].query: "rev_by_regin" not found; did you mean "rev_by_region"?</code>, and the agent fixes one field instead of regenerating everything.</li>
-          <li><b>Scripts do the rest.</b> Plain Node scripts validate the spec, build the HTML page, run the preview and render the MP4. "Slow down scene 2" changes one field, so everything else stays exactly as it was. Needs Node 20; make-motion also needs Chromium and ffmpeg, and fetches the Kokoro voice model once if you ask for narration.</li>
-        </ol>
-        <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> install portable-artifacts@claude-skills</code><button class="copy" data-copy="/plugin install portable-artifacts@claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">npx</span> skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene</code><button class="copy" data-copy="npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene">copy</button></div></div>
-        <p style="margin-top:10px">Optional, on Copilot or Codex: a cheaper model for the builds. After an <code>npx skills</code> install, the skill's doctor offers to write a small <code>artifact-builder</code> agent file, or run it yourself (replace <code>&lt;skill-dir&gt;</code> with the installed skill folder):</p>
-        <div class="code cmds"><div class="cl"><code class="ct">node &lt;skill-dir&gt;/scripts/doctor.mjs --fix builder_agent</code><button class="copy" data-copy="node &lt;skill-dir&gt;/scripts/doctor.mjs --fix builder_agent">copy</button></div></div>
-        <div class="links">
-          <a href="../docs/features/portable-artifacts.html#showcase">See the showcase</a>
-          <a href="../docs/features/portable-artifacts.html#gallery">Gallery: dashboards, videos, explainers, plans, diagrams</a>
-          <a href="../docs/features/portable-artifacts.html">Full guide</a>
         </div>
       </div>
     </article>

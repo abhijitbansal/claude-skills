@@ -9,7 +9,6 @@
     {
       "id": "intro",
       "duration": 4,
-      "transition": "fade",
       "elements": [
         {
           "id": "kicker",
@@ -20,20 +19,7 @@
           "fontSize": 34,
           "fontWeight": 600,
           "color": "#8b93a7",
-          "font": "mono",
-          "keyframes": [
-            {
-              "t": 0.2,
-              "opacity": 0,
-              "y": 366
-            },
-            {
-              "t": 0.8999999999999999,
-              "opacity": 1,
-              "y": 330,
-              "ease": "outCubic"
-            }
-          ]
+          "font": "mono"
         },
         {
           "id": "pct",

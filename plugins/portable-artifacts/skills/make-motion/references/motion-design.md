@@ -46,6 +46,35 @@ Holds are not checked by `check.mjs`. Count them yourself from the keyframe time
 - **One accent colour.** The theme's accent marks the one thing that matters in a scene (the number, the highlighted bar). Everything else uses the text colours.
 - **One hero moment per clip.** Pick the beat the clip is about and give it the biggest type, the accent, and the `land` ease if any (on its position or scale, never on a counter's `value`). Other beats stay quieter.
 
+## Scene changes
+
+- **A hard cut is the default.** Between related scenes (the same chart, the next step of a list) a hard cut reads as continuous; a `"transition": "crossfade"` (0.4 s, the new scene fading in over the previous one, which stays fully visible beneath) suits a change of subject. Set root `"transition": "crossfade"` to make it the default and put `"transition": "none"` on the scenes that should cut.
+- **Not on scene 1.** `fade` on the first scene makes frame 0, the video's thumbnail, blank; `crossfade` there is an error. `check.mjs` warns when scene 1 shows nothing at t = 0.
+- **Keep the outgoing text clear of the incoming text's position** (or end it with an `exit`): for the 0.4 s the old text is fully visible and the new text is fading in over it, and two lines in one spot read as a smear. `check.mjs` warns about it.
+
+## Texture and typing
+
+- **Texture is a look, not a default.** `texture.vignette` suits a single focal subject (a title, a card) and does nothing for a full-bleed chart; `texture.grain` 0.05–0.10 reads as film, above 0.12 as noise. Both cost render time (see schema.md), so keep them off for long clips unless asked.
+- **Type short lines.** `"typing": true` at 0.035 s per character runs a 30-character command in about a second; past about 60 characters it becomes a wait. Give the line the scene's first beat, or delay it with `value` keyframes, and hold the finished line for the reading time below.
+- **Place the full line, not the typed part.** The element's `x` is the centre of the whole text, so the line grows rightward from its left edge; the first characters appear left of `x`.
+
+## Sound cues
+
+Cues (`"cues"` in the spec) are opt-in sound design for a clip that is meant to have sound; a silent clip stays silent.
+
+- **One `impact` and one riser (`whoosh`) per clip.** Put the `whoosh` just before the hero moment and the `impact` on it, so the sound marks the beat the clip is about. More than that stops being emphasis.
+- **Continuous motion stays silent.** A drift, a counter running up or a chart reveal needs no sound; cue the arrival (a `pop` or `chime` when a card lands or a number settles), not the travel.
+- **A `pop` or `click` per list item only when the items are staggered 0.2 s or more apart**; faster than that reads as a buzz.
+- **Anchor with `scene` and `at`** so retiming an earlier scene keeps the sound on its beat.
+- **Keep the level where it is.** Cues peak at -6 dBFS; use `volume` 0.4–0.8 under a voiceover. The loudness line after a render tells you where the mix landed.
+
+## Shapes and charts
+
+- **Cards, not hex.** Draw a card as a `rect` with `"fill": "surface"`, `"stroke": "line"` and `"elevated": true`; the theme tokens keep the border visible on dark themes and follow a theme change.
+- **Bars are a `chart`, not thick `line`s.** A chart gets the rounded ends, the band gap and the axes for free; a row of thick lines needs all of it by hand. A thick `line` that stays a line takes `"cap": "round"`, and a pointer takes `"arrow": "end"`.
+- **Drop an axis title that repeats the chart title** (`"title": null` on the axis): the title above already says it.
+- **No long dead holds on a chart scene.** The chart reveal plus a short stagger is the motion; after that a 5 s stare reads as a frozen frame. Cut to the next scene once the figure has been read (see Reading holds).
+
 ## What `check.mjs` checks
 
 Run `node <skill-dir>/scripts/check.mjs motion.json` after looking at the contact sheets. It reports only:
@@ -54,4 +83,4 @@ Run `node <skill-dir>/scripts/check.mjs motion.json` after looking at the contac
 - two visible texts or counters overlapping while neither is moving or fading;
 - a scene that ends with nothing on screen (a title leaving through an applied `exit: true` counts as intended).
 
-It does not check timing, holds, stagger, eases, colour or what happens on the first frame of a scene.
+It also warns (exit stays 0) when the first scene shows nothing at t = 0. It does not check timing, holds, stagger, eases, colour or what happens at the start of later scenes, and, during a crossfade, only whether text of the two scenes overlaps at the window's midpoint (a warning).

@@ -2,10 +2,28 @@
 // No `background` default: the page fills it from the theme's page colour (see renderer fetchSpec).
 const DEFAULTS = Object.freeze({ size: [1920, 1080], fps: 30 });
 export const FADE_SECONDS = 0.4;
+export const TYPING_SECONDS_PER_CHAR = 0.035;
+export const ARROW_HEAD_LENGTH = 3; // an arrow head is this many stroke widths long
+// What a shape draws with when its spec gives no size: one source for the page and the validator's line-length minimums.
+export const DEFAULT_SHAPE_SIZE = 100; // width and height
+export const DEFAULT_LINE_STROKE = 4;
+
+// A `typing` text's characters as a reader counts them: grapheme clusters, so an emoji, a ZWJ sequence, a flag or a
+// letter with a combining accent is one character and is never typed in halves.
+const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' });
+export const graphemes = (text) => Array.from(GRAPHEMES.segment(text), (part) => part.segment);
+export const typingLength = (text) => graphemes(text).length;
 
 // make-motion's default theme (scripts/lib/default-theme.mjs re-exports it). The shared
 // DEFAULT_THEME stays `paper` for make-dashboard.
 export const MOTION_THEME = 'dusk';
+
+// Theme colour tokens a shape `fill`/`stroke` or a text `color` may name instead of a hex; each resolves to the
+// active theme's dark colour of that name (see renderer themedLook).
+export const COLOR_TOKENS = Object.freeze(['surface', 'line', 'accent', 'accentSoft', 'good', 'bad', 'warn', 'text', 'text2', 'text3', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5', 'cat6']);
+
+// `value` as a colour: a token becomes the theme's colour, anything else (already validated) passes through.
+export const resolveColor = (value, colors) => (COLOR_TOKENS.includes(value) ? colors[value] : value);
 
 // Per-theme kinetic type for `role: "title"` text that sets no keyframes. Themes not listed
 // (paper, ink, blueprint, editorial) get no preset.
@@ -117,8 +135,9 @@ export function withDefaults(spec) {
   out.fps ??= DEFAULTS.fps;
   out.theme ??= MOTION_THEME;
   out.audio = (out.audio ?? []).map((track) => ({ at: 0, volume: 1, fadeIn: 0, fadeOut: 0, ...track }));
+  const transition = out.transition ?? 'none';
   out.scenes.forEach((scene, si) => {
-    scene.transition ??= 'none';
+    scene.transition ??= si === 0 && transition === 'crossfade' ? 'none' : transition; // the first scene has nothing to fade out
     for (const el of scene.elements) {
       const preset = presetFor(el, out.theme, scene.duration, out.fps, si < out.scenes.length - 1);
       el.keyframes = preset.keyframes;
