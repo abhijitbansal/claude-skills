@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { SECTIONS } from '../scripts/lib/sections.mjs';
 import { loadSibling } from '../scripts/lib/siblings.mjs';
 import { loadTheme } from '../shared/theme.mjs';
-import { plain, rawText, glyph, toneChip } from '../scripts/lib/render/ui.mjs';
+import { plain, rawText, glyph, toneChip, chip } from '../scripts/lib/render/ui.mjs';
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 
@@ -102,6 +102,15 @@ test('ui: plain strips markup and stays escaped; rawText unescapes; unknown glyp
   assert.match(glyph('nope'), /<circle/);
   assert.equal(toneChip('neutral'), '');
   assert.equal(toneChip('toString'), '');
+});
+
+test('ui: chip never puts an unexpected tone into the class attribute', () => {
+  assert.match(chip(['Ok', 'check', 'good']), /class="chip tone-good"/);
+  for (const bad of ['"><img src=x onerror=1>', 'good" onclick="1', 'Good', '', undefined, 'a b']) {
+    const out = chip(['Ok', 'check', bad]);
+    assert.match(out, /^<span class="chip tone-neutral">/, String(bad));
+    assert.ok(!out.includes('onclick') && !out.includes('<img'), String(bad));
+  }
 });
 
 // ---- behaviour of individual renderers --------------------------------------------

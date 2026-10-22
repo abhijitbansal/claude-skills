@@ -51,9 +51,10 @@ export function glyph(name) {
 
 const own = (table, key) => (Object.hasOwn(table, key) ? table[key] : null);
 
-/** A status chip: glyph + word. `entry` is [label, glyph, toneClass]. */
+/** A status chip: glyph + word. `entry` is [label, glyph, toneClass]. A tone that is not lowercase letters falls back to neutral, so it can never break out of the class attribute. */
 export function chip([label, glyphName, tone]) {
-  return `<span class="chip tone-${tone}">${glyph(glyphName)}<span>${esc(label)}</span></span>`;
+  const safeTone = typeof tone === 'string' && /^[a-z]+$/.test(tone) ? tone : 'neutral';
+  return `<span class="chip tone-${safeTone}">${glyph(glyphName)}<span>${esc(label)}</span></span>`;
 }
 
 const TONE_CHIPS = { good: ['Good', 'good', 'good'], warn: ['Caution', 'warn', 'warn'], bad: ['Problem', 'bad', 'bad'] };
