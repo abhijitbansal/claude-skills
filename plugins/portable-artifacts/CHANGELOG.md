@@ -4,6 +4,28 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
+## [0.8.1] - 2026-10-22
+
+make-motion: voiceover dependencies on patched versions.
+
+### Security
+
+- **Patched voiceover dependencies.** `kokoro-js@1.2.1` (its latest release) pins `@huggingface/transformers` 3.x, which
+  pins `sharp ^0.34`: three high-severity advisories in its bundled libvips, libheif and librsvg
+  ([GHSA-f88m-g3jw-g9cj](https://github.com/advisories/GHSA-f88m-g3jw-g9cj),
+  [GHSA-rgj7-g3m4-5g8c](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c),
+  [GHSA-wq5f-xc86-pv6w](https://github.com/advisories/GHSA-wq5f-xc86-pv6w), fixed in `sharp` 0.35.5). It also reaches
+  `global-agent` 3.x, whose `roarr` dependency pulls in `sprintf-js`
+  ([GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), moderate, no fix). make-motion's
+  `package.json` now overrides `sharp` to 0.35.5 and `global-agent` to 4.1.3 (which no longer uses `roarr`): `npm audit`
+  on the voiceover install goes from 7 vulnerabilities (3 high, 4 moderate) to 0.
+
+### Fixed
+
+- **The kokoro install now honours those overrides.** npm 10 ignores a project's `overrides` under `--prefix`, so the
+  doctor's `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` still resolved `sharp` 0.34.5. The doctor now runs
+  `npm install kokoro-js@1.2.1 --no-save` from inside the skill folder (shown as `cd <skill-dir> && …`).
+
 ## [0.8.0] - 2026-10-21
 
 make-motion: polish, crossfade, sound cues, texture and typing.

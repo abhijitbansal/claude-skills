@@ -62,10 +62,12 @@ test('optional misses do not flip ok', async () => {
 
 test('runFixes runs only requested auto fixes and refuses sudo and unknown ids', async () => {
   const ran = [];
-  const run = (cmd, args) => { ran.push([cmd, ...args].join(' ')); return { status: 0 }; };
+  const cwds = [];
+  const run = (cmd, args, o) => { ran.push([cmd, ...args].join(' ')); cwds.push(o.cwd); return { status: 0 }; };
   const reqs = [ffmpeg(), kokoro()];
   const res = await runFixes(['kokoro', 'ffmpeg', 'nope'], reqs, ctx({ platform: 'linux' }), run);
-  assert.deepEqual(ran, ['npm install kokoro-js@1.2.1 --no-save --prefix /s/make-motion']);
+  assert.deepEqual(ran, ['npm install kokoro-js@1.2.1 --no-save']);
+  assert.deepEqual(cwds, ['/s/make-motion'], 'kokoro installs from inside the skill so npm applies its package.json overrides');
   assert.equal(res.find((r) => r.id === 'ffmpeg').refused, 'needs sudo');
   assert.match(res.find((r) => r.id === 'ffmpeg').manual, /sudo apt-get install ffmpeg/);
   assert.equal(res.find((r) => r.id === 'nope').refused, 'unknown id');
@@ -74,6 +76,12 @@ test('runFixes runs only requested auto fixes and refuses sudo and unknown ids',
 test('a failing fix reports ok:false', async () => {
   const res = await runFixes(['kokoro'], [kokoro()], ctx(), () => ({ status: 1 }));
   assert.equal(res[0].ok, false);
+});
+
+test('kokoro fix is cd <skill> && npm install (no --prefix), so the skill package.json overrides apply', async () => {
+  const r = await diagnose([kokoro()], ctx({ platform: 'linux' }));
+  assert.equal(r.missing[0].fix.auto, 'cd /s/make-motion && npm install kokoro-js@1.2.1 --no-save');
+  assert.doesNotMatch(r.missing[0].fix.manual.linux, /--prefix/);
 });
 
 // --- additions beyond the brief ---
@@ -389,7 +397,7 @@ test('N2: the shown sister command includes cd <root>; ran includes it; win32 us
 test('N3: doctorMain with injected ctx/run never reaches spawnSync; --fix uses the recorder', async () => {
   const calls = [];
   const r = await runMain(['--fix', 'kokoro', '--json'], { ...mainOpts(), requirementsFor: () => [kokoro()] }, { run: (c, a) => { calls.push([c, ...a].join(' ')); return { status: 0 }; } });
-  assert.deepEqual(calls, ['npm install kokoro-js@1.2.1 --no-save --prefix /s/make-motion']);
+  assert.deepEqual(calls, ['npm install kokoro-js@1.2.1 --no-save']);
   assert.equal(JSON.parse(r.out)[0].id, 'kokoro');
 });
 
