@@ -351,8 +351,13 @@ menu on the left (a corner button on a phone, or on a page too short for a
 menu): it downloads `<key>-answered.html`, this same page with the answers put
 inside it. Opening that file shows the answers again, in any browser, with no
 storage needed, so it can be kept, shared with others or handed to the agent. If this
-browser already holds a newer answer for the same plan, that newer answer wins.
-The reviewer's theme choice is not baked into the file. The agent
+browser already holds a newer answer for the same plan (or one written before saved
+pages existed), that answer wins; otherwise the file's answers are shown, and nothing
+is written to this browser until the reader changes something. The agent reads the
+answers as they were saved in the file, not what a browser shows later. The reviewer's
+theme choice is not baked into the file. A saved page is a full web page, not inert
+JSON: open one only if you trust whoever sent it, and give it to the agent only through
+`answers.mjs`. The agent
 never reads a file directly: it runs `answers.mjs plan.json plan-answers.json`
 or `answers.mjs plan.json <key>-answered.html`
 (add `--json` for machine-readable output), which exits 0 for valid answers, 1

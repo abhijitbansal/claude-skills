@@ -552,7 +552,8 @@ test('Save as HTML downloads <key>-answered.html that carries the answers and th
   assert.deepEqual(payload.export, await exported(page));
   assert.equal(payload.export.verdict, 'approve');
   assert.equal(payload.export.reviewer, 'Grace');
-  await said(page, 'saved');
+  await page.waitForFunction(() => /saved plan-test-answered\.html/i.test(document.querySelector('[data-plan-save-status]').textContent));
+  assert.equal(await page.locator('[data-plan-status]').textContent(), '', 'said once: the verdict line stays quiet');
   assert.deepEqual(problems, []);
   await context.close();
 });
@@ -568,9 +569,12 @@ test('the saved page, opened in a browser that has never seen the plan, shows th
   const second = await openPage(asPage(saved));
   assert.deepEqual(await exported(second.page), before);
   assert.equal(await second.page.locator('[data-reviewer]').inputValue(), 'Grace');
-  assert.ok(await stored(second.page), 'the restored answers are saved in this browser too');
+  assert.equal(await stored(second.page), null, 'opening a file writes nothing to this browser');
   await pick(second.page, 'theme', 'Brief');
   assert.equal((await exported(second.page)).answers.find((a) => a.id === 'theme').choice, 'Brief');
+  const written = JSON.parse(await stored(second.page));
+  assert.equal(written.answers.storage.choice, HOSTILE, 'the first change writes the whole form, not only the changed item');
+  assert.equal(written.reviewer, 'Grace');
   assert.deepEqual(second.problems, []);
   await second.context.close();
 });
@@ -627,6 +631,60 @@ test('a newer answer already in this browser wins over the saved page; an older 
   await older.context.close();
 });
 
+test('opening a saved file does not replace this browser\'s own older answers until the reader changes something; unstamped entries are never replaced', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const first = await openPage(built().url);
+  await answerSome(first.page);
+  const saved = await saveHtml(first.page);
+  await first.context.close();
+  const hash = planHashOf(saved.html);
+  const own = JSON.stringify({ hash, updatedAt: 1, answers: { owner: { text: 'My own answer' } }, verdict: null, reviewer: 'Me' });
+
+  const older = await openPage(asPage(saved), { seed: { [STORE]: own } });
+  assert.equal((await exported(older.page)).reviewer, 'Grace', 'the file is newer, so the form shows it');
+  assert.equal(await stored(older.page), own, 'but nothing is written yet');
+  await pick(older.page, 'theme', 'Brief');
+  assert.equal(JSON.parse(await stored(older.page)).reviewer, 'Grace', 'the first change replaces it with the whole form');
+  await older.context.close();
+
+  const legacy = JSON.stringify({ hash, answers: { owner: { text: 'Written before saved pages existed' } }, verdict: null, reviewer: 'Me' });
+  const kept = await openPage(asPage(saved), { seed: { [STORE]: legacy } });
+  assert.equal((await exported(kept.page)).reviewer, 'Me', 'an unstamped entry is the reader\'s own work: it wins');
+  assert.equal(await stored(kept.page), legacy);
+  await kept.context.close();
+});
+
+test('a saved file stamped by a clock far ahead of this one cannot swallow the reader\'s later edits', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const first = await openPage(built().url);
+  await answerSome(first.page);
+  const saved = await saveHtml(first.page);
+  await first.context.close();
+  const payload = JSON.parse(saved.html.match(SAVED_SLOT)[1]);
+  payload.savedAt = Date.now() + 10 * 24 * 3600 * 1000;
+  const skewed = { html: saved.html.replace(SAVED_SLOT, () => `<script type="application/json" id="pa-plan-saved">${JSON.stringify(payload).replace(/</g, '\\u003c')}</script>`) };
+  const { page, context } = await openPage(asPage(skewed, 'skewed.html'));
+  await pick(page, 'theme', 'Brief');
+  await page.reload();
+  await page.waitForFunction(() => window.paReady === true);
+  assert.equal((await exported(page)).answers.find((a) => a.id === 'theme').choice, 'Brief', 'the edit made after opening survives a reload');
+  await context.close();
+});
+
+test('a saved file opened with storage blocked still shows its answers', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const first = await openPage(built().url);
+  await answerSome(first.page);
+  const before = await exported(first.page);
+  const saved = await saveHtml(first.page);
+  await first.context.close();
+  const { page, context, problems } = await openPage(asPage(saved), { blockStorage: true });
+  assert.deepEqual(await exported(page), before);
+  assert.equal(await page.locator('[data-plan-unsaved]').isVisible(), true, 'the not-saved note is shown');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
 test('the saved page is clean: no theme choice, no notices showing, nothing left in the status line, hostile text cannot end the slot', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, context } = await openPage(built().url, { seed: { 'pa-theme': 'dark' } });
@@ -635,6 +693,10 @@ test('the saved page is clean: no theme choice, no notices showing, nothing left
   await settle(page);
   const saved = await saveHtml(page);
   assert.ok(!/<html[^>]*data-theme="/.test(saved.html), 'the reader\'s own theme choice is not baked in');
+  assert.match(saved.html, /<button[^>]*data-theme-toggle[^>]*>/);
+  const toggle = saved.html.match(/<button[^>]*data-theme-toggle[^>]*>/)[0];
+  assert.match(toggle, /data-mode="auto"/, 'the toggle shows Auto, not the reader\'s dark choice');
+  assert.match(toggle, /aria-label="Theme: Auto\. Switch to Light"/);
   assert.match(saved.html, /<p class="plan-flag" data-plan-unsaved(="")? hidden(="")?>/);
   assert.match(saved.html, /<p class="plan-flag" data-plan-stale(="")? hidden(="")?>/);
   assert.match(saved.html, /data-plan-status(="")? role="status"><\/p>/);
@@ -655,6 +717,18 @@ test('Save as HTML works with storage blocked (the saved file is the only copy)'
   const saved = await saveHtml(page);
   assert.equal(JSON.parse(saved.html.match(SAVED_SLOT)[1]).export.verdict, 'approve');
   assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('on a phone the corner Save button steps aside while the reader types', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(built().url, { width: 390, height: 800 });
+  const button = page.locator('[data-plan-save-html]');
+  assert.equal(await button.isVisible(), true);
+  await page.locator(`${item('owner')} [data-answer]`).focus();
+  assert.equal(await button.isVisible(), false);
+  await page.locator(`${item('owner')} [data-answer]`).blur();
+  assert.equal(await button.isVisible(), true);
   await context.close();
 });
 

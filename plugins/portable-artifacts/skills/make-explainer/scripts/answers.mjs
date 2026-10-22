@@ -11,7 +11,8 @@ import { UsageError, parseCli } from '../shared/cli.mjs';
 
 const USAGE = 'node scripts/answers.mjs <plan.json> <answers.json | saved-page.html> [--json] (--json prints { ok, errors, warnings, errorCount, warningCount, summary })';
 const OPTIONS = { json: { type: 'boolean' } };
-const MAX_ANSWERS_BYTES = 2 * 1024 * 1024; // a real file is a few kilobytes
+const MAX_ANSWERS_BYTES = 2 * 1024 * 1024; // a real answers file is a few kilobytes
+const MAX_SAVED_PAGE_BYTES = 32 * 1024 * 1024; // a saved page is a whole page: inlined images (1.5 MiB each, base64) and charts
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 // `errors` and `warnings` are the entries shown; the counts are the true totals (see checkAnswers).
@@ -45,7 +46,17 @@ function requireRegularFile(file, maxBytes) {
 
 // A page saved with "Save as HTML" holds the plan-answers/1 file in a data block. The text of the block is
 // the reviewer's data like any other answers file: it is parsed and checked, never run.
-const SAVED_BLOCK = /<script type="application\/json" id="pa-plan-saved">([^]*?)<\/script>/;
+// The block is found with two indexOf calls, not a regex: a hostile file of repeated opening tags cannot make
+// the search slow.
+const BLOCK_OPEN = '<script type="application/json" id="pa-plan-saved">';
+const BLOCK_CLOSE = '</script>';
+function savedBlockText(text) {
+  const start = text.indexOf(BLOCK_OPEN);
+  if (start < 0) return null;
+  const from = start + BLOCK_OPEN.length;
+  const end = text.indexOf(BLOCK_CLOSE, from);
+  return end < 0 ? null : text.slice(from, end);
+}
 function loadSavedPage(file) {
   let text;
   try {
@@ -53,11 +64,11 @@ function loadSavedPage(file) {
   } catch (e) {
     throw new UsageError(`cannot read ${file}: ${e.message}`);
   }
-  const block = SAVED_BLOCK.exec(text);
-  if (!block) throw new UsageError(`${file} has no pa-plan-saved block: it is not a plan page, or it was not saved with "Save as HTML"`);
+  const block = savedBlockText(text);
+  if (block === null) throw new UsageError(`${file} has no pa-plan-saved block: it is not a plan page, or it was not saved with "Save as HTML"`);
   let payload;
   try {
-    payload = JSON.parse(block[1]);
+    payload = JSON.parse(block);
   } catch {
     throw new UsageError(`${file}: the pa-plan-saved block is not valid JSON; save the page again`);
   }
@@ -70,7 +81,7 @@ function loadSavedPage(file) {
 
 async function check(planFile, answersFile) {
   requireRegularFile(planFile);
-  requireRegularFile(answersFile, MAX_ANSWERS_BYTES);
+  requireRegularFile(answersFile, /\.html?$/i.test(answersFile) ? MAX_SAVED_PAGE_BYTES : MAX_ANSWERS_BYTES);
   const { spec, dir } = loadSpec(planFile);
   const answers = /\.html?$/i.test(answersFile) ? loadSavedPage(answersFile) : loadSpec(answersFile).spec;
   const plan = await validateSpec(spec, { dir });

@@ -166,6 +166,11 @@ html[data-preset="plan"][data-theme-name="mono"] :is(strong, b) { color: var(--a
 .plan-save-solo { position: fixed; right: 16px; bottom: 16px; z-index: 40; margin: 0; padding: 0; border-top: 0; max-width: calc(100vw - 32px); }
 .plan-save-solo .plan-save-btn { width: auto; background: var(--surface); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18); }
 .plan-save-solo .plan-save-note { display: none; }
+/* a corner button would sit over the text being typed */
+@media (max-width: 1099.98px) {
+  body:has(textarea:focus, input[type="text"]:focus) .plan-save { display: none; }
+}
+body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: none; }
 
 /* print: keep each option and answer chip whole; drop the export controls and any box left empty (the blank
    placeholder makes an empty box match :placeholder-shown) */

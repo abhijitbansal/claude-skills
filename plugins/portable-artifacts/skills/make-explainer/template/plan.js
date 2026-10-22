@@ -135,6 +135,12 @@
   var dirtyVerdict = false;
   var saveTimer = 0;
   var canSave = false;
+  // Answers put on the form from a saved page are not written to storage until the reader changes something (their
+  // earlier answers here are never replaced just by opening a file), and that first write carries the whole form.
+  var adoptPending = false;
+  // A saved page's savedAt comes from another clock. Writes are stamped at least this late, so the reader's own
+  // later edits are never older than the file they started from.
+  var stampFloor = 0;
   function markDirty(target) {
     var box = target.closest ? target.closest('[data-plan-item]') : null;
     if (!box) return false;
@@ -150,7 +156,7 @@
     });
     return {
       hash: planHash,
-      updatedAt: Date.now(),
+      updatedAt: Math.max(Date.now(), stampFloor),
       answers: answers,
       verdict: dirtyVerdict ? verdictValue() : (isText(base.verdict) ? base.verdict : null),
       reviewer: dirtyVerdict ? textOf(verdictBox, 'data-reviewer') : (isText(base.reviewer) ? base.reviewer : ''),
@@ -168,9 +174,10 @@
     window.clearTimeout(saveTimer);
     saveTimer = 0;
     var base = freshEntry();
-    var entry = base ? merged(base) : everything();
+    var entry = base && !adoptPending ? merged(base) : everything();
     // What failed to save stays dirty, so the next write carries it and the note stays until one holds.
     if (PA.saveStore(local, storeKey, JSON.stringify(entry))) {
+      adoptPending = false;
       dirtyIds = Object.create(null);
       dirtyVerdict = false;
       if (canSave) hide(unsaved);
@@ -208,23 +215,18 @@
     if (!payload || payload.schema !== 'plan-saved/1' || typeof payload.savedAt !== 'number') return null;
     return isObject(payload.entry) && payload.entry.hash === planHash ? payload : null;
   }
-  // Make the whole form the stored entry (not only what this tab changed).
-  function adopt() {
-    var all = {};
-    asks.forEach(function (box) { all[box.getAttribute('data-id')] = true; });
-    dirtyIds = all;
-    dirtyVerdict = true;
-    persist();
-  }
-
   canSave = PA.saveStore(local, 'pa-probe', '1') && PA.saveStore(local, 'pa-probe', null);
   var data = canSave ? parseStored(PA.readStore(local, storeKey)) : null;
   var current = data && data.hash === planHash ? data : null;
   var shipped = shippedAnswers();
   if (!canSave) show(unsaved);
-  if (shipped && !(current && typeof current.updatedAt === 'number' && current.updatedAt >= shipped.savedAt)) {
+  // This browser's own entry wins when it is newer than the file, or older but unstamped (written before saved
+  // pages existed: it is the reader's own work, so it is never replaced just by opening a file).
+  var ownIsNewer = !!current && (typeof current.updatedAt !== 'number' || current.updatedAt >= (shipped ? shipped.savedAt : 0));
+  if (shipped) stampFloor = shipped.savedAt;
+  if (shipped && !ownIsNewer) {
     apply(shipped.entry);
-    if (canSave) adopt();
+    adoptPending = true;
   } else if (current) {
     apply(current);
   } else if (data) {
@@ -254,23 +256,27 @@
   });
 
   // ---- export: copy and download ---------------------------------------------------
-  // Two status lines say the same thing: the one by the verdict's buttons and the one under the Save button.
-  var statuses = [part(verdictBox, 'data-plan-status'), document.querySelector('[data-plan-save-status]')].filter(Boolean);
-  function setStatuses(text) { statuses.forEach(function (el) { el.textContent = text; }); }
+  // Two status lines: the one by the verdict's buttons (Copy, Download) and the one under the Save button (Save as
+  // HTML). A message goes to one of them, so a screen reader announces it once.
+  var verdictLine = part(verdictBox, 'data-plan-status');
+  var saveLine = document.querySelector('[data-plan-save-status]');
+  var lines = [verdictLine, saveLine].filter(Boolean);
+  function setLines(text) { lines.forEach(function (el) { el.textContent = text; }); }
   // Cleared first, then set on the next frame, so the same message said twice is announced twice. One pending
   // frame and one clear timer at a time: a later call cancels the earlier ones. A hidden tab never runs frames,
   // so there (or with no requestAnimationFrame) it is set on a zero timer instead.
-  function say(message) {
-    if (statuses.length === 0) return;
+  function say(message, line) {
+    var target = line || verdictLine || saveLine;
+    if (!target) return;
     window.clearTimeout(statusTimer);
     window.clearTimeout(speakTimer);
     if (frame && window.cancelAnimationFrame) window.cancelAnimationFrame(frame);
     frame = 0;
-    setStatuses('');
+    setLines('');
     var speak = function () {
       frame = 0;
-      setStatuses(message);
-      statusTimer = window.setTimeout(function () { setStatuses(''); }, STATUS_MS);
+      target.textContent = message;
+      statusTimer = window.setTimeout(function () { setLines(''); }, STATUS_MS);
     };
     if (window.requestAnimationFrame && !document.hidden) frame = window.requestAnimationFrame(speak);
     else speakTimer = window.setTimeout(speak, 0);
@@ -345,14 +351,20 @@
     block.textContent = blockJson({ schema: 'plan-saved/1', savedAt: Date.now(), entry: wholeEntry(), export: PA.planExport() });
     copy.removeAttribute('data-theme');
     copy.classList.remove('rise-ready');
-    [].forEach.call(copy.querySelectorAll('[data-plan-unsaved], [data-plan-stale]'), function (note) { note.hidden = true; });
+    [].forEach.call(copy.querySelectorAll('[data-plan-unsaved], [data-plan-stale], [data-unsaved]'), function (note) { note.hidden = true; });
     [].forEach.call(copy.querySelectorAll('[data-plan-status], [data-plan-save-status]'), function (line) { line.textContent = ''; });
+    // The theme toggle shows the reader's own choice (data-mode, label); the copy starts on Auto like a fresh page.
+    [].forEach.call(copy.querySelectorAll('[data-theme-toggle]'), function (toggle) {
+      toggle.setAttribute('data-mode', 'auto');
+      toggle.setAttribute('aria-label', 'Theme: Auto. Switch to Light');
+      toggle.setAttribute('title', 'Theme: Auto. Switch to Light');
+    });
     [].forEach.call(copy.querySelectorAll('[aria-current]'), function (el) { el.removeAttribute('aria-current'); });
     return '<!doctype html>\n' + copy.outerHTML + '\n';
   }
   function saveAsHtml() {
     var html = savedPage();
-    if (html === null) { say('Could not save: this page has no place for the answers'); return; }
+    if (html === null) { say('Could not save: this page has no place for the answers', saveLine); return; }
     var name = (planKey.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'plan') + '-answered.html';
     var url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
     var link = document.createElement('a');
@@ -363,7 +375,7 @@
     link.click();
     document.body.removeChild(link);
     window.setTimeout(function () { URL.revokeObjectURL(url); }, REVOKE_MS);
-    say('Saved ' + name + ' with your answers inside');
+    say('Saved ' + name + ' with your answers inside', saveLine);
   }
 
   var copy = part(verdictBox, 'data-plan-copy');
