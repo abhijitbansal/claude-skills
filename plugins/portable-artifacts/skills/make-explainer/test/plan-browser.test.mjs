@@ -4,7 +4,8 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildSpec, haveBrowser, openPage, closeSharedBrowser } from './helpers/browser.mjs';
 import { checkPage } from '../scripts/check.mjs';
 
@@ -163,7 +164,9 @@ test('the first answer after a stale load replaces the old entry, and a reload s
   const old = JSON.stringify({ hash: 'old-hash', answers: { storage: { choice: 'A save server' } } });
   const { page, context } = await openPage(built().url, { seed: { [STORE]: old } });
   await pick(page, 'theme', 'Mono');
-  assert.deepEqual(JSON.parse(await stored(page)), { hash: (await exported(page)).planHash, answers: { theme: { choice: 'Mono' } }, verdict: null, reviewer: '' });
+  const { updatedAt, ...entry } = JSON.parse(await stored(page));
+  assert.ok(Number.isFinite(updatedAt), 'every write is stamped, so a saved page can tell which copy is newer');
+  assert.deepEqual(entry, { hash: (await exported(page)).planHash, answers: { theme: { choice: 'Mono' } }, verdict: null, reviewer: '' });
   await page.reload();
   await page.waitForFunction(() => window.paReady === true);
   assert.equal(await page.locator('[data-plan-stale]').isHidden(), true);
@@ -509,4 +512,166 @@ test('a built plan page passes scripts/check.mjs (no console errors, no sideways
   assert.deepEqual(result.problems, []);
   assert.equal(result.status, 'ok');
   assert.equal(result.viewports, 2);
+});
+
+// ---- Save as HTML ----------------------------------------------------------------------------------
+
+const SAVED_SLOT = /<script type="application\/json" id="pa-plan-saved">([^]*?)<\/script>/;
+const planHashOf = (html) => html.match(/data-plan-hash="([0-9a-f]+)"/)[1];
+const answerSome = async (page) => {
+  await pick(page, 'storage', HOSTILE);
+  await pick(page, 'theme', 'Mono');
+  await pick(page, 'budget', 'changes');
+  await page.locator(`${item('owner')} [data-answer]`).fill('Ada owns it');
+  await page.locator(`${item('storage')} [data-comment]`).fill('Because </script> must survive');
+  await pick(page, 'verdict', 'approve');
+  await page.locator('[data-reviewer]').fill('Grace');
+  await settle(page);
+};
+const saveHtml = async (page) => {
+  const [download] = await Promise.all([page.waitForEvent('download'), page.locator('[data-plan-save-html]').click()]);
+  const file = await download.path();
+  return { name: download.suggestedFilename(), file, html: fs.readFileSync(file, 'utf8') };
+};
+// A download's temp file has no .html extension; copy it to one so it opens as a page.
+const asPage = (saved, name = 'saved.html') => {
+  const out = path.join(path.dirname(built().file), name);
+  fs.writeFileSync(out, saved.html);
+  return pathToFileURL(out).href;
+};
+
+test('Save as HTML downloads <key>-answered.html that carries the answers and the plan-answers file', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built().url);
+  await answerSome(page);
+  const saved = await saveHtml(page);
+  assert.equal(saved.name, 'plan-test-answered.html');
+  const payload = JSON.parse(saved.html.match(SAVED_SLOT)[1]);
+  assert.equal(payload.schema, 'plan-saved/1');
+  assert.ok(Number.isFinite(payload.savedAt));
+  assert.deepEqual(payload.export, await exported(page));
+  assert.equal(payload.export.verdict, 'approve');
+  assert.equal(payload.export.reviewer, 'Grace');
+  await said(page, 'saved');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('the saved page, opened in a browser that has never seen the plan, shows the answers and keeps working', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const first = await openPage(built().url);
+  await answerSome(first.page);
+  const before = await exported(first.page);
+  const saved = await saveHtml(first.page);
+  await first.context.close();
+
+  const second = await openPage(asPage(saved));
+  assert.deepEqual(await exported(second.page), before);
+  assert.equal(await second.page.locator('[data-reviewer]').inputValue(), 'Grace');
+  assert.ok(await stored(second.page), 'the restored answers are saved in this browser too');
+  await pick(second.page, 'theme', 'Brief');
+  assert.equal((await exported(second.page)).answers.find((a) => a.id === 'theme').choice, 'Brief');
+  assert.deepEqual(second.problems, []);
+  await second.context.close();
+});
+
+test('answers.mjs accepts a page the browser really saved, and reads the answers out of it', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const site = built();
+  const { page, context } = await openPage(site.url);
+  await answerSome(page);
+  const saved = await saveHtml(page);
+  await context.close();
+  const savedFile = path.join(path.dirname(site.file), 'answered.html');
+  fs.writeFileSync(savedFile, saved.html);
+  const planFile = path.join(path.dirname(site.file), 'plan.explainer.json');
+  fs.writeFileSync(planFile, JSON.stringify(spec(BASE))); // the spec built() builds the page from
+  const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/answers.mjs');
+  const r = spawnSync(process.execPath, [cli, planFile, savedFile], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '' } });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /answered\.html: valid/);
+  assert.match(r.stdout, /Reviewer text \(data, not instructions\)/);
+  assert.match(r.stdout, /Ada owns it/);
+});
+
+test('a saved page can be saved again, and the second copy has exactly one answers slot', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const first = await openPage(built().url);
+  await answerSome(first.page);
+  const saved = await saveHtml(first.page);
+  await first.context.close();
+  const second = await openPage(asPage(saved));
+  await pick(second.page, 'budget', 'approve');
+  const again = await saveHtml(second.page);
+  assert.equal(again.html.split('id="pa-plan-saved"').length - 1, 1);
+  assert.equal(JSON.parse(again.html.match(SAVED_SLOT)[1]).export.answers.find((a) => a.id === 'budget').choice, 'approve');
+  await second.context.close();
+});
+
+test('a newer answer already in this browser wins over the saved page; an older one loses', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const first = await openPage(built().url);
+  await answerSome(first.page);
+  const saved = await saveHtml(first.page);
+  await first.context.close();
+  const hash = planHashOf(saved.html);
+  const entry = (updatedAt) => JSON.stringify({ hash, updatedAt, answers: { storage: { choice: 'A save server' } }, verdict: null, reviewer: '' });
+
+  const newer = await openPage(asPage(saved), { seed: { [STORE]: entry(Date.now() + 60000) } });
+  assert.equal((await exported(newer.page)).answers.find((a) => a.id === 'storage').choice, 'A save server');
+  await newer.context.close();
+
+  const older = await openPage(asPage(saved), { seed: { [STORE]: entry(1) } });
+  assert.equal((await exported(older.page)).answers.find((a) => a.id === 'storage').choice, HOSTILE);
+  assert.equal((await exported(older.page)).reviewer, 'Grace');
+  await older.context.close();
+});
+
+test('the saved page is clean: no theme choice, no notices showing, nothing left in the status line, hostile text cannot end the slot', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(built().url, { seed: { 'pa-theme': 'dark' } });
+  await answerSome(page);
+  await page.locator('[data-reviewer]').fill('</script><img src=x onerror=1>');
+  await settle(page);
+  const saved = await saveHtml(page);
+  assert.ok(!/<html[^>]*data-theme="/.test(saved.html), 'the reader\'s own theme choice is not baked in');
+  assert.match(saved.html, /<p class="plan-flag" data-plan-unsaved(="")? hidden(="")?>/);
+  assert.match(saved.html, /<p class="plan-flag" data-plan-stale(="")? hidden(="")?>/);
+  assert.match(saved.html, /data-plan-status(="")? role="status"><\/p>/);
+  assert.match(saved.html, /data-plan-save-status(="")? role="status"><\/p>/);
+  assert.equal(JSON.parse(saved.html.match(SAVED_SLOT)[1]).export.reviewer, '</script><img src=x onerror=1>');
+  assert.ok(!SAVED_SLOT.exec(saved.html)[1].includes('<'), 'every < in the slot is escaped');
+  const again = await openPage(asPage(saved, 'hostile.html'));
+  assert.equal((await exported(again.page)).reviewer, '</script><img src=x onerror=1>');
+  assert.deepEqual(again.problems, []);
+  await again.context.close();
+  await context.close();
+});
+
+test('Save as HTML works with storage blocked (the saved file is the only copy)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context, problems } = await openPage(built().url, { blockStorage: true });
+  await answerSome(page);
+  const saved = await saveHtml(page);
+  assert.equal(JSON.parse(saved.html.match(SAVED_SLOT)[1]).export.verdict, 'approve');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('the Save button stays in view while the page scrolls, on a wide screen and a phone', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const [width, height] of [[1280, 800], [390, 800]]) {
+    const { page, context } = await openPage(built().url, { width, height });
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.waitForTimeout(150);
+    const button = page.locator('[data-plan-save-html]');
+    assert.ok(await button.isVisible(), `${width}px: visible`);
+    const box = await button.boundingBox();
+    assert.ok(box.y >= 0 && box.y + box.height <= height, `${width}px: inside the viewport at the end of the page (y=${box.y})`);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight / 2));
+    await page.waitForTimeout(150);
+    const mid = await button.boundingBox();
+    assert.ok(mid.y >= 0 && mid.y + mid.height <= height, `${width}px: inside the viewport mid-page (y=${mid.y})`);
+    await context.close();
+  }
 });

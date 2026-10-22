@@ -147,10 +147,30 @@ html[data-preset="plan"][data-theme-name="mono"] :is(strong, b) { color: var(--a
   [data-theme-name="brief"] .plan-opt { padding: 14px; }
 }
 
+/* Save as HTML: a block under the contents list, which is sticky on a wide screen. Below that width, and when the
+   page has no contents list (.plan-save-solo), the same block is a button fixed to the bottom corner, so it is in
+   reach wherever the reader is. */
+.plan-save { margin: 20px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line); }
+.plan-save-btn { width: 100%; }
+.plan-save-note { margin: 8px 0 0; color: var(--text-2); font-size: var(--fs-xs); line-height: 1.4; }
+.plan-save-status { margin: 6px 0 0; color: var(--text-2); font-size: var(--fs-xs); }
+.plan-save-status:empty { margin: 0; }
+.plan-save-solo { margin: 16px 0 0; }
+@media (max-width: 1099.98px) {
+  .plan-save { position: fixed; right: 16px; bottom: 16px; z-index: 40; margin: 0; padding: 0; border-top: 0; max-width: calc(100vw - 32px); }
+  .plan-save-btn { width: auto; background: var(--surface); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18); }
+  .plan-save-note { display: none; }
+  .plan-save-status { margin: 6px 0 0; padding: 4px 10px; background: var(--surface); border-radius: 6px; }
+  .plan-save-status:empty { display: none; }
+}
+.plan-save-solo { position: fixed; right: 16px; bottom: 16px; z-index: 40; margin: 0; padding: 0; border-top: 0; max-width: calc(100vw - 32px); }
+.plan-save-solo .plan-save-btn { width: auto; background: var(--surface); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18); }
+.plan-save-solo .plan-save-note { display: none; }
+
 /* print: keep each option and answer chip whole; drop the export controls and any box left empty (the blank
    placeholder makes an empty box match :placeholder-shown) */
 @media print {
   .plan-opt, .plan-choice { break-inside: avoid; }
-  .plan-actions, .plan-flag, .plan-status { display: none !important; }
+  .plan-actions, .plan-flag, .plan-status, .plan-save { display: none !important; }
   .plan-field:has(:placeholder-shown), .plan-text:placeholder-shown { display: none; }
 }

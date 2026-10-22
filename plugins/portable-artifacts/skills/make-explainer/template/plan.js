@@ -150,6 +150,7 @@
     });
     return {
       hash: planHash,
+      updatedAt: Date.now(),
       answers: answers,
       verdict: dirtyVerdict ? verdictValue() : (isText(base.verdict) ? base.verdict : null),
       reviewer: dirtyVerdict ? textOf(verdictBox, 'data-reviewer') : (isText(base.reviewer) ? base.reviewer : ''),
@@ -197,18 +198,39 @@
     if (name) name.value = isText(data.reviewer) ? data.reviewer : '';
   }
 
+  // A page saved with "Save as HTML" carries the reader's answers in a data block (#pa-plan-saved):
+  // { schema: 'plan-saved/1', savedAt, entry: <a stored entry>, export: <the plan-answers/1 file> }.
+  // It is the page's starting answers unless this browser holds a newer entry for the same plan (by updatedAt),
+  // and it applies even when storage is blocked, so a saved file works anywhere.
+  var slot = document.getElementById('pa-plan-saved');
+  function shippedAnswers() {
+    var payload = slot ? parseStored(slot.textContent) : null;
+    if (!payload || payload.schema !== 'plan-saved/1' || typeof payload.savedAt !== 'number') return null;
+    return isObject(payload.entry) && payload.entry.hash === planHash ? payload : null;
+  }
+  // Make the whole form the stored entry (not only what this tab changed).
+  function adopt() {
+    var all = {};
+    asks.forEach(function (box) { all[box.getAttribute('data-id')] = true; });
+    dirtyIds = all;
+    dirtyVerdict = true;
+    persist();
+  }
+
   canSave = PA.saveStore(local, 'pa-probe', '1') && PA.saveStore(local, 'pa-probe', null);
-  if (!canSave) {
-    show(unsaved);
-  } else {
-    var data = parseStored(PA.readStore(local, storeKey));
-    if (data && data.hash === planHash) {
-      apply(data);
-    } else if (data) {
-      // The plan was edited since these answers were saved: they do not fit it, so they are not applied. Nothing is
-      // written until the reader changes something; that first write replaces the old entry.
-      show(stale);
-    }
+  var data = canSave ? parseStored(PA.readStore(local, storeKey)) : null;
+  var current = data && data.hash === planHash ? data : null;
+  var shipped = shippedAnswers();
+  if (!canSave) show(unsaved);
+  if (shipped && !(current && typeof current.updatedAt === 'number' && current.updatedAt >= shipped.savedAt)) {
+    apply(shipped.entry);
+    if (canSave) adopt();
+  } else if (current) {
+    apply(current);
+  } else if (data) {
+    // The plan was edited since these answers were saved: they do not fit it, so they are not applied. Nothing is
+    // written until the reader changes something; that first write replaces the old entry.
+    show(stale);
   }
 
   document.addEventListener('change', function (event) {
@@ -232,21 +254,23 @@
   });
 
   // ---- export: copy and download ---------------------------------------------------
-  var status = part(verdictBox, 'data-plan-status');
+  // Two status lines say the same thing: the one by the verdict's buttons and the one under the Save button.
+  var statuses = [part(verdictBox, 'data-plan-status'), document.querySelector('[data-plan-save-status]')].filter(Boolean);
+  function setStatuses(text) { statuses.forEach(function (el) { el.textContent = text; }); }
   // Cleared first, then set on the next frame, so the same message said twice is announced twice. One pending
   // frame and one clear timer at a time: a later call cancels the earlier ones. A hidden tab never runs frames,
   // so there (or with no requestAnimationFrame) it is set on a zero timer instead.
   function say(message) {
-    if (!status) return;
+    if (statuses.length === 0) return;
     window.clearTimeout(statusTimer);
     window.clearTimeout(speakTimer);
     if (frame && window.cancelAnimationFrame) window.cancelAnimationFrame(frame);
     frame = 0;
-    status.textContent = '';
+    setStatuses('');
     var speak = function () {
       frame = 0;
-      status.textContent = message;
-      statusTimer = window.setTimeout(function () { status.textContent = ''; }, STATUS_MS);
+      setStatuses(message);
+      statusTimer = window.setTimeout(function () { setStatuses(''); }, STATUS_MS);
     };
     if (window.requestAnimationFrame && !document.hidden) frame = window.requestAnimationFrame(speak);
     else speakTimer = window.setTimeout(speak, 0);
@@ -297,8 +321,55 @@
     window.setTimeout(function () { URL.revokeObjectURL(url); }, REVOKE_MS);
     say('Download started');
   }
+  // Save as HTML: this very page with the answers put in its #pa-plan-saved block. The copy is made from the DOM
+  // with what the runtimes added undone (the reader's own theme choice, shown notices, status text, scroll-spy
+  // marks), so opening it starts like a fresh page plus the answers. The form's live state is not read from the
+  // copy: the answers travel in the block and are put back on load (above).
+  function wholeEntry() {
+    var answers = {};
+    asks.forEach(function (box) {
+      var saved = savedItem(box);
+      if (saved) answers[box.getAttribute('data-id')] = saved;
+    });
+    return { hash: planHash, answers: answers, verdict: verdictValue(), reviewer: textOf(verdictBox, 'data-reviewer') };
+  }
+  // JSON that cannot end its <script> block or be cut by a line separator: every "<" and U+2028/2029 is escaped.
+  var LINE_SEPARATORS = new RegExp(String.fromCharCode(91, 8232, 8233, 93), 'g'); // [U+2028 U+2029]
+  function blockJson(value) {
+    return JSON.stringify(value).replace(/</g, '\\u003c').replace(LINE_SEPARATORS, function (c) { return '\\u' + c.charCodeAt(0).toString(16); });
+  }
+  function savedPage() {
+    var copy = root.cloneNode(true);
+    var block = copy.querySelector('#pa-plan-saved');
+    if (!block) return null;
+    block.textContent = blockJson({ schema: 'plan-saved/1', savedAt: Date.now(), entry: wholeEntry(), export: PA.planExport() });
+    copy.removeAttribute('data-theme');
+    copy.classList.remove('rise-ready');
+    [].forEach.call(copy.querySelectorAll('[data-plan-unsaved], [data-plan-stale]'), function (note) { note.hidden = true; });
+    [].forEach.call(copy.querySelectorAll('[data-plan-status], [data-plan-save-status]'), function (line) { line.textContent = ''; });
+    [].forEach.call(copy.querySelectorAll('[aria-current]'), function (el) { el.removeAttribute('aria-current'); });
+    return '<!doctype html>\n' + copy.outerHTML + '\n';
+  }
+  function saveAsHtml() {
+    var html = savedPage();
+    if (html === null) { say('Could not save: this page has no place for the answers'); return; }
+    var name = (planKey.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'plan') + '-answered.html';
+    var url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    link.hidden = true;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(function () { URL.revokeObjectURL(url); }, REVOKE_MS);
+    say('Saved ' + name + ' with your answers inside');
+  }
+
   var copy = part(verdictBox, 'data-plan-copy');
   var download = part(verdictBox, 'data-plan-download');
+  var saveHtml = document.querySelector('[data-plan-save-html]');
   if (copy) copy.addEventListener('click', function () { copyAnswers(copy); });
   if (download) download.addEventListener('click', downloadAnswers);
+  if (saveHtml) saveHtml.addEventListener('click', saveAsHtml);
 })();

@@ -300,3 +300,36 @@ test('slides: a question with no default says nothing about blank answers', () =
   assert.ok(!render(question({ default: undefined }), slidesCtx).includes('blank answer'));
   assert.ok(render(question({ default: undefined })).includes('A blank answer leaves it open.'));
 });
+
+// ---- Save as HTML: the sticky button and the slot the saved answers go into ------------------
+
+const SAVE_SLOT = '<script type="application/json" id="pa-plan-saved">null</script>';
+const SAVE_BUTTON = '<button type="button" class="btn plan-btn plan-save-btn" data-plan-save-html>';
+
+test('a plan page has one Save as HTML button and an empty saved-answers slot, inside the contents nav when there is one', async () => {
+  const { html } = await build(plan([decision({ title: 'Storage' }), approval({ title: 'Themes' }), question({ title: 'Owner' }), { type: 'text', title: 'Context', text: 'x' }, review(), verdict()]));
+  assert.equal(html.split(SAVE_BUTTON).length - 1, 1);
+  assert.equal(html.split(SAVE_SLOT).length - 1, 1);
+  const nav = html.match(/<nav class="toc"[^]*?<\/nav>/);
+  assert.ok(nav && nav[0].includes('data-plan-save-html') && nav[0].includes(SAVE_SLOT), 'the block sits in the sticky contents nav');
+});
+
+test('a plan page too short for a contents list still gets the button, as a standalone block', async () => {
+  const { html } = await build(plan([question(), verdict()]));
+  assert.ok(!html.includes('<nav class="toc"'));
+  assert.equal(html.split(SAVE_BUTTON).length - 1, 1);
+  assert.match(html, /<aside class="plan-save plan-save-solo"/);
+});
+
+test('pages and decks without answerable items have no Save button and no slot', async () => {
+  const plain = (await build({ title: 'T', sections: [{ type: 'text', text: 'x' }] })).html;
+  const deck = (await build(plan([decision(), approval(), question(), verdict()], { mode: 'slides' }))).html;
+  for (const html of [plain, deck]) {
+    assert.ok(!html.includes(SAVE_BUTTON));
+    assert.ok(!html.includes('pa-plan-saved'));
+  }
+});
+
+test('print hides the Save block', () => {
+  assert.match(PLAN_CSS, /@media print[^]*\.plan-save/);
+});

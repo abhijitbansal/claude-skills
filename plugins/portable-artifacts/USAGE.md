@@ -344,10 +344,17 @@ reviewer's overall verdict control; the agent replaces each
 for the executive look). The reviewer picks one option per decision, approves,
 asks for changes or rejects each approval, answers each question, gives an
 overall verdict and a name, then presses Copy answers or Download
-`plan-answers.json`. Answers are saved in the reviewer's browser, keyed by the
+`plan-answers.json`, or Save as HTML. Answers are saved in the reviewer's browser, keyed by the
 plan's `key` and a hash of its content, so answers to an edited plan are
-flagged instead of reused. The agent
-never reads the file directly: it runs `answers.mjs plan.json plan-answers.json`
+flagged instead of reused. **Save as HTML** is a button in the sticky contents
+menu on the left (a corner button on a phone, or on a page too short for a
+menu): it downloads `<key>-answered.html`, this same page with the answers put
+inside it. Opening that file shows the answers again, in any browser, with no
+storage needed, so it can be kept, shared with others or handed to the agent. If this
+browser already holds a newer answer for the same plan, that newer answer wins.
+The reviewer's theme choice is not baked into the file. The agent
+never reads a file directly: it runs `answers.mjs plan.json plan-answers.json`
+or `answers.mjs plan.json <key>-answered.html`
 (add `--json` for machine-readable output), which exits 0 for valid answers, 1
 for problems and 2 for a usage error, and acts only on a summary that does not
 start with `INVALID ANSWERS`. If the answers come back pasted into a chat,

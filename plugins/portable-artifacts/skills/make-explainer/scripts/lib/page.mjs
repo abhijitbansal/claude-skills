@@ -23,6 +23,7 @@ import { flavorFor, flavorVars, scrimVar, CLASSIC } from './flavor.mjs';
 import { artSvg } from '../../shared/art.mjs';
 import { dataUri } from './image.mjs';
 import { planHash, planKey } from './plan-hash.mjs';
+import { saveBlock } from './render/plan-ui.mjs';
 
 const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), slides: new URL('../../template/slides.html', import.meta.url) };
 const BASE_CSS = new URL('../../template/base.css', import.meta.url);
@@ -159,7 +160,8 @@ function renderHeroTldr(section, id, titleId, ctx) {
 // Plan mode: the sections a reader answers. A page that has one carries the plan's key (the answers' storage
 // namespace) and its hash on <html>; the answers validator (answers.mjs) recomputes both from the spec.
 const PLAN_ITEM_TYPES = new Set(['decision', 'approval', 'question', 'verdict']);
-const planAttrs = (spec, slides) => (slides || !spec.sections.some((s) => PLAN_ITEM_TYPES.has(s.type))
+const hasPlanItems = (spec) => spec.sections.some((s) => PLAN_ITEM_TYPES.has(s.type));
+const planAttrs = (spec, slides) => (slides || !hasPlanItems(spec)
   ? ''
   : ` data-plan-key="${esc(planKey(spec))}" data-plan-hash="${planHash(spec)}"`);
 
@@ -190,10 +192,11 @@ function renderMeta(meta) {
   return `<dl class="meta">\n${items.join('\n')}\n</dl>`;
 }
 
-function renderToc(entries) {
+// `extra` is a block that rides along under the list (a plan page's Save button), so it is as sticky as the list.
+function renderToc(entries, extra = '') {
   if (entries.length < TOC_MIN) return '';
   const items = entries.map(({ id, title, label }) => `<li><a href="#${esc(id)}">${plain(label ?? title)}</a></li>`);
-  return `<nav class="toc" aria-label="Contents">\n<details open>\n<summary>Contents</summary>\n<ol>\n${items.join('\n')}\n</ol>\n</details>\n</nav>`;
+  return `<nav class="toc" aria-label="Contents">\n<details open>\n<summary>Contents</summary>\n<ol>\n${items.join('\n')}\n</ol>\n</details>${extra === '' ? '' : `\n${extra}`}\n</nav>`;
 }
 
 async function loadIcons(spec) {
@@ -248,14 +251,16 @@ function pageParts(spec, ctx, ids) {
   const tocEntries = spec.sections
     .map((s, i) => ({ id: ids[i], title: s.title, label: s.label, own: SECTIONS[s.type].ownHeading }))
     .filter((e) => e.title !== undefined && !e.own);
-  const toc = renderToc(tocEntries);
+  const answerable = hasPlanItems(spec);
+  const toc = renderToc(tocEntries, answerable ? saveBlock() : '');
   return {
     BODYCLASS: toc ? 'has-toc' : '',
     H1: inline(spec.title),
     SUBTITLE: spec.subtitle === undefined ? '' : `<p class="subtitle">${inline(spec.subtitle)}</p>`,
     META: renderMeta(spec.meta),
     HEROTLDR: heroTldr ? renderHeroTldr(spec.sections[0], ids[0], titleIds[0], ctx) : '',
-    TOC: toc,
+    // No contents list to sit in: the Save button stands alone (fixed to the corner by CSS).
+    TOC: toc || (answerable ? saveBlock({ solo: true }) : ''),
     SECTIONS: rendered.filter(Boolean).join('\n'),
   };
 }

@@ -37,6 +37,20 @@ export const radioName = (id) => `plan-${id}`;
 /** An element id inside an item. The underscore keeps it apart from section and heading ids (ID_PATTERN has none). */
 export const partId = (id, ...parts) => esc(['pl', id, ...parts].join('_'));
 
+/**
+ * The Save-as-HTML block of a plan page: the button (template/plan.js wires it), a status line and the empty slot
+ * the runtime fills, in the saved copy, with the reader's answers. `solo` is the page with no contents list to sit
+ * in. The slot is a data block (type application/json): the browser never runs it, so the page's CSP is unaffected.
+ */
+export function saveBlock({ solo = false } = {}) {
+  return `<aside class="plan-save${solo ? ' plan-save-solo' : ''}" aria-label="Save your answers">
+<button type="button" class="btn plan-btn plan-save-btn" data-plan-save-html>Save as HTML</button>
+<p class="plan-save-note">One file with your answers inside. Open it later, share it, or hand it to the agent.</p>
+<p class="plan-save-status" data-plan-save-status role="status"></p>
+<script type="application/json" id="pa-plan-saved">null</script>
+</aside>`;
+}
+
 /** The deck form: the same content, no controls, and where to answer instead. */
 export function staticItem(kind, inner) {
   return `<div class="plan-item plan-${kind} plan-static">
