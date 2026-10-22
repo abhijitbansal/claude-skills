@@ -64,6 +64,39 @@ that bite hardest in this repo:
   Regenerate `site/og.png` from `site/og.html` only when a total shown there
   changed.
 
+### Lessons from the voiceover dependency fix (PRs #45, #46)
+
+- **Dependencies installed on demand are invisible to `npm audit`.** A package
+  the doctor installs with `npm install <pin> --no-save` (make-motion's
+  voiceover: `kokoro-js`) is not in the skill's `package-lock.json`, so audit,
+  Dependabot and CI all report clean while the user's machine gets the
+  vulnerable tree (PR #45/#46: `sharp` 0.34.5, 3 high). When you add or bump
+  one: (1) audit it with `scripts/audit-on-demand-deps.sh`, which CI also runs
+  weekly in `audit-on-demand-deps.yml` because advisories land without a
+  commit; (2) fix transitive advisories with exact-version `overrides` in the
+  skill's `package.json`, not by waiting on upstream; (3) install from inside
+  the skill folder (`cd <skill-dir> && npm install …`), the form that applies
+  `overrides` on every npm we tried (`--prefix` did too on npm 10.9 and 11.5;
+  a report that it does not on npm 10.8.2 was never reproduced, so do not state
+  it as fact).
+- **Changing an install command or pin is a cross-surface edit.** The doctor
+  fix (`shared/doctor.mjs`, synced into every skill with `node
+  bin/sync-shared.mjs`), the runtime error hint (`doctor-hint.mjs`), README,
+  USAGE, `references/schema.md` and the changelog all print it. Grep the old
+  form across the whole plugin before you push (PR #45 fixed the doctor and
+  missed the hint and schema.md; `bin/test/install-commands.test.mjs` now
+  guards the docs).
+- **A pin that fixes a vulnerability must also reach existing installs.** The
+  doctor's check must go red for an install made before the pin (see
+  `staleOverrides` in `shared/doctor.mjs`), otherwise everyone who already
+  installed keeps the vulnerable version and is never told. Prove it with a
+  real pre-pin install, not a mock: install without the pin, restore it, run the
+  doctor, run `--fix`, confirm the version moved.
+- **Never assert a root cause you did not reproduce.** "npm ignores overrides
+  under `--prefix`" went into a PR body and a code comment from one
+  environment; a second environment disproved it. Say "reported" and name the
+  environment, as the CHANGELOG now does.
+
 ---
 
 ## Orchestration modes
@@ -141,6 +174,13 @@ CI is green and review passes.
 
 - **Branch first — never commit work directly to `main`.** One branch per
   logical unit of work (`feat/<slug>`, `fix/<slug>`, `docs/<slug>`).
+- **Reviewing or testing a PR: work on that PR's own branch.** Check it out
+  (`gh pr checkout <n>`, or fetch `pull/<n>/head` and switch to it), test
+  there, and put follow-up commits (learnings, fixes) on the same branch so
+  they ship with the PR. Do not create a new branch or push a new remote branch
+  for it unless asked; a side branch stacked on the PR splits one change across
+  two PRs. In a session worktree, push with
+  `git push origin HEAD:<pr-branch>` rather than inventing a branch name.
 - **Commits are task-level and atomic** — conventional format
   (`feat`/`fix`/`refactor`/`docs`/`test`/`chore`), one logical change, each
   leaving the tree green (`bats tests/bats` + `shellcheck` where scripts

@@ -1,5 +1,5 @@
 {
-  "title": "What portable-artifacts 0.8.0 adds",
+  "title": "What portable-artifacts 0.9.0 adds",
   "subtitle": "Four changes: what each does, how it was built, and what is still unproven",
   "preset": "concept",
   "generatedBy": { "model": "claude-haiku-5-5", "agent": "Claude Code" },
@@ -26,7 +26,7 @@
         { "label": "Motion gate", "value": "10 of 10" },
         { "label": "Runs on Haiku 5.5", "value": "19 of 19" },
         { "label": "Themes now", "value": "9" },
-        { "label": "Plugin version", "value": "0.8.0" }
+        { "label": "Plugin version", "value": "0.9.0" }
       ]
     },
     {
@@ -38,7 +38,7 @@
         { "title": "A. Numbers on one line", "text": "A number and its unit such as 42% or 1,204 ms no longer split across lines in explainers, decks, dashboards and motion." },
         { "title": "B. Cheap-model routing", "text": "Skills hand the build to an artifact-builder agent that runs a cheaper model on Copilot and Codex." },
         { "title": "C. Plan mode", "text": "A plan preset in make-explainer where reviewers answer decisions in the page and return a JSON file to the agent." },
-        { "title": "D. Docs and release", "text": "READMEs, feature pages and counts updated; plugin version raised from 0.7.0 to 0.8.0 for the CI guard." }
+        { "title": "D. Docs and release", "text": "READMEs, feature pages and counts updated; plugin version raised from 0.8.1 to 0.9.0 for the CI guard." }
       ]
     },
     {

@@ -4,12 +4,11 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
-## [0.8.0] - 2026-10-21
+## [0.9.0] - 2026-10-22
 
-make-motion: polish, crossfade, sound cues, texture and typing. Across the plugin: numbers that stay on one line,
-cheaper-model routing on GitHub Copilot and Codex, and a plan preset for make-explainer.
+Numbers that stay on one line, cheaper-model routing on GitHub Copilot and Codex, and a plan preset for make-explainer.
 
-### Across the plugin
+### Added and changed
 
 - **Numbers stay on one line.** A number with its unit or percent sign (`1,204 ms`, `18%`, `$4.2k`) is kept whole in
   make-explainer pages and decks (each token in a no-wrap span), make-dashboard KPI values (no-wrap and sized to their
@@ -29,6 +28,35 @@ cheaper-model routing on GitHub Copilot and Codex, and a plan preset for make-ex
 - **Security scanner alerts.** The two skills.sh/Socket "anomaly" alerts on make-diagram and make-explainer are fixed (an
   `fs`-patching test fixture was removed; a page chip tone is now checked against an allow-list). Scores change when
   skills.sh scans again.
+
+## [0.8.1] - 2026-10-22
+
+make-motion: voiceover dependencies on patched versions.
+
+### Security
+
+- **Patched voiceover dependencies.** `kokoro-js@1.2.1` (its latest release) pins `@huggingface/transformers` 3.x, which
+  pins `sharp ^0.34`: three high-severity advisories in its bundled libvips, libheif and librsvg
+  ([GHSA-f88m-g3jw-g9cj](https://github.com/advisories/GHSA-f88m-g3jw-g9cj),
+  [GHSA-rgj7-g3m4-5g8c](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c),
+  [GHSA-wq5f-xc86-pv6w](https://github.com/advisories/GHSA-wq5f-xc86-pv6w), fixed in `sharp` 0.35.5). It also reaches
+  `global-agent` 3.x, whose `roarr` dependency pulls in `sprintf-js`
+  ([GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), moderate, no fix). make-motion's
+  `package.json` now overrides `sharp` to 0.35.5 and `global-agent` to 4.1.3 (which no longer uses `roarr`): `npm audit`
+  on the voiceover install goes from 7 vulnerabilities (3 high, 4 moderate) to 0.
+
+### Fixed
+
+- **The kokoro install runs from inside the skill folder.** The doctor, `voice.mjs`'s install hint and the docs now use
+  `cd <skill-dir> && npm install kokoro-js@1.2.1 --no-save` instead of `--prefix <skill-dir>`, so npm always reads the
+  skill's `overrides`. (`--prefix` was reported to skip them on macOS with npm 10.8.2; it applied them in Linux tests.)
+- **Existing voiceover installs are flagged.** The doctor now reports kokoro as missing when an installed package differs
+  from an exact version pinned in the skill's `overrides`, so an install made before 0.8.1 is offered a reinstall instead
+  of keeping `sharp` 0.34.5. If you already use voiceover, run `node scripts/doctor.mjs --fix kokoro` once.
+
+## [0.8.0] - 2026-10-21
+
+make-motion: polish, crossfade, sound cues, texture and typing.
 
 ### Added
 
