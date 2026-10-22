@@ -100,7 +100,8 @@ test('install hints name the doctor with its real path and the missing item id',
   const doctor = quoteArg(path.join(SKILL, 'scripts/doctor.mjs'));
   const { INSTALL_HINT } = await lib('voice.mjs');
   assert.ok(INSTALL_HINT.includes(`node ${doctor} --for voiceover, id kokoro)`), INSTALL_HINT);
-  assert.ok(INSTALL_HINT.includes(`--prefix ${quoteArg(SKILL.replace(/[\\/]$/, ''))}`), INSTALL_HINT);
+  assert.ok(INSTALL_HINT.includes(`${quoteArg(SKILL.replace(/[\\/]$/, ''))} && npm install kokoro-js@1.2.1 --no-save`), INSTALL_HINT);
+  assert.doesNotMatch(INSTALL_HINT, /--prefix/);
   assert.doesNotMatch(INSTALL_HINT, /<skill-dir>/);
   const { findFfmpeg } = await lib('ffmpeg.mjs');
   const saved = { p: process.env.PATH, f: process.env.FFMPEG_PATH };
