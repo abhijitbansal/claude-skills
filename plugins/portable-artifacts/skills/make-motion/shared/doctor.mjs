@@ -334,8 +334,10 @@ export function kokoro() {
     size: '≈250 MB, plus a 90 MB model on first use',
     check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'kokoro-js')),
     fix: (ctx) => {
-      const argv = ['npm', 'install', KOKORO_PIN, '--no-save', '--prefix', ctx.skillDir];
-      return { auto: [argv], manual: manualAll(render([argv], ctx.platform)), notes: 'the 90 MB voice model downloads on first use; a later `--fix node_modules` (npm ci) removes kokoro again, so rerun `--fix kokoro`' };
+      // Run inside the skill folder, not with --prefix: npm 10 ignores the skill's package.json
+      // "overrides" under --prefix, and those overrides keep kokoro's sharp and global-agent patched.
+      const step = { argv: ['npm', 'install', KOKORO_PIN, '--no-save'], cwd: ctx.skillDir };
+      return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 90 MB voice model downloads on first use; a later `--fix node_modules` (npm ci) removes kokoro again, so rerun `--fix kokoro`' };
     },
     needsSudo: () => false,
   };
