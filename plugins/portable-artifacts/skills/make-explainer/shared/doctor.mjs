@@ -29,6 +29,7 @@ export function defaultCtx(skillDir) {
     cwd: process.cwd(),
     homedir: os.homedir(),
     exists: (p) => fs.existsSync(p),
+    readFile: (p) => fs.readFileSync(p, 'utf8'),
     realpath: (p) => fs.realpathSync(p),
     isExecutable: (p) => {
       try {
@@ -324,18 +325,42 @@ export function browser({ required = false, dir, id = 'chromium' } = {}) {
   };
 }
 
+// Names whose installed version differs from an exact-version "overrides" pin in the skill's
+// package.json. A kokoro install made before the pins existed keeps the vulnerable sharp and
+// global-agent until it is reinstalled. Unreadable files count as not stale.
+function staleOverrides(ctx) {
+  const read = (p) => {
+    try {
+      return JSON.parse(ctx.readFile(p));
+    } catch {
+      return null;
+    }
+  };
+  const P = pp(ctx);
+  const overrides = read(P.join(ctx.skillDir, 'package.json'))?.overrides ?? {};
+  return Object.entries(overrides)
+    .filter(([name, want]) => /^\d+\.\d+\.\d+$/.test(want) && (read(P.join(ctx.skillDir, 'node_modules', name, 'package.json'))?.version ?? want) !== want)
+    .map(([name]) => name);
+}
+
 export function kokoro() {
   return {
     id: 'kokoro',
     rank: RANK.kokoro,
     needsNodeModules: true,
-    why: 'local text-to-speech for voiceover',
+    why: (ctx) => {
+      const stale = staleOverrides(ctx);
+      return stale.length > 0 ? `local text-to-speech for voiceover; reinstall to get the patched ${stale.join(', ')} pinned in package.json "overrides"` : 'local text-to-speech for voiceover';
+    },
     required: false,
     size: '≈250 MB, plus a 90 MB model on first use',
-    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'kokoro-js')),
+    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'kokoro-js')) && staleOverrides(ctx).length === 0,
     fix: (ctx) => {
-      const argv = ['npm', 'install', KOKORO_PIN, '--no-save', '--prefix', ctx.skillDir];
-      return { auto: [argv], manual: manualAll(render([argv], ctx.platform)), notes: 'the 90 MB voice model downloads on first use; a later `--fix node_modules` (npm ci) removes kokoro again, so rerun `--fix kokoro`' };
+      // Run inside the skill folder so npm applies the skill's package.json "overrides" (patched sharp
+      // and global-agent). --prefix applied them in Linux tests with npm 10.8/10.9, but was reported
+      // not to on macOS with npm 10.8.2; running from the folder works either way.
+      const step = { argv: ['npm', 'install', KOKORO_PIN, '--no-save'], cwd: ctx.skillDir };
+      return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 90 MB voice model downloads on first use; a later `--fix node_modules` (npm ci) removes kokoro again, so rerun `--fix kokoro`' };
     },
     needsSudo: () => false,
   };

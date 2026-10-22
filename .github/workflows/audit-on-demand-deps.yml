@@ -1,0 +1,27 @@
+name: audit-on-demand-deps
+# `npm audit` in a skill folder cannot see packages installed with `npm install --no-save`
+# (make-motion's voiceover: kokoro-js). This audits them, on the PRs that change their pins and
+# weekly, because new advisories land without any commit here.
+on:
+  pull_request:
+    paths:
+      - 'plugins/portable-artifacts/skills/make-motion/package.json'
+      - 'plugins/portable-artifacts/skills/make-motion/package-lock.json'
+      - 'plugins/portable-artifacts/shared/doctor.mjs'
+      - 'scripts/audit-on-demand-deps.sh'
+      - '.github/workflows/audit-on-demand-deps.yml'
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: audit the on-demand voiceover install
+        run: bash scripts/audit-on-demand-deps.sh

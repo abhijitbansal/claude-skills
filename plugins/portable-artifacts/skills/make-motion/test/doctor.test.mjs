@@ -100,7 +100,8 @@ test('install hints name the doctor with its real path and the missing item id',
   const doctor = quoteArg(path.join(SKILL, 'scripts/doctor.mjs'));
   const { INSTALL_HINT } = await lib('voice.mjs');
   assert.ok(INSTALL_HINT.includes(`node ${doctor} --for voiceover, id kokoro)`), INSTALL_HINT);
-  assert.ok(INSTALL_HINT.includes(`--prefix ${quoteArg(SKILL.replace(/[\\/]$/, ''))}`), INSTALL_HINT);
+  assert.ok(INSTALL_HINT.includes(`${quoteArg(SKILL.replace(/[\\/]$/, ''))} && npm install kokoro-js@1.2.1 --no-save`), INSTALL_HINT);
+  assert.doesNotMatch(INSTALL_HINT, /--prefix/);
   assert.doesNotMatch(INSTALL_HINT, /<skill-dir>/);
   const { findFfmpeg } = await lib('ffmpeg.mjs');
   const saved = { p: process.env.PATH, f: process.env.FFMPEG_PATH };
@@ -150,4 +151,13 @@ test('the doctor command in hints quotes a path with spaces, as the shared helpe
   const { doctorCommand } = await import(pathToFileURL(path.join(dir, 'scripts/lib/doctor-hint.mjs')).href);
   assert.equal(doctorCommand(), `node ${quoteArg(path.join(fs.realpathSync(dir), 'scripts/doctor.mjs'))}`);
   assert.match(doctorCommand(), /^node ["']/);
+});
+
+// kokoro-js@1.2.1 pins @huggingface/transformers 3.x, which pins sharp ^0.34 (GHSA-f88m-g3jw-g9cj,
+// GHSA-rgj7-g3m4-5g8c, GHSA-wq5f-xc86-pv6w; fixed in 0.35.5) and reaches global-agent 3.x -> roarr ->
+// sprintf-js (GHSA-hp3w-g68c-fv3c). The doctor installs kokoro from this folder so these overrides apply.
+test('package.json overrides keep the voiceover dependencies on patched sharp and global-agent', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(SKILL, 'package.json'), 'utf8'));
+  assert.equal(pkg.overrides?.sharp, '0.35.5');
+  assert.equal(pkg.overrides?.['global-agent'], '4.1.3');
 });
