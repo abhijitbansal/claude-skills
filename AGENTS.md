@@ -174,6 +174,13 @@ CI is green and review passes.
 
 - **Branch first — never commit work directly to `main`.** One branch per
   logical unit of work (`feat/<slug>`, `fix/<slug>`, `docs/<slug>`).
+- **Reviewing or testing a PR: work on that PR's own branch.** Check it out
+  (`gh pr checkout <n>`, or fetch `pull/<n>/head` and switch to it), test
+  there, and put follow-up commits (learnings, fixes) on the same branch so
+  they ship with the PR. Do not create a new branch or push a new remote branch
+  for it unless asked; a side branch stacked on the PR splits one change across
+  two PRs. In a session worktree, push with
+  `git push origin HEAD:<pr-branch>` rather than inventing a branch name.
 - **Commits are task-level and atomic** — conventional format
   (`feat`/`fix`/`refactor`/`docs`/`test`/`chore`), one logical change, each
   leaving the tree green (`bats tests/bats` + `shellcheck` where scripts
