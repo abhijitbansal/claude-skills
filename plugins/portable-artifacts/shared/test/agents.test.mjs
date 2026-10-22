@@ -113,6 +113,33 @@ test('cli: `write codex <dir>` creates artifact-builder.toml; a second run keeps
   assert.equal(fs.readFileSync(path.join(dir, 'artifact-builder.toml'), 'utf8'), agentFile('codex').content);
 });
 
+test('cli: a dir that looks like a flag is refused and nothing is created', () => {
+  const cwd = tmpDir();
+  const r = spawnSync(process.execPath, [AGENTS, 'write', 'copilot', '--force'], { cwd, encoding: 'utf8' });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /usage: /);
+  assert.deepEqual(fs.readdirSync(cwd), []);
+});
+
+test('cli: runs through a symlinked agents.mjs (the npx skills layout)', () => {
+  const root = tmpDir();
+  const link = path.join(root, 'agents-link.mjs');
+  fs.symlinkSync(AGENTS, link);
+  const dir = path.join(root, 'agents');
+  const r = spawnSync(process.execPath, [link, 'write', 'codex', dir], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.existsSync(path.join(dir, 'artifact-builder.toml')));
+});
+
+test('importing the module never throws or writes, even when argv[1] is not a real path', () => {
+  const cwd = tmpDir();
+  const code = `import(${JSON.stringify(AGENTS)}).then((m) => console.log(typeof m.agentFile))`;
+  const r = spawnSync(process.execPath, ['-e', code, 'no-such-path'], { cwd, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.trim(), 'function');
+  assert.deepEqual(fs.readdirSync(cwd), []);
+});
+
 test('cli: unknown host, missing dir or unknown command exit 2 with usage and write nothing', () => {
   const dir = path.join(tmpDir(), 'agents');
   for (const args of [['write', 'gemini', dir], ['write', 'copilot'], ['frobnicate'], []]) {

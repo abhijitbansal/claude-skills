@@ -636,7 +636,7 @@ test('KOKORO_PIN is exported and used by the kokoro fix', async () => {
 
 const AGENT_DIRS = ["/h/.copilot/agents", "/h/.codex/agents", "/p/.github/agents", "/p/.codex/agents"];
 // files: existing agent files; dirs: other existing folders (the host's home folder is what makes the requirement apply).
-const agentCtx = (files = [], dirs = ["/h/.codex"]) => ctx({ homedir: "/h", cwd: "/p", exists: (p) => files.includes(p) || dirs.includes(p) });
+const agentCtx = (files = [], dirs = ["/h/.codex"]) => ctx({ homedir: "/h", cwd: "/p", execPath: "/n/node", exists: (p) => files.includes(p) || dirs.includes(p) });
 const EMPTY_HOME = [];
 
 test("builderAgent: false on an empty home and cwd; optional with the shared requirement fields", async () => {
@@ -668,6 +668,7 @@ test("builderAgent: auto fix writes the agent file for each host folder that exi
     ["/s/make-motion/shared/agents.mjs", "write", "copilot", "/h/.copilot/agents"],
     ["/s/make-motion/shared/agents.mjs", "write", "codex", "/h/.codex/agents"],
   ]);
+  assert.ok(both.auto.every((s) => s[0] === "/n/node"), "runs this process's Node, not node from PATH");
   const codexOnly = builderAgent().fix(agentCtx([], ["/h/.codex"]));
   assert.deepEqual(codexOnly.auto.map((s) => s.slice(1)), [["/s/make-motion/shared/agents.mjs", "write", "codex", "/h/.codex/agents"]]);
   assert.match(codexOnly.notes, /\/h\/\.codex\/agents\/artifact-builder\.toml/);
@@ -689,7 +690,7 @@ test("builderAgent: a missing agent file is optional and never makes doctor exit
   const run = await runMain([], mainOpts({ requirementsFor: () => [nodeVersion(1), builderAgent()] }), { ctx: agentCtx() });
   assert.equal(run.code, 0);
   assert.match(run.out, /missing \(optional\): builder_agent — /);
-  assert.match(run.out, /Run: node \/s\/make-motion\/shared\/agents\.mjs write codex \/h\/\.codex\/agents/);
+  assert.match(run.out, /Run: \/n\/node \/s\/make-motion\/shared\/agents\.mjs write codex \/h\/\.codex\/agents/);
   assert.match(run.out, /writes \/h\/\.codex\/agents\/artifact-builder\.toml/);
   const json = JSON.parse((await runMain(["--json"], mainOpts({ requirementsFor: () => [builderAgent()] }), { ctx: agentCtx() })).out);
   assert.equal(json.ok, true);
@@ -717,7 +718,7 @@ test("builderAgent: ~/.codex or ~/.copilot present without the file is a missing
     assert.deepEqual(missing.map((m) => [m.id, m.required]), [["builder_agent", false]]);
     const human = await runMain([], mainOpts({ requirementsFor: () => [nodeVersion(1), builderAgent()] }), { ctx: c });
     assert.equal(human.code, 0);
-    assert.match(human.out, /missing \(optional\): builder_agent — .*Run: node \/s\/make-motion\/shared\/agents\.mjs write (codex|copilot) \/h\/\.(codex|copilot)\/agents/);
+    assert.match(human.out, /missing \(optional\): builder_agent — .*Run: \/n\/node \/s\/make-motion\/shared\/agents\.mjs write (codex|copilot) \/h\/\.(codex|copilot)\/agents/);
   }
 });
 
@@ -745,8 +746,21 @@ test("builderAgent: --fix builder_agent runs the shared writer once per host fol
   assert.equal(res[0].ok, true);
 });
 
-test("builderAgent: --fix reports a failed write with the manual command", async () => {
+test("builderAgent: --fix reports a failed write with the writer command first, then the installer", async () => {
   const res = await runFixes(["builder_agent"], [builderAgent()], agentCtx(), () => ({ status: 1 }));
   assert.equal(res[0].ok, false);
+  assert.match(res[0].ran, /agents\.mjs write codex \/h\/\.codex\/agents/);
+  assert.match(res[0].manual, /^node \/s\/make-motion\/shared\/agents\.mjs write codex \/h\/\.codex\/agents \(this skill's own writer\); or /);
   assert.match(res[0].manual, /install\.mjs codex --agents-only/);
+});
+
+test("builderAgent: --fix with no host folder has no automatic fix and runs nothing", async () => {
+  const ran = [];
+  const none = agentCtx([], []);
+  assert.equal(builderAgent().fix(none).auto, null);
+  const res = await runFixes(["builder_agent"], [builderAgent()], none, (...a) => { ran.push(a); return { status: 0 }; });
+  assert.deepEqual(ran, []);
+  assert.equal(res[0].refused, "no automatic fix");
+  assert.match(res[0].manual, /install\.mjs copilot --agents-only/);
+  assert.doesNotMatch(res[0].manual, /this skill's own writer/);
 });

@@ -86,7 +86,7 @@ const USAGE = `usage: node agents.mjs write <${AGENT_HOSTS.join('|')}> <agents-d
 
 function cli(argv) {
   const [command, host, dir, ...rest] = argv;
-  if (command !== 'write' || !AGENT_HOSTS.includes(host) || !dir || rest.length) {
+  if (command !== 'write' || !AGENT_HOSTS.includes(host) || !dir || dir.startsWith('-') || rest.length) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
@@ -106,4 +106,14 @@ function cli(argv) {
   }
 }
 
-if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) process.exitCode = cli(process.argv.slice(2));
+// Run the CLI only when this file is the entry point. argv[1] can name a path that does not exist
+// (`node -e ... foo`), and importing this module must never throw because of that.
+function isEntryPoint() {
+  try {
+    return Boolean(process.argv[1]) && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) process.exitCode = cli(process.argv.slice(2));

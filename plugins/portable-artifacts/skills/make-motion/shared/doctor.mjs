@@ -342,7 +342,8 @@ export function kokoro() {
 }
 
 // The cheap-model `artifact-builder` agent file the skills hand their build to. Optional: a missing file
-// never fails doctor, and there is no auto fix (it is written by the plugin's installer, not by npm).
+// never fails doctor. The auto fix runs the skill's own shared/agents.mjs writer; the plugin's installer
+// (bin/install.mjs) writes the same file and is the way to a project-level install.
 // Doctor does not know its host, so it looks in every host folder, user level and project level.
 // It applies only where Copilot or Codex plausibly exists (~/.copilot or ~/.codex is there): on a
 // Claude Code or Gemini machine no agent file is ever installed, so nothing is reported at all.
@@ -371,17 +372,20 @@ export function builderAgent() {
     check: (ctx) => BUILDER_AGENT_DIRS(ctx).some((dir) => BUILDER_AGENT_FILES.some((f) => ctx.exists(pp(ctx).join(dir, f)))),
     // Auto fix: the skill's own copy of shared/agents.mjs writes the file into each host folder that
     // exists (user level; an existing file is kept). That works for an `npx skills add` install,
-    // which has no bin/. The manual line is the installer, for a project-level install.
+    // which has no bin/. The manual line offers that same writer first, then the installer (project-level install).
+    // The program is this process's own Node, not "node" from PATH: it may not be on PATH, and on Windows
+    // cmd.exe would look in the current (project) folder first.
     fix: (ctx) => {
       const P = pp(ctx);
       const home = ctx.homedir ?? os.homedir();
       const writer = P.join(ctx.skillDir, 'shared', 'agents.mjs');
       const hosts = BUILDER_AGENT_USER_HOSTS.filter(({ dotDir }) => ctx.exists(P.join(home, dotDir)));
-      const auto = hosts.map(({ host, dotDir }) => ['node', writer, 'write', host, P.join(home, dotDir, 'agents')]);
+      const auto = hosts.map(({ host, dotDir }) => [ctx.execPath ?? process.execPath, writer, 'write', host, P.join(home, dotDir, 'agents')]);
       const files = hosts.map(({ host, dotDir }) => P.join(home, dotDir, 'agents', BUILDER_AGENT_FILE_FOR[host]));
+      const byHand = hosts.map(({ host, dotDir }) => `node ${writer} write ${host} ${P.join(home, dotDir, 'agents')}`);
       return {
         auto: auto.length ? auto : null,
-        manual: manualAll(`${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both; add --project <dir> to install into one repo; <path-to-claude-skills> is a local checkout (or clone the repo)`),
+        manual: manualAll(`${byHand.length ? `${byHand.join(' ; ')} (this skill's own writer); or ` : ''}${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both; add --project <dir> to install into one repo; <path-to-claude-skills> is a local checkout (or clone the repo)`),
         notes: `writes ${files.join(' and ')} (user level, outside this project; an existing file is kept)`,
       };
     },
