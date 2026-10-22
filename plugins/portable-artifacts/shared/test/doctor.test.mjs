@@ -84,6 +84,24 @@ test('kokoro fix is cd <skill> && npm install (no --prefix), so the skill packag
   assert.doesNotMatch(r.missing[0].fix.manual.linux, /--prefix/);
 });
 
+test('kokoro installed before the overrides existed counts as missing until reinstalled', async () => {
+  const files = {
+    '/s/make-motion/package.json': JSON.stringify({ overrides: { sharp: '0.35.5', 'global-agent': '4.1.3', other: '^1.0.0' } }),
+    '/s/make-motion/node_modules/sharp/package.json': JSON.stringify({ version: '0.34.5' }),
+    '/s/make-motion/node_modules/global-agent/package.json': JSON.stringify({ version: '4.1.3' }),
+    '/s/make-motion/node_modules/other/package.json': JSON.stringify({ version: '9.9.9' }),
+  };
+  const readFile = (p) => {
+    if (!(p in files)) throw new Error('ENOENT');
+    return files[p];
+  };
+  const stale = await diagnose([kokoro()], ctx({ exists: () => true, readFile }));
+  assert.equal(stale.missing[0].id, 'kokoro');
+  assert.match(stale.missing[0].why, /reinstall to get the patched sharp pinned/);
+  files['/s/make-motion/node_modules/sharp/package.json'] = JSON.stringify({ version: '0.35.5' });
+  assert.deepEqual(await diagnose([kokoro()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
+});
+
 // --- additions beyond the brief ---
 
 test('nodeModules: omitDev false drops --omit=dev; present dir is fine', async () => {

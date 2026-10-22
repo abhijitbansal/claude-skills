@@ -22,9 +22,12 @@ make-motion: voiceover dependencies on patched versions.
 
 ### Fixed
 
-- **The kokoro install now honours those overrides.** npm 10 ignores a project's `overrides` under `--prefix`, so the
-  doctor's `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` still resolved `sharp` 0.34.5. The doctor now runs
-  `npm install kokoro-js@1.2.1 --no-save` from inside the skill folder (shown as `cd <skill-dir> && …`).
+- **The kokoro install runs from inside the skill folder.** The doctor, `voice.mjs`'s install hint and the docs now use
+  `cd <skill-dir> && npm install kokoro-js@1.2.1 --no-save` instead of `--prefix <skill-dir>`, so npm always reads the
+  skill's `overrides`. (`--prefix` was reported to skip them on macOS with npm 10.8.2; it applied them in Linux tests.)
+- **Existing voiceover installs are flagged.** The doctor now reports kokoro as missing when an installed package differs
+  from an exact version pinned in the skill's `overrides`, so an install made before 0.8.1 is offered a reinstall instead
+  of keeping `sharp` 0.34.5. If you already use voiceover, run `node scripts/doctor.mjs --fix kokoro` once.
 
 ## [0.8.0] - 2026-10-21
 
