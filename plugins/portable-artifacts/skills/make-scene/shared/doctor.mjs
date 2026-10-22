@@ -349,6 +349,8 @@ export function kokoro() {
 // Limit: project level means the current folder, not the git root.
 const BUILDER_AGENT_HOST_DIRS = ['.copilot', '.codex'];
 const BUILDER_AGENT_FILES = ['artifact-builder.agent.md', 'artifact-builder.toml'];
+const BUILDER_AGENT_FILE_FOR = { copilot: BUILDER_AGENT_FILES[0], codex: BUILDER_AGENT_FILES[1] };
+const BUILDER_AGENT_USER_HOSTS = [{ host: 'copilot', dotDir: '.copilot' }, { host: 'codex', dotDir: '.codex' }];
 const BUILDER_AGENT_DIRS = (ctx) => {
   const P = pp(ctx);
   const home = ctx.homedir ?? os.homedir();
@@ -367,10 +369,22 @@ export function builderAgent() {
     // diagnose() skips a requirement whose applies(ctx) is false: not missing, not listed.
     applies: (ctx) => BUILDER_AGENT_HOST_DIRS.some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d))),
     check: (ctx) => BUILDER_AGENT_DIRS(ctx).some((dir) => BUILDER_AGENT_FILES.some((f) => ctx.exists(pp(ctx).join(dir, f)))),
-    fix: () => ({
-      auto: null,
-      manual: manualAll(`${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both; add --project <dir> to install into one repo; <path-to-claude-skills> is a local checkout (or clone the repo)`),
-    }),
+    // Auto fix: the skill's own copy of shared/agents.mjs writes the file into each host folder that
+    // exists (user level; an existing file is kept). That works for an `npx skills add` install,
+    // which has no bin/. The manual line is the installer, for a project-level install.
+    fix: (ctx) => {
+      const P = pp(ctx);
+      const home = ctx.homedir ?? os.homedir();
+      const writer = P.join(ctx.skillDir, 'shared', 'agents.mjs');
+      const hosts = BUILDER_AGENT_USER_HOSTS.filter(({ dotDir }) => ctx.exists(P.join(home, dotDir)));
+      const auto = hosts.map(({ host, dotDir }) => ['node', writer, 'write', host, P.join(home, dotDir, 'agents')]);
+      const files = hosts.map(({ host, dotDir }) => P.join(home, dotDir, 'agents', BUILDER_AGENT_FILE_FOR[host]));
+      return {
+        auto: auto.length ? auto : null,
+        manual: manualAll(`${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both; add --project <dir> to install into one repo; <path-to-claude-skills> is a local checkout (or clone the repo)`),
+        notes: `writes ${files.join(' and ')} (user level, outside this project; an existing file is kept)`,
+      };
+    },
     needsSudo: () => false,
   };
 }

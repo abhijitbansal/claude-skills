@@ -120,7 +120,16 @@ node plugins/portable-artifacts/bin/install.mjs copilot
 node plugins/portable-artifacts/bin/install.mjs copilot --agents-only
 ```
 
-The first command installs the skills and the agent. The second writes only the agent file, for users whose skills came another way (for example `npx skills`). An existing agent file is kept unless you pass `--force`. `node <skill-dir>/scripts/doctor.mjs` reports a missing agent file as an optional item, and only where `~/.copilot` or `~/.codex` exists.
+The first command installs the skills and the agent. The second writes only the agent file, for users whose skills came another way. An existing agent file is kept unless you pass `--force`.
+
+Installed with `npx skills add`, which copies skill folders only (no `bin/install.mjs`)? Use the doctor instead:
+
+```bash
+node <skill-dir>/scripts/doctor.mjs
+node <skill-dir>/scripts/doctor.mjs --fix builder_agent
+```
+
+The doctor reports a missing agent file as an optional item, and only where `~/.copilot` or `~/.codex` exists. `--fix builder_agent` runs the skill's own copy of `shared/agents.mjs`, which writes `~/.copilot/agents/artifact-builder.agent.md` and/or `~/.codex/agents/artifact-builder.toml` (user level, outside the project; an existing file is kept, never overwritten). The skill's workflow already tells the agent to ask you before running a doctor fix. Project-level install (`.github/agents`, `.codex/agents`) still needs `install.mjs --project`. A host may need a new session before it lists the new agent.
 
 What was measured, on Copilot CLI 1.0.98, 2026-10-21 (results: [`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md)), running `copilot -p "<prompt>" --allow-all-tools --agent artifact-builder`:
 

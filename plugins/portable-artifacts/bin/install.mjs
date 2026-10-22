@@ -12,7 +12,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { agentFile } from './agents.mjs';
+import { agentFile, writeAgentFile } from '../shared/agents.mjs';
 
 const SKILLS_SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../skills');
 const SKIP = new Set(['node_modules', 'test', 'dist', 'out', '.cache']);
@@ -190,29 +190,6 @@ function preflight(plan, dstRoot, { force }) {
     if (present && !force) throw new Error(`${dst} already exists; pass --force to replace it`);
     return entry;
   });
-}
-
-// Write one agent file without ever following a symlink at the target (lstat, not exists).
-// Returns 'written', 'kept' (something is already there and force is off) or 'not-file' (a directory etc.).
-// A symlink under force is unlinked, never written through, so its target is untouched.
-function writeAgentFile(dir, file, content, force) {
-  let st = null;
-  try {
-    st = fs.lstatSync(file);
-  } catch (e) {
-    if (e.code !== 'ENOENT') throw e;
-  }
-  if (st && !st.isSymbolicLink() && !st.isFile()) return 'not-file';
-  if (st && !force) return 'kept';
-  if (st) fs.unlinkSync(file);
-  fs.mkdirSync(dir, { recursive: true });
-  try {
-    fs.writeFileSync(file, content, { flag: 'wx' }); // wx: lose a create race by keeping, not overwriting
-  } catch (e) {
-    if (e.code === 'EEXIST') return 'kept';
-    throw e;
-  }
-  return 'written';
 }
 
 // Write each agent file; an existing one is kept unless force. Returns true if any write failed (main decides whether that is fatal).

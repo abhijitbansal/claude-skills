@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { targetsFor, agentTargetsFor, HOSTS, expandRequires, UsageError } from '../install.mjs';
-import { agentFile } from '../agents.mjs';
+import { agentFile } from '../../shared/agents.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const installer = path.resolve(here, '../install.mjs');
@@ -115,7 +115,8 @@ function sandbox() {
   const root = tmp();
   fs.mkdirSync(path.join(root, 'bin'));
   fs.copyFileSync(installer, path.join(root, 'bin/install.mjs'));
-  fs.copyFileSync(path.join(here, '../agents.mjs'), path.join(root, 'bin/agents.mjs'));
+  fs.mkdirSync(path.join(root, 'shared'));
+  fs.copyFileSync(path.join(here, '../../shared/agents.mjs'), path.join(root, 'shared/agents.mjs'));
   fs.mkdirSync(path.join(root, 'skills/make-motion'), { recursive: true });
   fs.writeFileSync(path.join(root, 'skills/make-motion/SKILL.md'), '---\nname: make-motion\ndescription: fake\n---\n');
   return root;
@@ -238,7 +239,8 @@ function sandboxWith(spec) {
   const root = tmp();
   fs.mkdirSync(path.join(root, 'bin'));
   fs.copyFileSync(installer, path.join(root, 'bin/install.mjs'));
-  fs.copyFileSync(path.join(here, '../agents.mjs'), path.join(root, 'bin/agents.mjs'));
+  fs.mkdirSync(path.join(root, 'shared'));
+  fs.copyFileSync(path.join(here, '../../shared/agents.mjs'), path.join(root, 'shared/agents.mjs'));
   const skills = fakeSkills(spec);
   fs.renameSync(skills, path.join(root, 'skills'));
   return path.join(root, 'bin/install.mjs');
