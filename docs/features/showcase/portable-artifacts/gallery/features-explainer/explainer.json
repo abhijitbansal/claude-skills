@@ -66,8 +66,8 @@
       "items": [
         { "title": "Plan preset and sections", "text": "Five new section types: decision, approval, question, verdict and review, laid out decision-first with the verdict last." },
         { "title": "Two themes", "text": "`mono` is techie with a cyan accent. `brief` is executive. The explainer now has 9 themes." },
-        { "title": "Page runtime", "text": "`plan.js` stores answers in the browser, merges per item across tabs, and offers Copy (compact JSON) and Download (`plan-answers.json`)." },
-        { "title": "Answer checker", "text": "`answers.mjs` validates the file against a closed schema and quotes reviewer text only as data, never as instructions." }
+        { "title": "Page runtime", "text": "`plan.js` keeps answers in the browser and offers Copy, Download (`plan-answers.json`) and Save as HTML, a sticky button that saves the page with the answers inside." },
+        { "title": "Answer checker", "text": "`answers.mjs` validates the answers file, or a saved page, against a closed schema and quotes reviewer text only as data, never as instructions." }
       ]
     },
     {

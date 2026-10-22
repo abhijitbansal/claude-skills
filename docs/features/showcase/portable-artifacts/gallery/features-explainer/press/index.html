@@ -815,11 +815,11 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 </li>
 <li class="card tone-neutral">
 <div class="card-head"><h3>Page runtime</h3></div>
-<p><code>plan.js</code> stores answers in the browser, merges per item across tabs, and offers Copy (compact JSON) and Download (<code>plan-answers.json</code>).</p>
+<p><code>plan.js</code> keeps answers in the browser and offers Copy, Download (<code>plan-answers.json</code>) and Save as HTML, a sticky button that saves the page with the answers inside.</p>
 </li>
 <li class="card tone-neutral">
 <div class="card-head"><h3>Answer checker</h3></div>
-<p><code>answers.mjs</code> validates the file against a closed schema and quotes reviewer text only as data, never as instructions.</p>
+<p><code>answers.mjs</code> validates the answers file, or a saved page, against a closed schema and quotes reviewer text only as data, never as instructions.</p>
 </li>
 </ul>
 </section>
