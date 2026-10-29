@@ -6,7 +6,8 @@
 export const MODES = ["refuse", "warn", "off"];
 
 /** One cold episode = one model's cache that expired at one instant. */
-export const episodeKey = (snap) => `${snap.model}@${snap.expiresAt}`;
+export const episodeKey = (snap) => snap.reason === "model-switch"
+  ? `${snap.model}@switch:${snap.lastCallAt}` : `${snap.model}@${snap.expiresAt}`;
 
 // A slash command (`/name`, `/name args`) or a `!` shell escape never calls the
 // model with the conversation, so it is never guarded. A pasted path like
@@ -15,7 +16,9 @@ export const NOT_A_PROMPT = /^(\/[A-Za-z][\w-]*(\s|$)|!)/;
 
 export function decide({ snap, prompt, config, refusedKey = null, busy = false }) {
   if (NOT_A_PROMPT.test(String(prompt ?? "").trimStart())) return { action: "allow" };
-  if (config.mode === "off" || !snap || snap.state !== "cold") return { action: "allow" };
+  if (config.mode === "off" || !snap) return { action: "allow" };
+  if (snap.reason && snap.extraUsd === null) return { action: "warn" };
+  if (snap.state !== "cold" && snap.reason !== "model-switch") return { action: "allow" };
   if (snap.extraUsd === null || snap.extraUsd < config.minUsd) return { action: "allow" };
   const key = episodeKey(snap);
   // A prompt queued while a turn runs must not abort that turn: warn only.

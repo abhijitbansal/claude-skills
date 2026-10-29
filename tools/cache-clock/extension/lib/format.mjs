@@ -38,6 +38,10 @@ export function refusal(snap) {
 
 /** The cold-send price as an in-chat question, for hosts that can ask one. */
 export function coldQuestion(snap) {
+  if (snap.reason === "model-switch") {
+    return `${NAME}: switching to ${snap.displayName} may rewrite about ${tokens(snap.contextTokens)} tokens. ` +
+      `At its last reported prices, a cold send would cost about ${usd(snap.coldUsd)} (warm: ${usd(snap.warmUsd)}). Cache reuse is unknown.`;
+  }
   return (
     `${NAME}: the ${snap.displayName} prompt cache went cold ${duration(snap.msLeft)} ago. ` +
     `Sending this rewrites about ${tokens(snap.contextTokens)} tokens at ${perM(snap.prices.write)} = ${usd(snap.coldUsd)} ` +
@@ -46,6 +50,8 @@ export function coldQuestion(snap) {
 }
 
 export function coldWarn(snap) {
+  if (snap.reason && snap.extraUsd === null) return `${NAME}: ${snap.displayName}: next-send cache state and price are unknown (${selectionReason(snap)}). Sending without a price-based guard.`;
+  if (snap.reason === "model-switch") return coldQuestion(snap);
   return `${NAME}: sending cold, rewriting about ${tokens(snap.contextTokens)} tokens for ${usd(snap.coldUsd)} (warm: ${usd(snap.warmUsd)}).`;
 }
 
@@ -56,7 +62,15 @@ export function headsUp(snap) {
   );
 }
 
+function selectionReason(snap) {
+  if (snap.reason === "auto") return "Auto has not resolved the next model";
+  if (snap.reason === "qualified-selection") return "usage cannot verify the selected provider/context tier";
+  if (snap.reason === "model-switch") return "model switched; previous cache may not cover this context";
+  return "selected model unavailable";
+}
+
 function stateLine(snap) {
+  if (snap.reason) return `unknown (${selectionReason(snap)})`;
   const ttl = snap.ttlSec === null ? "" : ` (ttl ${duration(snap.ttlSec * 1000)})`;
   if (snap.state === "warm") return `warm, ${duration(snap.msLeft)} left${ttl}`;
   if (snap.state === "cold") return `cold for ${duration(snap.msLeft)}${ttl}`;

@@ -101,7 +101,7 @@ Settings live in `~/.copilot/cache-clock/config.json` and apply to every session
 (`CACHE_CLOCK_HOME` moves that directory). The heads-up has its own switch: it keeps
 running under `guard off` until you set `headsup off`.
 
-The card, from a real resumed session:
+Historical card, captured before model-switch accounting was added:
 
 ```
 cache-clock · Claude Sonnet 5.5
@@ -116,9 +116,16 @@ cache-clock · Claude Sonnet 5.5
 
 - **The clock.** Every main-agent model call emits `assistant.usage` with
   `cacheReadTokens`, `cacheWriteTokens`, `cacheExpiresAt`, `cacheTtlSeconds` and
-  per-token prices. Cache Clock keeps the last call per model. Nothing is guessed: the
-  TTL, the expiry and the prices all come from Copilot.
-- **The guard.** `onUserPromptSubmitted` checks the last model's clock. If the cache has
+  per-token prices. Cache Clock keeps cache observations per model and the latest
+  conversation context separately. TTL, expiry and prices come from Copilot; context
+  size and possible rewrite cost are estimates, not cache-reuse guarantees.
+- **Selected model.** At startup, before a prompt, and on status, a bounded (250 ms)
+  `session.rpc.model.getCurrent()` lookup resolves the selection. Main-agent
+  `session.model_change` and `session.model_deselected` events keep it current between
+  lookups; a newer event wins over an older in-flight reply. Missing/failed lookups
+  leave the estimate unknown. Older hosts without the RPC can use selection events
+  from the session log; usage alone is not treated as a selection.
+- **The guard.** `onUserPromptSubmitted` checks the selected model's clock. If the cache has
   expired and rewriting it would cost at least the threshold more than reading it, the
   hook asks with `session.ui.select` and waits for the answer. To stop the send it calls
   `session.abort()` without awaiting it (awaiting inside the hook deadlocks), so no model
@@ -128,6 +135,13 @@ cache-clock · Claude Sonnet 5.5
   message queued while a turn is running only gets the note: stopping it then would
   cancel the running turn. After a compaction the next send is exempt, since the context
   was rewritten anyway.
+- **Model switches.** The destination model's previous clock cannot prove that it cached
+  the current conversation. The card says unknown; with destination prices previously
+  observed in this session, the guard asks about a *possible* rewrite of the latest
+  context. Without those prices it warns and allows the send, never borrows the old
+  model's price. A confirmation is rechecked before sending and held if the selection
+  changed. Concurrent prompts share one check/question. A turn that starts while the
+  question is open is not aborted by its answer.
 - **The heads-up.** One ephemeral line before expiry, only when a cold send's extra cost
   is at least the threshold and no turn is running. The lead is the smaller of your
   setting and a fifth of the TTL, so a 5-minute Claude cache warns 1 minute ahead, not
@@ -186,7 +200,19 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
 That is the test machine after this README's experiments: the Sonnet row is the
 refusal capture's resend, the Luna rows include the gap test.
 
-"Extra paid" is what each cold call cost above a warm read of the same tokens.
+The example above is a historical capture. Current reports label the counterfactual
+as **estimated extra**, add a **switch rewrites** column, and compare consecutive
+conversation calls within each agent rather than stitching together only same-model
+calls. Returning to a model after using another is not counted as idle time. A switch
+with sufficient observed cache reads still counts as warm. Successful compaction
+starts a new context; the first call after it is not a rewrite.
+
+Estimated extra compares rewritten tokens with a warm read at the destination call's
+reported prices; it is not measured savings or proof that a switch caused read loss.
+Missing prices are counted as `unpricedRewrites`, not zero-cost evidence. In JSON,
+`extraUsd` is the priced subtotal; `perWeekUsd` is null if any rewrite is unpriced.
+Text reports mark incomplete rows and omit the weekly extrapolation in that case.
+
 "Prefix breaks" are cold calls inside the reported TTL: something changed the prompt
 prefix (tools, instructions, model routing), or the provider served it cold early
 (eviction or a different backend), as in the Luna gap test above.
@@ -222,8 +248,12 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
   can only ping with `session.send`, which adds a user and an assistant turn to your
   conversation each time; the transcript-free fork lives on the server API, not the
   extension's session. Whether pings pay off depends on your own tax: run the report.
-- **Auto routes per prompt.** With `auto`, the next prompt may go to a different model
-  than the last. The guard prices the last model used.
+- **Auto routes per prompt.** With `auto`, the next concrete model is unknown. Cache
+  Clock reports unknown and warns without holding the send, rather than pricing the
+  last model used. Provider/context-tier-qualified selections also remain unpriced:
+  usage records do not bind prices to that selection identity. Changing provider or
+  context tier discards previous price estimates. Reports still group by model ID,
+  not provider, and cannot fully attribute provider/configuration changes.
 - **The estimate is approximate.** It is the last call's input plus its answer. The
   real resend adds your new message and anything Copilot attaches (44.4k actual vs
   37.2k estimated in the capture above). Pulling the other way, Copilot's shared system
@@ -239,6 +269,13 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
   may rename or remove, and needs a copy in every repo (`--project`).
 - Claude was measured through `auto` only; the seat used for testing could not pick
   Claude models directly. Each boundary result above is a single run.
+- Model-selection handling is covered by synthetic tests against the public
+  [SDK v1.0.19 RPC contract](https://github.com/github/copilot-sdk/blob/f0b503aae1ba151d29d117088de4238d1983e33e/nodejs/src/generated/rpc.ts)
+  and [event definitions](https://github.com/github/copilot-sdk/blob/f0b503aae1ba151d29d117088de4238d1983e33e/nodejs/src/generated/session-events.ts),
+  not a new live CLI/VS Code verification. Selection checks are best-effort snapshots,
+  not atomic locks on routing. `session.error` and an abort request do not prove a turn
+  ended; only a main-session idle event clears the busy flag. A host that omits it can
+  leave the guard in warn-only behavior until the session is reattached.
 
 ## Tests
 

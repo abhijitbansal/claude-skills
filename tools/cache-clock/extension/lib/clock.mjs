@@ -35,14 +35,34 @@ export function createClock() {
   }
 
   /** The context was rewritten (compaction): the next send's cost is not an idle tax. */
-  function invalidate() {
+  function invalidate({ forgetPrices = false } = {}) {
     staleModels = new Set(lastByModel.keys());
     lastConversation = null;
+    if (forgetPrices) {
+      for (const [model, call] of lastByModel) lastByModel.set(model, { ...call, prices: null });
+    }
   }
 
-  function snapshot(now, model = lastModel) {
+  function snapshot(now, selection = lastModel) {
+    if (!lastModel) return null;
+    const model = typeof selection === "string" ? selection : selection?.modelId;
     const last = model ? lastByModel.get(model) : undefined;
-    if (!last) return null;
+    const context = lastConversation ?? lastByModel.get(lastModel);
+    const contextTokens = context.inputTokens + context.outputTokens;
+    // Usage has no provider/tier identity. Never attach its prices to a qualified
+    // selection (or Auto, whose next concrete model has not been resolved).
+    const unqualified = !selection?.providerId && !selection?.contextTier;
+    if (!model || model === "auto" || !unqualified || model !== lastModel) {
+      const priced = model && model !== "auto" && unqualified && lastConversation ? last?.prices : null;
+      const costs = nextSendCosts({ ...context, prices: priced });
+      return {
+        model: model ?? "unknown", displayName: last?.displayName ?? model ?? "unknown selection",
+        state: "unknown", reason: !model ? "selection-unavailable" : model === "auto" ? "auto" : !unqualified ? "qualified-selection" : "model-switch",
+        expiresAt: null, msLeft: null, ttlSec: null, lastCallAt: context.at,
+        contextTokens, prices: priced ?? null, coldUsd: costs?.coldUsd ?? null,
+        warmUsd: costs?.warmUsd ?? null, extraUsd: costs?.extraUsd ?? null,
+      };
+    }
     const expiresAt = expiryOf(last);
     const costs = nextSendCosts(last);
     let state = "unknown";

@@ -12,7 +12,7 @@ import { usage, T0, MIN } from "./fixtures.mjs";
 // "pending" for a question nobody answers, or an Error for a host that throws.
 function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir = mkdtempSync(join(tmpdir(), "cc-wiring-")), env = {}, answer } = {}) {
   saveConfig(dir, config);
-  const host = { now: T0, logs: [], aborts: 0, handlers: new Map(), timers: [], joinConfig: null, asked: [] };
+  const host = { now: T0, logs: [], aborts: 0, handlers: new Map(), timers: [], joinConfig: null, asked: [], selected: { modelId: "claude-sonnet-5.5" } };
   const ui = answer === undefined ? {} : {
     capabilities: { ui: { elicitation: true } },
     ui: {
@@ -27,6 +27,7 @@ function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir
   host.session = {
     ...ui,
     sessionId: "s-1",
+    rpc: { model: { getCurrent: async () => host.selected } },
     log: async (message, options = {}) => { host.logs.push({ message, ...options }); },
     // Never resolves: the real abort() waits for the prompt hook, so awaiting it deadlocks.
     abort: () => { host.aborts += 1; return new Promise(() => {}); },
@@ -37,6 +38,8 @@ function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir
   };
   host.joinSession = async (cfg) => { host.joinConfig = cfg; return host.session; };
   host.emit = (type, data, extra = {}) => {
+    if (type === "session.model_change" && !extra.agentId) host.selected = { modelId: data.newModel, providerId: data.providerId, contextTier: data.contextTier };
+    if (type === "session.model_deselected" && !extra.agentId) host.selected = {};
     for (const fn of host.handlers.get(type) ?? []) fn({ type, data, timestamp: new Date(host.now).toISOString(), ...extra });
   };
   host.timerApi = {
@@ -55,6 +58,9 @@ function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir
   host.dir = dir;
   return host;
 }
+
+// Let bounded RPCs and question promises settle without depending on microtask depth.
+const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 const sonnet = (o = {}) => usage({ model: "claude-sonnet-5.5", ttl: 300, input: 200_000, read: 0, write: 200_000, output: 0, ...o });
 
@@ -158,7 +164,7 @@ test("an unanswered question times out and holds the send", async () => {
   const h = fakeHost({ answer: "pending" });
   await goCold(h);
   const pending = h.prompt("give me a recap");
-  await Promise.resolve();
+  await flush();
   h.advance(10 * MIN);
   assert.deepEqual(await pending, { suppressOutput: true });
   assert.equal(h.aborts, 1);
@@ -187,7 +193,7 @@ test("an unanswered question says the send was held", async () => {
   const h = fakeHost({ answer: "pending" });
   await goCold(h);
   const pending = h.prompt("give me a recap");
-  await Promise.resolve();
+  await flush();
   h.advance(10 * MIN);
   await pending;
   assert.match(h.logs.at(-1).message, /no answer/i);
@@ -198,9 +204,9 @@ test("a prompt sent while a question is pending waits for the same answer", asyn
   const h = fakeHost({ answer: () => new Promise((resolve) => { release = resolve; }) });
   await goCold(h);
   const first = h.prompt("give me a recap");
-  await Promise.resolve();
+  await flush();
   const second = h.prompt("and another thing");
-  await Promise.resolve();
+  await flush();
   release("Don't send");
   assert.deepEqual(await first, { suppressOutput: true });
   assert.deepEqual(await second, { suppressOutput: true });
@@ -483,4 +489,190 @@ test("a throwing session.log never breaks the prompt hook", async () => {
   h.advance(7 * MIN);
   await h.prompt("recap");
   assert.equal(h.aborts, 1);
+});
+
+test("an unseen selected model never inherits the old warm clock or its price", async () => {
+  const h = fakeHost();
+  await h.start();
+  h.emit("assistant.usage", sonnet());
+  h.emit("session.model_change", { newModel: "new-model" });
+  await h.command("");
+  assert.match(h.logs.at(-1).message, /new-model/);
+  assert.match(h.logs.at(-1).message, /unknown/);
+  assert.doesNotMatch(h.logs.at(-1).message, /warm,|\$0\.50/);
+  await h.prompt("continue");
+  assert.equal(h.aborts, 0);
+  assert.match(h.logs.at(-1).message, /new-model.*price.*unknown/i);
+});
+
+test("switch confirmation uses destination prices and the current conversation size", async () => {
+  const h = fakeHost({ answer: "Don't send" });
+  await h.start();
+  h.emit("assistant.usage", sonnet({ input: 10_000, write: 10_000 }));
+  h.advance(MIN);
+  h.emit("session.model_change", { newModel: "gpt-6-luna" });
+  h.emit("assistant.usage", usage({ input: 200_000, output: 0 }));
+  h.emit("session.model_change", { newModel: "claude-sonnet-5.5" });
+  await h.prompt("continue");
+  assert.equal(h.asked.length, 1);
+  assert.match(h.asked[0].message, /switch.*Claude Sonnet 5\.5/i);
+  assert.match(h.asked[0].message, /200\.0k.*\$0\.50/);
+  assert.doesNotMatch(h.asked[0].message, /went cold/);
+});
+
+test("pre-send RPC catches a selection change with no event", async () => {
+  const h = await coldHost();
+  h.selected = { modelId: "new-model" };
+  await h.prompt("continue");
+  assert.equal(h.aborts, 0, "must not refuse using the old model's cold price");
+  assert.match(h.logs.at(-1).message, /new-model/);
+});
+
+test("changing selection while a confirmation is open holds the old quoted send", async () => {
+  let release;
+  const h = fakeHost({ answer: () => new Promise((resolve) => { release = resolve; }) });
+  await goCold(h);
+  const pending = h.prompt("continue");
+  await flush();
+  h.selected = { modelId: "new-model" }; // RPC catches even a missing event
+  release("Send anyway");
+  assert.deepEqual(await pending, { suppressOutput: true });
+  assert.match(h.logs.at(-1).message, /selection changed/i);
+});
+
+test("Auto and provider-qualified selections do not borrow unqualified prices", async () => {
+  const h = await coldHost();
+  for (const selected of [{ modelId: "auto" }, { modelId: "claude-sonnet-5.5", providerId: "other" }, { modelId: "claude-sonnet-5.5", contextTier: "long_context" }]) {
+    h.selected = selected;
+    await h.command("");
+    assert.match(h.logs.at(-1).message, /unknown/);
+    assert.doesNotMatch(h.logs.at(-1).message, /\$0\.50/);
+    await h.prompt("continue");
+    assert.equal(h.aborts, 0);
+  }
+});
+
+test("failed model lookup is bounded and cannot reuse the old selected price", async () => {
+  const h = await coldHost();
+  h.session.rpc.model.getCurrent = () => new Promise(() => {});
+  const pending = h.prompt("continue");
+  await flush();
+  h.advance(1000);
+  assert.equal(await pending, undefined);
+  assert.equal(h.aborts, 0);
+  assert.match(h.logs.at(-1).message, /selection.*unknown/i);
+});
+
+test("a model-change event wins over an older in-flight RPC result", async () => {
+  const h = await coldHost();
+  let release;
+  h.session.rpc.model.getCurrent = () => new Promise((resolve) => { release = resolve; });
+  const pending = h.prompt("continue");
+  await flush();
+  h.emit("session.model_change", { newModel: "new-model" });
+  release({ modelId: "claude-sonnet-5.5" });
+  await pending;
+  assert.equal(h.aborts, 0);
+  assert.match(h.logs.at(-1).message, /new-model/);
+});
+
+test("switching cancels the old model's scheduled heads-up", async () => {
+  const h = fakeHost();
+  await h.start();
+  h.emit("assistant.usage", sonnet());
+  h.emit("session.model_change", { newModel: "new-model" });
+  h.advance(4 * MIN + 1);
+  assert.equal(h.logs.length, 0);
+});
+
+test("subagent idle and compaction cannot reset the main guard", async () => {
+  const h = await coldHost();
+  h.emit("assistant.turn_start", {});
+  h.emit("session.idle", {}, { agentId: "sub" });
+  await h.prompt("queued");
+  assert.equal(h.aborts, 0);
+  h.emit("session.idle", {});
+  h.emit("session.compaction_complete", { success: true }, { agentId: "sub" });
+  await h.prompt("continue");
+  assert.equal(h.aborts, 1);
+});
+
+test("clearing a provider selection cannot revive cached prices from another provider", async () => {
+  const h = await coldHost();
+  h.emit("session.model_change", { newModel: "claude-sonnet-5.5", providerId: "other" });
+  h.emit("assistant.usage", sonnet({ at: new Date(h.now).toISOString() }));
+  h.emit("session.model_change", { newModel: "claude-sonnet-5.5" });
+  await h.command("");
+  assert.match(h.logs.at(-1).message, /unknown/);
+  assert.doesNotMatch(h.logs.at(-1).message, /\$0\.50/);
+});
+
+test("subagent model/start events and recoverable errors cannot change main lifecycle", async () => {
+  const h = await coldHost();
+  h.emit("session.model_change", { newModel: "new-model" }, { agentId: "sub" });
+  h.emit("assistant.turn_start", {}, { agentId: "sub" });
+  await h.prompt("continue");
+  assert.equal(h.aborts, 1);
+  const running = await coldHost();
+  running.emit("assistant.turn_start", {});
+  running.emit("session.error", { errorType: "rate_limit", recoverable: true });
+  running.emit("abort", { reason: "abort requested" });
+  await running.prompt("queued");
+  assert.equal(running.aborts, 0, "only a root idle event establishes the end of processing");
+});
+
+test("a turn starting during an open question is never aborted by its answer", async () => {
+  let release;
+  const h = fakeHost({ answer: () => new Promise((resolve) => { release = resolve; }) });
+  await goCold(h);
+  const pending = h.prompt("continue");
+  await flush();
+  h.emit("assistant.turn_start", {});
+  release("Don't send");
+  assert.equal(await pending, undefined);
+  assert.equal(h.aborts, 0);
+});
+
+test("old hosts use persisted selection events, but never infer selection from usage", async () => {
+  const h = fakeHost();
+  delete h.session.rpc;
+  h.history = [
+    { type: "session.usage_record", timestamp: new Date(T0).toISOString(), data: { usage: sonnet() } },
+    { type: "session.model_change", data: { newModel: "new-model" } },
+  ].map(JSON.stringify).join("\n");
+  await h.start();
+  await h.command("");
+  assert.match(h.logs.at(-1).message, /new-model/);
+  h.emit("session.model_deselected", {});
+  await h.command("");
+  assert.match(h.logs.at(-1).message, /unknown selection/);
+});
+
+test("lookup failures never block commands, sends, or startup", async () => {
+  for (const getCurrent of [() => { throw new Error("unsupported"); }, async () => null, async () => ({ modelId: 42 })]) {
+    const h = fakeHost();
+    h.session.rpc.model.getCurrent = getCurrent;
+    await h.start();
+    h.emit("assistant.usage", sonnet());
+    h.advance(7 * MIN);
+    await h.command("");
+    assert.match(h.logs.at(-1).message, /unknown selection/);
+    assert.equal(await h.prompt("continue"), undefined);
+    assert.equal(h.aborts, 0);
+  }
+});
+
+test("simultaneous prompts share the selection lookup and one question", async () => {
+  const h = await coldHost({ answer: "Don't send" });
+  let release;
+  let lookups = 0;
+  h.session.rpc.model.getCurrent = () => { lookups += 1; return new Promise((resolve) => { release = resolve; }); };
+  const first = h.prompt("first");
+  const second = h.prompt("second");
+  await flush();
+  release(h.selected);
+  assert.deepEqual(await first, { suppressOutput: true });
+  assert.deepEqual(await second, { suppressOutput: true });
+  assert.equal(lookups, 1);
+  assert.equal(h.asked.length, 1);
 });
