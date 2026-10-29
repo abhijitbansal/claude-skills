@@ -14,7 +14,7 @@ export function parseSessionLog(text) {
   let badLines = 0;
   let lastAt = null;
   // Calls in different epochs are never compared: a compaction rewrote the context in between.
-  let epoch = 0;
+  const epochs = new Map();
   for (const line of String(text).split("\n")) {
     if (!line.trim()) continue;
     let event;
@@ -31,12 +31,13 @@ export function parseSessionLog(text) {
     const at = Date.parse(event.timestamp);
     if (Number.isFinite(at)) lastAt = Math.max(lastAt ?? at, at);
     if (event.type === "session.usage_checkpoint") checkpoint = event.data ?? null;
-    if (event.type === "session.compaction_complete" && event.data?.success !== false) epoch += 1;
+    const agentKey = event.agentId ?? "main";
+    if (event.type === "session.compaction_complete" && event.data?.success !== false) epochs.set(agentKey, (epochs.get(agentKey) ?? 0) + 1);
     if (event.type !== "session.usage_record") continue;
     const raw = event.data?.usage;
     const call = normalizeUsage(raw, event.timestamp);
     if (!call) continue;
-    calls.push({ agentKey: event.agentId ?? "main", call, epoch, nanoAiu: raw.copilotUsage?.totalNanoAiu ?? 0 });
+    calls.push({ agentKey, call, epoch: epochs.get(agentKey) ?? 0, nanoAiu: raw.copilotUsage?.totalNanoAiu ?? 0 });
   }
   return { calls, checkpoint, badLines, lastAt };
 }

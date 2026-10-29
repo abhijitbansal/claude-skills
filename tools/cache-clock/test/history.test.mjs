@@ -158,6 +158,19 @@ test("subagents have separate chains across switches", () => {
   assert.ok(sum.models.every((m) => m.coldSwitch === 0 && m.coldBreak === 0));
 });
 
+test("a subagent compaction resets only that agent's accounting chain", () => {
+  const log = [
+    record(T0, { input: 100_000 }),
+    record(T0, { model: "claude-sonnet-5.5", input: 100_000 }, { agentId: "sub" }),
+    JSON.stringify({ type: "session.compaction_complete", agentId: "sub", data: { success: true } }),
+    record(T0 + 40 * MIN, { input: 101_000, read: 0, write: 101_000 }),
+    record(T0 + 40 * MIN, { model: "claude-sonnet-5.5", input: 20_000, read: 0 }, { agentId: "sub" }),
+  ].join("\n");
+  const sum = summarize([{ id: "agents", ...parseSessionLog(log) }]);
+  assert.equal(sum.models.find((m) => m.model === "gpt-6-luna").coldIdle, 1);
+  assert.equal(sum.models.find((m) => m.model === "claude-sonnet-5.5").coldIdle, 0);
+});
+
 test("report CLI reads a session-state directory and prints JSON", () => {
   const root = mkdtempSync(join(tmpdir(), "cc-report-"));
   mkdirSync(join(root, "sess-1"));

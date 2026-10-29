@@ -426,9 +426,9 @@ test("a refusal is remembered for the session across processes", async () => {
   await first.prompt("recap");
   assert.equal(first.aborts, 1);
   const second = fakeHost({ dir: first.dir });
+  second.now = first.now; // A resumed process cannot precede the refusal it loads.
   second.history = JSON.stringify({ type: "session.usage_record", timestamp: new Date(T0).toISOString(), data: { usage: sonnet() } });
   await second.start();
-  second.advance(7 * MIN);
   await second.prompt("recap");
   assert.equal(second.aborts, 0);
   assert.match(second.logs.at(-1).message, /sending cold/);
@@ -675,4 +675,16 @@ test("simultaneous prompts share the selection lookup and one question", async (
   assert.deepEqual(await second, { suppressOutput: true });
   assert.equal(lookups, 1);
   assert.equal(h.asked.length, 1);
+});
+
+test("a repeated selection event still supersedes an in-flight RPC snapshot", async () => {
+  const h = await coldHost();
+  let release;
+  h.session.rpc.model.getCurrent = () => new Promise((resolve) => { release = resolve; });
+  const pending = h.prompt("continue");
+  await flush();
+  h.emit("session.model_change", { newModel: "claude-sonnet-5.5" });
+  release({ modelId: "new-model" });
+  assert.deepEqual(await pending, { suppressOutput: true });
+  assert.match(h.logs.at(-1).message, /Claude Sonnet 5\.5/);
 });

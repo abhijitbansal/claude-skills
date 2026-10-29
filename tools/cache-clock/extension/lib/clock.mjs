@@ -7,7 +7,7 @@ export function createClock() {
   const lastByModel = new Map();
   let lastModel = null;
   let lastConversation = null;
-  // Models whose last call predates a compaction: their next call starts a new context.
+  // Observations from before compaction/configuration changes cannot prove cache warmth.
   let staleModels = new Set();
   let tally = { calls: 0, coldIdle: 0, coldBreak: 0, coldSwitch: 0, extraUsd: 0, unpricedRewrites: 0 };
 

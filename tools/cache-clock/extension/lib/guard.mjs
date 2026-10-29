@@ -5,7 +5,7 @@
 
 export const MODES = ["refuse", "warn", "off"];
 
-/** One cold episode = one model's cache that expired at one instant. */
+/** An expired cache, or a switch to a model with the current conversation context. */
 export const episodeKey = (snap) => snap.reason === "model-switch"
   ? `${snap.model}@switch:${snap.lastCallAt}` : `${snap.model}@${snap.expiresAt}`;
 

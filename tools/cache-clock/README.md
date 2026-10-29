@@ -130,7 +130,7 @@ cache-clock · Claude Sonnet 5.5
   hook asks with `session.ui.select` and waits for the answer. To stop the send it calls
   `session.abort()` without awaiting it (awaiting inside the hook deadlocks), so no model
   call happens. The episode is remembered per session in
-  `~/.copilot/cache-clock/refused.json` for a week, even across processes
+  `~/.copilot/cache-clock/refusals/<session-hash>.json` for a week, even across processes
   (`copilot --resume … -p`). Slash commands and `!` shell escapes are never guarded. A
   message queued while a turn is running only gets the note: stopping it then would
   cancel the running turn. After a compaction the next send is exempt, since the context
@@ -263,8 +263,13 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 - **Early eviction is invisible to the guard.** It trusts Copilot's `cacheExpiresAt`.
   When a provider serves a cache cold sooner (Luna at 29 of 30 minutes, once), the send is
   billed cold and the guard stays quiet; the report counts it as a prefix break.
-- **Refusal memory is one shared file.** Two Copilot sessions refusing in the same instant
-  can overwrite each other's entry in `refused.json`; the losing session is asked again.
+- **Refusal memory is advisory.** Each session has its own atomically replaced file, so
+  concurrent sessions cannot erase each other's entries. Existing `refused.json` entries
+  are read only when no session file exists; migration never rewrites the shared file.
+  Entries expire after seven days (including legacy entries); expired/malformed new
+  entries never fall back to legacy state. Files are not automatically deleted. Two
+  processes writing the *same session* are last-rename-wins, not an exactly-once
+  guarantee. A write failure can cause another question on resume.
 - **VS Code depends on an experimental setting** (`chat.canvases.enabled`), which VS Code
   may rename or remove, and needs a copy in every repo (`--project`).
 - Claude was measured through `auto` only; the seat used for testing could not pick
@@ -289,4 +294,9 @@ without questions), the refuse-once fallback and resend, the non-awaited abort,
 sub-agent and background calls, compaction, heads-up timing, seeding from a session
 log, settings and help, the VS Code card, the report over fixture logs, and the
 installer (link, copy, piped download, failed download). They make no network calls.
-Live checks are recorded above.
+Regression coverage also includes selected-model lookups, missing prices, selection
+changes during confirmation, stale RPC replies, concurrent prompts, switch attribution
+across `--since`, agent-isolated compaction, and legacy refusal migration/expiry. A
+12-process test forces the old shared-file lost-update interleaving and verifies that
+session-isolated writes retain every entry. No paid model call is needed to run it.
+Historical live checks are recorded above; they do not validate the new transition paths.

@@ -111,14 +111,14 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
   };
   const scheduleHeadsUp = () => headsUpScheduler({ state, clock, now, timers, dir, say });
   const snapshot = () => clock.snapshot(now(), state.selection);
-  const select = (raw) => {
+  const select = (raw, fromEvent = false) => {
     const next = raw && typeof (raw.modelId ?? raw.newModel) === "string" ? {
       modelId: raw.modelId ?? raw.newModel, providerId: raw.providerId ?? null,
       contextTier: raw.contextTier ?? null, reasoningEffort: raw.reasoningEffort ?? null,
     } : null;
     if ((next?.providerId ?? null) !== (state.selection?.providerId ?? null) ||
         (next?.contextTier ?? null) !== (state.selection?.contextTier ?? null)) clock.invalidate({ forgetPrices: true });
-    if (JSON.stringify(next) !== JSON.stringify(state.selection)) state.selectionRevision += 1;
+    if (fromEvent || JSON.stringify(next) !== JSON.stringify(state.selection)) state.selectionRevision += 1;
     state.selection = next;
   };
   let lookup = null;
@@ -216,17 +216,17 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
   });
 
   seed(clock, readHistory, state.session, select);
-  state.refusedKey = loadRefusal(dir, state.session.sessionId);
+  state.refusedKey = loadRefusal(dir, state.session.sessionId, now());
   scheduleHeadsUp();
 
   state.session.on("session.model_change", (event) => {
     if (event.agentId) return;
-    select(event.data);
+    select(event.data, true);
     scheduleHeadsUp();
   });
   state.session.on("session.model_deselected", (event) => {
     if (event.agentId) return;
-    select(null);
+    select(null, true);
     scheduleHeadsUp();
   });
   state.session.on("assistant.turn_start", (event) => {
