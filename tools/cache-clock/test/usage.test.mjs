@@ -113,7 +113,7 @@ test("extraUsd prices lost tokens at write minus read", () => {
   const prev = call({ at: "2026-10-10T08:00:00.000Z", input: 1_000_000 });
   const cur = call({ at: "2026-10-10T08:31:00.000Z", input: 1_000_000, read: 0, write: 1_000_000 });
   close(extraUsd(prev, cur), 0.125 - 0.01, 1e-9);
-  assert.equal(extraUsd(prev, { ...cur, prices: null }), 0);
+  assert.equal(extraUsd(prev, { ...cur, prices: null }), null);
 });
 
 test("nextSendCosts estimates a cold rewrite and a warm read of the context", () => {

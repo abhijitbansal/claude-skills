@@ -77,7 +77,8 @@ export function card(snap, tally, config) {
     `  cache      ${stateLine(snap)}`,
     `  context    ${tokens(snap.contextTokens)} tokens`,
     `  next send  warm ${usd(snap.warmUsd)} · cold ${usd(snap.coldUsd)} (${ratio})`,
-    `  session    ${tally.calls} model calls · ${tally.coldIdle} cold after idle · ${tally.coldBreak} prefix breaks · ${usd(tally.extraUsd)} extra paid`,
+    `  session    ${tally.calls} model calls · ${tally.coldIdle} cold after idle · ${tally.coldBreak} prefix breaks · ${tally.coldSwitch ?? 0} switch rewrites · ${usd(tally.extraUsd)} estimated extra` +
+      (tally.unpricedRewrites ? ` (priced subtotal; ${tally.unpricedRewrites} rewrite(s) missing prices)` : ""),
     `  guard      ${guardLine(config)}`,
   ];
   return lines.join("\n");
