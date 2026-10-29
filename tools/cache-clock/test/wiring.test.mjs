@@ -648,6 +648,95 @@ test("old hosts use persisted selection events, but never infer selection from u
   assert.match(h.logs.at(-1).message, /unknown selection/);
 });
 
+test("old hosts restore explicit selection from session.start without a model-change event", async () => {
+  const h = fakeHost();
+  delete h.session.rpc;
+  h.history = [
+    { type: "session.start", data: { selectedModel: "claude-sonnet-5.5" } },
+    { type: "session.usage_record", timestamp: new Date(T0).toISOString(), data: { usage: sonnet() } },
+  ].map(JSON.stringify).join("\n");
+  await h.start();
+  h.advance(7 * MIN);
+  await h.prompt("continue");
+  assert.equal(h.aborts, 1);
+  assert.match(h.logs.at(-1).message, /Claude Sonnet 5\.5.*went cold/);
+});
+
+test("a root resume snapshot supersedes older model-change events on old hosts", async () => {
+  const h = fakeHost();
+  delete h.session.rpc;
+  h.history = [
+    { type: "session.model_change", data: { newModel: "claude-sonnet-5.5" } },
+    { type: "session.usage_record", timestamp: new Date(T0).toISOString(), data: { usage: sonnet() } },
+    { type: "session.resume", data: { selectedModel: "new-model", providerId: "provider-b", contextTier: "long_context" } },
+    { type: "session.resume", agentId: "sub", data: { selectedModel: "claude-sonnet-5.5" } },
+  ].map(JSON.stringify).join("\n");
+  await h.start();
+  h.advance(7 * MIN);
+  await h.prompt("continue");
+  assert.equal(h.aborts, 0);
+  assert.match(h.logs.at(-1).message, /new-model.*provider\/context tier/);
+});
+
+test("unknown-selection warnings reach VS Code chat without aborting the send", async () => {
+  const h = await coldHost({ env: { VSCODE_CANVAS_DATA_DIR: "/tmp/x" } });
+  h.selected = { modelId: "new-model" };
+  await h.prompt("continue");
+  assert.equal(h.aborts, 0);
+  assert.match(h.logs.at(-1).message, /price.*unknown/i);
+  assert.equal(h.logs.at(-1).level, "error", "the VS Code host renders only error-level session logs in chat");
+});
+
+for (const flag of ["sessionWasActive", "continuePendingWork"]) {
+  test(`resume with ${flag} cannot abort work that started before attachment`, async () => {
+    const h = fakeHost();
+    h.history = [
+      { type: "session.usage_record", timestamp: new Date(T0).toISOString(), data: { usage: sonnet() } },
+      { type: "session.resume", data: { selectedModel: "claude-sonnet-5.5", [flag]: true } },
+    ].map(JSON.stringify).join("\n");
+    await h.start();
+    h.advance(7 * MIN);
+    h.emit("session.idle", {}, { agentId: "sub" });
+    assert.equal(await h.prompt("queued"), undefined);
+    assert.equal(h.aborts, 0);
+    h.emit("session.idle", {});
+    assert.deepEqual(await h.prompt("continue"), { suppressOutput: true });
+    assert.equal(h.aborts, 1);
+  });
+}
+
+test("cold resumes and recorded root idle events clear historical busy state", async () => {
+  for (const tail of [
+    [{ type: "session.resume", data: { selectedModel: "claude-sonnet-5.5", sessionWasActive: false } }],
+    [{ type: "session.resume", data: { sessionWasActive: true } }, { type: "session.idle", data: {} }],
+  ]) {
+    const h = fakeHost();
+    h.history = [
+      { type: "session.usage_record", timestamp: new Date(T0).toISOString(), data: { usage: sonnet() } },
+      { type: "assistant.turn_start", data: {} },
+      ...tail,
+    ].map(JSON.stringify).join("\n");
+    await h.start();
+    h.advance(7 * MIN);
+    assert.deepEqual(await h.prompt("continue"), { suppressOutput: true });
+    assert.equal(h.aborts, 1);
+  }
+});
+
+test("an unfinished recorded root turn stays busy across subagent lifecycle events", async () => {
+  const h = fakeHost();
+  h.history = [
+    { type: "session.usage_record", timestamp: new Date(T0).toISOString(), data: { usage: sonnet() } },
+    { type: "assistant.turn_start", data: {} },
+    { type: "session.resume", agentId: "sub", data: { sessionWasActive: false } },
+    { type: "session.idle", agentId: "sub", data: {} },
+  ].map(JSON.stringify).join("\n");
+  await h.start();
+  h.advance(7 * MIN);
+  assert.equal(await h.prompt("queued"), undefined);
+  assert.equal(h.aborts, 0);
+});
+
 test("lookup failures never block commands, sends, or startup", async () => {
   for (const getCurrent of [() => { throw new Error("unsupported"); }, async () => null, async () => ({ modelId: 42 })]) {
     const h = fakeHost();

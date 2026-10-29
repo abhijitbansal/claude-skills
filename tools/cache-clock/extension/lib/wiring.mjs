@@ -32,8 +32,9 @@ function seed(clock, readHistory, session, select) {
   try {
     text = readHistory(session);
   } catch {
-    return; // no log yet (new session) or unreadable: the clock starts at the next call
+    return false; // no log yet (new session) or unreadable: the clock starts at the next call
   }
+  let busy = false;
   for (const line of text.split("\n")) {
     let event;
     try {
@@ -42,6 +43,13 @@ function seed(clock, readHistory, session, select) {
       continue;
     }
     if (!event || typeof event !== "object") continue;
+    if (!event.agentId && (event.type === "session.start" || event.type === "session.resume")) {
+      select({ ...event.data, modelId: event.data?.selectedModel });
+      // Joining a live session does not replay its earlier turn-start callback.
+      busy = event.data?.sessionWasActive === true || event.data?.continuePendingWork === true;
+    }
+    if (!event.agentId && event.type === "assistant.turn_start") busy = true;
+    if (!event.agentId && event.type === "session.idle") busy = false;
     if (!event.agentId && event.type === "session.model_change") select(event.data);
     if (!event.agentId && event.type === "session.model_deselected") select(null);
     if (!event.agentId && event.type === "session.compaction_complete" && compacted(event)) clock.invalidate();
@@ -49,6 +57,7 @@ function seed(clock, readHistory, session, select) {
     const call = mainCall({ ...event, data: event.data?.usage });
     if (call) clock.ingest(call);
   }
+  return busy;
 }
 
 /** Calls fn, swallowing sync throws and async rejections: the host may be gone. */
@@ -123,7 +132,7 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
   };
   let lookup = null;
   const refreshSelection = () => {
-    // Older hosts can still supply model-change events. Without either source,
+    // Older hosts can still supply selection snapshots/events. Without either source,
     // selection stays unknown rather than silently substituting the last call.
     if (!state.session?.rpc?.model?.getCurrent) return Promise.resolve();
     if (lookup) return lookup;
@@ -186,7 +195,7 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
     } catch {
       return undefined; // never block the user's message on our own failure
     }
-    if (verdict.action === "warn") say(coldWarn(snap), { level: "warning" });
+    if (verdict.action === "warn") say(coldWarn(snap), warnLevel);
     if (verdict.action !== "refuse") return undefined;
     state.refusedKey = verdict.key;
     quietly(() => saveRefusal(dir, state.session?.sessionId, verdict.key, now()));
@@ -215,7 +224,7 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
     hooks: { onUserPromptSubmitted: onPrompt },
   });
 
-  seed(clock, readHistory, state.session, select);
+  state.busy = seed(clock, readHistory, state.session, select);
   state.refusedKey = loadRefusal(dir, state.session.sessionId, now());
   scheduleHeadsUp();
 

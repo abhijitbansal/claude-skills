@@ -123,8 +123,9 @@ cache-clock · Claude Sonnet 5.5
   `session.rpc.model.getCurrent()` lookup resolves the selection. Main-agent
   `session.model_change` and `session.model_deselected` events keep it current between
   lookups; a newer event wins over an older in-flight reply. Missing/failed lookups
-  leave the estimate unknown. Older hosts without the RPC can use selection events
-  from the session log; usage alone is not treated as a selection.
+  leave the estimate unknown. Older hosts without the RPC can use explicit selection
+  from the session log's start/resume snapshots and model-change events; usage alone
+  is not treated as a selection.
 - **The guard.** `onUserPromptSubmitted` checks the selected model's clock. If the cache has
   expired and rewriting it would cost at least the threshold more than reading it, the
   hook asks with `session.ui.select` and waits for the answer. To stop the send it calls
@@ -148,6 +149,9 @@ cache-clock · Claude Sonnet 5.5
   right after every call.
 - **Resume.** `assistant.usage` is not replayed when you resume, so the extension seeds
   the clock from the session's own `~/.copilot/session-state/<id>/events.jsonl`.
+  Root turn/idle events and active/pending-work resume flags also restore the busy
+  state, so joining a session already running work does not let the guard abort it.
+  A cold resume or a later root idle event clears historical busy state.
 
 ### What Copilot reported, measured on 11 October 2026
 
@@ -235,8 +239,10 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 - **Autopilot holds instead of asking.** VS Code's autopilot mode cancels extension
   questions (read from VS Code's code, not tested live); Cache Clock treats that as
   Don't send and says the send was held.
-- **The heads-up and the "sending cold" note reach only VS Code's log**, since VS Code
-  has no plain-message channel outside a question.
+- **The heads-up reaches only VS Code's log.** Cold-send and unknown-selection warnings
+  now use the existing error-level chat fallback so they are visible without another
+  question. Those warnings still allow the send; the box is not a refusal. This change
+  has synthetic regression coverage, not a new live VS Code capture.
 - **The report counts VS Code sessions as totals.** They land in the same
   `~/.copilot/session-state` directory (`client_name: vscode-agent-host`) but persist
   only `session.usage_checkpoint` totals, not per-call records. For per-turn cache hit
@@ -279,8 +285,10 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
   and [event definitions](https://github.com/github/copilot-sdk/blob/f0b503aae1ba151d29d117088de4238d1983e33e/nodejs/src/generated/session-events.ts),
   not a new live CLI/VS Code verification. Selection checks are best-effort snapshots,
   not atomic locks on routing. `session.error` and an abort request do not prove a turn
-  ended; only a main-session idle event clears the busy flag. A host that omits it can
-  leave the guard in warn-only behavior until the session is reattached.
+  ended; while attached, only a main-session idle event clears the busy flag. A host
+  that omits it can leave the guard in warn-only behavior until a cold resume or
+  reattachment with recorded root idle evidence. Restoring busy state also depends on
+  readable history; incomplete host history can miss work that predates attachment.
 
 ## Tests
 
@@ -299,4 +307,6 @@ changes during confirmation, stale RPC replies, concurrent prompts, switch attri
 across `--since`, agent-isolated compaction, and legacy refusal migration/expiry. A
 12-process test forces the old shared-file lost-update interleaving and verifies that
 session-isolated writes retain every entry. No paid model call is needed to run it.
+Start/resume selection snapshots, attachment during active/pending work, cold-resume
+busy-state reset, and VS Code warning visibility have dedicated regression tests.
 Historical live checks are recorded above; they do not validate the new transition paths.
