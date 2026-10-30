@@ -26,8 +26,9 @@ export function tally(runs: readonly unknown[] | undefined): Tally | undefined {
       passed += r.passed as number
       failed += r.failed as number
     }
-    if (!valid || r.commandStatus !== 'exited' || r.exitCode !== 0 || r.outputIncomplete === true
-      || (r.failed as number) > 0 || r.stale === true) warnings += 1
+    // A warning is evidence of trouble. An unknown status is the normal live shape; failed tests show as ✗; restored history is not trouble.
+    if (!valid || r.commandStatus === 'tool-error' || r.commandStatus === 'interrupted' || r.outputIncomplete === true
+      || (Number.isSafeInteger(r.exitCode) && r.exitCode !== 0)) warnings += 1
   }
   return isAny ? { passed, failed, warnings } : undefined
 }
