@@ -5,14 +5,14 @@ above the prompt shows how many tests passed, failed and were skipped, next to t
 previous run of the same suite in the same worktree.
 
 ```
-Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   ▲3 ✗   1m12s   done 14:32   prev 415 ✓ 0 ✗ · 2h ago   via ios-fixer  ✕
+Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   command status unknown   ▲3 ✗   1m12s   done 14:32  ✕
 ```
 
 ## What the band shows
 
 - One line per recent run, up to 3. Runs in the same turn stack; the first run after
   you submit a prompt replaces the previous turn's lines.
-- Each line: repo and suite, counts, change in failures against the previous run
+- Each line: repo and suite, counts, command/evidence warnings, change in failures against the previous run
   (`▲` more, `▼` fewer), duration, the time it finished (`done 14:32`), `prev …` (or
   `first run`), and `via …`.
 - Each line leaves the band 60 minutes after its run finished; the band closes with
@@ -31,9 +31,19 @@ Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   ▲3 ✗   1m1
   `pnpm dlx` or `yarn`: `xcodebuild … test` (or `test-without-building`), `swift test`,
   `pytest`, `jest`, `vitest`, `bun test`, `npm|pnpm|yarn [run] test`, `cargo test`,
   `go test`, `fastlane scan|test`. `cat pytest.log` is not one.
-- It reads cartoon's test summary first, then raw xcodebuild, swift test, pytest,
-  jest/vitest and bun output.
-- A recognised test command whose output it cannot read shows `ran · exit N · counts unavailable`.
+- It reads cartoon's test summary and raw xcodebuild, swift test, pytest,
+  jest/vitest and bun output. Impossible counts are invalid; repeated top-level
+  summaries or multiple formats are conflicting rather than silently choosing one.
+  Nested XCTest totals and combined XCTest/Swift Testing runs remain supported.
+- A recognised test command whose output it cannot read shows `counts unavailable`.
+- Parsed counts never erase a tool error, interruption, or reported nonzero exit.
+  `10 passed` followed by a failed build is still qualified as a `tool error` when
+  the host reports one. Interrupted or explicitly truncated output is marked
+  `output incomplete`.
+- The observed Bash response does not provide a structured exit code. A response
+  without a tool error is therefore `command status unknown`, not an invented
+  exit zero. Exit-code prose in output is not trusted. Older records' nonzero
+  codes are labeled `reported exit N`; their zero codes remain unknown.
 - It never blocks or changes a tool call, and makes no model calls.
 
 ## Install
@@ -48,6 +58,7 @@ Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   ▲3 ✗   1m1
 History lives in the plugin's store: the last 10 runs per suite per worktree. When the
 store passes a 2 MiB soft cap, the least recently used suites are dropped first.
 Session Compass reads the latest runs from `test-board.latest` when it is installed.
+Update Session Compass to 0.2.2 or later to retain these warnings in its band and pane.
 Runs leave `test-board.latest` at 60 minutes, so Compass's `tests` segment clears with
 them; `✕` hides only this band and leaves the segment up.
 
@@ -63,6 +74,13 @@ Widths count terminal cells for CJK, Hangul, fullwidth forms and emoji drawn as 
 other wide characters count as one cell, so a line holding them can wrap. A hot reload
 cancels the expiry timer; `session.start` re-arms it, so a line due in between leaves
 a moment late.
+
+This is an observational display, not a test attestation or enforcement gate.
+Output can be misleading even when it matches a supported summary format. The
+plugin does not independently observe process exits or detect every way output
+can be incomplete. Pipelines and wrappers may hide failures from the host itself.
+Warnings are never dropped to make space; mandatory content can wrap in a narrow
+terminal. This change does not establish which source revision was tested.
 
 ## Develop
 

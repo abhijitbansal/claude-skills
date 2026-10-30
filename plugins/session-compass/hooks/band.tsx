@@ -3,7 +3,7 @@ import type { SessionRecord } from '../types'
 import { basename, truncate } from './record'
 
 // Pure view builders: no `$` here (the host does not follow it out of register.tsx).
-export type Tally = { passed: number; failed: number }
+export type Tally = { passed: number; failed: number; warnings?: number }
 export type BandLine = { text: string; isDim: boolean }
 type Els = Pick<ReturnType<EngineInterface['ui']['resolve']>, 'Box' | 'Text'>
 
@@ -12,14 +12,24 @@ export function tally(runs: readonly unknown[] | undefined): Tally | undefined {
   let passed = 0
   let failed = 0
   let isAny = false
+  let warnings = 0
   for (const run of runs) {
-    const r = run as { parsed?: unknown; passed?: unknown; failed?: unknown }
-    if (r.parsed !== true || typeof r.passed !== 'number' || typeof r.failed !== 'number') continue
-    passed += r.passed
-    failed += r.failed
     isAny = true
+    if (run === null || typeof run !== 'object') { warnings += 1; continue }
+    const r = run as Record<string, unknown>
+    const countValues = [r.total, r.passed, r.failed, r.skipped]
+    const valid = r.parsed === true && countValues.every(n => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0)
+      && r.total === (r.passed as number) + (r.failed as number) + (r.skipped as number)
+      && Number.isSafeInteger(passed + (r.passed as number)) && Number.isSafeInteger(failed + (r.failed as number))
+      && r.countsIssue === undefined
+    if (valid) {
+      passed += r.passed as number
+      failed += r.failed as number
+    }
+    if (!valid || r.commandStatus !== 'exited' || r.exitCode !== 0 || r.outputIncomplete === true
+      || (r.failed as number) > 0 || r.stale === true) warnings += 1
   }
-  return isAny ? { passed, failed } : undefined
+  return isAny ? { passed, failed, warnings } : undefined
 }
 
 const lastTwo = (path: string): string => path.split('/').filter(Boolean).slice(-2).join('/')
@@ -31,6 +41,12 @@ export function formatBand(rec: SessionRecord, tests: Tally | undefined, columns
   const count = rec.artifacts.length
   const artifacts = `${count} artifact${count === 1 ? '' : 's'}`
   const testText = tests ? `tests ${tests.passed} ✓ ${tests.failed} ✗` : undefined
+  const warnings = tests?.warnings ?? 0
+  // Reserve the warning first: dropping optional segments must not erase a failed/unknown run.
+  const warning = warnings > 0 ? `tests: ${warnings} warning${warnings === 1 ? '' : 's'}` : ''
+  const prefix = warning === '' ? '' : `${warning} · `
+  if (prefix.length >= columns) return { text: truncate(warning, Math.max(0, columns)), isDim }
+  const available = columns - prefix.length
   const attempts = [
     { wt: lastTwo(rec.worktree), hasArtifacts: true, hasTests: true },
     { wt: lastTwo(rec.worktree), hasArtifacts: false, hasTests: true },
@@ -46,9 +62,9 @@ export function formatBand(rec: SessionRecord, tests: Tally | undefined, columns
       a.hasArtifacts ? artifacts : undefined,
       a.hasTests ? testText : undefined,
     ].filter((s): s is string => s !== undefined).join(' · ')
-    if (text.length <= columns) return { text, isDim }
+    if (text.length <= available) return { text: prefix + text, isDim }
   }
-  return { text: truncate(text, columns), isDim }
+  return { text: prefix + truncate(text, available), isDim }
 }
 
 // The compass line stacked above whatever the next band drew.
