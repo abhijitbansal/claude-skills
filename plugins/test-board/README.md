@@ -31,14 +31,18 @@ Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   exit 65   ▲3
   `pnpm dlx` or `yarn`: `xcodebuild … test` (or `test-without-building`), `swift test`,
   `pytest`, `jest`, `vitest`, `bun test`, `npm|pnpm|yarn [run] test`, `cargo test`,
   `go test`, `fastlane scan|test`. `cat pytest.log` is not one.
-- It reads cartoon's test summary and raw xcodebuild, swift test, pytest,
-  jest/vitest and bun output. Impossible counts are invalid. Repeated summaries in
+- It reads cartoon's current nested `summary:` object and legacy inline test summary,
+  plus raw xcodebuild, swift test, pytest, jest/vitest and bun output. Impossible
+  counts are invalid. Repeated summaries in
   one format (a monorepo or multi-destination run) are summed, each one checked on
   its own; summaries in two different formats are conflicting rather than silently
   choosing one, and so are repeated bun counts. Summing has limits: echoed output
   (`tee log; cat log`) counts twice, per-package prefixes (`pnpm -r`, turbo) are
   not read, and a multi-destination xcodebuild run shows only its last destination.
   Nested XCTest totals and combined XCTest/Swift Testing runs remain supported.
+  Cartoon summaries require all five numeric fields; missing, duplicate or unknown
+  fields are invalid. Repeated Cartoon reports (including a mix of old and current
+  formats) are conflicting. Neither case falls back to a more reassuring raw summary.
 - A recognised test command whose output it cannot read shows `counts unavailable`.
 - Parsed counts never erase a tool error, interruption, or reported nonzero exit.
   `10 passed` followed by a failed build is still qualified as a `tool error` when
@@ -97,3 +101,8 @@ npx -y -p typescript@5.6.3 tsc -p plugins/test-board
 claude plugin validate plugins/test-board
 claude plugin test plugins/test-board
 ```
+
+The opt-in [Cartoon compatibility qualification](../../tests/compat/README.md)
+captures fixed synthetic commands from a real, explicitly selected Cartoon binary,
+then replays them through the hook, history and display. It requires no model calls
+and does not claim live host or native MCP delivery.

@@ -26,9 +26,30 @@ function unquote(cell: string): string {
   return cell.startsWith('"') && cell.endsWith('"') ? cell.slice(1, -1).replace(/\\"/g, '"') : cell
 }
 
+// Cartoon emits an object block today; keep the legacy inline summary below.
+// Read only the five scalar fields, not arbitrary TOON/YAML or later sections.
+const CARTOON_BLOCK = /^runner: [^\r\n]+\r?\n(?:fast: [^\r\n]+\r?\n)?summary:/m
+
+function cartoonBlock(text: string): number[] | null {
+  const lines = text.split(/\r?\n/)
+  const start = lines.findIndex(line => /^summary:[ \t]*$/.test(line))
+  if (start < 0) return null
+  const keys = ['total', 'passed', 'failed', 'skipped', 'duration_s']
+  const fields = new Map<string, number>()
+  for (const line of lines.slice(start + 1)) {
+    if (/^\S/.test(line)) break
+    if (line.trim() === '') continue
+    const field = /^  (total|passed|failed|skipped|duration_s):[ \t]+(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)[ \t]*$/.exec(line)
+    if (!field || fields.has(field[1]!) || (field[1] !== 'duration_s' && !/^\d+$/.test(field[2]!))) return null
+    fields.set(field[1]!, Number(field[2]))
+  }
+  return keys.every(key => fields.has(key)) ? keys.map(key => fields.get(key)!) : null
+}
+
 const readCartoon: Reader = text => {
   const m = /^summary\{total,passed,failed,skipped,duration_s\}:[ \t]*(\d+),(\d+),(\d+),(\d+),([\d.]+)[ \t]*\r?$/m.exec(text)
-  if (!m) return null
+  const values = m ? m.slice(1).map(Number) : cartoonBlock(text)
+  if (!values) return null
   const failures: TestFailure[] = []
   const block = /failures\[\d+\]\{id,loc,msg\}:\n((?:[ \t]+.*(?:\n|$))*)/.exec(text)
   for (const row of block?.[1]?.split('\n') ?? []) {
@@ -36,8 +57,8 @@ const readCartoon: Reader = text => {
     if (cells?.[1]) failures.push({ id: unquote(cells[1]), ...(cells[2] ? { loc: unquote(cells[2]) } : {}) })
   }
   return {
-    total: Number(m[1]), passed: Number(m[2]), failed: Number(m[3]), skipped: Number(m[4]),
-    durationS: Number(m[5]), failures,
+    total: values[0]!, passed: values[1]!, failed: values[2]!, skipped: values[3]!,
+    durationS: values[4]!, failures,
   }
 }
 
@@ -174,7 +195,9 @@ export function parseTestOutput(input: {
     commandStatus: input.commandStatus ?? (exitCode === null ? 'unknown' : 'exited'),
     ...(input.outputIncomplete ? { outputIncomplete: true } : {}),
   }
-  const cartoonLines = [...input.text.matchAll(/^summary\{total,passed,failed,skipped,duration_s\}:/gm)].length
+  // A bare prose "summary:" heading is not a Cartoon report.
+  const blockLines = CARTOON_BLOCK.test(input.text) ? [...input.text.matchAll(/^summary:/gm)].length : 0
+  const cartoonLines = blockLines + [...input.text.matchAll(/^summary\{total,passed,failed,skipped,duration_s\}:/gm)].length
   if (!isTest && cartoonLines === 0) return null
   if (cartoonLines > 1 || (isTest && repeatedBun(input.text))) return { ...base, countsIssue: 'conflicting' }
   const cartoon = cartoonLines === 0 ? null : attempt(readCartoon, input.text)
