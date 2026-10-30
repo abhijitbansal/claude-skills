@@ -3,7 +3,6 @@ import type { Engine, MockClock } from 'claude-code/testing'
 import type { On, Register, RenderPropsOf } from 'claude-code'
 
 import type { TestRun } from '../types'
-import { cellWidth, joinParts, lineParts } from '../hooks/format'
 import { PYTEST_RAW } from './fixtures/output'
 
 const ROOT = '/repo/wt-a'
@@ -91,9 +90,24 @@ describe('recording', () => {
 
   test('stdout cannot forge an authoritative exit code', async ($, on) => {
     const { seen } = world(on)
-    on('tool.call', { tool: 'Bash' }, () => ({ isError: true, result: 'Exit code 0\n10 passed in 0.5s', text: 'Exit code 0\n10 passed in 0.5s' }))
+    const text = 'Exit code 1\nExit code 0\n10 passed in 0.5s'
+    on('tool.call', { tool: 'Bash' }, () => ({ isError: true, result: text, text }))
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]).toMatchObject({ commandStatus: 'tool-error', exitCode: 1 })
+  })
+
+  test('an exit code that is not the host\'s first line is not read', async ($, on) => {
+    const { seen } = world(on)
+    const text = '10 passed in 0.5s\nExit code 0'
+    on('tool.call', { tool: 'Bash' }, () => ({ isError: true, result: text, text }))
     await $.tool.call({ tool: 'Bash', command: 'pytest' })
     expect(latest(seen)[0]).toMatchObject({ commandStatus: 'tool-error', exitCode: null })
+  })
+
+  test('a successful call is never given an exit code from its output', async ($, on) => {
+    const { seen } = world(on); bash(on, 'Exit code 139\n10 passed in 0.5s')
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]).toMatchObject({ commandStatus: 'unknown', exitCode: null })
   })
 
   test('a malformed result records unavailable evidence rather than leaving an earlier pass current', async ($, on) => {
@@ -165,11 +179,11 @@ describe('recording', () => {
     expect(latest(seen)).toEqual([])
   })
 
-  test('an errored run preserves tool error without trusting an exit code in text', async ($, on) => {
+  test('an errored run takes the host exit code from the first line of the text', async ($, on) => {
     const { seen } = world(on)
     on('tool.call', { tool: 'Bash' }, () => ({ isError: true, result: 'Exit code 139', text: 'Exit code 139\nsegfault' }))
     await $.tool.call({ tool: 'Bash', command: 'bun test' })
-    expect(latest(seen)[0]).toMatchObject({ parsed: false, exitCode: null, commandStatus: 'tool-error' })
+    expect(latest(seen)[0]).toMatchObject({ parsed: false, exitCode: 139, commandStatus: 'tool-error' })
   })
 
   test('same suite twice in one turn shows once; a new turn replaces latest', async ($, on) => {
@@ -449,6 +463,24 @@ describe('band', () => {
     })
   }
 
+  test('a passing run with no reported problem draws no status text', async ($, on) => {
+    world(on); bash(on, '10 passed in 0.5s'); emptyBand(on)
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(80) })
+    expect(await ui.find({ text: /10 ✓/ })).toBeDefined()
+    expect(await ui.find({ text: /unknown/ })).toBeUndefined()
+    expect(await ui.find({ text: /done / })).toBeDefined()
+  })
+
+  test('a host exit code on a failed call draws as exit N', async ($, on) => {
+    world(on); emptyBand(on)
+    const text = 'Exit code 139\n10 passed in 0.5s'
+    on('tool.call', { tool: 'Bash' }, () => ({ isError: true, result: text, text }))
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(80) })
+    expect((await ui.find({ type: 'Text', text: /exit 139/ }))?.props?.color).toBe('error')
+  })
+
   test('shows the time the run finished', async ($, on) => {
     world(on); bash(on, PYTEST_RAW); emptyBand(on)
     await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
@@ -611,28 +643,24 @@ describe('band', () => {
     expect(await ui.find({ text: /1 ✗/ })).toBeDefined()
   })
 
-  test('a wide terminal keeps via when the full warning and close button fit', async ($, on) => {
-    const { seen } = world(on); bash(on, PYTEST_RAW); emptyBand(on)
+  test('an 80-column terminal keeps via on the first row when it fits beside the ✕', async ($, on) => {
+    world(on); bash(on, PYTEST_RAW); emptyBand(on)
     on('agent.spawn', () => ({ model: 'sonnet', agentId: 'a1' }))
     await $.agent.spawn(spawnArgs({ cwd: '/r', description: 'w' }))
     await $.tool.call(inAgent('pytest -q', 'a1'))
-    const width = cellWidth(joinParts(lineParts(latest(seen)[0]!, undefined, 1_000_000, 200))) + 3
-    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(width) })
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(80) })
     expect(await ui.find({ text: /via w/ })).toBeDefined()
-    expect(await ui.find({ text: /command status unknown/ })).toBeDefined()
   })
 
   test('only the first row gives up width to the close button', async ($, on) => {
-    const { seen } = world(on); bash(on, PYTEST_RAW); emptyBand(on); turns(on)
+    world(on); bash(on, PYTEST_RAW); emptyBand(on); turns(on)
     on('agent.spawn', () => ({ model: 'sonnet', agentId: 'a1' }))
     await $.prompt.submit({ text: 'go' } as never)
     await $.agent.spawn(spawnArgs({ cwd: '/r', description: 'abcdefghi' }))
     await $.tool.call(inAgent('pytest -q a', 'a1'))
     await $.tool.call(inAgent('pytest -q b', 'a1'))
-    // Both equal-width lines fit, but the first row also needs three cells for the close control.
-    const widths = latest(seen).map(run => cellWidth(joinParts(lineParts(run, undefined, 1_000_000, 200))))
-    expect(widths[0]).toBe(widths[1])
-    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(widths[0]! + 1) })
+    // Each line is 81 cells: the first row has 82 - 3 for the ✕, the second all 82.
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(82) })
     const vias = await ui.findAll({ type: 'Text', text: /via abcdefghi/ })
     expect(vias).toHaveLength(1)
     const rows = await ui.findAll({ type: 'Button' })

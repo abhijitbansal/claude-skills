@@ -68,11 +68,12 @@ export function joinParts(p: LineParts): string {
   return [p.label, p.counts, p.status, p.trend, p.duration, p.doneAt, p.prev, p.via].filter(Boolean).join(GAP)
 }
 
+// Only evidence of trouble draws: an unknown status is the normal live shape and says nothing.
 function status(run: TestRun): string | undefined {
+  const code = Number.isSafeInteger(run.exitCode) && run.exitCode !== 0 ? run.exitCode : undefined
   const command = run.commandStatus === 'interrupted' ? 'interrupted'
-    : run.commandStatus === 'tool-error' ? 'tool error'
-    : Number.isSafeInteger(run.exitCode) && run.exitCode !== 0 ? `${run.commandStatus === 'exited' ? '' : 'reported '}exit ${run.exitCode}`
-    : run.commandStatus === 'exited' && run.exitCode === 0 ? undefined : 'command status unknown'
+    : code !== undefined ? `${run.commandStatus === 'exited' || run.commandStatus === 'tool-error' ? '' : 'reported '}exit ${code}`
+    : run.commandStatus === 'tool-error' ? 'tool error' : undefined
   return [command, run.countsIssue === undefined ? undefined : `${run.countsIssue} counts`,
     run.outputIncomplete ? 'output incomplete' : undefined].filter(Boolean).join(' · ') || undefined
 }

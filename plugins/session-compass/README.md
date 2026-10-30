@@ -20,8 +20,10 @@ One line above the prompt: `repo · worktree (branch) · Goal · Now · N artifa
   clears when those runs leave test-board 60 minutes after they finished; closing the
   test-board band with `✕` leaves it up.
 - Narrow terminals drop the artifact count, then `tests`, then shorten the worktree path.
-- Runs with failures, unknown command status, unavailable/invalid/conflicting
-  counts, incomplete output, or restored history carry a warning. Counts are
+- Runs with a tool error, an interruption, a reported nonzero exit, incomplete output,
+  or unavailable/invalid/conflicting counts carry a warning. Failed tests already show
+  in the `✗` count, an unknown command status is the normal case for a live run, and
+  restored history is not trouble, so none of those warn. Counts are
   summed separately; malformed counts do not contribute. The warning count is
   placed first so dropping optional segments cannot hide it on narrow terminals.
   The `/compass` pane also shows the warnings; Test Board provides the details.
