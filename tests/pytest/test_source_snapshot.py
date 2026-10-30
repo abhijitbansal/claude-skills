@@ -1,0 +1,262 @@
+"""Read-only source snapshots, tested against disposable synthetic repositories."""
+
+import importlib.util
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+from unittest.mock import patch
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = ROOT / "plugins/test-board/scripts/source_snapshot.py"
+ENV = {"PATH": os.defpath, "LC_ALL": "C", "GIT_CONFIG_NOSYSTEM": "1",
+       "GIT_CONFIG_GLOBAL": os.devnull}
+
+
+@unittest.skipUnless(os.name == "posix", "collector supports POSIX hosts")
+class SourceSnapshotTests(unittest.TestCase):
+    def setUp(self):
+        scratch = ROOT / ".scratch"
+        scratch.mkdir(exist_ok=True)
+        self.temp = tempfile.TemporaryDirectory(prefix="source-test-", dir=scratch)
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name) / "repo"
+        self.root.mkdir()
+        self.git("init", "-q")
+        (self.root / "app.txt").write_text("alpha\n")
+        (self.root / ".gitignore").write_text("ignored/\n")
+        self.git("add", ".")
+        self.git("commit", "-qm", "synthetic fixture")
+
+    def git(self, *args, cwd=None):
+        return subprocess.run(
+            ["git", "--no-optional-locks", "-c", "core.hooksPath=/dev/null",
+             "-c", "commit.gpgsign=false", "-c", "user.name=Synthetic",
+             "-c", "user.email=synthetic@example.invalid", *args],
+            cwd=cwd or self.root, env=ENV, capture_output=True, check=True,
+            timeout=3,
+        ).stdout
+
+    def collect(self):
+        result = subprocess.run([sys.executable, "-I", str(SCRIPT), str(self.root)],
+                                env=ENV, capture_output=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, b"")
+        return json.loads(result.stdout)
+
+    def module(self):
+        self.assertTrue(SCRIPT.is_file(), "snapshot collector is not implemented")
+        spec = importlib.util.spec_from_file_location("source_snapshot", SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_unchanged_source_has_stable_content_identity_and_no_payload(self):
+        first = self.collect()
+        self.assertEqual(first["status"], "available")
+        second = self.collect()
+        self.assertEqual(first["digest"], second["digest"])
+        self.assertEqual(first["head"], self.git("rev-parse", "HEAD").decode().strip())
+        self.assertNotIn("alpha", json.dumps(first))
+        self.assertNotIn("app.txt", json.dumps(first))
+        self.assertEqual(first["files"], 2)
+
+    def test_same_size_and_restored_mtime_edit_changes_digest(self):
+        first = self.collect()
+        path = self.root / "app.txt"
+        old = path.stat()
+        path.write_text("bravo\n")
+        os.utime(path, ns=(old.st_atime_ns, old.st_mtime_ns))
+        self.assertNotEqual(first["digest"], self.collect()["digest"])
+
+    def test_staging_changes_identity_even_if_worktree_content_is_unchanged(self):
+        (self.root / "app.txt").write_text("bravo\n")
+        first = self.collect()
+        self.git("add", "app.txt")
+        self.assertNotEqual(first["digest"], self.collect()["digest"])
+
+    def test_add_delete_rename_and_executable_bit_change_identity(self):
+        previous = self.collect()["digest"]
+        path = self.root / "extra.txt"
+        path.write_text("synthetic\n")
+        current = self.collect()["digest"]
+        self.assertNotEqual(previous, current)
+        path.rename(self.root / "renamed.txt")
+        renamed = self.collect()["digest"]
+        self.assertNotEqual(current, renamed)
+        (self.root / "renamed.txt").chmod(0o755)
+        executable = self.collect()["digest"]
+        self.assertNotEqual(renamed, executable)
+        (self.root / "app.txt").unlink()
+        deleted = self.collect()
+        self.assertEqual(deleted["status"], "available")
+        self.assertNotEqual(executable, deleted["digest"])
+
+    def test_ignored_files_are_outside_the_declared_scope(self):
+        first = self.collect()
+        (self.root / "ignored").mkdir()
+        (self.root / "ignored/secret.txt").write_text("synthetic excluded input")
+        self.assertEqual(first["digest"], self.collect()["digest"])
+
+    def test_branch_and_commit_are_separate_from_content_identity(self):
+        first = self.collect()
+        self.git("checkout", "-qb", "synthetic-other")
+        branch = self.collect()
+        self.assertNotEqual(first["branch"], branch["branch"])
+        self.assertEqual(first["digest"], branch["digest"])
+        self.git("commit", "--allow-empty", "-qm", "empty fixture")
+        self.assertNotEqual(branch["head"], self.collect()["head"])
+        self.git("checkout", "--detach", "-q")
+        self.assertIsNone(self.collect()["branch"])
+
+    def test_worktrees_keep_separate_roots(self):
+        other = Path(self.temp.name) / "other"
+        self.git("worktree", "add", "--detach", "-q", str(other))
+        first = self.collect()
+        self.root = other
+        second = self.collect()
+        self.assertNotEqual(first["root"], second["root"])
+        self.assertEqual(first["head"], second["head"])
+
+    def test_symlink_file_and_parent_are_unsupported(self):
+        target = Path(self.temp.name) / "outside"
+        target.mkdir()
+        (target / "value").write_text("synthetic outside input")
+        (self.root / "link").symlink_to(target / "value")
+        self.assertEqual(self.collect()["status"], "unknown")
+        (self.root / "link").unlink()
+        (self.root / "dir").mkdir()
+        (self.root / "dir/value").write_text("tracked fixture")
+        self.git("add", "dir/value")
+        (self.root / "dir/value").unlink()
+        (self.root / "dir").rmdir()
+        (self.root / "dir").symlink_to(target, target_is_directory=True)
+        self.assertEqual(self.collect()["status"], "unknown")
+
+    def test_special_file_cannot_block_or_count_as_source(self):
+        os.mkfifo(self.root / "pipe")
+        # Git alone is insufficient: it omits this nonignored special node.
+        self.assertNotIn(b"pipe", self.git("ls-files", "--others", "--exclude-standard", "-z"))
+        self.assertEqual(self.collect()["status"], "unknown")
+
+    def test_nested_special_nodes_are_unknown_but_ignored_ones_are_excluded(self):
+        (self.root / "nested").mkdir()
+        os.mkfifo(self.root / "nested/pipe")
+        self.assertEqual(self.collect()["status"], "unknown")
+        (self.root / "nested/pipe").unlink()
+        (self.root / "ignored").mkdir()
+        os.mkfifo(self.root / "ignored/pipe")
+        self.assertEqual(self.collect()["status"], "available")
+
+    def test_submodules_and_hidden_index_entries_are_unknown(self):
+        head = self.git("rev-parse", "HEAD").decode().strip()
+        self.git("update-index", "--add", "--cacheinfo", f"160000,{head},sub")
+        self.assertEqual(self.collect()["status"], "unknown")
+        self.git("update-index", "--force-remove", "sub")
+        for flag in ("assume-unchanged", "skip-worktree"):
+            self.git("update-index", f"--{flag}", "app.txt")
+            self.assertEqual(self.collect()["status"], "unknown")
+            self.git("update-index", f"--no-{flag}", "app.txt")
+
+    def test_filename_delimiters_do_not_collide(self):
+        (self.root / "space tab\tline\n.txt").write_bytes(b"\x00\xffsynthetic")
+        first = self.collect()
+        self.assertEqual(first["status"], "available")
+        (self.root / "space tab\tline\n.txt").rename(self.root / "other.txt")
+        self.assertNotEqual(first["digest"], self.collect()["digest"])
+
+    def test_limits_return_unknown_not_a_partial_digest(self):
+        module = self.module()
+        for limits in ({"max_files": 1}, {"max_bytes": 1}, {"max_file_bytes": 1},
+                       {"max_git_bytes": 8}, {"timeout_s": 0}):
+            with self.subTest(limits=limits):
+                result = module.capture(str(self.root), **limits)
+                self.assertEqual(result["status"], "unknown")
+                self.assertNotIn("digest", result)
+
+    def test_missing_git_and_unreadable_files_are_unknown(self):
+        module = self.module()
+        with patch.object(module, "git_bytes", side_effect=FileNotFoundError):
+            self.assertEqual(module.capture(str(self.root))["status"], "unknown")
+        with patch.object(module, "read_file", side_effect=PermissionError):
+            self.assertEqual(module.capture(str(self.root))["status"], "unknown")
+
+    def test_change_during_capture_is_unknown(self):
+        module = self.module()
+        original = module.read_file
+        changed = False
+
+        def mutate(*args, **kwargs):
+            nonlocal changed
+            result = original(*args, **kwargs)
+            if not changed and args[1] == b"app.txt":
+                changed = True
+                (self.root / "app.txt").write_text("bravo\n")
+            return result
+
+        with patch.object(module, "read_file", side_effect=mutate):
+            self.assertEqual(module.capture(str(self.root))["status"], "unknown")
+
+    def test_unknown_errors_do_not_expose_exception_payloads(self):
+        module = self.module()
+        with patch.object(module, "read_file", side_effect=OSError("synthetic private payload")):
+            result = module.capture(str(self.root))
+            self.assertEqual(result["status"], "unknown")
+            self.assertNotIn("payload", json.dumps(result))
+
+    def test_deep_directories_return_unknown_instead_of_recursing_unboundedly(self):
+        nested = self.root
+        for _ in range(66):
+            nested = nested / "d"
+            nested.mkdir()
+        (nested / "input.txt").write_text("synthetic")
+        result = self.module().capture(str(self.root), timeout_s=5)
+        self.assertEqual(result["status"], "unknown")
+        self.assertEqual(result["reason"], "unsupported_path")
+
+    def test_deadline_and_output_limits_kill_and_reap_the_child(self):
+        module = self.module()
+        real_popen = subprocess.Popen
+        for code, reason in [("import time; time.sleep(10)", "deadline"),
+                             ("import os; os.write(1, b'x' * 65536)", "git_output_limit")]:
+            children = []
+
+            def child(_argv, **kwargs):
+                proc = real_popen([sys.executable, "-I", "-c", code], **kwargs)
+                children.append(proc)
+                return proc
+
+            with self.subTest(reason=reason), patch.object(module.subprocess, "Popen", side_effect=child):
+                started = time.monotonic()
+                result = module.capture(str(self.root), timeout_s=0.5, max_git_bytes=32)
+                self.assertEqual(result, {"version": 1, "scope": module.SCOPE,
+                                          "status": "unknown", "reason": reason})
+                self.assertLess(time.monotonic() - started, 3)
+                self.assertEqual(len(children), 1)
+                self.assertIsNotNone(children[0].returncode)
+
+    def test_capture_leaves_index_and_source_unchanged(self):
+        paths = [self.root / "app.txt", self.root / ".gitignore", self.root / ".git/index"]
+        before = [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths]
+        self.assertEqual(self.collect()["status"], "available")
+        self.assertEqual(before, [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths])
+
+    def test_tracked_content_inside_ignored_directory_is_still_hashed(self):
+        (self.root / "ignored").mkdir()
+        path = self.root / "ignored/tracked.txt"
+        path.write_text("before")
+        self.git("add", "-f", "ignored/tracked.txt")
+        first = self.collect()
+        path.write_text("after!")
+        second = self.collect()
+        self.assertEqual(second["status"], "available")
+        self.assertNotEqual(first["digest"], second["digest"])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -53,6 +53,58 @@ Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   exit 65   ▲3
   labeled `reported exit N`.
 - It never blocks or changes a tool call, and makes no model calls.
 
+## Source freshness
+
+Each run has a separate source line, kept visible on narrow terminals:
+
+```
+    source changed at last check 14:35
+```
+
+- `matching`: the bounded source observations before and after the run matched,
+  and the most recent check still matches them. This is not a claim of continuous
+  monitoring or proof of which inputs the command read.
+- `changed`: the supported source identity changed during the run or since it.
+  A change during the run stays flagged even if the source later returns to its
+  earlier state.
+- `unknown`: no complete supported comparison is available. Old runs without
+  source observations, overlapping tools, ambiguous shell context, missing tools,
+  unsupported files, and capture limits do not become matching.
+
+Before/after capture applies to recognized direct test commands with a statically
+located working directory, optionally preceded by a literal `cd ... &&`. Shell
+expansions, compound commands, redirections, pipes, and quoted shell wrappers
+still show their test results but have unknown source freshness. Tools invalidate
+the previous check before running. Checks run again after tool completion and at
+new prompt boundaries, not during rendering or on a filesystem-watcher timer.
+An edit made outside the session is only detected at the next check; the line
+explicitly says when that check occurred. A restored run starts unknown.
+
+The collector needs an existing `python3` and Git on a POSIX host. Nothing is
+installed automatically. It uses Python isolated mode and read-only, argv-based
+Git commands with hooks/fsmonitor and global/system Git config disabled. Each
+capture has a 1.5-second internal deadline and a 2-second host process timeout.
+It performs two scans, capped at 4,096 entries per scan, 64 directory levels,
+4 MiB per file, 32 MiB read across both scans, and 512 KiB per Git response.
+Unsupported or over-budget captures return unknown, without a partial digest.
+The worktree-root lookup is capped at one second. Capture adds bounded latency:
+up to two captures around a test, then one per visible worktree (at most three).
+
+The scope is Git-tracked files and repository-nonignored untracked regular files.
+Identity includes the worktree, HEAD, branch, index entries, paths, executable
+bits, and SHA-256 content hashes. It detects staged and unstaged edits, including
+same-length changes with restored modification times. File contents and individual
+filenames are not stored or logged. Symlinks, special nodes, submodules,
+assume-unchanged/skip-worktree entries (including sparse checkouts), unreadable
+files, or inconsistent scans yield unknown.
+
+These observations are not an atomic snapshot or an attestation. Edit-and-revert
+between observations can escape detection. Ignored files, dependencies outside
+the scope, environment variables, remote services, and other processes' behavior
+are not validated. Source matching does not imply passing tests or a successful
+command. Session Compass continues to display test counts; the source line is
+currently shown by Test Board only.
+
 ## Install
 
 ```
@@ -64,6 +116,9 @@ Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   exit 65   ▲3
 
 History lives in the plugin's store: the last 10 runs per suite per worktree. When the
 store passes a 2 MiB soft cap, the least recently used suites are dropped first.
+New runs also retain their before/after source observations (including digests,
+root, commit, branch, and aggregate file/byte counts). The latest comparison label
+is not persisted: restarting cannot resurrect a previously matching label.
 Session Compass reads the latest runs from `test-board.latest` when it is installed.
 Update Session Compass to 0.2.2 or later to retain these warnings in its band and pane.
 Runs leave `test-board.latest` at 60 minutes, so Compass's `tests` segment clears with
@@ -96,4 +151,5 @@ claude --plugin-dir plugins/test-board      # lays .claude-plugin/types (gitigno
 npx -y -p typescript@5.6.3 tsc -p plugins/test-board
 claude plugin validate plugins/test-board
 claude plugin test plugins/test-board
+python3 -B -m unittest discover -s tests/pytest -p test_source_snapshot.py -v
 ```

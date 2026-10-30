@@ -1,3 +1,11 @@
+export type SourceSnapshot = {
+  version: 1; scope: 'git-tracked+untracked-nonignored'; status: 'available'
+  root: string; head: string; branch: string | null; digest: string; files: number; bytes: number
+} | { version: 1; scope: 'git-tracked+untracked-nonignored'; status: 'unknown'; reason: string }
+export type SourceMatch = 'matching' | 'changed' | 'unknown'
+export type RunSource = { before: SourceSnapshot; after: SourceSnapshot }
+export type SourceCheck = { status: SourceMatch; at: number }
+
 export type TestFailure = { id: string; loc?: string }
 
 export type TestRun = {
@@ -13,6 +21,8 @@ export type TestRun = {
   at: number              // epoch ms
   via?: string            // subagent description, "workflow", or undefined for the main loop
   parsed: boolean         // false: looked like a test run, counts unavailable
+  source?: RunSource      // bounded observations, not proof of the command's inputs
+  sourceCheck?: SourceCheck // latest only: comparison as of an event, never stored
   stale?: boolean         // true only in `latest` for a run loaded from history at
                           // session start; never written to the store
 }

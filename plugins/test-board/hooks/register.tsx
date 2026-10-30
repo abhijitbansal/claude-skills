@@ -1,13 +1,14 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { TestRun } from '../types'
-import { GAP, lineParts, MAX_SHOWN_FAILURES, tail } from './format'
+import type { RunSource, SourceSnapshot, TestRun } from '../types'
+import { formatClock, GAP, lineParts, MAX_SHOWN_FAILURES, tail } from './format'
 import {
   appendRun, BAND_TTL_MS, keysToDrop, MAX_LATEST, oldestQuarter, previousRun, STORE_SOFT_CAP_BYTES, touchIndex, visibleRuns,
 } from './history'
 import { parseTestOutput } from './parse'
 import { resolveDir, splitCommand, suiteKey, suiteLabel } from './suite'
+import { parseSourceCapture, sourceCwd, sourceMatchForRun, sourceRoot, unknownSource } from './source-freshness'
 
 const latest = atom({ plugin: 'test-board', key: 'latest' } as const, [] as TestRun[])
 const expanded = atom({ plugin: 'test-board', key: 'expanded' } as const, false)
@@ -56,20 +57,62 @@ function commandEvidence(ran: Ran): Pick<TestRun, 'exitCode' | 'commandStatus' |
 
 type Roots = Map<string, string>
 type Loops = Map<string, Loop>
-type State = { loops: Loops; roots: Roots; turn: { isNew: boolean }; chain: Promise<void>; expiry?: Timer }
+type State = {
+  loops: Loops; roots: Roots; turn: { isNew: boolean }; chain: Promise<void>; expiry?: Timer
+  activeTools: number; activity: number
+}
 
 async function worktreeRoot($: EngineInterface, roots: Roots, cwd: string): Promise<string> {
   const cached = roots.get(cwd)
   if (cached !== undefined) return cached
   let root = cwd
   try {
-    const out = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd })
-    if (out.exitCode === 0 && out.stdout.trim() !== '') root = out.stdout.trim()
+    const out = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd, timeoutMs: 1000 })
+    if (out.exitCode === 0 && out.stderr === '' && /^\/[^\0\r\n]{0,4095}\n$/.test(out.stdout)) root = out.stdout.slice(0, -1)
   } catch {
     // not a repo, or git missing: the cwd stands in for the worktree
   }
   roots.set(cwd, root)
   return root
+}
+
+async function captureSource($: EngineInterface, root: string): Promise<SourceSnapshot> {
+  try {
+    const out = await $.process.run(['python3', '-I', '-B', `${$.plugin.root}/scripts/source_snapshot.py`, root],
+      { cwd: root, timeoutMs: 2000 })
+    const snapshot = parseSourceCapture(out)
+    return snapshot.status === 'available' && snapshot.root !== root ? unknownSource() : snapshot
+  } catch {
+    // Missing Python/Git, a process deadline, or an unsupported host never hides test results.
+    return unknownSource()
+  }
+}
+
+async function invalidateSource($: EngineInterface): Promise<void> {
+  if ((await read($, latest)).some(r => r.sourceCheck !== undefined)) {
+    await update($, latest, list => list.map(({ sourceCheck: _check, ...run }) => run))
+  }
+}
+
+// Called only on events, never during rendering. At most three visible worktrees.
+async function refreshSource($: EngineInterface, state: State): Promise<void> {
+  if (state.activeTools !== 0) return
+  const activity = state.activity
+  const held = visibleRuns(await read($, latest), await $.clock.now())
+  const snapshots = new Map<string, SourceSnapshot>()
+  for (const run of held.slice(0, MAX_LATEST)) {
+    const root = sourceRoot(run.source)
+    if (root !== undefined && !snapshots.has(root)) snapshots.set(root, await captureSource($, root))
+  }
+  if (state.activeTools !== 0 || state.activity !== activity) return
+  const at = await $.clock.now()
+  if (held.length > 0) await update($, latest, list => {
+    if (state.activeTools !== 0 || state.activity !== activity) return list
+    return list.map(run => ({
+      ...run, sourceCheck: { at, status: sourceMatchForRun(run.source, snapshots.get(sourceRoot(run.source) ?? '')) },
+    }))
+  })
+  if (state.activeTools !== 0 || state.activity !== activity) await invalidateSource($)
 }
 
 async function writeRuns($: EngineInterface, key: string, runs: TestRun[], index: string[], drop: string[]) {
@@ -165,7 +208,7 @@ const isDismissed = (d: { key: string; at: number } | null, run: TestRun | undef
 
 async function record(
   $: EngineInterface, state: State,
-  call: { command: string; agentId: string | undefined; startCwd: string }, ran: Ran,
+  call: { command: string; agentId: string | undefined; startCwd: string }, ran: Ran, source?: RunSource,
 ) {
   const text = outputOf(ran)
   if (text === null) return
@@ -182,6 +225,7 @@ async function record(
     suite: suiteLabel(parts.normalized),
     key: suiteKey(root, parts.normalized),
     at: await $.clock.now(),
+    ...(source === undefined ? {} : { source }),
     ...(via === undefined ? {} : { via }),
   }
   await saveRun($, run)
@@ -196,27 +240,55 @@ async function record(
 }
 
 export const register: Register = on => {
-  const state = { loops: new Map<string, Loop>(), roots: new Map<string, string>(), turn: { isNew: true }, chain: Promise.resolve() } as State
+  const state: State = { loops: new Map(), roots: new Map(), turn: { isNew: true }, chain: Promise.resolve(), activeTools: 0, activity: 0 }
 
-  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    // The directory the command starts in: read it before the command can change it.
+  on('tool.call', async ($, e, next) => {
+    const activity = ++state.activity
+    state.activeTools += 1
     let startCwd: string | undefined
+    let root: string | undefined
+    let before = unknownSource()
+    let source: RunSource | undefined
+    let ran: Ran | undefined
     try {
-      startCwd = await $.session.cwd()
-    } catch (err) {
-      $.ui.log(`test-board: cwd unavailable: ${String(err).slice(0, 120)}`)
-    }
-    const ran = await next(e)
-    if (startCwd !== undefined) {
-      // Serial queue: record() calls never interleave, so store and latest updates cannot be lost.
-      state.chain = state.chain
-        .then(() => record($, state, { command: e.command, agentId: e.agentId, startCwd }, ran as Ran))
-        .catch((err: unknown) => {
-          $.ui.log(`test-board: run not recorded: ${String(err).slice(0, 120)}`)
-        })
+      try {
+        await invalidateSource($)
+      } catch {
+        $.ui.log('test-board: source invalidation unavailable')
+      }
+      if (e.tool === 'Bash') {
+        try {
+          startCwd = await $.session.cwd()
+          const base = (e.agentId === undefined ? undefined : state.loops.get(e.agentId)?.cwd) ?? startCwd
+          const cwd = sourceCwd(e.command, base)
+          if (cwd !== undefined && state.activeTools === 1) {
+            root = await worktreeRoot($, state.roots, cwd)
+            before = await captureSource($, root)
+          }
+        } catch {
+          // Observation failure must not deny, modify or retry the tool call.
+        }
+      }
+      const result = await next(e)
+      ran = result as Ran
+      if (root !== undefined && outputOf(ran) !== null) {
+        const after = await captureSource($, root)
+        source = state.activity === activity && state.activeTools === 1
+          ? { before, after } : { before: unknownSource(), after: unknownSource() }
+      }
+      return result
+    } finally {
+      state.activeTools -= 1
+      // Serialize history writes and checks; overlapping tool runs cannot earn matching evidence.
+      const call = e.tool === 'Bash' && startCwd !== undefined
+        ? { command: e.command, agentId: e.agentId, startCwd } : undefined
+      const outcome = ran
+      state.chain = state.chain.then(async () => {
+        if (call !== undefined && outcome !== undefined) await record($, state, call, outcome, source)
+        await refreshSource($, state)
+      }).catch(() => { $.ui.log('test-board: results or source check unavailable') })
       await state.chain
     }
-    return ran
   })
 
   on('agent.spawn', async ($, e, next) => {
@@ -231,9 +303,16 @@ export const register: Register = on => {
     return started
   })
 
-  on('prompt.submit', ($, e, next) => {
+  on('prompt.submit', async ($, e, next) => {
     // A delivery into a running turn (peer message, notification) is not a new turn.
-    if (e.turnId === undefined) state.turn.isNew = true
+    if (e.turnId === undefined) {
+      state.turn.isNew = true
+      state.chain = state.chain.then(async () => {
+        await invalidateSource($)
+        await refreshSource($, state)
+      }).catch(() => { $.ui.log('test-board: source check unavailable') })
+      await state.chain
+    }
     return next(e)
   })
 
@@ -247,7 +326,7 @@ export const register: Register = on => {
       // A reload fires session.start too: a run past the hour stays off the band, and a closed band stays closed.
       const isClosed = (await read($, dismissed)) !== null
       if (newest !== undefined && !isClosed && visibleRuns([newest], now).length > 0) {
-        await update($, latest, () => [{ ...newest, stale: true }])
+        await update($, latest, () => [{ ...newest, sourceCheck: undefined, stale: true }])
       }
       // A hot reload cancels the old timer: re-arm for whatever latest now holds.
       await armExpiry($, state)
@@ -298,6 +377,7 @@ export const register: Register = on => {
                 <Button key="close" plain dimColor role="dismiss" label="Close test results" onPress={close}>✕</Button>
               )}
             </Box>
+            <Text dimColor>{`    source ${run.sourceCheck?.status ?? 'unknown'}${run.sourceCheck === undefined ? '' : ` at last check ${formatClock(run.sourceCheck.at)}`}`}</Text>
             {isOpen && run.failures.slice(0, MAX_SHOWN_FAILURES).map(f => (
               <Text dimColor>{`    ${f.id}${f.loc === undefined ? '' : `  ${f.loc}`}`}</Text>
             ))}
