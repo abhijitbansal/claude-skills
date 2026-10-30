@@ -33,12 +33,21 @@ function outputOf(ran: Ran): string | null {
   return typeof ran.text === 'string' ? ran.text : ''
 }
 
+// The host writes `Exit code N` as the first line of a failed call's error text, ahead of any stdout.
+// Only that line is read: anything later is the command's own output and could say anything.
+function hostExitCode(ran: Ran): number | null {
+  if (ran.isError !== true) return null
+  const text = typeof ran.text === 'string' ? ran.text : typeof ran.result === 'string' ? ran.result : ''
+  const code = /^Exit code (\d+)\r?$/.exec(text.split('\n', 1)[0] ?? '')?.[1]
+  return code !== undefined && Number.isSafeInteger(Number(code)) ? Number(code) : null
+}
+
 function commandEvidence(ran: Ran): Pick<TestRun, 'exitCode' | 'commandStatus' | 'outputIncomplete'> {
   const result = ran.result as { interrupted?: unknown; isStdoutTruncated?: unknown; isStderrTruncated?: unknown } | undefined
   const interrupted = result?.interrupted === true
-  // Bash's observed response shape has no structured exit code. Output text is not authority.
+  // Bash's observed response shape has no structured exit code; a success carries none, so it stays unknown.
   return {
-    exitCode: null,
+    exitCode: interrupted ? null : hostExitCode(ran),
     commandStatus: interrupted ? 'interrupted' : ran.isError === true ? 'tool-error' : 'unknown',
     ...(interrupted || result?.isStdoutTruncated === true || result?.isStderrTruncated === true
       ? { outputIncomplete: true } : {}),
@@ -278,7 +287,9 @@ export const register: Register = on => {
                   <Text color={run.failed > 0 ? 'error' : undefined} dimColor={run.stale === true}>{parts.split.failed}</Text>
                 )}
                 {parts.split !== undefined && <Text dimColor={run.stale === true}>{parts.split.tail}</Text>}
-                {parts.status !== undefined && <Text color={parts.isFailing ? 'error' : undefined}>{tail(parts.status)}</Text>}
+                {parts.status !== undefined && (
+                  <Text color={parts.isFailing ? 'error' : undefined} dimColor={run.stale === true}>{tail(parts.status)}</Text>
+                )}
                 <Text dimColor={run.stale === true}>{tail(parts.trend, parts.duration)}</Text>
                 <Text dimColor>{tail(parts.doneAt, parts.prev, parts.via)}</Text>
               </Button>

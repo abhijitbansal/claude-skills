@@ -27,3 +27,20 @@ test('fully observed passing controls have no warning', () => {
   expect(tally([pass])).toEqual({ passed: 10, failed: 0, warnings: 0 })
   expect(tally([])).toBeUndefined()
 })
+test('a clean live run as test-board records it has no warning', () => {
+  // The exact shape register.tsx writes for a passing Bash call: the host gives no structured exit code.
+  const live = { ...pass, exitCode: null, commandStatus: 'unknown' }
+  expect(tally([live])).toEqual({ passed: 10, failed: 0, warnings: 0 })
+  expect(formatBand(rec, tally([live]), 120).text).not.toContain('warning')
+})
+test('failing tests and restored history are not warnings by themselves', () => {
+  const live = { ...pass, exitCode: null, commandStatus: 'unknown' }
+  expect(tally([{ ...live, passed: 9, failed: 1 }])).toEqual({ passed: 9, failed: 1, warnings: 0 })
+  expect(tally([{ ...live, stale: true }])).toEqual({ passed: 10, failed: 0, warnings: 0 })
+})
+test('a tool error or a reported nonzero exit is a warning', () => {
+  expect(tally([{ ...pass, exitCode: null, commandStatus: 'tool-error' }])).toMatchObject({ warnings: 1 })
+  expect(tally([{ ...pass, exitCode: 139, commandStatus: 'tool-error' }])).toMatchObject({ warnings: 1 })
+  expect(tally([{ ...pass, exitCode: null, commandStatus: 'unknown', countsIssue: 'conflicting', parsed: false }]))
+    .toMatchObject({ warnings: 1 })
+})

@@ -5,7 +5,7 @@ above the prompt shows how many tests passed, failed and were skipped, next to t
 previous run of the same suite in the same worktree.
 
 ```
-Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   command status unknown   ▲3 ✗   1m12s   done 14:32  ✕
+Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   exit 65   ▲3 ✗   1m12s   done 14:32  ✕
 ```
 
 ## What the band shows
@@ -32,18 +32,25 @@ Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   command status
   `pytest`, `jest`, `vitest`, `bun test`, `npm|pnpm|yarn [run] test`, `cargo test`,
   `go test`, `fastlane scan|test`. `cat pytest.log` is not one.
 - It reads cartoon's test summary and raw xcodebuild, swift test, pytest,
-  jest/vitest and bun output. Impossible counts are invalid; repeated top-level
-  summaries or multiple formats are conflicting rather than silently choosing one.
+  jest/vitest and bun output. Impossible counts are invalid. Repeated summaries in
+  one format (a monorepo or multi-destination run) are summed, each one checked on
+  its own; summaries in two different formats are conflicting rather than silently
+  choosing one, and so are repeated bun counts. Summing has limits: echoed output
+  (`tee log; cat log`) counts twice, per-package prefixes (`pnpm -r`, turbo) are
+  not read, and a multi-destination xcodebuild run shows only its last destination.
   Nested XCTest totals and combined XCTest/Swift Testing runs remain supported.
 - A recognised test command whose output it cannot read shows `counts unavailable`.
 - Parsed counts never erase a tool error, interruption, or reported nonzero exit.
   `10 passed` followed by a failed build is still qualified as a `tool error` when
   the host reports one. Interrupted or explicitly truncated output is marked
   `output incomplete`.
-- The observed Bash response does not provide a structured exit code. A response
-  without a tool error is therefore `command status unknown`, not an invented
-  exit zero. Exit-code prose in output is not trusted. Older records' nonzero
-  codes are labeled `reported exit N`; their zero codes remain unknown.
+- The observed Bash response does not provide a structured exit code, so a response
+  without a tool error is never given an invented exit zero. Its status is unknown and
+  the line says nothing about it; only a tool error, an interruption, incomplete
+  output or an exit code is shown. For a failed call the host writes `Exit code N` as
+  the first line of the error text: that line is shown as `exit N`. Exit-code prose
+  anywhere later in the output is not trusted. Older records' nonzero codes are
+  labeled `reported exit N`.
 - It never blocks or changes a tool call, and makes no model calls.
 
 ## Install

@@ -3,7 +3,8 @@ import type { TestFailure, TestRun } from '../types'
 export type ParsedRun = Pick<TestRun,
   'total' | 'passed' | 'failed' | 'skipped' | 'durationS' | 'failures' | 'exitCode' | 'parsed' | 'commandStatus' | 'countsIssue' | 'outputIncomplete'>
 type Counts = Pick<ParsedRun, 'total' | 'passed' | 'failed' | 'skipped' | 'durationS' | 'failures'>
-type Reader = (text: string) => Counts | null
+// A reader that finds one summary per run returns them all; repeats of one format are summed (see `attempt`).
+type Reader = (text: string) => Counts | Counts[] | null
 
 // Anchored to the start of a command segment (optionally behind a runner prefix), so `cat pytest.log` is not a test run.
 const RUNNER_PREFIX = '(?:(?:python3?\\s+-m|npx|bunx|uv\\s+run|uv\\s+tool\\s+run|uvx|poetry\\s+run|pnpm\\s+exec|pnpm\\s+dlx|yarn)\\s+)*'
@@ -56,12 +57,16 @@ const readXcodebuild: Reader = text => {
 }
 
 const readSwiftTesting: Reader = text => {
-  const m = /Test run with (\d+) tests?(?: in \d+ suites?)? (passed|failed) after ([\d.]+) seconds/.exec(text)
-  if (!m) return null
-  const ids = [...text.matchAll(/✘ Test (\S+) failed after/g)].map(f => f[1] ?? '')
-  const total = Number(m[1])
-  const failed = m[2] === 'failed' ? Math.max(1, ids.length) : 0
-  return { total, failed, skipped: 0, passed: total - failed, durationS: Number(m[3]), failures: ids.map(id => ({ id })) }
+  const runs = [...text.matchAll(/Test run with (\d+) tests?(?: in \d+ suites?)? (passed|failed) after ([\d.]+) seconds/g)]
+  let from = 0
+  return runs.map((m, i) => {
+    // A run's failed tests are printed before its summary line; the last run also takes any recap after it.
+    const ids = [...text.slice(from, i === runs.length - 1 ? undefined : m.index).matchAll(/✘ Test (\S+) failed after/g)].map(f => f[1] ?? '')
+    from = m.index + m[0].length
+    const total = Number(m[1])
+    const failed = m[2] === 'failed' ? Math.max(1, ids.length) : 0
+    return { total, failed, skipped: 0, passed: total - failed, durationS: Number(m[3]), failures: ids.map(id => ({ id })) }
+  })
 }
 
 // Final pytest line: `=== 1 failed, 10 passed in 3.50s ===` (default) or bare `1 failed, 10 passed in 3.50s` (-q).
@@ -69,28 +74,28 @@ const PYTEST_SUMMARY = /^(?:=+ )?((?:\d+ (?:passed|failed|skipped|errors?|xfaile
 
 // `swift test` prints an XCTest summary (possibly "Executed 0 tests") and then a swift-testing run line.
 // Sum both when present; an empty XCTest run therefore never shadows swift-testing.
+// XCTest keeps only the last destination's total, so beside it swift-testing keeps only its last run too.
 const readSwiftPackage: Reader = text => {
-  const parts = [attempt(readXcodebuild, text), attempt(readSwiftTesting, text)].filter((c): c is Counts => c !== null)
+  const xctest = attempt(readXcodebuild, text)
+  const swiftRuns = readSwiftTesting(text)
+  const lastRun = Array.isArray(swiftRuns) ? swiftRuns.slice(-1) : swiftRuns
+  const swift = attempt(() => (xctest !== null && xctest.total > 0 ? lastRun : swiftRuns), text)
+  const parts = [xctest, swift].filter((c): c is Counts => c !== null)
   const live = parts.filter(c => c.total > 0)
   if (live.length === 0) return parts[0] ?? null
   if (live.length === 1) return live[0] ?? null
-  const sum = (pick: (c: Counts) => number) => live.reduce((acc, c) => acc + pick(c), 0)
-  const durationS = live.reduce<number | undefined>((acc, c) => (c.durationS === undefined ? acc : (acc ?? 0) + c.durationS), undefined)
-  return {
-    total: sum(c => c.total), passed: sum(c => c.passed), failed: sum(c => c.failed), skipped: sum(c => c.skipped),
-    ...(durationS === undefined ? {} : { durationS }), failures: live.flatMap(c => c.failures),
-  }
+  return sumCounts(live)
 }
 
 const readPytest: Reader = text => {
-  const m = lastMatch(PYTEST_SUMMARY, text)
-  if (!m?.[1]) return null
-  const counts = m[1]
-  const n = (word: RegExp) => [...counts.matchAll(word)].reduce((sum, p) => sum + Number(p[1]), 0)
-  const passed = n(/(\d+) passed/g); const skipped = n(/(\d+) skipped/g)
-  const failed = n(/(\d+) failed/g) + n(/(\d+) errors?/g)
   const ids = [...text.matchAll(/^FAILED (\S+)/gm)].map(f => ({ id: f[1] ?? '' }))
-  return { total: passed + failed + skipped, passed, failed, skipped, durationS: Number(m[2]), failures: ids }
+  return [...text.matchAll(PYTEST_SUMMARY)].map((m, i) => {
+    const n = (word: RegExp) => [...(m[1] ?? '').matchAll(word)].reduce((sum, p) => sum + Number(p[1]), 0)
+    const passed = n(/(\d+) passed/g); const skipped = n(/(\d+) skipped/g)
+    const failed = n(/(\d+) failed/g) + n(/(\d+) errors?/g)
+    // FAILED lines are not attributable to a summary: they ride on the first.
+    return { total: passed + failed + skipped, passed, failed, skipped, durationS: Number(m[2]), failures: i === 0 ? ids : [] }
+  })
 }
 
 function tokenCounts(list: string): { failed: number; skipped: number; passed: number; todo: number } {
@@ -98,18 +103,22 @@ function tokenCounts(list: string): { failed: number; skipped: number; passed: n
   return { failed: n('failed'), skipped: n('skipped'), passed: n('passed'), todo: n('todo') }
 }
 
-const readJest: Reader = text => {
-  const jest = /^\s*Tests:\s+(.+)$/m.exec(text)
-  const jestTotal = jest?.[1] ? /(\d+) total/.exec(jest[1]) : null
-  if (jest?.[1] && jestTotal) {
-    const t = tokenCounts(jest[1])
-    return { failed: t.failed, skipped: t.skipped + t.todo, passed: t.passed, total: Number(jestTotal[1]), failures: [] }
-  }
-  const vitest = /^\s*Tests\s+(.+?) \((\d+)\)\s*$/m.exec(text)
-  if (vitest?.[1]) {
-    const t = tokenCounts(vitest[1])
-    return { failed: t.failed, skipped: t.skipped + t.todo, passed: t.passed, total: Number(vitest[2]), failures: [] }
-  }
+const readJest: Reader = text =>
+  [...text.matchAll(/^\s*Tests:\s+(.+)$/gm)].flatMap(m => {
+    const total = /(\d+) total/.exec(m[1] ?? '')
+    if (!total) return []
+    const t = tokenCounts(m[1] ?? '')
+    return [{ failed: t.failed, skipped: t.skipped + t.todo, passed: t.passed, total: Number(total[1]), failures: [] }]
+  })
+
+const readVitest: Reader = text =>
+  [...text.matchAll(/^\s*Tests\s+(.+?) \((\d+)\)\s*$/gm)].map(m => {
+    const t = tokenCounts(m[1] ?? '')
+    return { failed: t.failed, skipped: t.skipped + t.todo, passed: t.passed, total: Number(m[2]), failures: [] }
+  })
+
+// bun prints bare `N pass` / `N fail` / `N skip` lines; repeats cannot be paired up, so they stay conflicting (see repeatedBun).
+const readBun: Reader = text => {
   const pass = /^\s*(\d+) pass\s*$/m.exec(text)
   if (!pass) return null
   const fail = Number(/^\s*(\d+) fail\s*$/m.exec(text)?.[1] ?? 0)
@@ -118,11 +127,23 @@ const readJest: Reader = text => {
   return { passed: Number(pass[1]), failed: fail, skipped: skip, total: Number(pass[1]) + fail + skip, failures: ids }
 }
 
-const RAW_READERS: Reader[] = [readSwiftPackage, readPytest, readJest]
+const RAW_READERS: Reader[] = [readSwiftPackage, readPytest, readJest, readVitest, readBun]
 
+function sumCounts(list: Counts[]): Counts {
+  const sum = (pick: (c: Counts) => number) => list.reduce((acc, c) => acc + pick(c), 0)
+  const durationS = list.reduce<number | undefined>((acc, c) => (c.durationS === undefined ? acc : (acc ?? 0) + c.durationS), undefined)
+  return {
+    total: sum(c => c.total), passed: sum(c => c.passed), failed: sum(c => c.failed), skipped: sum(c => c.skipped),
+    ...(durationS === undefined ? {} : { durationS }), failures: list.flatMap(c => c.failures),
+  }
+}
+
+// Repeats of one format are summed, but only if each is possible on its own: an invalid one is returned as it is.
 function attempt(reader: Reader, text: string): Counts | null {
   try {
-    return reader(text)
+    const found = reader(text)
+    if (!Array.isArray(found)) return found
+    return found.find(c => !validCounts(c)) ?? (found.length === 0 ? null : found.length === 1 ? found[0] ?? null : sumCounts(found))
   } catch {
     return null
   }
@@ -135,13 +156,11 @@ function validCounts(c: Counts): boolean {
     && (c.durationS === undefined || (Number.isFinite(c.durationS) && c.durationS >= 0))
 }
 
-// XCTest repeats nested suite totals; the other supported formats have one top-level summary.
-function repeatedSummary(text: string): boolean {
-  const patterns = [PYTEST_SUMMARY,
-    /^(?:[ \t]*Tests:[ \t]+.+|[ \t]*Tests[ \t]+.+? \(\d+\)[ \t]*|[ \t]*\d+ pass[ \t]*)\r?$/gm,
-    /^[ \t]*\d+ fail[ \t]*\r?$/gm, /^[ \t]*\d+ skip[ \t]*\r?$/gm,
-    /Test run with \d+ tests?(?: in \d+ suites?)? (?:passed|failed) after/g]
-  return patterns.some(re => [...text.matchAll(re)].length > 1)
+// bun's bare pass/fail/skip lines cannot be paired across repeats. The other formats sum their repeats
+// (XCTest repeats nested suite totals and keeps the last), so a monorepo run does not lose its counts.
+function repeatedBun(text: string): boolean {
+  return [/^[ \t]*\d+ pass[ \t]*\r?$/gm, /^[ \t]*\d+ fail[ \t]*\r?$/gm, /^[ \t]*\d+ skip[ \t]*\r?$/gm]
+    .some(re => [...text.matchAll(re)].length > 1)
 }
 
 export function parseTestOutput(input: {
@@ -157,7 +176,7 @@ export function parseTestOutput(input: {
   }
   const cartoonLines = [...input.text.matchAll(/^summary\{total,passed,failed,skipped,duration_s\}:/gm)].length
   if (!isTest && cartoonLines === 0) return null
-  if (cartoonLines > 1 || (isTest && repeatedSummary(input.text))) return { ...base, countsIssue: 'conflicting' }
+  if (cartoonLines > 1 || (isTest && repeatedBun(input.text))) return { ...base, countsIssue: 'conflicting' }
   const cartoon = cartoonLines === 0 ? null : attempt(readCartoon, input.text)
   if (cartoonLines === 1 && (cartoon === null || !validCounts(cartoon))) return { ...base, countsIssue: 'invalid' }
   const candidates = [cartoon, ...(isTest ? RAW_READERS.map(reader => attempt(reader, input.text)) : [])]
