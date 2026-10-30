@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import type { BuiltinToolResults, On } from 'claude-code'
 
 const ROOT = '/synthetic/repo'
@@ -19,24 +20,32 @@ const edited = () => ({ result: {
 function world(on: On, capture: () => unknown = () => SNAPSHOT, useMockClock = true) {
   const data = new Map<string, unknown>()
   const seen = new Map<string, unknown>()
+  const history = { unavailable: false, failedReads: 0 }
   const calls: { argv: readonly string[]; init?: { timeoutMs?: number } }[] = []
   const clock = useMockClock ? mock.clock(on, { now: 1_000_000 }) : undefined
   on('session.cwd', () => ({ value: ROOT }))
-  on('store.get', (_$, e) => ({ value: data.get(e.key) }))
+  on('store.get', (_$, e) => {
+    if (history.unavailable) {
+      history.failedReads += 1
+      throw new Error('synthetic unavailable history')
+    }
+    return { value: data.get(e.key) }
+  })
   on('store.set', (_$, e) => { data.set(e.key, e.value); return { value: undefined } })
   on('store.delete', (_$, e) => { data.delete(e.key); return { value: undefined } })
   on('store.keys', () => ({ value: [...data.keys()] }))
   on('state.set', (_$, e, next) => { seen.set(e.key, e.value); return next(e) })
+  on('ui.log', () => ({ value: undefined }))
   on('process.run', (_$, e) => {
     calls.push(e)
-    return { value: proc(e.argv[0] === 'git' ? `${ROOT}\n` : `${JSON.stringify(capture())}\n`) }
+    return { value: proc(e.argv[0] === 'git' ? `${e.init?.cwd ?? ROOT}\n` : `${JSON.stringify(capture())}\n`) }
   })
   on('prompt.submit', (_$, e) => ({ text: e.text }))
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
     const { Box } = $.ui.resolve(e)
     return <Box />
   })
-  return { data, seen, calls, clock }
+  return { data, seen, calls, clock, history }
 }
 
 const runs = (seen: Map<string, unknown>) => (seen.get('latest') ?? []) as {
@@ -157,6 +166,69 @@ test('restored history discards even a persisted matching label until a new chec
   expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
   await $.prompt.submit({ text: 'continue' } as never)
   expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('unknown')
+})
+
+test('reload clears a cached matching check even when history has disappeared', async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: 'Bash' }, passed)
+  on('session.start', () => ({ cwd: ROOT }))
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+  w.data.clear()
+  const captures = w.calls.length
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true } as never)
+  expect(runs(w.seen)).toHaveLength(1)
+  expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
+  expect(w.calls.length).toBe(captures)
+})
+
+test('reload clears cached checks before a failed history read', async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: 'Bash' }, passed)
+  on('session.start', () => ({ cwd: ROOT }))
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+  w.history.unavailable = true
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true } as never)
+  expect(w.history.failedReads).toBe(1)
+  expect(runs(w.seen)).toHaveLength(1)
+  expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
+})
+
+type SpawnArgs = Parameters<Engine['agent']['spawn']>[0]
+const spawnArgs = (cwd?: string): SpawnArgs => ({
+  tool_use_id: 'synthetic-spawn', prompt: 'synthetic task', description: 'synthetic-agent',
+  subagentType: 'general-purpose', ...(cwd === undefined ? {} : { cwd }),
+}) as SpawnArgs
+
+for (const registered of [false, true]) {
+  test(`an ${registered ? 'inherited-directory' : 'unrecognized'} agent cannot borrow the main loop source identity`, async ($, on) => {
+    const w = world(on)
+    on('tool.call', { tool: 'Bash' }, passed)
+    if (registered) {
+      on('agent.spawn', () => ({ model: 'sonnet', agentId: 'synthetic-agent' }))
+      await $.agent.spawn(spawnArgs())
+    }
+    await $.tool.call({ tool: 'Bash', command: 'pytest', agentId: 'synthetic-agent' } as never)
+    expect(runs(w.seen)).toHaveLength(1)
+    expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('unknown')
+    expect(w.calls.filter(c => c.argv[0] === 'python3')).toHaveLength(0)
+  })
+}
+
+test('an explicitly located agent captures its own worktree, not the main loop worktree', async ($, on) => {
+  const root = '/synthetic/agent'
+  const snapshot = { ...SNAPSHOT, root }
+  const w = world(on, () => snapshot)
+  on('tool.call', { tool: 'Bash' }, passed)
+  on('agent.spawn', () => ({ model: 'sonnet', agentId: 'synthetic-agent' }))
+  await $.agent.spawn(spawnArgs(root))
+  await $.tool.call({ tool: 'Bash', command: 'pytest', agentId: 'synthetic-agent' } as never)
+  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+  expect(runs(w.seen)[0]?.source).toEqual({ before: snapshot, after: snapshot })
+  const captures = w.calls.filter(c => c.argv[0] === 'python3')
+  expect(captures.length >= 2).toBe(true)
+  expect(captures.every(c => c.argv[c.argv.length - 1] === root)).toBe(true)
 })
 
 test('a denied call and a background command cannot mint source evidence', async ($, on) => {

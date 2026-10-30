@@ -259,8 +259,9 @@ export const register: Register = on => {
       if (e.tool === 'Bash') {
         try {
           startCwd = await $.session.cwd()
-          const base = (e.agentId === undefined ? undefined : state.loops.get(e.agentId)?.cwd) ?? startCwd
-          const cwd = sourceCwd(e.command, base)
+          // An unlocated agent must not borrow the main loop's source identity.
+          const base = e.agentId === undefined ? startCwd : state.loops.get(e.agentId)?.cwd
+          const cwd = base === undefined ? undefined : sourceCwd(e.command, base)
           if (cwd !== undefined && state.activeTools === 1) {
             root = await worktreeRoot($, state.roots, cwd)
             before = await captureSource($, root)
@@ -319,6 +320,8 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const result = next(e)
     try {
+      // Session atoms can survive reload even when history cannot be restored.
+      await invalidateSource($)
       const root = await worktreeRoot($, state.roots, e.cwd)
       const key = asKeys(await $.store.get('index')).find(k => k.startsWith(`${root}::`))
       const newest = key === undefined ? undefined : asRuns(await $.store.get(`runs:${key}`))[0]

@@ -68,8 +68,10 @@ Each run has a separate source line, kept visible on narrow terminals:
   A change during the run stays flagged even if the source later returns to its
   earlier state.
 - `unknown`: no complete supported comparison is available. Old runs without
-  source observations, overlapping tools, ambiguous shell context, missing tools,
-  unsupported files, and capture limits do not become matching.
+  source observations, overlapping tools, ambiguous shell context, unlocated
+  subagent directories, missing tools, unsupported files, and capture limits do
+  not become matching. Subagent capture requires an explicit spawn directory;
+  an inherited or unknown directory does not borrow the main session's identity.
 
 Before/after capture applies to recognized direct test commands with a statically
 located working directory, optionally preceded by a literal `cd ... &&`. Shell
@@ -78,7 +80,8 @@ still show their test results but have unknown source freshness. Tools invalidat
 the previous check before running. Checks run again after tool completion and at
 new prompt boundaries, not during rendering or on a filesystem-watcher timer.
 An edit made outside the session is only detected at the next check; the line
-explicitly says when that check occurred. A restored run starts unknown.
+explicitly says when that check occurred. A restored run starts unknown. Reload
+also clears cached checks when history is missing or cannot be read.
 
 The collector needs an existing `python3` and Git on a POSIX host. Nothing is
 installed automatically. It uses Python isolated mode and read-only, argv-based
