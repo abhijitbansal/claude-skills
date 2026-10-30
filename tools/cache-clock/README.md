@@ -123,9 +123,10 @@ cache-clock · Claude Sonnet 5.5
   `session.rpc.model.getCurrent()` lookup resolves the selection. Main-agent
   `session.model_change` and `session.model_deselected` events keep it current between
   lookups; a newer event wins over an older in-flight reply. Missing/failed lookups
-  leave the estimate unknown. Older hosts without the RPC can use explicit selection
-  from the session log's start/resume snapshots and model-change events; usage alone
-  is not treated as a selection.
+  keep the last known selection (only a reply or an event changes it), so a switch with
+  neither can leave a stale selection priced. Older hosts without the RPC can use
+  explicit selection from the session log's start/resume snapshots and model-change
+  events; usage alone is not treated as a selection.
 - **The guard.** `onUserPromptSubmitted` checks the selected model's clock. If the cache has
   expired and rewriting it would cost at least the threshold more than reading it, the
   hook asks with `session.ui.select` and waits for the answer. To stop the send it calls
@@ -149,9 +150,11 @@ cache-clock · Claude Sonnet 5.5
   right after every call.
 - **Resume.** `assistant.usage` is not replayed when you resume, so the extension seeds
   the clock from the session's own `~/.copilot/session-state/<id>/events.jsonl`.
-  Root turn/idle events and active/pending-work resume flags also restore the busy
+  An unfinished root turn (`assistant.turn_start` with no later `assistant.turn_end`
+  or `session.shutdown`) and the active/pending-work resume flags also restore the busy
   state, so joining a session already running work does not let the guard abort it.
-  A cold resume or a later root idle event clears historical busy state.
+  `session.idle` is never persisted, so the log alone ends a turn with `turn_end`. A cold
+  resume or a later root idle event clears historical busy state.
 
 ### What Copilot reported, measured on 11 October 2026
 
@@ -254,9 +257,14 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
   can only ping with `session.send`, which adds a user and an assistant turn to your
   conversation each time; the transcript-free fork lives on the server API, not the
   extension's session. Whether pings pay off depends on your own tax: run the report.
-- **Auto routes per prompt.** With `auto`, the next concrete model is unknown. Cache
-  Clock reports unknown and warns without holding the send, rather than pricing the
-  last model used. Provider/context-tier-qualified selections also remain unpriced:
+- **Auto routes per prompt.** Copilot reports each pick as `session.auto_mode_resolved`
+  (`chosenModel`). While the selection is `auto`, Cache Clock prices and guards the
+  next send as the last model Auto resolved to since you chose Auto, using that model's
+  observed prices; the next pick may differ. A pick made while a question is open does
+  not hold a "Send anyway". Before Auto has resolved a model, or when it resolved one
+  with no observed prices, the state is unknown: Cache Clock warns once each time you
+  choose Auto and does not hold the send. Provider/context-tier-qualified selections
+  also remain unpriced:
   usage records do not bind prices to that selection identity. Changing provider or
   context tier discards previous price estimates. Reports still group by model ID,
   not provider, and cannot fully attribute provider/configuration changes.
@@ -287,8 +295,8 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
   not atomic locks on routing. `session.error` and an abort request do not prove a turn
   ended; while attached, only a main-session idle event clears the busy flag. A host
   that omits it can leave the guard in warn-only behavior until a cold resume or
-  reattachment with recorded root idle evidence. Restoring busy state also depends on
-  readable history; incomplete host history can miss work that predates attachment.
+  reattachment, where a recorded root `turn_end` or `session.shutdown` clears it.
+  Restoring busy state also depends on readable history; incomplete host history can miss work that predates attachment.
 
 ## Tests
 

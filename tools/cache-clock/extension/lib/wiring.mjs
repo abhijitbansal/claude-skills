@@ -27,7 +27,7 @@ const readSessionLog = (session) => readFileSync(join(session.workspacePath, "ev
 // `assistant.usage` is ephemeral and not replayed on resume, and getEvents()
 // leaves out `session.usage_record`. The session's own events.jsonl keeps every
 // record with prices, so a resumed session starts with a known clock.
-function seed(clock, readHistory, session, select) {
+function seed(clock, readHistory, session, select, resolveAuto) {
   let text;
   try {
     text = readHistory(session);
@@ -49,7 +49,10 @@ function seed(clock, readHistory, session, select) {
       busy = event.data?.sessionWasActive === true || event.data?.continuePendingWork === true;
     }
     if (!event.agentId && event.type === "assistant.turn_start") busy = true;
-    if (!event.agentId && event.type === "session.idle") busy = false;
+    // `session.idle` is ephemeral and never persisted: a finished turn ends with
+    // `assistant.turn_end`, and a closed session with `session.shutdown`.
+    if (!event.agentId && (event.type === "session.idle" || event.type === "assistant.turn_end" || event.type === "session.shutdown")) busy = false;
+    if (!event.agentId && event.type === "session.auto_mode_resolved") resolveAuto(event.data);
     if (!event.agentId && event.type === "session.model_change") select(event.data);
     if (!event.agentId && event.type === "session.model_deselected") select(null);
     if (!event.agentId && event.type === "session.compaction_complete" && compacted(event)) clock.invalidate();
@@ -81,6 +84,7 @@ const OK = "OK";
 const QUESTION_TIMEOUT_MS = 5 * 60_000;
 const MODEL_LOOKUP_TIMEOUT_MS = 250;
 const UNASKED = Symbol("unasked");
+const FAILED = Symbol("failed");
 const EXPIRED = Symbol("expired");
 const EXPIRED_NOTE = "cache-clock: no answer in 5 minutes, so that send was held. Send it again to send it.";
 // VS Code cancels every extension question in autopilot mode; that arrives as a dismissal.
@@ -107,7 +111,7 @@ async function ask(session, timers, message, options) {
 
 export async function attach({ joinSession, now = Date.now, timers = globalThis, dir = configDir(), readHistory = readSessionLog, env = process.env }) {
   const clock = createClock();
-  const state = { session: null, refusedKey: null, busy: false, headsUpTimer: null, headsUpShown: null, pendingPrompt: null, selection: null, selectionRevision: 0 };
+  const state = { session: null, refusedKey: null, busy: false, headsUpTimer: null, headsUpShown: null, pendingPrompt: null, selection: null, selectionRevision: 0, autoModel: null, unknownWarnedFor: null };
   const vsCode = isVsCode(env);
   const say = (message, options) => quietly(() => state.session?.log(message, options));
   // In VS Code only error-level messages reach the chat.
@@ -118,8 +122,10 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
     if (vsCode && canAsk(state.session)) return quietly(() => ask(state.session, timers, message, [OK]));
     return say(message, vsCode ? { level: "error" } : options);
   };
-  const scheduleHeadsUp = () => headsUpScheduler({ state, clock, now, timers, dir, say });
-  const snapshot = () => clock.snapshot(now(), state.selection);
+  const scheduleHeadsUp = () => headsUpScheduler({ state, selection: effectiveSelection, clock, now, timers, dir, say });
+  // While the selection is Auto, the model Copilot last resolved it to stands in for it.
+  const effectiveSelection = () => state.selection?.modelId === "auto" && state.autoModel ? { ...state.selection, modelId: state.autoModel } : state.selection;
+  const snapshot = () => clock.snapshot(now(), effectiveSelection());
   const select = (raw, fromEvent = false) => {
     const next = raw && typeof (raw.modelId ?? raw.newModel) === "string" ? {
       modelId: raw.modelId ?? raw.newModel, providerId: raw.providerId ?? null,
@@ -128,7 +134,19 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
     if ((next?.providerId ?? null) !== (state.selection?.providerId ?? null) ||
         (next?.contextTier ?? null) !== (state.selection?.contextTier ?? null)) clock.invalidate({ forgetPrices: true });
     if (fromEvent || JSON.stringify(next) !== JSON.stringify(state.selection)) state.selectionRevision += 1;
+    // Entering Auto starts fresh: an earlier pick may be long out of date, and the warning may repeat.
+    if (next?.modelId === "auto" && state.selection?.modelId !== "auto") {
+      state.autoModel = null;
+      state.unknownWarnedFor = null;
+    }
     state.selection = next;
+  };
+  /** Records the model Auto chose; true when it differs from the last one. */
+  const resolveAuto = (data) => {
+    const chosen = typeof data?.chosenModel === "string" && data.chosenModel ? data.chosenModel : null;
+    if (!chosen || chosen === state.autoModel) return false;
+    state.autoModel = chosen;
+    return true;
   };
   let lookup = null;
   const refreshSelection = () => {
@@ -139,18 +157,23 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
     const revision = state.selectionRevision;
     lookup = (async () => {
       let timer;
-      let current = null;
+      let current = FAILED;
       try {
         current = await Promise.race([
           state.session.rpc.model.getCurrent(),
-          new Promise((resolve) => { timer = timers.setTimeout(() => resolve(null), MODEL_LOOKUP_TIMEOUT_MS); }),
+          new Promise((resolve) => {
+            timer = timers.setTimeout(() => resolve(FAILED), MODEL_LOOKUP_TIMEOUT_MS);
+            timer?.unref?.();
+          }),
         ]);
       } catch {
         // Unknown is advisory, never a reason to stop the user's prompt.
       } finally {
         timers.clearTimeout(timer);
       }
-      if (revision === state.selectionRevision) select(current);
+      // A lookup that failed or timed out says nothing about the selection: keep what is
+      // known, so it cannot read as a change. Only a reply or an event moves the selection.
+      if (current !== FAILED && current != null && revision === state.selectionRevision) select(current);
       scheduleHeadsUp();
     })().finally(() => { lookup = null; });
     return lookup;
@@ -183,6 +206,15 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
     }
   }
 
+  // Auto with no priced model to stand in for it cannot be guarded; say so once per selection.
+  const alreadyWarnedUnknown = (snap) => {
+    if (state.selection?.modelId !== "auto" || snap.extraUsd !== null) return false;
+    const key = JSON.stringify(state.selection);
+    if (state.unknownWarnedFor === key) return true;
+    state.unknownWarnedFor = key;
+    return false;
+  };
+
   async function checkPrompt(input) {
     let snap;
     let verdict;
@@ -195,7 +227,7 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
     } catch {
       return undefined; // never block the user's message on our own failure
     }
-    if (verdict.action === "warn") say(coldWarn(snap), warnLevel);
+    if (verdict.action === "warn" && !alreadyWarnedUnknown(snap)) say(coldWarn(snap), warnLevel);
     if (verdict.action !== "refuse") return undefined;
     state.refusedKey = verdict.key;
     quietly(() => saveRefusal(dir, state.session?.sessionId, verdict.key, now()));
@@ -224,7 +256,7 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
     hooks: { onUserPromptSubmitted: onPrompt },
   });
 
-  state.busy = seed(clock, readHistory, state.session, select);
+  state.busy = seed(clock, readHistory, state.session, select, resolveAuto);
   state.refusedKey = loadRefusal(dir, state.session.sessionId, now());
   scheduleHeadsUp();
 
@@ -236,6 +268,11 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
   state.session.on("session.model_deselected", (event) => {
     if (event.agentId) return;
     select(null, true);
+    scheduleHeadsUp();
+  });
+  state.session.on("session.auto_mode_resolved", (event) => {
+    // Not a selection change: Auto may resolve for the very send a question is open on.
+    if (event.agentId || !resolveAuto(event.data)) return;
     scheduleHeadsUp();
   });
   state.session.on("assistant.turn_start", (event) => {
@@ -262,11 +299,11 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
   return { session: state.session, clock };
 }
 
-function headsUpScheduler({ state, clock, now, timers, dir, say }) {
+function headsUpScheduler({ state, selection, clock, now, timers, dir, say }) {
   timers.clearTimeout(state.headsUpTimer);
   state.headsUpTimer = null;
   const config = loadConfig(dir);
-  const snap = clock.snapshot(now(), state.selection);
+  const snap = clock.snapshot(now(), selection());
   if (config.headsUpMin <= 0 || snap?.state !== "warm") return;
   const key = `${snap.model}@${snap.expiresAt}`;
   if (state.headsUpShown === key) return; // once per cache
@@ -274,7 +311,7 @@ function headsUpScheduler({ state, clock, now, timers, dir, say }) {
   const leadMs = Math.min(config.headsUpMin * 60_000, snap.ttlSec ? (snap.ttlSec * 1000) / HEADS_UP_TTL_SHARE : Infinity);
   state.headsUpTimer = timers.setTimeout(() => {
     state.headsUpTimer = null;
-    const live = clock.snapshot(now(), state.selection);
+    const live = clock.snapshot(now(), selection());
     // Mid-turn the next model call refreshes the cache on its own.
     if (state.busy || live?.state !== "warm" || live.extraUsd === null) return;
     if (live.extraUsd < loadConfig(dir).minUsd) return;

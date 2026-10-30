@@ -552,16 +552,34 @@ test("Auto and provider-qualified selections do not borrow unqualified prices", 
   }
 });
 
-test("failed model lookup is bounded and cannot reuse the old selected price", async () => {
+test("a failed model lookup is bounded and keeps the known selection and its guard", async () => {
   const h = await coldHost();
   h.session.rpc.model.getCurrent = () => new Promise(() => {});
   const pending = h.prompt("continue");
   await flush();
   h.advance(1000);
-  assert.equal(await pending, undefined);
-  assert.equal(h.aborts, 0);
-  assert.match(h.logs.at(-1).message, /selection.*unknown/i);
+  assert.deepEqual(await pending, { suppressOutput: true });
+  assert.equal(h.aborts, 1, "a lookup that never answers is not evidence the selection changed");
+  assert.match(h.logs.at(-1).message, /went cold/);
 });
+
+// A lookup that fails after the question was asked must not read as a selection change.
+for (const [name, fail] of [["hangs", () => new Promise(() => {})], ["throws", () => { throw new Error("rpc gone"); }]]) {
+  test(`Send anyway still sends when the post-answer model lookup ${name}`, async () => {
+    let release;
+    const h = fakeHost({ answer: () => new Promise((resolve) => { release = resolve; }) });
+    await goCold(h);
+    const pending = h.prompt("continue");
+    await flush();
+    h.session.rpc.model.getCurrent = fail;
+    release("Send anyway");
+    await flush();
+    h.advance(1000); // the bounded lookup gives up
+    assert.equal(await pending, undefined);
+    assert.equal(h.aborts, 0);
+    assert.equal(h.logs.length, 0, "no 'selection changed' hold");
+  });
+}
 
 test("a model-change event wins over an older in-flight RPC result", async () => {
   const h = await coldHost();
@@ -776,4 +794,129 @@ test("a repeated selection event still supersedes an in-flight RPC snapshot", as
   release({ modelId: "new-model" });
   assert.deepEqual(await pending, { suppressOutput: true });
   assert.match(h.logs.at(-1).message, /Claude Sonnet 5\.5/);
+});
+
+const AUTO_LUNA = { chosenModel: "gpt-6-luna", reasoningEffort: "medium" };
+
+test("Auto resolved to a priced model asks about a cold cache like any other selection", async () => {
+  const h = fakeHost({ answer: "Don't send" });
+  await h.start();
+  h.emit("assistant.usage", usage({ at: new Date(T0).toISOString(), ttl: 300, input: 2_000_000, read: 0, write: 2_000_000, output: 0 }));
+  h.selected = { modelId: "auto" };
+  h.emit("session.model_change", { newModel: "auto" });
+  h.emit("session.auto_mode_resolved", AUTO_LUNA);
+  h.advance(7 * MIN);
+  assert.deepEqual(await h.prompt("continue"), { suppressOutput: true });
+  assert.equal(h.asked.length, 1);
+  assert.match(h.asked[0].message, /GPT-6 Luna.*went cold/);
+  assert.equal(h.logs.length, 0, "no unknown-state warning");
+});
+
+test("Auto resolution seeded from history prices the cold send, and a sub-agent resolution is ignored", async () => {
+  const h = fakeHost({ answer: "Don't send" });
+  h.history = [
+    { type: "session.model_change", data: { newModel: "auto" } },
+    { type: "session.auto_mode_resolved", data: AUTO_LUNA },
+    { type: "session.auto_mode_resolved", agentId: "sub", data: { chosenModel: "claude-sonnet-5.5" } },
+    { type: "session.usage_record", timestamp: new Date(T0).toISOString(), data: { usage: usage({ at: new Date(T0).toISOString(), ttl: 300, input: 2_000_000, read: 0, write: 2_000_000, output: 0 }) } },
+  ].map(JSON.stringify).join("\n");
+  h.selected = { modelId: "auto" };
+  await h.start();
+  h.advance(7 * MIN);
+  await h.prompt("continue");
+  assert.equal(h.asked.length, 1);
+  assert.match(h.asked[0].message, /GPT-6 Luna/);
+});
+
+test("Auto that has not resolved warns once, not on every prompt", async () => {
+  const h = fakeHost();
+  await h.start();
+  h.emit("assistant.usage", sonnet({ at: new Date(T0).toISOString() }));
+  h.selected = { modelId: "auto" };
+  h.emit("session.model_change", { newModel: "auto" });
+  h.advance(7 * MIN);
+  assert.equal(await h.prompt("one"), undefined);
+  assert.equal(await h.prompt("two"), undefined);
+  assert.equal(h.aborts, 0);
+  assert.equal(h.logs.filter((l) => /Auto has not resolved/.test(l.message)).length, 1);
+});
+
+test("Auto resolved to an unpriced model falls back to the unknown-state warning, once", async () => {
+  const h = fakeHost();
+  await h.start();
+  h.emit("assistant.usage", sonnet({ at: new Date(T0).toISOString() }));
+  h.selected = { modelId: "auto" };
+  h.emit("session.model_change", { newModel: "auto" });
+  h.emit("session.auto_mode_resolved", { chosenModel: "never-seen-model" });
+  h.advance(7 * MIN);
+  await h.prompt("one");
+  await h.prompt("two");
+  assert.equal(h.aborts, 0);
+  assert.equal(h.logs.filter((l) => /unknown/.test(l.message)).length, 1);
+});
+
+test("a persisted turn that ended (turn_end, no session.idle) does not leave the guard busy", async () => {
+  const h = fakeHost({ answer: "Don't send" });
+  const at = new Date(T0).toISOString();
+  h.history = [
+    { type: "session.start", data: { selectedModel: "claude-sonnet-5.5" } },
+    { type: "session.model_change", data: { newModel: "claude-sonnet-5.5" } },
+    { type: "assistant.turn_start", data: {} },
+    { type: "session.usage_record", timestamp: at, data: { usage: sonnet({ at }) } },
+    { type: "assistant.turn_end", data: {} },
+  ].map(JSON.stringify).join("\n");
+  await h.start();
+  h.advance(7 * MIN);
+  assert.deepEqual(await h.prompt("continue"), { suppressOutput: true });
+  assert.equal(h.asked.length, 1);
+});
+
+test("a persisted session.shutdown clears busy state from an earlier unfinished turn", async () => {
+  const h = fakeHost({ answer: "Don't send" });
+  const at = new Date(T0).toISOString();
+  h.history = [
+    { type: "session.usage_record", timestamp: at, data: { usage: sonnet({ at }) } },
+    { type: "assistant.turn_start", data: {} },
+    { type: "session.shutdown", data: {} },
+  ].map(JSON.stringify).join("\n");
+  await h.start();
+  h.advance(7 * MIN);
+  assert.deepEqual(await h.prompt("continue"), { suppressOutput: true });
+});
+
+test("Auto resolving again while the question is open does not hold Send anyway", async () => {
+  let release;
+  const h = fakeHost({ answer: () => new Promise((resolve) => { release = resolve; }) });
+  await h.start();
+  h.emit("assistant.usage", usage({ at: new Date(T0).toISOString(), ttl: 300, input: 2_000_000, read: 0, write: 2_000_000, output: 0 }));
+  h.selected = { modelId: "auto" };
+  h.emit("session.model_change", { newModel: "auto" });
+  h.emit("session.auto_mode_resolved", AUTO_LUNA);
+  h.advance(7 * MIN);
+  const pending = h.prompt("continue");
+  await flush();
+  h.emit("session.auto_mode_resolved", { chosenModel: "claude-sonnet-5.5" }); // Auto picks for the pending send
+  release("Send anyway");
+  assert.equal(await pending, undefined);
+  assert.equal(h.aborts, 0);
+});
+
+test("returning to Auto forgets the old pick and warns again", async () => {
+  const h = fakeHost();
+  await h.start();
+  h.emit("assistant.usage", sonnet({ at: new Date(T0).toISOString() }));
+  const choose = (modelId) => { h.selected = { modelId }; h.emit("session.model_change", { newModel: modelId }); };
+  const unknownWarnings = () => h.logs.filter((l) => /Auto has not resolved/.test(l.message)).length;
+  choose("auto");
+  h.emit("session.auto_mode_resolved", { chosenModel: "claude-sonnet-5.5" });
+  await h.prompt("one");
+  assert.equal(unknownWarnings(), 0, "a priced pick is guarded normally");
+  choose("gpt-6-luna");
+  choose("auto");
+  await h.prompt("two");
+  assert.equal(unknownWarnings(), 1, "the earlier pick is not reused");
+  choose("claude-sonnet-5.5");
+  choose("auto");
+  await h.prompt("three");
+  assert.equal(unknownWarnings(), 2, "each return to Auto warns once");
 });
