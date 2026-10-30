@@ -61,12 +61,15 @@ export function sourceMatchForRun(source: unknown, current: unknown): SourceMatc
 
 /** Shell context we can locate without executing or interpreting shell expansions. */
 export function sourceCwd(command: string, base: string): string | undefined {
+  if (/[\0\r\n]/.test(command)) return undefined
   let rest = command.trim()
   let cwd = base
   const cd = /^cd\s+(?:"([^"\n]+)"|'([^'\n]+)'|([^\s]+))\s*&&\s*/.exec(rest)
   if (cd) {
     const dir = cd[1] ?? cd[2] ?? cd[3] ?? ''
-    if (!dir || /[~$`\\;|&<>\r\n]/.test(dir)) return undefined
+    // Bare names consult CDPATH even when quoted; `cd -` follows OLDPWD.
+    if (!/^(?:\/|\.\.?\/|\.\.?$)/.test(dir)
+      || /[\0~$`\\;|&<>\r\n*?\[\]{}]/.test(dir)) return undefined
     cwd = resolveDir(base, dir)
     rest = rest.slice(cd[0].length)
   }

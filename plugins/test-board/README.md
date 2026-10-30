@@ -74,8 +74,11 @@ Each run has a separate source line, kept visible on narrow terminals:
   an inherited or unknown directory does not borrow the main session's identity.
 
 Before/after capture applies to recognized direct test commands with a statically
-located working directory, optionally preceded by a literal `cd ... &&`. Shell
-expansions, compound commands, redirections, pipes, and quoted shell wrappers
+located working directory, optionally preceded by a literal `cd /absolute/path &&`
+or `cd ./relative/path &&` (`..` paths are also supported). Bare relative names
+such as `cd tests` can follow `CDPATH`, even when quoted; `cd -` follows `OLDPWD`.
+Those destinations remain unknown. Shell expansions (including path globs),
+compound commands, redirections, pipes, and quoted shell wrappers
 still show their test results but have unknown source freshness. Tools invalidate
 the previous check before running. Checks run again after tool completion and at
 new prompt boundaries, not during rendering or on a filesystem-watcher timer.
@@ -154,5 +157,5 @@ claude --plugin-dir plugins/test-board      # lays .claude-plugin/types (gitigno
 npx -y -p typescript@5.6.3 tsc -p plugins/test-board
 claude plugin validate plugins/test-board
 claude plugin test plugins/test-board
-python3 -B -m unittest discover -s tests/pytest -p test_source_snapshot.py -v
+python3 -B -m unittest discover -s tests/pytest -p 'test_source_*.py' -v
 ```

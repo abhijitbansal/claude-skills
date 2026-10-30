@@ -67,12 +67,29 @@ test('a run needs matching before and after observations as well as a current ma
 
 test('source cwd accepts only statically located direct test commands', () => {
   expect(sourceCwd('pytest -q', '/repo')).toBe('/repo')
-  expect(sourceCwd('cd tests && pytest -q', '/repo')).toBe('/repo/tests')
+  expect(sourceCwd('cd ./tests && pytest -q', '/repo')).toBe('/repo/tests')
+  expect(sourceCwd('cd ../tests && pytest -q', '/repo')).toBe('/tests')
+  expect(sourceCwd('cd . && pytest -q', '/repo')).toBe('/repo')
+  expect(sourceCwd('cd .. && pytest -q', '/repo')).toBe('/')
   expect(sourceCwd('cd "/repo with space" && pytest -q', '/repo')).toBe('/repo with space')
   for (const command of ['ls', 'cd absent; pytest', 'cd ~ && pytest', 'cd $ROOT && pytest',
     'cd $(pwd) && pytest', 'echo done && cd /other && pytest', 'pytest; cd /other; pytest',
     'pytest | tail -1', 'pytest &', 'pytest\necho done', 'pytest > result.txt',
     'cartoon -c "cd /other && pytest"', 'PYTHONPATH=$(helper) pytest']) {
+    expect(sourceCwd(command, '/repo')).toBeUndefined()
+  }
+})
+
+test('shell-dependent directory operands cannot supply a source identity', () => {
+  for (const dir of ['tests', 'tests/nested', '"tests"', "'tests'", '-', '"-"', '--',
+    './test*', './test?', './test[ab]', './{tests,other}', '/repo/test*']) {
+    expect(sourceCwd(`cd ${dir} && pytest -q`, '/repo')).toBeUndefined()
+  }
+})
+
+test('line breaks in a cd prefix cannot be consumed as shell whitespace', () => {
+  for (const command of ['cd\n/other && pytest', 'cd /other\n&& pytest',
+    'cd\r/other && pytest', 'cd /other &&\npytest']) {
     expect(sourceCwd(command, '/repo')).toBeUndefined()
   }
 })

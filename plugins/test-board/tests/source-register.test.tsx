@@ -119,6 +119,23 @@ test('ambiguous shell context does not gain source evidence', async ($, on) => {
   expect(w.calls.filter(c => c.argv[0] === 'python3')).toHaveLength(0)
 })
 
+for (const dir of ['tests', '"tests"', '-']) {
+  test(`shell-dependent cd ${dir} keeps test counts but never earns source matching`, async ($, on) => {
+    const w = world(on)
+    on('tool.call', { tool: 'Bash' }, passed)
+    const result = await $.tool.call({ tool: 'Bash', command: `cd ${dir} && pytest` })
+    expect(result.text).toBe('1 passed in 0.10s')
+    expect(runs(w.seen)[0]).toMatchObject({ passed: 1, sourceCheck: { status: 'unknown' } })
+    expect(w.calls.filter(c => c.argv[0] === 'python3')).toHaveLength(0)
+    await $.prompt.submit({ text: 'next' } as never)
+    expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('unknown')
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt',
+      props: { bodyColumns: 40, hasSurvey: false } as never })
+    expect(await ui.find({ text: /source unknown/ })).toBeDefined()
+    expect(w.calls.filter(c => c.argv[0] === 'python3')).toHaveLength(0)
+  })
+}
+
 test('outside edits are checked at prompt boundaries, not inside render', async ($, on) => {
   let current = SNAPSHOT
   const w = world(on, () => current)
