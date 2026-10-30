@@ -81,6 +81,7 @@ export function paneView({ Box, Text, Button }: Els, d: PaneData, act: PaneActio
     return <Box flexDirection="column">{tabs}<Text dimColor>No record for this session yet.</Text></Box>
   }
   const status = rec.statusAt === undefined ? 'status never set' : `status set ${ago(d.now, rec.statusAt)}`
+  const warnings = d.tests?.warnings ?? 0
   const kinds = KINDS.filter(k => rec.artifacts.some(a => a.kind === k))
   return (
     <Box flexDirection="column">
@@ -90,6 +91,7 @@ export function paneView({ Box, Text, Button }: Els, d: PaneData, act: PaneActio
       <Text>{`Now: ${rec.step ?? '-'} · Next: ${rec.next ?? '-'}`}</Text>
       <Text dimColor>{status}</Text>
       {d.tests !== undefined && <Text>{`Tests: ${d.tests.passed} ✓ ${d.tests.failed} ✗`}</Text>}
+      {warnings > 0 && <Text>{`Tests: ${warnings} warning${warnings === 1 ? '' : 's'}; see Test Board for details`}</Text>}
       {kinds.map(kind => (
         <Box key={`g-${kind}`} flexDirection="column">
           <Text bold>{KIND_LABEL[kind]}</Text>

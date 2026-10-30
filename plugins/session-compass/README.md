@@ -16,10 +16,15 @@ One line above the prompt: `repo · worktree (branch) · Goal · Now · N artifa
 - It is always up, from the moment the session starts, and updates as the goal, step
   and artifacts change. Only a survey on screen takes its place.
 - With no goal set, it shows your first prompt dimmed and `(no goal set)`.
-- `tests` appears when [test-board](../test-board) is installed and has parsed runs. It
+- `tests` appears when [test-board](../test-board) is installed and has recent runs. It
   clears when those runs leave test-board 60 minutes after they finished; closing the
   test-board band with `✕` leaves it up.
 - Narrow terminals drop the artifact count, then `tests`, then shorten the worktree path.
+- Runs with failures, unknown command status, unavailable/invalid/conflicting
+  counts, incomplete output, or restored history carry a warning. Counts are
+  summed separately; malformed counts do not contribute. The warning count is
+  placed first so dropping optional segments cannot hide it on narrow terminals.
+  The `/compass` pane also shows the warnings; Test Board provides the details.
 
 ### `/compass` pane
 

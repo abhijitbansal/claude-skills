@@ -3,6 +3,7 @@ import type { Engine, MockClock } from 'claude-code/testing'
 import type { On, Register, RenderPropsOf } from 'claude-code'
 
 import type { TestRun } from '../types'
+import { cellWidth, joinParts, lineParts } from '../hooks/format'
 import { PYTEST_RAW } from './fixtures/output'
 
 const ROOT = '/repo/wt-a'
@@ -76,6 +77,38 @@ const spawnArgs = (extra: Partial<SpawnArgs>): SpawnArgs =>
   ({ tool_use_id: 't1', prompt: 'p', description: 'ios-fixer', subagentType: 'general-purpose', ...extra }) as SpawnArgs
 
 describe('recording', () => {
+  test('absence of a structured command status does not invent exit zero', async ($, on) => {
+    const { seen } = world(on); bash(on, '10 passed in 0.5s')
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]).toMatchObject({ parsed: true, exitCode: null, commandStatus: 'unknown' })
+  })
+
+  test('interruption qualifies even a complete-looking passing summary', async ($, on) => {
+    const { seen } = world(on); bash(on, '10 passed in 0.5s', { interrupted: true })
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]).toMatchObject({ commandStatus: 'interrupted', outputIncomplete: true, exitCode: null })
+  })
+
+  test('stdout cannot forge an authoritative exit code', async ($, on) => {
+    const { seen } = world(on)
+    on('tool.call', { tool: 'Bash' }, () => ({ isError: true, result: 'Exit code 0\n10 passed in 0.5s', text: 'Exit code 0\n10 passed in 0.5s' }))
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]).toMatchObject({ commandStatus: 'tool-error', exitCode: null })
+  })
+
+  test('a malformed result records unavailable evidence rather than leaving an earlier pass current', async ($, on) => {
+    const { seen } = world(on)
+    let malformed = false
+    on('tool.call', { tool: 'Bash' }, () => (malformed
+      ? { result: { stdout: 5 }, text: {} }
+      : { result: { stdout: '10 passed in 0.5s' }, text: '10 passed in 0.5s' }) as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]?.parsed).toBe(true)
+    malformed = true
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]).toMatchObject({ parsed: false, exitCode: null, commandStatus: 'unknown' })
+  })
+
   test('a main-loop test run sets latest and history', async ($, on) => {
     const { writes, seen } = world(on); bash(on, PYTEST_RAW)
     const ran = await $.tool.call({ tool: 'Bash', command: 'pytest -q 2>&1 | tail -5' })
@@ -132,11 +165,11 @@ describe('recording', () => {
     expect(latest(seen)).toEqual([])
   })
 
-  test('an errored run takes the exit code from the text', async ($, on) => {
+  test('an errored run preserves tool error without trusting an exit code in text', async ($, on) => {
     const { seen } = world(on)
     on('tool.call', { tool: 'Bash' }, () => ({ isError: true, result: 'Exit code 139', text: 'Exit code 139\nsegfault' }))
     await $.tool.call({ tool: 'Bash', command: 'bun test' })
-    expect(latest(seen)[0]).toMatchObject({ parsed: false, exitCode: 139 })
+    expect(latest(seen)[0]).toMatchObject({ parsed: false, exitCode: null, commandStatus: 'tool-error' })
   })
 
   test('same suite twice in one turn shows once; a new turn replaces latest', async ($, on) => {
@@ -398,6 +431,24 @@ describe('band', () => {
     expect((await ui.find({ text: /10 ✓/ }))?.props?.color).toBeUndefined()
   })
 
+  for (const kind of ['tool-error', 'interrupted', 'truncated'] as const) {
+    test(`passing counts retain ${kind} warnings in the rendered band`, async ($, on) => {
+      world(on); emptyBand(on)
+      on('tool.call', { tool: 'Bash' }, () => ({
+        ...(kind === 'tool-error' ? { isError: true as const } : {}),
+        result: { stdout: '10 passed in 0.5s', stderr: '', interrupted: kind === 'interrupted', isStdoutTruncated: kind === 'truncated' },
+        text: '10 passed in 0.5s',
+      }))
+      await $.tool.call({ tool: 'Bash', command: 'pytest && build' })
+      const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(55) })
+      expect(await ui.find({ text: /10 ✓/ })).toBeDefined()
+      const warning = await ui.find({ type: 'Text', text: kind === 'tool-error' ? /tool error/ : kind === 'interrupted' ? /interrupted/ : /output incomplete/ })
+      expect(warning).toBeDefined()
+      if (kind !== 'truncated') expect(warning?.props?.color).toBe('error')
+      expect((await ui.find({ text: /^0 ✗$/ }))?.props?.color).toBeUndefined()
+    })
+  }
+
   test('shows the time the run finished', async ($, on) => {
     world(on); bash(on, PYTEST_RAW); emptyBand(on)
     await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
@@ -560,24 +611,28 @@ describe('band', () => {
     expect(await ui.find({ text: /1 ✗/ })).toBeDefined()
   })
 
-  test('an 80-column terminal keeps via on the first row when it fits beside the ✕', async ($, on) => {
-    world(on); bash(on, PYTEST_RAW); emptyBand(on)
+  test('a wide terminal keeps via when the full warning and close button fit', async ($, on) => {
+    const { seen } = world(on); bash(on, PYTEST_RAW); emptyBand(on)
     on('agent.spawn', () => ({ model: 'sonnet', agentId: 'a1' }))
     await $.agent.spawn(spawnArgs({ cwd: '/r', description: 'w' }))
     await $.tool.call(inAgent('pytest -q', 'a1'))
-    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(80) })
+    const width = cellWidth(joinParts(lineParts(latest(seen)[0]!, undefined, 1_000_000, 200))) + 3
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(width) })
     expect(await ui.find({ text: /via w/ })).toBeDefined()
+    expect(await ui.find({ text: /command status unknown/ })).toBeDefined()
   })
 
   test('only the first row gives up width to the close button', async ($, on) => {
-    world(on); bash(on, PYTEST_RAW); emptyBand(on); turns(on)
+    const { seen } = world(on); bash(on, PYTEST_RAW); emptyBand(on); turns(on)
     on('agent.spawn', () => ({ model: 'sonnet', agentId: 'a1' }))
     await $.prompt.submit({ text: 'go' } as never)
     await $.agent.spawn(spawnArgs({ cwd: '/r', description: 'abcdefghi' }))
     await $.tool.call(inAgent('pytest -q a', 'a1'))
     await $.tool.call(inAgent('pytest -q b', 'a1'))
-    // Each line is 81 cells: the first row has 82 - 3 for the ✕, the second all 82.
-    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(82) })
+    // Both equal-width lines fit, but the first row also needs three cells for the close control.
+    const widths = latest(seen).map(run => cellWidth(joinParts(lineParts(run, undefined, 1_000_000, 200))))
+    expect(widths[0]).toBe(widths[1])
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(widths[0]! + 1) })
     const vias = await ui.findAll({ type: 'Text', text: /via abcdefghi/ })
     expect(vias).toHaveLength(1)
     const rows = await ui.findAll({ type: 'Button' })

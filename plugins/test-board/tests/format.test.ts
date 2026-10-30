@@ -8,14 +8,14 @@ const T = new Date(2026, 9, 11, 14, 32).getTime()
 const mk = (extra: Partial<TestRun> = {}): TestRun => ({
   suite: 'xcodebuild test -scheme Cubby', key: '/p/Cubby::xcodebuild test -scheme Cubby',
   total: 417, passed: 412, failed: 3, skipped: 2, durationS: 72, failures: [], exitCode: 65,
-  at: T, parsed: true, via: 'ios-fixer', ...extra,
+  at: T, parsed: true, commandStatus: 'exited', via: 'ios-fixer', ...extra,
 })
-const prev = mk({ passed: 415, failed: 0, at: T - 2 * H, via: undefined })
+const prev = mk({ passed: 415, failed: 0, exitCode: 0, at: T - 2 * H, via: undefined })
 
 describe('lineParts', () => {
   test('full line matches the spec example', () => {
     expect(joinParts(lineParts(mk(), prev, T, 200))).toBe(
-      'Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   ▲3 ✗   1m12s   done 14:32   prev 415 ✓ 0 ✗ · 2h ago   via ios-fixer')
+      'Cubby · xcodebuild test -scheme Cubby   412 ✓  3 ✗  2 skip   exit 65   ▲3 ✗   1m12s   done 14:32   prev 415 ✓ 0 ✗ · 2h ago   via ios-fixer')
   })
   test('first run, falling failures', () => {
     expect(lineParts(mk(), undefined, T, 200).prev).toBe('first run')
@@ -23,7 +23,8 @@ describe('lineParts', () => {
   })
   test('unparsed run', () => {
     expect(lineParts(mk({ parsed: false, exitCode: 1, suite: 'bun test' }), undefined, 0, 200).counts)
-      .toBe('ran · exit 1 · counts unavailable')
+      .toBe('counts unavailable')
+    expect(lineParts(mk({ parsed: false, exitCode: 1 }), undefined, 0, 200).status).toBe('exit 1')
   })
   test('counts split around the failed segment, unparsed has no split', () => {
     const p = lineParts(mk(), undefined, T, 200)
@@ -37,15 +38,16 @@ describe('lineParts', () => {
     expect(joinParts(at79).length <= 79).toBe(true)
     const at60 = lineParts(mk(), prev, T, 60)
     expect([at60.via, at60.prev, at60.duration]).toEqual([undefined, undefined, undefined])
-    expect([at79.duration, at79.doneAt]).toEqual([undefined, 'done 14:32'])
+    expect([at79.duration, at79.doneAt]).toEqual([undefined, undefined])
+    expect(at79.status).toBe('exit 65')
     expect(at60.doneAt).toBeUndefined()
   })
   test('a reserve shrinks the fit budget but not the narrow-terminal gate', () => {
-    const short = mk({ key: '/p/r::t', suite: 't', via: 'a' })
+    const short = mk({ key: '/p/r::t', suite: 't', via: 'a', exitCode: 0 })
     const line = joinParts(lineParts(short, undefined, T, 200))
     expect(line.length <= 77).toBe(true)
     expect(lineParts(short, undefined, T, 80, 3).via).toBe('via a')
-    const long = mk({ key: '/p/r::t', suite: 't'.repeat(81 - line.length + 1), via: 'a' })
+    const long = mk({ key: '/p/r::t', suite: 't'.repeat(81 - line.length + 1), via: 'a', exitCode: 0 })
     expect(joinParts(lineParts(long, undefined, T, 200)).length).toBe(81)
     expect(lineParts(long, undefined, T, 81, 0).via).toBe('via a')
     expect(lineParts(long, undefined, T, 81, 1).via).toBeUndefined()

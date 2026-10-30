@@ -12,7 +12,7 @@ const run = (command: string, text: string, exitCode = 1) => parseTestOutput({ c
 describe('readers', () => {
   test('cartoon summary, any command', () => {
     expect(run('make check', CARTOON_PYTEST)).toEqual({
-      total: 13, passed: 10, failed: 2, skipped: 1, durationS: 3.21, exitCode: 1, parsed: true,
+      total: 13, passed: 10, failed: 2, skipped: 1, durationS: 3.21, exitCode: 1, commandStatus: 'exited', parsed: true,
       failures: [
         { id: 'tests/test_a.py::test_x', loc: 'tests/test_a.py:12' },
         { id: 'tests/test_b.py::test_y', loc: 'tests/test_b.py:40' },
@@ -21,7 +21,7 @@ describe('readers', () => {
   })
   test('xcodebuild uses the last Executed line and maps failure locations', () => {
     expect(run('xcodebuild test -scheme Cubby', XCODEBUILD_RAW)).toEqual({
-      total: 415, passed: 412, failed: 1, skipped: 2, durationS: 71.9, exitCode: 1, parsed: true,
+      total: 415, passed: 412, failed: 1, skipped: 2, durationS: 71.9, exitCode: 1, commandStatus: 'exited', parsed: true,
       failures: [{
         id: 'CubbyTests.ScanTests.testBarcode',
         loc: '/Users/x/Cubby/CubbyTests/ScanTests.swift:42',
@@ -90,7 +90,7 @@ describe('fix round 1', () => {
 describe('detection', () => {
   test('test command with unreadable output is parsed: false', () => {
     expect(run('bun test', 'segfault', 139)).toEqual({
-      total: 0, passed: 0, failed: 0, skipped: 0, failures: [], exitCode: 139, parsed: false,
+      total: 0, passed: 0, failed: 0, skipped: 0, failures: [], exitCode: 139, commandStatus: 'exited', parsed: false,
     })
   })
   test('non-test command is ignored', () => expect(run('ls', LS_OUTPUT, 0)).toBeNull())

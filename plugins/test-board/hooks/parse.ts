@@ -1,8 +1,8 @@
 import type { TestFailure, TestRun } from '../types'
 
 export type ParsedRun = Pick<TestRun,
-  'total' | 'passed' | 'failed' | 'skipped' | 'durationS' | 'failures' | 'exitCode' | 'parsed'>
-type Counts = Omit<ParsedRun, 'exitCode' | 'parsed'>
+  'total' | 'passed' | 'failed' | 'skipped' | 'durationS' | 'failures' | 'exitCode' | 'parsed' | 'commandStatus' | 'countsIssue' | 'outputIncomplete'>
+type Counts = Pick<ParsedRun, 'total' | 'passed' | 'failed' | 'skipped' | 'durationS' | 'failures'>
 type Reader = (text: string) => Counts | null
 
 // Anchored to the start of a command segment (optionally behind a runner prefix), so `cat pytest.log` is not a test run.
@@ -26,7 +26,7 @@ function unquote(cell: string): string {
 }
 
 const readCartoon: Reader = text => {
-  const m = /summary\{total,passed,failed,skipped,duration_s\}:\s*(\d+),(\d+),(\d+),(\d+),([\d.]+)/.exec(text)
+  const m = /^summary\{total,passed,failed,skipped,duration_s\}:[ \t]*(\d+),(\d+),(\d+),(\d+),([\d.]+)[ \t]*\r?$/m.exec(text)
   if (!m) return null
   const failures: TestFailure[] = []
   const block = /failures\[\d+\]\{id,loc,msg\}:\n((?:[ \t]+.*(?:\n|$))*)/.exec(text)
@@ -128,13 +128,41 @@ function attempt(reader: Reader, text: string): Counts | null {
   }
 }
 
-export function parseTestOutput(input: { command: string; text: string; exitCode: number }): ParsedRun | null {
+function validCounts(c: Counts): boolean {
+  return [c.total, c.passed, c.failed, c.skipped].every(n => Number.isSafeInteger(n) && n >= 0)
+    && Number.isSafeInteger(c.passed + c.failed + c.skipped)
+    && c.total === c.passed + c.failed + c.skipped
+    && (c.durationS === undefined || (Number.isFinite(c.durationS) && c.durationS >= 0))
+}
+
+// XCTest repeats nested suite totals; the other supported formats have one top-level summary.
+function repeatedSummary(text: string): boolean {
+  const patterns = [PYTEST_SUMMARY,
+    /^(?:[ \t]*Tests:[ \t]+.+|[ \t]*Tests[ \t]+.+? \(\d+\)[ \t]*|[ \t]*\d+ pass[ \t]*)\r?$/gm,
+    /^[ \t]*\d+ fail[ \t]*\r?$/gm, /^[ \t]*\d+ skip[ \t]*\r?$/gm,
+    /Test run with \d+ tests?(?: in \d+ suites?)? (?:passed|failed) after/g]
+  return patterns.some(re => [...text.matchAll(re)].length > 1)
+}
+
+export function parseTestOutput(input: {
+  command: string; text: string; exitCode: number | null
+  commandStatus?: TestRun['commandStatus']; outputIncomplete?: boolean
+}): ParsedRun | null {
   const isTest = isTestCommand(input.command)
-  const readers = isTest ? [readCartoon, ...RAW_READERS] : [readCartoon]
-  for (const reader of readers) {
-    const counts = attempt(reader, input.text)
-    if (counts) return { ...counts, exitCode: input.exitCode, parsed: true }
+  const exitCode = Number.isSafeInteger(input.exitCode) ? input.exitCode : null
+  const base: ParsedRun = {
+    total: 0, passed: 0, failed: 0, skipped: 0, failures: [], exitCode, parsed: false,
+    commandStatus: input.commandStatus ?? (exitCode === null ? 'unknown' : 'exited'),
+    ...(input.outputIncomplete ? { outputIncomplete: true } : {}),
   }
-  if (!isTest) return null
-  return { total: 0, passed: 0, failed: 0, skipped: 0, failures: [], exitCode: input.exitCode, parsed: false }
+  const cartoonLines = [...input.text.matchAll(/^summary\{total,passed,failed,skipped,duration_s\}:/gm)].length
+  if (!isTest && cartoonLines === 0) return null
+  if (cartoonLines > 1 || (isTest && repeatedSummary(input.text))) return { ...base, countsIssue: 'conflicting' }
+  const cartoon = cartoonLines === 0 ? null : attempt(readCartoon, input.text)
+  if (cartoonLines === 1 && (cartoon === null || !validCounts(cartoon))) return { ...base, countsIssue: 'invalid' }
+  const candidates = [cartoon, ...(isTest ? RAW_READERS.map(reader => attempt(reader, input.text)) : [])]
+    .filter((c): c is Counts => c !== null)
+  if (candidates.some(c => !validCounts(c))) return { ...base, countsIssue: 'invalid' }
+  if (candidates.length > 1) return { ...base, countsIssue: 'conflicting' }
+  return candidates[0] === undefined ? base : { ...base, ...candidates[0], parsed: true }
 }
