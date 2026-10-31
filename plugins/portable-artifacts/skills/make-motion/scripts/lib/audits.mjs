@@ -36,7 +36,7 @@ export const TEXT_FLOOR_PX = 28; // at 1080 on the short side
 export const TEXT_FLOOR_SECONDS = 0.5;
 const REFERENCE_SIDE = 1080;
 const EPSILON = 1e-6;
-const BISECT_SECONDS = 0.01; // how closely the reading floor places the edge of a span it has to measure
+const BISECT_SECONDS = 0.002; // how closely the reading floor places an edge of a span it has to measure; its midpoint is the estimate
 const CELL_COLUMNS = 4; // a text box is split into up to this many columns x CELL_ROWS rows for the contrast audit
 const CELL_ROWS = 2;
 const MIN_CELL_PX = 24; // ... and no cell is narrower or shorter than this, so a small box has fewer
@@ -99,6 +99,9 @@ export function nearestToken(cells, need, colors, opacity = 1) {
     && backdrops.every((cell) => contrastRatio(mixHex(colors[token], cell, opacity), cell) >= need)) ?? null;
 }
 
+/** The advice when no theme colour passes over every cell of a backdrop. */
+export const NO_PASSING_COLOUR = 'no single colour passes over this background; add a backing card (fill "surface") or move the text';
+
 // A ratio as shown: cut, never rounded up, so a failing 4.46 never reads "4.5:1; needs 4.5:1".
 const ratioText = (ratio) => `${(Math.floor(ratio * 10 + EPSILON) / 10).toFixed(1)}:1`;
 
@@ -130,7 +133,7 @@ export function contrastFindings(items, samples, colors, size) {
     if (!run) return;
     const { t, worst, need, cells, opacity } = fails[run[0]];
     const token = nearestToken(cells, need, colors, opacity);
-    const fix = token ? `nearest passing token: ${token}` : 'no single colour passes over this background; add a backing card (fill "surface") or move the text';
+    const fix = token ? `nearest passing token: ${token}` : NO_PASSING_COLOUR;
     const message = `${el.type} "${el.id}" has ${ratioText(worst)} contrast against its backdrop at ${seconds(t)}; needs ${need}:1; ${fix}`;
     (run[1] > run[0] ? found.problems : found.warnings).push({ path, message });
   });
@@ -232,13 +235,14 @@ function spanOf(own, first, last, duration) {
   };
 }
 
-// Is the span at least `threshold` seconds, to within BISECT_SECONDS? { seconds, ok }. Settled from the grid when it can
-// be; otherwise the two edges are measured with `isShown(localSecond)`. Without it a span the grid cannot place is ok.
+// Is the span at least `threshold` seconds? { seconds, ok }. Settled from the grid when it can be; otherwise the two
+// edges are measured with `isShown(localSecond)` (each to within BISECT_SECONDS, so the measure is good to a few
+// thousandths of a second and the threshold stays exactly as given). Without it a span the grid cannot place is ok.
 async function judgeSpan(span, own, duration, threshold, isShown) {
-  if (span.upper < threshold - BISECT_SECONDS) return { seconds: span.sampled, ok: false };
+  if (span.upper < threshold) return { seconds: span.sampled, ok: false };
   if (span.lower >= threshold || !isShown) return { seconds: span.sampled, ok: true };
   span.exact ??= await measuredSeconds(span, own, duration, isShown);
-  return { seconds: span.exact, ok: span.exact >= threshold - BISECT_SECONDS };
+  return { seconds: span.exact, ok: span.exact >= threshold };
 }
 
 async function measuredSeconds(span, own, duration, isShown) {
@@ -343,21 +347,29 @@ export function stillStretches(spec, steps, { tailExempt = TAIL_EXEMPT_SECONDS, 
   return found;
 }
 
-// `shape "id"` reads as its kind (rect, ellipse, line), the rest as their type.
-const labelOf = ({ el }) => `${el.type === 'shape' ? el.shape ?? 'shape' : el.type} "${el.id}"`;
+// What to call an item in advice about `hold`: `shape "id"` reads as its kind (rect, ellipse, line), the rest as their
+// type; a part of a block is its block (`hold` goes on the block, not on a part), named by `blockIds`, the ids of the
+// scene's blocks as written.
+function labelOf({ el, chain }, blockIds) {
+  const block = blockIds?.has(chain?.[0]?.id) ? chain[0] : null;
+  if (block) return `block "${block.id}"`;
+  return `${el.type === 'shape' ? el.shape ?? 'shape' : el.type} "${el.id}"`;
+}
 
 /**
  * The dead stretches of the default call (final 3 s and `hold` elements exempt), as problems on the scene they sit in.
- * `itemsOf[i]` are scene i's items: the message names the shown elements of the stretch that lack `hold`.
+ * `itemsOf[i]` are scene i's items: the message names the shown elements of the stretch that lack `hold`, a block once
+ * rather than its parts (`blocksOf[i]`: the ids of the blocks written in scene i).
  */
-export function deadStretchProblems(spec, steps, itemsOf = []) {
+export function deadStretchProblems(spec, steps, itemsOf = [], blocksOf = []) {
   const starts = spec.scenes.map((_, i) => spec.scenes.slice(0, i).reduce((n, scene) => n + scene.duration, 0));
   return stillStretches(spec, steps).map(({ from, to }) => {
     const scene = starts.findLastIndex((start) => start <= from + EPSILON);
     const inside = steps.filter((s) => s.scene === scene && s.t >= from - EPSILON && s.t <= to + EPSILON);
     const lacking = [...new Set(inside.flatMap((s) => s.els.flatMap((m, j) => (m.shown && !m.hold && itemsOf[scene]?.[j] ? [j] : []))))].sort((a, b) => a - b);
-    const named = lacking.slice(0, MAX_NAMED).map((j) => labelOf(itemsOf[scene][j])).join(', ') + (lacking.length > MAX_NAMED ? `, and ${lacking.length - MAX_NAMED} more` : '');
-    const advice = lacking.length ? `add motion, or set "hold": true on ${named} if ${lacking.length === 1 ? 'it is' : 'they are'} meant to sit still` : 'add motion';
+    const labels = [...new Set(lacking.map((j) => labelOf(itemsOf[scene][j], blocksOf[scene])))];
+    const named = labels.slice(0, MAX_NAMED).join(', ') + (labels.length > MAX_NAMED ? `, and ${labels.length - MAX_NAMED} more` : '');
+    const advice = labels.length ? `add motion, or set "hold": true on ${named} if ${labels.length === 1 ? 'it is' : 'they are'} meant to sit still` : 'add motion';
     return { path: `scenes[${scene}]`, message: `nothing changes from ${seconds(from)} to ${seconds(to)} (${(to - from).toFixed(1)}s); ${advice}` };
   });
 }

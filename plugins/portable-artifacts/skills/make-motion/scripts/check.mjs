@@ -42,7 +42,7 @@ import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
 import { specHasVideo, prepareVideo } from './lib/video.mjs';
 import { themeData } from './lib/theme.mjs';
 import {
-  CHECKED_TYPES, tweenSpans, inTween, auditTimes, backdropColors, contrastFindings, textFloorFindings, readingFloorFindings, deadStretchProblems,
+  CHECKED_TYPES, NO_PASSING_COLOUR, tweenSpans, inTween, auditTimes, backdropColors, contrastFindings, textFloorFindings, readingFloorFindings, deadStretchProblems,
 } from './lib/audits.mjs';
 
 const USAGE = 'node scripts/check.mjs <motion.json> [--json] [--theme <name>]';
@@ -356,7 +356,7 @@ export async function waitReady(page, ms = READY_MS) {
 
 // `prepare(page)`: an optional hook run once the page is ready and before any sampling (tests use it to undo the
 // renderer's U+00A0 binding, so the wrap rule can be shown firing through the real sampling, report and exit code).
-async function inspect(browser, spec, server, prepare) {
+async function inspect(browser, spec, server, prepare, written) {
   const page = await browser.newPage({ viewport: { width: spec.size[0], height: spec.size[1] }, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => process.stderr.write(`page error: ${e.message}\n`));
   await guardNetwork(page, new URL(server.url).origin, (url) => process.stderr.write(`blocked network request: ${url}\n`));
@@ -367,6 +367,7 @@ async function inspect(browser, spec, server, prepare) {
   const insets = safeInsets(spec.size);
   const problems = [];
   const itemsOf = spec.scenes.map(sceneItems); // the non-group elements of each scene, indexed as the page measures them
+  const blocksOf = written.scenes.map((scene) => new Set((scene.elements ?? []).filter(isBlock).map((el) => el.id))); // `hold` goes on these, not on their parts
   const warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], await measureAt(page, 0, 0), spec.size);
   const zone = spec.captions.length ? captionZone(spec.size, spec.format) : null; // the caption rules need captions
   const captionTimes = zone ? await page.evaluate(() => window.__motion.captionMoments.map((m) => m.t)) : [];
@@ -390,7 +391,7 @@ async function inspect(browser, spec, server, prepare) {
   }
   const probe = async (i, j, local) => isShown((await measureAt(page, starts[i] + local, i))[j], spec.size); // the reading floor places a span's edges with these
   const reading = await readingFloorFindings(spec, itemsOf, steps, probe);
-  problems.push(...reading.problems, ...deadStretchProblems(spec, steps, itemsOf));
+  problems.push(...reading.problems, ...deadStretchProblems(spec, steps, itemsOf, blocksOf));
   if (zone) problems.push(...await captionLayerProblems(page, zone));
   for (const fade of await page.evaluate(() => window.__motion.crossfades)) warnings.push(...await crossfadeWarnings(page, spec, itemsOf, fade, spec.size));
   return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings, info: reading.info };
@@ -402,7 +403,7 @@ async function prepareFrames(specPath, spec) {
   return prepareVideo(spec, path.dirname(specPath), ffmpeg, findFfprobe({ ffmpeg }), spec.fps);
 }
 
-async function checkSpec(specPath, spec, { env, theme, prepare }) {
+async function checkSpec(specPath, spec, { env, theme, prepare, written }) {
   if (env.PA_NO_BROWSER === '1') return { status: 'skipped', reason: 'PA_NO_BROWSER=1' };
   let browser;
   try {
@@ -415,7 +416,7 @@ async function checkSpec(specPath, spec, { env, theme, prepare }) {
     // The render page draws a video element from its decoded frames, so they are prepared as render.mjs prepares them.
     const videoFrames = specHasVideo(spec) ? await prepareFrames(specPath, spec) : {};
     server = await startServer({ specPath, mode: 'render', theme, videoFrames });
-    return await inspect(browser, spec, server, prepare);
+    return await inspect(browser, spec, server, prepare, written);
   } finally {
     await browser.close().catch(() => {});
     await server?.close();
@@ -431,15 +432,20 @@ export function atBlockParts(written, spec, findings) {
     if (!isBlock(el)) return finding;
     const part = spec.scenes[m[1]].elements[m[2]].children[m[3]].id.slice(el.id.length + 1);
     const hint = blockHint(finding.message, paramOfPart(el.block, part));
-    return { path: `scenes[${m[1]}].elements[${m[2]}]`, message: `${finding.message} (block ${JSON.stringify(el.block)}, part ${JSON.stringify(part)})${hint ? `; ${hint}` : ''}` };
+    const said = finding.message.replace(NO_PASSING_COLOUR, NO_PASSING_IN_BLOCK); // block terms, in place of the generic advice
+    return { path: `scenes[${m[1]}].elements[${m[2]}]`, message: `${said} (block ${JSON.stringify(el.block)}, part ${JSON.stringify(part)})${hint ? `; ${hint}` : ''}` };
   });
 }
 
+const NO_PASSING_IN_BLOCK = 'no theme colour passes over this background; change "theme" or the scene background';
+
 // What to change for a finding about a block part, matched to the finding; null when its message already says it (the
-// caption-zone rule says to move it above the zone, the crossfade warning to move one or let the other exit).
+// caption-zone rule says to move it above the zone, the crossfade warning to move one or let the other exit, the contrast
+// finding that nothing passes is reworded in atBlockParts).
 function blockHint(message, param) {
   const shorten = param ? ` or shorten params.${param}` : '';
   if (message.includes(' sits in the caption zone ') || message.includes(' during the crossfade')) return null;
+  if (message.includes(NO_PASSING_COLOUR)) return null;
   if (message.includes(' contrast against its backdrop ')) return 'blocks use theme colours; change "theme" or the scene background';
   if (/ is \d+px \(below /.test(message)) return 'raise the block\'s "scale" or use a larger format';
   if (message.includes(' shows for ')) return `lengthen the scene${shorten}`;
@@ -491,7 +497,7 @@ export async function main(argv, { prepare } = {}) {
     }
     // The theme the page draws decides the title presets (and so the settle times): the spec's own, else --theme.
     const spec = withDefaults(raw.theme === undefined && values.theme !== undefined ? { ...raw, theme: values.theme } : raw);
-    const checked = await checkSpec(path.resolve(positionals[0]), spec, { env: process.env, theme: values.theme, prepare });
+    const checked = await checkSpec(path.resolve(positionals[0]), spec, { env: process.env, theme: values.theme, prepare, written: raw });
     const result = { ...checked, ...(checked.problems && { problems: atBlockParts(raw, spec, checked.problems) }), ...(checked.warnings && { warnings: atBlockParts(raw, spec, checked.warnings) }), ...(checked.info && { info: atBlockParts(raw, spec, checked.info) }) };
     report(result, json);
     return result.status === 'failed' ? 1 : 0;

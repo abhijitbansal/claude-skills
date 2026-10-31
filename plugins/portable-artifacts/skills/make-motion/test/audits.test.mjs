@@ -183,6 +183,13 @@ test('readingFloorFindings: edges at 0.999/2.251 and at 1.0/2.249 get the same v
   assert.equal((await flagged(1, 2.45)).length, 1, 'shown 1.45 s is not');
 });
 
+test('readingFloorFindings: the slack is exactly one step: 0.005 s either side of need - 0.25 s decides', async () => {
+  // Six words need 1.725 s, so the line is 1.475 s; the edges (1.1 and 1.1 + shown) fall between grid steps and are measured.
+  const flagged = async (shown) => (await reading(oneScene, sixWords, (t) => [measured({ shown: t >= 1.1 && t < 1.1 + shown })])).problems.length;
+  assert.equal(await flagged(1.48), 0, '1.48 s is 0.245 s short: within a step');
+  assert.equal(await flagged(1.47), 1, '1.47 s is 0.255 s short: more than a step (the old 0.26 s slack let it pass)');
+});
+
 test('readingFloorFindings: the formula is the error rule for the last line too; a last line under 2 s that clears it is info', async () => {
   const long = [[item('text', 'last', { text: Array.from({ length: 20 }, (_, n) => `w${n}`).join(' ') })]]; // 4.875 s
   const lastFrom = (items, from) => reading(oneScene, items, (t) => [measured({ shown: t >= from })]);
@@ -245,6 +252,17 @@ test('deadStretchProblems: the message names the shown elements that lack hold, 
   const steps = grid(12, (t) => [measured({ sig: t < 4 ? `m${t}` : 'a' }), measured({ sig: 'p' }), measured({ sig: 'k', hold: true }), measured({ sig: t < 5 ? 'x' : 'y', shown: false })]);
   const [problem] = deadStretchProblems(spec, steps, items);
   assert.equal(problem.message, 'nothing changes from 4.00s to 9.00s (5.0s); add motion, or set "hold": true on text "a", rect "panel" if they are meant to sit still');
+});
+
+test('deadStretchProblems: block parts are named as their block, once; a plain group child keeps its own name', () => {
+  const spec = { scenes: [{ id: 's', duration: 12 }] };
+  const part = (id) => ({ ...item('text', id), chain: [{ id: 'lt', keyframes: [] }] });
+  const items = [[part('lt/card'), part('lt/name'), part('lt/role'), item('text', 'note')]];
+  const steps = grid(12, (t) => [0, 1, 2, 3].map((j) => measured({ sig: j === 0 && t < 4 ? `m${t}` : `s${j}` })));
+  const [problem] = deadStretchProblems(spec, steps, items, [new Set(['lt'])]);
+  assert.equal(problem.message, 'nothing changes from 4.00s to 9.00s (5.0s); add motion, or set "hold": true on block "lt", text "note" if they are meant to sit still');
+  const [plain] = deadStretchProblems(spec, steps, items);
+  assert.match(plain.message, /on text "lt\/card", text "lt\/name", text "lt\/role", text "note" if they are/, 'without the written spec the ids are all there is');
 });
 
 test('stillStretches: only shown elements count: an invisible or off-canvas element that changes does not mask a stretch, and showing one is a change', () => {
@@ -406,6 +424,17 @@ test('dead stretch: a static title beside an invisible drifting rect, or one dri
   assert.deepEqual(lines(offCanvas.stdout), [stretch, 'check: 1 problem']);
 });
 
+test('dead stretch: a static lower-third block is named as the block, and hold on the block clears it', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const spec = (hold) => ({ scenes: [{ id: 's', duration: 8, elements: [{ id: 'lt', type: 'block', block: 'lower-third', x: 100, y: 818, ...(hold ? { hold: true } : {}), params: { name: 'Ada Lovelace', role: 'Head of Research' } }] }] });
+  const r = check([writeSpec(spec(false))]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(lines(r.stdout)[0], /^scenes\[0\]: nothing changes from \d\.\d\ds to 5\.00s \(\d\.\ds\); add motion, or set "hold": true on block "lt" if it is meant to sit still$/);
+  assert.doesNotMatch(r.stdout, /lt\//, 'no part id is mentioned: hold goes on the block');
+  const held = check([writeSpec(spec(true))]);
+  assert.equal(held.status, 0, held.stdout + held.stderr);
+});
+
 test('dead stretch: one in the second scene is reported on that scene, from the cut', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const moving = { id: 'mover', type: 'text', text: 'Moving along', x: 300, y: 540, fontSize: 64, keyframes: [{ t: 0, x: 300 }, { t: 2.9, x: 900 }] };
@@ -504,6 +533,11 @@ test('a finding inside a block names the block, the part and what to change, mat
   });
   assert.equal(hint('text "lt/name" is 20px (below 28px at 1080); shown 1.00s').message, 'text "lt/name" is 20px (below 28px at 1080); shown 1.00s (block "lower-third", part "name"); raise the block\'s "scale" or use a larger format');
   assert.equal(hint('text "lt/name" (2 words) shows for 0.50s; needs 1.05s').message, 'text "lt/name" (2 words) shows for 0.50s; needs 1.05s (block "lower-third", part "name"); lengthen the scene or shorten params.name');
+  assert.equal(
+    hint('text "lt/name" has 1.0:1 contrast against its backdrop at 0.10s; needs 3:1; no single colour passes over this background; add a backing card (fill "surface") or move the text').message,
+    'text "lt/name" has 1.0:1 contrast against its backdrop at 0.10s; needs 3:1; no theme colour passes over this background; change "theme" or the scene background (block "lower-third", part "name")',
+    'one piece of advice, in block terms',
+  );
   const card = atBlockParts(written, spec, [{ path: 'scenes[0].elements[0].children[0]', message: 'text "lt/card" has 2.0:1 contrast against its backdrop at 0.10s; needs 3:1; nearest passing token: text' }])[0];
   assert.match(card.message, /; blocks use theme colours; change "theme" or the scene background$/, 'the lever is the same for a part that no param sets');
 });
