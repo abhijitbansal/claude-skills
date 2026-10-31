@@ -504,7 +504,12 @@ test('preview mode serves the clip under /assets with byte ranges and the render
     const frame = await fetch(new URL(`/frames/${key}/000001.jpg`, render.url));
     assert.equal(frame.status, 200);
     assert.equal(frame.headers.get('content-type'), 'image/jpeg');
-    assert.equal((await fetch(new URL(`/frames/${'0'.repeat(64)}/000001.jpg`, render.url))).status, 404);
+    assert.equal(frame.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(frame.headers.get('content-security-policy'), "default-src 'none'");
+    const missing = await fetch(new URL(`/frames/${'0'.repeat(64)}/000001.jpg`, render.url));
+    assert.equal(missing.status, 404);
+    assert.equal(missing.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(missing.headers.get('content-security-policy'), "default-src 'none'");
     assert.equal((await fetch(new URL(`/frames/${key}/done.json`, render.url))).status, 404);
     assert.equal((await fetch(new URL(`/frames/${key}/999999.jpg`, render.url))).status, 404);
     assert.equal((await fetch(new URL(`/frames/${key}/000001.png`, render.url))).status, 404, 'only the extension the key was decoded to');

@@ -122,6 +122,26 @@ test('/assets honours a byte Range request so the browser can seek audio', () =>
   assert.equal(page.headers['accept-ranges'], undefined, 'only /assets advertises byte ranges');
 }));
 
+const LOCKED_DOWN = { 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'" };
+
+test('every /assets response carries nosniff and a CSP of default-src none, so an opened .svg cannot run script', () => withServer(async (srv, f) => {
+  writeFileSync(path.join(f.dir, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+  writeFileSync(path.join(f.dir, 'r.wav'), '0123456789');
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('a'), audio: [{ src: 'r.wav' }] , scenes: [{ id: 's', duration: 1, elements: [
+    { id: 'im', type: 'image', src: 'logo.svg', x: 1, y: 1, width: 4, height: 4 }] }] }));
+  const responses = {
+    'whole svg': await get(srv.url, '/assets/logo.svg'),
+    'ranged wav (206)': await get(srv.url, '/assets/r.wav', { range: 'bytes=2-5' }),
+    'unsatisfiable range (416)': await get(srv.url, '/assets/r.wav', { range: 'bytes=50-60' }),
+    'unreferenced file (404)': await get(srv.url, '/assets/other.txt'),
+  };
+  assert.deepEqual(Object.values(responses).map((r) => r.status), [200, 206, 416, 404]);
+  for (const [what, r] of Object.entries(responses)) {
+    for (const [name, value] of Object.entries(LOCKED_DOWN)) assert.equal(r.headers[name], value, `${what}: ${name}`);
+  }
+  assert.equal((await get(srv.url, '/template/styles.css')).headers['content-security-policy'], undefined, 'the page assets keep their own policy');
+}));
+
 test('/assets maps every audio extension to an audio MIME', () => withServer(async (srv, f) => {
   const mimes = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', flac: 'audio/flac' };
   for (const ext of Object.keys(mimes)) writeFileSync(path.join(f.dir, `t.${ext}`), 'x');

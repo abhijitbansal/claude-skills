@@ -16,7 +16,7 @@ import { themeData, themeCss, FONTS_DIR } from './theme.mjs';
 import { artSvg } from '../../shared/art.mjs';
 import { flattenElements } from '../../template/groups.mjs';
 import { FORMATS } from '../../template/formats.mjs';
-import { BLOCKS, isBlock } from '../../template/blocks/index.mjs';
+import { blockDef, isBlock } from '../../template/blocks/index.mjs';
 import { CACHE_ROOT } from './video.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -155,7 +155,7 @@ function serveArt(ctx, res, sceneId) {
 // Image, video, audio and captions srcs named by the current spec, and the files a block's params name (logo-outro's
 // `src`, which its expansion draws as an image); /assets serves nothing else.
 const MEDIA_ELEMENTS = new Set(['image', 'video']);
-const blockAssets = (el) => (isBlock(el) ? (BLOCKS[el.block]?.assets ?? []).map((key) => el.params?.[key]).filter((src) => src !== undefined) : []);
+const blockAssets = (el) => (isBlock(el) ? (blockDef(el.block)?.assets ?? []).map((key) => el.params?.[key]).filter((src) => src !== undefined) : []);
 function referencedAssets(specFile) {
   try {
     const spec = JSON.parse(readFileSync(specFile, 'utf8'));
@@ -167,7 +167,16 @@ function referencedAssets(specFile) {
   } catch { return new Set(); }
 }
 
+// A user's file (or a decoded frame) opened directly in a tab must not run: no sniffing, and a policy that allows
+// nothing, so a referenced .svg or .html cannot execute script. Media elements ignore this policy, so the page is unaffected.
+// writeHead merges these with the headers each response sets, 404s and 416s included.
+function lockDown(res) {
+  res.setHeader('x-content-type-options', 'nosniff');
+  res.setHeader('content-security-policy', "default-src 'none'");
+}
+
 function serveAsset(ctx, req, res, rel) {
+  lockDown(res);
   let decoded;
   try { decoded = decodeURIComponent(rel); } catch { return notFound(res); }
   if (!referencedAssets(ctx.specFile).has(path.posix.normalize(decoded))) return notFound(res);
@@ -179,6 +188,7 @@ function serveAsset(ctx, req, res, rel) {
 // prepareVideo's answer as `videoFrames`) and only in the format that key was decoded to.
 const FRAME_ROUTE = /^\/frames\/([0-9a-f]{64})\/(\d{6})\.(jpg|png)$/;
 function serveFrame(ctx, res, [, key, n, ext]) {
+  lockDown(res);
   if (!Object.values(ctx.videoFrames).some((v) => v.key === key && v.ext === ext)) return notFound(res);
   const { file } = resolveAsset(path.join(ctx.frameRoot, key), `${n}.${ext}`);
   return file ? sendFile(res, file) : notFound(res);

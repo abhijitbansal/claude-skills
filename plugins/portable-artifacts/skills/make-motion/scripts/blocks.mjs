@@ -5,7 +5,7 @@
 // exit 0 ok, 2 usage (an unknown block names the closest one and lists them all)
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { BLOCKS, BLOCK_NAMES } from '../template/blocks/index.mjs';
+import { BLOCKS, BLOCK_NAMES, blockDef } from '../template/blocks/index.mjs';
 import { FORMATS, FORMAT_NAMES } from '../template/formats.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { didYouMean } from '../shared/errors.mjs';
@@ -45,7 +45,7 @@ function list() {
 }
 
 function show(name) {
-  const def = BLOCKS[name];
+  const def = blockDef(name);
   const rows = Object.entries(def.params.properties).map(([key, schema]) => [
     key, typeOf(schema), def.params.required.includes(key) ? 'yes' : 'no', schema.default === undefined ? '-' : String(schema.default), def.describe[key],
   ]);
@@ -86,7 +86,7 @@ export function main(argv) {
       return 0;
     }
     if (name === undefined || rest.length) throw new UsageError(`show takes one block name; usage: ${USAGE}`);
-    if (!BLOCKS[name]) throw unknownBlock(name);
+    if (!blockDef(name)) throw unknownBlock(name);
     process.stdout.write(`${show(name)}\n`);
     return 0;
   } catch (e) {

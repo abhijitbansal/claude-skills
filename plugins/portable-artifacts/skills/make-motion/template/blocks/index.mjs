@@ -41,6 +41,9 @@ export const BLOCK_NAMES = Object.freeze(Object.keys(BLOCKS));
 
 export const isBlock = (el) => el?.type === 'block';
 
+/** The definition of block `name`, or undefined. A name is a registry key only: `constructor` and `__proto__` are not blocks. */
+export const blockDef = (name) => (typeof name === 'string' && Object.hasOwn(BLOCKS, name) ? BLOCKS[name] : undefined);
+
 /**
  * A pure copy of `spec` with every top-level `block` element of every scene replaced by its group; a spec without
  * blocks comes back deepEqual to its input. A block the registry does not know, or one without a params object, is
@@ -54,14 +57,14 @@ export function expandBlocks(spec) {
   for (const scene of out.scenes) {
     if (!Array.isArray(scene?.elements)) continue;
     const ctx = { ...base, sceneDuration: scene.duration };
-    scene.elements = scene.elements.map((el) => (isBlock(el) && BLOCKS[el.block] && el.params && typeof el.params === 'object' ? BLOCKS[el.block].expand(el, ctx) : el));
+    scene.elements = scene.elements.map((el) => (isBlock(el) && blockDef(el.block) && el.params && typeof el.params === 'object' ? blockDef(el.block).expand(el, ctx) : el));
   }
   return out;
 }
 
 /** The param that sets the text of `part` (a part id without its `<blockId>/` prefix) of block `name`, or null. */
 export function paramOfPart(name, part) {
-  const def = BLOCKS[name];
+  const def = blockDef(name);
   if (!def) return null;
   if (def.paramOf) return def.paramOf(part);
   return Object.hasOwn(def.params.properties, part) ? part : null;

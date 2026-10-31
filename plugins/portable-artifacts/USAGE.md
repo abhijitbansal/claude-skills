@@ -461,7 +461,7 @@ preset in `references/examples/`.
 
 **What the agent does:**
 
-1. Writes `motion.json` (scenes → elements → keyframes).
+1. Asks one intake round (see below), then writes `motion.json` (scenes → elements → keyframes).
 2. `validate.mjs motion.json` until it prints `valid`.
 3. `render.mjs motion.json --contact-sheet` writes `out/contact/<scene>.png`,
    one tiled, timestamped sheet per scene (up to 11 moments plus a phone-width copy). The agent looks at each one and fixes clipping,
@@ -483,7 +483,41 @@ preset in `references/examples/`.
 **Other sizes:** set `"size": [1080, 1080]` in the spec for a square social
 clip, or override at render time with `--size 1280x720 --fps 24`. If the
 aspect ratio differs from the spec, the frame is letterboxed in the spec's
-background colour.
+background colour. A root `"format"` (`16:9`, `9:16`, `1:1` or `4:5`) sets the size
+for you, plus a safe area and a caption zone (the lower part of the frame:
+from 78 % of the height down, 72 % for `9:16` and `4:5`); a `size` that disagrees with
+it is an error.
+
+**The intake round.** Before it writes a spec the agent asks once, in one message,
+listing each option with its default: format (`16:9`), length (about 10 s), assets
+(none), voiceover (off), sound (none), theme (the one the prompt suggests: `press` for
+dense docs and recaps, `poster` for launches and pitches, otherwise `dusk`), CTA (none) and
+captions (off). Answer
+all of it in one reply, or say "defaults". An option your prompt already settles
+("a 9:16 clip", "with a voiceover") is not asked again. A run that cannot pause for
+an answer (`claude -p`, `codex exec`, an eval) skips the round and builds with the
+defaults, and its final report carries one line naming what it used:
+`intake: skipped (<reason>); values used: format 16:9, length 10 s, assets none, voiceover off, sound none, theme dusk, CTA none, captions off`
+(the values shown are the defaults; a value your prompt settled appears instead).
+
+**Groups and blocks.** A `group` holds up to 40 child elements, up to three groups
+deep, and moves them as one. A `block` is a ready-made piece of a scene, written as one
+element with a few params: `title-card`, `lower-third`, `kpi-counter`, `step-flow`,
+`quote-card`, `checklist`, `logo-outro` and `cta-close`. A block lays itself out for
+16:9 and 9:16, takes its colours from the theme and keeps clear of the caption zone.
+`node <skill-dir>/scripts/blocks.mjs list` lists them and `show <name>` prints a block's
+params and a ready element to paste.
+
+**Footage.** A `video` element places an mp4, mov, webm or m4v clip from the project
+folder, with optional `trimStart`, `trimEnd`, `offset`, `mute` and `volume`. Its sound
+joins the mix unless muted. It needs ffmpeg and ffprobe, and the render stays offline.
+
+**Captions.** A root `captions` array adds on-screen words, 2 to 6 at a time, from an
+SRT, VTT or Whisper JSON file in the project folder, or from the sentence timings
+`voice.mjs` writes to `voice/<scene>.json`. Styles: `plain`, `pill`, `karaoke`, `kinetic`,
+`boxed` and `typewriter`. They sit in the caption zone; `check.mjs` reports other text
+held there while a caption shows. Word timing inside a voice sentence is estimated,
+so `karaoke` and `kinetic` follow the voice only roughly.
 
 **Charts in videos** are Vega-Lite specs with inline `data.values`. Animate
 `reveal` from 0 to 1 for a left-to-right wipe.
@@ -525,8 +559,9 @@ file you supply. For narration the agent runs
 `voice.mjs "<text>" --out voice/<scene>.wav` (Kokoro, local, 28 voices,
 `--voice af_heart` by default) after asking once to install `kokoro-js`
 (about 250 MB plus a 90 MB model downloaded a single time). Short UI sounds need no
-file: a root `cues` array (up to 30 of `pop`, `click`, `whoosh`, `chime`, `impact`, each
-with `at`, or `scene` plus `at`, and optional `volume`, `pan` and `note`) is synthesised at
+file: a root `cues` array (up to 30 of `pop`, `click`, `whoosh`, `chime`, `impact`, `riser`,
+`swoosh`, `typing`, `drop`, `ding`, each with `at`, or `scene` plus `at`, and optional `volume`,
+`pan` and `note`; a `typing` cue can instead name a text with `follow`) is synthesised at
 render time, the same bytes every time, and mixed in with any tracks; the preview does not
 play cues.
 

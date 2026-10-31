@@ -15,7 +15,7 @@ import { VIDEO_EXTENSIONS, isVideo, probeVideo } from './video.mjs';
 import { findFfprobe } from './ffmpeg.mjs';
 import { doctorCommand } from './doctor-hint.mjs';
 
-import { BLOCKS, BLOCK_NAMES, isBlock } from '../../template/blocks/index.mjs';
+import { BLOCKS, BLOCK_NAMES, isBlock, blockDef } from '../../template/blocks/index.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
@@ -206,7 +206,7 @@ export const SCHEMA = {
 
 const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
 const schemaCheck = ajv.compile(SCHEMA);
-const paramsChecks = Object.fromEntries(Object.entries(BLOCKS).map(([name, def]) => [name, ajv.compile(def.params)]));
+const paramsChecks = Object.assign(Object.create(null), Object.fromEntries(Object.entries(BLOCKS).map(([name, def]) => [name, ajv.compile(def.params)])));
 const generatedByCheck = ajv.compile(GENERATED_BY_SCHEMA);
 
 // True only for a present, schema-valid `generatedBy`; the preview footer uses it without validating the whole spec.
@@ -635,7 +635,7 @@ function checkBlock(el, base, scene, dir, errors) {
   checkFields(el, base, errors);
   checkKeyframes(el, base, scene.duration, errors);
   if (el.block === undefined) return;
-  const def = BLOCKS[el.block];
+  const def = blockDef(el.block);
   if (!def) {
     const near = didYouMean(el.block, BLOCK_NAMES);
     errors.push({ path: pathJoin(base, 'block'), message: `unknown block ${JSON.stringify(el.block)}${near ? `; did you mean ${JSON.stringify(near)}?` : ''} (blocks: ${BLOCK_NAMES.join(', ')})` });

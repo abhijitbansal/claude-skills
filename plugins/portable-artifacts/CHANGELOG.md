@@ -4,7 +4,9 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
-## [Unreleased]
+## [1.1.0] - 2026-10-31
+
+make-motion: richer sound cues, an intake round, groups, video clips, formats, captions and ready-made blocks; plus the KPI and plan-page changes below.
 
 ### Security
 
@@ -27,6 +29,12 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
     `npm ci --prefix <skill-dir>` if you need them (they are only used by its tests).
   - make-motion keeps its dev packages (a plain `npm ci`) but removes a voiceover install, so run `--fix kokoro` again if
     you use voiceover.
+- **Preview and render assets cannot run script (make-motion).** Every `/assets/…` and `/frames/…` response now sends
+  `x-content-type-options: nosniff` and `content-security-policy: default-src 'none'`, so a referenced `.svg` or `.html`
+  opened directly in a tab does not execute. Images, video and audio in the page are unaffected.
+- **A block named like an object property is an unknown block (make-motion).** A block name equal to an
+  `Object.prototype` key (`constructor`, `toString`, `__proto__`, `hasOwnProperty`) used to crash `validate.mjs` and
+  `blocks.mjs show`; it now gets the normal `unknown block` error.
 
 ### Added and changed
 
@@ -43,6 +51,35 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
   then the decisions, approvals and questions. `validate.mjs` warns `a plan asks before it explains` when a decision,
   approval or question comes before any steps, cards, table, files or text section (any page with answerable items). A plan
   page may hold 1,800 words of prose; other pages keep 900. The checked-in plan example is reordered to match.
+- **Layered sound cues and five new ones (make-motion).** The five existing cues (`pop`, `click`, `whoosh`, `chime`,
+  `impact`) are rebuilt from layered partials, filtered noise and envelopes, so they change bytes (the renders stay
+  deterministic). New cues: `riser`, `swoosh`, `typing`, `drop` and `ding`. `typing` can name a text with `follow` and clicks
+  along with its typing. `note` now applies to `pop`, `chime`, `impact`, `drop` and `ding`.
+- **One intake round (make-motion).** Before writing a spec the agent asks once, listing format, length, assets,
+  voiceover, sound, theme, CTA and captions with their defaults, so you can answer in one reply or say "defaults". A run
+  that cannot pause (`claude -p`, `codex exec`, an eval) skips the round and ends its report with
+  `intake: skipped (<reason>); values used: …`.
+- **`group` element (make-motion).** A group holds 1 to 40 child elements, up to three groups deep, positioned from the
+  group's centre; its own position, opacity, scale, rotation and keyframes move them as one.
+- **`video` element (make-motion).** Place an mp4, mov, webm or m4v clip with `trimStart`, `trimEnd`, `offset`, `mute` and
+  `volume`. Frames are decoded once into a cache and the clip's sound joins the mix unless muted. It needs ffmpeg and
+  ffprobe; the preview and render stay offline.
+- **Formats (make-motion).** A root `format` (`16:9`, `9:16`, `1:1`, `4:5`) sets the size, the safe area and the caption
+  zone. A `size` that disagrees with it is an error.
+- **Voice sidecar (make-motion).** `voice.mjs` also writes `voice/<scene-id>.json` with sentence start and end times, which
+  captions can read.
+- **Captions (make-motion).** A root `captions` track reads an SRT, VTT or Whisper JSON file, or the voice sidecar, and
+  shows 2 to 6 words at a time in the caption zone in one of six styles: `plain`, `pill`, `karaoke`, `kinetic`, `boxed` or
+  `typewriter`. `check.mjs` flags text held in the caption zone while a caption shows.
+- **Blocks (make-motion).** Eight ready-made pieces of a scene as one `block` element with a few params: `title-card`,
+  `lower-third`, `kpi-counter`, `step-flow`, `quote-card`, `checklist`, `logo-outro` and `cta-close`. They lay out for 16:9
+  and 9:16, take the theme's colours and keep clear of the caption zone. `scripts/blocks.mjs list` and `show <name>` print
+  the params and a ready element.
+- **`--set` in the cross-host eval.** `run-eval.mjs --set benchmark` and `--set items` pick a prompt file for make-motion,
+  with a `check` column that scores the saved spec.
+- **CI renders with ffmpeg.** The Ubuntu job installs ffmpeg and runs with `PA_REQUIRE_RENDER=1`, so a render test that
+  cannot run fails instead of skipping. Render-twice tests check that two renders of one spec give the same frames and
+  audio (the MP4 `comment` tag carries the build date, so whole files differ by day unless `SOURCE_DATE_EPOCH` is set).
 
 ## [1.0.0] - 2026-10-22
 

@@ -16,17 +16,17 @@ A resumed session reads this table first, then `git log --oneline main..HEAD`; t
 
 | Milestone | State | Commit |
 |---|---|---|
-| Base: last commit of the two sibling plans (Gate 1's review diff starts here) | — | — |
-| Phase 0: verification machinery (Tasks 1–3) | not started | — |
-| Phase 0b: cue synthesis v2, Kenney pack, intake round (Tasks 3a–3c) | not started | — |
-| Gate 1 (Task 10) | not started | — |
+| Base: last commit of the two sibling plans (Gate 1's review diff starts here) | done | 986fcd9 |
+| Phase 0: verification machinery (Tasks 1–3) | done | c3b8268..861300d |
+| Phase 0b: cue synthesis v2, Kenney pack, intake round (Tasks 3a–3c) | done except Task 3b (Kenney pack), which is deferred: blocked until the owner supplies the zips (owner ruling 2026-10-31); Gate 1 ran without it, and `item-cue-kenney` is not in the items set | 80db226 (3a), 373c685 (3c) |
+| Gate 1 (Task 10) | passed (this commit): 14 of 14 new items valid (6 of 14 on the first validate.mjs call; the other 8 fixed validator errors within the run), benchmark pair 2 of 2, render-twice tests 188 pass 0 skipped, full suites green | this commit |
 | Viral mode (Tasks 11a–11b, after Task 11, inside Gate 2) | not started | — |
 | Gate 2 (Task 17) | not started | — |
 | Gate 3 (Task 27) | not started | — |
 | Phase 4a: cutouts (Task 28) | not started | — |
 | Phase 4b: WebGL spike (Task 29) | not started | — |
 
-Billed Haiku runs so far: **0 of 75** (the spec's budget is 65–75). Planned: Gate 1 17 (15 items + 2 benchmark; the items include `item-cues-v2` and `item-cue-kenney` from Phase 0b), Gate 2 23 (13 items + 10 benchmark; the items include `item-viral` and the four `item-block-*` of Task 11b), Gate 3 28 (16 items + 12 benchmark), Phase 4 up to 2 (`item-block-text-behind-subject`; `item-transition-gl` only if GL ships) = 70. The intake round (Task 3c) adds no field, so no prompt. Each gate allows one rerun of its failed ids, no more. After every eval run, add the number of prompts it ran to this line in the same commit. Before any run that would take the total past 75, stop and ask the owner.
+Billed Haiku runs so far: **16 of 75** (Gate 1: 14 items with `--set items` plus 2 benchmark prompts, measured by `node plugins/portable-artifacts/eval/run-eval.mjs --skill motion --host claude --model haiku …`; no rerun; summary in `plugins/portable-artifacts/eval/results/summary-motion-gate1-2026-10-31.md`) (the spec's budget is 65–75). Planned: Gate 1 17 (15 items + 2 benchmark; the items include `item-cues-v2` and `item-cue-kenney` from Phase 0b; it ran 16, because `item-cue-kenney` waits for the deferred Task 3b and will run with the first gate after 3b lands), Gate 2 23 (13 items + 10 benchmark; the items include `item-viral` and the four `item-block-*` of Task 11b), Gate 3 28 (16 items + 12 benchmark), Phase 4 up to 2 (`item-block-text-behind-subject`; `item-transition-gl` only if GL ships) = 70. The intake round (Task 3c) adds no field, so no prompt. Each gate allows one rerun of its failed ids, no more. After every eval run, add the number of prompts it ran to this line in the same commit. Before any run that would take the total past 75, stop and ask the owner.
 
 Dependency pins (filled in by the task that adds each; `npm view <pkg> version` at that moment):
 

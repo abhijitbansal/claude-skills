@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { BLOCKS, BLOCK_NAMES, expandBlocks } from '../template/blocks/index.mjs';
+import { BLOCKS, BLOCK_NAMES, expandBlocks, paramOfPart } from '../template/blocks/index.mjs';
 import { ENTER_SECONDS, STAGGER_SECONDS, LAST_MOTION_SHARE } from '../template/blocks/layout.mjs';
 import { canvasSize, safeMargin, captionZone, FORMATS, FORMAT_NAMES } from '../template/formats.mjs';
 import { flattenElements } from '../template/groups.mjs';
@@ -471,4 +471,30 @@ test('check.mjs hints match the finding inside a block: a caption-zone finding n
   const overlap = spawnSync(process.execPath, [CHECK, both], { encoding: 'utf8' });
   assert.equal(overlap.status, 1, overlap.stdout + overlap.stderr);
   assert.match(overlap.stdout, /^scenes\[0\]\.elements\[1\]: text "two\/name" overlaps text "one\/name" at \d+\.\d\ds \(block "lower-third", part "name"\); move one of the blocks or shorten params\.name$/m);
+});
+
+// ---- fix round 2: a block name is a registry key, never a property of Object.prototype --------------------------------
+
+const PROTOTYPE_NAMES = ['constructor', 'toString', '__proto__', 'hasOwnProperty'];
+
+test('a block named like an Object.prototype key is an unknown block: validate, expand and paramOfPart never throw', () => {
+  const list = BLOCK_NAMES.join(', ');
+  for (const name of PROTOTYPE_NAMES) {
+    const spec = oneScene([block(name, { title: 'x' })]);
+    let found;
+    assert.doesNotThrow(() => { found = errs(spec); }, `validating block "${name}"`);
+    assert.equal(found.length, 1, `${name}: ${found.join(' | ')}`);
+    assert.match(found[0], new RegExp(`^scenes\\[0\\]\\.elements\\[0\\]\\.block: unknown block ${JSON.stringify(name)}(; did you mean ".+"\\?)? \\(blocks: ${list}\\)$`), name);
+    assert.doesNotThrow(() => expandBlocks(spec), `expanding block "${name}"`);
+    assert.deepEqual(expandBlocks(spec), spec, `${name}: left as written`);
+    assert.equal(paramOfPart(name, 'title'), null, name);
+  }
+});
+
+test('blocks.mjs show <prototype key> exits 2 with the unknown-block message and the list', () => {
+  for (const name of PROTOTYPE_NAMES) {
+    const r = cli('show', name);
+    assert.equal(r.status, 2, `${name}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stderr, new RegExp(`^unknown block ${JSON.stringify(name)}(; did you mean ".+"\\?)? \\(blocks: ${BLOCK_NAMES.join(', ')}\\)\\n$`), name);
+  }
 });
