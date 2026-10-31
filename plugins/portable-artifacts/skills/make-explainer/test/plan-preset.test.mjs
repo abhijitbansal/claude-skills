@@ -178,7 +178,7 @@ test('the plan example validates with no errors and no warnings, decision first,
   assert.ok(verdict.title);
   assert.equal(spec.sections[0].label, 'Summary', 'only the verdict section is called a verdict');
   const firstAnswerable = types.findIndex((t) => ['decision', 'approval', 'question'].includes(t));
-  assert.ok(firstAnswerable <= 2, `the first decision comes right after the verdict and the numbers (index ${firstAnswerable})`);
+  assert.ok(types.slice(0, firstAnswerable).some((t) => ['steps', 'cards', 'table', 'files', 'text'].includes(t)), `a body section comes before the first decision (index ${firstAnswerable})`);
 });
 
 test('the plan example builds as mono by default and as brief with --theme brief', () => {

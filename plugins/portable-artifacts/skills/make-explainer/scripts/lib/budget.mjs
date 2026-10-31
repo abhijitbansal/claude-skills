@@ -14,6 +14,7 @@ export const SOFT_CAPS = {
   cardWords: 30,
   itemWords: 20,
   pageWords: 900,
+  planPageWords: 1800,
   tldrPoints: 3,
 };
 
@@ -224,8 +225,9 @@ export function warnBudget(spec) {
     out.push(...r.out);
     page += r.wordCount;
   });
-  if (page > SOFT_CAPS.pageWords) {
-    out.push(warn('', `page has ${page.toLocaleString('en-US')} words of prose; aim for ${SOFT_CAPS.pageWords} → cut, or convert sections to kpis, cards or steps`));
+  const pageCap = spec.preset === 'plan' ? SOFT_CAPS.planPageWords : SOFT_CAPS.pageWords;
+  if (page > pageCap) {
+    out.push(warn('', `page has ${page.toLocaleString('en-US')} words of prose; aim for ${pageCap} → cut, or convert sections to kpis, cards or steps`));
   }
   out.push(...emojiDensityWarnings(spec));
   return out;

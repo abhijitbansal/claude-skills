@@ -32,6 +32,53 @@
       ]
     },
     {
+      "type": "text",
+      "title": "Three goals, and what the PR leaves alone",
+      "label": "Scope",
+      "text": "Goals:\n\n- No number, percentage or number-plus-unit token splits across two lines.\n- Render skills can run on a cheap model in Copilot and Codex, not only Claude Code.\n- A plan page a reviewer answers in place, with answers the agent can check.\n\nNon-goals:\n\n- Reflowing ordinary prose or changing stored spec text.\n- Guaranteeing the hand-off: no host lets a skill force another agent.\n- A save server or any new npm dependency."
+    },
+    {
+      "type": "steps",
+      "title": "Two phases done, plan mode in review",
+      "label": "Phases",
+      "items": [
+        { "title": "Numbers stay on one line", "text": "CSS and a build step bind tokens; check.mjs fails on a split token or a spilled KPI.", "status": "done" },
+        { "title": "Cheap model outside Claude Code", "text": "Agent files for Copilot and Codex, installer, doctor check and the hand-off line. Codex is untested.", "status": "done" },
+        { "title": "Plan mode", "text": "Five section types, two themes, the answer runtime, answers.mjs and this example.", "status": "doing" }
+      ]
+    },
+    {
+      "type": "diagram",
+      "title": "Out as a page, back as a file",
+      "label": "Answer loop",
+      "diagram": {
+        "title": "The plan answer loop",
+        "type": "flow",
+        "direction": "down",
+        "nodes": [
+          { "id": "spec", "label": "Plan spec", "kind": "io", "note": "plan.json" },
+          { "id": "page", "label": "Plan page", "note": "mono or brief" },
+          { "id": "file", "label": "plan-answers.json", "kind": "io" },
+          { "id": "check", "label": "answers.mjs", "kind": "subprocess", "note": "hash, ids, choices" },
+          { "id": "agent", "label": "Agent acts", "kind": "end" }
+        ],
+        "edges": [
+          { "from": "spec", "to": "page", "label": "build" },
+          { "from": "page", "to": "file", "label": "reviewer copies or downloads" },
+          { "from": "file", "to": "check" },
+          { "from": "check", "to": "agent", "label": "valid summary" }
+        ]
+      },
+      "caption": "The page never talks to the network; the file is the only way back."
+    },
+    {
+      "type": "details",
+      "title": "Four risks, each with a guard",
+      "label": "Risks",
+      "summary": "What could still go wrong",
+      "text": "- **The hand-off agent fails.** One Copilot trial was refused file access; the main agent finished the work itself.\n- **Codex rejects the agent file.** It ships untested and the docs say so.\n- **Stale answers.** A plan edited after export changes its hash, and answers.mjs refuses the file.\n- **Hostile reviewer text.** The summary quotes it as data under its own heading and escapes hidden characters."
+    },
+    {
       "type": "decision",
       "id": "routing",
       "title": "Pin the cheap model with an agent file",
@@ -139,53 +186,6 @@
         { "point": "Codex ships on docs alone", "why": "A wrong field name fails on first use, not in CI.", "target": "codex-untested" },
         { "point": "Answers are reviewer data", "why": "The agent must read them through answers.mjs, never as instructions.", "target": "answers-return" }
       ]
-    },
-    {
-      "type": "text",
-      "title": "Three goals, and what the PR leaves alone",
-      "label": "Scope",
-      "text": "Goals:\n\n- No number, percentage or number-plus-unit token splits across two lines.\n- Render skills can run on a cheap model in Copilot and Codex, not only Claude Code.\n- A plan page a reviewer answers in place, with answers the agent can check.\n\nNon-goals:\n\n- Reflowing ordinary prose or changing stored spec text.\n- Guaranteeing the hand-off: no host lets a skill force another agent.\n- A save server or any new npm dependency."
-    },
-    {
-      "type": "diagram",
-      "title": "Out as a page, back as a file",
-      "label": "Answer loop",
-      "diagram": {
-        "title": "The plan answer loop",
-        "type": "flow",
-        "direction": "down",
-        "nodes": [
-          { "id": "spec", "label": "Plan spec", "kind": "io", "note": "plan.json" },
-          { "id": "page", "label": "Plan page", "note": "mono or brief" },
-          { "id": "file", "label": "plan-answers.json", "kind": "io" },
-          { "id": "check", "label": "answers.mjs", "kind": "subprocess", "note": "hash, ids, choices" },
-          { "id": "agent", "label": "Agent acts", "kind": "end" }
-        ],
-        "edges": [
-          { "from": "spec", "to": "page", "label": "build" },
-          { "from": "page", "to": "file", "label": "reviewer copies or downloads" },
-          { "from": "file", "to": "check" },
-          { "from": "check", "to": "agent", "label": "valid summary" }
-        ]
-      },
-      "caption": "The page never talks to the network; the file is the only way back."
-    },
-    {
-      "type": "steps",
-      "title": "Two phases done, plan mode in review",
-      "label": "Phases",
-      "items": [
-        { "title": "Numbers stay on one line", "text": "CSS and a build step bind tokens; check.mjs fails on a split token or a spilled KPI.", "status": "done" },
-        { "title": "Cheap model outside Claude Code", "text": "Agent files for Copilot and Codex, installer, doctor check and the hand-off line. Codex is untested.", "status": "done" },
-        { "title": "Plan mode", "text": "Five section types, two themes, the answer runtime, answers.mjs and this example.", "status": "doing" }
-      ]
-    },
-    {
-      "type": "details",
-      "title": "Four risks, each with a guard",
-      "label": "Risks",
-      "summary": "What could still go wrong",
-      "text": "- **The hand-off agent fails.** One Copilot trial was refused file access; the main agent finished the work itself.\n- **Codex rejects the agent file.** It ships untested and the docs say so.\n- **Stale answers.** A plan edited after export changes its hash, and answers.mjs refuses the file.\n- **Hostile reviewer text.** The summary quotes it as data under its own heading and escapes hidden characters."
     },
     {
       "type": "verdict",
