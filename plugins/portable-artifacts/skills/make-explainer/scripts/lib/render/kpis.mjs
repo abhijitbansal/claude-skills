@@ -6,9 +6,10 @@ import { esc, inline, toneChip, toneClass } from './ui.mjs';
 const NUMBER_FORMAT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 20, useGrouping: 'min2' });
 const valueText = (value) => (typeof value === 'number' ? NUMBER_FORMAT.format(value) : String(value));
 
-// The value is one line, sized from its tile's width: --n (its length) tells the CSS how many characters
-// must fit. A value longer than KPI_WIDE_CHARS would not fit a small tile even at the smallest size, so its
-// tile takes the whole row.
+// The value is one line, sized from its tile's width: --n tells the CSS how many characters must fit. The count
+// sits on the section, the longest of its one-line values, so those values are drawn at one size: the size that
+// fits the longest. A value longer than KPI_WIDE_CHARS would not fit a small tile even at the smallest size, so
+// its tile takes the whole row and the value keeps its own --n (and its own size).
 // The layout limit (10) is deliberately lower than the advice in semantic.mjs (warn above 12): 11 and 12
 // characters are legal but no longer fit a small tile, so they get the wide tile without a warning.
 // --n counts code points; wide glyphs (CJK, emoji, capitals) may run wider than the CSS's 0.7em-per-character
@@ -30,13 +31,18 @@ const KPI_LONG_CHARS = 16;
 export const band = true;
 
 export function render(section) {
-  const items = section.items.map((k) => {
-    const delta = k.delta === undefined && !toneChip(k.tone) ? '' : `<dd class="kpi-delta">${toneChip(k.tone)}${k.delta === undefined ? '' : `<span>${esc(k.delta)}</span>`}</dd>`;
-    const note = k.note === undefined ? '' : `<dd class="kpi-note">${inline(k.note)}</dd>`;
+  const measured = section.items.map((k) => {
     const value = valueText(k.value);
     const chars = [...value].length;
     const wide = chars > KPI_LONG_CHARS ? ' kpi-wide kpi-long' : chars > KPI_WIDE_CHARS ? ' kpi-wide' : '';
-    return `<div class="kpi ${toneClass(k.tone)}${wide}"><dt>${inline(k.label)}</dt><dd class="kpi-value" style="--n: ${chars}">${esc(value)}</dd>${delta}${note}</div>`;
+    return { k, value, chars, wide };
   });
-  return `<dl class="kpis">\n${items.join('\n')}\n</dl>`;
+  const groupN = Math.max(0, ...measured.filter((m) => !m.wide).map((m) => m.chars));
+  const items = measured.map(({ k, value, chars, wide }) => {
+    const delta = k.delta === undefined && !toneChip(k.tone) ? '' : `<dd class="kpi-delta">${toneChip(k.tone)}${k.delta === undefined ? '' : `<span>${esc(k.delta)}</span>`}</dd>`;
+    const note = k.note === undefined ? '' : `<dd class="kpi-note">${inline(k.note)}</dd>`;
+    const own = wide ? ` style="--n: ${chars}"` : '';
+    return `<div class="kpi ${toneClass(k.tone)}${wide}"><dt>${inline(k.label)}</dt><dd class="kpi-value"${own}>${esc(value)}</dd>${delta}${note}</div>`;
+  });
+  return `<dl class="kpis"${groupN > 0 ? ` style="--n: ${groupN}"` : ''}>\n${items.join('\n')}\n</dl>`;
 }

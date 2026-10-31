@@ -119,8 +119,11 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 .kpi { display: flex; flex-direction: column; container-type: inline-size; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; min-width: 0; }
 .kpi dt { color: var(--text-2); font-size: var(--fs-sm); }
 .kpi dd { margin: 0; }
-/* the whole value is one line ("87%", "1,204 ms"). --n (its character count, set by the renderer) gives the
-   size at which it just fills the tile: --kpi-fit = 100cqi / (n * 0.7em per character), never below --fs-md.
+/* the whole value is one line ("87%", "1,204 ms"). --n (a character count, set by the renderer on the section:
+   the longest of its one-line values, so they share one size; a wide or long value sets its own on the value)
+   gives the size at which it just fills the tile: --kpi-fit = 100cqi / (n * 0.7em per character), never below
+   --fs-md. cqi is each tile's own width, so sizes agree across a whole section only while its tracks are equal
+   (no .kpi-wide); in the wrapping rows below they agree within a row.
    The base size is the cap; flavors cap at their own size with the same --kpi-fit. --n counts code points, so
    wide glyphs (CJK, emoji, capitals) can run wider than the 0.7em assumption; scripts/check.mjs reports any
    value that still spills. A value longer than the renderer's limit gets a wide tile (.kpi-wide).

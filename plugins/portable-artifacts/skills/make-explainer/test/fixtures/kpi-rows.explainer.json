@@ -1,0 +1,18 @@
+{
+  "title": "KPI rows",
+  "preset": "recap",
+  "mode": "page",
+  "theme": "dusk",
+  "sections": [
+    {
+      "type": "kpis",
+      "title": "Measured",
+      "items": [
+        { "label": "Files indexed", "value": "3,576", "note": "in 16.3 s" },
+        { "label": "Repos refreshed", "value": 20 },
+        { "label": "Largest write", "value": "39 ms", "note": "limit 500 ms" },
+        { "label": "Tests passing", "value": "10 / 10" }
+      ]
+    }
+  ]
+}
