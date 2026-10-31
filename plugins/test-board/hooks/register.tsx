@@ -1,13 +1,14 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { TestRun } from '../types'
-import { GAP, lineParts, MAX_SHOWN_FAILURES, tail } from './format'
+import type { RunSource, SourceSnapshot, TestRun } from '../types'
+import { formatClock, GAP, lineParts, MAX_SHOWN_FAILURES, tail } from './format'
 import {
   appendRun, BAND_TTL_MS, keysToDrop, MAX_LATEST, oldestQuarter, previousRun, STORE_SOFT_CAP_BYTES, touchIndex, visibleRuns,
 } from './history'
 import { parseTestOutput } from './parse'
 import { resolveDir, splitCommand, suiteKey, suiteLabel } from './suite'
+import { hasSourceReport, parseSourceCapture, sourceCwd, sourceMatchForRun, sourceRoot, unknownSource } from './source-freshness'
 
 const latest = atom({ plugin: 'test-board', key: 'latest' } as const, [] as TestRun[])
 const expanded = atom({ plugin: 'test-board', key: 'expanded' } as const, false)
@@ -54,22 +55,134 @@ function commandEvidence(ran: Ran): Pick<TestRun, 'exitCode' | 'commandStatus' |
   }
 }
 
-type Roots = Map<string, string>
-type Loops = Map<string, Loop>
-type State = { loops: Loops; roots: Roots; turn: { isNew: boolean }; chain: Promise<void>; expiry?: Timer }
+// Tools that cannot change the worktree: they neither clear the source check nor contend with a run.
+// A deny-list on purpose: unknown and mcp__* tools still invalidate. Agent/Task only spawn a subagent whose own
+// tool calls reach this same hook (with its agentId), so skipping the spawning call itself loses nothing, except
+// when it asks for a worktree: the directory it creates sits inside the repo (see `isWorktreeSpawn`).
+const READ_ONLY_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LS', 'NotebookRead', 'WebFetch', 'WebSearch', 'TodoWrite',
+  'Agent', 'Task', 'Skill', 'ToolSearch', 'AskUserQuestion', 'TaskOutput', 'BashOutput', 'ExitPlanMode', 'EnterPlanMode'])
+const SOURCE_PENDING = '    source checking…'
+// A subagent asked to work in a worktree gets a directory made inside the repo before any of its tools run.
+const isWorktreeSpawn = (e: { tool: string }): boolean =>
+  (e.tool === 'Agent' || e.tool === 'Task') && (e as { isolation?: unknown }).isolation === 'worktree'
+// Quiet time before a background source check, so a burst of edits costs one check.
+const REFRESH_DELAY_MS = 500
 
-async function worktreeRoot($: EngineInterface, roots: Roots, cwd: string): Promise<string> {
+// `isRepo` is false when git could not name a worktree: the cwd then keys history but is never captured.
+type WorktreeRoot = { root: string; isRepo: boolean }
+type Roots = Map<string, WorktreeRoot>
+type Loops = Map<string, Loop>
+type Refresh = { timer?: Timer; isRunning: boolean; isQueued: boolean }
+type State = {
+  loops: Loops; roots: Roots; turn: { isNew: boolean }; chain: Promise<void>; expiry?: Timer
+  activeTools: number; activity: number; refresh: Refresh
+}
+
+async function worktreeRoot($: EngineInterface, roots: Roots, cwd: string): Promise<WorktreeRoot> {
   const cached = roots.get(cwd)
   if (cached !== undefined) return cached
-  let root = cwd
+  let found: WorktreeRoot = { root: cwd, isRepo: false }
   try {
-    const out = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd })
-    if (out.exitCode === 0 && out.stdout.trim() !== '') root = out.stdout.trim()
+    const out = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd, timeoutMs: 1000 })
+    if (out.exitCode === 0 && out.stderr === '' && /^\/[^\0\r\n]{0,4095}\n$/.test(out.stdout)) {
+      found = { root: out.stdout.slice(0, -1), isRepo: true }
+    }
   } catch {
     // not a repo, or git missing: the cwd stands in for the worktree
   }
-  roots.set(cwd, root)
-  return root
+  roots.set(cwd, found)
+  return found
+}
+
+async function captureSource($: EngineInterface, root: string): Promise<SourceSnapshot> {
+  try {
+    const out = await $.process.run(['python3', '-I', '-B', `${$.plugin.root}/scripts/source_snapshot.py`, root],
+      { cwd: root, timeoutMs: 3500 })
+    const snapshot = parseSourceCapture(out)
+    return snapshot.status === 'available' && snapshot.root !== root ? unknownSource() : snapshot
+  } catch {
+    // Missing Python/Git, a process deadline, or an unsupported host never hides test results.
+    return unknownSource()
+  }
+}
+
+async function invalidateSource($: EngineInterface): Promise<void> {
+  if ((await read($, latest)).some(r => r.sourceCheck !== undefined)) {
+    await update($, latest, list => list.map(({ sourceCheck: _check, ...run }) => run))
+  }
+}
+
+async function dropMatching($: EngineInterface): Promise<void> {
+  const isMatching = (run: TestRun): boolean => run.sourceCheck?.status === 'matching'
+  if ((await read($, latest)).some(isMatching)) {
+    await update($, latest, list => list.map(run => {
+      if (!isMatching(run)) return run
+      const { sourceCheck: _check, ...rest } = run
+      return rest
+    }))
+  }
+}
+
+// A run is compared again only if a capture was attempted for it and said something; restored runs never are.
+const isCheckable = (run: TestRun): boolean => run.stale !== true && hasSourceReport(run.source)
+
+// Called only on events, never during rendering. At most three visible worktrees.
+async function refreshSource($: EngineInterface, state: State): Promise<void> {
+  if (state.activeTools !== 0) return
+  const activity = state.activity
+  const held = visibleRuns(await read($, latest), await $.clock.now()).filter(isCheckable).slice(0, MAX_LATEST)
+  const snapshots = new Map<string, SourceSnapshot>()
+  for (const run of held) {
+    const root = sourceRoot(run.source)
+    if (root !== undefined && !snapshots.has(root)) snapshots.set(root, await captureSource($, root))
+  }
+  if (state.activeTools !== 0 || state.activity !== activity) return
+  const at = await $.clock.now()
+  if (held.length > 0) await update($, latest, list => {
+    if (state.activeTools !== 0 || state.activity !== activity) return list
+    return list.map(run => {
+      // A run the band hides (expired, or dated after `now`) was not refreshed and keeps what it had.
+      if (!held.some(h => h.key === run.key && h.at === run.at)) return run
+      const root = sourceRoot(run.source)
+      const snapshot = root === undefined ? undefined : snapshots.get(root)
+      // `at` is when a capture last ran for this run: a run with nothing to recapture keeps the time of its own.
+      return { ...run, sourceCheck: { at: snapshot === undefined ? run.at : at, status: sourceMatchForRun(run.source, snapshot) } }
+    })
+  })
+  if (state.activeTools !== 0 || state.activity !== activity) await invalidateSource($)
+}
+
+// Checks stay off the critical path: no tool call or prompt awaits one. One timer covers a burst of
+// events, and an event during a running check queues exactly one more, so at most one is in flight.
+function scheduleRefresh($: EngineInterface, state: State): void {
+  const { refresh } = state
+  if (refresh.isRunning) {
+    refresh.isQueued = true
+    return
+  }
+  if (refresh.timer !== undefined) return
+  try {
+    refresh.timer = $.clock.after(REFRESH_DELAY_MS, () => runRefresh($, state))
+  } catch {
+    $.ui.log('test-board: source check unavailable')
+  }
+}
+
+async function runRefresh($: EngineInterface, state: State): Promise<void> {
+  const { refresh } = state
+  refresh.timer = undefined
+  refresh.isRunning = true
+  try {
+    await refreshSource($, state)
+  } catch {
+    $.ui.log('test-board: source check unavailable')
+  } finally {
+    refresh.isRunning = false
+    if (refresh.isQueued) {
+      refresh.isQueued = false
+      scheduleRefresh($, state)
+    }
+  }
 }
 
 async function writeRuns($: EngineInterface, key: string, runs: TestRun[], index: string[], drop: string[]) {
@@ -165,7 +278,7 @@ const isDismissed = (d: { key: string; at: number } | null, run: TestRun | undef
 
 async function record(
   $: EngineInterface, state: State,
-  call: { command: string; agentId: string | undefined; startCwd: string }, ran: Ran,
+  call: { command: string; agentId: string | undefined; startCwd: string }, ran: Ran, source?: RunSource,
 ) {
   const text = outputOf(ran)
   if (text === null) return
@@ -175,13 +288,14 @@ async function record(
   const loop = call.agentId === undefined ? undefined : state.loops.get(call.agentId)
   const base = loop?.cwd ?? call.startCwd
   const cwd = parts.cdDir === undefined ? base : resolveDir(base, parts.cdDir)
-  const root = await worktreeRoot($, state.roots, cwd)
+  const { root } = await worktreeRoot($, state.roots, cwd)
   const via = call.agentId === undefined ? undefined : loop === undefined || loop.isWorkflow ? 'workflow' : loop.description
   const run: TestRun = {
     ...parsed,
     suite: suiteLabel(parts.normalized),
     key: suiteKey(root, parts.normalized),
     at: await $.clock.now(),
+    ...(source === undefined ? {} : { source }),
     ...(via === undefined ? {} : { via }),
   }
   await saveRun($, run)
@@ -189,34 +303,96 @@ async function record(
   state.turn.isNew = false
   // A run after ✕ starts the band afresh: the rows the person closed stay closed.
   const wasDismissed = (await read($, dismissed)) !== null
+  // A check already in flight predates this run and must not label it. The bump stays out of the updater, which
+  // should only compute the new list: any check that began earlier sees it and drops its result, and one that
+  // begins later captures source after the run ended, so it may label it.
+  state.activity += 1
   await update($, latest, list =>
     [run, ...(isFresh || wasDismissed ? [] : list.filter(r => r.key !== run.key && r.stale !== true))].slice(0, MAX_LATEST))
   if (wasDismissed) await update($, dismissed, () => null)
   await armExpiry($, state)
 }
 
-export const register: Register = on => {
-  const state = { loops: new Map<string, Loop>(), roots: new Map<string, string>(), turn: { isNew: true }, chain: Promise.resolve() } as State
+// Counts as source activity (so a check in flight is discarded) and clears the check.
+async function touchSource($: EngineInterface, state: State): Promise<void> {
+  state.activity += 1
+  try {
+    await invalidateSource($)
+  } catch {
+    $.ui.log('test-board: source invalidation unavailable')
+  }
+}
 
-  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    // The directory the command starts in: read it before the command can change it.
+export const register: Register = on => {
+  const state: State = {
+    loops: new Map(), roots: new Map(), turn: { isNew: true }, chain: Promise.resolve(), activeTools: 0, activity: 0,
+    refresh: { isRunning: false, isQueued: false },
+  }
+
+  on('tool.call', async ($, e, next) => {
+    if (isWorktreeSpawn(e)) {
+      // The directory appears inside the repo while the call is open, so the check is cleared on both sides of it.
+      // The call is not counted as an active tool: the subagent's own tool calls reach this hook and own their evidence.
+      await touchSource($, state)
+      try {
+        return await next(e)
+      } finally {
+        await touchSource($, state)
+        scheduleRefresh($, state)
+      }
+    }
+    if (READ_ONLY_TOOLS.has(e.tool)) return next(e)
+    const activity = ++state.activity
+    state.activeTools += 1
     let startCwd: string | undefined
+    let root: string | undefined
+    let before = unknownSource()
+    let source: RunSource | undefined
+    let ran: Ran | undefined
     try {
-      startCwd = await $.session.cwd()
-    } catch (err) {
-      $.ui.log(`test-board: cwd unavailable: ${String(err).slice(0, 120)}`)
+      try {
+        await invalidateSource($)
+      } catch {
+        $.ui.log('test-board: source invalidation unavailable')
+      }
+      if (e.tool === 'Bash') {
+        try {
+          startCwd = await $.session.cwd()
+          // An unlocated agent must not borrow the main loop's source identity.
+          const base = e.agentId === undefined ? startCwd : state.loops.get(e.agentId)?.cwd
+          const cwd = base === undefined ? undefined : sourceCwd(e.command, base)
+          if (cwd !== undefined && state.activeTools === 1) {
+            const located = await worktreeRoot($, state.roots, cwd)
+            // Outside a git worktree no capture is attempted, so the band draws no source line.
+            if (located.isRepo) {
+              root = located.root
+              before = await captureSource($, root)
+            }
+          }
+        } catch {
+          // Observation failure must not deny, modify or retry the tool call.
+        }
+      }
+      const result = await next(e)
+      ran = result as Ran
+      if (root !== undefined && outputOf(ran) !== null) {
+        const after = await captureSource($, root)
+        source = state.activity === activity && state.activeTools === 1
+          ? { before, after } : { before: unknownSource(), after: unknownSource() }
+      }
+      return result
+    } finally {
+      state.activeTools -= 1
+      if (e.tool === 'Bash' && startCwd !== undefined && ran !== undefined) {
+        const call = { command: e.command, agentId: e.agentId, startCwd }
+        const [outcome, evidence] = [ran, source]
+        // Serialize history writes; overlapping tool runs cannot earn matching evidence.
+        state.chain = state.chain.then(() => record($, state, call, outcome, evidence))
+          .catch(() => { $.ui.log('test-board: results unavailable') })
+        await state.chain
+      }
+      scheduleRefresh($, state)
     }
-    const ran = await next(e)
-    if (startCwd !== undefined) {
-      // Serial queue: record() calls never interleave, so store and latest updates cannot be lost.
-      state.chain = state.chain
-        .then(() => record($, state, { command: e.command, agentId: e.agentId, startCwd }, ran as Ran))
-        .catch((err: unknown) => {
-          $.ui.log(`test-board: run not recorded: ${String(err).slice(0, 120)}`)
-        })
-      await state.chain
-    }
-    return ran
   })
 
   on('agent.spawn', async ($, e, next) => {
@@ -231,23 +407,37 @@ export const register: Register = on => {
     return started
   })
 
-  on('prompt.submit', ($, e, next) => {
+  on('prompt.submit', async ($, e, next) => {
     // A delivery into a running turn (peer message, notification) is not a new turn.
-    if (e.turnId === undefined) state.turn.isNew = true
+    if (e.turnId === undefined) {
+      state.turn.isNew = true
+      // The person may have edited files since the last check. Drop a 'matching' label now (a cheap state write, no
+      // collector) and discard any check in flight, so the band cannot show it while the background check catches up.
+      state.activity += 1
+      try {
+        await dropMatching($)
+      } catch {
+        $.ui.log('test-board: source label not cleared')
+      }
+      scheduleRefresh($, state)
+    }
     return next(e)
   })
 
   on('session.start', async ($, e, next) => {
     const result = next(e)
     try {
-      const root = await worktreeRoot($, state.roots, e.cwd)
+      // Session atoms can survive reload even when history cannot be restored.
+      await invalidateSource($)
+      const { root } = await worktreeRoot($, state.roots, e.cwd)
       const key = asKeys(await $.store.get('index')).find(k => k.startsWith(`${root}::`))
       const newest = key === undefined ? undefined : asRuns(await $.store.get(`runs:${key}`))[0]
       const now = await $.clock.now()
       // A reload fires session.start too: a run past the hour stays off the band, and a closed band stays closed.
       const isClosed = (await read($, dismissed)) !== null
       if (newest !== undefined && !isClosed && visibleRuns([newest], now).length > 0) {
-        await update($, latest, () => [{ ...newest, stale: true }])
+        state.activity += 1
+        await update($, latest, () => [{ ...newest, sourceCheck: undefined, stale: true }])
       }
       // A hot reload cancels the old timer: re-arm for whatever latest now holds.
       await armExpiry($, state)
@@ -268,6 +458,9 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const columns = e.props.bodyColumns
     const rows = await Promise.all(runs.map((run, i) => partsFor($, run, now, columns, i === 0 ? CLOSE_RESERVE : 0)))
+    // One line for the whole band, from the newest run that has a check (only attempted captures get one).
+    // Between an invalidation and the background check landing a checkable run holds its place with a placeholder.
+    const sourced = runs.find(r => r.sourceCheck !== undefined) ?? runs.find(isCheckable)
     const close = (): Promise<void> => {
       state.chain = state.chain.then(() => dismiss($)).catch((err: unknown) => {
         $.ui.log(`test-board: band not closed: ${String(err).slice(0, 120)}`)
@@ -298,6 +491,10 @@ export const register: Register = on => {
                 <Button key="close" plain dimColor role="dismiss" label="Close test results" onPress={close}>✕</Button>
               )}
             </Box>
+            {run === sourced && (
+              <Text dimColor>{run.sourceCheck === undefined ? SOURCE_PENDING
+                : `    source ${run.sourceCheck.status} at last check ${formatClock(run.sourceCheck.at)}`}</Text>
+            )}
             {isOpen && run.failures.slice(0, MAX_SHOWN_FAILURES).map(f => (
               <Text dimColor>{`    ${f.id}${f.loc === undefined ? '' : `  ${f.loc}`}`}</Text>
             ))}
