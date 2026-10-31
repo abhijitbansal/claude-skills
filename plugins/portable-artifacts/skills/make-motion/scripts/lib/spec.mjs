@@ -410,7 +410,7 @@ function checkCaptions(spec, dir, errors) {
     const groups = captionErrorAt(at, errors, () => trackGroups(words, trackStart(track, spec)));
     if (groups) shown.push({ index: i, groups });
   });
-  checkCaptionOverlaps(shown, errors);
+  checkCaptionOverlaps(shown, totalSeconds(spec), errors);
 }
 
 // `run()`'s result, or null with its CaptionError pushed at `at`.
@@ -434,20 +434,21 @@ function captionWords(src, at, dir, errors) {
 }
 
 const msOf = (seconds) => Math.round(seconds * 1000);
-// The first moment two tracks' groups are on screen together, or null.
-function firstOverlap(a, b) {
+// The first moment before the video ends (`total`) that two tracks' groups are on screen together, or null.
+function firstOverlap(a, b, total) {
+  const end = (g) => Math.min(msOf(g.end), msOf(total));
   let first = null;
   for (const x of a) {
     for (const y of b) {
-      if (msOf(x.start) < msOf(y.end) && msOf(y.start) < msOf(x.end)) first = Math.min(first ?? Infinity, Math.max(x.start, y.start));
+      if (msOf(x.start) < end(y) && msOf(y.start) < end(x)) first = Math.min(first ?? Infinity, Math.max(x.start, y.start));
     }
   }
   return first;
 }
 
-function checkCaptionOverlaps(tracks, errors) {
+function checkCaptionOverlaps(tracks, total, errors) {
   tracks.forEach((later, k) => {
-    const hit = tracks.slice(0, k).map((earlier) => ({ earlier, t: firstOverlap(earlier.groups, later.groups) })).find(({ t }) => t !== null);
+    const hit = tracks.slice(0, k).map((earlier) => ({ earlier, t: firstOverlap(earlier.groups, later.groups, total) })).find(({ t }) => t !== null);
     if (!hit) return;
     errors.push({ path: `captions[${later.index}]`, message: `on screen at ${hit.t.toFixed(2)}s together with captions[${hit.earlier.index}]; only one captions track can show at a time: move one with at or scene, or merge the files` });
   });

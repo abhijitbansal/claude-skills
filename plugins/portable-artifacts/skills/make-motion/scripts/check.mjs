@@ -155,13 +155,17 @@ const intersects = (box, rect) => Math.min(box.right, rect.right) - Math.max(box
   && Math.min(box.bottom, rect.bottom) - Math.max(box.top, rect.top) > SUBPIXEL_PX;
 
 // A visible text or counter held in the caption zone while a caption is on screen would sit under it: once per element,
-// as the safe area. With no caption showing, the lower band is free to use.
-function captionZoneProblems(items, samples, zone, size) {
+// as the safe area. With no caption showing, the lower band is free to use. Judged at the scene's sheet moments and at
+// `extra`, the caption moments inside the scene (every group's midpoint), so a caption shown only between sheet moments
+// is seen too; only the scene's last sheet moment counts as held whatever moves.
+function captionZoneProblems(items, samples, extra, zone, size) {
   const problems = [];
+  const moments = [...samples.map((m, n) => ({ ...m, last: n === samples.length - 1 })), ...extra.map((m) => ({ ...m, last: false }))].sort((a, b) => a.t - b.t);
   items.forEach(({ el, path: where, chain }, j) => {
     if (!CHECKED.has(el.type)) return;
     const spans = tweenSpans(chain, GEOMETRY);
-    const hit = samples.find(({ t, els, captions }, n) => captions.some((c) => c.shown) && isShown(els[j], size) && isHeld(spans, t, n, samples) && intersects(els[j].box, zone));
+    const held = ({ t, last }) => last || isHeld(spans, t, -1, samples);
+    const hit = moments.find((m) => m.captions.some((c) => c.shown) && isShown(m.els[j], size) && held(m) && intersects(m.els[j].box, zone));
     if (hit) problems.push({ path: where, message: `${el.type} "${el.id}" sits in the caption zone (y >= ${zone.top}) at ${at(hit.t)}; move it above y ${zone.top} or end the captions before it` });
   });
   return problems;
@@ -256,10 +260,10 @@ async function crossfadeWarnings(page, spec, itemsOf, fade, size) {
   });
 }
 
-// `withCaptions`: also measure the captions layers at each moment.
-async function sampleScene(page, scene, items, index, start, fps, withCaptions) {
+// `withCaptions`: also measure the captions layers at each moment. `times`: scene-local seconds (the sheet moments).
+async function sampleScene(page, scene, items, index, start, times, withCaptions) {
   const samples = [];
-  for (const t of sheetTimes(scene, fps)) {
+  for (const t of times) {
     const els = await page.evaluate(measure, [start + t, index]);
     const ids = els.map((m) => m.id).join();
     if (ids !== items.map(({ el }) => el.id).join()) throw new Error(`scene "${scene.id}": the page shows elements ${ids}, not the spec's`);
@@ -267,6 +271,15 @@ async function sampleScene(page, scene, items, index, start, fps, withCaptions) 
     samples.push({ t, els, captions, wraps: await nowrapProblems(page, { root: '#stage' }) });
   }
   return samples;
+}
+
+// The caption moments (video seconds) inside a scene that starts at `start`, as scene-local seconds, leaving out the
+// sheet moments already sampled.
+function captionMomentsIn(captionTimes, start, duration, sheet) {
+  const ms = (sec) => Math.round(sec * 1000);
+  const taken = new Set(sheet.map(ms));
+  const local = captionTimes.filter((t) => t >= start && t < start + duration).map((t) => t - start);
+  return [...new Map(local.filter((t) => !taken.has(ms(t))).map((t) => [ms(t), t])).values()].sort((a, b) => a - b);
 }
 
 // Wait until the page has built its stage (window.__motion.ready), at most `ms`: a page that never gets there fails the
@@ -304,13 +317,17 @@ async function inspect(browser, spec, server, prepare) {
   const itemsOf = spec.scenes.map(sceneItems); // the non-group elements of each scene, indexed as the page measures them
   const warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], await page.evaluate(measure, [0, 0]), spec.size);
   const zone = spec.captions.length ? captionZone(spec.size, spec.format) : null; // the caption rules need captions
+  const captionTimes = zone ? await page.evaluate(() => window.__motion.captionMoments.map((m) => m.t)) : [];
   let moments = 0;
   for (const [i, scene] of spec.scenes.entries()) {
     const items = itemsOf[i];
-    const samples = await sampleScene(page, scene, items, i, starts[i], spec.fps, zone !== null);
-    moments += samples.length;
+    const times = sheetTimes(scene, spec.fps);
+    const samples = await sampleScene(page, scene, items, i, starts[i], times, zone !== null);
+    const extraTimes = captionMomentsIn(captionTimes, starts[i], scene.duration, times);
+    const extra = extraTimes.length ? await sampleScene(page, scene, items, i, starts[i], extraTimes, true) : [];
+    moments += samples.length + extra.length;
     problems.push(...safeAreaProblems(items, samples, insets, spec.size), ...overlapProblems(items, samples, spec.size), ...emptyEndProblems(scene, i, items, samples, spec.size), ...wrapProblems(scene, i, samples));
-    if (zone) problems.push(...captionZoneProblems(items, samples, zone, spec.size));
+    if (zone) problems.push(...captionZoneProblems(items, samples, extra, zone, spec.size));
   }
   if (zone) problems.push(...await captionLayerProblems(page, zone));
   for (const fade of await page.evaluate(() => window.__motion.crossfades)) warnings.push(...await crossfadeWarnings(page, spec, itemsOf, fade, spec.size));

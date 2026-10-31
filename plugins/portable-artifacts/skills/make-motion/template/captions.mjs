@@ -78,8 +78,8 @@ function decodeEntity(entity) {
   return code > 0 && code <= MAX_CODE_POINT ? String.fromCodePoint(code) : entity;
 }
 
-// Cue text without markup: tags, ASS overrides ({\an8}) and entities.
-const cueText = (lines) => lines.join(' ').replace(TAGS, '').replace(/\{\\[^}]*\}/g, '').replace(/&#?\w+;/g, decodeEntity);
+// Cue text without markup: a line break (<br>, <br/>) becomes a space, then tags, ASS overrides ({\an8}) and entities go.
+const cueText = (lines) => lines.join(' ').replace(/<br\s*\/?>/gi, ' ').replace(TAGS, '').replace(/\{\\[^}]*\}/g, '').replace(/&#?\w+;/g, decodeEntity);
 
 // Blank-line separated blocks with the 1-based line each starts on. A block holding a second timing line is two cues
 // whose blank line went missing: it is split there, and a bare cue number just before that line goes with the new cue.

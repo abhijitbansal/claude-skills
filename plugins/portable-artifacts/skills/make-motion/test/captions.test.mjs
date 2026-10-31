@@ -441,3 +441,60 @@ test('check.mjs: lower-band text with no caption on screen passes; the same text
   assert.match(out[0], /^scenes\[1\]\.elements\[0\]: text "low2" sits in the caption zone \(y >= 842\) at \d\.\d\ds; move it above y 842 or end the captions before it$/);
   assert.equal(out[1], 'check: 1 problem');
 });
+
+// ---- fix round 2 --------------------------------------------------------------------------------
+
+test('check.mjs: a caption shown only between sheet moments still makes held lower-band text a problem (at its group midpoint)', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  const { sheetTimes } = await import('../scripts/lib/sheet.mjs');
+  const scenes = [{ id: 's', duration: 2, elements: [{ id: 'low', type: 'text', text: 'Fine print', x: 960, y: 900, fontSize: 40 }] }];
+  // One group from 0.4 to 1.0 s (midpoint 0.7): no sheet moment of this scene falls inside it.
+  assert.ok(sheetTimes(withDefaults({ scenes }).scenes[0], 30).every((s) => s < 0.4 || s >= 1), 'the group sits between sheet moments');
+  const { file } = specDir({ size: [1920, 1080], captions: [{ src: 'c.srt' }], scenes }, { 'c.srt': srt([['00:00:00,400', '00:00:01,000', 'Only briefly here.']]) });
+  const r = check([file]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.deepEqual(lines(r.stdout), ['scenes[0].elements[0]: text "low" sits in the caption zone (y >= 842) at 0.70s; move it above y 842 or end the captions before it', 'check: 1 problem']);
+});
+
+test('a group first shown while the stage has no layout is fitted once layout exists (shrink-to-fit is not skipped)', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  const { file } = specDir({ size: [1920, 1080], captions: [{ src: 'c.srt', style: 'pill' }], scenes: [{ id: 's', duration: 3, elements: [] }] },
+    { 'c.srt': srt([['00:00:01,000', '00:00:03,000', '漢'.repeat(90)]]) });
+  const zone = captionZone([1920, 1080]);
+  const server = await startServer({ specPath: file, mode: 'render' });
+  const browser = await launchBrowser({ quiet: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
+    await page.goto(server.url);
+    await page.waitForFunction(() => window.__motion, null, { timeout: 0 });
+    await page.evaluate(() => window.__motion.ready);
+    const box = await page.evaluate(async () => {
+      const viewport = document.getElementById('viewport');
+      viewport.style.display = 'none'; // no layout: the stage's rect is 0 x 0
+      await window.__motion.seek(1.5); // the group first shows here
+      viewport.style.display = '';
+      await window.__motion.seek(1.6); // same group, now laid out
+      const stage = document.getElementById('stage').getBoundingClientRect();
+      const r = document.querySelector('#stage > .captions').getBoundingClientRect();
+      const k = window.__motion.size[0] / stage.width;
+      return { left: (r.left - stage.left) * k, top: (r.top - stage.top) * k, right: (r.right - stage.left) * k, bottom: (r.bottom - stage.top) * k };
+    });
+    assert.ok(inside(box, zone), `${JSON.stringify(box)} outside ${JSON.stringify(zone)}`);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
+test('<br> and <br/> in a cue are a space between words', () => {
+  const words = parseCaptions(srt([['00:00:00,000', '00:00:04,000', 'one<br>two<br/>three<BR />four']]), 'srt').map((x) => x.text);
+  assert.deepEqual(words, ['one', 'two', 'three', 'four']);
+});
+
+test('validate: two tracks that would overlap only after the video ends are fine', () => {
+  const scenes = [{ id: 'one', duration: 3, elements: [] }];
+  const { dir } = specDir({ scenes }, { 'long.srt': srt([['00:00:00,500', '00:00:05,000', 'A long line that runs on past the end']]), 'late.srt': srt([['00:00:00,500', '00:00:02,000', 'Too late']]) });
+  const errs = (captions) => validateSpec({ scenes, captions }, { dir }).errors.map((e) => `${e.path}: ${e.message}`);
+  assert.deepEqual(errs([{ src: 'long.srt' }, { src: 'late.srt', at: 2.9 }]), [], 'late.srt shows from 3.4 s, after the 3 s video');
+  assert.deepEqual(errs([{ src: 'long.srt' }, { src: 'late.srt', at: 2 }]), ['captions[1]: on screen at 2.50s together with captions[0]; only one captions track can show at a time: move one with at or scene, or merge the files']);
+});

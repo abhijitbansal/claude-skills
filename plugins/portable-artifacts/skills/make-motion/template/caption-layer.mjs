@@ -51,7 +51,7 @@ export function captionLayer(track, spec, look) {
     display: 'none',
   });
   if (BACKDROPS.has(track.style)) node.style.background = `color-mix(in srgb, ${look.colors.surface} ${BACKDROP_ALPHA}%, transparent)`;
-  return { node, zone, size: spec.size, index: track.index, style: track.style, groups: track.groups, shown: null, words: [], popCaps: [], typing: null };
+  return { node, zone, size: spec.size, index: track.index, style: track.style, groups: track.groups, shown: null, fitted: false, words: [], popCaps: [], typing: null };
 }
 
 /**
@@ -105,12 +105,16 @@ function fillGroup(layer, group) {
 
 // Centred on its anchor, and shrunk to fit when a group wraps to more lines than the zone is tall (a long CJK run, or
 // a big font on a short zone); `max-width` already keeps it inside the zone's width. Then, for kinetic, the largest
-// pop each word can take and still stay inside the zone (a word as wide as the zone does not pop at all).
+// pop each word can take and still stay inside the zone (a word as wide as the zone does not pop at all). Without a
+// laid-out stage (a preview whose viewport is hidden) nothing can be measured: the group is left unfitted, with no pop,
+// and applyCaption fits it on a later seek once layout exists.
 function fitGroup(layer) {
   const { node, zone, size } = layer;
   node.style.transform = 'translate(-50%, -50%)';
+  layer.popCaps = [];
   const box = canvasRect(node, size);
-  if (!box) return;
+  layer.fitted = box !== null && box.bottom > box.top;
+  if (!layer.fitted) return;
   const scale = Math.min(1, (zone.bottom - zone.top) / (box.bottom - box.top), (zone.right - zone.left) / (box.right - box.left));
   if (scale < 1) node.style.transform = `translate(-50%, -50%) scale(${scale})`;
   if (layer.style === 'kinetic') layer.popCaps = layer.words.map((span) => popCap(canvasRect(span, size), zone));
@@ -118,6 +122,7 @@ function fitGroup(layer) {
 
 // The largest scale a word (box `r`, scaled about its centre) can take and stay EDGE_PX inside the zone; at least 1.
 function popCap(r, zone) {
+  if (!r || r.right <= r.left || r.bottom <= r.top) return 1; // nothing to measure: no pop
   const cx = (r.left + r.right) / 2;
   const cy = (r.top + r.bottom) / 2;
   const hw = (r.right - r.left) / 2;
@@ -137,9 +142,10 @@ export function applyCaption(layer, sec) {
   layer.node.style.display = '';
   if (state.group !== layer.shown) {
     fillGroup(layer, state.group);
-    fitGroup(layer);
     layer.shown = state.group;
+    layer.fitted = false;
   }
+  if (!layer.fitted) fitGroup(layer);
   if (layer.typing) {
     const { chars, typed, rest } = layer.typing;
     typed.textContent = chars.slice(0, state.chars).join('');
