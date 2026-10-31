@@ -15,6 +15,7 @@ import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenanc
 import { themeData, themeCss, FONTS_DIR } from './theme.mjs';
 import { artSvg } from '../../shared/art.mjs';
 import { flattenElements } from '../../template/groups.mjs';
+import { FORMATS } from '../../template/formats.mjs';
 import { CACHE_ROOT } from './video.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -141,7 +142,7 @@ function serveArt(ctx, res, sceneId) {
   const spec = readSpecFile(ctx);
   const scene = Array.isArray(spec?.scenes) ? spec.scenes.find((s) => s?.id === sceneId && s.background === 'art') : undefined;
   if (!scene) return notFound(res);
-  const size = Array.isArray(spec.size) ? spec.size : DEFAULT_SIZE;
+  const size = Array.isArray(spec.size) ? spec.size : (FORMATS[spec.format]?.size ?? DEFAULT_SIZE);
   const svg = artSvg({
     theme: themeOrDefault(spec.theme ?? ctx.theme).name, seed: scene.id,
     width: artSide(size[0], DEFAULT_SIZE[0]), height: artSide(size[1], DEFAULT_SIZE[1]), mode: 'dark',

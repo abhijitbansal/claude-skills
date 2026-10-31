@@ -1,0 +1,44 @@
+{
+  "format": "9:16",
+  "size": [1080, 1920],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "hook",
+      "duration": 3,
+      "elements": [
+        { "id": "kicker", "type": "text", "text": "Build times", "x": 540, "y": 640, "fontSize": 52, "fontWeight": 500 },
+        { "id": "headline", "type": "text", "role": "title", "text": "Down 38%", "x": 540, "y": 800, "fontSize": 140, "fontWeight": 700 },
+        {
+          "id": "detail", "type": "text", "text": "from 21 to 13 minutes", "x": 540, "y": 960, "fontSize": 56,
+          "keyframes": [
+            { "t": 0.6, "opacity": 0 },
+            { "t": 1.1, "opacity": 1, "ease": "outCubic" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cta",
+      "duration": 3.5,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "speedup", "type": "counter", "from": 0, "to": 38, "prefix": "+", "suffix": "%", "x": 540, "y": 700, "fontSize": 220, "fontWeight": 700,
+          "keyframes": [
+            { "t": 0, "value": 0 },
+            { "t": 1.4, "value": 38, "ease": "outCubic" }
+          ]
+        },
+        { "id": "faster", "type": "text", "text": "faster builds", "x": 540, "y": 900, "fontSize": 72, "fontWeight": 600 },
+        {
+          "id": "action", "type": "text", "text": "Try Northwind 2.0", "x": 540, "y": 1200, "fontSize": 64,
+          "keyframes": [
+            { "t": 1.4, "opacity": 0 },
+            { "t": 1.9, "opacity": 1, "ease": "outCubic" }
+          ]
+        }
+      ]
+    }
+  ]
+}

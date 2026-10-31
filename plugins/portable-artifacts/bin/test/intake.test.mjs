@@ -48,6 +48,13 @@ test('the intake section sits before Workflow, and the heading is unique', () =>
   assert.ok(md.indexOf(`## ${HEADING}`) < md.indexOf('\n## Workflow\n'), 'before ## Workflow');
 });
 
+test('the intake format option lists the four format names, with 16:9 the default, and no pixel sizes', () => {
+  const line = optionLine(intakeSection(read('SKILL.md')), 'format');
+  for (const name of ['16:9', '9:16', '1:1', '4:5']) assert.ok(line.includes(`\`${name}\``), `names ${name}`);
+  assert.match(line, /`16:9` \(default\)/);
+  assert.ok(!/\d{3,4}x\d{3,4}/.test(line), 'no 1920x1080-style sizes: the preset names replace them');
+});
+
 test('the intake lists only options make-motion can do today', () => {
   const section = intakeSection(read('SKILL.md'));
   assert.ok(!/kenney/i.test(section), 'no Kenney samples until they land');

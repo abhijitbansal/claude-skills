@@ -27,6 +27,7 @@ import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
 import { sheetTimes } from './lib/sheet.mjs';
 import { flattenElements, isGroup } from '../template/groups.mjs';
+import { safeMargin, safeInsets } from '../template/formats.mjs';
 import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
 import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
@@ -36,8 +37,6 @@ const USAGE = 'node scripts/check.mjs <motion.json> [--json] [--theme <name>]';
 const OPTIONS = { json: { type: 'boolean' }, theme: { type: 'string' } };
 const READY_MS = 30000; // the page must build its stage within this (render.mjs's first wait), or the check fails instead of hanging
 const CHECKED = new Set(['text', 'counter']); // rendered text: the element types rules 1 and 2 judge
-const SAFE_MARGIN_PX = 60; // at 1080 px on the canvas's short side; scaled by short side / 1080
-const SAFE_REFERENCE_SIDE = 1080;
 const SUBPIXEL_PX = 0.5; // a box edge this close to the safe line is on it
 const VISIBLE_OPACITY = 0.05; // rendered opacity (element x scene) above this counts as visible
 const OVERLAP_TOLERANCE_PX = 2; // an intersection this thin on either axis is a shared edge, not an overlap
@@ -47,9 +46,7 @@ const EPSILON = 1e-6;
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 // A page error surfaces as "page.evaluate: Error: <message>"; the crash line keeps only the message.
 const crashLine = (e) => firstLine(e).replace(/^(page|frame)\.\w+: (Error: )?/, '');
-// The safe-area margin on every side: 60 px at 1080 on the short side (the rule comes from a 1080x1080 canvas), so
-// 1920x1080, 1080x1350 and 1080x1080 all get 60 px and 3840x2160 gets 120.
-export const safeMargin = (size) => (SAFE_MARGIN_PX * Math.min(size[0], size[1])) / SAFE_REFERENCE_SIDE;
+export { safeMargin }; // the safe-area margin lives in template/formats.mjs; this export stays for callers of check.mjs
 const skipHint = () => `ask the user, then run: ${doctorCommand('--for', 'check', '--fix', 'chromium')}`;
 
 // Holds: an element is in motion at scene-local `t` when `t` lies strictly inside the span between two consecutive
@@ -106,7 +103,7 @@ const isVisible = (m) => m.opacity > VISIBLE_OPACITY;
 const onCanvas = ({ box }, size) => box.right > 0 && box.left < size[0] && box.bottom > 0 && box.top < size[1];
 const isShown = (m, size) => isVisible(m) && onCanvas(m, size) && !m.undrawn; // seen in the frame, at least in part
 
-function safeAreaProblems(items, samples, margin, size) {
+function safeAreaProblems(items, samples, insets, size) {
   const problems = [];
   items.forEach(({ el, path: where, chain }, j) => {
     if (!CHECKED.has(el.type)) return;
@@ -114,7 +111,7 @@ function safeAreaProblems(items, samples, margin, size) {
     for (const [n, { t, els }] of samples.entries()) {
       const { box } = els[j];
       if (!isShown(els[j], size) || !isHeld(spans, t, n, samples)) continue;
-      const edges = [['top', margin - box.top], ['bottom', box.bottom - (size[1] - margin)], ['left', margin - box.left], ['right', box.right - (size[0] - margin)]]
+      const edges = [['top', insets.top - box.top], ['bottom', box.bottom - (size[1] - insets.bottom)], ['left', insets.left - box.left], ['right', box.right - (size[0] - insets.right)]]
         .filter(([, by]) => by > SUBPIXEL_PX).map(([edge]) => edge);
       if (!edges.length) continue;
       problems.push({ path: where, message: `${el.type} "${el.id}" leaves the safe area (${edges.join(', ')}) at ${at(t)}` });
@@ -238,7 +235,7 @@ async function inspect(browser, spec, server, prepare) {
   await waitReady(page);
   await prepare?.(page);
   const starts = await page.evaluate(() => window.__motion.sceneStarts);
-  const margin = safeMargin(spec.size);
+  const insets = safeInsets(spec.size);
   const problems = [];
   const itemsOf = spec.scenes.map(sceneItems); // the non-group elements of each scene, indexed as the page measures them
   const warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], await page.evaluate(measure, [0, 0]), spec.size);
@@ -247,7 +244,7 @@ async function inspect(browser, spec, server, prepare) {
     const items = itemsOf[i];
     const samples = await sampleScene(page, scene, items, i, starts[i], spec.fps);
     moments += samples.length;
-    problems.push(...safeAreaProblems(items, samples, margin, spec.size), ...overlapProblems(items, samples, spec.size), ...emptyEndProblems(scene, i, items, samples, spec.size), ...wrapProblems(scene, i, samples));
+    problems.push(...safeAreaProblems(items, samples, insets, spec.size), ...overlapProblems(items, samples, spec.size), ...emptyEndProblems(scene, i, items, samples, spec.size), ...wrapProblems(scene, i, samples));
   }
   for (const fade of await page.evaluate(() => window.__motion.crossfades)) warnings.push(...await crossfadeWarnings(page, spec, itemsOf, fade, spec.size));
   return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings };

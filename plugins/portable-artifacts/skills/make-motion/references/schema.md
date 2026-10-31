@@ -5,7 +5,8 @@ Validate with `node scripts/validate.mjs motion.json`. Unknown properties are er
 ## Root
 | field | type | default | notes |
 |---|---|---|---|
-| `size` | `[w, h]` ints 16–3840 | `[1920, 1080]` | logical canvas; `render --size` rescales output |
+| `format` | `16:9` \| `9:16` \| `1:1` \| `4:5` | none (the default size is `16:9`'s) | a preset: sets `size` (1920x1080, 1080x1920, 1080x1080, 1080x1350), the safe area (60 px at 1080 on the short side, every side) and the caption zone (the lower part of the safe area, from 78 % of the height down; 72 % for `9:16` and `4:5`). Use it instead of `size`; a `size` beside it must be the same one (`size: [1920,1080] does not match format "9:16" (1080x1920); drop one of them`). Video frames decode at each element's own `width` x `height`, so a preset changes nothing about them |
+| `size` | `[w, h]` ints 16–3840 | `[1920, 1080]` | logical canvas, or the one the `format` sets; `render --size` rescales output |
 | `fps` | 24 \| 25 \| 30 \| 60 | 30 | |
 | `background` | CSS colour | the theme's page colour | |
 | `theme` | shared theme name (`dusk`, `press`, `poster`, `paper`, `ink`, `blueprint`, `editorial`, `mono`, `brief`) | `dusk` | optional; see below |

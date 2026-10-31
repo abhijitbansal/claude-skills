@@ -9,6 +9,7 @@ import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { resolveAsset } from './paths.mjs';
 import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, PITCHED_CUES, MAX_CUES, NOTE_PATTERN, trackStart, typingFollow } from '../../template/audio.mjs';
 import { flattenElements, isGroup, MAX_GROUP_DEPTH, MAX_GROUP_CHILDREN } from '../../template/groups.mjs';
+import { FORMATS, FORMAT_NAMES } from '../../template/formats.mjs';
 import { VIDEO_EXTENSIONS, isVideo, probeVideo } from './video.mjs';
 import { findFfprobe } from './ffmpeg.mjs';
 import { doctorCommand } from './doctor-hint.mjs';
@@ -153,6 +154,7 @@ export const SCHEMA = {
   properties: {
     audio: { type: 'array', maxItems: MAX_AUDIO_TRACKS, items: audioTrack },
     cues: { type: 'array', maxItems: MAX_CUES, items: cue },
+    format: { enum: [...FORMAT_NAMES] },
     size: {
       type: 'array', minItems: 2, maxItems: 2,
       items: { type: 'integer', minimum: 16, maximum: 3840 },
@@ -535,10 +537,19 @@ function checkTheme(spec, errors) {
   errors.push({ path: 'theme', message: `unknown theme ${JSON.stringify(spec.theme)}; ${near ? `did you mean ${JSON.stringify(near)}?` : `available: ${themes.join(', ')}`}` });
 }
 
+// A `format` fixes the canvas size, so a `size` beside it must be the same one; either alone is enough.
+function checkFormat(spec, errors) {
+  if (spec.format === undefined || spec.size === undefined) return;
+  const [w, h] = FORMATS[spec.format].size;
+  if (spec.size[0] === w && spec.size[1] === h) return;
+  errors.push({ path: 'size', message: `${JSON.stringify(spec.size)} does not match format "${spec.format}" (${w}x${h}); drop one of them` });
+}
+
 export function validateSpec(spec, { dir = process.cwd() } = {}) {
   if (!schemaCheck(spec)) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
   const errors = [];
   checkIds(spec, errors);
+  checkFormat(spec, errors);
   checkTheme(spec, errors);
   checkColor(spec, 'background', '', errors);
   spec.scenes.forEach((scene, si) => {
