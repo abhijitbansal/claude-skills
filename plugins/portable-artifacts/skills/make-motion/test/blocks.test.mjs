@@ -13,6 +13,8 @@ import { canvasSize, safeMargin, captionZone, FORMATS, FORMAT_NAMES } from '../t
 import { flattenElements } from '../template/groups.mjs';
 import { validateSpec, withDefaults, loadSpec } from '../scripts/lib/spec.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
+import { launchBrowser } from '../scripts/lib/browser.mjs';
+import { waitReady } from '../scripts/check.mjs';
 import { probed } from './render-probe.mjs';
 import { requireRender, BROWSER_ONLY, assertRendersIdentically } from './helpers/render.mjs';
 
@@ -393,4 +395,80 @@ test('check.mjs names the block and the param to change when a finding is inside
   assert.equal(lines.length, 2, r.stdout);
   assert.match(lines[0], /^scenes\[0\]\.elements\[0\]: text "lt\/name" leaves the safe area \(right\) at \d+\.\d\ds \(block "lower-third", part "name"\); shorten params\.name or move the block$/);
   assert.equal(lines[1], 'check: 1 problem');
+});
+
+// ---- fix round 2 -----------------------------------------------------------------------------------------------------
+
+const SRT = '1\n00:00:00,200 --> 00:00:05,800\nCaptions stay on screen the whole time here\n';
+const CAPTION_SECONDS = 6;
+
+// A temp folder holding the spec (and the captions file and logo it names): the spec file's path.
+function captionedSpec(motion) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'block-cc-'));
+  writeFileSync(path.join(dir, 'c.srt'), SRT);
+  writeFileSync(path.join(dir, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="#f2a65a"/></svg>');
+  const file = path.join(dir, 'm.json');
+  writeFileSync(file, JSON.stringify(motion));
+  return file;
+}
+
+// The lowest edge of any drawn part (cards, shapes, images and texts; groups excluded) once everything has landed
+// (85 % of the scene), in canvas px, as the render page lays it out: { bottom, id }.
+async function lowestPart(browser, file, size) {
+  const srv = await startServer({ specPath: file, mode: 'render' });
+  const page = await browser.newPage({ viewport: { width: size[0], height: size[1] }, deviceScaleFactor: 1 });
+  try {
+    await page.goto(srv.url);
+    await waitReady(page);
+    await page.evaluate((s) => window.__motion.seek(s), LAST_MOTION_SHARE * CAPTION_SECONDS);
+    return await page.evaluate(() => {
+      const stage = document.getElementById('stage').getBoundingClientRect();
+      const k = window.__motion.size[0] / stage.width;
+      return [...document.querySelectorAll('#stage .el:not(.group)')]
+        .map((n) => ({ id: n.dataset.id, bottom: (n.getBoundingClientRect().bottom - stage.top) * k }))
+        .reduce((a, b) => (b.bottom > a.bottom ? b : a));
+    });
+  } finally { await page.close(); await srv.close(); }
+}
+
+test('with captions, every block at its place() with the largest params keeps its whole box above the caption zone, at every format (the 1:1 checklist of long items is a named check error instead)', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  const browser = await launchBrowser({ quiet: true });
+  try {
+    for (const name of names) {
+      for (const variant of ['first', 'last']) {
+        const params = extremes(name)[variant];
+        for (const format of FORMAT_NAMES) {
+          const size = FORMATS[format].size;
+          const { x, y } = BLOCKS[name].place(size, format, params.side);
+          const motion = { format, captions: [{ src: 'c.srt' }], scenes: [{ id: 's', duration: CAPTION_SECONDS, elements: [block(name, params, { x, y })] }] };
+          const file = captionedSpec(motion);
+          if (name === 'checklist' && format === '1:1') {
+            const r = spawnSync(process.execPath, [CHECK, file], { encoding: 'utf8' });
+            assert.equal(r.status, 1, r.stdout + r.stderr);
+            assert.match(r.stdout, /\(block "checklist", part "item-\d"\).*params\.items\[\d\]/);
+            continue;
+          }
+          const low = await lowestPart(browser, file, size);
+          const top = captionZone(size, format).top;
+          assert.ok(low.bottom <= top + 0.5, `${name} (${variant} params) at ${format}: "${low.id}" reaches y ${low.bottom.toFixed(1)}, into the caption zone at ${top}`);
+        }
+      }
+    }
+  } finally { await browser.close(); }
+});
+
+test('check.mjs hints match the finding inside a block: a caption-zone finding names the block, an overlap says to move one of the blocks', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  // A lower-third whose bottom sits deep in the caption zone.
+  const low = captionedSpec({ format: '16:9', captions: [{ src: 'c.srt' }], scenes: [{ id: 's', duration: 3, elements: [block('lower-third', { name: 'Ada Lovelace' }, { id: 'lt', x: 100, y: 1000 })] }] });
+  const zone = spawnSync(process.execPath, [CHECK, low], { encoding: 'utf8' });
+  assert.equal(zone.status, 1, zone.stdout + zone.stderr);
+  assert.match(zone.stdout, /^scenes\[0\]\.elements\[0\]: text "lt\/name" sits in the caption zone \(y >= 842\) at \d+\.\d\ds; move it above y 842 or end the captions before it \(block "lower-third", part "name"\)$/m);
+  // Two lower-thirds in the same place.
+  const twin = (id) => block('lower-third', { name: 'Ada Lovelace' }, { id, x: 100, y: 818 });
+  const both = captionedSpec({ format: '16:9', scenes: [{ id: 's', duration: 3, elements: [twin('one'), twin('two')] }] });
+  const overlap = spawnSync(process.execPath, [CHECK, both], { encoding: 'utf8' });
+  assert.equal(overlap.status, 1, overlap.stdout + overlap.stderr);
+  assert.match(overlap.stdout, /^scenes\[0\]\.elements\[1\]: text "two\/name" overlaps text "one\/name" at \d+\.\d\ds \(block "lower-third", part "name"\); move one of the blocks or shorten params\.name$/m);
 });

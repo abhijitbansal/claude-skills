@@ -10,7 +10,7 @@
           "id": "quote",
           "type": "block",
           "x": 960,
-          "y": 540,
+          "y": 451,
           "block": "quote-card",
           "params": {
             "quote": "We cut our release checklist from a day to ten minutes.",

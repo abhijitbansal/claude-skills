@@ -1,4 +1,5 @@
 // quote-card: a pull quote on a card: an accent quotation mark, the quote, and an optional attribution.
+import { captionZone, safeMargin } from '../formats.mjs';
 import { unit, contentWidth, fitText, squeeze, slot, textPart, rectPart, enter, blockGroup, stack, freeBand, roomAt, LINE_HEIGHT, MIN_TEXT } from './layout.mjs';
 
 const params = {
@@ -16,7 +17,7 @@ const DASHED = /^[-–—]/; // an attribution that already starts with a dash k
 
 // Quote size, quotation-mark size and card padding (px at 1080), roomiest first: the card takes the first that fits its
 // room (the band above the caption zone when the spec has captions), else the last.
-const TIERS = [{ quote: 56, mark: 120, pad: 64 }, { quote: 48, mark: 96, pad: 48 }, { quote: MIN_TEXT, mark: 80, pad: 36 }];
+const TIERS = [{ quote: 56, mark: 120, pad: 64 }, { quote: 48, mark: 96, pad: 48 }, { quote: MIN_TEXT, mark: 80, pad: 36 }, { quote: MIN_TEXT, mark: 64, pad: 24 }];
 
 function layout(el, u, cardW, tier) {
   const { quote, attribution } = el.params;
@@ -67,6 +68,8 @@ export default Object.freeze({
     attribution: 'who said it; a dash is added in front unless it starts with one',
   },
   example: { quote: 'We cut our release checklist from a day to ten minutes.', attribution: 'Priya Raman, platform lead' },
-  place: (size) => ({ x: size[0] / 2, y: size[1] / 2 }),
+  // Centred across, and centred in the band between the safe area top and the caption zone, so a long quote's card fits
+  // above captions.
+  place: (size, format) => ({ x: size[0] / 2, y: (safeMargin(size) + captionZone(size, format).top) / 2 }),
   expand,
 });

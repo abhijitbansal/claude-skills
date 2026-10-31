@@ -372,10 +372,19 @@ export function atBlockParts(written, spec, findings) {
     const el = m && written.scenes[m[1]]?.elements?.[m[2]];
     if (!isBlock(el)) return finding;
     const part = spec.scenes[m[1]].elements[m[2]].children[m[3]].id.slice(el.id.length + 1);
-    const param = paramOfPart(el.block, part);
-    const hint = param ? `shorten params.${param} or move the block` : 'move the block or change its params';
-    return { path: `scenes[${m[1]}].elements[${m[2]}]`, message: `${finding.message} (block ${JSON.stringify(el.block)}, part ${JSON.stringify(part)}); ${hint}` };
+    const hint = blockHint(finding.message, paramOfPart(el.block, part));
+    return { path: `scenes[${m[1]}].elements[${m[2]}]`, message: `${finding.message} (block ${JSON.stringify(el.block)}, part ${JSON.stringify(part)})${hint ? `; ${hint}` : ''}` };
   });
+}
+
+// What to change for a finding about a block part, matched to the finding; null when its message already says it (the
+// caption-zone rule says to move it above the zone, the crossfade warning to move one or let the other exit).
+function blockHint(message, param) {
+  const shorten = param ? ` or shorten params.${param}` : '';
+  if (message.includes(' sits in the caption zone ') || message.includes(' during the crossfade')) return null;
+  const other = / overlaps \w+ "([^"]+)"/.exec(message);
+  if (other) return other[1].includes('/') ? `move one of the blocks${shorten}` : `move the block or the other element${shorten}`;
+  return param ? `shorten params.${param} or move the block` : 'move the block or change its params';
 }
 
 function checkTheme(name) {
