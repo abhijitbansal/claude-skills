@@ -139,15 +139,15 @@ per-ref counts; the full per-ref map is in `counts.json` under the signal key.
 
 | ID | Signal | Count | Refs | Cost | Existing rule | Proposed home | Status |
 |---|---|---|---|---|---|---|---|
-| HF-01 | Large read, `large_read` | 130 | main/f601d050, main/bed33bab, main/bed33bab/agent-ad6ceeb141e056743, main/bed33bab/agent-a0cc02b515b707d80, main/c6ec0975/agent-a0eb2620ee0acc219 | tokens≈1574074 | none | AGENTS.md | edited (+4/-1) |
-| HF-02 | Guard refusal then retry: worktree guard, `guard_worktree` | 241 | main/c6ec0975, main/c36539bd, main/e9097288, main/8b03aa8a/agent-a4d3519108ebcea31, main/f601d050 | retries=188 | memory `worktree-guard-refuses-eval-paths` | AGENTS.md | edited (shared with HF-04, HF-07: +9/-1 total) |
-| HF-03 | Fix-up commits and late review finds, `pr_fixup_commits` | 92 | PR#41, PR#47, PR#44, PR#40, PR#43 | fixup-commits=92 | AGENTS.md "Branch & commit workflow" (pre-review gates) | AGENTS.md | edited (+11/-7) |
-| HF-04 | Guard refusal then retry: Blast Radius hold, `guard_blastradius` | 94 | main/bed33bab, main/bd41599b, main/0d2d8518/agent-a43f0e00bbaf0fde1, main/bed33bab/agent-ab16e20ffc706582c, main/bed33bab/agent-adbfb7e7134869dbc | retries=88 | memory `worktree-guard-refuses-eval-paths` | AGENTS.md | edited (shared with HF-02: +9/-1 total, no separate lines) |
-| HF-05 | Subagent commit with a session trailer, `commit_with_session_trailer_sidechain` | 57 | main/8b03aa8a/agent-a4d3519108ebcea31, main/802ac7c7/agent-a49e964f14247d21d, main/802ac7c7/agent-af57fdfcea0e28a21, main/802ac7c7/agent-a1a6afeca72766e74, main/802ac7c7/agent-a5cefc6b339e9ffdd | retries=57 | memory `subagent-commits-wrong-trailers`; AGENTS.md "Commit / PR trailers" | AGENTS.md | edited (+4/-1) |
-| HF-06 | Unwrapped noisy output, `noisy_piped_strict` | 273 | main/c36539bd, main/c6ec0975, main/bed33bab, wt/motion-improvement/2ab5f862, main/8b03aa8a | tokens≈63704 | `~/.claude/CLAUDE.md` "Noisy CLI output: run bare, let cartoon wrap it" | ~/.claude/hooks/bash-guard.sh | edited (home) |
-| HF-07 | Guard refusal then retry: foreground sleep block, `guard_sleep` | 15 | main/4165da11, main/c33995d6, main/c36539bd, main/f601d050, main/0d2d8518/agent-a042347f55b50098e | retries=13 | none | AGENTS.md | edited (shared with HF-02: +9/-1 total, no separate lines) |
-| HF-08 | Stale rule: GateGuard memory, `marker_GateGuard` | 2 | main/ae5f1f65, main/f601d050 | tokens≈245 | memory `gateguard-write-retry` | prune:/Users/abhijitbansal/.claude/projects/-Users-abhijitbansal-projects-claude-skills/memory/gateguard-write-retry.md | edited (home) |
-| HF-09 | Redone PR, `pr_redone` | 2 | PR#42, PR#45 | redone-PR | AGENTS.md "Branch & commit workflow" (work on the PR's own branch) | AGENTS.md | edited (+4/-3) |
+| HF-01 | Large read, `large_read` | 130 | main/f601d050, main/bed33bab, main/bed33bab/agent-ad6ceeb141e056743, main/bed33bab/agent-a0cc02b515b707d80, main/c6ec0975/agent-a0eb2620ee0acc219 | tokens≈1574074 | none | AGENTS.md | edited (+4/-1), 876035a, 5bbfc6e |
+| HF-02 | Guard refusal then retry: worktree guard, `guard_worktree` | 241 | main/c6ec0975, main/c36539bd, main/e9097288, main/8b03aa8a/agent-a4d3519108ebcea31, main/f601d050 | retries=188 | memory `worktree-guard-refuses-eval-paths` | AGENTS.md | edited (shared with HF-04, HF-07: +9/-1 total), 876035a, 5bbfc6e, 97d7471 |
+| HF-03 | Fix-up commits and late review finds, `pr_fixup_commits` | 92 | PR#41, PR#47, PR#44, PR#40, PR#43 | fixup-commits=92 | AGENTS.md "Branch & commit workflow" (pre-review gates) | AGENTS.md | edited (+11/-7), 876035a, 5bbfc6e |
+| HF-04 | Guard refusal then retry: Blast Radius hold, `guard_blastradius` | 94 | main/bed33bab, main/bd41599b, main/0d2d8518/agent-a43f0e00bbaf0fde1, main/bed33bab/agent-ab16e20ffc706582c, main/bed33bab/agent-adbfb7e7134869dbc | retries=88 | memory `worktree-guard-refuses-eval-paths` | AGENTS.md | edited (shared with HF-02: +9/-1 total, no separate lines), 876035a, 5bbfc6e, 97d7471 |
+| HF-05 | Subagent commit with a session trailer, `commit_with_session_trailer_sidechain` | 57 | main/8b03aa8a/agent-a4d3519108ebcea31, main/802ac7c7/agent-a49e964f14247d21d, main/802ac7c7/agent-af57fdfcea0e28a21, main/802ac7c7/agent-a1a6afeca72766e74, main/802ac7c7/agent-a5cefc6b339e9ffdd | retries=57 | memory `subagent-commits-wrong-trailers`; AGENTS.md "Commit / PR trailers" | AGENTS.md | edited (+4/-1), 876035a, 5bbfc6e, 97d7471 |
+| HF-06 | Unwrapped noisy output, `noisy_piped_strict` | 273 | main/c36539bd, main/c6ec0975, main/bed33bab, wt/motion-improvement/2ab5f862, main/8b03aa8a | tokens≈63704 | `~/.claude/CLAUDE.md` "Noisy CLI output: run bare, let cartoon wrap it" | ~/.claude/hooks/bash-guard.sh | edited (home), 97d7471, 7e9a1cc |
+| HF-07 | Guard refusal then retry: foreground sleep block, `guard_sleep` | 15 | main/4165da11, main/c33995d6, main/c36539bd, main/f601d050, main/0d2d8518/agent-a042347f55b50098e | retries=13 | none | AGENTS.md | edited (shared with HF-02: +9/-1 total, no separate lines), 876035a, 5bbfc6e |
+| HF-08 | Stale rule: GateGuard memory, `marker_GateGuard` | 2 | main/ae5f1f65, main/f601d050 | tokens≈245 | memory `gateguard-write-retry` | prune:/Users/abhijitbansal/.claude/projects/-Users-abhijitbansal-projects-claude-skills/memory/gateguard-write-retry.md | edited (home), 97d7471 |
+| HF-09 | Redone PR, `pr_redone` | 2 | PR#42, PR#45 | redone-PR | AGENTS.md "Branch & commit workflow" (work on the PR's own branch) | AGENTS.md | edited (+4/-3), 876035a, 5bbfc6e |
 
 ### Row notes
 
@@ -279,13 +279,49 @@ branch.
 
 ## Footprint
 
-Filled by Task 6: lines added and removed per edited file.
+Measured with `git diff --numstat 23778e2..HEAD -- AGENTS.md CLAUDE.md` (added,
+removed, file) and `wc -l` on the `~/.claude` files, before-copies in
+`.scratch/harness-learnings-home/before/`.
+
+In git:
+
+| added | removed | file | commits |
+|---|---|---|---|
+| 33 | 13 | `AGENTS.md` | 876035a, 5bbfc6e (HF-01, HF-02, HF-03, HF-04, HF-05, HF-07, HF-09) |
+| 3 | 2 | `CLAUDE.md` | 5bbfc6e (group 1 IDs) |
+
+Outside git (`wc -l`, before then after):
+
+| file | before | after | net |
+|---|---|---|---|
+| `~/.claude/hooks/bash-guard.sh` | 726 | 745 | +19 |
+| `~/.claude/hooks/tests/test-bash-guard.sh` | none | 110 | +110 (new test suite) |
+| `~/.claude/harness-changelog.md` | 38 | 49 | +11 (new section) |
+| memory `MEMORY.md` | 12 | 11 | -1 |
+| memory `subagent-commits-wrong-trailers.md` | 24 | 16 | -8 |
+| memory `worktree-guard-refuses-eval-paths.md` | 15 | 21 | +6 |
+| memory `gateguard-write-retry.md` | 14 | deleted | -14 |
+
+Sibling plan, not a harness edit: none. No commit touching `AGENTS.md` or
+`CLAUDE.md` since 23778e2 lacks an `HF-` id.
 
 Group 2 (guidelines): no findings
 
+Net lines across all harness files: +21 in git, +123 outside git, so the footprint
+grew rather than staying neutral. The instruction text read by sessions grew by
++21 in git (`AGENTS.md` +20, `CLAUDE.md` +1) and shrank by 17 lines of memory
+(rows HF-05, HF-08 net negative, HF-02 and HF-04 +6); the growth is justified by
+HF-01, HF-02, HF-03, HF-04, HF-05, HF-07 and HF-09. The +19 hook lines and +110
+test lines (HF-06) are enforcement code and its RED/GREEN proof, and the +11
+changelog lines are the record the spec requires, none of them loaded as rules.
+
 ## Edits outside git
 
-Filled by Task 4 and Task 5: `~/.claude` file, change, changelog heading.
+These edits are live in `~/.claude`, so they are not in git; the PR body lists
+them under a `Harness learnings` heading. Before-copies of the files are kept in
+`.scratch/harness-learnings-home/before/` (gitignored). The changelog section was
+checked against this table with `check_changelog.py` (shown firing on a bullet
+with no id; live run prints `ok`).
 
 Write access: granted (live edits; changelog probe succeeded). Changelog heading for every row: `2026-10-30: claude-skills harness learnings`.
 
@@ -300,3 +336,7 @@ Write access: granted (live edits; changelog probe succeeded). Changelog heading
 | `~/.claude/harness-changelog.md` | new section with one bullet per change | n/a | HF-06, HF-08, HF-05, HF-02, HF-04 |
 
 Concern (Cubby drift): the global `bash-guard.sh` was byte-identical to Cubby's committed `.claude/bash-guard.sh` and now differs. Upstreaming the block plus its cases into the Cubby repo's `.claude/tests/hooks/cases.jsonl` is the owner's call.
+
+Concern (memory branch caveat): the rewritten memory files `subagent-commits-wrong-trailers.md` and `worktree-guard-refuses-eval-paths.md` say AGENTS.md carries their rules "on branch `worktree-skills-improvement`". After this branch merges, prune that caveat from both files.
+
+No patch fallback was needed: `~/.claude` writes were permitted, so there is no `patch -p1 -d /Users/abhijitbansal` line to apply.
