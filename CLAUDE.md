@@ -11,8 +11,9 @@ source of the behavioral guidelines that `setup/setup.sh` merges into the
 - Run `bats tests/bats` after touching anything in `setup/`.
 - **Process conventions — orchestration, model routing (tiers/effort), and the
   branch/commit/CI workflow — live in [`AGENTS.md`](./AGENTS.md); read it before
-  dispatching subagents or opening a PR.** This CLAUDE.md stays the source of
-  truth for the *behavioral* guidelines below; AGENTS.md owns *process*. (The
+  dispatching subagents, before committing, and before opening a PR.** This
+  CLAUDE.md stays the source of truth for the *behavioral* guidelines below;
+  AGENTS.md owns *process*. (The
   `AGENTS.md` pointer sits outside the guideline markers, so it is not merged
   into other repos.)
 - The guideline block below (between the `claude-skills:guidelines` markers) is
