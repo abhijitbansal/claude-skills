@@ -168,7 +168,7 @@ so editor and OS litter such as `.DS_Store` stays out of scope. A repo's own
 path (`~/ignore`). An excludes path that is not a
 regular file (or a link to one), such as a FIFO or device, is skipped, whether it is the
 global one or the repo's own (the latter is replaced by an empty file). Each capture has a
-1.5-second internal deadline and a 2-second host process timeout.
+3-second internal deadline and a 3.5-second host process timeout.
 A capture hashes contents once, then re-lists Git state, re-walks the in-scope
 directories and re-checks every file's identity to catch changes made meanwhile.
 Limits per capture: 4,096 entries, 64 directory levels, 16 MiB per file, 128 MiB read,
@@ -177,7 +177,7 @@ without a partial digest. A nested Git repository inside the worktree is unsuppo
 Git runs a fixed handful of times plus one ignore query per directory level that
 holds unlisted directories, not one per directory. The worktree-root lookup is capped
 at one second. Capture adds bounded latency: two captures around a test (what the
-test command waits for), then at most one background check at a time covering up to
+test command waits for, at most 3.5 seconds each, typically well under one), then at most one background check at a time covering up to
 three visible worktrees.
 
 Measured with `python3 -I -B plugins/test-board/scripts/source_snapshot.py <root>`
@@ -193,10 +193,10 @@ Measured with `python3 -I -B plugins/test-board/scripts/source_snapshot.py <root
 | a 697-file repo (16.9 MB) | unknown, `deadline`, 1.53 s | available, 0.33 s |
 
 The size caps (128 MiB read, 16 MiB per file) leave room for repos of this size
-inside the 1.5-second deadline on this machine, but not with a wide margin: on the
+inside the 3-second deadline on this machine: on the
 ~88 MB `claude-skills` checkout (2,481 files with symlinks) the collector command above
 measured 0.47 to 0.89 s in 3 runs at normal load, and 1.24 to 1.43 s in 5 runs at a load
-average of 15, where 1 of the 5 reached the 1.5-second deadline and reported `unknown`
+average of 15, where 1 of the 5 reached the deadline when it was 1.5 seconds and reported `unknown`
 with reason `deadline`. A checkout holding
 symlinks (here untracked `.claude/skills/*`) is available: each in-scope symlink,
 tracked or not, is fingerprinted by its own link text and never followed.

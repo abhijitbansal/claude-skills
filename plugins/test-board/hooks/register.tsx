@@ -97,7 +97,7 @@ async function worktreeRoot($: EngineInterface, roots: Roots, cwd: string): Prom
 async function captureSource($: EngineInterface, root: string): Promise<SourceSnapshot> {
   try {
     const out = await $.process.run(['python3', '-I', '-B', `${$.plugin.root}/scripts/source_snapshot.py`, root],
-      { cwd: root, timeoutMs: 2000 })
+      { cwd: root, timeoutMs: 3500 })
     const snapshot = parseSourceCapture(out)
     return snapshot.status === 'available' && snapshot.root !== root ? unknownSource() : snapshot
   } catch {

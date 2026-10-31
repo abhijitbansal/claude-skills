@@ -681,6 +681,15 @@ class SourceSnapshotTests(unittest.TestCase):
         self.assertEqual(params["max_bytes"].default, 128 * 1024 * 1024)
         self.assertEqual(params["max_file_bytes"].default, 16 * 1024 * 1024)
 
+    def test_host_timeout_outlasts_the_collector_deadline(self):
+        deadline = inspect.signature(self.module().capture).parameters["timeout_s"].default
+        self.assertEqual(deadline, 3.0)
+        hook = (Path(__file__).resolve().parents[2] / "plugins/test-board/hooks/register.tsx").read_text()
+        host = re.search(r"\{ cwd: root, timeoutMs: (\d+) \}", hook)
+        self.assertIsNotNone(host)
+        # The host must leave the collector time to report its own `deadline` reason.
+        self.assertGreaterEqual(int(host.group(1)) / 1000, deadline + 0.5)
+
     def test_byte_cap_matches_the_hook_validator(self):
         import inspect
         default = inspect.signature(self.module().capture).parameters["max_bytes"].default

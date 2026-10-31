@@ -87,7 +87,7 @@ test('captures before and after the actual command, persists both and preserves 
   expect(stored[0]?.sourceCheck).toBeUndefined()
   const captures = w.calls.filter(c => c.argv[0] === 'python3')
   expect(captures.length >= 2).toBe(true)
-  expect(captures.every(c => c.argv[1] === '-I' && c.argv[2] === '-B' && c.init?.timeoutMs === 2000)).toBe(true)
+  expect(captures.every(c => c.argv[1] === '-I' && c.argv[2] === '-B' && c.init?.timeoutMs === 3500)).toBe(true)
 })
 
 test('a folder that is not a git worktree never attempts a capture and keeps no source evidence', async ($, on) => {
