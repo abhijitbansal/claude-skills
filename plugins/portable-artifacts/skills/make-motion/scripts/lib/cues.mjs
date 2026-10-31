@@ -106,8 +106,8 @@ const FM_CARRIER_MAX_HZ = MAX_HZ / (1 + (FM_MIN_INDEX + 1) * FM_RATIO); // the h
 export function fmBand(hz) {
   const carrier = Math.min(hz, FM_CARRIER_MAX_HZ);
   const modulator = FM_RATIO * carrier;
-  const index = Math.max(0, Math.min(FM_INDEX, (MAX_HZ - carrier) / modulator - 1));
-  return { carrier, modulator, index, topHz: index > 0 ? carrier + (index + 1) * modulator : carrier };
+  const index = Math.min(FM_INDEX, (MAX_HZ - carrier) / modulator - 1); // at least FM_MIN_INDEX: the carrier cap leaves room
+  return { carrier, modulator, index, topHz: carrier + (index + 1) * modulator };
 }
 // The FM click of each cue that has one sits at this multiple of the cue's f0.
 export const FM_CLICK_RATIO = Object.freeze({ pop: 6, drop: 16, ding: 2 });

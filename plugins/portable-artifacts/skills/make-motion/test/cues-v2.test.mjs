@@ -154,6 +154,16 @@ test('the FM attack of pop, drop and ding at C8 and B8 puts under 3e-4 of its on
   }
 });
 
+const BODY_ALIAS_BAR = 1e-3; // measured: at most 2e-5 with the partial and glide clamps, 2.5e-2 to 6.8e-2 without them
+
+test('at B8 chime, impact and ding put under 1e-3 of their first 4096 samples (85 ms) above 0.4 × the sample rate', () => {
+  for (const cue of ['chime', 'impact', 'ding']) {
+    const xs = channels(cueWav({ cue, note: 'B8' })).left.slice(0, 4096);
+    const above = bandEnergy(xs, SAMPLE_RATE, MAX_HZ, SAMPLE_RATE / 2 + 1) / bandEnergy(xs, SAMPLE_RATE, 0, SAMPLE_RATE / 2 + 1);
+    assert.ok(above < BODY_ALIAS_BAR, `${cue} at B8: ${above} of the energy is above ${MAX_HZ} Hz`);
+  }
+});
+
 test('levelled: a silent input stays silent (no 0/0 NaN)', () => {
   assert.deepEqual(levelled(new Float64Array(8)), [0, 0, 0, 0, 0, 0, 0, 0]);
 });
