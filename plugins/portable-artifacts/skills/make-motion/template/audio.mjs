@@ -9,6 +9,11 @@ export const MAX_AUDIO_TRACKS = 20;
 // Procedural sound cues (scripts/lib/cues.mjs makes the sound): `cues` entries are timed like audio tracks.
 export const CUE_NAMES = Object.freeze(['pop', 'click', 'whoosh', 'chime', 'impact', 'riser', 'swoosh', 'typing', 'drop', 'ding']);
 export const PITCHED_CUES = Object.freeze(['pop', 'chime', 'impact', 'drop', 'ding']); // the ones a `note` tunes; the rest are noise
+// Recorded cues (assets/sfx/kenney/<alias>.wav, Kenney CC0): `"cue": "kenney:<alias>"`. The alias is looked up in this
+// table and never joined into a path unless it is in it.
+export const KENNEY_NAMES = Object.freeze(['click', 'tick', 'switch', 'select', 'confirm', 'error', 'open', 'close', 'pluck', 'glass', 'thud', 'metal']);
+export const KENNEY_PREFIX = 'kenney:';
+export const isSampleCue = (cue) => typeof cue === 'string' && cue.startsWith(KENNEY_PREFIX);
 export const MAX_CUES = 30;
 export const NOTE_PATTERN = /^[A-G][#b]?[0-8]$/;
 

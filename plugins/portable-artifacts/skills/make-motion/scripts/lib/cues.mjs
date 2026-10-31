@@ -2,9 +2,10 @@
 // WAV with Buffer. No dependencies; noise comes from a seeded generator, so the same cue is the same bytes.
 // Every cue is built in layers: a short transient (a click), a body (a pitched tone or a filtered noise sweep), an
 // optional short reverb tail, then optional stereo width above 120 Hz (mono below, so the low end stays centred).
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { resolveCues } from '../../template/audio.mjs';
+import { fileURLToPath } from 'node:url';
+import { resolveCues, KENNEY_NAMES, KENNEY_PREFIX, isSampleCue } from '../../template/audio.mjs';
 import { mulberry32 } from '../../template/seeded.mjs';
 import { TYPING_SECONDS_PER_CHAR } from '../../template/defaults.mjs';
 
@@ -305,6 +306,31 @@ function layersOf(cue, chars, spacing) {
   return def;
 }
 
+// ---- recorded samples --------------------------------------------------------------------------
+
+const KENNEY_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../assets/sfx/kenney');
+const SAMPLE_HEADER_BYTES = 44;
+const SAMPLE_CHANNELS = 1;
+const SAMPLE_BITS = 16;
+
+/**
+ * A bundled recording as samples in -1..1. `alias` is looked up in KENNEY_NAMES and only then joined into the path, so no
+ * value from a spec can reach the file system. The file must be a 44-byte-header 48 kHz mono 16-bit PCM WAV.
+ */
+export function loadSample(alias) {
+  if (!KENNEY_NAMES.includes(alias)) {
+    throw new Error(`unknown sample ${JSON.stringify(`${KENNEY_PREFIX}${alias}`)}; samples: ${KENNEY_NAMES.map((n) => `${KENNEY_PREFIX}${n}`).join(', ')}`);
+  }
+  const buf = readFileSync(path.join(KENNEY_DIR, `${alias}.wav`));
+  const format = [buf.readUInt16LE(20), buf.readUInt16LE(22), buf.readUInt32LE(24), buf.readUInt16LE(34)];
+  const riff = buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WAVE' && buf.toString('ascii', 36, 40) === 'data';
+  if (!riff || format.join() !== [1, SAMPLE_CHANNELS, SAMPLE_RATE, SAMPLE_BITS].join()) {
+    throw new Error(`sample ${alias}.wav must be 48 kHz mono 16-bit PCM with a 44-byte header`);
+  }
+  const count = Math.min(buf.readUInt32LE(40), buf.length - SAMPLE_HEADER_BYTES) >> 1;
+  return Float64Array.from({ length: count }, (_, i) => buf.readInt16LE(SAMPLE_HEADER_BYTES + i * 2) / 32768);
+}
+
 // A 44-byte PCM header, then interleaved little-endian 16-bit frames.
 function wavBuffer(left, right) {
   const data = Buffer.alloc(left.length * 4);
@@ -336,14 +362,24 @@ export function levelled(xs) {
   return Array.from(xs, (x, i) => x * (PEAK / top) * Math.min(1, (xs.length - 1 - i) / tail));
 }
 
+// A synthesised cue's channels; a recorded one is mono, so both channels are the same samples.
+function synthChannels({ cue, note, chars, spacing }) {
+  const def = layersOf(cue, chars, spacing);
+  return layerCue(def, noteHz(note ?? DEFAULT_NOTE[cue] ?? 'A4'), mulberry32(NOISE_SEED));
+}
+function sampleChannels(cue) {
+  const mono = loadSample(cue.slice(KENNEY_PREFIX.length));
+  return { left: mono, right: mono };
+}
+
 /**
- * One cue as a WAV Buffer. `note` tunes pop, chime, impact, drop and ding; `pan` (-1 left .. 1 right) is equal-power
+ * One cue as a WAV Buffer: a synthesised one, or a recording (`kenney:<alias>`, see loadSample) that goes through the same
+ * peak, pan and fade. `note` tunes pop, chime, impact, drop and ding; `pan` (-1 left .. 1 right) is equal-power
  * with the centre at unity. `chars` and `spacing` (seconds between keys) shape `typing` only. Each channel peaks at
  * 0.5 before pan, whatever the cue (a widened cue's channels are levelled one by one).
  */
 export function cueWav({ cue, note, pan = 0, chars = 1, spacing = TYPING_SECONDS_PER_CHAR }) {
-  const def = layersOf(cue, chars, spacing);
-  const { left, right } = layerCue(def, noteHz(note ?? DEFAULT_NOTE[cue] ?? 'A4'), mulberry32(NOISE_SEED));
+  const { left, right } = isSampleCue(cue) ? sampleChannels(cue) : synthChannels({ cue, note, chars, spacing });
   const levelLeft = levelled(left);
   const levelRight = right === left ? levelLeft : levelled(right);
   const angle = ((pan + 1) * Math.PI) / 4;
@@ -361,7 +397,7 @@ export function writeCueTracks(spec, dir) {
   const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
   return resolveCues(spec).map(({ cue, note, pan, start, volume, chars, spacing }, i) => {
     const wav = cueWav({ cue, note, pan, chars, spacing });
-    const file = path.join(dir, `cue-${i}-${cue}.wav`);
+    const file = path.join(dir, `cue-${i}-${cue.replace(':', '-')}.wav`); // no colon in a file name (Windows)
     writeFileSync(file, wav);
     const seconds = (wav.length - 44) / 4 / SAMPLE_RATE;
     return { file, start, end: Math.min(total, start + seconds), volume, fadeIn: 0, fadeOut: TAIL_SECONDS }; // the mix trims a cue at the video end: this fade keeps that cut from clicking

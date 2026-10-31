@@ -7,7 +7,7 @@ import { formatAjvErrors, pathJoin, didYouMean } from '../../shared/errors.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { resolveAsset } from './paths.mjs';
-import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, PITCHED_CUES, MAX_CUES, NOTE_PATTERN, trackStart, typingFollow } from '../../template/audio.mjs';
+import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, KENNEY_NAMES, KENNEY_PREFIX, PITCHED_CUES, MAX_CUES, NOTE_PATTERN, trackStart, typingFollow } from '../../template/audio.mjs';
 import { flattenElements, isGroup, MAX_GROUP_DEPTH, MAX_GROUP_CHILDREN } from '../../template/groups.mjs';
 import { FORMATS, FORMAT_NAMES } from '../../template/formats.mjs';
 import { CAPTION_STYLES, CAPTION_EXTENSIONS, MAX_CAPTION_TRACKS, CaptionError, parseCaptions, trackGroups } from '../../template/captions.mjs';
@@ -145,7 +145,7 @@ const cue = {
   additionalProperties: false,
   required: ['cue'], // `at` too, unless a typing cue has `follow`: checkCues says so
   properties: {
-    cue: { enum: [...CUE_NAMES] },
+    cue: { enum: [...CUE_NAMES, ...KENNEY_NAMES.map((n) => `${KENNEY_PREFIX}${n}`)] }, // a synth name, or a recorded sample
     scene: { type: 'string', minLength: 1 },
     at: seconds,
     follow: { type: 'string', minLength: 1 },

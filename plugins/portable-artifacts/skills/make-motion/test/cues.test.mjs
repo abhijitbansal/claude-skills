@@ -136,7 +136,7 @@ test('valid cues pass', () => {
 });
 
 test('an unknown cue gets a did-you-mean, and a bad at, scene, volume, pan or note is named', () => {
-  assert.deepEqual(errs(spec({ cues: [{ cue: 'whoosh', at: 1 }, { cue: 'chim', at: 0 }] })), ['cues[1].cue: must be one of "pop", "click", "whoosh", "chime", "impact", "riser", "swoosh", "typing", "drop", "ding"; did you mean "chime"?']);
+  assert.deepEqual(errs(spec({ cues: [{ cue: 'whoosh', at: 1 }, { cue: 'chim', at: 0 }] })), ['cues[1].cue: must be one of "pop", "click", "whoosh", "chime", "impact", "riser", "swoosh", "typing", "drop", "ding", "kenney:click", "kenney:tick", "kenney:switch", "kenney:select", "kenney:confirm", "kenney:error", "kenney:open", "kenney:close", "kenney:pluck", "kenney:glass", "kenney:thud", "kenney:metal"; did you mean "chime"?']);
   assert.ok(errs(spec({ cues: [{ cue: 'pop', at: -1 }] }))[0].startsWith('cues[0].at:'));
   assert.deepEqual(errs(spec({ cues: [{ cue: 'pop' }] })), ['cues[0].at: required']);
   assert.deepEqual(errs(spec({ cues: [{ cue: 'pop', at: 4 }] })), ['cues[0].at: starts at 4s, but the video ends at 4s']);

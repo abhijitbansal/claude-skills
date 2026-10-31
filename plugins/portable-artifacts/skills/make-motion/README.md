@@ -43,7 +43,9 @@ shell commands.
   body, short reverb tail; stereo width above about 120 Hz on the noise sweeps) with no files and
   no extra dependency, deterministically, and mixed in; a `typing` cue with `follow` clicks
   along with a typing text; after any render with audio, `render.mjs` prints the integrated loudness and
-  true peak. Opt-in: no `cues`, no sound.
+  true peak. Twelve recorded clicks and hits (Kenney, CC0, 48 kHz WAV, about 261 KB in all) are
+  bundled as `"cue": "kenney:<name>"` (click, tick, switch, select, confirm, error, open, close,
+  pluck, glass, thud, metal); they need no download and fetch nothing at render. Opt-in: no `cues`, no sound.
 - **Texture and typing**: an opt-in root `texture` adds a vignette and static film grain
   (measured cost below), and `"typing": true` types a line out at 0.035 s per character
   with a caret.

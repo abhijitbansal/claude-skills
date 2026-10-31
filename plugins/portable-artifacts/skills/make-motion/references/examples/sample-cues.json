@@ -1,0 +1,47 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "bullets",
+      "duration": 4,
+      "background": "art",
+      "elements": [
+        { "id": "head", "type": "text", "text": "Recorded clicks and hits", "x": 960, "y": 250, "fontSize": 96, "fontWeight": 700 },
+        {
+          "id": "one", "type": "text", "text": "Click on every bullet", "x": 960, "y": 470, "fontSize": 64, "fontWeight": 500,
+          "keyframes": [{ "t": 0.5, "opacity": 0 }, { "t": 0.8, "opacity": 1, "ease": "enter" }]
+        },
+        {
+          "id": "two", "type": "text", "text": "A tick for the small things", "x": 960, "y": 610, "fontSize": 64, "fontWeight": 500,
+          "keyframes": [{ "t": 1.3, "opacity": 0 }, { "t": 1.6, "opacity": 1, "ease": "enter" }]
+        },
+        {
+          "id": "three", "type": "text", "text": "A switch for the big ones", "x": 960, "y": 750, "fontSize": 64, "fontWeight": 500,
+          "keyframes": [{ "t": 2.1, "opacity": 0 }, { "t": 2.4, "opacity": 1, "ease": "enter" }]
+        }
+      ]
+    },
+    {
+      "id": "hit",
+      "duration": 4,
+      "transition": "fade",
+      "elements": [
+        { "id": "card", "type": "text", "text": "A real thud on the last card", "x": 960, "y": 470, "fontSize": 110, "fontWeight": 800,
+          "keyframes": [{ "t": 0.3, "opacity": 0, "scale": 1.15 }, { "t": 0.55, "opacity": 1, "scale": 1, "ease": "outCubic" }]
+        },
+        {
+          "id": "note", "type": "text", "text": "Synthesised cues still do the whooshes", "x": 960, "y": 660, "fontSize": 50, "fontWeight": 400,
+          "keyframes": [{ "t": 1.6, "opacity": 0 }, { "t": 2, "opacity": 1, "ease": "enter" }]
+        }
+      ]
+    }
+  ],
+  "cues": [
+    { "cue": "kenney:click", "scene": "bullets", "at": 0.5 },
+    { "cue": "kenney:tick", "scene": "bullets", "at": 1.3, "volume": 0.8 },
+    { "cue": "kenney:switch", "scene": "bullets", "at": 2.1, "volume": 0.7 },
+    { "cue": "kenney:thud", "scene": "hit", "at": 0.3 },
+    { "cue": "kenney:confirm", "scene": "hit", "at": 2, "volume": 0.6 }
+  ]
+}

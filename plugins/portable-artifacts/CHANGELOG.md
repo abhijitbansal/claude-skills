@@ -4,6 +4,18 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
+## [Unreleased]
+
+### Added
+
+- **make-motion: a bundled pack of twelve recorded sounds.** `"cue": "kenney:<name>"` plays a real click or hit beside the
+  synthesised cues: `click`, `tick`, `switch`, `select`, `confirm`, `error`, `open`, `close`, `pluck`, `glass`, `thud` and
+  `metal`, from Kenney's Interface Sounds and Impact Sounds (CC0). The files are 48 kHz mono WAV, peak-levelled to -6 dBFS,
+  261 KB in all, and ship with the skill (`assets/sfx/kenney/`, sources in `assets/sfx/LICENSES/kenney.txt`); nothing is
+  fetched at render. A recording takes `at`, `scene`, `volume` and `pan` like any cue; `note` and `follow` are errors on
+  it. A mistyped name gets the full list and a did-you-mean (`kenney:clik` -> `kenney:click`). The intake round's sound
+  option offers them. New example `references/examples/sample-cues.json`; Licences table row for Kenney.
+
 ## [1.1.0] - 2026-10-31
 
 make-motion: richer sound cues, an intake round, groups, video clips, formats, captions and ready-made blocks; plus the KPI and plan-page changes below.

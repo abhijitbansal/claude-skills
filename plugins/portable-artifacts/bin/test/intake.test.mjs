@@ -57,7 +57,11 @@ test('the intake format option lists the four format names, with 16:9 the defaul
 
 test('the intake lists only options make-motion can do today', () => {
   const section = intakeSection(read('SKILL.md'));
-  assert.ok(!/kenney/i.test(section), 'no Kenney samples until they land');
+  const sound = optionLine(section, 'sound');
+  for (const alias of ['click', 'tick', 'switch', 'select', 'confirm', 'error', 'open', 'close', 'pluck', 'glass', 'thud', 'metal']) {
+    assert.ok(sound.includes(alias), `the sound option offers the recorded ${alias}`);
+  }
+  assert.match(sound, /kenney:/, 'the sound option names the kenney: form');
   for (const re of [/\bTask \d+[a-c]?\b/, /\bPhase 0b\b/, /\bGate \d\b/]) assert.ok(!re.test(section), `no plan reference ${re}`);
 });
 
