@@ -222,10 +222,17 @@ prompts are written).
 shellcheck 4); 189 came after 2026-10-11; 67 distinct refs. `tokens≈63704` is the
 size of the sliced results, not waste; the real cost is the error line the slice
 dropped, which the script cannot measure. A written rule exists and is missed
-(`~/.claude/CLAUDE.md` "Noisy CLI output"), so the home is enforcement: a
-PreToolUse warning on a piped noisy command. I did not read `bash-guard.sh`, so
-whether it is the right file is unverified; the edit author decides. A hook
-change needs a RED run. The cartoon plugin hook skips piped commands by design.
+(`~/.claude/CLAUDE.md` "Noisy CLI output"), so the home is enforcement. Shipped:
+a deny in `~/.claude/hooks/bash-guard.sh` (the registered PreToolUse Bash hook;
+its only convention is `deny()`), narrowed after review to a command whose first
+statement starts with `npm test`, `npm run test` or `pytest` and pipes into
+`head`, `tail` or `grep`. Those are the commands cartoon actually wraps (at most
+31 of the 273 hits: npm 25, pytest 6; the npm count includes non-test
+subcommands, and the strict count was not re-measured); the
+cartoon hook skips piped commands by design, so this is the backstop. `node`,
+`bats` and `shellcheck` (242 of 273) are not denied until cartoon wraps them; see
+"Proposed, not built". Commands starting with `git`, `gh`, `echo`, `rg` or
+`printf` never match. RED 24/29 on the pre-edit hook, GREEN 29/29.
 
 **HF-07 (confidence high, severity low).** 15 refusals with the foreground
 `sleep` guard (the Bash tool points to Monitor or background runs), 13 followed
@@ -264,6 +271,9 @@ branch.
   precedent for a quote-aware split.
 - **A size warning on Read of a diff file** (from HF-01), or a review harness that
   passes diffs in chunks. Needs a product or hook change.
+- **cartoon to wrap `node --test`, `bats` and `shellcheck`** (242 of 273 HF-06
+  runs by the row's own counts: node 203, bats 35, shellcheck 4), so a deny for
+  them would point at a real wrap.
 - **Find which hook raises the 33 non-blocking errors** on `Stop` and
   `PostToolUse:Write`, if it is a user hook.
 
@@ -281,12 +291,12 @@ Write access: granted (live edits; changelog probe succeeded). Changelog heading
 
 | file | change | changelog heading | HF-nn |
 |---|---|---|---|
-| `~/.claude/hooks/bash-guard.sh` | deny for `bats`/`pytest`/`npm`/`node`/`shellcheck`/`xcodebuild`/`swift` piped into `head`/`tail`/`grep` (+14 lines; RED 10/15, GREEN 15/15) | 2026-10-30: claude-skills harness learnings | HF-06 |
+| `~/.claude/hooks/bash-guard.sh` | deny when the first statement is `npm test`, `npm run test` or `pytest` piped into `head`/`tail`/`grep` (+19 lines; RED 24/29 on the pre-edit hook, GREEN 29/29) | 2026-10-30: claude-skills harness learnings | HF-06 |
 | `~/.claude/hooks/tests/test-bash-guard.sh` | new test suite for the hook, `HOOK` overridable | 2026-10-30: claude-skills harness learnings | HF-06 |
 | `~/.claude/projects/-Users-abhijitbansal-projects-claude-skills/memory/gateguard-write-retry.md` | deleted (`ECC_GATEGUARD` is `off` in settings.json env) | 2026-10-30: claude-skills harness learnings | HF-08 |
-| `.../memory/subagent-commits-wrong-trailers.md` | shortened to AGENTS.md pointer plus amend recovery | 2026-10-30: claude-skills harness learnings | HF-05 |
-| `.../memory/worktree-guard-refuses-eval-paths.md` | shortened to AGENTS.md pointer plus three uncovered quirks | 2026-10-30: claude-skills harness learnings | HF-02, HF-04 |
-| `.../memory/MEMORY.md` | gateguard line removed, two gists shortened | 2026-10-30: claude-skills harness learnings | HF-05, HF-02, HF-08 |
+| `.../memory/subagent-commits-wrong-trailers.md` | rewritten shorter; core rule kept in the file, notes AGENTS.md carries it on this branch | 2026-10-30: claude-skills harness learnings | HF-05 |
+| `.../memory/worktree-guard-refuses-eval-paths.md` | rewritten shorter; core shell rules and three AGENTS.md-uncovered quirks kept, rm hold text aligned with AGENTS.md | 2026-10-30: claude-skills harness learnings | HF-02, HF-04 |
+| `.../memory/MEMORY.md` | gateguard line removed, two gists shortened | 2026-10-30: claude-skills harness learnings | HF-05, HF-02, HF-04, HF-08 |
 | `~/.claude/harness-changelog.md` | new section with one bullet per change | n/a | HF-06, HF-08, HF-05, HF-02, HF-04 |
 
-Concern: the global `bash-guard.sh` was byte-identical to another repo's committed copy and no longer is; see the changelog bullet.
+Concern (Cubby drift): the global `bash-guard.sh` was byte-identical to Cubby's committed `.claude/bash-guard.sh` and now differs. Upstreaming the block plus its cases into the Cubby repo's `.claude/tests/hooks/cases.jsonl` is the owner's call.
