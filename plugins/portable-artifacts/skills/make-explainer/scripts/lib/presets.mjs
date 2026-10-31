@@ -233,10 +233,12 @@ function slides(facts, title) {
   };
 }
 
-// ---- plan: decision first --------------------------------------------------------------------------
-// What needs an answer comes straight after the verdict and the three numbers; the plan itself, the phases and the
-// risks follow for whoever wants them. Ids are fixed so the review items can point at them. An option label and
-// the `recommended` / `default` that name it are the same TODO string, so filling one placeholder fills all three.
+// ---- plan: context first ---------------------------------------------------------------------------
+// The plan explains itself before it asks anything: the verdict and the three numbers, then the workstreams, goals
+// and non-goals, their tasks and the choices already made, the diagram and the phases and the risks. Only then what
+// needs an answer (decision, approval, question), the review pointers and the verdict. Ids are fixed so the review items can point
+// at them. An option label and the `recommended` / `default` that name it are the same TODO string, so filling one
+// placeholder fills all three.
 // The verdict is the same call on every plan, so its heading is fixed: it is listed in the contents as "Your
 // verdict" and deep-linked as #verdict.
 const VERDICT_TITLE = 'Approve, change or stop this plan';
@@ -279,6 +281,36 @@ const planDiagram = () => ({
   },
 });
 
+// The plan body: what each workstream delivers, what the plan does and does not do, the tasks inside the workstreams, and the choices already made (not open).
+const planBody = () => [
+  {
+    type: 'cards',
+    title: todo('the workstreams, ≤ 8 words'),
+    label: LABEL,
+    columns: 2,
+    items: [1, 2].map((n) => ({ title: todo(`workstream ${n}`), text: todo('what this workstream delivers, one line') })),
+  },
+  {
+    type: 'text',
+    title: todo('what the plan does and does not do, ≤ 8 words'),
+    label: LABEL,
+    text: todo('goals as a short "- " list, then the non-goals as a second list'),
+  },
+  {
+    type: 'steps',
+    title: todo('the tasks in each workstream, ≤ 8 words'),
+    label: LABEL,
+    items: [1, 2, 3].map((n) => ({ title: todo(`task ${n}`), text: todo('task: what it does and how it is checked') })),
+  },
+  {
+    type: 'table',
+    title: todo('the choices already made, ≤ 8 words'),
+    label: LABEL,
+    columns: ['Choice', 'Why', 'Made by'],
+    rows: [[todo('a choice already made'), todo('why'), todo('who made it')]],
+  },
+];
+
 function plan(facts, title) {
   return {
     title: title ?? todo('the plan as one finding; aim for ≤ 8 words'),
@@ -297,6 +329,21 @@ function plan(facts, title) {
           { label: 'Cost', value: todo('money, time or both'), note: todo('what the cost buys') },
           { label: 'Risk', value: todo('low, medium or high'), note: todo('the main risk in a few words') },
         ],
+      },
+      ...planBody(),
+      planDiagram(),
+      {
+        type: 'steps',
+        title: todo('the phases in order, ≤ 8 words'),
+        label: LABEL,
+        items: [1, 2, 3].map((n) => ({ title: todo(`phase ${n}`), text: todo(`what phase ${n} delivers and how you know it is done`) })),
+      },
+      {
+        type: 'details',
+        title: todo('what could go wrong, ≤ 8 words'),
+        label: LABEL,
+        summary: todo('the risks in one line'),
+        text: todo('each risk as a "- " list item with how it is handled'),
       },
       planDecision(),
       {
@@ -325,26 +372,6 @@ function plan(facts, title) {
           { point: todo('the riskiest choice, one line'), why: todo('why a reviewer should check it'), target: 'decision-1' },
           { point: todo('the commitment that is hard to undo'), why: todo('what it costs if it is wrong'), target: 'approval-1' },
         ],
-      },
-      {
-        type: 'text',
-        title: todo('what the plan does and does not do, ≤ 8 words'),
-        label: LABEL,
-        text: todo('goals as a short "- " list, then the non-goals as a second list'),
-      },
-      planDiagram(),
-      {
-        type: 'steps',
-        title: todo('the phases in order, ≤ 8 words'),
-        label: LABEL,
-        items: [1, 2, 3].map((n) => ({ title: todo(`phase ${n}`), text: todo(`what phase ${n} delivers and how you know it is done`) })),
-      },
-      {
-        type: 'details',
-        title: todo('what could go wrong, ≤ 8 words'),
-        label: LABEL,
-        summary: todo('the risks in one line'),
-        text: todo('each risk as a "- " list item with how it is handled'),
       },
       { type: 'verdict', id: 'verdict', title: VERDICT_TITLE, label: VERDICT_LABEL, text: todo('the overall question: ship this plan as written?') },
     ],

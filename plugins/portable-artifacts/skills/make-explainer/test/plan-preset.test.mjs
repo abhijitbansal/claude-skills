@@ -1,4 +1,4 @@
-// Plan mode, the author's side: the `plan` scaffold (decision first, every sentence a TODO), the checked-in
+// Plan mode, the author's side: the `plan` scaffold (plan body first, questions after, every sentence a TODO), the checked-in
 // example (valid, builds in mono and brief, survives a real answer round trip through answers.mjs), the page-level
 // mono weight, and the SKILL.md instructions an agent follows.
 import { test, after } from 'node:test';
@@ -20,9 +20,10 @@ const EXAMPLE = path.join(ROOT, 'references/examples/plan.explainer.json');
 const node = (script, args) => spawnSync(process.execPath, [path.join(ROOT, 'scripts', script), ...args], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '', PA_OUTPUT_DIR: '' } });
 const tmp = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-plan-preset-')));
 const readExample = () => JSON.parse(fs.readFileSync(EXAMPLE, 'utf8'));
-const ORDER = ['tldr', 'kpis', 'decision', 'approval', 'question', 'review', 'text', 'diagram', 'steps', 'details', 'verdict'];
-// What the scaffold names itself: the three kpi labels and the verdict's heading (the same on every plan).
-const FIXED_PROSE = new Set(['Ship by', 'Cost', 'Risk', 'Approve, change or stop this plan', 'Your verdict']);
+const ORDER = ['tldr', 'kpis', 'cards', 'text', 'steps', 'table', 'diagram', 'steps', 'details', 'decision', 'approval', 'question', 'review', 'verdict'];
+// What the scaffold names itself: the three kpi labels, the choices table's column headings and the verdict's heading
+// (the same on every plan).
+const FIXED_PROSE = new Set(['Ship by', 'Cost', 'Risk', 'Choice', 'Why', 'Made by', 'Approve, change or stop this plan', 'Your verdict']);
 const isTodo = (s) => s.startsWith('TODO:');
 const todoErrors = (r) => r.errors.filter((e) => /TODO placeholder/.test(e.message));
 const otherErrors = (r) => r.errors.filter((e) => !/TODO placeholder/.test(e.message));
@@ -52,11 +53,19 @@ test('plan is a scaffold preset', () => {
   assert.ok(PRESET_NAMES.includes('plan'));
 });
 
-test('scaffold plan: decision first, in this order, with fixed ids and the verdict last', () => {
+test('scaffold plan: the plan body comes before anything that needs an answer', () => {
   const spec = scaffold('plan');
   assert.equal(spec.preset, 'plan');
-  assert.deepEqual(spec.sections.map((s) => s.type), ORDER);
+  const types = spec.sections.map((s) => s.type);
+  assert.deepEqual(types, ORDER);
+  const firstBody = types.findIndex((t) => ['cards', 'steps', 'table'].includes(t));
+  assert.ok(firstBody >= 0 && firstBody < spec.sections.findIndex((s) => s.id === 'decision-1'), 'the body precedes the first decision');
   const byType = Object.fromEntries(spec.sections.map((s) => [s.type, s]));
+  assert.equal(byType.cards.items.length, 2);
+  assert.ok(byType.cards.items.every((c) => isTodo(c.title) && isTodo(c.text)), 'workstream cards are TODOs');
+  assert.deepEqual(byType.table.columns, ['Choice', 'Why', 'Made by']);
+  assert.equal(byType.table.rows.length, 1);
+  assert.ok(byType.table.rows[0].every((c) => isTodo(String(c))), 'the choices row is TODOs');
   assert.equal(byType.decision.id, 'decision-1');
   assert.equal(byType.approval.id, 'approval-1');
   assert.equal(byType.question.id, 'question-1');
@@ -66,6 +75,7 @@ test('scaffold plan: decision first, in this order, with fixed ids and the verdi
   assert.ok(byType.kpis.items.every((i) => isTodo(String(i.value))), 'kpi values are TODOs');
   assert.ok(byType.decision.options.some((o) => o.label === byType.decision.recommended), 'recommended names an option');
   assert.ok(byType.decision.options.some((o) => o.label === byType.decision.default), 'default names an option');
+  assert.equal(types.at(-1), 'verdict');
   assert.deepEqual([byType.verdict.id, byType.verdict.label], ['verdict', 'Your verdict'], 'the verdict is in the contents with a stable link');
   assert.ok(byType.verdict.title && !isTodo(byType.verdict.title));
 });
