@@ -144,9 +144,9 @@ per-ref counts; the full per-ref map is in `counts.json` under the signal key.
 | HF-03 | Fix-up commits and late review finds, `pr_fixup_commits` | 92 | PR#41, PR#47, PR#44, PR#40, PR#43 | fixup-commits=92 | AGENTS.md "Branch & commit workflow" (pre-review gates) | AGENTS.md | edited (+11/-7) |
 | HF-04 | Guard refusal then retry: Blast Radius hold, `guard_blastradius` | 94 | main/bed33bab, main/bd41599b, main/0d2d8518/agent-a43f0e00bbaf0fde1, main/bed33bab/agent-ab16e20ffc706582c, main/bed33bab/agent-adbfb7e7134869dbc | retries=88 | memory `worktree-guard-refuses-eval-paths` | AGENTS.md | edited (shared with HF-02: +9/-1 total, no separate lines) |
 | HF-05 | Subagent commit with a session trailer, `commit_with_session_trailer_sidechain` | 57 | main/8b03aa8a/agent-a4d3519108ebcea31, main/802ac7c7/agent-a49e964f14247d21d, main/802ac7c7/agent-af57fdfcea0e28a21, main/802ac7c7/agent-a1a6afeca72766e74, main/802ac7c7/agent-a5cefc6b339e9ffdd | retries=57 | memory `subagent-commits-wrong-trailers`; AGENTS.md "Commit / PR trailers" | AGENTS.md | edited (+4/-1) |
-| HF-06 | Unwrapped noisy output, `noisy_piped_strict` | 273 | main/c36539bd, main/c6ec0975, main/bed33bab, wt/motion-improvement/2ab5f862, main/8b03aa8a | tokens≈63704 | `~/.claude/CLAUDE.md` "Noisy CLI output: run bare, let cartoon wrap it" | ~/.claude/hooks/bash-guard.sh | open |
+| HF-06 | Unwrapped noisy output, `noisy_piped_strict` | 273 | main/c36539bd, main/c6ec0975, main/bed33bab, wt/motion-improvement/2ab5f862, main/8b03aa8a | tokens≈63704 | `~/.claude/CLAUDE.md` "Noisy CLI output: run bare, let cartoon wrap it" | ~/.claude/hooks/bash-guard.sh | edited (home) |
 | HF-07 | Guard refusal then retry: foreground sleep block, `guard_sleep` | 15 | main/4165da11, main/c33995d6, main/c36539bd, main/f601d050, main/0d2d8518/agent-a042347f55b50098e | retries=13 | none | AGENTS.md | edited (shared with HF-02: +9/-1 total, no separate lines) |
-| HF-08 | Stale rule: GateGuard memory, `marker_GateGuard` | 2 | main/ae5f1f65, main/f601d050 | tokens≈245 | memory `gateguard-write-retry` | prune:/Users/abhijitbansal/.claude/projects/-Users-abhijitbansal-projects-claude-skills/memory/gateguard-write-retry.md | open |
+| HF-08 | Stale rule: GateGuard memory, `marker_GateGuard` | 2 | main/ae5f1f65, main/f601d050 | tokens≈245 | memory `gateguard-write-retry` | prune:/Users/abhijitbansal/.claude/projects/-Users-abhijitbansal-projects-claude-skills/memory/gateguard-write-retry.md | edited (home) |
 | HF-09 | Redone PR, `pr_redone` | 2 | PR#42, PR#45 | redone-PR | AGENTS.md "Branch & commit workflow" (work on the PR's own branch) | AGENTS.md | edited (+4/-3) |
 
 ### Row notes
@@ -271,6 +271,22 @@ branch.
 
 Filled by Task 6: lines added and removed per edited file.
 
+Group 2 (guidelines): no findings
+
 ## Edits outside git
 
 Filled by Task 4 and Task 5: `~/.claude` file, change, changelog heading.
+
+Write access: granted (live edits; changelog probe succeeded). Changelog heading for every row: `2026-10-30: claude-skills harness learnings`.
+
+| file | change | changelog heading | HF-nn |
+|---|---|---|---|
+| `~/.claude/hooks/bash-guard.sh` | deny for `bats`/`pytest`/`npm`/`node`/`shellcheck`/`xcodebuild`/`swift` piped into `head`/`tail`/`grep` (+14 lines; RED 10/15, GREEN 15/15) | 2026-10-30: claude-skills harness learnings | HF-06 |
+| `~/.claude/hooks/tests/test-bash-guard.sh` | new test suite for the hook, `HOOK` overridable | 2026-10-30: claude-skills harness learnings | HF-06 |
+| `~/.claude/projects/-Users-abhijitbansal-projects-claude-skills/memory/gateguard-write-retry.md` | deleted (`ECC_GATEGUARD` is `off` in settings.json env) | 2026-10-30: claude-skills harness learnings | HF-08 |
+| `.../memory/subagent-commits-wrong-trailers.md` | shortened to AGENTS.md pointer plus amend recovery | 2026-10-30: claude-skills harness learnings | HF-05 |
+| `.../memory/worktree-guard-refuses-eval-paths.md` | shortened to AGENTS.md pointer plus three uncovered quirks | 2026-10-30: claude-skills harness learnings | HF-02, HF-04 |
+| `.../memory/MEMORY.md` | gateguard line removed, two gists shortened | 2026-10-30: claude-skills harness learnings | HF-05, HF-02, HF-08 |
+| `~/.claude/harness-changelog.md` | new section with one bullet per change | n/a | HF-06, HF-08, HF-05, HF-02, HF-04 |
+
+Concern: the global `bash-guard.sh` was byte-identical to another repo's committed copy and no longer is; see the changelog bullet.
