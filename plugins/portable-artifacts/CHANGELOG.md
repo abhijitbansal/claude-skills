@@ -6,6 +6,20 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+### Security
+
+- **Patched `fast-uri` in all five skills.** `ajv` pulls in `fast-uri` 3.0.0 to 3.1.8, which has four moderate advisories
+  ([GHSA-w74x-v6f9-j3xg](https://github.com/advisories/GHSA-w74x-v6f9-j3xg),
+  [GHSA-xhq7-xmqj-769h](https://github.com/advisories/GHSA-xhq7-xmqj-769h),
+  [GHSA-wjr9-j795-jxcr](https://github.com/advisories/GHSA-wjr9-j795-jxcr),
+  [GHSA-333x-w4r6-6crp](https://github.com/advisories/GHSA-333x-w4r6-6crp), fixed in 3.1.9). Each skill's `package.json`
+  now overrides `fast-uri` to 3.1.9 and the lockfiles are regenerated: `npm audit` goes from 1 moderate vulnerability to 0
+  in make-dashboard, make-diagram, make-explainer, make-motion and make-scene, and in make-motion's voiceover install.
+- **Existing installs are flagged.** The doctor now reports `node_modules` as missing when an installed package differs from
+  an exact version pinned in the skill's `overrides`, so an install made before this change is offered `npm ci` instead of
+  keeping `fast-uri` 3.1.8. Run `node scripts/doctor.mjs --fix node_modules` once in each skill you already installed
+  (it installs without dev packages and removes a voiceover install, so rerun `--fix dev_deps` or `--fix kokoro` if you use them).
+
 ### Added and changed
 
 - **Even KPI rows (make-explainer).** The one-line values in a `kpis` section now share one size. A wide value (11 to 16

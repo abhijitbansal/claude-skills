@@ -102,6 +102,24 @@ test('kokoro installed before the overrides existed counts as missing until rein
   assert.deepEqual(await diagnose([kokoro()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
 });
 
+test('node_modules installed before an overrides pin existed counts as missing until npm ci reruns', async () => {
+  const files = {
+    '/s/make-motion/package.json': JSON.stringify({ overrides: { 'fast-uri': '3.1.9', other: '^1.0.0' } }),
+    '/s/make-motion/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.8' }),
+  };
+  const readFile = (p) => {
+    if (!(p in files)) throw new Error('ENOENT');
+    return files[p];
+  };
+  const stale = await diagnose([nodeModules()], ctx({ exists: () => true, readFile }));
+  assert.equal(stale.ok, false, 'the stale install must go red, node_modules is a required requirement');
+  assert.equal(stale.missing[0].id, 'node_modules');
+  assert.match(stale.missing[0].why, /reinstall to get the patched fast-uri pinned in package\.json "overrides"/);
+  assert.equal(stale.missing[0].fix.auto, 'npm ci --omit=dev --prefix /s/make-motion');
+  files['/s/make-motion/node_modules/fast-uri/package.json'] = JSON.stringify({ version: '3.1.9' });
+  assert.deepEqual(await diagnose([nodeModules()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
+});
+
 // --- additions beyond the brief ---
 
 test('nodeModules: omitDev false drops --omit=dev; present dir is fine', async () => {

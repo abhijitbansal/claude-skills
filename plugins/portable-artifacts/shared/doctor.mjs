@@ -105,10 +105,14 @@ export function nodeModules({ omitDev = true } = {}) {
   return {
     id: 'node_modules',
     rank: RANK.nodeModules,
-    why: "installs the skill's own npm packages",
+    why: (ctx) => {
+      const stale = staleOverrides(ctx);
+      return stale.length > 0 ? `installs the skill's own npm packages; reinstall to get the patched ${stale.join(', ')} pinned in package.json "overrides"` : "installs the skill's own npm packages";
+    },
     required: true,
     size: '≈30–60 MB',
-    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')),
+    // An install made before a security pin landed keeps the vulnerable version until npm ci reruns.
+    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) && staleOverrides(ctx).length === 0,
     fix: (ctx) => {
       const argv = ['npm', 'ci', ...(omitDev ? ['--omit=dev'] : []), '--prefix', ctx.skillDir];
       return { auto: [argv], manual: manualAll(render([argv], ctx.platform)) };
@@ -326,8 +330,9 @@ export function browser({ required = false, dir, id = 'chromium' } = {}) {
 }
 
 // Names whose installed version differs from an exact-version "overrides" pin in the skill's
-// package.json. A kokoro install made before the pins existed keeps the vulnerable sharp and
-// global-agent until it is reinstalled. Unreadable files count as not stale.
+// package.json. An install made before a pin existed (fast-uri in every skill's tree; sharp and
+// global-agent in a kokoro install) keeps the vulnerable version until it is reinstalled.
+// Unreadable files count as not stale.
 function staleOverrides(ctx) {
   const read = (p) => {
     try {
