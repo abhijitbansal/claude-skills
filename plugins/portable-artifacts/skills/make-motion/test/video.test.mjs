@@ -6,9 +6,11 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { requireRender, renderHash, assertRendersIdentically, makeTestVideo } from './helpers/render.mjs';
-import { probeVideo, frameCacheKey, decodeFrames, prepareVideo, videoAudioTracks, CACHE_ROOT } from '../scripts/lib/video.mjs';
+import { createHash } from 'node:crypto';
+import net from 'node:net';
+import { probeVideo, probeArgs, decodeArgs, frameCacheKey, ffmpegVersion, decodeFrames, readCache, prepareVideo, videoAudioTracks, CACHE_ROOT } from '../scripts/lib/video.mjs';
 import { validateSpec, withDefaults } from '../scripts/lib/spec.mjs';
-import { encodeArgs } from '../scripts/lib/ffmpeg.mjs';
+import { encodeArgs, preflightArgs, probeAudioArgs } from '../scripts/lib/ffmpeg.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
 import { videoCache, CACHE_LIMIT_BYTES } from '../scripts/lib/requirements.mjs';
@@ -119,13 +121,133 @@ test('a 15 fps clip rendered at 10 fps: decodeFrames yields round((trimEnd-trimS
 });
 
 test('frameCacheKey changes with every input and is stable', () => {
-  const base = { sha256: 'a'.repeat(64), trimStart: 0, trimEnd: 2, fps: 10, width: 320, height: 180, fit: 'contain', alpha: false };
+  const base = { sha256: 'a'.repeat(64), trimStart: 0, trimEnd: 2, fps: 10, width: 320, height: 180, fit: 'contain', alpha: false, ffmpegVersion: 'ffmpeg version 8.1.1' };
   const key = frameCacheKey(base);
   assert.match(key, /^[0-9a-f]{64}$/);
   assert.equal(frameCacheKey({ ...base }), key);
   assert.equal(frameCacheKey(Object.fromEntries(Object.entries(base).reverse())), key, 'key order does not matter');
-  const changed = { sha256: 'b'.repeat(64), trimStart: 0.5, trimEnd: 1.5, fps: 30, width: 640, height: 360, fit: 'cover', alpha: true };
+  const changed = { sha256: 'b'.repeat(64), trimStart: 0.5, trimEnd: 1.5, fps: 30, width: 640, height: 360, fit: 'cover', alpha: true, ffmpegVersion: 'ffmpeg version 7.1' };
   for (const [k, v] of Object.entries(changed)) assert.notEqual(frameCacheKey({ ...base, [k]: v }), key, k);
+  // The cache format version is salted in: the same inputs keyed without it (the first cache layout) do not collide.
+  const unsalted = createHash('sha256').update(JSON.stringify({ sha256: base.sha256, trimStart: 0, trimEnd: 2, fps: 10, width: 320, height: 180, fit: 'contain', alpha: false })).digest('hex');
+  assert.notEqual(key, unsalted);
+});
+
+test('ffmpegVersion is the first line of ffmpeg -version, probed once per binary', async (t) => {
+  const tools = await requireRender(t, VIDEO_TOOLS);
+  if (!tools) return;
+  assert.match(ffmpegVersion(tools.ffmpeg), /^ffmpeg version \S+/);
+  assert.equal(ffmpegVersion(tools.ffmpeg), ffmpegVersion(tools.ffmpeg));
+});
+
+// The offline guarantee for media: a user file is only ever opened through the file (or pipe) protocol, so a playlist
+// renamed to .mp4 or .mp3 cannot make ffmpeg fetch a URL or follow a reference out of the spec folder.
+const WHITELIST = ['-protocol_whitelist', 'file,pipe'];
+const whitelistedInput = (args, file) => {
+  const i = args.findIndex((a, n) => a === '-i' && args[n + 1] === file);
+  assert.ok(i >= 2, `no -i ${file} in ${args.join(' ')}`);
+  assert.deepEqual(args.slice(i - 2, i), WHITELIST, `-i ${file} is not preceded by the whitelist: ${args.join(' ')}`);
+};
+
+test('every ffprobe and ffmpeg call that opens a user file allows only the file and pipe protocols', () => {
+  const probe = probeArgs('/a/clip.mp4');
+  assert.deepEqual(probe.slice(probe.indexOf('-protocol_whitelist'), probe.indexOf('-protocol_whitelist') + 2), WHITELIST);
+  assert.ok(probe.indexOf('-protocol_whitelist') < probe.indexOf('/a/clip.mp4'));
+  whitelistedInput(decodeArgs({ file: '/a/clip.mp4', trimStart: 0, trimEnd: 1, fps: 10, width: 32, height: 18, fit: 'contain', alpha: false, dir: '/c' }), '/a/clip.mp4');
+  whitelistedInput(probeAudioArgs('/a/music.mp3'), '/a/music.mp3');
+  const audio = [
+    { file: '/a/music.mp3', start: 0, end: 2, volume: 1, fadeIn: 0, fadeOut: 0 },
+    { file: '/a/clip.mp4', start: 0, end: 1, volume: 1, fadeIn: 0, fadeOut: 0, clipStart: 0.5 },
+  ];
+  for (const args of [encodeArgs({ fps: 10, out: 'o.mp4', audio, duration: 2 }), preflightArgs({ fps: 10, audio })]) {
+    for (const { file } of audio) whitelistedInput(args, file);
+  }
+});
+
+test('an HLS playlist named .mp4 is rejected with a clear error and no network request', async (t) => {
+  const tools = await requireRender(t, VIDEO_TOOLS);
+  if (!tools) return;
+  let connections = 0;
+  const listener = net.createServer((socket) => { connections++; socket.destroy(); });
+  await new Promise((resolve) => { listener.listen(0, '127.0.0.1', resolve); });
+  try {
+    const dir = tmp('video-hls-');
+    const playlist = `#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nhttp://127.0.0.1:${listener.address().port}/seg.ts\n#EXT-X-ENDLIST\n`;
+    writeFileSync(path.join(dir, 'clip.mp4'), playlist);
+    const errors = validateSpec(readJson(videoSpec(dir)), { dir }).errors.map((e) => `${e.path}: ${e.message}`);
+    assert.equal(errors.length, 1, errors.join('\n'));
+    assert.match(errors[0], /^scenes\[0\]\.elements\[0\]\.src: ffprobe cannot read clip\.mp4: /);
+    assert.throws(() => prepareVideo(withDefaults(readJson(path.join(dir, 'motion.json'))), dir, tools.ffmpeg, tools.ffprobe, 10), /ffprobe cannot read clip\.mp4/);
+    assert.throws(() => decodeFrames(tools.ffmpeg, { file: path.join(dir, 'clip.mp4'), trimStart: 0, trimEnd: 1, fps: 10, width: 32, height: 18, fit: 'contain', alpha: false, dir: path.join(dir, 'frames') }), /ffmpeg cannot decode/);
+    // The playlist under its own name, so even a demuxer that sniffs by extension takes it as HLS: still no request.
+    writeFileSync(path.join(dir, 'clip.m3u8'), playlist);
+    assert.ok(probeVideo(tools.ffprobe, path.join(dir, 'clip.m3u8')).error);
+    assert.equal(connections, 0, 'ffprobe or ffmpeg opened a network connection');
+  } finally {
+    listener.close();
+  }
+});
+
+// A finished cache folder: done.json with { count } and frames 000001 to count.
+function fakeCache(dir, count, { ext = 'jpg', done = { count } } = {}) {
+  mkdirSync(dir, { recursive: true });
+  for (let i = 1; i <= count; i++) writeFileSync(path.join(dir, `${String(i).padStart(6, '0')}.${ext}`), 'x');
+  if (done !== null) writeFileSync(path.join(dir, 'done.json'), JSON.stringify(done));
+}
+
+test('readCache accepts only a whole decode: a positive integer count, and its first and last frames on disk', () => {
+  const root = tmp('video-done-');
+  const at = (name) => path.join(root, name);
+  fakeCache(at('ok'), 3);
+  assert.deepEqual(readCache(at('ok'), 'jpg'), { count: 3 });
+  assert.equal(readCache(at('ok'), 'png'), null, 'frames of another format');
+  fakeCache(at('none'), 3, { done: null });
+  fakeCache(at('zero'), 0, { done: { count: 0 } });
+  fakeCache(at('text'), 3, { done: { count: '3' } });
+  fakeCache(at('frac'), 3, { done: { count: 2.5 } });
+  fakeCache(at('short'), 2, { done: { count: 3 } });
+  writeFileSync(at('junk.json'), '');
+  fakeCache(at('bad'), 1);
+  writeFileSync(path.join(at('bad'), 'done.json'), '{');
+  rmSync(path.join(at('ok'), '000001.jpg'));
+  for (const name of ['ok', 'none', 'zero', 'text', 'frac', 'short', 'bad', 'missing']) assert.equal(readCache(at(name), 'jpg'), null, name);
+});
+
+test('decodeFrames replaces an unfinished folder by renaming it aside, and never touches a finished one', async (t) => {
+  const tools = await requireRender(t, VIDEO_TOOLS);
+  if (!tools) return;
+  const work = tmp('video-race-');
+  const file = path.join(work, 'clip.mp4');
+  makeTestVideo(tools.ffmpeg, file, { seconds: 1 });
+  const opts = { file, trimStart: 0, trimEnd: 1, fps: 10, width: 32, height: 18, fit: 'contain', alpha: false };
+  const dir = path.join(work, 'key');
+  fakeCache(dir, 2, { done: null }); // a decode that died before done.json
+  writeFileSync(path.join(dir, 'leftover'), 'x');
+  assert.deepEqual(decodeFrames(tools.ffmpeg, { ...opts, dir }), { count: 10 });
+  assert.deepEqual(readCache(dir, 'jpg'), { count: 10 });
+  assert.equal(existsSync(path.join(dir, 'leftover')), false, 'the unfinished folder was replaced');
+  // Another render finished this key first: its folder (which may be being served) stays exactly as it is.
+  writeFileSync(path.join(dir, 'marker'), 'served');
+  assert.deepEqual(decodeFrames(tools.ffmpeg, { ...opts, dir }), { count: 10 });
+  assert.equal(readFileSync(path.join(dir, 'marker'), 'utf8'), 'served');
+  assert.deepEqual(readdirSync(work).sort(), ['clip.mp4', 'key'], 'no .partial or .stale folder is left behind');
+});
+
+test('prepareVideo decodes again when the cached folder is damaged', async (t) => {
+  const tools = await requireRender(t, VIDEO_TOOLS);
+  if (!tools) return;
+  const dir = tmp('video-damaged-');
+  makeTestVideo(tools.ffmpeg, path.join(dir, 'clip.mp4'), { seconds: 1.3 }); // a length no other test uses: its own key
+  const spec = withDefaults(readJson(videoSpec(dir, {}, { duration: 1.3 })));
+  const { clip } = prepareVideo(spec, dir, tools.ffmpeg, tools.ffprobe, 10);
+  const cache = path.join(CACHE_ROOT, clip.key);
+  const last = path.join(cache, `${String(clip.count).padStart(6, '0')}.jpg`);
+  rmSync(last);
+  assert.deepEqual(prepareVideo(spec, dir, tools.ffmpeg, tools.ffprobe, 10), { clip });
+  assert.ok(existsSync(last), 'the missing last frame is decoded again');
+  writeFileSync(path.join(cache, 'done.json'), JSON.stringify({ count: 0 }));
+  assert.deepEqual(prepareVideo(spec, dir, tools.ffmpeg, tools.ffprobe, 10), { clip });
+  assert.deepEqual(readJson(path.join(cache, 'done.json')), { count: clip.count });
 });
 
 test('trackChain with clipStart 2 prepends atrim=start=2,asetpts=PTS-STARTPTS; without it the chain is unchanged', () => {
@@ -213,6 +335,21 @@ test('a 1.5 s movingbox clip in a 2 s scene holds its last frame: frames at 1.6 
   assert.ok(shots[1.6].png.equals(shots[1.4].png), 'the held frame is drawn identically');
   assert.ok(shots[1.9].png.equals(shots[1.4].png));
   assert.ok(!shots[1.0].png.equals(shots[1.4].png), 'the box has moved between 1.0 s and 1.4 s');
+});
+
+test('a clip whose scene crossfades out freezes on its last in-scene frame under the incoming scene', async (t) => {
+  const tools = await requireRender(t, RENDER_TOOLS);
+  if (!tools) return;
+  const dir = tmp('video-crossfade-');
+  makeTestVideo(tools.ffmpeg, path.join(dir, 'clip.mp4')); // 2 s, longer than its 1 s scene
+  const specPath = path.join(dir, 'motion.json');
+  writeFileSync(specPath, JSON.stringify({ size: [320, 180], fps: 30, scenes: [
+    { id: 'a', duration: 1, elements: [{ id: 'clip', type: 'video', x: 160, y: 90, src: 'clip.mp4', width: 320, height: 180 }] },
+    { id: 'b', duration: 1, transition: 'crossfade', elements: [{ id: 'note', type: 'text', text: 'next', x: 160, y: 40, fontSize: 24 }] },
+  ] }));
+  const shots = await pageShots(specPath, dir, tools, [0.9, 1.0, 1.2, 1.3]);
+  assert.match(shots[0.9].src, /\/000010\.jpg$/, 'the last frame scene "a" renders (t = 0.9 s at 10 fps)');
+  for (const sec of [1.0, 1.2, 1.3]) assert.equal(shots[sec].src, shots[0.9].src, `${sec} s, during the crossfade`);
 });
 
 test('offset holds the first frame until playback starts', async (t) => {

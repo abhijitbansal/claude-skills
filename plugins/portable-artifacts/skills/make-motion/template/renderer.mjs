@@ -235,7 +235,7 @@ function showFrame(frame, sceneT) {
   if (frame.img.getAttribute('src') === src) return null;
   frame.img.src = src;
   return frame.img.decode().catch(() => {
-    if (frame.img.getAttribute('src') === src) throw new Error(`video frame failed to load: ${src}`);
+    if (frame.img.getAttribute('src') === src) throw new Error(`video frame failed to load: ${src}; the frame cache may be damaged: run node scripts/doctor.mjs --fix cache, then render again`);
   });
 }
 
@@ -475,8 +475,15 @@ function makeApply({ scenes, parts }, built) {
       }
       if (format) node.textContent = format(s.value);
       if (typing) setTyping(typing, s.value, sec);
-      if (frame) decoding.push(showFrame(frame, sec - sceneStarts[sceneOf.get(el.id)]));
-      if (clip) seekClip(clip, sec - sceneStarts[sceneOf.get(el.id)]);
+      if (frame || clip) {
+        // Scene time, held at the scene's last frame: during a crossfade the outgoing clip freezes there (its sound
+        // stops at the scene end too) instead of playing on under the incoming scene.
+        const si = sceneOf.get(el.id);
+        const { duration } = scenes[si].scene;
+        const sceneT = sec - sceneStarts[si];
+        if (frame) decoding.push(showFrame(frame, Math.min(sceneT, duration - 1 / frame.fps)));
+        else seekClip(clip, Math.min(sceneT, duration));
+      }
     }
     return Promise.all(decoding);
   };

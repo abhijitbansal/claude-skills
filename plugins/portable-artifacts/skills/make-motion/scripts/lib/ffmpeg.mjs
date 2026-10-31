@@ -55,6 +55,11 @@ const PROBE_SECONDS = '0.1';
 const AFORMAT = 'aformat=sample_rates=48000:channel_layouts=stereo';
 const PREFLIGHT_VIDEO = (fps) => `color=s=16x16:r=${fps}:d=${PROBE_SECONDS}`;
 
+// A user file (audio track, video clip) as an ffmpeg input that may only be read through the file or pipe protocol:
+// ffmpeg sniffs content, so a playlist renamed to .mp3 or .mp4 must not make it fetch a URL. The offline guarantee.
+export const PROTOCOL_WHITELIST = ['-protocol_whitelist', 'file,pipe'];
+export const fileInput = (file) => [...PROTOCOL_WHITELIST, '-i', file];
+
 // Round to ms so float noise (1.3000000000000003) never reaches a filter graph.
 const sec = (n) => String(Math.round(n * MS_PER_SECOND) / MS_PER_SECOND);
 
@@ -85,7 +90,7 @@ export function encodeArgs({ fps, out, audio = [], duration, metadata }) {
   if (audio.length === 0) return [...VIDEO_INPUT(fps), ...VIDEO_CODEC, ...metadataArgs(metadata), out];
   if (!Number.isFinite(duration)) throw new Error('encodeArgs: duration is required when audio tracks are given');
   const { graph, label } = audioGraph(audio);
-  return [...VIDEO_INPUT(fps), ...audio.flatMap((t) => ['-i', t.file]), '-filter_complex', graph,
+  return [...VIDEO_INPUT(fps), ...audio.flatMap((t) => fileInput(t.file)), '-filter_complex', graph,
     '-map', '0:v', '-map', label, ...VIDEO_CODEC, ...AUDIO_CODEC, '-t', sec(duration), ...metadataArgs(metadata), out];
 }
 
@@ -93,7 +98,7 @@ export function encodeArgs({ fps, out, audio = [], duration, metadata }) {
 // installed ffmpeg accepts every filter and option before a single frame is captured.
 export function preflightArgs({ fps, audio }) {
   const { graph, label } = audioGraph(audio);
-  return ['-v', 'error', '-f', 'lavfi', '-i', PREFLIGHT_VIDEO(fps), ...audio.flatMap((t) => ['-i', t.file]),
+  return ['-v', 'error', '-f', 'lavfi', '-i', PREFLIGHT_VIDEO(fps), ...audio.flatMap((t) => fileInput(t.file)),
     '-filter_complex', graph, '-map', '0:v', '-map', label, '-t', PROBE_SECONDS, '-f', 'null', '-'];
 }
 
@@ -123,9 +128,11 @@ export function probeGraph(ffmpegPath, plan, args = preflightArgs(plan)) {
   return firstStderrLine(spawnSync(ffmpegPath, args, { encoding: 'utf8' }));
 }
 
+export const probeAudioArgs = (file) => ['-v', 'error', ...fileInput(file), '-map', '0:a:0', '-t', PROBE_SECONDS, '-f', 'null', '-'];
+
 // null when ffmpeg can decode the start of `file`'s first audio stream, else the first stderr line.
 // Mapping 0:a:0 makes a video-only or image file fail here instead of after every frame is captured.
 export function probeAudio(ffmpegPath, file) {
-  const args = ['-v', 'error', '-i', file, '-map', '0:a:0', '-t', PROBE_SECONDS, '-f', 'null', '-'];
+  const args = probeAudioArgs(file);
   return firstStderrLine(spawnSync(ffmpegPath, args, { encoding: 'utf8' }));
 }
