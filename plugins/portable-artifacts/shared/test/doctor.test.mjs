@@ -102,9 +102,13 @@ test('kokoro installed before the overrides existed counts as missing until rein
   assert.deepEqual(await diagnose([kokoro()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
 });
 
+// A lockfile whose tree holds fast-uri (via ajv) but not sharp or global-agent, which only a kokoro install brings.
+const LOCK = JSON.stringify({ packages: { '': {}, 'node_modules/ajv': {}, 'node_modules/fast-uri': {}, 'node_modules/@scope/pkg': {} } });
+
 test('node_modules installed before an overrides pin existed counts as missing until npm ci reruns', async () => {
   const files = {
     '/s/make-motion/package.json': JSON.stringify({ overrides: { 'fast-uri': '3.1.9', other: '^1.0.0' } }),
+    '/s/make-motion/package-lock.json': LOCK,
     '/s/make-motion/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.8' }),
   };
   const readFile = (p) => {
@@ -118,6 +122,57 @@ test('node_modules installed before an overrides pin existed counts as missing u
   assert.equal(stale.missing[0].fix.auto, 'npm ci --omit=dev --prefix /s/make-motion');
   files['/s/make-motion/node_modules/fast-uri/package.json'] = JSON.stringify({ version: '3.1.9' });
   assert.deepEqual(await diagnose([nodeModules()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
+});
+
+test('make-motion: a stale sharp from an old kokoro install leaves node_modules ok and turns only kokoro red', async () => {
+  const files = {
+    '/s/make-motion/package.json': JSON.stringify({ overrides: { sharp: '0.35.5', 'global-agent': '4.1.3', 'fast-uri': '3.1.9' } }),
+    '/s/make-motion/package-lock.json': LOCK,
+    '/s/make-motion/node_modules/sharp/package.json': JSON.stringify({ version: '0.34.5' }),
+    '/s/make-motion/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.9' }),
+  };
+  const readFile = (p) => {
+    if (!(p in files)) throw new Error('ENOENT');
+    return files[p];
+  };
+  const r = await diagnose([nodeModules({ omitDev: false }), kokoro()], ctx({ exists: () => true, readFile }));
+  assert.deepEqual(r.missing.map((m) => m.id), ['kokoro']);
+  assert.equal(r.ok, true, 'kokoro is optional, so the required items stay green');
+  assert.match(r.missing[0].why, /reinstall to get the patched sharp pinned/);
+  assert.doesNotMatch(r.missing[0].why, /fast-uri/);
+});
+
+test('node_modules fix on an existing install says what npm ci removes and which --fix ids restore it', async () => {
+  const exists = () => true;
+  const dev = (await diagnose([nodeModules({ restore: ['dev_deps'] })], ctx({ exists, readFile: () => { throw new Error('x'); }, skillDir: '/s/x' })));
+  assert.deepEqual(dev, { ok: true, missing: [] });
+  const stale = { '/s/x/package.json': JSON.stringify({ overrides: { 'fast-uri': '3.1.9' } }), '/s/x/package-lock.json': LOCK, '/s/x/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.8' }) };
+  const readFile = (p) => { if (!(p in stale)) throw new Error('ENOENT'); return stale[p]; };
+  const note = async (opts, over = {}) => (await diagnose([nodeModules(opts)], ctx({ exists, readFile, skillDir: '/s/x', ...over }))).missing[0].notes;
+  assert.match(await note({ restore: ['dev_deps'] }), /removes the dev packages; restore with --fix dev_deps$/);
+  assert.match(await note({ omitDev: false, restore: ['kokoro'] }), /removes any voiceover install \(kokoro-js\); restore with --fix kokoro$/);
+  assert.doesNotMatch(await note({ omitDev: false, restore: ['kokoro'] }), /dev packages/);
+  assert.match(await note({}), /removes the dev packages; restore the dev packages with npm ci --prefix \/s\/x \(this skill's doctor has no --fix id/);
+  assert.equal(await note({ omitDev: false }), undefined, 'nothing removed, nothing to disclose');
+  assert.equal((await diagnose([nodeModules({ restore: ['dev_deps'] })], ctx({ exists: () => false, skillDir: '/s/x' }))).missing[0].notes, undefined, 'a first install removes nothing');
+});
+
+test('sister skill: a node_modules that predates a pin in the sister package.json counts as missing', async () => {
+  const dir = '/p/.agents/skills/make-diagram';
+  const files = {
+    [dir + '/package.json']: JSON.stringify({ overrides: { 'fast-uri': '3.1.9' } }),
+    [dir + '/package-lock.json']: LOCK,
+    [dir + '/node_modules/fast-uri/package.json']: JSON.stringify({ version: '3.1.8' }),
+  };
+  const readFile = (p) => { if (!(p in files)) throw new Error('ENOENT'); return files[p]; };
+  const base = { skillDir: '/p/.agents/skills/make-explainer', cwd: '/p', homedir: '/h', exists: () => true, readFile };
+  const stale = await diagnose([sisterSkill('make-diagram')], ctx(base));
+  assert.equal(stale.ok, false);
+  assert.match(stale.missing[0].why, /make-diagram is installed but its dependencies predate the patched fast-uri/);
+  assert.equal(stale.missing[0].fix.auto, 'npm ci --omit=dev --prefix ' + dir);
+  assert.match(stale.missing[0].notes, /removes its dev packages/);
+  files[dir + '/node_modules/fast-uri/package.json'] = JSON.stringify({ version: '3.1.9' });
+  assert.deepEqual(await diagnose([sisterSkill('make-diagram')], ctx(base)), { ok: true, missing: [] });
 });
 
 // --- additions beyond the brief ---

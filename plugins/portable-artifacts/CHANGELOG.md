@@ -15,10 +15,18 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
   [GHSA-333x-w4r6-6crp](https://github.com/advisories/GHSA-333x-w4r6-6crp), fixed in 3.1.9). Each skill's `package.json`
   now overrides `fast-uri` to 3.1.9 and the lockfiles are regenerated: `npm audit` goes from 1 moderate vulnerability to 0
   in make-dashboard, make-diagram, make-explainer, make-motion and make-scene, and in make-motion's voiceover install.
-- **Existing installs are flagged.** The doctor now reports `node_modules` as missing when an installed package differs from
-  an exact version pinned in the skill's `overrides`, so an install made before this change is offered `npm ci` instead of
-  keeping `fast-uri` 3.1.8. Run `node scripts/doctor.mjs --fix node_modules` once in each skill you already installed
-  (it installs without dev packages and removes a voiceover install, so rerun `--fix dev_deps` or `--fix kokoro` if you use them).
+- **Existing installs are flagged.** The doctor now reports `node_modules` as missing when an installed package in the
+  skill's own lockfile tree differs from an exact version pinned in the skill's `overrides`, so an install made before this
+  change is offered `npm ci` instead of keeping `fast-uri` 3.1.8. A sister skill (for example make-diagram seen from
+  make-explainer) is checked the same way against its own `package.json`. A stale `sharp` or `global-agent` from an old
+  voiceover install still turns only the optional `kokoro` item red, not `node_modules`. Run
+  `node scripts/doctor.mjs --fix node_modules` once in each skill you already installed. The fix prints what it removes:
+  - make-diagram, make-explainer and make-scene install without dev packages, so afterwards run `--fix dev_deps` if you
+    use `check.mjs`.
+  - make-dashboard installs without dev packages too, but its doctor has no `dev_deps` id; run
+    `npm ci --prefix <skill-dir>` if you need them (they are only used by its tests).
+  - make-motion keeps its dev packages (a plain `npm ci`) but removes a voiceover install, so run `--fix kokoro` again if
+    you use voiceover.
 
 ### Added and changed
 
