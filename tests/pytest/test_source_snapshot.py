@@ -127,13 +127,9 @@ class SourceSnapshotTests(unittest.TestCase):
         self.assertNotEqual(first["root"], second["root"])
         self.assertEqual(first["head"], second["head"])
 
-    def test_symlink_file_and_parent_are_unsupported(self):
+    def test_a_symlinked_parent_of_a_tracked_file_is_unsupported(self):
         target = Path(self.temp.name) / "outside"
         target.mkdir()
-        (target / "value").write_text("synthetic outside input")
-        (self.root / "link").symlink_to(target / "value")
-        self.assertEqual(self.collect()["status"], "unknown")
-        (self.root / "link").unlink()
         (self.root / "dir").mkdir()
         (self.root / "dir/value").write_text("tracked fixture")
         self.git("add", "dir/value")
@@ -141,6 +137,139 @@ class SourceSnapshotTests(unittest.TestCase):
         (self.root / "dir").rmdir()
         (self.root / "dir").symlink_to(target, target_is_directory=True)
         self.assertEqual(self.collect()["status"], "unknown")
+
+    def outside(self, name="outside"):
+        path = Path(self.temp.name) / name
+        path.mkdir(exist_ok=True)
+        return path
+
+    def test_untracked_symlinks_are_fingerprinted_by_their_own_link_text(self):
+        outside = self.outside()
+        (outside / "value").write_text("synthetic outside input")
+        (outside / "tree").mkdir()
+        baseline = self.collect()
+        for name, target, kwargs in [("to-dir", outside / "tree", {"target_is_directory": True}),
+                                     ("to-file", outside / "value", {}),
+                                     ("dangling", "nowhere/at-all", {}),
+                                     ("relative", "../outside/value", {})]:
+            with self.subTest(link=name):
+                (self.root / name).symlink_to(target, **kwargs)
+                first = self.collect()
+                self.assertEqual(first["status"], "available", first)
+                self.assertEqual(first["files"], baseline["files"] + 1)
+                self.assertNotEqual(first["digest"], baseline["digest"])
+                self.assertEqual(first["digest"], self.collect()["digest"])
+                self.assertNotIn(name, json.dumps(first))
+                (self.root / name).unlink()
+                self.assertEqual(self.collect()["digest"], baseline["digest"])
+
+    def test_retargeting_a_symlink_changes_the_digest(self):
+        outside = self.outside()
+        (outside / "a").mkdir()
+        (outside / "b").mkdir()
+        link = self.root / "link"
+        link.symlink_to(outside / "a", target_is_directory=True)
+        first = self.collect()
+        link.unlink()
+        link.symlink_to(outside / "b", target_is_directory=True)
+        second = self.collect()
+        self.assertEqual(second["status"], "available")
+        self.assertNotEqual(first["digest"], second["digest"])
+        # Same text length, different bytes.
+        link.unlink()
+        link.symlink_to(outside / "c", target_is_directory=True)
+        third = self.collect()
+        self.assertNotEqual(second["digest"], third["digest"])
+        self.assertEqual(len(str(outside / "b")), len(str(outside / "c")))
+
+    def test_a_symlink_to_a_directory_is_never_walked_or_read(self):
+        outside = self.outside()
+        (outside / "inner").mkdir()
+        secret = outside / "inner" / "value"
+        secret.write_text("before")
+        pipe = outside / "pipe"
+        os.mkfifo(pipe)
+        (self.root / "dir-link").symlink_to(outside, target_is_directory=True)
+        (self.root / "file-link").symlink_to(secret)
+        (self.root / "pipe-link").symlink_to(pipe)
+        first = self.collect()
+        self.assertEqual(first["status"], "available", first)
+        secret.write_text("after! and longer")
+        (outside / "inner" / "new").write_text("planted")
+        os.chmod(secret, 0o755)
+        second = self.collect()
+        self.assertEqual(second["digest"], first["digest"])
+        self.assertEqual(second["bytes"], first["bytes"])
+        self.assertEqual(second["files"], first["files"])
+
+    def test_loop_and_self_referential_symlinks_terminate(self):
+        (self.root / "self").symlink_to("self")
+        (self.root / "ping").symlink_to("pong")
+        (self.root / "pong").symlink_to("ping")
+        (self.root / "up").symlink_to(".")
+        (self.root / "parent").symlink_to("..")
+        result = self.collect()
+        self.assertEqual(result["status"], "available", result)
+        self.assertEqual(result["files"], 7)
+
+    def test_tracked_symlinks_are_fingerprinted_and_retargeting_them_changes_the_digest(self):
+        outside = self.outside()
+        link = self.root / "tracked-link"
+        link.symlink_to(outside, target_is_directory=True)
+        self.git("add", "tracked-link")
+        self.assertIn(b"120000", self.git("ls-files", "--stage", "tracked-link"))
+        first = self.collect()
+        self.assertEqual(first["status"], "available", first)
+        (outside / "planted").write_text("outside content")
+        self.assertEqual(self.collect()["digest"], first["digest"])
+        link.unlink()
+        link.symlink_to("elsewhere")
+        second = self.collect()
+        self.assertEqual(second["status"], "available")
+        self.assertNotEqual(second["digest"], first["digest"])
+        # A tracked link replaced by a regular file is also a change, not an error.
+        link.unlink()
+        link.write_text("now a file")
+        third = self.collect()
+        self.assertEqual(third["status"], "available")
+        self.assertNotIn(third["digest"], (first["digest"], second["digest"]))
+
+    def test_ignored_symlinks_stay_out_of_scope(self):
+        (self.root / "ignored").mkdir()
+        baseline = self.collect()
+        (self.root / "ignored/link").symlink_to(self.outside())
+        self.assertEqual(self.collect()["digest"], baseline["digest"])
+
+    def test_a_symlink_retargeted_during_capture_is_unknown(self):
+        module = self.module()
+        outside = self.outside()
+        link = self.root / "link"
+        link.symlink_to(outside / "one")
+        original = module.read_file
+        changed = False
+
+        def retarget(*args, **kwargs):
+            nonlocal changed
+            result = original(*args, **kwargs)
+            if not changed and args[1] == b"link":
+                changed = True
+                link.unlink()
+                link.symlink_to(outside / "two")
+            return result
+
+        with patch.object(module, "read_file", side_effect=retarget):
+            self.assertEqual(module.capture(str(self.root))["status"], "unknown")
+
+    def test_the_second_listing_sees_link_text_not_only_lstat_identity(self):
+        module = self.module()
+        (self.root / "link").symlink_to("first-target")
+        root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        self.addCleanup(os.close, root_fd)
+        budget = module.Budget(4096, 1 << 20, 1 << 20, 1 << 20, 5)
+        budget.git = module.resolve_git()
+        _, entries, stats = module.observe(str(self.root), root_fd, budget)
+        self.assertIn(b"first-target", stats[b"link"])
+        self.assertNotIn(b"first-target", stats[b"app.txt"])
 
     def test_special_file_cannot_block_or_count_as_source(self):
         os.mkfifo(self.root / "pipe")
@@ -291,6 +420,98 @@ class SourceSnapshotTests(unittest.TestCase):
             result = module.capture(str(self.root), timeout_s=0.5, max_git_bytes=32)
         self.assertEqual(result["reason"], "git_output_limit")
         self.assertEqual(armed, [0.0])
+
+    def test_cleanup_disarms_the_alarm_before_deciding_whether_a_child_needs_reaping(self):
+        module = self.module()
+        real_popen = subprocess.Popen
+        seen = []
+
+        class Watched(real_popen):
+            """Records the alarm state at the first look at returncode, which is the start of cleanup."""
+            @property
+            def returncode(self):
+                if not seen:
+                    seen.append(signal.getitimer(signal.ITIMER_REAL)[0])
+                return self._rc
+
+            @returncode.setter
+            def returncode(self, value):
+                self._rc = value
+
+        def child(_argv, **kwargs):
+            code = "import os, time; os.write(1, b'x' * 65536); time.sleep(10)"
+            return Watched([sys.executable, "-I", "-c", code], **kwargs)
+
+        with patch.object(module.subprocess, "Popen", side_effect=child):
+            result = module.capture(str(self.root), timeout_s=0.5, max_git_bytes=32)
+        self.assertEqual(result["reason"], "git_output_limit")
+        self.assertEqual(seen[:1], [0.0])
+
+    def test_an_alarm_landing_right_after_the_child_starts_still_reaps_it(self):
+        module = self.module()
+        real_popen = subprocess.Popen
+        children = []
+
+        class StartedLate(real_popen):
+            """The deadline alarm is already pending when Popen() returns, before any cleanup is armed."""
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                os.kill(os.getpid(), signal.SIGALRM)
+
+        def child(_argv, **kwargs):
+            proc = StartedLate([sys.executable, "-I", "-c", "import time; time.sleep(10)"], **kwargs)
+            children.append(proc)
+            return proc
+
+        with patch.object(module.subprocess, "Popen", side_effect=child):
+            started = time.monotonic()
+            result = module.capture(str(self.root), timeout_s=0.5)
+        self.assertEqual(result["reason"], "deadline")
+        self.assertLess(time.monotonic() - started, 3)
+        self.assertIsNotNone(children[0].returncode)
+        self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0.0, 0.0))
+
+    def test_git_children_do_not_inherit_the_blocked_deadline_alarm(self):
+        module = self.module()
+        probe = Path(self.temp.name) / "probe-git"
+        probe.write_text(f"#!/bin/sh\nexec \"{sys.executable}\" -I -c "
+                         "'import signal; print(signal.SIGALRM in signal.pthread_sigmask(signal.SIG_BLOCK, []))'\n")
+        probe.chmod(0o755)
+        budget = module.Budget(4096, 1 << 20, 1 << 20, 1 << 20, 5)
+        budget.git = str(probe)
+        self.assertEqual(module.git_bytes(str(self.root), ["status"], budget), b"False\n")
+
+    def test_the_deadline_alarm_survives_a_swallowed_global_config_failure(self):
+        module = self.module()
+        env = self.home_with(**{".gitconfig": "[core\n"})  # unreadable global config: git_unavailable, swallowed
+        armed = []
+        original = module.scan
+
+        def spy(*args, **kwargs):
+            armed.append(signal.getitimer(signal.ITIMER_REAL)[0])
+            return original(*args, **kwargs)
+
+        with patch.dict(os.environ, env, clear=True), patch.object(module, "scan", side_effect=spy):
+            result = module.capture(str(self.root))
+        self.assertEqual(result["status"], "available", result)
+        self.assertGreater(armed[0], 0.0)
+
+    def test_a_repo_local_excludes_path_that_is_not_a_regular_file_cannot_stall_capture(self):
+        fifo = Path(self.temp.name) / "local-ignore-fifo"
+        os.mkfifo(fifo)
+        for name, target in [("fifo", fifo), ("device", "/dev/zero"), ("missing", Path(self.temp.name) / "absent")]:
+            with self.subTest(target=name):
+                self.git("config", "core.excludesFile", str(target))
+                result = self.collect()
+                self.assertEqual(result["status"], "available", result)
+
+    def test_a_regular_repo_local_excludes_file_is_still_left_to_git(self):
+        local = self.root / ".git/local-ignore"
+        local.write_text("*.local-litter\n")
+        self.git("config", "core.excludesFile", str(local))
+        first = self.collect()
+        (self.root / "notes.local-litter").write_text("synthetic")
+        self.assertEqual(first["digest"], self.collect()["digest"])
 
     def test_capture_leaves_index_and_source_unchanged(self):
         paths = [self.root / "app.txt", self.root / ".gitignore", self.root / ".git/index"]
@@ -480,6 +701,14 @@ class SourceSnapshotTests(unittest.TestCase):
         # The global file no longer applies, exactly as in git itself.
         (self.root / ".DS_Store").write_text("synthetic")
         self.assertNotEqual(first["digest"], self.collect(env)["digest"])
+
+    def test_a_repo_local_core_excludes_file_is_expanded_as_git_expands_it(self):
+        env = self.home_with(**{"ignore": ".DS_Store\n"})
+        self.git("config", "core.excludesFile", "~/ignore")
+        first = self.collect(env)
+        self.assertEqual(first["status"], "available", first)
+        (self.root / ".DS_Store").write_text("synthetic")
+        self.assertEqual(first["digest"], self.collect(env)["digest"])
 
     def test_an_excludes_path_that_is_not_a_regular_file_cannot_stall_capture(self):
         fifo = Path(self.temp.name) / "home" / "ignore-fifo"
