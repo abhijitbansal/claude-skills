@@ -1,0 +1,27 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "checklist",
+      "duration": 5,
+      "elements": [
+        {
+          "id": "list",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "checklist",
+          "params": {
+            "items": [
+              "Offline renders",
+              "Same spec, same video",
+              "Captions in six styles",
+              "No code to write"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

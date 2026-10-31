@@ -1,9 +1,12 @@
 // Browser-safe (no Node imports): shared by spec validation, timeline and renderer.
 import { childrenOf } from './groups.mjs';
-import { FORMATS } from './formats.mjs';
+import { canvasSize } from './formats.mjs';
+import { expandBlocks } from './blocks/index.mjs';
 
-// No `background` default: the page fills it from the theme's page colour (see renderer fetchSpec).
-const DEFAULTS = Object.freeze({ size: [1920, 1080], fps: 30 });
+// No `background` default: the page fills it from the theme's page colour (see renderer fetchSpec). The canvas size
+// default lives in formats.mjs (canvasSize).
+const DEFAULTS = Object.freeze({ fps: 30 });
+export const DEFAULT_FPS = DEFAULTS.fps;
 export const FADE_SECONDS = 0.4;
 export const TYPING_SECONDS_PER_CHAR = 0.035;
 export const ARROW_HEAD_LENGTH = 3; // an arrow head is this many stroke widths long
@@ -150,16 +153,28 @@ function fillElement(el, theme, scene, fps, exits) {
 // The root `format` sets the canvas size when the spec gives none (the validator refuses a `size` that disagrees);
 // with neither, the canvas is the default 1920x1080. `format` stays on the spec: the caption zone reads it.
 function applyFormat(out) {
-  out.size ??= [...(FORMATS[out.format]?.size ?? DEFAULTS.size)];
+  out.size ??= [...canvasSize(out)];
+}
+
+// The steps that rewrite a spec, in their one fixed order, so every consumer (validator, renderer, timeline, check,
+// render) sees the same plain elements. This list is the only place the order is written; Tasks 16 and 11a slot their
+// steps into the numbered places and never reorder them.
+//   1 substituteVars  (Task 16)  {{name}} becomes its value anywhere, block params and `mode` included
+//   2 applyViral      (Task 11a) `mode: "viral"` defaults, so the `format` it sets reaches step 3
+//   3 expandBlocks               each `block` becomes a `group` of plain elements, laid out for canvasSize(spec): the
+//                                size step 4 will write, read before it is written
+//   4 applyFormat                `size` from `format`
+//   5 autoCues        (Task 11a) cues derived from the finished elements
+// Steps 1-3 change what the spec says, so the validator runs them too (expandSpec), after checking their inputs (block
+// params) and before its full check; steps 4-5 only fill in, and run in withDefaults alone.
+export function expandSpec(spec) {
+  // 1 substituteVars and 2 applyViral go here, before expandBlocks.
+  return expandBlocks(spec); // 3: a pure copy
 }
 
 // Pure copy with every optional root and element base value filled in.
-// The steps that rewrite the spec run in one fixed order, so every consumer (renderer, timeline, check, render) sees
-// the same plain elements: substituteVars -> applyViral -> expandBlocks -> applyFormat -> autoCues. Only applyFormat
-// exists yet; the others slot into the numbered places below and never change order.
 export function withDefaults(spec) {
-  const out = structuredClone(spec);
-  // 1 substituteVars, 2 applyViral, 3 expandBlocks go here.
+  const out = expandSpec(spec); // steps 1-3 (a copy: spec is never mutated)
   applyFormat(out); // 4: size and presets
   // 5 autoCues goes here.
   out.fps ??= DEFAULTS.fps;

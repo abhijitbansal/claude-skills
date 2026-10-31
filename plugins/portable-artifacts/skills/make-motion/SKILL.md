@@ -58,7 +58,7 @@ Fill `<reason>` with why you could not ask. With nothing settled by the prompt t
 
 Run every step yourself, in this same turn, with your shell or file tools. Do not end your reply after showing or describing the JSON: keep going until validate prints `valid` and the output file exists.
 
-1. Write `motion.json` in the project (shape below; full reference in `<skill-dir>/references/schema.md`; copy a file from `<skill-dir>/references/examples/` to start).
+1. Write `motion.json` in the project (shape below; full reference in `<skill-dir>/references/schema.md`; copy a file from `<skill-dir>/references/examples/` to start). Start from a block when one fits (see Blocks below): a title card, a lower third, a KPI number, steps, a quote, a checklist, a logo outro or a closing call to action is one `block` element with a few params, not a dozen elements.
    Actually create the file: describing it or announcing a patch is not enough. If your file tool fails, write it with a short `node -e` script that calls `fs.writeFileSync`, then confirm the file exists before validating.
 2. Voiceover (only when asked, see above; run the doctor with `--for voiceover` first, and if the user declines the voice install, ask for a voice file instead): write the narration to `voice/<scene-id>.txt` (plain spoken text, no markdown), then `node <skill-dir>/scripts/voice.mjs --text-file voice/<scene-id>.txt --out voice/<scene-id>.wav [--voice af_heart] [--speed 1]` writes a 24 kHz wav and prints its length; it also writes `voice/<scene-id>.json` with sentence times (`{ sampleRate, voice, sentences: [{ text, start, end }] }`, seconds from the clip start), and prints that path on a third line; use it as a captions `src`. Use `--text-file`, not a quoted argument: the shell would expand `$4.2M` or backticks inside a double-quoted string and the clip would silently say something else. One clip per scene, scene-anchored in the spec (`"scene": "<id>", "at": 0.3`); keep each clip shorter than its scene (lengthen the scene if the printed duration does not fit). Voices: `af_heart` (default, warm US female), `af_bella`, `am_michael` (US male), `bf_emma` (UK female); `--list-voices` prints all. Write the narration text yourself from the prompt; keep it short and spoken, no markdown.
 3. `node <skill-dir>/scripts/validate.mjs motion.json` — fix every line it prints (`<json.path>: <message>`, with did-you-mean) and re-run until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage/IO error.
@@ -96,8 +96,35 @@ When done, report the spec path, the MP4 path with its duration and size, and on
 - Scene: `id`, `duration` (0.2–60 s), `elements`, optional `background` (a colour, or `"art"` for the theme's seeded art full-bleed behind the elements), `transition` (`none`, `fade` (a 0.4 s fade-in from the background) or `crossfade` (the new scene fades in over the previous one, which stays fully visible beneath, over 0.4 s; not on the first scene); a root `transition` sets the default). Only one scene is visible at a time, except during a crossfade; scenes play back to back. Do not put `fade` on scene 1: frame 0 is the video's thumbnail and `check.mjs` warns when it is blank.
 - Every element: `id` (unique in the whole spec), `type`, `x`, `y` (canvas pixels; the anchor is the element centre; a group's children measure them from the group's centre instead), optional `opacity`, `scale`, `rotate` (degrees), `keyframes`.
 - Types: `text` (optional `"role": "title"`: the theme's display font and, without `keyframes`, its kinetic entrance; `"typing": true` types it out from the scene start at 0.035 s per character with a caret, its box always the full text), `counter` (`from`, `to`, `decimals`, `prefix`, `suffix`; animate `value`), `shape` (`rect`, `ellipse`, `line`; a line is horizontal of length `width`, use `rotate` to angle it; animate `draw` 0–1; `"elevated": true` makes a rect a card, `"cap": "round"` and `"arrow": "end"` shape a line), `image` (`src` relative to the spec), `video` (`src` an mp4, mov, webm or m4v relative to the spec, `width`, `height`, `fit`; optional `trimStart` and `trimEnd` (seconds into the clip), `offset` (scene seconds before it plays; it holds its first frame before and its last frame after), `mute`, `volume` 0–1; its sound joins the mix unless muted and stops when its scene ends; needs ffmpeg and ffprobe), `chart` (`vegaLite` with inline `data.values`, `width`, `height`; animate `reveal` 0–1 for a left-to-right wipe), `group` (`children`: 1–40 elements, up to 3 groups deep, each positioned relative to the group's centre; the group's own `x`, `y`, `opacity`, `scale`, `rotate` and `keyframes` move them as one, so build a card or a lower-third once and animate it as a unit; child `id`s are unique across the whole spec).
+- `block` (see Blocks below): `block` (a block name) and `params` (its fields); it expands into a group of plain elements, so give its `x`, `y` and, if you like, `opacity`, `scale`, `rotate` and `keyframes`, but never its parts' styling.
 - Keyframe: `t` (seconds inside the scene, sorted, ≤ scene duration), optional `ease`, plus any animatable props for that type. Per property: it holds the first keyframe's value before it, interpolates to each later keyframe using that keyframe's `ease`, and holds the last value after. A property missing from a keyframe is interpolated across it. Frame *i* samples t = i/fps, so put the final keyframe at least one frame (1/fps s) before the scene end. A counter with no `value` keyframes counts from→to over min(2 s, 80% of the scene) with outCubic.
 - Eases: `linear`, or `in|out|inOut` + `Quad|Cubic|Quart|Back|Elastic|Bounce|Sine|Expo|Circ`, or the named `enter` (entrances), `exit` (exits), `move` (from one place to another) and `land` (a small overshoot; once per clip). Prefer `enter` (or `outCubic`) for entrances.
+
+## Blocks
+
+A block is a ready-made piece of a scene. Write one `block` element and its `params`; it lays itself out for the canvas (16:9 or 9:16 alike), takes its colours from the theme and enters with a short stagger. Run `node <skill-dir>/scripts/blocks.mjs show <name>` for a block's params, defaults, where it goes on each format and a ready element to paste; `node <skill-dir>/scripts/blocks.mjs list` lists them all.
+
+| block | use it for | params (`?` optional) |
+|---|---|---|
+| `title-card` | an opening or section title | `title`, `subtitle?`, `kicker?` |
+| `lower-third` | naming a speaker or a product on screen | `name`, `role?`, `side?` (`left` or `right`) |
+| `kpi-counter` | one headline number that counts up | `label`, `to`, `from?`, `prefix?`, `suffix?`, `decimals?`, `delta?` |
+| `step-flow` | a process of 2 to 6 steps | `steps` (each up to 24 characters), `direction?` (`row` or `column`) |
+| `quote-card` | a customer or press quote | `quote` (up to 200 characters), `attribution?` |
+| `checklist` | 2 to 8 items ticked off one by one | `items` (each up to 40 characters), `tickAfter?` (seconds) |
+| `logo-outro` | the closing logo and tagline | `src` (a logo file next to the spec), `tagline?`, `width?` |
+| `cta-close` | the closing ask | `headline`, `action` (up to 24 characters), `url?` |
+
+```json
+{ "id": "kpi", "type": "block", "x": 960, "y": 540, "block": "kpi-counter",
+  "params": { "label": "Monthly active users", "to": 48200, "delta": "+12% on last month" } }
+```
+
+- `x`, `y` is the block's centre: the canvas centre (`960, 540` at 16:9, `540, 960` at 9:16) for every block but `lower-third`, whose `x`, `y` is the middle of the card's outer edge: `x 100, y 732` at 16:9, `x 100, y 1272` at 9:16 (use `x 1820` at 16:9 or `980` at 9:16 with `"side": "right"`). That keeps it above the caption zone.
+- Strings are short (80 characters unless the table says less) and lists are capped; the validator names the param (`scenes[0].elements[1].params.title: must NOT have more than 80 characters`). Shorten the text rather than splitting the block.
+- Give a block's scene at least 3 to 4 s (a `checklist` of 8 items about 5 s); in a shorter scene its entrances are squeezed so nothing moves after 85 % of the scene.
+- Blocks add no sound; add `cues` yourself if the prompt asks for sound.
+- A block in the first scene starts invisible, so frame 0 (the thumbnail) is blank and `check.mjs` warns; put a plain text beside it or use `"background": "art"` when the thumbnail matters.
 
 ## Choosing a theme
 

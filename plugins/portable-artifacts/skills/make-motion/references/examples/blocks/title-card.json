@@ -1,0 +1,24 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "title-card",
+      "duration": 4,
+      "elements": [
+        {
+          "id": "title",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "title-card",
+          "params": {
+            "kicker": "Q3 2026",
+            "title": "Revenue up 18%",
+            "subtitle": "Three products, one quarter, no new hires"
+          }
+        }
+      ]
+    }
+  ]
+}

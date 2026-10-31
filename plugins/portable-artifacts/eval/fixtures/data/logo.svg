@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+  <!-- A placeholder logo for the logo-outro example: a play mark and three motion bars, shapes only (no fonts). -->
+  <rect x="24" y="36" width="128" height="128" rx="32" fill="#f2a65a"/>
+  <path d="M72 70 L120 100 L72 130 Z" fill="#1b1d24"/>
+  <rect x="180" y="58" width="196" height="22" rx="11" fill="#ece7df"/>
+  <rect x="180" y="89" width="148" height="22" rx="11" fill="#ece7df" opacity="0.75"/>
+  <rect x="180" y="120" width="96" height="22" rx="11" fill="#ece7df" opacity="0.5"/>
+</svg>

@@ -16,6 +16,7 @@ import { themeData, themeCss, FONTS_DIR } from './theme.mjs';
 import { artSvg } from '../../shared/art.mjs';
 import { flattenElements } from '../../template/groups.mjs';
 import { FORMATS } from '../../template/formats.mjs';
+import { BLOCKS, isBlock } from '../../template/blocks/index.mjs';
 import { CACHE_ROOT } from './video.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -151,12 +152,15 @@ function serveArt(ctx, res, sceneId) {
   return sendBody(res, MIME['.svg'], svg);
 }
 
-// Image, video, audio and captions srcs named by the current spec; /assets serves nothing else.
+// Image, video, audio and captions srcs named by the current spec, and the files a block's params name (logo-outro's
+// `src`, which its expansion draws as an image); /assets serves nothing else.
 const MEDIA_ELEMENTS = new Set(['image', 'video']);
+const blockAssets = (el) => (isBlock(el) ? (BLOCKS[el.block]?.assets ?? []).map((key) => el.params?.[key]).filter((src) => src !== undefined) : []);
 function referencedAssets(specFile) {
   try {
     const spec = JSON.parse(readFileSync(specFile, 'utf8'));
-    const images = spec.scenes.flatMap((s) => flattenElements(s.elements)).filter(({ el }) => MEDIA_ELEMENTS.has(el.type)).map(({ el }) => el.src);
+    const elements = spec.scenes.flatMap((s) => flattenElements(s.elements)).map(({ el }) => el);
+    const images = [...elements.filter((el) => MEDIA_ELEMENTS.has(el.type)).map((el) => el.src), ...elements.flatMap(blockAssets)];
     const audio = (spec.audio ?? []).map((a) => a.src);
     const captions = (spec.captions ?? []).map((c) => c.src);
     return new Set([...images, ...audio, ...captions].map((src) => path.posix.normalize(String(src))));

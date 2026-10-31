@@ -11,6 +11,13 @@ export const FORMATS = Object.freeze({
 });
 export const FORMAT_NAMES = Object.freeze(Object.keys(FORMATS));
 
+// The canvas when a spec gives neither `size` nor `format`.
+export const DEFAULT_SIZE = FORMATS['16:9'].size;
+
+// The canvas size a spec resolves to: its `size`, else its `format`'s, else the default. Pure; it writes nothing, so a
+// step that runs before applyFormat (block expansion) lays out for the size applyFormat will give.
+export const canvasSize = (spec) => spec.size ?? FORMATS[spec.format]?.size ?? DEFAULT_SIZE;
+
 // The caption zone's top when a spec names no format (a custom `size`).
 export const DEFAULT_CAPTION_TOP = 0.78;
 

@@ -1,0 +1,27 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "step-flow",
+      "duration": 4,
+      "elements": [
+        {
+          "id": "steps",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "step-flow",
+          "params": {
+            "steps": [
+              "Write the spec",
+              "Validate",
+              "Preview",
+              "Render"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

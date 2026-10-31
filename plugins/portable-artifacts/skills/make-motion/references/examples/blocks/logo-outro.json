@@ -1,0 +1,23 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "logo-outro",
+      "duration": 3,
+      "elements": [
+        {
+          "id": "outro",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "logo-outro",
+          "params": {
+            "src": "logo.svg",
+            "tagline": "Motion from one JSON file"
+          }
+        }
+      ]
+    }
+  ]
+}

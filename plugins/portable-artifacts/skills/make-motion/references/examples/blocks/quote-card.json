@@ -1,0 +1,23 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "quote-card",
+      "duration": 4,
+      "elements": [
+        {
+          "id": "quote",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "quote-card",
+          "params": {
+            "quote": "We cut our release checklist from a day to ten minutes.",
+            "attribution": "Priya Raman, platform lead"
+          }
+        }
+      ]
+    }
+  ]
+}

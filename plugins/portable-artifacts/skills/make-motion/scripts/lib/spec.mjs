@@ -15,9 +15,11 @@ import { VIDEO_EXTENSIONS, isVideo, probeVideo } from './video.mjs';
 import { findFfprobe } from './ffmpeg.mjs';
 import { doctorCommand } from './doctor-hint.mjs';
 
+import { BLOCKS, BLOCK_NAMES, isBlock } from '../../template/blocks/index.mjs';
+
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
-import { EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE, typingLength } from '../../template/defaults.mjs';
+import { expandSpec, EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE, typingLength } from '../../template/defaults.mjs';
 
 export class UsageError extends Error {}
 
@@ -35,6 +37,7 @@ export const ANIMATABLE = {
   chart: [...POSE, 'reveal'],
   group: [...POSE],
   video: [...POSE],
+  block: [...POSE], // a block's pose and keyframes become its group's
 };
 
 const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes'];
@@ -47,6 +50,7 @@ const FIELDS = {
   chart: [...COMMON, 'vegaLite', 'width', 'height'],
   group: [...COMMON, 'children'],
   video: [...COMMON, 'src', 'width', 'height', 'fit', 'trimStart', 'trimEnd', 'offset', 'mute', 'volume'],
+  block: [...COMMON, 'block', 'params'],
 };
 const REQUIRED = {
   text: ['text'],
@@ -56,6 +60,7 @@ const REQUIRED = {
   chart: ['vegaLite', 'width', 'height'],
   group: ['children'],
   video: ['src', 'width', 'height'],
+  block: ['block', 'params'],
 };
 
 const num = { type: 'number' };
@@ -107,6 +112,8 @@ const element = {
     vegaLite: { type: 'object' },
     trimStart: { type: 'number', minimum: 0 }, trimEnd: { type: 'number', exclusiveMinimum: 0 }, offset: { type: 'number', minimum: 0 },
     mute: { type: 'boolean' }, volume: unit,
+    block: { type: 'string', minLength: 1 },
+    params: { type: 'object' }, // checked against the named block's own schema (checkBlock)
     // A group's children are elements again (groups nest; checkElement caps the depth with a message that names the limit).
     children: { type: 'array', minItems: 1, maxItems: MAX_GROUP_CHILDREN, items: { $ref: '#/definitions/element' } },
   },
@@ -199,6 +206,7 @@ export const SCHEMA = {
 
 const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
 const schemaCheck = ajv.compile(SCHEMA);
+const paramsChecks = Object.fromEntries(Object.entries(BLOCKS).map(([name, def]) => [name, ajv.compile(def.params)]));
 const generatedByCheck = ajv.compile(GENERATED_BY_SCHEMA);
 
 // True only for a present, schema-valid `generatedBy`; the preview footer uses it without validating the whole spec.
@@ -548,8 +556,8 @@ function checkGroup(el, base, scene, dir, errors, fps, depth) {
   (el.children ?? []).forEach((child, i) => checkElement(child, pathJoin(pathJoin(base, 'children'), i), scene, dir, errors, fps, depth + 1));
 }
 
-// `depth`: how many groups enclose `el` (0 at the top level of a scene).
-function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS, depth = 0) {
+// The fields `el` may carry as its type, and the ones it must.
+function checkFields(el, base, errors) {
   const fields = FIELDS[el.type];
   for (const key of Object.keys(el)) {
     if (!fields.includes(key)) {
@@ -559,6 +567,11 @@ function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS, d
   for (const key of REQUIRED[el.type]) {
     if (el[key] === undefined) errors.push({ path: pathJoin(base, key), message: `required for type ${el.type}` });
   }
+}
+
+// `depth`: how many groups enclose `el` (0 at the top level of a scene).
+function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS, depth = 0) {
+  checkFields(el, base, errors);
   checkKeyframes(el, base, scene.duration, errors);
   if (el.type === 'text') { checkRole(el, base, errors); checkTyping(el, base, scene, fps, errors); }
   for (const key of ['color', 'fill', 'stroke']) checkColor(el, key, base, errors, { tokens: true });
@@ -616,8 +629,69 @@ function checkFormat(spec, errors) {
   errors.push({ path: 'size', message: `${JSON.stringify(spec.size)} does not match format "${spec.format}" (${w}x${h}); drop one of them` });
 }
 
-export function validateSpec(spec, { dir = process.cwd() } = {}) {
-  if (!schemaCheck(spec)) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
+// A block as written, at its own path: its element fields and keyframes, the block name, its params against the block's
+// schema, and the files its params name (checked like an image src). Params that pass expand without error.
+function checkBlock(el, base, scene, dir, errors) {
+  checkFields(el, base, errors);
+  checkKeyframes(el, base, scene.duration, errors);
+  if (el.block === undefined) return;
+  const def = BLOCKS[el.block];
+  if (!def) {
+    const near = didYouMean(el.block, BLOCK_NAMES);
+    errors.push({ path: pathJoin(base, 'block'), message: `unknown block ${JSON.stringify(el.block)}${near ? `; did you mean ${JSON.stringify(near)}?` : ''} (blocks: ${BLOCK_NAMES.join(', ')})` });
+    return;
+  }
+  if (el.params === undefined) return;
+  const at = pathJoin(base, 'params');
+  const check = paramsChecks[el.block];
+  if (!check(el.params)) {
+    errors.push(...formatAjvErrors(check.errors).map((e) => ({ path: e.path ? `${at}.${e.path}` : at, message: e.message })));
+    return;
+  }
+  for (const key of def.assets ?? []) if (el.params[key] !== undefined) checkAssetPath(el.params[key], pathJoin(at, key), dir, errors);
+}
+
+// Every block, checked before anything expands. A block goes directly in a scene's elements: expandBlocks expands only
+// those, so one inside a group is refused here, naming the group.
+function checkBlocks(spec, dir, errors) {
+  spec.scenes.forEach((scene, si) => {
+    const chain = [];
+    for (const { el, path: base, depth } of flattenElements(scene.elements, `scenes[${si}]`)) {
+      chain.length = depth;
+      chain.push(el);
+      if (!isBlock(el)) continue;
+      if (depth === 0) checkBlock(el, base, scene, dir, errors);
+      else errors.push({ path: pathJoin(base, 'type'), message: `a block goes directly in a scene's elements, not inside a group; move ${JSON.stringify(el.id)} out of group ${JSON.stringify(chain[depth - 1].id)}` });
+    }
+  });
+}
+
+// The full check runs on the expanded spec, where a block is a group of parts. Valid params never make a part fail, but
+// an error that does land inside a block (a part id another element also uses) is moved to the block itself: its `id`
+// for an id clash, else its `params`; a path to a part named inside a message is moved the same way.
+const PART_PATH = /scenes\[\d+\]\.elements\[\d+\](?:\.children\[\d+\])+(?:\.[A-Za-z]+(?:\[\d+\])*)*/g;
+function atBlocks(written, errors) {
+  const blocks = written.scenes.flatMap((scene, si) => scene.elements.flatMap((el, ei) => (isBlock(el) ? [{ base: `scenes[${si}].elements[${ei}]`, el }] : [])));
+  const owner = (at) => blocks.find(({ base }) => at.startsWith(`${base}.children[`));
+  const lift = (at) => {
+    const block = owner(at);
+    if (!block) return at;
+    return at.endsWith('.id') ? `${block.base}.id` : `${block.base}.params`;
+  };
+  return errors.map(({ path: at, message }) => {
+    const block = owner(at);
+    const lifted = message.replace(PART_PATH, lift);
+    if (!block) return { path: at, message: lifted };
+    return { path: lift(at), message: `${lifted} (block ${JSON.stringify(block.el.id)} names its parts "${block.el.id}/<part>")` };
+  });
+}
+
+export function validateSpec(written, { dir = process.cwd() } = {}) {
+  if (!schemaCheck(written)) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
+  const blockErrors = [];
+  checkBlocks(written, dir, blockErrors);
+  if (blockErrors.length) return { ok: false, errors: blockErrors };
+  const spec = expandSpec(written); // pipeline steps 1-3 (template/defaults.mjs); the checks below see plain elements
   const errors = [];
   checkIds(spec, errors);
   checkFormat(spec, errors);
@@ -638,5 +712,5 @@ export function validateSpec(spec, { dir = process.cwd() } = {}) {
   checkAudio(spec, dir, errors);
   checkCues(spec, errors);
   checkCaptions(spec, dir, errors);
-  return { ok: errors.length === 0, errors };
+  return { ok: errors.length === 0, errors: atBlocks(written, errors) };
 }

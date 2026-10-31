@@ -27,6 +27,11 @@ shell commands.
   lines and ringed points. Shapes and text take **theme colour tokens**
   (`"fill": "surface"`, `"color": "accent"`) that follow the theme, rects can be
   `elevated` cards, and lines can have round caps and an arrow head.
+- **Blocks**: eight parameterised building blocks (`title-card`, `lower-third`, `kpi-counter`, `step-flow`, `quote-card`, `checklist`, `logo-outro` and `cta-close`), each
+  written as one `block` element with a few params (`"block": "lower-third", "params": { "name": "Ada" }`) and
+  expanded into plain elements laid out for the canvas, coloured with theme tokens. `blocks.mjs list` and
+  `blocks.mjs show <name>` print each block's params and an example; `references/blocks/` holds a contact sheet
+  of each.
 - **Scene crossfade**: `"transition": "crossfade"` fades the new scene in over the
   previous one (which stays fully visible beneath) over 0.4 s; a root `transition` sets the default.
 - **Captions**: a `captions` track from an SRT, VTT or Whisper JSON file, or the voiceover's
@@ -110,6 +115,7 @@ builds with the defaults and its report says so.
 | `video` | `src` (an mp4, mov, webm or m4v relative to the spec), `width`, `height`, `fit`, `trimStart`, `trimEnd`, `offset`, `mute`, `volume`; decoded once into a frame cache (`.cache/video`, cleared by `doctor.mjs --fix cache`) so every frame is exact; its sound joins the mix unless muted | `opacity x y scale rotate` |
 | `chart` | `vegaLite` with inline `data.values`, `width`, `height` | + `reveal` (0–1 left-to-right wipe) |
 | `group` | `children` (1–40 elements, up to 3 groups deep), each placed relative to the group's centre | `opacity x y scale rotate`, applied to every child at once |
+| `block` | `block` (one of the eight block names), `params` (that block's own fields); expands into a group of parts named `<id>/<part>`, so validator errors name `params.<field>` | `opacity x y scale rotate`, applied to the whole block |
 
 A scene's `background` is a CSS colour or `"art"`: the theme's seeded art,
 full-bleed behind the elements and seeded by the scene `id`. A shape `fill` or
@@ -135,6 +141,7 @@ examples in [`references/examples/`](references/examples/).
 | Command | Does | Flags |
 |---|---|---|
 | `validate.mjs <spec>` | Schema plus cross-field checks (unique ids, keyframe times, per-type props, image, video and audio paths, video trims against the clip length (needs ffprobe), audio scene/start/fade fits, captions files parsed (a cue out of order names its line), chart compile, no remote URLs) | `--json` |
+| `blocks.mjs list` / `blocks.mjs show <name>` | One line per block with its params (optional ones marked `?`); or one block's params table (type, required, default, description), where it goes on each format, and a ready-to-paste element. An unknown name exits 2 with the closest one and the list | none |
 | `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` |
 | `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. The MP4 timing is exact | `--open` |
 | `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks, `cues` or an unmuted `video` clip with sound, followed by one `audio: … LUFS integrated, true peak … dBTP` line) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--contact-sheet` |

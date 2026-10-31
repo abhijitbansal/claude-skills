@@ -1,0 +1,24 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "cta-close",
+      "duration": 4,
+      "elements": [
+        {
+          "id": "cta",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "cta-close",
+          "params": {
+            "headline": "Make your first video today",
+            "action": "Start free",
+            "url": "example.com/start"
+          }
+        }
+      ]
+    }
+  ]
+}
