@@ -126,6 +126,8 @@ examples in [`references/examples/`](references/examples/).
 | `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen. An element that has left the frame entirely is gone, not clipped. It also warns on stderr (never a failure) when the first scene shows nothing at t = 0. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
 | `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover>`, `--fix <id[,id]>` |
 
+Two renders of the same spec and media give identical frames and audio; the MP4 `comment` tag carries the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set.
+
 Limits: up to 50 scenes and 120 s in total, up to 20 audio tracks and 30 cues; fps is 24, 25, 30 or 60; each side
 is 16–3840 px. Frame *i* samples `t = i / fps`, so put a final keyframe at
 least one frame before the scene ends.

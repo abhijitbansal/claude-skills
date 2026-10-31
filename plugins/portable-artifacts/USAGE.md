@@ -476,7 +476,9 @@ preset in `references/examples/`.
    whenever `motion.json` changes, and shows validation errors in the page.
 5. `render.mjs motion.json` writes `out/motion.mp4` (1920×1080, 30 fps,
    H.264, plus AAC audio when the spec has `audio` tracks or `cues`; with audio it
-   ends by printing `audio: <n> LUFS integrated, true peak <n> dBTP`).
+   ends by printing `audio: <n> LUFS integrated, true peak <n> dBTP`). Two renders of
+   the same spec and media give identical frames and audio; the MP4 `comment` tag carries
+   the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set.
 
 **Other sizes:** set `"size": [1080, 1080]` in the spec for a square social
 clip, or override at render time with `--size 1280x720 --fps 24`. If the
