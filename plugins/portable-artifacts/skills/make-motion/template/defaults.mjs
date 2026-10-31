@@ -1,4 +1,6 @@
 // Browser-safe (no Node imports): shared by spec validation, timeline and renderer.
+import { childrenOf } from './groups.mjs';
+
 // No `background` default: the page fills it from the theme's page colour (see renderer fetchSpec).
 const DEFAULTS = Object.freeze({ size: [1920, 1080], fps: 30 });
 export const FADE_SECONDS = 0.4;
@@ -128,6 +130,21 @@ function presetFor(el, theme, sceneDuration, fps, exits) {
   return { keyframes: [...entrance, ...exit], exited: exit.length > 0 };
 }
 
+// An element's own defaults, then its children's (a group's), at any depth.
+function fillElement(el, theme, scene, fps, exits) {
+  const preset = presetFor(el, theme, scene.duration, fps, exits);
+  el.keyframes = preset.keyframes;
+  if (preset.exited) el.exitPreset = true; // check.mjs: this title leaves on purpose (it opted in with `exit`)
+  el.opacity ??= 1;
+  el.scale ??= 1;
+  el.rotate ??= 0;
+  el.draw = 1;
+  el.reveal = 1;
+  el.value = el.type === 'counter' ? (el.from ?? 0) : 0;
+  el.keyframes ??= [];
+  for (const child of childrenOf(el)) fillElement(child, theme, scene, fps, exits);
+}
+
 // Pure copy with every optional root and element base value filled in.
 export function withDefaults(spec) {
   const out = structuredClone(spec);
@@ -138,18 +155,7 @@ export function withDefaults(spec) {
   const transition = out.transition ?? 'none';
   out.scenes.forEach((scene, si) => {
     scene.transition ??= si === 0 && transition === 'crossfade' ? 'none' : transition; // the first scene has nothing to fade out
-    for (const el of scene.elements) {
-      const preset = presetFor(el, out.theme, scene.duration, out.fps, si < out.scenes.length - 1);
-      el.keyframes = preset.keyframes;
-      if (preset.exited) el.exitPreset = true; // check.mjs: this title leaves on purpose (it opted in with `exit`)
-      el.opacity ??= 1;
-      el.scale ??= 1;
-      el.rotate ??= 0;
-      el.draw = 1;
-      el.reveal = 1;
-      el.value = el.type === 'counter' ? (el.from ?? 0) : 0;
-      el.keyframes ??= [];
-    }
+    for (const el of scene.elements) fillElement(el, out.theme, scene, out.fps, si < out.scenes.length - 1);
   });
   return out;
 }

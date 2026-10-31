@@ -6,6 +6,8 @@
 // last frame (a title whose `exit` preset was applied left on purpose and counts as present); a number-plus-unit token
 // ("1,204 ms", "87%") drawn across more than one line, reported once per token per scene. A box wholly off the canvas
 // has left the frame: it is never clipped, overlaps nothing, and is not on screen.
+// A `group` is not judged itself; each of its children is, at its nested path (scenes[0].elements[2].children[1]), and a
+// child counts as moving while any group around it moves.
 // A warning (never a failure; exit stays 0) when the first scene shows nothing at t = 0: stderr, or `warnings` in --json.
 // A scene is judged on its own layer, so the outgoing scene of a crossfade is not part of the incoming scene's own
 // checks (the incoming scene's first 0.4 s are sampled, from the 0.1 s first look on). Instead each crossfade window is
@@ -23,6 +25,7 @@ import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
 import { sheetTimes } from './lib/sheet.mjs';
+import { flattenElements, isGroup } from '../template/groups.mjs';
 import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
 
@@ -53,14 +56,27 @@ const skipHint = () => `ask the user, then run: ${doctorCommand('--for', 'check'
 // pair only when both are in a POSE hold, so a cross-fade swap in one spot is not a finding but an overlap held before
 // an exit fade is. sheetTimes samples every landing + 0.1 s, so every element gets a held moment after each move; the
 // scene's last frame is always judged (the fallback for a continuous drift that never holds).
-const tweenSpans = (el, props) => props.flatMap((p) => {
+const tweenSpans = (chain, props) => chain.flatMap((el) => props.flatMap((p) => {
   const times = el.keyframes.filter((kf) => kf[p] !== undefined).map((kf) => kf.t);
   return times.slice(1).map((to, k) => [times[k], to]);
-});
+}));
 const isHeld = (spans, t, n, samples) => n === samples.length - 1 || !spans.some(([from, to]) => t > from + EPSILON && t < to - EPSILON);
 
-// Runs in the page: seek to `sec`, then each element of scene layer `index` as {id, opacity, box} in canvas pixels.
-// Rendered opacity multiplies the element's and every ancestor's up to the stage (the scene fade); a hidden layer is 0.
+// What the rules judge in a scene, as the page draws it: every element that is not a group, at any depth, in document
+// order, each as { el, path, chain }. `path` is where it sits in the spec; `chain` is the groups around it, outermost
+// first, then the element itself, because a child's keyframes are not the only thing that moves it.
+function sceneItems(scene, index) {
+  const chain = [];
+  return flattenElements(scene.elements, `scenes[${index}]`).flatMap(({ el, path: where, depth }) => {
+    chain.length = depth;
+    chain.push(el);
+    return isGroup(el) ? [] : [{ el, path: where, chain: [...chain] }];
+  });
+}
+
+// Runs in the page: seek to `sec`, then each element of scene layer `index` (a group's children included, the groups
+// themselves not) as {id, opacity, box} in canvas pixels. Rendered opacity multiplies the element's and every
+// ancestor's up to the stage (a group's, the scene fade); a hidden layer is 0.
 const measure = ([sec, index]) => {
   window.__motion.seek(sec);
   const stage = document.getElementById('stage');
@@ -68,7 +84,7 @@ const measure = ([sec, index]) => {
   const k = window.__motion.size[0] / s.width;
   const layer = stage.querySelectorAll(':scope > .scene')[index];
   const shown = getComputedStyle(layer).display !== 'none';
-  return [...layer.querySelectorAll(':scope > .el')].map((node) => {
+  return [...layer.querySelectorAll('.el:not(.group)')].map((node) => {
     let opacity = shown ? 1 : 0;
     for (let n = node; n && n !== stage; n = n.parentElement) opacity *= Number(getComputedStyle(n).opacity);
     const r = node.getBoundingClientRect();
@@ -87,18 +103,18 @@ const isVisible = (m) => m.opacity > VISIBLE_OPACITY;
 const onCanvas = ({ box }, size) => box.right > 0 && box.left < size[0] && box.bottom > 0 && box.top < size[1];
 const isShown = (m, size) => isVisible(m) && onCanvas(m, size) && !m.undrawn; // seen in the frame, at least in part
 
-function safeAreaProblems(scene, i, samples, margin, size) {
+function safeAreaProblems(items, samples, margin, size) {
   const problems = [];
-  scene.elements.forEach((el, j) => {
+  items.forEach(({ el, path: where, chain }, j) => {
     if (!CHECKED.has(el.type)) return;
-    const spans = tweenSpans(el, GEOMETRY);
+    const spans = tweenSpans(chain, GEOMETRY);
     for (const [n, { t, els }] of samples.entries()) {
       const { box } = els[j];
       if (!isShown(els[j], size) || !isHeld(spans, t, n, samples)) continue;
       const edges = [['top', margin - box.top], ['bottom', box.bottom - (size[1] - margin)], ['left', margin - box.left], ['right', box.right - (size[0] - margin)]]
         .filter(([, by]) => by > SUBPIXEL_PX).map(([edge]) => edge);
       if (!edges.length) continue;
-      problems.push({ path: `scenes[${i}].elements[${j}]`, message: `${el.type} "${el.id}" leaves the safe area (${edges.join(', ')}) at ${at(t)}` });
+      problems.push({ path: where, message: `${el.type} "${el.id}" leaves the safe area (${edges.join(', ')}) at ${at(t)}` });
       return;
     }
   });
@@ -108,15 +124,15 @@ function safeAreaProblems(scene, i, samples, margin, size) {
 const overlaps = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > OVERLAP_TOLERANCE_PX
   && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > OVERLAP_TOLERANCE_PX;
 
-function overlapProblems(scene, i, samples, size) {
+function overlapProblems(items, samples, size) {
   const problems = [];
-  const texts = scene.elements.map((el, j) => ({ el, j, spans: tweenSpans(el, POSE) })).filter(({ el }) => CHECKED.has(el.type));
+  const texts = items.map((item, j) => ({ ...item, j, spans: tweenSpans(item.chain, POSE) })).filter(({ el }) => CHECKED.has(el.type));
   for (const [b, second] of texts.entries()) {
     for (const first of texts.slice(0, b)) {
       const hit = samples.find(({ t, els }, n) => isHeld(first.spans, t, n, samples) && isHeld(second.spans, t, n, samples)
         && isShown(els[first.j], size) && isShown(els[second.j], size) && overlaps(els[first.j].box, els[second.j].box));
       if (hit) {
-        problems.push({ path: `scenes[${i}].elements[${second.j}]`, message: `${second.el.type} "${second.el.id}" overlaps ${first.el.type} "${first.el.id}" at ${at(hit.t)}` });
+        problems.push({ path: second.path, message: `${second.el.type} "${second.el.id}" overlaps ${first.el.type} "${first.el.id}" at ${at(hit.t)}` });
       }
     }
   }
@@ -132,11 +148,12 @@ const quoted = (els) => els.map((el) => `"${el.id}"`).join(', ');
 
 // Frame 0 is the video's first frame and so its thumbnail: a warning when the first scene shows nothing there. An art
 // background is on screen at t = 0, so it counts. The message names what keeps the frame blank.
-function frameZeroWarnings(scene, els, size) {
-  if (scene.background === ART_BACKGROUND || !scene.elements.length || els.some((m) => isShown(m, size))) return [];
-  const invisible = scene.elements.filter(startsInvisible);
-  const undrawn = scene.elements.filter(startsUndrawn);
-  const empty = scene.elements.filter(startsEmpty);
+function frameZeroWarnings(scene, items, els, size) {
+  if (scene.background === ART_BACKGROUND || !items.length || els.some((m) => isShown(m, size))) return [];
+  const involved = [...new Set(items.flatMap(({ chain }) => chain))]; // a group that starts invisible hides its children
+  const invisible = involved.filter(startsInvisible);
+  const undrawn = involved.filter(startsUndrawn);
+  const empty = involved.filter(startsEmpty);
   const causes = [
     scene.transition === 'fade' && 'the scene fades in from the background ("fade" on scene 1)',
     invisible.length && `${quoted(invisible)} ${invisible.length === 1 ? 'has' : 'have'} an opacity 0 first keyframe${invisible.some((el) => el.role === 'title') ? " (a title's theme entrance starts at 0)" : ''}`,
@@ -148,9 +165,9 @@ function frameZeroWarnings(scene, els, size) {
 }
 
 // A title whose `exit` preset was applied (withDefaults marks it `exitPreset`) left on purpose: it counts as present.
-function emptyEndProblems(scene, i, samples, size) {
+function emptyEndProblems(scene, i, items, samples, size) {
   const last = samples[samples.length - 1];
-  if (!scene.elements.length || last.els.some((m, j) => isShown(m, size) || scene.elements[j].exitPreset)) return [];
+  if (!items.length || last.els.some((m, j) => isShown(m, size) || items[j].el.exitPreset)) return [];
   return [{ path: `scenes[${i}]`, message: `scene "${scene.id}" ends with nothing on screen: every element is invisible or off the canvas (at ${at(last.t)})` }];
 }
 
@@ -163,27 +180,26 @@ export function wrapProblems(scene, i, samples) {
 }
 
 // The two layers of a crossfade are both on screen at the window's midpoint: warn about text over text.
-async function crossfadeWarnings(page, spec, fade, size) {
+async function crossfadeWarnings(page, spec, itemsOf, fade, size) {
   const mid = (fade.start + fade.end) / 2;
   const outgoing = await page.evaluate(measure, [mid, fade.from]);
   const incoming = await page.evaluate(measure, [mid, fade.to]);
   const from = spec.scenes[fade.from];
-  const to = spec.scenes[fade.to];
-  const texts = (scene, els) => els.map((m, j) => ({ m, el: scene.elements[j], j })).filter(({ m, el }) => CHECKED.has(el.type) && isShown(m, size));
-  const old = texts(from, outgoing);
-  return texts(to, incoming).flatMap((now) => {
+  const texts = (items, els) => els.map((m, j) => ({ m, ...items[j] })).filter(({ m, el }) => CHECKED.has(el.type) && isShown(m, size));
+  const old = texts(itemsOf[fade.from], outgoing);
+  return texts(itemsOf[fade.to], incoming).flatMap((now) => {
     const under = old.find((o) => overlaps(o.m.box, now.m.box));
     if (!under) return [];
-    return [{ path: `scenes[${fade.to}].elements[${now.j}]`, message: `${now.el.type} "${now.el.id}" overlaps ${under.el.type} "${under.el.id}" of the outgoing scene "${from.id}" during the crossfade at ${at(mid)}; move one of them, or let the outgoing text exit first` }];
+    return [{ path: now.path, message: `${now.el.type} "${now.el.id}" overlaps ${under.el.type} "${under.el.id}" of the outgoing scene "${from.id}" during the crossfade at ${at(mid)}; move one of them, or let the outgoing text exit first` }];
   });
 }
 
-async function sampleScene(page, scene, index, start, fps) {
+async function sampleScene(page, scene, items, index, start, fps) {
   const samples = [];
   for (const t of sheetTimes(scene, fps)) {
     const els = await page.evaluate(measure, [start + t, index]);
     const ids = els.map((m) => m.id).join();
-    if (ids !== scene.elements.map((el) => el.id).join()) throw new Error(`scene "${scene.id}": the page shows elements ${ids}, not the spec's`);
+    if (ids !== items.map(({ el }) => el.id).join()) throw new Error(`scene "${scene.id}": the page shows elements ${ids}, not the spec's`);
     samples.push({ t, els, wraps: await nowrapProblems(page, { root: '#stage' }) });
   }
   return samples;
@@ -221,14 +237,16 @@ async function inspect(browser, spec, server, prepare) {
   const starts = await page.evaluate(() => window.__motion.sceneStarts);
   const margin = safeMargin(spec.size);
   const problems = [];
-  const warnings = frameZeroWarnings(spec.scenes[0], await page.evaluate(measure, [0, 0]), spec.size);
+  const itemsOf = spec.scenes.map(sceneItems); // the non-group elements of each scene, indexed as the page measures them
+  const warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], await page.evaluate(measure, [0, 0]), spec.size);
   let moments = 0;
   for (const [i, scene] of spec.scenes.entries()) {
-    const samples = await sampleScene(page, scene, i, starts[i], spec.fps);
+    const items = itemsOf[i];
+    const samples = await sampleScene(page, scene, items, i, starts[i], spec.fps);
     moments += samples.length;
-    problems.push(...safeAreaProblems(scene, i, samples, margin, spec.size), ...overlapProblems(scene, i, samples, spec.size), ...emptyEndProblems(scene, i, samples, spec.size), ...wrapProblems(scene, i, samples));
+    problems.push(...safeAreaProblems(items, samples, margin, spec.size), ...overlapProblems(items, samples, spec.size), ...emptyEndProblems(scene, i, items, samples, spec.size), ...wrapProblems(scene, i, samples));
   }
-  for (const fade of await page.evaluate(() => window.__motion.crossfades)) warnings.push(...await crossfadeWarnings(page, spec, fade, spec.size));
+  for (const fade of await page.evaluate(() => window.__motion.crossfades)) warnings.push(...await crossfadeWarnings(page, spec, itemsOf, fade, spec.size));
   return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings };
 }
 

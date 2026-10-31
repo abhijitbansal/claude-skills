@@ -3,6 +3,7 @@
 import { buildTimeline, seekTo } from './timeline.mjs';
 import { withDefaults, resolveColor, graphemes, typingLength, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE } from './defaults.mjs';
 import { resolveAudio } from './audio.mjs';
+import { flattenElements, isGroup } from './groups.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 import { bindWithNbsp } from '/shared/nowrap.mjs'; // served by server.mjs; the token regex lives only in shared/
 
@@ -241,10 +242,27 @@ function buildElement(el, look) {
       node.style.width = px(el.width);
       node.style.height = px(el.height);
       break;
+    case 'group': // styles.css makes it a zero-size node at its own centre; mountElements puts the children inside
+      break;
     default:
       throw new Error(`unknown element type "${el.type}" (element "${el.id}")`);
   }
   return part;
+}
+
+// Builds the nodes of `elements` into `container`, each tagged with its spec path (`prefix` + index); a group's children
+// are built into the group's own node, so they move with it. Charts and images queue their loading in `pending`.
+function mountElements(container, elements, prefix, look, parts, pending) {
+  elements.forEach((el, i) => {
+    const part = buildElement(el, look);
+    const at = `${prefix}[${i}]`;
+    part.node.dataset.path = at;
+    parts.push(part);
+    container.append(part.node);
+    if (el.type === 'chart') pending.push(renderChart(el, look).then((svg) => part.node.append(svg)));
+    if (part.img) pending.push(part.img.decode().catch(() => { throw new Error(`image failed to load: ${el.src}`); }));
+    if (isGroup(el)) mountElements(part.node, el.children, `${at}.children`, look, parts, pending);
+  });
 }
 
 // A scene with `background: "art"`: the theme's seeded art (drawn by the server, see /art/ in
@@ -310,7 +328,7 @@ async function buildStage(spec, look) {
   const parts = [];
   const pending = [];
   const grain = spec.texture?.grain ?? 0;
-  for (const scene of spec.scenes) {
+  for (const [si, scene] of spec.scenes.entries()) {
     const layer = document.createElement('div');
     layer.className = 'scene';
     if (scene.background === 'art') {
@@ -319,15 +337,7 @@ async function buildStage(spec, look) {
       layer.append(art.holder);
       pending.push(art.loaded);
     } else if (scene.background) layer.style.background = scene.background;
-    for (const el of scene.elements) {
-      const part = buildElement(el, look);
-      parts.push(part);
-      layer.append(part.node);
-      if (el.type === 'chart') {
-        pending.push(renderChart(el, look).then((svg) => part.node.append(svg)));
-      }
-      if (part.img) pending.push(part.img.decode().catch(() => { throw new Error(`image failed to load: ${el.src}`); }));
-    }
+    mountElements(layer, scene.elements, `scenes[${si}].elements`, look, parts, pending);
     stage.append(layer);
     const entry = { scene, layer, grain: null };
     if (grain > 0) pending.push(grainLayer(scene, spec.size, grain).then((img) => { entry.grain = img; }));
@@ -349,7 +359,7 @@ function collectStrings(node, out = []) {
 function fontNeeds(spec, look) {
   const needs = [];
   const digits = '0123456789.,-+%$';
-  for (const el of spec.scenes.flatMap((s) => s.elements)) {
+  for (const { el } of spec.scenes.flatMap((s) => flattenElements(s.elements))) {
     const kind = fontKind(el);
     const face = `${look.weight(kind, el.fontWeight ?? 600)} ${el.fontSize ?? 48}px ${look.fonts[kind]}`;
     if (el.type === 'text') needs.push([face, el.text]);

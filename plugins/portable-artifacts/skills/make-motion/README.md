@@ -104,6 +104,7 @@ builds with the defaults and its report says so.
 | `shape` | `shape` (`rect`/`ellipse`/`line`), `width`, `height`, `radius`, `fill`, `stroke`, `strokeWidth`, `elevated` (rect), `cap` and `arrow` (line) | + `draw` (0–1 stroke reveal) |
 | `image` | `src` (relative to the spec), `width`, `height`, `fit` | `opacity x y scale rotate` |
 | `chart` | `vegaLite` with inline `data.values`, `width`, `height` | + `reveal` (0–1 left-to-right wipe) |
+| `group` | `children` (1–40 elements, up to 3 groups deep), each placed relative to the group's centre | `opacity x y scale rotate`, applied to every child at once |
 
 A scene's `background` is a CSS colour or `"art"`: the theme's seeded art,
 full-bleed behind the elements and seeded by the scene `id`. A shape `fill` or

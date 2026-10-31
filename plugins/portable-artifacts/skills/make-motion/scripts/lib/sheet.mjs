@@ -1,5 +1,6 @@
 // Contact-sheet helpers: which moments of a scene to capture, and how to tile the frames into one PNG.
 // Tiling runs in a second Chromium page (a grid of data-URL <img>), never ffmpeg.
+import { flattenElements } from '../../template/groups.mjs';
 
 const FIRST_LOOK = 0.1; // seconds into the scene: the first thing a viewer sees
 const KEYFRAME_LAG = 0.1; // seconds after a keyframe lands
@@ -26,7 +27,7 @@ const PNG_HEIGHT_OFFSET = 20;
 // forced in. `fps` caps every time at the scene's last frame, duration - 1/fps.
 export function sheetTimes(scene, fps = DEFAULT_FPS) {
   const last = Math.max(0, scene.duration - 1 / fps);
-  const keyframes = (scene.elements ?? []).flatMap((el) => (el.keyframes ?? []).map((kf) => kf.t + KEYFRAME_LAG));
+  const keyframes = flattenElements(scene.elements).flatMap(({ el }) => (el.keyframes ?? []).map((kf) => kf.t + KEYFRAME_LAG)); // a group's keyframes move its children
   const raw = [FIRST_LOOK, ...keyframes, scene.duration * CONTACT_POINT, last]
     .map((t) => Math.min(Math.max(0, t), last))
     .sort((a, b) => a - b);

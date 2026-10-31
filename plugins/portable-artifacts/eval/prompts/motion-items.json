@@ -1,3 +1,4 @@
 [
-  { "id": "item-cues-v2", "prompt": "Make a 10-second explainer about our new sync engine: the title 'Sync, rebuilt' types itself out, then three numbers count up one after another (99.9% uptime, 40 ms latency, 3x throughput). Add sound: a riser into the reveal, key clicks while the title types itself, and a soft notification ding on the last number." }
+  { "id": "item-cues-v2", "prompt": "Make a 10-second explainer about our new sync engine: the title 'Sync, rebuilt' types itself out, then three numbers count up one after another (99.9% uptime, 40 ms latency, 3x throughput). Add sound: a riser into the reveal, key clicks while the title types itself, and a soft notification ding on the last number." },
+  { "id": "item-group", "prompt": "Make a 6-second clip with a stat card: a rounded panel holding the label 'Signups this week', the number 1,240 counting up, and a small green '+9%' line under it. The whole card should slide up from the bottom of the frame and settle in the middle as one piece, with a headline 'Weekly signups' above it that stays put." }
 ]

@@ -8,6 +8,7 @@ import { listThemes } from '../../shared/theme.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { resolveAsset } from './paths.mjs';
 import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, PITCHED_CUES, MAX_CUES, NOTE_PATTERN, trackStart, typingFollow } from '../../template/audio.mjs';
+import { flattenElements, isGroup, MAX_GROUP_DEPTH, MAX_GROUP_CHILDREN } from '../../template/groups.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
@@ -27,6 +28,7 @@ export const ANIMATABLE = {
   shape: [...POSE, 'draw'],
   image: [...POSE],
   chart: [...POSE, 'reveal'],
+  group: [...POSE],
 };
 
 const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes'];
@@ -37,6 +39,7 @@ const FIELDS = {
   shape: [...COMMON, 'shape', 'width', 'height', 'radius', 'fill', 'stroke', 'strokeWidth', 'elevated', 'cap', 'arrow'],
   image: [...COMMON, 'src', 'width', 'height', 'fit'],
   chart: [...COMMON, 'vegaLite', 'width', 'height'],
+  group: [...COMMON, 'children'],
 };
 const REQUIRED = {
   text: ['text'],
@@ -44,6 +47,7 @@ const REQUIRED = {
   shape: ['shape'],
   image: ['src', 'width', 'height'],
   chart: ['vegaLite', 'width', 'height'],
+  group: ['children'],
 };
 
 const num = { type: 'number' };
@@ -93,6 +97,8 @@ const element = {
     src: { type: 'string', minLength: 1 },
     fit: { enum: ['contain', 'cover', 'fill'] },
     vegaLite: { type: 'object' },
+    // A group's children are elements again (groups nest; checkElement caps the depth with a message that names the limit).
+    children: { type: 'array', minItems: 1, maxItems: MAX_GROUP_CHILDREN, items: { $ref: '#/definitions/element' } },
   },
 };
 const seconds = { type: 'number', minimum: 0 };
@@ -132,6 +138,7 @@ const cue = {
   },
 };
 export const SCHEMA = {
+  definitions: { element },
   type: 'object',
   additionalProperties: false,
   required: ['scenes'],
@@ -159,7 +166,7 @@ export const SCHEMA = {
           duration: { type: 'number', minimum: 0.2, maximum: 60 },
           background: color,
           transition,
-          elements: { type: 'array', items: element },
+          elements: { type: 'array', items: { $ref: '#/definitions/element' } },
         },
       },
     },
@@ -196,7 +203,7 @@ function checkIds(spec, errors) {
   };
   spec.scenes.forEach((scene, si) => {
     claim(scene.id, `scenes[${si}].id`);
-    scene.elements.forEach((el, ei) => claim(el.id, `scenes[${si}].elements[${ei}].id`));
+    for (const { el, path: at } of flattenElements(scene.elements, `scenes[${si}]`)) claim(el.id, pathJoin(at, 'id'));
   });
 }
 
@@ -399,7 +406,7 @@ function checkFollow(c, spec, base, errors) {
   if (c.scene !== undefined) return fail('scene', instead);
   const typing = typingFollow(spec, c.follow);
   if (!typing) {
-    const texts = spec.scenes.flatMap((s) => s.elements.filter((el) => el.type === 'text' && el.typing).map((el) => el.id));
+    const texts = spec.scenes.flatMap((s) => flattenElements(s.elements).filter(({ el }) => el.type === 'text' && el.typing).map(({ el }) => el.id));
     return fail('follow', `element ${JSON.stringify(c.follow)} not found; typing texts: ${texts.join(', ') || 'none'}`);
   }
   const name = JSON.stringify(c.follow);
@@ -444,13 +451,24 @@ function checkTyping(el, base, scene, fps, errors) {
 // The typing errors of `spec` at frame rate `fps`: render.mjs asks again with its --fps, which overrides the spec's.
 export function typingErrors(spec, fps) {
   const errors = [];
-  spec.scenes.forEach((scene, si) => scene.elements.forEach((el, ei) => {
-    if (el.type === 'text') checkTyping(el, `scenes[${si}].elements[${ei}]`, scene, fps, errors);
+  spec.scenes.forEach((scene, si) => flattenElements(scene.elements, `scenes[${si}]`).forEach(({ el, path: at }) => {
+    if (el.type === 'text') checkTyping(el, at, scene, fps, errors);
   }));
   return errors;
 }
 
-function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS) {
+// A group's children are checked as elements in their own right, at their nested path; a group may not nest deeper
+// than MAX_GROUP_DEPTH, and says so once, at the first group past the limit.
+function checkGroup(el, base, scene, dir, errors, fps, depth) {
+  if (depth >= MAX_GROUP_DEPTH) {
+    errors.push({ path: pathJoin(base, 'children'), message: `groups nest at most ${MAX_GROUP_DEPTH} deep; move this group's children up a level, or out of the outer groups` });
+    return;
+  }
+  (el.children ?? []).forEach((child, i) => checkElement(child, pathJoin(pathJoin(base, 'children'), i), scene, dir, errors, fps, depth + 1));
+}
+
+// `depth`: how many groups enclose `el` (0 at the top level of a scene).
+function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS, depth = 0) {
   const fields = FIELDS[el.type];
   for (const key of Object.keys(el)) {
     if (!fields.includes(key)) {
@@ -466,6 +484,7 @@ function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS) {
   if (el.type === 'shape') checkShapeStyle(el, base, errors);
   if (el.type === 'image' && typeof el.src === 'string') checkAssetPath(el.src, pathJoin(base, 'src'), dir, errors);
   if (el.type === 'chart' && el.vegaLite) checkChart(el, base, errors);
+  if (isGroup(el)) checkGroup(el, base, scene, dir, errors, fps, depth);
 }
 
 // A theme is a name from the shared themes; its dark colours and fonts become the defaults.

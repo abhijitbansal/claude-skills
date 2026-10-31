@@ -20,6 +20,9 @@ body.preview #viewport { bottom: 108px; }
 #stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; }
 .scene { position: absolute; inset: 0; display: none; }
 .el { position: absolute; left: 0; top: 0; will-change: transform, opacity; }
+/* A group is a zero-size node at its own centre: the centring translate(-50%, -50%) is then a no-op, and its children (.el
+   again, absolutely placed from that centre) move, fade, scale and rotate with it. */
+.el.group { width: 0; height: 0; }
 .el.text { font-family: var(--sans); white-space: pre-wrap; width: max-content; line-height: 1.15; letter-spacing: -0.01em; }
 .el.text.mono, .el.counter.mono { font-family: var(--mono); letter-spacing: 0; }
 .el.text.title { font-family: var(--display); line-height: 1.02; letter-spacing: -0.015em; }

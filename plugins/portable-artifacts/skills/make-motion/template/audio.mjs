@@ -1,6 +1,7 @@
 // Browser-safe (no Node imports): audio tracks resolved to absolute video time,
 // shared by the ffmpeg mix (render) and the preview player.
 import { TYPING_SECONDS_PER_CHAR, typingLength } from './defaults.mjs';
+import { flattenElements } from './groups.mjs';
 
 export const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'];
 export const MAX_AUDIO_TRACKS = 20;
@@ -46,7 +47,7 @@ export function resolveAudio(spec) {
 export function typingFollow(spec, id) {
   let sceneStart = 0;
   for (const scene of spec.scenes) {
-    const el = scene.elements.find((e) => e.id === id);
+    const el = flattenElements(scene.elements).find((f) => f.el.id === id)?.el; // a typing text may sit in a group
     if (el) {
       const chars = typingLength(typeof el.text === 'string' ? el.text : '');
       const keyed = (el.keyframes ?? []).filter((kf) => kf.value !== undefined);

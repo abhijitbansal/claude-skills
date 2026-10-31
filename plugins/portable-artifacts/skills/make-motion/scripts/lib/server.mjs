@@ -14,6 +14,7 @@ import { faviconLink } from '../../shared/icons.mjs';
 import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
 import { themeData, themeCss, FONTS_DIR } from './theme.mjs';
 import { artSvg } from '../../shared/art.mjs';
+import { flattenElements } from '../../template/groups.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NODE_MODULES = path.join(SKILL_ROOT, 'node_modules');
@@ -150,7 +151,7 @@ function serveArt(ctx, res, sceneId) {
 function referencedAssets(specFile) {
   try {
     const spec = JSON.parse(readFileSync(specFile, 'utf8'));
-    const images = spec.scenes.flatMap((s) => s.elements).filter((e) => e.type === 'image').map((e) => e.src);
+    const images = spec.scenes.flatMap((s) => flattenElements(s.elements)).filter(({ el }) => el.type === 'image').map(({ el }) => el.src);
     const audio = (spec.audio ?? []).map((a) => a.src);
     return new Set([...images, ...audio].map((src) => path.posix.normalize(String(src))));
   } catch { return new Set(); }

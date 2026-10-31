@@ -2,6 +2,7 @@
 // animates a plain state object per element. Runs unchanged in Node and the browser.
 import { createTimeline, cubicBezier } from 'animejs';
 import { withDefaults, FADE_SECONDS, EASE_CURVES, TYPING_SECONDS_PER_CHAR, typingLength } from './defaults.mjs';
+import { flattenElements } from './groups.mjs';
 
 const MS = 1000;
 const MIN_SEGMENT_MS = 1;
@@ -77,7 +78,7 @@ export function buildTimeline(input) {
       if (blends) crossfades.push({ from: si - 1, to: si, start, end: start + duration / MS });
     }
 
-    for (const el of scene.elements) {
+    for (const { el } of flattenElements(scene.elements)) { // a group's children are elements of the scene too
       sceneOf.set(el.id, si);
       const state = {
         x: el.x, y: el.y, opacity: el.opacity, scale: el.scale, rotate: el.rotate,
