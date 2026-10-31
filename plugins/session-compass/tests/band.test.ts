@@ -26,7 +26,8 @@ test('no goal shows the first prompt, marked and dimmed', () => {
   expect(line.text).toContain('Goal: "fix the scanner" (no goal set)')
   expect(line.isDim).toBe(true)
 })
-test('tally sums parsed runs and ignores unparsed ones', () => {
-  expect(tally([{ parsed: true, passed: 10, failed: 1 }, { parsed: false }])).toEqual({ passed: 10, failed: 1 })
+test('tally sums valid counts and retains uncertainty about unparsed runs', () => {
+  expect(tally([{ parsed: true, total: 11, passed: 10, failed: 1, skipped: 0, exitCode: 1, commandStatus: 'exited' }, { parsed: false }]))
+    .toEqual({ passed: 10, failed: 1, warnings: 2 })
   expect(tally(undefined)).toBeUndefined()
 })

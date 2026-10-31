@@ -76,6 +76,53 @@ const spawnArgs = (extra: Partial<SpawnArgs>): SpawnArgs =>
   ({ tool_use_id: 't1', prompt: 'p', description: 'ios-fixer', subagentType: 'general-purpose', ...extra }) as SpawnArgs
 
 describe('recording', () => {
+  test('absence of a structured command status does not invent exit zero', async ($, on) => {
+    const { seen } = world(on); bash(on, '10 passed in 0.5s')
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]).toMatchObject({ parsed: true, exitCode: null, commandStatus: 'unknown' })
+  })
+
+  test('interruption qualifies even a complete-looking passing summary', async ($, on) => {
+    const { seen } = world(on); bash(on, '10 passed in 0.5s', { interrupted: true })
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]).toMatchObject({ commandStatus: 'interrupted', outputIncomplete: true, exitCode: null })
+  })
+
+  test('stdout cannot forge an authoritative exit code', async ($, on) => {
+    const { seen } = world(on)
+    const text = 'Exit code 1\nExit code 0\n10 passed in 0.5s'
+    on('tool.call', { tool: 'Bash' }, () => ({ isError: true, result: text, text }))
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]).toMatchObject({ commandStatus: 'tool-error', exitCode: 1 })
+  })
+
+  test('an exit code that is not the host\'s first line is not read', async ($, on) => {
+    const { seen } = world(on)
+    const text = '10 passed in 0.5s\nExit code 0'
+    on('tool.call', { tool: 'Bash' }, () => ({ isError: true, result: text, text }))
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]).toMatchObject({ commandStatus: 'tool-error', exitCode: null })
+  })
+
+  test('a successful call is never given an exit code from its output', async ($, on) => {
+    const { seen } = world(on); bash(on, 'Exit code 139\n10 passed in 0.5s')
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]).toMatchObject({ commandStatus: 'unknown', exitCode: null })
+  })
+
+  test('a malformed result records unavailable evidence rather than leaving an earlier pass current', async ($, on) => {
+    const { seen } = world(on)
+    let malformed = false
+    on('tool.call', { tool: 'Bash' }, () => (malformed
+      ? { result: { stdout: 5 }, text: {} }
+      : { result: { stdout: '10 passed in 0.5s' }, text: '10 passed in 0.5s' }) as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]?.parsed).toBe(true)
+    malformed = true
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    expect(latest(seen)[0]).toMatchObject({ parsed: false, exitCode: null, commandStatus: 'unknown' })
+  })
+
   test('a main-loop test run sets latest and history', async ($, on) => {
     const { writes, seen } = world(on); bash(on, PYTEST_RAW)
     const ran = await $.tool.call({ tool: 'Bash', command: 'pytest -q 2>&1 | tail -5' })
@@ -132,11 +179,11 @@ describe('recording', () => {
     expect(latest(seen)).toEqual([])
   })
 
-  test('an errored run takes the exit code from the text', async ($, on) => {
+  test('an errored run takes the host exit code from the first line of the text', async ($, on) => {
     const { seen } = world(on)
     on('tool.call', { tool: 'Bash' }, () => ({ isError: true, result: 'Exit code 139', text: 'Exit code 139\nsegfault' }))
     await $.tool.call({ tool: 'Bash', command: 'bun test' })
-    expect(latest(seen)[0]).toMatchObject({ parsed: false, exitCode: 139 })
+    expect(latest(seen)[0]).toMatchObject({ parsed: false, exitCode: 139, commandStatus: 'tool-error' })
   })
 
   test('same suite twice in one turn shows once; a new turn replaces latest', async ($, on) => {
@@ -396,6 +443,42 @@ describe('band', () => {
     const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
     expect((await ui.find({ text: /^1 ✗$/ }))?.props).toMatchObject({ color: 'error' })
     expect((await ui.find({ text: /10 ✓/ }))?.props?.color).toBeUndefined()
+  })
+
+  for (const kind of ['tool-error', 'interrupted', 'truncated'] as const) {
+    test(`passing counts retain ${kind} warnings in the rendered band`, async ($, on) => {
+      world(on); emptyBand(on)
+      on('tool.call', { tool: 'Bash' }, () => ({
+        ...(kind === 'tool-error' ? { isError: true as const } : {}),
+        result: { stdout: '10 passed in 0.5s', stderr: '', interrupted: kind === 'interrupted', isStdoutTruncated: kind === 'truncated' },
+        text: '10 passed in 0.5s',
+      }))
+      await $.tool.call({ tool: 'Bash', command: 'pytest && build' })
+      const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(55) })
+      expect(await ui.find({ text: /10 ✓/ })).toBeDefined()
+      const warning = await ui.find({ type: 'Text', text: kind === 'tool-error' ? /tool error/ : kind === 'interrupted' ? /interrupted/ : /output incomplete/ })
+      expect(warning).toBeDefined()
+      if (kind !== 'truncated') expect(warning?.props?.color).toBe('error')
+      expect((await ui.find({ text: /^0 ✗$/ }))?.props?.color).toBeUndefined()
+    })
+  }
+
+  test('a passing run with no reported problem draws no status text', async ($, on) => {
+    world(on); bash(on, '10 passed in 0.5s'); emptyBand(on)
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(80) })
+    expect(await ui.find({ text: /10 ✓/ })).toBeDefined()
+    expect(await ui.find({ text: /unknown/ })).toBeUndefined()
+    expect(await ui.find({ text: /done / })).toBeDefined()
+  })
+
+  test('a host exit code on a failed call draws as exit N', async ($, on) => {
+    world(on); emptyBand(on)
+    const text = 'Exit code 139\n10 passed in 0.5s'
+    on('tool.call', { tool: 'Bash' }, () => ({ isError: true, result: text, text }))
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(80) })
+    expect((await ui.find({ type: 'Text', text: /exit 139/ }))?.props?.color).toBe('error')
   })
 
   test('shows the time the run finished', async ($, on) => {

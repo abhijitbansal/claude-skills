@@ -1,5 +1,5 @@
 import { expect, test, type Engine } from 'claude-code/testing'
-import { PANE_PROPS, START, T0, WT, startWorld } from './fixtures/world'
+import { BAND_PROPS, PANE_PROPS, START, T0, WT, startWorld } from './fixtures/world'
 
 const OTHER = {
   id: 'sess-0', repo: 'ocr', worktree: '/Users/me/projects/ocr', branch: 'main',
@@ -8,6 +8,23 @@ const OTHER = {
 const RUN = { command: 'compass', args: '', origin: { kind: 'user' } } as never
 const mount = ($: Engine, surface: 'terminal' | 'desktop') =>
   $.ui.mount({ plugin: 'session-compass', surface, component: 'Pane', requestId: 'compass', props: PANE_PROPS } as never)
+
+test('the pane preserves warnings alongside passing test counts', async ($, on) => {
+  startWorld(on)
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Box } = $.ui.resolve(e)
+    return <Box />
+  })
+  on('state.get', (_$, e, next) => e.plugin === 'test-board' && e.key === 'latest' ? { value: { version: 1, value: [{
+    parsed: true, total: 10, passed: 10, failed: 0, skipped: 0, exitCode: null, commandStatus: 'tool-error',
+  }] } } : next(e))
+  await $.session.start(START)
+  const ui = await mount($, 'terminal')
+  expect(await ui.find({ text: /Tests: 10 ✓ 0 ✗/ })).toBeDefined()
+  expect(await ui.find({ text: /1 warning/ })).toBeDefined()
+  const band = await $.ui.mount({ plugin: 'session-compass', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 30 } as never })
+  expect(await band.find({ text: /tests: 1 warning/ })).toBeDefined()
+})
 
 test('/compass opens the pane', async ($, on) => {
   const { world } = startWorld(on)

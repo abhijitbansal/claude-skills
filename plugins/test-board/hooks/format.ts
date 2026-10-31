@@ -25,6 +25,7 @@ export type LineParts = {
   label: string; counts: string; isFailing: boolean
   /** `counts` cut around its failed segment so the UI can color only that part; absent when unparsed. */
   split?: { head: string; failed: string; tail: string }
+  status?: string
   trend?: string; duration?: string; doneAt?: string; prev?: string; via?: string
 }
 
@@ -59,12 +60,22 @@ function countSplit(run: TestRun): LineParts['split'] {
 function counts(run: TestRun): string {
   const split = countSplit(run)
   return split === undefined
-    ? `ran · exit ${run.exitCode} · counts unavailable`
+    ? 'counts unavailable'
     : `${split.head}${split.failed}${split.tail}`
 }
 
 export function joinParts(p: LineParts): string {
-  return [p.label, p.counts, p.trend, p.duration, p.doneAt, p.prev, p.via].filter(Boolean).join(GAP)
+  return [p.label, p.counts, p.status, p.trend, p.duration, p.doneAt, p.prev, p.via].filter(Boolean).join(GAP)
+}
+
+// Only evidence of trouble draws: an unknown status is the normal live shape and says nothing.
+function status(run: TestRun): string | undefined {
+  const code = Number.isSafeInteger(run.exitCode) && run.exitCode !== 0 ? run.exitCode : undefined
+  const command = run.commandStatus === 'interrupted' ? 'interrupted'
+    : code !== undefined ? `${run.commandStatus === 'exited' || run.commandStatus === 'tool-error' ? '' : 'reported '}exit ${code}`
+    : run.commandStatus === 'tool-error' ? 'tool error' : undefined
+  return [command, run.countsIssue === undefined ? undefined : `${run.countsIssue} counts`,
+    run.outputIncomplete ? 'output incomplete' : undefined].filter(Boolean).join(' · ') || undefined
 }
 
 /**
@@ -78,13 +89,15 @@ export function lineParts(run: TestRun, prev: TestRun | undefined, now: number, 
     label: `${repoName(run.key)} · ${run.suite}`,
     counts: counts(run),
     ...(run.parsed ? { split: countSplit(run) } : {}),
-    isFailing: run.parsed ? run.failed > 0 : run.exitCode !== 0,
+    status: status(run),
+    isFailing: (run.parsed && run.failed > 0) || (Number.isSafeInteger(run.exitCode) && run.exitCode !== 0)
+      || run.commandStatus === 'tool-error' || run.commandStatus === 'interrupted',
     ...(delta > 0 ? { trend: `▲${delta} ✗` } : delta < 0 ? { trend: `▼${-delta} ✗` } : {}),
     ...(run.durationS === undefined ? {} : { duration: formatDuration(run.durationS) }),
     doneAt: `done ${formatClock(run.at)}`,
     prev: prev === undefined
       ? 'first run'
-      : `prev ${prev.parsed ? `${prev.passed} ✓ ${prev.failed} ✗` : `ran · exit ${prev.exitCode}`} · ${formatAgo(now - prev.at)}`,
+      : `prev ${prev.parsed ? `${prev.passed} ✓ ${prev.failed} ✗` : 'counts unavailable'}${status(prev) ? ` · ${status(prev)}` : ''} · ${formatAgo(now - prev.at)}`,
     ...(run.via === undefined ? {} : { via: `via ${run.via}` }),
   }
   if (columns < NARROW_COLUMNS) parts = { ...parts, via: undefined }
