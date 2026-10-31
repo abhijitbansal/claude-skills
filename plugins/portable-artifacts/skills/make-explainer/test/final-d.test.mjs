@@ -370,7 +370,7 @@ test('check: a Present button that never becomes clickable is reported as slow o
   const result = await checkPage(builtWith(never));
   assert.equal(result.status, 'failed');
   const lines = result.problems.filter((p) => /Present button/.test(p));
-  assert.equal(lines.length, 2, result.problems.join('\n'));
+  assert.equal(lines.length, 3, result.problems.join('\n'));
   for (const line of lines) {
     assert.match(line, /^\d+px: the Present button of diagram 1 did not become clickable within 5 s/);
     assert.doesNotMatch(line, /covered/);
@@ -382,6 +382,6 @@ test('check: a covered Present button says it is covered', async (t) => {
   const cover = '<div style="position:fixed;left:0;top:0;right:0;bottom:0;z-index:99999"></div>';
   const result = await checkPage(builtWith(cover));
   const lines = result.problems.filter((p) => /Present button/.test(p));
-  assert.equal(lines.length, 2, result.problems.join('\n'));
+  assert.equal(lines.length, 3, result.problems.join('\n'));
   for (const line of lines) assert.match(line, /^\d+px: the Present button of diagram 1 is covered by another element$/);
 });

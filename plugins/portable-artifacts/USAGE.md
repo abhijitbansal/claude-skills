@@ -317,7 +317,7 @@ your project folder):
    `<name>.assets/` folder beside the page: keep them together.
    `--image-api <https-endpoint>` is an optional extra described
    [below](#optional-hero-image); without it the build never uses the network.
-6. Optionally runs `check.mjs <page>`, which opens the page at 1280 and 390 px and
+6. Optionally runs `check.mjs <page>`, which opens the page at 1280, 390 and 1800 px and
    fails on console errors or warnings, sideways scrolling, a deck that cannot
    reach its last slide with the arrow keys, or a diagram Present overlay that
    will not close on Esc. It needs Playwright and a browser (a full `npm ci` plus

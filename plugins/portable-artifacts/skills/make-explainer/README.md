@@ -88,7 +88,7 @@ page, so keep the two together.
   a make-motion `spec` also needs the optional **`make-motion`** skill beside it,
   ffmpeg and Chromium; `PA_MOTION_TIMEOUT_MS` bounds the render.
 - No browser is needed to validate or build. Only `scripts/check.mjs` (an optional
-  headless check of the built page at 1280 and 390 px) and this skill's browser
+  headless check of the built page at 1280, 390 and 1800 px) and this skill's browser
   tests use one. Playwright is a dev dependency, so `check.mjs` needs a full
   `npm ci` plus a Chromium or Chrome (`npx playwright install chromium`); without
   either it skips cleanly and says so, naming the doctor command

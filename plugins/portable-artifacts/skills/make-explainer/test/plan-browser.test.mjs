@@ -506,12 +506,12 @@ test('selecting stays responsive: the option rows are not re-rendered', async (t
   await context.close();
 });
 
-test('a built plan page passes scripts/check.mjs (no console errors, no sideways scroll at 1280 and 390)', async (t) => {
+test('a built plan page passes scripts/check.mjs (no console errors, no sideways scroll at 1280, 390 and 1800)', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const result = await checkPage(built().file);
   assert.deepEqual(result.problems, []);
   assert.equal(result.status, 'ok');
-  assert.equal(result.viewports, 2);
+  assert.equal(result.viewports, 3);
 });
 
 // ---- Save as HTML ----------------------------------------------------------------------------------

@@ -211,7 +211,7 @@ function withExtra(built, extra, name) {
   return file;
 }
 
-test('check: the fixture page and deck pass at both viewports', async (t) => {
+test('check: the fixture page and deck pass at every viewport', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   for (const name of ['nowrap.explainer.json', 'nowrap-slides.explainer.json']) {
     const result = await checkPage(buildFile(fixture(name)).file);
@@ -220,13 +220,13 @@ test('check: the fixture page and deck pass at both viewports', async (t) => {
   }
 });
 
-test('check: a token that wraps and a KPI value that spills each fail the check, at both viewports', async (t) => {
+test('check: a token that wraps and a KPI value that spills each fail the check, at every viewport', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const built = buildFile(fixture('nowrap.explainer.json'));
   const bad = '<p style="width:60px;font:16px/1.4 monospace">aaaa 1,204 ms</p><style>.kpi-value { --n: 1 !important; }</style>';
   const result = await checkPage(withExtra(built, bad, 'bad-numbers'));
   assert.equal(result.status, 'failed');
-  for (const label of ['1280px', '390px']) {
+  for (const label of ['1280px', '390px', '1800px']) {
     assert.ok(result.problems.includes(`${label}: a number-plus-unit token wraps across lines: "1,204 ms"`), result.problems.join('\n'));
     assert.ok(result.problems.some((p) => p.startsWith(`${label}: a KPI value overflows its tile: "`)), result.problems.join('\n'));
   }

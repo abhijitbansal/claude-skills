@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // node scripts/check.mjs <page.html> [--json]
-// Opens a built page at 1280 and 390 px and fails on console errors or warnings, a page that scrolls
+// Opens a built page at 1280, 390 and 1800 px and fails on console errors or warnings, a page that scrolls
 // sideways, elements wider than the page (outside a scrolling region), content clipped sideways inside a
 // slide (a slide hides what overflows it, so the page-level checks cannot see that), a deck that cannot
 // reach its last slide with the arrow keys or whose counter disagrees, a number-plus-unit token that wraps
@@ -18,7 +18,7 @@ import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 
 const USAGE = 'node scripts/check.mjs <page.html> [--json]';
 const OPTIONS = { json: { type: 'boolean' } };
-const VIEWPORTS = [{ width: 1280, height: 900 }, { width: 390, height: 780 }];
+const VIEWPORTS = [{ width: 1280, height: 900 }, { width: 390, height: 780 }, { width: 1800, height: 1000 }];
 const READY_MS = 5000;
 const ACTION_MS = 5000; // default timeout for every page action and navigation
 const SETTLE_MS = 2000; // a state change the runtime makes at once (slide, overlay)

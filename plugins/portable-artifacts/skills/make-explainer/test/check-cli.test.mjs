@@ -10,6 +10,7 @@ import { checkPage, isConsoleProblem } from '../scripts/check.mjs';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CHECK = path.join(ROOT, 'scripts/check.mjs');
 
+const fixture = (name) => path.join(ROOT, 'test/fixtures', name);
 const cli = (args, env = {}) => spawnSync(process.execPath, [CHECK, ...args], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '', ...env } });
 const skipUnlessBrowser = async (t) => {
   if (await haveBrowser()) return false;
@@ -59,12 +60,12 @@ test('PA_CHECK_TIMEOUT_MS must be a positive number', () => {
 // ---- clean pages pass ------------------------------------------------------------------------
 
 for (const name of ['concept', 'checklist', 'slides', 'recap']) {
-  test(`the ${name} example passes at 1280 and 390`, async (t) => {
+  test(`the ${name} example passes at 1280, 390 and 1800`, async (t) => {
     if (await skipUnlessBrowser(t)) return;
     const result = await checkPage(buildFile(exampleFile(name)).file);
     assert.deepEqual(result.problems, []);
     assert.equal(result.status, 'ok');
-    assert.equal(result.viewports, 2);
+    assert.equal(result.viewports, 3);
   });
 }
 
@@ -73,10 +74,10 @@ test('the CLI prints one ok line for a clean page, and --json says so', async (t
   const { file } = buildFile(exampleFile('slides'));
   const r = cli([file]);
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.match(r.stdout, /^check: ok \(2 viewports, \d+ slides\)\n$/);
+  assert.match(r.stdout, /^check: ok \(3 viewports, \d+ slides\)\n$/);
   const j = JSON.parse(cli([file, '--json']).stdout);
   assert.equal(j.ok, true);
-  assert.equal(j.viewports, 2);
+  assert.equal(j.viewports, 3);
 });
 
 // ---- each problem fails with a clear line ----------------------------------------------------
@@ -161,4 +162,17 @@ test('a GL driver performance message is not a console problem, any other warnin
   assert.equal(isConsoleProblem('warning', 'careful'), true);
   assert.equal(isConsoleProblem('warning', '[.WebGL-0x1]GL Driver Message (OpenGL, Other, X, High): something else'), true);
   assert.equal(isConsoleProblem('error', stall), true, 'an error of that shape is still an error');
+});
+
+// ---- guardrail proof on a real old page ------------------------------------------------------
+
+test('guardrail proof: a 0.8.0 page whose KPI values wrap only in a wide window fails at 1800 px and nowhere else', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const result = await checkPage(fixture('legacy-kpi-wide-wrap.html'));
+  assert.equal(result.status, 'failed', result.problems.join('\n'));
+  assert.ok(result.problems.includes('1800px: a number-plus-unit token wraps across lines: "39 ms"'), result.problems.join('\n'));
+  assert.deepEqual(result.problems.filter((p) => !p.startsWith('1800px:')), [], 'the two older viewports stay clean');
+  const r = cli([fixture('legacy-kpi-wide-wrap.html')]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /^1800px: a number-plus-unit token wraps across lines: "39 ms"\ncheck: 1 problem\n$/);
 });
