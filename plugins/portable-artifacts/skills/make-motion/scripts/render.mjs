@@ -1,11 +1,14 @@
 #!/usr/bin/env node
-// node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--contact-sheet]
+// node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--workers n|auto] [--quality draft|final] [--contact-sheet]
 // --theme: a shared theme for a spec that names none (a spec's own `theme` wins). The first stdout line names
 // the theme drawn: `theme: <name>`.
+// --workers: capture frames on that many pages of one browser (1-16, or auto); the MP4 is byte-identical to --workers 1.
+// --quality draft: half the size on each side and a faster encode, for a quick look; final (the default) is the full render.
+// Both notes (`workers: N`, `quality: draft (WxH)`) go to stderr; stdout is the same either way.
 // --model/--effort/--agent override the spec's generatedBy; they are stamped into the MP4 comment/artist tags.
 // With --contact-sheet, --out is a directory; one tiled, timestamped PNG per scene goes to <out>/contact/<scene-id>.png.
 import { spawn } from 'node:child_process';
-import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { loadSpec, validateSpec, frameRateErrors, withDefaults, UsageError } from './lib/spec.mjs';
@@ -14,7 +17,8 @@ import { printResult, didYouMean } from '../shared/errors.mjs';
 import { listThemes } from '../shared/theme.mjs';
 import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
-import { findFfmpeg, findFfprobe, encodeArgs, probeAudio, probeGraph, measureLoudness } from './lib/ffmpeg.mjs';
+import { findFfmpeg, findFfprobe, encodeArgs, probeAudio, probeGraph, measureLoudness, draftSize, QUALITIES } from './lib/ffmpeg.mjs';
+import { parseWorkers, captureInOrder } from './lib/workers.mjs';
 import { specHasVideo, prepareVideo, videoAudioTracks } from './lib/video.mjs';
 import { synthesiseCues } from './lib/cues.mjs';
 import { resolveAsset } from './lib/paths.mjs';
@@ -29,9 +33,11 @@ const MAX_FPS = 120;
 const MIN_SIDE = 16;
 const MAX_SIDE = 3840;
 const FFMPEG_GRACE_MS = 2000;
+const FRAME_DIR_RETRIES = 5;
+const FRAME_DIR_RETRY_MS = 100;
 const EXIT_SIGINT = 130;
 const EXIT_SIGTERM = 143;
-const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--contact-sheet]';
+const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--workers n|auto] [--quality draft|final] [--contact-sheet]';
 
 function takeValue(argv, i, flag) {
   const value = argv[i + 1];
@@ -61,7 +67,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--contact-sheet') opts.contact = true;
-    else if (a === '--out' || a === '--fps' || a === '--size' || a === '--theme' || a === '--model' || a === '--effort' || a === '--agent') opts[a.slice(2)] = takeValue(argv, i++, a);
+    else if (['--out', '--fps', '--size', '--theme', '--model', '--effort', '--agent', '--workers', '--quality'].includes(a)) opts[a.slice(2)] = takeValue(argv, i++, a);
     else if (a.startsWith('--')) throw new UsageError(`unknown option ${a}`);
     else rest.push(a);
   }
@@ -73,7 +79,19 @@ function parseArgs(argv) {
   }
   if (opts.size !== undefined) opts.size = parseSize(opts.size);
   if (opts.theme !== undefined) checkTheme(opts.theme);
+  checkCapture(opts);
   return opts;
+}
+
+// --workers and --quality: a value outside the accepted set is a usage error, and so is one a contact sheet would ignore.
+function checkCapture(opts) {
+  const workers = parseWorkers(opts.workers);
+  if (opts.quality !== undefined && !QUALITIES.includes(opts.quality)) {
+    throw new UsageError(`--quality must be ${QUALITIES.map((q) => JSON.stringify(q)).join(' or ')} (got ${JSON.stringify(opts.quality)})`);
+  }
+  if (opts.contact && opts.workers !== undefined) throw new UsageError('--workers does not apply to --contact-sheet (it captures a few frames on one page); leave it out');
+  if (opts.contact && opts.quality === 'draft') throw new UsageError('--quality does not apply to --contact-sheet (a sheet is always full size); leave it out');
+  opts.workers = workers;
 }
 
 function partialPath(out) {
@@ -134,8 +152,13 @@ async function plan(opts, state) {
   const hasVideo = specHasVideo(spec);
   const ffmpeg = opts.contact && !hasVideo ? null : await findFfmpeg();
   const ffprobe = hasVideo ? findFfprobe({ ffmpeg }) : null;
+  const quality = opts.quality ?? 'final';
+  const size = opts.size ?? spec.size;
   return {
-    theme: opts.theme, themeName: loaded.theme ?? opts.theme ?? MOTION_THEME, spec, specPath, fps, frames, total, contact: opts.contact, size: opts.size ?? spec.size,
+    theme: opts.theme, themeName: loaded.theme ?? opts.theme ?? MOTION_THEME, spec, specPath, fps, frames, total, contact: opts.contact, quality,
+    // A draft page is half the size: the stage scales to fit it exactly as it does for --size, so captions, the safe area and fonts shrink with it.
+    size: quality === 'draft' ? draftSize(size) : size,
+    workers: opts.workers,
     out: path.resolve(opts.out ?? defaultOut), ffmpeg,
     metadata: { comment: provenanceText('make-motion', spec.generatedBy, buildDate()), artist: spec.generatedBy?.model },
     videoFrames: hasVideo ? prepareVideo(spec, dir, ffmpeg, ffprobe, fps) : {},
@@ -194,17 +217,29 @@ async function renderContactSheets(page, p, info, browser) {
   process.stdout.write(`${outDir}\n${p.spec.scenes.length} contact sheet(s)\n`);
 }
 
-async function renderVideo(page, p, state) {
+// One page: seek, screenshot, encode, frame by frame. Several pages: they take the frames in turn, write PNG files (at
+// most two per page at once) and the encoder takes the frames in order (workers.mjs); every frame is the same bytes
+// whichever page draws it.
+async function renderVideo(pages, p, state) {
   mkdirSync(path.dirname(p.out), { recursive: true });
   state.partial = partialPath(p.out);
-  state.encoder = startEncoder(p.ffmpeg, encodeArgs({ fps: p.fps, out: state.partial, audio: p.audio, duration: p.total, metadata: p.metadata }));
+  state.encoder = startEncoder(p.ffmpeg, encodeArgs({ fps: p.fps, out: state.partial, audio: p.audio, duration: p.total, metadata: p.metadata, quality: p.quality }));
+  let written = 0;
   let nextMark = 1;
-  for (let i = 0; i < p.frames; i++) {
-    await page.evaluate((s) => window.__motion.seek(s), i / p.fps);
-    await state.encoder.write(await page.screenshot({ type: 'png' }));
-    if ((i + 1) / p.frames >= nextMark / PROGRESS_STEPS) {
-      process.stdout.write(`${nextMark * PROGRESS_STEPS}% (${i + 1}/${p.frames} frames)\n`);
+  const onFrame = async (png) => {
+    await state.encoder.write(png);
+    written++;
+    if (written / p.frames >= nextMark / PROGRESS_STEPS) {
+      process.stdout.write(`${nextMark * PROGRESS_STEPS}% (${written}/${p.frames} frames)\n`);
       nextMark++;
+    }
+  };
+  if (pages.length > 1) {
+    await captureInOrder({ pages, frames: p.frames, fps: p.fps, dir: state.frameDir, onFrame });
+  } else {
+    for (let i = 0; i < p.frames; i++) {
+      await pages[0].evaluate((s) => window.__motion.seek(s), i / p.fps);
+      await onFrame(await pages[0].screenshot({ type: 'png' }));
     }
   }
   await state.encoder.finish();
@@ -234,6 +269,8 @@ async function cleanup(state) {
   await state.encoder?.kill();
   await state.browser?.close().catch(() => {});
   if (state.partial) rmSync(state.partial, { force: true });
+  // A screenshot a page had already taken can land in the folder while it is removed (an interrupt), so retry on ENOTEMPTY.
+  if (state.frameDir) rmSync(state.frameDir, { recursive: true, force: true, maxRetries: FRAME_DIR_RETRIES, retryDelay: FRAME_DIR_RETRY_MS });
   if (state.cueDir) rmSync(state.cueDir, { recursive: true, force: true });
 }
 
@@ -246,32 +283,43 @@ function installSignalHandlers(state) {
   }
 }
 
-async function openPage(p, server, state) {
-  state.browser = await launchBrowser();
-  const page = await state.browser.newPage({ viewport: { width: p.size[0], height: p.size[1] }, deviceScaleFactor: 1 });
-  page.on('pageerror', (e) => process.stderr.write(`page error: ${e.message}\n`));
-  await guardNetwork(page, new URL(server.url).origin, (url) => process.stderr.write(`blocked network request: ${url}\n`));
-  await page.goto(server.url);
-  await page.waitForFunction(() => window.__motion);
-  await page.evaluate(() => window.__motion.ready);
-  return page;
+// One browser, `count` pages. Every page opens exactly the same way: the same viewport and scale factor, the same
+// network guard, and the same wait for fonts and video frames, so a frame is the same bytes whichever page draws it.
+async function openPages(p, server, state, count) {
+  state.browser = await launchBrowser({ ownSignals: true }); // the signal handlers above remove the partial MP4 and temp frames
+  const origin = new URL(server.url).origin;
+  const open = async () => {
+    const page = await state.browser.newPage({ viewport: { width: p.size[0], height: p.size[1] }, deviceScaleFactor: 1 });
+    page.on('pageerror', (e) => process.stderr.write(`page error: ${e.message}\n`));
+    await guardNetwork(page, origin, (url) => process.stderr.write(`blocked network request: ${url}\n`));
+    await page.goto(server.url);
+    await page.waitForFunction(() => window.__motion);
+    await page.evaluate(() => window.__motion.ready);
+    return page;
+  };
+  return Promise.all(Array.from({ length: count }, open));
 }
 
 async function main() {
   warnIfStaleCopy();
   // The handlers go in before planning: planning writes the cue folder, and an interrupt with no handler would kill the
   // process and leave it behind.
-  const state = { encoder: null, browser: null, partial: null, cueDir: null, exiting: false };
+  const state = { encoder: null, browser: null, partial: null, frameDir: null, cueDir: null, exiting: false };
   installSignalHandlers(state);
   const p = await plan(parseArgs(process.argv.slice(2)), state);
   if (!p) return 1;
   process.stdout.write(`theme: ${p.themeName}\n`);
+  const pageCount = p.contact ? 1 : Math.min(p.workers, p.frames); // no page without a frame to take
+  if (p.quality === 'draft') process.stderr.write(`quality: draft (${p.size.join('x')})\n`);
+  if (pageCount > 1) process.stderr.write(`workers: ${pageCount}\n`);
   let server;
   try {
+    // Frames of a parallel render wait here, outside the spec folder; cleanup() removes the folder on every exit.
+    if (pageCount > 1) state.frameDir = mkdtempSync(path.join(os.tmpdir(), 'motion-frames-'));
     server = await startServer({ specPath: p.specPath, mode: 'render', theme: p.theme, videoFrames: p.videoFrames });
-    const page = await openPage(p, server, state);
-    const info = await page.evaluate(() => ({ sceneStarts: window.__motion.sceneStarts }));
-    await (p.contact ? renderContactSheets(page, p, info, state.browser) : renderVideo(page, p, state));
+    const pages = await openPages(p, server, state, pageCount);
+    const info = await pages[0].evaluate(() => ({ sceneStarts: window.__motion.sceneStarts }));
+    await (p.contact ? renderContactSheets(pages[0], p, info, state.browser) : renderVideo(pages, p, state));
     return 0;
   } catch (e) {
     if (state.exiting) return new Promise(() => {}); // the signal handler owns the exit

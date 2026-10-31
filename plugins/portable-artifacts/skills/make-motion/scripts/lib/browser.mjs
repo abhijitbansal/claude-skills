@@ -11,13 +11,16 @@ const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 const ARGS = ['--disable-partial-raster'];
 
 // Bundled Chromium first; falls back to system Chrome with a warning.
-export async function launchBrowser({ quiet = false } = {}) {
+// Playwright closes the browser and exits 130 or 143 itself on Ctrl+C or SIGTERM, which pre-empts a caller's own handler
+// (render.mjs removes its partial MP4 and temp frames there). `ownSignals: true` leaves SIGINT and SIGTERM to the caller.
+export async function launchBrowser({ quiet = false, ownSignals = false } = {}) {
+  const options = { args: ARGS, ...(ownSignals ? { handleSIGINT: false, handleSIGTERM: false } : {}) };
   try {
-    return await chromium.launch({ args: ARGS });
+    return await chromium.launch(options);
   } catch (first) {
     if (!/Executable doesn't exist/i.test(first.message)) throw first;
     try {
-      const browser = await chromium.launch({ channel: 'chrome', args: ARGS });
+      const browser = await chromium.launch({ channel: 'chrome', ...options });
       if (!quiet) {
         process.stderr.write('warning: Playwright Chromium not installed; using system Chrome. '
           + 'Output may differ between machines. Fix: ' + npxInstallChromium() + '\n');

@@ -499,10 +499,31 @@ function isOpaqueColor(css) {
 // it; a see-through one is a one-colour gradient (an image layer) stacked on top.
 const paintOver = (color, under) => (isOpaqueColor(color) ? color : `linear-gradient(${color}, ${color}), ${under}`);
 
+// Chromium remembers what an element looked like, and the next frame can be drawn from that memory rather than from the
+// element: (1) once an element was drawn part-way transparent, its text is drawn up to one level per colour channel off, on
+// the glyph edges, from the same element drawn fresh; (2) a move of a few thousandths of a pixel (an ease settling on its
+// target, 470.009 px then 470 px) is not redrawn at all, so the new frame shows the old position. Either way a frame
+// reached by seeking straight to it differs from the same frame after a walk, so --workers, contact sheets and check.mjs
+// would not match the video. Taking the element out of layout and putting it back makes the next paint start from the
+// element itself (measured: no painted frame needed in between). So every element whose pose (transform or opacity) changed
+// in this seek is renewed; one that did not change is left as it is, drawn already from a renewed or a fresh start. The
+// element nodes (`parts`) and the scene cameras are the nodes measured to need it. Scene layers (transitions) and caption
+// pops were also measured, at 1080p and 30 fps where the steps are smallest, and match in every order without it; the typing
+// caret and captions change their text, which redraws them (test/seek-order.test.mjs: transitions.json, kinetic captions
+// over a slide). A node of another kind that starts to settle in sub-pixel steps would be added here. The renewal runs
+// only in a render (any page that does not say "preview" outright, like the live layers): a preview needs no exact bytes.
+function renewNodes(nodes) {
+  const shown = nodes.map((node) => node.style.display);
+  nodes.forEach((node) => { node.style.display = 'none'; });
+  document.body.getBoundingClientRect(); // layout runs here, so the nodes' layout objects are dropped
+  nodes.forEach((node, i) => { node.style.display = shown[i]; });
+}
+
 // Returns a function that poses the stage at `sec`; it resolves once every video frame it changed is decoded.
 // `background`: the root colour, `themeBackground`: the theme's page colour, the base under a see-through root.
 function makeApply({ scenes, parts, captions }, built, { size, background, themeBackground }) {
   const { states, sceneStarts, sceneOf, overlaps } = built;
+  const lastPose = new Map(); // part node -> the transform and opacity it was given last, to renew it when they change
   const base = paintOver(background, themeBackground); // what the stage shows behind a scene with no background of its own
   return (sec) => {
     const decoding = [];
@@ -518,13 +539,19 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
     // under 1) is painted over that base. A crossfade keeps its transparent layers (the old scene is meant to show
     // through, and its bytes never changed).
     const opaque = open !== undefined && open.type !== 'crossfade';
+    let cameraMoved = false; // a camera that moved redraws everything under it, so those elements are renewed too
     scenes.forEach(({ scene, layer, camera, grain }, i) => {
       const role = i === active ? 'incoming' : i === outgoing ? 'outgoing' : null;
       const look = (role && styles?.[role]) || NO_LAYER_STYLES;
       layer.style.display = role ? 'block' : 'none';
       const own = scene.background && scene.background !== 'art' ? scene.background : ''; // an art plate fills its layer
       layer.style.background = opaque && role && scene.background !== 'art' ? (own ? paintOver(own, base) : base) : own;
-      if (camera) camera.style.transform = cameraTransform(states.get(`camera:${scene.id}`), scene.camera.shake, Math.min(Math.max(0, sec - sceneStarts[i]), scene.duration));
+      if (camera) {
+        const shot = cameraTransform(states.get(`camera:${scene.id}`), scene.camera.shake, Math.min(Math.max(0, sec - sceneStarts[i]), scene.duration));
+        camera.style.transform = shot;
+        if (lastPose.has(camera) && lastPose.get(camera) !== shot) cameraMoved = true;
+        lastPose.set(camera, shot);
+      }
       layer.style.opacity = String(look.opacity ?? states.get(`scene:${scene.id}`).opacity);
       layer.style.transform = look.transform ?? '';
       layer.style.clipPath = look.clipPath ?? '';
@@ -534,10 +561,16 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
         for (const prop of ['display', 'opacity', 'transform', 'clipPath', 'filter', 'zIndex']) grain.style[prop] = layer.style[prop];
       }
     });
+    const renew = [];
     for (const { node, el, drawNodes, arrowNode, roundCap, format, typing, codeTyping, frame, clip } of parts) {
       const s = states.get(el.id);
-      node.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
-      node.style.opacity = String(s.opacity);
+      const transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
+      const opacity = String(s.opacity);
+      node.style.transform = transform;
+      node.style.opacity = opacity;
+      const pose = `${transform} ${opacity}`;
+      if (cameraMoved || (lastPose.has(node) && lastPose.get(node) !== pose)) renew.push(node);
+      lastPose.set(node, pose);
       for (const drawNode of drawNodes ?? []) drawNode.setAttribute('stroke-dashoffset', String(1 - s.draw));
       // A round cap draws a dot of the stroke's width the moment the dash has any length: keep the line hidden until
       // the drawn length is more than a cap radius, so the stroke grows from a stub instead of popping in as a dot. A
@@ -561,6 +594,7 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
         else seekClip(clip, Math.min(sceneT, duration));
       }
     }
+    if (renew.length && !LIVE_LAYERS) renewNodes(renew); // not in a preview: it needs no byte-exact frames, and its elements are compositor layers (a <video> among them)
     for (const layer of captions) applyCaption(layer, sec);
     return Promise.all(decoding);
   };

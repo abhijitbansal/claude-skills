@@ -85,13 +85,24 @@ function audioGraph(audio) {
 // `audio`: resolveAudio() output plus an absolute `file` per track. `duration` caps the MP4 at the video length.
 const metadataArgs = (m = {}) => Object.entries(m).filter(([, v]) => v).flatMap(([k, v]) => ['-metadata', `${k}=${v}`]);
 
+// `quality`: "final" (the default: the arguments are exactly those of a call without it) or "draft" (a faster, smaller encode).
+export const QUALITIES = ['draft', 'final'];
+const DRAFT_CODEC = ['-crf', '30', '-preset', 'veryfast'];
+
+// A draft is half the size on each side, rounded down to even (yuv420p needs even sides), and never under the 16 px
+// minimum side that --size accepts.
+const DRAFT_MIN_SIDE = 16;
+export const draftSize = (size) => size.map((n) => Math.max(DRAFT_MIN_SIDE, 2 * Math.floor(n / 4)));
+
 // `metadata`: { comment?, artist? } written into the MP4 container tags.
-export function encodeArgs({ fps, out, audio = [], duration, metadata }) {
-  if (audio.length === 0) return [...VIDEO_INPUT(fps), ...VIDEO_CODEC, ...metadataArgs(metadata), out];
+export function encodeArgs({ fps, out, audio = [], duration, metadata, quality = 'final' }) {
+  if (!QUALITIES.includes(quality)) throw new Error(`encodeArgs: quality must be "draft" or "final" (got ${JSON.stringify(quality)})`);
+  const videoCodec = quality === 'draft' ? [...VIDEO_CODEC, ...DRAFT_CODEC] : VIDEO_CODEC;
+  if (audio.length === 0) return [...VIDEO_INPUT(fps), ...videoCodec, ...metadataArgs(metadata), out];
   if (!Number.isFinite(duration)) throw new Error('encodeArgs: duration is required when audio tracks are given');
   const { graph, label } = audioGraph(audio);
   return [...VIDEO_INPUT(fps), ...audio.flatMap((t) => fileInput(t.file)), '-filter_complex', graph,
-    '-map', '0:v', '-map', label, ...VIDEO_CODEC, ...AUDIO_CODEC, '-t', sec(duration), ...metadataArgs(metadata), out];
+    '-map', '0:v', '-map', label, ...videoCodec, ...AUDIO_CODEC, '-t', sec(duration), ...metadataArgs(metadata), out];
 }
 
 // The real mix graph against a lavfi video stand-in, discarded after PROBE_SECONDS: proves the
