@@ -1,5 +1,7 @@
 // Pure, DOM-free: compiles a motion spec into one paused anime.js timeline that
 // animates a plain state object per element. Runs unchanged in Node and the browser.
+// The root `captions` tracks are not on it: nothing about them animates, and what a captions layer shows is a pure
+// function of the time (template/captions.mjs captionState, applied by the renderer on every seek).
 import { createTimeline, cubicBezier } from 'animejs';
 import { withDefaults, FADE_SECONDS, EASE_CURVES, TYPING_SECONDS_PER_CHAR, typingLength } from './defaults.mjs';
 import { flattenElements } from './groups.mjs';

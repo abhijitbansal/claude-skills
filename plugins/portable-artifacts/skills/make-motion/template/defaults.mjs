@@ -10,6 +10,7 @@ export const ARROW_HEAD_LENGTH = 3; // an arrow head is this many stroke widths 
 // What a shape draws with when its spec gives no size: one source for the page and the validator's line-length minimums.
 export const DEFAULT_SHAPE_SIZE = 100; // width and height
 export const DEFAULT_LINE_STROKE = 4;
+export const DEFAULT_CAPTION_STYLE = 'plain'; // a captions track's `style` when it names none (template/captions.mjs)
 
 // A `typing` text's characters as a reader counts them: grapheme clusters, so an emoji, a ZWJ sequence, a flag or a
 // letter with a combining accent is one character and is never typed in halves.
@@ -164,6 +165,7 @@ export function withDefaults(spec) {
   out.fps ??= DEFAULTS.fps;
   out.theme ??= MOTION_THEME;
   out.audio = (out.audio ?? []).map((track) => ({ at: 0, volume: 1, fadeIn: 0, fadeOut: 0, ...track }));
+  out.captions = (out.captions ?? []).map((track) => ({ at: 0, style: DEFAULT_CAPTION_STYLE, ...track }));
   const transition = out.transition ?? 'none';
   out.scenes.forEach((scene, si) => {
     scene.transition ??= si === 0 && transition === 'crossfade' ? 'none' : transition; // the first scene has nothing to fade out

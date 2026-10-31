@@ -10,6 +10,7 @@ import { resolveAsset } from './paths.mjs';
 import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, PITCHED_CUES, MAX_CUES, NOTE_PATTERN, trackStart, typingFollow } from '../../template/audio.mjs';
 import { flattenElements, isGroup, MAX_GROUP_DEPTH, MAX_GROUP_CHILDREN } from '../../template/groups.mjs';
 import { FORMATS, FORMAT_NAMES } from '../../template/formats.mjs';
+import { CAPTION_STYLES, CAPTION_EXTENSIONS, MAX_CAPTION_TRACKS, CaptionError, parseCaptions } from '../../template/captions.mjs';
 import { VIDEO_EXTENSIONS, isVideo, probeVideo } from './video.mjs';
 import { findFfprobe } from './ffmpeg.mjs';
 import { doctorCommand } from './doctor-hint.mjs';
@@ -146,6 +147,18 @@ const cue = {
     note: { type: 'string' },
   },
 };
+// A captions track is timed like an audio track (`scene` + `at`); checkCaptions reads and parses its file.
+const captionTrack = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['src'],
+  properties: {
+    src: { type: 'string', minLength: 1 },
+    style: { enum: [...CAPTION_STYLES] },
+    scene: { type: 'string', minLength: 1 },
+    at: seconds,
+  },
+};
 export const SCHEMA = {
   definitions: { element },
   type: 'object',
@@ -154,6 +167,7 @@ export const SCHEMA = {
   properties: {
     audio: { type: 'array', maxItems: MAX_AUDIO_TRACKS, items: audioTrack },
     cues: { type: 'array', maxItems: MAX_CUES, items: cue },
+    captions: { type: 'array', maxItems: MAX_CAPTION_TRACKS, items: captionTrack },
     format: { enum: [...FORMAT_NAMES] },
     size: {
       type: 'array', minItems: 2, maxItems: 2,
@@ -383,6 +397,31 @@ function checkAudio(spec, dir, errors) {
   });
 }
 
+// A captions file must be one the page can read (srt, vtt or json, inside the spec folder) and must parse: a cue out of
+// order or ending before it starts is reported here, at the track's `src`, naming the cue and its line.
+function checkCaptions(spec, dir, errors) {
+  (spec.captions ?? []).forEach((track, i) => {
+    const base = `captions[${i}]`;
+    const at = pathJoin(base, 'src');
+    if (checkAssetPath(track.src, at, dir, errors)) checkCaptionFile(track.src, at, dir, errors);
+    checkStart(track, spec, base, errors);
+  });
+}
+
+function checkCaptionFile(src, at, dir, errors) {
+  const ext = path.extname(src).slice(1).toLowerCase();
+  if (!CAPTION_EXTENSIONS.includes(ext)) {
+    errors.push({ path: at, message: `unsupported captions format "${path.extname(src)}"; use srt, vtt or json` });
+    return;
+  }
+  try {
+    parseCaptions(readFileSync(resolveAsset(dir, src).file, 'utf8'), ext);
+  } catch (e) {
+    if (!(e instanceof CaptionError)) throw e;
+    errors.push({ path: at, message: e.message });
+  }
+}
+
 // `elevated` belongs to rects, `cap` and `arrow` to lines.
 const SHAPE_ONLY = { elevated: 'rect', cap: 'line', arrow: 'line' };
 function checkShapeStyle(el, base, errors) {
@@ -566,5 +605,6 @@ export function validateSpec(spec, { dir = process.cwd() } = {}) {
   checkVideos(spec, dir, errors);
   checkAudio(spec, dir, errors);
   checkCues(spec, errors);
+  checkCaptions(spec, dir, errors);
   return { ok: errors.length === 0, errors };
 }

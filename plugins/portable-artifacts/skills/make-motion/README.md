@@ -29,6 +29,10 @@ shell commands.
   `elevated` cards, and lines can have round caps and an arrow head.
 - **Scene crossfade**: `"transition": "crossfade"` fades the new scene in over the
   previous one (which stays fully visible beneath) over 0.4 s; a root `transition` sets the default.
+- **Captions**: a `captions` track from an SRT, VTT or Whisper JSON file, or the voiceover's
+  sentence timings, shown two to six words at a time in the caption zone in one of six styles
+  (`plain`, `pill`, `karaoke`, `kinetic`, `boxed`, `typewriter`); `check.mjs` keeps other text out
+  of the zone.
 - **Procedural sound cues**: a `cues` array (`pop`, `click`, `whoosh`, `chime`, `impact`,
   `riser`, `swoosh`, `typing`, `drop`, `ding`) is synthesised locally in layers (transient,
   body, short reverb tail; stereo width above about 120 Hz on the noise sweeps) with no files and
@@ -115,7 +119,7 @@ a colour; it resolves to the active theme's dark colour.
 
 Root-level options (all off unless set): `transition` (`none`, `fade` or `crossfade`, the
 default for every scene), `cues` (up to 30 sound cues, timed from the video or a scene
-start), `texture` (`vignette`, and `grain` from 0 to 0.15). Texture costs render time, measured
+start), `captions` (up to 20 tracks, each an SRT, VTT or JSON file and a `style`), `texture` (`vignette`, and `grain` from 0 to 0.15). Texture costs render time, measured
 on 1920x1080 frames (seek plus PNG screenshot, headless Chromium, one Apple-silicon Mac): about
 17 to 33 ms per frame with none, 42 ms with the vignette, 100 ms with grain and 187 ms with both.
 
@@ -130,16 +134,16 @@ examples in [`references/examples/`](references/examples/).
 
 | Command | Does | Flags |
 |---|---|---|
-| `validate.mjs <spec>` | Schema plus cross-field checks (unique ids, keyframe times, per-type props, image, video and audio paths, video trims against the clip length (needs ffprobe), audio scene/start/fade fits, chart compile, no remote URLs) | `--json` |
+| `validate.mjs <spec>` | Schema plus cross-field checks (unique ids, keyframe times, per-type props, image, video and audio paths, video trims against the clip length (needs ffprobe), audio scene/start/fade fits, captions files parsed (a cue out of order names its line), chart compile, no remote URLs) | `--json` |
 | `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` |
 | `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. The MP4 timing is exact | `--open` |
 | `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks, `cues` or an unmuted `video` clip with sound, followed by one `audio: … LUFS integrated, true peak … dBTP` line) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--contact-sheet` |
-| `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen. An element that has left the frame entirely is gone, not clipped. It also warns on stderr (never a failure) when the first scene shows nothing at t = 0. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
+| `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen; with `captions`, a text or counter held in the caption zone and a captions layer that leaves it. An element that has left the frame entirely is gone, not clipped. It also warns on stderr (never a failure) when the first scene shows nothing at t = 0. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
 | `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Lists the video frame cache once it passes 2 GB; `--fix cache` deletes it. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover>`, `--fix <id[,id]>` |
 
 Two renders of the same spec and media give identical frames and audio; the MP4 `comment` tag carries the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set.
 
-Limits: up to 50 scenes and 120 s in total, up to 20 audio tracks and 30 cues; fps is 24, 25, 30 or 60; each side
+Limits: up to 50 scenes and 120 s in total, up to 20 audio tracks, 30 cues and 20 captions tracks; fps is 24, 25, 30 or 60; each side
 is 16–3840 px. Frame *i* samples `t = i / fps`, so put a final keyframe at
 least one frame before the scene ends.
 
@@ -151,8 +155,8 @@ then `PATH`, then an optional `ffmpeg-static` install. It is never bundled.
 ## Security
 
 - The preview server binds `127.0.0.1`, rejects non-local `Host` headers (DNS
-  rebinding) and serves only its own files plus the image, video and audio
-  files the spec names (and the frames decoded from those videos). Media
+  rebinding) and serves only its own files plus the image, video, audio and
+  captions files the spec names (and the frames decoded from those videos). Media
   paths can't leave the spec's folder.
 - No network from specs: chart `url` keys and `url()` colours are rejected,
   the page runs under a CSP whose script hash covers only its own import

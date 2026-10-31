@@ -34,6 +34,7 @@ const MIME = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.txt': 'text/plain; charset=utf-8',
   '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.flac': 'audio/flac',
   '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm', '.m4v': 'video/x-m4v',
+  '.srt': 'application/x-subrip; charset=utf-8', '.vtt': 'text/vtt; charset=utf-8',
 };
 
 const VENDOR_ROOTS = {
@@ -150,14 +151,15 @@ function serveArt(ctx, res, sceneId) {
   return sendBody(res, MIME['.svg'], svg);
 }
 
-// Image, video and audio srcs named by the current spec; /assets serves nothing else.
+// Image, video, audio and captions srcs named by the current spec; /assets serves nothing else.
 const MEDIA_ELEMENTS = new Set(['image', 'video']);
 function referencedAssets(specFile) {
   try {
     const spec = JSON.parse(readFileSync(specFile, 'utf8'));
     const images = spec.scenes.flatMap((s) => flattenElements(s.elements)).filter(({ el }) => MEDIA_ELEMENTS.has(el.type)).map(({ el }) => el.src);
     const audio = (spec.audio ?? []).map((a) => a.src);
-    return new Set([...images, ...audio].map((src) => path.posix.normalize(String(src))));
+    const captions = (spec.captions ?? []).map((c) => c.src);
+    return new Set([...images, ...audio, ...captions].map((src) => path.posix.normalize(String(src))));
   } catch { return new Set(); }
 }
 
@@ -280,7 +282,7 @@ function broadcastSpecState(ctx) {
   for (const c of ctx.clients) c.write(message);
 }
 
-// The spec file, or any image/audio file it references (also in subfolders), triggers a reload.
+// The spec file, or any image, video, audio or captions file it references (also in subfolders), triggers a reload.
 function isWatched(ctx, name) {
   if (!name) return false;
   const rel = path.posix.normalize(String(name).replaceAll('\\', '/'));

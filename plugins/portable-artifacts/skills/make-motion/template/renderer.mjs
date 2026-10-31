@@ -4,6 +4,7 @@ import { buildTimeline, seekTo } from './timeline.mjs';
 import { withDefaults, resolveColor, graphemes, typingLength, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE } from './defaults.mjs';
 import { resolveAudio } from './audio.mjs';
 import { flattenElements, isGroup } from './groups.mjs';
+import { loadCaptionTracks, captionLayer, applyCaption, captionSample, captionFontSize, CAPTION_WEIGHT } from './caption-layer.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 import { bindWithNbsp } from '/shared/nowrap.mjs'; // served by server.mjs; the token regex lives only in shared/
 
@@ -371,7 +372,8 @@ async function grainLayer(scene, size, amount) {
   return img;
 }
 
-async function buildStage(spec, look, frames) {
+// `captions`: loadCaptionTracks' tracks; each gets a layer over the scenes and under the grain and vignette.
+async function buildStage(spec, look, frames, captions) {
   const stage = document.createElement('div');
   stage.id = 'stage';
   stage.style.width = px(spec.size[0]);
@@ -396,10 +398,12 @@ async function buildStage(spec, look, frames) {
     if (grain > 0) pending.push(grainLayer(scene, spec.size, grain).then((img) => { entry.grain = img; }));
     scenes.push(entry);
   }
+  const captionLayers = captions.map((track) => captionLayer(track, spec, look));
+  stage.append(...captionLayers.map((layer) => layer.node));
   await Promise.all(pending);
   for (const { grain: img } of scenes) if (img) stage.append(img); // over the scenes, under the vignette
   if (spec.texture?.vignette) stage.append(vignetteLayer());
-  return { stage, scenes, parts };
+  return { stage, scenes, parts, captions: captionLayers };
 }
 
 function collectStrings(node, out = []) {
@@ -408,8 +412,9 @@ function collectStrings(node, out = []) {
   return out;
 }
 
-// [css font shorthand, sample text] per use, so only the subsets the spec needs are fetched.
-function fontNeeds(spec, look) {
+// [css font shorthand, sample text] per use, so only the subsets the spec needs are fetched. `captions`: the tracks
+// loadCaptionTracks read, drawn in the body font.
+function fontNeeds(spec, look, captions) {
   const needs = [];
   const digits = '0123456789.,-+%$';
   for (const { el } of spec.scenes.flatMap((s) => flattenElements(s.elements))) {
@@ -422,11 +427,12 @@ function fontNeeds(spec, look) {
       for (const weight of new Set([400, 500, 600, 700].map((w) => look.weight('sans', w)))) needs.push([`${weight} 24px ${look.chartFace}`, sample]);
     }
   }
+  if (captions.length) needs.push([`${look.weight('sans', CAPTION_WEIGHT)} ${captionFontSize(spec.size)}px ${look.fonts.sans}`, captionSample(captions)]);
   return needs;
 }
 
-async function loadFonts(spec, look) {
-  await Promise.all(fontNeeds(spec, look).map(([font, text]) => document.fonts.load(font, text)));
+async function loadFonts(spec, look, captions) {
+  await Promise.all(fontNeeds(spec, look, captions).map(([font, text]) => document.fonts.load(font, text)));
   await document.fonts.ready;
 }
 
@@ -444,7 +450,7 @@ function revealMask(reveal) {
 }
 
 // Returns a function that poses the stage at `sec`; it resolves once every video frame it changed is decoded.
-function makeApply({ scenes, parts }, built) {
+function makeApply({ scenes, parts, captions }, built) {
   const { states, sceneStarts, sceneOf, crossfades } = built;
   return (sec) => {
     const decoding = [];
@@ -485,6 +491,7 @@ function makeApply({ scenes, parts }, built) {
         else seekClip(clip, Math.min(sceneT, duration));
       }
     }
+    for (const layer of captions) applyCaption(layer, sec);
     return Promise.all(decoding);
   };
 }
@@ -615,8 +622,9 @@ let generation = 0;
 async function mount() {
   const mine = ++generation;
   const { spec, look } = await fetchSpec();
-  await loadFonts(spec, look);
-  const dom = await buildStage(spec, look, await fetchFrames());
+  const captions = await loadCaptionTracks(spec, assetUrl);
+  await loadFonts(spec, look, captions);
+  const dom = await buildStage(spec, look, await fetchFrames(), captions);
   if (mine !== generation) return null;
   const built = buildTimeline(spec);
   const apply = makeApply(dom, built);

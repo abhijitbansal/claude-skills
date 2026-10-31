@@ -30,6 +30,17 @@ body.preview #viewport { bottom: 108px; }
 .el svg { display: block; overflow: visible; }
 .el img, .el video { display: block; }
 .el.chart svg { width: 100%; height: 100%; }
+/* Captions: one layer per track on the stage (template/caption-layer.mjs sets its centre, the zone's width as max-width,
+   the font size and weight and the text colour). A long group wraps, balanced, and an unbreakable word breaks anywhere,
+   so it never runs past the zone. A word is an inline-block so a kinetic word can scale. */
+.captions { position: absolute; width: max-content; transform: translate(-50%, -50%); font-family: var(--sans);
+  line-height: 1.2; letter-spacing: -0.01em; text-align: center; white-space: normal; overflow-wrap: anywhere;
+  text-wrap: balance; pointer-events: none; }
+.captions .word { display: inline-block; }
+.captions.style-plain, .captions.style-karaoke, .captions.style-kinetic, .captions.style-typewriter { text-shadow: 0 0.04em 0.25em var(--page); }
+.captions.style-pill { padding: 0.2em 0.75em; border-radius: 0.8em; }
+.captions.style-boxed { padding: 0.2em 0.5em; border-radius: 0.12em; }
+.captions.style-karaoke .word.on, .captions.style-kinetic .word.on { color: var(--accent); }
 /* A typing text's caret: an empty inline marker with a thin bar absolutely positioned on it. It has no width and no
    break opportunity, so the text wraps identically at every typed count. */
 .el .caret { position: relative; }
