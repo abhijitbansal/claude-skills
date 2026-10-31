@@ -121,6 +121,56 @@ test("parseSince reads days, hours and all", () => {
   assert.equal(parseSince("soon", now), null);
 });
 
+test("model transitions are not first calls or idle time, including a --since boundary", () => {
+  const log = [
+    record(T0, { input: 100_000 }),
+    record(T0 + MIN, { model: "claude-sonnet-5.5", input: 101_000, read: 0, write: 101_000 }),
+    record(T0 + 40 * MIN, { input: 102_000, read: 0, write: 102_000 }),
+  ].join("\n");
+  const sum = summarize([{ id: "switch", ...parseSessionLog(log) }], { since: T0 + MIN });
+  assert.equal(sum.models.length, 2);
+  for (const m of sum.models) {
+    assert.equal(m.coldSwitch, 1);
+    assert.equal(m.coldIdle, 0);
+    assert.deepEqual(m.idleMinutes, []);
+    assert.ok(m.extraUsd > 0);
+  }
+  assert.match(formatReport(sum), /switch rewrites/);
+});
+
+test("missing prices are disclosed and suppress the complete weekly estimate", () => {
+  const log = [record(T0, { input: 100_000 }), record(T0 + 40 * MIN, { input: 101_000, read: 0, prices: [] })].join("\n");
+  const sum = summarize([{ id: "unpriced", ...parseSessionLog(log) }]);
+  assert.equal(sum.unpricedRewrites, 1);
+  assert.equal(sum.models[0].unpricedRewrites, 1);
+  assert.equal(sum.perWeekUsd, null);
+  assert.match(formatReport(sum), /1 rewrite\(s\) missing prices/);
+  assert.doesNotMatch(formatReport(sum), /about \$0 per week/);
+});
+
+test("subagents have separate chains across switches", () => {
+  const log = [
+    record(T0, { input: 100_000 }),
+    record(T0 + MIN, { model: "claude-sonnet-5.5", input: 100_000, read: 0 }, { agentId: "sub" }),
+    record(T0 + 2 * MIN, { input: 101_000, read: 100_000 }),
+  ].join("\n");
+  const sum = summarize([{ id: "agents", ...parseSessionLog(log) }]);
+  assert.ok(sum.models.every((m) => m.coldSwitch === 0 && m.coldBreak === 0));
+});
+
+test("a subagent compaction resets only that agent's accounting chain", () => {
+  const log = [
+    record(T0, { input: 100_000 }),
+    record(T0, { model: "claude-sonnet-5.5", input: 100_000 }, { agentId: "sub" }),
+    JSON.stringify({ type: "session.compaction_complete", agentId: "sub", data: { success: true } }),
+    record(T0 + 40 * MIN, { input: 101_000, read: 0, write: 101_000 }),
+    record(T0 + 40 * MIN, { model: "claude-sonnet-5.5", input: 20_000, read: 0 }, { agentId: "sub" }),
+  ].join("\n");
+  const sum = summarize([{ id: "agents", ...parseSessionLog(log) }]);
+  assert.equal(sum.models.find((m) => m.model === "gpt-6-luna").coldIdle, 1);
+  assert.equal(sum.models.find((m) => m.model === "claude-sonnet-5.5").coldIdle, 0);
+});
+
 test("report CLI reads a session-state directory and prints JSON", () => {
   const root = mkdtempSync(join(tmpdir(), "cc-report-"));
   mkdirSync(join(root, "sess-1"));
