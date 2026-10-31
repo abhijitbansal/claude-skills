@@ -71,6 +71,13 @@ From an agent, just ask: *"Make an 8-second clip: Q3 revenue up 18%, then a
 bar chart of Q1–Q3."* In Claude Code or Copilot you can call `/make-motion …`,
 and in Codex `$make-motion …`.
 
+Before it writes the spec, the agent runs one intake round: one message of
+questions with the defaults already picked: format (1920x1080, or 1080x1920 for Reels, TikTok and
+Shorts), length, your own photos, logo, music or voice file, a voiceover,
+sound cues, theme and a closing line. Answer once, or say "defaults". Run
+non-interactively (`claude -p`, `codex exec`, `copilot -p`), it skips the round,
+builds with the defaults and its report says so.
+
 ## The spec
 
 ```json

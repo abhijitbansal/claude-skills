@@ -12,7 +12,7 @@ You write one JSON file, `motion.json`. Scripts validate it, preview it in a bro
 
 Run every command from the project folder (where `motion.json` lives), using the full path to the scripts. Image paths resolve relative to the spec file. If the request is empty, ask what the video should say, how long it should be, and the size (default 1920x1080, 30 fps).
 
-**Audio is opt-in.** Add `audio` tracks only when the prompt asks for sound (music, soundtrack, voiceover, narration, "read it aloud", a sound effect, a click or a whoosh) or the user confirms when you ask. Never add audio to a prompt that does not mention it. When the prompt is about sound but unclear (for example "make it feel polished" with an mp3 in the folder), ask one question before writing the spec. Music and sound effects are files the user supplies; a voiceover can be synthesised with `voice.mjs` (workflow step 2) when the prompt asks for narration without giving a file. Short UI-style sounds need no file: the root `cues` array (below) synthesises them locally.
+**Audio is opt-in.** Add `audio` tracks only when the prompt asks for sound (music, soundtrack, voiceover, narration, "read it aloud", a sound effect, a click or a whoosh) or the user confirms when you ask. Never add audio to a prompt that does not mention it. When the prompt is about sound but unclear (for example "make it feel polished" with an mp3 in the folder), put it in the intake round (see Intake (one round)) rather than asking separately. Music and sound effects are files the user supplies; a voiceover can be synthesised with `voice.mjs` (workflow step 2) when the prompt asks for narration without giving a file. Short UI-style sounds need no file: the root `cues` array (below) synthesises them locally.
 
 ## Cheaper model
 
@@ -34,6 +34,24 @@ If the `artifact-builder` agent is not installed, or you cannot start another ag
 `<skill-dir>` is the folder containing this SKILL.md. Run `node <skill-dir>/scripts/doctor.mjs --json` (add `--for <spec.json>` once the spec exists, `--for voiceover` for a voiceover (make-motion), `--for check` before `check.mjs` (skills that have one)). It needs only Node.
 
 If it reports anything missing, tell the user in one message: each item, why it is needed, its size and the command, plus every `notes` and `info` entry from the output (they disclose downloads and the files an install writes). Ask once per set of missing items (the plain run and a later `--for` run may each find new ones). On yes, run `node <skill-dir>/scripts/doctor.mjs --fix <ids>` with the ids it reported, and the same `--for` you diagnosed with (for example `--fix <ids> --for check`). Hand the user the exact command to run themselves for anything the doctor reports as refused (it needs sudo, or has no automatic fix), skipped (needs node_modules first), installed elsewhere, still missing, or failed; in Claude Code suggest prefixing it with `!`. On no, do what you can without it and give the user the remaining commands.
+
+## Intake (one round)
+
+Before writing the spec, ask once. Send one message that lists every option below with its default, so the user can answer in one reply, or say "defaults". When you hand the build to `artifact-builder`, ask first and put the answers in its brief. Leave out an option the prompt already settles ("a 9:16 clip", "with a voiceover") and say what you took from it. Then build; do not ask again.
+
+- **format**: the video `size`. 1920x1080 (default), 1080x1920 for Reels, TikTok and Shorts, 1080x1080 or 1080x1350.
+- **length**: about 10 s (default); 8 to 30 s works well.
+- **assets**: your own files in the project folder. Photos or a logo (PNG, JPG, SVG), music and a voice file (mp3, wav, m4a, aac, ogg, flac). Default: none, so the video is built from text, shapes and charts.
+- **voiceover**: narration synthesised on this machine with Kokoro. Default: off. Saying yes means a one-time install of about 250 MB plus a 90 MB voice model (the doctor check in Before the first build asks again before it installs). A voice file in assets replaces it.
+- **sound**: short synthesised cues (pop, click, whoosh, chime, impact, riser, swoosh, typing, drop, ding), or none. Default: none; the audio opt-in rule above stands.
+- **theme**: `dusk`, `press` or `poster`, as in Choosing a theme. Default: the one that section picks for the prompt, `dusk` when unclear.
+- **CTA**: a closing line and what to do (for example "Try it free at example.com"). Default: none.
+
+If the prompt asks you to build and you cannot pause for an answer, skip the round and build with the defaults. That covers `claude -p`, `codex exec`, `copilot -p`, the eval, or any run that cannot pause for an answer. Do not ask a question in place of a spec. Your final report then carries one line listing what you skipped:
+
+`intake: skipped (<reason>); defaults used: format 16:9, 10 s, no assets, no voiceover, no sound, theme <name>, no CTA`
+
+Fill `<reason>` with why you could not ask, and `<name>` with the theme you drew.
 
 ## Workflow
 
@@ -85,7 +103,7 @@ Nine themes exist; `dusk` is the default. Pick one (the spec's theme field, or `
 
 1. A theme the user names ("use poster") wins. Use it as given: write it as the spec's theme field. On the render, `--theme <name>` only fills in for a spec that names none, so a theme already in the spec wins over the flag.
 2. Otherwise infer it from the prompt and say which theme and why in one line. Dense docs, long reads, changelogs and branch recaps: `press`. Launch decks, pitches, demos and energetic clips: `poster`. Everything else, or unclear: `dusk`.
-3. If the prompt is genuinely split between two themes, ask the user once and list all three with a one-line feel each: `dusk` is soft, warm and playful; `press` is print editorial, calm and long-form; `poster` is loud, condensed and high-energy.
+3. If the prompt is genuinely split between two themes, ask the user in the intake round (`## Intake (one round)`), not separately, and list all three with a one-line feel each: `dusk` is soft, warm and playful; `press` is print editorial, calm and long-form; `poster` is loud, condensed and high-energy.
 4. If you cannot ask, use `dusk`.
 
 The older themes `paper`, `blueprint`, `ink` and `editorial` stay available by name; use one only when the user names it. Two more are available by name only: `mono` (terminal and engineering console, dark mode near-black with a cyan accent) and `brief` (executive, warm white with a burgundy accent); `mono` and `brief` are the plan-page themes of make-explainer (see its Plan mode).
