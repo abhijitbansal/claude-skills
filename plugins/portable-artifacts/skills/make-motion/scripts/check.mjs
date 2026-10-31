@@ -40,11 +40,15 @@ import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
 import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
 import { specHasVideo, prepareVideo } from './lib/video.mjs';
+import { themeData } from './lib/theme.mjs';
+import {
+  CHECKED_TYPES, CONTRAST_MIN_OPACITY, auditTimes, backdropColors, contrastFindings, textFloorFindings, readingFloorFindings, deadStretchProblems,
+} from './lib/audits.mjs';
 
 const USAGE = 'node scripts/check.mjs <motion.json> [--json] [--theme <name>]';
 const OPTIONS = { json: { type: 'boolean' }, theme: { type: 'string' } };
 const READY_MS = 30000; // the page must build its stage within this (render.mjs's first wait), or the check fails instead of hanging
-const CHECKED = new Set(['text', 'counter']); // rendered text: the element types rules 1 and 2 judge
+const CHECKED = new Set(CHECKED_TYPES); // rendered text: the element types the rules judge
 const SUBPIXEL_PX = 0.5; // a box edge this close to the safe line is on it
 const VISIBLE_OPACITY = 0.05; // rendered opacity (element x scene) above this counts as visible
 const OVERLAP_TOLERANCE_PX = 2; // an intersection this thin on either axis is a shared edge, not an overlap
@@ -68,23 +72,28 @@ const tweenSpans = (chain, props) => chain.flatMap((el) => props.flatMap((p) => 
   const times = el.keyframes.filter((kf) => kf[p] !== undefined).map((kf) => kf.t);
   return times.slice(1).map((to, k) => [times[k], to]);
 }));
-const isHeld = (spans, t, n, samples) => n === samples.length - 1 || !spans.some(([from, to]) => t > from + EPSILON && t < to - EPSILON);
+const inTween = (spans, t) => spans.some(([from, to]) => t > from + EPSILON && t < to - EPSILON);
+const isHeld = (spans, t, n, samples) => n === samples.length - 1 || !inTween(spans, t);
 
 // What the rules judge in a scene, as the page draws it: every element that is not a group, at any depth, in document
 // order, each as { el, path, chain }. `path` is where it sits in the spec; `chain` is the groups around it, outermost
-// first, then the element itself, because a child's keyframes are not the only thing that moves it.
+// first, then the element itself, because a child's keyframes are not the only thing that moves it. `hold`: the element
+// or a group around it says "hold": true (it may sit still).
 function sceneItems(scene, index) {
   const chain = [];
   return flattenElements(scene.elements, `scenes[${index}]`).flatMap(({ el, path: where, depth }) => {
     chain.length = depth;
     chain.push(el);
-    return isGroup(el) ? [] : [{ el, path: where, chain: [...chain] }];
+    return isGroup(el) ? [] : [{ el, path: where, chain: [...chain], hold: chain.some((c) => c.hold === true) }];
   });
 }
 
 // Runs in the page: seek to `sec`, then each element of scene layer `index` (a group's children included, the groups
-// themselves not) as {id, opacity, box} in canvas pixels. Rendered opacity multiplies the element's and every
-// ancestor's up to the stage (a group's, the scene fade); a hidden layer is 0.
+// themselves not) as {id, opacity, box, undrawn, sig, fontSize, weight, color} in canvas pixels. Rendered opacity
+// multiplies the element's and every ancestor's up to the stage (a group's, the scene fade); a hidden layer is 0.
+// `fontSize` is a text's or counter's size as drawn (its font size times every scale around it), `weight` and `color`
+// (#rrggbb) are what it is drawn with, and `sig` a string that differs whenever the element looks different (position,
+// size, opacity, text, drawing, reveal, video frame), for the dead-stretch audit.
 const measure = async ([sec, index]) => {
   await window.__motion.seek(sec); // a video element's frame is decoded before anything is read
   const stage = document.getElementById('stage');
@@ -92,9 +101,16 @@ const measure = async ([sec, index]) => {
   const k = window.__motion.size[0] / s.width;
   const layer = stage.querySelectorAll(':scope > .scene')[index];
   const shown = getComputedStyle(layer).display !== 'none';
+  const hex = (css) => `#${(css.match(/[\d.]+/g) ?? []).slice(0, 3).map((v) => Math.round(Number(v)).toString(16).padStart(2, '0')).join('')}`;
   return [...layer.querySelectorAll('.el:not(.group)')].map((node) => {
     let opacity = shown ? 1 : 0;
-    for (let n = node; n && n !== stage; n = n.parentElement) opacity *= Number(getComputedStyle(n).opacity);
+    let scale = 1;
+    for (let n = node; n && n !== stage; n = n.parentElement) {
+      const style = getComputedStyle(n);
+      opacity *= Number(style.opacity);
+      const m = new DOMMatrix(style.transform);
+      scale *= Math.hypot(m.a, m.b);
+    }
     const r = node.getBoundingClientRect();
     const box = { left: (r.left - s.left) * k, top: (r.top - s.top) * k, right: (r.right - s.left) * k, bottom: (r.bottom - s.top) * k };
     // Nothing drawn yet: a chart at reveal 0, a line (or unfilled shape) at draw 0 (a filled shape shows its fill), or a
@@ -102,12 +118,19 @@ const measure = async ([sec, index]) => {
     const mark = node.querySelector(':scope > svg > :first-child');
     const untyped = node.querySelector(':scope > .typed')?.textContent === '';
     const undrawn = untyped || node.dataset.reveal === '0' || (mark !== null && mark.getAttribute('stroke-dashoffset') === '1' && (mark.tagName === 'line' || mark.getAttribute('fill') === 'none'));
-    return { id: node.dataset.id, opacity, box, undrawn };
+    const own = getComputedStyle(node);
+    const isText = node.classList.contains('text') || node.classList.contains('counter');
+    const content = [node.textContent, node.dataset.reveal ?? '', mark?.getAttribute('stroke-dashoffset') ?? '', node.querySelector('img')?.getAttribute('src') ?? ''].join('\u0001');
+    const sig = `${[box.left, box.top, box.right, box.bottom].map((v) => v.toFixed(1)).join(',')}|${opacity.toFixed(2)}|${content}`;
+    return {
+      id: node.dataset.id, opacity, box, undrawn, sig,
+      fontSize: isText ? parseFloat(own.fontSize) * scale : 0, weight: Number(own.fontWeight), color: isText ? hex(own.color) : '#000000',
+    };
   });
 };
 
 // Runs in the page: seek to `sec` (null: stay where `measure` put it), then each captions layer (a stage child, one
-// per track) as {index, shown, box} in canvas pixels; `shown` is false while the track has no group on screen. The box
+// per track) as {index, shown, box, text} in canvas pixels; `shown` is false while the track has no group on screen. The box
 // joins the layer's with each word's, so a scaled (kinetic) word that pokes out of the layer counts.
 const measureCaptions = async (sec) => {
   if (sec !== null) await window.__motion.seek(sec);
@@ -118,7 +141,7 @@ const measureCaptions = async (sec) => {
     const rects = [node, ...node.querySelectorAll('.word')].map((n) => n.getBoundingClientRect());
     const edge = (side, pick) => pick(...rects.map((r) => r[side]));
     const box = { left: (edge('left', Math.min) - s.left) * k, top: (edge('top', Math.min) - s.top) * k, right: (edge('right', Math.max) - s.left) * k, bottom: (edge('bottom', Math.max) - s.top) * k };
-    return { index: Number(node.dataset.index), shown: getComputedStyle(node).display !== 'none', box };
+    return { index: Number(node.dataset.index), shown: getComputedStyle(node).display !== 'none', box, text: node.textContent };
   });
 };
 
@@ -265,16 +288,37 @@ async function crossfadeWarnings(page, spec, itemsOf, fade, size) {
 }
 
 // `withCaptions`: also measure the captions layers at each moment. `times`: scene-local seconds (the sheet moments).
-async function sampleScene(page, scene, items, index, start, times, withCaptions) {
+// `withBackdrop`: also read the colour behind every text that is on screen (one screenshot per moment), for the contrast
+// audit: `back[j]` for item j, null where it was not read.
+async function sampleScene(page, scene, items, index, start, times, withCaptions, size, withBackdrop = false) {
   const samples = [];
   for (const t of times) {
-    const els = await page.evaluate(measure, [start + t, index]);
-    const ids = els.map((m) => m.id).join();
+    const measured = await page.evaluate(measure, [start + t, index]);
+    const ids = measured.map((m) => m.id).join();
     if (ids !== items.map(({ el }) => el.id).join()) throw new Error(`scene "${scene.id}": the page shows elements ${ids}, not the spec's`);
+    const els = measured.map((m) => ({ ...m, shown: isShown(m, size) }));
+    const judged = els.flatMap((m, j) => (CHECKED.has(items[j].el.type) && m.shown && m.opacity >= CONTRAST_MIN_OPACITY ? [j] : []));
+    const back = els.map(() => null);
+    if (withBackdrop && judged.length) (await backdropColors(page, judged.map((j) => els[j].box), [...CHECKED])).forEach((colour, n) => { back[judged[n]] = colour; });
     const captions = withCaptions ? await page.evaluate(measureCaptions, null) : [];
-    samples.push({ t, els, captions, wraps: await nowrapProblems(page, { root: '#stage' }) });
+    samples.push({ t, els, back, captions, wraps: await nowrapProblems(page, { root: '#stage' }) });
   }
   return samples;
+}
+
+// The AUDIT_STEP grid of one scene: { t (video seconds), scene, local (scene seconds), els, captions } per step. Each
+// element carries `shown`, `hold` (it, or a group around it, says "hold": true) and `held` (its size is not being tweened,
+// so the text floor judges it); `captions` is a string that changes when the words on screen do.
+async function sampleSteps(page, items, index, scene, start, withCaptions, size) {
+  const sizeSpans = items.map(({ chain }) => tweenSpans(chain, ['scale']));
+  const steps = [];
+  for (const local of auditTimes(scene.duration)) {
+    const measured = await page.evaluate(measure, [start + local, index]);
+    const els = measured.map((m, j) => ({ ...m, shown: isShown(m, size), hold: items[j].hold, held: !inTween(sizeSpans[j], local) }));
+    const layers = withCaptions ? await page.evaluate(measureCaptions, null) : [];
+    steps.push({ t: start + local, scene: index, local, els, captions: layers.map((c) => `${c.shown}:${c.text}`).join('\u0001') });
+  }
+  return steps;
 }
 
 // The caption moments (video seconds) inside a scene that starts at `start`, as scene-local seconds, leaving out the
@@ -322,20 +366,29 @@ async function inspect(browser, spec, server, prepare) {
   const warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], await page.evaluate(measure, [0, 0]), spec.size);
   const zone = spec.captions.length ? captionZone(spec.size, spec.format) : null; // the caption rules need captions
   const captionTimes = zone ? await page.evaluate(() => window.__motion.captionMoments.map((m) => m.t)) : [];
+  const colors = themeData(spec.theme)?.dark ?? {};
+  const steps = [];
   let moments = 0;
   for (const [i, scene] of spec.scenes.entries()) {
     const items = itemsOf[i];
     const times = sheetTimes(scene, spec.fps);
-    const samples = await sampleScene(page, scene, items, i, starts[i], times, zone !== null);
+    const samples = await sampleScene(page, scene, items, i, starts[i], times, zone !== null, spec.size, true);
     const extraTimes = captionMomentsIn(captionTimes, starts[i], scene.duration, times);
-    const extra = extraTimes.length ? await sampleScene(page, scene, items, i, starts[i], extraTimes, true) : [];
+    const extra = extraTimes.length ? await sampleScene(page, scene, items, i, starts[i], extraTimes, true, spec.size) : [];
+    const own = await sampleSteps(page, items, i, scene, starts[i], zone !== null, spec.size);
+    steps.push(...own);
     moments += samples.length + extra.length;
-    problems.push(...safeAreaProblems(items, samples, insets, spec.size), ...overlapProblems(items, samples, spec.size), ...emptyEndProblems(scene, i, items, samples, spec.size), ...wrapProblems(scene, i, samples));
+    const contrast = contrastFindings(items, samples, colors, spec.size);
+    const floor = textFloorFindings(items, own, scene.duration, spec.size);
+    problems.push(...safeAreaProblems(items, samples, insets, spec.size), ...overlapProblems(items, samples, spec.size), ...emptyEndProblems(scene, i, items, samples, spec.size), ...wrapProblems(scene, i, samples), ...contrast.problems, ...floor.problems);
+    warnings.push(...contrast.warnings, ...floor.warnings);
     if (zone) problems.push(...captionZoneProblems(items, samples, extra, zone, spec.size));
   }
+  const reading = readingFloorFindings(spec, itemsOf, steps);
+  problems.push(...reading.problems, ...deadStretchProblems(spec, steps));
   if (zone) problems.push(...await captionLayerProblems(page, zone));
   for (const fade of await page.evaluate(() => window.__motion.crossfades)) warnings.push(...await crossfadeWarnings(page, spec, itemsOf, fade, spec.size));
-  return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings };
+  return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings, info: reading.info };
 }
 
 // Decoding needs ffmpeg; without it findFfmpeg's install hint ends the check as a crash line.
@@ -382,6 +435,9 @@ export function atBlockParts(written, spec, findings) {
 function blockHint(message, param) {
   const shorten = param ? ` or shorten params.${param}` : '';
   if (message.includes(' sits in the caption zone ') || message.includes(' during the crossfade')) return null;
+  if (message.includes(' contrast against its backdrop ')) return param ? `change params.${param} colour or the theme token` : 'change the theme token or the backdrop behind the block';
+  if (/ is \d+px \(below /.test(message)) return 'raise the font size';
+  if (message.includes(' shows for ')) return `lengthen the scene${shorten}`;
   const other = / overlaps \w+ "([^"]+)"/.exec(message);
   if (other) return other[1].includes('/') ? `move one of the blocks${shorten}` : `move the block or the other element${shorten}`;
   return param ? `shorten params.${param} or move the block` : 'move the block or change its params';
@@ -395,8 +451,8 @@ function checkTheme(name) {
 }
 
 function report(result, json) {
-  const { status, problems = [], warnings = [] } = result;
-  const noted = warnings.length ? { warnings } : {};
+  const { status, problems = [], warnings = [], info = [] } = result;
+  const noted = { ...(warnings.length ? { warnings } : {}), ...(info.length ? { info } : {}) };
   if (json) {
     const body = status === 'skipped' ? { ok: true, skipped: true, reason: result.reason, hint: skipHint() }
       : status === 'ok' ? { ok: true, scenes: result.scenes, moments: result.moments, ...noted }
@@ -405,6 +461,7 @@ function report(result, json) {
     return;
   }
   for (const w of warnings) process.stderr.write(`warning: ${w.path}: ${w.message}\n`); // stderr: stdout stays the verdict alone
+  for (const n of info) process.stderr.write(`info: ${n.path}: ${n.message}\n`); // information only: never changes the verdict
   if (status === 'skipped') process.stdout.write(`check: skipped (no browser: ${result.reason}; ${skipHint()})\n`);
   else if (status === 'ok') process.stdout.write(`check: ok (${result.scenes} scene${result.scenes === 1 ? '' : 's'}, ${result.moments} moments)\n`);
   else {
@@ -430,7 +487,7 @@ export async function main(argv, { prepare } = {}) {
     // The theme the page draws decides the title presets (and so the settle times): the spec's own, else --theme.
     const spec = withDefaults(raw.theme === undefined && values.theme !== undefined ? { ...raw, theme: values.theme } : raw);
     const checked = await checkSpec(path.resolve(positionals[0]), spec, { env: process.env, theme: values.theme, prepare });
-    const result = { ...checked, ...(checked.problems && { problems: atBlockParts(raw, spec, checked.problems) }), ...(checked.warnings && { warnings: atBlockParts(raw, spec, checked.warnings) }) };
+    const result = { ...checked, ...(checked.problems && { problems: atBlockParts(raw, spec, checked.problems) }), ...(checked.warnings && { warnings: atBlockParts(raw, spec, checked.warnings) }), ...(checked.info && { info: atBlockParts(raw, spec, checked.info) }) };
     report(result, json);
     return result.status === 'failed' ? 1 : 0;
   } catch (e) {

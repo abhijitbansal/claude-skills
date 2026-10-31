@@ -231,7 +231,7 @@ test('params caps: a 40-word title, an over-long label (</script> padded past 80
 });
 
 test('a block element is checked as a block: its own fields, its keyframes, a missing params, a block inside a group', () => {
-  assert.deepEqual(errs(oneScene([block('title-card', { title: 'Hi' }, { text: 'no' })])), ['scenes[0].elements[0].text: not valid on block; allowed: id, type, x, y, opacity, scale, rotate, keyframes, block, params']);
+  assert.deepEqual(errs(oneScene([block('title-card', { title: 'Hi' }, { text: 'no' })])), ['scenes[0].elements[0].text: not valid on block; allowed: id, type, x, y, opacity, scale, rotate, keyframes, hold, block, params']);
   assert.deepEqual(errs(oneScene([{ id: 'b', type: 'block', x: 0, y: 0, block: 'title-card' }])), ['scenes[0].elements[0].params: required for type block']);
   assert.deepEqual(errs(oneScene([block('title-card', { title: 'Hi' }, { keyframes: [{ t: 0, draw: 0 }] })])), ['scenes[0].elements[0].keyframes[0].draw: not animatable on block; animatable: opacity, x, y, scale, rotate']);
   assert.deepEqual(errs(oneScene([block('title-card', { title: 'Hi' }, { keyframes: [{ t: 9, x: 1 }] })])), ['scenes[0].elements[0].keyframes[0].t: 9 exceeds scene duration 6']);

@@ -1,0 +1,17 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "quick",
+      "duration": 4,
+      "elements": [
+        {
+          "id": "sub", "type": "text", "text": "one two three four five six seven", "x": 960, "y": 400, "fontSize": 64,
+          "keyframes": [{ "t": 0.99, "opacity": 0 }, { "t": 1, "opacity": 1 }, { "t": 2.24, "opacity": 1 }, { "t": 2.25, "opacity": 0 }]
+        },
+        { "id": "closing", "type": "text", "text": "The end", "x": 960, "y": 700, "fontSize": 64 }
+      ]
+    }
+  ]
+}

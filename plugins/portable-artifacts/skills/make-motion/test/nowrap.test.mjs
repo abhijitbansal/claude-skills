@@ -23,10 +23,10 @@ async function skipUnlessBrowser(t) {
   return !(await requireRender(t, BROWSER_ONLY));
 }
 
-function specFile(elements, { size = [1920, 1080] } = {}) {
+function specFile(elements, { size = [1920, 1080], duration = 2 } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'motion-nowrap-'));
   const file = path.join(dir, 'motion.json');
-  writeFileSync(file, JSON.stringify({ size, fps: 30, scenes: [{ id: 's', duration: 2, elements }] }));
+  writeFileSync(file, JSON.stringify({ size, fps: 30, scenes: [{ id: 's', duration, elements }] }));
   return file;
 }
 
@@ -34,7 +34,7 @@ function specFile(elements, { size = [1920, 1080] } = {}) {
 const withTokenSpacesBound = (text) => findTokens(text).reduceRight(
   (acc, tok) => acc.slice(0, tok.start) + tok.text.replace(' ', '\u00a0') + acc.slice(tok.end), text);
 
-const narrowToken = () => specFile([{ id: 'latency', type: 'text', text: TOKEN_TEXT, x: 960, y: 540, fontSize: 120, maxWidth: 300 }]);
+const narrowToken = () => specFile([{ id: 'latency', type: 'text', text: TOKEN_TEXT, x: 960, y: 540, fontSize: 120, maxWidth: 300 }], { duration: 3 }); // 8 words: the reading floor wants 2.2 s
 
 test('check: a token in a narrow box is held on one line by the renderer, so check passes', async (t) => {
   if (await skipUnlessBrowser(t)) return;

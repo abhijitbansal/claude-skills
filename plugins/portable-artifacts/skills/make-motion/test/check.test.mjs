@@ -112,11 +112,12 @@ test('safeMargin: 60 px at 1080 on the short side, on every side', () => {
 
 test('the safe area scales with the short side in the real page: 60 px at 1920x1080, 120 px at 3840x2160', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  // A 40 px line is 46 px tall (line-height 1.15), so y 103 puts its top 80 px from the frame edge.
-  const el = (x) => [{ id: 'note', type: 'text', text: 'Hi', x, y: 103, fontSize: 40 }];
+  // A 40 px line is 46 px tall (line-height 1.15), so y 103 puts its top 80 px from the frame edge. At 3840x2160 the same
+  // look is an 80 px line (40 px would be under the text floor there), 92 px tall, at y 126.
+  const el = (x, { y = 103, fontSize = 40 } = {}) => [{ id: 'note', type: 'text', text: 'Hi', x, y, fontSize }];
   const hd = check([specFile(el(960))]);
   assert.equal(hd.status, 0, hd.stdout + hd.stderr);
-  const uhd = check([specFile(el(1920), { size: [3840, 2160] })]);
+  const uhd = check([specFile(el(1920, { y: 126, fontSize: 80 }), { size: [3840, 2160] })]);
   assert.equal(uhd.status, 1, uhd.stdout + uhd.stderr);
   assert.deepEqual(lines(uhd.stdout), ['scenes[0].elements[0]: text "note" leaves the safe area (top) at 0.10s', 'check: 1 problem']);
 });

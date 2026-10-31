@@ -1,0 +1,16 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "idle",
+      "duration": 12,
+      "elements": [
+        {
+          "id": "drift", "type": "text", "text": "Hello", "x": 300, "y": 540, "fontSize": 64,
+          "keyframes": [{ "t": 0, "x": 300 }, { "t": 4, "x": 700 }, { "t": 7.5, "x": 700 }, { "t": 8, "x": 1100 }]
+        }
+      ]
+    }
+  ]
+}

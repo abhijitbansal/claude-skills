@@ -118,7 +118,7 @@ export const drawIn = (part, [start, end]) => ({ ...part, keyframes: [{ t: start
 // The group a block becomes: its id, place and pose, holding `children`.
 export function blockGroup(el, children) {
   const group = { id: el.id, type: 'group', x: el.x, y: el.y, children };
-  for (const key of ['opacity', 'scale', 'rotate', 'keyframes']) if (el[key] !== undefined) group[key] = el[key];
+  for (const key of ['opacity', 'scale', 'rotate', 'keyframes', 'hold']) if (el[key] !== undefined) group[key] = el[key];
   return group;
 }
 

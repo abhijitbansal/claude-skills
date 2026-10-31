@@ -13,5 +13,6 @@
   { "id": "item-block-checklist", "prompt": "Make a 6-second clip that ticks off four features one after another: Offline renders, Same spec same video, Captions in six styles, No code to write." },
   { "id": "item-block-logo-outro", "prompt": "Make a 3-second closing shot with our logo from data/logo.svg and the tagline 'Motion from one JSON file' under it." },
   { "id": "item-block-cta-close", "prompt": "Make a 4-second closing scene that asks viewers to act: the headline 'Make your first video today', a button that says 'Start free', and the address example.com/start under it." },
-  { "id": "item-cue-kenney", "prompt": "Make a 10-second clip with a title card and three bullets that fade in one by one, then a closing card. I want a recorded UI click on each bullet and a real thud on the last card." }
+  { "id": "item-cue-kenney", "prompt": "Make a 10-second clip with a title card and three bullets that fade in one by one, then a closing card. I want a recorded UI click on each bullet and a real thud on the last card." },
+  { "id": "item-hold", "prompt": "Make a 10-second clip that is one big title, 'Built for focus', centred and left completely still after it appears. I want nothing else moving on screen." }
 ]

@@ -40,7 +40,7 @@ export const ANIMATABLE = {
   block: [...POSE], // a block's pose and keyframes become its group's
 };
 
-const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes'];
+const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes', 'hold'];
 const TEXT_STYLE = ['fontSize', 'fontWeight', 'color', 'align', 'maxWidth', 'font'];
 const FIELDS = {
   text: [...COMMON, 'text', 'role', 'exit', 'typing', ...TEXT_STYLE],
@@ -85,6 +85,7 @@ const element = {
     type: { enum: Object.keys(FIELDS) },
     x: num, y: num, opacity: unit, scale: num, rotate: num,
     keyframes: { type: 'array', items: keyframe },
+    hold: { type: 'boolean' }, // check.mjs: this element (a group's children too) may sit still for more than 3 s
     text: { type: 'string' },
     role: { type: 'string' },
     exit: { type: 'boolean' },

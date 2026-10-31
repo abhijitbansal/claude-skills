@@ -1,0 +1,14 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "grey",
+      "duration": 3,
+      "elements": [
+        { "id": "panel", "type": "shape", "shape": "rect", "x": 960, "y": 540, "width": 1920, "height": 1080, "fill": "#555555" },
+        { "id": "sub", "type": "text", "text": "Quarterly review", "x": 960, "y": 540, "fontSize": 64, "color": "#8a8a8a" }
+      ]
+    }
+  ]
+}

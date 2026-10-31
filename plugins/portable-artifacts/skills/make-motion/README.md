@@ -19,8 +19,9 @@ shell commands.
   same video.
 - **Self-check for models**: `--contact-sheet` writes one tiled, timestamped PNG
   per scene, so a model that can read images can review its own work before
-  rendering; `check.mjs` then flags text or counters outside the safe area, overlapping text
-  and a scene that ends with nothing visible, and warns (exit stays 0) when the first
+  rendering; `check.mjs` then flags text or counters outside the safe area, overlapping text,
+  a scene that ends with nothing visible, low text contrast, text that is not up long enough to read,
+  stretches where nothing changes (opt out with `"hold": true`) and text under 28 px, and warns (exit stays 0) when the first
   frame, the video's thumbnail, is blank.
 - **Polished by default**: charts draw with about five ticks per axis, no tick marks, no
   y-axis line and no vertical gridlines, bars with rounded ends and a gap, 4 px round
@@ -73,7 +74,7 @@ SKILL=path/to/make-motion
 cp $SKILL/references/examples/q3-revenue.json motion.json
 node $SKILL/scripts/validate.mjs motion.json              # `valid`, or path-precise errors
 node $SKILL/scripts/render.mjs motion.json --contact-sheet # out/contact/<scene>.png
-node $SKILL/scripts/check.mjs motion.json                 # safe area, overlaps, empty endings
+node $SKILL/scripts/check.mjs motion.json                 # safe area, overlaps, empty endings, contrast, reading time, dead stretches, small text
 node $SKILL/scripts/preview.mjs motion.json --open         # scrubber, play/pause, live reload
 node $SKILL/scripts/render.mjs motion.json                 # out/motion.mp4, 1920x1080 @ 30 fps
 ```
@@ -147,7 +148,7 @@ examples in [`references/examples/`](references/examples/).
 | `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` |
 | `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. The MP4 timing is exact | `--open` |
 | `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks, `cues` or an unmuted `video` clip with sound, followed by one `audio: … LUFS integrated, true peak … dBTP` line) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--contact-sheet` |
-| `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen; with `captions`, a text or counter held in the caption zone while a caption shows and a captions layer that leaves it (measured once per caption group). An element that has left the frame entirely is gone, not clipped. It also warns on stderr (never a failure) when the first scene shows nothing at t = 0. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
+| `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen; text whose colour has less than 4.5:1 (3:1 for large text) contrast against the pixels behind it, a text on screen for less than 0.75 × (0.5 + 0.3 × words) seconds (a last line under 2 s is only an `info:` note), more than 3 s in which nothing changes (not in the last 3 s, not for `"hold": true` elements) and text under 28 px at 1080 on the short side for 0.5 s or more (a contrast or size finding at one moment only is a warning); with `captions`, a text or counter held in the caption zone while a caption shows and a captions layer that leaves it (measured once per caption group). An element that has left the frame entirely is gone, not clipped. It also warns on stderr (never a failure) when the first scene shows nothing at t = 0. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
 | `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Lists the video frame cache once it passes 2 GB; `--fix cache` deletes it. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover>`, `--fix <id[,id]>` |
 
 Two renders of the same spec and media give identical frames and audio; the MP4 `comment` tag carries the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set.
