@@ -10,7 +10,7 @@ import { resolveAsset } from './paths.mjs';
 import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, PITCHED_CUES, MAX_CUES, NOTE_PATTERN, trackStart, typingFollow } from '../../template/audio.mjs';
 import { flattenElements, isGroup, MAX_GROUP_DEPTH, MAX_GROUP_CHILDREN } from '../../template/groups.mjs';
 import { FORMATS, FORMAT_NAMES } from '../../template/formats.mjs';
-import { CAPTION_STYLES, CAPTION_EXTENSIONS, MAX_CAPTION_TRACKS, CaptionError, parseCaptions } from '../../template/captions.mjs';
+import { CAPTION_STYLES, CAPTION_EXTENSIONS, MAX_CAPTION_TRACKS, CaptionError, parseCaptions, trackGroups } from '../../template/captions.mjs';
 import { VIDEO_EXTENSIONS, isVideo, probeVideo } from './video.mjs';
 import { findFfprobe } from './ffmpeg.mjs';
 import { doctorCommand } from './doctor-hint.mjs';
@@ -398,28 +398,59 @@ function checkAudio(spec, dir, errors) {
 }
 
 // A captions file must be one the page can read (srt, vtt or json, inside the spec folder) and must parse: a cue out of
-// order or ending before it starts is reported here, at the track's `src`, naming the cue and its line.
+// order or ending before it starts is reported here, at the track's `src`, naming the cue and its line. A track must
+// show something, and two tracks must never be on screen at once (they would draw over each other in the zone).
 function checkCaptions(spec, dir, errors) {
+  const shown = [];
   (spec.captions ?? []).forEach((track, i) => {
     const base = `captions[${i}]`;
     const at = pathJoin(base, 'src');
-    if (checkAssetPath(track.src, at, dir, errors)) checkCaptionFile(track.src, at, dir, errors);
-    checkStart(track, spec, base, errors);
+    const words = checkAssetPath(track.src, at, dir, errors) ? captionWords(track.src, at, dir, errors) : null;
+    if (!checkStart(track, spec, base, errors) || !words) return;
+    const groups = captionErrorAt(at, errors, () => trackGroups(words, trackStart(track, spec)));
+    if (groups) shown.push({ index: i, groups });
   });
+  checkCaptionOverlaps(shown, errors);
 }
 
-function checkCaptionFile(src, at, dir, errors) {
-  const ext = path.extname(src).slice(1).toLowerCase();
-  if (!CAPTION_EXTENSIONS.includes(ext)) {
-    errors.push({ path: at, message: `unsupported captions format "${path.extname(src)}"; use srt, vtt or json` });
-    return;
-  }
+// `run()`'s result, or null with its CaptionError pushed at `at`.
+function captionErrorAt(at, errors, run) {
   try {
-    parseCaptions(readFileSync(resolveAsset(dir, src).file, 'utf8'), ext);
+    return run();
   } catch (e) {
     if (!(e instanceof CaptionError)) throw e;
     errors.push({ path: at, message: e.message });
+    return null;
   }
+}
+
+function captionWords(src, at, dir, errors) {
+  const ext = path.extname(src).slice(1).toLowerCase();
+  if (!CAPTION_EXTENSIONS.includes(ext)) {
+    errors.push({ path: at, message: `unsupported captions format "${path.extname(src)}"; use srt, vtt or json` });
+    return null;
+  }
+  return captionErrorAt(at, errors, () => parseCaptions(readFileSync(resolveAsset(dir, src).file, 'utf8'), ext));
+}
+
+const msOf = (seconds) => Math.round(seconds * 1000);
+// The first moment two tracks' groups are on screen together, or null.
+function firstOverlap(a, b) {
+  let first = null;
+  for (const x of a) {
+    for (const y of b) {
+      if (msOf(x.start) < msOf(y.end) && msOf(y.start) < msOf(x.end)) first = Math.min(first ?? Infinity, Math.max(x.start, y.start));
+    }
+  }
+  return first;
+}
+
+function checkCaptionOverlaps(tracks, errors) {
+  tracks.forEach((later, k) => {
+    const hit = tracks.slice(0, k).map((earlier) => ({ earlier, t: firstOverlap(earlier.groups, later.groups) })).find(({ t }) => t !== null);
+    if (!hit) return;
+    errors.push({ path: `captions[${later.index}]`, message: `on screen at ${hit.t.toFixed(2)}s together with captions[${hit.earlier.index}]; only one captions track can show at a time: move one with at or scene, or merge the files` });
+  });
 }
 
 // `elevated` belongs to rects, `cap` and `arrow` to lines.

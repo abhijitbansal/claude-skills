@@ -14,7 +14,9 @@
 // sampled at its midpoint, and a visible text or counter of the incoming scene that overlaps one of the outgoing scene
 // there is a warning (never a failure).
 // With a `captions` track: a visible text or counter that sits in the caption zone (template/formats.mjs captionZone)
-// while it is not moving is a problem, and so is a captions layer whose box leaves the zone at any sampled moment.
+// while it is not moving and a caption is on screen is a problem, and so is a captions layer that leaves the zone: each
+// layer is measured once per caption group (at its midpoint, and for kinetic at each word's start), its box joined with
+// every word's so transforms and the kinetic pop count.
 // --theme: the theme render.mjs --theme would draw a spec that names none in (a spec's own `theme` wins).
 // A spec with a video element has its frames decoded first, as render.mjs does, so it needs ffmpeg and ffprobe too.
 // exit 0 ok or skipped (no browser), 1 problems (or an invalid spec), 2 usage/IO
@@ -100,15 +102,18 @@ const measure = async ([sec, index]) => {
   });
 };
 
-// Runs in the page, after `measure` has seeked: each captions layer (a stage child, one per track) as {index, shown,
-// box} in canvas pixels; `shown` is false while the track has no group on screen.
-const measureCaptions = () => {
+// Runs in the page: seek to `sec` (null: stay where `measure` put it), then each captions layer (a stage child, one
+// per track) as {index, shown, box} in canvas pixels; `shown` is false while the track has no group on screen. The box
+// joins the layer's with each word's, so a scaled (kinetic) word that pokes out of the layer counts.
+const measureCaptions = async (sec) => {
+  if (sec !== null) await window.__motion.seek(sec);
   const stage = document.getElementById('stage');
   const s = stage.getBoundingClientRect();
   const k = window.__motion.size[0] / s.width;
   return [...stage.querySelectorAll(':scope > .captions')].map((node) => {
-    const r = node.getBoundingClientRect();
-    const box = { left: (r.left - s.left) * k, top: (r.top - s.top) * k, right: (r.right - s.left) * k, bottom: (r.bottom - s.top) * k };
+    const rects = [node, ...node.querySelectorAll('.word')].map((n) => n.getBoundingClientRect());
+    const edge = (side, pick) => pick(...rects.map((r) => r[side]));
+    const box = { left: (edge('left', Math.min) - s.left) * k, top: (edge('top', Math.min) - s.top) * k, right: (edge('right', Math.max) - s.left) * k, bottom: (edge('bottom', Math.max) - s.top) * k };
     return { index: Number(node.dataset.index), shown: getComputedStyle(node).display !== 'none', box };
   });
 };
@@ -149,29 +154,31 @@ export function captionBoxProblem(box, zone, t) {
 const intersects = (box, rect) => Math.min(box.right, rect.right) - Math.max(box.left, rect.left) > SUBPIXEL_PX
   && Math.min(box.bottom, rect.bottom) - Math.max(box.top, rect.top) > SUBPIXEL_PX;
 
-// A visible text or counter held in the caption zone would sit under the captions: once per element, as the safe area.
+// A visible text or counter held in the caption zone while a caption is on screen would sit under it: once per element,
+// as the safe area. With no caption showing, the lower band is free to use.
 function captionZoneProblems(items, samples, zone, size) {
   const problems = [];
   items.forEach(({ el, path: where, chain }, j) => {
     if (!CHECKED.has(el.type)) return;
     const spans = tweenSpans(chain, GEOMETRY);
-    const hit = samples.find(({ t, els }, n) => isShown(els[j], size) && isHeld(spans, t, n, samples) && intersects(els[j].box, zone));
-    if (hit) problems.push({ path: where, message: `${el.type} "${el.id}" sits in the caption zone (y >= ${zone.top}) at ${at(hit.t)}` });
+    const hit = samples.find(({ t, els, captions }, n) => captions.some((c) => c.shown) && isShown(els[j], size) && isHeld(spans, t, n, samples) && intersects(els[j].box, zone));
+    if (hit) problems.push({ path: where, message: `${el.type} "${el.id}" sits in the caption zone (y >= ${zone.top}) at ${at(hit.t)}; move it above y ${zone.top} or end the captions before it` });
   });
   return problems;
 }
 
-// Each captions track whose layer leaves the zone, once, at the first sampled moment (`start` + t: video time).
-// `reported` carries the tracks already reported in earlier scenes.
-function captionLayerProblems(samples, zone, start, reported) {
+// Each captions track whose layer leaves the zone, once, at the first of its moments (window.__motion.captionMoments,
+// video time) where it does.
+async function captionLayerProblems(page, zone) {
   const problems = [];
-  for (const { t, captions } of samples) {
-    for (const { index, shown, box } of captions) {
-      const message = shown && !reported.has(index) ? captionBoxProblem(box, zone, start + t) : null;
-      if (!message) continue;
-      reported.add(index);
-      problems.push({ path: `captions[${index}]`, message });
-    }
+  const reported = new Set();
+  for (const { index, t } of await page.evaluate(() => window.__motion.captionMoments)) {
+    if (reported.has(index)) continue;
+    const layer = (await page.evaluate(measureCaptions, t)).find((c) => c.index === index);
+    const message = layer?.shown ? captionBoxProblem(layer.box, zone, t) : null;
+    if (!message) continue;
+    reported.add(index);
+    problems.push({ path: `captions[${index}]`, message });
   }
   return problems;
 }
@@ -256,7 +263,7 @@ async function sampleScene(page, scene, items, index, start, fps, withCaptions) 
     const els = await page.evaluate(measure, [start + t, index]);
     const ids = els.map((m) => m.id).join();
     if (ids !== items.map(({ el }) => el.id).join()) throw new Error(`scene "${scene.id}": the page shows elements ${ids}, not the spec's`);
-    const captions = withCaptions ? await page.evaluate(measureCaptions) : [];
+    const captions = withCaptions ? await page.evaluate(measureCaptions, null) : [];
     samples.push({ t, els, captions, wraps: await nowrapProblems(page, { root: '#stage' }) });
   }
   return samples;
@@ -297,15 +304,15 @@ async function inspect(browser, spec, server, prepare) {
   const itemsOf = spec.scenes.map(sceneItems); // the non-group elements of each scene, indexed as the page measures them
   const warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], await page.evaluate(measure, [0, 0]), spec.size);
   const zone = spec.captions.length ? captionZone(spec.size, spec.format) : null; // the caption rules need captions
-  const reported = new Set();
   let moments = 0;
   for (const [i, scene] of spec.scenes.entries()) {
     const items = itemsOf[i];
     const samples = await sampleScene(page, scene, items, i, starts[i], spec.fps, zone !== null);
     moments += samples.length;
     problems.push(...safeAreaProblems(items, samples, insets, spec.size), ...overlapProblems(items, samples, spec.size), ...emptyEndProblems(scene, i, items, samples, spec.size), ...wrapProblems(scene, i, samples));
-    if (zone) problems.push(...captionZoneProblems(items, samples, zone, spec.size), ...captionLayerProblems(samples, zone, starts[i], reported));
+    if (zone) problems.push(...captionZoneProblems(items, samples, zone, spec.size));
   }
+  if (zone) problems.push(...await captionLayerProblems(page, zone));
   for (const fade of await page.evaluate(() => window.__motion.crossfades)) warnings.push(...await crossfadeWarnings(page, spec, itemsOf, fade, spec.size));
   return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings };
 }

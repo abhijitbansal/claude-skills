@@ -29,6 +29,7 @@ const chars = (g) => graphemes(g.words.map((x) => x.text).join(' ')).length;
 // Contiguous words from `at`, `each` seconds apiece.
 const run = (words, at, each = 0.3) => words.split(' ').map((text, i) => w(text, +(at + i * each).toFixed(3), +(at + (i + 1) * each).toFixed(3)));
 
+const NO_CAPTIONS = 'no captions found; expected SRT or WebVTT cues (a "00:00:01,000 --> 00:00:02,500" line, then the text), or JSON with Whisper "segments" or "words", or the voice sidecar\'s "sentences"';
 const srt = (cues) => cues.map(([from, to, text], i) => `${i + 1}\n${from} --> ${to}\n${text}\n`).join('\n');
 
 // A spec folder holding `files` (name -> text) and motion.json.
@@ -122,12 +123,12 @@ test('out-of-order cue, empty cue, 200-word cue, emoji and CJK words: no empty o
     && e.message === 'cue 3 (line 9): start 00:00:01,000 is not after the previous cue\'s start 00:00:02,000; sort the cues by time');
   const inverted = srt([['00:00:00,000', '00:00:01,000', 'one'], ['00:00:01,000', '00:00:02,000', 'two'], ['00:00:05,000', '00:00:04,000', 'three']]);
   assert.throws(() => parseCaptions(inverted, 'srt'), { message: 'cue 3 (line 9): end 00:00:04,000 is before start' });
-  assert.throws(() => parseCaptions('1\n00:00:01,000 --> 00:00:01,000\nflat\n', 'srt'), { message: 'cue 1 (line 1): end 00:00:01,000 is before start' });
+  assert.throws(() => parseCaptions('1\n00:00:01,000 --> 00:00:01,000\nflat\n', 'srt'), { message: 'cue 1 (line 1): end 00:00:01,000 is not after start 00:00:01,000; make the cue last at least 1 ms' });
   assert.throws(() => parseCaptions('1\n00:00:01,000 -> 00:00:02,000\nno arrow\n', 'srt'), { message: 'cue 1 (line 1): no timing line such as "00:00:01,000 --> 00:00:02,500"' });
   assert.throws(() => parseCaptions('1\n00:00:01 --> 00:00:02,000\nbad stamp\n', 'srt'), { message: 'cue 1 (line 1): "00:00:01" is not a time such as 00:00:01,000' });
-  assert.throws(() => parseCaptions('1\n00:00:01,000 --> 00:00:02,000\n\n', 'srt'), { message: 'no captions found' });
-  assert.throws(() => parseCaptions('', 'vtt'), { message: 'no captions found' });
-  assert.throws(() => parseCaptions('{}', 'json'), { message: 'no captions found' });
+  assert.throws(() => parseCaptions('1\n00:00:01,000 --> 00:00:02,000\n\n', 'srt'), { message: NO_CAPTIONS });
+  assert.throws(() => parseCaptions('', 'vtt'), { message: NO_CAPTIONS });
+  assert.throws(() => parseCaptions('{}', 'json'), { message: NO_CAPTIONS });
   assert.throws(() => parseCaptions('hello', 'txt'), { message: 'unsupported captions format ".txt"; use srt, vtt or json' });
 
   const long = Array.from({ length: 200 }, (_, i) => `word${i}`).join(' ');
@@ -256,7 +257,8 @@ async function captionBoxes(file, size, times) {
         const s = stage.getBoundingClientRect();
         const k = window.__motion.size[0] / s.width;
         return [...stage.querySelectorAll(':scope > .captions')].filter((n) => getComputedStyle(n).display !== 'none').map((n) => {
-          const r = n.getBoundingClientRect();
+          const rects = [n, ...n.querySelectorAll('.word')].map((x) => x.getBoundingClientRect());
+          const r = { left: Math.min(...rects.map((x) => x.left)), top: Math.min(...rects.map((x) => x.top)), right: Math.max(...rects.map((x) => x.right)), bottom: Math.max(...rects.map((x) => x.bottom)) };
           return { t: sec, text: n.textContent, lineHeight: parseFloat(getComputedStyle(n).lineHeight), height: n.offsetHeight, box: { left: (r.left - s.left) * k, top: (r.top - s.top) * k, right: (r.right - s.left) * k, bottom: (r.bottom - s.top) * k } };
         });
       }, t));
@@ -318,7 +320,7 @@ test('check.mjs: a body text at y 900 on 1920x1080 with captions is a caption-zo
   const withCaptions = specDir({ size: [1920, 1080], captions: [{ src: 'c.srt' }], scenes }, files);
   const r = check([withCaptions.file]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.deepEqual(lines(r.stdout), ['scenes[0].elements[0]: text "sub" sits in the caption zone (y >= 842) at 0.10s', 'check: 1 problem']);
+  assert.deepEqual(lines(r.stdout), ['scenes[0].elements[0]: text "sub" sits in the caption zone (y >= 842) at 0.10s; move it above y 842 or end the captions before it', 'check: 1 problem']);
   const without = specDir({ size: [1920, 1080], scenes }, files);
   const ok = check([without.file]);
   assert.equal(ok.status, 0, ok.stdout + ok.stderr);
@@ -328,8 +330,9 @@ test('check.mjs: a body text at y 900 on 1920x1080 with captions is a caption-zo
 test('check.mjs runs captionBoxProblem on every captions layer: a layer pushed past the zone is reported at captions[i]', async (t) => {
   if (!(await requireRender(t, BROWSER_ONLY))) return;
   const scenes = [{ id: 's', duration: 2, elements: [{ id: 'title', type: 'text', text: 'Up top', x: 960, y: 300 }] }];
-  const files = { 'c.srt': srt([['00:00:00,000', '00:00:02,000', 'Short and sweet.']]) };
-  const { file } = specDir({ size: [1920, 1080], captions: [{ src: 'c.srt' }, { src: 'c.srt', style: 'pill' }], scenes }, files);
+  // Two tracks one after the other (two on screen at once is a validation error): 0.1-0.8 s and 1.0-1.8 s.
+  const files = { 'c.srt': srt([['00:00:00,000', '00:00:00,800', 'Short and sweet.']]) };
+  const { file } = specDir({ size: [1920, 1080], captions: [{ src: 'c.srt' }, { src: 'c.srt', style: 'pill', at: 1 }], scenes }, files);
   // check.mjs's test seam: move the second layer's centre to x 1800, so it runs past the zone's right edge (1860).
   const prepare = (page) => page.evaluate(() => { document.querySelectorAll('#stage > .captions')[1].style.left = '1800px'; });
   const out = [];
@@ -342,5 +345,99 @@ test('check.mjs runs captionBoxProblem on every captions layer: a layer pushed p
     process.stdout.write = realWrite;
   }
   assert.equal(code, 1, out.join(''));
-  assert.deepEqual(JSON.parse(out.join('')).errors, [{ path: 'captions[1]', message: 'captions leave the caption zone (right) at 0.10s' }]);
+  assert.deepEqual(JSON.parse(out.join('')).errors, [{ path: 'captions[1]', message: 'captions leave the caption zone (right) at 1.40s' }]);
+});
+
+// ---- fix round 1 --------------------------------------------------------------------------------
+
+test('SRT: a timing line inside a block starts a new cue (a missing blank line), and its errors name its own line', () => {
+  const glued = '1\n00:00:00,000 --> 00:00:01,000\nHello there\n2\n00:00:01,500 --> 00:00:02,500\nGeneral Kenobi\n';
+  const words = parseCaptions(glued, 'srt');
+  assert.deepEqual(words.map((x) => x.text), ['Hello', 'there', 'General', 'Kenobi'], 'the "2" index line is not a word');
+  assert.deepEqual([words[1].end, words[2].start, words[3].end], [1, 1.5, 2.5]);
+  const bare = '00:00:00,000 --> 00:00:01,000\nHello\n00:00:01,500 --> 00:00:02,500\nWorld\n';
+  assert.deepEqual(parseCaptions(bare, 'srt'), [w('Hello', 0, 1), w('World', 1.5, 2.5)]);
+  const broken = '1\n00:00:00,000 --> 00:00:01,000\nHello\n2\n00:00:03,000 --> 00:00:02,000\nWorld\n';
+  assert.throws(() => parseCaptions(broken, 'srt'), { message: 'cue 2 (line 4): end 00:00:02,000 is before start' });
+});
+
+test('JSON with a UTF-8 BOM parses like JSON without one: Whisper words, Whisper segments and the voice sidecar', () => {
+  const shapes = {
+    words: { words: [{ word: ' Hi', start: 0, end: 0.5 }, { word: ' there', start: 0.5, end: 1 }] },
+    segments: { segments: [{ text: ' Hi there', start: 0, end: 1 }] },
+    sentences: { sentences: [{ text: 'Hi there', start: 0, end: 1 }] },
+  };
+  for (const [name, data] of Object.entries(shapes)) {
+    const plain = parseCaptions(JSON.stringify(data), 'json');
+    assert.deepEqual(plain.map((x) => x.text), ['Hi', 'there'], name);
+    assert.deepEqual(parseCaptions(`﻿${JSON.stringify(data)}`, 'json'), plain, `${name} with a BOM`);
+  }
+});
+
+test('markup: only tag-shaped markup is dropped, "a<b and c>d" survives, and numeric entities decode', () => {
+  const words = (text) => parseCaptions(srt([['00:00:00,000', '00:00:04,000', text]]), 'srt').map((x) => x.text);
+  assert.deepEqual(words('a<b and c>d'), ['a<b', 'and', 'c>d']);
+  assert.deepEqual(words('<i>one</i> <c.yellow>two</c> <00:00:01.000>three <font color="red">four</font> <v Ana>five</v>'), ['one', 'two', 'three', 'four', 'five']);
+  assert.deepEqual(words('&#65;&#x42; &amp; &lt;3 &#9999999; &bogus;'), ['AB', '&', '<3', '&#9999999;', '&bogus;']);
+});
+
+test('VTT: a cue whose id starts with NOTE keeps its cue; a NOTE block is still skipped', () => {
+  const vtt = 'WEBVTT\n\nNOTE this is a comment\n\nNOTE-1\n00:00.000 --> 00:01.000\nKept here\n\nNOTE\nanother comment\n';
+  assert.deepEqual(parseCaptions(vtt, 'vtt').map((x) => x.text), ['Kept', 'here']);
+});
+
+test('the first-group 0.1 s clamp applies after a dropped group: no shown group starts before 0.1 s', () => {
+  const groups = groupWords([w('Hi.', 0, 0.03), w('x'.repeat(40), 0.05, 0.5), w('end.', 0.5, 0.8)]);
+  assert.deepEqual(groups.map((g) => [texts([g])[0].slice(0, 4), g.start, g.end]), [['xxxx', 0.1, 0.5], ['end.', 0.5, 0.8]]);
+});
+
+test('the borrow step never moves a word that ends a sentence', () => {
+  assert.deepEqual(texts(groupWords(run('one two three four five six. seven', 0.2))), ['one two three four five six.', 'seven']);
+});
+
+test('a Whisper word with no text, and a track that would show nothing, are errors that name the fix', () => {
+  assert.throws(() => parseCaptions('{"words":[{"start":0,"end":1}]}', 'json'), { message: 'words[0]: no "word" or "text"; give every word its text' });
+  assert.throws(() => parseCaptions('{"segments":[{"start":0,"end":1,"words":[{"start":0,"end":1}]}]}', 'json'), { message: 'segments[0].words[0]: no "word" or "text"; give every word its text' });
+  const scenes = [{ id: 'one', duration: 3, elements: [] }];
+  const { dir } = specDir({ scenes }, { 'early.srt': srt([['00:00:00,000', '00:00:00,050', 'Hi']]) });
+  assert.deepEqual(validateSpec({ scenes, captions: [{ src: 'early.srt' }] }, { dir }).errors.map((e) => `${e.path}: ${e.message}`),
+    ['captions[0].src: nothing would show: every word ends by 0.1 s into the video; start the track later with at, or fix the times in the file']);
+  assert.deepEqual(validateSpec({ scenes, captions: [{ src: 'early.srt', at: 0.5 }] }, { dir }).errors, []);
+});
+
+test('validate: two captions tracks on screen at once is an error naming both and the time', () => {
+  const scenes = [{ id: 'one', duration: 6, elements: [] }];
+  const { dir } = specDir({ scenes }, { 'ok.srt': srt([['00:00:00,500', '00:00:02,000', 'Hello there']]) });
+  const errs = (captions) => validateSpec({ scenes, captions }, { dir }).errors.map((e) => `${e.path}: ${e.message}`);
+  assert.deepEqual(errs([{ src: 'ok.srt' }, { src: 'ok.srt', style: 'pill', at: 1 }]),
+    ['captions[1]: on screen at 1.50s together with captions[0]; only one captions track can show at a time: move one with at or scene, or merge the files']);
+  assert.deepEqual(errs([{ src: 'ok.srt' }, { src: 'ok.srt', at: 2 }]), [], 'back to back is fine');
+});
+
+test('kinetic: the pop is capped so a long word at 9:16 never leaves the zone; a short word still pops', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  const files = { 'c.srt': srt([['00:00:01,000', '00:00:03,000', 'W'.repeat(40)], ['00:00:03,500', '00:00:05,000', 'Go now']]) };
+  const { file } = specDir({ format: '9:16', size: [1080, 1920], captions: [{ src: 'c.srt', style: 'kinetic' }], scenes: [{ id: 's', duration: 5, elements: [] }] }, files);
+  const zone = captionZone([1080, 1920], '9:16');
+  const seen = await captionBoxes(file, [1080, 1920], [1, 1.03, 1.08, 1.2, 3.5, 3.7]);
+  assert.equal(seen.length, 6);
+  for (const { t: at, box } of seen) assert.ok(inside(box, zone), `at ${at}s: ${JSON.stringify(box)} outside ${JSON.stringify(zone)}`);
+  const width = (b) => b.right - b.left;
+  assert.ok(width(seen.find((s) => s.t === 3.5).box) > width(seen.find((s) => s.t === 3.7).box), 'the short group still pops');
+  const r = check([file]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+test('check.mjs: lower-band text with no caption on screen passes; the same text while a caption shows is a problem', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  const low = (id) => ({ id, type: 'text', text: 'Fine print', x: 960, y: 900, fontSize: 40 });
+  const scenes = [{ id: 'quiet', duration: 2, elements: [low('low1')] }, { id: 'talk', duration: 2, elements: [low('low2')] }];
+  const files = { 'c.srt': srt([['00:00:02,500', '00:00:04,000', 'Now it shows.']]) };
+  const { file } = specDir({ size: [1920, 1080], captions: [{ src: 'c.srt' }], scenes }, files);
+  const r = check([file]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  const out = lines(r.stdout);
+  assert.equal(out.length, 2, r.stdout);
+  assert.match(out[0], /^scenes\[1\]\.elements\[0\]: text "low2" sits in the caption zone \(y >= 842\) at \d\.\d\ds; move it above y 842 or end the captions before it$/);
+  assert.equal(out[1], 'check: 1 problem');
 });

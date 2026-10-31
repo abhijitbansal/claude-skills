@@ -4,7 +4,7 @@ import { buildTimeline, seekTo } from './timeline.mjs';
 import { withDefaults, resolveColor, graphemes, typingLength, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE } from './defaults.mjs';
 import { resolveAudio } from './audio.mjs';
 import { flattenElements, isGroup } from './groups.mjs';
-import { loadCaptionTracks, captionLayer, applyCaption, captionSample, captionFontSize, CAPTION_WEIGHT } from './caption-layer.mjs';
+import { loadCaptionTracks, captionLayer, applyCaption, captionSample, captionFontSize, captionMoments, CAPTION_WEIGHT } from './caption-layer.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 import { bindWithNbsp } from '/shared/nowrap.mjs'; // served by server.mjs; the token regex lives only in shared/
 
@@ -601,10 +601,11 @@ function stampSheet(text) {
   el.textContent = text;
 }
 
-function makeMotion(spec, built, apply, audio) {
+// `captions`: the stage's captions layers; check.mjs measures each at captionMoments.
+function makeMotion(spec, built, apply, audio, captions) {
   return {
     duration: built.duration, fps: spec.fps, size: spec.size, sceneStarts: built.sceneStarts, crossfades: built.crossfades,
-    sceneIds: spec.scenes.map((s) => s.id), audio,
+    sceneIds: spec.scenes.map((s) => s.id), audio, captionMoments: captionMoments(captions, built.duration),
     // Resolves once the frame is fully drawn (every video frame it shows is decoded); render.mjs awaits it per frame.
     seek(sec) {
       const t = Math.min(Math.max(0, sec), built.duration);
@@ -633,7 +634,7 @@ async function mount() {
   currentStage = dom.stage;
   if (MODE === 'render') document.documentElement.style.background = spec.background; // letterbox
   fitStage(spec.size);
-  const motion = makeMotion(spec, built, apply, replaceAudio(spec));
+  const motion = makeMotion(spec, built, apply, replaceAudio(spec), dom.captions);
   motion.seek(0);
   return motion;
 }

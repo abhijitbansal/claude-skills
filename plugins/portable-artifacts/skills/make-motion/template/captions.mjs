@@ -54,8 +54,14 @@ function spreadWords(text, start, end) {
 
 const TIMESTAMP = /^(?:(\d+):)?(\d{1,2}):(\d{2})[,.](\d{1,3})$/;
 const ARROW = '-->';
-const VTT_SKIPPED = /^(WEBVTT|NOTE|STYLE|REGION)\b/;
-const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&nbsp;': ' ', '&quot;': '"', '&#39;': "'" };
+const VTT_SKIPPED = /^(WEBVTT|NOTE|STYLE|REGION)(\s|$)/;
+const CUE_INDEX = /^\d+$/;
+const BOM = /^﻿/;
+const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&nbsp;': ' ', '&quot;': '"', '&apos;': "'" };
+const MAX_CODE_POINT = 0x10ffff;
+// Only tag-shaped markup: SRT <i> <b> <u> <font …>, WebVTT <c.class>, <v Name>, <lang en>, <ruby>, <rt> and the
+// karaoke timestamps <00:00:01.000>. Anything else in angle brackets is text ("a<b and c>d").
+const TAGS = /<\/?(?:[biu]|c|ruby|rt)(?:\.[\w.-]+)?>|<(?:v|lang)(?:\.[\w.-]+)?(?:\s[^>]*)?>|<\/(?:v|lang)>|<font(?:\s[^>]*)?>|<\/font>|<(?:\d+:)?\d{2}:\d{2}\.\d{3}>/gi;
 
 function seconds(stamp, where) {
   const m = TIMESTAMP.exec(stamp);
@@ -64,15 +70,30 @@ function seconds(stamp, where) {
   return roundSeconds(Number(h) * 3600 + Number(min) * 60 + Number(s) + Number(frac.padEnd(3, '0')) / MS);
 }
 
-// Cue text without markup: SRT/VTT tags (<i>, <c.x>, <v Name>, <00:00:01.000>), ASS overrides ({\an8}) and entities.
-const cueText = (lines) => lines.join(' ').replace(/<[^>]*>/g, '').replace(/\{\\[^}]*\}/g, '').replace(/&[#\w]+;/g, (e) => ENTITIES[e] ?? e);
+// &amp; and the other named entities above, and &#NNN; / &#xHH;; anything else is left as written.
+function decodeEntity(entity) {
+  const numeric = /^&#(x[0-9a-f]+|\d+);$/i.exec(entity);
+  if (!numeric) return ENTITIES[entity] ?? entity;
+  const code = numeric[1][0].toLowerCase() === 'x' ? parseInt(numeric[1].slice(1), 16) : Number(numeric[1]);
+  return code > 0 && code <= MAX_CODE_POINT ? String.fromCodePoint(code) : entity;
+}
 
-// Blank-line separated blocks with the 1-based line each starts on.
+// Cue text without markup: tags, ASS overrides ({\an8}) and entities.
+const cueText = (lines) => lines.join(' ').replace(TAGS, '').replace(/\{\\[^}]*\}/g, '').replace(/&#?\w+;/g, decodeEntity);
+
+// Blank-line separated blocks with the 1-based line each starts on. A block holding a second timing line is two cues
+// whose blank line went missing: it is split there, and a bare cue number just before that line goes with the new cue.
 function blocks(text) {
   const out = [];
   let current = null;
-  String(text).replace(/^﻿/, '').split(/\r\n|\r|\n/).forEach((line, i) => {
+  String(text).replace(BOM, '').split(/\r\n|\r|\n/).forEach((line, i) => {
     if (line.trim() === '') { current = null; return; }
+    const secondTiming = current && line.includes(ARROW) && current.lines.some((l) => l.includes(ARROW));
+    if (secondTiming) {
+      const index = CUE_INDEX.test(current.lines.at(-1).trim()) && !current.lines.at(-1).includes(ARROW) ? current.lines.pop() : null;
+      current = { line: index === null ? i + 1 : i, lines: index === null ? [] : [index] };
+      out.push(current);
+    }
     if (!current) out.push(current = { line: i + 1, lines: [] });
     current.lines.push(line);
   });
@@ -87,7 +108,8 @@ function parseCue(block, n) {
   const to = rest.split(/\s+/)[0]; // a VTT cue may carry settings after the end time
   const start = seconds(from, where);
   const end = seconds(to, where);
-  if (end <= start) throw new CaptionError(`${where.label}: end ${to} is before start`, block.line);
+  if (end < start) throw new CaptionError(`${where.label}: end ${to} is before start`, block.line);
+  if (end === start) throw new CaptionError(`${where.label}: end ${to} is not after start ${from}; make the cue last at least 1 ms`, block.line);
   return { where, from, start, end, text: cueText(block.lines.slice(at + 1)) };
 }
 
@@ -115,30 +137,39 @@ function timed(item, label) {
   return { start, end };
 }
 
+// A Whisper word: its text is `word` (Whisper) or `text`.
+function whisperWord(x, label) {
+  const word = x?.word ?? x?.text;
+  if (word === undefined || word === null) throw new CaptionError(`${label}: no "word" or "text"; give every word its text`);
+  return { label, word: String(word), ...timed(x, label) };
+}
+
 // [{ label, start, end, text?, word? }] in file order: Whisper words, Whisper segments without word timings, or sidecar
 // sentences. A sentence or segment is spread over its span like a cue; a Whisper word is used as given.
 function jsonItems(data) {
   if (Array.isArray(data?.sentences)) return data.sentences.map((s, i) => ({ label: `sentences[${i}]`, text: s?.text, ...timed(s, `sentences[${i}]`) }));
-  if (Array.isArray(data?.words)) return data.words.map((x, i) => ({ label: `words[${i}]`, word: x?.word ?? x?.text, ...timed(x, `words[${i}]`) }));
+  if (Array.isArray(data?.words)) return data.words.map((x, i) => whisperWord(x, `words[${i}]`));
   if (!Array.isArray(data?.segments)) return [];
   return data.segments.flatMap((seg, si) => (Array.isArray(seg?.words)
-    ? seg.words.map((x, wi) => ({ label: `segments[${si}].words[${wi}]`, word: x?.word ?? x?.text, ...timed(x, `segments[${si}].words[${wi}]`) }))
+    ? seg.words.map((x, wi) => whisperWord(x, `segments[${si}].words[${wi}]`))
     : [{ label: `segments[${si}]`, text: seg?.text, ...timed(seg, `segments[${si}]`) }]));
 }
 
 function parseJson(text) {
   let data;
-  try { data = JSON.parse(text); } catch (e) { throw new CaptionError(`not valid JSON: ${e.message}`); }
+  try { data = JSON.parse(String(text).replace(BOM, '')); } catch (e) { throw new CaptionError(`not valid JSON: ${e.message}`); }
   const items = jsonItems(data);
   items.forEach((item, i) => {
     if (i > 0 && item.start < items[i - 1].start) throw new CaptionError(`${item.label}: start ${item.start} is before the start of the one before it; sort them by time`);
   });
   return items.flatMap((item) => {
     if (item.word === undefined) return spreadWords(item.text ?? '', item.start, item.end);
-    const word = String(item.word).trim(); // Whisper puts the separating space in front of the word
+    const word = item.word.trim(); // Whisper puts the separating space in front of the word
     return word ? [{ text: word, start: item.start, end: item.end }] : [];
   });
 }
+
+const NO_CAPTIONS = 'no captions found; expected SRT or WebVTT cues (a "00:00:01,000 --> 00:00:02,500" line, then the text), or JSON with Whisper "segments" or "words", or the voice sidecar\'s "sentences"';
 
 /**
  * The words of a captions file, in order: [{ text, start, end }] in seconds from the file's start. `ext` is the file's
@@ -148,7 +179,7 @@ export function parseCaptions(text, ext) {
   const kind = String(ext).toLowerCase();
   if (!CAPTION_EXTENSIONS.includes(kind)) throw new CaptionError(`unsupported captions format ".${ext}"; use srt, vtt or json`);
   const words = kind === 'json' ? parseJson(text) : parseCues(text, kind).flatMap((cue) => spreadWords(cue.text, cue.start, cue.end));
-  if (!words.length) throw new CaptionError('no captions found');
+  if (!words.length) throw new CaptionError(NO_CAPTIONS);
   return words;
 }
 
@@ -172,11 +203,13 @@ function split(words, o) {
 
 // Merge pass: a group under minWords joins the next group when it is close enough (mergeGapSeconds) and the result keeps
 // within maxWords and maxChars, else the previous one under the same conditions. When neither fits it borrows the
-// adjacent word of a close neighbour that can spare one (previous first), so no lone word sits beside a close group.
-// Otherwise it stays alone: a one-word track, a word isolated by long pauses, or one too long to pair.
+// adjacent word of a close neighbour that can spare one (previous first), so no lone word sits beside a close group; a
+// word that ends a sentence is never borrowed. Otherwise it stays alone: a one-word track, a word isolated by long
+// pauses, or one too long to pair.
 function merge(groups, o) {
   const fits = (words) => words.length <= o.maxWords && charCount(groupText(words)) <= o.maxChars;
   const near = (a, b) => gapMs(a, b) <= ms(o.mergeGapSeconds);
+  const spare = (g) => g.length > o.minWords;
   const pending = [...groups];
   const out = [];
   for (let i = 0; i < pending.length; i++) {
@@ -186,8 +219,8 @@ function merge(groups, o) {
     if (words.length >= o.minWords) out.push(words);
     else if (next && near(words, next) && fits([...words, ...next])) pending[i + 1] = [...words, ...next];
     else if (prev && near(prev, words) && fits([...prev, ...words])) out[out.length - 1] = [...prev, ...words];
-    else if (prev && near(prev, words) && prev.length > o.minWords && fits([prev.at(-1), ...words])) out.splice(-1, 1, prev.slice(0, -1), [prev.at(-1), ...words]);
-    else if (next && near(words, next) && next.length > o.minWords && fits([...words, next[0]])) {
+    else if (prev && near(prev, words) && spare(prev) && !endsSentence(prev.at(-1).text) && fits([prev.at(-1), ...words])) out.splice(-1, 1, prev.slice(0, -1), [prev.at(-1), ...words]);
+    else if (next && near(words, next) && spare(next) && !endsSentence(next[0].text) && fits([...words, next[0]])) {
       out.push([...words, next[0]]);
       pending[i + 1] = next.slice(1);
     } else out.push(words);
@@ -196,20 +229,27 @@ function merge(groups, o) {
 }
 
 /**
- * The words as caption groups, one on screen at a time: [{ start, end, words }]. The first group starts at
- * max(its start, firstAt); each ends at min(its own end, the next group's start). A group left with no time on screen
- * (a first word that ends before firstAt) is dropped. Pure.
+ * The words as caption groups, one on screen at a time: [{ start, end, words }]. Each ends at min(its own end, the next
+ * group's start). Groups that end by firstAt are dropped, and the first one left starts at max(its start, firstAt), so
+ * no group shows before firstAt; a group left with no time on screen is dropped too. Pure.
  */
 export function groupWords(words, options = {}) {
   const o = { ...GROUPING, ...options };
   const groups = merge(split(words, o), o);
-  return groups
-    .map((g, i) => ({
-      start: i === 0 ? Math.max(g[0].start, o.firstAt) : g[0].start,
-      end: groups[i + 1] ? Math.min(g.at(-1).end, groups[i + 1][0].start) : g.at(-1).end,
-      words: g,
-    }))
-    .filter((g) => ms(g.end) > ms(g.start));
+  const timedGroups = groups
+    .map((g, i) => ({ start: g[0].start, end: groups[i + 1] ? Math.min(g.at(-1).end, groups[i + 1][0].start) : g.at(-1).end, words: g }))
+    .filter((g) => ms(g.end) > ms(g.start) && ms(g.end) > ms(o.firstAt));
+  return timedGroups.map((g, i) => (i === 0 ? { ...g, start: Math.max(g.start, o.firstAt) } : g));
+}
+
+/**
+ * A track's groups on the video's clock: its words moved by `offset` seconds (the track's `scene` + `at`), then
+ * grouped. Throws CaptionError when nothing would show. Shared by the validator and the page.
+ */
+export function trackGroups(words, offset) {
+  const groups = groupWords(words.map((w) => ({ ...w, start: roundSeconds(w.start + offset), end: roundSeconds(w.end + offset) })));
+  if (!groups.length) throw new CaptionError(`nothing would show: every word ends by ${GROUPING.firstAt} s into the video; start the track later with at, or fix the times in the file`);
+  return groups;
 }
 
 // ---- what a style shows ----------------------------------------------------------------------------------------------
