@@ -6,7 +6,7 @@ export const SOURCE_SCOPE = 'git-tracked+untracked-nonignored'
 
 // Mirrors the collector's single-scan byte cap: `max_bytes` in scripts/source_snapshot.py `capture()`.
 // Keep the two equal, or a repo the collector reports available is rejected here as invalid_capture.
-export const MAX_SOURCE_BYTES = 32 * 1024 * 1024
+export const MAX_SOURCE_BYTES = 128 * 1024 * 1024
 
 const reasons = new Set(['deadline', 'unsupported_host', 'git_output_limit', 'git_unavailable',
   'invalid_listing', 'unsupported_index', 'file_limit', 'unsupported_path', 'unsupported_file',

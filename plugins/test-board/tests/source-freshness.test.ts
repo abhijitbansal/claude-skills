@@ -107,9 +107,9 @@ test('only an attempted capture that said something earns a source line', () => 
 
 test('a capture up to the collector byte cap is accepted and anything above it is not', () => {
   const MIB = 1024 * 1024
-  expect(MAX_SOURCE_BYTES).toBe(32 * MIB)
-  for (const bytes of [16 * MIB + 1, 20 * MIB, 32 * MIB]) {
+  expect(MAX_SOURCE_BYTES).toBe(128 * MIB)
+  for (const bytes of [32 * MIB + 1, 85 * MIB, 128 * MIB]) {
     expect(parseSourceCapture(captured({ ...snapshot, bytes }))).toEqual({ ...snapshot, bytes })
   }
-  expect(parseSourceCapture(captured({ ...snapshot, bytes: 32 * MIB + 1 }))).toMatchObject({ status: 'unknown', reason: 'invalid_capture' })
+  expect(parseSourceCapture(captured({ ...snapshot, bytes: 128 * MIB + 1 }))).toMatchObject({ status: 'unknown', reason: 'invalid_capture' })
 })

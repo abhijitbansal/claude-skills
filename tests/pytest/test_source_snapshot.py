@@ -1,6 +1,7 @@
 """Read-only source snapshots, tested against disposable synthetic repositories."""
 
 import importlib.util
+import inspect
 import json
 import os
 import re
@@ -453,6 +454,11 @@ class SourceSnapshotTests(unittest.TestCase):
                 self.assertEqual(spawn_env["GIT_CONFIG_NOSYSTEM"], "1")
                 self.assertIn("core.hooksPath=/dev/null", argv)
                 self.assertIn("core.fsmonitor=false", argv)
+
+    def test_default_caps_fit_a_large_repo(self):
+        params = inspect.signature(self.module().capture).parameters
+        self.assertEqual(params["max_bytes"].default, 128 * 1024 * 1024)
+        self.assertEqual(params["max_file_bytes"].default, 16 * 1024 * 1024)
 
     def test_byte_cap_matches_the_hook_validator(self):
         import inspect

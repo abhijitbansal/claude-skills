@@ -350,8 +350,8 @@ def scan(root, root_fd, budget):
     return summary, (listing, stats)
 
 
-def capture(root, *, max_files=4096, max_bytes=32 * 1024 * 1024,
-            max_file_bytes=4 * 1024 * 1024, max_git_bytes=512 * 1024,
+def capture(root, *, max_files=4096, max_bytes=128 * 1024 * 1024,
+            max_file_bytes=16 * 1024 * 1024, max_git_bytes=512 * 1024,
             timeout_s=1.5):
     """Return a complete identity or unknown; never return a partial digest.
 

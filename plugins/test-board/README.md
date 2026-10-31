@@ -121,7 +121,7 @@ regular file (or a link to one), such as a FIFO or device, is skipped. Each capt
 1.5-second internal deadline and a 2-second host process timeout.
 A capture hashes contents once, then re-lists Git state, re-walks the in-scope
 directories and re-checks every file's identity to catch changes made meanwhile.
-Limits per capture: 4,096 entries, 64 directory levels, 4 MiB per file, 32 MiB read,
+Limits per capture: 4,096 entries, 64 directory levels, 16 MiB per file, 128 MiB read,
 and 512 KiB per Git response. Unsupported or over-budget captures return unknown,
 without a partial digest. A nested Git repository inside the worktree is unsupported.
 Git runs a fixed handful of times plus one ignore query per directory level that
@@ -135,19 +135,18 @@ Measured with `python3 -I -B plugins/test-board/scripts/source_snapshot.py <root
 
 | Root | Before | After |
 | --- | --- | --- |
-| `claude-skills` (1,625 tracked, 354 directories) | unknown, `deadline`, 1.53 s | unknown, `unsupported_file`, 0.15 s |
-| a 593-file app repo (45.5 MB) | unknown, `byte_limit`, 1.31 s | unknown, `byte_limit`, 0.17 s |
+| `claude-skills` with untracked symlinks (1,625 tracked) | unknown, `deadline`, 1.53 s | unknown, `unsupported_file`, 0.15 s |
+| a clean `claude-skills` checkout (1,727 files, 84.7 MB) | unknown, `deadline` | available, 0.48 s |
+| a 593-file app repo (45.5 MB) | unknown, `byte_limit`, 1.31 s | available, 0.28 s |
 | a 186-file repo (3.6 MB) | available, 1.41 s | available, 0.25 s |
 | a 598-file repo (9.4 MB) | unknown, `deadline`, 1.53 s | available, 0.35 s |
 | a 697-file repo (16.9 MB) | unknown, `deadline`, 1.53 s | available, 0.33 s |
 
-The two large roots are unknown for real reasons, not time. `claude-skills` holds
-untracked symlinks (`.claude/skills/*`), which are unsupported; its tracked files alone
-total 80 MB, over the 32 MiB cap. The 593-file app repo tracks 45.5 MB, over the cap, including two
-files of about 4.3 MB over the 4 MiB per-file cap. With the caps lifted for one
-measurement only (not a supported setting), a clean checkout of `claude-skills`
-(1,727 files, 84.6 MB) completed in 0.50 s and the app repo in 0.30 s, so the time
-budget is no longer what limits them. Caps are unchanged.
+The size caps (128 MiB read, 16 MiB per file) leave room for repos of this size
+inside the 1.5-second deadline on this machine; a slower disk or a cold cache can
+still end a capture at the deadline, which reports unknown. A checkout holding
+untracked symlinks (here `.claude/skills/*`) stays unknown, because symlinks are
+refused rather than followed.
 
 
 The scope is Git-tracked files and repository-nonignored untracked regular files.
