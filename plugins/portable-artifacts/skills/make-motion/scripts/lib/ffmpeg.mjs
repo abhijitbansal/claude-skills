@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
+import path from 'node:path';
 import { doctorCommand, npmInstallFfmpegStatic } from './doctor-hint.mjs';
 
 const HINT = 'ffmpeg not found. Install it (macOS: brew install ffmpeg; Windows: winget install Gyan.FFmpeg; Debian/Ubuntu: sudo apt-get install ffmpeg), '
@@ -28,6 +29,17 @@ export async function findFfmpeg({ skipStatic = false } = {}) {
     } catch { /* optional dependency not installed */ }
   }
   throw new Error(HINT);
+}
+
+// $FFPROBE_PATH, then ffprobe on PATH, then the ffprobe beside ffmpeg (`ffmpeg`, else $FFMPEG_PATH); null when none.
+export function findFfprobe({ ffmpeg } = {}) {
+  const fromEnv = process.env.FFPROBE_PATH;
+  if (fromEnv && isExecutable(fromEnv)) return fromEnv;
+  if (spawnSync('ffprobe', ['-version'], { stdio: 'ignore' }).status === 0) return 'ffprobe';
+  const beside = ffmpeg ?? process.env.FFMPEG_PATH;
+  if (!beside) return null;
+  const sibling = path.join(path.dirname(beside), 'ffprobe');
+  return isExecutable(sibling) ? sibling : null;
 }
 
 const VIDEO_INPUT = (fps) => ['-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-'];

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { mkdtempSync, mkdirSync, readdirSync, existsSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -11,6 +11,7 @@ import { launchBrowser, guardNetwork } from '../scripts/lib/browser.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { writeWav } from './helpers/wav.mjs';
 import { sheetTimes } from '../scripts/lib/sheet.mjs';
+import { requireRender } from './helpers/render.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER = path.join(root, 'scripts/render.mjs');
@@ -22,11 +23,6 @@ async function haveBrowser() {
   try { await (await launchBrowser({ quiet: true })).close(); return true; } catch { return false; }
 }
 async function haveFfmpeg() { try { return await findFfmpeg(); } catch { return null; } }
-function ffprobeFor(ff) {
-  const sibling = path.join(path.dirname(ff), 'ffprobe');
-  if (existsSync(sibling)) return sibling;
-  return spawnSync('ffprobe', ['-version'], { stdio: 'ignore' }).status === 0 ? 'ffprobe' : null;
-}
 
 // Share of pixels that differ from the background, decoded in the browser.
 async function nonBackgroundRatio(png) {
@@ -51,9 +47,9 @@ async function nonBackgroundRatio(png) {
 const render = (args, env = {}) => spawnSync(process.execPath, [RENDER, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
 
 test('render q3-revenue at 320x180 / 10 fps, probe it, and the frame is not blank', async (t) => {
-  const ff = await haveFfmpeg();
-  if (!ff || !(await haveBrowser())) return t.skip('browser or ffmpeg unavailable');
-  const probeBin = ffprobeFor(ff);
+  const tools = await requireRender(t);
+  if (!tools) return undefined;
+  const { ffmpeg: ff, ffprobe: probeBin } = tools;
   const dir = tmp('rnd-');
   const out = path.join(dir, 'v.mp4');
   const r = render([EXAMPLE, '--out', out, '--fps', '10', '--size', '320x180']);
@@ -95,8 +91,9 @@ function containerDuration(stderr) {
 }
 
 test('render with two audio tracks muxes one AAC stream and keeps the spec length', async (t) => {
-  const ff = await haveFfmpeg();
-  if (!ff || !(await haveBrowser())) return t.skip('browser or ffmpeg unavailable');
+  const tools = await requireRender(t);
+  if (!tools) return undefined;
+  const ff = tools.ffmpeg;
   const dir = tmp('aud-');
   writeWav(path.join(dir, 'music.wav'), { seconds: 3 });
   writeWav(path.join(dir, 'voice.wav'), { seconds: 1 });
@@ -119,8 +116,9 @@ const meanDb = (ff, file, filters) => {
 };
 
 test('a stereo track listed after a mono one keeps its channels and sample rate, and tracks start where the spec says', async (t) => {
-  const ff = await haveFfmpeg();
-  if (!ff || !(await haveBrowser())) return t.skip('browser or ffmpeg unavailable');
+  const tools = await requireRender(t);
+  if (!tools) return undefined;
+  const ff = tools.ffmpeg;
   const dir = tmp('mix-');
   writeWav(path.join(dir, 'voice.wav'), { seconds: 1, sampleRate: 24000 }); // what voice.mjs writes
   writeWav(path.join(dir, 'music.wav'), { seconds: 3, sampleRate: 44100, channels: 2, leftOnly: true });
@@ -281,8 +279,7 @@ test('ffmpeg dying early: clean non-zero exit, ffmpeg stderr shown, no partial f
 });
 
 test('SIGTERM mid-render exits 143 and leaves no output', async (t) => {
-  const ff = await haveFfmpeg();
-  if (!ff || !(await haveBrowser())) return t.skip('browser or ffmpeg unavailable');
+  if (!(await requireRender(t))) return undefined;
   const dir = tmp('sig-');
   const out = path.join(dir, 'v.mp4');
   const child = spawn(process.execPath, [RENDER, EXAMPLE, '--out', out, '--fps', '60', '--size', '320x180'], { stdio: ['ignore', 'pipe', 'pipe'] });

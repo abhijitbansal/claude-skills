@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 jobs:
   test:
     strategy:
@@ -83,8 +84,15 @@ jobs:
       - name: make-dashboard
         working-directory: plugins/portable-artifacts/skills/make-dashboard
         run: npm ci && npx playwright install --with-deps chromium && npm test
+      - name: install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      # PA_REQUIRE_RENDER=1: a missing browser or ffmpeg fails the render tests instead of skipping them
       - name: make-motion
         working-directory: plugins/portable-artifacts/skills/make-motion
+        env:
+          PA_REQUIRE_RENDER: '1'
         run: npm ci && npx playwright install --with-deps chromium && npm test
       - name: make-diagram
         working-directory: plugins/portable-artifacts/skills/make-diagram
