@@ -17,10 +17,11 @@ const edited = () => ({ result: {
   userModified: false, replaceAll: false,
 } satisfies BuiltinToolResults['Edit'], text: 'edited' })
 
-function world(on: On, capture: () => unknown = () => SNAPSHOT, useMockClock = true) {
+function world(on: On, capture: () => unknown = () => SNAPSHOT, useMockClock = true, isRepo = true) {
   const data = new Map<string, unknown>()
   const seen = new Map<string, unknown>()
   const history = { unavailable: false, failedReads: 0 }
+  const gates: { record?: Promise<void> } = {}
   const calls: { argv: readonly string[]; init?: { timeoutMs?: number } }[] = []
   const clock = useMockClock ? mock.clock(on, { now: 1_000_000 }) : undefined
   on('session.cwd', () => ({ value: ROOT }))
@@ -31,22 +32,38 @@ function world(on: On, capture: () => unknown = () => SNAPSHOT, useMockClock = t
     }
     return { value: data.get(e.key) }
   })
-  on('store.set', (_$, e) => { data.set(e.key, e.value); return { value: undefined } })
+  on('store.set', async (_$, e) => {
+    if (e.key.startsWith('runs:')) await gates.record
+    data.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('store.delete', (_$, e) => { data.delete(e.key); return { value: undefined } })
   on('store.keys', () => ({ value: [...data.keys()] }))
   on('state.set', (_$, e, next) => { seen.set(e.key, e.value); return next(e) })
   on('ui.log', () => ({ value: undefined }))
-  on('process.run', (_$, e) => {
+  on('process.run', async (_$, e) => {
     calls.push(e)
-    return { value: proc(e.argv[0] === 'git' ? `${e.init?.cwd ?? ROOT}\n` : `${JSON.stringify(capture())}\n`) }
+    if (e.argv[0] === 'git' && !isRepo) return { value: { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository\n' } }
+    return { value: proc(e.argv[0] === 'git' ? `${e.init?.cwd ?? ROOT}\n` : `${JSON.stringify(await capture())}\n`) }
   })
   on('prompt.submit', (_$, e) => ({ text: e.text }))
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
     const { Box } = $.ui.resolve(e)
     return <Box />
   })
-  return { data, seen, calls, clock, history }
+  return { data, seen, calls, clock, history, gates }
 }
+
+// Checks after a tool or prompt run in the background, behind a short debounce on the plugin clock.
+const REFRESH_WAIT_MS = 5_000
+const later = (ms = 0) => new Promise<void>(resolve => setTimeout(resolve, ms))
+async function refreshed(w: { clock?: { advance(ms: number): Promise<void> } }) {
+  await w.clock?.advance(REFRESH_WAIT_MS)
+  await later(10)
+}
+// Fails fast instead of hanging when a handler waits on the background check.
+const promptly = <T,>(work: Promise<T>): Promise<T> => Promise.race([work,
+  later(300).then(() => { throw new Error('blocked on a source check') })])
 
 const runs = (seen: Map<string, unknown>) => (seen.get('latest') ?? []) as {
   source?: { before?: unknown; after?: unknown }; sourceCheck?: { status: string }; stale?: boolean
@@ -62,6 +79,7 @@ test('captures before and after the actual command, persists both and preserves 
   const result = await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
   expect(result.text).toBe('1 passed in 0.10s')
   expect(order.slice(0, 3)).toEqual(['capture', 'command', 'capture'])
+  await refreshed(w)
   expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
   expect(runs(w.seen)[0]?.source).toEqual({ before: SNAPSHOT, after: SNAPSHOT })
   const stored = w.data.get(`runs:${ROOT}::pytest -q`) as Record<string, unknown>[]
@@ -72,6 +90,18 @@ test('captures before and after the actual command, persists both and preserves 
   expect(captures.every(c => c.argv[1] === '-I' && c.argv[2] === '-B' && c.init?.timeoutMs === 2000)).toBe(true)
 })
 
+test('a folder that is not a git worktree never attempts a capture and keeps no source evidence', async ($, on) => {
+  const w = world(on, () => ({ version: 1, scope: SNAPSHOT.scope, status: 'unknown', reason: 'git_unavailable' }), true, false)
+  on('tool.call', { tool: 'Bash' }, passed)
+  const result = await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+  expect(result.text).toBe('1 passed in 0.10s')
+  await refreshed(w)
+  expect(w.calls.filter(c => c.argv[0] === 'python3')).toHaveLength(0)
+  expect(runs(w.seen)).toHaveLength(1)
+  expect(runs(w.seen)[0]?.source).toBeUndefined()
+  expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
+})
+
 test('source changes during a run cannot be relabelled matching at a later check', async ($, on) => {
   let current = SNAPSHOT
   const w = world(on, () => current)
@@ -80,8 +110,10 @@ test('source changes during a run cannot be relabelled matching at a later check
     return passed()
   })
   await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
   expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('changed')
   await $.prompt.submit({ text: 'next task' } as never)
+  await refreshed(w)
   expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('changed')
 })
 
@@ -95,9 +127,11 @@ test('an edit invalidates the prior check before executing and refreshes afterwa
     return edited()
   })
   await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
   expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
   const result = await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/app.txt`, old_string: 'a', new_string: 'b' })
   expect(result.text).toBe('edited')
+  await refreshed(w)
   expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('changed')
 })
 
@@ -105,8 +139,11 @@ test('missing interpreter leaves results visible with source unknown and no erro
   const w = world(on, () => { throw new Error('synthetic private diagnostic') })
   on('tool.call', { tool: 'Bash' }, passed)
   await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
   expect(runs(w.seen)).toHaveLength(1)
-  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('unknown')
+  // A collector that never ran says nothing about the source: no check, no line.
+  expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
+  expect(await (await mount($)).find({ type: 'Text', text: /source/ })).toBeUndefined()
   expect(JSON.stringify([...w.data.values()])).not.toContain('private diagnostic')
 })
 
@@ -114,8 +151,9 @@ test('ambiguous shell context does not gain source evidence', async ($, on) => {
   const w = world(on)
   on('tool.call', { tool: 'Bash' }, passed)
   await $.tool.call({ tool: 'Bash', command: 'pytest; cd /other; pytest' })
+  await refreshed(w)
   expect(runs(w.seen)).toHaveLength(1)
-  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('unknown')
+  expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
   expect(w.calls.filter(c => c.argv[0] === 'python3')).toHaveLength(0)
 })
 
@@ -125,13 +163,16 @@ for (const dir of ['tests', '"tests"', '-']) {
     on('tool.call', { tool: 'Bash' }, passed)
     const result = await $.tool.call({ tool: 'Bash', command: `cd ${dir} && pytest` })
     expect(result.text).toBe('1 passed in 0.10s')
-    expect(runs(w.seen)[0]).toMatchObject({ passed: 1, sourceCheck: { status: 'unknown' } })
+    await refreshed(w)
+    expect(runs(w.seen)[0]).toMatchObject({ passed: 1 })
+    expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
     expect(w.calls.filter(c => c.argv[0] === 'python3')).toHaveLength(0)
     await $.prompt.submit({ text: 'next' } as never)
-    expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('unknown')
+    await refreshed(w)
+    expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
     const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt',
       props: { bodyColumns: 40, hasSurvey: false } as never })
-    expect(await ui.find({ text: /source unknown/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /source/ })).toBeUndefined()
     expect(w.calls.filter(c => c.argv[0] === 'python3')).toHaveLength(0)
   })
 }
@@ -141,8 +182,10 @@ test('outside edits are checked at prompt boundaries, not inside render', async 
   const w = world(on, () => current)
   on('tool.call', { tool: 'Bash' }, passed)
   await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
   current = { ...SNAPSHOT, digest: 'e'.repeat(64) }
   await $.prompt.submit({ text: 'next' } as never)
+  await refreshed(w)
   expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('changed')
   const before = w.calls.length
   const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt',
@@ -165,8 +208,11 @@ test('concurrent commands never acquire matching source evidence', async ($, on)
     $.tool.call({ tool: 'Bash', command: 'pytest -q' }),
     $.tool.call({ tool: 'Bash', command: 'swift test' }),
   ])
+  await refreshed(w)
   expect(runs(w.seen)).toHaveLength(2)
-  expect(runs(w.seen).map(r => r.sourceCheck?.status)).toEqual(['unknown', 'unknown'])
+  // Overlap leaves no usable observation: neither run is labelled, so neither draws a line.
+  expect(runs(w.seen).map(r => r.sourceCheck)).toEqual([undefined, undefined])
+  expect(await (await mount($)).find({ type: 'Text', text: /source/ })).toBeUndefined()
 })
 
 test('restored history discards even a persisted matching label until a new check', async ($, on) => {
@@ -182,7 +228,8 @@ test('restored history discards even a persisted matching label until a new chec
   expect(runs(w.seen)).toHaveLength(1)
   expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
   await $.prompt.submit({ text: 'continue' } as never)
-  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('unknown')
+  await refreshed(w)
+  expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
 })
 
 test('reload clears a cached matching check even when history has disappeared', async ($, on) => {
@@ -190,6 +237,7 @@ test('reload clears a cached matching check even when history has disappeared', 
   on('tool.call', { tool: 'Bash' }, passed)
   on('session.start', () => ({ cwd: ROOT }))
   await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
   expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
   w.data.clear()
   const captures = w.calls.length
@@ -204,6 +252,7 @@ test('reload clears cached checks before a failed history read', async ($, on) =
   on('tool.call', { tool: 'Bash' }, passed)
   on('session.start', () => ({ cwd: ROOT }))
   await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
   expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
   w.history.unavailable = true
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true } as never)
@@ -227,8 +276,9 @@ for (const registered of [false, true]) {
       await $.agent.spawn(spawnArgs())
     }
     await $.tool.call({ tool: 'Bash', command: 'pytest', agentId: 'synthetic-agent' } as never)
+    await refreshed(w)
     expect(runs(w.seen)).toHaveLength(1)
-    expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('unknown')
+    expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
     expect(w.calls.filter(c => c.argv[0] === 'python3')).toHaveLength(0)
   })
 }
@@ -241,6 +291,7 @@ test('an explicitly located agent captures its own worktree, not the main loop w
   on('agent.spawn', () => ({ model: 'sonnet', agentId: 'synthetic-agent' }))
   await $.agent.spawn(spawnArgs(root))
   await $.tool.call({ tool: 'Bash', command: 'pytest', agentId: 'synthetic-agent' } as never)
+  await refreshed(w)
   expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
   expect(runs(w.seen)[0]?.source).toEqual({ before: snapshot, after: snapshot })
   const captures = w.calls.filter(c => c.argv[0] === 'python3')
@@ -263,7 +314,7 @@ test('a denied call and a background command cannot mint source evidence', async
 
 test('a tool starting during the final check timestamp prevents a matching label', async ($, on) => {
   let captures = 0
-  const w = world(on, () => { captures += 1; return SNAPSHOT }, false)
+  const w = world(on, () => { captures += 1; return SNAPSHOT })
   let began = false
   let releaseEdit!: () => void
   let editStarted!: () => void
@@ -276,21 +327,216 @@ test('a tool starting during the final check timestamp prevents a matching label
     await held
     return edited()
   })
-  on('clock.after', () => new Promise(() => {}))
-  on('clock.now', async () => {
-    if (captures === 3 && !began) {
+  on('state.get', async (_$, e, next) => {
+    // The third capture is the background check's; its next read of latest is the labelling write.
+    if (e.key === 'latest' && captures === 3 && !began) {
       began = true
       pending = $.tool.call({ tool: 'Edit', file_path: `${ROOT}/app.txt`, old_string: 'a', new_string: 'b' })
       await started
     }
-    return { value: 1_000_000 }
+    return next(e)
   })
   try {
     await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    await refreshed(w)
     expect(began).toBe(true)
     expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
   } finally {
     releaseEdit()
     await pending
   }
+})
+
+test('a check that began before a run was recorded cannot label that run', async ($, on) => {
+  let current = SNAPSHOT
+  let holdCapture: Promise<void> | undefined
+  const w = world(on, async () => {
+    const observed = current
+    await holdCapture
+    return observed
+  })
+  let releaseRecord!: () => void
+  let releaseCapture!: () => void
+  on('tool.call', { tool: 'Bash' }, passed)
+  on('tool.call', { tool: 'Edit' }, edited)
+  await $.tool.call({ tool: 'Bash', command: 'pytest -q a' })
+  await refreshed(w)
+  // The edit leaves a check pending; the next run ends but is still being recorded when it fires.
+  await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/app.txt`, old_string: 'a', new_string: 'b' })
+  const changed = { ...SNAPSHOT, digest: 'c'.repeat(64) }
+  current = changed
+  w.gates.record = new Promise<void>(resolve => { releaseRecord = resolve })
+  const second = $.tool.call({ tool: 'Bash', command: 'pytest -q b' })
+  await later(20)
+  current = SNAPSHOT
+  holdCapture = new Promise<void>(resolve => { releaseCapture = resolve })
+  void w.clock?.advance(REFRESH_WAIT_MS)
+  await later(20)
+  releaseRecord()
+  await second
+  releaseCapture()
+  await later(20)
+  expect(runs(w.seen)[0]).toMatchObject({ suite: 'pytest -q b' })
+  expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
+  current = changed
+  holdCapture = undefined
+  await refreshed(w)
+  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+})
+
+const mount = ($: Parameters<Parameters<typeof test>[1]>[0]) => $.ui.mount({
+  plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt',
+  props: { bodyColumns: 80, hasSurvey: false } as never })
+
+test('a slow source check never holds up a tool call', async ($, on) => {
+  let isHanging = false
+  const w = world(on, () => isHanging ? new Promise(() => {}) : SNAPSHOT)
+  on('tool.call', { tool: 'Bash' }, passed)
+  on('tool.call', { tool: 'Edit' }, edited)
+  await promptly($.tool.call({ tool: 'Bash', command: 'pytest' }))
+  isHanging = true
+  const result = await promptly($.tool.call({ tool: 'Edit', file_path: `${ROOT}/app.txt`, old_string: 'a', new_string: 'b' }))
+  expect(result.text).toBe('edited')
+  void w.clock?.advance(REFRESH_WAIT_MS)
+  await promptly($.tool.call({ tool: 'Edit', file_path: `${ROOT}/app.txt`, old_string: 'b', new_string: 'c' }))
+})
+
+test('a slow source check never holds up the next prompt', async ($, on) => {
+  let isHanging = false
+  const w = world(on, () => isHanging ? new Promise(() => {}) : SNAPSHOT)
+  on('tool.call', { tool: 'Bash' }, passed)
+  await promptly($.tool.call({ tool: 'Bash', command: 'pytest' }))
+  isHanging = true
+  await promptly($.prompt.submit({ text: 'next' } as never))
+  void w.clock?.advance(REFRESH_WAIT_MS)
+  await later(10)
+  await promptly($.prompt.submit({ text: 'and again' } as never))
+})
+
+test('a burst of edits is covered by one background check', async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: 'Bash' }, passed)
+  on('tool.call', { tool: 'Edit' }, edited)
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
+  const captures = () => w.calls.filter(c => c.argv[0] === 'python3').length
+  const settled = captures()
+  for (let i = 0; i < 5; i += 1) await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/app.txt`, old_string: 'a', new_string: 'b' })
+  expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
+  await refreshed(w)
+  expect(captures() - settled).toBe(1)
+  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+})
+
+// Harness tools that cannot touch the worktree. A subagent's own tool calls reach tool.call with its agentId,
+// so skipping the Agent call itself loses nothing.
+const HARNESS_TOOLS = ['Agent', 'Task', 'Skill', 'ToolSearch', 'AskUserQuestion', 'TaskOutput', 'BashOutput',
+  'ExitPlanMode', 'EnterPlanMode'] as const
+
+for (const tool of ['Read', 'Grep', 'Glob', ...HARNESS_TOOLS] as const) {
+  test(`${tool} cannot change source, so it neither clears nor re-runs the check`, async ($, on) => {
+    const w = world(on)
+    let during: unknown = 'not run'
+    on('tool.call', { tool: 'Bash' }, passed)
+    on('tool.call', { tool }, () => {
+      during = runs(w.seen)[0]?.sourceCheck
+      return { result: {}, text: 'read' } as never
+    })
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    await refreshed(w)
+    expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+    const captures = w.calls.length
+    await $.tool.call({ tool, file_path: `${ROOT}/app.txt`, pattern: 'a' } as never)
+    expect(during).toMatchObject({ status: 'matching' })
+    await refreshed(w)
+    expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+    expect(w.calls.length).toBe(captures)
+  })
+}
+
+test('a read-only tool overlapping a test does not spoil its source evidence', async ($, on) => {
+  const w = world(on)
+  let release!: () => void
+  const held = new Promise<void>(resolve => { release = resolve })
+  on('tool.call', { tool: 'Bash' }, async () => { await held; return passed() })
+  on('tool.call', { tool: 'Read' }, () => ({ result: {}, text: 'read' }) as never)
+  const test = $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await $.tool.call({ tool: 'Read', file_path: `${ROOT}/app.txt` } as never)
+  release()
+  await test
+  await refreshed(w)
+  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+  expect(runs(w.seen)[0]?.source).toEqual({ before: SNAPSHOT, after: SNAPSHOT })
+})
+
+test('a band shows one source line, under the newest run whose capture was attempted', async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: 'Bash' }, (_$, e) => ({ result: {
+    stdout: e.command === 'swift test' ? 'Executed 2 tests, with 0 failures (0 unexpected) in 0.1 (0.1) seconds' : '1 passed in 0.10s',
+    stderr: '', interrupted: false } satisfies BuiltinToolResults['Bash'],
+  text: e.command === 'swift test' ? 'Executed 2 tests, with 0 failures (0 unexpected) in 0.1 (0.1) seconds' : '1 passed in 0.10s' }))
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await $.tool.call({ tool: 'Bash', command: 'swift test' })
+  await $.tool.call({ tool: 'Bash', command: 'cd tests && pytest -q' })
+  await refreshed(w)
+  expect(runs(w.seen)).toHaveLength(3)
+  const ui = await mount($)
+  expect(await ui.findAll({ type: 'Text', text: /source / })).toHaveLength(1)
+  expect(await ui.find({ type: 'Text', text: /source matching at last check/ })).toBeDefined()
+})
+
+test('a capture the collector reported unknown still draws its line', async ($, on) => {
+  const w = world(on, () => ({ version: 1, scope: SNAPSHOT.scope, status: 'unknown', reason: 'byte_limit' }))
+  on('tool.call', { tool: 'Bash' }, passed)
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
+  const ui = await mount($)
+  expect(await ui.find({ type: 'Text', text: /source unknown at last check/ })).toBeDefined()
+})
+
+test('a capture that produced no report draws no line, nor does a restored run', async ($, on) => {
+  const w = world(on, () => { throw new Error('synthetic missing interpreter') })
+  on('tool.call', { tool: 'Bash' }, passed)
+  on('session.start', () => ({ cwd: ROOT }))
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
+  expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
+  expect(await (await mount($)).find({ type: 'Text', text: /source/ })).toBeUndefined()
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true } as never)
+  await $.prompt.submit({ text: 'continue' } as never)
+  await refreshed(w)
+  expect(runs(w.seen)[0]?.stale).toBe(true)
+  expect(await (await mount($)).find({ type: 'Text', text: /source/ })).toBeUndefined()
+})
+
+test('unknown and mcp tools still invalidate the check', async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: 'Bash' }, passed)
+  const others = ['mcp__synthetic__write', 'SomeNewTool']
+  for (const tool of others) on('tool.call', { tool } as never, () => ({ result: {}, text: 'ok' }) as never)
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
+  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+  for (const tool of others) {
+    await $.tool.call({ tool, file_path: `${ROOT}/app.txt` } as never)
+    expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
+    await refreshed(w)
+    expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+  }
+})
+
+test('a run whose capture never ran keeps its original check time through later refreshes', async ($, on) => {
+  const w = world(on, () => ({ version: 1, scope: SNAPSHOT.scope, status: 'unknown', reason: 'byte_limit' }))
+  on('tool.call', { tool: 'Bash' }, passed)
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
+  const first = runs(w.seen)[0] as { at: number; sourceCheck?: { at: number; status: string } }
+  expect(first.sourceCheck?.status).toBe('unknown')
+  const captures = () => w.calls.filter(c => c.argv[0] === 'python3').length
+  const settled = captures()
+  await $.prompt.submit({ text: 'next task' } as never)
+  await refreshed(w)
+  const second = runs(w.seen)[0] as { at: number; sourceCheck?: { at: number; status: string } }
+  expect(captures()).toBe(settled)
+  expect(second.sourceCheck?.at).toBe(second.at)
 })

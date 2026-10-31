@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { compareSourceSnapshots, parseSourceCapture, sourceMatchForRun, sourceCwd } from '../hooks/source-freshness'
+import { MAX_SOURCE_BYTES, compareSourceSnapshots, hasSourceReport, parseSourceCapture, sourceMatchForRun, sourceCwd, unknownSource } from '../hooks/source-freshness'
 
 const snapshot = {
   version: 1, scope: 'git-tracked+untracked-nonignored', status: 'available', root: '/synthetic',
@@ -92,4 +92,24 @@ test('line breaks in a cd prefix cannot be consumed as shell whitespace', () => 
     'cd\r/other && pytest', 'cd /other &&\npytest']) {
     expect(sourceCwd(command, '/repo')).toBeUndefined()
   }
+})
+
+test('only an attempted capture that said something earns a source line', () => {
+  const reported = unknownSource('byte_limit')
+  expect(hasSourceReport({ before: snapshot, after: snapshot })).toBe(true)
+  expect(hasSourceReport({ before: reported, after: reported })).toBe(true)
+  expect(hasSourceReport({ before: unknownSource('invalid_capture'), after: reported })).toBe(true)
+  for (const source of [undefined, null, {}, 'x', { before: unknownSource(), after: unknownSource() },
+    { before: unknownSource('invalid_capture'), after: unknownSource('invalid_capture') }]) {
+    expect(hasSourceReport(source)).toBe(false)
+  }
+})
+
+test('a capture up to the collector byte cap is accepted and anything above it is not', () => {
+  const MIB = 1024 * 1024
+  expect(MAX_SOURCE_BYTES).toBe(32 * MIB)
+  for (const bytes of [16 * MIB + 1, 20 * MIB, 32 * MIB]) {
+    expect(parseSourceCapture(captured({ ...snapshot, bytes }))).toEqual({ ...snapshot, bytes })
+  }
+  expect(parseSourceCapture(captured({ ...snapshot, bytes: 32 * MIB + 1 }))).toMatchObject({ status: 'unknown', reason: 'invalid_capture' })
 })

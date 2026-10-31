@@ -1,14 +1,17 @@
 """Bounded, read-only source identity. No source payloads leave this process.
 
 Invoked with python3 -I -B by the hook host, which also enforces an outer timeout.
-Two matching scans are an observation, not an atomic snapshot or attestation.
+One hashing pass bracketed by two cheap listings is an observation, not an atomic
+snapshot or attestation.
 """
 
+import errno
 import hashlib
 import json
 import os
 import re
 import selectors
+import shutil
 import signal
 import stat
 import subprocess
@@ -19,6 +22,7 @@ import time
 VERSION = 1
 SCOPE = "git-tracked+untracked-nonignored"
 OID = re.compile(rb"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
+REAP_TIMEOUT_S = 2  # a SIGKILLed child exits at once; this only bounds a pathological one
 GIT_ENV = {"PATH": os.defpath, "LC_ALL": "C", "GIT_CONFIG_NOSYSTEM": "1",
            "GIT_CONFIG_GLOBAL": os.devnull, "GIT_OPTIONAL_LOCKS": "0"}
 
@@ -29,6 +33,8 @@ class Unknown(Exception):
 
 class Budget:
     def __init__(self, max_files, max_bytes, max_file_bytes, max_git_bytes, timeout_s):
+        self.git = None      # absolute path, resolved once per capture
+        self.config = []     # extra `-c` arguments, e.g. the global excludes file
         self.max_files = max_files
         self.bytes_left = max_bytes
         self.max_file_bytes = max_file_bytes
@@ -42,14 +48,73 @@ class Budget:
         return remaining
 
 
-def git_bytes(root, args, budget, *, allow_empty=False, input_bytes=None):
+def resolve_git():
+    """Find git on the caller's PATH, but only run it by absolute path."""
+    found = shutil.which("git", path=os.environ.get("PATH") or os.defpath)
+    if found is None or not os.path.isabs(found):
+        raise Unknown("git_unavailable")
+    return found
+
+
+def usable_excludes(path):
+    """Only a regular file (or a link to one) is handed to git: a FIFO or device would stall it."""
+    try:
+        return stat.S_ISREG(os.stat(path).st_mode)
+    except (OSError, ValueError):
+        return False
+
+
+def global_excludes(root, budget):
+    """Global config stays disabled; only the user's excludes file is read back from it.
+
+    A repo-local core.excludesFile wins in git itself, so nothing is injected over it.
+    """
+    if git_bytes(root, ["config", "--get", "core.excludesFile"], budget, allow_empty=True) is not None:
+        return []
+    env = {key: value for key, value in GIT_ENV.items() if key != "GIT_CONFIG_GLOBAL"}
+    env.update({key: os.environ[key] for key in ("HOME", "XDG_CONFIG_HOME") if os.environ.get(key)})
+    try:
+        configured = git_bytes(root, ["config", "--global", "--type=path", "--get", "core.excludesFile"],
+                               budget, allow_empty=True, env=env)
+    except Unknown as error:
+        if str(error) != "git_unavailable":
+            raise
+        configured = None  # unreadable global config: fall back to the default location
+    path = os.fsdecode(configured.rstrip(b"\n")) if configured else None
+    if path is None or not os.path.isabs(path) or "\0" in path:
+        base = os.environ.get("XDG_CONFIG_HOME") or (
+            os.path.join(os.environ["HOME"], ".config") if os.environ.get("HOME") else None)
+        path = os.path.join(base, "git", "ignore") if base and os.path.isabs(base) else None
+    return ["-c", f"core.excludesFile={path}"] if path is not None and usable_excludes(path) else []
+
+
+def reap(proc):
+    """Kill and collect a child without the one-shot deadline alarm interrupting the cleanup.
+
+    Every caller is about to fail the whole capture, so disarming the alarm costs nothing.
+    A late alarm that lands before the disarm raises Unknown once; the retry then runs clean.
+    """
+    while True:
+        try:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait(timeout=REAP_TIMEOUT_S)
+            return
+        except Unknown:
+            continue
+        except subprocess.TimeoutExpired:
+            return
+
+
+def git_bytes(root, args, budget, *, allow_empty=False, input_bytes=None, env=GIT_ENV):
     """Bound both pipes while reading, not after an unbounded communicate()."""
-    argv = ["git", "--no-optional-locks", "-c", "core.hooksPath=/dev/null",
-            "-c", "core.fsmonitor=false", *args]
+    argv = [budget.git, "--no-optional-locks", "-c", "core.hooksPath=/dev/null",
+            "-c", "core.fsmonitor=false", *budget.config, *args]
     budget.remaining()
     if input_bytes is not None and len(input_bytes) > budget.max_git_bytes:
         raise Unknown("git_output_limit")
-    with subprocess.Popen(argv, cwd=root, env=GIT_ENV,
+    with subprocess.Popen(argv, cwd=root, env=env,
                           stdin=subprocess.PIPE if input_bytes else subprocess.DEVNULL,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
         try:
@@ -84,8 +149,8 @@ def git_bytes(root, args, budget, *, allow_empty=False, input_bytes=None):
                 raise Unknown("git_unavailable")
             return bytes(data["stdout"])
         finally:
-            if proc.poll() is None:
-                proc.kill()
+            if proc.returncode is None:
+                reap(proc)
 
 
 def records(raw):
@@ -124,46 +189,84 @@ def identity(info):
             info.st_mtime_ns, info.st_ctime_ns)
 
 
+def open_dir(root_fd, path):
+    """Open a directory below root_fd component by component, never through a symlink."""
+    directory = os.dup(root_fd)
+    try:
+        for part in path.split(b"/") if path else []:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+            os.close(directory)
+            directory = child
+    except BaseException:
+        os.close(directory)
+        raise
+    return directory
+
+
 def check_scope(root, root_fd, entries, budget):
-    """Git omits special nodes. Check nonignored directories without following links."""
+    """Git omits special nodes, so look for them without following links.
+
+    Returns the lstat identity of every listed file. Directories holding listed
+    files are always entered; any other directory costs one ignore query shared
+    by its whole tree level, so git runs per level, not per directory.
+    """
+    holding = {b""}
+    for path in entries:
+        parent = path.rpartition(b"/")[0]
+        while parent and parent not in holding:
+            holding.add(parent)
+            parent = parent.rpartition(b"/")[0]
+    stats = {}
     visited = 0
-
-    def walk(directory, prefix, depth=0):
-        nonlocal visited
-        if depth > 64 or len(prefix) > 4096:
+    level = [b""]
+    depth = 0
+    while level:
+        if depth > 64:
             raise Unknown("unsupported_path")
-        paths = {}
-        with os.scandir(directory) as children:
-            for child in children:
-                budget.remaining()
-                name = os.fsencode(child.name)
-                if not prefix and name == b".git":
+        descend, candidates = [], {}
+        for directory in level:
+            if len(directory) > 4096:
+                raise Unknown("unsupported_path")
+            directory_fd = open_dir(root_fd, directory)
+            try:
+                with os.scandir(directory_fd) as children:
+                    for child in children:
+                        budget.remaining()
+                        name = os.fsencode(child.name)
+                        if name == b".git":
+                            if directory:
+                                raise Unknown("unsupported_file")  # nested repository
+                            continue
+                        visited += 1
+                        if visited > budget.max_files:
+                            raise Unknown("file_limit")
+                        path = directory + b"/" + name if directory else name
+                        info = child.stat(follow_symlinks=False)
+                        if path in entries:
+                            if not stat.S_ISREG(info.st_mode):
+                                raise Unknown("unsupported_file")
+                            stats[path] = identity(info)
+                        elif path in holding and stat.S_ISDIR(info.st_mode):
+                            descend.append(path)
+                        elif not stat.S_ISREG(info.st_mode):
+                            candidates[path] = info  # a regular file git omits is ignored
+            finally:
+                os.close(directory_fd)
+        if candidates:
+            ignored = set(records(git_bytes(root, ["check-ignore", "--stdin", "-z"], budget,
+                                            allow_empty=True,
+                                            input_bytes=b"\0".join(candidates) + b"\0") or b""))
+            if not ignored.issubset(candidates):
+                raise Unknown("invalid_listing")
+            for path, info in candidates.items():
+                if path in ignored:
                     continue
-                visited += 1
-                if visited > budget.max_files:
-                    raise Unknown("file_limit")
-                paths[prefix + name] = (name, child.stat(follow_symlinks=False))
-        if not paths:
-            return
-        ignored = set(records(git_bytes(root, ["check-ignore", "--stdin", "-z"], budget,
-                                        allow_empty=True, input_bytes=b"\0".join(paths) + b"\0") or b""))
-        if not ignored.issubset(paths):
-            raise Unknown("invalid_listing")
-        for path, (name, info) in paths.items():
-            if path in ignored:
-                continue
-            if stat.S_ISDIR(info.st_mode):
-                child_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
-                try:
-                    walk(child_fd, path + b"/", depth + 1)
-                finally:
-                    os.close(child_fd)
-            elif not stat.S_ISREG(info.st_mode):
-                raise Unknown("unsupported_file")
-            elif path not in entries:
-                raise Unknown("changed_during_capture")
-
-    walk(root_fd, b"")
+                if not stat.S_ISDIR(info.st_mode):
+                    raise Unknown("unsupported_file")
+                descend.append(path)
+        level = descend
+        depth += 1
+    return stats
 
 
 def read_file(root_fd, path, tracked, budget):
@@ -171,13 +274,10 @@ def read_file(root_fd, path, tracked, budget):
     parts = path.split(b"/")
     if len(path) > 4096 or any(part in (b"", b".", b"..", b".git") for part in parts):
         raise Unknown("unsupported_path")
-    directory = os.dup(root_fd)
+    directory = None
     file_fd = None
     try:
-        for part in parts[:-1]:
-            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
-            os.close(directory)
-            directory = child
+        directory = open_dir(root_fd, b"/".join(parts[:-1]))
         # NONBLOCK prevents a replaced file/FIFO from stalling before fstat.
         file_fd = os.open(parts[-1], os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=directory)
         before = os.fstat(file_fd)
@@ -201,20 +301,32 @@ def read_file(root_fd, path, tracked, budget):
         named = os.stat(parts[-1], dir_fd=directory, follow_symlinks=False)
         if identity(before) != identity(after) or identity(after) != identity(named) or size != before.st_size:
             raise Unknown("changed_during_capture")
-        return f"file:{before.st_mode & 0o111}:{size}:{digest.hexdigest()}".encode(), size
+        value = f"file:{before.st_mode & 0o111}:{size}:{digest.hexdigest()}".encode()
+        return value, size, identity(named)
     except FileNotFoundError:
         if tracked and file_fd is None:
-            return b"deleted", 0
+            return b"deleted", 0, None
         raise Unknown("changed_during_capture") from None
+    except OSError as error:
+        if error.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise Unknown("unsupported_file") from None  # a link or non-directory replaced a component
+        raise
     finally:
         if file_fd is not None:
             os.close(file_fd)
-        os.close(directory)
+        if directory is not None:
+            os.close(directory)
+
+
+def observe(root, root_fd, budget):
+    """Cheap listing of the in-scope tree: git state plus each file's lstat identity."""
+    head, branch, tracked, untracked, entries = inventory(root, budget)
+    return (head, branch, tracked, untracked), entries, check_scope(root, root_fd, entries, budget)
 
 
 def scan(root, root_fd, budget):
-    head, branch, tracked, untracked, entries = inventory(root, budget)
-    check_scope(root, root_fd, entries, budget)
+    listing, entries, stats = observe(root, root_fd, budget)
+    head, branch, tracked, untracked = listing
     digest = hashlib.sha256()
 
     def add(value):
@@ -226,13 +338,16 @@ def scan(root, root_fd, budget):
     add(untracked)
     size = 0
     for path, is_tracked in sorted(entries.items()):
-        value, length = read_file(root_fd, path, is_tracked, budget)
+        value, length, seen = read_file(root_fd, path, is_tracked, budget)
+        if seen != stats.get(path):
+            raise Unknown("changed_during_capture")
         add(path)
         add(value)
         size += length
-    return {"head": head.decode("ascii"),
-            "branch": branch.decode("utf-8").rstrip("\n") if branch is not None else None,
-            "digest": digest.hexdigest(), "files": len(entries), "bytes": size}
+    summary = {"head": head.decode("ascii"),
+               "branch": branch.decode("utf-8").rstrip("\n") if branch is not None else None,
+               "digest": digest.hexdigest(), "files": len(entries), "bytes": size}
+    return summary, (listing, stats)
 
 
 def capture(root, *, max_files=4096, max_bytes=32 * 1024 * 1024,
@@ -240,7 +355,8 @@ def capture(root, *, max_files=4096, max_bytes=32 * 1024 * 1024,
             timeout_s=1.5):
     """Return a complete identity or unknown; never return a partial digest.
 
-The byte budget covers both scans. Only this disposable subprocess installs an
+Contents are hashed once; a second listing then rechecks git state, the directory
+walk and every file's lstat identity. Only this disposable subprocess installs an
 alarm; the hook host must additionally bound process startup and shutdown.
 """
     base = {"version": VERSION, "scope": SCOPE}
@@ -260,19 +376,21 @@ alarm; the hook host must additionally bound process startup and shutdown.
         signal.signal(signal.SIGALRM, deadline)
         signal.setitimer(signal.ITIMER_REAL, timeout_s)
         budget = Budget(max_files, max_bytes, max_file_bytes, max_git_bytes, timeout_s)
+        budget.git = resolve_git()
         root = os.path.realpath(root)
         top = git_bytes(root, ["rev-parse", "--show-toplevel"], budget).rstrip(b"\n")
         if os.fsencode(root) != top:
             raise Unknown("not_worktree_root")
         root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         original = os.fstat(root_fd)
-        first = scan(root, root_fd, budget)
-        second = scan(root, root_fd, budget)
+        budget.config = global_excludes(root, budget)
+        summary, watched = scan(root, root_fd, budget)
+        listing, _, stats = observe(root, root_fd, budget)
         current = os.stat(root, follow_symlinks=False)
-        if first != second or (original.st_dev, original.st_ino) != (current.st_dev, current.st_ino):
+        if watched != (listing, stats) or (original.st_dev, original.st_ino) != (current.st_dev, current.st_ino):
             raise Unknown("changed_during_capture")
         budget.remaining()
-        return {**base, "status": "available", "root": root, **second}
+        return {**base, "status": "available", "root": root, **summary}
     except Unknown as error:
         return {**base, "status": "unknown", "reason": str(error)}
     except (OSError, ValueError, subprocess.SubprocessError):

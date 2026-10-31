@@ -8,7 +8,7 @@ import {
 } from './history'
 import { parseTestOutput } from './parse'
 import { resolveDir, splitCommand, suiteKey, suiteLabel } from './suite'
-import { parseSourceCapture, sourceCwd, sourceMatchForRun, sourceRoot, unknownSource } from './source-freshness'
+import { hasSourceReport, parseSourceCapture, sourceCwd, sourceMatchForRun, sourceRoot, unknownSource } from './source-freshness'
 
 const latest = atom({ plugin: 'test-board', key: 'latest' } as const, [] as TestRun[])
 const expanded = atom({ plugin: 'test-board', key: 'expanded' } as const, false)
@@ -55,25 +55,38 @@ function commandEvidence(ran: Ran): Pick<TestRun, 'exitCode' | 'commandStatus' |
   }
 }
 
-type Roots = Map<string, string>
+// Tools that cannot change the worktree: they neither clear the source check nor contend with a run.
+// A deny-list on purpose: unknown and mcp__* tools still invalidate. Agent/Task only spawn a subagent whose own
+// tool calls reach this same hook (with its agentId), so skipping the spawning call itself loses nothing.
+const READ_ONLY_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LS', 'NotebookRead', 'WebFetch', 'WebSearch', 'TodoWrite',
+  'Agent', 'Task', 'Skill', 'ToolSearch', 'AskUserQuestion', 'TaskOutput', 'BashOutput', 'ExitPlanMode', 'EnterPlanMode'])
+// Quiet time before a background source check, so a burst of edits costs one check.
+const REFRESH_DELAY_MS = 500
+
+// `isRepo` is false when git could not name a worktree: the cwd then keys history but is never captured.
+type WorktreeRoot = { root: string; isRepo: boolean }
+type Roots = Map<string, WorktreeRoot>
 type Loops = Map<string, Loop>
+type Refresh = { timer?: Timer; isRunning: boolean; isQueued: boolean }
 type State = {
   loops: Loops; roots: Roots; turn: { isNew: boolean }; chain: Promise<void>; expiry?: Timer
-  activeTools: number; activity: number
+  activeTools: number; activity: number; refresh: Refresh
 }
 
-async function worktreeRoot($: EngineInterface, roots: Roots, cwd: string): Promise<string> {
+async function worktreeRoot($: EngineInterface, roots: Roots, cwd: string): Promise<WorktreeRoot> {
   const cached = roots.get(cwd)
   if (cached !== undefined) return cached
-  let root = cwd
+  let found: WorktreeRoot = { root: cwd, isRepo: false }
   try {
     const out = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd, timeoutMs: 1000 })
-    if (out.exitCode === 0 && out.stderr === '' && /^\/[^\0\r\n]{0,4095}\n$/.test(out.stdout)) root = out.stdout.slice(0, -1)
+    if (out.exitCode === 0 && out.stderr === '' && /^\/[^\0\r\n]{0,4095}\n$/.test(out.stdout)) {
+      found = { root: out.stdout.slice(0, -1), isRepo: true }
+    }
   } catch {
     // not a repo, or git missing: the cwd stands in for the worktree
   }
-  roots.set(cwd, root)
-  return root
+  roots.set(cwd, found)
+  return found
 }
 
 async function captureSource($: EngineInterface, root: string): Promise<SourceSnapshot> {
@@ -94,11 +107,14 @@ async function invalidateSource($: EngineInterface): Promise<void> {
   }
 }
 
+// A run is compared again only if a capture was attempted for it and said something; restored runs never are.
+const isCheckable = (run: TestRun): boolean => run.stale !== true && hasSourceReport(run.source)
+
 // Called only on events, never during rendering. At most three visible worktrees.
 async function refreshSource($: EngineInterface, state: State): Promise<void> {
   if (state.activeTools !== 0) return
   const activity = state.activity
-  const held = visibleRuns(await read($, latest), await $.clock.now())
+  const held = visibleRuns(await read($, latest), await $.clock.now()).filter(isCheckable)
   const snapshots = new Map<string, SourceSnapshot>()
   for (const run of held.slice(0, MAX_LATEST)) {
     const root = sourceRoot(run.source)
@@ -108,11 +124,48 @@ async function refreshSource($: EngineInterface, state: State): Promise<void> {
   const at = await $.clock.now()
   if (held.length > 0) await update($, latest, list => {
     if (state.activeTools !== 0 || state.activity !== activity) return list
-    return list.map(run => ({
-      ...run, sourceCheck: { at, status: sourceMatchForRun(run.source, snapshots.get(sourceRoot(run.source) ?? '')) },
-    }))
+    return list.map(run => {
+      if (!isCheckable(run)) return run
+      const root = sourceRoot(run.source)
+      const snapshot = root === undefined ? undefined : snapshots.get(root)
+      // `at` is when a capture last ran for this run: a run with nothing to recapture keeps the time of its own.
+      return { ...run, sourceCheck: { at: snapshot === undefined ? run.at : at, status: sourceMatchForRun(run.source, snapshot) } }
+    })
   })
   if (state.activeTools !== 0 || state.activity !== activity) await invalidateSource($)
+}
+
+// Checks stay off the critical path: no tool call or prompt awaits one. One timer covers a burst of
+// events, and an event during a running check queues exactly one more, so at most one is in flight.
+function scheduleRefresh($: EngineInterface, state: State): void {
+  const { refresh } = state
+  if (refresh.isRunning) {
+    refresh.isQueued = true
+    return
+  }
+  if (refresh.timer !== undefined) return
+  try {
+    refresh.timer = $.clock.after(REFRESH_DELAY_MS, () => runRefresh($, state))
+  } catch {
+    $.ui.log('test-board: source check unavailable')
+  }
+}
+
+async function runRefresh($: EngineInterface, state: State): Promise<void> {
+  const { refresh } = state
+  refresh.timer = undefined
+  refresh.isRunning = true
+  try {
+    await refreshSource($, state)
+  } catch {
+    $.ui.log('test-board: source check unavailable')
+  } finally {
+    refresh.isRunning = false
+    if (refresh.isQueued) {
+      refresh.isQueued = false
+      scheduleRefresh($, state)
+    }
+  }
 }
 
 async function writeRuns($: EngineInterface, key: string, runs: TestRun[], index: string[], drop: string[]) {
@@ -218,7 +271,7 @@ async function record(
   const loop = call.agentId === undefined ? undefined : state.loops.get(call.agentId)
   const base = loop?.cwd ?? call.startCwd
   const cwd = parts.cdDir === undefined ? base : resolveDir(base, parts.cdDir)
-  const root = await worktreeRoot($, state.roots, cwd)
+  const { root } = await worktreeRoot($, state.roots, cwd)
   const via = call.agentId === undefined ? undefined : loop === undefined || loop.isWorkflow ? 'workflow' : loop.description
   const run: TestRun = {
     ...parsed,
@@ -233,16 +286,23 @@ async function record(
   state.turn.isNew = false
   // A run after ✕ starts the band afresh: the rows the person closed stay closed.
   const wasDismissed = (await read($, dismissed)) !== null
-  await update($, latest, list =>
-    [run, ...(isFresh || wasDismissed ? [] : list.filter(r => r.key !== run.key && r.stale !== true))].slice(0, MAX_LATEST))
+  await update($, latest, list => {
+    // A check already in flight predates this run and must not label it.
+    state.activity += 1
+    return [run, ...(isFresh || wasDismissed ? [] : list.filter(r => r.key !== run.key && r.stale !== true))].slice(0, MAX_LATEST)
+  })
   if (wasDismissed) await update($, dismissed, () => null)
   await armExpiry($, state)
 }
 
 export const register: Register = on => {
-  const state: State = { loops: new Map(), roots: new Map(), turn: { isNew: true }, chain: Promise.resolve(), activeTools: 0, activity: 0 }
+  const state: State = {
+    loops: new Map(), roots: new Map(), turn: { isNew: true }, chain: Promise.resolve(), activeTools: 0, activity: 0,
+    refresh: { isRunning: false, isQueued: false },
+  }
 
   on('tool.call', async ($, e, next) => {
+    if (READ_ONLY_TOOLS.has(e.tool)) return next(e)
     const activity = ++state.activity
     state.activeTools += 1
     let startCwd: string | undefined
@@ -263,8 +323,12 @@ export const register: Register = on => {
           const base = e.agentId === undefined ? startCwd : state.loops.get(e.agentId)?.cwd
           const cwd = base === undefined ? undefined : sourceCwd(e.command, base)
           if (cwd !== undefined && state.activeTools === 1) {
-            root = await worktreeRoot($, state.roots, cwd)
-            before = await captureSource($, root)
+            const located = await worktreeRoot($, state.roots, cwd)
+            // Outside a git worktree no capture is attempted, so the band draws no source line.
+            if (located.isRepo) {
+              root = located.root
+              before = await captureSource($, root)
+            }
           }
         } catch {
           // Observation failure must not deny, modify or retry the tool call.
@@ -280,15 +344,15 @@ export const register: Register = on => {
       return result
     } finally {
       state.activeTools -= 1
-      // Serialize history writes and checks; overlapping tool runs cannot earn matching evidence.
-      const call = e.tool === 'Bash' && startCwd !== undefined
-        ? { command: e.command, agentId: e.agentId, startCwd } : undefined
-      const outcome = ran
-      state.chain = state.chain.then(async () => {
-        if (call !== undefined && outcome !== undefined) await record($, state, call, outcome, source)
-        await refreshSource($, state)
-      }).catch(() => { $.ui.log('test-board: results or source check unavailable') })
-      await state.chain
+      if (e.tool === 'Bash' && startCwd !== undefined && ran !== undefined) {
+        const call = { command: e.command, agentId: e.agentId, startCwd }
+        const [outcome, evidence] = [ran, source]
+        // Serialize history writes; overlapping tool runs cannot earn matching evidence.
+        state.chain = state.chain.then(() => record($, state, call, outcome, evidence))
+          .catch(() => { $.ui.log('test-board: results unavailable') })
+        await state.chain
+      }
+      scheduleRefresh($, state)
     }
   })
 
@@ -308,11 +372,7 @@ export const register: Register = on => {
     // A delivery into a running turn (peer message, notification) is not a new turn.
     if (e.turnId === undefined) {
       state.turn.isNew = true
-      state.chain = state.chain.then(async () => {
-        await invalidateSource($)
-        await refreshSource($, state)
-      }).catch(() => { $.ui.log('test-board: source check unavailable') })
-      await state.chain
+      scheduleRefresh($, state)
     }
     return next(e)
   })
@@ -322,14 +382,17 @@ export const register: Register = on => {
     try {
       // Session atoms can survive reload even when history cannot be restored.
       await invalidateSource($)
-      const root = await worktreeRoot($, state.roots, e.cwd)
+      const { root } = await worktreeRoot($, state.roots, e.cwd)
       const key = asKeys(await $.store.get('index')).find(k => k.startsWith(`${root}::`))
       const newest = key === undefined ? undefined : asRuns(await $.store.get(`runs:${key}`))[0]
       const now = await $.clock.now()
       // A reload fires session.start too: a run past the hour stays off the band, and a closed band stays closed.
       const isClosed = (await read($, dismissed)) !== null
       if (newest !== undefined && !isClosed && visibleRuns([newest], now).length > 0) {
-        await update($, latest, () => [{ ...newest, sourceCheck: undefined, stale: true }])
+        await update($, latest, () => {
+          state.activity += 1
+          return [{ ...newest, sourceCheck: undefined, stale: true }]
+        })
       }
       // A hot reload cancels the old timer: re-arm for whatever latest now holds.
       await armExpiry($, state)
@@ -350,6 +413,8 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const columns = e.props.bodyColumns
     const rows = await Promise.all(runs.map((run, i) => partsFor($, run, now, columns, i === 0 ? CLOSE_RESERVE : 0)))
+    // One line for the whole band, from the newest run that has a check (only attempted captures get one).
+    const sourced = runs.find(r => r.sourceCheck !== undefined)
     const close = (): Promise<void> => {
       state.chain = state.chain.then(() => dismiss($)).catch((err: unknown) => {
         $.ui.log(`test-board: band not closed: ${String(err).slice(0, 120)}`)
@@ -380,7 +445,9 @@ export const register: Register = on => {
                 <Button key="close" plain dimColor role="dismiss" label="Close test results" onPress={close}>✕</Button>
               )}
             </Box>
-            <Text dimColor>{`    source ${run.sourceCheck?.status ?? 'unknown'}${run.sourceCheck === undefined ? '' : ` at last check ${formatClock(run.sourceCheck.at)}`}`}</Text>
+            {run === sourced && run.sourceCheck !== undefined && (
+              <Text dimColor>{`    source ${run.sourceCheck.status} at last check ${formatClock(run.sourceCheck.at)}`}</Text>
+            )}
             {isOpen && run.failures.slice(0, MAX_SHOWN_FAILURES).map(f => (
               <Text dimColor>{`    ${f.id}${f.loc === undefined ? '' : `  ${f.loc}`}`}</Text>
             ))}
