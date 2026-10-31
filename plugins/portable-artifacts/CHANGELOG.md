@@ -4,6 +4,19 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
+## [Unreleased]
+
+### Added and changed
+
+- **Even KPI rows (make-explainer).** The one-line values in a `kpis` section now share one size. A wide value (11 to 16
+  characters) or a long one (over 16, which wraps) keeps its own size. In a section with a wide tile the tiles wrap in rows,
+  and the one-line values in a row share a size. make-dashboard is unchanged.
+- **Wide-screen check (make-explainer).** `check.mjs` now checks a page at 1800 px as well as 1280 and 390 px. A trimmed page
+  built by 0.8.0 fails at 1800 px; it passed before this change.
+- **Stale plugin copy warning.** When a build or render runs from a folder under the plugin cache that is not the recorded
+  `installPath`, all five skills print one line to stderr. It is silent on other hosts, in repo checkouts and when the
+  record is missing, and it never fails a build.
+
 ## [1.0.0] - 2026-10-22
 
 Numbers that stay on one line, cheaper-model routing on GitHub Copilot and Codex, and a plan preset for make-explainer.
