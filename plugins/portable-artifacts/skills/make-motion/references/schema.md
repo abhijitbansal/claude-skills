@@ -42,13 +42,14 @@ Optional root `texture`: `vignette` (boolean, default off) darkens the corners w
 Optional root `cues` array, up to 30: short sounds the renderer synthesises, no file needed. Opt-in: a spec with no `cues` renders exactly as before, and a spec with neither `audio` nor `cues` stays silent. Cues are mixed through the same graph as `audio` tracks; contact sheets and the preview ignore them.
 | field | type | default | notes |
 |---|---|---|---|
-| `cue` | `pop` \| `click` \| `whoosh` \| `chime` \| `impact` | required | `pop`: a 0.12 s falling blip; `click`: a 0.04 s tick; `whoosh`: 0.8 s of swelling noise; `chime`: a 1.4 s three-partial bell; `impact`: a 0.9 s low thud |
-| `at` | seconds ≥ 0 | required | from the video start; with `scene`, from that scene's start. Must fall before the video end |
+| `cue` | `pop` \| `click` \| `whoosh` \| `chime` \| `impact` \| `riser` \| `swoosh` \| `typing` \| `drop` \| `ding` | required | `pop`: a 0.16 s blip with a bright tick at its start; `click`: a 0.04 s dry UI tick; `whoosh`: 0.8 s of air going past, loudest and brightest 0.4 s in (start it 0.4 s before the cut it marks); `chime`: a 1.4 s three-partial bell with a short room tail; `impact`: a 0.9 s thud whose pitch falls two octaves in its first 0.1 s; `riser`: 1.6 s of noise climbing in pitch and level, ending at full level (start it 1.6 s before the moment it builds to); `swoosh`: a 0.3 s whoosh for a transition, loudest 0.15 s in; `typing`: key clicks 0.035 s apart, one per character (0.035 s × characters + 0.05 s long); `drop`: a 0.6 s sub hit; `ding`: a 0.5 s notification ding. `whoosh`, `riser` and `swoosh` are stereo above 120 Hz (mono below); the rest are mono |
+| `at` | seconds ≥ 0 | required (except with `follow`) | from the video start; with `scene`, from that scene's start. Must fall before the video end |
+| `follow` | a `text` element `id` | none | `typing` only: the cue starts when that typing text starts typing (its scene start, or its first `value` keyframe) and clicks once per character. With `value` keyframes the clicks are spread evenly up to the first keyframe that reaches the whole text, so under an ease they only approximate the characters. Not with `at` or `scene`; counted at 0.035 s per character from where it starts typing, it must end inside the text's scene. Without `follow`, a `typing` cue is a single key click at `at` |
 | `scene` | scene `id` | none | anchors `at` to the scene, as on an audio track, so changing an earlier scene's duration keeps the cue aligned |
 | `volume` | 0–1 | 1 | literal gain on a cue that peaks at -6 dBFS (0.5); the mix is not normalised |
 | `pan` | -1..1 | 0 | equal-power: the centre is unity in both channels, a hard pan is 3 dB louder in its channel |
-| `note` | `A`-`G`, optional `#` or `b`, octave 0-8 | per cue | tunes `pop` (default E5), `chime` (A5) and `impact` (F2); an error on `click` and `whoosh`, which are noise |
-The sounds are pure functions of the cue: noise is seeded, so the same spec gives the same WAV bytes and the same MP4. A cue longer than the time left is cut at the video end, and every cue is faded out over its last 5 ms in the mix so a cut one cannot click. With `scene`, `at` must be inside that scene (a smaller `at`, or a later scene, is the fix the validator names); a cue never spills into the next scene.
+| `note` | `A`-`G`, optional `#` or `b`, octave 0-8 | per cue | tunes `pop` (default E5), `chime` (A5), `impact` (F2), `drop` (C2) and `ding` (E6); an error on `click`, `whoosh`, `riser`, `swoosh` and `typing`, which are noise |
+Each cue is built in layers (a short transient, a body, and on `pop`, `chime`, `impact` and `ding` a reverb tail under 0.5 s) and every cue peaks at -6 dBFS in each channel. The sounds are pure functions of the cue: noise is seeded, so the same spec gives the same WAV bytes and the same MP4. A cue longer than the time left is cut at the video end, and every cue is faded out over its last 5 ms in the mix so a cut one cannot click. With `scene`, `at` must be inside that scene (a smaller `at`, or a later scene, is the fix the validator names); a cue never spills into the next scene.
 
 ## Elements
 Common: `id` (unique across scenes and elements), `type`, `x`, `y` (required), `opacity` (0–1, default 1), `scale` (1), `rotate` (deg, 0), `keyframes`.
@@ -95,9 +96,11 @@ Chart notes: data must be inline: `data.values`, or `datasets` plus `data: {name
 - `audio[0].src: unsupported audio format ".wma"; use mp3, wav, m4a, aac, ogg or flac`
 - `audio[1].scene: scene "outro" not found; scenes: intro, chart`
 - `audio[1].at: starts at 9s (scene "chart" + 4s), but the video ends at 8s`
-- `cues[1].cue: must be one of "pop", "click", "whoosh", "chime", "impact"; did you mean "chime"?`
+- `cues[1].cue: must be one of "pop", "click", "whoosh", "chime", "impact", "riser", "swoosh", "typing", "drop", "ding"; did you mean "chime"?`
 - `cues[0].at: 2s is past the end of scene "two", which lasts 2s; use a smaller at, or put the cue in a later scene`
-- `cues[0].note: click has no pitch; note is for pop, chime and impact`
+- `cues[0].note: click has no pitch; note is for pop, chime, impact, drop and ding`
+- `cues[0].follow: element "title" is not a typing text (set "typing": true on it, or drop follow)` (also `only typing takes follow`, and `cues[0].at: not with follow; the cue starts when "title" starts typing`)
+- `cues[0].follow: "title" types past the end of scene "one"`
 - `audio[0].fadeOut: fadeIn 1s + fadeOut 2.5s exceed the 3s the track plays (from 2s to the video end at 5s)`
 - `scenes[0].elements[1].src: file not found: pic.png` (also `must stay inside the spec folder`, `hidden files are not allowed`)
 - `scenes[0].elements[0].fill: must be a CSS colour (hex, rgb(), rgba(), hsl(), hsla() or a named colour) or a theme token: surface, line, accent, ...`

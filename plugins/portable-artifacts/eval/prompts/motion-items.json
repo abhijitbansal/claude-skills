@@ -1,1 +1,3 @@
-[]
+[
+  { "id": "item-cues-v2", "prompt": "Make a 10-second explainer about our new sync engine: the title 'Sync, rebuilt' types itself out, then three numbers count up one after another (99.9% uptime, 40 ms latency, 3x throughput). Add sound: a riser into the reveal, key clicks while the title types itself, and a soft notification ding on the last number." }
+]

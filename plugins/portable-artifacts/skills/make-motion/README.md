@@ -29,9 +29,11 @@ shell commands.
   `elevated` cards, and lines can have round caps and an arrow head.
 - **Scene crossfade**: `"transition": "crossfade"` fades the new scene in over the
   previous one (which stays fully visible beneath) over 0.4 s; a root `transition` sets the default.
-- **Procedural sound cues**: a `cues` array (`pop`, `click`, `whoosh`, `chime`, `impact`)
-  is synthesised locally with no files and no extra dependency, deterministically, and
-  mixed in; after any render with audio, `render.mjs` prints the integrated loudness and
+- **Procedural sound cues**: a `cues` array (`pop`, `click`, `whoosh`, `chime`, `impact`,
+  `riser`, `swoosh`, `typing`, `drop`, `ding`) is synthesised locally in layers (transient,
+  body, short reverb tail; stereo width above 120 Hz on the noise sweeps) with no files and
+  no extra dependency, deterministically, and mixed in; a `typing` cue with `follow` clicks
+  along with a typing text; after any render with audio, `render.mjs` prints the integrated loudness and
   true peak. Opt-in: no `cues`, no sound.
 - **Texture and typing**: an opt-in root `texture` adds a vignette and static film grain
   (measured cost below), and `"typing": true` types a line out at 0.035 s per character

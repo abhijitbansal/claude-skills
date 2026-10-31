@@ -654,8 +654,21 @@ test('the motion benchmark prompts carry the wording and fixtures the plan pins'
   }
 });
 
-test('motion-items.json starts empty and the default motion.json is untouched', () => {
-  assert.deepEqual(readJson('prompts', 'motion-items.json'), []);
+// The keys run-eval reads from a prompt entry: id and prompt always; category (benchmark), seed and repo (prepareWorkdir) when set.
+const PROMPT_KEYS = ['id', 'prompt', 'category', 'seed', 'repo'];
+
+test('motion-items.json holds prompt entries with unique ids (tasks append to it) and the default motion.json is untouched', () => {
+  const items = readJson('prompts', 'motion-items.json');
+  assert.ok(Array.isArray(items));
+  for (const p of items) {
+    assert.equal(typeof p.id, 'string', JSON.stringify(p));
+    assert.ok(p.id.length > 0, 'an id is never empty');
+    assert.equal(typeof p.prompt, 'string', `${p.id}: prompt is a string`);
+    assert.ok(p.prompt.trim().length > 0, `${p.id}: prompt is not empty`);
+    const unknown = Object.keys(p).filter((k) => !PROMPT_KEYS.includes(k));
+    assert.deepEqual(unknown, [], `${p.id}: keys are ${PROMPT_KEYS.join(', ')}`);
+  }
+  assert.equal(new Set(items.map((p) => p.id)).size, items.length, 'ids are unique');
   const ids = readJson('prompts', 'motion.json').map((p) => p.id);
   assert.equal(ids.length, 10);
   assert.equal(ids[0], 'q3-counter');

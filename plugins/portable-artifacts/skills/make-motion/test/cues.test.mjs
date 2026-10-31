@@ -40,13 +40,18 @@ const peak = (xs) => xs.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
 
 // ---- generators --------------------------------------------------------------------------------
 
-const LENGTH = { pop: [0.05, 0.3], click: [0.01, 0.1], whoosh: [0.4, 1.5], chime: [0.8, 2.5], impact: [0.4, 1.5] }; // plausible seconds
+const LENGTH = { pop: [0.05, 0.3], click: [0.01, 0.1], whoosh: [0.4, 1.5], chime: [0.8, 2.5], impact: [0.4, 1.5], riser: [1.2, 2], swoosh: [0.2, 0.5], typing: [0.05, 0.2], drop: [0.4, 1], ding: [0.3, 0.8] }; // plausible seconds (typing: one character)
 const HASHES = {
-  pop: '57226792287bb166744bdd97876459614f4b0583cb8059c5a286d7e5b345b33d',
-  click: 'b4c61527373ad4a8531717e6bcd46ab288a962ee0cd666e3e091b5d25458b829',
-  whoosh: 'cbb061a7e604811f0076efa809b953c668b7050a5363bdd3b0d9b28e73f94dfa',
-  chime: '04ea1133ba0af6a5a9229dd5680930f061bb8167d98730d7a724e1cf9e462b27',
-  impact: '6ec8f79bc366e3f1588acd500ca6476ba6545c0a38870aa9c0bd59a788ad6300',
+  pop: 'cc04cc481e04ebf802884e943ae18b502598b6f3e7ba33e277b0ad8c2bd6569e',
+  click: 'dda6a952655125403ec05266280ca7c04bfa0c8241684a65964c6624786b5497',
+  whoosh: '7efa3af288449415b5915e6f6e4629920390379d1c6f8ad864be952326f42d63',
+  chime: 'bbb6caa15474b90ee7e8ba5415830376abf7e55f90f267b172ab92359297aee2',
+  impact: '84827605aeafda789d0e89436c4c74d69e14543978ca45819d7dc91e2e61a3ec',
+  riser: '79d5c5297a56f9b8aa3e6bd379d53728095f780aaf622458316387d3df78bc2d',
+  swoosh: 'f5deb7652f488830374cb7caef5075684566e5f425a6c476eb6a666829d53cff',
+  typing: '3353297ca50ae09b6b664d0e2d8d205d7d96db50239e829868f492f35dd02fe0',
+  drop: '793be04e68628a0c342c02b9f1112feafe1f11233577689acb48e2578155ec9a',
+  ding: 'f63c8334e2ebd4aa9e4473bb230d874c6c75167174da04f68c617a6a7fb66bc4',
 };
 
 for (const cue of CUE_NAMES) {
@@ -64,9 +69,9 @@ for (const cue of CUE_NAMES) {
   });
 }
 
-test('the five cues are distinct sounds', () => {
+test('the ten cues are distinct sounds', () => {
   assert.equal(new Set(CUE_NAMES.map((cue) => sha(cueWav({ cue })))).size, CUE_NAMES.length);
-  assert.deepEqual([...CUE_NAMES], ['pop', 'click', 'whoosh', 'chime', 'impact']);
+  assert.deepEqual([...CUE_NAMES], ['pop', 'click', 'whoosh', 'chime', 'impact', 'riser', 'swoosh', 'typing', 'drop', 'ding']);
 });
 
 test('note sets the pitch of pop, chime and impact; pan places the cue between the channels', () => {
@@ -131,7 +136,7 @@ test('valid cues pass', () => {
 });
 
 test('an unknown cue gets a did-you-mean, and a bad at, scene, volume, pan or note is named', () => {
-  assert.deepEqual(errs(spec({ cues: [{ cue: 'whoosh', at: 1 }, { cue: 'chim', at: 0 }] })), ['cues[1].cue: must be one of "pop", "click", "whoosh", "chime", "impact"; did you mean "chime"?']);
+  assert.deepEqual(errs(spec({ cues: [{ cue: 'whoosh', at: 1 }, { cue: 'chim', at: 0 }] })), ['cues[1].cue: must be one of "pop", "click", "whoosh", "chime", "impact", "riser", "swoosh", "typing", "drop", "ding"; did you mean "chime"?']);
   assert.ok(errs(spec({ cues: [{ cue: 'pop', at: -1 }] }))[0].startsWith('cues[0].at:'));
   assert.deepEqual(errs(spec({ cues: [{ cue: 'pop' }] })), ['cues[0].at: required']);
   assert.deepEqual(errs(spec({ cues: [{ cue: 'pop', at: 4 }] })), ['cues[0].at: starts at 4s, but the video ends at 4s']);
@@ -144,7 +149,7 @@ test('an unknown cue gets a did-you-mean, and a bad at, scene, volume, pan or no
 });
 
 test('note has no meaning on click and whoosh, which are noise', () => {
-  assert.deepEqual(errs(spec({ cues: [{ cue: 'click', at: 0, note: 'A4' }] })), ['cues[0].note: click has no pitch; note is for pop, chime and impact']);
+  assert.deepEqual(errs(spec({ cues: [{ cue: 'click', at: 0, note: 'A4' }] })), ['cues[0].note: click has no pitch; note is for pop, chime, impact, drop and ding']);
 });
 
 test('more than the cap is rejected and the error names the cap', () => {

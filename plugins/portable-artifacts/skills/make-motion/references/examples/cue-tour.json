@@ -1,0 +1,52 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "type",
+      "duration": 4,
+      "background": "art",
+      "elements": [
+        { "id": "title", "type": "text", "text": "Ten cues, no files", "typing": true, "x": 960, "y": 470, "fontSize": 110, "fontWeight": 700 },
+        {
+          "id": "subtitle", "type": "text", "text": "synthesised at render time", "x": 960, "y": 630, "fontSize": 48, "fontWeight": 400,
+          "keyframes": [{ "t": 1, "opacity": 0 }, { "t": 1.4, "opacity": 1, "ease": "enter" }]
+        }
+      ]
+    },
+    {
+      "id": "hit",
+      "duration": 4,
+      "elements": [
+        {
+          "id": "score", "type": "counter", "from": 0, "to": 42, "suffix": "%", "x": 960, "y": 480, "fontSize": 200, "fontWeight": 800,
+          "keyframes": [{ "t": 0.3, "value": 0 }, { "t": 1.8, "value": 42, "ease": "outCubic" }]
+        },
+        {
+          "id": "caption", "type": "text", "text": "louder, not longer", "x": 960, "y": 720, "fontSize": 56, "fontWeight": 500,
+          "keyframes": [{ "t": 2, "opacity": 0 }, { "t": 2.4, "opacity": 1, "ease": "enter" }]
+        }
+      ]
+    },
+    {
+      "id": "end",
+      "duration": 4,
+      "transition": "fade",
+      "elements": [
+        { "id": "closing", "type": "text", "text": "Make it sound finished", "x": 960, "y": 540, "fontSize": 96, "fontWeight": 700 }
+      ]
+    }
+  ],
+  "cues": [
+    { "cue": "typing", "follow": "title" },
+    { "cue": "pop", "scene": "type", "at": 1, "volume": 0.6 },
+    { "cue": "riser", "scene": "type", "at": 2.4, "volume": 0.5 },
+    { "cue": "impact", "scene": "hit", "at": 0 },
+    { "cue": "click", "scene": "hit", "at": 0.3, "volume": 0.5 },
+    { "cue": "ding", "scene": "hit", "at": 1.8, "volume": 0.6 },
+    { "cue": "whoosh", "scene": "hit", "at": 3.6, "volume": 0.6 },
+    { "cue": "swoosh", "scene": "end", "at": 0.2, "volume": 0.5, "pan": 0.3 },
+    { "cue": "chime", "scene": "end", "at": 1, "volume": 0.6 },
+    { "cue": "drop", "scene": "end", "at": 2.5 }
+  ]
+}

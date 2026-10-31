@@ -7,7 +7,7 @@ import { formatAjvErrors, pathJoin, didYouMean } from '../../shared/errors.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { resolveAsset } from './paths.mjs';
-import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, PITCHED_CUES, MAX_CUES, NOTE_PATTERN, trackStart } from '../../template/audio.mjs';
+import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, PITCHED_CUES, MAX_CUES, NOTE_PATTERN, trackStart, typingFollow } from '../../template/audio.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
@@ -120,11 +120,12 @@ const audioTrack = {
 const cue = {
   type: 'object',
   additionalProperties: false,
-  required: ['cue', 'at'],
+  required: ['cue'], // `at` too, unless a typing cue has `follow`: checkCues says so
   properties: {
     cue: { enum: [...CUE_NAMES] },
     scene: { type: 'string', minLength: 1 },
     at: seconds,
+    follow: { type: 'string', minLength: 1 },
     volume: unit,
     pan: { type: 'number', minimum: -1, maximum: 1 },
     note: { type: 'string' },
@@ -387,7 +388,29 @@ function checkLineLength(el, base, errors) {
   errors.push({ path: pathJoin(base, 'width'), message: `${width} is too short for ${what} with strokeWidth ${stroke}; the width must be more than ${minimum}` });
 }
 
-// A cue is timed like an audio track (`scene` + `at`); a `note` tunes only the pitched cues.
+// A typing cue with `follow` takes its start and its clicks from a typing text, so it has no `at` or `scene`. Its clicks
+// must end inside the text's scene (at the default pace from where the text starts typing).
+const FOLLOW_EPSILON = 1e-9;
+function checkFollow(c, spec, base, errors) {
+  const fail = (key, message) => errors.push({ path: pathJoin(base, key), message });
+  if (c.cue !== 'typing') return fail('follow', 'only typing takes follow');
+  const instead = `not with follow; the cue starts when ${JSON.stringify(c.follow)} starts typing`;
+  if (c.at !== undefined) return fail('at', instead);
+  if (c.scene !== undefined) return fail('scene', instead);
+  const typing = typingFollow(spec, c.follow);
+  if (!typing) {
+    const texts = spec.scenes.flatMap((s) => s.elements.filter((el) => el.type === 'text' && el.typing).map((el) => el.id));
+    return fail('follow', `element ${JSON.stringify(c.follow)} not found; typing texts: ${texts.join(', ') || 'none'}`);
+  }
+  if (typing.el.type !== 'text' || !typing.el.typing) return fail('follow', `element ${JSON.stringify(c.follow)} is not a typing text (set "typing": true on it, or drop follow)`);
+  const sceneEnd = trackStart({ scene: typing.scene.id }, spec) + typing.scene.duration;
+  if (typing.start + typing.chars * TYPING_SECONDS_PER_CHAR > sceneEnd + FOLLOW_EPSILON) {
+    fail('follow', `${JSON.stringify(c.follow)} types past the end of scene ${JSON.stringify(typing.scene.id)}`);
+  }
+  return undefined;
+}
+
+// A cue is timed like an audio track (`scene` + `at`), or follows a typing text; a `note` tunes only the pitched cues.
 function checkCues(spec, errors) {
   (spec.cues ?? []).forEach((c, i) => {
     const base = `cues[${i}]`;
@@ -396,7 +419,9 @@ function checkCues(spec, errors) {
     } else if (c.note !== undefined && !PITCHED_CUES.includes(c.cue)) {
       errors.push({ path: pathJoin(base, 'note'), message: `${c.cue} has no pitch; note is for ${PITCHED_CUES.slice(0, -1).join(', ')} and ${PITCHED_CUES.at(-1)}` });
     }
-    checkStart(c, spec, base, errors, { inScene: true });
+    if (c.follow !== undefined) checkFollow(c, spec, base, errors);
+    else if (c.at === undefined) errors.push({ path: pathJoin(base, 'at'), message: 'required' });
+    else checkStart(c, spec, base, errors, { inScene: true });
   });
 }
 

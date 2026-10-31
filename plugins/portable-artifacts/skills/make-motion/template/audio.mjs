@@ -1,11 +1,13 @@
 // Browser-safe (no Node imports): audio tracks resolved to absolute video time,
 // shared by the ffmpeg mix (render) and the preview player.
+import { TYPING_SECONDS_PER_CHAR, typingLength } from './defaults.mjs';
+
 export const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'];
 export const MAX_AUDIO_TRACKS = 20;
 
 // Procedural sound cues (scripts/lib/cues.mjs makes the sound): `cues` entries are timed like audio tracks.
-export const CUE_NAMES = Object.freeze(['pop', 'click', 'whoosh', 'chime', 'impact']);
-export const PITCHED_CUES = Object.freeze(['pop', 'chime', 'impact']); // the ones a `note` tunes; click and whoosh are noise
+export const CUE_NAMES = Object.freeze(['pop', 'click', 'whoosh', 'chime', 'impact', 'riser', 'swoosh', 'typing', 'drop', 'ding']);
+export const PITCHED_CUES = Object.freeze(['pop', 'chime', 'impact', 'drop', 'ding']); // the ones a `note` tunes; the rest are noise
 export const MAX_CUES = 30;
 export const NOTE_PATTERN = /^[A-G][#b]?[0-8]$/;
 
@@ -34,7 +36,36 @@ export function resolveAudio(spec) {
   });
 }
 
-// [{ cue, note, pan, start, volume }] with `start` in absolute video seconds; `volume` is a literal gain.
+// Where a `typing` cue with `follow` plays: { el, scene, start, chars, spacing } for the text element `id`, or null when no
+// scene has an element with that id. It starts when the text starts typing (its scene start plus its first `value`
+// keyframe, 0 without one) and clicks once per character, `spacing` seconds apart. With `value` keyframes the clicks
+// are spread evenly up to the first keyframe that reaches the whole text (else the last `value` keyframe): under an
+// ease the characters arrive unevenly, so the clicks only approximate them.
+export function typingFollow(spec, id) {
+  let sceneStart = 0;
+  for (const scene of spec.scenes) {
+    const el = scene.elements.find((e) => e.id === id);
+    if (el) {
+      const chars = typingLength(typeof el.text === 'string' ? el.text : '');
+      const keyed = (el.keyframes ?? []).filter((kf) => kf.value !== undefined);
+      if (!keyed.length) return { el, scene, start: sceneStart, chars, spacing: TYPING_SECONDS_PER_CHAR };
+      const done = keyed.find((kf) => kf.value >= chars) ?? keyed.at(-1);
+      const span = done.t - keyed[0].t;
+      return { el, scene, start: sceneStart + keyed[0].t, chars, spacing: span > 0 && chars > 0 ? span / chars : TYPING_SECONDS_PER_CHAR };
+    }
+    sceneStart += scene.duration;
+  }
+  return null;
+}
+
+// [{ cue, note, pan, start, volume, chars, spacing }] with `start` in absolute video seconds; `volume` is a literal
+// gain. `chars` and `spacing` (seconds between key clicks) are read by `typing` only: one click unless it follows a text.
 export function resolveCues(spec) {
-  return (spec.cues ?? []).map((c) => ({ cue: c.cue, note: c.note, pan: c.pan ?? 0, start: trackStart(c, spec), volume: c.volume ?? 1 }));
+  return (spec.cues ?? []).map((c) => {
+    const base = { cue: c.cue, note: c.note, pan: c.pan ?? 0, volume: c.volume ?? 1 };
+    if (c.follow === undefined) return { ...base, start: trackStart(c, spec), chars: 1, spacing: TYPING_SECONDS_PER_CHAR };
+    const typing = typingFollow(spec, c.follow);
+    if (!typing) throw new Error(`cue follows element ${JSON.stringify(c.follow)}, which no scene has`);
+    return { ...base, start: typing.start, chars: typing.chars, spacing: typing.spacing };
+  });
 }
