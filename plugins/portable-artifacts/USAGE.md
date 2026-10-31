@@ -84,6 +84,8 @@ own `chromium`. `--fix` exits 1 when any requested id is refused, skipped,
 failed, still missing afterwards or installed elsewhere, optional ids included.
 On Windows the text output labels command lines `(cmd.exe)`.
 
+If a build prints `warning: this script runs from …, not the installed copy …`, it was started from an old folder under `~/.claude/plugins/cache/` while `~/.claude/plugins/installed_plugins.json` points at a newer one. Run `npm ci` in the installed skill folder it names (or its `doctor.mjs --fix node_modules`) and use that folder's scripts.
+
 ### Tested hosts
 
 Tested live on this branch: **Claude Code**, and **GitHub Copilot CLI 1.0.98**

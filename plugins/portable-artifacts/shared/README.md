@@ -13,5 +13,7 @@ copy. CI runs `node bin/sync-shared.mjs --check` and fails on any drift.
 
 `art.mjs` draws seeded procedural art (`artSvg({ theme, seed, width, height, mode })`) as an inline SVG in the theme's own tokens: no script, no external references, the same arguments give the same bytes.
 
+`stale-copy.mjs` warns once on stderr when a build or render runs from an old copy under `~/.claude/plugins/cache/`: it compares the running script's folder with the `installPath` that `~/.claude/plugins/installed_plugins.json` lists for `portable-artifacts@claude-skills`, and stays silent outside that cache, when the file is missing or unreadable, or when the script sits inside the installed copy. It never throws and never changes an exit code.
+
 Rules: no npm dependencies (skills have separate lockfiles); tests live in
 `shared/test/` and run with `node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` (quote the glob so Node expands it, which needs Node >= 21; CI uses Node 24. The directory form fails on Node 24.7).

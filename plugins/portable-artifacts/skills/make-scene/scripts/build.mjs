@@ -20,6 +20,7 @@ import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
 import { resolveOutput } from '../shared/output.mjs';
 import { PROVENANCE_OPTIONS, withGeneratedBy } from '../shared/provenance.mjs';
+import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
 
 const USAGE = 'node scripts/build.mjs <scene.json> [--out <file.html|dir>] [--theme <name>] [--world <world>] [--model <m>] [--effort <e>] [--agent <a>] [--allow-outside] [--json]';
 const OPTIONS = {
@@ -125,6 +126,7 @@ export async function build(file, { out, theme, world, model, effort, agent, env
 }
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  warnIfStaleCopy();
   const argv = process.argv.slice(2);
   let json = argv.includes('--json');
   try {

@@ -17,6 +17,7 @@ import { findFfmpeg, encodeArgs, probeAudio, probeGraph, measureLoudness } from 
 import { synthesiseCues } from './lib/cues.mjs';
 import { resolveAsset } from './lib/paths.mjs';
 import { withGeneratedBy, provenanceText, buildDate } from '../shared/provenance.mjs';
+import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
 import { resolveAudio } from '../template/audio.mjs';
 import { MOTION_THEME } from './lib/default-theme.mjs';
 import { sheetMoments, tileSheet, PHONE_WIDTH } from './lib/sheet.mjs';
@@ -239,6 +240,7 @@ async function openPage(p, server, state) {
 }
 
 async function main() {
+  warnIfStaleCopy();
   // The handlers go in before planning: planning writes the cue folder, and an interrupt with no handler would kill the
   // process and leave it behind.
   const state = { encoder: null, browser: null, partial: null, cueDir: null, exiting: false };

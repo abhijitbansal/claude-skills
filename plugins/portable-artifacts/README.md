@@ -206,6 +206,14 @@ to install the ones that need no `sudo` (ids are resolved against the same `--fo
 make-explainer's browser for a motion section). Agents run it first and ask once before installing
 anything.
 
+**Stale plugin copies.** The Claude plugin keeps every installed version in `~/.claude/plugins/cache/`, and `~/.claude/plugins/installed_plugins.json` says which one is current. A build or render started from an older folder prints one line on stderr and carries on:
+
+```
+warning: this script runs from <old copy>, not the installed copy <installed copy>; run npm ci in <installed copy>/skills/<skill> (or node <installed copy>/skills/<skill>/scripts/doctor.mjs --fix node_modules), then use that copy
+```
+
+Fix it by running `npm ci` in the installed skill folder (or its `doctor.mjs --fix node_modules`) and using that folder's scripts. A repo checkout, an `npx skills add` install, or a missing `installed_plugins.json` draws no warning.
+
 | | make-dashboard | make-diagram | make-explainer | make-motion | make-scene |
 |---|---|---|---|---|---|
 | Node.js ≥ 20 | ✓ | ✓ | ✓ | ✓ | ✓ |
