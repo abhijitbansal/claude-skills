@@ -42,7 +42,7 @@ import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
 import { specHasVideo, prepareVideo } from './lib/video.mjs';
 import { themeData } from './lib/theme.mjs';
 import {
-  CHECKED_TYPES, CONTRAST_MIN_OPACITY, auditTimes, backdropColors, contrastFindings, textFloorFindings, readingFloorFindings, deadStretchProblems,
+  CHECKED_TYPES, tweenSpans, inTween, auditTimes, backdropColors, contrastFindings, textFloorFindings, readingFloorFindings, deadStretchProblems,
 } from './lib/audits.mjs';
 
 const USAGE = 'node scripts/check.mjs <motion.json> [--json] [--theme <name>]';
@@ -68,18 +68,13 @@ const skipHint = () => `ask the user, then run: ${doctorCommand('--for', 'check'
 // pair only when both are in a POSE hold, so a cross-fade swap in one spot is not a finding but an overlap held before
 // an exit fade is. sheetTimes samples every landing + 0.1 s, so every element gets a held moment after each move; the
 // scene's last frame is always judged (the fallback for a continuous drift that never holds).
-const tweenSpans = (chain, props) => chain.flatMap((el) => props.flatMap((p) => {
-  const times = el.keyframes.filter((kf) => kf[p] !== undefined).map((kf) => kf.t);
-  return times.slice(1).map((to, k) => [times[k], to]);
-}));
-const inTween = (spans, t) => spans.some(([from, to]) => t > from + EPSILON && t < to - EPSILON);
-const isHeld = (spans, t, n, samples) => n === samples.length - 1 || !inTween(spans, t);
+const isHeld = (spans, t, n, samples) => n === samples.length - 1 || !inTween(spans, t); // tweenSpans and inTween: lib/audits.mjs
 
 // What the rules judge in a scene, as the page draws it: every element that is not a group, at any depth, in document
 // order, each as { el, path, chain }. `path` is where it sits in the spec; `chain` is the groups around it, outermost
 // first, then the element itself, because a child's keyframes are not the only thing that moves it. `hold`: the element
 // or a group around it says "hold": true (it may sit still).
-function sceneItems(scene, index) {
+export function sceneItems(scene, index) {
   const chain = [];
   return flattenElements(scene.elements, `scenes[${index}]`).flatMap(({ el, path: where, depth }) => {
     chain.length = depth;
@@ -89,12 +84,13 @@ function sceneItems(scene, index) {
 }
 
 // Runs in the page: seek to `sec`, then each element of scene layer `index` (a group's children included, the groups
-// themselves not) as {id, opacity, box, undrawn, sig, fontSize, weight, color} in canvas pixels. Rendered opacity
-// multiplies the element's and every ancestor's up to the stage (a group's, the scene fade); a hidden layer is 0.
+// themselves not) as {id, opacity, ownOpacity, box, undrawn, sig, fontSize, weight, color, alpha} in canvas pixels.
+// Rendered opacity multiplies the element's and every ancestor's up to the stage (a group's, the scene fade); a hidden
+// layer is 0. `ownOpacity` leaves the scene's fade out. `types`: the element types that are text (CHECKED_TYPES).
 // `fontSize` is a text's or counter's size as drawn (its font size times every scale around it), `weight` and `color`
 // (#rrggbb) are what it is drawn with, and `sig` a string that differs whenever the element looks different (position,
 // size, opacity, text, drawing, reveal, video frame), for the dead-stretch audit.
-const measure = async ([sec, index]) => {
+const measure = async ([sec, index, types]) => {
   await window.__motion.seek(sec); // a video element's frame is decoded before anything is read
   const stage = document.getElementById('stage');
   const s = stage.getBoundingClientRect();
@@ -104,10 +100,12 @@ const measure = async ([sec, index]) => {
   const hex = (css) => `#${(css.match(/[\d.]+/g) ?? []).slice(0, 3).map((v) => Math.round(Number(v)).toString(16).padStart(2, '0')).join('')}`;
   return [...layer.querySelectorAll('.el:not(.group)')].map((node) => {
     let opacity = shown ? 1 : 0;
+    let ownOpacity = 1;
     let scale = 1;
     for (let n = node; n && n !== stage; n = n.parentElement) {
       const style = getComputedStyle(n);
       opacity *= Number(style.opacity);
+      if (n !== layer) ownOpacity *= Number(style.opacity);
       const m = new DOMMatrix(style.transform);
       scale *= Math.hypot(m.a, m.b);
     }
@@ -119,12 +117,13 @@ const measure = async ([sec, index]) => {
     const untyped = node.querySelector(':scope > .typed')?.textContent === '';
     const undrawn = untyped || node.dataset.reveal === '0' || (mark !== null && mark.getAttribute('stroke-dashoffset') === '1' && (mark.tagName === 'line' || mark.getAttribute('fill') === 'none'));
     const own = getComputedStyle(node);
-    const isText = node.classList.contains('text') || node.classList.contains('counter');
+    const isText = types.some((type) => node.classList.contains(type));
+    const colour = own.color.match(/[\d.]+/g) ?? [];
     const content = [node.textContent, node.dataset.reveal ?? '', mark?.getAttribute('stroke-dashoffset') ?? '', node.querySelector('img')?.getAttribute('src') ?? ''].join('\u0001');
     const sig = `${[box.left, box.top, box.right, box.bottom].map((v) => v.toFixed(1)).join(',')}|${opacity.toFixed(2)}|${content}`;
     return {
-      id: node.dataset.id, opacity, box, undrawn, sig,
-      fontSize: isText ? parseFloat(own.fontSize) * scale : 0, weight: Number(own.fontWeight), color: isText ? hex(own.color) : '#000000',
+      id: node.dataset.id, opacity, ownOpacity, box, undrawn, sig,
+      fontSize: isText ? parseFloat(own.fontSize) * scale : 0, weight: Number(own.fontWeight), color: isText ? hex(own.color) : '#000000', alpha: isText && colour.length > 3 ? Number(colour[3]) : 1,
     };
   });
 };
@@ -144,6 +143,9 @@ const measureCaptions = async (sec) => {
     return { index: Number(node.dataset.index), shown: getComputedStyle(node).display !== 'none', box, text: node.textContent };
   });
 };
+
+// `measure` at video second `sec` for scene layer `index`.
+const measureAt = (page, sec, index) => page.evaluate(measure, [sec, index, [...CHECKED_TYPES]]);
 
 const at = (t) => `${t.toFixed(2)}s`;
 const isVisible = (m) => m.opacity > VISIBLE_OPACITY;
@@ -275,8 +277,8 @@ export function wrapProblems(scene, i, samples) {
 // The two layers of a crossfade are both on screen at the window's midpoint: warn about text over text.
 async function crossfadeWarnings(page, spec, itemsOf, fade, size) {
   const mid = (fade.start + fade.end) / 2;
-  const outgoing = await page.evaluate(measure, [mid, fade.from]);
-  const incoming = await page.evaluate(measure, [mid, fade.to]);
+  const outgoing = await measureAt(page, mid, fade.from);
+  const incoming = await measureAt(page, mid, fade.to);
   const from = spec.scenes[fade.from];
   const texts = (items, els) => els.map((m, j) => ({ m, ...items[j] })).filter(({ m, el }) => CHECKED.has(el.type) && isShown(m, size));
   const old = texts(itemsOf[fade.from], outgoing);
@@ -289,31 +291,33 @@ async function crossfadeWarnings(page, spec, itemsOf, fade, size) {
 
 // `withCaptions`: also measure the captions layers at each moment. `times`: scene-local seconds (the sheet moments).
 // `withBackdrop`: also read the colour behind every text that is on screen (one screenshot per moment), for the contrast
-// audit: `back[j]` for item j, null where it was not read.
+// audit: `back[j]` for item j, the colours of the cells behind it (see backdropColors), null where they were not read.
 async function sampleScene(page, scene, items, index, start, times, withCaptions, size, withBackdrop = false) {
+  const fading = items.map(({ chain }) => tweenSpans(chain, ['opacity'])); // the contrast audit leaves a text mid-fade alone
   const samples = [];
   for (const t of times) {
-    const measured = await page.evaluate(measure, [start + t, index]);
+    const measured = await measureAt(page, start + t, index);
     const ids = measured.map((m) => m.id).join();
     if (ids !== items.map(({ el }) => el.id).join()) throw new Error(`scene "${scene.id}": the page shows elements ${ids}, not the spec's`);
     const els = measured.map((m) => ({ ...m, shown: isShown(m, size) }));
-    const judged = els.flatMap((m, j) => (CHECKED.has(items[j].el.type) && m.shown && m.opacity >= CONTRAST_MIN_OPACITY ? [j] : []));
+    const judged = els.flatMap((m, j) => (CHECKED.has(items[j].el.type) && m.shown && !inTween(fading[j], t) ? [j] : []));
     const back = els.map(() => null);
-    if (withBackdrop && judged.length) (await backdropColors(page, judged.map((j) => els[j].box), [...CHECKED])).forEach((colour, n) => { back[judged[n]] = colour; });
+    if (withBackdrop && judged.length) (await backdropColors(page, judged.map((j) => els[j].box), [...CHECKED])).forEach((cells, n) => { back[judged[n]] = cells; });
     const captions = withCaptions ? await page.evaluate(measureCaptions, null) : [];
     samples.push({ t, els, back, captions, wraps: await nowrapProblems(page, { root: '#stage' }) });
   }
   return samples;
 }
 
-// The AUDIT_STEP grid of one scene: { t (video seconds), scene, local (scene seconds), els, captions } per step. Each
+// The AUDIT_STEP grid of one scene, exported for the checks that build on it (`stillStretches` takes the steps of every
+// scene in order): { t (video seconds), scene, local (scene seconds), els, captions } per step. Each
 // element carries `shown`, `hold` (it, or a group around it, says "hold": true) and `held` (its size is not being tweened,
 // so the text floor judges it); `captions` is a string that changes when the words on screen do.
-async function sampleSteps(page, items, index, scene, start, withCaptions, size) {
+export async function sampleSteps(page, items, index, scene, start, withCaptions, size) {
   const sizeSpans = items.map(({ chain }) => tweenSpans(chain, ['scale']));
   const steps = [];
   for (const local of auditTimes(scene.duration)) {
-    const measured = await page.evaluate(measure, [start + local, index]);
+    const measured = await measureAt(page, start + local, index);
     const els = measured.map((m, j) => ({ ...m, shown: isShown(m, size), hold: items[j].hold, held: !inTween(sizeSpans[j], local) }));
     const layers = withCaptions ? await page.evaluate(measureCaptions, null) : [];
     steps.push({ t: start + local, scene: index, local, els, captions: layers.map((c) => `${c.shown}:${c.text}`).join('\u0001') });
@@ -363,7 +367,7 @@ async function inspect(browser, spec, server, prepare) {
   const insets = safeInsets(spec.size);
   const problems = [];
   const itemsOf = spec.scenes.map(sceneItems); // the non-group elements of each scene, indexed as the page measures them
-  const warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], await page.evaluate(measure, [0, 0]), spec.size);
+  const warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], await measureAt(page, 0, 0), spec.size);
   const zone = spec.captions.length ? captionZone(spec.size, spec.format) : null; // the caption rules need captions
   const captionTimes = zone ? await page.evaluate(() => window.__motion.captionMoments.map((m) => m.t)) : [];
   const colors = themeData(spec.theme)?.dark ?? {};
@@ -384,8 +388,9 @@ async function inspect(browser, spec, server, prepare) {
     warnings.push(...contrast.warnings, ...floor.warnings);
     if (zone) problems.push(...captionZoneProblems(items, samples, extra, zone, spec.size));
   }
-  const reading = readingFloorFindings(spec, itemsOf, steps);
-  problems.push(...reading.problems, ...deadStretchProblems(spec, steps));
+  const probe = async (i, j, local) => isShown((await measureAt(page, starts[i] + local, i))[j], spec.size); // the reading floor places a span's edges with these
+  const reading = await readingFloorFindings(spec, itemsOf, steps, probe);
+  problems.push(...reading.problems, ...deadStretchProblems(spec, steps, itemsOf));
   if (zone) problems.push(...await captionLayerProblems(page, zone));
   for (const fade of await page.evaluate(() => window.__motion.crossfades)) warnings.push(...await crossfadeWarnings(page, spec, itemsOf, fade, spec.size));
   return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings, info: reading.info };
@@ -435,8 +440,8 @@ export function atBlockParts(written, spec, findings) {
 function blockHint(message, param) {
   const shorten = param ? ` or shorten params.${param}` : '';
   if (message.includes(' sits in the caption zone ') || message.includes(' during the crossfade')) return null;
-  if (message.includes(' contrast against its backdrop ')) return param ? `change params.${param} colour or the theme token` : 'change the theme token or the backdrop behind the block';
-  if (/ is \d+px \(below /.test(message)) return 'raise the font size';
+  if (message.includes(' contrast against its backdrop ')) return 'blocks use theme colours; change "theme" or the scene background';
+  if (/ is \d+px \(below /.test(message)) return 'raise the block\'s "scale" or use a larger format';
   if (message.includes(' shows for ')) return `lengthen the scene${shorten}`;
   const other = / overlaps \w+ "([^"]+)"/.exec(message);
   if (other) return other[1].includes('/') ? `move one of the blocks${shorten}` : `move the block or the other element${shorten}`;
