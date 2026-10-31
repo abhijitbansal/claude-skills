@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { launchBrowser } from '../scripts/lib/browser.mjs';
+import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 import * as checkModule from '../scripts/check.mjs';
 
 const { safeMargin } = checkModule;
@@ -16,11 +16,9 @@ const FIXTURES = path.join(root, 'test/fixtures');
 const EXAMPLES = path.join(root, 'references/examples');
 const check = (args, env = {}) => spawnSync(process.execPath, [CHECK, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
 
-let browserPresent;
+// True when the test was skipped (no browser); throws under PA_REQUIRE_RENDER=1.
 async function skipUnlessBrowser(t) {
-  browserPresent ??= await launchBrowser({ quiet: true }).then((b) => b.close().then(() => true), () => false);
-  if (!browserPresent) t.skip('no browser (bundled Chromium or system Chrome)');
-  return !browserPresent;
+  return !(await requireRender(t, BROWSER_ONLY));
 }
 
 // A one-scene spec in a temp folder; `files` maps extra file names to their contents.

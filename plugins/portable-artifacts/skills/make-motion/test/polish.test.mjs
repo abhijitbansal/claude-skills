@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateSpec } from '../scripts/lib/spec.mjs';
 import { loadTheme } from '../shared/theme.mjs';
-import { haveBrowser, probed } from './render-probe.mjs';
+import { probed } from './render-probe.mjs';
+import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 
 const spec = (elements, extra = {}) => ({ size: [480, 270], scenes: [{ id: 's', duration: 2, elements }], ...extra });
 const errs = (motion) => validateSpec(motion).errors.map((e) => `${e.path}: ${e.message}`);
@@ -55,7 +56,7 @@ test('elevated, cap and arrow are not valid on text', () => {
 // ---- colour tokens: drawn ----------------------------------------------------------------------
 
 test('tokens resolve from the active theme in shape fill, stroke and text colour', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const els = [rect({ fill: 'surface', stroke: 'cat3', strokeWidth: 2 }), { id: 't', type: 'text', text: 'x', x: 1, y: 1, color: 'good' }, line({ stroke: 'bad' })];
   for (const name of ['dusk', 'poster']) {
     const dark = loadTheme(name).dark;
@@ -75,7 +76,7 @@ test('tokens resolve from the active theme in shape fill, stroke and text colour
 });
 
 test('hex colours draw unchanged', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed(spec([rect({ fill: '#123456', stroke: 'tomato' })]), () => {
     const node = document.querySelector('.el.shape rect');
     return [node.getAttribute('fill'), node.getAttribute('stroke')];
@@ -87,7 +88,7 @@ test('hex colours draw unchanged', async (t) => {
 // ---- elevated ----------------------------------------------------------------------------------
 
 test('elevated adds one inset highlight rect after the main rect and lifts the fill toward the text colour', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed(spec([rect({ id: 'flat', fill: '#202020' }), rect({ id: 'up', x: 300, fill: '#202020', radius: 12, elevated: true })]), () => {
     const kids = (id) => [...document.querySelector(`[data-id="${id}"] svg`).children].map((n) => ({
       tag: n.tagName, fill: n.getAttribute('fill'), stroke: n.getAttribute('stroke'), sw: n.getAttribute('stroke-width'),
@@ -113,7 +114,7 @@ test('elevated adds one inset highlight rect after the main rect and lifts the f
 // ---- line cap and arrow ------------------------------------------------------------------------
 
 test('a round cap insets both endpoints by half the stroke width; the default line is unchanged', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed(spec([line({ id: 'plain' }), line({ id: 'round', y: 200, cap: 'round' })]), () => {
     const read = (id) => {
       const n = document.querySelector(`[data-id="${id}"] line`);
@@ -127,7 +128,7 @@ test('a round cap insets both endpoints by half the stroke width; the default li
 });
 
 test('an arrow is a filled triangle at the line end, shown only once draw reaches 0.98', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const motion = spec([line({ arrow: 'end', keyframes: [{ t: 0, draw: 0 }, { t: 1, draw: 1 }] })]);
   const found = await probed(motion, () => {
     const head = () => document.querySelector('.el.shape path');
@@ -144,7 +145,7 @@ test('an arrow is a filled triangle at the line end, shown only once draw reache
 });
 
 test('a line without arrow draws no path node', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const count = await probed(spec([line()]), () => document.querySelectorAll('.el.shape path').length);
   assert.equal(count, 0);
   return undefined;
@@ -153,7 +154,7 @@ test('a line without arrow draws no path node', async (t) => {
 // ---- review follow-ups: caps, arrows, elevated ------------------------------------------------
 
 test('a round-cap line stays hidden until the drawn length passes its cap, then shows; draw 0 is blank', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed(spec([line({ cap: 'round', keyframes: [{ t: 0, draw: 0 }, { t: 1, draw: 1 }] })]), () => {
     const node = document.querySelector('.el.shape line');
     const at = (sec) => { window.__motion.seek(sec); return getComputedStyle(node).visibility; };
@@ -165,7 +166,7 @@ test('a round-cap line stays hidden until the drawn length passes its cap, then 
 });
 
 test('a round-cap line too short for the dot rule still shows once fully drawn (widths the validator accepts)', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const draw = [{ t: 0, draw: 0 }, { t: 1, draw: 1 }];
   const motion = spec([
     { id: 'short', type: 'shape', shape: 'line', x: 100, y: 60, width: 5, strokeWidth: 4, cap: 'round', keyframes: draw },
@@ -185,7 +186,7 @@ test('a round-cap line too short for the dot rule still shows once fully drawn (
 });
 
 test('the default line stroke and shape size are one shared constant: the validator and the page agree', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   // No strokeWidth and no width: the validator's minimum uses the same defaults the page draws with.
   const m = spec([{ id: 'plain', type: 'shape', shape: 'line', x: 100, y: 60, cap: 'round', arrow: 'end' }]);
   assert.deepEqual(errs(m), []);
@@ -199,7 +200,7 @@ test('the default line stroke and shape size are one shared constant: the valida
 });
 
 test('a butt-cap line is never hidden by draw: only round caps make a dot', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed(spec([line({ keyframes: [{ t: 0, draw: 0 }, { t: 1, draw: 1 }] })]), () => {
     const node = document.querySelector('.el.shape line');
     window.__motion.seek(0.015);
@@ -218,7 +219,7 @@ test('an arrow or round cap needs a line longer than its head and caps, and the 
 });
 
 test('elevated follows draw, is left off a stroke-only rect, and elevated: false is fine on any shape', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   assert.deepEqual(errs(spec([{ ...rect({ shape: 'ellipse' }), elevated: false }, { ...line(), elevated: false }])), []);
   const found = await probed(spec([
     rect({ id: 'card', elevated: true, fill: '#202020', keyframes: [{ t: 0, draw: 0 }, { t: 1, draw: 1 }] }),
@@ -240,7 +241,7 @@ test('elevated follows draw, is left off a stroke-only rect, and elevated: false
 // ---- mono precedence ---------------------------------------------------------------------------
 
 test('font mono wins over role title: the mono face, mono weight and no title class', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed(spec([{ id: 'm', type: 'text', text: 'SELECT 1', x: 100, y: 100, role: 'title', font: 'mono', fontWeight: 800 }, { id: 'p', type: 'text', text: 'Plain title', x: 100, y: 200, role: 'title' }]), () => {
     const read = (id) => { const n = document.querySelector(`[data-id="${id}"]`); return { family: getComputedStyle(n).fontFamily, weight: n.style.fontWeight, classes: n.className }; };
     return { mono: read('m'), plain: read('p') };
@@ -260,7 +261,7 @@ const LINE = { data: { values: [1, 2, 3, 4, 5].map((k) => ({ k, v: k * k })) }, 
 const chart = (id, vegaLite, extra = {}) => ({ id, type: 'chart', x: 240, y: 135, width: 440, height: 240, vegaLite, ...extra });
 
 test('chart defaults: five-ish y ticks and gridlines, no tick marks, no y domain line', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed(spec([chart('c', BARS)]), () => {
     const n = (sel) => document.querySelectorAll(`.el.chart svg ${sel}`).length;
     const axis = (name) => `g.role-axis[aria-label^="${name}"]`;
@@ -274,7 +275,7 @@ test('chart defaults: five-ish y ticks and gridlines, no tick marks, no y domain
 });
 
 test('chart defaults: wider band gap, rounder bars; line 4 px round; points ringed in the page colour', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed(spec([chart('bars', BARS), chart('lines', LINE, { y: 200 })]), () => {
     const bars = [...document.querySelectorAll('[data-id="bars"] svg .role-mark.marks path')].map((p) => p.getBoundingClientRect());
     const lineMark = document.querySelector('[data-id="lines"] svg .mark-line path');
@@ -297,7 +298,7 @@ test('chart defaults: wider band gap, rounder bars; line 4 px round; points ring
 });
 
 test('chart defaults: a quantitative x axis has a handful of whole-number ticks and no vertical gridlines', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed(spec([chart('lines', LINE)]), () => ({
     grid: document.querySelectorAll('.el.chart svg .role-axis-grid').length,
     labels: [...document.querySelectorAll('.el.chart svg g.role-axis[aria-label^="X-axis"] .role-axis-label text')].map((n) => n.textContent),
@@ -309,7 +310,7 @@ test('chart defaults: a quantitative x axis has a handful of whole-number ticks 
 });
 
 test('hollow points (filled: false) keep their accent outline: the page-colour ring is only for filled points', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const hollow = { ...LINE, mark: { type: 'point', filled: false } };
   const found = await probed(spec([chart('hollow', hollow), chart('solid', { ...LINE, mark: { type: 'point', filled: true } }, { y: 200 })]), () => {
     const dot = (id) => { const n = document.querySelector(`[data-id="${id}"] svg .mark-symbol path`); return { fill: n.getAttribute('fill'), stroke: n.getAttribute('stroke'), width: n.getAttribute('stroke-width') }; };
@@ -323,7 +324,7 @@ test('hollow points (filled: false) keep their accent outline: the page-colour r
 });
 
 test('chart reveal is a soft mask edge, not a hard clip, and is off once fully revealed', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed(spec([chart('c', BARS, { keyframes: [{ t: 0, reveal: 0 }, { t: 1, reveal: 1 }] })]), () => {
     const node = document.querySelector('.el.chart');
     const at = (sec) => { window.__motion.seek(sec); return { mask: node.style.maskImage, clip: node.style.clipPath }; };

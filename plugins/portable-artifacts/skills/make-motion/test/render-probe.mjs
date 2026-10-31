@@ -10,10 +10,6 @@ import { startServer } from '../scripts/lib/server.mjs';
 const made = [];
 after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
 
-export async function haveBrowser() {
-  try { await (await launchBrowser({ quiet: true })).close(); return true; } catch { return false; }
-}
-
 // The PNG of `motion` at `sec`, as the render loop screenshots it.
 export async function framed(motion, sec) {
   const { page, done } = await openPage(motion, motion.size);

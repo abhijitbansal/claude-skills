@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTimeline, seekTo } from '../template/timeline.mjs';
 import { validateSpec, withDefaults } from '../scripts/lib/spec.mjs';
-import { haveBrowser, probed, framed, meanLuma } from './render-probe.mjs';
+import { probed, framed, meanLuma } from './render-probe.mjs';
+import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 
 const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} !~ ${b}`);
 const label = (id, extra = {}) => ({ id, type: 'text', text: id, x: 240, y: 135, fontSize: 40, ...extra });
@@ -86,7 +87,7 @@ const layers = () => {
 };
 
 test('mid-crossfade frame has both scene layers visible, the old one beneath; before and after show one', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed({ size: [480, 270], scenes: scenes({ transition: 'crossfade' }) }, layers);
   assert.deepEqual(found.before, [1, null]);
   assert.equal(found.mid.length, 2);
@@ -97,14 +98,14 @@ test('mid-crossfade frame has both scene layers visible, the old one beneath; be
 });
 
 test('without a transition the page shows one layer at every moment, as before', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed({ size: [480, 270], scenes: scenes() }, layers);
   assert.deepEqual(found, { before: [1, null], mid: [null, 1], after: [null, 1] });
   return undefined;
 });
 
 test('two scenes with the same opaque background keep the same mean luma through the crossfade (no dip to the stage colour)', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const white = (id, extra = {}) => ({ id, duration: 2, background: '#ffffff', elements: [], ...extra });
   const motion = { size: [160, 90], scenes: [white('a'), white('b', { transition: 'crossfade' })] };
   const luma = [];

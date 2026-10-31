@@ -11,8 +11,7 @@ import { cueWav, writeCueTracks, synthesiseCues, noteHz, SAMPLE_RATE } from '../
 import { CUE_NAMES, MAX_CUES, resolveCues } from '../template/audio.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
 import { parseLoudness, encodeArgs } from '../scripts/lib/ffmpeg.mjs';
-import { launchBrowser } from '../scripts/lib/browser.mjs';
-import { requireRender } from './helpers/render.mjs';
+import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER = path.join(root, 'scripts/render.mjs');
@@ -208,7 +207,7 @@ test('a render without cues has no audio stream and prints no loudness line', as
 });
 
 test('--contact-sheet ignores cues and needs no ffmpeg', async (t) => {
-  try { await (await launchBrowser({ quiet: true })).close(); } catch { return t.skip('browser unavailable'); }
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const dir = tmp('cue-sheet-');
   writeFileSync(path.join(dir, 'm.json'), JSON.stringify(spec({ cues: [{ cue: 'pop', at: 0 }] })));
   const r = render([path.join(dir, 'm.json'), '--contact-sheet', '--out', dir, '--size', '160x90'], { PATH: '/nonexistent' });

@@ -31,15 +31,18 @@ export async function findFfmpeg({ skipStatic = false } = {}) {
   throw new Error(HINT);
 }
 
-// $FFPROBE_PATH, then ffprobe on PATH, then the ffprobe beside ffmpeg (`ffmpeg`, else $FFMPEG_PATH); null when none.
+// $FFPROBE_PATH, then the ffprobe beside ffmpeg (`ffmpeg`, else $FFMPEG_PATH: the pair that belongs
+// together), then ffprobe on PATH; null when none.
 export function findFfprobe({ ffmpeg } = {}) {
   const fromEnv = process.env.FFPROBE_PATH;
   if (fromEnv && isExecutable(fromEnv)) return fromEnv;
-  if (spawnSync('ffprobe', ['-version'], { stdio: 'ignore' }).status === 0) return 'ffprobe';
+  if (fromEnv) process.stderr.write(`warning: FFPROBE_PATH is set to "${fromEnv}" but it is not executable; looking elsewhere\n`);
   const beside = ffmpeg ?? process.env.FFMPEG_PATH;
-  if (!beside) return null;
-  const sibling = path.join(path.dirname(beside), 'ffprobe');
-  return isExecutable(sibling) ? sibling : null;
+  if (beside && /[\\/]/.test(beside)) { // a bare `ffmpeg` has no folder to look in
+    const sibling = path.join(path.dirname(beside), 'ffprobe');
+    if (isExecutable(sibling)) return sibling;
+  }
+  return spawnSync('ffprobe', ['-version'], { stdio: 'ignore' }).status === 0 ? 'ffprobe' : null;
 }
 
 const VIDEO_INPUT = (fps) => ['-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-'];

@@ -7,14 +7,11 @@ import { launchBrowser } from '../scripts/lib/browser.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { writeWav } from './helpers/wav.mjs';
 import { gainAt } from '../template/preview-audio.mjs';
+import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 
 const WAV_SECONDS = 3;
 const SCENE_SECONDS = 4;
 const PLAY_TIMEOUT_MS = 3000;
-
-async function haveBrowser() {
-  try { await (await launchBrowser({ quiet: true })).close(); return true; } catch { return false; }
-}
 
 function fixture(track = { src: 'voice.wav', scene: 's', at: 0, duration: WAV_SECONDS }) {
   const dir = mkdtempSync(path.join(tmpdir(), 'pa-'));
@@ -59,7 +56,7 @@ test('gainAt ramps linearly over fadeIn after start and fadeOut before end', () 
 });
 
 test('preview mounts one idle <audio> per track, outside the stage', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   await withPage('preview', async (page) => {
     const s = await audioState(page);
     assert.equal(s.count, 1);
@@ -77,7 +74,7 @@ test('preview mounts one idle <audio> per track, outside the stage', async (t) =
 });
 
 test('render mode creates no <audio> element', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   await withPage('render', async (page) => {
     assert.equal((await audioState(page)).count, 0);
   });
@@ -85,7 +82,7 @@ test('render mode creates no <audio> element', async (t) => {
 });
 
 test('Play starts the track, Space pauses it, scrubbing pauses it', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   await withPage('preview', async (page) => {
     await page.click('#play');
     await page.waitForFunction(() => window.__motion.audio[0].el.paused === false, null, { timeout: PLAY_TIMEOUT_MS });
@@ -104,7 +101,7 @@ test('Play starts the track, Space pauses it, scrubbing pauses it', async (t) =>
 });
 
 test('M toggles mute and the mute button reflects it', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   await withPage('preview', async (page) => {
     await page.click('#play');
     await page.waitForFunction(() => window.__motion.audio[0].el.paused === false, null, { timeout: PLAY_TIMEOUT_MS });
@@ -119,7 +116,7 @@ test('M toggles mute and the mute button reflects it', async (t) => {
 });
 
 test('a spec reload replaces the audio holder without starting playback', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   await withPage('preview', async (page) => {
     await page.evaluate(() => window.__reload());
     const s = await audioState(page);
@@ -136,7 +133,7 @@ const scrubTo = (page, sec) => page.evaluate((v) => {
 }, sec);
 
 test('Play from a scrubbed position starts the track at the matching offset', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const track = { src: 'voice.wav', scene: 's', at: 0.5, duration: WAV_SECONDS };
   await withPage('preview', async (page) => {
     await scrubTo(page, 2);
@@ -149,7 +146,7 @@ test('Play from a scrubbed position starts the track at the matching offset', as
 });
 
 test('a track outside the playhead stays paused and fades apply to el.volume while scrubbing', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const track = { src: 'voice.wav', scene: 's', at: 1, duration: 2, fadeIn: 2, volume: 0.5 };
   await withPage('preview', async (page) => {
     await scrubTo(page, 0.5);
@@ -164,7 +161,7 @@ test('a track outside the playhead stays paused and fades apply to el.volume whi
 });
 
 test('a spec reload while the tab is hidden and playing does not start the new audio', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   await withPage('preview', async (page) => {
     await page.click('#play');
     await page.waitForFunction(() => window.__motion.audio[0].el.paused === false, null, { timeout: PLAY_TIMEOUT_MS });

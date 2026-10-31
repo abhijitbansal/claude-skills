@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
+import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { bindWithNbsp, findTokens } from '../shared/nowrap.mjs';
 import { nowrapProblems } from '../shared/nowrap-probe.mjs';
@@ -17,11 +18,9 @@ const SPEC_DIRS = [path.join(root, 'test/fixtures'), path.join(root, 'references
 const TOKEN_TEXT = 'Latency fell to 1,204 ms after the change';
 const MESSAGE = 'a number-plus-unit token wraps across lines';
 
-let browserPresent;
+// True when the test was skipped (no browser); throws under PA_REQUIRE_RENDER=1.
 async function skipUnlessBrowser(t) {
-  browserPresent ??= await launchBrowser({ quiet: true }).then((b) => b.close().then(() => true), () => false);
-  if (!browserPresent) t.skip('no browser (bundled Chromium or system Chrome)');
-  return !browserPresent;
+  return !(await requireRender(t, BROWSER_ONLY));
 }
 
 function specFile(elements, { size = [1920, 1080] } = {}) {
