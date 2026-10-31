@@ -161,7 +161,7 @@ test('validate names the plan page theme (mono) when an embedded diagram carries
 
 // ---- the checked-in example ------------------------------------------------------------------------
 
-test('the plan example validates with no errors and no warnings, decision first, verdict last', async () => {
+test('the plan example validates with no errors and no warnings, context first, verdict last', async () => {
   const spec = readExample();
   const r = await validateSpec(spec, { dir: path.dirname(EXAMPLE) });
   assert.deepEqual(r.errors, []);

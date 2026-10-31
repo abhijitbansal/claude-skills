@@ -309,7 +309,7 @@ your project folder):
    `TODO:` text, filler phrases ("leverage", "seamless", "delve"), titles
    numbered like `01` or ending in `!`, and (for slides) a slide with more
    than 6 points, 8 table rows, 12 code lines or 80 words. Each line is a JSON
-   path, the problem and the fix; text over the soft caps only warns (exit 0): title 8 words, label 4 words, paragraph 3 sentences or 60 words, text section 120 words, card text 30 words, list item 20 words, page prose 900 words, `tldr` 3 points. Emoji are allowed; dense emoji only warn: a prose string with 3 or more at more than 1 per 40 characters, or a section title with more than 3. Each warning names the section; resolve them before building where you can.
+   path, the problem and the fix; text over the soft caps only warns (exit 0): title 8 words, label 4 words, paragraph 3 sentences or 60 words, text section 120 words, card text 30 words, list item 20 words, page prose 900 words (1,800 on a plan page), `tldr` 3 points. Emoji are allowed; dense emoji only warn: a prose string with 3 or more at more than 1 per 40 characters, or a section title with more than 3. Each warning names the section; resolve them before building where you can.
 5. `build.mjs explainer.json` writes one HTML file and prints its path. The
    default folder is `~/.agent/diagrams/` (set `PA_OUTPUT_DIR`, or pass
    `--out file.html` or `--out dir`). `--theme <name>` overrides the spec's
@@ -331,17 +331,21 @@ your project folder):
 **Presets:** `recap` (tl;dr, numbers, how it works, files changed, timeline,
 risks), `checklist` (a group per area of changed files, a regression group, an
 intro and "If something fails"), `concept` (tl;dr, explanation, cards, steps),
-`slides` (a deck), `plan` (a decision-first plan the reviewer answers on the
+`slides` (a deck), `plan` (a plan that explains before it asks, which the reviewer answers on the
 page, see below). **Sections** (24): `tldr`, `text`, `kpis`, `cards`,
 `table`, `risks`, `files`, `steps`, `timeline`, `compare`, `callout`, `code`,
 `details`, `checklist`, `diagram`, `chart`, `motion`, `scene`, `image`, and
 for plans `decision`, `approval`, `question`, `review`, `verdict`.
 
 **Plan mode.** Ask for a plan, proposal or design to be reviewed and answered.
-`scaffold.mjs plan --title "…" --out plan.json` writes a decision-first
-starter: a summary, three numbers, a decision, an approval, a question,
-"review these first", goals, a diagram, phases and risks, and last the
-reviewer's overall verdict control; the agent replaces each
+`scaffold.mjs plan --title "…" --out plan.json` writes a starter that
+explains before it asks: a summary, three numbers, a card per workstream, goals,
+one workstream's tasks as steps (copy it once per workstream), a table of choices
+already made, a diagram, phases and risks, then a decision, an approval, a
+question, "review these first" and last the reviewer's overall verdict control.
+Validate warns when a decision, approval or question comes before any steps, cards,
+table, files or text section. A plan page may hold 1,800 words of prose, not 900.
+The agent replaces each
 `TODO:` and builds the page, which defaults to the `mono` theme (`--theme brief`
 for the executive look). The reviewer picks one option per decision, approves,
 asks for changes or rejects each approval, answers each question, gives an

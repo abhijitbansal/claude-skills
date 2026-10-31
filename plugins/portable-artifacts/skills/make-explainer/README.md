@@ -26,7 +26,7 @@ unless you opt in with `--image-api` (see below).
 - **Short on purpose**: the page opens with a hero and a TL;DR card; any section
   takes a `label` of up to 4 words for the contents list; validation warns (never
   fails) over the soft caps: title 8 words, label 4, paragraph 3 sentences or 60
-  words, text section 120, card text 30, list item 20, page prose 900, tl;dr 3 points.
+  words, text section 120, card text 30, list item 20, page prose 900 (1,800 on a plan page), tl;dr 3 points.
 - **A page worth opening**: themed (nine themes, light and dark; `dusk` by default, `mono` for a plan), a
   contents list from four sections up, copy buttons on code, print styles,
   reduced motion respected, no network at build or view time
@@ -113,7 +113,7 @@ page, so keep the two together.
 | `checklist` | `gather.mjs` facts | one group per area of changed files, a regression group, an intro and "If something fails" |
 | `concept` | an empty skeleton | tl;dr, explanation, cards, steps |
 | `slides` | an empty skeleton | a deck of cover, tl;dr, cards, steps and a closing slide |
-| `plan` | an empty skeleton | decision first: summary, three numbers, a decision, an approval and a question the reviewer answers on the page, review pointers, goals, a diagram, phases, risks and the verdict with Copy / Download answers; `mono` theme by default; check the answers with `scripts/answers.mjs` |
+| `plan` | an empty skeleton | explains before it asks: summary, three numbers, a card per workstream, goals, a workstream's tasks as steps, a table of choices already made, a diagram, phases and risks, then a decision, an approval and a question the reviewer answers on the page, review pointers and the verdict with Copy / Download answers; validate warns when a plan asks before it explains; `mono` theme by default; check the answers with `scripts/answers.mjs` |
 
 ## Tests
 

@@ -32,6 +32,16 @@
       ]
     },
     {
+      "type": "cards",
+      "title": "Three workstreams, each built on its own",
+      "label": "Workstreams",
+      "items": [
+        { "title": "One-line numbers", "text": "CSS and a build step keep a number with its unit; check.mjs fails on a split." },
+        { "title": "Cheap model outside Claude Code", "text": "Agent files for Copilot and Codex, plus an installer and a hand-off line." },
+        { "title": "Plan mode", "text": "Decisions, approvals and questions answered on the page and checked by answers.mjs." }
+      ]
+    },
+    {
       "type": "text",
       "title": "Three goals, and what the PR leaves alone",
       "label": "Scope",
@@ -45,6 +55,17 @@
         { "title": "Numbers stay on one line", "text": "CSS and a build step bind tokens; check.mjs fails on a split token or a spilled KPI.", "status": "done" },
         { "title": "Cheap model outside Claude Code", "text": "Agent files for Copilot and Codex, installer, doctor check and the hand-off line. Codex is untested.", "status": "done" },
         { "title": "Plan mode", "text": "Five section types, two themes, the answer runtime, answers.mjs and this example.", "status": "doing" }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Three choices are already made",
+      "label": "Settled",
+      "columns": ["Choice", "Why", "Made by"],
+      "rows": [
+        ["Bind number tokens in CSS and a build step", "Rewriting stored text would change what authors wrote", "Author"],
+        ["check.mjs fails on a split number", "A warning is easy to ignore", "Author"],
+        ["No new npm dependency", "Every page stays one offline file", "Repo rule"]
       ]
     },
     {
@@ -102,7 +123,7 @@
         }
       ],
       "recommended": "Pinned agent file plus a hand-off line",
-      "why": "Copilot's logs show the agent file's model is used: claude-haiku-5.5 in 19 of 19 runs. The skill hand-off itself was tried once; the started agent was refused file access and the main model finished. This option is built, so if nobody answers it ships as is.",
+      "why": "The Workstreams cards and Phases steps explain what is built. Copilot's logs show the agent file's model is used: claude-haiku-5.5 in 19 of 19 runs. The skill hand-off itself was tried once; the started agent was refused file access and the main model finished. This option is built, so if nobody answers it ships as is.",
       "default": "Pinned agent file plus a hand-off line"
     },
     {
@@ -124,7 +145,7 @@
         }
       ],
       "recommended": "Copy or download plan-answers.json",
-      "why": "A server breaks the one rule every page keeps: no network. The file carries a plan hash, so answers to an edited plan are refused. This option is built, so if nobody answers it ships as is.",
+      "why": "The Answer loop diagram shows the path. A server breaks the one rule every page keeps: no network. The file carries a plan hash, so answers to an edited plan are refused. This option is built, so if nobody answers it ships as is.",
       "default": "Copy or download plan-answers.json"
     },
     {

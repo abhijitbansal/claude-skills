@@ -33,8 +33,10 @@
 <ol>
 <li><a href="#built-three-calls-and-two-approvals-left">Summary</a></li>
 <li><a href="#one-pr-one-cost-sample-one-untested-host">Numbers</a></li>
+<li><a href="#three-workstreams-each-built-on-its-own">Workstreams</a></li>
 <li><a href="#three-goals-and-what-the-pr-leaves-alone">Scope</a></li>
 <li><a href="#two-phases-done-plan-mode-in-review">Phases</a></li>
+<li><a href="#three-choices-are-already-made">Settled</a></li>
 <li><a href="#out-as-a-page-back-as-a-file">Answer loop</a></li>
 <li><a href="#four-risks-each-with-a-guard">Risks</a></li>
 <li><a href="#routing">Cheap model</a></li>
@@ -63,6 +65,24 @@
 <div class="kpi tone-neutral"><dt>Cost</dt><dd class="kpi-value">$0.19</dd><dd class="kpi-note">one trial; the hand-off failed and the main model finished</dd></div>
 <div class="kpi tone-warn"><dt>Risk</dt><dd class="kpi-value">Medium</dd><dd class="kpi-delta"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Caution</span></span></dd><dd class="kpi-note">Codex files ship untested</dd></div>
 </dl>
+</section>
+<section class="sec sec-cards" id="three-workstreams-each-built-on-its-own" aria-labelledby="three-workstreams-each-built-on-its-own-title">
+<p class="sec-eyebrow pa-label">Workstreams</p>
+<h2 class="sec-title" id="three-workstreams-each-built-on-its-own-title">Three workstreams, each built on its own<a class="anchor" href="#three-workstreams-each-built-on-its-own" aria-label="Link to this section: Three workstreams, each built on its own">#</a></h2>
+<ul class="cards">
+<li class="card tone-neutral">
+<div class="card-head"><h3>One-line numbers</h3></div>
+<p>CSS and a build step keep a number with its unit; check.mjs fails on a split.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>Cheap model outside Claude Code</h3></div>
+<p>Agent files for Copilot and Codex, plus an installer and a hand-off line.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>Plan mode</h3></div>
+<p>Decisions, approvals and questions answered on the page and checked by answers.mjs.</p>
+</li>
+</ul>
 </section>
 <section class="sec sec-text" id="three-goals-and-what-the-pr-leaves-alone" aria-labelledby="three-goals-and-what-the-pr-leaves-alone-title">
 <p class="sec-eyebrow pa-label">Scope</p>
@@ -100,7 +120,21 @@
 </li>
 </ol>
 </section>
-<section class="sec sec-diagram" id="out-as-a-page-back-as-a-file" aria-labelledby="out-as-a-page-back-as-a-file-title">
+<section class="sec sec-table" id="three-choices-are-already-made" aria-labelledby="three-choices-are-already-made-title">
+<p class="sec-eyebrow pa-label">Settled</p>
+<h2 class="sec-title" id="three-choices-are-already-made-title">Three choices are already made<a class="anchor" href="#three-choices-are-already-made" aria-label="Link to this section: Three choices are already made">#</a></h2>
+<div class="tablewrap" role="region" aria-label="Three choices are already made" tabindex="0">
+<table>
+<thead><tr><th scope="col" class="a-l">Choice</th><th scope="col" class="a-l">Why</th><th scope="col" class="a-l">Made by</th></tr></thead>
+<tbody>
+<tr><th scope="row" class="a-l">Bind number tokens in CSS and a build step</th><td class="a-l">Rewriting stored text would change what authors wrote</td><td class="a-l">Author</td></tr>
+<tr><th scope="row" class="a-l">check.mjs fails on a split number</th><td class="a-l">A warning is easy to ignore</td><td class="a-l">Author</td></tr>
+<tr><th scope="row" class="a-l">No new npm dependency</th><td class="a-l">Every page stays one offline file</td><td class="a-l">Repo rule</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+<section class="sec sec-diagram sec-alt" id="out-as-a-page-back-as-a-file" aria-labelledby="out-as-a-page-back-as-a-file-title">
 <p class="sec-eyebrow pa-label">Answer loop</p>
 <h2 class="sec-title" id="out-as-a-page-back-as-a-file-title">Out as a page, back as a file<a class="anchor" href="#out-as-a-page-back-as-a-file" aria-label="Link to this section: Out as a page, back as a file">#</a></h2>
 <figure class="dg" data-diagram style="--dg-w: 419; --dg-h: 936">
@@ -138,8 +172,8 @@
 <button type="button" class="btn dg-play" data-pa-play aria-label="Play" title="Play or pause (Space)"><span class="pa-playicon" aria-hidden="true"><svg data-sibling-svg></svg></span></button>
 <button type="button" class="btn" data-pa-next title="Next beat (Right)">Next</button>
 <button type="button" class="btn" data-pa-next-chapter title="Next chapter">Next chapter</button>
-<input type="range" class="dg-scrub" data-pa-scrub min="0" max="0" step="1" value="0" aria-label="Beat" list="dg_4-ticks">
-<datalist id="dg_4-ticks" data-pa-ticks></datalist>
+<input type="range" class="dg-scrub" data-pa-scrub min="0" max="0" step="1" value="0" aria-label="Beat" list="dg_6-ticks">
+<datalist id="dg_6-ticks" data-pa-ticks></datalist>
 <span class="dg-cap-count">Beat <span data-pa-count></span></span>
 <button type="button" class="btn" data-pa-speed aria-label="Speed 1×; change speed" title="Playback speed">1×</button>
 <button type="button" class="btn" data-pa-loop aria-pressed="false" title="Loop the story">Loop</button>
@@ -192,7 +226,7 @@
 <details class="plan-why" open>
 <summary>Why Pinned agent file plus a hand-off line</summary>
 <div class="plan-why-body prose">
-<p>Copilot&#39;s logs show the agent file&#39;s model is used: claude-haiku-5.5 in 19 of 19 runs. The skill hand-off itself was tried once; the started agent was refused file access and the main model finished. This option is built, so if nobody answers it ships as is.</p>
+<p>The Workstreams cards and Phases steps explain what is built. Copilot&#39;s logs show the agent file&#39;s model is used: claude-haiku-5.5 in 19 of 19 runs. The skill hand-off itself was tried once; the started agent was refused file access and the main model finished. This option is built, so if nobody answers it ships as is.</p>
 </div>
 </details>
 <p class="plan-default"><span class="plan-default-k">If nobody answers:</span> Pinned agent file plus a hand-off line</p>
@@ -221,7 +255,7 @@
 <details class="plan-why" open>
 <summary>Why Copy or download plan-answers.json</summary>
 <div class="plan-why-body prose">
-<p>A server breaks the one rule every page keeps: no network. The file carries a plan hash, so answers to an edited plan are refused. This option is built, so if nobody answers it ships as is.</p>
+<p>The Answer loop diagram shows the path. A server breaks the one rule every page keeps: no network. The file carries a plan hash, so answers to an edited plan are refused. This option is built, so if nobody answers it ships as is.</p>
 </div>
 </details>
 <p class="plan-default"><span class="plan-default-k">If nobody answers:</span> Copy or download plan-answers.json</p>

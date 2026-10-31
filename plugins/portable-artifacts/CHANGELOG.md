@@ -16,6 +16,11 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 - **Stale plugin copy warning.** When a build or render runs from a folder under the plugin cache that is not the recorded
   `installPath`, all five skills print one line to stderr. It is silent on other hosts, in repo checkouts and when the
   record is missing, and it never fails a build.
+- **Plan mode explains before it asks (make-explainer).** The `plan` scaffold now opens with the summary and numbers, then a
+  card per workstream, goals, the tasks as steps, a table of choices already made, a diagram, phases and risks, and only
+  then the decisions, approvals and questions. `validate.mjs` warns `a plan asks before it explains` when a decision,
+  approval or question comes before any steps, cards, table, files or text section (any page with answerable items). A plan
+  page may hold 1,800 words of prose; other pages keep 900. The checked-in plan example is reordered to match.
 
 ## [1.0.0] - 2026-10-22
 
