@@ -19,6 +19,8 @@ export const SKILLS = {
     // Contact sheet into <work>/out; success = at least one PNG.
     outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/render.mjs'), spec, '--contact-sheet', '--out', path.join(work, 'out')],
     artifacts: ['out'],
+    // Visual check on the spec once the contact sheet built; prints {"ok":true,"skipped":true} without a browser.
+    checkCmd: (skill, spec) => [path.join(skill, 'scripts/check.mjs'), spec, '--json'],
   },
   diagram: {
     dir: 'make-diagram',
@@ -119,6 +121,19 @@ export function prepareWorkdir(p, { skillCfg, skillsRoot, evalDir, tmpDir = os.t
     seedSpec = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
   }
   return { work, seedSpec };
+}
+
+// The prompts to run: prompts/<skill>.json, or with `set` prompts/<skill>-<set>.json. The set is looked up
+// among the files that exist and never joined into a path. Throws `unknown --set "x"; available for <skill>: a, b`.
+export function loadPrompts(promptsDir, skill, set) {
+  if (set === undefined) return JSON.parse(fs.readFileSync(path.join(promptsDir, `${skill}.json`), 'utf8'));
+  const prefix = `${skill}-`;
+  const sets = fs.readdirSync(promptsDir)
+    .filter((f) => f.startsWith(prefix) && f.endsWith('.json'))
+    .map((f) => f.slice(prefix.length, -'.json'.length))
+    .sort();
+  if (!sets.includes(set)) throw new Error(`unknown --set "${set}"; available for ${skill}: ${sets.join(', ') || '(none)'}`);
+  return JSON.parse(fs.readFileSync(path.join(promptsDir, `${skill}-${set}.json`), 'utf8'));
 }
 
 export function buildPrompt(skillCfg, task) {
@@ -243,6 +258,7 @@ export async function scoreRun({ work, skillCfg, skillDir, seedSpec, outputTimeo
     finalValid: false,
     errors: [],
     outputOk: false,
+    checkOk: null, // the skill's check on the spec: true/false, null when it has none, skipped, or the output step failed
     changedPaths: null,
     model: '-', // generatedBy.model the agent self-reported in its saved spec; '-' if none
   };
@@ -274,19 +290,41 @@ export async function scoreRun({ work, skillCfg, skillDir, seedSpec, outputTimeo
     if (!fs.existsSync(p)) return false;
     return fs.statSync(p).isDirectory() ? fs.readdirSync(p, { recursive: true }).some((f) => String(f).endsWith('.png')) : true;
   });
+  if (score.outputOk && skillCfg.checkCmd) {
+    const c = await run(['node', ...skillCfg.checkCmd(skillDir, specPath)], {
+      cwd: work, env, timeoutMs: outputTimeoutMs, logFile: path.join(work, 'check.log'),
+    });
+    score.checkOk = readCheckResult(c);
+  }
   return score;
+}
+
+// The result line of a check run: the last output line that parses to an object with a boolean `ok` (stderr
+// shares the stream, so it need not be the last line). null when the check skipped (no browser), false when it
+// failed, timed out, exited non-zero or printed no result.
+function readCheckResult({ out, code, timedOut }) {
+  if (timedOut) return false;
+  for (const line of out.trim().split('\n').reverse()) {
+    let parsed;
+    try { parsed = JSON.parse(line); } catch { continue; }
+    if (typeof parsed?.ok !== 'boolean') continue;
+    if (parsed.skipped === true) return null;
+    return parsed.ok && code === 0;
+  }
+  return false;
 }
 
 export function summarize(rows, { host, skill, model, agent }) {
   const n = rows.length;
   const pct = (k) => `${rows.filter((r) => r[k]).length}/${n}`;
+  const checkedRows = rows.filter((r) => r.checkOk === true || r.checkOk === false); // a skipped or unrun check is not a miss
   const lines = [
     `# Eval — ${skill} on ${host}${model ? ` (${model})` : ''}${agent ? ` as agent ${agent}` : ''}`,
     '',
-    `Spec written ${pct('specExists')} · valid ${pct('finalValid')} · output ok ${pct('outputOk')}`,
+    `Spec written ${pct('specExists')} · valid ${pct('finalValid')} · output ok ${pct('outputOk')}${checkedRows.length ? ` · check ok ${checkedRows.filter((r) => r.checkOk).length}/${checkedRows.length}` : ''}`,
     '',
-    '| id | spec | valid | validate runs | output | seconds | model reported | notes |',
-    '|---|---|---|---|---|---|---|---|',
+    '| id | spec | valid | validate runs | output | seconds | model reported | notes | check |',
+    '|---|---|---|---|---|---|---|---|---|',
   ];
   for (const r of rows) {
     const notes = [
@@ -295,7 +333,8 @@ export function summarize(rows, { host, skill, model, agent }) {
       r.changedPaths ? `changed: ${r.changedPaths.join(', ')}` : '',
     ].filter(Boolean).join('; ').replaceAll('|', '\\|');
     const b = (x) => (x ? '✓' : '✗');
-    lines.push(`| ${r.id} | ${b(r.specExists)} | ${b(r.finalValid)} | ${r.validateRuns} | ${b(r.outputOk)} | ${r.seconds.toFixed(0)} | ${String(r.model ?? '-').replaceAll('|', '\\|')} | ${notes} |`);
+    const check = r.checkOk === true ? '✓' : r.checkOk === false ? '✗' : '-';
+    lines.push(`| ${r.id} | ${b(r.specExists)} | ${b(r.finalValid)} | ${r.validateRuns} | ${b(r.outputOk)} | ${r.seconds.toFixed(0)} | ${String(r.model ?? '-').replaceAll('|', '\\|')} | ${notes} | ${check} |`);
   }
   return `${lines.join('\n')}\n`;
 }

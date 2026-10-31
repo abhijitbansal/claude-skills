@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { SKILLS, buildPrompt, expandCmd, run, scoreRun, summarize, prepareWorkdir } from './lib.mjs';
+import { SKILLS, buildPrompt, expandCmd, loadPrompts, run, scoreRun, summarize, prepareWorkdir } from './lib.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { values: opts } = parseArgs({
@@ -15,6 +15,7 @@ const { values: opts } = parseArgs({
     host: { type: 'string' },
     model: { type: 'string' },
     agent: { type: 'string' },
+    set: { type: 'string' },
     limit: { type: 'string' },
     only: { type: 'string' },
     timeout: { type: 'string', default: '600' },
@@ -23,7 +24,7 @@ const { values: opts } = parseArgs({
 });
 
 function usage(msg) {
-  process.stderr.write(`${msg}\nusage: node eval/run-eval.mjs --skill ${Object.keys(SKILLS).join('|')} --host <${Object.keys(JSON.parse(fs.readFileSync(path.join(here, 'hosts.json'), 'utf8'))).join('|')}> [--model m] [--agent name] [--limit n] [--only id,id] [--timeout sec] [--out dir]\n`);
+  process.stderr.write(`${msg}\nusage: node eval/run-eval.mjs --skill ${Object.keys(SKILLS).join('|')} --host <${Object.keys(JSON.parse(fs.readFileSync(path.join(here, 'hosts.json'), 'utf8'))).join('|')}> [--model m] [--agent name] [--set name] [--limit n] [--only id,id] [--timeout sec] [--out dir]\n`);
   process.exit(2);
 }
 
@@ -35,6 +36,14 @@ if (!host) usage(`unknown --host ${opts.host ?? ''}`);
 if (opts.agent !== undefined) {
   if (opts.agent === '') usage('--agent needs a name');
   if (!host.agentArgs) usage(`host "${opts.host}" has no agentArgs`);
+}
+
+// --set picks prompts/<skill>-<set>.json (no flag: prompts/<skill>.json); an unknown set is a usage error before any host runs.
+let prompts;
+try {
+  prompts = loadPrompts(path.join(here, 'prompts'), opts.skill, opts.set);
+} catch (e) {
+  usage(e.message);
 }
 
 const check = await run(host.check);
@@ -52,7 +61,6 @@ for (const src of [skillSrc, ...siblingDirs]) {
   }
 }
 
-let prompts = JSON.parse(fs.readFileSync(path.join(here, 'prompts', `${opts.skill}.json`), 'utf8'));
 if (opts.only) {
   const ids = opts.only.split(',');
   const unknown = ids.filter((id) => !prompts.some((p) => p.id === id));
@@ -89,12 +97,12 @@ for (const p of prompts) {
   const score = await scoreRun({ work, skillCfg, skillDir: path.join(work, 'skills', skillCfg.dir), seedSpec });
   const row = { id: p.id, hostExit: r.code, timedOut: r.timedOut, seconds: r.seconds, ...score };
   rows.push(row);
-  for (const f of [skillCfg.spec, 'output.log', ...skillCfg.artifacts]) {
+  for (const f of [skillCfg.spec, 'output.log', 'check.log', ...skillCfg.artifacts]) {
     const src = path.join(work, f);
     if (fs.existsSync(src)) fs.cpSync(src, path.join(caseDir, path.basename(f)), { recursive: true });
   }
   fs.rmSync(work, { recursive: true, force: true }); // artifacts already copied; rmSync does not follow the node_modules symlink
-  process.stdout.write(`  spec ${row.specExists ? '✓' : '✗'}  valid ${row.finalValid ? '✓' : '✗'}  runs ${row.validateRuns}  output ${row.outputOk ? '✓' : '✗'}  ${row.seconds.toFixed(0)}s  model ${row.model}\n`);
+  process.stdout.write(`  spec ${row.specExists ? '✓' : '✗'}  valid ${row.finalValid ? '✓' : '✗'}  runs ${row.validateRuns}  output ${row.outputOk ? '✓' : '✗'}  check ${row.checkOk === null ? '-' : row.checkOk ? '✓' : '✗'}  ${row.seconds.toFixed(0)}s  model ${row.model}\n`);
 }
 
 fs.writeFileSync(path.join(resultsDir, 'results.json'), `${JSON.stringify({ host: opts.host, skill: opts.skill, model: opts.model ?? null, agent: opts.agent ?? null, rows }, null, 2)}\n`);

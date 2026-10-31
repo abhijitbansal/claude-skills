@@ -14,6 +14,8 @@ what the host left behind.
 
 node run-eval.mjs --skill dashboard --host claude --limit 3
 node run-eval.mjs --skill motion --host codex --only q3-counter,edit-existing
+node run-eval.mjs --skill motion --host claude --model haiku --set benchmark
+node run-eval.mjs --skill motion --host claude --model haiku --set benchmark --only chart-race,map-regions
 node run-eval.mjs --skill diagram --host claude --only checkout-path,edit-existing
 node run-eval.mjs --skill explainer --host claude --model haiku --only recap-from-repo,edit-existing
 node run-eval.mjs --skill scene --host claude --model haiku --only city-inline,edit-switch-forest
@@ -25,6 +27,12 @@ Hosts are defined in `hosts.json`: `claude`, `codex`, `codex-oss`
 (Ollama via `codex exec --oss`), `gemini` and `copilot`. To add a host,
 add an entry with a `cmd` template (`{prompt}`, `{cwd}`, `{model}`), plus
 optional `modelArgs`, `agentArgs` and a `check` command.
+
+`--set <name>` runs the prompts in `prompts/<skill>-<name>.json` instead of
+the default `prompts/<skill>.json` (which stays as it is, so committed
+summaries remain comparable). An unknown set exits 2 with
+`unknown --set "x"; available for motion: benchmark, items`. `--only` and
+`--limit` apply after `--set`. Motion has two sets (see "Motion sets" below).
 
 `--agent <name>` runs the host through a named custom agent. It works only
 for a host with `agentArgs` (today `copilot`: `--agent {agent}`); any other
@@ -59,6 +67,7 @@ of which model ran. (The harness rebuilds each page from the spec without
 | valid | the harness's final `validate` passes |
 | validate runs | how many times the host ran `validate` (1 = right first time) |
 | output | the build or contact sheet succeeded |
+| check | motion only: `scripts/check.mjs <spec> --json` passed (`✓`), failed (`✗`), or did not apply (`-`: skipped without a browser, the output step failed, or the skill has no check). It runs only after `output` succeeded, and its output is kept as `check.log`. The totals line reads `check ok n/m` over the rows whose check ran. |
 | changed | for edit prompts: the leaf JSON paths that differ from the seed (a targeted edit changes only a few) |
 
 Results go to `results/<timestamp>/<host>-<skill>/`: `results.json`,
@@ -78,6 +87,33 @@ prompts. The lift inputs ride in `fixtures/data/` because a seed can only
 become the spec itself. Edit prompts start from `fixtures/seeds/scene.json`
 (a city with no tour) or `scene-tour.json` (the same city with a two-beat
 tour, for the rename). The pass bar for a billed run is 90% valid.
+
+## Motion sets
+
+- `prompts/motion.json` (no `--set`): the original ten prompts.
+- `--set benchmark`: twelve prompts, two per category (product launch, PR
+  walkthrough, data viz, captioned social, docs to video, templated batch),
+  each naming a 10 to 30 second duration and tagged with a `category`. Some ask for
+  capabilities a later release adds, so a spec that cannot express them is a
+  real miss, not a harness fault.
+- `--set items`: one prompt per new field or block, appended as each feature
+  lands (empty until then).
+
+The benchmark prompts read files from `fixtures/data/`, which every run copies to
+`./data/`:
+
+| File | Content |
+|---|---|
+| `captions.srt` | 6 cues, 24 words, English |
+| `captions.vtt` | the same cues as WebVTT |
+| `clip.mp4` | 2 s, 320x180, SMPTE bars, silent (committed, a few KB) |
+| `music.wav` | 10 s mono 8 kHz click track at 120 BPM: a 20 ms 1 kHz burst every 0.5 s on silence, so beat detection has onsets |
+| `rows.json` | 3 rows of `{ "name", "city", "count" }` for the templated-batch prompts |
+
+`music.wav` is `writeWav` from the make-motion test helpers with
+`{ seconds: 10, sampleRate: 8000, clickBpm: 120 }`, and `clip.mp4` is
+`makeTestVideo` with `{ source: 'smptebars' }`; both were generated once and
+committed. A test checks `music.wav` byte for byte against the helper.
 
 ## Tests
 

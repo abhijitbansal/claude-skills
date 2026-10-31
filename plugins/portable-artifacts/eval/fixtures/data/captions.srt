@@ -1,0 +1,23 @@
+1
+00:00:00,000 --> 00:00:01,800
+Welcome to the launch
+
+2
+00:00:02,000 --> 00:00:03,800
+Today we ship faster
+
+3
+00:00:04,000 --> 00:00:05,800
+Every build stays deterministic
+
+4
+00:00:06,000 --> 00:00:07,800
+No network needed anywhere
+
+5
+00:00:08,000 --> 00:00:09,800
+Export to MP4 instantly
+
+6
+00:00:10,000 --> 00:00:11,800
+Thanks for watching today

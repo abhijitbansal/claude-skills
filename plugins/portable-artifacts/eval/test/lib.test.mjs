@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { SKILLS, buildPrompt, expandCmd, readSpecModel, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules, createFixtureRepo, prepareWorkdir, copySkill } from '../lib.mjs';
+import { SKILLS, buildPrompt, expandCmd, readSpecModel, diffPaths, countValidateRuns, scoreRun, summarize, run, linkNodeModules, createFixtureRepo, prepareWorkdir, copySkill, loadPrompts } from '../lib.mjs';
 
 const made = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-eval-test-')); made.push(d); return d; };
@@ -529,4 +529,188 @@ test('summarize has a "model reported" column and names the agent', () => {
   assert.match(md, /\| a \| ✓ \| ✓ \| 1 \| ✓ \| 3 \| Claude Haiku 5\.5 \|/);
   assert.match(md, /\| b \| ✗ \| ✗ \| 0 \| ✗ \| 3 \| - \|/);
   assert.match(md, /artifact-builder/);
+});
+
+// --- --set prompt sets, the check column, the motion benchmark and its fixtures (Task 3) ---
+
+const promptsDir = path.join(evalDir, 'prompts');
+
+test('loadPrompts: no set reads prompts/<skill>.json, a set reads prompts/<skill>-<set>.json', () => {
+  assert.deepEqual(loadPrompts(promptsDir, 'motion'), readJson('prompts', 'motion.json'));
+  assert.deepEqual(loadPrompts(promptsDir, 'motion', 'benchmark'), readJson('prompts', 'motion-benchmark.json'));
+  assert.deepEqual(loadPrompts(promptsDir, 'motion', 'items'), readJson('prompts', 'motion-items.json'));
+});
+
+test('loadPrompts: an unknown set names the sets that exist, and a set is never joined into a path', () => {
+  assert.throws(() => loadPrompts(promptsDir, 'motion', 'x'), { message: 'unknown --set "x"; available for motion: benchmark, items' });
+  assert.throws(() => loadPrompts(promptsDir, 'motion', '../motion'), { message: 'unknown --set "../motion"; available for motion: benchmark, items' });
+  assert.throws(() => loadPrompts(promptsDir, 'dashboard', 'benchmark'), { message: 'unknown --set "benchmark"; available for dashboard: (none)' });
+  assert.throws(() => loadPrompts(promptsDir, 'motion', ''), /unknown --set ""/);
+});
+
+test('run-eval: an unknown --set exits 2 listing the sets before any host runs; a known set gets past that check', () => {
+  const { r, hostLaunched } = runEvalWithFakeHosts(['--host', 'claude', '--skill', 'motion', '--set', 'nope']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /unknown --set "nope"; available for motion: benchmark, items/);
+  assert.match(r.stderr, /\[--set name\]/);
+  assert.equal(hostLaunched, false, 'no host executable may be launched');
+  const known = runEvalWithFakeHosts(['--host', 'claude', '--skill', 'motion', '--set', 'benchmark']);
+  assert.equal(known.r.status, 2);
+  assert.match(known.r.stderr, /host "claude" not available/);
+});
+
+// A fake skill whose scripts/check.mjs prints `body` and exits `code`.
+function fakeSkillWithCheck(body, code = 0) {
+  const skill = fakeSkill();
+  fs.writeFileSync(path.join(skill, 'scripts/check.mjs'), `process.stdout.write(${JSON.stringify(body)}); process.exit(${code});`);
+  return skill;
+}
+const checkCfg = { ...cfg, checkCmd: (skill, spec) => [path.join(skill, 'scripts/check.mjs'), spec, '--json'] };
+const scoreWithCheck = async (body, code, skillCfg = checkCfg) => {
+  const work = tmp();
+  fs.writeFileSync(path.join(work, 'spec.json'), '{"ok": true}');
+  return scoreRun({ work, skillCfg, skillDir: fakeSkillWithCheck(body, code) });
+};
+
+test('scoreRun records checkOk from checkCmd and null when the check skips', async () => {
+  assert.equal((await scoreWithCheck('{"ok":true}\n', 0)).checkOk, true);
+  assert.equal((await scoreWithCheck('{"ok":true,"skipped":true,"reason":"no browser"}\n', 0)).checkOk, null);
+  assert.equal((await scoreWithCheck('{"ok":false,"errors":[{"path":"a","message":"b"}]}\n', 1)).checkOk, false);
+  assert.equal((await scoreWithCheck('{"ok":true}\n', 1)).checkOk, false, 'a non-zero exit fails even with ok:true');
+  assert.equal((await scoreWithCheck('boom, not json\n', 1)).checkOk, false, 'a check that printed no JSON is a failed check');
+  assert.equal((await scoreWithCheck('{"ok":true,"warnings":["w"]}\nsome stderr after\n', 0)).checkOk, true, 'the JSON line need not be last');
+});
+
+test('scoreRun: checkOk is null without a checkCmd and when the output step did not succeed', async () => {
+  assert.equal((await scoreWithCheck('{"ok":true}\n', 0, cfg)).checkOk, null);
+  const invalidWork = tmp();
+  fs.writeFileSync(path.join(invalidWork, 'spec.json'), '{"ok": false}');
+  const invalid = await scoreRun({ work: invalidWork, skillCfg: checkCfg, skillDir: fakeSkillWithCheck('{"ok":true}\n', 0) });
+  assert.equal(invalid.checkOk, null);
+  const noSpec = await scoreRun({ work: tmp(), skillCfg: checkCfg, skillDir: fakeSkill() });
+  assert.equal(noSpec.checkOk, null);
+  const failOut = { ...checkCfg, outputCmd: (skill) => [path.join(skill, 'scripts/missing.mjs')] };
+  const outWork = tmp();
+  fs.writeFileSync(path.join(outWork, 'spec.json'), '{"ok": true}');
+  const s = await scoreRun({ work: outWork, skillCfg: failOut, skillDir: fakeSkillWithCheck('{"ok":true}\n', 0) });
+  assert.equal(s.outputOk, false);
+  assert.equal(s.checkOk, null);
+});
+
+test('SKILLS.motion.checkCmd runs scripts/check.mjs on the spec with --json; no other skill has one', () => {
+  assert.deepEqual(SKILLS.motion.checkCmd('/s', '/w/motion.json'), [path.join('/s', 'scripts/check.mjs'), '/w/motion.json', '--json']);
+  assert.deepEqual(Object.keys(SKILLS).filter((k) => SKILLS[k].checkCmd), ['motion']);
+});
+
+test('summarize has a check column: ✓ passed, ✗ failed, - skipped or not run', () => {
+  const base = { specExists: true, finalValid: true, validateRuns: 1, outputOk: true, seconds: 3, errors: [] };
+  const md = summarize([{ id: 'a', ...base, checkOk: true }, { id: 'b', ...base, checkOk: false }, { id: 'c', ...base, checkOk: null }, { id: 'd', ...base }], { host: 'claude', skill: 'motion' });
+  assert.match(md, /\| model reported \| notes \| check \|/);
+  const cell = (id) => md.split('\n').find((l) => l.startsWith(`| ${id} |`)).split('|').slice(-2, -1)[0].trim();
+  assert.deepEqual(['a', 'b', 'c', 'd'].map(cell), ['✓', '✗', '-', '-']);
+  assert.match(md, /check ok 1\/2/, 'counted over the rows whose check ran');
+  const none = summarize([{ id: 'x', ...base }], { host: 'claude', skill: 'dashboard' });
+  assert.doesNotMatch(none, /check ok/, 'the totals line only mentions the check when some row ran one');
+});
+
+const BENCHMARK_ORDER = [
+  ['product-launch', ['launch-teaser', 'launch-feature-trio']],
+  ['pr-walkthrough', ['pr-walkthrough', 'pr-code-diff']],
+  ['data-viz', ['chart-race', 'map-regions']],
+  ['captioned-social', ['captioned-social', 'captioned-vertical']],
+  ['docs-to-video', ['docs-steps', 'docs-faq']],
+  ['templated-batch', ['batch-welcome', 'batch-kpi-cards']],
+];
+
+test('the motion benchmark file has 12 prompts, unique ids, two per category tag', () => {
+  const prompts = readJson('prompts', 'motion-benchmark.json');
+  assert.equal(prompts.length, 12);
+  assert.equal(new Set(prompts.map((p) => p.id)).size, 12);
+  assert.deepEqual(prompts.map((p) => [p.category, p.id]), BENCHMARK_ORDER.flatMap(([c, ids]) => ids.map((id) => [c, id])));
+  for (const [category] of BENCHMARK_ORDER) assert.equal(prompts.filter((p) => p.category === category).length, 2, category);
+  for (const p of prompts) {
+    assert.deepEqual(Object.keys(p).sort(), ['category', 'id', 'prompt'], `${p.id}: only id, category, prompt`);
+    const seconds = [...p.prompt.matchAll(/(\d+)[- ]second/g)].map((m) => Number(m[1]));
+    assert.equal(seconds.length, 1, `${p.id} names exactly one duration`);
+    assert.ok(seconds[0] >= 10 && seconds[0] <= 30, `${p.id} duration ${seconds[0]} s is within 10-30`);
+  }
+});
+
+test('the motion benchmark prompts carry the wording and fixtures the plan pins', () => {
+  const by = Object.fromEntries(readJson('prompts', 'motion-benchmark.json').map((p) => [p.id, p.prompt]));
+  assert.match(by['pr-walkthrough'], /as monospace text lines starting with \+ and -/);
+  assert.match(by['pr-code-diff'], /a code-diff block/);
+  assert.match(by['captioned-social'], /16:9/);
+  assert.match(by['captioned-social'], /data\/captions\.srt/);
+  assert.match(by['captioned-social'], /plain captions/);
+  assert.match(by['captioned-vertical'], /9:16/);
+  assert.match(by['captioned-vertical'], /data\/captions\.vtt/);
+  assert.match(by['captioned-vertical'], /karaoke captions/);
+  assert.match(by['captioned-vertical'], /data\/music\.wav/);
+  assert.match(by['batch-welcome'], /name and city/);
+  assert.match(by['batch-welcome'], /so it can be rendered per row of data\/rows\.json/);
+  for (const [id, text] of Object.entries(by)) {
+    for (const [, file] of text.matchAll(/\bdata\/([\w-]+\.\w+)/g)) assert.ok(fs.existsSync(path.join(evalDir, 'fixtures/data', file)), `${id} names data/${file}`);
+  }
+});
+
+test('motion-items.json starts empty and the default motion.json is untouched', () => {
+  assert.deepEqual(readJson('prompts', 'motion-items.json'), []);
+  const ids = readJson('prompts', 'motion.json').map((p) => p.id);
+  assert.equal(ids.length, 10);
+  assert.equal(ids[0], 'q3-counter');
+  assert.equal(ids[9], 'edit-existing');
+});
+
+const dataFile = (name) => path.join(evalDir, 'fixtures/data', name);
+const words = (text) => text.split(/\s+/).filter(Boolean).length;
+
+test('captions.srt has 6 cues and 24 words, and captions.vtt carries the same text under a WEBVTT header', () => {
+  const srt = fs.readFileSync(dataFile('captions.srt'), 'utf8');
+  const vtt = fs.readFileSync(dataFile('captions.vtt'), 'utf8');
+  const blocks = (text) => text.trim().split(/\r?\n\r?\n/);
+  const cueText = (block) => block.split(/\r?\n/).filter((l) => !/^\d+$/.test(l) && !l.includes('-->')).join(' ');
+  const srtBlocks = blocks(srt);
+  assert.equal(srtBlocks.length, 6);
+  assert.ok(srtBlocks.every((b) => /^\d+\n\d\d:\d\d:\d\d,\d{3} --> \d\d:\d\d:\d\d,\d{3}\n\S/.test(b)));
+  assert.equal(words(srtBlocks.map(cueText).join(' ')), 24);
+  assert.match(vtt, /^WEBVTT\n/);
+  const vttCues = blocks(vtt).slice(1);
+  assert.equal(vttCues.length, 6);
+  assert.ok(vttCues.every((b) => /\d\d:\d\d:\d\d\.\d{3} --> \d\d:\d\d:\d\d\.\d{3}/.test(b)));
+  assert.deepEqual(vttCues.map(cueText), srtBlocks.map(cueText));
+});
+
+test('rows.json has 3 rows of name, city and count', () => {
+  const rows = JSON.parse(fs.readFileSync(dataFile('rows.json'), 'utf8'));
+  assert.equal(rows.length, 3);
+  for (const row of rows) {
+    assert.deepEqual(Object.keys(row), ['name', 'city', 'count']);
+    assert.equal(typeof row.name, 'string');
+    assert.equal(typeof row.city, 'string');
+    assert.equal(typeof row.count, 'number');
+  }
+});
+
+test('music.wav is exactly writeWav({ clickBpm: 120 }): 10 s mono 8 kHz, a 20 ms 1 kHz burst every 0.5 s', async () => {
+  const { wavBuffer } = await import('../../skills/make-motion/test/helpers/wav.mjs');
+  const file = fs.readFileSync(dataFile('music.wav'));
+  assert.deepEqual(file, wavBuffer({ seconds: 10, sampleRate: 8000, clickBpm: 120 }));
+  assert.equal(file.readUInt16LE(22), 1);
+  assert.equal(file.readUInt32LE(24), 8000);
+  assert.equal(file.length, 44 + 10 * 8000 * 2);
+});
+
+test('clip.mp4 is a small committed H.264 file: 2 s, 320x180, no audio', (t) => {
+  const file = dataFile('clip.mp4');
+  const bytes = fs.readFileSync(file);
+  assert.equal(bytes.subarray(4, 8).toString('latin1'), 'ftyp');
+  assert.ok(bytes.length < 100 * 1024, `${bytes.length} bytes is under 100 KB`);
+  const probe = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name,width,height:format=duration', '-of', 'json', file], { encoding: 'utf8' });
+  if (probe.error || probe.status !== 0) { t.skip('ffprobe unavailable'); return; }
+  const info = JSON.parse(probe.stdout);
+  assert.deepEqual(info.streams.map((s) => s.codec_type), ['video']);
+  assert.equal(info.streams[0].codec_name, 'h264');
+  assert.equal(`${info.streams[0].width}x${info.streams[0].height}`, '320x180');
+  assert.ok(Math.abs(Number(info.format.duration) - 2) < 0.15, `duration ${info.format.duration}`);
 });
