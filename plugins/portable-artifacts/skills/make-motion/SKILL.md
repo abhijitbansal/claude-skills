@@ -10,9 +10,9 @@ effort: low
 
 You write one JSON file, `motion.json`. Scripts validate it, preview it in a browser and render it to MP4. You never write animation code, and you never edit generated output.
 
-Run every command from the project folder (where `motion.json` lives), using the full path to the scripts. Image paths resolve relative to the spec file. If the request is empty, ask what the video should say, how long it should be, and the size (default 1920x1080, 30 fps).
+Run every command from the project folder (where `motion.json` lives), using the full path to the scripts. Image paths resolve relative to the spec file. If the request is empty, ask what the video should say, how long it should be, and the size (default 1920x1080, 30 fps). Before writing a spec, or handing the work to another agent, run the Intake (one round) section below, and put its answers in the hand-off brief.
 
-**Audio is opt-in.** Add `audio` tracks only when the prompt asks for sound (music, soundtrack, voiceover, narration, "read it aloud", a sound effect, a click or a whoosh) or the user confirms when you ask. Never add audio to a prompt that does not mention it. When the prompt is about sound but unclear (for example "make it feel polished" with an mp3 in the folder), put it in the intake round (see Intake (one round)) rather than asking separately. Music and sound effects are files the user supplies; a voiceover can be synthesised with `voice.mjs` (workflow step 2) when the prompt asks for narration without giving a file. Short UI-style sounds need no file: the root `cues` array (below) synthesises them locally.
+**Audio is opt-in.** Add `audio` tracks only when the prompt asks for sound (music, soundtrack, voiceover, narration, "read it aloud", a sound effect, a click or a whoosh) or the user confirms when you ask. Never add audio to a prompt that does not mention it. A music or voice file the user names, in the prompt or in the intake round, counts as asking for that track. When the prompt is about sound but unclear (for example "make it feel polished" with an mp3 in the folder), put it in the intake round (see Intake (one round)) rather than asking separately. Music and sound effects are files the user supplies; a voiceover can be synthesised with `voice.mjs` (workflow step 2) when the prompt asks for narration without giving a file. Short UI-style sounds need no file: the root `cues` array (below) synthesises them locally.
 
 ## Cheaper model
 
@@ -37,21 +37,21 @@ If it reports anything missing, tell the user in one message: each item, why it 
 
 ## Intake (one round)
 
-Before writing the spec, ask once. Send one message that lists every option below with its default, so the user can answer in one reply, or say "defaults". When you hand the build to `artifact-builder`, ask first and put the answers in its brief. Leave out an option the prompt already settles ("a 9:16 clip", "with a voiceover") and say what you took from it. Then build; do not ask again.
+Before writing the spec, ask once. Send one message that lists every option below with its default, so the user can answer in one reply, or say "defaults". Ask before any hand-off to `artifact-builder` and put the answers in its brief. Leave out an option the prompt already settles ("a 9:16 clip", "with a voiceover") and say what you took from it. If the prompt already settles every option that matters, skip the round and build. Then build; do not ask again.
 
 - **format**: the video `size`. 1920x1080 (default), 1080x1920 for Reels, TikTok and Shorts, 1080x1080 or 1080x1350.
 - **length**: about 10 s (default); 8 to 30 s works well.
-- **assets**: your own files in the project folder. Photos or a logo (PNG, JPG, SVG), music and a voice file (mp3, wav, m4a, aac, ogg, flac). Default: none, so the video is built from text, shapes and charts.
+- **assets**: your own files in the project folder. Photos or a logo (PNG, JPG, SVG), music and a voice file (mp3, wav, m4a, aac, ogg, flac). Default: none, so the video is built from text, shapes and charts. Naming a music or voice file here counts as asking for that track.
 - **voiceover**: narration synthesised on this machine with Kokoro. Default: off. Saying yes means a one-time install of about 250 MB plus a 90 MB voice model (the doctor check in Before the first build asks again before it installs). A voice file in assets replaces it.
 - **sound**: short synthesised cues (pop, click, whoosh, chime, impact, riser, swoosh, typing, drop, ding), or none. Default: none; the audio opt-in rule above stands.
 - **theme**: `dusk`, `press` or `poster`, as in Choosing a theme. Default: the one that section picks for the prompt, `dusk` when unclear.
 - **CTA**: a closing line and what to do (for example "Try it free at example.com"). Default: none.
 
-If the prompt asks you to build and you cannot pause for an answer, skip the round and build with the defaults. That covers `claude -p`, `codex exec`, `copilot -p`, the eval, or any run that cannot pause for an answer. Do not ask a question in place of a spec. Your final report then carries one line listing what you skipped:
+If the prompt asks you to build and you cannot pause for an answer, skip the round and build with the defaults. That covers `claude -p`, `codex exec`, `copilot -p`, the eval, or any run that cannot pause for an answer. Do not ask a question in place of a spec. Your final report then carries one line with the value you actually used for each option, not the defaults when the prompt settled something else:
 
-`intake: skipped (<reason>); defaults used: format 16:9, 10 s, no assets, no voiceover, no sound, theme <name>, no CTA`
+`intake: skipped (<reason>); values used: format <format>, length <seconds> s, assets <files or none>, voiceover <on or off>, sound <cues or none>, theme <name>, CTA <text or none>`
 
-Fill `<reason>` with why you could not ask, and `<name>` with the theme you drew.
+Fill `<reason>` with why you could not ask. With nothing settled by the prompt the line reads `format 16:9, length 10 s, assets none, voiceover off, sound none, theme <name>, CTA none`.
 
 ## Workflow
 

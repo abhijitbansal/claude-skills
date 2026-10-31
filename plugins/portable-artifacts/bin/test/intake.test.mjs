@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CUE_NAMES } from '../../skills/make-motion/template/audio.mjs';
 
 const MOTION = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../skills/make-motion');
 const HEADING = 'Intake (one round)';
@@ -16,6 +17,8 @@ export function intakeSection(md) {
 
 // One option per list line: a bold name, then text that must carry a default.
 const OPTIONS = ['format', 'length', 'assets', 'voiceover', 'sound', 'theme', 'CTA'];
+const VOICEOVER_DISCLOSURE = 'a one-time install of about 250 MB plus a 90 MB voice model';
+const TRIGGERS = ['`claude -p`', '`codex exec`', '`copilot -p`', 'the eval'];
 export const optionLine = (section, name) => section.split('\n').find((l) => l.includes(`**${name}**`));
 
 export function problems(section) {
@@ -25,9 +28,11 @@ export function problems(section) {
     if (!line) out.push(`no line for option ${name}`);
     else if (!/default/i.test(line)) out.push(`option ${name} names no default`);
   }
-  for (const phrase of ['250 MB', '90 MB', 'any run that cannot pause for an answer', 'intake: skipped (']) {
+  for (const phrase of [VOICEOVER_DISCLOSURE, ...TRIGGERS, 'any run that cannot pause for an answer', 'intake: skipped (', 'values used: format <format>']) {
     if (!section.includes(phrase)) out.push(`missing "${phrase}"`);
   }
+  const sound = optionLine(section, 'sound') ?? '';
+  for (const cue of CUE_NAMES) if (!sound.includes(cue)) out.push(`sound line lacks cue ${cue}`);
   return out;
 }
 
@@ -46,7 +51,7 @@ test('the intake section sits before Workflow, and the heading is unique', () =>
 test('the intake lists only options make-motion can do today', () => {
   const section = intakeSection(read('SKILL.md'));
   assert.ok(!/kenney/i.test(section), 'no Kenney samples until they land');
-  for (const word of ['0b', 'Task ']) assert.ok(!section.includes(word), `no plan reference "${word}"`);
+  for (const re of [/\bTask \d+[a-c]?\b/, /\bPhase 0b\b/, /\bGate \d\b/]) assert.ok(!re.test(section), `no plan reference ${re}`);
 });
 
 test('the Audio is opt-in paragraph still says never add audio, and now points at the intake', () => {
@@ -55,6 +60,27 @@ test('the Audio is opt-in paragraph still says never add audio, and now points a
   assert.ok(para, 'paragraph exists');
   assert.ok(para.includes('Never add audio'), 'the opt-in rule stands');
   assert.ok(para.includes('Intake (one round)'), 'the ask-one-question sentence points at the intake');
+});
+
+test('the opening paragraph sends the agent to the intake before Cheaper model, and the intake says when to skip it', () => {
+  const md = read('SKILL.md');
+  const pointer = md.indexOf('Intake (one round)');
+  assert.ok(pointer > -1 && pointer < md.indexOf('\n## Cheaper model\n'), 'pointer before ## Cheaper model');
+  assert.ok(md.slice(0, md.indexOf('\n## ')).includes('Intake (one round)'), 'pointer is in the opening text');
+  assert.ok(md.slice(0, md.indexOf('\n## ')).includes('hand-off brief'), 'answers go in the hand-off brief');
+  assert.match(intakeSection(md), /already settles every option that matters, skip the round/);
+});
+
+test('naming a music or voice file counts as asking for that track', () => {
+  const md = read('SKILL.md');
+  assert.match(optionLine(intakeSection(md), 'assets'), /counts as asking for that track/);
+  assert.ok(md.split('\n').find((l) => l.startsWith('**Audio is opt-in.**')).includes('counts as asking for that track'));
+});
+
+test('the fallback line reports the values used, not a fixed template', () => {
+  const section = intakeSection(read('SKILL.md'));
+  assert.ok(!section.includes('no assets, no voiceover, no sound'), 'no fixed list of defaults');
+  assert.match(section, /not the defaults/);
 });
 
 test('Choosing a theme rule 3 points at the intake', () => {
@@ -75,7 +101,9 @@ test('guardrail: a missing option, a missing default or a missing fallback is ca
   assert.ok(section.includes('**voiceover**'));
   assert.deepEqual(problems(section.replace('**voiceover**', '**narration**')), ['no line for option voiceover']);
   assert.deepEqual(problems(section.replace('any run that cannot pause for an answer', 'x')), ['missing "any run that cannot pause for an answer"']);
-  assert.deepEqual(problems(section.replaceAll('250 MB', 'big')), ['missing "250 MB"']);
+  assert.deepEqual(problems(section.replaceAll('250 MB', 'big')), [`missing "${VOICEOVER_DISCLOSURE}"`]);
+  assert.deepEqual(problems(section.replace('`codex exec`', 'x')), ['missing "`codex exec`"']);
+  assert.deepEqual(problems(section.replace('ding)', 'x)')), ['sound line lacks cue ding']);
   const noDefault = section.split('\n').map((l) => (l.includes('**CTA**') ? l.replace(/default/gi, 'usually') : l)).join('\n');
   assert.deepEqual(problems(noDefault), ['option CTA names no default']);
 });
