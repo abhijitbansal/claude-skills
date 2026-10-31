@@ -5,14 +5,19 @@ const INSTALL_HINT = `No browser available. Run: ${npxInstallChromium()} `
   + `(doctor: ${doctorCommand()}, id chromium)`;
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 
+// Render mode paints every element into the stage layer (styles.css), so each seek re-rasters the tiles a moving element
+// touched. With partial raster, Chromium re-rasters only the changed part of a reused tile, and an image or art under
+// that part came out one of two ways per browser launch. Whole-tile raster gives the same bytes every launch.
+const ARGS = ['--disable-partial-raster'];
+
 // Bundled Chromium first; falls back to system Chrome with a warning.
 export async function launchBrowser({ quiet = false } = {}) {
   try {
-    return await chromium.launch();
+    return await chromium.launch({ args: ARGS });
   } catch (first) {
     if (!/Executable doesn't exist/i.test(first.message)) throw first;
     try {
-      const browser = await chromium.launch({ channel: 'chrome' });
+      const browser = await chromium.launch({ channel: 'chrome', args: ARGS });
       if (!quiet) {
         process.stderr.write('warning: Playwright Chromium not installed; using system Chrome. '
           + 'Output may differ between machines. Fix: ' + npxInstallChromium() + '\n');

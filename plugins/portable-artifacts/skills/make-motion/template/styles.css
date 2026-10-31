@@ -19,7 +19,15 @@ body { font-family: var(--sans); color: var(--text); }
 body.preview #viewport { bottom: 108px; }
 #stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; }
 .scene { position: absolute; inset: 0; display: none; }
-.el { position: absolute; left: 0; top: 0; will-change: transform, opacity; }
+.el { position: absolute; left: 0; top: 0; }
+/* Compositor layers only where playback is live: renderer.mjs sets body.live-layers only for an explicit preview page,
+   so a missing or unknown mode paints like render mode. In render mode (render.mjs and check.mjs seek, then screenshot)
+   a layer per element made captures depend on timing: a layer keeps the raster scale it was first drawn at (a title that
+   scales in came out in one of two rasterizations per browser launch), and a layer that jumps on screen from off canvas
+   could be captured before its tiles were drawn (an image caught "mid-swipe"). Dropping the layers is half the fix:
+   captures are byte-identical only together with the whole-tile raster flag in scripts/lib/browser.mjs
+   (test/determinism.test.mjs). */
+body.live-layers .el { will-change: transform, opacity; }
 /* A group is a zero-size node at its own centre: the centring translate(-50%, -50%) is then a no-op, and its children (.el
    again, absolutely placed from that centre) move, fade, scale and rotate with it. */
 .el.group { width: 0; height: 0; }

@@ -320,7 +320,8 @@ function watchSpec(ctx) {
 // `nowrapModule`: the file served as /shared/nowrap.mjs (tests point it at a missing file).
 // `videoFrames`: prepareVideo()'s `{ [elementId]: { key, count, fps, ext } }`, served as /frames.json; the frames
 // themselves come from `frameRoot`/<key>/. Preview passes none: it plays the clips themselves from /assets.
-export async function startServer({ specPath, mode = 'preview', theme, nowrapModule = NOWRAP_MODULE, videoFrames = {}, frameRoot = CACHE_ROOT }) {
+// `mode` defaults to render, so a caller that forgets it gets deterministic captures; preview.mjs asks for 'preview'.
+export async function startServer({ specPath, mode = 'render', theme, nowrapModule = NOWRAP_MODULE, videoFrames = {}, frameRoot = CACHE_ROOT }) {
   const specFile = path.resolve(specPath);
   const ctx = { specFile, theme, nowrapModule, videoFrames, frameRoot, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
   const watcher = watchSpec(ctx);

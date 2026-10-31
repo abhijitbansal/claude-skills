@@ -9,7 +9,11 @@ import { expressionInterpreter } from 'vega-interpreter';
 import { bindWithNbsp } from '/shared/nowrap.mjs'; // served by server.mjs; the token regex lives only in shared/
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const MODE = document.querySelector('meta[name="motion-mode"]')?.content ?? 'preview';
+const MODE_MARKER = document.querySelector('meta[name="motion-mode"]')?.content;
+const MODE = MODE_MARKER ?? 'preview';
+// Per-element compositor layers (styles.css body.live-layers) only when the page says preview outright: a missing or
+// unknown marker gets render-mode painting, which is what makes captures deterministic.
+const LIVE_LAYERS = MODE_MARKER === 'preview';
 const SCENE_END_EPSILON = 1e-9;
 const ELEVATED_HIGHLIGHT = 'rgba(255,255,255,.06)'; // the 1 px inset edge of an `elevated` rect
 const ELEVATED_LIFT = 6; // percent of the text colour an elevated fill moves toward
@@ -606,7 +610,9 @@ function makeMotion(spec, built, apply, audio, captions) {
   return {
     duration: built.duration, fps: spec.fps, size: spec.size, sceneStarts: built.sceneStarts, crossfades: built.crossfades,
     sceneIds: spec.scenes.map((s) => s.id), audio, captionMoments: captionMoments(captions, built.duration),
-    // Resolves once the frame is fully drawn (every video frame it shows is decoded); render.mjs awaits it per frame.
+    // Resolves once every video frame it shows is decoded; render.mjs awaits it per frame. It does not wait for a paint:
+    // captures are deterministic because render mode has no per-element layers (styles.css) and the browser rasters
+    // whole tiles (scripts/lib/browser.mjs).
     seek(sec) {
       const t = Math.min(Math.max(0, sec), built.duration);
       seekTo(built.timeline, t);
@@ -661,6 +667,7 @@ async function reload() {
 
 async function start() {
   document.body.classList.add(MODE);
+  if (LIVE_LAYERS) document.body.classList.add('live-layers');
   const motion = await mount();
   window.__motion = Object.assign(motion, { ready });
   window.__reload = reload;

@@ -201,8 +201,11 @@ test('/events emits spec-error with formatted errors when the changed spec is in
   const got = await sseUntil(srv, () => writeFileSync(f.specPath, JSON.stringify({ ...spec('x'), fsp: 30 })), /event: spec-error\ndata: .*\n\n/);
   const data = JSON.parse(/event: spec-error\ndata: (.*)\n/.exec(got)[1]);
   assert.deepEqual(data[0], { path: 'fsp', message: 'unknown property; did you mean "fps"?' });
-  const got2 = await sseUntil(srv, () => writeFileSync(f.specPath, '{not json'), /event: spec-error\ndata: .*\n\n/);
-  assert.match(JSON.parse(/event: spec-error\ndata: (.*)\n/.exec(got2)[1])[0].message, /not valid JSON/);
+  // Under load a late watch event from the first write can still deliver the `fsp` spec-error on this second
+  // connection, so wait for and read the invalid-JSON one, not merely the first spec-error.
+  const notJson = /event: spec-error\ndata: (\[\{"path":"\(root\)","message":"not valid JSON.*)\n\n/;
+  const got2 = await sseUntil(srv, () => writeFileSync(f.specPath, '{not json'), notJson);
+  assert.match(JSON.parse(notJson.exec(got2)[1])[0].message, /^not valid JSON: /);
 }));
 
 const openFds = () => readdirSync('/dev/fd').length;
