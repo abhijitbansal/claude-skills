@@ -16,7 +16,7 @@ import { themeData, themeCss, FONTS_DIR } from './theme.mjs';
 import { artSvg } from '../../shared/art.mjs';
 import { flattenElements } from '../../template/groups.mjs';
 import { FORMATS } from '../../template/formats.mjs';
-import { blockDef, isBlock } from '../../template/blocks/index.mjs';
+import { blockAssetFiles, isBlock } from '../../template/blocks/index.mjs';
 import { CACHE_ROOT } from './video.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -155,7 +155,7 @@ function serveArt(ctx, res, sceneId) {
 // Image, video, audio and captions srcs named by the current spec, and the files a block's params name (logo-outro's
 // `src`, which its expansion draws as an image); /assets serves nothing else.
 const MEDIA_ELEMENTS = new Set(['image', 'video']);
-const blockAssets = (el) => (isBlock(el) ? (blockDef(el.block)?.assets ?? []).map((key) => el.params?.[key]).filter((src) => src !== undefined) : []);
+const blockAssets = (el) => (isBlock(el) ? blockAssetFiles(el).map((file) => file.src) : []);
 function referencedAssets(specFile) {
   try {
     const spec = JSON.parse(readFileSync(specFile, 'utf8'));

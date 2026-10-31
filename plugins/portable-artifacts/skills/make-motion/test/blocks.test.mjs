@@ -2,7 +2,7 @@
 // sees the spec, into a `group` of plain elements laid out for the canvas size the spec resolves to.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -38,24 +38,38 @@ const keyframesOf = (spec) => flattenElements(spec.scenes[0].elements).flatMap((
 
 const PROSE = 'Every release ships faster when the builds stay local and the checks run before review starts';
 const prose = (n) => PROSE.repeat(Math.ceil(n / PROSE.length) + 1).slice(0, n).trimEnd();
-function value(schema, pick) {
+function value(schema, pick, keep = {}, at = '') {
+  if (Object.hasOwn(keep, at)) return keep[at];
   if (schema.enum) return pick === 'first' ? schema.enum[0] : schema.enum.at(-1);
   switch (schema.type) {
     case 'string': return pick === 'small' ? 'Go' : prose(schema.maxLength);
     case 'number': case 'integer': return pick === 'small' ? (schema.minimum ?? 0) : (schema.maximum ?? 987654321);
     case 'boolean': return pick !== 'small';
-    case 'array': return Array.from({ length: pick === 'small' ? schema.minItems : schema.maxItems }, () => value(schema.items, pick));
+    case 'array': // a unique list of enum values (cta-soft actions) takes the values in order, from the end for 'last'
+      if (schema.uniqueItems && schema.items.enum) return (pick === 'last' ? [...schema.items.enum].reverse() : schema.items.enum).slice(0, pick === 'small' ? schema.minItems : schema.maxItems);
+      return Array.from({ length: pick === 'small' ? schema.minItems : schema.maxItems }, () => value(schema.items, pick));
+    case 'object': return fill(schema, pick, keep, at);
     default: throw new Error(`no test value for ${JSON.stringify(schema)}`);
   }
 }
-// `assets` params (logo-outro's src) keep the example's file, which exists in the examples folder.
+// An object's properties (only the required ones for 'small'), each valued by `value`; `at` is the dotted path so far.
+const fill = (schema, pick, keep, at) => Object.fromEntries(Object.entries(schema.properties)
+  .filter(([key]) => pick !== 'small' || schema.required.includes(key))
+  .map(([key, child]) => [key, value(child, pick, keep, at ? `${at}.${key}` : key)]));
+// `assets` params (logo-outro's src, before-after-swipe's before.src) keep the example's file, which exists in the examples folder.
+const exampleAt = (example, dotted) => dotted.split('.').reduce((v, k) => v[k], example);
 function extremes(name) {
   const { params, example, assets = [] } = BLOCKS[name];
-  const make = (pick) => Object.fromEntries(Object.entries(params.properties)
-    .filter(([key]) => pick !== 'small' || params.required.includes(key))
-    .map(([key, schema]) => [key, assets.includes(key) ? example[key] : value(schema, pick)]));
+  const keep = Object.fromEntries(assets.map((dotted) => [dotted, exampleAt(example, dotted)]));
+  const make = (pick) => fill(params, pick, keep, '');
   return { example, first: make('first'), last: make('last'), small: make('small') };
 }
+// The seconds a scene must last for `params` (a block whose schedule needs a long scene says so), else 0.
+const needsSeconds = (name, params) => BLOCKS[name].minDuration?.(params) ?? 0;
+// Blocks whose parts do not all enter over 0.6 s from the scene start: story-beats fades over 0.3 s beat by beat and
+// listicle holds its title from frame 0 and brings its rows in later (test/viral-blocks.test.mjs checks their timing).
+// 'all' skips the entrance rule; 'first' only the "first part enters at the scene start" one (listicle's rows keep theirs).
+const OWN_SCHEDULE = new Map([['story-beats', 'all'], ['listicle', 'first']]);
 
 // ---- the table: every block -------------------------------------------------------------------------------------------
 
@@ -63,7 +77,7 @@ for (const name of names) {
   const example = path.join(EXAMPLES, `${name}.json`);
 
   test(`${name}: example params validate, expand, and the expanded spec is valid`, () => {
-    const motion = oneScene([block(name, BLOCKS[name].example)]);
+    const motion = oneScene([block(name, BLOCKS[name].example)], {}, Math.max(6, needsSeconds(name, BLOCKS[name].example)));
     assert.deepEqual(errs(motion), []);
     const expanded = expandBlocks(motion);
     const [group] = expanded.scenes[0].elements;
@@ -100,12 +114,22 @@ for (const name of names) {
     const canvases = [{ format: '16:9' }, { format: '9:16' }, { format: '1:1' }, { size: [320, 180] }, { size: [16, 16] }];
     for (const [variant, params] of Object.entries(extremes(name))) {
       for (const canvas of canvases) {
-        for (const duration of [0.2, 1, 6]) {
+        // A block with its own schedule is also run at the shortest scene its validator accepts (its minimum).
+        const need = needsSeconds(name, params);
+        for (const duration of [...new Set([0.2, 1, 6, ...(need > 0 ? [need] : [])])]) {
           const motion = oneScene([block(name, params)], canvas, duration);
           const where = `${variant} params, ${JSON.stringify(canvas)}, ${duration} s`;
-          assert.deepEqual(errs(motion), [], where);
+          // A scene shorter than the block's schedule is one error at the param its validator names (exact texts: viral-blocks.test.mjs).
+          const found = errs(motion);
+          if (duration >= need) assert.deepEqual(found, [], where);
+          else {
+            const [expected] = BLOCKS[name].validate(params, { sceneDuration: duration });
+            assert.deepEqual(found.map((line) => line.split(':')[0]), [`scenes[0].elements[0].params.${expected.path}`], `${where}: ${found.join(' | ')}`);
+          }
+          // Squeezed to 85 % of the scene, except in a scene that meets the block's own minimum: it keeps its own times, all inside the scene.
+          const last = need > 0 && duration >= need ? duration : LAST_MOTION_SHARE * duration;
           for (const kf of keyframesOf(expandBlocks(motion))) {
-            assert.ok(kf.t >= 0 && kf.t <= LAST_MOTION_SHARE * duration + EPSILON, `${where}: keyframe at ${kf.t} s is after 85 % of the scene`);
+            assert.ok(kf.t >= 0 && kf.t <= last + EPSILON, `${where}: keyframe at ${kf.t} s is after ${last} s`);
           }
         }
       }
@@ -113,12 +137,13 @@ for (const name of names) {
   });
 
   test(`${name}: colours are theme tokens; entrances use enter over 0.6 s, staggered at least 0.2 s`, () => {
-    const parts = partsOf(expandBlocks(oneScene([block(name, BLOCKS[name].example)])));
+    const parts = partsOf(expandBlocks(oneScene([block(name, BLOCKS[name].example)], {}, Math.max(6, needsSeconds(name, BLOCKS[name].example)))));
     for (const el of parts) {
       for (const key of ['color', 'fill', 'stroke']) {
         if (el[key] !== undefined) assert.ok(TOKENS.includes(el[key]), `${el.id}.${key} is ${el[key]}, not a theme token`);
       }
     }
+    if (OWN_SCHEDULE.get(name) === 'all') return;
     const starts = [];
     for (const el of parts) {
       const kfs = el.keyframes ?? [];
@@ -132,7 +157,7 @@ for (const name of names) {
     }
     assert.ok(starts.length >= 2, 'at least two parts enter');
     const distinct = [...new Set(starts)].sort((a, b) => a - b);
-    assert.equal(distinct[0], 0, 'the first part enters at the scene start');
+    if (!OWN_SCHEDULE.has(name)) assert.equal(distinct[0], 0, 'the first part enters at the scene start');
     distinct.slice(1).forEach((s, i) => assert.ok(s - distinct[i] >= STAGGER_SECONDS - EPSILON, `entrances ${distinct[i]} and ${s} are under ${STAGGER_SECONDS} s apart`));
   });
 }
@@ -405,6 +430,7 @@ const CAPTION_SECONDS = 6;
 // A temp folder holding the spec (and the captions file and logo it names): the spec file's path.
 function captionedSpec(motion) {
   const dir = mkdtempSync(path.join(tmpdir(), 'block-cc-'));
+  for (const file of ['swipe-before.png', 'swipe-after.png']) copyFileSync(path.join(EXAMPLES, file), path.join(dir, file)); // before-after-swipe's example images
   writeFileSync(path.join(dir, 'c.srt'), SRT);
   writeFileSync(path.join(dir, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="#f2a65a"/></svg>');
   const file = path.join(dir, 'm.json');
@@ -414,13 +440,13 @@ function captionedSpec(motion) {
 
 // The lowest edge of any drawn part (cards, shapes, images and texts; groups excluded) once everything has landed
 // (85 % of the scene), in canvas px, as the render page lays it out: { bottom, id }.
-async function lowestPart(browser, file, size) {
+async function lowestPart(browser, file, size, seconds) {
   const srv = await startServer({ specPath: file, mode: 'render' });
   const page = await browser.newPage({ viewport: { width: size[0], height: size[1] }, deviceScaleFactor: 1 });
   try {
     await page.goto(srv.url);
     await waitReady(page);
-    await page.evaluate((s) => window.__motion.seek(s), LAST_MOTION_SHARE * CAPTION_SECONDS);
+    await page.evaluate((s) => window.__motion.seek(s), LAST_MOTION_SHARE * seconds);
     return await page.evaluate(() => {
       const stage = document.getElementById('stage').getBoundingClientRect();
       const k = window.__motion.size[0] / stage.width;
@@ -441,7 +467,8 @@ test('with captions, every block at its place() with the largest params keeps it
         for (const format of FORMAT_NAMES) {
           const size = FORMATS[format].size;
           const { x, y } = BLOCKS[name].place(size, format, params.side);
-          const motion = { format, captions: [{ src: 'c.srt' }], scenes: [{ id: 's', duration: CAPTION_SECONDS, elements: [block(name, params, { x, y })] }] };
+          const seconds = Math.max(CAPTION_SECONDS, needsSeconds(name, params));
+          const motion = { format, captions: [{ src: 'c.srt' }], scenes: [{ id: 's', duration: seconds, elements: [block(name, params, { x, y })] }] };
           const file = captionedSpec(motion);
           if (name === 'checklist' && format === '1:1') {
             const r = spawnSync(process.execPath, [CHECK, file], { encoding: 'utf8' });
@@ -449,7 +476,7 @@ test('with captions, every block at its place() with the largest params keeps it
             assert.match(r.stdout, /\(block "checklist", part "item-\d"\).*params\.items\[\d\]/);
             continue;
           }
-          const low = await lowestPart(browser, file, size);
+          const low = await lowestPart(browser, file, size, seconds);
           const top = captionZone(size, format).top;
           assert.ok(low.bottom <= top + 0.5, `${name} (${variant} params) at ${format}: "${low.id}" reaches y ${low.bottom.toFixed(1)}, into the caption zone at ${top}`);
         }

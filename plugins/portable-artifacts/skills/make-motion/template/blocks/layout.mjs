@@ -86,6 +86,20 @@ export function fitText(text, { size, min, maxWidth, maxLines, lineHeight = LINE
 }
 
 /**
+ * The first of `sizes` (canvas px, largest first) at which `text` takes at most `maxHeight` inside `maxWidth`, wrapping
+ * at spaces with no word wider than the line; the last (smallest) when none does. -> { fontSize, lines, height }.
+ */
+export function fitHeight(text, { sizes, maxWidth, maxHeight, lineHeight = LINE_HEIGHT.sans }) {
+  const fits = (fs) => longestWordWidth(text, fs) <= maxWidth && lineCount(text, fs, maxWidth) * fs * lineHeight <= maxHeight;
+  const fontSize = sizes.find(fits) ?? sizes.at(-1);
+  const lines = lineCount(text, fontSize, maxWidth);
+  return { fontSize, lines, height: lines * fontSize * lineHeight };
+}
+
+// A ladder of sizes in px at 1080 on the short side (largest first, MIN_TEXT or more) as canvas px for fitHeight.
+export const sizeLadder = (sizes, u) => sizes.map((s) => Math.max(MIN_FONT_SIZE, Math.round(s * u)));
+
+/**
  * The scene-time function of a block whose schedule, at full speed, ends at `nominalEnd` seconds: the identity when
  * that fits inside LAST_MOTION_SHARE of the scene, else every time scaled down so the schedule ends exactly there.
  * Rounded down, so rounding never pushes a keyframe past the line.
@@ -93,6 +107,16 @@ export function fitText(text, { size, min, maxWidth, maxLines, lineHeight = LINE
 export function squeeze(sceneDuration, nominalEnd) {
   const k = Math.min(1, (LAST_MOTION_SHARE * sceneDuration) / nominalEnd);
   return (t) => Math.floor(t * k * T_DECIMALS + 1e-6) / T_DECIMALS;
+}
+
+/**
+ * The scene-time function of a block with its own schedule and a validator that demands a scene of at least `needs`
+ * seconds: such a scene keeps every time as the block wrote it (rounded to T_DECIMALS), a shorter one (invalid, but
+ * still expanded without error) is squeezed as `squeeze` does.
+ */
+export function fitSchedule(sceneDuration, nominalEnd, needs) {
+  if (sceneDuration + 1e-9 >= needs) return (t) => Math.round(t * T_DECIMALS) / T_DECIMALS;
+  return squeeze(sceneDuration, nominalEnd);
 }
 
 // Item i's entrance at full speed: [start, end].

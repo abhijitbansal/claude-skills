@@ -246,8 +246,13 @@ test('every block at its viral place() keeps every part inside the platform safe
     for (const name of BLOCK_NAMES) {
       const def = BLOCKS[name];
       const { x, y } = def.place(PHONE, '9:16', def.example.side, insets);
-      const params = { ...def.example, ...(def.assets ?? []).reduce((a, key) => ({ ...a, [key]: 'logo.svg' }), {}) };
-      const motion = viral([scene('s', 6, [{ id: 'b', type: 'block', block: name, x, y, params }])], { captions: [{ src: 'c.srt' }] });
+      const params = structuredClone(def.example);
+      for (const dotted of def.assets ?? []) { // an asset param, or a dotted path to a nested one (before.src), names logo.svg
+        const keys = dotted.split('.');
+        const last = keys.pop();
+        keys.reduce((o, k) => o[k], params)[last] = 'logo.svg';
+      }
+      const motion = viral([scene('s', Math.max(6, def.minDuration?.(params) ?? 0), [{ id: 'b', type: 'block', block: name, x, y, params }])], { captions: [{ src: 'c.srt' }] });
       const file = specFile(motion, { 'c.srt': srt, 'logo.svg': '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="#f2a65a"/></svg>' });
       assert.deepEqual(validateSpec(motion, { dir: path.dirname(file) }).errors, [], name);
       const srv = await startServer({ specPath: file, mode: 'render' });

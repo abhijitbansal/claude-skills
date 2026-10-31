@@ -13,7 +13,7 @@ import { PROTOCOL_WHITELIST, fileInput } from './ffmpeg.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const CACHE_ROOT = path.join(SKILL_ROOT, '.cache/video'); // gitignored; doctor --fix cache clears it
-export const VIDEO_EXTENSIONS = ['mp4', 'mov', 'webm', 'm4v'];
+export { VIDEO_EXTENSIONS } from '../../template/media.mjs';
 const ALPHA_PIX_FMT = /^(yuva|rgba|argb|bgra|gbrap)/;
 const DONE = 'done.json';
 const CACHE_VERSION = 1; // salted into every cache key; bump it when the decode or the folder layout changes

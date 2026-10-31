@@ -1,0 +1,27 @@
+{
+  "mode": "viral",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "story-beats",
+      "duration": 12,
+      "elements": [
+        {
+          "id": "story",
+          "type": "block",
+          "x": 502,
+          "y": 644,
+          "block": "story-beats",
+          "params": {
+            "hook": "Your edits take forever",
+            "problem": "Every cut costs you another hour",
+            "reveal": "One JSON file makes the video",
+            "proof": "Time saved on every edit",
+            "proofNumber": { "to": 63, "suffix": "%" },
+            "cta": "Follow for the full workflow"
+          }
+        }
+      ]
+    }
+  ]
+}

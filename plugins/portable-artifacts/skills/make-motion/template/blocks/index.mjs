@@ -8,7 +8,11 @@
 //   example   example params
 //   place     (size, format[, side[, insets]]) -> { x, y }: where the block belongs on that canvas; `insets` are a viral
 //             spec's (viral.mjs viralInsets), which move it inside the platform safe zone and above the lifted captions
-//   assets    (optional) params that name a file next to the spec (checked like an image src, served like one)
+//   assets    (optional) params that name a file next to the spec (checked like an image src, served like one): each a
+//             key of `params`, or a dotted path to a nested one (`before.src`); see blockAssetFiles
+//   validate  (optional) (params, { sceneDuration }) -> [{ path, message }]: what the schema cannot say, run on params
+//             that passed it; `path` is relative to `params` (`beatSeconds`). A block whose schedule needs a scene of
+//             some length also exports `minDuration(params)` in seconds, which validate reads
 //   hook      (optional) the parts (names without `<blockId>/`) that are on screen from frame 0, with viral.mjs's hook
 //             entrance, when the block opens a viral spec (scene 0): the words a viewer should read first
 //   paramOf   (optional) part -> the param that sets that part's text (`label-2` -> `steps[1]`), for check.mjs hints;
@@ -32,6 +36,10 @@ import quoteCard from './quote-card.mjs';
 import checklist from './checklist.mjs';
 import logoOutro from './logo-outro.mjs';
 import ctaClose from './cta-close.mjs';
+import ctaSoft from './cta-soft.mjs';
+import storyBeats from './story-beats.mjs';
+import listicle from './listicle.mjs';
+import beforeAfterSwipe from './before-after-swipe.mjs';
 
 export const BLOCKS = Object.freeze({
   'title-card': titleCard,
@@ -42,6 +50,10 @@ export const BLOCKS = Object.freeze({
   checklist,
   'logo-outro': logoOutro,
   'cta-close': ctaClose,
+  'cta-soft': ctaSoft,
+  'story-beats': storyBeats,
+  listicle,
+  'before-after-swipe': beforeAfterSwipe,
 });
 export const BLOCK_NAMES = Object.freeze(Object.keys(BLOCKS));
 
@@ -49,6 +61,19 @@ export const isBlock = (el) => el?.type === 'block';
 
 /** The definition of block `name`, or undefined. A name is a registry key only: `constructor` and `__proto__` are not blocks. */
 export const blockDef = (name) => (typeof name === 'string' && Object.hasOwn(BLOCKS, name) ? BLOCKS[name] : undefined);
+
+/**
+ * The files the params of block element `el` name, as [{ at, src }]: `at` the path in `params` (`src`, `before.src`),
+ * `src` its value, for every path in the definition's `assets` that holds a string. Own properties only; never throws,
+ * so it also reads params that no schema has checked.
+ */
+export function blockAssetFiles(el) {
+  const at = (obj, key) => (obj !== null && typeof obj === 'object' && Object.hasOwn(obj, key) ? obj[key] : undefined);
+  return (blockDef(el?.block)?.assets ?? []).flatMap((path) => {
+    const src = path.split('.').reduce(at, el.params);
+    return typeof src === 'string' ? [{ at: path, src }] : [];
+  });
+}
 
 /**
  * A pure copy of `spec` with every top-level `block` element of every scene replaced by its group; a spec without

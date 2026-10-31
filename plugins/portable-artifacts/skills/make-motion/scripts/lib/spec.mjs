@@ -15,7 +15,7 @@ import { VIDEO_EXTENSIONS, isVideo, probeVideo } from './video.mjs';
 import { findFfprobe } from './ffmpeg.mjs';
 import { doctorCommand } from './doctor-hint.mjs';
 
-import { BLOCKS, BLOCK_NAMES, isBlock, blockDef } from '../../template/blocks/index.mjs';
+import { BLOCKS, BLOCK_NAMES, isBlock, blockDef, blockAssetFiles } from '../../template/blocks/index.mjs';
 import { VIRAL_MODE } from '../../template/viral.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
@@ -653,7 +653,8 @@ function checkFormat(spec, errors) {
 }
 
 // A block as written, at its own path: its element fields and keyframes, the block name, its params against the block's
-// schema, and the files its params name (checked like an image src). Params that pass expand without error.
+// schema, the files its params name (checked like an image src) and what its definition adds (`validate`, such as a
+// scene too short for its schedule). Params that pass expand without error.
 function checkBlock(el, base, scene, dir, errors) {
   checkFields(el, base, errors);
   checkKeyframes(el, base, scene.duration, errors);
@@ -671,7 +672,8 @@ function checkBlock(el, base, scene, dir, errors) {
     errors.push(...formatAjvErrors(check.errors).map((e) => ({ path: e.path ? `${at}.${e.path}` : at, message: e.message })));
     return;
   }
-  for (const key of def.assets ?? []) if (el.params[key] !== undefined) checkAssetPath(el.params[key], pathJoin(at, key), dir, errors);
+  for (const file of blockAssetFiles(el)) checkAssetPath(file.src, pathJoin(at, file.at), dir, errors);
+  for (const e of def.validate?.(el.params, { sceneDuration: scene.duration }) ?? []) errors.push({ path: pathJoin(at, e.path), message: e.message });
 }
 
 // Every block, checked before anything expands. A block goes directly in a scene's elements: expandBlocks expands only
