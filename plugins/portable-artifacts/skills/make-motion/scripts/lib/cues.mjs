@@ -96,17 +96,21 @@ export const MAX_HZ = 0.4 * SAMPLE_RATE;
 // An FM click: a sine at `hz` whose phase is pushed by a fast-falling modulation index, the attack of a struck object.
 const FM_RATIO = 1.41; // inharmonic, so the click has no pitch of its own
 const FM_INDEX = 5;
+const FM_MIN_INDEX = 1; // a click needs at least this much modulation to stay a click and not a beep
+const FM_CARRIER_MAX_HZ = MAX_HZ / (1 + (FM_MIN_INDEX + 1) * FM_RATIO); // the highest carrier that still has room for it
 /**
- * The FM click actually made for `hz`: { carrier, modulator, index, topHz }. The carrier is held at or below MAX_HZ and
- * the peak index is lowered until the highest strong sideband (Carson's rule: carrier + (index + 1) × modulator) is
- * too; with no room left the index is 0 and the click is a plain sine at the carrier.
+ * The FM click actually made for `hz`: { carrier, modulator, index, topHz }. The carrier is held low enough to leave
+ * room for an index of 1 (about 5 kHz), and the peak index is lowered until the highest strong sideband (Carson's
+ * rule: carrier + (index + 1) × modulator) stays at or below MAX_HZ.
  */
 export function fmBand(hz) {
-  const carrier = Math.min(hz, MAX_HZ);
+  const carrier = Math.min(hz, FM_CARRIER_MAX_HZ);
   const modulator = FM_RATIO * carrier;
   const index = Math.max(0, Math.min(FM_INDEX, (MAX_HZ - carrier) / modulator - 1));
   return { carrier, modulator, index, topHz: index > 0 ? carrier + (index + 1) * modulator : carrier };
 }
+// The FM click of each cue that has one sits at this multiple of the cue's f0.
+export const FM_CLICK_RATIO = Object.freeze({ pop: 6, drop: 16, ding: 2 });
 function fmClick(seconds, hz) {
   const { carrier, modulator, index: peak } = fmBand(hz);
   return Float64Array.from({ length: frames(seconds) }, (_, i) => {
@@ -120,7 +124,8 @@ function fmClick(seconds, hz) {
 // `drive` > 0 soft-clips it, adding the harmonics that let a low note be heard on small speakers; it is dropped when
 // those harmonics (up to the 3rd) would pass MAX_HZ, where a high note needs no help anyway.
 const DRIVE_HARMONIC = 3;
-function pitchDrop(seconds, { from, to, glide, decay, attackSeconds = 0.001, drive = 0 }) {
+function pitchDrop(seconds, { from: rawFrom, to: rawTo, glide, decay, attackSeconds = 0.001, drive = 0 }) {
+  const [from, to] = [Math.min(rawFrom, MAX_HZ), Math.min(rawTo, MAX_HZ)]; // a very high note glides from MAX_HZ at most
   let phase = 0;
   const tau = glide / 4;
   const shape = drive > 0 && DRIVE_HARMONIC * from <= MAX_HZ ? (x) => Math.tanh(drive * x) / Math.tanh(drive) : (x) => x;
@@ -132,10 +137,12 @@ function pitchDrop(seconds, { from, to, glide, decay, attackSeconds = 0.001, dri
 }
 
 // Partials [ratio, level, decay per second] of `f0` under a short attack: a struck bell or glass.
+// A partial above MAX_HZ (a high note's upper partials) is left out rather than aliased.
 function partials(seconds, f0, list, attackSeconds) {
+  const audible = list.filter(([ratio]) => ratio * f0 <= MAX_HZ);
   return Float64Array.from({ length: frames(seconds) }, (_, i) => {
     const t = i * DT;
-    return list.reduce((sum, [ratio, level, decay]) => sum + level * Math.sin(TWO_PI * ratio * f0 * t) * Math.exp(-t * decay), 0) * attack(t, attackSeconds);
+    return audible.reduce((sum, [ratio, level, decay]) => sum + level * Math.sin(TWO_PI * ratio * f0 * t) * Math.exp(-t * decay), 0) * attack(t, attackSeconds);
   });
 }
 
@@ -206,7 +213,7 @@ export const CUE_LAYERS = Object.freeze({
   // in a small room.
   pop: {
     seconds: 0.16,
-    transient: (f0) => scaled(fmClick(0.003, 6 * f0), 0.4),
+    transient: (f0) => scaled(fmClick(0.003, FM_CLICK_RATIO.pop * f0), 0.4),
     body: (f0) => pitchDrop(0.16, { from: 1.12 * f0, to: f0, glide: 0.04, decay: 30 }),
     tail: { seconds: 0.15, wet: 0.12 },
   },
@@ -259,13 +266,13 @@ export const CUE_LAYERS = Object.freeze({
   // A sub hit: an FM click, then a sine falling an octave (2 × f0 -> f0) in 80 ms; dry.
   drop: {
     seconds: 0.6,
-    transient: (f0) => scaled(fmClick(0.005, 16 * f0), 0.35),
+    transient: (f0) => scaled(fmClick(0.005, FM_CLICK_RATIO.drop * f0), 0.35),
     body: (f0) => pitchDrop(0.6, { from: 2 * f0, to: f0, glide: 0.08, decay: 6, drive: 2 }),
   },
   // A notification: an FM click, then a bright glassy pair of partials (f0 and 2.76 × f0) in a little room.
   ding: {
     seconds: 0.5,
-    transient: (f0) => scaled(fmClick(0.004, 2 * f0), 0.3),
+    transient: (f0) => scaled(fmClick(0.004, FM_CLICK_RATIO.ding * f0), 0.3),
     body: (f0) => partials(0.5, f0, [[1, 1, 7], [2.76, 0.35, 14]], 0.001),
     tail: { seconds: 0.25, wet: 0.2 },
   },
@@ -322,7 +329,7 @@ function wavBuffer(left, right) {
 }
 
 // Scaled so its peak is PEAK, with the linear fade over the last TAIL_SECONDS. Silence stays silence (no 0/0).
-function levelled(xs) {
+export function levelled(xs) {
   const tail = frames(TAIL_SECONDS);
   const top = xs.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
   if (top === 0) return Array.from(xs, () => 0);

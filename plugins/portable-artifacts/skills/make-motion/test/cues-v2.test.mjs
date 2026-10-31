@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { cueWav, writeCueTracks, pinkNoise, layerCue, noteHz, fmBand, CUE_LAYERS, MAX_HZ, SAMPLE_RATE } from '../scripts/lib/cues.mjs';
+import { cueWav, writeCueTracks, pinkNoise, layerCue, levelled, noteHz, fmBand, CUE_LAYERS, FM_CLICK_RATIO, MAX_HZ, SAMPLE_RATE } from '../scripts/lib/cues.mjs';
 import { mulberry32 } from '../template/seeded.mjs';
 import { CUE_NAMES, resolveCues } from '../template/audio.mjs';
 import { TYPING_SECONDS_PER_CHAR, typingLength } from '../template/defaults.mjs';
@@ -126,7 +126,7 @@ test('pop, chime, impact and ding have a reverb tail: the tail adds between -30 
 
 test('at C8 every FM click stays at or below 0.4 × the sample rate, and every pitched cue still renders at full peak', () => {
   const c8 = noteHz('C8');
-  for (const [cue, ratio] of [['pop', 6], ['drop', 16], ['ding', 2]]) {
+  for (const [cue, ratio] of Object.entries(FM_CLICK_RATIO)) {
     const band = fmBand(ratio * c8);
     assert.ok(band.topHz <= MAX_HZ + 1e-9, `${cue}: FM reaches ${band.topHz} Hz`);
   }
@@ -137,6 +137,25 @@ test('at C8 every FM click stays at or below 0.4 × the sample rate, and every p
     const top = left.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
     assert.ok(left.every(Number.isFinite) && Math.abs(top - 0.5) < 0.01, `${cue} at C8 peaks at ${top}`);
   }
+});
+
+// The onset (first 10 ms) of a cue, zero-padded in front so the Hann window centres on the attack, not on its tail.
+const ONSET = Math.round(0.01 * SAMPLE_RATE);
+const onsetWindow = (xs) => [...new Array(ONSET).fill(0), ...xs.slice(0, ONSET)];
+const ALIAS_BAR = 3e-4; // measured: about 4e-5 with the clamp, 7e-4 to 1.2e-2 with the raw carrier and index 5
+
+test('the FM attack of pop, drop and ding at C8 and B8 puts under 3e-4 of its onset energy above 0.4 × the sample rate', () => {
+  for (const note of ['C8', 'B8']) {
+    for (const cue of Object.keys(FM_CLICK_RATIO)) {
+      const xs = onsetWindow(channels(cueWav({ cue, note })).left);
+      const above = bandEnergy(xs, SAMPLE_RATE, MAX_HZ, SAMPLE_RATE / 2 + 1) / bandEnergy(xs, SAMPLE_RATE, 0, SAMPLE_RATE / 2 + 1);
+      assert.ok(above < ALIAS_BAR, `${cue} at ${note}: ${above} of the onset energy is above ${MAX_HZ} Hz`);
+    }
+  }
+});
+
+test('levelled: a silent input stays silent (no 0/0 NaN)', () => {
+  assert.deepEqual(levelled(new Float64Array(8)), [0, 0, 0, 0, 0, 0, 0, 0]);
 });
 
 test('pop: a small pitch drop, so the zero-crossing rate over 10–30 ms is under 1.15× the rate over 60–80 ms (the old pop fell an octave: 1.36)', () => {
