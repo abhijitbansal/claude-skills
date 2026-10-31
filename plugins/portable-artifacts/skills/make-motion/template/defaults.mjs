@@ -3,12 +3,13 @@ import { childrenOf } from './groups.mjs';
 import { canvasSize } from './formats.mjs';
 import { expandBlocks } from './blocks/index.mjs';
 import { applyViral, autoCues, isViral, hookKeyframes, visibleAtStart } from './viral.mjs';
+import { TRANSITION_SECONDS, normalizeTransition, comesInOver } from './transitions.mjs';
 
 // No `background` default: the page fills it from the theme's page colour (see renderer fetchSpec). The canvas size
 // default lives in formats.mjs (canvasSize).
 const DEFAULTS = Object.freeze({ fps: 30 });
 export const DEFAULT_FPS = DEFAULTS.fps;
-export const FADE_SECONDS = 0.4;
+export const FADE_SECONDS = TRANSITION_SECONDS; // a fade or crossfade lasts this unless its `duration` says otherwise
 export const TYPING_SECONDS_PER_CHAR = 0.035;
 export const ARROW_HEAD_LENGTH = 3; // an arrow head is this many stroke widths long
 // What a shape draws with when its spec gives no size: one source for the page and the validator's line-length minimums.
@@ -194,7 +195,8 @@ export function withDefaults(spec) {
   out.captions = (out.captions ?? []).map((track) => ({ at: 0, style: DEFAULT_CAPTION_STYLE, ...track }));
   const transition = out.transition ?? 'none';
   out.scenes.forEach((scene, si) => {
-    scene.transition ??= si === 0 && transition === 'crossfade' ? 'none' : transition; // the first scene has nothing to fade out
+    // the first scene has nothing to come in over; a root object is copied, not shared between scenes
+    scene.transition ??= si === 0 && comesInOver(normalizeTransition(transition).type) ? 'none' : (typeof transition === 'object' ? { ...transition } : transition);
     const hook = si === 0 && isViral(out); // the first scene's titles are the hook
     for (const el of scene.elements) fillElement(el, out.theme, scene, out.fps, si < out.scenes.length - 1, hook);
   });

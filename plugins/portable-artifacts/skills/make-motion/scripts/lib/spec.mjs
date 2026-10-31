@@ -17,6 +17,7 @@ import { doctorCommand } from './doctor-hint.mjs';
 
 import { BLOCKS, BLOCK_NAMES, isBlock, blockDef, blockAssetFiles } from '../../template/blocks/index.mjs';
 import { VIRAL_MODE } from '../../template/viral.mjs';
+import { TRANSITIONS, MIN_TRANSITION_SECONDS, MAX_TRANSITION_SECONDS, directionsOf, comesInOver, normalizeTransition } from '../../template/transitions.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
@@ -121,7 +122,19 @@ const element = {
   },
 };
 const seconds = { type: 'number', minimum: 0 };
-const transition = { enum: ['none', 'fade', 'crossfade'] };
+// A name, or { type, direction?, duration? }. `direction` is checked per type by checkTransition, which names the
+// directions that type takes; an object that fails the schema is reported under its own keys (an `if` is noise to the formatter).
+const transitionObject = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['type'],
+  properties: {
+    type: { enum: [...TRANSITIONS] },
+    direction: { type: 'string' },
+    duration: { type: 'number', minimum: MIN_TRANSITION_SECONDS, maximum: MAX_TRANSITION_SECONDS },
+  },
+};
+const transition = { if: { type: 'object' }, then: transitionObject, else: { enum: [...TRANSITIONS] } };
 export const MAX_GRAIN = 0.15;
 const texture = {
   type: 'object',
@@ -749,6 +762,23 @@ function checkViral(written, errors) {
   }
 }
 
+// What the schema cannot say: a direction belongs to a type (push, slide and wipe take an edge, zoom and iris in or out,
+// the rest none), and the first scene has nothing to come in over. `value` is the schema-valid name or object, or undefined.
+function checkTransition(value, at, errors, isFirst) {
+  if (value === undefined) return;
+  const { type } = normalizeTransition(value);
+  const direction = typeof value === 'object' ? value.direction : undefined;
+  const directions = directionsOf(type);
+  if (direction !== undefined && !directions) {
+    errors.push({ path: `${at}.direction`, message: `${type} takes no direction; remove it` });
+  } else if (direction !== undefined && !directions.includes(direction)) {
+    errors.push({ path: `${at}.direction`, message: `must be one of ${directions.map((d) => JSON.stringify(d)).join(', ')} for ${type}; got ${JSON.stringify(direction)}` });
+  }
+  if (isFirst && comesInOver(type)) {
+    errors.push({ path: at, message: `${type} needs a previous scene to ${type === 'crossfade' ? 'fade in over' : 'come in over'}; use "fade" or "none" on the first scene` });
+  }
+}
+
 export function validateSpec(written, { dir = process.cwd() } = {}) {
   if (!schemaCheck(written)) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
   const blockErrors = [];
@@ -761,11 +791,10 @@ export function validateSpec(written, { dir = process.cwd() } = {}) {
   checkFormat(spec, errors);
   checkTheme(spec, errors);
   checkColor(spec, 'background', '', errors);
+  checkTransition(spec.transition, 'transition', errors, false);
   spec.scenes.forEach((scene, si) => {
     checkSceneBackground(scene, `scenes[${si}]`, errors);
-    if (si === 0 && scene.transition === 'crossfade') {
-      errors.push({ path: 'scenes[0].transition', message: 'crossfade needs a previous scene to fade in over; use "fade" or "none" on the first scene' });
-    }
+    checkTransition(scene.transition, `scenes[${si}].transition`, errors, si === 0);
     scene.elements.forEach((el, ei) => checkElement(el, `scenes[${si}].elements[${ei}]`, scene, dir, errors, spec.fps));
   });
   const total = spec.scenes.reduce((a, s) => a + s.duration, 0);

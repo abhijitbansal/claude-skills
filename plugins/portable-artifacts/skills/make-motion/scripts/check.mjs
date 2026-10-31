@@ -9,10 +9,13 @@
 // A `group` is not judged itself; each of its children is, at its nested path (scenes[0].elements[2].children[1]), and a
 // child counts as moving while any group around it moves.
 // A warning (never a failure; exit stays 0) when the first scene shows nothing at t = 0: stderr, or `warnings` in --json.
-// A scene is judged on its own layer, so the outgoing scene of a crossfade is not part of the incoming scene's own
-// checks (the incoming scene's first 0.4 s are sampled, from the 0.1 s first look on). Instead each crossfade window is
-// sampled at its midpoint, and a visible text or counter of the incoming scene that overlaps one of the outgoing scene
-// there is a warning (never a failure).
+// A scene is judged on its own layer, where it settles, so the outgoing scene of a transition (crossfade, push, slide,
+// wipe, zoom, blur or iris) is not part of the incoming scene's own checks, nor is the styling that carries it in (the
+// incoming scene's first 0.4 s are sampled, from the 0.1 s first look on). Instead each transition window is sampled at
+// its midpoint, with both layers drawn as they are, and a visible text or counter of the incoming scene that overlaps
+// one of the outgoing scene there is a warning (never a failure). A window is change for the dead-stretch audit, and a
+// text is not judged for contrast while its scene is coming in (the screenshot is two layers then); a text that shows
+// only inside its window gets an `info:` line (never changing the exit code).
 // With a `captions` track: a visible text or counter that sits in the caption zone (template/formats.mjs captionZone)
 // while it is not moving and a caption is on screen is a problem, and so is a captions layer that leaves the zone: each
 // layer is measured once per caption group (at its midpoint, and for kinetic at each word's start), its box joined with
@@ -44,12 +47,13 @@ import { safeMargin, safeInsets, captionZone } from '../template/formats.mjs';
 import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
 import { isViral } from '../template/viral.mjs';
+import { TRANSITIONS, comesInOver, normalizeTransition } from '../template/transitions.mjs';
 import { specWarnings, hookWarnings, stillWarnings, gapWarnings, loopWarnings, frameDifference } from './lib/viral-checks.mjs';
 import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
 import { specHasVideo, prepareVideo } from './lib/video.mjs';
 import { themeData } from './lib/theme.mjs';
 import {
-  CHECKED_TYPES, NO_PASSING_COLOUR, tweenSpans, inTween, auditTimes, backdropColors, contrastFindings, textFloorFindings, readingFloorFindings, deadStretchProblems,
+  CHECKED_TYPES, NO_PASSING_COLOUR, tweenSpans, inTween, auditTimes, backdropColors, contrastFindings, unjudgedContrast, textFloorFindings, readingFloorFindings, deadStretchProblems,
 } from './lib/audits.mjs';
 
 const USAGE = 'node scripts/check.mjs <motion.json> [--json] [--theme <name>]';
@@ -92,17 +96,21 @@ export function sceneItems(scene, index) {
 
 // Runs in the page: seek to `sec`, then each element of scene layer `index` (a group's children included, the groups
 // themselves not) as {id, opacity, ownOpacity, box, undrawn, sig, fontSize, weight, color, alpha} in canvas pixels.
+// A scene is judged where it settles: unless `placed`, the layer's transition styles (the push or zoom that carries it
+// in, a wipe or iris clip, a blur) are lifted first and stay lifted until the next seek, so the boxes, and the
+// screenshot the contrast audit reads, are the scene's own. `placed` keeps them, for the overlap check of a window.
 // Rendered opacity multiplies the element's and every ancestor's up to the stage (a group's, the scene fade); a hidden
 // layer is 0. `ownOpacity` leaves the scene's fade out. `types`: the element types that are text (CHECKED_TYPES).
 // `fontSize` is a text's or counter's size as drawn (its font size times every scale around it), `weight` and `color`
 // (#rrggbb) are what it is drawn with, and `sig` a string that differs whenever the element looks different (position,
 // size, opacity, text, drawing, reveal, video frame), for the dead-stretch audit.
-const measure = async ([sec, index, types]) => {
+const measure = async ([sec, index, types, placed]) => {
   await window.__motion.seek(sec); // a video element's frame is decoded before anything is read
   const stage = document.getElementById('stage');
   const s = stage.getBoundingClientRect();
   const k = window.__motion.size[0] / s.width;
   const layer = stage.querySelectorAll(':scope > .scene')[index];
+  if (!placed) for (const prop of ['transform', 'clipPath', 'filter']) layer.style[prop] = '';
   const shown = getComputedStyle(layer).display !== 'none';
   const hex = (css) => `#${(css.match(/[\d.]+/g) ?? []).slice(0, 3).map((v) => Math.round(Number(v)).toString(16).padStart(2, '0')).join('')}`;
   return [...layer.querySelectorAll('.el:not(.group)')].map((node) => {
@@ -151,8 +159,8 @@ const measureCaptions = async (sec) => {
   });
 };
 
-// `measure` at video second `sec` for scene layer `index`.
-const measureAt = (page, sec, index) => page.evaluate(measure, [sec, index, [...CHECKED_TYPES]]);
+// `measure` at video second `sec` for scene layer `index`; `placed`: where the layer is drawn, transition and all.
+const measureAt = (page, sec, index, placed = false) => page.evaluate(measure, [sec, index, [...CHECKED_TYPES], placed]);
 
 const at = (t) => `${t.toFixed(2)}s`;
 const isVisible = (m) => m.opacity > VISIBLE_OPACITY;
@@ -284,7 +292,7 @@ function frameZeroWarnings(scene, items, els, size) {
   const undrawn = involved.filter(startsUndrawn);
   const empty = involved.filter(startsEmpty);
   const causes = [
-    scene.transition === 'fade' && 'the scene fades in from the background ("fade" on scene 1)',
+    normalizeTransition(scene.transition).type === 'fade' && 'the scene fades in from the background ("fade" on scene 1)',
     invisible.length && `${quoted(invisible)} ${invisible.length === 1 ? 'has' : 'have'} an opacity 0 first keyframe${invisible.some((el) => el.role === 'title') ? " (a title's theme entrance starts at 0)" : ''}`,
     undrawn.length && `${quoted(undrawn)} ${undrawn.length === 1 ? 'starts' : 'start'} undrawn (draw or reveal 0)`,
     empty.length && `${quoted(empty)} ${empty.length === 1 ? 'starts' : 'start'} empty (a typing text types from no characters)`,
@@ -308,25 +316,32 @@ export function wrapProblems(scene, i, samples) {
   return [...first].map(([text, t]) => ({ path: `scenes[${i}]`, message: `a number-plus-unit token wraps across lines: "${text}" at ${at(t)}` }));
 }
 
-// The two layers of a crossfade are both on screen at the window's midpoint: warn about text over text.
-async function crossfadeWarnings(page, spec, itemsOf, fade, size) {
-  const mid = (fade.start + fade.end) / 2;
-  const outgoing = await measureAt(page, mid, fade.from);
-  const incoming = await measureAt(page, mid, fade.to);
-  const from = spec.scenes[fade.from];
+// The two layers of a transition window are both on screen at its midpoint, where they are drawn (not where each settles:
+// a push carries them apart): warn about text over text. A push leaves no such place, so it never warns.
+async function overlapWarnings(page, spec, itemsOf, span, size) {
+  const mid = (span.start + span.end) / 2;
+  const outgoing = await measureAt(page, mid, span.from, true);
+  const incoming = await measureAt(page, mid, span.to, true);
+  const from = spec.scenes[span.from];
   const texts = (items, els) => els.map((m, j) => ({ m, ...items[j] })).filter(({ m, el }) => CHECKED.has(el.type) && isShown(m, size));
-  const old = texts(itemsOf[fade.from], outgoing);
-  return texts(itemsOf[fade.to], incoming).flatMap((now) => {
+  const old = texts(itemsOf[span.from], outgoing);
+  return texts(itemsOf[span.to], incoming).flatMap((now) => {
     const under = old.find((o) => overlaps(o.m.box, now.m.box));
     if (!under) return [];
-    return [{ path: now.path, message: `${now.el.type} "${now.el.id}" overlaps ${under.el.type} "${under.el.id}" of the outgoing scene "${from.id}" during the crossfade at ${at(mid)}; move one of them, or let the outgoing text exit first` }];
+    return [{ path: now.path, message: `${now.el.type} "${now.el.id}" overlaps ${under.el.type} "${under.el.id}" of the outgoing scene "${from.id}" during the ${span.type} at ${at(mid)}; move one of them, or let the outgoing text exit first` }];
   });
 }
+
+// The transition window of `windows` (those a scene comes in through) that video second `sec` falls in, else undefined.
+const windowAt = (windows, sec) => windows.find((w) => sec >= w.start - EPSILON && sec < w.end - EPSILON);
 
 // `withCaptions`: also measure the captions layers at each moment. `times`: scene-local seconds (the sheet moments).
 // `withBackdrop`: also read the colour behind every text that is on screen (one screenshot per moment), for the contrast
 // audit: `back[j]` for item j, the colours of the cells behind it (see backdropColors), null where they were not read.
-async function sampleScene(page, scene, items, index, start, times, withCaptions, size, withBackdrop = false) {
+// `windows`: the transition windows this scene comes in through. The screenshot there is two layers (the outgoing scene
+// draws over, under or beside this one), so no backdrop is read inside one: the contrast audit leaves a text coming in
+// alone, as it leaves a text inside an opacity tween of its own.
+async function sampleScene(page, scene, items, index, start, times, withCaptions, size, withBackdrop = false, windows = []) {
   const fading = items.map(({ chain }) => tweenSpans(chain, ['opacity'])); // the contrast audit leaves a text mid-fade alone
   const samples = [];
   for (const t of times) {
@@ -336,9 +351,10 @@ async function sampleScene(page, scene, items, index, start, times, withCaptions
     const els = measured.map((m) => ({ ...m, shown: isShown(m, size) }));
     const judged = els.flatMap((m, j) => (CHECKED.has(items[j].el.type) && m.shown && !inTween(fading[j], t) ? [j] : []));
     const back = els.map(() => null);
-    if (withBackdrop && judged.length) (await backdropColors(page, judged.map((j) => els[j].box), [...CHECKED])).forEach((cells, n) => { back[judged[n]] = cells; });
+    const open = windowAt(windows, start + t);
+    if (withBackdrop && judged.length && !open) (await backdropColors(page, judged.map((j) => els[j].box), [...CHECKED])).forEach((cells, n) => { back[judged[n]] = cells; });
     const captions = withCaptions ? await page.evaluate(measureCaptions, null) : [];
-    samples.push({ t, els, back, captions, wraps: await nowrapProblems(page, { root: '#stage' }) });
+    samples.push({ t, els, back, captions, window: open?.type ?? null, wraps: await nowrapProblems(page, { root: '#stage' }) });
   }
   return samples;
 }
@@ -347,14 +363,15 @@ async function sampleScene(page, scene, items, index, start, times, withCaptions
 // scene in order): { t (video seconds), scene, local (scene seconds), els, captions } per step. Each
 // element carries `shown`, `hold` (it, or a group around it, says "hold": true) and `held` (its size is not being tweened,
 // so the text floor judges it); `captions` is a string that changes when the words on screen do.
-export async function sampleSteps(page, items, index, scene, start, withCaptions, size) {
+export async function sampleSteps(page, items, index, scene, start, withCaptions, size, windows = []) {
   const sizeSpans = items.map(({ chain }) => tweenSpans(chain, ['scale']));
   const steps = [];
   for (const local of auditTimes(scene.duration)) {
     const measured = await measureAt(page, start + local, index);
     const els = measured.map((m, j) => ({ ...m, shown: isShown(m, size), hold: items[j].hold, held: !inTween(sizeSpans[j], local) }));
     const layers = withCaptions ? await page.evaluate(measureCaptions, null) : [];
-    steps.push({ t: start + local, scene: index, local, els, captions: layers.map((c) => `${c.shown}:${c.text}`).join('\u0001') });
+    const moving = windowAt(windows, start + local) ? String(local) : undefined; // a transition window is change
+    steps.push({ t: start + local, scene: index, local, els, moving, captions: layers.map((c) => `${c.shown}:${c.text}`).join('\u0001') });
   }
   return steps;
 }
@@ -398,6 +415,7 @@ async function inspect(browser, spec, server, prepare, written) {
   await waitReady(page);
   await prepare?.(page);
   const starts = await page.evaluate(() => window.__motion.sceneStarts);
+  const overlapsAll = await page.evaluate(() => window.__motion.overlaps); // every transition window
   const insets = safeInsets(spec.size);
   const problems = [];
   const itemsOf = spec.scenes.map(sceneItems); // the non-group elements of each scene, indexed as the page measures them
@@ -410,18 +428,21 @@ async function inspect(browser, spec, server, prepare, written) {
   const captionTimes = zone ? await page.evaluate(() => window.__motion.captionMoments.map((m) => m.t)) : [];
   const colors = themeData(spec.theme)?.dark ?? {};
   const steps = [];
+  const unjudged = []; // info: a text no contrast sample could judge because of a window
   let moments = 0;
   for (const [i, scene] of spec.scenes.entries()) {
     const items = itemsOf[i];
     const times = sheetTimes(scene, spec.fps);
-    const samples = await sampleScene(page, scene, items, i, starts[i], times, zone !== null, spec.size, true);
+    const windows = overlapsAll.filter((w) => w.to === i);
+    const samples = await sampleScene(page, scene, items, i, starts[i], times, zone !== null, spec.size, true, windows);
     const extraTimes = captionMomentsIn(captionTimes, starts[i], scene.duration, times);
     const extra = extraTimes.length ? await sampleScene(page, scene, items, i, starts[i], extraTimes, true, spec.size) : [];
-    const own = await sampleSteps(page, items, i, scene, starts[i], zone !== null, spec.size);
+    const own = await sampleSteps(page, items, i, scene, starts[i], zone !== null, spec.size, windows);
     steps.push(...own);
     moments += samples.length + extra.length;
     const contrast = contrastFindings(items, samples, colors, spec.size);
     const floor = textFloorFindings(items, own, scene.duration, spec.size);
+    unjudged.push(...unjudgedContrast(items, samples));
     problems.push(...safeAreaProblems(items, samples, insets, spec.size), ...overlapProblems(items, samples, spec.size), ...emptyEndProblems(scene, i, items, samples, spec.size), ...wrapProblems(scene, i, samples), ...contrast.problems, ...floor.problems);
     warnings.push(...contrast.warnings, ...floor.warnings);
     if (zone) problems.push(...captionZoneProblems(items, samples, extra, zone, spec.size));
@@ -431,9 +452,9 @@ async function inspect(browser, spec, server, prepare, written) {
   const reading = await readingFloorFindings(spec, itemsOf, steps, probe);
   problems.push(...reading.problems, ...deadStretchProblems(spec, steps, itemsOf, blocksOf));
   if (zone) problems.push(...await captionLayerProblems(page, zone));
-  for (const fade of await page.evaluate(() => window.__motion.crossfades)) warnings.push(...await crossfadeWarnings(page, spec, itemsOf, fade, spec.size));
+  for (const open of overlapsAll) warnings.push(...await overlapWarnings(page, spec, itemsOf, open, spec.size));
   if (platform) warnings.push(...await viralWarnings(page, spec, itemsOf, frame0, steps, band));
-  return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings, info: reading.info };
+  return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings, info: [...reading.info, ...unjudged] };
 }
 
 // Decoding needs ffmpeg; without it findFfmpeg's install hint ends the check as a crash line.
@@ -480,13 +501,15 @@ export function atBlockParts(written, spec, findings) {
 
 const NO_PASSING_IN_BLOCK = 'no theme colour passes over this background; change "theme" or the scene background';
 
+const TRANSITION_WINDOW = new RegExp(` during the (${TRANSITIONS.filter(comesInOver).join('|')}) at `);
+
 // What to change for a finding about a block part, matched to the finding; null when its message already says it (the
 // caption-zone rule says to move it above the zone, the crossfade warning to move one or let the other exit, the contrast
 // finding that nothing passes is reworded in atBlockParts).
 function blockHint(message, param) {
   const shorten = param ? ` or shorten params.${param}` : '';
-  if (message.includes(' sits in the caption zone ') || message.includes(' during the crossfade')) return null;
-  if (message.includes(NO_PASSING_COLOUR)) return null;
+  if (message.includes(' sits in the caption zone ') || TRANSITION_WINDOW.test(message)) return null;
+  if (message.includes(NO_PASSING_COLOUR) || message.includes(' was not judged for contrast')) return null;
   if (message.includes(' contrast against its backdrop ')) return 'blocks use theme colours; change "theme" or the scene background';
   if (/ is \d+px \(below /.test(message)) return 'raise the block\'s "scale" or use a larger format';
   if (message.includes(' shows for ')) return `lengthen the scene${shorten}`;

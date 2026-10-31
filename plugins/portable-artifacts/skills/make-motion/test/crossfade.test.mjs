@@ -65,7 +65,7 @@ test('an explicit crossfade on the first scene is an error, a root default is no
 });
 
 test('an unknown transition is rejected at the root too', () => {
-  const e = errs({ transition: 'wipe', scenes: scenes() });
+  const e = errs({ transition: 'spin', scenes: scenes() }); // `wipe` was the unknown example until it became a transition
   assert.equal(e.length, 1);
   assert.match(e[0], /^transition: must be one of "none", "fade", "crossfade"/);
 });

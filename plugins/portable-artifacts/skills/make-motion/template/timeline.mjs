@@ -3,11 +3,13 @@
 // The root `captions` tracks are not on it: nothing about them animates, and what a captions layer shows is a pure
 // function of the time (template/captions.mjs captionState, applied by the renderer on every seek).
 import { createTimeline, cubicBezier } from 'animejs';
-import { withDefaults, FADE_SECONDS, EASE_CURVES, TYPING_SECONDS_PER_CHAR, typingLength, counterSeconds } from './defaults.mjs';
+import { withDefaults, EASE_CURVES, TYPING_SECONDS_PER_CHAR, typingLength, counterSeconds } from './defaults.mjs';
 import { flattenElements } from './groups.mjs';
+import { normalizeTransition, comesInOver } from './transitions.mjs';
 
 const MS = 1000;
 const MIN_SEGMENT_MS = 1;
+const TRANSITION_EASE = 'inOutCubic'; // the progress of push, slide, wipe, zoom, blur and iris
 
 // The named eases as anime.js easing functions; every other name is one of anime's own (a string it resolves).
 const NAMED_EASES = Object.fromEntries(Object.entries(EASE_CURVES).map(([name, points]) => [name, cubicBezier(...points)]));
@@ -58,23 +60,27 @@ export function buildTimeline(input) {
   const states = new Map();
   const sceneOf = new Map();
   const sceneStarts = [];
-  const crossfades = []; // {from, to, start, end}: scene `from` stays visible under scene `to` until `end` (seconds)
+  const overlaps = []; // {from, to, start, end, type}: scene `from` stays visible under scene `to` until `end` (seconds)
   let cursor = 0;
 
   spec.scenes.forEach((scene, si) => {
     const start = cursor;
     sceneStarts.push(start);
 
-    const blends = scene.transition === 'crossfade' && si > 0; // the first scene has nothing to fade out
-    const fadesIn = scene.transition === 'fade' || blends;
+    const transition = normalizeTransition(scene.transition);
+    const comesIn = si > 0 && comesInOver(transition.type); // the first scene has nothing to come in over
+    const fadesIn = transition.type === 'fade' || (comesIn && transition.type === 'crossfade');
+    const moves = comesIn && !fadesIn; // push, slide, wipe, zoom, blur, iris: the renderer styles the layers from `p`
     const sceneState = { opacity: fadesIn ? 0 : 1 };
+    if (moves) sceneState.p = 0;
     states.set(`scene:${scene.id}`, sceneState);
-    if (fadesIn) {
-      const duration = Math.min(FADE_SECONDS, scene.duration) * MS;
-      timeline.add(sceneState, { opacity: { from: 0, to: 1, duration }, composition: 'none' }, start * MS);
+    if (fadesIn || moves) {
+      const duration = Math.min(transition.duration, scene.duration) * MS;
+      if (fadesIn) timeline.add(sceneState, { opacity: { from: 0, to: 1, duration }, composition: 'none' }, start * MS);
+      else timeline.add(sceneState, { p: { from: 0, to: 1, duration, ease: easeOf(TRANSITION_EASE) }, composition: 'none' }, start * MS);
       // The previous scene is not faded: it stays at full opacity under the incoming one until the window ends, so
       // the stage colour never shows through (two layers fading together would dip towards it).
-      if (blends) crossfades.push({ from: si - 1, to: si, start, end: start + duration / MS });
+      if (comesIn) overlaps.push({ from: si - 1, to: si, start, end: start + duration / MS, type: transition.type });
     }
 
     for (const { el } of flattenElements(scene.elements)) { // a group's children are elements of the scene too
@@ -91,7 +97,9 @@ export function buildTimeline(input) {
     cursor += scene.duration;
   });
 
-  return { timeline, states, duration: cursor, sceneStarts, sceneOf, crossfades };
+  // `crossfades` is the crossfade windows alone, as they were before the other transitions (no `type`).
+  const crossfades = overlaps.filter((w) => w.type === 'crossfade').map(({ type, ...window }) => window);
+  return { timeline, states, duration: cursor, sceneStarts, sceneOf, overlaps, crossfades };
 }
 
 // Seek to `sec` seconds. Deterministic: same input time gives the same state.

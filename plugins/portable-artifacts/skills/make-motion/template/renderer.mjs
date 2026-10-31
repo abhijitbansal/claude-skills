@@ -2,6 +2,7 @@
 // window.__motion for the preview UI and the Playwright frame loop.
 import { buildTimeline, seekTo } from './timeline.mjs';
 import { withDefaults, resolveColor, graphemes, typingLength, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE } from './defaults.mjs';
+import { layerStyles, layerUnder } from './transitions.mjs';
 import { resolveAudio } from './audio.mjs';
 import { flattenElements, isGroup } from './groups.mjs';
 import { loadCaptionTracks, captionLayer, applyCaption, captionSample, captionFontSize, captionMoments, CAPTION_WEIGHT } from './caption-layer.mjs';
@@ -15,6 +16,7 @@ const MODE = MODE_MARKER ?? 'preview';
 // unknown marker gets render-mode painting, which is what makes captures deterministic.
 const LIVE_LAYERS = MODE_MARKER === 'preview';
 const SCENE_END_EPSILON = 1e-9;
+const NO_LAYER_STYLES = Object.freeze({ opacity: null, transform: null, clipPath: null, filter: null }); // a scene layer outside any transition
 const ELEVATED_HIGHLIGHT = 'rgba(255,255,255,.06)'; // the 1 px inset edge of an `elevated` rect
 const ELEVATED_LIFT = 6; // percent of the text colour an elevated fill moves toward
 const ARROW_HALF_WIDTH = 1.5; // an arrow head reaches this many stroke widths either side of the line (it is ARROW_HEAD_LENGTH long)
@@ -453,20 +455,58 @@ function revealMask(reveal) {
   return `linear-gradient(to right, #000 ${front - REVEAL_EDGE}%, transparent ${front}%)`;
 }
 
+// Whether a CSS colour is fully opaque (alpha 1), read by painting it into one canvas pixel; one that does not parse is
+// left black, so it reads as opaque. Cached per colour.
+const OPAQUE = new Map();
+let opaqueProbe = null;
+function isOpaqueColor(css) {
+  if (!OPAQUE.has(css)) {
+    opaqueProbe ??= Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true });
+    opaqueProbe.clearRect(0, 0, 1, 1);
+    opaqueProbe.fillStyle = '#000000';
+    opaqueProbe.fillStyle = css;
+    opaqueProbe.fillRect(0, 0, 1, 1);
+    OPAQUE.set(css, opaqueProbe.getImageData(0, 0, 1, 1).data[3] === 255);
+  }
+  return OPAQUE.get(css);
+}
+
+// `color` painted over `under` (a CSS background value), as one background value: an opaque colour needs nothing under
+// it; a see-through one is a one-colour gradient (an image layer) stacked on top.
+const paintOver = (color, under) => (isOpaqueColor(color) ? color : `linear-gradient(${color}, ${color}), ${under}`);
+
 // Returns a function that poses the stage at `sec`; it resolves once every video frame it changed is decoded.
-function makeApply({ scenes, parts, captions }, built) {
-  const { states, sceneStarts, sceneOf, crossfades } = built;
+// `background`: the root colour, `themeBackground`: the theme's page colour, the base under a see-through root.
+function makeApply({ scenes, parts, captions }, built, { size, background, themeBackground }) {
+  const { states, sceneStarts, sceneOf, overlaps } = built;
+  const base = paintOver(background, themeBackground); // what the stage shows behind a scene with no background of its own
   return (sec) => {
     const decoding = [];
     const active = activeScene(sceneStarts, sec);
-    // During a crossfade the previous scene's layer stays up beneath the active one.
-    const outgoing = crossfades.find((c) => c.to === active && sec < c.end)?.from;
+    // During a transition window the previous scene's layer stays up beneath (or beside) the active one.
+    const open = overlaps.find((c) => c.to === active && sec < c.end);
+    const outgoing = open?.from;
+    const transition = open ? scenes[active].scene.transition : null;
+    const styles = open ? layerStyles(transition, states.get(`scene:${scenes[active].scene.id}`).p ?? 0, size) : null;
+    const under = open ? layerUnder(transition) : null;
+    // A layer that comes in over another, or closes over it, must be opaque: with no `background` of its own it takes the
+    // root one, or the old scene would show through the whole window and drop out in one frame; a see-through one (alpha
+    // under 1) is painted over that base. A crossfade keeps its transparent layers (the old scene is meant to show
+    // through, and its bytes never changed).
+    const opaque = open !== undefined && open.type !== 'crossfade';
     scenes.forEach(({ scene, layer, grain }, i) => {
-      layer.style.display = i === active || i === outgoing ? 'block' : 'none';
-      layer.style.opacity = String(states.get(`scene:${scene.id}`).opacity);
-      if (grain) {
-        grain.style.display = layer.style.display;
-        grain.style.opacity = layer.style.opacity;
+      const role = i === active ? 'incoming' : i === outgoing ? 'outgoing' : null;
+      const look = (role && styles?.[role]) || NO_LAYER_STYLES;
+      layer.style.display = role ? 'block' : 'none';
+      const own = scene.background && scene.background !== 'art' ? scene.background : ''; // an art plate fills its layer
+      layer.style.background = opaque && role && scene.background !== 'art' ? (own ? paintOver(own, base) : base) : own;
+      layer.style.opacity = String(look.opacity ?? states.get(`scene:${scene.id}`).opacity);
+      layer.style.transform = look.transform ?? '';
+      layer.style.clipPath = look.clipPath ?? '';
+      layer.style.filter = look.filter ?? '';
+      layer.style.zIndex = role && role === under ? '-1' : ''; // an iris closing over the incoming scene draws it beneath
+      if (grain) { // a scene's grain moves, clips and fades with it
+        for (const prop of ['display', 'opacity', 'transform', 'clipPath', 'filter', 'zIndex']) grain.style[prop] = layer.style[prop];
       }
     });
     for (const { node, el, drawNodes, arrowNode, roundCap, format, typing, frame, clip } of parts) {
@@ -608,7 +648,9 @@ function stampSheet(text) {
 // `captions`: the stage's captions layers; check.mjs measures each at captionMoments.
 function makeMotion(spec, built, apply, audio, captions) {
   return {
-    duration: built.duration, fps: spec.fps, size: spec.size, sceneStarts: built.sceneStarts, crossfades: built.crossfades,
+    duration: built.duration, fps: spec.fps, size: spec.size, sceneStarts: built.sceneStarts,
+    overlaps: built.overlaps, // every transition window, with its type
+    crossfades: built.crossfades, // the crossfade windows alone, as before (the same list buildTimeline returns under this name)
     sceneIds: spec.scenes.map((s) => s.id), audio, captionMoments: captionMoments(captions, built.duration),
     // Resolves once every video frame it shows is decoded; render.mjs awaits it per frame. It does not wait for a paint:
     // captures are deterministic because render mode has no per-element layers (styles.css) and the browser rasters
@@ -634,7 +676,7 @@ async function mount() {
   const dom = await buildStage(spec, look, await fetchFrames(), captions);
   if (mine !== generation) return null;
   const built = buildTimeline(spec);
-  const apply = makeApply(dom, built);
+  const apply = makeApply(dom, built, { size: spec.size, background: spec.background, themeBackground: look.background });
   currentStage?.remove();
   viewportEl.append(dom.stage);
   currentStage = dom.stage;

@@ -33,8 +33,10 @@ shell commands.
   expanded into plain elements laid out for the canvas, coloured with theme tokens. `blocks.mjs list` and
   `blocks.mjs show <name>` print each block's params and an example; `references/blocks/` holds a contact sheet
   of each.
-- **Scene crossfade**: `"transition": "crossfade"` fades the new scene in over the
-  previous one (which stays fully visible beneath) over 0.4 s; a root `transition` sets the default.
+- **Scene transitions**: `"transition": "crossfade"` fades the new scene in over the previous one (which
+  stays fully visible beneath) over 0.4 s; `push`, `slide`, `wipe`, `zoom`, `blur` and `iris` move, clip,
+  scale or blur it in, and `{ "type": "push", "direction": "up", "duration": 0.6 }` picks the edge and the
+  length; a root `transition` sets the default.
 - **Captions**: a `captions` track from an SRT, VTT or Whisper JSON file, or the voiceover's
   sentence timings, shown two to six words at a time in the caption zone in one of six styles
   (`plain`, `pill`, `karaoke`, `kinetic`, `boxed`, `typewriter`); `check.mjs` keeps other text out
@@ -135,8 +137,8 @@ full-bleed behind the elements and seeded by the scene `id`. A shape `fill` or
 `accentSoft`, `good`, `bad`, `warn`, `text`, `text2`, `text3`, `cat1`..`cat6`) instead of
 a colour; it resolves to the active theme's dark colour.
 
-Root-level options (all off unless set): `transition` (`none`, `fade` or `crossfade`, the
-default for every scene), `cues` (up to 30 sound cues, timed from the video or a scene
+Root-level options (all off unless set): `transition` (a name, `none`, `fade`, `crossfade`, `push`, `slide`, `wipe`, `zoom`, `blur` or `iris`, or
+`{ type, direction?, duration? }`; the default for every scene), `cues` (up to 30 sound cues, timed from the video or a scene
 start), `captions` (up to 20 tracks, each an SRT, VTT or JSON file and a `style`), `texture` (`vignette`, and `grain` from 0 to 0.15). Texture costs render time, measured
 on 1920x1080 frames (seek plus PNG screenshot, headless Chromium, one Apple-silicon Mac): about
 17 to 33 ms per frame with none, 42 ms with the vignette, 100 ms with grain and 187 ms with both.

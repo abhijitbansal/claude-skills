@@ -141,6 +141,23 @@ export function contrastFindings(items, samples, colors, size) {
 }
 
 /**
+ * Info findings for a text that no contrast sample could judge: it is shown at some sampled moments, but every one of
+ * them fell inside a transition window its scene comes in through (no backdrop is read there: the screenshot is two
+ * layers). Each sample carries `window`, the type of the window it fell in, or null. -> [{ path, message }].
+ */
+export function unjudgedContrast(items, samples) {
+  const found = [];
+  items.forEach(({ el, path, chain }, j) => {
+    if (!isChecked(el)) return;
+    const fading = tweenSpans(chain ?? [], ['opacity']);
+    const reads = samples.filter(({ t, els }) => els[j].shown && !inTween(fading, t));
+    if (!reads.length || !reads.every(({ window }) => window)) return;
+    found.push({ path, message: `${el.type} "${el.id}" was not judged for contrast: every moment it shows in falls inside the ${reads[0].window} window of its scene; lengthen the scene or shorten the transition` });
+  });
+  return found;
+}
+
+/**
  * The backdrop behind each of `boxes` (canvas pixels): the box split into a grid of up to CELL_COLUMNS x CELL_ROWS cells
  * (fewer for a small box), each as its mean colour #rrggbb, in a page with every `.el.<type>` of `types` made transparent.
  * One PNG screenshot, decoded in the page. The text goes transparent instead of hidden so the soft plate a text on an art
@@ -317,12 +334,15 @@ export function textFloorFindings(items, own, duration, size) {
 // ---- dead stretch -------------------------------------------------------------------------------------------------
 
 // What a step looks like: each shown element's `sig`, '-' for one that is not shown (invisible, off the canvas, undrawn),
-// so an element nobody can see never counts as change, and one that appears does.
-const signatureOf = (step) => `${step.els.map((m) => (m.shown ? m.sig : '-')).join('|')}#${step.captions ?? ''}`;
+// so an element nobody can see never counts as change, and one that appears does. `moving` is set on a step inside a
+// transition window (check.mjs sampleSteps) and differs from step to step: the window is change all through, even when
+// the layer's own styling (a push, a clip) is not part of what the element's box says.
+const signatureOf = (step) => `${step.els.map((m) => (m.shown ? m.sig : '-')).join('|')}#${step.captions ?? ''}#${step.moving ?? ''}`;
 
 /**
  * The stretches longer than DEAD_STRETCH_SECONDS in which nothing on screen changes: no element's look (position,
- * opacity, scale, rotation, drawing, reveal, value, typed text, video frame), no caption and no scene. -> [{ from, to }]
+ * opacity, scale, rotation, drawing, reveal, value, typed text, video frame), no caption, no scene and no transition window.
+ * -> [{ from, to }]
  * in video seconds. `steps` is the whole video's AUDIT_STEP grid in order; a stretch runs from the first step of the
  * still state to the last step that still shows it (to the cut when a scene change ends it, to the video's end when it
  * runs out). The last `tailExempt` seconds of the video are never part of a stretch. With `ignoreHold` a stretch in which

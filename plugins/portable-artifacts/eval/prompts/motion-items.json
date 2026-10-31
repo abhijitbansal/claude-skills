@@ -19,5 +19,6 @@
   { "id": "item-block-before-after-swipe", "prompt": "Make a 6-second before-and-after reveal: show data/logo.svg labelled 'Before', then swipe data/clip.mp4 in over it, labelled 'After'." },
   { "id": "item-cue-kenney", "prompt": "Make a 10-second clip with a title card and three bullets that fade in one by one, then a closing card. I want a recorded UI click on each bullet and a real thud on the last card." },
   { "id": "item-hold", "prompt": "Make a 10-second clip that is one big title, 'Built for focus', centred and left completely still after it appears. I want nothing else moving on screen." },
-  { "id": "item-viral", "prompt": "Make a 12-second Reel about cutting video edits down to the best three seconds, with a strong hook, captions from data/captions.srt and sound." }
+  { "id": "item-viral", "prompt": "Make a 12-second Reel about cutting video edits down to the best three seconds, with a strong hook, captions from data/captions.srt and sound." },
+  { "id": "item-transition-push", "prompt": "Make a 9-second clip of three title cards: 'Plan', 'Build', 'Ship'. Each new card should push the old one out, coming in from the right edge, taking half a second." }
 ]

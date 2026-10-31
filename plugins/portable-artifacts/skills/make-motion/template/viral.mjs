@@ -13,6 +13,7 @@
 import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from './formats.mjs';
 import { flattenElements } from './groups.mjs';
 import { MAX_CUES } from './audio.mjs';
+import { windowSeconds } from './transitions.mjs';
 import { DEFAULT_FPS, TYPING_SECONDS_PER_CHAR, typingLength, counterSeconds } from './defaults.mjs';
 
 export const VIRAL_MODE = 'viral';
@@ -143,14 +144,14 @@ function continuousSpans(el, sceneDuration) {
 /**
  * The stretches longer than VIRAL_CHANGE_SECONDS in which the spec changes nothing, as [{ from, to }] in video seconds.
  * Change moments are every scene start, every keyframe and every one of `captionTimes` (video seconds where a caption
- * group appears or goes); any tween is change all through its span. The video's end closes the last stretch. Read
+ * group appears or goes); any tween, and the window of a scene's transition, is change all through its span. The video's end closes the last stretch. Read
  * from the spec alone (no page), so a tween between two equal values still counts as change. Pure.
  */
 export function changeGaps(spec, captionTimes = []) {
   const spans = captionTimes.map((t) => [t, t]);
   let start = 0;
-  for (const scene of spec.scenes) {
-    spans.push([start, start]);
+  for (const [si, scene] of spec.scenes.entries()) {
+    spans.push([start, start + windowSeconds(scene, si)]); // a transition window is change all through
     for (const { el } of flattenElements(scene.elements)) {
       for (const kf of el.keyframes ?? []) spans.push([start + kf.t, start + kf.t]);
       for (const [a, b] of continuousSpans(el, scene.duration)) spans.push([start + a, start + b]);

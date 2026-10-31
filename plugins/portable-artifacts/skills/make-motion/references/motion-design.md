@@ -49,8 +49,9 @@ Holds are not checked by `check.mjs`. Count them yourself from the keyframe time
 ## Scene changes
 
 - **A hard cut is the default.** Between related scenes (the same chart, the next step of a list) a hard cut reads as continuous; a `"transition": "crossfade"` (0.4 s, the new scene fading in over the previous one, which stays fully visible beneath) suits a change of subject. Set root `"transition": "crossfade"` to make it the default and put `"transition": "none"` on the scenes that should cut.
-- **Not on scene 1.** `fade` on the first scene makes frame 0, the video's thumbnail, blank; `crossfade` there is an error. `check.mjs` warns when scene 1 shows nothing at t = 0.
-- **Keep the outgoing text clear of the incoming text's position** (or end it with an `exit`): for the 0.4 s the old text is fully visible and the new text is fading in over it, and two lines in one spot read as a smear. `check.mjs` warns about it.
+- **Motion transitions are for a change of place or step.** `push` and `slide` suit a sequence (step 1 to step 2), `wipe` and `iris` a reveal, `zoom` a move closer, `blur` a soft change of subject; keep them 0.3–0.6 s and use one or two kinds per video, not one per scene.
+- **Not on scene 1.** `fade` on the first scene makes frame 0, the video's thumbnail, blank; `crossfade`, `push`, `slide`, `wipe`, `zoom`, `blur` and `iris` there are errors. `check.mjs` warns when scene 1 shows nothing at t = 0.
+- **Keep the outgoing text clear of the incoming text's position** (or end it with an `exit`): during the window (0.4 s unless `duration` is set) both scenes are on screen. In a `crossfade` the old text is fully visible and the new text fades in over it; in `zoom` and `blur` the new scene fades in over the old one; in `wipe`, `slide` and `iris` in the new scene covers the old one from an edge or the centre, and in `iris` out the old scene closes to a circle over the new one; only `push` keeps them apart. Two lines in one spot read as a smear. `check.mjs` warns about it (not for a `push`).
 
 ## Texture and typing
 
@@ -83,4 +84,4 @@ Run `node <skill-dir>/scripts/check.mjs motion.json` after looking at the contac
 - two visible texts or counters overlapping while neither is moving or fading;
 - a scene that ends with nothing on screen (a title leaving through an applied `exit: true` counts as intended).
 
-It also warns (exit stays 0) when the first scene shows nothing at t = 0. It does not check timing, holds, stagger, eases, colour or what happens at the start of later scenes, and, during a crossfade, only whether text of the two scenes overlaps at the window's midpoint (a warning).
+It also warns (exit stays 0) when the first scene shows nothing at t = 0. It does not check timing, holds, stagger, eases, colour or what happens at the start of later scenes, and, during a transition window, only whether text of the two scenes overlaps at the window's midpoint (a warning).
