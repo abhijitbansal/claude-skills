@@ -402,10 +402,13 @@ function checkFollow(c, spec, base, errors) {
     const texts = spec.scenes.flatMap((s) => s.elements.filter((el) => el.type === 'text' && el.typing).map((el) => el.id));
     return fail('follow', `element ${JSON.stringify(c.follow)} not found; typing texts: ${texts.join(', ') || 'none'}`);
   }
-  if (typing.el.type !== 'text' || !typing.el.typing) return fail('follow', `element ${JSON.stringify(c.follow)} is not a typing text (set "typing": true on it, or drop follow)`);
+  const name = JSON.stringify(c.follow);
+  if (typing.el.type !== 'text') return fail('follow', `element ${name} is a ${typing.el.type}, not a text; follow a typing text`);
+  if (!typing.el.typing) return fail('follow', `element ${name} is not a typing text (set "typing": true on it, or drop follow)`);
+  if (typing.chars === 0) return fail('follow', `${name} never types a character (it needs text, and value keyframes that rise if it has any); fix the text or drop follow`);
   const sceneEnd = trackStart({ scene: typing.scene.id }, spec) + typing.scene.duration;
   if (typing.start + typing.chars * TYPING_SECONDS_PER_CHAR > sceneEnd + FOLLOW_EPSILON) {
-    fail('follow', `${JSON.stringify(c.follow)} types past the end of scene ${JSON.stringify(typing.scene.id)}`);
+    fail('follow', `${name} types past the end of scene ${JSON.stringify(typing.scene.id)}`);
   }
   return undefined;
 }

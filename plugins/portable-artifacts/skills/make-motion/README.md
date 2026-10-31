@@ -31,7 +31,7 @@ shell commands.
   previous one (which stays fully visible beneath) over 0.4 s; a root `transition` sets the default.
 - **Procedural sound cues**: a `cues` array (`pop`, `click`, `whoosh`, `chime`, `impact`,
   `riser`, `swoosh`, `typing`, `drop`, `ding`) is synthesised locally in layers (transient,
-  body, short reverb tail; stereo width above 120 Hz on the noise sweeps) with no files and
+  body, short reverb tail; stereo width above about 120 Hz on the noise sweeps) with no files and
   no extra dependency, deterministically, and mixed in; a `typing` cue with `follow` clicks
   along with a typing text; after any render with audio, `render.mjs` prints the integrated loudness and
   true peak. Opt-in: no `cues`, no sound.

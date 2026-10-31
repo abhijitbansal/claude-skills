@@ -7,12 +7,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { cueWav, writeCueTracks, pinkNoise, SAMPLE_RATE } from '../scripts/lib/cues.mjs';
+import { cueWav, writeCueTracks, pinkNoise, layerCue, noteHz, fmBand, CUE_LAYERS, MAX_HZ, SAMPLE_RATE } from '../scripts/lib/cues.mjs';
 import { mulberry32 } from '../template/seeded.mjs';
 import { CUE_NAMES, resolveCues } from '../template/audio.mjs';
 import { TYPING_SECONDS_PER_CHAR, typingLength } from '../template/defaults.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
-import { bandEnergy, spectralCentroid, zeroCrossingRate, rms } from './helpers/spectrum.mjs';
+import { bandEnergy, spectralCentroid, zeroCrossingRate, rms, pitchAt } from './helpers/spectrum.mjs';
 import { requireRender, assertRendersIdentically } from './helpers/render.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -71,11 +71,72 @@ test('whoosh: spectral centroid of the first 20 % is below 1 kHz and of the midd
   assert.ok(middle > 2500, `middle 20 %: ${middle} Hz`);
 });
 
-test('impact: zero-crossing rate over the first 20 ms is at least 3× the rate over 150–200 ms', () => {
+// The pitch of the first whole cycle at or after `from` seconds (a noise burst can hide the cycles before it).
+function firstPitch(xs, from) {
+  for (let t = from; t < from + 0.05; t += 0.001) {
+    const hz = pitchAt(xs, SAMPLE_RATE, t);
+    if (Number.isFinite(hz)) return hz;
+  }
+  return Number.NaN;
+}
+
+test('impact: pitch just after the 8 ms noise burst is at least 2.5× where it settles, and it has settled (within 10 %) by 100 ms', () => {
   const { left } = channels(cueWav({ cue: 'impact' }));
-  const attack = zeroCrossingRate(seconds(left, 0, 0.02), SAMPLE_RATE);
-  const settled = zeroCrossingRate(seconds(left, 0.15, 0.2), SAMPLE_RATE);
-  assert.ok(attack >= 3 * settled, `first 20 ms ${attack}/s, 150–200 ms ${settled}/s`);
+  const onset = firstPitch(left, 0.01);
+  const at100 = pitchAt(left, SAMPLE_RATE, 0.1);
+  const settled = pitchAt(left, SAMPLE_RATE, 0.3);
+  assert.ok(onset >= 2.5 * settled, `onset ${onset} Hz, settled ${settled} Hz: a fall of ${(onset / settled).toFixed(2)}×`);
+  assert.ok(Math.abs(at100 / settled - 1) < 0.1, `100 ms ${at100} Hz against ${settled} Hz`);
+});
+
+test('drop: falls about an octave (1.4–2.1× measured just after its 5 ms click) and has settled (within 3 %) by 80 ms', () => {
+  const { left } = channels(cueWav({ cue: 'drop' }));
+  const onset = firstPitch(left, 0.006);
+  const at80 = pitchAt(left, SAMPLE_RATE, 0.08);
+  const settled = pitchAt(left, SAMPLE_RATE, 0.3);
+  assert.ok(onset >= 1.4 * settled && onset <= 2.1 * settled, `onset ${onset} Hz, settled ${settled} Hz`);
+  assert.ok(Math.abs(at80 / settled - 1) < 0.03, `80 ms ${at80} Hz against ${settled} Hz`);
+});
+
+test('ding: a partial near 2.76 × f0, at least 10× the energy of the band between 2.2 and 2.5 × f0', () => {
+  const f0 = noteHz('E6');
+  const { left } = channels(cueWav({ cue: 'ding' }));
+  const head = seconds(left, 0, 0.1);
+  const partial = bandEnergy(head, SAMPLE_RATE, 2.66 * f0, 2.86 * f0);
+  const between = bandEnergy(head, SAMPLE_RATE, 2.2 * f0, 2.5 * f0);
+  assert.ok(partial >= 10 * between, `2.76 × f0 band ${partial}, 2.2–2.5 × f0 band ${between}`);
+});
+
+test('swoosh: the spectral centroid of its middle third is above both outer thirds (it opens and closes)', () => {
+  const { left } = channels(cueWav({ cue: 'swoosh' }));
+  const [first, middle, last] = [0, 1, 2].map((k) => spectralCentroid(part(left, k / 3, (k + 1) / 3), SAMPLE_RATE));
+  assert.ok(middle > first && middle > last, `thirds: ${first}, ${middle}, ${last} Hz`);
+});
+
+test('pop, chime, impact and ding have a reverb tail: the tail adds between -30 and -6 dB of the dry sound', () => {
+  for (const cue of ['pop', 'chime', 'impact', 'ding']) {
+    const def = CUE_LAYERS[cue];
+    const f0 = noteHz({ pop: 'E5', chime: 'A5', impact: 'F2', ding: 'E6' }[cue]);
+    const wet = layerCue(def, f0, mulberry32(1)).left;
+    const dry = layerCue({ ...def, tail: undefined }, f0, mulberry32(1)).left;
+    const db = 20 * Math.log10(rms(wet.map((x, i) => x - dry[i])) / rms(dry));
+    assert.ok(db > -30 && db < -6, `${cue}: tail at ${db.toFixed(1)} dB`);
+  }
+});
+
+test('at C8 every FM click stays at or below 0.4 × the sample rate, and every pitched cue still renders at full peak', () => {
+  const c8 = noteHz('C8');
+  for (const [cue, ratio] of [['pop', 6], ['drop', 16], ['ding', 2]]) {
+    const band = fmBand(ratio * c8);
+    assert.ok(band.topHz <= MAX_HZ + 1e-9, `${cue}: FM reaches ${band.topHz} Hz`);
+  }
+  assert.equal(MAX_HZ, 0.4 * SAMPLE_RATE);
+  assert.ok(fmBand(1000).index === 5 && fmBand(1000).topHz <= MAX_HZ, 'a low click keeps its full index');
+  for (const cue of ['pop', 'chime', 'impact', 'drop', 'ding']) {
+    const { left } = channels(cueWav({ cue, note: 'C8' }));
+    const top = left.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
+    assert.ok(left.every(Number.isFinite) && Math.abs(top - 0.5) < 0.01, `${cue} at C8 peaks at ${top}`);
+  }
 });
 
 test('pop: a small pitch drop, so the zero-crossing rate over 10–30 ms is under 1.15× the rate over 60–80 ms (the old pop fell an octave: 1.36)', () => {
@@ -155,6 +216,29 @@ test('follow on a non-typing text, follow beside at, follow on a pop, a typing p
   assert.deepEqual(errs(late), ['cues[0].follow: "title" types past the end of scene "two"']);
   assert.deepEqual(errs({ ...typingSpec(), cues: [{ cue: 'pop' }] }), ['cues[0].at: required']);
   assert.deepEqual(errs({ ...typingSpec(), cues: [{ cue: 'typing' }] }), ['cues[0].at: required']);
+});
+
+test('follow on an element that is not a text names its type', () => {
+  const counter = { id: 'n', type: 'counter', to: 9, x: 160, y: 40 };
+  const spec = typingSpec({}, { follow: 'n' });
+  spec.scenes[1].elements.push(counter);
+  assert.deepEqual(errs(spec), ['cues[0].follow: element "n" is a counter, not a text; follow a typing text']);
+});
+
+test('follow edge cases: keyframes that start part-typed, one value keyframe, none reaching the whole text, and empty text', () => {
+  const chars = typingLength(TITLE); // 12
+  const [partTyped] = resolveCues(typingSpec({ keyframes: [{ t: 1, value: 4 }, { t: 3, value: chars }] }));
+  assert.equal(partTyped.chars, chars - 4, 'only the characters still to come click');
+  assert.ok(Math.abs(partTyped.spacing - 2 / (chars - 4)) < 1e-12, `${partTyped.spacing}`);
+  const [halfway] = resolveCues(typingSpec({ keyframes: [{ t: 1, value: 0 }, { t: 2, value: 6 }] }));
+  assert.equal(halfway.chars, 6, 'no keyframe reaches the whole text: the clicks run to the last one');
+  assert.ok(Math.abs(halfway.spacing - 1 / 6) < 1e-12, `${halfway.spacing}`);
+  const never = 'cues[0].follow: "title" never types a character (it needs text, and value keyframes that rise if it has any); fix the text or drop follow';
+  assert.deepEqual(errs(typingSpec({ keyframes: [{ t: 1, value: chars }] })), [never], 'one value keyframe: the text appears at once');
+  assert.deepEqual(errs(typingSpec({ keyframes: [{ t: 1, value: chars }, { t: 2, value: 0 }] })), [never], 'keyframes that only fall');
+  assert.deepEqual(errs(typingSpec({ text: '' })), [never], 'empty text');
+  assert.equal(resolveCues(typingSpec({ text: '' }))[0].chars, 0);
+  assert.ok(cueWav({ cue: 'typing', chars: 0 }).length > 44, 'a zero count still makes one click, never a 0/0 level');
 });
 
 test('cue-tour example is valid, passes check with no stderr, and renders byte-identical twice', async (t) => {

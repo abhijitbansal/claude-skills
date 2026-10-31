@@ -42,7 +42,7 @@ const peak = (xs) => xs.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
 
 const LENGTH = { pop: [0.05, 0.3], click: [0.01, 0.1], whoosh: [0.4, 1.5], chime: [0.8, 2.5], impact: [0.4, 1.5], riser: [1.2, 2], swoosh: [0.2, 0.5], typing: [0.05, 0.2], drop: [0.4, 1], ding: [0.3, 0.8] }; // plausible seconds (typing: one character)
 const HASHES = {
-  pop: 'cc04cc481e04ebf802884e943ae18b502598b6f3e7ba33e277b0ad8c2bd6569e',
+  pop: '05ceac153a43e2fa1f13919f33b3e7aff764da5e577e7c900b5ba39c6b176054',
   click: 'dda6a952655125403ec05266280ca7c04bfa0c8241684a65964c6624786b5497',
   whoosh: '7efa3af288449415b5915e6f6e4629920390379d1c6f8ad864be952326f42d63',
   chime: 'bbb6caa15474b90ee7e8ba5415830376abf7e55f90f267b172ab92359297aee2',
@@ -51,7 +51,7 @@ const HASHES = {
   swoosh: 'f5deb7652f488830374cb7caef5075684566e5f425a6c476eb6a666829d53cff',
   typing: '3353297ca50ae09b6b664d0e2d8d205d7d96db50239e829868f492f35dd02fe0',
   drop: '793be04e68628a0c342c02b9f1112feafe1f11233577689acb48e2578155ec9a',
-  ding: 'f63c8334e2ebd4aa9e4473bb230d874c6c75167174da04f68c617a6a7fb66bc4',
+  ding: '16a9e8e970c08c6c7ba0d6cb69d9f09848f874d752ab072795df621954f9abc1',
 };
 
 for (const cue of CUE_NAMES) {

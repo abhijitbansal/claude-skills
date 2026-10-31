@@ -51,6 +51,23 @@ export function zeroCrossingRate(samples, rate) {
   return (crossings * rate) / samples.length;
 }
 
+/**
+ * The pitch in Hz of the cycle that contains `seconds`: the signal is low-passed (four one-pole stages at `maxHz`, so
+ * noise and partials above a low tone barely move the zero crossings), then the cycle is the span between two
+ * upward zero crossings, interpolated to a fraction of a sample. NaN when no whole cycle contains `seconds`.
+ */
+export function pitchAt(samples, rate, seconds, { maxHz = 1000 } = {}) {
+  const a = 1 - Math.exp((-2 * Math.PI * maxHz) / rate);
+  const stages = [0, 0, 0, 0];
+  const low = Array.from(samples, (x) => stages.reduce((input, _, s) => (stages[s] += a * (input - stages[s])), x));
+  const ups = [];
+  for (let i = 1; i < low.length; i++) {
+    if (low[i - 1] < 0 && low[i] >= 0) ups.push((i - 1 + low[i - 1] / (low[i - 1] - low[i])) / rate);
+  }
+  const k = ups.findIndex((t, j) => t <= seconds && ups[j + 1] > seconds);
+  return k < 0 ? Number.NaN : 1 / (ups[k + 1] - ups[k]);
+}
+
 /** Root mean square. */
 export function rms(samples) {
   let sum = 0;

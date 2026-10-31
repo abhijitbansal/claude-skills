@@ -36,11 +36,13 @@ export function resolveAudio(spec) {
   });
 }
 
-// Where a `typing` cue with `follow` plays: { el, scene, start, chars, spacing } for the text element `id`, or null when no
+// Where a `typing` cue with `follow` plays: { el, scene, start, chars, spacing } for the element `id`, or null when no
 // scene has an element with that id. It starts when the text starts typing (its scene start plus its first `value`
-// keyframe, 0 without one) and clicks once per character, `spacing` seconds apart. With `value` keyframes the clicks
-// are spread evenly up to the first keyframe that reaches the whole text (else the last `value` keyframe): under an
-// ease the characters arrive unevenly, so the clicks only approximate them.
+// keyframe, 0 without one) and clicks once per character typed, `spacing` seconds apart: `chars` is that number of
+// clicks. With `value` keyframes the clicks are the characters typed between the first `value` keyframe and the first
+// one that reaches the whole text (else the last `value` keyframe), spread evenly between the two: under an ease the
+// characters arrive unevenly, so the clicks only approximate them. `chars` is 0 (and `spacing` the default pace) when
+// the text never types a character: empty text, one `value` keyframe, or keyframes that never rise.
 export function typingFollow(spec, id) {
   let sceneStart = 0;
   for (const scene of spec.scenes) {
@@ -51,7 +53,9 @@ export function typingFollow(spec, id) {
       if (!keyed.length) return { el, scene, start: sceneStart, chars, spacing: TYPING_SECONDS_PER_CHAR };
       const done = keyed.find((kf) => kf.value >= chars) ?? keyed.at(-1);
       const span = done.t - keyed[0].t;
-      return { el, scene, start: sceneStart + keyed[0].t, chars, spacing: span > 0 && chars > 0 ? span / chars : TYPING_SECONDS_PER_CHAR };
+      const clicks = Math.max(0, Math.floor(Math.min(done.value, chars)) - Math.max(0, Math.floor(keyed[0].value)));
+      const typed = span > 0 && clicks > 0;
+      return { el, scene, start: sceneStart + keyed[0].t, chars: typed ? clicks : 0, spacing: typed ? span / clicks : TYPING_SECONDS_PER_CHAR };
     }
     sceneStart += scene.duration;
   }

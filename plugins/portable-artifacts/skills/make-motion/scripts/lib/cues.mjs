@@ -90,22 +90,40 @@ function noiseClick(seconds, tau, noise) {
   });
 }
 
+// The highest frequency a cue may make: above it a high note would fold back (alias) into audible junk.
+export const MAX_HZ = 0.4 * SAMPLE_RATE;
+
 // An FM click: a sine at `hz` whose phase is pushed by a fast-falling modulation index, the attack of a struck object.
 const FM_RATIO = 1.41; // inharmonic, so the click has no pitch of its own
+const FM_INDEX = 5;
+/**
+ * The FM click actually made for `hz`: { carrier, modulator, index, topHz }. The carrier is held at or below MAX_HZ and
+ * the peak index is lowered until the highest strong sideband (Carson's rule: carrier + (index + 1) × modulator) is
+ * too; with no room left the index is 0 and the click is a plain sine at the carrier.
+ */
+export function fmBand(hz) {
+  const carrier = Math.min(hz, MAX_HZ);
+  const modulator = FM_RATIO * carrier;
+  const index = Math.max(0, Math.min(FM_INDEX, (MAX_HZ - carrier) / modulator - 1));
+  return { carrier, modulator, index, topHz: index > 0 ? carrier + (index + 1) * modulator : carrier };
+}
 function fmClick(seconds, hz) {
+  const { carrier, modulator, index: peak } = fmBand(hz);
   return Float64Array.from({ length: frames(seconds) }, (_, i) => {
     const t = i * DT;
-    const index = 5 * Math.exp(-t / 0.0015);
-    return Math.sin(TWO_PI * hz * t + index * Math.sin(TWO_PI * hz * FM_RATIO * t)) * attack(t, 0.0003) * (1 - t / seconds) ** 3;
+    const index = peak * Math.exp(-t / 0.0015);
+    return Math.sin(TWO_PI * carrier * t + index * Math.sin(TWO_PI * modulator * t)) * attack(t, 0.0003) * (1 - t / seconds) ** 3;
   });
 }
 
 // A sine gliding from `from` Hz down to `to` Hz (most of the way within `glide` seconds), dying at `decay` per second.
-// `drive` > 0 soft-clips it, adding the harmonics that let a low note be heard on small speakers.
+// `drive` > 0 soft-clips it, adding the harmonics that let a low note be heard on small speakers; it is dropped when
+// those harmonics (up to the 3rd) would pass MAX_HZ, where a high note needs no help anyway.
+const DRIVE_HARMONIC = 3;
 function pitchDrop(seconds, { from, to, glide, decay, attackSeconds = 0.001, drive = 0 }) {
   let phase = 0;
   const tau = glide / 4;
-  const shape = drive > 0 ? (x) => Math.tanh(drive * x) / Math.tanh(drive) : (x) => x;
+  const shape = drive > 0 && DRIVE_HARMONIC * from <= MAX_HZ ? (x) => Math.tanh(drive * x) / Math.tanh(drive) : (x) => x;
   return Float64Array.from({ length: frames(seconds) }, (_, i) => {
     const t = i * DT;
     phase += TWO_PI * (to + (from - to) * Math.exp(-t / tau)) * DT;
@@ -181,7 +199,9 @@ function tick(seconds, hz, noise, { noiseTau = 1 / 180, ping = 0.6 } = {}) {
   return burst.map((x, i) => x + ping * Math.sin(TWO_PI * hz * i * DT) * Math.exp(-i * DT * 250));
 }
 
-const LAYERS = {
+// The layer definition of every cue but typing (which is built per text): exported so a test can render a cue without
+// one of its layers.
+export const CUE_LAYERS = Object.freeze({
   // A rounded blip: a bright FM tick, then a sine whose pitch drops about 12 % in its first 40 ms as it dies away,
   // in a small room.
   pop: {
@@ -249,7 +269,7 @@ const LAYERS = {
     body: (f0) => partials(0.5, f0, [[1, 1, 7], [2.76, 0.35, 14]], 0.001),
     tail: { seconds: 0.25, wet: 0.2 },
   },
-};
+});
 
 const TYPING_JITTER = 0.08; // each key's ping is up to 8 % off 3 kHz, so a run of keys is not one tick repeated
 const TYPING_RING_SECONDS = 0.05; // room after the last key for its tick to die away
@@ -273,8 +293,8 @@ function typingLayers(chars, spacing) {
 
 function layersOf(cue, chars, spacing) {
   if (cue === 'typing') return typingLayers(chars, spacing);
-  const def = LAYERS[cue];
-  if (!def) throw new Error(`unknown cue ${JSON.stringify(cue)}; cues: ${Object.keys(LAYERS).join(', ')}, typing`);
+  const def = Object.hasOwn(CUE_LAYERS, cue) ? CUE_LAYERS[cue] : undefined;
+  if (!def) throw new Error(`unknown cue ${JSON.stringify(cue)}; cues: ${Object.keys(CUE_LAYERS).join(', ')}, typing`);
   return def;
 }
 
@@ -301,10 +321,11 @@ function wavBuffer(left, right) {
   return Buffer.concat([header, data]);
 }
 
-// Scaled so its peak is PEAK, with the linear fade over the last TAIL_SECONDS.
+// Scaled so its peak is PEAK, with the linear fade over the last TAIL_SECONDS. Silence stays silence (no 0/0).
 function levelled(xs) {
   const tail = frames(TAIL_SECONDS);
   const top = xs.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
+  if (top === 0) return Array.from(xs, () => 0);
   return Array.from(xs, (x, i) => x * (PEAK / top) * Math.min(1, (xs.length - 1 - i) / tail));
 }
 
