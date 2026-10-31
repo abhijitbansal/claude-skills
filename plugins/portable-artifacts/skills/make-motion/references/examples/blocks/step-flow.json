@@ -10,7 +10,7 @@
           "id": "steps",
           "type": "block",
           "x": 960,
-          "y": 540,
+          "y": 451,
           "block": "step-flow",
           "params": {
             "steps": [

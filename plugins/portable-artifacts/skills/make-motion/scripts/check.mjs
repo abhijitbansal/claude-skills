@@ -17,6 +17,9 @@
 // while it is not moving and a caption is on screen is a problem, and so is a captions layer that leaves the zone: each
 // layer is measured once per caption group (at its midpoint, and for kinetic at each word's start), its box joined with
 // every word's so transforms and the kinetic pop count.
+// A finding inside a block (a part of its expansion) names the block instead: its own path, the block and part, and the
+// param to change (`scenes[0].elements[1]: text "lt/name" leaves the safe area (right) at 0.90s (block "lower-third",
+// part "name"); shorten params.name or move the block`).
 // --theme: the theme render.mjs --theme would draw a spec that names none in (a spec's own `theme` wins).
 // A spec with a video element has its frames decoded first, as render.mjs does, so it needs ffmpeg and ffprobe too.
 // exit 0 ok or skipped (no browser), 1 problems (or an invalid spec), 2 usage/IO
@@ -31,6 +34,7 @@ import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
 import { sheetTimes } from './lib/sheet.mjs';
 import { flattenElements, isGroup } from '../template/groups.mjs';
+import { isBlock, paramOfPart } from '../template/blocks/index.mjs';
 import { safeMargin, safeInsets, captionZone } from '../template/formats.mjs';
 import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
@@ -360,6 +364,20 @@ async function checkSpec(specPath, spec, { env, theme, prepare }) {
   }
 }
 
+// `findings` (problems or warnings, on the expanded `spec`) with each one inside a block moved to the block as `written`.
+const PART_PATH = /^scenes\[(\d+)\]\.elements\[(\d+)\]\.children\[(\d+)\]/;
+export function atBlockParts(written, spec, findings) {
+  return findings.map((finding) => {
+    const m = PART_PATH.exec(finding.path ?? '');
+    const el = m && written.scenes[m[1]]?.elements?.[m[2]];
+    if (!isBlock(el)) return finding;
+    const part = spec.scenes[m[1]].elements[m[2]].children[m[3]].id.slice(el.id.length + 1);
+    const param = paramOfPart(el.block, part);
+    const hint = param ? `shorten params.${param} or move the block` : 'move the block or change its params';
+    return { path: `scenes[${m[1]}].elements[${m[2]}]`, message: `${finding.message} (block ${JSON.stringify(el.block)}, part ${JSON.stringify(part)}); ${hint}` };
+  });
+}
+
 function checkTheme(name) {
   const themes = listThemes();
   if (themes.includes(name)) return;
@@ -402,7 +420,8 @@ export async function main(argv, { prepare } = {}) {
     }
     // The theme the page draws decides the title presets (and so the settle times): the spec's own, else --theme.
     const spec = withDefaults(raw.theme === undefined && values.theme !== undefined ? { ...raw, theme: values.theme } : raw);
-    const result = await checkSpec(path.resolve(positionals[0]), spec, { env: process.env, theme: values.theme, prepare });
+    const checked = await checkSpec(path.resolve(positionals[0]), spec, { env: process.env, theme: values.theme, prepare });
+    const result = { ...checked, ...(checked.problems && { problems: atBlockParts(raw, spec, checked.problems) }), ...(checked.warnings && { warnings: atBlockParts(raw, spec, checked.warnings) }) };
     report(result, json);
     return result.status === 'failed' ? 1 : 0;
   } catch (e) {

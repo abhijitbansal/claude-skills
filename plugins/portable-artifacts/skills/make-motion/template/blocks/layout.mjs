@@ -3,7 +3,7 @@
 // moves after LAST_MOTION_SHARE of the scene), and text is sized without a DOM: expansion runs in the validator (Node)
 // as well as the page, so a block estimates how many lines a text takes from its characters and reserves room for them.
 // The estimate is deliberately wide (CHAR_EM), so a text takes at most the lines reserved for it.
-import { safeMargin } from '../formats.mjs';
+import { safeMargin, captionZone } from '../formats.mjs';
 import { ARROW_HEAD_LENGTH } from '../defaults.mjs';
 
 export const ENTER_SECONDS = 0.6;
@@ -16,6 +16,8 @@ const FIT_STEP = 0.92; // a text that does not fit shrinks by this factor per tr
 const MIN_FONT_SIZE = 1; // the validator's floor for fontSize, so a tiny canvas still gives a valid spec
 const T_DECIMALS = 1e4;
 export const LINE_HEIGHT = Object.freeze({ sans: 1.15, title: 1.05 }); // styles.css: .el.text 1.15, .title 1.02 (+ room)
+export const MIN_TEXT = 40; // px at 1080 on the short side: no block text is smaller, so the 360 px phone tile stays legible
+const BAND_INSET = 12; // px at 1080 kept free inside the band a block fills (freeBand)
 
 // One px at 1080 on the short side, in canvas px.
 export const unit = (size) => Math.min(size[0], size[1]) / REFERENCE_SIDE;
@@ -23,11 +25,23 @@ export const unit = (size) => Math.min(size[0], size[1]) / REFERENCE_SIDE;
 // The width a centred block may use: the canvas inside the safe area, less `inset` on each side, at most `cap`.
 export const contentWidth = (size, cap, inset) => Math.min(size[0] - 2 * safeMargin(size) - 2 * inset, cap);
 
+// The band, top to bottom in canvas px, that a block may fill: the safe area, ending above the caption zone when the
+// spec has captions (ctx.captions), less BAND_INSET at each end.
+export function freeBand({ size, format, captions }) {
+  const inset = BAND_INSET * unit(size);
+  const bottom = captions ? captionZone(size, format).top : size[1] - safeMargin(size);
+  return { top: safeMargin(size) + inset, bottom: bottom - inset };
+}
+
+// The height a block centred at canvas `y` may take inside `band`.
+export const roomAt = (band, y) => Math.max(0, 2 * Math.min(band.bottom - y, y - band.top));
+
 const chars = (text) => Array.from(text).length;
 const wordsOf = (text) => text.split(/\s+/).filter(Boolean);
 
-// The estimated one-line width of `text` at font size `fs`.
+// The estimated one-line width of `text` at font size `fs`, and of its longest word (a word never wraps).
 export const textWidth = (text, fs) => chars(text) * CHAR_EM * fs;
+export const longestWordWidth = (text, fs) => Math.max(0, ...wordsOf(text).map(chars)) * CHAR_EM * fs;
 
 // Lines `text` wraps onto at `maxWidth`, wrapping at spaces as the page does (a word longer than the line overflows it).
 export function lineCount(text, fs, maxWidth) {
@@ -100,13 +114,6 @@ export function enter(part, [start, end], { dx = 0, dy = 0, scale } = {}) {
 
 // `part` (a line) drawn in from `[start, end]` with the `enter` ease.
 export const drawIn = (part, [start, end]) => ({ ...part, keyframes: [{ t: start, draw: 0 }, { t: end, draw: 1, ease: 'enter' }] });
-
-// The block's own params over the defaults its schema declares.
-export function withParamDefaults(schema, params) {
-  const out = { ...params };
-  for (const [key, prop] of Object.entries(schema.properties)) if (out[key] === undefined && prop.default !== undefined) out[key] = prop.default;
-  return out;
-}
 
 // The group a block becomes: its id, place and pose, holding `children`.
 export function blockGroup(el, children) {

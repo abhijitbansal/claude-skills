@@ -6,11 +6,16 @@
 //   describe  one line per param, for blocks.mjs show
 //   summary   one line on what the block is for
 //   example   example params
-//   place     (size, format) -> { x, y }: where the block belongs on that canvas
+//   place     (size, format[, side]) -> { x, y }: where the block belongs on that canvas
 //   assets    (optional) params that name a file next to the spec (checked like an image src, served like one)
-//   expand    (el, ctx: { theme, sceneDuration, fps, size }) -> group; never throws on params its schema accepts
-// The validator compiles `params` with Ajv (Node only); nothing here does. defaults.mjs imports this module, and this
-// module imports defaults.mjs's constants only inside expandBlocks, so the import cycle is safe.
+//   paramOf   (optional) part -> the param that sets that part's text (`label-2` -> `steps[1]`), for check.mjs hints;
+//             without it a part named like a param (`name`, `title`) points at that param (see paramOfPart)
+//   expand    (el, ctx: { theme, sceneDuration, fps, size, format, captions }) -> group; never throws on params its
+//             schema accepts. `captions` is whether the spec has a captions track (blocks that stack keep above it).
+// The validator compiles `params` with Ajv (Node only); nothing here does.
+// Import cycle: defaults.mjs imports this module, and this module (and layout.mjs) import constants from defaults.mjs.
+// It is safe because each side reads the other's exports only when a function runs, never while its module loads; keep
+// it that way (no top-level use of an imported constant here or in layout.mjs).
 import { canvasSize } from '../formats.mjs';
 import { MOTION_THEME, DEFAULT_FPS } from '../defaults.mjs';
 import titleCard from './title-card.mjs';
@@ -44,11 +49,20 @@ export const isBlock = (el) => el?.type === 'block';
 export function expandBlocks(spec) {
   const out = structuredClone(spec);
   if (!Array.isArray(out?.scenes)) return out;
-  const base = { theme: out.theme ?? MOTION_THEME, fps: out.fps ?? DEFAULT_FPS, size: canvasSize(out) };
+  const captions = Array.isArray(out.captions) && out.captions.length > 0;
+  const base = { theme: out.theme ?? MOTION_THEME, fps: out.fps ?? DEFAULT_FPS, size: canvasSize(out), format: out.format, captions };
   for (const scene of out.scenes) {
     if (!Array.isArray(scene?.elements)) continue;
     const ctx = { ...base, sceneDuration: scene.duration };
     scene.elements = scene.elements.map((el) => (isBlock(el) && BLOCKS[el.block] && el.params && typeof el.params === 'object' ? BLOCKS[el.block].expand(el, ctx) : el));
   }
   return out;
+}
+
+/** The param that sets the text of `part` (a part id without its `<blockId>/` prefix) of block `name`, or null. */
+export function paramOfPart(name, part) {
+  const def = BLOCKS[name];
+  if (!def) return null;
+  if (def.paramOf) return def.paramOf(part);
+  return Object.hasOwn(def.params.properties, part) ? part : null;
 }

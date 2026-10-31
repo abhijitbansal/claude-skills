@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { BLOCKS, BLOCK_NAMES, expandBlocks } from '../template/blocks/index.mjs';
 import { ENTER_SECONDS, STAGGER_SECONDS, LAST_MOTION_SHARE } from '../template/blocks/layout.mjs';
-import { canvasSize, safeMargin } from '../template/formats.mjs';
+import { canvasSize, safeMargin, captionZone, FORMATS, FORMAT_NAMES } from '../template/formats.mjs';
 import { flattenElements } from '../template/groups.mjs';
 import { validateSpec, withDefaults, loadSpec } from '../scripts/lib/spec.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
@@ -218,7 +218,7 @@ test('params errors come from the block schema at scenes[i].elements[j].params.<
   assert.deepEqual(errs(oneScene([block('step-flow', { steps: ['one'] })])), ['scenes[0].elements[0].params.steps: must NOT have fewer than 2 items']);
 });
 
-test('a 40-word title, a </script> label and an empty items list are params errors at params.<field>, never at the expansion', () => {
+test('params caps: a 40-word title, an over-long label (</script> padded past 80 characters) and an empty items list are errors at params.<field>, never at the expansion', () => {
   const words40 = Array.from({ length: 40 }, (_, i) => `word${i}`).join(' ');
   assert.deepEqual(errs(oneScene([block('title-card', { title: words40 })])), ['scenes[0].elements[0].params.title: must NOT have more than 80 characters']);
   const script = `</script><script>alert(1)</script>${'x'.repeat(60)}`;
@@ -293,8 +293,9 @@ test('blocks.mjs list names every block; show kpi-counter prints the params tabl
   const show = cli('show', 'kpi-counter');
   assert.equal(show.status, 0, show.stderr);
   assert.match(show.stdout, /^param +type +required +default +description$/m);
-  assert.match(show.stdout, /^label +string +yes +- +/m);
-  assert.match(show.stdout, /^decimals +integer +no +0 +/m);
+  assert.match(show.stdout, /^label +string≤80 +yes +- +/m);
+  assert.match(show.stdout, /^prefix +string≤6 +no +- +/m);
+  assert.match(show.stdout, /^decimals +integer 0–4 +no +0 +/m);
   const json = JSON.parse(show.stdout.slice(show.stdout.indexOf('{')));
   assert.deepEqual(json.params, BLOCKS['kpi-counter'].example);
   assert.equal(json.block, 'kpi-counter');
@@ -307,4 +308,89 @@ test('blocks.mjs list names every block; show kpi-counter prints the params tabl
   assert.match(kpi.stderr, /^unknown block "kpi"; did you mean "kpi-counter"\? \(blocks: /);
   assert.equal(cli().status, 2);
   assert.equal(cli('lsit').status, 2);
+});
+
+// ---- fix round 1 -----------------------------------------------------------------------------------------------------
+
+// The canvas extent [top, bottom] of every rect and ellipse part (cards, rows, boxes: the containers the texts sit in),
+// with the block's group at (x, y).
+const shapeBoxes = (spec, x, y) => partsOf(spec).filter((el) => el.type === 'shape' && el.shape !== 'line')
+  .map((el) => ({ id: el.id, top: y + el.y - el.height / 2, bottom: y + el.y + el.height / 2, left: x + el.x - el.width / 2, right: x + el.x + el.width / 2 }));
+
+test('lower-third at its place() keeps its card above the caption zone and inside the safe area, at every format, with 80-character name and role, on either side', () => {
+  for (const format of FORMAT_NAMES) {
+    const size = FORMATS[format].size;
+    const zone = captionZone(size, format);
+    const m = safeMargin(size);
+    for (const side of ['left', 'right']) {
+      const { x, y } = BLOCKS['lower-third'].place(size, format, side);
+      const params = { name: prose(80), role: PROSE.slice(9, 89).trimEnd(), side };
+      const [card] = shapeBoxes(expandBlocks(oneScene([block('lower-third', params, { x, y })], { format })), x, y).filter((b) => b.id === 'b/card');
+      const where = `${format} ${side}`;
+      assert.ok(card.bottom <= zone.top, `${where}: card bottom ${card.bottom} reaches the caption zone at ${zone.top}`);
+      assert.ok(card.top >= m && card.left >= m && card.right <= size[0] - m, `${where}: card ${JSON.stringify(card)} leaves the safe area`);
+    }
+  }
+});
+
+test('with captions, an 8-item checklist and a 6-step column step-flow at their place() fit between the safe area and the caption zone (16:9)', () => {
+  const size = [1920, 1080];
+  const zone = captionZone(size, '16:9');
+  const m = safeMargin(size);
+  const items = Array.from({ length: 8 }, (_, i) => PROSE.slice(i * 6).slice(0, 40).trimEnd());
+  const steps = ['Configure the deployment', 'Provision every service', 'Migrate the old database', 'Validate the release plan', 'Announce the maintenance', 'Celebrate with the team'];
+  for (const [name, params] of [['checklist', { items }], ['step-flow', { steps, direction: 'column' }]]) {
+    for (const captions of [[{ src: 'c.srt' }], undefined]) {
+      const { x, y } = BLOCKS[name].place(size, '16:9');
+      const spec = expandBlocks(oneScene([block(name, params, { x, y })], { format: '16:9', ...(captions ? { captions } : {}) }));
+      const floor = captions ? zone.top : size[1] - m;
+      for (const box of shapeBoxes(spec, x, y)) {
+        assert.ok(box.top >= m && box.bottom <= floor, `${name}${captions ? ' with captions' : ''}: ${box.id} spans ${box.top}..${box.bottom}, outside ${m}..${floor}`);
+      }
+    }
+  }
+});
+
+test('every block text is at least 40 px at 1080 on the short side, for the example, largest and smallest params', () => {
+  for (const name of names) {
+    for (const [variant, params] of Object.entries(extremes(name))) {
+      for (const format of ['16:9', '9:16', '1:1']) {
+        const size = FORMATS[format].size;
+        const floor = Math.round((40 * Math.min(...size)) / 1080);
+        for (const el of partsOf(expandBlocks(oneScene([block(name, params)], { format })))) {
+          if (el.type === 'text' || el.type === 'counter') assert.ok(el.fontSize >= floor, `${name} ${variant} ${format}: ${el.id} is ${el.fontSize} px`);
+        }
+      }
+    }
+  }
+});
+
+test('a duplicate block id is one error at the block id, not one per part', () => {
+  const kpi = (extra) => block('kpi-counter', { label: 'Users', to: 5 }, { id: 'kpi', ...extra });
+  assert.deepEqual(errs(oneScene([kpi(), kpi({ y: 300 })])), ['scenes[0].elements[1].id: duplicate id "kpi" (first used at scenes[0].elements[0].id)']);
+});
+
+test('blocks.mjs show prints caps in the type column and where a right-side lower-third goes', () => {
+  const show = cli('show', 'lower-third');
+  assert.equal(show.status, 0, show.stderr);
+  assert.match(show.stdout, /^name +string≤80 +yes +- +/m);
+  assert.match(show.stdout, /^side +left\|right +no +left +.*x is the right edge/m);
+  assert.match(show.stdout, /^place with "side": "right" \(x, y\): 16:9 x 1820 y \d+; 9:16 x 980 y \d+;/m);
+  const checklist = cli('show', 'checklist');
+  assert.match(checklist.stdout, /^items +string≤40\[2–8\] +yes +- +/m);
+  assert.match(checklist.stdout, /^tickAfter +number 0\.1–2 +no +0\.25 +/m);
+});
+
+test('check.mjs names the block and the param to change when a finding is inside a block', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  const dir = mkdtempSync(path.join(tmpdir(), 'block-check-'));
+  const file = path.join(dir, 'm.json');
+  // A left-side lower-third anchored near the right edge: its card grows rightward, off the safe area.
+  writeFileSync(file, JSON.stringify(oneScene([block('lower-third', { name: 'Ada Lovelace from the research team' }, { id: 'lt', x: 1500, y: 818 })], { format: '16:9' }, 3)));
+  const r = spawnSync(process.execPath, [CHECK, file], { encoding: 'utf8' });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  const lines = r.stdout.trim().split('\n');
+  assert.equal(lines.length, 2, r.stdout);
+  assert.match(lines[0], /^scenes\[0\]\.elements\[0\]: text "lt\/name" leaves the safe area \(right\) at \d+\.\d\ds \(block "lower-third", part "name"\); shorten params\.name or move the block$/);
+  assert.equal(lines[1], 'check: 1 problem');
 });

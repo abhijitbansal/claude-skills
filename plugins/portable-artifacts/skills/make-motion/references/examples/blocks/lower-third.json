@@ -10,7 +10,7 @@
           "id": "speaker",
           "type": "block",
           "x": 100,
-          "y": 732,
+          "y": 818,
           "block": "lower-third",
           "params": {
             "name": "Ada Lovelace",

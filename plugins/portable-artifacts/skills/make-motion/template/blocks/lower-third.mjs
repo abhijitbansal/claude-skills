@@ -1,8 +1,9 @@
-// lower-third: a name and an optional role on a card with an accent bar on its outer edge. Its `x`, `y` is the middle
-// of that outer edge (the left edge for side left, the right edge for side right), so a longer name grows the card
-// inward, away from the frame edge.
+// lower-third: a name and an optional role on a card with an accent bar on its outer edge. Its `x`, `y` is the bottom
+// corner of that outer edge (bottom-left for side left, bottom-right for side right): the card grows up and inward
+// from there, so however long the name and role, its bottom edge stays at `y`. place() puts `y` CAPTION_GAP above the
+// caption zone, so at its place the card never reaches the zone, whatever the text.
 import { captionZone } from '../formats.mjs';
-import { unit, contentWidth, textWidth, fitText, squeeze, slot, textPart, rectPart, enter, blockGroup, stack } from './layout.mjs';
+import { unit, contentWidth, textWidth, fitText, squeeze, slot, textPart, rectPart, enter, blockGroup, MIN_TEXT } from './layout.mjs';
 
 const params = {
   type: 'object',
@@ -16,7 +17,7 @@ const params = {
 };
 
 const EDGE_INSET = 40; // px at 1080 from the safe area to the card's outer edge, in place()
-const ABOVE_CAPTIONS = 110; // px at 1080 from the card's middle up from the caption zone's top, in place()
+const CAPTION_GAP = 24; // px at 1080 between the card's bottom (y) and the caption zone's top, in place()
 
 function expand(el, { size, sceneDuration }) {
   const u = unit(size);
@@ -26,19 +27,20 @@ function expand(el, { size, sceneDuration }) {
   const padX = 32 * u;
   const padY = 24 * u;
   const gap = 8 * u;
-  const maxCard = contentWidth(size, Math.max(760 * u, 0.45 * size[0]), EDGE_INSET * u);
+  const maxCard = contentWidth(size, Math.max(900 * u, 0.55 * size[0]), EDGE_INSET * u);
   const area = maxCard - bar - 2 * padX; // the widest the text may be
-  const nameFit = fitText(name, { size: 46 * u, min: 32 * u, maxWidth: area, maxLines: 2 });
-  const roleFit = role && fitText(role, { size: 30 * u, min: 24 * u, maxWidth: area, maxLines: 2 });
-  const inner = Math.min(area, Math.max(240 * u, textWidth(name, nameFit.fontSize), role ? textWidth(role, roleFit.fontSize) : 0));
+  const nameFit = fitText(name, { size: 56 * u, min: 44 * u, maxWidth: area, maxLines: 2 });
+  const roleFit = role && fitText(role, { size: MIN_TEXT * u, min: MIN_TEXT * u, maxWidth: area, maxLines: 2 });
+  const inner = Math.min(area, Math.max(320 * u, textWidth(name, nameFit.fontSize), role ? textWidth(role, roleFit.fontSize) : 0));
   const cardW = inner + bar + 2 * padX;
   const cardH = 2 * padY + nameFit.height + (role ? gap + roleFit.height : 0);
   const out = side === 'left' ? 1 : -1; // which way the card extends from the anchor
-  const [nameY, roleY] = stack(role ? [nameFit.height, roleFit.height] : [nameFit.height], [gap]);
+  const nameY = -cardH + padY + nameFit.height / 2;
+  const roleY = role ? -cardH + padY + nameFit.height + gap + roleFit.height / 2 : 0;
   const textX = out * (bar + padX + inner / 2);
   const parts = [
-    rectPart(id('card'), out * (cardW / 2), 0, cardW, cardH, { fill: 'surface', radius: Math.round(8 * u), elevated: true }),
-    rectPart(id('bar'), out * (bar / 2), 0, bar, cardH, { fill: 'accent' }),
+    rectPart(id('card'), out * (cardW / 2), -cardH / 2, cardW, cardH, { fill: 'surface', radius: Math.round(8 * u), elevated: true }),
+    rectPart(id('bar'), out * (bar / 2), -cardH / 2, bar, cardH, { fill: 'accent' }),
     textPart(id('name'), name, textX, nameY, { fontSize: nameFit.fontSize, maxWidth: inner, fontWeight: 700, color: 'text' }),
     role && textPart(id('role'), role, textX, roleY, { fontSize: roleFit.fontSize, maxWidth: inner, fontWeight: 500, color: 'text2' }),
   ].filter(Boolean);
@@ -54,15 +56,15 @@ export default Object.freeze({
   describe: {
     name: 'the main line, in bold',
     role: 'a second, quieter line under the name',
-    side: 'left (default) or right: which frame edge the card hangs from; x, y is the middle of that outer edge',
+    side: 'left (default) or right: which frame edge the card hangs from. x, y is the bottom corner of that outer edge: for left, x is the left edge; for right, x is the right edge. The card grows up and inward from there',
   },
   example: { name: 'Ada Lovelace', role: 'Head of Research', side: 'left' },
-  // Its outer edge 40 px inside the safe area, its middle 110 px above the caption zone, so captions never cover it.
+  // Its outer edge 40 px inside the safe area, its bottom 24 px above the caption zone, so captions never cover it.
   place: (size, format, side = 'left') => {
     const u = unit(size);
     const zone = captionZone(size, format);
     const inset = zone.left + EDGE_INSET * u;
-    return { x: side === 'right' ? size[0] - inset : inset, y: zone.top - ABOVE_CAPTIONS * u };
+    return { x: side === 'right' ? size[0] - inset : inset, y: zone.top - CAPTION_GAP * u };
   },
   expand,
 });

@@ -1,6 +1,6 @@
 // checklist: 2 to 8 items, each on a row with an empty circle; once every row is in, the items are ticked in order.
-import { safeMargin } from '../formats.mjs';
-import { unit, contentWidth, fitText, lineCount, squeeze, slot, textPart, rectPart, ellipsePart, linePart, enter, blockGroup, ENTER_SECONDS, LINE_HEIGHT } from './layout.mjs';
+import { captionZone, safeMargin } from '../formats.mjs';
+import { unit, contentWidth, fitText, lineCount, squeeze, slot, textPart, rectPart, ellipsePart, linePart, enter, blockGroup, freeBand, roomAt, ENTER_SECONDS, LINE_HEIGHT, MIN_TEXT } from './layout.mjs';
 
 const params = {
   type: 'object',
@@ -20,37 +20,39 @@ const STROKE_SHARE = 0.09; // the tick's stroke width, of d
 const SHORT_DRAW = [0.15, 0.3]; // seconds after the tick starts: the short stroke draws over this span
 const LONG_DRAW = [0.3, 0.5]; // ... then the long one
 
-const FONT_SIZES = [38, 34, 30, 26, 22]; // px at 1080: the rows take the first that lets them all fit the safe height
-const ROOM_INSET = 20; // px at 1080 kept free above and below the rows, inside the safe area
-const PAD_Y = 16;
+const FONT_SIZES = [48, 44, MIN_TEXT]; // px at 1080, largest first
+// Row spacing, roomiest first: the rows take the largest font size, then the roomiest spacing, that fits their room.
+const ROW_TIERS = [{ padY: 16, gap: 14 }, { padY: 10, gap: 8 }, { padY: 6, gap: 6 }];
 
-// One font size for every row (the largest of FONT_SIZES at which each item fits its row in two lines and the rows
-// fit `room` tall, else the smallest), and the row height it needs.
-function fitRows(items, { u, d, textW, gap, room }) {
+// One font size for every row (the largest at which each item fits its row in two lines and the rows fit `room` tall)
+// and the row height and gap that go with it; the smallest size and tightest spacing when nothing fits.
+function fitRows(items, { u, d, textW, room }) {
   let fit;
   for (const base of FONT_SIZES) {
-    const fs = Math.min(...items.map((item) => fitText(item, { size: base * u, min: FONT_SIZES.at(-1) * u, maxWidth: textW, maxLines: 2 }).fontSize));
+    const fs = Math.min(...items.map((item) => fitText(item, { size: base * u, min: MIN_TEXT * u, maxWidth: textW, maxLines: 2 }).fontSize));
     const lines = Math.max(...items.map((item) => lineCount(item, fs, textW)));
-    const rowH = Math.max(d, lines * fs * LINE_HEIGHT.sans) + 2 * PAD_Y * u;
-    fit = { fontSize: fs, rowH };
-    if (items.length * rowH + (items.length - 1) * gap <= room) break;
+    for (const tier of ROW_TIERS) {
+      const rowH = Math.max(d, lines * fs * LINE_HEIGHT.sans) + 2 * tier.padY * u;
+      fit = { fontSize: fs, rowH, gap: tier.gap * u };
+      if (items.length * rowH + (items.length - 1) * fit.gap <= room) return fit;
+    }
   }
   return fit;
 }
 
-function expand(el, { size, sceneDuration }) {
+function expand(el, ctx) {
+  const { size, sceneDuration } = ctx;
   const u = unit(size);
   const { items } = el.params;
   const tickAfter = el.params.tickAfter ?? params.properties.tickAfter.default;
   const n = items.length;
   const id = (part) => `${el.id}/${part}`;
-  const rowW = contentWidth(size, 960 * u, 40 * u);
+  const rowW = contentWidth(size, 1240 * u, 40 * u);
   const d = 44 * u;
   const padX = 24 * u;
   const textLeft = -rowW / 2 + padX + d + 20 * u;
   const textW = rowW / 2 - padX - textLeft;
-  const gap = 14 * u;
-  const { fontSize, rowH } = fitRows(items, { u, d, textW, gap, room: size[1] - 2 * safeMargin(size) - 2 * ROOM_INSET * u });
+  const { fontSize, rowH, gap } = fitRows(items, { u, d, textW, room: roomAt(freeBand(ctx), el.y) });
   const y = (i) => (i - (n - 1) / 2) * (rowH + gap);
   const circleX = -rowW / 2 + padX + d / 2;
   // Rows enter STAGGER apart; the first tick starts when the last row has landed, then one every tickAfter seconds.
@@ -87,6 +89,9 @@ export default Object.freeze({
     tickAfter: 'seconds between one tick and the next, 0.1 to 2; ticking starts once every row is in',
   },
   example: { items: ['Offline renders', 'Same spec, same video', 'Captions in six styles', 'No code to write'] },
-  place: (size) => ({ x: size[0] / 2, y: size[1] / 2 }),
+  // Centred across, and centred in the band between the safe area top and the caption zone, so the rows fit above
+  // captions.
+  place: (size, format) => ({ x: size[0] / 2, y: (safeMargin(size) + captionZone(size, format).top) / 2 }),
+  paramOf: (part) => (/^item-(\d+)$/.test(part) ? `items[${Number(part.split('-')[1]) - 1}]` : null),
   expand,
 });

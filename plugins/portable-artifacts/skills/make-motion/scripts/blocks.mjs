@@ -16,11 +16,23 @@ const COLUMN_GAP = 2;
 
 const paramList = ({ params }) => Object.keys(params.properties).map((key) => (params.required.includes(key) ? key : `${key}?`)).join(', ');
 
-// A param schema as one short type: string, number, integer, boolean, left|right, string[2-6].
+// A param schema as one short type with its caps: string≤80, integer 0–4, number ±999999999999, left|right,
+// string≤24[2–6] (2 to 6 strings of up to 24 characters).
 function typeOf(schema) {
   if (schema.enum) return schema.enum.join('|');
-  if (schema.type === 'array') return `${typeOf(schema.items)}[${schema.minItems}-${schema.maxItems}]`;
+  if (schema.type === 'array') return `${typeOf(schema.items)}[${schema.minItems}–${schema.maxItems}]`;
+  if (schema.type === 'string') return schema.maxLength === undefined ? 'string' : `string≤${schema.maxLength}`;
+  const { minimum: lo, maximum: hi } = schema;
+  if (lo !== undefined && hi !== undefined) return lo === -hi ? `${schema.type} ±${hi}` : `${schema.type} ${lo}–${hi}`;
   return schema.type;
+}
+
+// Where the block goes on each format, as one line; `side` is passed to place() (lower-third).
+function placeLine(def, side) {
+  return FORMAT_NAMES.map((format) => {
+    const { x, y } = def.place(FORMATS[format].size, format, side);
+    return `${format} x ${Math.round(x)} y ${Math.round(y)}`;
+  }).join('; ');
 }
 
 function table(rows) {
@@ -37,10 +49,9 @@ function show(name) {
   const rows = Object.entries(def.params.properties).map(([key, schema]) => [
     key, typeOf(schema), def.params.required.includes(key) ? 'yes' : 'no', schema.default === undefined ? '-' : String(schema.default), def.describe[key],
   ]);
-  const places = FORMAT_NAMES.map((format) => {
-    const { x, y } = def.place(FORMATS[format].size, format);
-    return `${format} x ${Math.round(x)} y ${Math.round(y)}`;
-  });
+  // A block with a `side` param also gets a line for each other side.
+  const side = def.params.properties.side;
+  const otherSides = (side?.enum ?? []).filter((value) => value !== side.default);
   const { x, y } = def.place(FORMATS['16:9'].size, '16:9');
   const element = { id: name.split('-')[0], type: 'block', x: Math.round(x), y: Math.round(y), block: name, params: def.example };
   return [
@@ -48,7 +59,8 @@ function show(name) {
     '',
     table([['param', 'type', 'required', 'default', 'description'], ...rows]),
     '',
-    `place (x, y): ${places.join('; ')}`,
+    `place (x, y): ${placeLine(def)}`,
+    ...otherSides.map((value) => `place with "side": ${JSON.stringify(value)} (x, y): ${placeLine(def, value)}`),
     '',
     'example element (1920x1080):',
     JSON.stringify(element, null, 2),

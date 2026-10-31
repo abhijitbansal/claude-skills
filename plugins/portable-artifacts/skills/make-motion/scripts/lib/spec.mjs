@@ -678,11 +678,20 @@ function atBlocks(written, errors) {
     if (!block) return at;
     return at.endsWith('.id') ? `${block.base}.id` : `${block.base}.params`;
   };
-  return errors.map(({ path: at, message }) => {
+  const lifted = errors.map(({ path: at, message }) => {
     const block = owner(at);
-    const lifted = message.replace(PART_PATH, lift);
-    if (!block) return { path: at, message: lifted };
-    return { path: lift(at), message: `${lifted} (block ${JSON.stringify(block.el.id)} names its parts "${block.el.id}/<part>")` };
+    const text = message.replace(PART_PATH, lift);
+    if (!block) return { path: at, message: text };
+    return { path: lift(at), message: `${text} (block ${JSON.stringify(block.el.id)} names its parts "${block.el.id}/<part>")` };
+  });
+  // A block id used twice clashes once for the block and once per part: keep only the first error at each block's id.
+  const blockIds = new Set(blocks.map(({ base }) => `${base}.id`));
+  const seen = new Set();
+  return lifted.filter(({ path: at }) => {
+    if (!blockIds.has(at)) return true;
+    if (seen.has(at)) return false;
+    seen.add(at);
+    return true;
   });
 }
 

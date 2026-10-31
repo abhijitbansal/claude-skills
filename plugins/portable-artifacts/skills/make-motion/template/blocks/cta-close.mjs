@@ -1,5 +1,5 @@
 // cta-close: a closing headline, an accent button with the action, and an optional address shown as text.
-import { unit, contentWidth, textWidth, fitText, squeeze, slot, textPart, rectPart, enter, blockGroup, stack, LINE_HEIGHT } from './layout.mjs';
+import { unit, contentWidth, textWidth, fitText, squeeze, slot, textPart, rectPart, enter, blockGroup, stack, LINE_HEIGHT, MIN_TEXT } from './layout.mjs';
 
 const params = {
   type: 'object',
@@ -19,10 +19,10 @@ function expand(el, { size, sceneDuration }) {
   const width = contentWidth(size, 1500 * u, 48 * u);
   const headFit = fitText(headline, { size: 96 * u, min: 48 * u, maxWidth: width, maxLines: 3, lineHeight: LINE_HEIGHT.title });
   const padX = 44 * u;
-  const actionFit = fitText(action, { size: 38 * u, min: 24 * u, maxWidth: width - 2 * padX, maxLines: 1 });
+  const actionFit = fitText(action, { size: 44 * u, min: MIN_TEXT * u, maxWidth: width - 2 * padX, maxLines: 1 });
   const buttonH = Math.max(88 * u, actionFit.height + 2 * 20 * u);
   const buttonW = Math.min(width, Math.max(280 * u, textWidth(action, actionFit.fontSize) + 2 * padX));
-  const urlFit = url && fitText(url, { size: 32 * u, min: 24 * u, maxWidth: width, maxLines: 2 });
+  const urlFit = url && fitText(url, { size: MIN_TEXT * u, min: MIN_TEXT * u, maxWidth: width, maxLines: 2 });
   const ys = stack([headFit.height, buttonH, ...(urlFit ? [urlFit.height] : [])], [56 * u, 28 * u]);
   const at = squeeze(sceneDuration, slot(urlFit ? 2 : 1)[1]);
   const span = (i) => slot(i).map(at);

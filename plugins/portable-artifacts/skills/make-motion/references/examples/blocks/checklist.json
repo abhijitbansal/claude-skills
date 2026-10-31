@@ -10,7 +10,7 @@
           "id": "list",
           "type": "block",
           "x": 960,
-          "y": 540,
+          "y": 451,
           "block": "checklist",
           "params": {
             "items": [

@@ -1,5 +1,5 @@
 // logo-outro: the logo image settling into place, then an optional tagline under it; a closing card.
-import { unit, contentWidth, fitText, squeeze, slot, textPart, enter, blockGroup, stack } from './layout.mjs';
+import { unit, contentWidth, fitText, squeeze, slot, textPart, enter, blockGroup, stack, freeBand, roomAt, MIN_TEXT } from './layout.mjs';
 
 const params = {
   type: 'object',
@@ -14,14 +14,17 @@ const params = {
 
 const BOX_ASPECT = 0.5; // the logo is fitted (contain) into a box `width` wide and half as tall
 
-function expand(el, { size, sceneDuration }) {
+function expand(el, ctx) {
+  const { size, sceneDuration } = ctx;
   const u = unit(size);
   const { src, tagline } = el.params;
   const id = (part) => `${el.id}/${part}`;
   const area = contentWidth(size, Infinity, 40 * u);
-  const width = Math.max(1, Math.min(el.params.width ?? params.properties.width.default, area));
+  const tagFit = tagline && fitText(tagline, { size: 48 * u, min: MIN_TEXT * u, maxWidth: area, maxLines: 2 });
+  // The box is as wide as asked, within the safe area, and no taller than the room around y leaves beside the tagline.
+  const tall = roomAt(freeBand(ctx), el.y) - (tagFit ? tagFit.height + 40 * u : 0);
+  const width = Math.max(1, Math.min(el.params.width ?? params.properties.width.default, area, tall / BOX_ASPECT));
   const height = width * BOX_ASPECT;
-  const tagFit = tagline && fitText(tagline, { size: 44 * u, min: 28 * u, maxWidth: area, maxLines: 2 });
   const ys = stack([height, ...(tagFit ? [tagFit.height] : [])], [40 * u]);
   const at = squeeze(sceneDuration, slot(tagFit ? 1 : 0)[1]);
   const logo = { id: id('logo'), type: 'image', src, x: 0, y: Math.round(ys[0]), width: Math.round(width), height: Math.round(height), fit: 'contain' };
