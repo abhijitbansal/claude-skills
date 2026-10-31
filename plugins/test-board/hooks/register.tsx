@@ -57,9 +57,14 @@ function commandEvidence(ran: Ran): Pick<TestRun, 'exitCode' | 'commandStatus' |
 
 // Tools that cannot change the worktree: they neither clear the source check nor contend with a run.
 // A deny-list on purpose: unknown and mcp__* tools still invalidate. Agent/Task only spawn a subagent whose own
-// tool calls reach this same hook (with its agentId), so skipping the spawning call itself loses nothing.
+// tool calls reach this same hook (with its agentId), so skipping the spawning call itself loses nothing, except
+// when it asks for a worktree: the directory it creates sits inside the repo (see `isWorktreeSpawn`).
 const READ_ONLY_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LS', 'NotebookRead', 'WebFetch', 'WebSearch', 'TodoWrite',
   'Agent', 'Task', 'Skill', 'ToolSearch', 'AskUserQuestion', 'TaskOutput', 'BashOutput', 'ExitPlanMode', 'EnterPlanMode'])
+const SOURCE_PENDING = '    source checking…'
+// A subagent asked to work in a worktree gets a directory made inside the repo before any of its tools run.
+const isWorktreeSpawn = (e: { tool: string }): boolean =>
+  (e.tool === 'Agent' || e.tool === 'Task') && (e as { isolation?: unknown }).isolation === 'worktree'
 // Quiet time before a background source check, so a burst of edits costs one check.
 const REFRESH_DELAY_MS = 500
 
@@ -107,6 +112,17 @@ async function invalidateSource($: EngineInterface): Promise<void> {
   }
 }
 
+async function dropMatching($: EngineInterface): Promise<void> {
+  const isMatching = (run: TestRun): boolean => run.sourceCheck?.status === 'matching'
+  if ((await read($, latest)).some(isMatching)) {
+    await update($, latest, list => list.map(run => {
+      if (!isMatching(run)) return run
+      const { sourceCheck: _check, ...rest } = run
+      return rest
+    }))
+  }
+}
+
 // A run is compared again only if a capture was attempted for it and said something; restored runs never are.
 const isCheckable = (run: TestRun): boolean => run.stale !== true && hasSourceReport(run.source)
 
@@ -114,9 +130,9 @@ const isCheckable = (run: TestRun): boolean => run.stale !== true && hasSourceRe
 async function refreshSource($: EngineInterface, state: State): Promise<void> {
   if (state.activeTools !== 0) return
   const activity = state.activity
-  const held = visibleRuns(await read($, latest), await $.clock.now()).filter(isCheckable)
+  const held = visibleRuns(await read($, latest), await $.clock.now()).filter(isCheckable).slice(0, MAX_LATEST)
   const snapshots = new Map<string, SourceSnapshot>()
-  for (const run of held.slice(0, MAX_LATEST)) {
+  for (const run of held) {
     const root = sourceRoot(run.source)
     if (root !== undefined && !snapshots.has(root)) snapshots.set(root, await captureSource($, root))
   }
@@ -125,7 +141,8 @@ async function refreshSource($: EngineInterface, state: State): Promise<void> {
   if (held.length > 0) await update($, latest, list => {
     if (state.activeTools !== 0 || state.activity !== activity) return list
     return list.map(run => {
-      if (!isCheckable(run)) return run
+      // A run the band hides (expired, or dated after `now`) was not refreshed and keeps what it had.
+      if (!held.some(h => h.key === run.key && h.at === run.at)) return run
       const root = sourceRoot(run.source)
       const snapshot = root === undefined ? undefined : snapshots.get(root)
       // `at` is when a capture last ran for this run: a run with nothing to recapture keeps the time of its own.
@@ -286,13 +303,24 @@ async function record(
   state.turn.isNew = false
   // A run after ✕ starts the band afresh: the rows the person closed stay closed.
   const wasDismissed = (await read($, dismissed)) !== null
-  await update($, latest, list => {
-    // A check already in flight predates this run and must not label it.
-    state.activity += 1
-    return [run, ...(isFresh || wasDismissed ? [] : list.filter(r => r.key !== run.key && r.stale !== true))].slice(0, MAX_LATEST)
-  })
+  // A check already in flight predates this run and must not label it. The bump stays out of the updater, which
+  // should only compute the new list: any check that began earlier sees it and drops its result, and one that
+  // begins later captures source after the run ended, so it may label it.
+  state.activity += 1
+  await update($, latest, list =>
+    [run, ...(isFresh || wasDismissed ? [] : list.filter(r => r.key !== run.key && r.stale !== true))].slice(0, MAX_LATEST))
   if (wasDismissed) await update($, dismissed, () => null)
   await armExpiry($, state)
+}
+
+// Counts as source activity (so a check in flight is discarded) and clears the check.
+async function touchSource($: EngineInterface, state: State): Promise<void> {
+  state.activity += 1
+  try {
+    await invalidateSource($)
+  } catch {
+    $.ui.log('test-board: source invalidation unavailable')
+  }
 }
 
 export const register: Register = on => {
@@ -302,6 +330,17 @@ export const register: Register = on => {
   }
 
   on('tool.call', async ($, e, next) => {
+    if (isWorktreeSpawn(e)) {
+      // The directory appears inside the repo while the call is open, so the check is cleared on both sides of it.
+      // The call is not counted as an active tool: the subagent's own tool calls reach this hook and own their evidence.
+      await touchSource($, state)
+      try {
+        return await next(e)
+      } finally {
+        await touchSource($, state)
+        scheduleRefresh($, state)
+      }
+    }
     if (READ_ONLY_TOOLS.has(e.tool)) return next(e)
     const activity = ++state.activity
     state.activeTools += 1
@@ -372,6 +411,14 @@ export const register: Register = on => {
     // A delivery into a running turn (peer message, notification) is not a new turn.
     if (e.turnId === undefined) {
       state.turn.isNew = true
+      // The person may have edited files since the last check. Drop a 'matching' label now (a cheap state write, no
+      // collector) and discard any check in flight, so the band cannot show it while the background check catches up.
+      state.activity += 1
+      try {
+        await dropMatching($)
+      } catch {
+        $.ui.log('test-board: source label not cleared')
+      }
       scheduleRefresh($, state)
     }
     return next(e)
@@ -389,10 +436,8 @@ export const register: Register = on => {
       // A reload fires session.start too: a run past the hour stays off the band, and a closed band stays closed.
       const isClosed = (await read($, dismissed)) !== null
       if (newest !== undefined && !isClosed && visibleRuns([newest], now).length > 0) {
-        await update($, latest, () => {
-          state.activity += 1
-          return [{ ...newest, sourceCheck: undefined, stale: true }]
-        })
+        state.activity += 1
+        await update($, latest, () => [{ ...newest, sourceCheck: undefined, stale: true }])
       }
       // A hot reload cancels the old timer: re-arm for whatever latest now holds.
       await armExpiry($, state)
@@ -414,7 +459,8 @@ export const register: Register = on => {
     const columns = e.props.bodyColumns
     const rows = await Promise.all(runs.map((run, i) => partsFor($, run, now, columns, i === 0 ? CLOSE_RESERVE : 0)))
     // One line for the whole band, from the newest run that has a check (only attempted captures get one).
-    const sourced = runs.find(r => r.sourceCheck !== undefined)
+    // Between an invalidation and the background check landing a checkable run holds its place with a placeholder.
+    const sourced = runs.find(r => r.sourceCheck !== undefined) ?? runs.find(isCheckable)
     const close = (): Promise<void> => {
       state.chain = state.chain.then(() => dismiss($)).catch((err: unknown) => {
         $.ui.log(`test-board: band not closed: ${String(err).slice(0, 120)}`)
@@ -445,8 +491,9 @@ export const register: Register = on => {
                 <Button key="close" plain dimColor role="dismiss" label="Close test results" onPress={close}>✕</Button>
               )}
             </Box>
-            {run === sourced && run.sourceCheck !== undefined && (
-              <Text dimColor>{`    source ${run.sourceCheck.status} at last check ${formatClock(run.sourceCheck.at)}`}</Text>
+            {run === sourced && (
+              <Text dimColor>{run.sourceCheck === undefined ? SOURCE_PENDING
+                : `    source ${run.sourceCheck.status} at last check ${formatClock(run.sourceCheck.at)}`}</Text>
             )}
             {isOpen && run.failures.slice(0, MAX_SHOWN_FAILURES).map(f => (
               <Text dimColor>{`    ${f.id}${f.loc === undefined ? '' : `  ${f.loc}`}`}</Text>

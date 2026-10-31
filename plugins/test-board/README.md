@@ -87,21 +87,69 @@ Before/after capture applies to recognized direct test commands with a staticall
 located working directory, optionally preceded by a literal `cd /absolute/path &&`
 or `cd ./relative/path &&` (`..` paths are also supported). Bare relative names
 such as `cd tests` can follow `CDPATH`, even when quoted; `cd -` follows `OLDPWD`.
-Those destinations remain unknown. Shell expansions (including path globs),
-compound commands, redirections, pipes, and quoted shell wrappers
-still show their test results but have unknown source freshness. Tools that can
+Those destinations remain unknown, and so does a `cd` operand holding a quote
+(`cd ./x'y'` is `./xy` to the shell). Only space and tab separate words: a command
+holding any other whitespace (a non-breaking space, form feed, U+2028) is unknown.
+These forms are still located. None of them changes the directory the test runs in;
+the runner flags and variables listed below are refused, but that list is not complete:
+
+- cartoon's rewrite of the command, `cartoon -c '<command>'` (or `"…"` when the
+  text holds no `$`, backtick or backslash), and the `cartoon --tag t -- <command>`
+  prefix form. cartoon writes a single quote in the command as the POSIX sequence
+  `'\''`, so `pytest -k 'a and b'` becomes `cartoon -c 'pytest -k '\''a and b'\'''`;
+  that sequence, and only that one, is decoded back to the quote. The inner command
+  gets exactly the rules below, including its own leading `cd`, so the typed command
+  and its rewrite are treated alike (checked against `cartoon hook rewrite`).
+- Quoted arguments such as `pytest -k "a and b"` or `-k 'x'`. Single quotes are
+  literal; double quotes may not hold `$`, a backtick or a backslash, and every
+  quote must close.
+- Output plumbing after the test: `2>&1`, `> file`, `>> file`, `2> file`, and
+  `| tail -n 50`, `| tee log`, `| grep …`, through `head`, `tail`, `grep`, `egrep`,
+  `fgrep`, `rg`, `tee`, `cat`, `sort`, `uniq`, `wc`, `cut` and `tr`, except `rg --pre`
+  / `--pre-glob` and `sort --compress-program`, which run another program. Redirecting
+  or tee-ing into the worktree writes a file there, a source change like any other, so
+  the run shows `changed`.
+- Environment prefixes such as `CI=1 pytest`, except those that set `PWD`, `OLDPWD`
+  or `CDPATH`, or point a runner elsewhere (below).
+
+A runner told to work on a different project than the directory it starts in has the
+code under test outside the located worktree, so these stay unknown too: `--prefix`,
+`--dir`, `-C`, `--cwd`, `--chdir`, `--directory`, `--project`, `--manifest-path`,
+`--package-path`, `--rootdir`, `--rootDir` and `--root` (npm, pnpm, yarn, bun, go, make,
+cargo, swift, pytest, jest, vitest, uv, poetry); `--config`, `-c`, `-r`, `-project` and
+`-workspace` when their value is absolute, starts with `~`, climbs out with `..` or is
+missing; and the variables `npm_config_prefix` and `PYTEST_ADDOPTS` carrying one of these.
+Ordinary flags (`-k`, `-q`, `--watch=false`, `--config jest.config.js`) are unaffected.
+Short clusters ending in `-c` or `-C` (`-qc ../x`, `-sC dir`) and jest's `--roots` and
+`--projects` are checked the same way. This is a short list, not a model of every runner.
+Not detected: a test path that points outside the worktree (`pytest ../other/tests`) and
+variables that load code from elsewhere (`PYTHONPATH`, `NODE_PATH`, `GOWORK`).
+
+Shell expansions (including path globs), `;`, `&`, `&&` chains other than the single
+leading `cd`, `||`, subshells and braces, `$(…)` and backticks, unquoted `$VAR`,
+newlines, input redirection and pipes into any other command still show their test
+results but have unknown source freshness.
+
+Tools that can
 change source (`Bash`, `Edit`, `Write`, `NotebookEdit`, `MultiEdit`, and any tool not on
 a short read-only list: `Read`, `Grep`, `Glob`, `LS`, `NotebookRead`, `WebFetch`,
 `WebSearch`, `TodoWrite`, `Agent`, `Task`, `Skill`, `ToolSearch`, `AskUserQuestion`,
 `TaskOutput`, `BashOutput`, `ExitPlanMode`, `EnterPlanMode`) clear the previous check
 before running. `Agent` and `Task` are skipped because a subagent's own tool calls reach
-this same hook; the spawn call itself is not checked. Read-only tools do
+this same hook; the spawn call itself is not checked, except when it asks for
+`isolation: "worktree"`: that creates a directory inside the repo, so the check is cleared
+before and after the call (the call does not count as an active tool, so the subagent's
+own test runs keep their evidence). Read-only tools do
 not clear it, re-run it or spoil a test's evidence by overlapping it. The two captures around
 a test run synchronously, because they bracket the command. Every other check
 (after a tool, at a new prompt) runs in the background, 0.5 seconds after the last
 event, at most one at a time: a tool call or prompt never waits on one, and a burst of
 edits costs one check. The line therefore trails an edit by that delay plus the capture
 time. Checks never run during rendering or on a filesystem-watcher timer.
+While a run has no current check (after an edit, before the background check lands) its
+line reads `source checking…`, so the band does not change height. A new prompt drops a
+`matching` label at once, without running the collector, and discards any check already
+in flight, so an edit made between turns can never leave a stale `matching` on screen.
 An edit made outside the session is only detected at the next check; the line
 explicitly says when that check occurred. A restored run starts without a check and
 stays without one. Reload also clears cached checks when history is missing or cannot
@@ -116,8 +164,10 @@ and run by absolute path; a relative `PATH` entry is refused.
 System and global config stay off, except that the collector reads back only your
 global `core.excludesFile` (else `$XDG_CONFIG_HOME/git/ignore` or `~/.config/git/ignore`)
 so editor and OS litter such as `.DS_Store` stays out of scope. A repo's own
-`core.excludesFile` takes precedence, as in Git, and an excludes path that is not a
-regular file (or a link to one), such as a FIFO or device, is skipped. Each capture has a
+`core.excludesFile` takes precedence, as in Git, and is expanded the way Git expands a
+path (`~/ignore`). An excludes path that is not a
+regular file (or a link to one), such as a FIFO or device, is skipped, whether it is the
+global one or the repo's own (the latter is replaced by an empty file). Each capture has a
 1.5-second internal deadline and a 2-second host process timeout.
 A capture hashes contents once, then re-lists Git state, re-walks the in-scope
 directories and re-checks every file's identity to catch changes made meanwhile.
@@ -135,7 +185,7 @@ Measured with `python3 -I -B plugins/test-board/scripts/source_snapshot.py <root
 
 | Root | Before | After |
 | --- | --- | --- |
-| `claude-skills` with untracked symlinks (1,625 tracked) | unknown, `deadline`, 1.53 s | unknown, `unsupported_file`, 0.15 s |
+| `claude-skills` with untracked symlinks (2,481 files, 88.5 MB) | unknown, `unsupported_file`, 0.15 s | available, 0.55 s |
 | a clean `claude-skills` checkout (1,727 files, 84.7 MB) | unknown, `deadline` | available, 0.48 s |
 | a 593-file app repo (45.5 MB) | unknown, `byte_limit`, 1.31 s | available, 0.28 s |
 | a 186-file repo (3.6 MB) | available, 1.41 s | available, 0.25 s |
@@ -143,19 +193,26 @@ Measured with `python3 -I -B plugins/test-board/scripts/source_snapshot.py <root
 | a 697-file repo (16.9 MB) | unknown, `deadline`, 1.53 s | available, 0.33 s |
 
 The size caps (128 MiB read, 16 MiB per file) leave room for repos of this size
-inside the 1.5-second deadline on this machine; a slower disk or a cold cache can
-still end a capture at the deadline, which reports unknown. A checkout holding
-untracked symlinks (here `.claude/skills/*`) stays unknown, because symlinks are
-refused rather than followed.
+inside the 1.5-second deadline on this machine, but not with a wide margin: on the
+~88 MB `claude-skills` checkout (2,481 files with symlinks) the collector command above
+measured 0.47 to 0.89 s in 3 runs at normal load, and 1.24 to 1.43 s in 5 runs at a load
+average of 15, where 1 of the 5 reached the 1.5-second deadline and reported `unknown`
+with reason `deadline`. A checkout holding
+symlinks (here untracked `.claude/skills/*`) is available: each in-scope symlink,
+tracked or not, is fingerprinted by its own link text and never followed.
 
-
-The scope is Git-tracked files and repository-nonignored untracked regular files.
+The scope is Git-tracked files and repository-nonignored untracked regular files and symlinks.
 Identity includes the worktree, HEAD, branch, index entries, paths, executable
 bits, and SHA-256 content hashes. It detects staged and unstaged edits, including
 same-length changes with restored modification times. File contents and individual
-filenames are not stored or logged. Symlinks, special nodes, submodules, nested Git
-repositories, assume-unchanged/skip-worktree entries (including sparse checkouts),
-unreadable files, or inconsistent scans yield unknown.
+filenames are not stored or logged. A symlink in scope counts as its link text (recorded
+as a link, not a file): retargeting it changes the identity, while its target's contents,
+and anything below a link to a directory, are never listed or read, so a target outside
+the worktree is outside the scope. The second listing re-reads link text as well as
+identity. A symlink standing in for a parent directory of a tracked file, special nodes
+(FIFOs, devices, sockets), submodules, nested Git repositories,
+assume-unchanged/skip-worktree entries (including sparse checkouts), unreadable files, or
+inconsistent scans yield unknown.
 
 These observations are not an atomic snapshot or an attestation. Edit-and-revert
 between observations can escape detection. Ignored files, dependencies outside

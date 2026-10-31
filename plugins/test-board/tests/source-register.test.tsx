@@ -540,3 +540,191 @@ test('a run whose capture never ran keeps its original check time through later 
   expect(captures()).toBe(settled)
   expect(second.sourceCheck?.at).toBe(second.at)
 })
+
+// A check relabels only the runs it re-captured. A run the band hides (an hour old, or dated after `now`) cannot be held
+// in latest by this harness: the mock clock reaches the hour by firing the expiry timer, which drops the run first, and
+// it never runs backwards. A run that was never captured is outside the same set, and is where the filter is observable.
+test('a refresh leaves a run that was not re-captured exactly as it was', async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: 'Bash' }, passed)
+  await $.tool.call({ tool: 'Bash', command: 'cd tests && pytest -q' })
+  await $.tool.call({ tool: 'Bash', command: 'pytest -x' })
+  await refreshed(w)
+  const byKey = () => new Map((runs(w.seen) as { key: string; sourceCheck?: { status: string } }[]).map(r => [r.key, r]))
+  expect([...byKey().keys()].sort()).toEqual([`${ROOT}/tests::pytest -q`, `${ROOT}::pytest -x`])
+  expect(byKey().get(`${ROOT}::pytest -x`)?.sourceCheck?.status).toBe('matching')
+  expect(byKey().get(`${ROOT}/tests::pytest -q`)?.sourceCheck).toBeUndefined()
+  await $.prompt.submit({ text: 'next task' } as never)
+  await refreshed(w)
+  expect(byKey().get(`${ROOT}::pytest -x`)?.sourceCheck?.status).toBe('matching')
+  expect(byKey().get(`${ROOT}/tests::pytest -q`)?.sourceCheck).toBeUndefined()
+})
+
+// The host shows tool.call either the typed command or cartoon's rewrite of it: both earn source evidence.
+for (const command of ["cartoon -c 'pytest -q'", 'cartoon -c "pytest -q"',
+  'pytest -q -k "a and b"', 'pytest -q 2>&1', 'pytest -q > out.log 2>&1', 'pytest -q | tail -n 50']) {
+  test(`${command} is captured before and after like a bare test command`, async ($, on) => {
+    const w = world(on)
+    on('tool.call', { tool: 'Bash' }, passed)
+    await $.tool.call({ tool: 'Bash', command })
+    await refreshed(w)
+    expect(w.calls.filter(c => c.argv[0] === 'python3').length >= 2).toBe(true)
+    expect(runs(w.seen)[0]?.source).toEqual({ before: SNAPSHOT, after: SNAPSHOT })
+    expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+  })
+}
+
+for (const command of ["cartoon -c 'cd tests && pytest'", "cartoon -c 'pytest; cd /other; pytest'", 'pytest -q | tail && cd /other',
+  'pytest -k "$X"', 'CDPATH=/other pytest -q']) {
+  test(`${command} keeps its counts but earns no source evidence`, async ($, on) => {
+    const w = world(on)
+    on('tool.call', { tool: 'Bash' }, passed)
+    await $.tool.call({ tool: 'Bash', command })
+    await refreshed(w)
+    expect(runs(w.seen)[0]).toMatchObject({ passed: 1 })
+    expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
+    expect(w.calls.filter(c => c.argv[0] === 'python3')).toHaveLength(0)
+  })
+}
+
+test("a cd inside cartoon's wrapper locates the capture in that directory", async ($, on) => {
+  const root = `${ROOT}/tests`
+  const snapshot = { ...SNAPSHOT, root }
+  const w = world(on, () => snapshot)
+  on('tool.call', { tool: 'Bash' }, passed)
+  await $.tool.call({ tool: 'Bash', command: "cartoon -c 'cd ./tests && pytest -q'" })
+  await refreshed(w)
+  const captures = w.calls.filter(c => c.argv[0] === 'python3')
+  expect(captures.length >= 2).toBe(true)
+  expect(captures.every(c => c.argv[c.argv.length - 1] === root)).toBe(true)
+  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+})
+
+const texts = async (ui: Awaited<ReturnType<typeof mount>>) => (await ui.findAll({ type: 'Text' })).map(n => JSON.stringify(n.props))
+
+test('a checkable run without a current check holds its source line with a placeholder, so the band keeps its height', async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: 'Bash' }, passed)
+  on('tool.call', { tool: 'Edit' }, edited)
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  // Recorded, first background check not landed yet.
+  const fresh = await mount($)
+  expect(await fresh.findAll({ type: 'Text', text: /source / })).toHaveLength(1)
+  expect(await fresh.find({ type: 'Text', text: /source checking…/ })).toBeDefined()
+  await refreshed(w)
+  const checked = await mount($)
+  expect(await checked.find({ type: 'Text', text: /source matching at last check/ })).toBeDefined()
+  expect(await checked.find({ type: 'Text', text: /source checking/ })).toBeUndefined()
+  await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/app.txt`, old_string: 'a', new_string: 'b' })
+  expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
+  const pending = await mount($)
+  expect(await pending.findAll({ type: 'Text', text: /source / })).toHaveLength(1)
+  expect(await pending.find({ type: 'Text', text: /source checking…/ })).toBeDefined()
+  expect((await texts(pending)).length).toBe((await texts(checked)).length)
+  await refreshed(w)
+  expect(await (await mount($)).find({ type: 'Text', text: /source matching at last check/ })).toBeDefined()
+})
+
+test('the placeholder goes under the newest checkable run only, and never for runs that draw no source line', async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: 'Bash' }, passed)
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
+  await $.tool.call({ tool: 'Bash', command: 'cd tests && pytest -q' })
+  await $.tool.call({ tool: 'Bash', command: 'pytest -q -x' })
+  const ui = await mount($)
+  expect(runs(w.seen)).toHaveLength(3)
+  expect(await ui.findAll({ type: 'Text', text: /source / })).toHaveLength(1)
+})
+
+test('a run whose capture produced no report gets no placeholder either', async ($, on) => {
+  const w = world(on, () => { throw new Error('synthetic missing interpreter') })
+  on('tool.call', { tool: 'Bash' }, passed)
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  expect(await (await mount($)).find({ type: 'Text', text: /source/ })).toBeUndefined()
+  await refreshed(w)
+  expect(await (await mount($)).find({ type: 'Text', text: /source/ })).toBeUndefined()
+})
+
+test('a new prompt drops a matching label at once, so an outside edit between turns never shows a stale one', async ($, on) => {
+  let current = SNAPSHOT
+  const w = world(on, () => current)
+  on('tool.call', { tool: 'Bash' }, passed)
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
+  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+  current = { ...SNAPSHOT, digest: 'f'.repeat(64) }
+  const captures = w.calls.length
+  await promptly($.prompt.submit({ text: 'next' } as never))
+  expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
+  const ui = await mount($)
+  expect(await ui.find({ type: 'Text', text: /source matching/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /source checking…/ })).toBeDefined()
+  // No collector ran inside the prompt handler.
+  expect(w.calls.length).toBe(captures)
+  await refreshed(w)
+  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('changed')
+})
+
+test('a prompt mid-check discards that check instead of letting it relabel the band', async ($, on) => {
+  let holdCapture: Promise<void> | undefined
+  let releaseCapture!: () => void
+  const w = world(on, async () => { const seen = SNAPSHOT; await holdCapture; return seen })
+  on('tool.call', { tool: 'Bash' }, passed)
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
+  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+  await $.prompt.submit({ text: 'first' } as never)
+  holdCapture = new Promise<void>(resolve => { releaseCapture = resolve })
+  void w.clock?.advance(REFRESH_WAIT_MS)
+  await later(20)
+  await $.prompt.submit({ text: 'second' } as never)
+  holdCapture = undefined
+  releaseCapture()
+  await later(20)
+  expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
+  await refreshed(w)
+  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+})
+
+test('a delivery into a running turn is not a new prompt and keeps the label', async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: 'Bash' }, passed)
+  await $.tool.call({ tool: 'Bash', command: 'pytest' })
+  await refreshed(w)
+  await $.prompt.submit({ text: 'peer message', turnId: 'running-turn' } as never)
+  expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+})
+
+for (const tool of ['Agent', 'Task'] as const) {
+  test(`${tool} with worktree isolation clears the check, since it creates a directory inside the repo`, async ($, on) => {
+    const w = world(on)
+    let during: unknown = 'not run'
+    on('tool.call', { tool: 'Bash' }, passed)
+    on('tool.call', { tool }, () => {
+      during = runs(w.seen)[0]?.sourceCheck
+      return { result: {}, text: 'spawned' } as never
+    })
+    await $.tool.call({ tool: 'Bash', command: 'pytest' })
+    await refreshed(w)
+    expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+    await $.tool.call({ tool, prompt: 'synthetic', isolation: 'worktree' } as never)
+    expect(during).toBeUndefined()
+    expect(runs(w.seen)[0]?.sourceCheck).toBeUndefined()
+    await refreshed(w)
+    expect(runs(w.seen)[0]?.sourceCheck?.status).toBe('matching')
+  })
+
+  test(`${tool} with worktree isolation does not hold the main loop's source evidence for the whole subagent run`, async ($, on) => {
+    const w = world(on)
+    on('tool.call', { tool: 'Bash' }, passed)
+    on('tool.call', { tool }, async () => {
+      // The subagent's own test run, issued while the spawning call is still open.
+      await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+      return { result: {}, text: 'spawned' } as never
+    })
+    await $.tool.call({ tool, prompt: 'synthetic', isolation: 'worktree' } as never)
+    await refreshed(w)
+    expect(runs(w.seen)[0]?.source).toEqual({ before: SNAPSHOT, after: SNAPSHOT })
+  })
+}

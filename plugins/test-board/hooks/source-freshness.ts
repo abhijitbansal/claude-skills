@@ -1,6 +1,8 @@
 import type { SourceMatch, SourceSnapshot } from '../types'
 import { isTestCommand } from './parse'
-import { resolveDir, splitCommand } from './suite'
+import { scanPipeline } from './shell-scan'
+import type { Stage } from './shell-scan'
+import { CARTOON_C, cartoonInner, resolveDir, splitCommand } from './suite'
 
 export const SOURCE_SCOPE = 'git-tracked+untracked-nonignored'
 
@@ -72,20 +74,108 @@ export function sourceMatchForRun(source: unknown, current: unknown): SourceMatc
   return compareSourceSnapshots(source.after, current)
 }
 
-/** Shell context we can locate without executing or interpreting shell expansions. */
+// Output filters a test run may be piped through. Each runs in its own process: none can move the test's directory.
+const FILTERS = new Set(['head', 'tail', 'grep', 'egrep', 'fgrep', 'rg', 'tee', 'cat', 'sort', 'uniq', 'wc', 'cut', 'tr'])
+// Filter flags that make the filter run another program, which could do anything. sort accepts any unambiguous
+// prefix of a long option (`--compress-prog`, `--comp`), so its entry is matched as a prefix; rg and pytest refuse
+// abbreviations.
+const FILTER_EXEC_FLAGS: Record<string, string[]> = { rg: ['--pre', '--pre-glob'], sort: ['--compress-program'] }
+const PREFIX_MATCHED = new Set(['sort'])
+// Variables that decide which directory a shell command starts in.
+const CWD_VARS = new Set(['PWD', 'OLDPWD', 'CDPATH'])
+// What may precede cartoon's `-c`: plain `--flag` words only (`--tag=t`), nothing the shell would expand or split.
+const CARTOON_HEAD = /^cartoon(?:[ \t]+[\w.=:/@-]+)*[ \t]+$/
+
+// Flags and variables that point a runner at a project other than the directory it starts in. The cwd then names the
+// wrong worktree, so a run carrying one gets no source check. A small explicit table, not a parser of every runner:
+// PROJECT_* name the project root outright (npm/pnpm/yarn/bun, go, make, cargo, swift, pytest, jest/vitest, uv/poetry).
+const PROJECT_FLAGS = new Set(['--prefix', '--dir', '-C', '--cwd', '--chdir', '--directory', '--project', '--manifest-path',
+  '--package-path', '--rootdir', '--rootDir', '--root'])
+// These select a file or project that is usually a plain name beside the cwd (`--config jest.config.js`,
+// `-project App.xcodeproj`): refused only when the value is absolute, `~`, climbs out with `..`, or is missing.
+const PATH_FLAGS = new Set(['--config', '-c', '-r', '-project', '-workspace', '--roots', '--projects'])
+// Short flags whose value may follow directly (`-C../x`, `-c../x`). `-r` is not one: `-rA` is a pytest report option.
+const ATTACHED_FLAGS = ['-C', '-c']
+// A short cluster ending in one of them (`-qc ../x`, `-sC dir`, `-qc../x`): up to three letters before it, so long
+// single-dash words such as `-scheme` or `-enableCodeCoverage` are not read as clusters.
+const CLUSTER = /^-[A-Za-z]{1,3}([cC])(.*)$/
+const PROJECT_ENV = new Set(['npm_config_prefix'])
+// pytest reads extra options from here, `--rootdir` included.
+const FLAGS_ENV = 'PYTEST_ADDOPTS'
+
+const unquoted = (word: string): string => word.replace(/['"]/g, '')
+const leavesDirectory = (value: string): boolean => value === '' || /^[/~]/.test(value) || /(?:^|\/)\.\.(?:\/|$)/.test(value)
+
+/** Whether any word is a flag that moves the code under test. Quotes are dropped first: the shell would drop them. */
+function movesProject(words: string[]): boolean {
+  return words.some((word, i) => {
+    const eq = word.startsWith('-') ? word.indexOf('=') : -1
+    const [name, value]: [string, string] = eq > 0 ? [word.slice(0, eq), word.slice(eq + 1)] : [word, words[i + 1] ?? '']
+    if (PROJECT_FLAGS.has(name)) return true
+    if (PATH_FLAGS.has(name)) return leavesDirectory(value)
+    const attached = word.length > 2 && !word.startsWith('--') ? ATTACHED_FLAGS.find(f => word.startsWith(f)) : undefined
+    if (attached !== undefined) return PROJECT_FLAGS.has(attached) || leavesDirectory(word.slice(attached.length))
+    const cluster = CLUSTER.exec(word)
+    if (cluster === null) return false
+    const rest = cluster[2] ?? ''
+    // A cluster with a remainder that is all letters is a long word (`-scheme`), not a flag and its value.
+    if (/^[A-Za-z]+$/.test(rest)) return false
+    return cluster[1] === 'C' || leavesDirectory(rest === '' ? words[i + 1] ?? '' : rest)
+  })
+}
+
+/** An environment assignment that sets the directory (`PWD=`), or the project a runner uses (`npm_config_prefix=`). */
+function movesDirectoryEnv(assignment: string): boolean {
+  const eq = assignment.indexOf('=')
+  const name = assignment.slice(0, eq)
+  if (CWD_VARS.has(name) || PROJECT_ENV.has(name.toLowerCase())) return true
+  return name === FLAGS_ENV && movesProject(unquoted(assignment.slice(eq + 1)).split(/[ \t]+/))
+}
+
+/** Shell context we can locate without executing or interpreting shell expansions.
+ * The host may show the command before or after cartoon rewrites it to `cartoon -c '<command>'`; both locate alike. */
 export function sourceCwd(command: string, base: string): string | undefined {
-  if (/[\0\r\n]/.test(command)) return undefined
+  // Only space and tab separate words: the shell does not treat NBSP, form feed or U+2028 that way.
+  if (/[\0]|[^\S \t]/.test(command)) return undefined
   let rest = command.trim()
   let cwd = base
-  const cd = /^cd\s+(?:"([^"\n]+)"|'([^'\n]+)'|([^\s]+))\s*&&\s*/.exec(rest)
+  // A quote in an unquoted operand would be joined into the path by the shell (`./x'y'` is `./xy`): not a plain name.
+  const cd = /^cd[ \t]+(?:"([^"\n]+)"|'([^'\n]+)'|([^ \t'"]+))[ \t]*&&[ \t]*/.exec(rest)
   if (cd) {
     const dir = cd[1] ?? cd[2] ?? cd[3] ?? ''
     // Bare names consult CDPATH even when quoted; `cd -` follows OLDPWD.
     if (!/^(?:\/|\.\.?\/|\.\.?$)/.test(dir)
-      || /[\0~$`\\;|&<>\r\n*?\[\]{}]/.test(dir)) return undefined
+      || /[\0~$`\;|&<>\r\n*?\[\]{}]/.test(dir)) return undefined
     cwd = resolveDir(base, dir)
     rest = rest.slice(cd[0].length)
   }
-  if (!cwd.startsWith('/') || /[\0\r\n]/.test(cwd) || /[;&|$`\\<>\r\n(){}'"]/.test(rest)) return undefined
-  return isTestCommand(splitCommand(rest).normalized) ? cwd : undefined
+  if (!cwd.startsWith('/') || /[\0\r\n]/.test(cwd)) return undefined
+  const [first, ...filters] = scanPipeline(rest) ?? []
+  if (first === undefined || !filters.every(isPlainFilter)) return undefined
+  let env = 0
+  for (; env < first.raw.length; env += 1) {
+    const word = first.raw[env] ?? ''
+    if (!/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) break
+    if (movesDirectoryEnv(word)) return undefined
+  }
+  const joined = first.raw.slice(env).join(' ')
+  const wrapped = CARTOON_C.exec(joined)
+  if (wrapped) {
+    const quoted = wrapped[1] === undefined ? `"${wrapped[2]}"` : `'${wrapped[1]}'`
+    const head = joined.slice(0, -quoted.length)
+    // The inner text was one quoted word, so it is literal; it gets the same rules as a command typed bare.
+    return CARTOON_HEAD.test(head) ? sourceCwd(cartoonInner(wrapped), cwd) : undefined
+  }
+  const isDirect = isTestCommand(splitCommand(first.plain.join(' ')).normalized)
+  return isDirect && !movesProject(first.raw.slice(env).map(unquoted)) ? cwd : undefined
+}
+
+const isPlainFilter = (stage: Stage): boolean => {
+  const name = stage.plain[0] ?? ''
+  const exec = FILTER_EXEC_FLAGS[name] ?? []
+  const runsProgram = (w: string, f: string): boolean => {
+    const flag = w.split('=')[0] ?? ''
+    return flag === f || (PREFIX_MATCHED.has(name) && flag.length > 3 && f.startsWith(flag))
+  }
+  return FILTERS.has(name) && !stage.raw.slice(1).map(unquoted).some(w => exec.some(f => runsProgram(w, f)))
 }
