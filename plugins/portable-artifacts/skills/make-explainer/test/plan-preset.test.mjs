@@ -178,7 +178,12 @@ test('the plan example validates with no errors and no warnings, context first, 
   assert.ok(verdict.title);
   assert.equal(spec.sections[0].label, 'Summary', 'only the verdict section is called a verdict');
   const firstAnswerable = types.findIndex((t) => ['decision', 'approval', 'question'].includes(t));
-  assert.ok(types.slice(0, firstAnswerable).some((t) => ['steps', 'cards', 'table', 'files', 'text'].includes(t)), `a body section comes before the first decision (index ${firstAnswerable})`);
+  const before = types.slice(0, firstAnswerable);
+  for (const t of ['cards', 'table', 'steps']) assert.ok(before.includes(t), `a ${t} section comes before the first decision (index ${firstAnswerable})`);
+  // The scaffold has one workstream `steps`; the example copies it once per workstream, so a run of steps counts as one.
+  const collapse = (list) => list.filter((t, i) => !(t === 'steps' && list[i - 1] === 'steps'));
+  assert.deepEqual(collapse(before), ORDER.slice(0, ORDER.indexOf('decision')), 'the example follows the scaffold order up to the first decision');
+  assert.ok(before.filter((t) => t === 'steps').length >= 2, 'a workstream steps section, and the phases after the diagram');
 });
 
 test('the plan example builds as mono by default and as brief with --theme brief', () => {

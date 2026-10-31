@@ -49,12 +49,34 @@
     },
     {
       "type": "steps",
-      "title": "Two phases done, plan mode in review",
-      "label": "Phases",
+      "title": "One-line numbers take three tasks",
+      "label": "Numbers tasks",
       "items": [
-        { "title": "Numbers stay on one line", "text": "CSS and a build step bind tokens; check.mjs fails on a split token or a spilled KPI.", "status": "done" },
-        { "title": "Cheap model outside Claude Code", "text": "Agent files for Copilot and Codex, installer, doctor check and the hand-off line. Codex is untested.", "status": "done" },
-        { "title": "Plan mode", "text": "Five section types, two themes, the answer runtime, answers.mjs and this example.", "status": "doing" }
+        { "title": "Bind each number to its unit", "text": "A build step wraps the token in a no-wrap span; a unit test feeds it sample text." },
+        { "title": "Size KPI values to their tile", "text": "CSS keeps a value on one line; check.mjs fails on a spilled tile." },
+        { "title": "Fail the build on a split", "text": "check.mjs measures each token in a browser at three widths." }
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "The cheap model needs four tasks",
+      "label": "Model tasks",
+      "items": [
+        { "title": "Write the agent files", "text": "One pinned file each for Copilot and Codex; a test reads back the model key." },
+        { "title": "Teach the installer", "text": "It writes the file to a user or project folder and never overwrites without --force." },
+        { "title": "Add a doctor check", "text": "doctor.mjs reports a missing file and fixes it on request." },
+        { "title": "Add the hand-off line", "text": "SKILL.md names the agent; a test requires the same text in all five skills." }
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "Plan mode needs four tasks",
+      "label": "Plan tasks",
+      "items": [
+        { "title": "Add the answer sections", "text": "Decision, approval, question, review and verdict; validate rejects a bad id." },
+        { "title": "Save answers in the page", "text": "Browser tests answer every item and reload the page." },
+        { "title": "Check the file", "text": "answers.mjs refuses a stale hash or an unknown id; its tests cover each case." },
+        { "title": "Ship this example", "text": "It must validate with no warnings and build in both themes." }
       ]
     },
     {
@@ -93,6 +115,16 @@
       "caption": "The page never talks to the network; the file is the only way back."
     },
     {
+      "type": "steps",
+      "title": "Two phases done, plan mode in review",
+      "label": "Phases",
+      "items": [
+        { "title": "Numbers stay on one line", "text": "CSS and a build step bind tokens; check.mjs fails on a split token or a spilled KPI.", "status": "done" },
+        { "title": "Cheap model outside Claude Code", "text": "Agent files for Copilot and Codex, installer, doctor check and the hand-off line. Codex is untested.", "status": "done" },
+        { "title": "Plan mode", "text": "Five section types, two themes, the answer runtime, answers.mjs and this example.", "status": "doing" }
+      ]
+    },
+    {
       "type": "details",
       "title": "Four risks, each with a guard",
       "label": "Risks",
@@ -123,7 +155,7 @@
         }
       ],
       "recommended": "Pinned agent file plus a hand-off line",
-      "why": "The Workstreams cards and Phases steps explain what is built. Copilot's logs show the agent file's model is used: claude-haiku-5.5 in 19 of 19 runs. The skill hand-off itself was tried once; the started agent was refused file access and the main model finished. This option is built, so if nobody answers it ships as is.",
+      "why": "The Workstreams cards and Model tasks steps explain what is built. Copilot's logs show the agent file's model is used: claude-haiku-5.5 in 19 of 19 runs. The skill hand-off itself was tried once; the started agent was refused file access and the main model finished. This option is built, so if nobody answers it ships as is.",
       "default": "Pinned agent file plus a hand-off line"
     },
     {
@@ -167,7 +199,7 @@
         }
       ],
       "recommended": "Yes: model haiku and the hand-off line",
-      "why": "The bar, set before the run, was 8 of 10 valid and built; Copilot CLI scored 10 of 10. Claude Code reads `model: haiku` from the frontmatter itself, and that path was not measured. This option is built, so if nobody answers it ships as is.",
+      "why": "The Model tasks steps explain what the agent file does. The bar, set before the run, was 8 of 10 valid and built; Copilot CLI scored 10 of 10. Claude Code reads `model: haiku` from the frontmatter itself, and that path was not measured. This option is built, so if nobody answers it ships as is.",
       "default": "Yes: model haiku and the hand-off line"
     },
     {

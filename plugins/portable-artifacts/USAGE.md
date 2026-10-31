@@ -331,9 +331,9 @@ your project folder):
 **Presets:** `recap` (tl;dr, numbers, how it works, files changed, timeline,
 risks), `checklist` (a group per area of changed files, a regression group, an
 intro and "If something fails"), `concept` (tl;dr, explanation, cards, steps),
-`slides` (a deck), `plan` (a plan that explains before it asks, which the reviewer answers on the
-page, see below). **Sections** (24): `tldr`, `text`, `kpis`, `cards`,
-`table`, `risks`, `files`, `steps`, `timeline`, `compare`, `callout`, `code`,
+`slides` (a deck), `plan` (a plan that explains before it asks, which the
+reviewer answers on the page, see below). **Sections** (24): `tldr`, `text`,
+`kpis`, `cards`, `table`, `risks`, `files`, `steps`, `timeline`, `compare`, `callout`, `code`,
 `details`, `checklist`, `diagram`, `chart`, `motion`, `scene`, `image`, and
 for plans `decision`, `approval`, `question`, `review`, `verdict`.
 
@@ -345,9 +345,8 @@ already made, a diagram, phases and risks, then a decision, an approval, a
 question, "review these first" and last the reviewer's overall verdict control.
 Validate warns when a decision, approval or question comes before any steps, cards,
 table, files or text section. A plan page may hold 1,800 words of prose, not 900.
-The agent replaces each
-`TODO:` and builds the page, which defaults to the `mono` theme (`--theme brief`
-for the executive look). The reviewer picks one option per decision, approves,
+The agent replaces each `TODO:` and builds the page, which defaults to the `mono`
+theme (`--theme brief` for the executive look). The reviewer picks one option per decision, approves,
 asks for changes or rejects each approval, answers each question, gives an
 overall verdict and a name, then presses Copy answers or Download
 `plan-answers.json`, or Save as HTML. Answers are saved in the reviewer's browser, keyed by the
