@@ -13,7 +13,8 @@ import { printResult, didYouMean } from '../shared/errors.mjs';
 import { listThemes } from '../shared/theme.mjs';
 import { startServer } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
-import { findFfmpeg, encodeArgs, probeAudio, probeGraph, measureLoudness } from './lib/ffmpeg.mjs';
+import { findFfmpeg, findFfprobe, encodeArgs, probeAudio, probeGraph, measureLoudness } from './lib/ffmpeg.mjs';
+import { specHasVideo, prepareVideo, videoAudioTracks } from './lib/video.mjs';
 import { synthesiseCues } from './lib/cues.mjs';
 import { resolveAsset } from './lib/paths.mjs';
 import { withGeneratedBy, provenanceText, buildDate } from '../shared/provenance.mjs';
@@ -80,17 +81,19 @@ function partialPath(out) {
 }
 
 // Resolve each audio track to an absolute file and fail before the browser launches if ffmpeg cannot decode one.
+// The sound of each video element (unless muted) joins as a track that starts with the clip.
 // Cues are synthesised into a temp folder (`cueDir`, removed by cleanup) and join the mix as more tracks.
-function planAudio(spec, dir, ffmpeg, fps, state) {
+function planAudio(spec, dir, ffmpeg, ffprobe, fps, total, state) {
   const files = resolveAudio(spec).map((track, i) => {
     const { file } = resolveAsset(dir, track.src); // the path the validator already accepted (normalised, realpath)
     const problem = probeAudio(ffmpeg, file);
     if (problem) throw new Error(`audio[${i}].src: ffmpeg cannot decode ${track.src}: ${problem}`);
     return { ...track, file };
   });
+  const clips = videoAudioTracks(spec, dir, ffprobe, total);
   const { dir: cueDir, tracks } = synthesiseCues(spec, os.tmpdir());
   state.cueDir = cueDir; // recorded at once: the signal handlers (installed before planning) remove it on an interrupt
-  const audio = [...files, ...tracks];
+  const audio = [...files, ...clips, ...tracks];
   if (audio.length) {
     const problem = probeGraph(ffmpeg, { fps, audio }); // an old ffmpeg without amix normalize / adelay all fails here, not at frame 1
     if (problem) {
@@ -125,12 +128,16 @@ async function plan(opts, state) {
   if (!opts.contact && frames < 1) throw new UsageError(`spec is too short for ${fps} fps: no frames to render`);
   const name = path.basename(specPath, path.extname(specPath));
   const defaultOut = opts.contact ? path.join(dir, 'out') : path.join(dir, 'out', `${name}.mp4`);
-  const ffmpeg = opts.contact ? null : await findFfmpeg();
+  // Video elements need ffmpeg to decode their frames, contact sheets included.
+  const hasVideo = specHasVideo(spec);
+  const ffmpeg = opts.contact && !hasVideo ? null : await findFfmpeg();
+  const ffprobe = hasVideo ? findFfprobe({ ffmpeg }) : null;
   return {
     theme: opts.theme, themeName: loaded.theme ?? opts.theme ?? MOTION_THEME, spec, specPath, fps, frames, total, contact: opts.contact, size: opts.size ?? spec.size,
     out: path.resolve(opts.out ?? defaultOut), ffmpeg,
     metadata: { comment: provenanceText('make-motion', spec.generatedBy, buildDate()), artist: spec.generatedBy?.model },
-    ...(opts.contact ? { audio: [] } : planAudio(spec, dir, ffmpeg, fps, state)),
+    videoFrames: hasVideo ? prepareVideo(spec, dir, ffmpeg, ffprobe, fps) : {},
+    ...(opts.contact ? { audio: [] } : planAudio(spec, dir, ffmpeg, ffprobe, fps, total, state)),
   };
 }
 
@@ -164,7 +171,8 @@ function startEncoder(ffmpegPath, args) {
 async function renderContactSheets(page, p, info, browser) {
   const outDir = path.join(p.out, 'contact');
   mkdirSync(outDir, { recursive: true });
-  const seek = (sec, label) => page.evaluate(([s, text]) => { window.__motion.seek(s); window.__motion.stamp(text); }, [sec, label]);
+  // seek() resolves once every video frame it set is decoded, so the screenshot never catches an old one.
+  const seek = (sec, label) => page.evaluate(async ([s, text]) => { await window.__motion.seek(s); window.__motion.stamp(text); }, [sec, label]);
   for (const [i, scene] of p.spec.scenes.entries()) {
     const { times, total } = sheetMoments(scene, p.fps);
     if (total > times.length) process.stderr.write(`${scene.id}: ${total} moments, showing ${times.length}\n`);
@@ -250,7 +258,7 @@ async function main() {
   process.stdout.write(`theme: ${p.themeName}\n`);
   let server;
   try {
-    server = await startServer({ specPath: p.specPath, mode: 'render', theme: p.theme });
+    server = await startServer({ specPath: p.specPath, mode: 'render', theme: p.theme, videoFrames: p.videoFrames });
     const page = await openPage(p, server, state);
     const info = await page.evaluate(() => ({ sceneStarts: window.__motion.sceneStarts }));
     await (p.contact ? renderContactSheets(page, p, info, state.browser) : renderVideo(page, p, state));

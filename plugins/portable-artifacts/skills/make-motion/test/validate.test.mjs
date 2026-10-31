@@ -6,6 +6,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec, withDefaults, EASES, ANIMATABLE } from '../scripts/lib/spec.mjs';
+import { specHasVideo } from '../scripts/lib/video.mjs';
+import { findFfprobe } from '../scripts/lib/ffmpeg.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const exDir = path.join(root, 'references/examples');
@@ -17,11 +19,17 @@ const good = () => ({
 });
 const errs = (spec, dir = root) => validateSpec(spec, { dir }).errors.map((e) => `${e.path}: ${e.message}`);
 
-test('every example is valid, <= 15 s', () => {
+test('every example is valid, <= 15 s', (t) => {
   const files = readdirSync(exDir).filter((f) => f.endsWith('.json'));
   assert.ok(files.length >= 3);
   for (const f of files) {
     const { spec, dir } = loadSpec(path.join(exDir, f));
+    // A video example needs ffprobe to be validated: skipped without it, a failure under PA_REQUIRE_RENDER=1.
+    if (specHasVideo(spec) && !findFfprobe()) {
+      assert.notEqual(process.env.PA_REQUIRE_RENDER, '1', `PA_REQUIRE_RENDER=1 but ffprobe is unavailable to validate ${f}`);
+      t.diagnostic(`skipped ${f}: it has a video element and ffprobe is unavailable`);
+      continue;
+    }
     const r = validateSpec(spec, { dir });
     assert.deepEqual(r.errors, [], f);
     assert.ok(r.ok);

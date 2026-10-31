@@ -80,7 +80,9 @@ export async function assertRendersIdentically(_t, specPath, args) {
 
 const TEST_VIDEO_SOURCES = {
   // Every frame differs and the flat areas compress near-losslessly, so a one-frame misalignment shows.
-  movingbox: (size, fps, seconds) => `color=c=0x224466:size=${size}:rate=${fps}:duration=${seconds},drawbox=x='t*100':y=40:w=60:h=60:color=white:t=fill`,
+  // The box is overlaid, not drawn: drawbox has no time variable (its `t` is the line thickness), so a drawbox at
+  // x='t*100' stands still. overlay's `t` is the frame time: 100 px a second.
+  movingbox: (size, fps, seconds) => `color=c=0x224466:size=${size}:rate=${fps}:duration=${seconds}[bg];color=c=white:size=60x60:rate=${fps}[box];[bg][box]overlay=x='t*100':y=40:shortest=1`,
   smptebars: (size, fps, seconds) => `smptebars=size=${size}:rate=${fps}:duration=${seconds}`,
 };
 

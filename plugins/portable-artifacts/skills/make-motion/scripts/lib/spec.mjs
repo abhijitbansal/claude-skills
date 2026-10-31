@@ -9,6 +9,9 @@ import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { resolveAsset } from './paths.mjs';
 import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, PITCHED_CUES, MAX_CUES, NOTE_PATTERN, trackStart, typingFollow } from '../../template/audio.mjs';
 import { flattenElements, isGroup, MAX_GROUP_DEPTH, MAX_GROUP_CHILDREN } from '../../template/groups.mjs';
+import { VIDEO_EXTENSIONS, isVideo, probeVideo } from './video.mjs';
+import { findFfprobe } from './ffmpeg.mjs';
+import { doctorCommand } from './doctor-hint.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
@@ -29,6 +32,7 @@ export const ANIMATABLE = {
   image: [...POSE],
   chart: [...POSE, 'reveal'],
   group: [...POSE],
+  video: [...POSE],
 };
 
 const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes'];
@@ -40,6 +44,7 @@ const FIELDS = {
   image: [...COMMON, 'src', 'width', 'height', 'fit'],
   chart: [...COMMON, 'vegaLite', 'width', 'height'],
   group: [...COMMON, 'children'],
+  video: [...COMMON, 'src', 'width', 'height', 'fit', 'trimStart', 'trimEnd', 'offset', 'mute', 'volume'],
 };
 const REQUIRED = {
   text: ['text'],
@@ -48,6 +53,7 @@ const REQUIRED = {
   image: ['src', 'width', 'height'],
   chart: ['vegaLite', 'width', 'height'],
   group: ['children'],
+  video: ['src', 'width', 'height'],
 };
 
 const num = { type: 'number' };
@@ -97,6 +103,8 @@ const element = {
     src: { type: 'string', minLength: 1 },
     fit: { enum: ['contain', 'cover', 'fill'] },
     vegaLite: { type: 'object' },
+    trimStart: { type: 'number', minimum: 0 }, trimEnd: { type: 'number', exclusiveMinimum: 0 }, offset: { type: 'number', minimum: 0 },
+    mute: { type: 'boolean' }, volume: unit,
     // A group's children are elements again (groups nest; checkElement caps the depth with a message that names the limit).
     children: { type: 'array', minItems: 1, maxItems: MAX_GROUP_CHILDREN, items: { $ref: '#/definitions/element' } },
   },
@@ -487,6 +495,37 @@ function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS, d
   if (isGroup(el)) checkGroup(el, base, scene, dir, errors, fps, depth);
 }
 
+// A video `src` follows the image path rules and must be a clip ffprobe can read; its trimmed range must lie inside the
+// clip. Without ffprobe nothing about the clip can be known, so the spec gets one error, at its first video element.
+function checkVideos(spec, dir, errors) {
+  const videos = spec.scenes.flatMap((s, si) => flattenElements(s.elements, `scenes[${si}]`)).filter(({ el }) => isVideo(el));
+  if (!videos.length) return;
+  const ffprobe = findFfprobe();
+  if (!ffprobe) errors.push({ path: pathJoin(videos[0].path, 'src'), message: `ffprobe not found (needed to check video elements); install ffmpeg: ${doctorCommand('--fix', 'ffmpeg')}` });
+  for (const { el, path: base } of videos) checkVideo(el, base, dir, ffprobe, errors);
+}
+
+function checkVideo(el, base, dir, ffprobe, errors) {
+  const at = pathJoin(base, 'src');
+  if (typeof el.src !== 'string' || !checkAssetPath(el.src, at, dir, errors)) return;
+  if (!VIDEO_EXTENSIONS.includes(path.extname(el.src).slice(1).toLowerCase())) {
+    const list = `${VIDEO_EXTENSIONS.slice(0, -1).join(', ')} or ${VIDEO_EXTENSIONS.at(-1)}`;
+    errors.push({ path: at, message: `unsupported video format "${path.extname(el.src)}"; use ${list}` });
+    return;
+  }
+  const trimStart = el.trimStart ?? 0;
+  const trimOrder = { path: pathJoin(base, 'trimStart'), message: 'trimStart must be less than trimEnd' };
+  if (el.trimEnd !== undefined && trimStart >= el.trimEnd) {
+    errors.push(trimOrder);
+    return;
+  }
+  if (!ffprobe) return;
+  const info = probeVideo(ffprobe, resolveAsset(dir, el.src).file);
+  if (info.error) errors.push({ path: at, message: `ffprobe cannot read ${el.src}: ${info.error}` });
+  else if (el.trimEnd > info.duration) errors.push({ path: pathJoin(base, 'trimEnd'), message: `trimEnd ${el.trimEnd} exceeds the clip length ${info.duration}s` });
+  else if (trimStart >= (el.trimEnd ?? info.duration)) errors.push(trimOrder);
+}
+
 // A theme is a name from the shared themes; its dark colours and fonts become the defaults.
 function checkTheme(spec, errors) {
   if (spec.theme === undefined) return;
@@ -513,6 +552,7 @@ export function validateSpec(spec, { dir = process.cwd() } = {}) {
   if (total > MAX_TOTAL_SECONDS) {
     errors.push({ path: 'scenes', message: `total duration ${total}s exceeds the ${MAX_TOTAL_SECONDS}s limit` });
   }
+  checkVideos(spec, dir, errors);
   checkAudio(spec, dir, errors);
   checkCues(spec, errors);
   return { ok: errors.length === 0, errors };

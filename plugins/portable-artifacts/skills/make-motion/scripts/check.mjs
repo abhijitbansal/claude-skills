@@ -14,6 +14,7 @@
 // sampled at its midpoint, and a visible text or counter of the incoming scene that overlaps one of the outgoing scene
 // there is a warning (never a failure).
 // --theme: the theme render.mjs --theme would draw a spec that names none in (a spec's own `theme` wins).
+// A spec with a video element has its frames decoded first, as render.mjs does, so it needs ffmpeg and ffprobe too.
 // exit 0 ok or skipped (no browser), 1 problems (or an invalid spec), 2 usage/IO
 import fs from 'node:fs';
 import path from 'node:path';
@@ -28,6 +29,8 @@ import { sheetTimes } from './lib/sheet.mjs';
 import { flattenElements, isGroup } from '../template/groups.mjs';
 import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
+import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
+import { specHasVideo, prepareVideo } from './lib/video.mjs';
 
 const USAGE = 'node scripts/check.mjs <motion.json> [--json] [--theme <name>]';
 const OPTIONS = { json: { type: 'boolean' }, theme: { type: 'string' } };
@@ -77,8 +80,8 @@ function sceneItems(scene, index) {
 // Runs in the page: seek to `sec`, then each element of scene layer `index` (a group's children included, the groups
 // themselves not) as {id, opacity, box} in canvas pixels. Rendered opacity multiplies the element's and every
 // ancestor's up to the stage (a group's, the scene fade); a hidden layer is 0.
-const measure = ([sec, index]) => {
-  window.__motion.seek(sec);
+const measure = async ([sec, index]) => {
+  await window.__motion.seek(sec); // a video element's frame is decoded before anything is read
   const stage = document.getElementById('stage');
   const s = stage.getBoundingClientRect();
   const k = window.__motion.size[0] / s.width;
@@ -250,6 +253,12 @@ async function inspect(browser, spec, server, prepare) {
   return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings };
 }
 
+// Decoding needs ffmpeg; without it findFfmpeg's install hint ends the check as a crash line.
+async function prepareFrames(specPath, spec) {
+  const ffmpeg = await findFfmpeg();
+  return prepareVideo(spec, path.dirname(specPath), ffmpeg, findFfprobe({ ffmpeg }), spec.fps);
+}
+
 async function checkSpec(specPath, spec, { env, theme, prepare }) {
   if (env.PA_NO_BROWSER === '1') return { status: 'skipped', reason: 'PA_NO_BROWSER=1' };
   let browser;
@@ -260,7 +269,9 @@ async function checkSpec(specPath, spec, { env, theme, prepare }) {
   }
   let server;
   try {
-    server = await startServer({ specPath, mode: 'render', theme });
+    // The render page draws a video element from its decoded frames, so they are prepared as render.mjs prepares them.
+    const videoFrames = specHasVideo(spec) ? await prepareFrames(specPath, spec) : {};
+    server = await startServer({ specPath, mode: 'render', theme, videoFrames });
     return await inspect(browser, spec, server, prepare);
   } finally {
     await browser.close().catch(() => {});

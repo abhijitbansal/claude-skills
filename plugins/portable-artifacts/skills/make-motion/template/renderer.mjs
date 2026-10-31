@@ -205,7 +205,49 @@ function setTyping({ chars, total, typed, caret, rest }, value, sec) {
   caret.style.visibility = n < total || blinkOn ? 'visible' : 'hidden';
 }
 
-function buildElement(el, look) {
+// A `video` element. Render mode draws the clip's pre-decoded frames (render.mjs and check.mjs decode them before the
+// page loads and serve the list as /frames.json) through an <img>, so every frame is exact. Preview mode plays the clip
+// itself in a muted <video> and seeks it, which is approximate.
+const CLIP_SEEK_TOLERANCE = 0.04; // seconds a preview <video> may drift before it is seeked again
+const frameUrl = ({ key, ext }, index) => `/frames/${key}/${String(index + 1).padStart(6, '0')}.${ext}`; // ffmpeg numbers from 1
+
+function videoMedia(el, frames) {
+  const offset = el.offset ?? 0;
+  if (MODE !== 'render') {
+    const media = document.createElement('video');
+    Object.assign(media, { preload: 'auto', muted: true, playsInline: true, src: assetUrl(el.src) });
+    return { media, clip: { video: media, offset, trimStart: el.trimStart ?? 0, trimEnd: el.trimEnd } };
+  }
+  const media = document.createElement('img');
+  media.alt = '';
+  const entry = frames[el.id];
+  // render.mjs and check.mjs always decode the frames first; a render page opened without them (a test reading text,
+  // say) keeps the element's box and draws nothing in it.
+  return { media, frame: entry && { ...entry, img: media, offset } };
+}
+
+// Render mode: show frame round((scene time - offset) x fps), held at the first frame before playback and at the last
+// after it. Resolves when the new frame is decoded; null when the frame is already shown. A decode that a newer seek
+// overtook is not an error.
+function showFrame(frame, sceneT) {
+  const index = Math.min(frame.count - 1, Math.max(0, Math.round((sceneT - frame.offset) * frame.fps)));
+  const src = frameUrl(frame, index);
+  if (frame.img.getAttribute('src') === src) return null;
+  frame.img.src = src;
+  return frame.img.decode().catch(() => {
+    if (frame.img.getAttribute('src') === src) throw new Error(`video frame failed to load: ${src}`);
+  });
+}
+
+// Preview mode: seek the clip to trimStart + (scene time - offset), held inside the trimmed range.
+function seekClip(clip, sceneT) {
+  const end = clip.trimEnd ?? clip.video.duration; // NaN until the clip's metadata has loaded
+  const at = clip.trimStart + Math.max(0, sceneT - clip.offset);
+  const target = Number.isFinite(end) ? Math.min(at, end) : at;
+  if (Math.abs(clip.video.currentTime - target) > CLIP_SEEK_TOLERANCE) clip.video.currentTime = target;
+}
+
+function buildElement(el, look, frames) {
   const node = document.createElement('div');
   node.className = `el ${el.type}`;
   node.dataset.id = el.id;
@@ -238,6 +280,15 @@ function buildElement(el, look) {
       part.img = img;
       break;
     }
+    case 'video': {
+      const { media, frame, clip } = videoMedia(el, frames);
+      media.style.width = px(el.width);
+      media.style.height = px(el.height);
+      media.style.objectFit = el.fit ?? 'contain';
+      node.append(media);
+      Object.assign(part, { frame, clip });
+      break;
+    }
     case 'chart':
       node.style.width = px(el.width);
       node.style.height = px(el.height);
@@ -251,17 +302,19 @@ function buildElement(el, look) {
 }
 
 // Builds the nodes of `elements` into `container`, each tagged with its spec path (`prefix` + index); a group's children
-// are built into the group's own node, so they move with it. Charts and images queue their loading in `pending`.
-function mountElements(container, elements, prefix, look, parts, pending) {
+// are built into the group's own node, so they move with it. Charts, images and video first frames queue their loading
+// in `pending`. `frames`: render mode's /frames.json, the decoded frames of each video element.
+function mountElements(container, elements, prefix, { look, frames }, parts, pending) {
   elements.forEach((el, i) => {
-    const part = buildElement(el, look);
+    const part = buildElement(el, look, frames);
     const at = `${prefix}[${i}]`;
     part.node.dataset.path = at;
     parts.push(part);
     container.append(part.node);
     if (el.type === 'chart') pending.push(renderChart(el, look).then((svg) => part.node.append(svg)));
     if (part.img) pending.push(part.img.decode().catch(() => { throw new Error(`image failed to load: ${el.src}`); }));
-    if (isGroup(el)) mountElements(part.node, el.children, `${at}.children`, look, parts, pending);
+    if (part.frame) pending.push(showFrame(part.frame, 0));
+    if (isGroup(el)) mountElements(part.node, el.children, `${at}.children`, { look, frames }, parts, pending);
   });
 }
 
@@ -318,7 +371,7 @@ async function grainLayer(scene, size, amount) {
   return img;
 }
 
-async function buildStage(spec, look) {
+async function buildStage(spec, look, frames) {
   const stage = document.createElement('div');
   stage.id = 'stage';
   stage.style.width = px(spec.size[0]);
@@ -337,7 +390,7 @@ async function buildStage(spec, look) {
       layer.append(art.holder);
       pending.push(art.loaded);
     } else if (scene.background) layer.style.background = scene.background;
-    mountElements(layer, scene.elements, `scenes[${si}].elements`, look, parts, pending);
+    mountElements(layer, scene.elements, `scenes[${si}].elements`, { look, frames }, parts, pending);
     stage.append(layer);
     const entry = { scene, layer, grain: null };
     if (grain > 0) pending.push(grainLayer(scene, spec.size, grain).then((img) => { entry.grain = img; }));
@@ -390,9 +443,11 @@ function revealMask(reveal) {
   return `linear-gradient(to right, #000 ${front - REVEAL_EDGE}%, transparent ${front}%)`;
 }
 
+// Returns a function that poses the stage at `sec`; it resolves once every video frame it changed is decoded.
 function makeApply({ scenes, parts }, built) {
-  const { states, sceneStarts, crossfades } = built;
+  const { states, sceneStarts, sceneOf, crossfades } = built;
   return (sec) => {
+    const decoding = [];
     const active = activeScene(sceneStarts, sec);
     // During a crossfade the previous scene's layer stays up beneath the active one.
     const outgoing = crossfades.find((c) => c.to === active && sec < c.end)?.from;
@@ -404,7 +459,7 @@ function makeApply({ scenes, parts }, built) {
         grain.style.opacity = layer.style.opacity;
       }
     });
-    for (const { node, el, drawNodes, arrowNode, roundCap, format, typing } of parts) {
+    for (const { node, el, drawNodes, arrowNode, roundCap, format, typing, frame, clip } of parts) {
       const s = states.get(el.id);
       node.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
       node.style.opacity = String(s.opacity);
@@ -420,7 +475,10 @@ function makeApply({ scenes, parts }, built) {
       }
       if (format) node.textContent = format(s.value);
       if (typing) setTyping(typing, s.value, sec);
+      if (frame) decoding.push(showFrame(frame, sec - sceneStarts[sceneOf.get(el.id)]));
+      if (clip) seekClip(clip, sec - sceneStarts[sceneOf.get(el.id)]);
     }
+    return Promise.all(decoding);
   };
 }
 
@@ -480,6 +538,14 @@ async function fetchSpec() {
   return { spec, look };
 }
 
+// Render mode: the decoded frames of each video element (render.mjs and check.mjs prepare them). Preview needs none.
+async function fetchFrames() {
+  if (MODE !== 'render') return {};
+  const response = await fetch('/frames.json', { cache: 'no-store' });
+  if (!response.ok) throw new Error(`failed to load the video frame list: HTTP ${response.status}`);
+  return response.json();
+}
+
 let currentAudio = null;
 
 // Preview only: one idle <audio> per track in a hidden holder outside the scaled stage.
@@ -525,10 +591,11 @@ function makeMotion(spec, built, apply, audio) {
   return {
     duration: built.duration, fps: spec.fps, size: spec.size, sceneStarts: built.sceneStarts, crossfades: built.crossfades,
     sceneIds: spec.scenes.map((s) => s.id), audio,
+    // Resolves once the frame is fully drawn (every video frame it shows is decoded); render.mjs awaits it per frame.
     seek(sec) {
       const t = Math.min(Math.max(0, sec), built.duration);
       seekTo(built.timeline, t);
-      apply(t);
+      return apply(t);
     },
     // Contact-sheet mode only: render.mjs --contact-sheet calls this; a normal render or preview never does.
     stamp(text) { stampSheet(text); },
@@ -542,7 +609,7 @@ async function mount() {
   const mine = ++generation;
   const { spec, look } = await fetchSpec();
   await loadFonts(spec, look);
-  const dom = await buildStage(spec, look);
+  const dom = await buildStage(spec, look, await fetchFrames());
   if (mine !== generation) return null;
   const built = buildTimeline(spec);
   const apply = makeApply(dom, built);

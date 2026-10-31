@@ -28,7 +28,7 @@ body.preview #viewport { bottom: 108px; }
 .el.text.title { font-family: var(--display); line-height: 1.02; letter-spacing: -0.015em; }
 .el.counter { font-family: var(--sans); white-space: pre; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .el svg { display: block; overflow: visible; }
-.el img { display: block; }
+.el img, .el video { display: block; }
 .el.chart svg { width: 100%; height: 100%; }
 /* A typing text's caret: an empty inline marker with a thin bar absolutely positioned on it. It has no width and no
    break opportunity, so the text wraps identically at every typed count. */

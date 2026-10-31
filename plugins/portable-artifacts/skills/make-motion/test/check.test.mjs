@@ -7,6 +7,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 import * as checkModule from '../scripts/check.mjs';
+import { loadSpec } from '../scripts/lib/spec.mjs';
+import { specHasVideo } from '../scripts/lib/video.mjs';
 
 const { safeMargin } = checkModule;
 
@@ -34,7 +36,9 @@ const lines = (stdout) => stdout.trim().split('\n');
 
 for (const name of readdirSync(EXAMPLES).filter((f) => f.endsWith('.json'))) {
   test(`every spec in references/examples passes with exit 0: ${name}`, async (t) => {
-    if (await skipUnlessBrowser(t)) return;
+    // A video example also needs ffmpeg and ffprobe: check.mjs decodes its frames for the render page.
+    const hasVideo = specHasVideo(loadSpec(path.join(EXAMPLES, name)).spec);
+    if (hasVideo ? !(await requireRender(t, { need: ['browser', 'ffmpeg', 'ffprobe'] })) : await skipUnlessBrowser(t)) return;
     const r = check([path.join(EXAMPLES, name)]);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.match(r.stdout, /^check: ok \(\d+ scenes?, \d+ moments\)\n$/);

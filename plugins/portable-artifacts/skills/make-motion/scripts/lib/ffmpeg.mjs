@@ -59,9 +59,11 @@ const PREFLIGHT_VIDEO = (fps) => `color=s=16x16:r=${fps}:d=${PROBE_SECONDS}`;
 const sec = (n) => String(Math.round(n * MS_PER_SECOND) / MS_PER_SECOND);
 
 // One track -> trim to its clip, gain, fades, then delay to its absolute start. `end` is the fade-out anchor.
+// `clipStart` (a video element's trimStart) first skips that far into the file.
 function trackChain(track, index) {
   const length = track.end - track.start;
-  const steps = [AFORMAT, `atrim=end=${sec(length)}`, `volume=${sec(track.volume)}`];
+  const skip = track.clipStart > 0 ? [`atrim=start=${sec(track.clipStart)}`, 'asetpts=PTS-STARTPTS'] : [];
+  const steps = [...skip, AFORMAT, `atrim=end=${sec(length)}`, `volume=${sec(track.volume)}`];
   if (track.fadeIn > 0) steps.push(`afade=t=in:st=0:d=${sec(track.fadeIn)}`);
   if (track.fadeOut > 0) steps.push(`afade=t=out:st=${sec(Math.max(0, length - track.fadeOut))}:d=${sec(track.fadeOut)}`);
   steps.push(`adelay=${Math.round(track.start * MS_PER_SECOND)}:all=1`);

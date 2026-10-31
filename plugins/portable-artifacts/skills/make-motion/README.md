@@ -103,6 +103,7 @@ builds with the defaults and its report says so.
 | `counter` | `from`, `to`, `decimals`, `prefix`, `suffix` + text styling | + `value` (with no `value` keyframes it counts from→to automatically) |
 | `shape` | `shape` (`rect`/`ellipse`/`line`), `width`, `height`, `radius`, `fill`, `stroke`, `strokeWidth`, `elevated` (rect), `cap` and `arrow` (line) | + `draw` (0–1 stroke reveal) |
 | `image` | `src` (relative to the spec), `width`, `height`, `fit` | `opacity x y scale rotate` |
+| `video` | `src` (an mp4, mov, webm or m4v relative to the spec), `width`, `height`, `fit`, `trimStart`, `trimEnd`, `offset`, `mute`, `volume`; decoded once into a frame cache (`.cache/video`, cleared by `doctor.mjs --fix cache`) so every frame is exact; its sound joins the mix unless muted | `opacity x y scale rotate` |
 | `chart` | `vegaLite` with inline `data.values`, `width`, `height` | + `reveal` (0–1 left-to-right wipe) |
 | `group` | `children` (1–40 elements, up to 3 groups deep), each placed relative to the group's centre | `opacity x y scale rotate`, applied to every child at once |
 
@@ -129,12 +130,12 @@ examples in [`references/examples/`](references/examples/).
 
 | Command | Does | Flags |
 |---|---|---|
-| `validate.mjs <spec>` | Schema plus cross-field checks (unique ids, keyframe times, per-type props, image and audio paths, audio scene/start/fade fits, chart compile, no remote URLs) | `--json` |
+| `validate.mjs <spec>` | Schema plus cross-field checks (unique ids, keyframe times, per-type props, image, video and audio paths, video trims against the clip length (needs ffprobe), audio scene/start/fade fits, chart compile, no remote URLs) | `--json` |
 | `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` |
 | `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. The MP4 timing is exact | `--open` |
 | `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks or `cues`, followed by one `audio: … LUFS integrated, true peak … dBTP` line) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--contact-sheet` |
 | `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen. An element that has left the frame entirely is gone, not clipped. It also warns on stderr (never a failure) when the first scene shows nothing at t = 0. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
-| `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover>`, `--fix <id[,id]>` |
+| `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Lists the video frame cache once it passes 2 GB; `--fix cache` deletes it. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover>`, `--fix <id[,id]>` |
 
 Two renders of the same spec and media give identical frames and audio; the MP4 `comment` tag carries the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set.
 
@@ -150,8 +151,9 @@ then `PATH`, then an optional `ffmpeg-static` install. It is never bundled.
 ## Security
 
 - The preview server binds `127.0.0.1`, rejects non-local `Host` headers (DNS
-  rebinding) and serves only its own files plus the image files the spec
-  names. Image paths can't leave the spec's folder.
+  rebinding) and serves only its own files plus the image, video and audio
+  files the spec names (and the frames decoded from those videos). Media
+  paths can't leave the spec's folder.
 - No network from specs: chart `url` keys and `url()` colours are rejected,
   the page runs under a CSP whose script hash covers only its own import
   map, and the renderer aborts any non-local request.

@@ -1,6 +1,6 @@
 // Local-only HTTP server for preview and render. Binds 127.0.0.1, accepts only
 // local Host headers, serves the page template, vendored libraries from
-// node_modules, the live spec, and the image and audio files the spec names.
+// node_modules, the live spec, the image, video and audio files the spec names, and (render) the decoded video frames.
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { readFileSync, statSync, existsSync, createReadStream, watch } from 'node:fs';
@@ -15,6 +15,7 @@ import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenanc
 import { themeData, themeCss, FONTS_DIR } from './theme.mjs';
 import { artSvg } from '../../shared/art.mjs';
 import { flattenElements } from '../../template/groups.mjs';
+import { CACHE_ROOT } from './video.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NODE_MODULES = path.join(SKILL_ROOT, 'node_modules');
@@ -31,6 +32,7 @@ const MIME = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.txt': 'text/plain; charset=utf-8',
   '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.flac': 'audio/flac',
+  '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm', '.m4v': 'video/x-m4v',
 };
 
 const VENDOR_ROOTS = {
@@ -147,11 +149,12 @@ function serveArt(ctx, res, sceneId) {
   return sendBody(res, MIME['.svg'], svg);
 }
 
-// Image and audio srcs named by the current spec; /assets serves nothing else.
+// Image, video and audio srcs named by the current spec; /assets serves nothing else.
+const MEDIA_ELEMENTS = new Set(['image', 'video']);
 function referencedAssets(specFile) {
   try {
     const spec = JSON.parse(readFileSync(specFile, 'utf8'));
-    const images = spec.scenes.flatMap((s) => flattenElements(s.elements)).filter(({ el }) => el.type === 'image').map(({ el }) => el.src);
+    const images = spec.scenes.flatMap((s) => flattenElements(s.elements)).filter(({ el }) => MEDIA_ELEMENTS.has(el.type)).map(({ el }) => el.src);
     const audio = (spec.audio ?? []).map((a) => a.src);
     return new Set([...images, ...audio].map((src) => path.posix.normalize(String(src))));
   } catch { return new Set(); }
@@ -163,6 +166,15 @@ function serveAsset(ctx, req, res, rel) {
   if (!referencedAssets(ctx.specFile).has(path.posix.normalize(decoded))) return notFound(res);
   const { file } = resolveAsset(ctx.specDir, decoded);
   return file ? sendFile(res, file, req.headers.range ?? '') : notFound(res);
+}
+
+// /frames/<key>/<n>.<ext>: a decoded video frame, only for a key the render was given (render.mjs and check.mjs pass
+// prepareVideo's answer as `videoFrames`) and only in the format that key was decoded to.
+const FRAME_ROUTE = /^\/frames\/([0-9a-f]{64})\/(\d{6})\.(jpg|png)$/;
+function serveFrame(ctx, res, [, key, n, ext]) {
+  if (!Object.values(ctx.videoFrames).some((v) => v.key === key && v.ext === ext)) return notFound(res);
+  const { file } = resolveAsset(path.join(ctx.frameRoot, key), `${n}.${ext}`);
+  return file ? sendFile(res, file) : notFound(res);
 }
 
 function serveUnder(res, root, rel) {
@@ -210,6 +222,9 @@ function route(ctx, req, res) {
     return res.end(indexHtml(ctx));
   }
   if (pathname === '/spec.json') return serveSpec(ctx, res);
+  if (pathname === '/frames.json') return sendBody(res, MIME['.json'], JSON.stringify(ctx.videoFrames));
+  const frameRoute = FRAME_ROUTE.exec(pathname);
+  if (frameRoute) return serveFrame(ctx, res, frameRoute);
   if (pathname === '/events') return serveEvents(ctx, req, res);
   if (pathname.startsWith('/template/')) return serveUnder(res, TEMPLATE_DIR, pathname.slice('/template/'.length));
   if (pathname === '/shared/nowrap.mjs') return existsSync(ctx.nowrapModule) ? sendFile(res, ctx.nowrapModule) : reply(res, 404, NOWRAP_MISSING);
@@ -286,9 +301,11 @@ function watchSpec(ctx) {
 
 // `theme`: a shared theme name for specs that set none (render --theme).
 // `nowrapModule`: the file served as /shared/nowrap.mjs (tests point it at a missing file).
-export async function startServer({ specPath, mode = 'preview', theme, nowrapModule = NOWRAP_MODULE }) {
+// `videoFrames`: prepareVideo()'s `{ [elementId]: { key, count, fps, ext } }`, served as /frames.json; the frames
+// themselves come from `frameRoot`/<key>/. Preview passes none: it plays the clips themselves from /assets.
+export async function startServer({ specPath, mode = 'preview', theme, nowrapModule = NOWRAP_MODULE, videoFrames = {}, frameRoot = CACHE_ROOT }) {
   const specFile = path.resolve(specPath);
-  const ctx = { specFile, theme, nowrapModule, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
+  const ctx = { specFile, theme, nowrapModule, videoFrames, frameRoot, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
   const watcher = watchSpec(ctx);
   const server = http.createServer((req, res) => handle(ctx, req, res));
   await new Promise((resolve, reject) => {

@@ -3,8 +3,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { doctorMain } from '../shared/doctor.mjs';
-import { targets, requirementsFor } from './lib/requirements.mjs';
+import { targets, doctorRequirementsFor } from './lib/requirements.mjs';
 
 const SKILL_DIR = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
-await doctorMain(process.argv.slice(2), { skill: 'make-motion', skillDir: SKILL_DIR, targets, requirementsFor });
+await doctorMain(process.argv.slice(2), { skill: 'make-motion', skillDir: SKILL_DIR, targets, requirementsFor: doctorRequirementsFor });

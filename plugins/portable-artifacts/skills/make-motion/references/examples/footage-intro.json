@@ -1,0 +1,35 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "footage",
+      "duration": 4,
+      "elements": [
+        {
+          "id": "headline",
+          "type": "text",
+          "text": "Real footage, every frame exact",
+          "x": 960,
+          "y": 150,
+          "fontSize": 64,
+          "fontWeight": 700
+        },
+        {
+          "id": "screen",
+          "type": "group",
+          "x": 960,
+          "y": 610,
+          "keyframes": [
+            { "t": 0, "opacity": 0, "y": 650 },
+            { "t": 0.6, "opacity": 1, "y": 610, "ease": "enter" }
+          ],
+          "children": [
+            { "id": "bezel", "type": "shape", "shape": "rect", "x": 0, "y": 0, "width": 1000, "height": 580, "radius": 24, "fill": "surface", "elevated": true },
+            { "id": "clip", "type": "video", "src": "footage/clip.mp4", "x": 0, "y": 0, "width": 960, "height": 540, "offset": 0.5 }
+          ]
+        }
+      ]
+    }
+  ]
+}
