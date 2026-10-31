@@ -46,7 +46,16 @@ shell commands.
   along with a typing text; after any render with audio, `render.mjs` prints the integrated loudness and
   true peak. Twelve recorded clicks and hits (Kenney, CC0, 48 kHz WAV, about 261 KB in all) are
   bundled as `"cue": "kenney:<name>"` (click, tick, switch, select, confirm, error, open, close,
-  pluck, glass, thud, metal); they need no download and fetch nothing at render. Opt-in: no `cues`, no sound.
+  pluck, glass, thud, metal); they need no download and fetch nothing at render. Opt-in: no `cues`, no sound
+  (except in viral mode, below, which places cues unless the spec writes `cues`).
+- **Viral mode**: `"mode": "viral"` for Reels, TikTok and Shorts: 9:16 at 1080x1920, a
+  platform safe zone (top 290, bottom 675, left 120, right 195 px; `viral.safeZone` overrides it)
+  with captions lifted above the bottom band, the first scene's title on screen from frame 0 as the
+  hook, cues placed on cuts, entrances and counter landings, and a −14 LUFS / −1 dBTP loudness
+  target that `render.mjs` reports against. `check.mjs` warns (never fails) on a hook outside 3–7
+  words, text under a platform band, more than 3 s with no change, audio without captions, a
+  non-9:16 canvas and, with `viral.loop`, an ending that does not match the start. The numbers are
+  tunable defaults from platform ad specs, not platform rules.
 - **Texture and typing**: an opt-in root `texture` adds a vignette and static film grain
   (measured cost below), and `"typing": true` types a line out at 0.035 s per character
   with a caret.

@@ -1,6 +1,5 @@
 // quote-card: a pull quote on a card: an accent quotation mark, the quote, and an optional attribution.
-import { captionZone, safeMargin } from '../formats.mjs';
-import { unit, contentWidth, fitText, squeeze, slot, textPart, rectPart, enter, blockGroup, stack, freeBand, roomAt, LINE_HEIGHT, MIN_TEXT } from './layout.mjs';
+import { unit, contentWidth, fitText, squeeze, slot, textPart, rectPart, enter, blockGroup, stack, freeBand, roomAt, LINE_HEIGHT, MIN_TEXT, abovePlace } from './layout.mjs';
 
 const params = {
   type: 'object',
@@ -39,7 +38,7 @@ function expand(el, ctx) {
   const u = unit(size);
   const { quote } = el.params;
   const id = (part) => `${el.id}/${part}`;
-  const cardW = contentWidth(size, 1400 * u, 40 * u);
+  const cardW = contentWidth(size, 1400 * u, 40 * u, ctx.insets);
   const room = roomAt(freeBand(ctx), el.y);
   let fit;
   for (const tier of TIERS) {
@@ -70,6 +69,7 @@ export default Object.freeze({
   example: { quote: 'We cut our release checklist from a day to ten minutes.', attribution: 'Priya Raman, platform lead' },
   // Centred across, and centred in the band between the safe area top and the caption zone, so a long quote's card fits
   // above captions.
-  place: (size, format) => ({ x: size[0] / 2, y: (safeMargin(size) + captionZone(size, format).top) / 2 }),
+  place: (size, format, _side, insets) => abovePlace(size, format, insets),
+  hook: ['card', 'quote'], // the words, on their card; the quotation mark still enters after them
   expand,
 });

@@ -3,13 +3,11 @@
 // The root `captions` tracks are not on it: nothing about them animates, and what a captions layer shows is a pure
 // function of the time (template/captions.mjs captionState, applied by the renderer on every seek).
 import { createTimeline, cubicBezier } from 'animejs';
-import { withDefaults, FADE_SECONDS, EASE_CURVES, TYPING_SECONDS_PER_CHAR, typingLength } from './defaults.mjs';
+import { withDefaults, FADE_SECONDS, EASE_CURVES, TYPING_SECONDS_PER_CHAR, typingLength, counterSeconds } from './defaults.mjs';
 import { flattenElements } from './groups.mjs';
 
 const MS = 1000;
 const MIN_SEGMENT_MS = 1;
-const COUNTER_MAX_SECONDS = 2;
-const COUNTER_SCENE_SHARE = 0.8;
 
 // The named eases as anime.js easing functions; every other name is one of anime's own (a string it resolves).
 const NAMED_EASES = Object.fromEntries(Object.entries(EASE_CURVES).map(([name, points]) => [name, cubicBezier(...points)]));
@@ -24,8 +22,7 @@ function track(keyframes, prop) {
 
 // A counter with no `value` keyframes counts from -> to at the start of its scene.
 function counterDefaultTrack(el, sceneDuration) {
-  const seconds = Math.min(COUNTER_MAX_SECONDS, COUNTER_SCENE_SHARE * sceneDuration);
-  return [{ t: 0, value: el.from ?? 0, ease: 'linear' }, { t: seconds, value: el.to, ease: 'outCubic' }];
+  return [{ t: 0, value: el.from ?? 0, ease: 'linear' }, { t: counterSeconds(sceneDuration), value: el.to, ease: 'outCubic' }];
 }
 
 // A `typing` text types its characters from the start of its scene at TYPING_SECONDS_PER_CHAR each.

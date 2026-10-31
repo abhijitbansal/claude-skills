@@ -3,6 +3,7 @@
 // timeline: what a layer shows is a pure function of the time (captionState), set on every seek.
 import { parseCaptions, trackGroups, captionState, groupText } from './captions.mjs';
 import { captionZone } from './formats.mjs';
+import { viralInsets } from './viral.mjs';
 import { trackStart } from './audio.mjs';
 import { graphemes } from './defaults.mjs';
 import { bindWithNbsp } from '/shared/nowrap.mjs'; // served by server.mjs
@@ -35,9 +36,10 @@ export function loadCaptionTracks(spec, assetUrl) {
 /** Every caption text of `tracks`, for the font loader. */
 export const captionSample = (tracks) => tracks.flatMap((t) => t.groups.map((g) => groupText(g.words))).join(' ');
 
-/** The layer of one track (from loadCaptionTracks), hidden until applyCaption shows a group. */
+/** The layer of one track (from loadCaptionTracks), hidden until applyCaption shows a group. A viral spec's captions sit
+ * in the lifted zone between its platform bands (captionZone with its insets). */
 export function captionLayer(track, spec, look) {
-  const zone = captionZone(spec.size, spec.format);
+  const zone = captionZone(spec.size, spec.format, viralInsets(spec));
   const node = document.createElement('div');
   node.className = `captions style-${track.style}`;
   node.dataset.index = String(track.index);

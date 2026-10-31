@@ -6,7 +6,8 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { BLOCKS, BLOCK_NAMES, blockDef } from '../template/blocks/index.mjs';
-import { FORMATS, FORMAT_NAMES } from '../template/formats.mjs';
+import { FORMATS, FORMAT_NAMES, safeInsets, VIRAL_SAFE_ZONE } from '../template/formats.mjs';
+import { VIRAL_FORMAT } from '../template/viral.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { didYouMean } from '../shared/errors.mjs';
 
@@ -27,12 +28,13 @@ function typeOf(schema) {
   return schema.type;
 }
 
-// Where the block goes on each format, as one line; `side` is passed to place() (lower-third).
+// Where the block goes on each format, then in viral mode (9:16 with the default platform safe zone), as one line;
+// `side` is passed to place() (lower-third).
 function placeLine(def, side) {
-  return FORMAT_NAMES.map((format) => {
-    const { x, y } = def.place(FORMATS[format].size, format, side);
-    return `${format} x ${Math.round(x)} y ${Math.round(y)}`;
-  }).join('; ');
+  const at = ({ x, y }) => `x ${Math.round(x)} y ${Math.round(y)}`;
+  const viralSize = FORMATS[VIRAL_FORMAT].size;
+  const viral = at(def.place(viralSize, VIRAL_FORMAT, side, safeInsets(viralSize, VIRAL_SAFE_ZONE)));
+  return [...FORMAT_NAMES.map((format) => `${format} ${at(def.place(FORMATS[format].size, format, side))}`), `viral ${VIRAL_FORMAT} ${viral}`].join('; ');
 }
 
 function table(rows) {

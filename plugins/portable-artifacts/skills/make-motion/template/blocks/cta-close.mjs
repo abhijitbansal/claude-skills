@@ -1,5 +1,5 @@
 // cta-close: a closing headline, an accent button with the action, and an optional address shown as text.
-import { unit, contentWidth, textWidth, fitText, squeeze, slot, textPart, rectPart, enter, blockGroup, stack, LINE_HEIGHT, MIN_TEXT } from './layout.mjs';
+import { unit, contentWidth, textWidth, fitText, squeeze, slot, textPart, rectPart, enter, blockGroup, stack, LINE_HEIGHT, MIN_TEXT, centrePlace } from './layout.mjs';
 
 const params = {
   type: 'object',
@@ -12,11 +12,11 @@ const params = {
   },
 };
 
-function expand(el, { size, sceneDuration }) {
+function expand(el, { size, sceneDuration, insets }) {
   const u = unit(size);
   const { headline, action, url } = el.params;
   const id = (part) => `${el.id}/${part}`;
-  const width = contentWidth(size, 1500 * u, 48 * u);
+  const width = contentWidth(size, 1500 * u, 48 * u, insets);
   const headFit = fitText(headline, { size: 96 * u, min: 48 * u, maxWidth: width, maxLines: 3, lineHeight: LINE_HEIGHT.title });
   const padX = 44 * u;
   const actionFit = fitText(action, { size: 44 * u, min: MIN_TEXT * u, maxWidth: width - 2 * padX, maxLines: 1 });
@@ -44,6 +44,7 @@ export default Object.freeze({
     url: 'an address under the button, shown as text (nothing is linked or fetched)',
   },
   example: { headline: 'Make your first video today', action: 'Start free', url: 'example.com/start' },
-  place: (size) => ({ x: size[0] / 2, y: size[1] / 2 }),
+  place: (size, format, _side, insets) => centrePlace(size, format, insets),
+  hook: ['headline'],
   expand,
 });

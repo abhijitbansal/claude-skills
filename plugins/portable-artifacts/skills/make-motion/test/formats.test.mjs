@@ -93,9 +93,10 @@ test('captionZone sits in the lower part of the safe area: top at 78 % (72 % for
   assert.deepEqual(captionZone([1080, 1920]), { left: 60, top: 1498, right: 1020, bottom: 1860 }, 'a size with no format uses 78 %');
 });
 
-test('a zone or insets argument is refused until viral mode defines it, never ignored', () => {
-  assert.throws(() => safeInsets([1080, 1920], { top: 290 }), /safeInsets: a zone/);
-  assert.throws(() => captionZone([1080, 1920], '9:16', { left: 120 }), /captionZone: insets/);
+// Task 11a replaced the refusal this test asserted with viral mode's real branches (test/viral.test.mjs has the rest).
+test('a zone or insets argument is used, never ignored', () => {
+  assert.deepEqual(safeInsets([1080, 1920], { top: 290, bottom: 675, left: 120, right: 195 }), { top: 290, right: 195, bottom: 675, left: 120 });
+  assert.deepEqual(captionZone([1080, 1920], '9:16', { top: 290, right: 195, bottom: 675, left: 120 }), { left: 120, top: 998, right: 885, bottom: 1245 });
 });
 
 // ---- server: the art follows the format ---------------------------------------------------------

@@ -22,16 +22,32 @@ const BAND_INSET = 12; // px at 1080 kept free inside the band a block fills (fr
 // One px at 1080 on the short side, in canvas px.
 export const unit = (size) => Math.min(size[0], size[1]) / REFERENCE_SIDE;
 
-// The width a centred block may use: the canvas inside the safe area, less `inset` on each side, at most `cap`.
-export const contentWidth = (size, cap, inset) => Math.min(size[0] - 2 * safeMargin(size) - 2 * inset, cap);
+// The safe area's margins: a viral spec's `insets` (ctx.insets), else the plain safe margin on every side.
+const marginsOf = (size, insets) => insets ?? { top: safeMargin(size), right: safeMargin(size), bottom: safeMargin(size), left: safeMargin(size) };
 
-// The band, top to bottom in canvas px, that a block may fill: the safe area, ending above the caption zone when the
-// spec has captions (ctx.captions), less BAND_INSET at each end.
-export function freeBand({ size, format, captions }) {
-  const inset = BAND_INSET * unit(size);
-  const bottom = captions ? captionZone(size, format).top : size[1] - safeMargin(size);
-  return { top: safeMargin(size) + inset, bottom: bottom - inset };
+// The width a centred block may use: the canvas inside the safe area (`insets`: a viral spec's, ctx.insets), less
+// `inset` on each side, at most `cap`.
+export function contentWidth(size, cap, inset, insets = null) {
+  const m = marginsOf(size, insets);
+  return Math.min(size[0] - m.left - m.right - 2 * inset, cap);
 }
+
+// The band, top to bottom in canvas px, that a block may fill: the safe area (a viral spec's insets when it has them),
+// ending above the caption zone when the spec has captions (ctx.captions), less BAND_INSET at each end.
+export function freeBand({ size, format, captions, insets = null }) {
+  const inset = BAND_INSET * unit(size);
+  const m = marginsOf(size, insets);
+  const bottom = captions ? captionZone(size, format, insets).top : size[1] - m.bottom;
+  return { top: m.top + inset, bottom: bottom - inset };
+}
+
+// place() helpers, `insets` as in contentWidth. The middle of the safe area across (the canvas centre without insets).
+const middleX = (size, insets) => (insets ? (insets.left + size[0] - insets.right) / 2 : size[0] / 2);
+// Centred across and in the band between the safe area's top and the caption zone, so a stack fits above captions.
+export const abovePlace = (size, format, insets = null) => ({ x: middleX(size, insets), y: (marginsOf(size, insets).top + captionZone(size, format, insets).top) / 2 });
+// The canvas centre; with viral insets the band above the lifted caption zone instead (the canvas centre is too close
+// to it to leave a block any room).
+export const centrePlace = (size, format, insets = null) => (insets ? abovePlace(size, format, insets) : { x: size[0] / 2, y: size[1] / 2 });
 
 // The height a block centred at canvas `y` may take inside `band`.
 export const roomAt = (band, y) => Math.max(0, 2 * Math.min(band.bottom - y, y - band.top));

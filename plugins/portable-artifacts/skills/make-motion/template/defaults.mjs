@@ -2,6 +2,7 @@
 import { childrenOf } from './groups.mjs';
 import { canvasSize } from './formats.mjs';
 import { expandBlocks } from './blocks/index.mjs';
+import { applyViral, autoCues, isViral, hookKeyframes, visibleAtStart } from './viral.mjs';
 
 // No `background` default: the page fills it from the theme's page colour (see renderer fetchSpec). The canvas size
 // default lives in formats.mjs (canvasSize).
@@ -20,6 +21,11 @@ export const DEFAULT_CAPTION_STYLE = 'plain'; // a captions track's `style` when
 const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' });
 export const graphemes = (text) => Array.from(GRAPHEMES.segment(text), (part) => part.segment);
 export const typingLength = (text) => graphemes(text).length;
+
+// A counter with no `value` keyframes counts from -> to from its scene start over this many seconds (timeline.mjs).
+const COUNTER_MAX_SECONDS = 2;
+const COUNTER_SCENE_SHARE = 0.8;
+export const counterSeconds = (sceneDuration) => Math.min(COUNTER_MAX_SECONDS, COUNTER_SCENE_SHARE * sceneDuration);
 
 // make-motion's default theme (scripts/lib/default-theme.mjs re-exports it). The shared
 // DEFAULT_THEME stays `paper` for make-dashboard.
@@ -127,17 +133,21 @@ export function presetKeyframes(name, el, sceneDuration, fps) {
 
 // `exits`: whether an `exit: true` title may leave (every scene but the spec's last). Returns the keyframes and
 // whether an exit was appended.
-function presetFor(el, theme, sceneDuration, fps, exits) {
+// `hook`: the title is viral mode's hook (scene 0, nothing around it hidden at t 0), so it enters with the hook entrance
+// (viral.mjs hookKeyframes) instead of the theme's, whatever the theme; its `exit` still takes the theme's exit.
+function presetFor(el, theme, sceneDuration, fps, exits, hook) {
   const name = TYPE_PRESETS[theme];
-  if (!name || el.type !== 'text' || el.role !== 'title' || el.keyframes !== undefined) return { keyframes: el.keyframes, exited: false };
-  const entrance = presetKeyframes(name, el, sceneDuration, fps);
+  if ((!name && !hook) || el.type !== 'text' || el.role !== 'title' || el.keyframes !== undefined) return { keyframes: el.keyframes, exited: false };
+  const entrance = hook ? hookKeyframes(el, sceneDuration, fps) : presetKeyframes(name, el, sceneDuration, fps);
+  if (!name) return { keyframes: entrance, exited: false };
   const exit = el.exit === true && exits ? exitKeyframes(name, el, sceneDuration, fps, entrance) : [];
   return { keyframes: [...entrance, ...exit], exited: exit.length > 0 };
 }
 
-// An element's own defaults, then its children's (a group's), at any depth.
-function fillElement(el, theme, scene, fps, exits) {
-  const preset = presetFor(el, theme, scene.duration, fps, exits);
+// An element's own defaults, then its children's (a group's), at any depth. `hook`: titles here are viral mode's hook; a
+// group hidden at t 0 passes it on to no child, since a hook it hides could not be on screen at frame 0.
+function fillElement(el, theme, scene, fps, exits, hook = false) {
+  const preset = presetFor(el, theme, scene.duration, fps, exits, hook);
   el.keyframes = preset.keyframes;
   if (preset.exited) el.exitPreset = true; // check.mjs: this title leaves on purpose (it opted in with `exit`)
   el.opacity ??= 1;
@@ -147,7 +157,7 @@ function fillElement(el, theme, scene, fps, exits) {
   el.reveal = 1;
   el.value = el.type === 'counter' ? (el.from ?? 0) : 0;
   el.keyframes ??= [];
-  for (const child of childrenOf(el)) fillElement(child, theme, scene, fps, exits);
+  for (const child of childrenOf(el)) fillElement(child, theme, scene, fps, exits, hook && visibleAtStart(el));
 }
 
 // The root `format` sets the canvas size when the spec gives none (the validator refuses a `size` that disagrees);
@@ -163,20 +173,21 @@ function applyFormat(out) {
 //   2 applyViral      (Task 11a) `mode: "viral"` defaults, so the `format` it sets reaches step 3
 //   3 expandBlocks               each `block` becomes a `group` of plain elements, laid out for canvasSize(spec): the
 //                                size step 4 will write, read before it is written
-//   4 applyFormat                `size` from `format`
-//   5 autoCues        (Task 11a) cues derived from the finished elements
+//   4 applyFormat                `size` from `format`; then the theme presets fill in (fillElement), viral mode's hook
+//                                entrance in place of the theme's for the first scene's titles
+//   5 autoCues        (Task 11a) cues derived from the finished elements: it runs last, once every element's base
+//                                values and theme preset are filled in, because a preset's opacity-0 start is an entrance
 // Steps 1-3 change what the spec says, so the validator runs them too (expandSpec), after checking their inputs (block
 // params) and before its full check; steps 4-5 only fill in, and run in withDefaults alone.
 export function expandSpec(spec) {
-  // 1 substituteVars and 2 applyViral go here, before expandBlocks.
-  return expandBlocks(spec); // 3: a pure copy
+  // 1 substituteVars goes here, before applyViral.
+  return expandBlocks(applyViral(spec)); // 2, then 3: each a pure copy (applyViral returns a spec that is not viral as it is)
 }
 
 // Pure copy with every optional root and element base value filled in.
 export function withDefaults(spec) {
   const out = expandSpec(spec); // steps 1-3 (a copy: spec is never mutated)
   applyFormat(out); // 4: size and presets
-  // 5 autoCues goes here.
   out.fps ??= DEFAULTS.fps;
   out.theme ??= MOTION_THEME;
   out.audio = (out.audio ?? []).map((track) => ({ at: 0, volume: 1, fadeIn: 0, fadeOut: 0, ...track }));
@@ -184,7 +195,9 @@ export function withDefaults(spec) {
   const transition = out.transition ?? 'none';
   out.scenes.forEach((scene, si) => {
     scene.transition ??= si === 0 && transition === 'crossfade' ? 'none' : transition; // the first scene has nothing to fade out
-    for (const el of scene.elements) fillElement(el, out.theme, scene, out.fps, si < out.scenes.length - 1);
+    const hook = si === 0 && isViral(out); // the first scene's titles are the hook
+    for (const el of scene.elements) fillElement(el, out.theme, scene, out.fps, si < out.scenes.length - 1, hook);
   });
+  if (isViral(out) && out.cues === undefined) out.cues = autoCues(out); // 5: a written `cues` (even []) wins
   return out;
 }

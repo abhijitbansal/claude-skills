@@ -1,5 +1,5 @@
 // kpi-counter: a card with a label, a number that counts up once the card is in, and an optional change line.
-import { unit, contentWidth, textWidth, fitText, squeeze, slot, textPart, rectPart, enter, blockGroup, stack, MIN_TEXT } from './layout.mjs';
+import { unit, contentWidth, textWidth, fitText, squeeze, slot, textPart, rectPart, enter, blockGroup, stack, MIN_TEXT, centrePlace } from './layout.mjs';
 
 // Caps that keep the widest number (sign, 12 digits, point, 4 decimals, prefix and suffix) on one line at MIN_TEXT on a
 // 9:16 card.
@@ -26,13 +26,13 @@ const RISING = /^[+↑▲]/; // a delta that starts like this is good news, pain
 
 const shown = (n, { prefix = '', suffix = '', decimals = 0 }) => `${prefix}${n.toFixed(decimals)}${suffix}`;
 
-function expand(el, { size, sceneDuration }) {
+function expand(el, { size, sceneDuration, insets }) {
   const u = unit(size);
   const p = el.params;
   const from = p.from ?? 0;
   const decimals = p.decimals ?? 0;
   const id = (part) => `${el.id}/${part}`;
-  const cardW = contentWidth(size, 900 * u, 40 * u);
+  const cardW = contentWidth(size, 900 * u, 40 * u, insets);
   const pad = 48 * u;
   const inner = cardW - 2 * pad;
   const labelFit = fitText(p.label, { size: 44 * u, min: MIN_TEXT * u, maxWidth: inner, maxLines: 2 });
@@ -83,6 +83,6 @@ export default Object.freeze({
     delta: `a change line under the number; one that starts with + or ↑ is painted good, any other in text2`,
   },
   example: { label: 'Monthly active users', to: 48200, delta: '+12% on last month' },
-  place: (size) => ({ x: size[0] / 2, y: size[1] / 2 }),
+  place: (size, format, _side, insets) => centrePlace(size, format, insets),
   expand,
 });

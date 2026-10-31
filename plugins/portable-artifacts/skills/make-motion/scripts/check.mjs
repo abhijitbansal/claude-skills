@@ -20,6 +20,11 @@
 // A finding inside a block (a part of its expansion) names the block instead: its own path, the block and part, and the
 // param to change (`scenes[0].elements[1]: text "lt/name" leaves the safe area (right) at 0.90s (block "lower-third",
 // part "name"); shorten params.name or move the block`).
+// With `"mode": "viral"`, warnings only (scripts/lib/viral-checks.mjs): a canvas that is not 9:16, audio without
+// captions, no 3-7 word hook at frame 0, a held text or counter under a platform band (inside the 60 px safe area), a
+// still stretch the dead-stretch audit exempts (the final 3 s, `hold`), and with `viral.loop` a last frame unlike the
+// first. The caption rules use the lifted viral zone the page draws captions in. Without a browser the spec-level
+// ones (format, captions, change gaps read from the spec's keyframes and captions files) still print.
 // --theme: the theme render.mjs --theme would draw a spec that names none in (a spec's own `theme` wins).
 // A spec with a video element has its frames decoded first, as render.mjs does, so it needs ffmpeg and ffprobe too.
 // exit 0 ok or skipped (no browser), 1 problems (or an invalid spec), 2 usage/IO
@@ -38,6 +43,8 @@ import { isBlock, paramOfPart } from '../template/blocks/index.mjs';
 import { safeMargin, safeInsets, captionZone } from '../template/formats.mjs';
 import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
+import { isViral } from '../template/viral.mjs';
+import { specWarnings, hookWarnings, stillWarnings, gapWarnings, loopWarnings, frameDifference } from './lib/viral-checks.mjs';
 import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
 import { specHasVideo, prepareVideo } from './lib/video.mjs';
 import { themeData } from './lib/theme.mjs';
@@ -168,6 +175,33 @@ function safeAreaProblems(items, samples, insets, size) {
     }
   });
   return problems;
+}
+
+// Viral: a text or counter held inside the plain safe area but under one of the platform bands (`insets`, from the
+// spec's `viral.safeZone` px values `zone`), once per element at the first such moment.
+function bandWarnings(items, samples, insets, zone, size) {
+  const inner = (m) => ({ top: m.top, bottom: size[1] - m.bottom, left: m.left, right: size[0] - m.right });
+  const plain = inner(safeInsets(size));
+  const platform = inner(insets);
+  const warnings = [];
+  items.forEach(({ el, path: where, chain }, j) => {
+    if (!CHECKED.has(el.type)) return;
+    const spans = tweenSpans(chain, GEOMETRY);
+    const hit = samples.find(({ t, els }, n) => isShown(els[j], size) && isHeld(spans, t, n, samples)
+      && !edgesOutside(els[j].box, plain).length && edgesOutside(els[j].box, platform).length);
+    if (!hit) return;
+    const bands = edgesOutside(hit.els[j].box, platform).map((edge) => `${edge} ${zone[edge]} px`).join(', ');
+    warnings.push({ path: where, message: `viral: ${el.type} "${el.id}" sits under the platform UI (${bands}) at ${at(hit.t)}` });
+  });
+  return warnings;
+}
+
+// Viral: every warning that needs the page. `frame0` is scene 0 measured at t 0; `band` the bandWarnings of every scene.
+async function viralWarnings(page, spec, itemsOf, frame0, steps, band) {
+  const texts = itemsOf[0].flatMap(({ el, path: where }, j) => (el.type === 'text' && isShown(frame0[j], spec.size) ? [{ el, path: where, fontSize: frame0[j].fontSize }] : []));
+  const total = spec.scenes.reduce((n, scene) => n + scene.duration, 0);
+  const loop = spec.viral.loop === true ? loopWarnings(await frameDifference(page, 0, total - 1 / spec.fps)) : [];
+  return [...specWarnings(spec), ...hookWarnings(texts), ...band, ...stillWarnings(spec, steps), ...loop];
 }
 
 // The edges of `box` that lie more than half a pixel outside `rect`.
@@ -368,8 +402,11 @@ async function inspect(browser, spec, server, prepare, written) {
   const problems = [];
   const itemsOf = spec.scenes.map(sceneItems); // the non-group elements of each scene, indexed as the page measures them
   const blocksOf = written.scenes.map((scene) => new Set((scene.elements ?? []).filter(isBlock).map((el) => el.id))); // `hold` goes on these, not on their parts
-  const warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], await measureAt(page, 0, 0), spec.size);
-  const zone = spec.captions.length ? captionZone(spec.size, spec.format) : null; // the caption rules need captions
+  const frame0 = await measureAt(page, 0, 0);
+  const warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], frame0, spec.size);
+  const platform = isViral(spec) ? safeInsets(spec.size, spec.viral.safeZone) : null; // viral: the platform bands
+  const band = [];
+  const zone = spec.captions.length ? captionZone(spec.size, spec.format, platform) : null; // the caption rules need captions
   const captionTimes = zone ? await page.evaluate(() => window.__motion.captionMoments.map((m) => m.t)) : [];
   const colors = themeData(spec.theme)?.dark ?? {};
   const steps = [];
@@ -388,12 +425,14 @@ async function inspect(browser, spec, server, prepare, written) {
     problems.push(...safeAreaProblems(items, samples, insets, spec.size), ...overlapProblems(items, samples, spec.size), ...emptyEndProblems(scene, i, items, samples, spec.size), ...wrapProblems(scene, i, samples), ...contrast.problems, ...floor.problems);
     warnings.push(...contrast.warnings, ...floor.warnings);
     if (zone) problems.push(...captionZoneProblems(items, samples, extra, zone, spec.size));
+    if (platform) band.push(...bandWarnings(items, samples, platform, spec.viral.safeZone, spec.size));
   }
   const probe = async (i, j, local) => isShown((await measureAt(page, starts[i] + local, i))[j], spec.size); // the reading floor places a span's edges with these
   const reading = await readingFloorFindings(spec, itemsOf, steps, probe);
   problems.push(...reading.problems, ...deadStretchProblems(spec, steps, itemsOf, blocksOf));
   if (zone) problems.push(...await captionLayerProblems(page, zone));
   for (const fade of await page.evaluate(() => window.__motion.crossfades)) warnings.push(...await crossfadeWarnings(page, spec, itemsOf, fade, spec.size));
+  if (platform) warnings.push(...await viralWarnings(page, spec, itemsOf, frame0, steps, band));
   return { status: problems.length ? 'failed' : 'ok', scenes: spec.scenes.length, moments, problems, warnings, info: reading.info };
 }
 
@@ -404,12 +443,14 @@ async function prepareFrames(specPath, spec) {
 }
 
 async function checkSpec(specPath, spec, { env, theme, prepare, written }) {
-  if (env.PA_NO_BROWSER === '1') return { status: 'skipped', reason: 'PA_NO_BROWSER=1' };
+  // Without a page, a viral spec still gets the warnings its spec alone can show.
+  const skipped = (reason) => ({ status: 'skipped', reason, warnings: isViral(spec) ? [...specWarnings(spec), ...gapWarnings(spec, path.dirname(specPath))] : [] });
+  if (env.PA_NO_BROWSER === '1') return skipped('PA_NO_BROWSER=1');
   let browser;
   try {
     browser = await launchBrowser({ quiet: true });
   } catch (e) {
-    return { status: 'skipped', reason: firstLine(e) };
+    return skipped(firstLine(e));
   }
   let server;
   try {
@@ -465,7 +506,7 @@ function report(result, json) {
   const { status, problems = [], warnings = [], info = [] } = result;
   const noted = { ...(warnings.length ? { warnings } : {}), ...(info.length ? { info } : {}) };
   if (json) {
-    const body = status === 'skipped' ? { ok: true, skipped: true, reason: result.reason, hint: skipHint() }
+    const body = status === 'skipped' ? { ok: true, skipped: true, reason: result.reason, hint: skipHint(), ...noted }
       : status === 'ok' ? { ok: true, scenes: result.scenes, moments: result.moments, ...noted }
         : { ok: false, ...(result.crashed ? { crashed: true } : {}), errors: problems, ...noted };
     process.stdout.write(`${JSON.stringify(body)}\n`);

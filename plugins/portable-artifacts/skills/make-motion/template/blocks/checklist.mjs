@@ -1,6 +1,5 @@
 // checklist: 2 to 8 items, each on a row with an empty circle; once every row is in, the items are ticked in order.
-import { captionZone, safeMargin } from '../formats.mjs';
-import { unit, contentWidth, fitText, lineCount, squeeze, slot, textPart, rectPart, ellipsePart, linePart, enter, blockGroup, freeBand, roomAt, ENTER_SECONDS, LINE_HEIGHT, MIN_TEXT } from './layout.mjs';
+import { unit, contentWidth, fitText, lineCount, squeeze, slot, textPart, rectPart, ellipsePart, linePart, enter, blockGroup, freeBand, roomAt, ENTER_SECONDS, LINE_HEIGHT, MIN_TEXT, abovePlace } from './layout.mjs';
 
 const params = {
   type: 'object',
@@ -47,7 +46,7 @@ function expand(el, ctx) {
   const tickAfter = el.params.tickAfter ?? params.properties.tickAfter.default;
   const n = items.length;
   const id = (part) => `${el.id}/${part}`;
-  const rowW = contentWidth(size, 1240 * u, 40 * u);
+  const rowW = contentWidth(size, 1240 * u, 40 * u, ctx.insets);
   const d = 44 * u;
   const padX = 24 * u;
   const textLeft = -rowW / 2 + padX + d + 20 * u;
@@ -91,7 +90,7 @@ export default Object.freeze({
   example: { items: ['Offline renders', 'Same spec, same video', 'Captions in six styles', 'No code to write'] },
   // Centred across, and centred in the band between the safe area top and the caption zone, so the rows fit above
   // captions.
-  place: (size, format) => ({ x: size[0] / 2, y: (safeMargin(size) + captionZone(size, format).top) / 2 }),
+  place: (size, format, _side, insets) => abovePlace(size, format, insets),
   paramOf: (part) => (/^item-(\d+)$/.test(part) ? `items[${Number(part.split('-')[1]) - 1}]` : null),
   expand,
 });

@@ -19,7 +19,7 @@ const params = {
 const EDGE_INSET = 40; // px at 1080 from the safe area to the card's outer edge, in place()
 const CAPTION_GAP = 24; // px at 1080 between the card's bottom (y) and the caption zone's top, in place()
 
-function expand(el, { size, sceneDuration }) {
+function expand(el, { size, sceneDuration, insets }) {
   const u = unit(size);
   const { name, role, side = 'left' } = el.params;
   const id = (part) => `${el.id}/${part}`;
@@ -27,7 +27,7 @@ function expand(el, { size, sceneDuration }) {
   const padX = 32 * u;
   const padY = 24 * u;
   const gap = 8 * u;
-  const maxCard = contentWidth(size, Math.max(900 * u, 0.55 * size[0]), EDGE_INSET * u);
+  const maxCard = contentWidth(size, Math.max(900 * u, 0.55 * size[0]), EDGE_INSET * u, insets);
   const area = maxCard - bar - 2 * padX; // the widest the text may be
   const nameFit = fitText(name, { size: 56 * u, min: 44 * u, maxWidth: area, maxLines: 2 });
   const roleFit = role && fitText(role, { size: MIN_TEXT * u, min: MIN_TEXT * u, maxWidth: area, maxLines: 2 });
@@ -60,11 +60,11 @@ export default Object.freeze({
   },
   example: { name: 'Ada Lovelace', role: 'Head of Research', side: 'left' },
   // Its outer edge 40 px inside the safe area, its bottom 24 px above the caption zone, so captions never cover it.
-  place: (size, format, side = 'left') => {
+  // `insets`: a viral spec's, which narrow the zone to the platform safe zone and lift it.
+  place: (size, format, side = 'left', insets = null) => {
     const u = unit(size);
-    const zone = captionZone(size, format);
-    const inset = zone.left + EDGE_INSET * u;
-    return { x: side === 'right' ? size[0] - inset : inset, y: zone.top - CAPTION_GAP * u };
+    const zone = captionZone(size, format, insets);
+    return { x: side === 'right' ? zone.right - EDGE_INSET * u : zone.left + EDGE_INSET * u, y: zone.top - CAPTION_GAP * u };
   },
   expand,
 });

@@ -28,19 +28,32 @@ export const SAFE_REFERENCE_SIDE = 1080;
 // 1920x1080, 1080x1350 and 1080x1080 all get 60 px and 3840x2160 gets 120.
 export const safeMargin = (size) => (SAFE_MARGIN_PX * Math.min(size[0], size[1])) / SAFE_REFERENCE_SIDE;
 
-// The safe area as a margin on each side. `zone` is a platform's UI bands (viral mode); it is not defined yet, so a
-// caller that passes one is refused rather than silently given the plain margin.
+// Viral mode's platform safe zone: the union of the UI bands Reels, TikTok and Shorts draw over a 1080x1920 frame (px
+// at that size; top 290 is the account bar, bottom 675 the caption, music and buttons, the sides the action rail).
+// Tunable defaults from the platforms' ad-spec margins, not rules: a spec's `viral.safeZone` replaces them.
+export const VIRAL_SAFE_ZONE = Object.freeze({ top: 290, bottom: 675, left: 120, right: 195 });
+export const VIRAL_REFERENCE = Object.freeze([1080, 1920]); // the canvas VIRAL_SAFE_ZONE is measured on
+// Where viral captions start, as a share of the height: above the bottom band (a 9:16 caption zone from 72 % lies
+// inside it), leaving two caption lines of room before the band.
+export const VIRAL_CAPTION_TOP = 0.52;
+
+// The safe area as a margin on each side: the plain margin, or with `zone` (a platform's UI bands in px at 1080x1920,
+// viral mode) each band scaled to the canvas, never less than the plain margin.
 export function safeInsets(size, zone = null) {
-  if (zone !== null) throw new Error('safeInsets: a zone is not supported yet (viral mode defines it)');
   const margin = safeMargin(size);
-  return { top: margin, right: margin, bottom: margin, left: margin };
+  if (zone === null) return { top: margin, right: margin, bottom: margin, left: margin };
+  const [w, h] = size;
+  const [refW, refH] = VIRAL_REFERENCE;
+  const band = (px, side, ref) => Math.max(margin, (px * side) / ref);
+  return { top: band(zone.top, h, refH), right: band(zone.right, w, refW), bottom: band(zone.bottom, h, refH), left: band(zone.left, w, refW) };
 }
 
-// Where captions sit: the safe area's lower part, from `captionTop` of the height down to the bottom margin. `insets`
-// (viral mode's lifted zone) is not defined yet and refused the same way.
+// Where captions sit: the safe area's lower part, from `captionTop` of the height down to the bottom margin. With
+// `insets` (viral mode, from safeInsets with a zone) the zone is lifted above the bottom band: from VIRAL_CAPTION_TOP of
+// the height down to the band, between the side bands.
 export function captionZone(size, format, insets = null) {
-  if (insets !== null) throw new Error('captionZone: insets are not supported yet (viral mode defines them)');
   const [w, h] = size;
+  if (insets !== null) return { left: insets.left, top: Math.round(h * VIRAL_CAPTION_TOP), right: w - insets.right, bottom: h - insets.bottom };
   const safe = safeMargin(size);
   const top = FORMATS[format]?.captionTop ?? DEFAULT_CAPTION_TOP;
   return { left: safe, top: Math.round(h * top), right: w - safe, bottom: h - safe };

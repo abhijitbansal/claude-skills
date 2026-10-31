@@ -16,7 +16,7 @@ export function intakeSection(md) {
 }
 
 // One option per list line: a bold name, then text that must carry a default.
-const OPTIONS = ['format', 'length', 'assets', 'voiceover', 'sound', 'theme', 'CTA'];
+const OPTIONS = ['platform', 'format', 'length', 'assets', 'voiceover', 'sound', 'theme', 'CTA'];
 const VOICEOVER_DISCLOSURE = 'a one-time install of about 250 MB plus a 90 MB voice model';
 const TRIGGERS = ['`claude -p`', '`codex exec`', '`copilot -p`', 'the eval'];
 export const optionLine = (section, name) => section.split('\n').find((l) => l.includes(`**${name}**`));
@@ -53,6 +53,15 @@ test('the intake format option lists the four format names, with 16:9 the defaul
   for (const name of ['16:9', '9:16', '1:1', '4:5']) assert.ok(line.includes(`\`${name}\``), `names ${name}`);
   assert.match(line, /`16:9` \(default\)/);
   assert.ok(!/\d{3,4}x\d{3,4}/.test(line), 'no 1920x1080-style sizes: the preset names replace them');
+});
+
+test('the intake platform option names Reels, TikTok and Shorts and points at viral mode', () => {
+  const md = read('SKILL.md');
+  const line = optionLine(intakeSection(md), 'platform');
+  for (const name of ['Reels', 'TikTok', 'Shorts']) assert.ok(line.includes(name), `names ${name}`);
+  assert.ok(line.includes('"mode": "viral"'), 'says which field it sets');
+  assert.ok(md.includes('\n## Viral mode\n'), 'the section it points at exists');
+  assert.match(intakeSection(md), /platform <name or none>/, 'the fallback line reports it');
 });
 
 test('the intake lists only options make-motion can do today', () => {

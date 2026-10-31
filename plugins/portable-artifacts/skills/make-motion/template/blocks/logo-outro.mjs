@@ -1,5 +1,5 @@
 // logo-outro: the logo image settling into place, then an optional tagline under it; a closing card.
-import { unit, contentWidth, fitText, squeeze, slot, textPart, enter, blockGroup, stack, freeBand, roomAt, MIN_TEXT } from './layout.mjs';
+import { unit, contentWidth, fitText, squeeze, slot, textPart, enter, blockGroup, stack, freeBand, roomAt, MIN_TEXT, centrePlace } from './layout.mjs';
 
 const params = {
   type: 'object',
@@ -19,7 +19,7 @@ function expand(el, ctx) {
   const u = unit(size);
   const { src, tagline } = el.params;
   const id = (part) => `${el.id}/${part}`;
-  const area = contentWidth(size, Infinity, 40 * u);
+  const area = contentWidth(size, Infinity, 40 * u, ctx.insets);
   const tagFit = tagline && fitText(tagline, { size: 48 * u, min: MIN_TEXT * u, maxWidth: area, maxLines: 2 });
   // The box is as wide as asked, within the safe area, and no taller than the room around y leaves beside the tagline.
   const tall = roomAt(freeBand(ctx), el.y) - (tagFit ? tagFit.height + 40 * u : 0);
@@ -42,7 +42,7 @@ export default Object.freeze({
     width: 'the logo box width in px, 40 to 1600 (at most the safe area); the logo is fitted into a box half as tall',
   },
   example: { src: 'logo.svg', tagline: 'Motion from one JSON file' },
-  place: (size) => ({ x: size[0] / 2, y: size[1] / 2 }),
+  place: (size, format, _side, insets) => centrePlace(size, format, insets),
   assets: ['src'],
   expand,
 });

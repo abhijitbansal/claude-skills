@@ -6,18 +6,24 @@
 //   describe  one line per param, for blocks.mjs show
 //   summary   one line on what the block is for
 //   example   example params
-//   place     (size, format[, side]) -> { x, y }: where the block belongs on that canvas
+//   place     (size, format[, side[, insets]]) -> { x, y }: where the block belongs on that canvas; `insets` are a viral
+//             spec's (viral.mjs viralInsets), which move it inside the platform safe zone and above the lifted captions
 //   assets    (optional) params that name a file next to the spec (checked like an image src, served like one)
+//   hook      (optional) the parts (names without `<blockId>/`) that are on screen from frame 0, with viral.mjs's hook
+//             entrance, when the block opens a viral spec (scene 0): the words a viewer should read first
 //   paramOf   (optional) part -> the param that sets that part's text (`label-2` -> `steps[1]`), for check.mjs hints;
 //             without it a part named like a param (`name`, `title`) points at that param (see paramOfPart)
-//   expand    (el, ctx: { theme, sceneDuration, fps, size, format, captions }) -> group; never throws on params its
-//             schema accepts. `captions` is whether the spec has a captions track (blocks that stack keep above it).
+//   expand    (el, ctx: { theme, sceneDuration, fps, size, format, captions, insets }) -> group; never throws on params
+//             its schema accepts. `captions` is whether the spec has a captions track (blocks that stack keep above it);
+//             `insets` the viral safe zone, null for a spec that is not viral (layout.mjs freeBand and contentWidth).
+// In scene 0 of a viral spec a block's `hook` parts take the hook entrance (viral.mjs hookParts), so frame 0 shows them.
 // The validator compiles `params` with Ajv (Node only); nothing here does.
 // Import cycle: defaults.mjs imports this module, and this module (and layout.mjs) import constants from defaults.mjs.
 // It is safe because each side reads the other's exports only when a function runs, never while its module loads; keep
 // it that way (no top-level use of an imported constant here or in layout.mjs).
 import { canvasSize } from '../formats.mjs';
 import { MOTION_THEME, DEFAULT_FPS } from '../defaults.mjs';
+import { isViral, viralInsets, hookParts } from '../viral.mjs';
 import titleCard from './title-card.mjs';
 import lowerThird from './lower-third.mjs';
 import kpiCounter from './kpi-counter.mjs';
@@ -53,12 +59,19 @@ export function expandBlocks(spec) {
   const out = structuredClone(spec);
   if (!Array.isArray(out?.scenes)) return out;
   const captions = Array.isArray(out.captions) && out.captions.length > 0;
-  const base = { theme: out.theme ?? MOTION_THEME, fps: out.fps ?? DEFAULT_FPS, size: canvasSize(out), format: out.format, captions };
-  for (const scene of out.scenes) {
-    if (!Array.isArray(scene?.elements)) continue;
+  const size = canvasSize(out);
+  const base = { theme: out.theme ?? MOTION_THEME, fps: out.fps ?? DEFAULT_FPS, size, format: out.format, captions, insets: viralInsets(out, size) };
+  out.scenes.forEach((scene, si) => {
+    if (!Array.isArray(scene?.elements)) return;
     const ctx = { ...base, sceneDuration: scene.duration };
-    scene.elements = scene.elements.map((el) => (isBlock(el) && blockDef(el.block) && el.params && typeof el.params === 'object' ? blockDef(el.block).expand(el, ctx) : el));
-  }
+    const hook = isViral(out) && si === 0;
+    scene.elements = scene.elements.map((el) => {
+      if (!(isBlock(el) && blockDef(el.block) && el.params && typeof el.params === 'object')) return el;
+      const def = blockDef(el.block);
+      const group = def.expand(el, ctx);
+      return hook ? hookParts(group, def.hook, scene.duration, base.fps) : group;
+    });
+  });
   return out;
 }
 

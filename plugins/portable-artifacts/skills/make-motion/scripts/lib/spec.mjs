@@ -9,13 +9,14 @@ import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { resolveAsset } from './paths.mjs';
 import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, KENNEY_NAMES, KENNEY_PREFIX, PITCHED_CUES, MAX_CUES, NOTE_PATTERN, trackStart, typingFollow } from '../../template/audio.mjs';
 import { flattenElements, isGroup, MAX_GROUP_DEPTH, MAX_GROUP_CHILDREN } from '../../template/groups.mjs';
-import { FORMATS, FORMAT_NAMES } from '../../template/formats.mjs';
+import { FORMATS, FORMAT_NAMES, VIRAL_REFERENCE, VIRAL_CAPTION_TOP } from '../../template/formats.mjs';
 import { CAPTION_STYLES, CAPTION_EXTENSIONS, MAX_CAPTION_TRACKS, CaptionError, parseCaptions, trackGroups } from '../../template/captions.mjs';
 import { VIDEO_EXTENSIONS, isVideo, probeVideo } from './video.mjs';
 import { findFfprobe } from './ffmpeg.mjs';
 import { doctorCommand } from './doctor-hint.mjs';
 
 import { BLOCKS, BLOCK_NAMES, isBlock, blockDef } from '../../template/blocks/index.mjs';
+import { VIRAL_MODE } from '../../template/viral.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
@@ -167,6 +168,24 @@ const captionTrack = {
     at: seconds,
   },
 };
+// Viral mode (template/viral.mjs): the platform safe zone in px at 1080x1920, and whether the clip should loop.
+const MAX_ZONE_PX = 800;
+const zonePx = { type: 'integer', minimum: 0, maximum: MAX_ZONE_PX };
+const viral = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    safeZone: { type: 'object', additionalProperties: false, required: ['top', 'bottom', 'left', 'right'], properties: { top: zonePx, bottom: zonePx, left: zonePx, right: zonePx } },
+    loop: { type: 'boolean' },
+  },
+};
+// A loudness target for the mix: render.mjs reports the measured level against it.
+const loudness = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['integrated', 'truePeak'],
+  properties: { integrated: { type: 'number', minimum: -30, maximum: -5 }, truePeak: { type: 'number', minimum: -3, maximum: 0 } },
+};
 export const SCHEMA = {
   definitions: { element },
   type: 'object',
@@ -187,6 +206,9 @@ export const SCHEMA = {
     transition,
     texture,
     generatedBy: GENERATED_BY_SCHEMA,
+    mode: { enum: [VIRAL_MODE] },
+    viral,
+    loudness,
     scenes: {
       type: 'array', minItems: 1, maxItems: 50,
       items: {
@@ -696,6 +718,35 @@ function atBlocks(written, errors) {
   });
 }
 
+// What a `viral.safeZone` must leave free, in px at 1080x1920: room across for text and captions, room above the
+// lifted caption zone (it starts at VIRAL_CAPTION_TOP of the height) for the content, and room in it for two lines.
+const MIN_SAFE_WIDTH = 360;
+const MIN_CONTENT_HEIGHT = 240;
+const MIN_CAPTION_HEIGHT = 160;
+
+// `viral` settings mean nothing without viral mode, so they are refused rather than silently ignored; a safe zone whose
+// bands overlap (or crowd out the content or the captions) would lay everything out in an inverted box.
+function checkViral(written, errors) {
+  if (written.viral !== undefined && written.mode !== VIRAL_MODE) {
+    errors.push({ path: 'viral', message: `needs "mode": "${VIRAL_MODE}"` });
+    return;
+  }
+  const zone = written.viral?.safeZone;
+  if (!zone) return;
+  const [w, h] = VIRAL_REFERENCE;
+  const captionTop = Math.round(h * VIRAL_CAPTION_TOP);
+  const at = 'viral.safeZone';
+  if (zone.left + zone.right > w - MIN_SAFE_WIDTH) {
+    errors.push({ path: at, message: `left ${zone.left} + right ${zone.right} leave ${Math.max(0, w - zone.left - zone.right)} px of the ${w} px width; keep left + right at most ${w - MIN_SAFE_WIDTH}` });
+  }
+  if (zone.top > captionTop - MIN_CONTENT_HEIGHT) {
+    errors.push({ path: `${at}.top`, message: `${zone.top} leaves ${Math.max(0, captionTop - zone.top)} px above the captions (they start at y ${captionTop}); keep top at most ${captionTop - MIN_CONTENT_HEIGHT}` });
+  }
+  if (h - zone.bottom - captionTop < MIN_CAPTION_HEIGHT) {
+    errors.push({ path: `${at}.bottom`, message: `${zone.bottom} leaves the captions ${Math.max(0, h - zone.bottom - captionTop)} px (y ${captionTop} to ${h - zone.bottom}); keep bottom at most ${h - captionTop - MIN_CAPTION_HEIGHT}` });
+  }
+}
+
 export function validateSpec(written, { dir = process.cwd() } = {}) {
   if (!schemaCheck(written)) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
   const blockErrors = [];
@@ -703,6 +754,7 @@ export function validateSpec(written, { dir = process.cwd() } = {}) {
   if (blockErrors.length) return { ok: false, errors: blockErrors };
   const spec = expandSpec(written); // pipeline steps 1-3 (template/defaults.mjs); the checks below see plain elements
   const errors = [];
+  checkViral(written, errors);
   checkIds(spec, errors);
   checkFormat(spec, errors);
   checkTheme(spec, errors);

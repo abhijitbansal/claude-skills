@@ -1,5 +1,5 @@
 // title-card: an optional kicker, a big title, an accent rule and an optional subtitle, centred on the block.
-import { unit, contentWidth, fitText, squeeze, slot, textPart, linePart, enter, drawIn, blockGroup, stack, freeBand, roomAt, LINE_HEIGHT, MIN_TEXT } from './layout.mjs';
+import { unit, contentWidth, fitText, squeeze, slot, textPart, linePart, enter, drawIn, blockGroup, stack, freeBand, roomAt, LINE_HEIGHT, MIN_TEXT, centrePlace } from './layout.mjs';
 
 const params = {
   type: 'object',
@@ -36,7 +36,7 @@ function rowsFor(el, u, width, [titleSize, subSize]) {
 function expand(el, ctx) {
   const { size, sceneDuration } = ctx;
   const u = unit(size);
-  const width = contentWidth(size, 1560 * u, 48 * u);
+  const width = contentWidth(size, 1560 * u, 48 * u, ctx.insets);
   const room = roomAt(freeBand(ctx), el.y);
   const height = (rows) => rows.reduce((a, r, i) => a + r.h + (i < rows.length - 1 ? r.gap : 0), 0);
   let rows;
@@ -63,6 +63,7 @@ export default Object.freeze({
     kicker: 'a short label above the title, in the accent colour',
   },
   example: { kicker: 'Q3 2026', title: 'Revenue up 18%', subtitle: 'Three products, one quarter, no new hires' },
-  place: (size) => ({ x: size[0] / 2, y: size[1] / 2 }),
+  place: (size, format, _side, insets) => centrePlace(size, format, insets),
+  hook: ['title'],
   expand,
 });

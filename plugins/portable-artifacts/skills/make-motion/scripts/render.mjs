@@ -209,15 +209,23 @@ async function renderVideo(page, p, state) {
   renameSync(state.partial, p.out);
   state.partial = null;
   process.stdout.write(`${p.out}\n${p.frames} frames @ ${p.fps} fps, ${p.size.join('x')}\n`);
-  if (p.audio.length) reportLoudness(p.ffmpeg, p.out);
+  if (p.audio.length) reportLoudness(p.ffmpeg, p.out, p.spec.loudness);
 }
 
-// One line after any render with audio: how loud the mix came out. Information only; it never fails a render.
-function reportLoudness(ffmpeg, file) {
+// The mix is on a `loudness` target when its integrated loudness is within this many LU of it and its true peak is at
+// or below the target's.
+const LOUDNESS_TOLERANCE_LU = 1;
+
+// One line after any render with audio: how loud the mix came out; with a `loudness` target (viral mode sets one), a
+// second line measures it against the target. Information only; it never fails a render.
+function reportLoudness(ffmpeg, file, target) {
   const level = measureLoudness(ffmpeg, file);
   if (!level) return process.stderr.write('audio: loudness could not be measured\n');
   const db = (n, unit) => (Number.isFinite(n) ? `${n.toFixed(1)} ${unit}` : `silent (${unit})`);
-  return process.stdout.write(`audio: ${db(level.lufs, 'LUFS')} integrated, true peak ${db(level.truePeak, 'dBTP')}\n`);
+  process.stdout.write(`audio: ${db(level.lufs, 'LUFS')} integrated, true peak ${db(level.truePeak, 'dBTP')}\n`);
+  if (!target) return true;
+  const on = Math.abs(level.lufs - target.integrated) <= LOUDNESS_TOLERANCE_LU && level.truePeak <= target.truePeak; // silence (-Infinity) is off
+  return process.stdout.write(`loudness: target ${target.integrated} LUFS / ${target.truePeak} dBTP; measured ${db(level.lufs, 'LUFS')} / ${db(level.truePeak, 'dBTP')} (${on ? 'on' : 'off'} target)\n`);
 }
 
 async function cleanup(state) {

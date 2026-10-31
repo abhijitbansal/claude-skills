@@ -1,6 +1,5 @@
 // step-flow: 2 to 6 numbered steps in boxes joined by arrows, as a row or a column, each box then its arrow in turn.
-import { captionZone, safeMargin } from '../formats.mjs';
-import { unit, contentWidth, fitText, lineCount, longestWordWidth, squeeze, slot, textPart, rectPart, linePart, enter, drawIn, blockGroup, freeBand, roomAt, LINE_HEIGHT, MIN_TEXT } from './layout.mjs';
+import { unit, contentWidth, fitText, lineCount, longestWordWidth, squeeze, slot, textPart, rectPart, linePart, enter, drawIn, blockGroup, freeBand, roomAt, LINE_HEIGHT, MIN_TEXT, abovePlace } from './layout.mjs';
 
 const params = {
   type: 'object',
@@ -23,10 +22,10 @@ function labelFit(steps, sizes, u, labelWidth, maxLines) {
   return { fontSize, height: Math.max(...steps.map((s) => lineCount(s, fontSize, labelWidth))) * fontSize * LINE_HEIGHT.sans };
 }
 
-function rowLayout(steps, size, u) {
+function rowLayout(steps, size, u, insets) {
   const n = steps.length;
   const gap = 56 * u;
-  const box = Math.min(360 * u, (contentWidth(size, 1720 * u, 40 * u) - (n - 1) * gap) / n);
+  const box = Math.min(360 * u, (contentWidth(size, 1720 * u, 40 * u, insets) - (n - 1) * gap) / n);
   const labelWidth = box - 2 * ROW_PAD * u;
   // A row works only if every word of every label fits its box at the smallest size.
   const fits = steps.every((s) => longestWordWidth(s, MIN_TEXT * u) <= labelWidth);
@@ -37,9 +36,9 @@ function rowLayout(steps, size, u) {
 }
 
 // The column: the largest label size and roomiest spacing whose stack fits `room` tall (else the tightest of all).
-function columnLayout(steps, size, u, room, numH) {
+function columnLayout(steps, size, u, room, numH, insets) {
   const n = steps.length;
-  const box = contentWidth(size, 760 * u, 40 * u);
+  const box = contentWidth(size, 760 * u, 40 * u, insets);
   const labelWidth = box - 96 * u;
   let layout;
   for (const fontSize of LABEL_SIZES) {
@@ -65,9 +64,9 @@ function expand(el, ctx) {
   const numSize = Math.round(MIN_TEXT * u);
   const numH = numSize * LINE_HEIGHT.sans;
   const wantRow = (el.params.direction ?? (size[0] >= size[1] ? 'row' : 'column')) === 'row';
-  const row = wantRow ? rowLayout(steps, size, u) : null;
+  const row = wantRow ? rowLayout(steps, size, u, ctx.insets) : null;
   const isRow = row?.fits === true;
-  const layout = isRow ? { ...row, boxH: 16 * u + numH + 6 * u + row.label.height + 20 * u } : columnLayout(steps, size, u, roomAt(freeBand(ctx), el.y), numH);
+  const layout = isRow ? { ...row, boxH: 16 * u + numH + 6 * u + row.label.height + 20 * u } : columnLayout(steps, size, u, roomAt(freeBand(ctx), el.y), numH, ctx.insets);
   const { boxH } = layout;
   // Box i, then arrow i, each STAGGER after the one before.
   const at = squeeze(sceneDuration, slot(2 * n - 2)[1]);
@@ -104,7 +103,7 @@ export default Object.freeze({
   example: { steps: ['Write the spec', 'Validate', 'Preview', 'Render'] },
   // Centred across, and centred in the band between the safe area top and the caption zone, so a column fits above
   // captions.
-  place: (size, format) => ({ x: size[0] / 2, y: (safeMargin(size) + captionZone(size, format).top) / 2 }),
+  place: (size, format, _side, insets) => abovePlace(size, format, insets),
   paramOf: (part) => (/^label-(\d+)$/.test(part) ? `steps[${Number(part.split('-')[1]) - 1}]` : null),
   expand,
 });
