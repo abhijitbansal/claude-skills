@@ -19,6 +19,11 @@ body { font-family: var(--sans); color: var(--text); }
 body.preview #viewport { bottom: 108px; }
 #stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; }
 .scene { position: absolute; inset: 0; display: none; }
+/* A scene with a `camera` holds its elements in a .camera node the size of the layer, posed about the canvas centre by
+   renderer.mjs. The layer clips what the zoom pushes out and keeps the background (a colour or the art plate), so zooming
+   out, panning, rolling or shaking never shows a gap. No will-change here: render mode must not get compositor layers (see body.live-layers). */
+.scene.has-camera { overflow: hidden; }
+.camera { position: absolute; inset: 0; transform-origin: 50% 50%; }
 .el { position: absolute; left: 0; top: 0; }
 /* Compositor layers only where playback is live: renderer.mjs sets body.live-layers only for an explicit preview page,
    so a missing or unknown mode paints like render mode. In render mode (render.mjs and check.mjs seek, then screenshot)

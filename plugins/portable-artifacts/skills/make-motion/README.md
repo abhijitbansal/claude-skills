@@ -37,6 +37,9 @@ shell commands.
   stays fully visible beneath) over 0.4 s; `push`, `slide`, `wipe`, `zoom`, `blur` and `iris` move, clip,
   scale or blur it in, and `{ "type": "push", "direction": "up", "duration": 0.6 }` picks the edge and the
   length; a root `transition` sets the default.
+- **Scene camera**: a scene's `camera` keyframes `zoom` (0.5–3), a pan (`x`, `y` px) and a roll (`rotate`) of
+  every element in the scene about the canvas centre, and `shake` (`amount` px, `hz`, `seed`) adds a seeded
+  handheld jitter; the same spec always shakes the same way. The background, captions, grain and the vignette stay put.
 - **Captions**: a `captions` track from an SRT, VTT or Whisper JSON file, or the voiceover's
   sentence timings, shown two to six words at a time in the caption zone in one of six styles
   (`plain`, `pill`, `karaoke`, `kinetic`, `boxed`, `typewriter`); `check.mjs` keeps other text out

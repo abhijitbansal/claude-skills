@@ -6,6 +6,11 @@
 // last frame (a title whose `exit` preset was applied left on purpose and counts as present); a number-plus-unit token
 // ("1,204 ms", "87%") drawn across more than one line, reported once per token per scene. A box wholly off the canvas
 // has left the frame: it is never clipped, overlaps nothing, and is not on screen.
+// A scene `camera` is part of every box and font size (the page is read after it). A camera tween counts as every element
+// of the scene moving for the safe-area, overlap and caption-zone rules, exactly as an element's own tween does (judged
+// where it settles and at the last frame; spansOf, isHeld); two equal keyframes are a hold, not a move. A shake has no
+// keyframes and does not count as moving, so its elements are judged where the shake puts them. The dead-stretch audit
+// reads the camera node's transform at every step (sampleSteps), so only a camera that really changes counts as change.
 // A `group` is not judged itself; each of its children is, at its nested path (scenes[0].elements[2].children[1]), and a
 // child counts as moving while any group around it moves.
 // A warning (never a failure; exit stays 0) when the first scene shows nothing at t = 0: stderr, or `warnings` in --json.
@@ -48,6 +53,7 @@ import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
 import { isViral } from '../template/viral.mjs';
 import { TRANSITIONS, comesInOver, normalizeTransition } from '../template/transitions.mjs';
+import { cameraTweens } from '../template/camera.mjs';
 import { specWarnings, hookWarnings, stillWarnings, gapWarnings, loopWarnings, frameDifference } from './lib/viral-checks.mjs';
 import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
 import { specHasVideo, prepareVideo } from './lib/video.mjs';
@@ -79,20 +85,29 @@ const skipHint = () => `ask the user, then run: ${doctorCommand('--for', 'check'
 // pair only when both are in a POSE hold, so a cross-fade swap in one spot is not a finding but an overlap held before
 // an exit fade is. sheetTimes samples every landing + 0.1 s, so every element gets a held moment after each move; the
 // scene's last frame is always judged (the fallback for a continuous drift that never holds).
-const isHeld = (spans, t, n, samples) => n === samples.length - 1 || !inTween(spans, t); // tweenSpans and inTween: lib/audits.mjs
+// A scene camera move (`spans.camera`: a property that changes value, not two equal keyframes) is a move of everything and is
+// exempt while it runs exactly as an element's own move is: where it starts is not judged, where it settles is.
+const isHeld = ({ own, camera }, t, n, samples) => n === samples.length - 1 || (!inTween(own, t) && !inTween(camera, t)); // tweenSpans and inTween: lib/audits.mjs
 
 // What the rules judge in a scene, as the page draws it: every element that is not a group, at any depth, in document
-// order, each as { el, path, chain }. `path` is where it sits in the spec; `chain` is the groups around it, outermost
-// first, then the element itself, because a child's keyframes are not the only thing that moves it. `hold`: the element
-// or a group around it says "hold": true (it may sit still).
+// order, each as { el, path, chain, camera }. `path` is where it sits in the spec; `chain` is the groups around it, outermost
+// first, then the element itself, because a child's keyframes are not the only thing that moves it. `camera`: the scene's
+// camera, or null: the camera moves everything in the scene, so a move of it (cameraTweens) is a move of every item
+// (spansOf). A shake has no keyframes, so it is never "moving" here: the rules judge an element
+// under a shake where it is at each sampled moment. `hold`: the element or a group around it says "hold": true (it may
+// sit still).
 export function sceneItems(scene, index) {
   const chain = [];
+  const camera = scene.camera ?? null;
   return flattenElements(scene.elements, `scenes[${index}]`).flatMap(({ el, path: where, depth }) => {
     chain.length = depth;
     chain.push(el);
-    return isGroup(el) ? [] : [{ el, path: where, chain: [...chain], hold: chain.some((c) => c.hold === true) }];
+    return isGroup(el) ? [] : [{ el, path: where, chain: [...chain], camera, hold: chain.some((c) => c.hold === true) }];
   });
 }
+
+// The tween spans of `props` that move an item: { own: its own and its groups', camera: the scene camera's }.
+const spansOf = ({ chain, camera }, props) => ({ own: tweenSpans(chain, props), camera: cameraTweens(camera, props) });
 
 // Runs in the page: seek to `sec`, then each element of scene layer `index` (a group's children included, the groups
 // themselves not) as {id, opacity, ownOpacity, box, undrawn, sig, fontSize, weight, color, alpha} in canvas pixels.
@@ -159,6 +174,9 @@ const measureCaptions = async (sec) => {
   });
 };
 
+// Runs in the page, after a seek: the transform of scene layer `index`'s camera node ('' when it has none).
+const measureCamera = (index) => document.getElementById('stage').querySelectorAll(':scope > .scene')[index].querySelector(':scope > .camera')?.style.transform ?? '';
+
 // `measure` at video second `sec` for scene layer `index`; `placed`: where the layer is drawn, transition and all.
 const measureAt = (page, sec, index, placed = false) => page.evaluate(measure, [sec, index, [...CHECKED_TYPES], placed]);
 
@@ -169,9 +187,10 @@ const isShown = (m, size) => isVisible(m) && onCanvas(m, size) && !m.undrawn; //
 
 function safeAreaProblems(items, samples, insets, size) {
   const problems = [];
-  items.forEach(({ el, path: where, chain }, j) => {
+  items.forEach((item, j) => {
+    const { el, path: where } = item;
     if (!CHECKED.has(el.type)) return;
-    const spans = tweenSpans(chain, GEOMETRY);
+    const spans = spansOf(item, GEOMETRY);
     for (const [n, { t, els }] of samples.entries()) {
       const { box } = els[j];
       if (!isShown(els[j], size) || !isHeld(spans, t, n, samples)) continue;
@@ -192,9 +211,10 @@ function bandWarnings(items, samples, insets, zone, size) {
   const plain = inner(safeInsets(size));
   const platform = inner(insets);
   const warnings = [];
-  items.forEach(({ el, path: where, chain }, j) => {
+  items.forEach((item, j) => {
+    const { el, path: where } = item;
     if (!CHECKED.has(el.type)) return;
-    const spans = tweenSpans(chain, GEOMETRY);
+    const spans = spansOf(item, GEOMETRY);
     const hit = samples.find(({ t, els }, n) => isShown(els[j], size) && isHeld(spans, t, n, samples)
       && !edgesOutside(els[j].box, plain).length && edgesOutside(els[j].box, platform).length);
     if (!hit) return;
@@ -232,9 +252,10 @@ const intersects = (box, rect) => Math.min(box.right, rect.right) - Math.max(box
 function captionZoneProblems(items, samples, extra, zone, size) {
   const problems = [];
   const moments = [...samples.map((m, n) => ({ ...m, last: n === samples.length - 1 })), ...extra.map((m) => ({ ...m, last: false }))].sort((a, b) => a.t - b.t);
-  items.forEach(({ el, path: where, chain }, j) => {
+  items.forEach((item, j) => {
+    const { el, path: where } = item;
     if (!CHECKED.has(el.type)) return;
-    const spans = tweenSpans(chain, GEOMETRY);
+    const spans = spansOf(item, GEOMETRY);
     const held = ({ t, last }) => last || isHeld(spans, t, -1, samples);
     const hit = moments.find((m) => m.captions.some((c) => c.shown) && isShown(m.els[j], size) && held(m) && intersects(m.els[j].box, zone));
     if (hit) problems.push({ path: where, message: `${el.type} "${el.id}" sits in the caption zone (y >= ${zone.top}) at ${at(hit.t)}; move it above y ${zone.top} or end the captions before it` });
@@ -263,7 +284,7 @@ const overlaps = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left)
 
 function overlapProblems(items, samples, size) {
   const problems = [];
-  const texts = items.map((item, j) => ({ ...item, j, spans: tweenSpans(item.chain, POSE) })).filter(({ el }) => CHECKED.has(el.type));
+  const texts = items.map((item, j) => ({ ...item, j, spans: spansOf(item, POSE) })).filter(({ el }) => CHECKED.has(el.type));
   for (const [b, second] of texts.entries()) {
     for (const first of texts.slice(0, b)) {
       const hit = samples.find(({ t, els }, n) => isHeld(first.spans, t, n, samples) && isHeld(second.spans, t, n, samples)
@@ -364,14 +385,17 @@ async function sampleScene(page, scene, items, index, start, times, withCaptions
 // element carries `shown`, `hold` (it, or a group around it, says "hold": true) and `held` (its size is not being tweened,
 // so the text floor judges it); `captions` is a string that changes when the words on screen do.
 export async function sampleSteps(page, items, index, scene, start, withCaptions, size, windows = []) {
-  const sizeSpans = items.map(({ chain }) => tweenSpans(chain, ['scale']));
+  const sizeSpans = items.map(({ chain }) => tweenSpans(chain, ['scale'])); // measure reads the size as drawn, camera zoom included
   const steps = [];
   for (const local of auditTimes(scene.duration)) {
     const measured = await measureAt(page, start + local, index);
     const els = measured.map((m, j) => ({ ...m, shown: isShown(m, size), hold: items[j].hold, held: !inTween(sizeSpans[j], local) }));
     const layers = withCaptions ? await page.evaluate(measureCaptions, null) : [];
     const moving = windowAt(windows, start + local) ? String(local) : undefined; // a transition window is change
-    steps.push({ t: start + local, scene: index, local, els, moving, captions: layers.map((c) => `${c.shown}:${c.text}`).join('\u0001') });
+    // What the camera node is drawn with, so a pan or a shake is change even over a scene that shows no element (an art plate
+    // alone), and a camera held with two equal keyframes is not.
+    const camera = scene.camera ? await page.evaluate(measureCamera, index) : undefined;
+    steps.push({ t: start + local, scene: index, local, els, moving, camera, captions: layers.map((c) => `${c.shown}:${c.text}`).join('\u0001') });
   }
   return steps;
 }

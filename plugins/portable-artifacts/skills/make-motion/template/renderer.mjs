@@ -3,6 +3,7 @@
 import { buildTimeline, seekTo } from './timeline.mjs';
 import { withDefaults, resolveColor, graphemes, typingLength, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE } from './defaults.mjs';
 import { layerStyles, layerUnder } from './transitions.mjs';
+import { cameraTransform } from './camera.mjs';
 import { resolveAudio } from './audio.mjs';
 import { flattenElements, isGroup } from './groups.mjs';
 import { loadCaptionTracks, captionLayer, applyCaption, captionSample, captionFontSize, captionMoments, CAPTION_WEIGHT } from './caption-layer.mjs';
@@ -398,9 +399,19 @@ async function buildStage(spec, look, frames, captions) {
       layer.append(art.holder);
       pending.push(art.loaded);
     } else if (scene.background) layer.style.background = scene.background;
-    mountElements(layer, scene.elements, `scenes[${si}].elements`, { look, frames }, parts, pending);
+    // With a camera the elements live in a .camera node inside the layer: the layer keeps the background (a colour or the
+    // art plate: both are backdrop, so a pan, a roll, a shake or a zoom out never uncovers the stage) and the transition
+    // styles, the camera node the zoom, pan and roll.
+    const camera = scene.camera ? document.createElement('div') : null;
+    if (camera) {
+      camera.className = 'camera';
+      layer.classList.add('has-camera');
+      layer.append(camera);
+    }
+    const host = camera ?? layer;
+    mountElements(host, scene.elements, `scenes[${si}].elements`, { look, frames }, parts, pending);
     stage.append(layer);
-    const entry = { scene, layer, grain: null };
+    const entry = { scene, layer, camera, grain: null };
     if (grain > 0) pending.push(grainLayer(scene, spec.size, grain).then((img) => { entry.grain = img; }));
     scenes.push(entry);
   }
@@ -494,12 +505,13 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
     // under 1) is painted over that base. A crossfade keeps its transparent layers (the old scene is meant to show
     // through, and its bytes never changed).
     const opaque = open !== undefined && open.type !== 'crossfade';
-    scenes.forEach(({ scene, layer, grain }, i) => {
+    scenes.forEach(({ scene, layer, camera, grain }, i) => {
       const role = i === active ? 'incoming' : i === outgoing ? 'outgoing' : null;
       const look = (role && styles?.[role]) || NO_LAYER_STYLES;
       layer.style.display = role ? 'block' : 'none';
       const own = scene.background && scene.background !== 'art' ? scene.background : ''; // an art plate fills its layer
       layer.style.background = opaque && role && scene.background !== 'art' ? (own ? paintOver(own, base) : base) : own;
+      if (camera) camera.style.transform = cameraTransform(states.get(`camera:${scene.id}`), scene.camera.shake, Math.min(Math.max(0, sec - sceneStarts[i]), scene.duration));
       layer.style.opacity = String(look.opacity ?? states.get(`scene:${scene.id}`).opacity);
       layer.style.transform = look.transform ?? '';
       layer.style.clipPath = look.clipPath ?? '';

@@ -27,7 +27,10 @@ const PNG_HEIGHT_OFFSET = 20;
 // forced in. `fps` caps every time at the scene's last frame, duration - 1/fps.
 export function sheetTimes(scene, fps = DEFAULT_FPS) {
   const last = Math.max(0, scene.duration - 1 / fps);
-  const keyframes = flattenElements(scene.elements).flatMap(({ el }) => (el.keyframes ?? []).map((kf) => kf.t + KEYFRAME_LAG)); // a group's keyframes move its children
+  const keyframes = [
+    ...flattenElements(scene.elements).flatMap(({ el }) => (el.keyframes ?? []).map((kf) => kf.t + KEYFRAME_LAG)), // a group's keyframes move its children
+    ...(scene.camera?.keyframes ?? []).map((kf) => kf.t + KEYFRAME_LAG), // so do the camera's
+  ];
   const raw = [FIRST_LOOK, ...keyframes, scene.duration * CONTACT_POINT, last]
     .map((t) => Math.min(Math.max(0, t), last))
     .sort((a, b) => a - b);

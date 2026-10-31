@@ -17,6 +17,7 @@ import { doctorCommand } from './doctor-hint.mjs';
 
 import { BLOCKS, BLOCK_NAMES, isBlock, blockDef, blockAssetFiles } from '../../template/blocks/index.mjs';
 import { VIRAL_MODE } from '../../template/viral.mjs';
+import { CAMERA_PROPS, CAMERA_REST, MIN_ZOOM, MAX_ZOOM, MAX_SHAKE_AMOUNT, MAX_SHAKE_HZ, MAX_SHAKE_SEED } from '../../template/camera.mjs';
 import { TRANSITIONS, MIN_TRANSITION_SECONDS, MAX_TRANSITION_SECONDS, directionsOf, comesInOver, normalizeTransition } from '../../template/transitions.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
@@ -135,6 +136,34 @@ const transitionObject = {
   },
 };
 const transition = { if: { type: 'object' }, then: transitionObject, else: { enum: [...TRANSITIONS] } };
+// A scene camera: keyframes of zoom (0.5 to 3), pan x and y (px) and roll (deg), and a seeded shake. The order of the
+// keyframes and their times against the scene are checked by checkCamera.
+const cameraKeyframe = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['t'],
+  properties: {
+    t: { type: 'number', minimum: 0 },
+    ease: { enum: EASES },
+    zoom: { type: 'number', minimum: MIN_ZOOM, maximum: MAX_ZOOM },
+    x: num, y: num, rotate: num,
+  },
+};
+const cameraShake = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['amount'],
+  properties: {
+    amount: { type: 'number', minimum: 0, maximum: MAX_SHAKE_AMOUNT },
+    hz: { type: 'number', exclusiveMinimum: 0, maximum: MAX_SHAKE_HZ },
+    seed: { type: 'integer', minimum: 0, maximum: MAX_SHAKE_SEED },
+  },
+};
+const camera = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { keyframes: { type: 'array', items: cameraKeyframe }, shake: cameraShake },
+};
 export const MAX_GRAIN = 0.15;
 const texture = {
   type: 'object',
@@ -233,6 +262,7 @@ export const SCHEMA = {
           duration: { type: 'number', minimum: 0.2, maximum: 60 },
           background: color,
           transition,
+          camera,
           elements: { type: 'array', items: { $ref: '#/definitions/element' } },
         },
       },
@@ -275,10 +305,25 @@ function checkIds(spec, errors) {
   });
 }
 
+// Keyframe `i` of `keyframes` must not be before the one ahead of it and must land inside the scene (one at the scene's end
+// is allowed). `at`: the path of the array.
+function checkKeyframeTime(keyframes, i, at, sceneDuration, errors) {
+  const kf = keyframes[i];
+  const prev = keyframes[i - 1];
+  const where = pathJoin(pathJoin(at, i), 't');
+  if (prev && kf.t < prev.t) {
+    errors.push({ path: where, message: `${kf.t} is before previous keyframe t=${prev.t}; keyframes must be sorted by t` });
+  }
+  if (kf.t > sceneDuration) {
+    errors.push({ path: where, message: `${kf.t} exceeds scene duration ${sceneDuration}` });
+  }
+}
+
 function checkKeyframes(el, base, sceneDuration, errors) {
   const allowed = el.type === 'text' && el.typing ? [...ANIMATABLE.text, 'value'] : ANIMATABLE[el.type]; // a typing text's `value` is its character count
   const typingHint = el.type === 'text' && !el.typing ? ' (value needs "typing": true)' : '';
-  (el.keyframes ?? []).forEach((kf, i) => {
+  const keyframes = el.keyframes ?? [];
+  keyframes.forEach((kf, i) => {
     const at = pathJoin(pathJoin(base, 'keyframes'), i);
     for (const prop of Object.keys(kf)) {
       if (prop === 't' || prop === 'ease' || allowed.includes(prop)) continue;
@@ -287,17 +332,21 @@ function checkKeyframes(el, base, sceneDuration, errors) {
         message: `not animatable on ${el.type}; animatable: ${allowed.join(', ')}${prop === 'value' ? typingHint : ''}`,
       });
     }
-    const prev = el.keyframes[i - 1];
-    if (prev && kf.t < prev.t) {
-      errors.push({
-        path: pathJoin(at, 't'),
-        message: `${kf.t} is before previous keyframe t=${prev.t}; keyframes must be sorted by t`,
-      });
-    }
-    if (kf.t > sceneDuration) {
-      errors.push({ path: pathJoin(at, 't'), message: `${kf.t} exceeds scene duration ${sceneDuration}` });
-    }
+    checkKeyframeTime(keyframes, i, pathJoin(base, 'keyframes'), sceneDuration, errors);
   });
+}
+
+// A camera needs something to do (a keyframe that sets a property, or a shake with an amount); its keyframes follow the
+// element rules for t.
+function checkCamera(scene, base, errors) {
+  if (scene.camera === undefined) return;
+  const at = pathJoin(base, 'camera');
+  const keyframes = scene.camera.keyframes ?? [];
+  const leavesRest = keyframes.some((kf) => CAMERA_PROPS.some((prop) => kf[prop] !== undefined && kf[prop] !== CAMERA_REST[prop]));
+  if (!leavesRest && !(scene.camera.shake?.amount > 0)) {
+    errors.push({ path: at, message: 'this camera does nothing; give a keyframe that sets zoom, x, y or rotate away from rest (zoom 1, x 0, y 0, rotate 0), or a shake with an amount above 0' });
+  }
+  keyframes.forEach((_, i) => checkKeyframeTime(keyframes, i, pathJoin(at, 'keyframes'), scene.duration, errors));
 }
 
 const CSS_NAMED = new Set(('aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown '
@@ -795,6 +844,7 @@ export function validateSpec(written, { dir = process.cwd() } = {}) {
   spec.scenes.forEach((scene, si) => {
     checkSceneBackground(scene, `scenes[${si}]`, errors);
     checkTransition(scene.transition, `scenes[${si}].transition`, errors, si === 0);
+    checkCamera(scene, `scenes[${si}]`, errors);
     scene.elements.forEach((el, ei) => checkElement(el, `scenes[${si}].elements[${ei}]`, scene, dir, errors, spec.fps));
   });
   const total = spec.scenes.reduce((a, s) => a + s.duration, 0);

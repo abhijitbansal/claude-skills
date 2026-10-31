@@ -6,6 +6,7 @@ import { createTimeline, cubicBezier } from 'animejs';
 import { withDefaults, EASE_CURVES, TYPING_SECONDS_PER_CHAR, typingLength, counterSeconds } from './defaults.mjs';
 import { flattenElements } from './groups.mjs';
 import { normalizeTransition, comesInOver } from './transitions.mjs';
+import { CAMERA_PROPS, CAMERA_REST } from './camera.mjs';
 
 const MS = 1000;
 const MIN_SEGMENT_MS = 1;
@@ -81,6 +82,12 @@ export function buildTimeline(input) {
       // The previous scene is not faded: it stays at full opacity under the incoming one until the window ends, so
       // the stage colour never shows through (two layers fading together would dip towards it).
       if (comesIn) overlaps.push({ from: si - 1, to: si, start, end: start + duration / MS, type: transition.type });
+    }
+
+    if (scene.camera) { // the keyframed pose; the shake is added by the renderer, as a function of the time alone
+      const pose = { ...CAMERA_REST };
+      states.set(`camera:${scene.id}`, pose);
+      for (const prop of CAMERA_PROPS) addTrack(timeline, pose, prop, track(scene.camera.keyframes ?? [], prop), start);
     }
 
     for (const { el } of flattenElements(scene.elements)) { // a group's children are elements of the scene too

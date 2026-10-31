@@ -11,7 +11,8 @@
 //
 // Two sample sets feed them. `samples` are the sheet moments of one scene ({ t, els, back }, `back[j]` the backdrop cells
 // (#rrggbb each) behind text j, taken with the screenshot). `steps` are the AUDIT_STEP grid of the whole video, in order
-// ({ t, scene, local, els, captions }): `t` video seconds, `local` scene seconds. Both carry, per element j of the scene's
+// ({ t, scene, local, els, captions, camera }): `t` video seconds, `local` scene seconds, `camera` the transform the scene's camera
+// node is drawn with (undefined without a camera). Both carry, per element j of the scene's
 // item list, what check.mjs's `measure` read (`opacity`, `ownOpacity` without the scene's fade, `box`, `fontSize` rendered
 // px, `weight`, `color` #rrggbb, `alpha`, `sig` a string that changes when the element looks different) plus `shown`
 // (visible and on the canvas) and, in steps, `hold` (the element or a group around it says "hold": true) and `held` (its
@@ -336,8 +337,9 @@ export function textFloorFindings(items, own, duration, size) {
 // What a step looks like: each shown element's `sig`, '-' for one that is not shown (invisible, off the canvas, undrawn),
 // so an element nobody can see never counts as change, and one that appears does. `moving` is set on a step inside a
 // transition window (check.mjs sampleSteps) and differs from step to step: the window is change all through, even when
-// the layer's own styling (a push, a clip) is not part of what the element's box says.
-const signatureOf = (step) => `${step.els.map((m) => (m.shown ? m.sig : '-')).join('|')}#${step.captions ?? ''}#${step.moving ?? ''}`;
+// the layer's own styling (a push, a clip) is not part of what the element's box says. The camera's transform is part of the signature too, so a pan or shake over a scene with no
+// shown element is change, and a camera held with equal keyframes is not.
+const signatureOf = (step) => `${step.els.map((m) => (m.shown ? m.sig : '-')).join('|')}#${step.captions ?? ''}#${step.moving ?? ''}#${step.camera ?? ''}`;
 
 /**
  * The stretches longer than DEAD_STRETCH_SECONDS in which nothing on screen changes: no element's look (position,

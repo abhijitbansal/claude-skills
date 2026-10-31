@@ -53,6 +53,15 @@ Holds are not checked by `check.mjs`. Count them yourself from the keyframe time
 - **Not on scene 1.** `fade` on the first scene makes frame 0, the video's thumbnail, blank; `crossfade`, `push`, `slide`, `wipe`, `zoom`, `blur` and `iris` there are errors. `check.mjs` warns when scene 1 shows nothing at t = 0.
 - **Keep the outgoing text clear of the incoming text's position** (or end it with an `exit`): during the window (0.4 s unless `duration` is set) both scenes are on screen. In a `crossfade` the old text is fully visible and the new text fades in over it; in `zoom` and `blur` the new scene fades in over the old one; in `wipe`, `slide` and `iris` in the new scene covers the old one from an edge or the centre, and in `iris` out the old scene closes to a circle over the new one; only `push` keeps them apart. Two lines in one spot read as a smear. `check.mjs` warns about it (not for a `push`).
 
+## Camera
+
+- **A slow push-in is the cheapest way to make a still scene feel alive**: `zoom` 1 to 1.05–1.15 over the whole scene with an `inOutQuad` ease. It also keeps `check.mjs` quiet about a dead stretch.
+- **Settle where the text is safe.** `check.mjs` judges text where the camera rests, so end a push at a zoom the text still fits at (a 1.2 zoom throws anything within 12% of the edge out of frame), or finish the move back at 1.
+- **Pan to a place, then stop.** Ease a `x` pan out (`outCubic`) so the camera lands on the card it is showing; pair a small `rotate` with it for a handheld feel and return it to 0.
+- **Shake is for a hit.** `amount` 6–14 px at `hz` 10–14 on the scene where something lands; more than that reads as a fault. A shake runs for the whole scene, so give the hit a short scene of its own. The same `seed` always shakes the same way.
+- **The background stays put.** The camera moves the elements over a still colour or art plate; that is what keeps a pan or a shake from ever showing the edge of the picture.
+- **One camera idea per scene.** A push-in with a pan and a roll at once reads as drift.
+
 ## Texture and typing
 
 - **Texture is a look, not a default.** `texture.vignette` suits a single focal subject (a title, a card) and does nothing for a full-bleed chart; `texture.grain` 0.05–0.10 reads as film, above 0.12 as noise. Both cost render time (see schema.md), so keep them off for long clips unless asked.

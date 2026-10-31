@@ -14,6 +14,7 @@ import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from './formats.mjs';
 import { flattenElements } from './groups.mjs';
 import { MAX_CUES } from './audio.mjs';
 import { windowSeconds } from './transitions.mjs';
+import { cameraSpans } from './camera.mjs';
 import { DEFAULT_FPS, TYPING_SECONDS_PER_CHAR, typingLength, counterSeconds } from './defaults.mjs';
 
 export const VIRAL_MODE = 'viral';
@@ -152,6 +153,8 @@ export function changeGaps(spec, captionTimes = []) {
   let start = 0;
   for (const [si, scene] of spec.scenes.entries()) {
     spans.push([start, start + windowSeconds(scene, si)]); // a transition window is change all through
+    for (const kf of scene.camera?.keyframes ?? []) spans.push([start + kf.t, start + kf.t]); // the camera, as the elements
+    for (const [a, b] of cameraSpans(scene.camera, scene.duration)) spans.push([start + a, start + b]);
     for (const { el } of flattenElements(scene.elements)) {
       for (const kf of el.keyframes ?? []) spans.push([start + kf.t, start + kf.t]);
       for (const [a, b] of continuousSpans(el, scene.duration)) spans.push([start + a, start + b]);
