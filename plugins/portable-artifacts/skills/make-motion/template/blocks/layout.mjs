@@ -5,6 +5,7 @@
 // The estimate is deliberately wide (CHAR_EM), so a text takes at most the lines reserved for it.
 import { safeMargin, captionZone } from '../formats.mjs';
 import { ARROW_HEAD_LENGTH } from '../defaults.mjs';
+import { CODE_LINE_HEIGHT, CODE_ROW_PAD_EM, CODE_TAB_SIZE, MONO_EM } from '../code-theme.mjs';
 
 export const ENTER_SECONDS = 0.6;
 export const STAGGER_SECONDS = 0.2;
@@ -173,3 +174,33 @@ export function stack(heights, gaps) {
     return centre;
   });
 }
+
+// ---- code (code-typing, code-diff, terminal-run) -----------------------------------------------------------------------
+
+// Columns `line` takes in a mono font: one per character, CODE_TAB_SIZE per tab.
+const columnsOf = (line) => Array.from(line).reduce((n, ch) => n + (ch === '\t' ? CODE_TAB_SIZE : 1), 0);
+
+/**
+ * Rows `lines` take in a code element `width` wide at font size `fs`: the page wraps a line at any character (styles.css
+ * .el.code), and each row loses CODE_ROW_PAD_EM at each end; a character is MONO_EM wide (the widest bundled mono font),
+ * so the page never needs more rows than this. An empty line is still a row.
+ */
+export function codeRows(lines, fs, width) {
+  const perRow = Math.max(1, Math.floor((width - 2 * CODE_ROW_PAD_EM * fs) / (MONO_EM * fs)));
+  return lines.reduce((n, line) => n + Math.max(1, Math.ceil(columnsOf(line) / perRow)), 0);
+}
+
+/**
+ * The first of `sizes` (canvas px, largest first), then smaller by FIT_STEP down to MIN_FONT_SIZE, at which `lines` fit
+ * `maxHeight` in a code element `width` wide. -> { fontSize, height }. Below the last of `sizes` the code is under the
+ * text floor, which check.mjs reports: the block keeps its box inside its room rather than run into the captions.
+ */
+export function fitCode(lines, { sizes, width, maxHeight }) {
+  const heightAt = (fs) => codeRows(lines, fs, width) * fs * CODE_LINE_HEIGHT;
+  let fontSize = sizes.find((fs) => heightAt(fs) <= maxHeight) ?? sizes.at(-1);
+  while (fontSize > MIN_FONT_SIZE && heightAt(fontSize) > maxHeight) fontSize = Math.max(MIN_FONT_SIZE, Math.floor(fontSize * FIT_STEP));
+  return { fontSize, height: heightAt(fontSize) };
+}
+
+// A `code` element part; `extra` adds typing, diff or keyframes.
+export const codePart = (id, code, lang, x, y, { width, fontSize, ...extra }) => ({ id, type: 'code', code, lang, x: px(x), y: px(y), width: size0(width), fontSize, ...extra });

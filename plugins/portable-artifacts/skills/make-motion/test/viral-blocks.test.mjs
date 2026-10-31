@@ -307,7 +307,7 @@ test('the same largest params, drawn by the page, keep every part (texts include
 });
 
 test('the registry lists the four new blocks after the original eight, and blocks.mjs show describes their nested params', () => {
-  assert.deepEqual(BLOCK_NAMES.slice(8), NEW_BLOCKS);
+  assert.deepEqual(BLOCK_NAMES.slice(8, 12), NEW_BLOCKS);
   const cli = (...args) => spawnSync(process.execPath, [path.join(root, 'scripts/blocks.mjs'), ...args], { encoding: 'utf8' });
   const show = cli('show', 'before-after-swipe');
   assert.equal(show.status, 0, show.stderr);

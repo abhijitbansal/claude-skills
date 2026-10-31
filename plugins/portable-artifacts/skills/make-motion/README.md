@@ -28,7 +28,7 @@ shell commands.
   lines and ringed points. Shapes and text take **theme colour tokens**
   (`"fill": "surface"`, `"color": "accent"`) that follow the theme, rects can be
   `elevated` cards, and lines can have round caps and an arrow head.
-- **Blocks**: twelve parameterised building blocks (`title-card`, `lower-third`, `kpi-counter`, `step-flow`, `quote-card`, `checklist`, `logo-outro`, `cta-close`, and four for short-form video: `cta-soft`, `story-beats`, `listicle` and `before-after-swipe`), each
+- **Blocks**: fifteen parameterised building blocks (`title-card`, `lower-third`, `kpi-counter`, `step-flow`, `quote-card`, `checklist`, `logo-outro`, `cta-close`, four for short-form video: `cta-soft`, `story-beats`, `listicle` and `before-after-swipe`, and three for code: `code-typing`, `code-diff` and `terminal-run`), each
   written as one `block` element with a few params (`"block": "lower-third", "params": { "name": "Ada" }`) and
   expanded into plain elements laid out for the canvas, coloured with theme tokens. `blocks.mjs list` and
   `blocks.mjs show <name>` print each block's params and an example; `references/blocks/` holds a contact sheet
@@ -132,6 +132,7 @@ builds with the defaults and its report says so.
 | `video` | `src` (an mp4, mov, webm or m4v relative to the spec), `width`, `height`, `fit`, `trimStart`, `trimEnd`, `offset`, `mute`, `volume`; decoded once into a frame cache (`.cache/video`, cleared by `doctor.mjs --fix cache`) so every frame is exact; its sound joins the mix unless muted | `opacity x y scale rotate` |
 | `chart` | `vegaLite` with inline `data.values`, `width`, `height` | + `reveal` (0–1 left-to-right wipe) |
 | `group` | `children` (1–40 elements, up to 3 groups deep), each placed relative to the group's centre | `opacity x y scale rotate`, applied to every child at once |
+| `code` | `code`, `lang` (`text`, `javascript`, `typescript`, `json`, `bash`, `python`, `diff`, `go`, `rust`, `swift`, `yaml`, `html`, `css`, `markdown`), `width`, `height`, `fontSize` (28), `highlight` (line numbers), `diff`, `typing`; highlighted offline with shiki (JavaScript regex engine, no wasm) in the theme's colour tokens, drawn as text, never markup | `opacity x y scale rotate` (+ `value`, the characters typed, with `typing`) |
 | `block` | `block` (one of the eight block names), `params` (that block's own fields); expands into a group of parts named `<id>/<part>`, so validator errors name `params.<field>` | `opacity x y scale rotate`, applied to the whole block |
 
 A scene's `background` is a CSS colour or `"art"`: the theme's seeded art,

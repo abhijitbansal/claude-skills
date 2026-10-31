@@ -10,16 +10,17 @@
 //             spec's (viral.mjs viralInsets), which move it inside the platform safe zone and above the lifted captions
 //   assets    (optional) params that name a file next to the spec (checked like an image src, served like one): each a
 //             key of `params`, or a dotted path to a nested one (`before.src`); see blockAssetFiles
-//   validate  (optional) (params, { sceneDuration }) -> [{ path, message }]: what the schema cannot say, run on params
-//             that passed it; `path` is relative to `params` (`beatSeconds`). A block whose schedule needs a scene of
-//             some length also exports `minDuration(params)` in seconds, which validate reads
+//   validate  (optional) (params, { sceneDuration, fps, durations?, index? }) -> [{ path, message }]: what the schema cannot say, run on
+//             params that passed it; `path` is relative to `params` (`beatSeconds`). A block whose schedule needs a scene
+//             of some length also exports `minDuration(params)` in seconds (at the default fps), which validate reads
 //   hook      (optional) the parts (names without `<blockId>/`) that are on screen from frame 0, with viral.mjs's hook
 //             entrance, when the block opens a viral spec (scene 0): the words a viewer should read first
 //   paramOf   (optional) part -> the param that sets that part's text (`label-2` -> `steps[1]`), for check.mjs hints;
 //             without it a part named like a param (`name`, `title`) points at that param (see paramOfPart)
-//   expand    (el, ctx: { theme, sceneDuration, fps, size, format, captions, insets }) -> group; never throws on params
-//             its schema accepts. `captions` is whether the spec has a captions track (blocks that stack keep above it);
-//             `insets` the viral safe zone, null for a spec that is not viral (layout.mjs freeBand and contentWidth).
+//   expand    (el, ctx: { theme, sceneDuration, fps, size, format, captions, insets, durations, index }) -> group; never
+//             throws on params its schema accepts. `captions` is whether the spec has a captions track (blocks that stack
+//             keep above it); `insets` the viral safe zone, null for a spec that is not viral (layout.mjs freeBand and
+//             contentWidth); `durations` and `index` every scene's length and this one's place (frames.mjs gridOf).
 // In scene 0 of a viral spec a block's `hook` parts take the hook entrance (viral.mjs hookParts), so frame 0 shows them.
 // The validator compiles `params` with Ajv (Node only); nothing here does.
 // Import cycle: defaults.mjs imports this module, and this module (and layout.mjs) import constants from defaults.mjs.
@@ -40,6 +41,9 @@ import ctaSoft from './cta-soft.mjs';
 import storyBeats from './story-beats.mjs';
 import listicle from './listicle.mjs';
 import beforeAfterSwipe from './before-after-swipe.mjs';
+import codeTyping from './code-typing.mjs';
+import codeDiff from './code-diff.mjs';
+import terminalRun from './terminal-run.mjs';
 
 export const BLOCKS = Object.freeze({
   'title-card': titleCard,
@@ -54,6 +58,9 @@ export const BLOCKS = Object.freeze({
   'story-beats': storyBeats,
   listicle,
   'before-after-swipe': beforeAfterSwipe,
+  'code-typing': codeTyping,
+  'code-diff': codeDiff,
+  'terminal-run': terminalRun,
 });
 export const BLOCK_NAMES = Object.freeze(Object.keys(BLOCKS));
 
@@ -86,9 +93,10 @@ export function expandBlocks(spec) {
   const captions = Array.isArray(out.captions) && out.captions.length > 0;
   const size = canvasSize(out);
   const base = { theme: out.theme ?? MOTION_THEME, fps: out.fps ?? DEFAULT_FPS, size, format: out.format, captions, insets: viralInsets(out, size) };
+  const durations = out.scenes.map((scene) => scene?.duration);
   out.scenes.forEach((scene, si) => {
     if (!Array.isArray(scene?.elements)) return;
-    const ctx = { ...base, sceneDuration: scene.duration };
+    const ctx = { ...base, sceneDuration: scene.duration, durations, index: si };
     const hook = isViral(out) && si === 0;
     scene.elements = scene.elements.map((el) => {
       if (!(isBlock(el) && blockDef(el.block) && el.params && typeof el.params === 'object')) return el;

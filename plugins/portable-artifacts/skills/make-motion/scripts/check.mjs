@@ -5,7 +5,8 @@
 // visible text or counter boxes overlapping while neither is moving or fading; a scene with nothing on screen at its
 // last frame (a title whose `exit` preset was applied left on purpose and counts as present); a number-plus-unit token
 // ("1,204 ms", "87%") drawn across more than one line, reported once per token per scene. A box wholly off the canvas
-// has left the frame: it is never clipped, overlaps nothing, and is not on screen.
+// has left the frame: it is never clipped, overlaps nothing, and is not on screen. A `code` element is text to every rule
+// here (CHECKED_TYPES), its contrast judged by its worst token colour.
 // A scene `camera` is part of every box and font size (the page is read after it). A camera tween counts as every element
 // of the scene moving for the safe-area, overlap and caption-zone rules, exactly as an element's own tween does (judged
 // where it settles and at the last frame; spansOf, isHeld); two equal keyframes are a hold, not a move. A shake has no
@@ -110,7 +111,7 @@ export function sceneItems(scene, index) {
 const spansOf = ({ chain, camera }, props) => ({ own: tweenSpans(chain, props), camera: cameraTweens(camera, props) });
 
 // Runs in the page: seek to `sec`, then each element of scene layer `index` (a group's children included, the groups
-// themselves not) as {id, opacity, ownOpacity, box, undrawn, sig, fontSize, weight, color, alpha} in canvas pixels.
+// themselves not) as {id, opacity, ownOpacity, box, undrawn, sig, inks, fontSize, weight, color, alpha} in canvas pixels.
 // A scene is judged where it settles: unless `placed`, the layer's transition styles (the push or zoom that carries it
 // in, a wipe or iris clip, a blur) are lifted first and stay lifted until the next seek, so the boxes, and the
 // screenshot the contrast audit reads, are the scene's own. `placed` keeps them, for the overlap check of a window.
@@ -144,15 +145,17 @@ const measure = async ([sec, index, types, placed]) => {
     // Nothing drawn yet: a chart at reveal 0, a line (or unfilled shape) at draw 0 (a filled shape shows its fill), or a
     // typing text with no characters typed (its caret alone is not content).
     const mark = node.querySelector(':scope > svg > :first-child');
-    const untyped = node.querySelector(':scope > .typed')?.textContent === '';
+    const untyped = node.querySelector(':scope > .typed')?.textContent === '' || node.dataset.typed === '0'; // a typing code element says its count
     const undrawn = untyped || node.dataset.reveal === '0' || (mark !== null && mark.getAttribute('stroke-dashoffset') === '1' && (mark.tagName === 'line' || mark.getAttribute('fill') === 'none'));
     const own = getComputedStyle(node);
     const isText = types.some((type) => node.classList.contains(type));
     const colour = own.color.match(/[\d.]+/g) ?? [];
-    const content = [node.textContent, node.dataset.reveal ?? '', mark?.getAttribute('stroke-dashoffset') ?? '', node.querySelector('img')?.getAttribute('src') ?? ''].join('\u0001');
+    const content = [node.textContent, node.dataset.reveal ?? '', mark?.getAttribute('stroke-dashoffset') ?? '', node.querySelector('img')?.getAttribute('src') ?? '', node.dataset.typed ?? ''].join('\u0001');
     const sig = `${[box.left, box.top, box.right, box.bottom].map((v) => v.toFixed(1)).join(',')}|${opacity.toFixed(2)}|${content}`;
+    // A code element's token colours (template/code-view.mjs marks each coloured span data-ink): the contrast audit judges every one.
+    const inks = isText ? [...new Set([...node.querySelectorAll('[data-ink]')].map((n) => hex(getComputedStyle(n).color)))] : [];
     return {
-      id: node.dataset.id, opacity, ownOpacity, box, undrawn, sig,
+      id: node.dataset.id, opacity, ownOpacity, box, undrawn, sig, inks,
       fontSize: isText ? parseFloat(own.fontSize) * scale : 0, weight: Number(own.fontWeight), color: isText ? hex(own.color) : '#000000', alpha: isText && colour.length > 3 ? Number(colour[3]) : 1,
     };
   });

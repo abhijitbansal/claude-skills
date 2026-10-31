@@ -8,7 +8,8 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { loadSpec, validateSpec, typingErrors, withDefaults, UsageError } from './lib/spec.mjs';
+import { loadSpec, validateSpec, frameRateErrors, withDefaults, UsageError } from './lib/spec.mjs';
+import { frameCount } from '../template/frames.mjs';
 import { printResult, didYouMean } from '../shared/errors.mjs';
 import { listThemes } from '../shared/theme.mjs';
 import { startServer } from './lib/server.mjs';
@@ -117,14 +118,15 @@ async function plan(opts, state) {
   const spec = withDefaults(raw);
   const specPath = path.resolve(opts.spec);
   const fps = opts.fps ?? spec.fps;
-  // --fps replaces the spec's frame rate after validation, and a typing text's last frame depends on it.
-  const slow = opts.fps === undefined ? [] : typingErrors(raw, fps);
+  // --fps replaces the spec's frame rate after validation, and a typing text's or code's last frame depends on it;
+  // so do a block's own schedule (a terminal-run's last line) and a block's typing parts: frameRateErrors names the param.
+  const slow = opts.fps === undefined ? [] : frameRateErrors(raw, fps);
   if (slow.length) {
     printResult({ ok: false, errors: slow }, { label: opts.spec });
     return null;
   }
   const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
-  const frames = Math.round(total * fps);
+  const frames = frameCount(total, fps); // template/frames.mjs: the grid every cut-off check judges against
   if (!opts.contact && frames < 1) throw new UsageError(`spec is too short for ${fps} fps: no frames to render`);
   const name = path.basename(specPath, path.extname(specPath));
   const defaultOut = opts.contact ? path.join(dir, 'out') : path.join(dir, 'out', `${name}.mp4`);

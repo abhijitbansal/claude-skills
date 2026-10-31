@@ -3,7 +3,7 @@
 // The root `captions` tracks are not on it: nothing about them animates, and what a captions layer shows is a pure
 // function of the time (template/captions.mjs captionState, applied by the renderer on every seek).
 import { createTimeline, cubicBezier } from 'animejs';
-import { withDefaults, EASE_CURVES, TYPING_SECONDS_PER_CHAR, typingLength, counterSeconds } from './defaults.mjs';
+import { withDefaults, EASE_CURVES, TYPING_SECONDS_PER_CHAR, typingLength, counterSeconds, isTyping, typedText } from './defaults.mjs';
 import { flattenElements } from './groups.mjs';
 import { normalizeTransition, comesInOver } from './transitions.mjs';
 import { CAMERA_PROPS, CAMERA_REST } from './camera.mjs';
@@ -28,16 +28,16 @@ function counterDefaultTrack(el, sceneDuration) {
   return [{ t: 0, value: el.from ?? 0, ease: 'linear' }, { t: counterSeconds(sceneDuration), value: el.to, ease: 'outCubic' }];
 }
 
-// A `typing` text types its characters from the start of its scene at TYPING_SECONDS_PER_CHAR each.
+// A `typing` text or code types its characters from the start of its scene at TYPING_SECONDS_PER_CHAR each.
 function typingDefaultTrack(el) {
-  const chars = typingLength(el.text);
+  const chars = typingLength(typedText(el));
   return [{ t: 0, value: 0, ease: 'linear' }, { t: chars * TYPING_SECONDS_PER_CHAR, value: chars, ease: 'linear' }];
 }
 
 function elementTrack(el, prop, sceneDuration) {
   const points = track(el.keyframes, prop);
   if (prop === 'value' && el.type === 'counter' && !points.length) return counterDefaultTrack(el, sceneDuration);
-  if (prop === 'value' && el.type === 'text' && el.typing && !points.length) return typingDefaultTrack(el);
+  if (prop === 'value' && isTyping(el) && !points.length) return typingDefaultTrack(el);
   return points;
 }
 

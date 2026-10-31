@@ -38,13 +38,28 @@ const MIME = {
   '.srt': 'application/x-subrip; charset=utf-8', '.vtt': 'text/vtt; charset=utf-8',
 };
 
-const VENDOR_ROOTS = {
+// /vendor/<package>/<file>: each package's folder that the page imports from, and nothing above it. shiki (code elements)
+// is the fine-grained core, the JavaScript regex engine (no wasm) and the CODE_LANGS grammars, with every package those
+// import (template/index.html maps each bare specifier to one of these); its themes, the oniguruma engine and its wasm
+// are not served.
+const VENDOR_ROOTS = Object.freeze(Object.assign(Object.create(null), {
   animejs: path.join(NODE_MODULES, 'animejs/dist/bundles'),
   vega: path.join(NODE_MODULES, 'vega/build'),
   'vega-lite': path.join(NODE_MODULES, 'vega-lite/build'),
   'vega-util': path.join(NODE_MODULES, 'vega-util/build'),
   'vega-interpreter': path.join(NODE_MODULES, 'vega-interpreter/build'),
-};
+  shiki: path.join(NODE_MODULES, 'shiki/dist'),
+  ...Object.fromEntries(['core', 'primitive', 'types', 'vscode-textmate', 'engine-javascript', 'langs'].map((name) => [`@shikijs/${name}`, path.join(NODE_MODULES, '@shikijs', name, 'dist')])),
+  'oniguruma-to-es': path.join(NODE_MODULES, 'oniguruma-to-es/dist/esm'),
+  'oniguruma-parser': path.join(NODE_MODULES, 'oniguruma-parser/dist'),
+  regex: path.join(NODE_MODULES, 'regex/src'),
+  'regex-recursion': path.join(NODE_MODULES, 'regex-recursion/src'),
+  'regex-utilities': path.join(NODE_MODULES, 'regex-utilities/src'),
+  // hast-util-to-html (imported by @shikijs/core) and its dependencies keep their modules at the package root.
+  ...Object.fromEntries(['hast-util-to-html', 'hast-util-whitespace', 'property-information', 'stringify-entities', 'ccount', 'character-entities-html4',
+    'character-entities-legacy', 'comma-separated-tokens', 'html-void-elements', 'space-separated-tokens', 'zwitch'].map((name) => [name, path.join(NODE_MODULES, name)])),
+}));
+const VENDOR_ROUTE = /^\/vendor\/((?:@[^/]+\/)?[^/]+)\/(.*)$/; // a package name, scoped or not, then the file in its folder
 
 // Single byte range from a Range header against a file of `size` bytes; null when absent or malformed.
 function parseRange(header, size) {
@@ -199,6 +214,15 @@ function serveUnder(res, root, rel) {
   return file ? sendFile(res, file) : notFound(res);
 }
 
+// A library's JavaScript only (no package.json, no wasm), locked down like /assets: opened in a tab it does not run, and
+// the page's own imports are unaffected.
+const SCRIPT_FILE = /\.m?js$/;
+function serveVendor(res, root, rel) {
+  lockDown(res);
+  const file = resolveUrlPath(root, rel);
+  return file && SCRIPT_FILE.test(file) ? sendFile(res, file) : notFound(res);
+}
+
 // The shared theme a spec names: its JSON for the colours, a stylesheet for the fonts.
 function serveTheme(res, name, kind) {
   const theme = themeData(name);
@@ -251,8 +275,8 @@ function route(ctx, req, res) {
   if (artRoute) return serveArt(ctx, res, safeDecode(artRoute[1]));
   const themeRoute = /^\/theme\/([^/]+)\.(json|css)$/.exec(pathname);
   if (themeRoute) return serveTheme(res, safeDecode(themeRoute[1]), themeRoute[2]);
-  const vendor = /^\/vendor\/([^/]+)\/(.*)$/.exec(pathname);
-  if (vendor && VENDOR_ROOTS[vendor[1]]) return serveUnder(res, VENDOR_ROOTS[vendor[1]], vendor[2]);
+  const vendor = VENDOR_ROUTE.exec(pathname);
+  if (vendor && Object.hasOwn(VENDOR_ROOTS, vendor[1])) return serveVendor(res, VENDOR_ROOTS[vendor[1]], vendor[2]);
   return notFound(res);
 }
 

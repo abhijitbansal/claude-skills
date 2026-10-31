@@ -21,5 +21,9 @@
   { "id": "item-hold", "prompt": "Make a 10-second clip that is one big title, 'Built for focus', centred and left completely still after it appears. I want nothing else moving on screen." },
   { "id": "item-viral", "prompt": "Make a 12-second Reel about cutting video edits down to the best three seconds, with a strong hook, captions from data/captions.srt and sound." },
   { "id": "item-transition-push", "prompt": "Make a 9-second clip of three title cards: 'Plan', 'Build', 'Ship'. Each new card should push the old one out, coming in from the right edge, taking half a second." },
-  { "id": "item-camera", "prompt": "Make a 6-second clip in two scenes. Scene one, 4 seconds: a big title, 'Zoom in on it', centred, with the camera slowly pushing in on it, about 20% closer by the end. Scene two, 2 seconds: the word 'Boom' centred, with the whole picture shaking a little as if something heavy landed." }
+  { "id": "item-camera", "prompt": "Make a 6-second clip in two scenes. Scene one, 4 seconds: a big title, 'Zoom in on it', centred, with the camera slowly pushing in on it, about 20% closer by the end. Scene two, 2 seconds: the word 'Boom' centred, with the whole picture shaking a little as if something heavy landed." },
+  { "id": "item-code", "prompt": "Make a 6-second clip that shows a short Python function that adds two numbers, syntax highlighted, with the return line highlighted, under the heading 'Keep it simple'." },
+  { "id": "item-block-code-typing", "prompt": "Make an 8-second clip where a JavaScript snippet gets typed out in an editor: a function called greet that takes a name and returns 'Hello, ' plus the name. Title it 'Say hello'." },
+  { "id": "item-block-code-diff", "prompt": "Make a 6-second clip showing a code change in Go: the line 'timeout := 10' becomes 'timeout := 30' inside a short main function. Title it 'Raise the timeout'." },
+  { "id": "item-block-terminal-run", "prompt": "Make a 7-second clip of a terminal: someone types 'npm install' and it prints 'added 42 packages' and then 'found 0 vulnerabilities'." }
 ]

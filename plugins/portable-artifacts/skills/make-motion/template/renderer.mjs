@@ -7,6 +7,8 @@ import { cameraTransform } from './camera.mjs';
 import { resolveAudio } from './audio.mjs';
 import { flattenElements, isGroup } from './groups.mjs';
 import { loadCaptionTracks, captionLayer, applyCaption, captionSample, captionFontSize, captionMoments, CAPTION_WEIGHT } from './caption-layer.mjs';
+import { codeHighlighter, styleCode, fillCode, setCodeTyping } from './code-view.mjs';
+import { DEFAULT_CODE_SIZE } from './code-theme.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 import { bindWithNbsp } from '/shared/nowrap.mjs'; // served by server.mjs; the token regex lives only in shared/
 
@@ -205,12 +207,15 @@ function typingParts(node, el) {
   return { chars, total: typingLength(el.text), typed, caret, rest };
 }
 
+// How many of `total` characters a typing `value` shows, and whether a complete line's blinking caret is on at `sec`.
+const typedCount = (value, total) => Math.min(total, Math.max(0, Math.floor(value + TYPING_EPSILON)));
+const blinkOn = (sec) => Math.floor(sec / CARET_BLINK_SECONDS) % 2 === 0;
+
 function setTyping({ chars, total, typed, caret, rest }, value, sec) {
-  const n = Math.min(total, Math.max(0, Math.floor(value + TYPING_EPSILON)));
+  const n = typedCount(value, total);
   typed.textContent = chars.slice(0, n).join('');
   rest.textContent = chars.slice(n).join('');
-  const blinkOn = Math.floor(sec / CARET_BLINK_SECONDS) % 2 === 0;
-  caret.style.visibility = n < total || blinkOn ? 'visible' : 'hidden';
+  caret.style.visibility = n < total || blinkOn(sec) ? 'visible' : 'hidden';
 }
 
 // A `video` element. Render mode draws the clip's pre-decoded frames (render.mjs and check.mjs decode them before the
@@ -303,6 +308,9 @@ function buildElement(el, look, frames) {
       break;
     case 'group': // styles.css makes it a zero-size node at its own centre; mountElements puts the children inside
       break;
+    case 'code': // empty until its tokens are in (mountElements queues them; code-view.mjs fills the rows)
+      styleCode(node, el, look);
+      break;
     default:
       throw new Error(`unknown element type "${el.type}" (element "${el.id}")`);
   }
@@ -310,9 +318,11 @@ function buildElement(el, look, frames) {
 }
 
 // Builds the nodes of `elements` into `container`, each tagged with its spec path (`prefix` + index); a group's children
-// are built into the group's own node, so they move with it. Charts, images and video first frames queue their loading
-// in `pending`. `frames`: render mode's /frames.json, the decoded frames of each video element.
-function mountElements(container, elements, prefix, { look, frames }, parts, pending) {
+// are built into the group's own node, so they move with it. Charts, images, video first frames and code tokens queue
+// their loading in `pending`. `frames`: render mode's /frames.json, the decoded frames of each video element.
+// `highlight`: code-view.mjs codeHighlighter for this stage.
+function mountElements(container, elements, prefix, ctx, parts, pending) {
+  const { look, frames, highlight } = ctx;
   elements.forEach((el, i) => {
     const part = buildElement(el, look, frames);
     const at = `${prefix}[${i}]`;
@@ -320,9 +330,10 @@ function mountElements(container, elements, prefix, { look, frames }, parts, pen
     parts.push(part);
     container.append(part.node);
     if (el.type === 'chart') pending.push(renderChart(el, look).then((svg) => part.node.append(svg)));
+    if (el.type === 'code') pending.push(highlight(el).then((lines) => { part.codeTyping = fillCode(part.node, el, lines, look); }));
     if (part.img) pending.push(part.img.decode().catch(() => { throw new Error(`image failed to load: ${el.src}`); }));
     if (part.frame) pending.push(showFrame(part.frame, 0));
-    if (isGroup(el)) mountElements(part.node, el.children, `${at}.children`, { look, frames }, parts, pending);
+    if (isGroup(el)) mountElements(part.node, el.children, `${at}.children`, ctx, parts, pending);
   });
 }
 
@@ -390,6 +401,7 @@ async function buildStage(spec, look, frames, captions) {
   const parts = [];
   const pending = [];
   const grain = spec.texture?.grain ?? 0;
+  const highlight = codeHighlighter(spec, look);
   for (const [si, scene] of spec.scenes.entries()) {
     const layer = document.createElement('div');
     layer.className = 'scene';
@@ -409,7 +421,7 @@ async function buildStage(spec, look, frames, captions) {
       layer.append(camera);
     }
     const host = camera ?? layer;
-    mountElements(host, scene.elements, `scenes[${si}].elements`, { look, frames }, parts, pending);
+    mountElements(host, scene.elements, `scenes[${si}].elements`, { look, frames, highlight }, parts, pending);
     stage.append(layer);
     const entry = { scene, layer, camera, grain: null };
     if (grain > 0) pending.push(grainLayer(scene, spec.size, grain).then((img) => { entry.grain = img; }));
@@ -438,6 +450,7 @@ function fontNeeds(spec, look, captions) {
     const kind = fontKind(el);
     const face = `${look.weight(kind, el.fontWeight ?? 600)} ${el.fontSize ?? 48}px ${look.fonts[kind]}`;
     if (el.type === 'text') needs.push([face, el.text]);
+    if (el.type === 'code') needs.push([`${look.weight('mono', 400)} ${el.fontSize ?? DEFAULT_CODE_SIZE}px ${look.fonts.mono}`, el.code]);
     if (el.type === 'counter') needs.push([face, `${el.prefix ?? ''}${el.suffix ?? ''}${digits}`]);
     if (el.type === 'chart') {
       const sample = collectStrings(el.vegaLite).join(' ') + digits;
@@ -521,7 +534,7 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
         for (const prop of ['display', 'opacity', 'transform', 'clipPath', 'filter', 'zIndex']) grain.style[prop] = layer.style[prop];
       }
     });
-    for (const { node, el, drawNodes, arrowNode, roundCap, format, typing, frame, clip } of parts) {
+    for (const { node, el, drawNodes, arrowNode, roundCap, format, typing, codeTyping, frame, clip } of parts) {
       const s = states.get(el.id);
       node.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
       node.style.opacity = String(s.opacity);
@@ -537,6 +550,7 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
       }
       if (format) node.textContent = format(s.value);
       if (typing) setTyping(typing, s.value, sec);
+      if (codeTyping) setCodeTyping(codeTyping, typedCount(s.value, codeTyping.total), blinkOn(sec));
       if (frame || clip) {
         // Scene time, held at the scene's last frame: during a crossfade the outgoing clip freezes there (its sound
         // stops at the scene end too) instead of playing on under the incoming scene.

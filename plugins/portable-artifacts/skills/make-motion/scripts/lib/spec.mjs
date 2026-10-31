@@ -15,18 +15,23 @@ import { VIDEO_EXTENSIONS, isVideo, probeVideo } from './video.mjs';
 import { findFfprobe } from './ffmpeg.mjs';
 import { doctorCommand } from './doctor-hint.mjs';
 
-import { BLOCKS, BLOCK_NAMES, isBlock, blockDef, blockAssetFiles } from '../../template/blocks/index.mjs';
+import { BLOCKS, BLOCK_NAMES, isBlock, blockDef, blockAssetFiles, paramOfPart } from '../../template/blocks/index.mjs';
 import { VIRAL_MODE } from '../../template/viral.mjs';
+import { checkCode } from './code-check.mjs';
+import { gridOf, frameCutoff } from '../../template/frames.mjs';
 import { CAMERA_PROPS, CAMERA_REST, MIN_ZOOM, MAX_ZOOM, MAX_SHAKE_AMOUNT, MAX_SHAKE_HZ, MAX_SHAKE_SEED } from '../../template/camera.mjs';
 import { TRANSITIONS, MIN_TRANSITION_SECONDS, MAX_TRANSITION_SECONDS, directionsOf, comesInOver, normalizeTransition } from '../../template/transitions.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
-import { expandSpec, EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE, typingLength } from '../../template/defaults.mjs';
+import { expandSpec, EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE, DEFAULT_FPS, typingLength, typingNeeds, typedText, isTyping } from '../../template/defaults.mjs';
 
 export class UsageError extends Error {}
 
 const MAX_TOTAL_SECONDS = 120;
+// A code element's `code`: room for the largest code-diff expansion (about 8,000 characters with its markers and line
+// breaks), and still far more than a canvas shows above the text floor.
+const MAX_CODE_CHARACTERS = 10000;
 
 const EASE_FAMILIES = ['Quad', 'Cubic', 'Quart', 'Back', 'Elastic', 'Bounce', 'Sine', 'Expo', 'Circ'];
 export const EASES = ['linear', ...['in', 'out', 'inOut'].flatMap((d) => EASE_FAMILIES.map((f) => d + f)), ...Object.keys(EASE_CURVES)];
@@ -41,6 +46,7 @@ export const ANIMATABLE = {
   group: [...POSE],
   video: [...POSE],
   block: [...POSE], // a block's pose and keyframes become its group's
+  code: [...POSE], // and `value` when it types, as a text does
 };
 
 const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes', 'hold'];
@@ -54,6 +60,7 @@ const FIELDS = {
   group: [...COMMON, 'children'],
   video: [...COMMON, 'src', 'width', 'height', 'fit', 'trimStart', 'trimEnd', 'offset', 'mute', 'volume'],
   block: [...COMMON, 'block', 'params'],
+  code: [...COMMON, 'code', 'lang', 'width', 'height', 'fontSize', 'highlight', 'diff', 'typing'],
 };
 const REQUIRED = {
   text: ['text'],
@@ -64,6 +71,7 @@ const REQUIRED = {
   group: ['children'],
   video: ['src', 'width', 'height'],
   block: ['block', 'params'],
+  code: ['code', 'lang', 'width'],
 };
 
 const num = { type: 'number' };
@@ -118,6 +126,10 @@ const element = {
     mute: { type: 'boolean' }, volume: unit,
     block: { type: 'string', minLength: 1 },
     params: { type: 'object' }, // checked against the named block's own schema (checkBlock)
+    code: { type: 'string', maxLength: MAX_CODE_CHARACTERS },
+    lang: { type: 'string', minLength: 1 }, // one of CODE_LANGS (checkCode names the closest)
+    highlight: { type: 'array', items: { type: 'integer', minimum: 1 } }, // 1-based line numbers, checked against the code by checkCode
+    diff: { type: 'boolean' },
     // A group's children are elements again (groups nest; checkElement caps the depth with a message that names the limit).
     children: { type: 'array', minItems: 1, maxItems: MAX_GROUP_CHILDREN, items: { $ref: '#/definitions/element' } },
   },
@@ -320,8 +332,9 @@ function checkKeyframeTime(keyframes, i, at, sceneDuration, errors) {
 }
 
 function checkKeyframes(el, base, sceneDuration, errors) {
-  const allowed = el.type === 'text' && el.typing ? [...ANIMATABLE.text, 'value'] : ANIMATABLE[el.type]; // a typing text's `value` is its character count
-  const typingHint = el.type === 'text' && !el.typing ? ' (value needs "typing": true)' : '';
+  const typed = el.type === 'text' || el.type === 'code';
+  const allowed = typed && el.typing ? [...ANIMATABLE[el.type], 'value'] : ANIMATABLE[el.type]; // a typing text's or code's `value` is its character count
+  const typingHint = typed && !el.typing ? ' (value needs "typing": true)' : '';
   const keyframes = el.keyframes ?? [];
   keyframes.forEach((kf, i) => {
     const at = pathJoin(pathJoin(base, 'keyframes'), i);
@@ -609,26 +622,64 @@ function checkCues(spec, errors) {
   });
 }
 
-// A typing text with no `value` keyframes types at a fixed pace from the scene start; it must finish (a frame before
-// the scene ends, so its last frame shows the whole line) or the video would cut it off silently.
-const TYPING_FALLBACK_FPS = 30;
-const CENTISECONDS = 100;
-function checkTyping(el, base, scene, fps, errors) {
-  if (!el.typing || typeof el.text !== 'string' || el.keyframes?.some((kf) => kf.value !== undefined)) return;
-  const chars = typingLength(el.text);
+// A typing text or code with no `value` keyframes types at a fixed pace from the scene start; it must finish a frame
+// before the scene ends and by the last frame the render draws of its scene (frames.mjs: up to 1.5 frames before the
+// end), or the video would cut it off silently. `at`: the path the error goes to (the element's text or code, or the
+// block param that set it). `scene` carries `durations` and `index`, its place in the video (withGrid).
+const TYPING_FALLBACK_FPS = DEFAULT_FPS;
+function checkTyping(el, at, scene, fps, errors) {
+  if (!isTyping(el) || typeof typedText(el) !== 'string' || el.keyframes?.some((kf) => kf.value !== undefined)) return;
+  const chars = typingLength(typedText(el));
   const takes = chars * TYPING_SECONDS_PER_CHAR;
-  const needs = takes + 1 / fps;
-  if (needs <= scene.duration) return;
-  errors.push({ path: pathJoin(base, 'text'), message: `typing ${chars} characters takes ${takes.toFixed(2)}s but scene "${scene.id}" lasts ${scene.duration}s (it must finish a frame before the scene ends at ${fps} fps); shorten the text or lengthen the scene to at least ${Math.ceil(needs * CENTISECONDS) / CENTISECONDS}s` });
+  const grid = gridOf({ sceneDuration: scene.duration, fps, durations: scene.durations, index: scene.index });
+  const fix = frameCutoff(grid, { end: takes, minimum: typingNeeds(chars, fps) });
+  if (fix === null) return;
+  errors.push({ path: at, message: `typing ${chars} characters takes ${takes.toFixed(2)}s but scene "${scene.id}" lasts ${scene.duration}s (it must finish a frame before the scene ends at ${fps} fps); shorten the ${el.type} or lengthen the scene to at least ${fix}s` });
 }
 
-// The typing errors of `spec` at frame rate `fps`: render.mjs asks again with its --fps, which overrides the spec's.
-export function typingErrors(spec, fps) {
+// The scenes of `spec`, each with every scene's length and its own place (what the frame-grid checks need).
+const withGrid = (spec) => {
+  const durations = spec.scenes.map((s) => s.duration);
+  return spec.scenes.map((scene, index) => ({ ...scene, durations, index }));
+};
+
+const TOP_ELEMENT = /^scenes\[\d+\]\.elements\[(\d+)\]/; // the scene-level element a path is in (a block's group, for a part)
+
+// The path of the field a typing element types: its own, or, for a part of a block, the block param that set it.
+function typingPath(el, at, block) {
+  if (!block) return pathJoin(at, el.type === 'code' ? 'code' : 'text');
+  const param = paramOfPart(block.el.block, el.id.slice(block.el.id.length + 1));
+  const params = pathJoin(block.base, 'params');
+  return param ? pathJoin(params, param) : params;
+}
+
+// The typing errors of `written` at frame rate `fps`: render.mjs asks again with its --fps, which overrides the spec's.
+// Checked on the expanded spec, so a block's typing parts are checked too; their errors name the block param.
+export function typingErrors(written, fps) {
   const errors = [];
-  spec.scenes.forEach((scene, si) => flattenElements(scene.elements, `scenes[${si}]`).forEach(({ el, path: at }) => {
-    if (el.type === 'text') checkTyping(el, at, scene, fps, errors);
+  withGrid(expandSpec(written)).forEach((scene, si) => flattenElements(scene.elements, `scenes[${si}]`).forEach(({ el, path: at }) => {
+    const [base, ei] = TOP_ELEMENT.exec(at);
+    const own = written.scenes[si].elements[Number(ei)];
+    checkTyping(el, typingPath(el, at, isBlock(own) ? { el: own, base } : null), scene, fps, errors);
   }));
   return errors;
+}
+
+// What a block's validate is told about its scene (a scene from withGrid): its length, the frame rate and its place.
+const blockContext = (scene, fps) => ({ sceneDuration: scene.duration, fps, durations: scene.durations, index: scene.index });
+
+// Every check that depends on the frame rate, at `fps` (render.mjs asks with its --fps): each block's own schedule (its
+// `validate` given `fps`, which is how a terminal-run's last output line is kept inside the last frame) and the typing
+// cut-offs (typingErrors). A block param both name is reported once, by the block.
+export function frameRateErrors(written, fps) {
+  const errors = [];
+  withGrid(written).forEach((scene, si) => scene.elements.forEach((el, ei) => {
+    const def = isBlock(el) ? blockDef(el.block) : undefined;
+    const at = `scenes[${si}].elements[${ei}].params`;
+    for (const e of def?.validate?.(el.params, blockContext(scene, fps)) ?? []) errors.push({ path: pathJoin(at, e.path), message: e.message });
+  }));
+  const named = new Set(errors.map((e) => e.path));
+  return [...errors, ...typingErrors(written, fps).filter((e) => !named.has(e.path))];
 }
 
 // A group's children are checked as elements in their own right, at their nested path; a group may not nest deeper
@@ -658,7 +709,9 @@ function checkFields(el, base, errors) {
 function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS, depth = 0) {
   checkFields(el, base, errors);
   checkKeyframes(el, base, scene.duration, errors);
-  if (el.type === 'text') { checkRole(el, base, errors); checkTyping(el, base, scene, fps, errors); }
+  if (el.type === 'text') checkRole(el, base, errors);
+  checkTyping(el, typingPath(el, base, null), scene, fps, errors);
+  if (el.type === 'code') checkCode(el, base, errors);
   for (const key of ['color', 'fill', 'stroke']) checkColor(el, key, base, errors, { tokens: true });
   if (el.type === 'shape') checkShapeStyle(el, base, errors);
   if (el.type === 'image' && typeof el.src === 'string') checkAssetPath(el.src, pathJoin(base, 'src'), dir, errors);
@@ -717,7 +770,7 @@ function checkFormat(spec, errors) {
 // A block as written, at its own path: its element fields and keyframes, the block name, its params against the block's
 // schema, the files its params name (checked like an image src) and what its definition adds (`validate`, such as a
 // scene too short for its schedule). Params that pass expand without error.
-function checkBlock(el, base, scene, dir, errors) {
+function checkBlock(el, base, scene, dir, errors, fps) {
   checkFields(el, base, errors);
   checkKeyframes(el, base, scene.duration, errors);
   if (el.block === undefined) return;
@@ -735,19 +788,19 @@ function checkBlock(el, base, scene, dir, errors) {
     return;
   }
   for (const file of blockAssetFiles(el)) checkAssetPath(file.src, pathJoin(at, file.at), dir, errors);
-  for (const e of def.validate?.(el.params, { sceneDuration: scene.duration }) ?? []) errors.push({ path: pathJoin(at, e.path), message: e.message });
+  for (const e of def.validate?.(el.params, blockContext(scene, fps)) ?? []) errors.push({ path: pathJoin(at, e.path), message: e.message });
 }
 
 // Every block, checked before anything expands. A block goes directly in a scene's elements: expandBlocks expands only
 // those, so one inside a group is refused here, naming the group.
 function checkBlocks(spec, dir, errors) {
-  spec.scenes.forEach((scene, si) => {
+  withGrid(spec).forEach((scene, si) => {
     const chain = [];
     for (const { el, path: base, depth } of flattenElements(scene.elements, `scenes[${si}]`)) {
       chain.length = depth;
       chain.push(el);
       if (!isBlock(el)) continue;
-      if (depth === 0) checkBlock(el, base, scene, dir, errors);
+      if (depth === 0) checkBlock(el, base, scene, dir, errors, spec.fps ?? DEFAULT_FPS);
       else errors.push({ path: pathJoin(base, 'type'), message: `a block goes directly in a scene's elements, not inside a group; move ${JSON.stringify(el.id)} out of group ${JSON.stringify(chain[depth - 1].id)}` });
     }
   });
@@ -841,7 +894,7 @@ export function validateSpec(written, { dir = process.cwd() } = {}) {
   checkTheme(spec, errors);
   checkColor(spec, 'background', '', errors);
   checkTransition(spec.transition, 'transition', errors, false);
-  spec.scenes.forEach((scene, si) => {
+  withGrid(spec).forEach((scene, si) => {
     checkSceneBackground(scene, `scenes[${si}]`, errors);
     checkTransition(scene.transition, `scenes[${si}].transition`, errors, si === 0);
     checkCamera(scene, `scenes[${si}]`, errors);

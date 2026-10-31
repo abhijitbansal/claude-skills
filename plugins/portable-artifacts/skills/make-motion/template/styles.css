@@ -40,6 +40,11 @@ body.live-layers .el { will-change: transform, opacity; }
 .el.text.mono, .el.counter.mono { font-family: var(--mono); letter-spacing: 0; }
 .el.text.title { font-family: var(--display); line-height: 1.02; letter-spacing: -0.015em; }
 .el.counter { font-family: var(--sans); white-space: pre; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+/* A code element: one .line per line of code (template/code-view.mjs), wrapping at any character inside its width so
+   the box never grows sideways (blocks/layout.mjs codeRows counts rows the same way); an empty line keeps its row. A row's
+   padding (0.3em, CODE_ROW_PAD_EM) lets a highlight or diff tint reach past the glyphs. */
+.el.code { font-family: var(--mono); white-space: pre-wrap; word-break: break-all; line-height: 1.4; tab-size: 2; letter-spacing: 0; text-align: left; }
+.el.code .line { min-height: 1.4em; padding: 0 0.3em; border-radius: 0.2em; }
 .el svg { display: block; overflow: visible; }
 .el img, .el video { display: block; }
 .el.chart svg { width: 100%; height: 100%; }

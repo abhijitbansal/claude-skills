@@ -17,6 +17,7 @@
     "ajv": "8.20.0",
     "animejs": "4.5.0",
     "playwright": "1.64.0",
+    "shiki": "4.5.0",
     "vega": "6.4.0",
     "vega-interpreter": "2.3.2",
     "vega-lite": "6.5.0",

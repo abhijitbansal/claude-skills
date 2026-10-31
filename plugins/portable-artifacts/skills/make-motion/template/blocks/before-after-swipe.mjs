@@ -1,6 +1,8 @@
 // before-after-swipe: two images (or two clips) in the same frame; the "after" slides in from the right over the
 // "before" behind a vertical line, with a label pill on each corner. before-after (two counters) compares numbers.
 import { unit, contentWidth, textWidth, fitText, fitHeight, sizeLadder, fitSchedule, slot, textPart, rectPart, linePart, enter, blockGroup, stack, freeBand, roomAt, LINE_HEIGHT, MIN_TEXT, abovePlace } from './layout.mjs';
+import { DEFAULT_FPS } from '../defaults.mjs';
+import { gridOf, frameCutoff } from '../frames.mjs';
 import { isVideoSrc } from '../media.mjs';
 
 const side = {
@@ -46,6 +48,21 @@ function media(id, src, x, y, width, height) {
 const num = (n) => Number(n.toFixed(2));
 // The scene must hold the swipe, then HOLD_SECONDS of the finished frame.
 const minDuration = (p) => (p.swipeAt ?? 0) + SWIPE_SECONDS + HOLD_SECONDS;
+// When the swipe starts in a scene of `sceneDuration` (expand's rule), and when the last motion ends.
+const swipeStart = (p, sceneDuration) => p.swipeAt ?? Math.max(0, Math.min(SWIPE_SHARE * sceneDuration, sceneDuration - SWIPE_SECONDS - HOLD_SECONDS));
+const lastMotion = (p, sceneDuration) => Math.max(swipeStart(p, sceneDuration) + SWIPE_SECONDS, slot(p.headline ? 2 : 1)[1]);
+
+// The scene must hold the swipe and the finished frame, and its last rendered frame (frames.mjs) must come after the swipe
+// ends: at a low render --fps the last frame can fall short of it.
+function validate(p, ctx) {
+  const { sceneDuration } = ctx;
+  if (sceneDuration + EPSILON < minDuration(p)) {
+    return [{ path: 'swipeAt', message: `${p.swipeAt === undefined ? '' : `swipeAt ${num(p.swipeAt)}s + `}the ${SWIPE_SECONDS}s swipe and ${HOLD_SECONDS}s to show the result need a scene of at least ${num(minDuration(p))}s${p.swipeAt === undefined ? '' : `; use a swipeAt of at most ${num(Math.max(0, sceneDuration - SWIPE_SECONDS - HOLD_SECONDS))}s or a longer scene`}` }];
+  }
+  const fps = ctx.fps ?? DEFAULT_FPS;
+  const fix = frameCutoff(gridOf({ ...ctx, fps }), { end: (d) => lastMotion(p, d), minimum: minDuration(p), tolerance: EPSILON });
+  return fix === null ? [] : [{ path: 'swipeAt', message: `the swipe ends at ${num(lastMotion(p, sceneDuration))}s, after the last frame at ${fps} fps; the scene must last at least ${fix}s` }];
+}
 
 function expand(el, ctx) {
   const { size, sceneDuration } = ctx;
@@ -108,9 +125,7 @@ export default Object.freeze({
   place: (size, format, _side, insets) => abovePlace(size, format, insets),
   assets: ['before.src', 'after.src'],
   minDuration,
-  validate: (p, { sceneDuration }) => (sceneDuration + EPSILON >= minDuration(p)
-    ? []
-    : [{ path: 'swipeAt', message: `${p.swipeAt === undefined ? '' : `swipeAt ${num(p.swipeAt)}s + `}the ${SWIPE_SECONDS}s swipe and ${HOLD_SECONDS}s to show the result need a scene of at least ${num(minDuration(p))}s${p.swipeAt === undefined ? '' : `; use a swipeAt of at most ${num(Math.max(0, sceneDuration - SWIPE_SECONDS - HOLD_SECONDS))}s or a longer scene`}` }]),
+  validate,
   paramOf: (part) => (Object.hasOwn(PARAM_OF, part) ? PARAM_OF[part] : null),
   expand,
 });

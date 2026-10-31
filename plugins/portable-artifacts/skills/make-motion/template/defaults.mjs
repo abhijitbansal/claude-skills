@@ -22,6 +22,11 @@ export const DEFAULT_CAPTION_STYLE = 'plain'; // a captions track's `style` when
 const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' });
 export const graphemes = (text) => Array.from(GRAPHEMES.segment(text), (part) => part.segment);
 export const typingLength = (text) => graphemes(text).length;
+// A `typing` element (a text, or a code element) and the string it types.
+export const isTyping = (el) => el?.typing === true && (el.type === 'text' || el.type === 'code');
+export const typedText = (el) => (el.type === 'code' ? el.code : el.text);
+// The scene seconds `chars` characters need at the default pace and `fps`: typing must end a frame before the scene does.
+export const typingNeeds = (chars, fps) => chars * TYPING_SECONDS_PER_CHAR + 1 / fps;
 
 // A counter with no `value` keyframes counts from -> to from its scene start over this many seconds (timeline.mjs).
 const COUNTER_MAX_SECONDS = 2;

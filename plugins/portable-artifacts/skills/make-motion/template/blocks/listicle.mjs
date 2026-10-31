@@ -1,6 +1,8 @@
 // listicle: a title held from the first frame, then 2 to 5 rows that come in one every itemSeconds, each with a number
 // badge when numbered. The title is the hook of a viral spec, so keep it to 3 to 7 words.
 import { unit, contentWidth, fitHeight, sizeLadder, lineCount, fitSchedule, textPart, rectPart, enter, blockGroup, stack, freeBand, roomAt, ENTER_SECONDS, LINE_HEIGHT, MIN_TEXT, abovePlace } from './layout.mjs';
+import { DEFAULT_FPS } from '../defaults.mjs';
+import { gridOf, frameCutoff } from '../frames.mjs';
 
 const params = {
   type: 'object',
@@ -24,6 +26,17 @@ const ROW_TIERS = [{ padY: 16, gap: 14 }, { padY: 10, gap: 8 }, { padY: 6, gap: 
 
 const itemSeconds = (p) => p.itemSeconds ?? params.properties.itemSeconds.default;
 const minDuration = (p) => FIRST_ROW_SECONDS + p.items.length * itemSeconds(p);
+const lastRowIn = (p) => FIRST_ROW_SECONDS + (p.items.length - 1) * itemSeconds(p) + ENTER_SECONDS;
+
+// The scene must hold every row's turn, and its last rendered frame (frames.mjs) must come after the last row is in: at a
+// low render --fps the last frame can fall short of it.
+function validate(p, ctx) {
+  const { sceneDuration } = ctx;
+  if (sceneDuration + EPSILON < minDuration(p)) return [{ path: 'itemSeconds', message: `${p.items.length} items × ${num(itemSeconds(p))}s need a scene of at least ${num(minDuration(p))}s` }];
+  const fps = ctx.fps ?? DEFAULT_FPS;
+  const fix = frameCutoff(gridOf({ ...ctx, fps }), { end: lastRowIn(p), minimum: minDuration(p), tolerance: EPSILON });
+  return fix === null ? [] : [{ path: 'itemSeconds', message: `${p.items.length} items × ${num(itemSeconds(p))}s: the last row is in at ${num(lastRowIn(p))}s, after the last frame at ${fps} fps; the scene must last at least ${fix}s` }];
+}
 const num = (n) => Number(n.toFixed(2));
 
 // The largest title size, row size and spacing at which the title, the gap and every row fit `room` tall: the first
@@ -99,8 +112,6 @@ export default Object.freeze({
   hook: ['title'],
   paramOf: (part) => (/^item-(\d+)$/.test(part) ? `items[${Number(part.split('-')[1]) - 1}]` : (part === 'title' ? part : null)),
   minDuration,
-  validate: (p, { sceneDuration }) => (sceneDuration + EPSILON >= minDuration(p)
-    ? []
-    : [{ path: 'itemSeconds', message: `${p.items.length} items × ${num(itemSeconds(p))}s need a scene of at least ${num(minDuration(p))}s` }]),
+  validate,
   expand,
 });

@@ -15,12 +15,13 @@
 // node is drawn with (undefined without a camera). Both carry, per element j of the scene's
 // item list, what check.mjs's `measure` read (`opacity`, `ownOpacity` without the scene's fade, `box`, `fontSize` rendered
 // px, `weight`, `color` #rrggbb, `alpha`, `sig` a string that changes when the element looks different) plus `shown`
-// (visible and on the canvas) and, in steps, `hold` (the element or a group around it says "hold": true) and `held` (its
+// (visible and on the canvas), `inks` (a code element: each token colour #rrggbb, judged for contrast in place of `color`)
+// and, in steps, `hold` (the element or a group around it says "hold": true) and `held` (its
 // size is not being tweened).
 import { contrastRatio, mixHex } from '../../shared/contrast.mjs';
 import { COLOR_TOKENS } from '../../template/defaults.mjs';
 
-export const CHECKED_TYPES = Object.freeze(['text', 'counter']); // rendered text: the element types the audits judge
+export const CHECKED_TYPES = Object.freeze(['text', 'counter', 'code']); // rendered text: the element types the audits judge
 export const AUDIT_STEP = 0.25; // seconds between the steps every scene is sampled at
 export const DEAD_STRETCH_SECONDS = 3; // nothing changing for longer than this is a dead stretch ...
 export const TAIL_EXEMPT_SECONDS = 3; // ... except in the last this many seconds of the video
@@ -126,7 +127,8 @@ export function contrastFindings(items, samples, colors, size) {
       if (!cells?.length || !m.shown || inTween(fading, t)) return null;
       const opacity = m.ownOpacity ?? m.opacity;
       const need = contrastNeed(m.fontSize, m.weight, k);
-      const worst = Math.min(...cells.map((cell) => contrastRatio(mixHex(m.color, cell, (m.alpha ?? 1) * opacity), cell)));
+      const inks = m.inks?.length ? m.inks : [m.color]; // a code element's token colours, else the one text colour
+      const worst = Math.min(...inks.flatMap((ink) => cells.map((cell) => contrastRatio(mixHex(ink, cell, (m.alpha ?? 1) * opacity), cell))));
       return worst < need ? { t, worst, need, cells, opacity } : null;
     });
     const runs = runsOf(fails.map(Boolean));

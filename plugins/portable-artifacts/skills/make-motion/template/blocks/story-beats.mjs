@@ -1,6 +1,8 @@
 // story-beats: a short story told in five beats in one place, one at a time: hook, problem, reveal, proof (with an
 // optional number counting up under it) and a call to action that stays. Beat i starts at i x beatSeconds.
 import { unit, contentWidth, textWidth, fitHeight, sizeLadder, fitSchedule, textPart, blockGroup, stack, freeBand, roomAt, LINE_HEIGHT, MIN_TEXT, centrePlace } from './layout.mjs';
+import { DEFAULT_FPS } from '../defaults.mjs';
+import { gridOf, frameCutoff } from '../frames.mjs';
 import { hookKeyframes } from '../viral.mjs';
 
 const short = { type: 'string', minLength: 1, maxLength: 6 };
@@ -41,6 +43,17 @@ const EPSILON = 1e-9;
 
 const beatSeconds = (p) => p.beatSeconds ?? params.properties.beatSeconds.default;
 const minDuration = (p) => BEATS * beatSeconds(p);
+const lastBeatIn = (p) => (BEATS - 1) * beatSeconds(p) + FADE_SECONDS;
+
+// The scene must hold every beat, and its last rendered frame (frames.mjs) must come after the last beat is in: at a low
+// render --fps the last frame can fall short of it.
+function validate(p, ctx) {
+  const { sceneDuration } = ctx;
+  if (sceneDuration + EPSILON < minDuration(p)) return [{ path: 'beatSeconds', message: `${BEATS} beats × ${num(beatSeconds(p))}s need a scene of at least ${num(minDuration(p))}s` }];
+  const fps = ctx.fps ?? DEFAULT_FPS;
+  const fix = frameCutoff(gridOf({ ...ctx, fps }), { end: lastBeatIn(p), minimum: minDuration(p), tolerance: EPSILON });
+  return fix === null ? [] : [{ path: 'beatSeconds', message: `${BEATS} beats × ${num(beatSeconds(p))}s: the last beat is in at ${num(lastBeatIn(p))}s, after the last frame at ${fps} fps; the scene must last at least ${fix}s` }];
+}
 const num = (n) => Number(n.toFixed(2));
 // The number as the counter shows it, for sizing it so the widest value never wraps.
 const shown = (n, { prefix = '', suffix = '', decimals = 0 }) => `${prefix}${n.toFixed(decimals)}${suffix}`;
@@ -108,8 +121,6 @@ export default Object.freeze({
   place: (size, format, _side, insets) => centrePlace(size, format, insets),
   paramOf: (part) => (part === 'proof-number' ? 'proofNumber' : (Object.hasOwn(params.properties, part) ? part : null)),
   minDuration,
-  validate: (p, { sceneDuration }) => (sceneDuration + EPSILON >= minDuration(p)
-    ? []
-    : [{ path: 'beatSeconds', message: `${BEATS} beats × ${num(beatSeconds(p))}s need a scene of at least ${num(minDuration(p))}s` }]),
+  validate,
   expand,
 });
