@@ -4,6 +4,7 @@ import { canvasSize } from './formats.mjs';
 import { expandBlocks } from './blocks/index.mjs';
 import { applyViral, autoCues, isViral, hookKeyframes, visibleAtStart } from './viral.mjs';
 import { TRANSITION_SECONDS, normalizeTransition, comesInOver } from './transitions.mjs';
+import { substituteVars } from './vars.mjs';
 
 // No `background` default: the page fills it from the theme's page colour (see renderer fetchSpec). The canvas size
 // default lives in formats.mjs (canvasSize).
@@ -175,7 +176,8 @@ function applyFormat(out) {
 // The steps that rewrite a spec, in their one fixed order, so every consumer (validator, renderer, timeline, check,
 // render) sees the same plain elements. This list is the only place the order is written; Tasks 16 and 11a slot their
 // steps into the numbered places and never reorder them.
-//   1 substituteVars  (Task 16)  {{name}} becomes its value anywhere, block params and `mode` included
+//   1 substituteVars  (vars.mjs) {{name}} becomes its default anywhere, block params and `mode` included (render --batch
+//                                substitutes each row's values first, so the spec reaching here has no `vars` left)
 //   2 applyViral      (Task 11a) `mode: "viral"` defaults, so the `format` it sets reaches step 3
 //   3 expandBlocks               each `block` becomes a `group` of plain elements, laid out for canvasSize(spec): the
 //                                size step 4 will write, read before it is written
@@ -186,8 +188,8 @@ function applyFormat(out) {
 // Steps 1-3 change what the spec says, so the validator runs them too (expandSpec), after checking their inputs (block
 // params) and before its full check; steps 4-5 only fill in, and run in withDefaults alone.
 export function expandSpec(spec) {
-  // 1 substituteVars goes here, before applyViral.
-  return expandBlocks(applyViral(spec)); // 2, then 3: each a pure copy (applyViral returns a spec that is not viral as it is)
+  // 1, 2, then 3: each pure (substituteVars and applyViral return a spec they do not change as it is; expandBlocks copies)
+  return expandBlocks(applyViral(substituteVars(spec)));
 }
 
 // Pure copy with every optional root and element base value filled in.

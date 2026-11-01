@@ -16,7 +16,8 @@ import { findFfprobe } from './ffmpeg.mjs';
 import { doctorCommand } from './doctor-hint.mjs';
 
 import { BLOCKS, BLOCK_NAMES, isBlock, blockDef, blockAssetFiles, paramOfPart } from '../../template/blocks/index.mjs';
-import { VIRAL_MODE } from '../../template/viral.mjs';
+import { VIRAL_MODE, applyViral } from '../../template/viral.mjs';
+import { VAR_NAME, MAX_VARS, VAR_TYPES, declaresVars, findVarRefs, varValues, substituteVars } from '../../template/vars.mjs';
 import { checkCode } from './code-check.mjs';
 import { gridOf, frameCutoff } from '../../template/frames.mjs';
 import { CAMERA_PROPS, CAMERA_REST, MIN_ZOOM, MAX_ZOOM, MAX_SHAKE_AMOUNT, MAX_SHAKE_HZ, MAX_SHAKE_SEED } from '../../template/camera.mjs';
@@ -263,6 +264,7 @@ export const SCHEMA = {
     mode: { enum: [VIRAL_MODE] },
     viral,
     loudness,
+    vars: { type: 'object' }, // checked by checkVars before anything else, then removed by substitution
     scenes: {
       type: 'array', minItems: 1, maxItems: 50,
       items: {
@@ -286,6 +288,13 @@ const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
 const schemaCheck = ajv.compile(SCHEMA);
 const paramsChecks = Object.assign(Object.create(null), Object.fromEntries(Object.entries(BLOCKS).map(([name, def]) => [name, ajv.compile(def.params)])));
 const generatedByCheck = ajv.compile(GENERATED_BY_SCHEMA);
+// One entry of `vars`; the names, their count and whether a default matches its type are checked by checkVars.
+const varCheck = ajv.compile({
+  type: 'object',
+  additionalProperties: false,
+  required: ['type'],
+  properties: { type: { enum: [...VAR_TYPES] }, default: {} }, // the default's type: checkVarsBlock, against `type`
+});
 
 // True only for a present, schema-valid `generatedBy`; the preview footer uses it without validating the whole spec.
 export const checkGeneratedBy = (value) => value !== undefined && generatedByCheck(value);
@@ -655,8 +664,9 @@ function typingPath(el, at, block) {
 
 // The typing errors of `written` at frame rate `fps`: render.mjs asks again with its --fps, which overrides the spec's.
 // Checked on the expanded spec, so a block's typing parts are checked too; their errors name the block param.
-export function typingErrors(written, fps) {
+export function typingErrors(input, fps) {
   const errors = [];
+  const written = substituteVars(input); // the text as it renders (a no-op on a spec already substituted)
   withGrid(expandSpec(written)).forEach((scene, si) => flattenElements(scene.elements, `scenes[${si}]`).forEach(({ el, path: at }) => {
     const [base, ei] = TOP_ELEMENT.exec(at);
     const own = written.scenes[si].elements[Number(ei)];
@@ -671,8 +681,9 @@ const blockContext = (scene, fps) => ({ sceneDuration: scene.duration, fps, dura
 // Every check that depends on the frame rate, at `fps` (render.mjs asks with its --fps): each block's own schedule (its
 // `validate` given `fps`, which is how a terminal-run's last output line is kept inside the last frame) and the typing
 // cut-offs (typingErrors). A block param both name is reported once, by the block.
-export function frameRateErrors(written, fps) {
+export function frameRateErrors(input, fps) {
   const errors = [];
+  const written = substituteVars(input); // a block's params as they render
   withGrid(written).forEach((scene, si) => scene.elements.forEach((el, ei) => {
     const def = isBlock(el) ? blockDef(el.block) : undefined;
     const at = `scenes[${si}].elements[${ei}].params`;
@@ -881,10 +892,79 @@ function checkTransition(value, at, errors, isFirst) {
   }
 }
 
-export function validateSpec(written, { dir = process.cwd() } = {}) {
+const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const typeOf = (v) => (v === null ? 'null' : Array.isArray(v) ? 'an array' : typeof v === 'object' ? 'an object'
+  : typeof v === 'number' && !Number.isFinite(v) ? 'a number too large to use' : `a ${typeof v}`);
+// A value as an error shows it: JSON, except a non-finite number (JSON.parse reads 1e309 as Infinity), which JSON writes as null.
+const shown = (v) => (typeof v === 'number' && !Number.isFinite(v) ? String(v) : JSON.stringify(v));
+const RESERVED_VAR = 'index'; // the row number in a --batch --out template (scripts/lib/batch.mjs)
+const matchesType = (value, type) => (type === 'number' ? Number.isFinite(value) : typeof value === type);
+
+// The `vars` block itself: an object of at most MAX_VARS names of the var pattern, each `{ type, default? }` with a
+// default of its own type.
+function checkVarsBlock(vars, errors) {
+  if (!isPlainObject(vars)) return errors.push({ path: 'vars', message: 'must be an object of { "<name>": { "type": "string" | "number", "default"? } }' });
+  const names = Object.keys(vars);
+  if (names.length > MAX_VARS) errors.push({ path: 'vars', message: `declares ${names.length} vars; at most ${MAX_VARS}` });
+  for (const name of names) {
+    const at = pathJoin('vars', name);
+    if (!VAR_NAME.test(name)) errors.push({ path: at, message: 'a var name starts with a lowercase letter, then letters, digits or _ (like city or firstName)' });
+    else if (name === RESERVED_VAR) errors.push({ path: at, message: `"${RESERVED_VAR}" is reserved for the row number in a --batch --out template; give the var another name` });
+    else if (!varCheck(vars[name])) errors.push(...formatAjvErrors(varCheck.errors).map((e) => ({ path: e.path ? `${at}.${e.path}` : at, message: e.message })));
+    else if (Object.hasOwn(vars[name], 'default') && !matchesType(vars[name].default, vars[name].type)) {
+      errors.push({ path: `${at}.default`, message: `must be a ${vars[name].type}, as its type says (got ${typeOf(vars[name].default)})` });
+    }
+  }
+  return errors.length;
+}
+
+// A row's values (`values`, untrusted: read with own-property lookups only) against the declared vars: every value of a
+// declared var must be of its type, never coerced. A key that is no declared var is an extra column: ignored here (it
+// never reaches the spec), and render --batch warns about it (batch.mjs columnWarnings).
+function checkRowValues(vars, values, errors) {
+  if (!isPlainObject(values)) return errors.push({ path: 'vars', message: `the row must be an object of var values (got ${typeOf(values)})` });
+  for (const key of Object.keys(values)) {
+    if (Object.hasOwn(vars, key) && !matchesType(values[key], vars[key].type)) {
+      errors.push({ path: pathJoin('vars', key), message: `the row gives ${shown(values[key])} (${typeOf(values[key])}); ${key} is a ${vars[key].type}` });
+    }
+  }
+  return errors.length;
+}
+
+/**
+ * The checks substitution needs before it runs (pipeline step 1): the `vars` block, the row's values, and every
+ * `{{name}}`: declared, and with a value (the row's, else the default). [] for a spec without `vars` and no row values,
+ * so a spec without `vars` is never searched for references.
+ */
+export function checkVars(written, values = {}) {
+  const errors = [];
+  if (!declaresVars(written)) {
+    if (isPlainObject(values) && Object.keys(values).length === 0) return errors;
+    checkRowValues({}, values, errors);
+    return errors;
+  }
+  if (checkVarsBlock(written.vars, errors) || checkRowValues(written.vars, values, errors)) return errors;
+  const declared = Object.keys(written.vars);
+  const known = varValues(written, values);
+  for (const { path: at, name } of findVarRefs(written)) {
+    if (!Object.hasOwn(written.vars, name)) errors.push({ path: at, message: `unknown variable ${JSON.stringify(name)}; declared: ${declared.join(', ') || 'none'}` });
+  }
+  for (const name of declared) {
+    if (!Object.hasOwn(known, name)) errors.push({ path: pathJoin('vars', name), message: 'no default and the row gives no value' });
+  }
+  return errors;
+}
+
+// `values`: one batch row's var values (render --batch); without it each var takes its default. The spec is checked as
+// it renders: after its vars are substituted (step 1) and viral mode applied (step 2), so a value that names a file
+// outside the spec folder, or is no colour, fails at the field it lands in, exactly as if it had been written there.
+export function validateSpec(input, { dir = process.cwd(), values = {} } = {}) {
+  const varErrors = checkVars(input, values);
+  if (varErrors.length) return { ok: false, errors: varErrors };
+  const written = substituteVars(input, values); // step 1: the same structure, so every path below is one in `input`
   if (!schemaCheck(written)) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
   const blockErrors = [];
-  checkBlocks(written, dir, blockErrors);
+  checkBlocks(applyViral(written), dir, blockErrors); // step 2, then the block params step 3 expands
   if (blockErrors.length) return { ok: false, errors: blockErrors };
   const spec = expandSpec(written); // pipeline steps 1-3 (template/defaults.mjs); the checks below see plain elements
   const errors = [];

@@ -18,6 +18,7 @@ import { flattenElements } from '../../template/groups.mjs';
 import { FORMATS } from '../../template/formats.mjs';
 import { blockAssetFiles, isBlock } from '../../template/blocks/index.mjs';
 import { CACHE_ROOT } from './video.mjs';
+import { substituteVars } from '../../template/vars.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NODE_MODULES = path.join(SKILL_ROOT, 'node_modules');
@@ -119,8 +120,11 @@ export function themeOrDefault(name) {
   try { return loadTheme(name ?? MOTION_THEME); } catch { return loadTheme(MOTION_THEME); }
 }
 
+// The spec as the page draws it: the one the server was given (render --batch: a row's, already substituted), else the
+// file with its vars at their defaults (pipeline step 1), so an asset or scene id named by `{{name}}` is found.
 function readSpecFile(ctx) {
-  try { return JSON.parse(readFileSync(ctx.specFile, 'utf8')); } catch { return undefined; }
+  if (ctx.spec !== undefined) return ctx.spec;
+  try { return substituteVars(JSON.parse(readFileSync(ctx.specFile, 'utf8'))); } catch { return undefined; }
 }
 
 // Favicon, theme stylesheet and provenance footer for the current spec, read fresh. Only `generatedBy`
@@ -167,13 +171,13 @@ function serveArt(ctx, res, sceneId) {
   return sendBody(res, MIME['.svg'], svg);
 }
 
-// Image, video, audio and captions srcs named by the current spec, and the files a block's params name (logo-outro's
-// `src`, which its expansion draws as an image); /assets serves nothing else.
+// Image, video, audio and captions srcs named by the current spec (after its vars are substituted), and the files a
+// block's params name (logo-outro's `src`, which its expansion draws as an image); /assets serves nothing else.
 const MEDIA_ELEMENTS = new Set(['image', 'video']);
 const blockAssets = (el) => (isBlock(el) ? blockAssetFiles(el).map((file) => file.src) : []);
-function referencedAssets(specFile) {
+function referencedAssets(ctx) {
   try {
-    const spec = JSON.parse(readFileSync(specFile, 'utf8'));
+    const spec = readSpecFile(ctx);
     const elements = spec.scenes.flatMap((s) => flattenElements(s.elements)).map(({ el }) => el);
     const images = [...elements.filter((el) => MEDIA_ELEMENTS.has(el.type)).map((el) => el.src), ...elements.flatMap(blockAssets)];
     const audio = (spec.audio ?? []).map((a) => a.src);
@@ -194,7 +198,7 @@ function serveAsset(ctx, req, res, rel) {
   lockDown(res);
   let decoded;
   try { decoded = decodeURIComponent(rel); } catch { return notFound(res); }
-  if (!referencedAssets(ctx.specFile).has(path.posix.normalize(decoded))) return notFound(res);
+  if (!referencedAssets(ctx).has(path.posix.normalize(decoded))) return notFound(res);
   const { file } = resolveAsset(ctx.specDir, decoded);
   return file ? sendFile(res, file, req.headers.range ?? '') : notFound(res);
 }
@@ -280,9 +284,10 @@ function route(ctx, req, res) {
   return notFound(res);
 }
 
-// The spec as written; an embedding tool may give the server a theme for specs that name none.
+// The spec as written (or the one the server was given); an embedding tool may give the server a theme for specs that
+// name none.
 function specBody(ctx) {
-  const body = readFileSync(ctx.specFile);
+  const body = ctx.spec === undefined ? readFileSync(ctx.specFile) : Buffer.from(JSON.stringify(ctx.spec));
   if (ctx.theme === undefined) return body;
   try {
     const spec = JSON.parse(body.toString('utf8'));
@@ -324,7 +329,7 @@ function broadcastSpecState(ctx) {
 function isWatched(ctx, name) {
   if (!name) return false;
   const rel = path.posix.normalize(String(name).replaceAll('\\', '/'));
-  return rel === path.basename(ctx.specFile) || referencedAssets(ctx.specFile).has(rel);
+  return rel === path.basename(ctx.specFile) || referencedAssets(ctx).has(rel);
 }
 
 function watchSpec(ctx) {
@@ -345,9 +350,11 @@ function watchSpec(ctx) {
 // `videoFrames`: prepareVideo()'s `{ [elementId]: { key, count, fps, ext } }`, served as /frames.json; the frames
 // themselves come from `frameRoot`/<key>/. Preview passes none: it plays the clips themselves from /assets.
 // `mode` defaults to render, so a caller that forgets it gets deterministic captures; preview.mjs asks for 'preview'.
-export async function startServer({ specPath, mode = 'render', theme, nowrapModule = NOWRAP_MODULE, videoFrames = {}, frameRoot = CACHE_ROOT }) {
+// `spec`: a validated spec object served in place of the file (render --batch: one row's, its vars substituted); assets
+// still resolve inside the folder of `specPath`.
+export async function startServer({ specPath, mode = 'render', theme, nowrapModule = NOWRAP_MODULE, videoFrames = {}, frameRoot = CACHE_ROOT, spec }) {
   const specFile = path.resolve(specPath);
-  const ctx = { specFile, theme, nowrapModule, videoFrames, frameRoot, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
+  const ctx = { specFile, spec, theme, nowrapModule, videoFrames, frameRoot, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
   const watcher = watchSpec(ctx);
   const server = http.createServer((req, res) => handle(ctx, req, res));
   await new Promise((resolve, reject) => {

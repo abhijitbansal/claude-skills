@@ -25,5 +25,6 @@
   { "id": "item-code", "prompt": "Make a 6-second clip that shows a short Python function that adds two numbers, syntax highlighted, with the return line highlighted, under the heading 'Keep it simple'." },
   { "id": "item-block-code-typing", "prompt": "Make an 8-second clip where a JavaScript snippet gets typed out in an editor: a function called greet that takes a name and returns 'Hello, ' plus the name. Title it 'Say hello'." },
   { "id": "item-block-code-diff", "prompt": "Make a 6-second clip showing a code change in Go: the line 'timeout := 10' becomes 'timeout := 30' inside a short main function. Title it 'Raise the timeout'." },
-  { "id": "item-block-terminal-run", "prompt": "Make a 7-second clip of a terminal: someone types 'npm install' and it prints 'added 42 packages' and then 'found 0 vulnerabilities'." }
+  { "id": "item-block-terminal-run", "prompt": "Make a 7-second clip of a terminal: someone types 'npm install' and it prints 'added 42 packages' and then 'found 0 vulnerabilities'." },
+  { "id": "item-vars", "prompt": "Make a 5-second welcome clip that greets a new teammate by name and says which team they join, set up so the same spec can be rendered once per person: make the name and the team variables, with 'Ada' and 'Platform' as their defaults." }
 ]

@@ -53,6 +53,7 @@ import { safeMargin, safeInsets, captionZone } from '../template/formats.mjs';
 import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
 import { isViral } from '../template/viral.mjs';
+import { substituteVars } from '../template/vars.mjs';
 import { TRANSITIONS, comesInOver, normalizeTransition } from '../template/transitions.mjs';
 import { cameraTweens } from '../template/camera.mjs';
 import { specWarnings, hookWarnings, stillWarnings, gapWarnings, loopWarnings, frameDifference } from './lib/viral-checks.mjs';
@@ -580,12 +581,13 @@ export async function main(argv, { prepare } = {}) {
     json = values.json === true;
     if (positionals.length !== 1) throw new UsageError(`expected one motion.json; usage: ${USAGE}`);
     if (values.theme !== undefined) checkTheme(values.theme);
-    const { spec: raw, dir } = loadSpec(positionals[0]);
-    const valid = validateSpec(raw, { dir });
+    const { spec: loaded, dir } = loadSpec(positionals[0]);
+    const valid = validateSpec(loaded, { dir });
     if (!valid.ok) {
       printResult(valid, { json, label: positionals[0] });
       return 1;
     }
+    const raw = substituteVars(loaded); // its vars at their defaults: block ids and params as the page draws them
     // The theme the page draws decides the title presets (and so the settle times): the spec's own, else --theme.
     const spec = withDefaults(raw.theme === undefined && values.theme !== undefined ? { ...raw, theme: values.theme } : raw);
     const checked = await checkSpec(path.resolve(positionals[0]), spec, { env: process.env, theme: values.theme, prepare, written: raw });

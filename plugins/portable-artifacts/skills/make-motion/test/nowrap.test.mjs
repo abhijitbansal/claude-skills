@@ -10,6 +10,7 @@ import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { bindWithNbsp, findTokens } from '../shared/nowrap.mjs';
 import { nowrapProblems } from '../shared/nowrap-probe.mjs';
+import { substituteVars } from '../template/vars.mjs';
 import { main as checkMain, wrapProblems } from '../scripts/check.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -118,7 +119,8 @@ test('rendered text element textContent: unchanged without a token; only the tok
   let tokenSpecs = 0;
   try {
     for (const file of files) {
-      const spec = JSON.parse(readFileSync(file, 'utf8'));
+      // The text as the page draws it: a spec's `{{name}}` vars at their defaults (a spec without vars is unchanged).
+      const spec = substituteVars(JSON.parse(readFileSync(file, 'utf8')));
       const texts = spec.scenes.flatMap((s) => s.elements).filter((e) => e.type === 'text');
       if (!texts.length) continue;
       const server = await startServer({ specPath: file, mode: 'render' });

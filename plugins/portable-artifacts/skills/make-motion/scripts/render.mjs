@@ -7,11 +7,13 @@
 // Both notes (`workers: N`, `quality: draft (WxH)`) go to stderr; stdout is the same either way.
 // --model/--effort/--agent override the spec's generatedBy; they are stamped into the MP4 comment/artist tags.
 // With --contact-sheet, --out is a directory; one tiled, timestamped PNG per scene goes to <out>/contact/<scene-id>.png.
+// --batch rows.json --out "renders/{name}.mp4": one MP4 per row of var values ({index} or a {var} in the file name), every
+// row checked before the first frame, then rendered in turn; manifest.json beside them records each row's result.
 import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { loadSpec, validateSpec, frameRateErrors, withDefaults, UsageError } from './lib/spec.mjs';
+import { loadSpec, validateSpec, checkVars, frameRateErrors, withDefaults, UsageError } from './lib/spec.mjs';
 import { frameCount } from '../template/frames.mjs';
 import { printResult, didYouMean } from '../shared/errors.mjs';
 import { listThemes } from '../shared/theme.mjs';
@@ -22,6 +24,8 @@ import { parseWorkers, captureInOrder } from './lib/workers.mjs';
 import { specHasVideo, prepareVideo, videoAudioTracks } from './lib/video.mjs';
 import { synthesiseCues } from './lib/cues.mjs';
 import { resolveAsset } from './lib/paths.mjs';
+import { readRows, outTemplate, outputFor, collisionKey, columnWarnings, batchTempPath, tempClashes, recheckRows, checkManifestSlot, sha256File, writeManifest, NEEDS_TEMPLATE } from './lib/batch.mjs';
+import { declaresVars, varValues, substituteVars } from '../template/vars.mjs';
 import { withGeneratedBy, provenanceText, buildDate } from '../shared/provenance.mjs';
 import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
 import { resolveAudio } from '../template/audio.mjs';
@@ -37,7 +41,9 @@ const FRAME_DIR_RETRIES = 5;
 const FRAME_DIR_RETRY_MS = 100;
 const EXIT_SIGINT = 130;
 const EXIT_SIGTERM = 143;
-const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--workers n|auto] [--quality draft|final] [--contact-sheet]';
+const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--workers n|auto] [--quality draft|final] [--contact-sheet] [--batch <rows.json> --out "<dir>/{index}.mp4"]';
+const VALUE_FLAGS = ['--out', '--fps', '--size', '--theme', '--model', '--effort', '--agent', '--workers', '--quality', '--batch'];
+const FLAGS = [...VALUE_FLAGS, '--contact-sheet'];
 
 function takeValue(argv, i, flag) {
   const value = argv[i + 1];
@@ -67,8 +73,11 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--contact-sheet') opts.contact = true;
-    else if (['--out', '--fps', '--size', '--theme', '--model', '--effort', '--agent', '--workers', '--quality'].includes(a)) opts[a.slice(2)] = takeValue(argv, i++, a);
-    else if (a.startsWith('--')) throw new UsageError(`unknown option ${a}`);
+    else if (VALUE_FLAGS.includes(a)) opts[a.slice(2)] = takeValue(argv, i++, a);
+    else if (a.startsWith('--')) {
+      const near = didYouMean(a, FLAGS);
+      throw new UsageError(`unknown option ${a}${near ? `; did you mean ${near}?` : ''} (accepted: ${FLAGS.join(', ')})`);
+    }
     else rest.push(a);
   }
   if (rest.length !== 1) throw new UsageError(USAGE);
@@ -80,7 +89,21 @@ function parseArgs(argv) {
   if (opts.size !== undefined) opts.size = parseSize(opts.size);
   if (opts.theme !== undefined) checkTheme(opts.theme);
   checkCapture(opts);
+  checkBatch(opts);
   return opts;
+}
+
+// --batch writes one MP4 per row, so --out must name each row's file; the template's names are checked against the spec's
+// vars once it is loaded (outTemplate). Without --batch, a placeholder in --out is a forgotten --batch, not a file name.
+const OUT_PLACEHOLDER = /\{(index|[a-z][a-zA-Z0-9_]*)\}/;
+function checkBatch(opts) {
+  const placeholder = OUT_PLACEHOLDER.exec(path.basename(opts.out ?? '')); // a folder may be named {draft}
+  if (opts.batch === undefined && placeholder) {
+    throw new UsageError(`--out has a ${placeholder[0]} placeholder but no --batch; add --batch <rows.json>, or write the file name without braces`);
+  }
+  if (opts.batch === undefined) return;
+  if (opts.contact) throw new UsageError('--batch does not apply to --contact-sheet (a batch writes one MP4 per row); leave one out');
+  if (!/\{[^{}]*\}/.test(opts.out ?? '')) throw new UsageError(NEEDS_TEMPLATE);
 }
 
 // --workers and --quality: a value outside the accepted set is a usage error, and so is one a contact sheet would ignore.
@@ -124,25 +147,38 @@ function planAudio(spec, dir, ffmpeg, ffprobe, fps, total, state) {
   return { audio };
 }
 
+// The spec as it renders with one batch row's `values` (`{}`: the defaults), as `{ errors }` or `{ errors: [], raw }`.
+// Its vars are checked and substituted first, and only then are --model/--effort/--agent stamped into its generatedBy, so
+// a flag's value is never substituted. Then the spec's own checks, and (with --fps, which replaces the spec's frame rate
+// after validation) the checks that depend on the frame rate: a typing text's or code's last frame, a block's own
+// schedule (a terminal-run's last line) and a block's typing parts, which frameRateErrors names by param.
+function specErrors(opts, loaded, dir, values) {
+  const varErrors = checkVars(loaded, values);
+  if (varErrors.length) return { errors: varErrors };
+  const raw = withGeneratedBy(substituteVars(loaded, values), { model: opts.model, effort: opts.effort, agent: opts.agent });
+  const result = validateSpec(raw, { dir });
+  if (!result.ok) return { errors: result.errors };
+  return { errors: opts.fps === undefined ? [] : frameRateErrors(raw, opts.fps), raw };
+}
+
 // Validate the spec and work out every input before launching anything.
 async function plan(opts, state) {
   const { spec: loaded, dir } = loadSpec(opts.spec);
-  const raw = withGeneratedBy(loaded, { model: opts.model, effort: opts.effort, agent: opts.agent });
-  const result = validateSpec(raw, { dir });
-  if (!result.ok) {
-    printResult(result, { label: opts.spec });
+  const { errors, raw } = specErrors(opts, loaded, dir, {});
+  if (errors.length) {
+    printResult({ ok: false, errors }, { label: opts.spec });
     return null;
   }
+  return prepare(opts, { raw, loaded, dir }, state);
+}
+
+// Every input of one render of `raw` (valid: plan and planBatch checked it). `served`: the spec the page draws in place
+// of the file (a batch row's); `out`: the MP4 (a batch row's), else --out or the default; `partial`: where it encodes
+// before the rename (a batch row's batchTempPath), else <name>.partial<ext> beside it.
+async function prepare(opts, { raw, loaded, dir, served, out, partial }, state) {
   const spec = withDefaults(raw);
   const specPath = path.resolve(opts.spec);
   const fps = opts.fps ?? spec.fps;
-  // --fps replaces the spec's frame rate after validation, and a typing text's or code's last frame depends on it;
-  // so do a block's own schedule (a terminal-run's last line) and a block's typing parts: frameRateErrors names the param.
-  const slow = opts.fps === undefined ? [] : frameRateErrors(raw, fps);
-  if (slow.length) {
-    printResult({ ok: false, errors: slow }, { label: opts.spec });
-    return null;
-  }
   const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
   const frames = frameCount(total, fps); // template/frames.mjs: the grid every cut-off check judges against
   if (!opts.contact && frames < 1) throw new UsageError(`spec is too short for ${fps} fps: no frames to render`);
@@ -155,11 +191,11 @@ async function plan(opts, state) {
   const quality = opts.quality ?? 'final';
   const size = opts.size ?? spec.size;
   return {
-    theme: opts.theme, themeName: loaded.theme ?? opts.theme ?? MOTION_THEME, spec, specPath, fps, frames, total, contact: opts.contact, quality,
+    theme: opts.theme, themeName: substituteVars(loaded).theme ?? opts.theme ?? MOTION_THEME, spec, served, specPath, fps, frames, total, contact: opts.contact, quality,
     // A draft page is half the size: the stage scales to fit it exactly as it does for --size, so captions, the safe area and fonts shrink with it.
     size: quality === 'draft' ? draftSize(size) : size,
     workers: opts.workers,
-    out: path.resolve(opts.out ?? defaultOut), ffmpeg,
+    out: out ?? path.resolve(opts.out ?? defaultOut), partial, ffmpeg,
     metadata: { comment: provenanceText('make-motion', spec.generatedBy, buildDate()), artist: spec.generatedBy?.model },
     videoFrames: hasVideo ? prepareVideo(spec, dir, ffmpeg, ffprobe, fps) : {},
     ...(opts.contact ? { audio: [] } : planAudio(spec, dir, ffmpeg, ffprobe, fps, total, state)),
@@ -222,7 +258,7 @@ async function renderContactSheets(page, p, info, browser) {
 // whichever page draws it.
 async function renderVideo(pages, p, state) {
   mkdirSync(path.dirname(p.out), { recursive: true });
-  state.partial = partialPath(p.out);
+  state.partial = p.partial ?? partialPath(p.out);
   state.encoder = startEncoder(p.ffmpeg, encodeArgs({ fps: p.fps, out: state.partial, audio: p.audio, duration: p.total, metadata: p.metadata, quality: p.quality }));
   let written = 0;
   let nextMark = 1;
@@ -265,6 +301,7 @@ function reportLoudness(ffmpeg, file, target) {
   return process.stdout.write(`loudness: target ${target.integrated} LUFS / ${target.truePeak} dBTP; measured ${db(level.lufs, 'LUFS')} / ${db(level.truePeak, 'dBTP')} (${on ? 'on' : 'off'} target)\n`);
 }
 
+// Each field is cleared once handled, so a batch can use the same state for its next row.
 async function cleanup(state) {
   await state.encoder?.kill();
   await state.browser?.close().catch(() => {});
@@ -272,6 +309,7 @@ async function cleanup(state) {
   // A screenshot a page had already taken can land in the folder while it is removed (an interrupt), so retry on ENOTEMPTY.
   if (state.frameDir) rmSync(state.frameDir, { recursive: true, force: true, maxRetries: FRAME_DIR_RETRIES, retryDelay: FRAME_DIR_RETRY_MS });
   if (state.cueDir) rmSync(state.cueDir, { recursive: true, force: true });
+  Object.assign(state, { encoder: null, browser: null, partial: null, frameDir: null, cueDir: null });
 }
 
 function installSignalHandlers(state) {
@@ -300,14 +338,8 @@ async function openPages(p, server, state, count) {
   return Promise.all(Array.from({ length: count }, open));
 }
 
-async function main() {
-  warnIfStaleCopy();
-  // The handlers go in before planning: planning writes the cue folder, and an interrupt with no handler would kill the
-  // process and leave it behind.
-  const state = { encoder: null, browser: null, partial: null, frameDir: null, cueDir: null, exiting: false };
-  installSignalHandlers(state);
-  const p = await plan(parseArgs(process.argv.slice(2)), state);
-  if (!p) return 1;
+// One planned render (plan or prepare): the server, the pages, the frames. Throws on failure; cleans up either way.
+async function runRender(p, state) {
   process.stdout.write(`theme: ${p.themeName}\n`);
   const pageCount = p.contact ? 1 : Math.min(p.workers, p.frames); // no page without a frame to take
   if (p.quality === 'draft') process.stderr.write(`quality: draft (${p.size.join('x')})\n`);
@@ -316,18 +348,99 @@ async function main() {
   try {
     // Frames of a parallel render wait here, outside the spec folder; cleanup() removes the folder on every exit.
     if (pageCount > 1) state.frameDir = mkdtempSync(path.join(os.tmpdir(), 'motion-frames-'));
-    server = await startServer({ specPath: p.specPath, mode: 'render', theme: p.theme, videoFrames: p.videoFrames });
+    server = await startServer({ specPath: p.specPath, mode: 'render', theme: p.theme, videoFrames: p.videoFrames, spec: p.served });
     const pages = await openPages(p, server, state, pageCount);
     const info = await pages[0].evaluate(() => ({ sceneStarts: window.__motion.sceneStarts }));
     await (p.contact ? renderContactSheets(pages[0], p, info, state.browser) : renderVideo(pages, p, state));
-    return 0;
   } catch (e) {
-    if (state.exiting) return new Promise(() => {}); // the signal handler owns the exit
+    if (state.exiting) await new Promise(() => {}); // the signal handler owns the exit
     throw e;
   } finally {
     if (!state.exiting) await cleanup(state); // also removes the cue folder when the server never started
     await server?.close();
   }
+}
+
+// Every row of a batch, checked before anything renders: its values against the spec's vars, the spec with them
+// substituted (every validator path, so a value that names a file outside the spec folder fails where it lands), the
+// frame-rate checks, and its output file (inside the --out folder, and neither another row's output nor another row's
+// temp file). The --out folder must not hold a manifest.json that is not a batch's (exit 2). Prints every failure as
+// `row <i>: <path>: <message>` and returns null when there is one; extra columns are only warnings on stderr.
+function planBatch(opts) {
+  const { spec: loaded, dir } = loadSpec(opts.spec);
+  const rows = readRows(opts.batch);
+  const template = outTemplate(opts.out, declaresVars(loaded) && loaded.vars !== null && typeof loaded.vars === 'object' ? Object.keys(loaded.vars) : []);
+  checkManifestSlot(template.dir);
+  const errors = [];
+  const jobs = [];
+  const taken = new Map();
+  const fail = (index, list) => { errors.push(...list.map((e) => `row ${index}: ${e.path || '(root)'}: ${e.message}`)); };
+  rows.forEach((row, index) => {
+    for (const warning of columnWarnings(loaded, row)) process.stderr.write(`row ${index}: ${warning}\n`);
+    const { errors: problems, raw } = specErrors(opts, loaded, dir, row);
+    if (problems.length) return fail(index, problems);
+    const values = varValues(loaded, row);
+    const target = outputFor(template, index, values);
+    if (target.error) return fail(index, [{ path: '--out', message: target.error }]);
+    const key = collisionKey(target.out);
+    if (taken.has(key)) return fail(index, [{ path: '--out', message: `${path.basename(target.out)} is also row ${taken.get(key)}'s output; add {index} to --out, or give the rows different values` }]);
+    taken.set(key, index);
+    return jobs.push({ index, values, out: target.out, partial: batchTempPath(target.out, index), raw, served: substituteVars(loaded, row) });
+  });
+  // No row may encode over, or be renamed onto, another row's MP4 (batchTempPath keeps temps out of reach of outputs).
+  for (const clash of tempClashes(jobs)) fail(clash.index, [clash]);
+  if (!errors.length) return { jobs, dir, folder: template.dir };
+  for (const line of errors) process.stdout.write(`${line}\n`);
+  process.stdout.write(`${opts.batch}: ${errors.length} error${errors.length === 1 ? '' : 's'}; nothing rendered\n`);
+  return null;
+}
+
+// One row after another; a row that fails is recorded as failed (its partial MP4 removed by cleanup) and the rest still
+// render. Each row encodes into its own hidden temp file and is renamed onto its output only when complete, so an older
+// file under that name is replaced on success and left as it was on failure: a reader judges a row by its `status`, and
+// a `failed` row's `out` is never vouched for. The manifest is rewritten after every row, and once more after the last,
+// with every ok row's file checked again (recheckRows; failed rows pass through by status). Exit 1 when any row failed.
+async function renderBatch(opts, state) {
+  const batch = planBatch(opts);
+  if (!batch) return 1;
+  const rows = [];
+  for (const job of batch.jobs) {
+    process.stdout.write(`row ${job.index}: ${job.out}\n`);
+    const entry = { index: job.index, vars: { ...job.values }, status: 'failed', out: path.basename(job.out), sha256: null, duration: null };
+    try {
+      const p = await prepare(opts, { raw: job.raw, loaded: job.served, served: job.served, dir: batch.dir, out: job.out, partial: job.partial }, state);
+      entry.duration = p.total;
+      await runRender(p, state);
+      Object.assign(entry, { status: 'ok', sha256: sha256File(job.out) }); // the final file, after the rename
+    } catch (e) {
+      if (state.exiting) await new Promise(() => {}); // the signal handler owns the exit
+      await cleanup(state); // a row that failed while planning (its cue folder) as well as while rendering
+      entry.error = String(e.message).split('\n')[0];
+      process.stderr.write(`row ${job.index}: failed: ${entry.error}\n`);
+    }
+    rows.push(entry);
+    writeManifest(batch.folder, rows);
+  }
+  const checked = recheckRows(batch.folder, rows);
+  checked.forEach((row, i) => { if (row.status !== rows[i].status) process.stderr.write(`row ${row.index}: failed: ${row.error}\n`); });
+  const manifest = writeManifest(batch.folder, checked);
+  const failed = checked.filter((r) => r.status === 'failed').length;
+  process.stdout.write(`${manifest}\n${checked.length - failed} of ${checked.length} rows rendered${failed ? `, ${failed} failed` : ''}\n`);
+  return failed ? 1 : 0;
+}
+
+async function main() {
+  warnIfStaleCopy();
+  // The handlers go in before planning: planning writes the cue folder, and an interrupt with no handler would kill the
+  // process and leave it behind.
+  const state = { encoder: null, browser: null, partial: null, frameDir: null, cueDir: null, exiting: false };
+  installSignalHandlers(state);
+  const opts = parseArgs(process.argv.slice(2));
+  if (opts.batch !== undefined) return renderBatch(opts, state);
+  const p = await plan(opts, state);
+  if (!p) return 1;
+  await runRender(p, state);
+  return 0;
 }
 
 main().then((code) => process.exit(code), (e) => {
