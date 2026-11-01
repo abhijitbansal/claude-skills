@@ -19,6 +19,7 @@ import { FORMATS } from '../../template/formats.mjs';
 import { blockAssetFiles, isBlock } from '../../template/blocks/index.mjs';
 import { CACHE_ROOT } from './video.mjs';
 import { substituteVars } from '../../template/vars.mjs';
+import { applyViral } from '../../template/viral.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NODE_MODULES = path.join(SKILL_ROOT, 'node_modules');
@@ -39,10 +40,12 @@ const MIME = {
   '.srt': 'application/x-subrip; charset=utf-8', '.vtt': 'text/vtt; charset=utf-8',
 };
 
-// /vendor/<package>/<file>: each package's folder that the page imports from, and nothing above it. shiki (code elements)
-// is the fine-grained core, the JavaScript regex engine (no wasm) and the CODE_LANGS grammars, with every package those
-// import (template/index.html maps each bare specifier to one of these); its themes, the oniguruma engine and its wasm
-// are not served.
+// /vendor/<package>/<file>: each package's folder that the page imports from, and nothing above it; only .js and .mjs.
+// shiki (code elements) is used as the fine-grained core, the JavaScript regex engine (no wasm) and the CODE_LANGS
+// grammars, with every package those import (template/index.html maps each bare specifier to one of these). The whole of
+// shiki/dist is reachable, so its theme modules, bundles and oniguruma engine module are served too, though the page
+// imports none of them; the oniguruma .wasm is refused by extension, and @shikijs/engine-oniguruma is not a root, so
+// those modules could not load their imports anyway.
 const VENDOR_ROOTS = Object.freeze(Object.assign(Object.create(null), {
   animejs: path.join(NODE_MODULES, 'animejs/dist/bundles'),
   vega: path.join(NODE_MODULES, 'vega/build'),
@@ -163,7 +166,9 @@ function serveArt(ctx, res, sceneId) {
   const spec = readSpecFile(ctx);
   const scene = Array.isArray(spec?.scenes) ? spec.scenes.find((s) => s?.id === sceneId && s.background === 'art') : undefined;
   if (!scene) return notFound(res);
-  const size = Array.isArray(spec.size) ? spec.size : (FORMATS[spec.format]?.size ?? DEFAULT_SIZE);
+  // Pipeline step 2 (applyViral) first: a viral spec that writes neither size nor format is 9:16, as the page draws it.
+  const sized = applyViral(spec);
+  const size = Array.isArray(sized.size) ? sized.size : (FORMATS[sized.format]?.size ?? DEFAULT_SIZE);
   const svg = artSvg({
     theme: themeOrDefault(spec.theme ?? ctx.theme).name, seed: scene.id,
     width: artSide(size[0], DEFAULT_SIZE[0]), height: artSide(size[1], DEFAULT_SIZE[1]), mode: 'dark',
@@ -175,14 +180,20 @@ function serveArt(ctx, res, sceneId) {
 // block's params name (logo-outro's `src`, which its expansion draws as an image); /assets serves nothing else.
 const MEDIA_ELEMENTS = new Set(['image', 'video']);
 const blockAssets = (el) => (isBlock(el) ? blockAssetFiles(el).map((file) => file.src) : []);
+
+/**
+ * The file srcs `spec` (substituted, not expanded) reads, as written: image and video elements, the files block params
+ * name, audio and captions. Throws on a spec without a scenes array. render --batch refuses an output that is one of them.
+ */
+export function assetSrcs(spec) {
+  const elements = spec.scenes.flatMap((s) => flattenElements(s.elements)).map(({ el }) => el);
+  const images = [...elements.filter((el) => MEDIA_ELEMENTS.has(el.type)).map((el) => el.src), ...elements.flatMap(blockAssets)];
+  return [...images, ...(spec.audio ?? []).map((a) => a.src), ...(spec.captions ?? []).map((c) => c.src)];
+}
+
 function referencedAssets(ctx) {
   try {
-    const spec = readSpecFile(ctx);
-    const elements = spec.scenes.flatMap((s) => flattenElements(s.elements)).map(({ el }) => el);
-    const images = [...elements.filter((el) => MEDIA_ELEMENTS.has(el.type)).map((el) => el.src), ...elements.flatMap(blockAssets)];
-    const audio = (spec.audio ?? []).map((a) => a.src);
-    const captions = (spec.captions ?? []).map((c) => c.src);
-    return new Set([...images, ...audio, ...captions].map((src) => path.posix.normalize(String(src))));
+    return new Set(assetSrcs(readSpecFile(ctx)).map((src) => path.posix.normalize(String(src))));
   } catch { return new Set(); }
 }
 

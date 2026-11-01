@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, chmodSync, symlinkSync, lstatSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import http from 'node:http';
 import path from 'node:path';
@@ -10,9 +10,10 @@ import { fileURLToPath } from 'node:url';
 import { substituteVars, findVarRefs, varValues } from '../template/vars.mjs';
 import { expandSpec, withDefaults } from '../template/defaults.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
-import { safeSegment, outTemplate, outputFor, readRows, columnWarnings, collisionKey, batchTempPath, tempClashes, recheckRows, checkManifestSlot } from '../scripts/lib/batch.mjs';
+import { safeSegment, outTemplate, outputFor, readRows, columnWarnings, collisionKey, batchTempPath, tempClashes, recheckRows, checkManifestSlot, writeManifest } from '../scripts/lib/batch.mjs';
+import { freshFile } from '../scripts/lib/paths.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
-import { requireRender, assertRendersIdentically } from './helpers/render.mjs';
+import { requireRender, assertRendersIdentically, makeTestVideo } from './helpers/render.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER = path.join(root, 'scripts/render.mjs');
@@ -536,4 +537,65 @@ test('batch (L3, L4, L6, L8): messages and limits', () => {
   const long = '漢'.repeat(80);
   assert.match(outputFor(tpl, 0, Object.assign(Object.create(null), { a: long, b: long, c: long })).error, /file name is \d+ bytes with its temporary prefix and suffix; at most 255/);
   assert.equal(collisionKey('/o/STRASSE.mp4'), collisionKey('/o/straße.mp4'));
+});
+
+// --- Gate 2 fix (L6) ------------------------------------------------------------------------------------------------
+
+test('batch (gate 2 L6): an output that is the rows file, or a clip the spec plays, is refused before anything renders', async (t) => {
+  const spec = motion([text('t', '{{name}}')], { name: { type: 'string', default: 'A' } });
+  const body = JSON.stringify([{ name: 'rows' }, { name: 'ok' }]);
+  const dir = project(spec, undefined, { 'rows.mp4': body });
+  const rows = path.join(dir, 'rows.mp4');
+  const r = render(dir, ['--batch', rows, '--out', path.join(dir, '{name}.mp4')]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.ok(lines(r).includes('row 0: --out: rows.mp4 is a file this batch reads (the rows file); change the value or the --out template'), r.stdout);
+  assert.equal(readFileSync(rows, 'utf8'), body, 'the rows file is untouched');
+  const tools = await requireRender(t, { need: ['ffmpeg', 'ffprobe'] });
+  if (!tools) return;
+  const video = { id: 'v', type: 'video', src: 'footage/clip.mp4', x: 80, y: 45, width: 160, height: 90 };
+  const clipDir = project({ ...spec, scenes: [scene([text('t', '{{name}}'), video])] }, [{ name: 'CLIP' }]);
+  mkdirSync(path.join(clipDir, 'footage'));
+  makeTestVideo(tools.ffmpeg, path.join(clipDir, 'footage', 'clip.mp4'), { seconds: 1 });
+  const before = sha(path.join(clipDir, 'footage', 'clip.mp4'));
+  const clip = batch(clipDir, path.join(clipDir, 'footage', '{name}.mp4'));
+  assert.equal(clip.status, 1, clip.stdout + clip.stderr);
+  assert.ok(lines(clip).includes('row 0: --out: CLIP.mp4 is a file this batch reads (footage/clip.mp4); change the value or the --out template'), clip.stdout);
+  assert.equal(sha(path.join(clipDir, 'footage', 'clip.mp4')), before, 'the clip is untouched');
+});
+
+// Gate 2 re-review N1: a plain render guards its --out the same way.
+test('render (gate 2 N1): --out onto the spec\'s own clip, or the spec itself, exits 2 before anything renders', async (t) => {
+  const tools = await requireRender(t, { need: ['ffmpeg', 'ffprobe'] });
+  if (!tools) return;
+  const video = { id: 'v', type: 'video', src: 'footage/clip.mp4', x: 80, y: 45, width: 160, height: 90 };
+  const dir = project(motion([text('t', 'Hi'), video]));
+  mkdirSync(path.join(dir, 'footage'));
+  const clipFile = path.join(dir, 'footage', 'clip.mp4');
+  makeTestVideo(tools.ffmpeg, clipFile, { seconds: 1 });
+  const before = sha(clipFile);
+  const r = render(dir, ['--out', clipFile]);
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.equal(r.stderr.trim(), '--out: clip.mp4 is a file this render reads (footage/clip.mp4); choose another --out');
+  assert.equal(sha(clipFile), before, 'the clip is untouched');
+  const spec = readFileSync(path.join(dir, 'm.json'), 'utf8');
+  const self = render(dir, ['--out', path.join(dir, 'm.json')]);
+  assert.equal(self.status, 2, self.stdout + self.stderr);
+  assert.equal(self.stderr.trim(), '--out: m.json is a file this render reads (the spec); choose another --out');
+  assert.equal(readFileSync(path.join(dir, 'm.json'), 'utf8'), spec, 'the spec is untouched');
+});
+
+test('batch (gate 2 L6): a symlink left at the manifest temp name is never written through, and one at a partial MP4 name is replaced by a new file', () => {
+  const folder = mkdtempSync(path.join(tmpdir(), 'vars-link-'));
+  const victim = path.join(folder, 'victim.txt');
+  writeFileSync(victim, 'keep me');
+  symlinkSync(victim, path.join(folder, `.manifest.json.${process.pid}.tmp`));
+  writeManifest(folder, [{ index: 0, status: 'ok', out: 'a.mp4', sha256: null }]);
+  assert.equal(readFileSync(victim, 'utf8'), 'keep me');
+  assert.equal(JSON.parse(readFileSync(path.join(folder, 'manifest.json'), 'utf8')).rows.length, 1);
+  const partial = path.join(folder, '.x.0.partial.mp4');
+  symlinkSync(victim, partial);
+  freshFile(partial);
+  assert.equal(lstatSync(partial).isFile(), true, 'a regular file now, not a link');
+  assert.equal(statSync(partial).size, 0);
+  assert.equal(readFileSync(victim, 'utf8'), 'keep me');
 });

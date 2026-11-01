@@ -15,7 +15,7 @@ import { flattenElements } from './groups.mjs';
 import { MAX_CUES } from './audio.mjs';
 import { windowSeconds } from './transitions.mjs';
 import { cameraSpans } from './camera.mjs';
-import { DEFAULT_FPS, TYPING_SECONDS_PER_CHAR, typingLength, counterSeconds } from './defaults.mjs';
+import { DEFAULT_FPS, TYPING_SECONDS_PER_CHAR, typingLength, isTyping, typedText, counterSeconds } from './defaults.mjs';
 
 export const VIRAL_MODE = 'viral';
 export const VIRAL_FORMAT = '9:16';
@@ -127,8 +127,8 @@ export function autoCues(spec) {
 }
 
 // Scene-second spans over which `el` changes the frame continuously: every tween (two consecutive keyframes setting the
-// same property, a move or fade as much as a count, draw or reveal), and a counter's or typing text's default count
-// when it has no `value` keyframes.
+// same property, a move or fade as much as a count, draw or reveal), and a counter's or typing text's or code's default
+// count when it has no `value` keyframes.
 function continuousSpans(el, sceneDuration) {
   const keyframes = el.keyframes ?? [];
   const props = [...new Set(keyframes.flatMap((kf) => Object.keys(kf)))].filter((prop) => prop !== 't' && prop !== 'ease');
@@ -138,7 +138,7 @@ function continuousSpans(el, sceneDuration) {
   });
   if (keyframes.some((kf) => kf.value !== undefined)) return spans;
   if (el.type === 'counter') spans.push([0, counterSeconds(sceneDuration)]);
-  if (el.type === 'text' && el.typing) spans.push([0, typingLength(el.text ?? '') * TYPING_SECONDS_PER_CHAR]);
+  if (isTyping(el)) spans.push([0, typingLength(typedText(el) ?? '') * TYPING_SECONDS_PER_CHAR]);
   return spans;
 }
 

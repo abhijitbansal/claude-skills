@@ -189,17 +189,16 @@ function clipOf(el, dir, ffprobe) {
  */
 export function prepareVideo(spec, dir, ffmpeg, ffprobe, fps) {
   if (!ffprobe) throw new Error('ffprobe not found (needed for video elements); it comes with ffmpeg');
-  const frames = {};
-  for (const { el } of videoElements(spec)) {
+  // The ids are the user's: Object.fromEntries makes each one an own key, "__proto__" and "constructor" included.
+  return Object.fromEntries(videoElements(spec).map(({ el }) => {
     const { file, info, trimStart, trimEnd } = clipOf(el, dir, ffprobe);
     const opts = { trimStart, trimEnd, fps, width: Math.round(el.width), height: Math.round(el.height), fit: el.fit ?? 'contain', alpha: info.hasAlpha };
     const key = frameCacheKey({ sha256: fileSha256(file), ffmpegVersion: ffmpegVersion(ffmpeg), ...opts });
     const cacheDir = path.join(CACHE_ROOT, key);
     const ext = opts.alpha ? 'png' : 'jpg';
     const count = readCache(cacheDir, ext)?.count ?? decodeFrames(ffmpeg, { file, dir: cacheDir, ...opts }).count;
-    frames[el.id] = { key, count, fps, ext };
-  }
-  return frames;
+    return [el.id, { key, count, fps, ext }];
+  }));
 }
 
 /**

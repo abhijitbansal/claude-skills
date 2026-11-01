@@ -14,6 +14,7 @@ import { freeBand } from '../template/blocks/layout.mjs';
 import { safeInsets, captionZone, VIRAL_SAFE_ZONE } from '../template/formats.mjs';
 import { flattenElements } from '../template/groups.mjs';
 import { validateSpec, withDefaults } from '../scripts/lib/spec.mjs';
+import { buildTimeline, seekTo } from '../template/timeline.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
 import { waitReady } from '../scripts/check.mjs';
@@ -159,6 +160,25 @@ test('before-after-swipe with two clips renders, byte-identical twice (needs a b
   const args = ['--fps', '10', '--size', '180x320'];
   const first = await renderHash(specPath, args);
   assert.equal((await renderHash(specPath, args)).sha256, first.sha256);
+});
+
+// Gate 2 fix M2: the parked "after" frame and swipe line sit off the canvas until the swipe, where a scene camera that zooms
+// out or pans would show them. They are drawn at opacity 0 (their own times every group's around them) until the swipe
+// starts, and fully from the frame after it; the slide itself is unchanged.
+test('before-after-swipe: the after frame and the line are invisible until the swipe starts and fully visible once it runs', () => {
+  const motion = { size: [1920, 1080], fps: 30, scenes: [scene(6, [block('before-after-swipe', SWIPE, { x: 960, y: 540 })])] };
+  const spec = withDefaults(motion);
+  const { timeline, states } = buildTimeline(spec);
+  const chains = new Map();
+  const walk = (els, above) => els.forEach((el) => { chains.set(el.id, [...above, el.id]); if (el.children) walk(el.children, [...above, el.id]); });
+  walk(spec.scenes[0].elements, []);
+  const shown = (id, sec) => { seekTo(timeline, sec); return chains.get(id).reduce((o, k) => o * states.get(k).opacity, 1); };
+  for (const id of ['b/after', 'b/swipe-line']) {
+    for (const sec of [0, 1, 2, 2.39, 2.4]) assert.equal(shown(id, sec), 0, `${id} at ${sec} s`);
+    for (const sec of [2.4 + 1 / 30, 2.7, 3, 5.9]) assert.equal(shown(id, sec), 1, `${id} at ${sec} s`);
+  }
+  assert.equal(shown('b/before', 2), 1, 'the before frame is unaffected');
+  assert.deepEqual(errs(motion), []);
 });
 
 test('listicle at the validator minimum keeps the rows at 0.8 + i x itemSeconds: 5 items x 1 s in a 5.8 s scene, 2 items x 1 s in 2.8 s', () => {

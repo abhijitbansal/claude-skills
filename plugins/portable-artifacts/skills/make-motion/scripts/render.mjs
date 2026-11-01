@@ -17,14 +17,14 @@ import { loadSpec, validateSpec, checkVars, frameRateErrors, withDefaults, Usage
 import { frameCount } from '../template/frames.mjs';
 import { printResult, didYouMean } from '../shared/errors.mjs';
 import { listThemes } from '../shared/theme.mjs';
-import { startServer } from './lib/server.mjs';
+import { startServer, assetSrcs } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
 import { findFfmpeg, findFfprobe, encodeArgs, probeAudio, probeGraph, measureLoudness, draftSize, QUALITIES } from './lib/ffmpeg.mjs';
 import { parseWorkers, captureInOrder } from './lib/workers.mjs';
 import { specHasVideo, prepareVideo, videoAudioTracks } from './lib/video.mjs';
 import { synthesiseCues } from './lib/cues.mjs';
-import { resolveAsset } from './lib/paths.mjs';
-import { readRows, outTemplate, outputFor, collisionKey, columnWarnings, batchTempPath, tempClashes, recheckRows, checkManifestSlot, sha256File, writeManifest, NEEDS_TEMPLATE } from './lib/batch.mjs';
+import { resolveAsset, freshFile } from './lib/paths.mjs';
+import { readRows, outTemplate, outputFor, collisionKey, columnWarnings, batchTempPath, tempClashes, inputClashes, recheckRows, checkManifestSlot, sha256File, writeManifest, NEEDS_TEMPLATE } from './lib/batch.mjs';
 import { declaresVars, varValues, substituteVars } from '../template/vars.mjs';
 import { withGeneratedBy, provenanceText, buildDate } from '../shared/provenance.mjs';
 import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
@@ -144,7 +144,7 @@ function planAudio(spec, dir, ffmpeg, ffprobe, fps, total, state) {
       throw new Error(`audio: ffmpeg rejected the mix (needs ffmpeg >= 4.4): ${problem}`);
     }
   }
-  return { audio };
+  return { audio, cuesOnly: files.length + clips.length === 0 };
 }
 
 // The spec as it renders with one batch row's `values` (`{}`: the defaults), as `{ errors }` or `{ errors: [], raw }`.
@@ -184,6 +184,14 @@ async function prepare(opts, { raw, loaded, dir, served, out, partial }, state) 
   if (!opts.contact && frames < 1) throw new UsageError(`spec is too short for ${fps} fps: no frames to render`);
   const name = path.basename(specPath, path.extname(specPath));
   const defaultOut = opts.contact ? path.join(dir, 'out') : path.join(dir, 'out', `${name}.mp4`);
+  // A single MP4 render (a batch checked its rows in planBatch) never replaces a file it reads: the spec, or a clip,
+  // image, sound or captions file it names. Exit 2 before anything is written.
+  if (out === undefined && !opts.contact) {
+    const output = path.resolve(opts.out ?? defaultOut);
+    const inputs = [{ file: specPath, what: 'the spec' }, ...assetSrcs(raw).map((src) => ({ file: path.resolve(dir, String(src)), what: src }))];
+    const [clash] = inputClashes([{ index: 0, out: output }], inputs, { reader: 'this render', fix: 'choose another --out' });
+    if (clash) throw new UsageError(`--out: ${clash.message}`);
+  }
   // Video elements need ffmpeg to decode their frames, contact sheets included.
   const hasVideo = specHasVideo(spec);
   const ffmpeg = opts.contact && !hasVideo ? null : await findFfmpeg();
@@ -259,6 +267,7 @@ async function renderContactSheets(page, p, info, browser) {
 async function renderVideo(pages, p, state) {
   mkdirSync(path.dirname(p.out), { recursive: true });
   state.partial = p.partial ?? partialPath(p.out);
+  freshFile(state.partial); // a symlink left at the temp name is replaced by a new file before ffmpeg -y opens it by name (not race-proof)
   state.encoder = startEncoder(p.ffmpeg, encodeArgs({ fps: p.fps, out: state.partial, audio: p.audio, duration: p.total, metadata: p.metadata, quality: p.quality }));
   let written = 0;
   let nextMark = 1;
@@ -282,23 +291,28 @@ async function renderVideo(pages, p, state) {
   renameSync(state.partial, p.out);
   state.partial = null;
   process.stdout.write(`${p.out}\n${p.frames} frames @ ${p.fps} fps, ${p.size.join('x')}\n`);
-  if (p.audio.length) reportLoudness(p.ffmpeg, p.out, p.spec.loudness);
+  if (p.audio.length) reportLoudness(p.ffmpeg, p.out, p.spec.loudness, p.cuesOnly);
 }
 
 // The mix is on a `loudness` target when its integrated loudness is within this many LU of it and its true peak is at
 // or below the target's.
 const LOUDNESS_TOLERANCE_LU = 1;
+const LOUDNESS_CUES_ONLY = 'loudness: information only: this mix is cues alone, and render does not normalise to the target yet; the target is for music and voiceover\n';
 
 // One line after any render with audio: how loud the mix came out; with a `loudness` target (viral mode sets one), a
-// second line measures it against the target. Information only; it never fails a render.
-function reportLoudness(ffmpeg, file, target) {
+// second line measures it against the target. Information only; it never fails a render. Render does not normalise to
+// the target yet, so a mix of cues alone (`cuesOnly`: viral's auto cues, say) sits below it by design: a third line says
+// so, rather than leave a default viral render's "off target" reading like a fault.
+function reportLoudness(ffmpeg, file, target, cuesOnly = false) {
   const level = measureLoudness(ffmpeg, file);
   if (!level) return process.stderr.write('audio: loudness could not be measured\n');
   const db = (n, unit) => (Number.isFinite(n) ? `${n.toFixed(1)} ${unit}` : `silent (${unit})`);
   process.stdout.write(`audio: ${db(level.lufs, 'LUFS')} integrated, true peak ${db(level.truePeak, 'dBTP')}\n`);
   if (!target) return true;
   const on = Math.abs(level.lufs - target.integrated) <= LOUDNESS_TOLERANCE_LU && level.truePeak <= target.truePeak; // silence (-Infinity) is off
-  return process.stdout.write(`loudness: target ${target.integrated} LUFS / ${target.truePeak} dBTP; measured ${db(level.lufs, 'LUFS')} / ${db(level.truePeak, 'dBTP')} (${on ? 'on' : 'off'} target)\n`);
+  process.stdout.write(`loudness: target ${target.integrated} LUFS / ${target.truePeak} dBTP; measured ${db(level.lufs, 'LUFS')} / ${db(level.truePeak, 'dBTP')} (${on ? 'on' : 'off'} target)\n`);
+  if (cuesOnly) process.stdout.write(LOUDNESS_CUES_ONLY);
+  return true;
 }
 
 // Each field is cleared once handled, so a batch can use the same state for its next row.
@@ -389,6 +403,10 @@ function planBatch(opts) {
   });
   // No row may encode over, or be renamed onto, another row's MP4 (batchTempPath keeps temps out of reach of outputs).
   for (const clash of tempClashes(jobs)) fail(clash.index, [clash]);
+  // Nor onto a file the batch reads: the spec, the rows, or any row's clip, image, sound or captions (a later row decodes it).
+  const inputs = [{ file: opts.spec, what: 'the spec' }, { file: opts.batch, what: 'the rows file' },
+    ...jobs.flatMap((job) => assetSrcs(job.served).map((src) => ({ file: path.resolve(dir, String(src)), what: src })))];
+  for (const clash of inputClashes(jobs, inputs)) fail(clash.index, [clash]);
   if (!errors.length) return { jobs, dir, folder: template.dir };
   for (const line of errors) process.stdout.write(`${line}\n`);
   process.stdout.write(`${opts.batch}: ${errors.length} error${errors.length === 1 ? '' : 's'}; nothing rendered\n`);

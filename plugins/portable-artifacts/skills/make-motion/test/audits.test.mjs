@@ -444,6 +444,35 @@ test('dead stretch: one in the second scene is reported on that scene, from the 
   assert.deepEqual(lines(r.stdout), ['scenes[1]: nothing changes from 3.00s to 9.00s (6.0s); add motion, or set "hold": true on text "second" if it is meant to sit still', 'check: 1 problem']);
 });
 
+// Gate 2 fix H1: a typing text's node holds its whole text at every moment (typed, caret, untyped rest), so the typed
+// count must be part of what the audit compares. 160 characters type for 5.6 s.
+test('dead stretch: a typing text is change while it types, and still once it is whole', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const line = { id: 'line', type: 'text', typing: true, fontSize: 40, maxWidth: 1500, x: 960, y: 540, text: 'Typed out one character at a time, '.repeat(5).slice(0, 160) };
+  const end = { id: 'end', type: 'text', text: 'Thanks for watching', fontSize: 64, x: 960, y: 540, keyframes: [{ t: 0, opacity: 0 }, { t: 0.5, opacity: 1 }] };
+  const typing = check([writeSpec({ scenes: [{ id: 'typed', duration: 8, elements: [line] }, { id: 'after', duration: 4, elements: [end] }] })]);
+  assert.equal(typing.status, 0, typing.stdout + typing.stderr);
+  const long = check([writeSpec({ scenes: [{ id: 'typed', duration: 12, elements: [line] }] })]);
+  assert.equal(long.status, 1, long.stdout + long.stderr);
+  assert.match(lines(long.stdout)[0], /^scenes\[0\]: nothing changes from 5\.\d\ds to 9\.00s \(3\.\ds\); add motion, or set "hold": true on text "line" if it is meant to sit still$/);
+});
+
+// Gate 2 fix M3: a `fade` is a window as the other transitions are: the screenshot inside it is half the scene, so no
+// backdrop is read there (on the first scene as on a later one).
+test('contrast: no backdrop is read inside a fade window, so black text fading in on white is not judged mid-fade', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const dark = { id: 'dark', duration: 3, background: '#101010', elements: [{ id: 'a', type: 'text', text: 'White on dark', color: '#ffffff', fontSize: 64, x: 960, y: 540, hold: true }] };
+  const light = (fade) => ({ id: 'light', duration: 3, background: '#ffffff', transition: { type: 'fade', duration: fade }, elements: [{ id: 'b', type: 'text', text: 'Black on white', color: '#000000', fontSize: 64, x: 960, y: 540, hold: true }] });
+  for (const fade of [1, 2]) {
+    const r = check([writeSpec({ background: '#101010', scenes: [dark, light(fade)] })]);
+    assert.equal(r.status, 0, `${fade} s fade: ${r.stdout}${r.stderr}`);
+    assert.equal(r.stderr, '', `${fade} s fade`);
+  }
+  const first = check([writeSpec({ background: '#101010', scenes: [light(1)] })]);
+  assert.equal(first.status, 0, first.stdout + first.stderr);
+  assert.doesNotMatch(first.stderr, /contrast/);
+});
+
 test('contrast: rgba(255,255,255,0.15) on the dusk page fails; the colour is judged at its alpha', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const file = writeSpec({ scenes: [{ id: 's', duration: 3, elements: [{ id: 'faint', type: 'text', text: 'Faint text', x: 960, y: 540, fontSize: 96, color: 'rgba(255,255,255,0.15)' }] }] });
@@ -540,4 +569,15 @@ test('a finding inside a block names the block, the part and what to change, mat
   );
   const card = atBlockParts(written, spec, [{ path: 'scenes[0].elements[0].children[0]', message: 'text "lt/card" has 2.0:1 contrast against its backdrop at 0.10s; needs 3:1; nearest passing token: text' }])[0];
   assert.match(card.message, /; blocks use theme colours; change "theme" or the scene background$/, 'the lever is the same for a part that no param sets');
+});
+
+// Gate 2 fix L14: under a scene camera a part can be pushed out of place by the zoom or pan, not by its params.
+test('a placement or size finding inside a block in a scene with a camera also names the camera as a lever', () => {
+  const written = { scenes: [{ id: 's', duration: 4, camera: { keyframes: [{ t: 0, zoom: 1 }, { t: 3, zoom: 1.3 }] }, elements: [{ id: 'lt', type: 'block', block: 'lower-third', x: 100, y: 818, params: { name: 'Ada Lovelace' } }] }] };
+  const spec = withDefaults(written);
+  const index = spec.scenes[0].elements[0].children.findIndex((c) => c.id === 'lt/name');
+  const hint = (message) => atBlockParts(written, spec, [{ path: `scenes[0].elements[0].children[${index}]`, message }])[0].message;
+  assert.equal(hint('text "lt/name" leaves the safe area (right) at 3.97s'), 'text "lt/name" leaves the safe area (right) at 3.97s (block "lower-third", part "name"); shorten params.name or move the block, or ease the scene camera');
+  assert.equal(hint('text "lt/name" is 20px (below 28px at 1080); shown 1.00s'), 'text "lt/name" is 20px (below 28px at 1080); shown 1.00s (block "lower-third", part "name"); raise the block\'s "scale" or use a larger format, or ease the scene camera');
+  assert.equal(hint('text "lt/name" (2 words) shows for 0.50s; needs 1.05s'), 'text "lt/name" (2 words) shows for 0.50s; needs 1.05s (block "lower-third", part "name"); lengthen the scene or shorten params.name', 'timing is not the camera\'s');
 });

@@ -16,12 +16,13 @@
 // child counts as moving while any group around it moves.
 // A warning (never a failure; exit stays 0) when the first scene shows nothing at t = 0: stderr, or `warnings` in --json.
 // A scene is judged on its own layer, where it settles, so the outgoing scene of a transition (crossfade, push, slide,
-// wipe, zoom, blur or iris) is not part of the incoming scene's own checks, nor is the styling that carries it in (the
-// incoming scene's first 0.4 s are sampled, from the 0.1 s first look on). Instead each transition window is sampled at
-// its midpoint, with both layers drawn as they are, and a visible text or counter of the incoming scene that overlaps
-// one of the outgoing scene there is a warning (never a failure). A window is change for the dead-stretch audit, and a
-// text is not judged for contrast while its scene is coming in (the screenshot is two layers then); a text that shows
-// only inside its window gets an `info:` line (never changing the exit code).
+// wipe, zoom, blur or iris) is not part of the incoming scene's own checks, nor is the styling that carries it in (it is
+// lifted for every sample, so the samples inside the window, 0.1 to 2 s long, judge the scene where it settles). Instead
+// each transition window is sampled at its midpoint, with both layers drawn as they are, and a visible text or counter of
+// the incoming scene that overlaps one of the outgoing scene there is a warning (never a failure). A window, a `fade`'s
+// included, is change for the dead-stretch audit, and a text is not judged for contrast while its scene is coming in
+// (the screenshot is two layers then, or the scene half faded in); a text that shows only inside its window gets an
+// `info:` line (never changing the exit code).
 // With a `captions` track: a visible text or counter that sits in the caption zone (template/formats.mjs captionZone)
 // while it is not moving and a caption is on screen is a problem, and so is a captions layer that leaves the zone: each
 // layer is measured once per caption group (at its midpoint, and for kinetic at each word's start), its box joined with
@@ -54,7 +55,7 @@ import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
 import { isViral } from '../template/viral.mjs';
 import { substituteVars } from '../template/vars.mjs';
-import { TRANSITIONS, comesInOver, normalizeTransition } from '../template/transitions.mjs';
+import { TRANSITIONS, comesInOver, normalizeTransition, windowSeconds } from '../template/transitions.mjs';
 import { cameraTweens } from '../template/camera.mjs';
 import { specWarnings, hookWarnings, stillWarnings, gapWarnings, loopWarnings, frameDifference } from './lib/viral-checks.mjs';
 import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
@@ -151,7 +152,10 @@ const measure = async ([sec, index, types, placed]) => {
     const own = getComputedStyle(node);
     const isText = types.some((type) => node.classList.contains(type));
     const colour = own.color.match(/[\d.]+/g) ?? [];
-    const content = [node.textContent, node.dataset.reveal ?? '', mark?.getAttribute('stroke-dashoffset') ?? '', node.querySelector('img')?.getAttribute('src') ?? '', node.dataset.typed ?? ''].join('\u0001');
+    // A typing text's node holds its whole text at every moment (typed, caret, untyped rest), so what is typed so far is
+    // read from its `.typed` span; a typing code element says its count in data-typed.
+    const typed = node.querySelector(':scope > .typed')?.textContent ?? '';
+    const content = [node.textContent, node.dataset.reveal ?? '', mark?.getAttribute('stroke-dashoffset') ?? '', node.querySelector('img')?.getAttribute('src') ?? '', node.dataset.typed ?? '', typed].join('\u0001');
     const sig = `${[box.left, box.top, box.right, box.bottom].map((v) => v.toFixed(1)).join(',')}|${opacity.toFixed(2)}|${content}`;
     // A code element's token colours (template/code-view.mjs marks each coloured span data-ink): the contrast audit judges every one.
     const inks = isText ? [...new Set([...node.querySelectorAll('[data-ink]')].map((n) => hex(getComputedStyle(n).color)))] : [];
@@ -307,6 +311,8 @@ const startsInvisible = (el) => (el.keyframes.find((kf) => kf.opacity !== undefi
 const startsUndrawn = (el) => ['draw', 'reveal'].some((p) => el.keyframes.find((kf) => kf[p] !== undefined)?.[p] === 0);
 const startsEmpty = (el) => Boolean(el.typing) && (el.keyframes.find((kf) => kf.value !== undefined)?.value ?? 0) === 0;
 const quoted = (els) => els.map((el) => `"${el.id}"`).join(', ');
+// What the typing elements `els` are, for the blank-frame cause: text, code, or both.
+const typingKind = (els) => (els.every((el) => el.type === 'code') ? 'a typing code element' : els.some((el) => el.type === 'code') ? 'a typing text or code element' : 'a typing text');
 
 // Frame 0 is the video's first frame and so its thumbnail: a warning when the first scene shows nothing there. An art
 // background is on screen at t = 0, so it counts. The message names what keeps the frame blank.
@@ -320,7 +326,7 @@ function frameZeroWarnings(scene, items, els, size) {
     normalizeTransition(scene.transition).type === 'fade' && 'the scene fades in from the background ("fade" on scene 1)',
     invisible.length && `${quoted(invisible)} ${invisible.length === 1 ? 'has' : 'have'} an opacity 0 first keyframe${invisible.some((el) => el.role === 'title') ? " (a title's theme entrance starts at 0)" : ''}`,
     undrawn.length && `${quoted(undrawn)} ${undrawn.length === 1 ? 'starts' : 'start'} undrawn (draw or reveal 0)`,
-    empty.length && `${quoted(empty)} ${empty.length === 1 ? 'starts' : 'start'} empty (a typing text types from no characters)`,
+    empty.length && `${quoted(empty)} ${empty.length === 1 ? 'starts' : 'start'} empty (${typingKind(empty)} types from no characters)`,
   ].filter(Boolean);
   const why = causes.length ? causes.join('; ') : 'every element is off the canvas';
   return [{ path: 'scenes[0]', message: `scene "${scene.id}" shows nothing at ${at(0)}: the first frame, the video's thumbnail, is blank; ${why}. Show something at t = 0, or accept a blank thumbnail` }];
@@ -359,6 +365,15 @@ async function overlapWarnings(page, spec, itemsOf, span, size) {
 
 // The transition window of `windows` (those a scene comes in through) that video second `sec` falls in, else undefined.
 const windowAt = (windows, sec) => windows.find((w) => sec >= w.start - EPSILON && sec < w.end - EPSILON);
+
+// The windows scene `i` (starting at video second `start`) comes in through: the page's (`overlaps`, every transition that
+// comes in over the scene before), and a `fade`'s, which the page does not list because nothing is under it (the scene
+// fades in from the background, the first scene too). A fade is a window as the others are: its frames are half the scene.
+function windowsInto(scene, i, start, overlaps) {
+  const own = overlaps.filter((w) => w.to === i);
+  const seconds = normalizeTransition(scene.transition).type === 'fade' ? windowSeconds(scene, i) : 0;
+  return seconds > 0 ? [...own, { from: null, to: i, start, end: start + seconds, type: 'fade' }] : own;
+}
 
 // `withCaptions`: also measure the captions layers at each moment. `times`: scene-local seconds (the sheet moments).
 // `withBackdrop`: also read the colour behind every text that is on screen (one screenshot per moment), for the contrast
@@ -461,7 +476,7 @@ async function inspect(browser, spec, server, prepare, written) {
   for (const [i, scene] of spec.scenes.entries()) {
     const items = itemsOf[i];
     const times = sheetTimes(scene, spec.fps);
-    const windows = overlapsAll.filter((w) => w.to === i);
+    const windows = windowsInto(scene, i, starts[i], overlapsAll);
     const samples = await sampleScene(page, scene, items, i, starts[i], times, zone !== null, spec.size, true, windows);
     const extraTimes = captionMomentsIn(captionTimes, starts[i], scene.duration, times);
     const extra = extraTimes.length ? await sampleScene(page, scene, items, i, starts[i], extraTimes, true, spec.size) : [];
@@ -521,7 +536,7 @@ export function atBlockParts(written, spec, findings) {
     const el = m && written.scenes[m[1]]?.elements?.[m[2]];
     if (!isBlock(el)) return finding;
     const part = spec.scenes[m[1]].elements[m[2]].children[m[3]].id.slice(el.id.length + 1);
-    const hint = blockHint(finding.message, paramOfPart(el.block, part));
+    const hint = blockHint(finding.message, paramOfPart(el.block, part), Boolean(written.scenes[m[1]].camera));
     const said = finding.message.replace(NO_PASSING_COLOUR, NO_PASSING_IN_BLOCK); // block terms, in place of the generic advice
     return { path: `scenes[${m[1]}].elements[${m[2]}]`, message: `${said} (block ${JSON.stringify(el.block)}, part ${JSON.stringify(part)})${hint ? `; ${hint}` : ''}` };
   });
@@ -531,10 +546,19 @@ const NO_PASSING_IN_BLOCK = 'no theme colour passes over this background; change
 
 const TRANSITION_WINDOW = new RegExp(` during the (${TRANSITIONS.filter(comesInOver).join('|')}) at `);
 
+// A finding about where a part sits or how large it is drawn: in a scene with a camera, its zoom or pan may be the cause.
+const PLACED = / leaves the safe area | overlaps | sits under the platform UI | is \d+px \(below /;
+
 // What to change for a finding about a block part, matched to the finding; null when its message already says it (the
 // caption-zone rule says to move it above the zone, the crossfade warning to move one or let the other exit, the contrast
-// finding that nothing passes is reworded in atBlockParts).
-function blockHint(message, param) {
+// finding that nothing passes is reworded in atBlockParts). `camera`: the part's scene has one, so a placement or size
+// finding also names it.
+function blockHint(message, param, camera = false) {
+  const hint = partHint(message, param);
+  return hint && camera && PLACED.test(message) ? `${hint}, or ease the scene camera` : hint;
+}
+
+function partHint(message, param) {
   const shorten = param ? ` or shorten params.${param}` : '';
   if (message.includes(' sits in the caption zone ') || TRANSITION_WINDOW.test(message)) return null;
   if (message.includes(NO_PASSING_COLOUR) || message.includes(' was not judged for contrast')) return null;

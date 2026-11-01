@@ -250,6 +250,24 @@ test('prepareVideo decodes again when the cached folder is damaged', async (t) =
   assert.deepEqual(readJson(path.join(cache, 'done.json')), { count: clip.count });
 });
 
+// Gate 2 fix L15: the frame map is keyed by element id, which the user writes: an id that names an Object.prototype
+// member is an ordinary key, on the Node side and on the page.
+test('a video element with id "__proto__" or "constructor" gets its own frame entry and renders', async (t) => {
+  const tools = await requireRender(t, RENDER_TOOLS);
+  if (!tools) return;
+  for (const id of ['__proto__', 'constructor']) {
+    const dir = tmp('video-proto-');
+    makeTestVideo(tools.ffmpeg, path.join(dir, 'clip.mp4'), { seconds: 1 });
+    const specPath = videoSpec(dir, { id }, { duration: 1 });
+    const frames = prepareVideo(withDefaults(readJson(specPath)), dir, tools.ffmpeg, tools.ffprobe, 10);
+    assert.ok(Object.hasOwn(frames, id), `${id} is an own key`);
+    assert.equal(Object.getPrototypeOf(frames), Object.prototype, `${id}: the map's prototype is untouched`);
+    assert.deepEqual(Object.keys(JSON.parse(JSON.stringify(frames))), [id], `${id} survives /frames.json`);
+    const { sha256 } = await renderHash(specPath, SMALL);
+    assert.match(sha256, /^[0-9a-f]{64}$/, `${id} renders`);
+  }
+});
+
 test('trackChain with clipStart 2 prepends atrim=start=2,asetpts=PTS-STARTPTS; without it the chain is unchanged', () => {
   const track = { file: 'a.mp4', start: 1, end: 3, volume: 1, fadeIn: 0, fadeOut: 0 };
   const graph = (t) => { const args = encodeArgs({ fps: 30, out: 'o.mp4', audio: [t], duration: 4 }); return args[args.indexOf('-filter_complex') + 1]; };

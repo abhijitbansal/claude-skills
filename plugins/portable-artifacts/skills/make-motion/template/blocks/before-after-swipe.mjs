@@ -29,6 +29,7 @@ const params = {
 const SWIPE_SHARE = 0.4; // of the scene: the default `swipeAt`
 const SWIPE_SECONDS = 0.6;
 const HOLD_SECONDS = 0.4; // the finished swipe stays on screen at least this long before the scene ends
+const SHOW_STEP = 0.001; // seconds after the swipe starts at which the waiting after frame and line show (between two frames)
 const EPSILON = 1e-9;
 const MAX_ASPECT = 1.25; // the frame is at most this much taller than wide
 const HEADLINE_SIZES = [64, 56, 48, MIN_TEXT]; // px at 1080, largest first
@@ -94,13 +95,21 @@ function expand(el, ctx) {
   const line = linePart(id('swipe-line'), 0, frameY, frameH, { stroke: 'accent', strokeWidth: stroke, rotate: 90 });
   const afterTo = 0;
   const lineTo = -frameW / 2 + stroke / 2; // inside the frame's left edge, so the line never leaves the safe area
+  // The after frame and the line wait off the canvas, where a scene camera that zooms out or pans would show them; so they
+  // sit in a group at opacity 0 until the swipe starts, and show in full SHOW_STEP later (a step, not a fade: the slide is
+  // still off the canvas then, so a scene without a camera draws the same pixels as before).
+  const shownAt = Math.min(at(swipeAt) + SHOW_STEP, (at(swipeAt) + at(swipeAt + SWIPE_SECONDS)) / 2);
+  const swipeSide = {
+    id: id('swipe'), type: 'group', x: 0, y: 0,
+    children: [slide(media(id('after'), after.src, afterTo, frameY, frameW, frameH), offscreen, afterTo), slide(line, offscreen + lineTo, lineTo)],
+    keyframes: [{ t: at(swipeAt), opacity: 0 }, { t: shownAt, opacity: 1 }],
+  };
   const parts = [];
   if (headFit) parts.push(enter(textPart(id('headline'), headline, 0, ys[0], { fontSize: headFit.fontSize, maxWidth: frameW, fontWeight: 700, role: 'title', color: 'text' }), span(0), { dy: 24 * u }));
   // Both frames and the line first, then the pills on top, so neither label is ever covered by the swipe.
   parts.push(
     enter(media(id('before'), before.src, 0, frameY, frameW, frameH), span(k)),
-    slide(media(id('after'), after.src, afterTo, frameY, frameW, frameH), offscreen, afterTo),
-    slide(line, offscreen + lineTo, lineTo),
+    swipeSide,
     enter(rectPart(id('before-pill'), pillX(0), pillY, pillW(0), pillH, { fill: 'surface', radius: Math.round(pillH / 2), elevated: true }), span(k + 1)),
     enter(textPart(id('before-label'), before.label, pillX(0), pillY, { fontSize: labels[0].fontSize, maxWidth: pillW(0) - 2 * PILL_PAD.x * u, fontWeight: 700, color: 'text' }), span(k + 1)),
   );

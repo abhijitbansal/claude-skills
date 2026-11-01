@@ -233,7 +233,7 @@ function videoMedia(el, frames) {
   }
   const media = document.createElement('img');
   media.alt = '';
-  const entry = frames[el.id];
+  const entry = Object.hasOwn(frames, el.id) ? frames[el.id] : undefined; // an id is the user's: never a prototype member
   // render.mjs and check.mjs always decode the frames first; a render page opened without them (a test reading text,
   // say) keeps the element's box and draws nothing in it.
   return { media, frame: entry && { ...entry, img: media, offset } };

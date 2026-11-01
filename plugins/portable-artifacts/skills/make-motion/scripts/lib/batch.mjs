@@ -1,10 +1,11 @@
 // render --batch: the rows file, the --out template, and the manifest written next to the outputs.
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { didYouMean } from '../../shared/errors.mjs';
 import { UsageError } from './spec.mjs';
 import { declaresVars } from '../../template/vars.mjs';
+import { realOrResolved } from './paths.mjs';
 
 export const MANIFEST = 'manifest.json';
 export const NEEDS_TEMPLATE = '--batch needs an --out template with {index} or a {var}, so outputs do not collide';
@@ -102,6 +103,21 @@ export function tempClashes(jobs) {
 }
 
 /**
+ * Every planned job (`{ index, out }`) whose output is a file the batch reads, as `{ index, path: '--out', message }`:
+ * rendering it would replace the spec, the rows file or a clip, image or sound that this row or a later one draws.
+ * `inputs`: `[{ file, what }]`, `what` naming it in the message (`the rows file`, or the src as the spec writes it).
+ * Paths are compared through their symlinks where they exist, then as collisionKey. `wording`: what reads the file and
+ * what to do instead; a single render (render.mjs prepare) passes its own.
+ */
+export function inputClashes(jobs, inputs, { reader = 'this batch', fix = 'change the value or the --out template' } = {}) {
+  const read = new Map(inputs.map(({ file, what }) => [collisionKey(realOrResolved(file)), what]));
+  return jobs.flatMap((job) => {
+    const what = read.get(collisionKey(path.join(realOrResolved(path.dirname(job.out)), path.basename(job.out))));
+    return what === undefined ? [] : [{ index: job.index, path: '--out', message: `${path.basename(job.out)} is a file ${reader} reads (${what}); ${fix}` }];
+  });
+}
+
+/**
  * The output file of row `index` with var values `values` (a null-prototype object, varValues): `{ out }`, an absolute
  * path inside the template's folder, or `{ error }` when a value leaves no file name, the name is the manifest's, or the
  * name (as its temp file, the longer of the two) is over NAME_MAX_BYTES.
@@ -186,7 +202,8 @@ export function writeManifest(dir, rows) {
   mkdirSync(dir, { recursive: true });
   const file = path.join(dir, MANIFEST);
   const temp = path.join(dir, `.${MANIFEST}.${process.pid}.tmp`);
-  writeFileSync(temp, `${JSON.stringify({ rows }, null, 2)}\n`);
+  rmSync(temp, { force: true }); // a stale temp, or a symlink planted at its name: the link goes, never what it points to
+  writeFileSync(temp, `${JSON.stringify({ rows }, null, 2)}\n`, { flag: 'wx' }); // created here, so never written through a link
   renameSync(temp, file);
   return file;
 }

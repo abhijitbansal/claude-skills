@@ -4,7 +4,44 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
-## [Unreleased]
+## [1.2.0] - 2026-11-01
+
+make-motion: four quality audits, viral mode for short-form video, six new transitions, a scene camera, highlighted code,
+parallel rendering and one MP4 per data row.
+
+### Behaviour changes to know about
+
+- **Render baselines changed on purpose, twice.** Frames and MP4s from 1.1.0 and from 1.2.0 are not byte-identical; the
+  differences are glyph edges only (no layout, colour or timing change). Commit `5ca4a2e` (deterministic captures:
+  Chromium now launches with `--disable-partial-raster` and the render page drops per-element compositor layers) changed
+  the render hashes of `q3-revenue` and `ok-crossfade` and all 12 golden block sheets (antialiasing only: PSNR 42.8 to
+  60 dB, SSIM at least 0.9988 against the old sheets, as the commit body of `5ca4a2e` reports them; the comparison
+  command was not recorded). Commit `d0d6fbf` (order-independent frames, so that `--workers` gives the same bytes as one
+  worker) changed them a second time: `q3-revenue` 7fa15373... to cb304e5d..., `ok-crossfade` f560b9f5... to
+  ac068343... (`--fps 10 --size 320x180`), and 14 of the 15 golden sheets (glyph edges +-1 level; the `logo-outro` icon
+  edges up to 8, from the commit body of `d0d6fbf`, method not recorded). From 1.2.0 on, every spec tested gives the
+  same bytes in any seek order and at any worker count (`test/seek-order.test.mjs`, the `--workers` cases in
+  `test/workers.test.mjs`, and the Gate 2 review's mixed spec of transitions, camera, code, captions and block images
+  at 1 and 4 workers); this is measured on those specs, not proved for every spec. A pipeline that pinned a 1.1.0 hash
+  must re-pin it.
+- **A stricter frame rule for typed-out text can refuse an existing spec.** The checks that ask whether a typed-out line
+  (a typing `text`, `code`, a terminal's last line, a block's last entrance) is whole on screen now use the last frame the
+  render really draws for that scene (`render.mjs` draws `round(total x fps)` frames, so a scene's last frame can sit up
+  to 1.5 frames before its end), not "one frame before the end". A typing `text` spec that passed before can now be
+  refused by up to half a frame; the error names the length to give the scene. `render.mjs --fps` refuses, before writing
+  anything, a spec whose blocks no longer fit at that rate.
+- **`check.mjs` prints less for crossfade and fade specs.** A transition window counts as change for the dead-stretch
+  audit, the contrast audit reads no backdrop inside the window a scene comes in through (a `fade`'s included), and a
+  text shown only inside its window gets an `info:` line. A spec that printed warnings around a crossfade or fade may now
+  print none (no render change).
+- **`/vendor/` responses are locked down.** The preview and render server now sends `x-content-type-options: nosniff` and
+  `content-security-policy: default-src 'none'` on every `/vendor/` response (animejs and vega had neither), and serves
+  only `.js` and `.mjs` files inside each listed package folder.
+- **`startServer` now defaults to `mode: 'render'`.** Every caller in this repository passes the mode explicitly; an
+  outside caller that omitted it now gets render behaviour (no compositor layers) instead of preview behaviour.
+- **New dependency: shiki 4.5.0**, pinned exactly (`npm audit`: 0 vulnerabilities), with 23 vendored MIT-licensed
+  packages served to the render page (shiki, its `@shikijs` packages and their small dependencies); the Licences table in
+  `README.md` lists each. Highlighting uses the JavaScript regex engine, so there is no wasm and no network.
 
 ### Added
 
@@ -15,6 +52,57 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
   fetched at render. A recording takes `at`, `scene`, `volume` and `pan` like any cue; `note` and `follow` are errors on
   it. A mistyped name gets the full list and a did-you-mean (`kenney:clik` -> `kenney:click`). The intake round's sound
   option offers them. New example `references/examples/sample-cues.json`; Licences table row for Kenney.
+- **make-motion: four `check.mjs` audits and `hold`.** Contrast (a text's colour, at its alpha and opacity, must reach
+  WCAG AA against the worst of the pixels behind it; the message names a passing theme token), reading floor (a text
+  stays on screen 0.75 x (0.5 + 0.3 x words) seconds, one 0.25 s step of slack; a last line under 2 s that clears it is an
+  `info:` line), dead stretch (nothing visible stays unchanged for more than 3 s except in the final 3 s) and text floor
+  (text under 28 px at 1080 for 0.5 s or more). A contrast or text-floor finding at one moment is a warning. An element
+  meant to sit still takes `"hold": true`; on a group or block it covers the children. `--json` carries an `info` list.
+- **make-motion: viral mode.** `"mode": "viral"` sets short-form defaults for Reels, TikTok and Shorts: 9:16 at
+  1080x1920, a platform safe zone (top 290, bottom 675, left 120, right 195 px; `viral.safeZone` overrides it), captions
+  lifted to y 998 to 1245, a first-scene title visible from frame 0 as the hook, cues placed for you (a `swoosh` on each
+  cut, a `pop` on each entrance, a `ding` when a counter lands, at least 0.4 s apart, none if you write `"cues": []`) and
+  a -14 LUFS / -1 dBTP target that `render.mjs` reports the mix against (information only: render does not normalise
+  to it yet, so a mix of cues alone reads `off target`, and a line after it says so). `check.mjs` adds warnings only: a canvas that is
+  not 9:16, audio without captions, a hook outside 3 to 7 words, a held text under a platform band, a still stretch in
+  the final seconds, and with `viral.loop` a last frame unlike the first. The intake round offers a platform. **Evidence
+  caveat:** every number here (the safe-zone bands, the 3 to 7 word hook, the 3 s change rule, -14 LUFS) is a tunable
+  default taken from the platforms' ad specs and common practice, not a rule the platforms publish and not a promise of
+  reach. New example `references/examples/viral-hook.json`.
+- **make-motion: four viral blocks.** `cta-soft` (a line and 1 to 3 pills: save, send, follow, comment, part 2),
+  `story-beats` (hook, problem, reveal, proof with an optional counter, call to action, one beat at a time),
+  `listicle` (a title and 2 to 5 rows that arrive one at a time) and `before-after-swipe` (two images or clips, the
+  second swiping in over the first). All lay out inside the viral safe zone, which makes twelve blocks. A scene must be
+  long enough for the block's schedule, and the validator says how long.
+- **make-motion: six more transitions.** A scene `transition` is a name or `{ type, direction, duration }`: `push`, `slide`
+  and `wipe` (from `left`, `right`, `up` or `down`), `zoom` and `iris` (`in` or `out`) and `blur`, on top of `fade` and
+  `crossfade`; 0.1 to 2 s, 0.4 s by default. New example `references/examples/transitions.json`.
+- **make-motion: a scene camera.** A scene `camera` takes keyframed `zoom` (0.5 to 3), `x` and `y` pan, `rotate`, and a
+  seeded `shake` (`amount` 0 to 100 px, `hz`, `seed`); the same seed shakes the same way. Elements move; the scene
+  background, captions, grain and vignette do not. New example `references/examples/camera-push-in.json`.
+- **make-motion: a `code` element and three blocks on it.** `code` highlights 14 languages (`javascript`, `typescript`,
+  `json`, `bash`, `python`, `diff`, `go`, `rust`, `swift`, `yaml`, `html`, `css`, `markdown`, `text`) in theme colours,
+  offline, with `highlight` lines, `"diff": true` and `"typing": true`; `code-typing`, `code-diff` and `terminal-run` are
+  blocks that use it, which makes fifteen blocks. New example `references/examples/code-highlight.json`.
+- **make-motion: parallel capture and a draft quality.** `render.mjs --workers N` (1 to 16, or `auto`) captures frames
+  on several pages of one browser and gives the same MP4 as one worker; `--quality draft` renders half the size on each
+  side with a faster encode. Measured on an Apple M4 Pro (14 logical cores) by timing the whole process of
+  `env SOURCE_DATE_EPOCH=1793318400 node skills/make-motion/scripts/render.mjs
+  skills/make-motion/test/fixtures/benchmark-30s.json --out <file>.mp4 --workers <n>`, twice at `--workers 1` and
+  twice at `--workers 4` (the fixture: 30 s, 1080p, 30 fps, eight scenes with titles, counters, two charts, `step-flow`
+  and `kpi-counter` blocks, a push and a wipe): one worker took 30.35 s and 30.53 s, four took 13.37 s and 13.57 s
+  (2.28x, slower one-worker run over faster four-worker run), and all four files had the SHA-256
+  `a9363289c86517cd...`. Ctrl+C during a render leaves no `.partial.mp4` behind.
+- **make-motion: typed `vars` and `--batch`.** A root `vars` declares up to 30 `string` or `number` names, each with a
+  `default`; `{{name}}` in any string value becomes the value (a value that is exactly `"{{n}}"` of a number var becomes the
+  number, so a counter's `to` can come from a row; `{{{{` writes a literal `{{`; a spec without `vars` is untouched).
+  `render.mjs --batch rows.json --out "renders/{name}.mp4"` checks every row before the first frame (`row 1: <path>:
+  <message>`; an extra column is a warning, not an error), then renders one MP4 per row and writes `manifest.json` with
+  each row's status, file and SHA-256. A failed row never overwrites an older file and the others still render. New
+  example `references/examples/batch-welcome.json` with `data/batch-welcome.rows.json`.
+- **Eval prompts.** `motion-items.json` gained prompts for each of these (`item-hold`, `item-viral`, the four viral
+  blocks, `item-transition-push`, `item-camera`, `item-code`, the three code blocks, `item-vars`);
+  `eval/results/summary-motion-gate2-2026-11-01.md` holds the Haiku run.
 
 ## [1.1.0] - 2026-10-31
 

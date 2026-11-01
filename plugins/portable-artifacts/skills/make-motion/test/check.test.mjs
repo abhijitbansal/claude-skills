@@ -435,6 +435,15 @@ test('a typing text at zero characters (only its caret on screen) does not count
   assert.equal(shown.stderr, '', 'another visible element keeps the frame from being blank');
 });
 
+// Gate 2 fix L13: the blank-thumbnail cause names a typing code element as code, not as a text.
+test('a typing code element at zero characters is named as code in the blank-frame warning', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const code = { id: 'snip', type: 'code', lang: 'bash', code: 'npm run build', typing: true, width: 800, x: 960, y: 540 };
+  const r = check([blankFrame({ elements: [code] })]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(warningOf(r), /"snip" starts empty \(a typing code element types from no characters\)/);
+});
+
 // ---- typing text (P4) ----------------------------------------------------------------------------
 
 test('a typing text is judged by its full box: a short line passes while it is still being typed', async (t) => {

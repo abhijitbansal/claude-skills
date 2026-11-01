@@ -1,0 +1,126 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "background": "#0b0d12",
+  "scenes": [
+    {
+      "id": "title",
+      "duration": 4,
+      "elements": [
+        { "id": "title-kicker", "type": "text", "text": "SPEED BENCHMARK", "x": 960, "y": 400, "fontSize": 40, "fontWeight": 600, "color": "#8b93a7", "font": "mono" },
+        { "id": "title-main", "type": "text", "text": "Thirty seconds, eight scenes", "x": 960, "y": 540, "fontSize": 110, "fontWeight": 800, "color": "#f4f6fb",
+          "keyframes": [{ "t": 0.2, "opacity": 0, "y": 580 }, { "t": 1.0, "opacity": 1, "y": 540, "ease": "outCubic" }] },
+        { "id": "title-sub", "type": "text", "text": "titles, counters, charts, blocks and transitions", "x": 960, "y": 680, "fontSize": 48, "fontWeight": 400, "color": "#c9cfdd",
+          "keyframes": [{ "t": 0.8, "opacity": 0, "y": 716 }, { "t": 1.6, "opacity": 1, "y": 680, "ease": "outCubic" }] }
+      ]
+    },
+    {
+      "id": "counters",
+      "duration": 4,
+      "transition": { "type": "push", "direction": "left", "duration": 0.6 },
+      "elements": [
+        { "id": "c-title", "type": "text", "text": "Three numbers", "x": 960, "y": 200, "fontSize": 72, "fontWeight": 700, "color": "#f4f6fb",
+          "keyframes": [{ "t": 0.2, "opacity": 0, "y": 236 }, { "t": 0.9, "opacity": 1, "y": 200, "ease": "outCubic" }] },
+        { "id": "c-one", "type": "counter", "from": 0, "to": 18, "prefix": "+", "suffix": "%", "x": 400, "y": 520, "fontSize": 130, "fontWeight": 800, "color": "#5eead4",
+          "keyframes": [{ "t": 0.4, "value": 0, "opacity": 0 }, { "t": 0.7, "opacity": 1 }, { "t": 2.4, "value": 18, "ease": "outQuart" }] },
+        { "id": "c-two", "type": "counter", "from": 0, "to": 2.4, "decimals": 1, "suffix": "M", "x": 960, "y": 520, "fontSize": 130, "fontWeight": 800, "color": "#f5c542",
+          "keyframes": [{ "t": 0.6, "value": 0, "opacity": 0 }, { "t": 0.9, "opacity": 1 }, { "t": 2.6, "value": 2.4, "ease": "outQuart" }] },
+        { "id": "c-three", "type": "counter", "from": 0, "to": 99.9, "decimals": 1, "suffix": "%", "x": 1520, "y": 520, "fontSize": 130, "fontWeight": 800, "color": "#f4f6fb",
+          "keyframes": [{ "t": 0.8, "value": 0, "opacity": 0 }, { "t": 1.1, "opacity": 1 }, { "t": 2.8, "value": 99.9, "ease": "outQuart" }] },
+        { "id": "c-l-one", "type": "text", "text": "growth", "x": 400, "y": 660, "fontSize": 44, "fontWeight": 400, "color": "#c9cfdd",
+          "keyframes": [{ "t": 1.4, "opacity": 0 }, { "t": 2.0, "opacity": 1 }] },
+        { "id": "c-l-two", "type": "text", "text": "users", "x": 960, "y": 660, "fontSize": 44, "fontWeight": 400, "color": "#c9cfdd",
+          "keyframes": [{ "t": 1.6, "opacity": 0 }, { "t": 2.2, "opacity": 1 }] },
+        { "id": "c-l-three", "type": "text", "text": "uptime", "x": 1520, "y": 660, "fontSize": 44, "fontWeight": 400, "color": "#c9cfdd",
+          "keyframes": [{ "t": 1.8, "opacity": 0 }, { "t": 2.4, "opacity": 1 }] }
+      ]
+    },
+    {
+      "id": "chart-bars",
+      "duration": 4,
+      "elements": [
+        { "id": "bars-title", "type": "text", "text": "Revenue by quarter", "x": 960, "y": 150, "fontSize": 64, "fontWeight": 700, "color": "#f4f6fb",
+          "keyframes": [{ "t": 0.2, "opacity": 0, "y": 186 }, { "t": 0.9, "opacity": 1, "y": 150, "ease": "outCubic" }] },
+        { "id": "bars-chart", "type": "chart", "x": 960, "y": 590, "width": 1400, "height": 700,
+          "vegaLite": {
+            "mark": { "type": "bar", "cornerRadiusEnd": 6 },
+            "data": { "values": [
+              { "quarter": "Q1", "revenue": 32 },
+              { "quarter": "Q2", "revenue": 36 },
+              { "quarter": "Q3", "revenue": 42 },
+              { "quarter": "Q4", "revenue": 51 }
+            ] },
+            "encoding": {
+              "x": { "field": "quarter", "type": "ordinal", "sort": null, "title": null },
+              "y": { "field": "revenue", "type": "quantitative", "title": "Revenue ($M)" }
+            }
+          },
+          "keyframes": [{ "t": 0.4, "reveal": 0, "opacity": 0 }, { "t": 0.7, "opacity": 1 }, { "t": 2.6, "reveal": 1, "ease": "inOutCubic" }] }
+      ]
+    },
+    {
+      "id": "steps",
+      "duration": 4,
+      "elements": [
+        { "id": "steps-title", "type": "text", "text": "How it works", "x": 960, "y": 300, "fontSize": 72, "fontWeight": 700, "color": "#f4f6fb",
+          "keyframes": [{ "t": 0.2, "opacity": 0, "y": 336 }, { "t": 0.9, "opacity": 1, "y": 300, "ease": "outCubic" }] },
+        { "id": "steps-flow", "type": "block", "x": 960, "y": 540, "block": "step-flow",
+          "params": { "steps": ["Write the spec", "Validate", "Preview", "Render"] } }
+      ]
+    },
+    {
+      "id": "chart-line",
+      "duration": 4,
+      "transition": { "type": "wipe", "direction": "right", "duration": 0.6 },
+      "elements": [
+        { "id": "line-title", "type": "text", "text": "Monthly active users", "x": 960, "y": 150, "fontSize": 64, "fontWeight": 700, "color": "#f4f6fb",
+          "keyframes": [{ "t": 0.2, "opacity": 0, "y": 186 }, { "t": 0.9, "opacity": 1, "y": 150, "ease": "outCubic" }] },
+        { "id": "line-chart", "type": "chart", "x": 960, "y": 590, "width": 1400, "height": 700,
+          "vegaLite": {
+            "mark": { "type": "line", "point": true, "strokeWidth": 5, "interpolate": "monotone" },
+            "data": { "values": [
+              { "month": "Jan", "users": 12 },
+              { "month": "Feb", "users": 13 },
+              { "month": "Mar", "users": 15 },
+              { "month": "Apr", "users": 31 },
+              { "month": "May", "users": 38 },
+              { "month": "Jun", "users": 42 }
+            ] },
+            "encoding": {
+              "x": { "field": "month", "type": "ordinal", "sort": null, "title": null },
+              "y": { "field": "users", "type": "quantitative", "title": "Users (k)" }
+            }
+          },
+          "keyframes": [{ "t": 0.4, "reveal": 0, "opacity": 0 }, { "t": 0.7, "opacity": 1 }, { "t": 2.6, "reveal": 1, "ease": "inOutCubic" }] }
+      ]
+    },
+    {
+      "id": "kpi",
+      "duration": 4,
+      "elements": [
+        { "id": "kpi-card", "type": "block", "x": 960, "y": 540, "block": "kpi-counter",
+          "params": { "label": "Monthly active users", "to": 48200, "delta": "+12% on last month" } }
+      ]
+    },
+    {
+      "id": "closing-numbers",
+      "duration": 3,
+      "elements": [
+        { "id": "cn-big", "type": "counter", "from": 0, "to": 100, "suffix": "%", "x": 960, "y": 500, "fontSize": 260, "fontWeight": 800, "color": "#5eead4",
+          "keyframes": [{ "t": 0.2, "value": 0, "opacity": 0 }, { "t": 0.5, "opacity": 1 }, { "t": 2.0, "value": 100, "ease": "outQuart" }] },
+        { "id": "cn-sub", "type": "text", "text": "offline and deterministic", "x": 960, "y": 740, "fontSize": 56, "fontWeight": 400, "color": "#c9cfdd",
+          "keyframes": [{ "t": 0.8, "opacity": 0, "y": 776 }, { "t": 1.5, "opacity": 1, "y": 740, "ease": "outCubic" }] }
+      ]
+    },
+    {
+      "id": "outro",
+      "duration": 3,
+      "elements": [
+        { "id": "outro-title", "type": "text", "text": "That is the whole spec", "x": 960, "y": 500, "fontSize": 100, "fontWeight": 800, "color": "#f4f6fb",
+          "keyframes": [{ "t": 0.2, "opacity": 0, "y": 540 }, { "t": 1.0, "opacity": 1, "y": 500, "ease": "outCubic" }] },
+        { "id": "outro-sub", "type": "text", "text": "render it once or render it in parallel", "x": 960, "y": 660, "fontSize": 48, "fontWeight": 400, "color": "#c9cfdd",
+          "keyframes": [{ "t": 0.8, "opacity": 0, "y": 696 }, { "t": 1.6, "opacity": 1, "y": 660, "ease": "outCubic" }] }
+      ]
+    }
+  ]
+}

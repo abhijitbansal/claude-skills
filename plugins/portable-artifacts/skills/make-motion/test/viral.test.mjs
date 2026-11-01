@@ -180,6 +180,16 @@ test('changeGaps: a 10 s scene with one keyframe at 2 s gives [{from: 2, to: 10}
   assert.deepEqual(changeGaps(withDefaults({ scenes: [scene('s', 10, [once])] }), [6]), [{ from: 2, to: 6 }, { from: 6, to: 10 }], 'a caption change splits a gap, and each side still counts');
 });
 
+// Gate 2 fix L1: a typing `code` element (and the code-typing block it expands from) types continuously, as a typing text does.
+test('changeGaps: a typing code element and a code-typing block are change while they type, as a typing text is', () => {
+  const code = 'export function total(items) {\n  return items.reduce((sum, item) => sum + item.price * item.count, 0);\n}\nconsole.log(total([{ price: 2, count: 3 }]));';
+  const snippet = { id: 'snip', type: 'code', lang: 'javascript', typing: true, width: 1400, x: 960, y: 540, code };
+  assert.deepEqual(changeGaps(withDefaults({ scenes: [scene('s', 8, [snippet])] })), [], '150 characters type for 5.25 s');
+  const block = { id: 'ct', type: 'block', block: 'code-typing', x: 960, y: 540, params: { code, lang: 'javascript' } };
+  assert.deepEqual(changeGaps(withDefaults({ scenes: [scene('s', 8, [block])] })), []);
+  assert.deepEqual(changeGaps(withDefaults({ scenes: [scene('s', 8, [{ ...snippet, typing: false }])] })), [{ from: 0, to: 8 }], 'the same code without typing is still');
+});
+
 test('autoCues: three scenes, an entering title, a counter landing at 2.5 s and a reveal at 2.7 s give swoosh at scenes 2 and 3, ding at 2.5 and no pop at 2.7; 40 entrances cap at 30; "cues": [] gives none; a written cue list wins', () => {
   assert.equal(AUTO_CUE_GAP, 0.4);
   const counter = { id: 'n', type: 'counter', from: 0, to: 3, x: 500, y: 900, keyframes: [{ t: 0.5, value: 0 }, { t: 2.5, value: 3, ease: 'outCubic' }] };
@@ -423,6 +433,23 @@ test('render prints the loudness report line reading "off target" for a -6 dBFS 
   // A written `loudness` on a spec that is not viral is reported the same way.
   const target = await renderHash(specFile({ loudness: { integrated: -16, truePeak: -2 }, audio: [{ src: 'tone.wav' }], scenes: [scene('s', 2, [hookText()])] }, { 'tone.wav': (f) => writeWav(f, { seconds: 2 }) }), SMALL);
   assert.match(target.stdout, /^loudness: target -16 LUFS \/ -2 dBTP; measured -?\d+\.\d LUFS \/ -?\d+\.\d dBTP \(off target\)$/m);
+});
+
+// Gate 2 fix L4: render does not normalise yet, so a mix of cues alone (viral's auto cues) sits below the target by
+// design; the target line is kept as it is and a line after it says so.
+test('render says a cues-only mix is not normalised to the viral loudness target, after the usual target line', async (t) => {
+  if (!(await requireRender(t))) return;
+  const entering = { id: 'more', type: 'text', text: 'And more', x: 540, y: 1200, keyframes: [{ t: 0.5, opacity: 0 }, { t: 0.9, opacity: 1 }] }; // an auto pop
+  const { stdout } = await renderHash(specFile(viral([scene('s', 2, [hookText(), entering])])), SMALL);
+  const audio = /^audio: (-?\d+\.\d) LUFS integrated, true peak (-?\d+\.\d) dBTP$/m.exec(stdout);
+  assert.ok(audio, stdout);
+  const lines = stdout.split('\n');
+  const at = lines.indexOf(audio[0]);
+  assert.match(lines[at + 1], /^loudness: target -14 LUFS \/ -1 dBTP; measured -?\d+\.\d LUFS \/ -?\d+\.\d dBTP \((on|off) target\)$/);
+  assert.equal(lines[at + 2], 'loudness: information only: this mix is cues alone, and render does not normalise to the target yet; the target is for music and voiceover');
+  // A mix with a real track gets no such line.
+  const tone = await renderHash(specFile(viral([scene('s', 2, [hookText()])], { audio: [{ src: 'tone.wav' }], cues: [] }), { 'tone.wav': (f) => writeWav(f, { seconds: 2 }) }), SMALL);
+  assert.doesNotMatch(tone.stdout, /information only/);
 });
 
 test('viral-hook example passes check with no stderr and renders byte-identical twice', async (t) => {

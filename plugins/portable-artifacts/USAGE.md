@@ -470,7 +470,11 @@ preset in `references/examples/`.
    (60 px at 1080 on the short side) while they are not moving, overlapping text or counters
    and a scene that ends with nothing visible (it prints `check: skipped (no browser: …)` and exits 0
    without a browser). It also warns on stderr, without failing, when the first
-   frame (the video's thumbnail) is blank.
+   frame (the video's thumbnail) is blank. Four audits join it: contrast (WCAG AA against
+   the worst pixels behind a text), reading floor (a text stays on screen
+   0.75 x (0.5 + 0.3 x words) seconds), dead stretch (nothing may sit unchanged for more
+   than 3 s outside the final 3 s; `"hold": true` opts an element out) and text floor
+   (under 28 px at 1080 for 0.5 s or more).
 4. Offers `preview.mjs motion.json --open`, a local page with a scrubber,
    play/pause, scene markers and frame-by-frame arrow keys. It reloads
    whenever `motion.json` changes, and shows validation errors in the page.
@@ -503,10 +507,49 @@ defaults, and its final report carries one line naming what it used:
 **Groups and blocks.** A `group` holds up to 40 child elements, up to three groups
 deep, and moves them as one. A `block` is a ready-made piece of a scene, written as one
 element with a few params: `title-card`, `lower-third`, `kpi-counter`, `step-flow`,
-`quote-card`, `checklist`, `logo-outro` and `cta-close`. A block lays itself out for
+`quote-card`, `checklist`, `logo-outro`, `cta-close`, `cta-soft` (a soft ask: save, send,
+follow), `story-beats` (hook, problem, reveal, proof, call to action), `listicle` (a
+numbered list), `before-after-swipe`, `code-typing`, `code-diff` and `terminal-run`.
+A block lays itself out for
 16:9 and 9:16, takes its colours from the theme and keeps clear of the caption zone.
 `node <skill-dir>/scripts/blocks.mjs list` lists them and `show <name>` prints a block's
 params and a ready element to paste.
+
+**Viral mode.** For Reels, TikTok and Shorts: `"mode": "viral"` (the agent writes it when
+you name a platform in the intake round). It sets 9:16 at 1080x1920, a platform safe zone
+(top 290, bottom 675, left 120, right 195 px), captions in a zone lifted above the bottom
+band, a first-scene title shown from frame 0 as the hook, cues placed for you (a `swoosh`
+on each cut, a `pop` on each entrance, a `ding` when a counter lands; write `"cues": []` for
+silence) and a -14 LUFS target that the render reports against. `check.mjs` adds warnings,
+never failures: a hook outside 3 to 7 words, text under a platform band, 3 s with no
+change, audio without captions. The safe-zone numbers are tunable defaults taken from
+the platforms' ad specs, and -14 LUFS is a common default that no platform publishes; none
+of this is a guarantee of reach. Start from `references/examples/viral-hook.json`.
+
+**Transitions and camera.** A scene's `transition` is a name or `{ "type", "direction",
+"duration" }`: `fade`, `crossfade`, `push`, `slide`, `wipe`, `zoom`, `blur` or `iris`
+(0.1 to 2 s, 0.4 s by default). A scene `camera` takes keyframed `zoom`, `x`, `y` and
+`rotate`, and a seeded `shake`; the same seed always shakes the same way. Examples:
+`references/examples/transitions.json` and `camera-push-in.json`.
+
+**Code.** A `code` element shows highlighted code in 14 languages (highlighted offline
+with shiki), optionally typed out or as a diff; the `code-typing`, `code-diff` and
+`terminal-run` blocks wrap the common cases.
+
+**Faster renders.** `render.mjs --workers 4` (1 to 16, or `auto`) captures frames in
+parallel and gives the same MP4 as one worker. `--quality draft` renders half the size on
+each side with a faster encode, for a quick look. Measured on one Apple M4 Pro (14 logical
+cores) by timing the whole process of
+`env SOURCE_DATE_EPOCH=1793318400 node scripts/render.mjs test/fixtures/benchmark-30s.json --out <file>.mp4 --workers <n>`
+(paths inside `skills/make-motion/`), twice with each worker count: the 30 s, 1080p, 30 fps
+benchmark spec took 30.35 s and 30.53 s with one worker and 13.37 s and 13.57 s with four
+(a 2.28x speedup; all four files had the same SHA-256).
+
+**One video per row.** Declare `vars` in the spec, write `{{name}}` where a value goes, put
+the values in a JSON array of objects, and run
+`render.mjs motion.json --batch rows.json --out "renders/{name}.mp4"`. Every row is checked
+before anything renders; `renders/manifest.json` lists each row's status, file and SHA-256.
+A row that fails while rendering is marked `failed` and the others still render.
 
 **Footage.** A `video` element places an mp4, mov, webm or m4v clip from the project
 folder, with optional `trimStart`, `trimEnd`, `offset`, `mute` and `volume`. Its sound
@@ -563,7 +606,9 @@ file: a root `cues` array (up to 30 of `pop`, `click`, `whoosh`, `chime`, `impac
 `swoosh`, `typing`, `drop`, `ding`, each with `at`, or `scene` plus `at`, and optional `volume`,
 `pan` and `note`; a `typing` cue can instead name a text with `follow`) is synthesised at
 render time, the same bytes every time, and mixed in with any tracks; the preview does not
-play cues.
+play cues. Twelve recorded clicks and hits (Kenney, CC0) ship with the skill as
+`"cue": "kenney:<name>"`: `click`, `tick`, `switch`, `select`, `confirm`, `error`, `open`,
+`close`, `pluck`, `glass`, `thud` and `metal`.
 
 ## 6. 3D scenes with make-scene
 

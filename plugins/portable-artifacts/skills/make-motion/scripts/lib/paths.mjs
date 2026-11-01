@@ -1,5 +1,6 @@
-// Shared by the validator and the server so both agree on what a spec may reference.
-import { realpathSync, statSync } from 'node:fs';
+// Shared by the validator and the server so both agree on what a spec may reference; and the two file helpers render
+// --batch uses for its temp files and its outputs.
+import { closeSync, openSync, realpathSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const OUTSIDE = 'must stay inside the spec folder';
@@ -20,6 +21,22 @@ export function resolveAsset(root, rel) {
   if (!real.startsWith(realRoot + path.sep)) return { error: OUTSIDE };
   if (!statSync(real).isFile()) return { error: `not a regular file: ${rel}` };
   return { file: real };
+}
+
+/**
+ * Makes `file` a new, empty regular file before a tool writes it: whatever is at that name (a stale temp from an
+ * interrupted run, or a symlink planted there) is removed first, the link itself and never what it points to, and the
+ * file is then created exclusively. A tool that reopens the file by name (ffmpeg -y) gets this new file unless something
+ * replaces it in between: it closes the case of a link left there beforehand, not a race.
+ */
+export function freshFile(file) {
+  rmSync(file, { force: true });
+  closeSync(openSync(file, 'wx'));
+}
+
+/** `file` with its symlinks resolved when it exists, else its absolute path as written. */
+export function realOrResolved(file) {
+  try { return realpathSync(file); } catch { return path.resolve(file); }
 }
 
 // Same check for URL paths: decodes, then returns the real file or null.

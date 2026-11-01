@@ -326,6 +326,18 @@ test('/art/<scene>.svg draws the scene art: seeded by the scene id, in the spec 
   assert.equal((await get(srv.url, '/art/open.svg')).status, 404, 'an unreadable spec has no art');
 }));
 
+// Gate 2 fix M1: a viral spec that writes neither size nor format is 9:16 (applyViral), and its art is drawn at that size.
+test('/art draws a viral spec at its canvas: 1080x1920 by default, its written format or size otherwise', () => withServer(async (srv, f) => {
+  const viral = (extra = {}) => ({ mode: 'viral', ...extra, scenes: [{ id: 'hook', duration: 3, background: 'art', elements: [] }] });
+  const box = async () => /^<svg [^>]*viewBox="0 0 (\d+) (\d+)"/.exec((await get(srv.url, '/art/hook.svg')).body)?.slice(1).map(Number);
+  writeFileSync(f.specPath, JSON.stringify(viral()));
+  assert.deepEqual(await box(), [1080, 1920]);
+  writeFileSync(f.specPath, JSON.stringify(viral({ format: '1:1' })));
+  assert.deepEqual(await box(), [1080, 1080]);
+  writeFileSync(f.specPath, JSON.stringify(viral({ size: [720, 1280] })));
+  assert.deepEqual(await box(), [720, 1280]);
+}));
+
 test('/art follows the render --theme for a spec without one', async () => {
   const f = fixture();
   writeFileSync(f.specPath, JSON.stringify({ size: [64, 64], scenes: [{ id: 's', duration: 1, background: 'art', elements: [] }] }));
