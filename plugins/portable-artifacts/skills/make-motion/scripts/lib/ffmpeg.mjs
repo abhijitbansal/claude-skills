@@ -47,7 +47,7 @@ export function findFfprobe({ ffmpeg } = {}) {
 
 const VIDEO_INPUT = (fps) => ['-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-'];
 const VIDEO_CODEC = ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart'];
-const AUDIO_CODEC = ['-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2']; // always stereo: amix follows the first input's layout
+export const AUDIO_CODEC = ['-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2']; // always stereo: amix follows the first input's layout
 const MS_PER_SECOND = 1000;
 const PROBE_SECONDS = '0.1';
 // amix adopts the first input's rate and layout, so every track is normalised first;
@@ -61,7 +61,7 @@ export const PROTOCOL_WHITELIST = ['-protocol_whitelist', 'file,pipe'];
 export const fileInput = (file) => [...PROTOCOL_WHITELIST, '-i', file];
 
 // Round to ms so float noise (1.3000000000000003) never reaches a filter graph.
-const sec = (n) => String(Math.round(n * MS_PER_SECOND) / MS_PER_SECOND);
+export const sec = (n) => String(Math.round(n * MS_PER_SECOND) / MS_PER_SECOND);
 
 // One track -> trim to its clip, gain, fades, then delay to its absolute start. `end` is the fade-out anchor.
 // `clipStart` (a video element's trimStart) first skips that far into the file.

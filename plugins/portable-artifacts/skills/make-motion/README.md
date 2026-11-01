@@ -17,6 +17,12 @@ shell commands.
 - **Deterministic**: every frame is captured after seeking the timeline to
   exactly `i / fps`, never in real time, so the same spec always gives the
   same video.
+- **Loudness target**: `render.mjs --loudness -16` (−30 to −5 LUFS; `--true-peak` −3 to 0, −1.5 by
+  default) normalises the mix after the encode with a two-pass `loudnorm`, byte-identical twice; a
+  spec's root `loudness` field is the target without a flag (viral mode sets −14 / −1), and
+  `--loudness off` renders the mix as mixed. A mix one gain cannot take (cues alone, or music
+  with a loudness range over 11 LU) gets a limiter stage first, so a viral clip lands on its
+  target too; that stage needs ffmpeg 5.1 or later, and an older one falls back to one gain with a note.
 - **Faster renders**: `--workers 4` (1-16, or `auto`) captures frames on several
   pages of one browser and gives the same MP4 as `--workers 1`; `--quality draft`
   renders half the size on each side with a faster encode, for a quick look.
@@ -68,7 +74,7 @@ shell commands.
   platform safe zone (top 290, bottom 675, left 120, right 195 px; `viral.safeZone` overrides it)
   with captions lifted above the bottom band, the first scene's title on screen from frame 0 as the
   hook, cues placed on cuts, entrances and counter landings, and a −14 LUFS / −1 dBTP loudness
-  target that `render.mjs` reports against. `check.mjs` warns (never fails) on a hook outside 3–7
+  target that `render.mjs` normalises the mix to (a two-pass `loudnorm`; `--loudness off` skips it) and reports against. `check.mjs` warns (never fails) on a hook outside 3–7
   words, text under a platform band, more than 3 s with no change, audio without captions, a
   non-9:16 canvas and, with `viral.loop`, an ending that does not match the start. The numbers are
   tunable defaults from platform ad specs, not platform rules.
@@ -174,7 +180,7 @@ examples in [`references/examples/`](references/examples/).
 | `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` |
 | `beats.mjs <audio>` | Beat grid of an audio file (ffmpeg; the first five minutes) → `<stem>.beats.json` for a spec's root `beats`; prints the path and `<bpm> BPM, <n> beats`; exit 1 with `no steady beat found in <file> (confidence …; needs 0.5)` | `--out <file>.json`, `--min-confidence <0-1>`, `--bpm <n>` (force the tempo), `--min-bpm <n>` / `--max-bpm <n>` (narrow the search) |
 | `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. The MP4 timing is exact | `--open` |
-| `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks, `cues` or an unmuted `video` clip with sound, followed by one `audio: … LUFS integrated, true peak … dBTP` line) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--workers <n or auto>`, `--quality <draft or final>`, `--contact-sheet`, `--batch <rows.json>` (with an `--out` template holding `{index}` or a `{var}`) |
+| `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks, `cues` or an unmuted `video` clip with sound, followed by one `audio: … LUFS integrated, true peak … dBTP` line) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--workers <n or auto>`, `--quality <draft or final>`, `--loudness <-30 to -5 LUFS, or off>`, `--true-peak <-3 to 0 dBTP>`, `--contact-sheet`, `--batch <rows.json>` (with an `--out` template holding `{index}` or a `{var}`) |
 | `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen; text whose colour has less than 4.5:1 (3:1 for large text) contrast against the pixels behind it, a text on screen for less than 0.75 × (0.5 + 0.3 × words) seconds (a last line under 2 s is only an `info:` note), more than 3 s in which nothing changes (not in the last 3 s, not for `"hold": true` elements) and text under 28 px at 1080 on the short side for 0.5 s or more (a contrast or size finding at one moment only is a warning); with `captions`, a text or counter held in the caption zone while a caption shows and a captions layer that leaves it (measured once per caption group). An element that has left the frame entirely is gone, not clipped. It also warns on stderr (never a failure) when the first scene shows nothing at t = 0. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
 | `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Lists the video frame cache once it passes 2 GB; `--fix cache` deletes it. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover>`, `--fix <id[,id]>` |
 
@@ -203,7 +209,7 @@ then `PATH`, then an optional `ffmpeg-static` install. It is never bundled.
 
 ## Requirements and licences
 
-Node.js ≥ 20, ffmpeg (≥ 4.4 for audio tracks), Chromium (one-time download) or Google Chrome. The
+Node.js ≥ 20, ffmpeg (≥ 4.4 for audio tracks; ≥ 5.1 for the limiter stage of `--loudness`, see `references/schema.md`), Chromium (one-time download) or Google Chrome. The
 dependencies, pinned by the lockfile, are anime.js v4 (MIT), Playwright
 (Apache-2.0), Vega, Vega-Lite and vega-interpreter (BSD-3-Clause), Ajv (MIT),
 and the theme fonts in the synced `shared/fonts` (OFL-1.1). The `@fontsource/inter` and

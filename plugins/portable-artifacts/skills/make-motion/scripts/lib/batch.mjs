@@ -6,6 +6,7 @@ import { didYouMean } from '../../shared/errors.mjs';
 import { UsageError } from './spec.mjs';
 import { declaresVars } from '../../template/vars.mjs';
 import { collisionKey, inputClashes } from './paths.mjs';
+import { normalizedPath } from './loudness.mjs';
 
 // inputClashes and collisionKey live in paths.mjs (beats.mjs uses them without loading the validator); re-exported here.
 export { collisionKey, inputClashes };
@@ -108,9 +109,10 @@ export function tempClashes(jobs) {
 /**
  * The output file of row `index` with var values `values` (a null-prototype object, varValues): `{ out }`, an absolute
  * path inside the template's folder, or `{ error }` when a value leaves no file name, the name is the manifest's, or the
- * name (as its temp file, the longer of the two) is over NAME_MAX_BYTES.
+ * name (as its temp file, the longer of the two) is over NAME_MAX_BYTES. `normalised`: the row is loudness-normalised, so
+ * its second temp (normalizedPath of the first) must fit too.
  */
-export function outputFor(template, index, values) {
+export function outputFor(template, index, values, { normalised = false } = {}) {
   const empty = [];
   const name = template.base.replace(PLACEHOLDER, (_, key) => {
     const segment = key === 'index' ? String(index) : safeSegment(Object.hasOwn(values, key) ? values[key] : '');
@@ -124,8 +126,12 @@ export function outputFor(template, index, values) {
   if (collisionKey(name) === MANIFEST) return { error: `${name} is the batch manifest's name; change the --out template` };
   const out = path.join(template.dir, name);
   if (path.dirname(out) !== template.dir) return { error: `${name} is not a file name inside ${template.dir}` }; // never: safeSegment drops / and \
-  const bytes = Buffer.byteLength(path.basename(batchTempPath(out, index)));
-  if (bytes > NAME_MAX_BYTES) return { error: `${name}: the file name is ${bytes} bytes with its temporary prefix and suffix; at most ${NAME_MAX_BYTES}, so shorten the values or the --out template` };
+  const temp = batchTempPath(out, index);
+  const bytes = Buffer.byteLength(path.basename(normalised ? normalizedPath(temp) : temp));
+  if (bytes > NAME_MAX_BYTES) {
+    const copy = normalised ? ' (the longer one, the ".loudnorm" copy a normalised render writes)' : '';
+    return { error: `${name}: the file name is ${bytes} bytes with its temporary prefix and suffix${copy}; at most ${NAME_MAX_BYTES}, so shorten the values or the --out template` };
+  }
   return { out };
 }
 

@@ -418,7 +418,7 @@ test('check.mjs without a browser still prints the spec-level viral warnings, ch
 
 // ---- render ---------------------------------------------------------------------------------------------------------
 
-test('render prints the loudness report line reading "off target" for a -6 dBFS tone spec with mode viral', async (t) => {
+test('render normalises a -6 dBFS tone spec with mode viral to its -14 / -1 target and prints the loudness line reading "on target"', async (t) => {
   if (!(await requireRender(t))) return;
   const motion = viral([scene('s', 2, [hookText()])], { audio: [{ src: 'tone.wav' }], cues: [] });
   const { stdout } = await renderHash(specFile(motion, { 'tone.wav': (f) => writeWav(f, { seconds: 2 }) }), SMALL);
@@ -426,18 +426,18 @@ test('render prints the loudness report line reading "off target" for a -6 dBFS 
   assert.ok(audio, stdout);
   const lines = stdout.split('\n');
   const at = lines.indexOf(audio[0]);
-  assert.equal(lines[at + 1], `loudness: target -14 LUFS / -1 dBTP; measured ${audio[1]} LUFS / ${audio[2]} dBTP (off target)`);
+  assert.equal(lines[at + 1], `loudness: target -14 LUFS / -1 dBTP; measured ${audio[1]} LUFS / ${audio[2]} dBTP (on target)`);
   // No `loudness` and no mode: the line is not printed.
   const plain = await renderHash(specFile({ audio: [{ src: 'tone.wav' }], scenes: [scene('s', 2, [hookText()])] }, { 'tone.wav': (f) => writeWav(f, { seconds: 2 }) }), SMALL);
   assert.doesNotMatch(plain.stdout, /^loudness:/m);
-  // A written `loudness` on a spec that is not viral is reported the same way.
+  // A written `loudness` on a spec that is not viral is a target too: normalised, and reported the same way.
   const target = await renderHash(specFile({ loudness: { integrated: -16, truePeak: -2 }, audio: [{ src: 'tone.wav' }], scenes: [scene('s', 2, [hookText()])] }, { 'tone.wav': (f) => writeWav(f, { seconds: 2 }) }), SMALL);
-  assert.match(target.stdout, /^loudness: target -16 LUFS \/ -2 dBTP; measured -?\d+\.\d LUFS \/ -?\d+\.\d dBTP \(off target\)$/m);
+  assert.match(target.stdout, /^loudness: target -16 LUFS \/ -2 dBTP; measured -?\d+\.\d LUFS \/ -?\d+\.\d dBTP \(on target\)$/m);
 });
 
-// Gate 2 fix L4: render does not normalise yet, so a mix of cues alone (viral's auto cues) sits below the target by
-// design; the target line is kept as it is and a line after it says so.
-test('render says a cues-only mix is not normalised to the viral loudness target, after the usual target line', async (t) => {
+// Task 19: render normalises now, so the Gate 2 fix L4 line ("information only … not normalised yet") is gone; a mix of
+// cues alone (viral's auto cues) gets the usual target line and no other.
+test('render prints the usual target line for a cues-only viral mix and no "information only" line any more', async (t) => {
   if (!(await requireRender(t))) return;
   const entering = { id: 'more', type: 'text', text: 'And more', x: 540, y: 1200, keyframes: [{ t: 0.5, opacity: 0 }, { t: 0.9, opacity: 1 }] }; // an auto pop
   const { stdout } = await renderHash(specFile(viral([scene('s', 2, [hookText(), entering])])), SMALL);
@@ -445,9 +445,10 @@ test('render says a cues-only mix is not normalised to the viral loudness target
   assert.ok(audio, stdout);
   const lines = stdout.split('\n');
   const at = lines.indexOf(audio[0]);
-  assert.match(lines[at + 1], /^loudness: target -14 LUFS \/ -1 dBTP; measured -?\d+\.\d LUFS \/ -?\d+\.\d dBTP \((on|off) target\)$/);
-  assert.equal(lines[at + 2], 'loudness: information only: this mix is cues alone, and render does not normalise to the target yet; the target is for music and voiceover');
-  // A mix with a real track gets no such line.
+  assert.match(lines[at + 1], /^loudness: target -14 LUFS \/ -1 dBTP; measured -?\d+\.\d LUFS \/ -?\d+\.\d dBTP \(on target\)$/);
+  assert.doesNotMatch(stdout, /information only|not normalise/);
+  assert.equal(lines[at + 2], '', 'nothing follows the target line but the end of the output');
+  // A mix with a real track gets no such line either.
   const tone = await renderHash(specFile(viral([scene('s', 2, [hookText()])], { audio: [{ src: 'tone.wav' }], cues: [] }), { 'tone.wav': (f) => writeWav(f, { seconds: 2 }) }), SMALL);
   assert.doesNotMatch(tone.stdout, /information only/);
 });
@@ -469,7 +470,7 @@ test('viral-hook example passes check with no stderr and renders byte-identical 
   assert.equal(r.stderr, '');
   await assertRendersIdentically(t, EXAMPLE, SMALL);
   const shown = run(RENDER, [EXAMPLE, '--out', path.join(mkdtempSync(path.join(tmpdir(), 'viral-out-')), 'v.mp4'), ...SMALL], { SOURCE_DATE_EPOCH: '1793318400' });
-  assert.match(shown.stdout, /^loudness: target -14 LUFS \/ -1 dBTP; measured -?\d+\.\d LUFS \/ -?\d+\.\d dBTP \((on|off) target\)$/m);
+  assert.match(shown.stdout, /^loudness: target -14 LUFS \/ -1 dBTP; measured -?\d+\.\d LUFS \/ -?\d+\.\d dBTP \(on target\)$/m);
 });
 
 // Keep the FORMATS import honest: the viral default is the 9:16 preset's size.

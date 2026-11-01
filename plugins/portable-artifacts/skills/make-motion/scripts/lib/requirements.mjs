@@ -1,6 +1,7 @@
 // What this skill needs, per doctor target. Side-effect free: imports only built-ins and ../../shared/.
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { ALL, nodeVersion, nodeModules, ffmpeg, browser, kokoro, builderAgent, render } from '../../shared/doctor.mjs';
 
 export const CACHE_LIMIT_BYTES = 2 * 1024 ** 3;
@@ -39,6 +40,26 @@ export function videoCache() {
   };
 }
 
+// Information only, never a failure (check is always true): the loudness limiter stage of `render.mjs --loudness` (viral
+// clips of cues alone use it) needs ffmpeg 5.1 or later; an older one still renders, with a plain gain and a stderr note.
+// Shown as a doctor note with the installed version, when ffmpeg answers `-version`.
+export function loudnessLimiter() {
+  return {
+    id: 'loudness-limiter',
+    why: 'the loudness limiter stage needs ffmpeg 5.1 or later',
+    required: false,
+    size: '—',
+    check: () => true,
+    fix: () => ({ auto: null, manual: { darwin: 'install a newer ffmpeg', linux: 'install a newer ffmpeg', win32: 'install a newer ffmpeg' } }),
+    needsSudo: () => false,
+    presentInfo: (ctx) => {
+      const r = spawnSync(ctx.env?.FFMPEG_PATH || 'ffmpeg', ['-version'], { encoding: 'utf8' });
+      const version = r.status === 0 ? /ffmpeg version (\S+)/.exec(r.stdout ?? '')?.[1] : undefined;
+      return version ? { note: `the loudness limiter stage needs ffmpeg 5.1 or later; this is ${version}` } : null;
+    },
+  };
+}
+
 // Rendering always needs ffmpeg and a browser; kokoro only for a voiceover (or --fix, which may install any). beats.mjs
 // needs ffmpeg alone, so every target but `check` covers it (a spec that names a beats file needs nothing extra to check).
 // check.mjs needs only the browser (it captures no video), so `check` leaves ffmpeg and kokoro out. A spec with a video
@@ -58,4 +79,4 @@ export const requirementsFor = (target) => (target === 'check'
 
 // What doctor.mjs checks and fixes: the requirements of `target`, plus the video frame cache in every target (check.mjs
 // fills it too). The cache is housekeeping, not something the skill needs, so requirementsFor leaves it out.
-export const doctorRequirementsFor = (target) => [...requirementsFor(target), videoCache()];
+export const doctorRequirementsFor = (target) => [...requirementsFor(target), videoCache(), ...(target === 'check' ? [] : [loudnessLimiter()])];

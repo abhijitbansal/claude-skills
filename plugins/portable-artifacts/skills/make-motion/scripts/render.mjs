@@ -4,6 +4,8 @@
 // the theme drawn: `theme: <name>`.
 // --workers: capture frames on that many pages of one browser (1-16, or auto); the MP4 is byte-identical to --workers 1.
 // --quality draft: half the size on each side and a faster encode, for a quick look; final (the default) is the full render.
+// --loudness <lufs>|off (-30 to -5) and --true-peak <dbtp> (-3 to 0): normalise the mix with a two-pass loudnorm after the
+// encode. Without a flag a spec's root `loudness` (viral mode sets -14 / -1) is the target; off disables it.
 // Both notes (`workers: N`, `quality: draft (WxH)`) go to stderr; stdout is the same either way.
 // --model/--effort/--agent override the spec's generatedBy; they are stamped into the MP4 comment/artist tags.
 // With --contact-sheet, --out is a directory; one tiled, timestamped PNG per scene goes to <out>/contact/<scene-id>.png.
@@ -32,6 +34,7 @@ import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
 import { resolveAudio } from '../template/audio.mjs';
 import { MOTION_THEME } from './lib/default-theme.mjs';
 import { sheetMoments, tileSheet, PHONE_WIDTH } from './lib/sheet.mjs';
+import { normalizeFile, normalizedPath, parseLoudnessFlag, parseTruePeakFlag, resolveTarget, parseFfmpegVersion, limiterSupported, ffmpegVersionLine, LIMITER_MIN_VERSION, LIMITER_NOTE_DB, NAME_MAX_BYTES } from './lib/loudness.mjs';
 
 const PROGRESS_STEPS = 10;
 const MAX_FPS = 120;
@@ -42,8 +45,8 @@ const FRAME_DIR_RETRIES = 5;
 const FRAME_DIR_RETRY_MS = 100;
 const EXIT_SIGINT = 130;
 const EXIT_SIGTERM = 143;
-const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--workers n|auto] [--quality draft|final] [--contact-sheet] [--batch <rows.json> --out "<dir>/{index}.mp4"]';
-const VALUE_FLAGS = ['--out', '--fps', '--size', '--theme', '--model', '--effort', '--agent', '--workers', '--quality', '--batch'];
+const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--workers n|auto] [--quality draft|final] [--loudness <lufs>|off] [--true-peak <dbtp>] [--contact-sheet] [--batch <rows.json> --out "<dir>/{index}.mp4"]';
+const VALUE_FLAGS = ['--out', '--fps', '--size', '--theme', '--model', '--effort', '--agent', '--workers', '--quality', '--loudness', '--true-peak', '--batch'];
 const FLAGS = [...VALUE_FLAGS, '--contact-sheet'];
 
 function takeValue(argv, i, flag) {
@@ -90,6 +93,7 @@ function parseArgs(argv) {
   if (opts.size !== undefined) opts.size = parseSize(opts.size);
   if (opts.theme !== undefined) checkTheme(opts.theme);
   checkCapture(opts);
+  checkLoudness(opts);
   checkBatch(opts);
   return opts;
 }
@@ -116,6 +120,17 @@ function checkCapture(opts) {
   if (opts.contact && opts.workers !== undefined) throw new UsageError('--workers does not apply to --contact-sheet (it captures a few frames on one page); leave it out');
   if (opts.contact && opts.quality === 'draft') throw new UsageError('--quality does not apply to --contact-sheet (a sheet is always full size); leave it out');
   opts.workers = workers;
+}
+
+// --loudness and --true-peak: a value out of range is a usage error, and so is one a contact sheet would ignore. Whether
+// there is a target for --true-peak to apply to depends on the spec, so resolveTarget decides that once it is loaded.
+function checkLoudness(opts) {
+  const peak = opts['true-peak'];
+  delete opts['true-peak'];
+  if (opts.contact && opts.loudness !== undefined) throw new UsageError('--loudness does not apply to --contact-sheet (a sheet has no audio); leave it out');
+  if (opts.contact && peak !== undefined) throw new UsageError('--true-peak does not apply to --contact-sheet (a sheet has no audio); leave it out');
+  if (opts.loudness !== undefined) opts.loudness = parseLoudnessFlag(opts.loudness);
+  if (peak !== undefined) opts.truePeak = parseTruePeakFlag(peak);
 }
 
 function partialPath(out) {
@@ -145,7 +160,7 @@ function planAudio(spec, dir, ffmpeg, ffprobe, fps, total, state) {
       throw new Error(`audio: ffmpeg rejected the mix (needs ffmpeg >= 4.4): ${problem}`);
     }
   }
-  return { audio, cuesOnly: files.length + clips.length === 0 };
+  return { audio };
 }
 
 // The spec as it renders with one batch row's `values` (`{}`: the defaults), as `{ errors }` or `{ errors: [], raw, served }`.
@@ -205,16 +220,27 @@ async function prepare(opts, { raw, loaded, dir, served, out, partial }, state) 
   const ffprobe = hasVideo ? findFfprobe({ ffmpeg }) : null;
   const quality = opts.quality ?? 'final';
   const size = opts.size ?? spec.size;
+  const loudness = loudnessFor(opts, spec);
   return {
     theme: opts.theme, themeName: substituteVars(loaded).theme ?? opts.theme ?? MOTION_THEME, spec, served, specPath, fps, frames, total, contact: opts.contact, quality,
     // A draft page is half the size: the stage scales to fit it exactly as it does for --size, so captions, the safe area and fonts shrink with it.
     size: quality === 'draft' ? draftSize(size) : size,
     workers: opts.workers,
+    loudness: loudness.target, loudnessReport: loudness.report, loudnessFlagged: loudness.flagged, loudnessOff: loudness.off,
     out: out ?? path.resolve(opts.out ?? defaultOut), partial, ffmpeg,
     metadata: { comment: provenanceText('make-motion', spec.generatedBy, buildDate()), artist: spec.generatedBy?.model },
     videoFrames: hasVideo ? prepareVideo(spec, dir, ffmpeg, ffprobe, fps) : {},
     ...(opts.contact ? { audio: [] } : planAudio(spec, dir, ffmpeg, ffprobe, fps, total, state)),
   };
+}
+
+// The `loudness` target a render normalises to (`target`: flags, then the spec's field; null for none or off) and the one
+// it reports against (`report`: the same, or the spec's own when --loudness off skipped the normalising). `flagged`: a flag
+// asked for it, so a spec with no audio says it ignored it. A usage error for a flag with nothing to apply to: raised for a
+// batch's rows up front too, in planBatch.
+function loudnessFor(opts, spec) {
+  const target = resolveTarget(opts, spec.loudness);
+  return { target, report: target ?? spec.loudness, off: opts.loudness === 'off', flagged: target !== null && (typeof opts.loudness === 'number' || opts.truePeak !== undefined) };
 }
 
 function startEncoder(ffmpegPath, args) {
@@ -268,6 +294,18 @@ async function renderContactSheets(page, p, info, browser) {
   process.stdout.write(`${outDir}\n${p.spec.scenes.length} contact sheet(s)\n`);
 }
 
+// Before any browser is launched: the temp files of this render must have names the file system takes (255 bytes). The
+// normalised copy's is nine bytes longer than the encode's (a batch checked both in planBatch). A usage error (exit 2).
+function checkTempNames(p) {
+  if (p.contact) return;
+  const partial = p.partial ?? partialPath(p.out);
+  const names = [partial, ...(p.loudness && p.audio.length ? [normalizedPath(partial)] : [])];
+  for (const name of names) {
+    const bytes = Buffer.byteLength(path.basename(name));
+    if (bytes > NAME_MAX_BYTES) throw new UsageError(`--out: the temporary file name ${path.basename(name)} is ${bytes} bytes; at most ${NAME_MAX_BYTES}, so shorten the --out file name${name === partial ? '' : ', or pass --loudness off'}`);
+  }
+}
+
 // One page: seek, screenshot, encode, frame by frame. Several pages: they take the frames in turn, write PNG files (at
 // most two per page at once) and the encoder takes the frames in order (workers.mjs); every frame is the same bytes
 // whichever page draws it.
@@ -275,6 +313,7 @@ async function renderVideo(pages, p, state) {
   mkdirSync(path.dirname(p.out), { recursive: true });
   state.partial = p.partial ?? partialPath(p.out);
   freshFile(state.partial); // a symlink left at the temp name is replaced by a new file before ffmpeg -y opens it by name (not race-proof)
+  if (p.loudnessFlagged && !p.audio.length) process.stderr.write('loudness: this spec has no audio, so --loudness and --true-peak are ignored\n');
   state.encoder = startEncoder(p.ffmpeg, encodeArgs({ fps: p.fps, out: state.partial, audio: p.audio, duration: p.total, metadata: p.metadata, quality: p.quality }));
   let written = 0;
   let nextMark = 1;
@@ -295,42 +334,72 @@ async function renderVideo(pages, p, state) {
     }
   }
   await state.encoder.finish();
-  renameSync(state.partial, p.out);
-  state.partial = null;
+  const finished = p.loudness && p.audio.length ? await normalise(p, state) : state.partial;
+  renameSync(finished, p.out);
+  rmSync(state.partial, { force: true }); // the encode, when the normalised copy replaced it (else it was just renamed away)
+  Object.assign(state, { partial: null, normalized: null });
   process.stdout.write(`${p.out}\n${p.frames} frames @ ${p.fps} fps, ${p.size.join('x')}\n`);
-  if (p.audio.length) reportLoudness(p.ffmpeg, p.out, p.spec.loudness, p.cuesOnly);
+  if (p.audio.length) reportLoudness(p.ffmpeg, p.out, p.loudnessReport, p.loudnessOff);
+}
+
+// The two-pass loudnorm from the encode (state.partial) into a second fresh temp; returns the file to rename onto the
+// output: the normalised temp, or the encode itself when the mix is silent (nothing to scale). cleanup() removes the temp
+// and stops ffmpeg if this is interrupted or fails.
+async function normalise(p, state) {
+  state.normalized = normalizedPath(state.partial);
+  freshFile(state.normalized);
+  // The limiter stage needs ffmpeg 5.1; an older one gets one gain, and a note, rather than a failure after the frames.
+  const track = (job) => { state.job = job; };
+  const { silent, unavailable, reduction } = await normalizeFile(p.ffmpeg, { input: state.partial, out: state.normalized, target: p.loudness.integrated, truePeak: p.loudness.truePeak, duration: p.total, limiter: () => limiterSupported(p.ffmpeg, track), track });
+  state.job = null;
+  if (unavailable) {
+    const version = parseFfmpegVersion(ffmpegVersionLine(p.ffmpeg)); // for the message only; limiterSupported asked the ffmpeg itself
+    process.stderr.write(`loudness: this mix needs the limiter stage to reach the target, which needs ffmpeg ${LIMITER_MIN_VERSION.major}.${LIMITER_MIN_VERSION.minor} or later (this is ${version ? `${version.major}.${version.minor}` : 'an ffmpeg that rejected the stage'}); it is normalised with a plain gain capped at the true-peak ceiling, so it may read off target\n`);
+  }
+  if (reduction > LIMITER_NOTE_DB) process.stderr.write(`loudness: the limiter reduces this mix's peaks by up to ${reduction} dB (more than ${LIMITER_NOTE_DB} dB) to reach ${p.loudness.integrated} LUFS; the mix is quiet or peaky for that target, so consider raising its level or lowering the target\n`);
+  if (!silent) return state.normalized;
+  process.stderr.write('loudness: the mix is silent, so there is nothing to normalise\n');
+  rmSync(state.normalized, { force: true });
+  state.normalized = null;
+  return state.partial;
 }
 
 // The mix is on a `loudness` target when its integrated loudness is within this many LU of it and its true peak is at
 // or below the target's.
 const LOUDNESS_TOLERANCE_LU = 1;
-const LOUDNESS_CUES_ONLY = 'loudness: information only: this mix is cues alone, and render does not normalise to the target yet; the target is for music and voiceover\n';
 
-// One line after any render with audio: how loud the mix came out; with a `loudness` target (viral mode sets one), a
-// second line measures it against the target. Information only; it never fails a render. Render does not normalise to
-// the target yet, so a mix of cues alone (`cuesOnly`: viral's auto cues, say) sits below it by design: a third line says
-// so, rather than leave a default viral render's "off target" reading like a fault.
-function reportLoudness(ffmpeg, file, target, cuesOnly = false) {
+// One line after any render with audio: how loud the mix came out; with a `loudness` target (a flag, or the spec's field:
+// viral mode sets one), a second line measures the finished file against it. Information only; it never fails a render. A
+// normalised mix reads `on target`; with `--loudness off` (`flagOff`) a mix that is not reads `off target; --loudness off`,
+// so the line is not taken for a fault.
+function reportLoudness(ffmpeg, file, target, flagOff = false) {
   const level = measureLoudness(ffmpeg, file);
   if (!level) return process.stderr.write('audio: loudness could not be measured\n');
   const db = (n, unit) => (Number.isFinite(n) ? `${n.toFixed(1)} ${unit}` : `silent (${unit})`);
   process.stdout.write(`audio: ${db(level.lufs, 'LUFS')} integrated, true peak ${db(level.truePeak, 'dBTP')}\n`);
   if (!target) return true;
   const on = Math.abs(level.lufs - target.integrated) <= LOUDNESS_TOLERANCE_LU && level.truePeak <= target.truePeak; // silence (-Infinity) is off
-  process.stdout.write(`loudness: target ${target.integrated} LUFS / ${target.truePeak} dBTP; measured ${db(level.lufs, 'LUFS')} / ${db(level.truePeak, 'dBTP')} (${on ? 'on' : 'off'} target)\n`);
-  if (cuesOnly) process.stdout.write(LOUDNESS_CUES_ONLY);
+  process.stdout.write(`loudness: target ${target.integrated} LUFS / ${target.truePeak} dBTP; measured ${db(level.lufs, 'LUFS')} / ${db(level.truePeak, 'dBTP')} (${on ? 'on target' : flagOff ? 'off target; --loudness off' : 'off target'})\n`);
   return true;
+}
+
+// Cleanup is best effort: every step runs on its own, so one that fails (a permission error, a busy file) is named on
+// stderr and never skips the rest (the cue folder, the browser) or escapes a batch row.
+async function attempt(label, step) {
+  try { await step(); } catch (e) { process.stderr.write(`cleanup: ${label}: ${e.message}\n`); }
 }
 
 // Each field is cleared once handled, so a batch can use the same state for its next row.
 async function cleanup(state) {
-  await state.encoder?.kill();
-  await state.browser?.close().catch(() => {});
-  if (state.partial) rmSync(state.partial, { force: true });
+  await attempt('encoder', () => state.encoder?.kill());
+  await attempt('loudnorm pass', () => state.job?.kill()); // before its temp files go, so ffmpeg cannot write one back
+  await attempt('browser', () => state.browser?.close());
+  if (state.partial) await attempt(state.partial, () => rmSync(state.partial, { force: true }));
+  if (state.normalized) await attempt(state.normalized, () => rmSync(state.normalized, { force: true }));
   // A screenshot a page had already taken can land in the folder while it is removed (an interrupt), so retry on ENOTEMPTY.
-  if (state.frameDir) rmSync(state.frameDir, { recursive: true, force: true, maxRetries: FRAME_DIR_RETRIES, retryDelay: FRAME_DIR_RETRY_MS });
-  if (state.cueDir) rmSync(state.cueDir, { recursive: true, force: true });
-  Object.assign(state, { encoder: null, browser: null, partial: null, frameDir: null, cueDir: null });
+  if (state.frameDir) await attempt(state.frameDir, () => rmSync(state.frameDir, { recursive: true, force: true, maxRetries: FRAME_DIR_RETRIES, retryDelay: FRAME_DIR_RETRY_MS }));
+  if (state.cueDir) await attempt(state.cueDir, () => rmSync(state.cueDir, { recursive: true, force: true }));
+  Object.assign(state, { encoder: null, job: null, browser: null, partial: null, normalized: null, frameDir: null, cueDir: null });
 }
 
 function installSignalHandlers(state) {
@@ -367,6 +436,7 @@ async function runRender(p, state) {
   if (pageCount > 1) process.stderr.write(`workers: ${pageCount}\n`);
   let server;
   try {
+    checkTempNames(p);
     // Frames of a parallel render wait here, outside the spec folder; cleanup() removes the folder on every exit.
     if (pageCount > 1) state.frameDir = mkdtempSync(path.join(os.tmpdir(), 'motion-frames-'));
     server = await startServer({ specPath: p.specPath, mode: 'render', theme: p.theme, videoFrames: p.videoFrames, spec: p.served });
@@ -400,8 +470,9 @@ function planBatch(opts) {
     for (const warning of columnWarnings(loaded, row)) process.stderr.write(`row ${index}: ${warning}\n`);
     const { errors: problems, raw, served } = specErrors(opts, loaded, dir, row);
     if (problems.length) return fail(index, problems);
+    const normalised = resolveTarget(opts, withDefaults(raw).loudness) !== null; // a --true-peak with no target fails the whole batch (exit 2), not row by row
     const values = varValues(loaded, row);
-    const target = outputFor(template, index, values);
+    const target = outputFor(template, index, values, { normalised });
     if (target.error) return fail(index, [{ path: '--out', message: target.error }]);
     const key = collisionKey(target.out);
     if (taken.has(key)) return fail(index, [{ path: '--out', message: `${path.basename(target.out)} is also row ${taken.get(key)}'s output; add {index} to --out, or give the rows different values` }]);
@@ -410,6 +481,7 @@ function planBatch(opts) {
   });
   // No row may encode over, or be renamed onto, another row's MP4 (batchTempPath keeps temps out of reach of outputs).
   for (const clash of tempClashes(jobs)) fail(clash.index, [clash]);
+  for (const clash of tempClashes(jobs.map((job) => ({ ...job, partial: normalizedPath(job.partial) })))) fail(clash.index, [clash]); // --loudness' second temp
   // Nor onto a file the batch reads: the spec, the rows, or any row's clip, image, sound or captions (a later row decodes it).
   const inputs = [{ file: opts.spec, what: 'the spec' }, { file: opts.batch, what: 'the rows file' },
     ...jobs.flatMap((job) => assetSrcs(job.served).map((src) => ({ file: path.resolve(dir, String(src)), what: src })))];
@@ -458,7 +530,7 @@ async function main() {
   warnIfStaleCopy();
   // The handlers go in before planning: planning writes the cue folder, and an interrupt with no handler would kill the
   // process and leave it behind.
-  const state = { encoder: null, browser: null, partial: null, frameDir: null, cueDir: null, exiting: false };
+  const state = { encoder: null, job: null, browser: null, partial: null, normalized: null, frameDir: null, cueDir: null, exiting: false };
   installSignalHandlers(state);
   const opts = parseArgs(process.argv.slice(2));
   if (opts.batch !== undefined) return renderBatch(opts, state);
