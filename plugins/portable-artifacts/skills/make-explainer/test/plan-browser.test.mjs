@@ -6,10 +6,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { buildSpec, haveBrowser, openPage, closeSharedBrowser } from './helpers/browser.mjs';
+import { buildSpec, haveBrowser, openPage as openFile, openServed as openPage, closeSharedBrowser } from './helpers/browser.mjs';
 import { checkPage } from '../scripts/check.mjs';
 
 after(closeSharedBrowser);
+
+// Every page here is opened over loopback http, not file://: these tests write localStorage and read it back after a
+// reload, and Chromium's file:// localStorage does not reliably do that on a loaded machine (see servedUrl in
+// helpers/browser.mjs; openServed is openPage over http). The one
+// file:// test below keeps the real way a reader opens the page covered, without asserting on saved answers.
 
 const skipUnlessBrowser = async (t) => {
   if (await haveBrowser()) return false;
@@ -53,6 +58,15 @@ test('a non-recommended option exports isRecommended false, the recommended one 
   const [storage, theme] = file.answers;
   assert.deepEqual([storage.answered, storage.choice, storage.isRecommended], [true, 'A save server', false]);
   assert.deepEqual([theme.answered, theme.choice, theme.isRecommended], [true, 'Mono', true]);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('opened from disk (file://), answering and exporting work with no console errors', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openFile(built().url);
+  await pick(page, 'storage', 'A save server');
+  assert.equal((await exported(page)).answers[0].choice, 'A save server');
   assert.deepEqual(problems, []);
   await context.close();
 });
