@@ -20,6 +20,7 @@ import { blockAssetFiles, isBlock } from '../../template/blocks/index.mjs';
 import { CACHE_ROOT } from './video.mjs';
 import { substituteVars } from '../../template/vars.mjs';
 import { applyViral } from '../../template/viral.mjs';
+import { declaresBeats, resolveSpecBeats } from './beats-file.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NODE_MODULES = path.join(SKILL_ROOT, 'node_modules');
@@ -183,12 +184,13 @@ const blockAssets = (el) => (isBlock(el) ? blockAssetFiles(el).map((file) => fil
 
 /**
  * The file srcs `spec` (substituted, not expanded) reads, as written: image and video elements, the files block params
- * name, audio and captions. Throws on a spec without a scenes array. render --batch refuses an output that is one of them.
+ * name, audio, captions and the beats file. Throws on a spec without a scenes array. render --batch refuses an output that is one of them.
  */
 export function assetSrcs(spec) {
   const elements = spec.scenes.flatMap((s) => flattenElements(s.elements)).map(({ el }) => el);
   const images = [...elements.filter((el) => MEDIA_ELEMENTS.has(el.type)).map((el) => el.src), ...elements.flatMap(blockAssets)];
-  return [...images, ...(spec.audio ?? []).map((a) => a.src), ...(spec.captions ?? []).map((c) => c.src)];
+  const beats = typeof spec.beats === 'string' ? [spec.beats] : []; // watched for a reload, guarded against an --out over it
+  return [...images, ...(spec.audio ?? []).map((a) => a.src), ...(spec.captions ?? []).map((c) => c.src), ...beats];
 }
 
 function referencedAssets(ctx) {
@@ -295,10 +297,22 @@ function route(ctx, req, res) {
   return notFound(res);
 }
 
-// The spec as written (or the one the server was given); an embedding tool may give the server a theme for specs that
-// name none.
+// A spec file that names a beats file is served resolved (pipeline step 1b): its vars substituted, then every "beat:<n>"
+// as seconds, so the page never meets a reference. Any other file is served as written, byte for byte. Throws when the
+// beats cannot be resolved (serveSpec answers 404; the preview's spec-error event carries the reasons).
+function beatsResolved(ctx, body) {
+  let spec;
+  try { spec = JSON.parse(body.toString('utf8')); } catch { return body; }
+  if (!declaresBeats(spec)) return body;
+  const { spec: resolved, errors } = resolveSpecBeats(substituteVars(spec), ctx.specDir);
+  if (errors) throw new Error(errors[0].message);
+  return Buffer.from(JSON.stringify(resolved));
+}
+
+// The spec as written, beats resolved (or the one the server was given, which render has already resolved); an
+// embedding tool may give the server a theme for specs that name none.
 function specBody(ctx) {
-  const body = ctx.spec === undefined ? readFileSync(ctx.specFile) : Buffer.from(JSON.stringify(ctx.spec));
+  const body = ctx.spec === undefined ? beatsResolved(ctx, readFileSync(ctx.specFile)) : Buffer.from(JSON.stringify(ctx.spec));
   if (ctx.theme === undefined) return body;
   try {
     const spec = JSON.parse(body.toString('utf8'));
@@ -361,8 +375,8 @@ function watchSpec(ctx) {
 // `videoFrames`: prepareVideo()'s `{ [elementId]: { key, count, fps, ext } }`, served as /frames.json; the frames
 // themselves come from `frameRoot`/<key>/. Preview passes none: it plays the clips themselves from /assets.
 // `mode` defaults to render, so a caller that forgets it gets deterministic captures; preview.mjs asks for 'preview'.
-// `spec`: a validated spec object served in place of the file (render --batch: one row's, its vars substituted); assets
-// still resolve inside the folder of `specPath`.
+// `spec`: a validated spec object served in place of the file (render --batch: one row's, its vars substituted and its
+// beats resolved); assets still resolve inside the folder of `specPath`.
 export async function startServer({ specPath, mode = 'render', theme, nowrapModule = NOWRAP_MODULE, videoFrames = {}, frameRoot = CACHE_ROOT, spec }) {
   const specFile = path.resolve(specPath);
   const ctx = { specFile, spec, theme, nowrapModule, videoFrames, frameRoot, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };

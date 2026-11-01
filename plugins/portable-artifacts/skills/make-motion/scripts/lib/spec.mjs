@@ -6,7 +6,7 @@ import { compile as compileVegaLite } from 'vega-lite';
 import { formatAjvErrors, pathJoin, didYouMean } from '../../shared/errors.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
-import { resolveAsset } from './paths.mjs';
+import { resolveAsset, resolveSpecPath } from './paths.mjs';
 import { AUDIO_EXTENSIONS, MAX_AUDIO_TRACKS, CUE_NAMES, KENNEY_NAMES, KENNEY_PREFIX, PITCHED_CUES, MAX_CUES, NOTE_PATTERN, trackStart, typingFollow } from '../../template/audio.mjs';
 import { flattenElements, isGroup, MAX_GROUP_DEPTH, MAX_GROUP_CHILDREN } from '../../template/groups.mjs';
 import { FORMATS, FORMAT_NAMES, VIRAL_REFERENCE, VIRAL_CAPTION_TOP } from '../../template/formats.mjs';
@@ -19,12 +19,14 @@ import { BLOCKS, BLOCK_NAMES, isBlock, blockDef, blockAssetFiles, paramOfPart } 
 import { VIRAL_MODE, applyViral } from '../../template/viral.mjs';
 import { VAR_NAME, MAX_VARS, VAR_TYPES, declaresVars, findVarRefs, varValues, substituteVars } from '../../template/vars.mjs';
 import { checkCode } from './code-check.mjs';
+import { resolveSpecBeats } from './beats-file.mjs';
 import { gridOf, frameCutoff } from '../../template/frames.mjs';
 import { CAMERA_PROPS, CAMERA_REST, MIN_ZOOM, MAX_ZOOM, MAX_SHAKE_AMOUNT, MAX_SHAKE_HZ, MAX_SHAKE_SEED } from '../../template/camera.mjs';
 import { TRANSITIONS, MIN_TRANSITION_SECONDS, MAX_TRANSITION_SECONDS, directionsOf, comesInOver, normalizeTransition } from '../../template/transitions.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
+export { resolveBeats } from './beat-refs.mjs'; // pure; the file-reading entry is resolveSpecBeats (beats-file.mjs)
 import { expandSpec, EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE, DEFAULT_FPS, typingLength, typingNeeds, typedText, isTyping } from '../../template/defaults.mjs';
 
 export class UsageError extends Error {}
@@ -265,6 +267,7 @@ export const SCHEMA = {
     viral,
     loudness,
     vars: { type: 'object' }, // checked by checkVars before anything else, then removed by substitution
+    beats: { type: 'string', minLength: 1 }, // a beats file (scripts/beats.mjs): read by resolveSpecBeats, which also checks the path
     scenes: {
       type: 'array', minItems: 1, maxItems: 50,
       items: {
@@ -456,11 +459,7 @@ function checkChart(el, base, errors) {
 }
 
 function checkAssetPath(src, at, dir, errors) {
-  if (/^[a-z][a-z0-9+.-]*:/i.test(src) || path.isAbsolute(src)) {
-    errors.push({ path: at, message: 'must be a path relative to the spec file' });
-    return false;
-  }
-  const { error } = resolveAsset(dir, src);
+  const { error } = resolveSpecPath(dir, src);
   if (error) errors.push({ path: at, message: error });
   return !error;
 }
@@ -956,12 +955,16 @@ export function checkVars(written, values = {}) {
 }
 
 // `values`: one batch row's var values (render --batch); without it each var takes its default. The spec is checked as
-// it renders: after its vars are substituted (step 1) and viral mode applied (step 2), so a value that names a file
-// outside the spec folder, or is no colour, fails at the field it lands in, exactly as if it had been written there.
+// it renders: after its vars are substituted (step 1), its beats resolved (step 1b) and viral mode applied (step 2), so a
+// value that names a file outside the spec folder, or is no colour, fails at the field it lands in, exactly as if it had
+// been written there.
 export function validateSpec(input, { dir = process.cwd(), values = {} } = {}) {
   const varErrors = checkVars(input, values);
   if (varErrors.length) return { ok: false, errors: varErrors };
-  const written = substituteVars(input, values); // step 1: the same structure, so every path below is one in `input`
+  const substituted = substituteVars(input, values); // step 1: the same structure, so every path below is one in `input`
+  const beats = resolveSpecBeats(substituted, dir); // step 1b: "beat:<n>" becomes seconds; same structure again
+  if (beats.errors) return { ok: false, errors: beats.errors };
+  const written = beats.spec;
   if (!schemaCheck(written)) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
   const blockErrors = [];
   checkBlocks(applyViral(written), dir, blockErrors); // step 2, then the block params step 3 expands

@@ -42,6 +42,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec, withDefaults, ART_BACKGROUND, UsageError as SpecUsageError } from './lib/spec.mjs';
+import { resolveSpecBeats } from './lib/beats-file.mjs';
 import { printResult, didYouMean } from '../shared/errors.mjs';
 import { listThemes } from '../shared/theme.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
@@ -611,7 +612,12 @@ export async function main(argv, { prepare } = {}) {
       printResult(valid, { json, label: positionals[0] });
       return 1;
     }
-    const raw = substituteVars(loaded); // its vars at their defaults: block ids and params as the page draws them
+    const beats = resolveSpecBeats(substituteVars(loaded), dir); // its vars at their defaults (block ids and params as the page draws them), then its beats
+    if (beats.errors) { // validateSpec passed a moment ago: the beats file changed since
+      printResult({ ok: false, errors: beats.errors }, { json, label: positionals[0] });
+      return 1;
+    }
+    const raw = beats.spec;
     // The theme the page draws decides the title presets (and so the settle times): the spec's own, else --theme.
     const spec = withDefaults(raw.theme === undefined && values.theme !== undefined ? { ...raw, theme: values.theme } : raw);
     const checked = await checkSpec(path.resolve(positionals[0]), spec, { env: process.env, theme: values.theme, prepare, written: raw });

@@ -39,7 +39,8 @@ export function videoCache() {
   };
 }
 
-// Rendering always needs ffmpeg and a browser; kokoro only for a voiceover (or --fix, which may install any).
+// Rendering always needs ffmpeg and a browser; kokoro only for a voiceover (or --fix, which may install any). beats.mjs
+// needs ffmpeg alone, so every target but `check` covers it (a spec that names a beats file needs nothing extra to check).
 // check.mjs needs only the browser (it captures no video), so `check` leaves ffmpeg and kokoro out. A spec with a video
 // element is the exception (check decodes its frames with ffmpeg); `--for <spec.json>` asks for ffmpeg.
 export const targets = ['check', 'voiceover'];

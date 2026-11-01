@@ -178,6 +178,11 @@ function applyFormat(out) {
 // steps into the numbered places and never reorder them.
 //   1 substituteVars  (vars.mjs) {{name}} becomes its default anywhere, block params and `mode` included (render --batch
 //                                substitutes each row's values first, so the spec reaching here has no `vars` left)
+//   1b resolveSpecBeats (scripts/lib/beats-file.mjs, Node only) `"beat:<n>"` in a keyframe `t` or an `at` becomes seconds
+//                                from the beats file named by the root `beats`. It cannot run here (it reads a file), so
+//                                every consumer calls it on the substituted spec before this one: validateSpec, render,
+//                                check and the preview server (which serves the spec resolved). The page never sees a
+//                                reference, and this list never needs to know of one.
 //   2 applyViral      (Task 11a) `mode: "viral"` defaults, so the `format` it sets reaches step 3
 //   3 expandBlocks               each `block` becomes a `group` of plain elements, laid out for canvasSize(spec): the
 //                                size step 4 will write, read before it is written

@@ -14,6 +14,7 @@ import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:
 import os from 'node:os';
 import path from 'node:path';
 import { loadSpec, validateSpec, checkVars, frameRateErrors, withDefaults, UsageError } from './lib/spec.mjs';
+import { declaresBeats, resolveSpecBeats } from './lib/beats-file.mjs';
 import { frameCount } from '../template/frames.mjs';
 import { printResult, didYouMean } from '../shared/errors.mjs';
 import { listThemes } from '../shared/theme.mjs';
@@ -147,29 +148,35 @@ function planAudio(spec, dir, ffmpeg, ffprobe, fps, total, state) {
   return { audio, cuesOnly: files.length + clips.length === 0 };
 }
 
-// The spec as it renders with one batch row's `values` (`{}`: the defaults), as `{ errors }` or `{ errors: [], raw }`.
-// Its vars are checked and substituted first, and only then are --model/--effort/--agent stamped into its generatedBy, so
-// a flag's value is never substituted. Then the spec's own checks, and (with --fps, which replaces the spec's frame rate
-// after validation) the checks that depend on the frame rate: a typing text's or code's last frame, a block's own
-// schedule (a terminal-run's last line) and a block's typing parts, which frameRateErrors names by param.
+// The spec as it renders with one batch row's `values` (`{}`: the defaults), as `{ errors }` or `{ errors: [], raw, served }`.
+// Its vars are checked and substituted first, then its beats resolved (a var may feed a beat index, and each row resolves
+// after its own substitution), and only then are --model/--effort/--agent stamped into its generatedBy, so a flag's value
+// is never substituted. `served` is the spec without that stamp: what a batch row's page draws. Then the spec's own checks,
+// and (with --fps, which replaces the spec's frame rate after validation) the checks that depend on the frame rate: a
+// typing text's or code's last frame, a block's own schedule (a terminal-run's last line) and a block's typing parts,
+// which frameRateErrors names by param.
 function specErrors(opts, loaded, dir, values) {
   const varErrors = checkVars(loaded, values);
   if (varErrors.length) return { errors: varErrors };
-  const raw = withGeneratedBy(substituteVars(loaded, values), { model: opts.model, effort: opts.effort, agent: opts.agent });
+  const beats = resolveSpecBeats(substituteVars(loaded, values), dir);
+  if (beats.errors) return { errors: beats.errors };
+  const raw = withGeneratedBy(beats.spec, { model: opts.model, effort: opts.effort, agent: opts.agent });
   const result = validateSpec(raw, { dir });
   if (!result.ok) return { errors: result.errors };
-  return { errors: opts.fps === undefined ? [] : frameRateErrors(raw, opts.fps), raw };
+  return { errors: opts.fps === undefined ? [] : frameRateErrors(raw, opts.fps), raw, served: beats.spec };
 }
 
 // Validate the spec and work out every input before launching anything.
 async function plan(opts, state) {
   const { spec: loaded, dir } = loadSpec(opts.spec);
-  const { errors, raw } = specErrors(opts, loaded, dir, {});
+  const { errors, raw, served } = specErrors(opts, loaded, dir, {});
   if (errors.length) {
     printResult({ ok: false, errors }, { label: opts.spec });
     return null;
   }
-  return prepare(opts, { raw, loaded, dir }, state);
+  // A spec that names beats is drawn from the very spec that was just checked, not read again from the file (a beats file
+  // edited in between would resolve to times nobody validated); any other spec is served as the file, as ever.
+  return prepare(opts, { raw, loaded, dir, served: declaresBeats(loaded) ? served : undefined }, state);
 }
 
 // Every input of one render of `raw` (valid: plan and planBatch checked it). `served`: the spec the page draws in place
@@ -391,7 +398,7 @@ function planBatch(opts) {
   const fail = (index, list) => { errors.push(...list.map((e) => `row ${index}: ${e.path || '(root)'}: ${e.message}`)); };
   rows.forEach((row, index) => {
     for (const warning of columnWarnings(loaded, row)) process.stderr.write(`row ${index}: ${warning}\n`);
-    const { errors: problems, raw } = specErrors(opts, loaded, dir, row);
+    const { errors: problems, raw, served } = specErrors(opts, loaded, dir, row);
     if (problems.length) return fail(index, problems);
     const values = varValues(loaded, row);
     const target = outputFor(template, index, values);
@@ -399,7 +406,7 @@ function planBatch(opts) {
     const key = collisionKey(target.out);
     if (taken.has(key)) return fail(index, [{ path: '--out', message: `${path.basename(target.out)} is also row ${taken.get(key)}'s output; add {index} to --out, or give the rows different values` }]);
     taken.set(key, index);
-    return jobs.push({ index, values, out: target.out, partial: batchTempPath(target.out, index), raw, served: substituteVars(loaded, row) });
+    return jobs.push({ index, values, out: target.out, partial: batchTempPath(target.out, index), raw, served });
   });
   // No row may encode over, or be renamed onto, another row's MP4 (batchTempPath keeps temps out of reach of outputs).
   for (const clash of tempClashes(jobs)) fail(clash.index, [clash]);
