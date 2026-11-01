@@ -6,6 +6,7 @@ import { layerStyles, layerUnder } from './transitions.mjs';
 import { cameraTransform } from './camera.mjs';
 import { resolveAudio } from './audio.mjs';
 import { flattenElements, isGroup } from './groups.mjs';
+import { gradeFilter, gradeId, GRADE_ELEMENT_TYPES } from './grade.mjs';
 import { loadCaptionTracks, captionLayer, applyCaption, captionSample, captionFontSize, captionMoments, CAPTION_WEIGHT } from './caption-layer.mjs';
 import { codeHighlighter, styleCode, fillCode, setCodeTyping } from './code-view.mjs';
 import { DEFAULT_CODE_SIZE } from './code-theme.mjs';
@@ -317,14 +318,35 @@ function buildElement(el, look, frames) {
   return part;
 }
 
+// Grades the picture of an image or video node: its filter is on the <img> or <video> itself, so the node keeps its own
+// transform and opacity, and the grade sits under both (the filter's markup is the stage's, see gradeDefs).
+function gradePicture(node, grade, grades) {
+  const id = gradeId(grades.length);
+  grades.push({ id, grade });
+  node.querySelector('img, video').style.filter = `url("#${id}")`;
+}
+
+// One <svg> holding the filter of every graded picture, laid on the stage but outside every element and scene node (a
+// renewal takes element nodes out of layout; this must stay put). It has a size of 0 and is not hidden: a filter in a
+// display:none svg may not be applied. Null when nothing is graded.
+function gradeDefs(grades) {
+  if (!grades.length) return null;
+  const svg = svgEl('svg', { width: 0, height: 0, 'aria-hidden': 'true' });
+  svg.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;pointer-events:none';
+  svg.innerHTML = `<defs>${grades.map(({ id, grade }) => gradeFilter(id, grade)).join('')}</defs>`; // parsed as SVG: its context is an <svg>
+  return svg;
+}
+
 // Builds the nodes of `elements` into `container`, each tagged with its spec path (`prefix` + index); a group's children
 // are built into the group's own node, so they move with it. Charts, images, video first frames and code tokens queue
 // their loading in `pending`. `frames`: render mode's /frames.json, the decoded frames of each video element.
-// `highlight`: code-view.mjs codeHighlighter for this stage.
+// `highlight`: code-view.mjs codeHighlighter for this stage. `grades`: the stage's grade list; a graded picture takes the
+// next id from it (an element's own id is the user's text and is never used as one) and its filter is built from the list.
 function mountElements(container, elements, prefix, ctx, parts, pending) {
-  const { look, frames, highlight } = ctx;
+  const { look, frames, highlight, grades } = ctx;
   elements.forEach((el, i) => {
     const part = buildElement(el, look, frames);
+    if (el.grade && GRADE_ELEMENT_TYPES.includes(el.type)) gradePicture(part.node, el.grade, grades); // validation refuses a grade elsewhere
     const at = `${prefix}[${i}]`;
     part.node.dataset.path = at;
     parts.push(part);
@@ -400,6 +422,7 @@ async function buildStage(spec, look, frames, captions) {
   const scenes = [];
   const parts = [];
   const pending = [];
+  const grades = [];
   const grain = spec.texture?.grain ?? 0;
   const highlight = codeHighlighter(spec, look);
   for (const [si, scene] of spec.scenes.entries()) {
@@ -421,7 +444,7 @@ async function buildStage(spec, look, frames, captions) {
       layer.append(camera);
     }
     const host = camera ?? layer;
-    mountElements(host, scene.elements, `scenes[${si}].elements`, { look, frames, highlight }, parts, pending);
+    mountElements(host, scene.elements, `scenes[${si}].elements`, { look, frames, highlight, grades }, parts, pending);
     stage.append(layer);
     const entry = { scene, layer, camera, grain: null };
     if (grain > 0) pending.push(grainLayer(scene, spec.size, grain).then((img) => { entry.grain = img; }));
@@ -430,6 +453,8 @@ async function buildStage(spec, look, frames, captions) {
   const captionLayers = captions.map((track) => captionLayer(track, spec, look));
   stage.append(...captionLayers.map((layer) => layer.node));
   await Promise.all(pending);
+  const defs = gradeDefs(grades);
+  if (defs) stage.append(defs);
   for (const { grain: img } of scenes) if (img) stage.append(img); // over the scenes, under the vignette
   if (spec.texture?.vignette) stage.append(vignetteLayer());
   return { stage, scenes, parts, captions: captionLayers };

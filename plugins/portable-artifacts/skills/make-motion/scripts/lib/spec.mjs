@@ -22,6 +22,7 @@ import { checkCode } from './code-check.mjs';
 import { resolveSpecBeats } from './beats-file.mjs';
 import { gridOf, frameCutoff } from '../../template/frames.mjs';
 import { CAMERA_PROPS, CAMERA_REST, MIN_ZOOM, MAX_ZOOM, MAX_SHAKE_AMOUNT, MAX_SHAKE_HZ, MAX_SHAKE_SEED } from '../../template/camera.mjs';
+import { GRADE_ELEMENT_TYPES, GRADE_PRESETS, EXPOSURE_RANGE, CONTRAST_RANGE, SATURATION_RANGE, isIdleGrade } from '../../template/grade.mjs';
 import { TRANSITIONS, MIN_TRANSITION_SECONDS, MAX_TRANSITION_SECONDS, directionsOf, comesInOver, normalizeTransition } from '../../template/transitions.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
@@ -58,10 +59,10 @@ const FIELDS = {
   text: [...COMMON, 'text', 'role', 'exit', 'typing', ...TEXT_STYLE],
   counter: [...COMMON, 'from', 'to', 'decimals', 'prefix', 'suffix', ...TEXT_STYLE],
   shape: [...COMMON, 'shape', 'width', 'height', 'radius', 'fill', 'stroke', 'strokeWidth', 'elevated', 'cap', 'arrow'],
-  image: [...COMMON, 'src', 'width', 'height', 'fit'],
+  image: [...COMMON, 'src', 'width', 'height', 'fit', 'grade'],
   chart: [...COMMON, 'vegaLite', 'width', 'height'],
   group: [...COMMON, 'children'],
-  video: [...COMMON, 'src', 'width', 'height', 'fit', 'trimStart', 'trimEnd', 'offset', 'mute', 'volume'],
+  video: [...COMMON, 'src', 'width', 'height', 'fit', 'trimStart', 'trimEnd', 'offset', 'mute', 'volume', 'grade'],
   block: [...COMMON, 'block', 'params'],
   code: [...COMMON, 'code', 'lang', 'width', 'height', 'fontSize', 'highlight', 'diff', 'typing'],
 };
@@ -88,6 +89,18 @@ const keyframe = {
     t: { type: 'number', minimum: 0 },
     ease: { enum: EASES },
     opacity: unit, x: num, y: num, scale: num, rotate: num, draw: unit, reveal: unit, value: num,
+  },
+};
+// A colour grade (template/grade.mjs) for an image or a video; checkFields refuses it on any other type, checkGrade a grade
+// that changes nothing.
+const grade = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    preset: { enum: [...GRADE_PRESETS] },
+    exposure: { type: 'number', minimum: EXPOSURE_RANGE[0], maximum: EXPOSURE_RANGE[1] },
+    contrast: { type: 'number', minimum: CONTRAST_RANGE[0], maximum: CONTRAST_RANGE[1] },
+    saturation: { type: 'number', minimum: SATURATION_RANGE[0], maximum: SATURATION_RANGE[1] },
   },
 };
 const element = {
@@ -124,6 +137,7 @@ const element = {
     arrow: { enum: ['end'] },
     src: { type: 'string', minLength: 1 },
     fit: { enum: ['contain', 'cover', 'fill'] },
+    grade,
     vegaLite: { type: 'object' },
     trimStart: { type: 'number', minimum: 0 }, trimEnd: { type: 'number', exclusiveMinimum: 0 }, offset: { type: 'number', minimum: 0 },
     mute: { type: 'boolean' }, volume: unit,
@@ -706,13 +720,19 @@ function checkGroup(el, base, scene, dir, errors, fps, depth) {
 function checkFields(el, base, errors) {
   const fields = FIELDS[el.type];
   for (const key of Object.keys(el)) {
-    if (!fields.includes(key)) {
-      errors.push({ path: pathJoin(base, key), message: `not valid on ${el.type}; allowed: ${fields.join(', ')}` });
-    }
+    if (fields.includes(key)) continue;
+    const message = key === 'grade' ? `only valid on ${GRADE_ELEMENT_TYPES.join(' or ')} elements` : `not valid on ${el.type}; allowed: ${fields.join(', ')}`;
+    errors.push({ path: pathJoin(base, key), message });
   }
   for (const key of REQUIRED[el.type]) {
     if (el[key] === undefined) errors.push({ path: pathJoin(base, key), message: `required for type ${el.type}` });
   }
+}
+
+// A grade must change something: a preset, or a number away from its default.
+function checkGrade(el, base, errors) {
+  if (!GRADE_ELEMENT_TYPES.includes(el.type) || !isPlainObject(el.grade) || !isIdleGrade(el.grade)) return;
+  errors.push({ path: pathJoin(base, 'grade'), message: 'this grade changes nothing; set a preset, or an exposure away from 0, a contrast away from 1 or a saturation away from 1' });
 }
 
 // `depth`: how many groups enclose `el` (0 at the top level of a scene).
@@ -722,6 +742,7 @@ function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS, d
   if (el.type === 'text') checkRole(el, base, errors);
   checkTyping(el, typingPath(el, base, null), scene, fps, errors);
   if (el.type === 'code') checkCode(el, base, errors);
+  checkGrade(el, base, errors);
   for (const key of ['color', 'fill', 'stroke']) checkColor(el, key, base, errors, { tokens: true });
   if (el.type === 'shape') checkShapeStyle(el, base, errors);
   if (el.type === 'image' && typeof el.src === 'string') checkAssetPath(el.src, pathJoin(base, 'src'), dir, errors);

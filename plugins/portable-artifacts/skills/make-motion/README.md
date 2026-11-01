@@ -57,6 +57,10 @@ shell commands.
 - **Scene camera**: a scene's `camera` keyframes `zoom` (0.5–3), a pan (`x`, `y` px) and a roll (`rotate`) of
   every element in the scene about the canvas centre, and `shake` (`amount` px, `hz`, `seed`) adds a seeded
   handheld jitter; the same spec always shakes the same way. The background, captions, grain and the vignette stay put.
+- **Colour grade**: `"grade": { "preset": "warm" | "cool" | "mono" | "film", "exposure", "contrast", "saturation" }`
+  on an image or a video: a preset look, then exposure in stops (−2 to 2), contrast (0.5–2) and saturation (0–2) on top, as
+  one SVG filter on the picture. It renders byte-identically (at any `--workers`) and `check.mjs` judges text over a graded
+  photo on the graded pixels.
 - **Captions**: a `captions` track from an SRT, VTT or Whisper JSON file, or the voiceover's
   sentence timings, shown two to six words at a time in the caption zone in one of six styles
   (`plain`, `pill`, `karaoke`, `kinetic`, `boxed`, `typewriter`); `check.mjs` keeps other text out
