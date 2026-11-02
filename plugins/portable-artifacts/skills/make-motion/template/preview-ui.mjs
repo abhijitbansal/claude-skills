@@ -6,8 +6,38 @@ const PLAY_ICON = '▶';
 const PAUSE_ICON = '❚❚';
 const MUTE_ICON = '♪';
 
+const TOAST_MS = 2000;
+
 const fmt = (sec) => `${sec.toFixed(2)}s`;
 const motion = () => window.__motion;
+
+// Click an element in the preview to copy where it sits in the spec: `<path>  id=<id>` (two spaces), to paste into a
+// request such as "make this bigger". The innermost node under the pointer wins, so a group's child beats the group.
+function initPick() {
+  const toast = document.createElement('div');
+  toast.id = 'pick-toast';
+  toast.setAttribute('role', 'status');
+  toast.hidden = true;
+  document.body.append(toast);
+  let timer = 0;
+  const say = (message) => {
+    toast.textContent = message;
+    toast.hidden = false;
+    clearTimeout(timer);
+    timer = setTimeout(() => { toast.hidden = true; }, TOAST_MS);
+  };
+  document.getElementById('stage').addEventListener('click', async (e) => {
+    const node = e.target.closest?.('[data-path]');
+    if (!node) return;
+    const { path, id } = node.dataset;
+    try {
+      await navigator.clipboard.writeText(`${path}  id=${id}`);
+      say(`copied ${path} (id "${id}")`);
+    } catch {
+      say(`could not copy ${path} (id "${id}"): the browser blocked clipboard access`);
+    }
+  });
+}
 
 export function initPreviewUI() {
   const ui = document.getElementById('ui');
@@ -107,5 +137,6 @@ export function initPreviewUI() {
     window.__showError(`spec has ${lines.length} error${lines.length === 1 ? '' : 's'}:\n${lines.join('\n')}`);
   });
 
+  initPick();
   layout();
 }

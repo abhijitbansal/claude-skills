@@ -93,6 +93,13 @@ body.preview #ui { display: flex; position: absolute; left: 0; right: 0; bottom:
   font: 11px/14px var(--mono); font-style: normal; color: var(--text3); white-space: nowrap; }
 #readout { font: 13px var(--mono); color: var(--text3); min-width: 140px; text-align: right; font-variant-numeric: tabular-nums; }
 
+/* Pick toast: preview only (initPick in preview-ui.mjs builds it; the render page never has one). */
+#pick-toast { position: absolute; left: 50%; bottom: 124px; transform: translateX(-50%); max-width: 90%; padding: 8px 14px;
+  background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); border-radius: var(--ui-radius);
+  font: 13px/1.4 var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; z-index: 6; }
+#pick-toast[hidden] { display: none; }
+body.preview #stage .el[data-path] { cursor: pointer; }
+
 /* Provenance footer: preview only (the render captures the whole page), below the controls. */
 .pa-footer { display: none; }
 body.preview .pa-footer { display: block; position: absolute; left: 0; right: 0; bottom: 0; height: 24px; padding: 0 20px;
