@@ -49,7 +49,7 @@ shell commands.
   lines and ringed points. Shapes and text take **theme colour tokens**
   (`"fill": "surface"`, `"color": "accent"`) that follow the theme, rects can be
   `elevated` cards, and lines can have round caps and an arrow head.
-- **Blocks**: seventeen parameterised building blocks (`title-card`, `lower-third`, `kpi-counter`, `step-flow`, `quote-card`, `checklist`, `logo-outro`, `cta-close`, four for short-form video: `cta-soft`, `story-beats`, `listicle` and `before-after-swipe`, three for code: `code-typing`, `code-diff` and `terminal-run`, and two for maps: `map-highlight` and `flow-map`), each
+- **Blocks**: twenty-seven parameterised building blocks (`title-card`, `lower-third`, `kpi-counter`, `step-flow`, `quote-card`, `checklist`, `logo-outro`, `cta-close`, four for short-form video: `cta-soft`, `story-beats`, `listicle` and `before-after-swipe`, three for code: `code-typing`, `code-diff` and `terminal-run`, two for maps: `map-highlight` and `flow-map`, and four for data and comparisons: `race` (a bar chart race), `comparison-split`, `before-after` (two numbers) and `notification-stack`, and six for people and messages: `chat-thread`, `timeline`, `testimonial` and the lower thirds `lower-third-tag`, `lower-third-social` and `lower-third-ticker`), each
   written as one `block` element with a few params (`"block": "lower-third", "params": { "name": "Ada" }`) and
   expanded into plain elements laid out for the canvas, coloured with theme tokens. `blocks.mjs list` and
   `blocks.mjs show <name>` print each block's params and an example; `references/blocks/` holds a contact sheet

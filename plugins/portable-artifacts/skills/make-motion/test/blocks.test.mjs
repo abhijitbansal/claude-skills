@@ -24,7 +24,7 @@ const CLI = path.join(root, 'scripts/blocks.mjs');
 const EXAMPLES = path.join(root, 'references/examples/blocks');
 const GOLDEN = path.join(root, 'references/blocks');
 const names = Object.keys(BLOCKS);
-const TOKENS = ['surface', 'line', 'accent', 'text', 'text2', 'good'];
+const TOKENS = ['surface', 'line', 'accent', 'text', 'text2', 'good', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5', 'cat6']; // cat1..cat6: race's bars
 const EPSILON = 1e-9;
 
 const block = (name, params, extra = {}) => ({ id: 'b', type: 'block', x: 960, y: 540, block: name, params, ...extra });
@@ -69,7 +69,7 @@ const needsSeconds = (name, params) => BLOCKS[name].minDuration?.(params) ?? 0;
 // Blocks whose parts do not all enter over 0.6 s from the scene start: story-beats fades over 0.3 s beat by beat and
 // listicle holds its title from frame 0 and brings its rows in later (test/viral-blocks.test.mjs checks their timing).
 // 'all' skips the entrance rule; 'first' only the "first part enters at the scene start" one (listicle's rows keep theirs).
-const OWN_SCHEDULE = new Map([['story-beats', 'all'], ['listicle', 'first']]);
+const OWN_SCHEDULE = new Map([['story-beats', 'all'], ['listicle', 'first'], ['race', 'all']]); // race: one keyframe per period, not entrances
 
 // ---- the table: every block -------------------------------------------------------------------------------------------
 
@@ -163,6 +163,10 @@ for (const name of names) {
 }
 
 // ---- expansion ---------------------------------------------------------------------------------------------------------
+
+test('BLOCKS has 27 entries after Phase 3', () => {
+  assert.equal(BLOCK_NAMES.length, 27, BLOCK_NAMES.join(' '));
+});
 
 test('expandBlocks leaves a spec without blocks deepEqual, and never mutates its input', () => {
   const plain = oneScene([{ id: 't', type: 'text', text: 'hi', x: 1, y: 2 }, { id: 'g', type: 'group', x: 0, y: 0, children: [{ id: 'c', type: 'text', text: 'c', x: 0, y: 0 }] }], { size: [640, 360] });
@@ -430,7 +434,7 @@ const CAPTION_SECONDS = 6;
 // A temp folder holding the spec (and the captions file and logo it names): the spec file's path.
 function captionedSpec(motion) {
   const dir = mkdtempSync(path.join(tmpdir(), 'block-cc-'));
-  for (const file of ['swipe-before.png', 'swipe-after.png']) copyFileSync(path.join(EXAMPLES, file), path.join(dir, file)); // before-after-swipe's example images
+  for (const file of ['swipe-before.png', 'swipe-after.png', 'avatar.svg']) copyFileSync(path.join(EXAMPLES, file), path.join(dir, file)); // before-after-swipe's example images, testimonial's avatar
   writeFileSync(path.join(dir, 'c.srt'), SRT);
   writeFileSync(path.join(dir, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="#f2a65a"/></svg>');
   const file = path.join(dir, 'm.json');

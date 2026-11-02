@@ -434,7 +434,7 @@ test('docs: schema.md names the atlases and both blocks, SKILL.md and both READM
     assert.ok(readme.includes(name), `README.md: ${name}`);
   }
   assert.ok(pa.includes('map highlight, flow map'), '<pa>/README.md lists the two blocks by name, as it lists the others');
-  assert.match(pa, /seventeen blocks/);
+  assert.match(pa, /twenty-seven blocks/);
   assert.match(pa, /\| \[world-atlas\]\(https:\/\/github\.com\/topojson\/world-atlas\) 2\.0\.2 .*\| ISC \|/);
   assert.match(pa, /\| \[us-atlas\]\(https:\/\/github\.com\/topojson\/us-atlas\) 3\.0\.1 .*\| ISC \|/);
   const pkg = readJson(path.join(root, 'package.json'));

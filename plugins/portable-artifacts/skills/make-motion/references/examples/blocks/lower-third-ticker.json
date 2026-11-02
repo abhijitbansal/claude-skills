@@ -1,0 +1,22 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "lower-third-ticker",
+      "duration": 6,
+      "elements": [
+        {
+          "id": "news",
+          "type": "block",
+          "x": 960,
+          "y": 818,
+          "block": "lower-third-ticker",
+          "params": {
+            "items": ["Release 2.4 is out", "Captions now render offline", "Blocks reach 27"]
+          }
+        }
+      ]
+    }
+  ]
+}

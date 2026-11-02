@@ -1,0 +1,38 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "notification-stack",
+      "duration": 5,
+      "elements": [
+        {
+          "id": "notification",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "notification-stack",
+          "params": {
+            "items": [
+              {
+                "app": "Calendar",
+                "title": "Design review at 3 pm",
+                "body": "Room 4B, bring the new mockups"
+              },
+              {
+                "app": "Messages",
+                "title": "Priya",
+                "body": "The render finished, it looks great"
+              },
+              {
+                "app": "Deploys",
+                "title": "Production is live",
+                "body": "Version 2.4 shipped without errors"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

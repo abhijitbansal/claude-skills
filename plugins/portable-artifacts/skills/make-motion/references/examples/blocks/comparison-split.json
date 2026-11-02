@@ -1,0 +1,38 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "comparison-split",
+      "duration": 5,
+      "elements": [
+        {
+          "id": "comparison",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "comparison-split",
+          "params": {
+            "headline": "Spreadsheet or spec?",
+            "left": {
+              "title": "By hand",
+              "points": [
+                "Drag every keyframe",
+                "Re-export each tweak",
+                "Fix the timing again"
+              ]
+            },
+            "right": {
+              "title": "With a spec",
+              "points": [
+                "Describe the scene",
+                "Preview in seconds",
+                "Same video every time"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

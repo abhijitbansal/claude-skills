@@ -281,7 +281,8 @@ test('every block at its viral place() keeps every part inside the platform safe
         });
         for (const b of boxes) {
           const where = `${name}: "${b.id}" ${JSON.stringify(b)}`;
-          assert.ok(b.left >= insets.left - 0.5 && b.right <= PHONE[0] - insets.right + 0.5, `${where} crosses a side band (${insets.left}..${PHONE[0] - insets.right})`);
+          // The ticker is a full-width band with items crawling through it: crossing the side bands is what it is, so it is held to the vertical limits only.
+          if (name !== 'lower-third-ticker') assert.ok(b.left >= insets.left - 0.5 && b.right <= PHONE[0] - insets.right + 0.5, `${where} crosses a side band (${insets.left}..${PHONE[0] - insets.right})`);
           assert.ok(b.top >= insets.top - 0.5 && b.bottom <= zone.top + 0.5, `${where} leaves ${insets.top}..${zone.top}`);
         }
       } finally { await page.close(); await srv.close(); }

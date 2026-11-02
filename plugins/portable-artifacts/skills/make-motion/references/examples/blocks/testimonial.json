@@ -1,0 +1,25 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "testimonial",
+      "duration": 6,
+      "elements": [
+        {
+          "id": "review",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "testimonial",
+          "params": {
+            "quote": "We cut our release checklist from a day to ten minutes.",
+            "name": "Priya Raman",
+            "role": "Platform lead, Northwind",
+            "avatar": "avatar.svg"
+          }
+        }
+      ]
+    }
+  ]
+}

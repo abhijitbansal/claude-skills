@@ -46,6 +46,16 @@ import codeDiff from './code-diff.mjs';
 import terminalRun from './terminal-run.mjs';
 import mapHighlight from './map-highlight.mjs';
 import flowMap from './flow-map.mjs';
+import race from './race.mjs';
+import comparisonSplit from './comparison-split.mjs';
+import beforeAfter from './before-after.mjs';
+import notificationStack from './notification-stack.mjs';
+import chatThread from './chat-thread.mjs';
+import timeline from './timeline.mjs';
+import testimonial from './testimonial.mjs';
+import lowerThirdTag from './lower-third-tag.mjs';
+import lowerThirdSocial from './lower-third-social.mjs';
+import lowerThirdTicker from './lower-third-ticker.mjs';
 
 export const BLOCKS = Object.freeze({
   'title-card': titleCard,
@@ -65,6 +75,16 @@ export const BLOCKS = Object.freeze({
   'terminal-run': terminalRun,
   'map-highlight': mapHighlight,
   'flow-map': flowMap,
+  race,
+  'comparison-split': comparisonSplit,
+  'before-after': beforeAfter,
+  'notification-stack': notificationStack,
+  'chat-thread': chatThread,
+  timeline,
+  testimonial,
+  'lower-third-tag': lowerThirdTag,
+  'lower-third-social': lowerThirdSocial,
+  'lower-third-ticker': lowerThirdTicker,
 });
 export const BLOCK_NAMES = Object.freeze(Object.keys(BLOCKS));
 
