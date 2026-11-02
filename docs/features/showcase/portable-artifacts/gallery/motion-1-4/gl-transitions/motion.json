@@ -1,0 +1,51 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "theme": "dusk",
+  "generatedBy": { "model": "claude-sonnet-5-5", "agent": "Claude Code" },
+  "scenes": [
+    {
+      "id": "open",
+      "duration": 2,
+      "background": "#14213d",
+      "elements": [
+        { "id": "cap-open", "type": "text", "text": "New: gl-ripple and gl-cube transitions", "x": 960, "y": 96, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "open-title", "type": "text", "text": "Two shader transitions", "x": 960, "y": 380, "fontSize": 110, "fontWeight": 700, "hold": true },
+        { "id": "open-label", "type": "text", "text": "drawn in software WebGL at render time", "x": 960, "y": 520, "fontSize": 48, "fontWeight": 400, "hold": true }
+      ]
+    },
+    {
+      "id": "ripple",
+      "duration": 2,
+      "background": "#3d1f4a",
+      "transition": { "type": "gl-ripple", "duration": 0.8 },
+      "elements": [
+        { "id": "cap-ripple", "type": "text", "text": "New: gl-ripple and gl-cube transitions", "x": 960, "y": 96, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "ripple-title", "type": "text", "text": "Ripple", "x": 960, "y": 700, "fontSize": 140, "fontWeight": 700, "hold": true },
+        { "id": "ripple-label", "type": "text", "text": "a wave crosses both scenes", "x": 960, "y": 860, "fontSize": 52, "fontWeight": 400, "hold": true }
+      ]
+    },
+    {
+      "id": "cube",
+      "duration": 2,
+      "background": "#0f3b3a",
+      "transition": { "type": "gl-cube", "direction": "left", "duration": 0.8 },
+      "elements": [
+        { "id": "cap-cube", "type": "text", "text": "New: gl-ripple and gl-cube transitions", "x": 960, "y": 96, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "cube-title", "type": "text", "text": "Cube", "x": 960, "y": 460, "fontSize": 140, "fontWeight": 700, "hold": true },
+        { "id": "cube-label", "type": "text", "text": "the scene turns in from the left", "x": 960, "y": 620, "fontSize": 52, "fontWeight": 400, "hold": true }
+      ]
+    },
+    {
+      "id": "cube-down",
+      "duration": 2,
+      "background": "#4a1f2a",
+      "transition": { "type": "gl-cube", "direction": "down", "duration": 0.8 },
+      "elements": [
+        { "id": "cap-down", "type": "text", "text": "New: gl-ripple and gl-cube transitions", "x": 960, "y": 96, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "down-title", "type": "text", "text": "Cube, from below", "x": 960, "y": 700, "fontSize": 140, "fontWeight": 700, "hold": true },
+        { "id": "down-label", "type": "text", "text": "the same turn about the other axis", "x": 960, "y": 860, "fontSize": 52, "fontWeight": 400, "hold": true }
+      ]
+    }
+  ]
+}

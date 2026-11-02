@@ -1,0 +1,38 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "theme": "dusk",
+  "generatedBy": { "model": "claude-sonnet-5-5", "agent": "Claude Code" },
+  "scenes": [
+    {
+      "id": "highlight",
+      "duration": 3.0,
+      "elements": [
+        { "id": "cap-highlight", "type": "text", "text": "New: map-highlight block (bundled world and US atlases)", "x": 960, "y": 96, "fontSize": 48, "fontWeight": 600, "color": "accent", "hold": true },
+        {
+          "id": "markets", "type": "block", "x": 960, "y": 560, "block": "map-highlight",
+          "params": { "map": "world", "highlight": ["United States of America", "Brazil", "India", "Germany"], "label": "Where the pilot runs (sample)" }
+        }
+      ]
+    },
+    {
+      "id": "flows",
+      "duration": 5.0,
+      "transition": "fade",
+      "elements": [
+        { "id": "cap-flows", "type": "text", "text": "New: flow-map block (arcs between places)", "x": 960, "y": 96, "fontSize": 48, "fontWeight": 600, "color": "accent", "hold": true },
+        {
+          "id": "routes", "type": "block", "x": 960, "y": 560, "block": "flow-map",
+          "params": {
+            "map": "world",
+            "flows": [
+              { "from": { "lon": -74, "lat": 40.7 }, "to": { "lon": -0.13, "lat": 51.5 }, "label": "New York to London" },
+              { "from": { "lon": -0.13, "lat": 51.5 }, "to": { "lon": 77.2, "lat": 28.6 }, "label": "London to Delhi" },
+              { "from": { "lon": 77.2, "lat": 28.6 }, "to": { "lon": 139.7, "lat": 35.7 }, "label": "Delhi to Tokyo" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

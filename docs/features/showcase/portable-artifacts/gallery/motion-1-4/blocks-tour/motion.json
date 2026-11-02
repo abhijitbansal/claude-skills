@@ -1,0 +1,89 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "theme": "dusk",
+  "generatedBy": { "model": "claude-sonnet-5-5", "agent": "Claude Code" },
+  "scenes": [
+    {
+      "id": "split",
+      "duration": 3,
+      "elements": [
+        { "id": "cap-split", "type": "text", "text": "New block: comparison-split", "x": 960, "y": 96, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "comparison", "type": "block", "x": 960, "y": 520, "block": "comparison-split",
+          "params": { "headline": "Spreadsheet or spec?",
+            "left": { "title": "By hand", "points": ["Drag every keyframe", "Re-export each tweak"] },
+            "right": { "title": "With a spec", "points": ["Describe the scene", "Preview in seconds"] } } }
+      ]
+    },
+    {
+      "id": "numbers",
+      "duration": 3,
+      "transition": "push",
+      "elements": [
+        { "id": "cap-numbers", "type": "text", "text": "New block: before-after (two counting numbers)", "x": 960, "y": 96, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "numbers-block", "type": "block", "x": 960, "y": 520, "block": "before-after",
+          "params": { "headline": "Sample numbers", "before": { "label": "Before", "value": 94, "suffix": " s" }, "after": { "label": "After", "value": 12, "suffix": " s" } } }
+      ]
+    },
+    {
+      "id": "notify",
+      "duration": 3,
+      "transition": "push",
+      "elements": [
+        { "id": "cap-notify", "type": "text", "text": "New block: notification-stack", "x": 960, "y": 96, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "notification", "type": "block", "x": 960, "y": 520, "block": "notification-stack",
+          "params": { "items": [
+            { "app": "Render", "title": "Render finished", "body": "The MP4 is in the folder" },
+            { "app": "Preview", "title": "Spec reloaded", "body": "The page reloads when the file changes" } ] } }
+      ]
+    },
+    {
+      "id": "chat",
+      "duration": 4,
+      "transition": "push",
+      "elements": [
+        { "id": "cap-chat", "type": "text", "text": "New block: chat-thread", "x": 960, "y": 96, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "chat-block", "type": "block", "x": 960, "y": 520, "block": "chat-thread",
+          "params": { "messages": [
+            { "from": "them", "text": "Did the render finish?" },
+            { "from": "me", "text": "Yes, the MP4 is ready." },
+            { "from": "them", "text": "Great, sending it now." } ] } }
+      ]
+    },
+    {
+      "id": "line",
+      "duration": 3,
+      "transition": "push",
+      "elements": [
+        { "id": "cap-line", "type": "text", "text": "New block: timeline", "x": 960, "y": 96, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "timeline-block", "type": "block", "x": 960, "y": 520, "block": "timeline",
+          "params": { "events": [
+            { "when": "Mon", "what": "Write the spec" },
+            { "when": "Tue", "what": "Preview" },
+            { "when": "Wed", "what": "Render" },
+            { "when": "Thu", "what": "Share" } ] } }
+      ]
+    },
+    {
+      "id": "quote",
+      "duration": 3.5,
+      "transition": "push",
+      "elements": [
+        { "id": "cap-quote", "type": "text", "text": "New block: testimonial (sample text)", "x": 960, "y": 96, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "testimonial-block", "type": "block", "x": 960, "y": 520, "block": "testimonial",
+          "params": { "quote": "A sample quote on a card with a name and a role.", "name": "Sample Person", "role": "Sample role", "avatar": "avatar.svg" } }
+      ]
+    },
+    {
+      "id": "thirds",
+      "duration": 4.5,
+      "transition": "push",
+      "elements": [
+        { "id": "cap-thirds", "type": "text", "text": "New blocks: lower-third-tag, -social, -ticker", "x": 960, "y": 96, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "third-tag", "type": "block", "x": 100, "y": 440, "block": "lower-third-tag", "params": { "name": "Sample Name", "tag": "GUEST" } },
+        { "id": "third-social", "type": "block", "x": 100, "y": 680, "block": "lower-third-social", "params": { "handle": "@example", "platform": "x" } },
+        { "id": "third-ticker", "type": "block", "x": 960, "y": 980, "block": "lower-third-ticker", "params": { "items": ["New: race and map blocks", "New: gl-cube transition", "New: beat-synced cues"] } }
+      ]
+    }
+  ]
+}
