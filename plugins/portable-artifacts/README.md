@@ -200,7 +200,7 @@ Not sure what is missing? Run `node <skill-dir>/scripts/doctor.mjs --json` (it
 needs only Node, so it works before `npm ci`). It lists each missing item with
 its size and the fix for your OS; add `--for` with a spec `.json` (every skill;
 make-explainer and make-scene add sister skills from it), `check` (make-diagram, make-explainer and
-make-scene: the check browser) or `voiceover` (make-motion), and `--fix <ids>`
+make-scene: the check browser), `voiceover` or `cutout` (make-motion), and `--fix <ids>`
 to install the ones that need no `sudo` (ids are resolved against the same `--for`;
 `dev_deps` and `chromium` are required for `check`, and `motion_chromium` is
 make-explainer's browser for a motion section). Agents run it first and ask once before installing

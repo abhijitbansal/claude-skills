@@ -502,7 +502,7 @@ all of it in one reply, or say "defaults". An option your prompt already settles
 ("a 9:16 clip", "with a voiceover") is not asked again. A run that cannot pause for
 an answer (`claude -p`, `codex exec`, an eval) skips the round and builds with the
 defaults, and its final report carries one line naming what it used:
-`intake: skipped (<reason>); values used: format 16:9, length 10 s, assets none, voiceover off, sound none, theme dusk, CTA none, captions off`
+`intake: skipped (<reason>); values used: format 16:9, length 10 s, assets none, voiceover off, sound none, theme dusk, CTA none, captions off, platform none`
 (the values shown are the defaults; a value your prompt settled appears instead).
 
 **The storyboard.** For a clip over 20 s, after the intake round, the agent writes a short
@@ -640,7 +640,7 @@ scene, and optional `duration`, `volume`, `fadeIn` and `fadeOut`. ffmpeg
 mixes the tracks into the MP4 as AAC stereo; the preview plays them in sync
 (approximately; `M` mutes) and the MP4 timing is exact. Music is always a
 file you supply. For narration the agent runs
-`voice.mjs "<text>" --out voice/<scene>.wav` (Kokoro, local, 28 voices,
+`voice.mjs --text-file voice/<scene>.txt --out voice/<scene>.wav` (a text file, not a quoted argument, because the shell expands `$` and backticks; Kokoro, local, 28 voices,
 `--voice af_heart` by default) after asking once to install `kokoro-js`
 (about 250 MB plus a 90 MB model downloaded a single time). Short UI sounds need no
 file: a root `cues` array (up to 30 of `pop`, `click`, `whoosh`, `chime`, `impact`, `riser`,

@@ -1,6 +1,6 @@
 # Motion design for make-motion
 
-Rules of thumb for timing a clip so it reads well. They are guidance: `scripts/check.mjs` enforces only the safe area, overlapping text and empty scene endings (see the end of this page). Look at the contact sheets for everything else.
+Rules of thumb for timing a clip so it reads well. They are guidance: `scripts/check.mjs` enforces the safe area, overlapping text, empty scene endings and four audits (contrast, reading time, dead stretches, small text; see the end of this page). Look at the contact sheets for everything else.
 
 Timing numbers adapted from whaleyxbt/claude-motion, MIT.
 
@@ -38,7 +38,7 @@ Give the viewer time to read before anything else moves:
 - **Hold at least 1 s, plus 0.25 s for every word beyond three.** A six-word line needs about 1.75 s fully on screen.
 - **Hold the closing frame at least 2 s**: the last thing the viewer sees should stay put.
 
-Holds are not checked by `check.mjs`. Count them yourself from the keyframe times.
+`check.mjs` reports a dead stretch (nothing visible changing for more than 3 s, except in the last 3 s) and a text that leaves the screen sooner than its reading time. An element meant to sit still takes `"hold": true`. Count the closing hold yourself from the keyframe times.
 
 ## Layout and emphasis
 
@@ -87,10 +87,15 @@ Cues (`"cues"` in the spec) are opt-in sound design for a clip that is meant to 
 
 ## What `check.mjs` checks
 
-Run `node <skill-dir>/scripts/check.mjs motion.json` after looking at the contact sheets. It reports only:
+Run `node <skill-dir>/scripts/check.mjs motion.json` after looking at the contact sheets. It reports:
 
 - visible text or a counter outside the safe area while it is not moving;
 - two visible texts or counters overlapping while neither is moving or fading;
 - a scene that ends with nothing on screen (a title leaving through an applied `exit: true` counts as intended).
 
-It also warns (exit stays 0) when the first scene shows nothing at t = 0. It does not check timing, holds, stagger, eases, colour or what happens at the start of later scenes, and, during a transition window, only whether text of the two scenes overlaps at the window's midpoint (a warning).
+It also warns (exit stays 0) when the first scene shows nothing at t = 0. - a text whose colour does not reach WCAG AA contrast against the pixels behind it (the message names a theme token that passes);
+- a text that stays on screen less than 0.75 x (0.5 + 0.3 x words) seconds;
+- a dead stretch: nothing visible changing for more than 3 s, except in the last 3 s (`"hold": true` opts an element out);
+- text under 28 px at 1080 for half a second or more.
+
+It does not check stagger, eases or what happens at the start of later scenes, and, during a transition window, only whether text of the two scenes overlaps at the window's midpoint (a warning).

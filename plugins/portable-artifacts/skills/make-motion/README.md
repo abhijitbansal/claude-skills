@@ -175,7 +175,7 @@ builds with the defaults and its report says so.
 | `group` | `children` (1–40 elements, up to 3 groups deep), each placed relative to the group's centre | `opacity x y scale rotate`, applied to every child at once |
 | `code` | `code`, `lang` (`text`, `javascript`, `typescript`, `json`, `bash`, `python`, `diff`, `go`, `rust`, `swift`, `yaml`, `html`, `css`, `markdown`), `width`, `height`, `fontSize` (28), `highlight` (line numbers), `diff`, `typing`; highlighted offline with shiki (JavaScript regex engine, no wasm) in the theme's colour tokens, drawn as text, never markup | `opacity x y scale rotate` (+ `value`, the characters typed, with `typing`) |
 | `lottie` | `src` (a Lottie JSON file relative to the spec, at most 4 MiB), `width`, `height`, `offset` (scene s before it plays), `speed` (0.25–4); played with lottie-web's light SVG build (no expression engine); embedded PNG, JPEG or WebP images only, no remote assets, web fonts or expressions | `opacity x y scale rotate` |
-| `block` | `block` (one of the eight block names), `params` (that block's own fields); expands into a group of parts named `<id>/<part>`, so validator errors name `params.<field>` | `opacity x y scale rotate`, applied to the whole block |
+| `block` | `block` (one of the 28 block names), `params` (that block's own fields); expands into a group of parts named `<id>/<part>`, so validator errors name `params.<field>` | `opacity x y scale rotate`, applied to the whole block |
 
 A scene's `background` is a CSS colour or `"art"`: the theme's seeded art,
 full-bleed behind the elements and seeded by the scene `id`. A shape `fill` or
@@ -192,8 +192,8 @@ on 1920x1080 frames (seek plus PNG screenshot, headless Chromium, one Apple-sili
 Keyframes are `{ "t": seconds-in-scene, "ease": "outCubic", …props }`. Each
 property holds its value before its first keyframe, interpolates between
 keyframes using the later keyframe's ease, and holds after the last one.
-There are 28 anime.js eases, from `linear` to `inOutElastic`. The full reference
-is [`references/schema.md`](references/schema.md), and there are 4 complete
+There are 32 eases, from `linear` to `inOutElastic`. The full reference
+is [`references/schema.md`](references/schema.md), and there are 20 complete
 examples in [`references/examples/`](references/examples/).
 
 ## Scripts
