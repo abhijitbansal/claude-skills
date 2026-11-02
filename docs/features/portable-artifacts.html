@@ -70,6 +70,16 @@
   <main id="main" class="doc-main">
 
     <section id="whats-new" class="doc-section">
+      <h2>What's new in 1.3.0</h2>
+      <p style="margin-bottom:12px">2 Nov 2026 · make-motion gets beat-anchored timing, loudness normalisation, colour grades, Lottie, offline maps, a bar chart race and twelve more blocks. The full list, including the behaviour changes to read before upgrading, is in the <a href="https://github.com/abhijitbansal/claude-skills/blob/main/plugins/portable-artifacts/CHANGELOG.md">changelog</a>.</p>
+      <div class="inv" style="margin-bottom:24px">
+        <div class="row"><span class="nm">Beats</span><span class="dc"><code>beats.mjs</code> finds the beat grid of a music file locally, and <code>"beat:&lt;n&gt;"</code> times a keyframe, cue or caption to it. Measured on synthetic audio only, not on real music.</span></div>
+        <div class="row"><span class="nm">Loudness</span><span class="dc"><code>render.mjs --loudness &lt;lufs&gt;</code> normalises the mix with a two-pass <code>loudnorm</code>; viral specs now get -14 LUFS / -1 dBTP without a flag.</span></div>
+        <div class="row"><span class="nm">Grades, Lottie and maps</span><span class="dc">A <code>grade</code> on images and video (<code>warm</code>, <code>cool</code>, <code>mono</code>, <code>film</code>, plus exposure, contrast and saturation), a <code>lottie</code> element that plays a Lottie file offline, and bundled world and US atlases for charts.</span></div>
+        <div class="row"><span class="nm">27 blocks</span><span class="dc">Twelve more: <code>map-highlight</code>, <code>flow-map</code>, <code>race</code>, <code>comparison-split</code>, <code>before-after</code>, <code>notification-stack</code>, <code>chat-thread</code>, <code>timeline</code>, <code>testimonial</code> and three <code>lower-third</code> variants.</span></div>
+        <div class="row"><span class="nm">Pick and storyboard</span><span class="dc">Click an element in the live preview to copy its spec path. For a clip over 20 s the agent can first send a make-explainer storyboard page for approval; it skips when no one can answer.</span></div>
+        <div class="row"><span class="nm">Read before upgrading</span><span class="dc">Viral renders are now normalised to the loudness target (1.2.0 only reported it). New pinned dependencies: lottie-web, world-atlas and us-atlas.</span></div>
+      </div>
       <h2>What's new in 1.2.0</h2>
       <p style="margin-bottom:12px">1 Nov 2026 · make-motion gets quality audits, a viral mode, transitions, a camera, highlighted code, parallel rendering and batch renders. The full list, including the behaviour changes to read before upgrading, is in the <a href="https://github.com/abhijitbansal/claude-skills/blob/main/plugins/portable-artifacts/CHANGELOG.md">changelog</a>.</p>
       <div class="inv" style="margin-bottom:24px">

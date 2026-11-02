@@ -521,7 +521,10 @@ deep, and moves them as one. A `block` is a ready-made piece of a scene, written
 element with a few params: `title-card`, `lower-third`, `kpi-counter`, `step-flow`,
 `quote-card`, `checklist`, `logo-outro`, `cta-close`, `cta-soft` (a soft ask: save, send,
 follow), `story-beats` (hook, problem, reveal, proof, call to action), `listicle` (a
-numbered list), `before-after-swipe`, `code-typing`, `code-diff` and `terminal-run`.
+numbered list), `before-after-swipe`, `code-typing`, `code-diff`, `terminal-run`,
+`map-highlight`, `flow-map`, `race` (a bar chart race over periods), `comparison-split`,
+`before-after` (two numbers), `notification-stack`, `chat-thread`, `timeline`,
+`testimonial`, `lower-third-tag`, `lower-third-social` and `lower-third-ticker`: 27 in all.
 A block lays itself out for
 16:9 and 9:16, takes its colours from the theme and keeps clear of the caption zone.
 `node <skill-dir>/scripts/blocks.mjs list` lists them and `show <name>` prints a block's
@@ -532,7 +535,8 @@ you name a platform in the intake round). It sets 9:16 at 1080x1920, a platform 
 (top 290, bottom 675, left 120, right 195 px), captions in a zone lifted above the bottom
 band, a first-scene title shown from frame 0 as the hook, cues placed for you (a `swoosh`
 on each cut, a `pop` on each entrance, a `ding` when a counter lands; write `"cues": []` for
-silence) and a -14 LUFS target that the render reports against. `check.mjs` adds warnings,
+silence) and a -14 LUFS / -1 dBTP target that the render normalises the mix to (a two-pass
+`loudnorm`; `render.mjs --loudness off` turns it off). `check.mjs` adds warnings,
 never failures: a hook outside 3 to 7 words, text under a platform band, 3 s with no
 change, audio without captions. The safe-zone numbers are tunable defaults taken from
 the platforms' ad specs, and -14 LUFS is a common default that no platform publishes; none
@@ -543,6 +547,24 @@ of this is a guarantee of reach. Start from `references/examples/viral-hook.json
 (0.1 to 2 s, 0.4 s by default). A scene `camera` takes keyframed `zoom`, `x`, `y` and
 `rotate`, and a seeded `shake`; the same seed always shakes the same way. Examples:
 `references/examples/transitions.json` and `camera-push-in.json`.
+
+**Beats and loudness.** `beats.mjs music.wav --out data/music.beats.json` finds the beat
+grid of a music file with a local detector (no network, no new dependency); name that file
+in the spec's root `beats` and any keyframe `t`, cue or audio `at`, or caption `at` can be
+`"beat:<n>"`. It was measured on synthetic audio only, not on real music; `--bpm` forces a
+tempo when the detector picks the wrong one. `render.mjs --loudness <lufs>` (-30 to -5) and
+`--true-peak <dbtp>` normalise the mix after the encode; without a target nothing changes.
+
+**Grade, Lottie and maps.** An `image` or `video` element takes `"grade"`: a preset (`warm`,
+`cool`, `mono`, `film`) and optional `exposure`, `contrast` and `saturation`. A `lottie`
+element plays a Lottie JSON file from the project folder offline; a file with remote assets
+or expressions is refused. A chart's `data` can be a named atlas (`world-110m`, `world-50m`,
+`us-states-10m`, `us-counties-10m`, bundled, offline), and the `map-highlight` and `flow-map`
+blocks use them.
+
+**Pick in the preview.** In the live preview, clicking an element copies its spec path and
+id (for example `scenes[1].elements[3]  id=title`) and shows a 2 s toast, so you can tell the
+agent exactly which element to change.
 
 **Code.** A `code` element shows highlighted code in 14 languages (highlighted offline
 with shiki), optionally typed out or as a diff; the `code-typing`, `code-diff` and

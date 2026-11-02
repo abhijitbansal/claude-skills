@@ -26,7 +26,8 @@ function initPick() {
     clearTimeout(timer);
     timer = setTimeout(() => { toast.hidden = true; }, TOAST_MS);
   };
-  document.getElementById('stage').addEventListener('click', async (e) => {
+  // On #viewport, not #stage: every mount() (each live reload) builds a new #stage, which would drop the listener.
+  document.getElementById('viewport').addEventListener('click', async (e) => {
     const node = e.target.closest?.('[data-path]');
     if (!node) return;
     const { path, id } = node.dataset;

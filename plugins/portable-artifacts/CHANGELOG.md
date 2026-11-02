@@ -4,6 +4,46 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
+## [1.3.0] - 2026-11-02
+
+make-motion: beat-anchored timing, loudness normalisation, colour grades, Lottie, offline maps, a bar chart race and
+twelve more blocks (27 in all), click-to-pick in the preview and an optional storyboard step.
+
+### Behaviour changes to know about
+
+- **Viral renders are now normalised to -14 LUFS / -1 dBTP.** 1.2.0 only reported the mix against that target. A viral
+  spec now gets the two-pass `loudnorm` stage without a flag, and its loudness line reads `on target`; `render.mjs
+  --loudness off` turns it off. A spec with a `loudness` field or a `--loudness` flag is normalised too. A spec with no
+  target is unchanged. The stage needs ffmpeg 5.1 or later.
+- **New dependencies, pinned exactly:** lottie-web 5.13.0, world-atlas 2.0.2 and us-atlas 3.0.1 (`npm audit`: 0
+  vulnerabilities); the Licences table in `README.md` lists each.
+
+### Added
+
+- **make-motion: `beats.mjs` and `"beat:<n>"` times.** `scripts/beats.mjs <audio>` writes the beat grid of a music file
+  from a local detector (no new dependency). A spec's root `beats` file lets a keyframe `t`, a cue or audio `at`, camera
+  keyframes and captions take `"beat:<n>"`. Measured on synthetic audio only, not on real music. New example
+  `references/examples/on-the-beat.json`.
+- **make-motion: `render --loudness <lufs>` and `--true-peak <dbtp>`.** A two-pass `loudnorm` after the encode (single
+  and `--batch` renders alike); sparse mixes that linear `loudnorm` cannot reach get a limiter stage first.
+- **make-motion: grades.** `image` and `video` elements take `grade`: a preset (`warm`, `cool`, `mono`, `film`) and
+  `exposure`, `contrast` and `saturation`. Specs without a grade render with unchanged hashes. New example
+  `references/examples/graded-photo.json`.
+- **make-motion: a `lottie` element.** Plays a Lottie JSON file offline through lottie-web, frame by frame, so renders
+  are deterministic. Remote assets, expressions and files over a size or work budget are refused by the validator and
+  again by the page.
+- **make-motion: bundled maps.** Named atlases (`world-110m`, `world-50m`, `us-states-10m`, `us-counties-10m`) as chart
+  data, and the `map-highlight` and `flow-map` blocks.
+- **make-motion: twelve more blocks, 27 in all.** `race` (a bar chart race over 4 to 200 period rows),
+  `comparison-split`, `before-after` (two numbers; `before-after-swipe` is the image one), `notification-stack`,
+  `chat-thread`, `timeline`, `testimonial`, `lower-third-tag`, `lower-third-social` (a text label, no logos) and
+  `lower-third-ticker`, plus the two map blocks above. Each has an example and a golden contact sheet.
+- **make-motion: pick in the preview.** Clicking an element in the live preview copies `<path>  id=<id>` and shows a 2 s
+  toast.
+- **make-motion: a storyboard step.** For a clip over 20 s, `scripts/storyboard.mjs` writes a make-explainer plan page
+  for approval. It skips, with one line (`storyboard: skipped (<reason>)`) and exit 0, for 20 s or less, without
+  make-explainer beside make-motion, and under `--non-interactive`.
+
 ## [1.2.0] - 2026-11-01
 
 make-motion: four quality audits, viral mode for short-form video, six new transitions, a scene camera, highlighted code,

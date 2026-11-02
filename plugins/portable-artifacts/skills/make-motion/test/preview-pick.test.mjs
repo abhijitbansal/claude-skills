@@ -67,6 +67,17 @@ test('preview: clicking a top-level element copies its path and id', async (t) =
   });
 });
 
+test('preview: a click still copies after a live reload rebuilds the stage', async (t) => {
+  if (!await requireRender(t, BROWSER_ONLY)) return;
+  await withPage('preview', async ({ page, click }) => {
+    await page.evaluate(() => window.__reload());
+    await page.evaluate(() => window.__motion.seek(0.5));
+    await click('[data-path="scenes[0].elements[0]"]');
+    await page.waitForSelector(TOAST, { state: 'visible' });
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'scenes[0].elements[0]  id=title');
+  });
+});
+
 test('preview: the toast goes away after about 2 seconds', async (t) => {
   if (!await requireRender(t, BROWSER_ONLY)) return;
   await withPage('preview', async ({ page, click }) => {

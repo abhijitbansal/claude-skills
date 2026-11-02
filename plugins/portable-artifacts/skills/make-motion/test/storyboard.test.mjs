@@ -246,6 +246,29 @@ test('CLI exit 2 for missing --out, a missing brief, two briefs, or --out pointi
   assert.deepEqual(JSON.parse(readFileSync(brief, 'utf8')), LONG);
 });
 
+test('CLI refuses to overwrite a file that is not a storyboard plan, but refreshes one that is', () => {
+  const { base, cli } = skillCopy({ withExplainer: true });
+  const brief = writeBrief(base, LONG);
+  const motion = path.join(base, 'motion.json');
+  const spec = JSON.stringify({ scenes: [] });
+  writeFileSync(motion, spec);
+  const clash = run(cli, [brief, '--out', motion]);
+  assert.equal(clash.status, 2);
+  assert.match(clash.stderr, /--out: motion\.json exists and is not a storyboard plan/);
+  assert.equal(readFileSync(motion, 'utf8'), spec);
+  const out = path.join(base, 'plan.json');
+  assert.equal(run(cli, [brief, '--out', out]).status, 0);
+  assert.equal(run(cli, [brief, '--out', out]).status, 0, 'a rerun replaces its own plan');
+});
+
+test('CLI quotes the path in the build line it prints', () => {
+  const { base, cli } = skillCopy({ withExplainer: true });
+  const out = path.join(base, 'my plan;x.json');
+  const result = run(cli, [writeBrief(base, LONG), '--out', out]);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /build: node \S+build\.mjs '[^']*my plan;x\.json'\n/);
+});
+
 test('CLI exit 2 for a brief that is not JSON, exit 1 with the problems for one that breaks the rules', () => {
   const { base, cli } = skillCopy({ withExplainer: true });
   const out = path.join(base, 'plan.json');

@@ -6,7 +6,7 @@
 // the clip is 20 s or less, make-explainer is not beside this skill, or --non-interactive is passed. A script cannot tell
 // an interactive session from `claude -p`, so the agent declares it. Exit 1: the brief breaks a rule (problems on stderr);
 // exit 2: a usage or IO problem.
-import { closeSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
@@ -57,6 +57,30 @@ function sameFile(a, b) {
 }
 
 // The plan appears whole or not at all: written beside the target, then renamed onto it.
+// An existing file may be replaced only when it is itself a storyboard plan (a JSON object with `preset: "plan"`) or
+// empty: a rerun refreshes its own plan, and a motion spec or any other file is never overwritten by a mistyped --out.
+function isPlanFile(file) {
+  try {
+    if (statSync(file).size === 0) return true;
+    if (statSync(file).size > MAX_BRIEF_BYTES) return false;
+    const data = JSON.parse(readFileSync(file, 'utf8'));
+    return data !== null && typeof data === 'object' && data.preset === 'plan';
+  } catch {
+    return false;
+  }
+}
+
+function checkOut(out) {
+  let stat;
+  try { stat = lstatSync(out); } catch { return; }
+  if (stat.isSymbolicLink()) throw new UsageError(`--out: ${path.basename(out)} is a symbolic link; choose a regular file name`);
+  if (stat.isDirectory()) throw new UsageError(`--out: ${out} is a folder; name the .json file`);
+  if (stat.isFile() && !isPlanFile(out)) throw new UsageError(`--out: ${path.basename(out)} exists and is not a storyboard plan; choose another --out`);
+}
+
+// Paths made of plain characters print as they are (the documented `build:` line); anything else is single-quoted.
+const shellQuote = (text) => (/^[\w@%+=:,./-]+$/.test(text) ? text : `'${text.replaceAll("'", `'\\''`)}'`);
+
 function writePlan(out, plan) {
   mkdirSync(path.dirname(out), { recursive: true });
   const partial = path.join(path.dirname(out), `.${path.basename(out)}.${process.pid}.partial`);
@@ -87,8 +111,9 @@ export function main(argv) {
       return 0;
     }
     const out = path.resolve(opts.out);
+    checkOut(out);
     writePlan(out, storyboardPlan(brief));
-    process.stdout.write(`${out}\nbuild: node ${path.join(explainerDir, 'scripts/build.mjs')} ${out}\n`);
+    process.stdout.write(`${out}\nbuild: node ${shellQuote(path.join(explainerDir, 'scripts/build.mjs'))} ${shellQuote(out)}\n`);
     return 0;
   } catch (e) {
     if (!(e instanceof UsageError)) throw e;
