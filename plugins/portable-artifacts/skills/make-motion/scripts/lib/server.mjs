@@ -1,6 +1,6 @@
 // Local-only HTTP server for preview and render. Binds 127.0.0.1, accepts only
 // local Host headers, serves the page template, vendored libraries from
-// node_modules, the live spec, the image, video and audio files the spec names, and (render) the decoded video frames.
+// node_modules, the live spec, the image, video, lottie and audio files the spec names, and (render) the decoded video frames.
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { readFileSync, statSync, existsSync, createReadStream, watch } from 'node:fs';
@@ -63,6 +63,13 @@ const VENDOR_ROOTS = Object.freeze(Object.assign(Object.create(null), {
   // hast-util-to-html (imported by @shikijs/core) and its dependencies keep their modules at the package root.
   ...Object.fromEntries(['hast-util-to-html', 'hast-util-whitespace', 'property-information', 'stringify-entities', 'ccount', 'character-entities-html4',
     'character-entities-legacy', 'comma-separated-tokens', 'html-void-elements', 'space-separated-tokens', 'zwitch'].map((name) => [name, path.join(NODE_MODULES, name)])),
+  'lottie-web': path.join(NODE_MODULES, 'lottie-web/build/player/esm'), // lottie elements; VENDOR_ONLY narrows it to one file
+}));
+// A package whose folder also holds files the page must never load serves only the files listed here. lottie-web ships its
+// full players (they evaluate Lottie expressions with eval) beside the light one: the page imports the light SVG build
+// alone, which has no expression engine and no eval, so an expression could not run even if lottieProblems missed one.
+const VENDOR_ONLY = Object.freeze(Object.assign(Object.create(null), {
+  'lottie-web': Object.freeze(['lottie_light.min.js']),
 }));
 const VENDOR_ROUTE = /^\/vendor\/((?:@[^/]+\/)?[^/]+)\/(.*)$/; // a package name, scoped or not, then the file in its folder
 
@@ -177,13 +184,13 @@ function serveArt(ctx, res, sceneId) {
   return sendBody(res, MIME['.svg'], svg);
 }
 
-// Image, video, audio and captions srcs named by the current spec (after its vars are substituted), and the files a
+// Image, video, lottie, audio and captions srcs named by the current spec (after its vars are substituted), and the files a
 // block's params name (logo-outro's `src`, which its expansion draws as an image); /assets serves nothing else.
-const MEDIA_ELEMENTS = new Set(['image', 'video']);
+const MEDIA_ELEMENTS = new Set(['image', 'video', 'lottie']);
 const blockAssets = (el) => (isBlock(el) ? blockAssetFiles(el).map((file) => file.src) : []);
 
 /**
- * The file srcs `spec` (substituted, not expanded) reads, as written: image and video elements, the files block params
+ * The file srcs `spec` (substituted, not expanded) reads, as written: image, video and lottie elements, the files block params
  * name, audio, captions and the beats file. Throws on a spec without a scenes array. render --batch refuses an output that is one of them.
  */
 export function assetSrcs(spec) {
@@ -234,8 +241,11 @@ function serveUnder(res, root, rel) {
 // A library's JavaScript only (no package.json, no wasm), locked down like /assets: opened in a tab it does not run, and
 // the page's own imports are unaffected.
 const SCRIPT_FILE = /\.m?js$/;
-function serveVendor(res, root, rel) {
+// `only`: the files of the package that may be served (VENDOR_ONLY), compared with the path after URL parsing has
+// normalised it (`./x` and `%2e/x` arrive as `x`) and before any percent-decoding, so an encoded name is not served.
+function serveVendor(res, root, rel, only) {
   lockDown(res);
+  if (only && !only.includes(rel)) return notFound(res);
   const file = resolveUrlPath(root, rel);
   return file && SCRIPT_FILE.test(file) ? sendFile(res, file) : notFound(res);
 }
@@ -293,7 +303,7 @@ function route(ctx, req, res) {
   const themeRoute = /^\/theme\/([^/]+)\.(json|css)$/.exec(pathname);
   if (themeRoute) return serveTheme(res, safeDecode(themeRoute[1]), themeRoute[2]);
   const vendor = VENDOR_ROUTE.exec(pathname);
-  if (vendor && Object.hasOwn(VENDOR_ROOTS, vendor[1])) return serveVendor(res, VENDOR_ROOTS[vendor[1]], vendor[2]);
+  if (vendor && Object.hasOwn(VENDOR_ROOTS, vendor[1])) return serveVendor(res, VENDOR_ROOTS[vendor[1]], vendor[2], VENDOR_ONLY[vendor[1]]);
   return notFound(res);
 }
 

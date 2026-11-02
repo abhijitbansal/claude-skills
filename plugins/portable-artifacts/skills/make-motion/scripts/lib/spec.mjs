@@ -19,6 +19,8 @@ import { BLOCKS, BLOCK_NAMES, isBlock, blockDef, blockAssetFiles, paramOfPart } 
 import { VIRAL_MODE, applyViral } from '../../template/viral.mjs';
 import { VAR_NAME, MAX_VARS, VAR_TYPES, declaresVars, findVarRefs, varValues, substituteVars } from '../../template/vars.mjs';
 import { checkCode } from './code-check.mjs';
+import { checkLottie } from './lottie-check.mjs';
+import { LOTTIE_SPEED } from '../../template/lottie-guard.mjs';
 import { resolveSpecBeats } from './beats-file.mjs';
 import { gridOf, frameCutoff } from '../../template/frames.mjs';
 import { CAMERA_PROPS, CAMERA_REST, MIN_ZOOM, MAX_ZOOM, MAX_SHAKE_AMOUNT, MAX_SHAKE_HZ, MAX_SHAKE_SEED } from '../../template/camera.mjs';
@@ -51,6 +53,7 @@ export const ANIMATABLE = {
   video: [...POSE],
   block: [...POSE], // a block's pose and keyframes become its group's
   code: [...POSE], // and `value` when it types, as a text does
+  lottie: [...POSE], // its own animation plays from `offset` at `speed`; keyframes move the element
 };
 
 const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes', 'hold'];
@@ -65,6 +68,7 @@ const FIELDS = {
   video: [...COMMON, 'src', 'width', 'height', 'fit', 'trimStart', 'trimEnd', 'offset', 'mute', 'volume', 'grade'],
   block: [...COMMON, 'block', 'params'],
   code: [...COMMON, 'code', 'lang', 'width', 'height', 'fontSize', 'highlight', 'diff', 'typing'],
+  lottie: [...COMMON, 'src', 'width', 'height', 'offset', 'speed'],
 };
 const REQUIRED = {
   text: ['text'],
@@ -76,6 +80,7 @@ const REQUIRED = {
   video: ['src', 'width', 'height'],
   block: ['block', 'params'],
   code: ['code', 'lang', 'width'],
+  lottie: ['src', 'width', 'height'],
 };
 
 const num = { type: 'number' };
@@ -141,6 +146,7 @@ const element = {
     vegaLite: { type: 'object' },
     trimStart: { type: 'number', minimum: 0 }, trimEnd: { type: 'number', exclusiveMinimum: 0 }, offset: { type: 'number', minimum: 0 },
     mute: { type: 'boolean' }, volume: unit,
+    speed: { type: 'number', minimum: LOTTIE_SPEED[0], maximum: LOTTIE_SPEED[1] }, // a lottie's playback rate
     block: { type: 'string', minLength: 1 },
     params: { type: 'object' }, // checked against the named block's own schema (checkBlock)
     code: { type: 'string', maxLength: MAX_CODE_CHARACTERS },
@@ -747,6 +753,7 @@ function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS, d
   if (el.type === 'shape') checkShapeStyle(el, base, errors);
   if (el.type === 'image' && typeof el.src === 'string') checkAssetPath(el.src, pathJoin(base, 'src'), dir, errors);
   if (el.type === 'chart' && el.vegaLite) checkChart(el, base, errors);
+  if (el.type === 'lottie' && typeof el.src === 'string') checkLottie(el, base, dir, errors);
   if (isGroup(el)) checkGroup(el, base, scene, dir, errors, fps, depth);
 }
 

@@ -34,7 +34,7 @@ Dependency pins (filled in by the task that adds each; `npm view <pkg> version` 
 | Package | Pin | Added in | `npm audit` |
 |---|---|---|---|
 | shiki | — | Task 14 | — |
-| lottie-web | — | Task 21 | — |
+| lottie-web | 5.13.0 | Task 21 | 0 vulnerabilities (npm audit) |
 | world-atlas | — | Task 22 | — |
 | us-atlas | — | Task 22 | — |
 | onnxruntime-node (on demand) | — | Task 28 | audit-on-demand-deps.sh: — |

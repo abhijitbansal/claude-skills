@@ -61,6 +61,10 @@ shell commands.
   on an image or a video: a preset look, then exposure in stops (−2 to 2), contrast (0.5–2) and saturation (0–2) on top, as
   one SVG filter on the picture. It renders byte-identically (at any `--workers`) and `check.mjs` judges text over a graded
   photo on the graded pixels.
+- **Lottie**: a `lottie` element plays a Lottie JSON file (`src`, `width`, `height`, optional `offset` and `speed`)
+  with lottie-web's light SVG build, which has no expression engine. The validator and the page both refuse remote
+  images, web fonts, external segments, expressions and files too heavy to draw, so the file can never fetch or run
+  anything or stall the render (which also bounds its wait for the page); frames are byte-identical at any `--workers`.
 - **Captions**: a `captions` track from an SRT, VTT or Whisper JSON file, or the voiceover's
   sentence timings, shown two to six words at a time in the caption zone in one of six styles
   (`plain`, `pill`, `karaoke`, `kinetic`, `boxed`, `typewriter`); `check.mjs` keeps other text out
@@ -154,6 +158,7 @@ builds with the defaults and its report says so.
 | `chart` | `vegaLite` with inline `data.values`, `width`, `height` | + `reveal` (0–1 left-to-right wipe) |
 | `group` | `children` (1–40 elements, up to 3 groups deep), each placed relative to the group's centre | `opacity x y scale rotate`, applied to every child at once |
 | `code` | `code`, `lang` (`text`, `javascript`, `typescript`, `json`, `bash`, `python`, `diff`, `go`, `rust`, `swift`, `yaml`, `html`, `css`, `markdown`), `width`, `height`, `fontSize` (28), `highlight` (line numbers), `diff`, `typing`; highlighted offline with shiki (JavaScript regex engine, no wasm) in the theme's colour tokens, drawn as text, never markup | `opacity x y scale rotate` (+ `value`, the characters typed, with `typing`) |
+| `lottie` | `src` (a Lottie JSON file relative to the spec, at most 4 MiB), `width`, `height`, `offset` (scene s before it plays), `speed` (0.25–4); played with lottie-web's light SVG build (no expression engine); embedded PNG, JPEG or WebP images only, no remote assets, web fonts or expressions | `opacity x y scale rotate` |
 | `block` | `block` (one of the eight block names), `params` (that block's own fields); expands into a group of parts named `<id>/<part>`, so validator errors name `params.<field>` | `opacity x y scale rotate`, applied to the whole block |
 
 A scene's `background` is a CSS colour or `"art"`: the theme's seeded art,
@@ -216,6 +221,7 @@ then `PATH`, then an optional `ffmpeg-static` install. It is never bundled.
 Node.js ≥ 20, ffmpeg (≥ 4.4 for audio tracks; ≥ 5.1 for the limiter stage of `--loudness`, see `references/schema.md`), Chromium (one-time download) or Google Chrome. The
 dependencies, pinned by the lockfile, are anime.js v4 (MIT), Playwright
 (Apache-2.0), Vega, Vega-Lite and vega-interpreter (BSD-3-Clause), Ajv (MIT),
+lottie-web 5.13.0 (MIT; the page loads only its light SVG build),
 and the theme fonts in the synced `shared/fonts` (OFL-1.1). The `@fontsource/inter` and
 `@fontsource/jetbrains-mono` npm packages are still pinned but no longer read: the
 default look now comes from `dusk`, and the `press` theme gets JetBrains Mono from `shared/fonts`.

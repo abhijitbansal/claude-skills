@@ -22,6 +22,7 @@ import { printResult, didYouMean } from '../shared/errors.mjs';
 import { listThemes } from '../shared/theme.mjs';
 import { startServer, assetSrcs } from './lib/server.mjs';
 import { launchBrowser, guardNetwork } from './lib/browser.mjs';
+import { readyBudget, waitReady, boundPage, frameLimit } from './lib/ready.mjs';
 import { findFfmpeg, findFfprobe, encodeArgs, probeAudio, probeGraph, measureLoudness, draftSize, QUALITIES } from './lib/ffmpeg.mjs';
 import { parseWorkers, captureInOrder } from './lib/workers.mjs';
 import { specHasVideo, prepareVideo, videoAudioTracks } from './lib/video.mjs';
@@ -272,7 +273,7 @@ function startEncoder(ffmpegPath, args) {
 
 async function renderContactSheets(page, p, info, browser) {
   const outDir = path.join(p.out, 'contact');
-  mkdirSync(outDir, { recursive: true });
+  const sheets = []; // written once every scene's tiles are in, so a render that fails part way leaves no sheet behind
   // seek() resolves once every video frame it set is decoded, so the screenshot never catches an old one.
   const seek = (sec, label) => page.evaluate(async ([s, text]) => { await window.__motion.seek(s); window.__motion.stamp(text); }, [sec, label]);
   for (const [i, scene] of p.spec.scenes.entries()) {
@@ -289,8 +290,10 @@ async function renderContactSheets(page, p, info, browser) {
       await seek(info.sceneStarts[i] + times[times.length - 1], '');
       tiles.push({ png: await page.screenshot({ type: 'png' }), label: `${lastLabel} · ${PHONE_WIDTH}px phone`, width: PHONE_WIDTH });
     }
-    writeFileSync(path.join(outDir, `${scene.id}.png`), await tileSheet(browser, tiles));
+    sheets.push([path.join(outDir, `${scene.id}.png`), await tileSheet(browser, tiles)]);
   }
+  mkdirSync(outDir, { recursive: true });
+  for (const [file, png] of sheets) writeFileSync(file, png);
   process.stdout.write(`${outDir}\n${p.spec.scenes.length} contact sheet(s)\n`);
 }
 
@@ -416,14 +419,14 @@ function installSignalHandlers(state) {
 async function openPages(p, server, state, count) {
   state.browser = await launchBrowser({ ownSignals: true }); // the signal handlers above remove the partial MP4 and temp frames
   const origin = new URL(server.url).origin;
+  const ready = readyBudget(p.spec);
   const open = async () => {
     const page = await state.browser.newPage({ viewport: { width: p.size[0], height: p.size[1] }, deviceScaleFactor: 1 });
     page.on('pageerror', (e) => process.stderr.write(`page error: ${e.message}\n`));
     await guardNetwork(page, origin, (url) => process.stderr.write(`blocked network request: ${url}\n`));
     await page.goto(server.url);
-    await page.waitForFunction(() => window.__motion);
-    await page.evaluate(() => window.__motion.ready);
-    return page;
+    await waitReady(page, ready.ms, ready.hint); // bounded: a page that stops (a lottie too heavy to draw) fails, never hangs
+    return boundPage(page, { ms: frameLimit(), hint: ready.hint, fps: p.fps }); // and so is every seek and screenshot
   };
   return Promise.all(Array.from({ length: count }, open));
 }

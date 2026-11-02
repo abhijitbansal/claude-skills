@@ -106,6 +106,7 @@ The benchmark prompts read files from `fixtures/data/`, which every run copies t
 |---|---|
 | `captions.srt` | 6 cues, 24 words, English |
 | `captions.vtt` | the same cues as WebVTT |
+| `badge.lottie.json` | a 2 s Lottie shape animation (a disc pops in, a ring sweeps round, a tick draws), 512x512 at 30 fps; a copy of make-motion's `references/examples/data/badge.lottie.json` |
 | `clip.mp4` | 2 s, 320x180, SMPTE bars, silent (committed, a few KB) |
 | `music.wav` | 10 s mono 8 kHz click track at 120 BPM: a 20 ms 1 kHz burst every 0.5 s on silence, so beat detection has onsets |
 | `rows.json` | 3 rows of `{ "name", "city", "count" }` for the templated-batch prompts |

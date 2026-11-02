@@ -60,6 +60,7 @@ import { TRANSITIONS, comesInOver, normalizeTransition, windowSeconds } from '..
 import { cameraTweens } from '../template/camera.mjs';
 import { specWarnings, hookWarnings, stillWarnings, gapWarnings, loopWarnings, frameDifference } from './lib/viral-checks.mjs';
 import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
+import { readyBudget, waitReady, boundPage, frameLimit } from './lib/ready.mjs';
 import { specHasVideo, prepareVideo } from './lib/video.mjs';
 import { themeData } from './lib/theme.mjs';
 import {
@@ -68,7 +69,6 @@ import {
 
 const USAGE = 'node scripts/check.mjs <motion.json> [--json] [--theme <name>]';
 const OPTIONS = { json: { type: 'boolean' }, theme: { type: 'string' } };
-const READY_MS = 30000; // the page must build its stage within this (render.mjs's first wait), or the check fails instead of hanging
 const CHECKED = new Set(CHECKED_TYPES); // rendered text: the element types the rules judge
 const SUBPIXEL_PX = 0.5; // a box edge this close to the safe line is on it
 const VISIBLE_OPACITY = 0.05; // rendered opacity (element x scene) above this counts as visible
@@ -122,7 +122,7 @@ const spansOf = ({ chain, camera }, props) => ({ own: tweenSpans(chain, props), 
 // layer is 0. `ownOpacity` leaves the scene's fade out. `types`: the element types that are text (CHECKED_TYPES).
 // `fontSize` is a text's or counter's size as drawn (its font size times every scale around it), `weight` and `color`
 // (#rrggbb) are what it is drawn with, and `sig` a string that differs whenever the element looks different (position,
-// size, opacity, text, drawing, reveal, video frame), for the dead-stretch audit.
+// size, opacity, text, drawing, reveal, video frame, lottie frame), for the dead-stretch audit.
 const measure = async ([sec, index, types, placed]) => {
   await window.__motion.seek(sec); // a video element's frame is decoded before anything is read
   const stage = document.getElementById('stage');
@@ -132,7 +132,8 @@ const measure = async ([sec, index, types, placed]) => {
   if (!placed) for (const prop of ['transform', 'clipPath', 'filter']) layer.style[prop] = '';
   const shown = getComputedStyle(layer).display !== 'none';
   const hex = (css) => `#${(css.match(/[\d.]+/g) ?? []).slice(0, 3).map((v) => Math.round(Number(v)).toString(16).padStart(2, '0')).join('')}`;
-  return [...layer.querySelectorAll('.el:not(.group)')].map((node) => {
+  // Element nodes only: nothing inside a lottie's own drawing, whatever classes it carries.
+  return [...layer.querySelectorAll('.el:not(.group)')].filter((node) => !node.parentElement.closest('.lottie-player')).map((node) => {
     let opacity = shown ? 1 : 0;
     let ownOpacity = 1;
     let scale = 1;
@@ -154,9 +155,10 @@ const measure = async ([sec, index, types, placed]) => {
     const isText = types.some((type) => node.classList.contains(type));
     const colour = own.color.match(/[\d.]+/g) ?? [];
     // A typing text's node holds its whole text at every moment (typed, caret, untyped rest), so what is typed so far is
-    // read from its `.typed` span; a typing code element says its count in data-typed.
+    // read from its `.typed` span; a typing code element says its count in data-typed. A lottie says the frame it drew in
+    // data-frame: its own animation changes the picture inside an unchanged box.
     const typed = node.querySelector(':scope > .typed')?.textContent ?? '';
-    const content = [node.textContent, node.dataset.reveal ?? '', mark?.getAttribute('stroke-dashoffset') ?? '', node.querySelector('img')?.getAttribute('src') ?? '', node.dataset.typed ?? '', typed].join('\u0001');
+    const content = [node.textContent, node.dataset.reveal ?? '', mark?.getAttribute('stroke-dashoffset') ?? '', node.querySelector('img')?.getAttribute('src') ?? '', node.dataset.typed ?? '', typed, node.dataset.frame ?? ''].join('\u0001');
     const sig = `${[box.left, box.top, box.right, box.bottom].map((v) => v.toFixed(1)).join(',')}|${opacity.toFixed(2)}|${content}`;
     // A code element's token colours (template/code-view.mjs marks each coloured span data-ink): the contrast audit judges every one.
     const inks = isText ? [...new Set([...node.querySelectorAll('[data-ink]')].map((n) => hex(getComputedStyle(n).color)))] : [];
@@ -429,35 +431,20 @@ function captionMomentsIn(captionTimes, start, duration, sheet) {
   return [...new Map(local.filter((t) => !taken.has(ms(t))).map((t) => [ms(t), t])).values()].sort((a, b) => a - b);
 }
 
-// Wait until the page has built its stage (window.__motion.ready), at most `ms`: a page that never gets there fails the
-// check with a clear message instead of hanging. A failed build rejects `ready` and surfaces its own message.
-export async function waitReady(page, ms = READY_MS) {
-  const work = (async () => {
-    await page.waitForFunction(() => window.__motion, null, { timeout: 0 });
-    await page.evaluate(() => window.__motion.ready);
-  })();
-  work.catch(() => {}); // after a timeout, closing the browser rejects whatever was in flight
-  let timer;
-  const seconds = Number((ms / 1000).toFixed(2));
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`the page did not become ready within ${seconds} s (any page error is printed above)`)), ms);
-  });
-  try {
-    await Promise.race([work, timeout]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
+// The bounded wait for the page (scripts/lib/ready.mjs), kept exported here for the tests that import it from check.mjs.
+export { waitReady };
 
 // `prepare(page)`: an optional hook run once the page is ready and before any sampling (tests use it to undo the
 // renderer's U+00A0 binding, so the wrap rule can be shown firing through the real sampling, report and exit code).
 async function inspect(browser, spec, server, prepare, written) {
-  const page = await browser.newPage({ viewport: { width: spec.size[0], height: spec.size[1] }, deviceScaleFactor: 1 });
-  page.on('pageerror', (e) => process.stderr.write(`page error: ${e.message}\n`));
-  await guardNetwork(page, new URL(server.url).origin, (url) => process.stderr.write(`blocked network request: ${url}\n`));
-  await page.goto(server.url);
-  await waitReady(page);
-  await prepare?.(page);
+  const raw = await browser.newPage({ viewport: { width: spec.size[0], height: spec.size[1] }, deviceScaleFactor: 1 });
+  raw.on('pageerror', (e) => process.stderr.write(`page error: ${e.message}\n`));
+  await guardNetwork(raw, new URL(server.url).origin, (url) => process.stderr.write(`blocked network request: ${url}\n`));
+  await raw.goto(server.url);
+  const { ms, hint } = readyBudget(spec); // the page must build its stage in time, or the check fails instead of hanging
+  await waitReady(raw, ms, hint);
+  await prepare?.(raw);
+  const page = boundPage(raw, { ms: frameLimit(), hint, fps: spec.fps }); // and every seek and screenshot after it
   const starts = await page.evaluate(() => window.__motion.sceneStarts);
   const overlapsAll = await page.evaluate(() => window.__motion.overlaps); // every transition window
   const insets = safeInsets(spec.size);

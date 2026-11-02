@@ -10,6 +10,7 @@ import { gradeFilter, gradeId, GRADE_ELEMENT_TYPES } from './grade.mjs';
 import { loadCaptionTracks, captionLayer, applyCaption, captionSample, captionFontSize, captionMoments, CAPTION_WEIGHT } from './caption-layer.mjs';
 import { codeHighlighter, styleCode, fillCode, setCodeTyping } from './code-view.mjs';
 import { DEFAULT_CODE_SIZE } from './code-theme.mjs';
+import { mountLottie, seekLottie, destroyLotties } from './lottie-view.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 import { bindWithNbsp } from '/shared/nowrap.mjs'; // served by server.mjs; the token regex lives only in shared/
 
@@ -312,6 +313,17 @@ function buildElement(el, look, frames) {
     case 'code': // empty until its tokens are in (mountElements queues them; code-view.mjs fills the rows)
       styleCode(node, el, look);
       break;
+    case 'lottie': { // empty until its player is in (mountElements queues it; lottie-view.mjs fills the holder)
+      // Not the class "lottie": 100 ms after it loads, lottie-web scans the page for that class (and "bodymovin") and
+      // registers a second, empty player on each node it finds; whether the stage is in the page by then is a race.
+      node.className = 'el lottie-player';
+      node.style.width = px(el.width);
+      node.style.height = px(el.height);
+      part.lottieHolder = document.createElement('div');
+      part.lottieHolder.style.cssText = 'width:100%;height:100%';
+      node.append(part.lottieHolder);
+      break;
+    }
     default:
       throw new Error(`unknown element type "${el.type}" (element "${el.id}")`);
   }
@@ -338,12 +350,13 @@ function gradeDefs(grades) {
 }
 
 // Builds the nodes of `elements` into `container`, each tagged with its spec path (`prefix` + index); a group's children
-// are built into the group's own node, so they move with it. Charts, images, video first frames and code tokens queue
-// their loading in `pending`. `frames`: render mode's /frames.json, the decoded frames of each video element.
+// are built into the group's own node, so they move with it. Charts, images, video first frames, code tokens and lottie
+// players queue their loading in `pending`. `frames`: render mode's /frames.json, the decoded frames of each video element.
 // `highlight`: code-view.mjs codeHighlighter for this stage. `grades`: the stage's grade list; a graded picture takes the
 // next id from it (an element's own id is the user's text and is never used as one) and its filter is built from the list.
+// `lotties`: the stage's lottie players, destroyed when the stage is replaced.
 function mountElements(container, elements, prefix, ctx, parts, pending) {
-  const { look, frames, highlight, grades } = ctx;
+  const { look, frames, highlight, grades, lotties } = ctx;
   elements.forEach((el, i) => {
     const part = buildElement(el, look, frames);
     if (el.grade && GRADE_ELEMENT_TYPES.includes(el.type)) gradePicture(part.node, el.grade, grades); // validation refuses a grade elsewhere
@@ -353,6 +366,7 @@ function mountElements(container, elements, prefix, ctx, parts, pending) {
     container.append(part.node);
     if (el.type === 'chart') pending.push(renderChart(el, look).then((svg) => part.node.append(svg)));
     if (el.type === 'code') pending.push(highlight(el).then((lines) => { part.codeTyping = fillCode(part.node, el, lines, look); }));
+    if (el.type === 'lottie') pending.push(mountLottie(part.lottieHolder, el, assetUrl(el.src), lotties).then((state) => { part.lottie = state; }));
     if (part.img) pending.push(part.img.decode().catch(() => { throw new Error(`image failed to load: ${el.src}`); }));
     if (part.frame) pending.push(showFrame(part.frame, 0));
     if (isGroup(el)) mountElements(part.node, el.children, `${at}.children`, ctx, parts, pending);
@@ -412,8 +426,9 @@ async function grainLayer(scene, size, amount) {
   return img;
 }
 
-// `captions`: loadCaptionTracks' tracks; each gets a layer over the scenes and under the grain and vignette.
-async function buildStage(spec, look, frames, captions) {
+// `captions`: loadCaptionTracks' tracks; each gets a layer over the scenes and under the grain and vignette. `lotties`: the
+// caller's list, which every lottie player joins as soon as it exists (the caller destroys them if the build fails).
+async function buildStage(spec, look, frames, captions, lotties) {
   const stage = document.createElement('div');
   stage.id = 'stage';
   stage.style.width = px(spec.size[0]);
@@ -444,7 +459,7 @@ async function buildStage(spec, look, frames, captions) {
       layer.append(camera);
     }
     const host = camera ?? layer;
-    mountElements(host, scene.elements, `scenes[${si}].elements`, { look, frames, highlight, grades }, parts, pending);
+    mountElements(host, scene.elements, `scenes[${si}].elements`, { look, frames, highlight, grades, lotties }, parts, pending);
     stage.append(layer);
     const entry = { scene, layer, camera, grain: null };
     if (grain > 0) pending.push(grainLayer(scene, spec.size, grain).then((img) => { entry.grain = img; }));
@@ -457,7 +472,7 @@ async function buildStage(spec, look, frames, captions) {
   if (defs) stage.append(defs);
   for (const { grain: img } of scenes) if (img) stage.append(img); // over the scenes, under the vignette
   if (spec.texture?.vignette) stage.append(vignetteLayer());
-  return { stage, scenes, parts, captions: captionLayers };
+  return { stage, scenes, parts, captions: captionLayers, lotties };
 }
 
 function collectStrings(node, out = []) {
@@ -587,7 +602,7 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
       }
     });
     const renew = [];
-    for (const { node, el, drawNodes, arrowNode, roundCap, format, typing, codeTyping, frame, clip } of parts) {
+    for (const { node, el, drawNodes, arrowNode, roundCap, format, typing, codeTyping, frame, clip, lottie } of parts) {
       const s = states.get(el.id);
       const transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
       const opacity = String(s.opacity);
@@ -609,14 +624,18 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
       if (format) node.textContent = format(s.value);
       if (typing) setTyping(typing, s.value, sec);
       if (codeTyping) setCodeTyping(codeTyping, typedCount(s.value, codeTyping.total), blinkOn(sec));
-      if (frame || clip) {
+      if (frame || clip || lottie) {
         // Scene time, held at the scene's last frame: during a crossfade the outgoing clip freezes there (its sound
-        // stops at the scene end too) instead of playing on under the incoming scene.
+        // stops at the scene end too) instead of playing on under the incoming scene; a lottie holds there too.
         const si = sceneOf.get(el.id);
         const { duration } = scenes[si].scene;
         const sceneT = sec - sceneStarts[si];
         if (frame) decoding.push(showFrame(frame, Math.min(sceneT, duration - 1 / frame.fps)));
-        else seekClip(clip, Math.min(sceneT, duration));
+        else if (clip) seekClip(clip, Math.min(sceneT, duration));
+        else {
+          // check.mjs reads data-frame: a lottie playing its own animation is change for the dead-stretch audit
+          try { node.dataset.frame = String(seekLottie(lottie, Math.min(sceneT, duration), el)); } catch (e) { decoding.push(Promise.reject(e)); }
+        }
       }
     }
     if (renew.length && !LIVE_LAYERS) renewNodes(renew); // not in a preview: it needs no byte-exact frames, and its elements are compositor layers (a <video> among them)
@@ -628,6 +647,7 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
 const viewportEl = document.getElementById('viewport');
 const errorEl = document.getElementById('error');
 let currentStage = null;
+let currentLotties = [];
 
 function fitStage(size) {
   const k = Math.min(viewportEl.clientWidth / size[0], viewportEl.clientHeight / size[1]);
@@ -758,10 +778,22 @@ async function mount() {
   const { spec, look } = await fetchSpec();
   const captions = await loadCaptionTracks(spec, assetUrl);
   await loadFonts(spec, look, captions);
-  const dom = await buildStage(spec, look, await fetchFrames(), captions);
-  if (mine !== generation) return null;
+  const lotties = [];
+  let dom;
+  try {
+    dom = await buildStage(spec, look, await fetchFrames(), captions, lotties);
+  } catch (e) {
+    destroyLotties(lotties); // the players the failed build had started
+    throw e;
+  }
+  if (mine !== generation) {
+    destroyLotties(dom.lotties);
+    return null;
+  }
   const built = buildTimeline(spec);
   const apply = makeApply(dom, built, { size: spec.size, background: spec.background, themeBackground: look.background });
+  destroyLotties(currentLotties); // a preview reload: the old stage's players go with it
+  currentLotties = dom.lotties;
   currentStage?.remove();
   viewportEl.append(dom.stage);
   currentStage = dom.stage;
