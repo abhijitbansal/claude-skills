@@ -27,6 +27,7 @@ import { findFfmpeg, findFfprobe, encodeArgs, probeAudio, probeGraph, measureLou
 import { parseWorkers, captureInOrder } from './lib/workers.mjs';
 import { specHasVideo, prepareVideo, videoAudioTracks } from './lib/video.mjs';
 import { synthesiseCues } from './lib/cues.mjs';
+import { createCompositor, takeFrame, usesGl } from './lib/gl-composite.mjs';
 import { resolveAsset, freshFile } from './lib/paths.mjs';
 import { readRows, outTemplate, outputFor, collisionKey, columnWarnings, batchTempPath, tempClashes, inputClashes, recheckRows, checkManifestSlot, sha256File, writeManifest, NEEDS_TEMPLATE } from './lib/batch.mjs';
 import { declaresVars, varValues, substituteVars } from '../template/vars.mjs';
@@ -271,24 +272,28 @@ function startEncoder(ffmpegPath, args) {
   return { write, finish, kill };
 }
 
-async function renderContactSheets(page, p, info, browser) {
+async function renderContactSheets(page, p, info, browser, compositor) {
   const outDir = path.join(p.out, 'contact');
   const sheets = []; // written once every scene's tiles are in, so a render that fails part way leaves no sheet behind
-  // seek() resolves once every video frame it set is decoded, so the screenshot never catches an old one.
+  // seek() resolves once every video frame it set is decoded, so the screenshot never catches an old one. A tile inside a GL
+  // transition window is composed like a frame of the video (takeFrame), and carries no in-page stamp: the sheet labels it.
   const seek = (sec, label) => page.evaluate(async ([s, text]) => { await window.__motion.seek(s); window.__motion.stamp(text); }, [sec, label]);
+  const shot = async (sec, label) => {
+    if (compositor) return takeFrame({ page, compositor, k: 0 }, sec, label);
+    await seek(sec, label);
+    return page.screenshot({ type: 'png' });
+  };
   for (const [i, scene] of p.spec.scenes.entries()) {
     const { times, total } = sheetMoments(scene, p.fps);
     if (total > times.length) process.stderr.write(`${scene.id}: ${total} moments, showing ${times.length}\n`);
     const tiles = [];
     for (const t of times) {
       const label = `${scene.id} · ${t.toFixed(2)}s`;
-      await seek(info.sceneStarts[i] + t, label);
-      tiles.push({ png: await page.screenshot({ type: 'png' }), label });
+      tiles.push({ png: await shot(info.sceneStarts[i] + t, label), label });
     }
     if (p.size[0] > PHONE_WIDTH) { // a phone-width copy of the last frame, without the stamp
       const lastLabel = tiles[tiles.length - 1].label;
-      await seek(info.sceneStarts[i] + times[times.length - 1], '');
-      tiles.push({ png: await page.screenshot({ type: 'png' }), label: `${lastLabel} · ${PHONE_WIDTH}px phone`, width: PHONE_WIDTH });
+      tiles.push({ png: await shot(info.sceneStarts[i] + times[times.length - 1], ''), label: `${lastLabel} · ${PHONE_WIDTH}px phone`, width: PHONE_WIDTH });
     }
     sheets.push([path.join(outDir, `${scene.id}.png`), await tileSheet(browser, tiles)]);
   }
@@ -329,14 +334,20 @@ async function renderVideo(pages, p, state) {
     }
   };
   if (pages.length > 1) {
-    await captureInOrder({ pages, frames: p.frames, fps: p.fps, dir: state.frameDir, onFrame });
+    const capture = state.compositor ? (page, k, sec) => takeFrame({ page, compositor: state.compositor, k }, sec) : undefined;
+    await captureInOrder({ pages, frames: p.frames, fps: p.fps, dir: state.frameDir, onFrame, capture });
   } else {
     for (let i = 0; i < p.frames; i++) {
+      if (state.compositor) {
+        await onFrame(await takeFrame({ page: pages[0], compositor: state.compositor, k: 0 }, i / p.fps));
+        continue;
+      }
       await pages[0].evaluate((s) => window.__motion.seek(s), i / p.fps);
       await onFrame(await pages[0].screenshot({ type: 'png' }));
     }
   }
   await state.encoder.finish();
+  if (state.compositor) process.stderr.write(`webgl: ${state.compositor.composed} frame${state.compositor.composed === 1 ? '' : 's'} composed in software\n`);
   const finished = p.loudness && p.audio.length ? await normalise(p, state) : state.partial;
   renameSync(finished, p.out);
   rmSync(state.partial, { force: true }); // the encode, when the normalised copy replaced it (else it was just renamed away)
@@ -396,13 +407,14 @@ async function attempt(label, step) {
 async function cleanup(state) {
   await attempt('encoder', () => state.encoder?.kill());
   await attempt('loudnorm pass', () => state.job?.kill()); // before its temp files go, so ffmpeg cannot write one back
+  await attempt('webgl compositor', () => state.compositor?.close());
   await attempt('browser', () => state.browser?.close());
   if (state.partial) await attempt(state.partial, () => rmSync(state.partial, { force: true }));
   if (state.normalized) await attempt(state.normalized, () => rmSync(state.normalized, { force: true }));
   // A screenshot a page had already taken can land in the folder while it is removed (an interrupt), so retry on ENOTEMPTY.
   if (state.frameDir) await attempt(state.frameDir, () => rmSync(state.frameDir, { recursive: true, force: true, maxRetries: FRAME_DIR_RETRIES, retryDelay: FRAME_DIR_RETRY_MS }));
   if (state.cueDir) await attempt(state.cueDir, () => rmSync(state.cueDir, { recursive: true, force: true }));
-  Object.assign(state, { encoder: null, job: null, browser: null, partial: null, normalized: null, frameDir: null, cueDir: null });
+  Object.assign(state, { encoder: null, job: null, compositor: null, browser: null, partial: null, normalized: null, frameDir: null, cueDir: null });
 }
 
 function installSignalHandlers(state) {
@@ -445,7 +457,10 @@ async function runRender(p, state) {
     server = await startServer({ specPath: p.specPath, mode: 'render', theme: p.theme, videoFrames: p.videoFrames, spec: p.served });
     const pages = await openPages(p, server, state, pageCount);
     const info = await pages[0].evaluate(() => ({ sceneStarts: window.__motion.sceneStarts }));
-    await (p.contact ? renderContactSheets(pages[0], p, info, state.browser) : renderVideo(pages, p, state));
+    // A GL transition (gl-ripple, gl-cube) is composed by a second browser with software WebGL, launched on the first frame
+    // that needs it; a spec with none never creates it.
+    if (usesGl(p.spec)) state.compositor = createCompositor({ size: p.size });
+    await (p.contact ? renderContactSheets(pages[0], p, info, state.browser, state.compositor) : renderVideo(pages, p, state));
   } catch (e) {
     if (state.exiting) await new Promise(() => {}); // the signal handler owns the exit
     throw e;
@@ -533,7 +548,7 @@ async function main() {
   warnIfStaleCopy();
   // The handlers go in before planning: planning writes the cue folder, and an interrupt with no handler would kill the
   // process and leave it behind.
-  const state = { encoder: null, job: null, browser: null, partial: null, normalized: null, frameDir: null, cueDir: null, exiting: false };
+  const state = { encoder: null, job: null, compositor: null, browser: null, partial: null, normalized: null, frameDir: null, cueDir: null, exiting: false };
   installSignalHandlers(state);
   const opts = parseArgs(process.argv.slice(2));
   if (opts.batch !== undefined) return renderBatch(opts, state);

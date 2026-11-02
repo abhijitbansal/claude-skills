@@ -10,7 +10,7 @@ import { CAMERA_PROPS, CAMERA_REST } from './camera.mjs';
 
 const MS = 1000;
 const MIN_SEGMENT_MS = 1;
-const TRANSITION_EASE = 'inOutCubic'; // the progress of push, slide, wipe, zoom, blur and iris
+const TRANSITION_EASE = 'inOutCubic'; // the progress of push, slide, wipe, zoom, blur, iris, gl-ripple and gl-cube
 
 // The named eases as anime.js easing functions; every other name is one of anime's own (a string it resolves).
 const NAMED_EASES = Object.fromEntries(Object.entries(EASE_CURVES).map(([name, points]) => [name, cubicBezier(...points)]));
@@ -71,7 +71,7 @@ export function buildTimeline(input) {
     const transition = normalizeTransition(scene.transition);
     const comesIn = si > 0 && comesInOver(transition.type); // the first scene has nothing to come in over
     const fadesIn = transition.type === 'fade' || (comesIn && transition.type === 'crossfade');
-    const moves = comesIn && !fadesIn; // push, slide, wipe, zoom, blur, iris: the renderer styles the layers from `p`
+    const moves = comesIn && !fadesIn; // push, slide, wipe, zoom, blur, iris, gl-ripple, gl-cube: the renderer styles the layers from `p` (a GL window is composed from it)
     const sceneState = { opacity: fadesIn ? 0 : 1 };
     if (moves) sceneState.p = 0;
     states.set(`scene:${scene.id}`, sceneState);

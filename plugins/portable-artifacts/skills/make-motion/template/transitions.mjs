@@ -2,6 +2,11 @@
 // normalizeTransition reads either form; layerStyles says how the two scene layers look at progress p of the window
 // (the timeline eases p, template/timeline.mjs), and the renderer sets the styles it returns (template/renderer.mjs).
 // `direction` of push, slide and wipe names the edge the incoming scene comes from.
+// gl-ripple and gl-cube (template/gl-transitions.mjs) are drawn by a shader in a render. TRANSITIONS stays the nine CSS
+// names; the GL ones are accepted wherever a transition is (normalizeTransition, directionsOf, comesInOver), and
+// layerStyles gives the preview and check.mjs the CSS look that stands in for them.
+
+import { GL_TRANSITIONS, glDirections, glFallback, isGlTransition } from './gl-transitions.mjs';
 
 export const TRANSITIONS = Object.freeze(['none', 'fade', 'crossfade', 'push', 'slide', 'wipe', 'zoom', 'blur', 'iris']);
 export const TRANSITION_SECONDS = 0.4;
@@ -12,14 +17,14 @@ const EDGES = Object.freeze(['left', 'right', 'up', 'down']);
 const SCALES = Object.freeze(['in', 'out']);
 const DIRECTIONS = new Map([['push', EDGES], ['slide', EDGES], ['wipe', EDGES], ['zoom', SCALES], ['iris', SCALES]]);
 const FROM_EDGE = new Map([['left', [-1, 0]], ['right', [1, 0]], ['up', [0, -1]], ['down', [0, 1]]]); // where the incoming scene starts, in canvas sizes
-const OVERLAPPING = new Set(['crossfade', 'push', 'slide', 'wipe', 'zoom', 'blur', 'iris']); // the incoming scene comes in over the outgoing one
+const OVERLAPPING = new Set(['crossfade', 'push', 'slide', 'wipe', 'zoom', 'blur', 'iris', ...GL_TRANSITIONS]); // the incoming scene comes in over the outgoing one
 
 const ZOOM_FROM = new Map([['in', 1.2], ['out', 0.8]]);
 const BLUR_PX = 24;
 const IRIS_REACH = 71; // a circle of this radius, in percent of the box's reference length, covers the corners of any box
 
 /** The directions `type` accepts, in order (the first is the default), or null when it takes none. */
-export const directionsOf = (type) => DIRECTIONS.get(type) ?? null;
+export const directionsOf = (type) => DIRECTIONS.get(type) ?? glDirections(type);
 
 /** True for a transition whose incoming scene comes in over the previous one (every name but none and fade). */
 export const comesInOver = (type) => OVERLAPPING.has(type);
@@ -27,7 +32,7 @@ export const comesInOver = (type) => OVERLAPPING.has(type);
 /** { type, direction, duration } of a name or object; `direction` is null where the type takes none. Unknown input is "none". */
 export function normalizeTransition(value) {
   const written = typeof value === 'string' ? { type: value } : (typeof value === 'object' && value !== null ? value : {});
-  const type = TRANSITIONS.includes(written.type) ? written.type : 'none';
+  const type = TRANSITIONS.includes(written.type) || isGlTransition(written.type) ? written.type : 'none';
   const directions = directionsOf(type);
   const direction = directions ? (directions.includes(written.direction) ? written.direction : directions[0]) : null;
   const wanted = Number.isFinite(written.duration) ? written.duration : TRANSITION_SECONDS;
@@ -69,7 +74,10 @@ export function layerStyles(transition, p, size) {
   const incoming = unset();
   const outgoing = unset();
   const [width, height] = size;
-  if (type === 'push' || type === 'slide') {
+  if (isGlTransition(type)) { // a render draws these with a shader; here the layers are posed as the nearest CSS transition
+    if (glFallback(type) === 'push') return layerStyles({ type: 'push', direction }, p, size);
+    incoming.opacity = p;
+  } else if (type === 'push' || type === 'slide') {
     const [dx, dy] = FROM_EDGE.get(direction);
     incoming.transform = translate([dx * (1 - p) * width, dy * (1 - p) * height]);
     if (type === 'push') outgoing.transform = translate([-dx * p * width, -dy * p * height]);

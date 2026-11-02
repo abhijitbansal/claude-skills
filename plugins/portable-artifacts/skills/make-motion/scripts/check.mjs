@@ -21,7 +21,9 @@
 // each transition window is sampled at its midpoint, with both layers drawn as they are, and a visible text or counter of
 // the incoming scene that overlaps one of the outgoing scene there is a warning (never a failure). A window, a `fade`'s
 // included, is change for the dead-stretch audit, and a text is not judged for contrast while its scene is coming in
-// (the screenshot is two layers then, or the scene half faded in); a text that shows only inside its window gets an
+// (the screenshot is two layers then, or the scene half faded in); a gl-ripple or gl-cube window is judged on the layers
+// the page poses for it, a crossfade and a push (template/transitions.mjs layerStyles): check has no shader compositor, so a
+// ripple can report text over text and a cube never does; a text that shows only inside its window gets an
 // `info:` line (never changing the exit code).
 // With a `captions` track: a visible text or counter that sits in the caption zone (template/formats.mjs captionZone)
 // while it is not moving and a caption is on screen is a problem, and so is a captions layer that leaves the zone: each
@@ -57,6 +59,7 @@ import { doctorCommand } from './lib/doctor-hint.mjs';
 import { isViral } from '../template/viral.mjs';
 import { substituteVars } from '../template/vars.mjs';
 import { TRANSITIONS, comesInOver, normalizeTransition, windowSeconds } from '../template/transitions.mjs';
+import { GL_TRANSITIONS } from '../template/gl-transitions.mjs';
 import { cameraTweens } from '../template/camera.mjs';
 import { specWarnings, hookWarnings, stillWarnings, gapWarnings, loopWarnings, frameDifference } from './lib/viral-checks.mjs';
 import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
@@ -532,7 +535,7 @@ export function atBlockParts(written, spec, findings) {
 
 const NO_PASSING_IN_BLOCK = 'no theme colour passes over this background; change "theme" or the scene background';
 
-const TRANSITION_WINDOW = new RegExp(` during the (${TRANSITIONS.filter(comesInOver).join('|')}) at `);
+const TRANSITION_WINDOW = new RegExp(` during the (${[...TRANSITIONS, ...GL_TRANSITIONS].filter(comesInOver).join('|')}) at `);
 
 // A finding about where a part sits or how large it is drawn: in a scene with a camera, its zoom or pan may be the cause.
 const PLACED = / leaves the safe area | overlaps | sits under the platform UI | is \d+px \(below /;

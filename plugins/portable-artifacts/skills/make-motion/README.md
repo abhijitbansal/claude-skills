@@ -61,7 +61,9 @@ shell commands.
 - **Scene transitions**: `"transition": "crossfade"` fades the new scene in over the previous one (which
   stays fully visible beneath) over 0.4 s; `push`, `slide`, `wipe`, `zoom`, `blur` and `iris` move, clip,
   scale or blur it in, and `{ "type": "push", "direction": "up", "duration": 0.6 }` picks the edge and the
-  length; a root `transition` sets the default.
+  length; a root `transition` sets the default. `gl-ripple` and `gl-cube` are WebGL shaders (a wave through
+  both scenes; a box turning in perspective) drawn in a render with software WebGL, byte-identical at any
+  `--workers`; the preview and `check.mjs` show a crossfade and a push in their place.
 - **Scene camera**: a scene's `camera` keyframes `zoom` (0.5–3), a pan (`x`, `y` px) and a roll (`rotate`) of
   every element in the scene about the canvas centre, and `shake` (`amount` px, `hz`, `seed`) adds a seeded
   handheld jitter; the same spec always shakes the same way. The background, captions, grain and the vignette stay put.
@@ -181,7 +183,7 @@ full-bleed behind the elements and seeded by the scene `id`. A shape `fill` or
 `accentSoft`, `good`, `bad`, `warn`, `text`, `text2`, `text3`, `cat1`..`cat6`) instead of
 a colour; it resolves to the active theme's dark colour.
 
-Root-level options (all off unless set): `transition` (a name, `none`, `fade`, `crossfade`, `push`, `slide`, `wipe`, `zoom`, `blur` or `iris`, or
+Root-level options (all off unless set): `transition` (a name, `none`, `fade`, `crossfade`, `push`, `slide`, `wipe`, `zoom`, `blur`, `iris`, `gl-ripple` or `gl-cube`, or
 `{ type, direction?, duration? }`; the default for every scene), `cues` (up to 30 sound cues, timed from the video or a scene
 start), `captions` (up to 20 tracks, each an SRT, VTT or JSON file and a `style`), `texture` (`vignette`, and `grain` from 0 to 0.15). Texture costs render time, measured
 on 1920x1080 frames (seek plus PNG screenshot, headless Chromium, one Apple-silicon Mac): about

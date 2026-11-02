@@ -7,6 +7,12 @@ import { UsageError } from './spec.mjs';
 
 export const MAX_WORKERS = 16;
 export const AHEAD_PER_PAGE = 2; // PNG files in flight per page: the most that wait on disk
+
+// One seek and one screenshot: a frame of a page with no GL transition.
+async function captureFrame(page, _k, sec) {
+  await page.evaluate((s) => window.__motion.seek(s), sec);
+  return page.screenshot({ type: 'png' });
+}
 const AUTO_CAP = 8;
 const WORKERS_HELP = `--workers must be an integer from 1 to ${MAX_WORKERS} or "auto"`;
 
@@ -41,8 +47,10 @@ function deferred() {
  * (renderer.mjs renewNodes). A page error or an unreadable file rejects with `worker <k> failed at frame <j>: <message>`
  * (k counts from 0); an `onFrame` error is rethrown as it is. Every worker has stopped by the time this settles, so the
  * caller can remove `dir` and close the browser. An `ahead` under 1 (or not a number) would wait for ever, so it counts as 1.
+ * `capture(page, k, sec)` returns the PNG of one frame on page `k`; the default seeks and screenshots (a GL transition window
+ * takes a frame in several steps, scripts/lib/gl-composite.mjs takeFrame).
  */
-export async function captureInOrder({ pages, frames, fps, dir, onFrame, ahead: aheadWanted = AHEAD_PER_PAGE * pages.length }) {
+export async function captureInOrder({ pages, frames, fps, dir, onFrame, capture = captureFrame, ahead: aheadWanted = AHEAD_PER_PAGE * pages.length }) {
   const ahead = Math.max(1, Math.floor(aheadWanted) || 1);
   const failAt = parseFailAt(process.env.PA_WORKER_FAIL_AT);
   const file = (i) => path.join(dir, `${i}.png`);
@@ -65,8 +73,7 @@ export async function captureInOrder({ pages, frames, fps, dir, onFrame, ahead: 
       for (i = await take(); i !== null; i = await take()) {
         owner[i] = k;
         if (i === failAt) throw new Error('injected failure (PA_WORKER_FAIL_AT)');
-        await pages[k].evaluate((s) => window.__motion.seek(s), i / fps);
-        await writeFile(file(i), await pages[k].screenshot({ type: 'png' }));
+        await writeFile(file(i), await capture(pages[k], k, i / fps));
         ready[i].resolve();
       }
     } catch (cause) {

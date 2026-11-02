@@ -99,14 +99,6 @@ jobs:
         env:
           PA_REQUIRE_RENDER: '1'
         run: npm ci && npx playwright install --with-deps chromium && npm test
-      # Task 29 spike: manual runs only (gh workflow run test.yml). Prints `webgl-spike: <platform> <sha>`; compare with
-      # the webgl-spike-macos job. Remove both pieces (or keep the macOS job if GL transitions ship) per the plan.
-      - name: webgl spike
-        if: github.event_name == 'workflow_dispatch'
-        working-directory: plugins/portable-artifacts/skills/make-motion
-        env:
-          PA_WEBGL_SPIKE: '1'
-        run: node --test test/webgl-spike.test.mjs
       - name: make-diagram
         working-directory: plugins/portable-artifacts/skills/make-diagram
         run: npm ci && npx playwright install --with-deps chromium && npm test
@@ -126,7 +118,10 @@ jobs:
         working-directory: tools/cache-clock
         run: node --test "test/*.test.mjs"
 
-  # Task 29 spike, macOS half: manual runs only. The node job above runs the Ubuntu half.
+  # WebGL transitions (gl-ripple, gl-cube), macOS half: manual runs only (gh workflow run test.yml). The Ubuntu half is the
+  # make-motion step of the node job above, whose npm test includes test/gl-transitions.test.mjs. Both print
+  # `webgl-spike: <platform> <sha>` and `gl-frame: <platform> <type> <sha>` (the same composed frame on both runners is the
+  # evidence that software WebGL is deterministic across them); compare them in the logs (gh run view <id> --log).
   webgl-spike-macos:
     if: github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
@@ -135,11 +130,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: webgl spike
+      - name: install ffmpeg
+        run: brew install ffmpeg
+      - name: webgl spike and gl transitions
         working-directory: plugins/portable-artifacts/skills/make-motion
         env:
           PA_WEBGL_SPIKE: '1'
-        run: npm ci && npx playwright install chromium && node --test test/webgl-spike.test.mjs
+          PA_REQUIRE_RENDER: '1'
+        run: npm ci && npx playwright install chromium && node --test test/webgl-spike.test.mjs && node --test test/gl-transitions.test.mjs
 
   # A plugin's plugin.json `version` is the ONLY update trigger — Claude Code
   # skips a plugin whose version string is unchanged, even when its code moved.

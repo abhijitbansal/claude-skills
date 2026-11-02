@@ -13,8 +13,10 @@ const ARGS = ['--disable-partial-raster'];
 // Bundled Chromium first; falls back to system Chrome with a warning.
 // Playwright closes the browser and exits 130 or 143 itself on Ctrl+C or SIGTERM, which pre-empts a caller's own handler
 // (render.mjs removes its partial MP4 and temp frames there). `ownSignals: true` leaves SIGINT and SIGTERM to the caller.
-export async function launchBrowser({ quiet = false, ownSignals = false } = {}) {
-  const options = { args: ARGS, ...(ownSignals ? { handleSIGINT: false, handleSIGTERM: false } : {}) };
+// `args`: more launch arguments after the fixed ones (the GL compositor's own browser, scripts/lib/gl-composite.mjs;
+// every other caller launches with ARGS alone).
+export async function launchBrowser({ quiet = false, ownSignals = false, args = [] } = {}) {
+  const options = { args: [...ARGS, ...args], ...(ownSignals ? { handleSIGINT: false, handleSIGTERM: false } : {}) };
   try {
     return await chromium.launch(options);
   } catch (first) {

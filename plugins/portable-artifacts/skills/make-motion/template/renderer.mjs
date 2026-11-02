@@ -2,7 +2,8 @@
 // window.__motion for the preview UI and the Playwright frame loop.
 import { buildTimeline, seekTo } from './timeline.mjs';
 import { withDefaults, resolveColor, graphemes, typingLength, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE } from './defaults.mjs';
-import { layerStyles, layerUnder } from './transitions.mjs';
+import { layerStyles, layerUnder, normalizeTransition } from './transitions.mjs';
+import { isGlTransition } from './gl-transitions.mjs';
 import { cameraTransform } from './camera.mjs';
 import { resolveAudio } from './audio.mjs';
 import { flattenElements, isGroup } from './groups.mjs';
@@ -576,13 +577,18 @@ function renewNodes(nodes) {
   nodes.forEach((node, i) => { node.style.display = shown[i]; });
 }
 
-// Returns a function that poses the stage at `sec`; it resolves once every video frame it changed is decoded.
+// Returns a function that poses the stage at `sec`; it resolves once every video frame it changed is decoded. It also
+// carries `gl()`: the GL transition window the last pose fell in, { type, direction, p }, else null. In a GL window the layers
+// are posed as the CSS transition that stands in for the shader (template/transitions.mjs layerStyles); a render that
+// composes the window itself (scripts/lib/gl-composite.mjs) asks for `isolate`, 'outgoing' or 'incoming', to see that layer
+// alone, opaque and unposed, and screenshots each. `isolate` does nothing outside a GL window.
 // `background`: the root colour, `themeBackground`: the theme's page colour, the base under a see-through root.
 function makeApply({ scenes, parts, captions }, built, { size, background, themeBackground }) {
   const { states, sceneStarts, sceneOf, overlaps } = built;
   const lastPose = new Map(); // part node -> the transform and opacity it was given last, to renew it when they change
   const base = paintOver(background, themeBackground); // what the stage shows behind a scene with no background of its own
-  return (sec) => {
+  let glWindow = null;
+  const apply = (sec, isolate) => {
     const decoding = [];
     const active = activeScene(sceneStarts, sec);
     // During a transition window the previous scene's layer stays up beneath (or beside) the active one.
@@ -596,11 +602,15 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
     // under 1) is painted over that base. A crossfade keeps its transparent layers (the old scene is meant to show
     // through, and its bytes never changed).
     const opaque = open !== undefined && open.type !== 'crossfade';
+    const glLook = open && isGlTransition(open.type) ? normalizeTransition(transition) : null;
+    glWindow = glLook && { type: glLook.type, direction: glLook.direction, p: states.get(`scene:${scenes[active].scene.id}`).p ?? 0 };
+    const alone = glWindow ? isolate : undefined; // the one layer to show, in a GL window asked to isolate one
     let cameraMoved = false; // a camera that moved redraws everything under it, so those elements are renewed too
     scenes.forEach(({ scene, layer, camera, grain }, i) => {
       const role = i === active ? 'incoming' : i === outgoing ? 'outgoing' : null;
-      const look = (role && styles?.[role]) || NO_LAYER_STYLES;
-      layer.style.display = role ? 'block' : 'none';
+      const shown = role && (alone === undefined || role === alone);
+      const look = (shown && alone === undefined && styles?.[role]) || NO_LAYER_STYLES;
+      layer.style.display = shown ? 'block' : 'none';
       const own = scene.background && scene.background !== 'art' ? scene.background : ''; // an art plate fills its layer
       layer.style.background = opaque && role && scene.background !== 'art' ? (own ? paintOver(own, base) : base) : own;
       if (camera) {
@@ -659,6 +669,7 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
     for (const layer of captions) applyCaption(layer, sec);
     return Promise.all(decoding);
   };
+  return Object.assign(apply, { gl: () => glWindow });
 }
 
 const viewportEl = document.getElementById('viewport');
@@ -777,11 +788,15 @@ function makeMotion(spec, built, apply, audio, captions) {
     // Resolves once every video frame it shows is decoded; render.mjs awaits it per frame. It does not wait for a paint:
     // captures are deterministic because render mode has no per-element layers (styles.css) and the browser rasters
     // whole tiles (scripts/lib/browser.mjs).
-    seek(sec) {
+    // `layer` ('outgoing' or 'incoming'): inside a GL transition window, show that scene layer alone (makeApply).
+    seek(sec, layer) {
+      if (layer !== undefined && layer !== 'outgoing' && layer !== 'incoming') throw new Error(`seek: layer must be "outgoing" or "incoming" (got ${JSON.stringify(layer)})`);
       const t = Math.min(Math.max(0, sec), built.duration);
       seekTo(built.timeline, t);
-      return apply(t);
+      return apply(t, layer);
     },
+    // The GL transition window the last seek fell in, { type, direction, p } (p: the eased progress), else null.
+    glState() { return apply.gl(); },
     // Contact-sheet mode only: render.mjs --contact-sheet calls this; a normal render or preview never does.
     stamp(text) { stampSheet(text); },
   };

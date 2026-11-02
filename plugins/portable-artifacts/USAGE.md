@@ -549,7 +549,11 @@ of this is a guarantee of reach. Start from `references/examples/viral-hook.json
 "duration" }`: `fade`, `crossfade`, `push`, `slide`, `wipe`, `zoom`, `blur` or `iris`
 (0.1 to 2 s, 0.4 s by default). A scene `camera` takes keyframed `zoom`, `x`, `y` and
 `rotate`, and a seeded `shake`; the same seed always shakes the same way. Examples:
-`references/examples/transitions.json` and `camera-push-in.json`.
+`references/examples/transitions.json` and `camera-push-in.json`. `gl-ripple` and `gl-cube`
+are two more transition names that a render draws with a WebGL shader in software (the same
+frames on every machine and at any `--workers`); the live preview and `check.mjs` show a
+crossfade and a push in their place, so judge the look from the render or `--contact-sheet`
+(`references/examples/gl-transitions.json`).
 
 **Beats and loudness.** `beats.mjs music.wav --out data/music.beats.json` finds the beat
 grid of a music file with a local detector (no network, no new dependency); name that file
