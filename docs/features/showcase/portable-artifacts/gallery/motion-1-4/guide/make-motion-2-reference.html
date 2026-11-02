@@ -1222,7 +1222,7 @@ UK male   (4):  bm_george bm_lewis bm_daniel bm_fable</code></pre>
 <table><caption>MODNet (Apache-2.0) runs on onnxruntime-node (MIT) on this machine. The weights are pinned to one commit and checked against a SHA-256 before every use. A cutout makes the only other network access after the voice model, once.</caption>
 <thead><tr><th scope="col" class="a-l">Step</th><th scope="col" class="a-l">Details</th></tr></thead>
 <tbody>
-<tr><th scope="row" class="a-l">Install (once)</th><td class="a-l">node &lt;skill-dir&gt;/scripts/doctor.mjs --fix cutout  (about <span class="nw">300 MB</span>), plus a <span class="nw">25 MB</span> MODNet model downloaded on first use. The install removes a voiceover install; rerun --fix kokoro after.</td></tr>
+<tr><th scope="row" class="a-l">Install (once)</th><td class="a-l">node &lt;skill-dir&gt;/scripts/doctor.mjs --fix cutout  (about <span class="nw">300 MB</span>), plus a <span class="nw">25 MB</span> MODNet model downloaded on first use. The install keeps an installed voiceover.</td></tr>
 <tr><th scope="row" class="a-l">Cut out</th><td class="a-l">node &lt;skill-dir&gt;/scripts/cutout.mjs portrait.jpg --out cutouts  writes cutouts/portrait.png (RGBA). A clip writes a VP9 alpha .webm with no sound, at most 900 frames, with --fps 1 to 60. Prints the path.</td></tr>
 <tr><th scope="row" class="a-l">Use</th><td class="a-l">A text-behind-subject block with src (the original photo or clip), cutout (the file it printed), text (up to 40 characters), fontSize 40 to 400 and color text, text2, accent or good.</td></tr>
 <tr><th scope="row" class="a-l">Alternative</th><td class="a-l">Without the install, put the text over the picture with an image and a text element. A cutout you already have needs no install.</td></tr>

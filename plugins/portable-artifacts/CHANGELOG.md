@@ -4,6 +4,19 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
+## [1.4.1] - 2026-11-02
+
+Doctor: the voiceover and cutout installs no longer remove each other.
+
+### Fixed
+
+- **`doctor --fix kokoro` and `--fix cutout` keep each other.** Both are `npm install <pin> --no-save`, and npm prunes
+  every package that is not in `package.json` or the lockfile, so each install used to delete the other. Each fix now
+  names its own pin plus the pin of whichever one is already installed, in one command
+  (`npm install kokoro-js@1.2.1 onnxruntime-node@1.31.1 --no-save`), so `--fix kokoro,cutout` ends with both. Tested
+  with a fake npm that prunes, and for real on one machine in both directions. `npm ci` (`--fix node_modules`) still
+  removes both, and the doctor note says so.
+
 ## [1.4.0] - 2026-11-02
 
 make-motion: cutouts of a person from a photo or clip, a `text-behind-subject` block (28 blocks in all) and two WebGL
@@ -11,7 +24,7 @@ transitions, `gl-ripple` and `gl-cube`.
 
 ### Behaviour changes to know about
 
-- **A cutout install and a voiceover install remove each other.** Both are on-demand `npm install … --no-save`, and npm
+- **A cutout install and a voiceover install remove each other (fixed in 1.4.1).** Both are on-demand `npm install … --no-save`, and npm
   prunes whatever `--no-save` put there before. After `doctor --fix cutout`, run `doctor --fix kokoro` again if you want
   a voiceover (and the other way round). `npm ci` removes both, as before.
 - **`scripts/audit-on-demand-deps.sh` now fails on a bad pin.** Its loop used to swallow a failed `npm install`; it now

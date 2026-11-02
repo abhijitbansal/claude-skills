@@ -1188,7 +1188,7 @@ node &lt;skill-dir&gt;/scripts/render.mjs revenue.json --out out/revenue.mp4</co
 <tr><th scope="row" class="a-l">An npx playwright install chromium hint at render time</th><td class="a-l">Run it inside &lt;skill-dir&gt; (Linux: npx playwright install --with-deps chromium), or install Google Chrome as the fallback</td></tr>
 <tr><th scope="row" class="a-l">check: skipped (no browser: ...)</th><td class="a-l">Expected without Playwright or Chromium. Run doctor.mjs --for check --fix chromium to enable the check</td></tr>
 <tr><th scope="row" class="a-l">kokoro-js is not installed</th><td class="a-l">cd &lt;skill-dir&gt; &amp;&amp; npm install kokoro-js@1.2.1 --no-save (run inside the folder so the pinned overrides apply)</td></tr>
-<tr><th scope="row" class="a-l">onnxruntime-node is not installed</th><td class="a-l">cd &lt;skill-dir&gt; &amp;&amp; npm install onnxruntime-node@1.31.1 --no-save. That removes a kokoro install: rerun --fix kokoro</td></tr>
+<tr><th scope="row" class="a-l">onnxruntime-node is not installed</th><td class="a-l">cd &lt;skill-dir&gt; &amp;&amp; npm install onnxruntime-node@1.31.1 --no-save. Prefer doctor.mjs --fix cutout: it keeps an installed kokoro, which this bare command would remove</td></tr>
 <tr><th scope="row" class="a-l">audio[0].src: ffmpeg cannot decode ...</th><td class="a-l">The file is not valid audio. Re-export it as mp3 or wav</td></tr>
 <tr><th scope="row" class="a-l">scenes: total duration <span class="nw">121s</span> exceeds the <span class="nw">120s</span> limit</th><td class="a-l">Cut a scene or split the video</td></tr>
 <tr><th scope="row" class="a-l">scenes[0].elements[0].keyframes[2].t: 5 exceeds scene duration 3</th><td class="a-l">Move the keyframe earlier or lengthen the scene</td></tr>

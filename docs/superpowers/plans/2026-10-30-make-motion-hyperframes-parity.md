@@ -38,7 +38,7 @@ Gate 3 follow-ups (reviewer findings not fixed in the gate commit; each is a `fi
 
 Phase 4 follow-ups (reviewer findings not fixed in the final commit; the `--out` overwrite-by-identity guard, the 900-frame extraction bound and the CI comment were fixed):
 
-- MEDIUM `<pa>/shared/doctor.mjs` (`runFixes`): `--fix kokoro,cutout` runs two `npm install --no-save` steps, and the second prunes the first, so both report ok and kokoro is gone. Fix: install both pins in one step when both are wanted, or re-check every earlier-fixed id.
+- ~~MEDIUM~~ FIXED in 1.4.1 (each fix now names the pin of an installed sibling; tests with a pruning fake npm, real install checked in both directions) `<pa>/shared/doctor.mjs` (`runFixes`): `--fix kokoro,cutout` runs two `npm install --no-save` steps, and the second prunes the first, so both report ok and kokoro is gone. Fix: install both pins in one step when both are wanted, or re-check every earlier-fixed id.
 - MEDIUM `scripts/lib/cutout.mjs`: `.cache/cutout` (up to 900 full-size RGBA PNGs per clip) is never pruned and the doctor `cache` item and `--fix cache` ignore it; a 4K clip can take several GB. Fix: include it in the cache item, downscale clip frames, delete `src` frames once processed.
 - MEDIUM `scripts/lib/cutout.mjs`: a photo's dimensions are checked only after Chromium has decoded it (a 30000 x 30000 PNG can exhaust memory before the 8192 px refusal). Fix: read the header size in Node first and cap the input bytes.
 - MEDIUM `template/renderer.mjs`: in a GL window the captions are drawn into both layer shots, so a cube turns them away and a ripple warps them (CSS transitions keep captions fixed). Fix: hide caption layers in the isolated shots and draw them over the composed frame, or document it.

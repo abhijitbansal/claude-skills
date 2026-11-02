@@ -1223,8 +1223,8 @@ node &lt;skill-dir&gt;/scripts/doctor.mjs --fix cache             # delete the v
 </section>
 <section class="sec sec-callout" id="on-demand">
 <aside class="callout tone-warn">
-<p class="callout-head"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Warning</span></span><strong class="callout-title">The two optional installs remove each other</strong></p>
-<p>Voiceover (kokoro-js) and cutouts (onnxruntime-node) install with npm install --no-save, and npm removes whatever an earlier --no-save install put there. After a cutout install, rerun doctor.mjs --fix kokoro; a later npm ci removes both. The model downloads (<span class="nw">90 MB</span>, <span class="nw">25 MB</span>) on first use are the only network access in the tool.</p>
+<p class="callout-head"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Warning</span></span><strong class="callout-title">The two optional installs keep each other</strong></p>
+<p>Voiceover (kokoro-js) and cutouts (onnxruntime-node) install with npm install --no-save, and npm removes whatever an install leaves off its command line. The doctor names the pin of the one already installed too, so installing either keeps the other. A later npm ci removes both: rerun doctor.mjs --fix kokoro and --fix cutout. The model downloads (<span class="nw">90 MB</span>, <span class="nw">25 MB</span>) on first use are the only network access in the tool.</p>
 </aside>
 </section>
 <section class="sec sec-code" id="first-run" aria-labelledby="first-run-title">

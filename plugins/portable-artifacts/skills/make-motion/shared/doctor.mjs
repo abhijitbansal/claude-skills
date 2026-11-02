@@ -378,6 +378,16 @@ function staleOverrides(ctx, scope = 'all', dir = ctx.skillDir) {
     .map(([name]) => name);
 }
 
+// kokoro and cutout are both `npm install <pin> --no-save`. npm rebuilds node_modules from package.json and the
+// lockfile and prunes every package not in them, so an install that leaves the other one off the command line
+// deletes it. Each fix therefore names its own pin plus the pin of whichever sibling is already installed.
+const ON_DEMAND_PINS = [{ pkg: 'kokoro-js', pin: KOKORO_PIN, id: 'kokoro' }, { pkg: 'onnxruntime-node', pin: CUTOUT_PIN, id: 'cutout' }];
+
+function onDemandInstall(ctx, id) {
+  const pins = ON_DEMAND_PINS.filter((p) => p.id === id || ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', p.pkg))).map((p) => p.pin);
+  return { argv: ['npm', 'install', ...pins, '--no-save'], cwd: ctx.skillDir };
+}
+
 export function kokoro() {
   return {
     id: 'kokoro',
@@ -394,16 +404,16 @@ export function kokoro() {
       // Run inside the skill folder so npm applies the skill's package.json "overrides" (patched sharp
       // and global-agent). --prefix applied them in Linux tests with npm 10.8/10.9, but was reported
       // not to on macOS with npm 10.8.2; running from the folder works either way.
-      const step = { argv: ['npm', 'install', KOKORO_PIN, '--no-save'], cwd: ctx.skillDir };
-      return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 90 MB voice model downloads on first use; a later `--fix node_modules` (npm ci) removes kokoro again, so rerun `--fix kokoro`' };
+      const step = onDemandInstall(ctx, 'kokoro');
+      return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 90 MB voice model downloads on first use; this keeps an installed cutout (onnxruntime-node), but a later `--fix node_modules` (npm ci) removes both, so rerun `--fix kokoro` (and `--fix cutout`)' };
     },
     needsSudo: () => false,
   };
 }
 
-// make-motion's cutout.mjs: onnxruntime-node (the MODNet weights, about 25 MB, download on first use). `npm install … --no-save`
-// removes other packages that were added the same way (kokoro-js), so after a cutout install rerun `--fix kokoro` if you
-// need the voiceover. A pre-pin install counts as missing like kokoro's does (the 'extra' overrides: not in the lockfile).
+// make-motion's cutout.mjs: onnxruntime-node (the MODNet weights, about 25 MB, download on first use). The install names
+// an installed kokoro-js too (see onDemandInstall), so neither removes the other. A pre-pin install counts as missing like
+// kokoro's does (the 'extra' overrides: not in the lockfile).
 export function cutout() {
   return {
     id: 'cutout',
@@ -418,8 +428,8 @@ export function cutout() {
     check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'onnxruntime-node')) && staleOverrides(ctx, 'extra').length === 0,
     fix: (ctx) => {
       // From inside the skill folder, like kokoro, so npm applies the skill's package.json "overrides".
-      const step = { argv: ['npm', 'install', CUTOUT_PIN, '--no-save'], cwd: ctx.skillDir };
-      return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 25 MB MODNet model downloads on first use; npm removes other --no-save installs (rerun `--fix kokoro` for the voiceover), and a later `--fix node_modules` (npm ci) removes this again, so rerun `--fix cutout`' };
+      const step = onDemandInstall(ctx, 'cutout');
+      return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 25 MB MODNet model downloads on first use; this keeps an installed voiceover (kokoro-js), but a later `--fix node_modules` (npm ci) removes both, so rerun `--fix cutout` (and `--fix kokoro`)' };
     },
     needsSudo: () => false,
   };

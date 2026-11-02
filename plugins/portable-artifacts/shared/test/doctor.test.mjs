@@ -903,7 +903,7 @@ test('cutout installed before the overrides existed counts as missing until rein
 test('--fix cutout runs the pinned install in the skill folder, after node_modules and before nothing else it depends on', async () => {
   const { CUTOUT_PIN, cutout } = await import('../doctor.mjs');
   const ran = [];
-  const res = await runFixes(['cutout', 'node_modules'], [cutout(), nodeModules()], ctx({ platform: 'linux', exists: () => true }), (cmd, args, o) => { ran.push(`${cmd} ${args.join(' ')} @${o.cwd ?? ''}`); return { status: 0 }; });
+  const res = await runFixes(['cutout', 'node_modules'], [cutout(), nodeModules()], ctx({ platform: 'linux', exists: (p) => p.endsWith('/node_modules') }), (cmd, args, o) => { ran.push(`${cmd} ${args.join(' ')} @${o.cwd ?? ''}`); return { status: 0 }; });
   assert.deepEqual(res.map((r) => r.id), ['node_modules', 'cutout']);
   assert.deepEqual(ran, ['npm ci --omit=dev --prefix /s/make-motion @', `npm install ${CUTOUT_PIN} --no-save @/s/make-motion`]);
 });
@@ -914,4 +914,52 @@ test('the node_modules reinstall note names a cutout install when the skill can 
   const note = async (opts) => (await diagnose([nodeModules(opts)], ctx({ exists: () => true, readFile, skillDir: '/s/x' }))).missing[0].notes;
   assert.match(await note({ omitDev: false, restore: ['kokoro', 'cutout'] }), /removes any voiceover install \(kokoro-js\) and any cutout install \(onnxruntime-node\); restore with --fix kokoro and --fix cutout$/);
   assert.match(await note({ omitDev: false, restore: ['cutout'] }), /removes any cutout install \(onnxruntime-node\); restore with --fix cutout$/);
+});
+
+// --- on-demand installs keep each other: both are `npm install --no-save`, which prunes the other one ---
+
+const has = (...pkgs) => (p) => pkgs.some((k) => p.endsWith(`/node_modules/${k}`));
+
+test('installing the voiceover with a cutout install in place installs both pins in one command', async () => {
+  const { CUTOUT_PIN } = await import('../doctor.mjs');
+  const r = await diagnose([kokoro()], ctx({ platform: 'linux', exists: has('onnxruntime-node') }));
+  assert.equal(r.missing[0].fix.auto, `cd /s/make-motion && npm install kokoro-js@1.2.1 ${CUTOUT_PIN} --no-save`);
+});
+
+test('installing the cutout with a voiceover install in place installs both pins in one command', async () => {
+  const { CUTOUT_PIN, cutout } = await import('../doctor.mjs');
+  const r = await diagnose([cutout()], ctx({ platform: 'linux', exists: has('kokoro-js') }));
+  assert.equal(r.missing[0].fix.auto, `cd /s/make-motion && npm install kokoro-js@1.2.1 ${CUTOUT_PIN} --no-save`);
+});
+
+test('--fix kokoro,cutout in one run ends with both installed, in either order given', async () => {
+  const { cutout } = await import('../doctor.mjs');
+  const ran = [];
+  const installed = new Set();
+  const run = (cmd, args) => {
+    ran.push([cmd, ...args].join(' '));
+    for (const a of args) { if (a.startsWith('kokoro-js')) installed.add('kokoro-js'); if (a.startsWith('onnxruntime-node')) installed.add('onnxruntime-node'); }
+    return { status: 0 };
+  };
+  const c = ctx({ platform: 'linux', exists: (p) => [...installed].some((k) => p.endsWith(`/node_modules/${k}`)) });
+  // A real npm prune: an install that omits an installed package removes it.
+  const pruning = (cmd, args) => {
+    const keep = new Set(args.filter((a) => a.includes('@')).map((a) => a.split('@')[0]));
+    for (const k of [...installed]) if (!keep.has(k)) installed.delete(k);
+    return run(cmd, args);
+  };
+  const res = await runFixes(['cutout', 'kokoro'], [cutout(), kokoro()], c, pruning);
+  assert.deepEqual(res.map((r) => r.ok), [true, true]);
+  assert.deepEqual([...installed].sort(), ['kokoro-js', 'onnxruntime-node']);
+  assert.equal(ran.length, 2);
+});
+
+test('the on-demand install notes say the other install is kept, and that npm ci removes both', async () => {
+  const { cutout } = await import('../doctor.mjs');
+  for (const req of [kokoro(), cutout()]) {
+    const r = await diagnose([req], ctx());
+    assert.match(r.missing[0].notes, /keeps an installed (cutout|voiceover)/);
+    assert.match(r.missing[0].notes, /npm ci/);
+    assert.doesNotMatch(r.missing[0].notes, /removes other --no-save installs/);
+  }
 });
