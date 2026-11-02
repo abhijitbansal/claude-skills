@@ -39,8 +39,10 @@ transitions, `gl-ripple` and `gl-cube`.
   compositor and show a crossfade (ripple) or a push (cube); `validate.mjs` prints a note saying so. **Evidence:** a
   256 x 256 gradient-and-triangle spike hashed the same on macOS and Ubuntu runners (`3d6bb01b...`, CI run
   `41499553141`), and the transitions render byte-identical twice and across `--workers 1` and `4` on one machine
-  (macOS); the per-frame `gl-frame:` hashes of the real transitions on the two runners are printed by the tests and were
-  not compared before this release. New example `references/examples/gl-transitions.json`.
+  (macOS). A dispatched CI run (`41511417439`) printed the composed-frame hashes of the three test transitions on the
+  macOS runner, the Ubuntu runner and a local macOS machine: `gl-ripple` `8dd90a7b...`, `gl-cube` left `7a5783eb...`,
+  `gl-cube` down `512ddb0a...`, identical on all three. The finished MP4 files differ between platforms (different
+  ffmpeg builds), so compare frames, not MP4 hashes. New example `references/examples/gl-transitions.json`.
 
 ### Changed
 
