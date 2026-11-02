@@ -276,7 +276,7 @@ Test Board accepts Cartoon's nested `runner` / `summary` report and its legacy i
 from the enclosing command's exit or tool error and from the source observation. Malformed, duplicate, or conflicting
 reports never become a passing summary by falling back to raw counts.
 
-The opt-in [producer and replay qualification](../../tests/compat/README.md) runs a reviewed local Cartoon binary on
+The opt-in [producer and replay qualification](https://github.com/abhijitbansal/claude-skills/blob/main/tests/compat/README.md) runs a reviewed local Cartoon binary on
 fixed synthetic scenarios, then replays its output through Test Board's hooks, history, and display. It also checks
 source matching, changed, and unknown observations independently of the counts and command status. This does not
 qualify native MCP or live host delivery.

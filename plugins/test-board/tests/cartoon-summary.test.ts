@@ -79,3 +79,17 @@ test('Cartoon acceleration metadata does not hide its summary', () => {
   expect(parse(SUMMARY.replace('runner: pytest\n', 'runner: pytest\nfast: "-n auto"\n')))
     .toMatchObject({ parsed: true, passed: 1, failed: 1 })
 })
+
+test('Cartoon diagnostics adapters (no test keys in summary) are not test reports', () => {
+  const ruff = 'runner: ruff\nsummary:\n  errors: 40\n  warnings: 0\ndiagnostics[40]{file,line,code,msg}:\n  a.py,1,E1,x\n'
+  expect(parseTestOutput({ command: 'ruff check .', text: ruff, exitCode: 1 })).toBeNull()
+})
+
+test('a summary with only some test keys stays invalid', () => {
+  expect(parse('runner: pytest\nsummary:\n  total: 2\n  passed: 2\n')).toMatchObject({ parsed: false, countsIssue: 'invalid' })
+})
+
+test('CRLF failures rows are retained', () => {
+  const text = SUMMARY.replace(/\n/g, '\r\n') + 'failures[1]{id,loc,msg}:\r\n  synthetic.two,test_two.py:5,synthetic failure\r\n'
+  expect(parse(text)).toMatchObject({ parsed: true, failed: 1, failures: [{ id: 'synthetic.two', loc: 'test_two.py:5' }] })
+})
