@@ -70,6 +70,14 @@
   <main id="main" class="doc-main">
 
     <section id="whats-new" class="doc-section">
+      <h2>What's new in 1.4.0</h2>
+      <p style="margin-bottom:12px">2 Nov 2026 · make-motion gets cutouts of a person, a text-behind-subject block and two WebGL transitions. The full list, including the behaviour changes to read before upgrading, is in the <a href="https://github.com/abhijitbansal/claude-skills/blob/main/plugins/portable-artifacts/CHANGELOG.md">changelog</a>.</p>
+      <div class="inv" style="margin-bottom:24px">
+        <div class="row"><span class="nm">Cutouts</span><span class="dc"><code>cutout.mjs</code> cuts the person out of a photo or a clip locally with MODNet (Apache-2.0) on onnxruntime-node. It is an on-demand install of about 300 MB plus a one-time 25 MB download of the weights, checked against a SHA-256, and the original is never overwritten.</span></div>
+        <div class="row"><span class="nm">Text behind the subject</span><span class="dc">The <code>text-behind-subject</code> block puts big text between a photo or clip and its cutout: 28 blocks in all.</span></div>
+        <div class="row"><span class="nm">WebGL transitions</span><span class="dc"><code>gl-ripple</code> and <code>gl-cube</code> are drawn by a software-WebGL browser during render. The preview shows a crossfade or a push instead. A spike frame hashed the same on macOS and Ubuntu; the transitions are byte-identical across worker counts on one machine.</span></div>
+        <div class="row"><span class="nm">Read before upgrading</span><span class="dc">A cutout install and a voiceover install remove each other (both are <code>--no-save</code> installs); rerun <code>doctor --fix kokoro</code> or <code>--fix cutout</code>. Specs without these features render the same bytes as before.</span></div>
+      </div>
       <h2>What's new in 1.3.0</h2>
       <p style="margin-bottom:12px">2 Nov 2026 · make-motion gets beat-anchored timing, loudness normalisation, colour grades, Lottie, offline maps, a bar chart race and twelve more blocks. The full list, including the behaviour changes to read before upgrading, is in the <a href="https://github.com/abhijitbansal/claude-skills/blob/main/plugins/portable-artifacts/CHANGELOG.md">changelog</a>.</p>
       <div class="inv" style="margin-bottom:24px">

@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { UsageError } from '../scripts/lib/spec.mjs';
 import {
   MODEL_URL, MODEL_SHA256, MODEL_BYTES, MODEL_FILE, MODEL_DIR, INSTALL_HINT, USAGE,
-  parseCutoutArgs, modelSize, ensureModel, loadOnnx, fileKind,
+  MAX_FRAMES, parseCutoutArgs, extractArgs, modelSize, ensureModel, loadOnnx, fileKind,
 } from '../scripts/lib/cutout.mjs';
 import { probeVideo, decodeFrames, decodeArgs } from '../scripts/lib/video.mjs';
 import { findFfmpeg, findFfprobe } from '../scripts/lib/ffmpeg.mjs';
@@ -80,6 +80,30 @@ test('parseCutoutArgs: a photo or a clip, --out and --fps; everything else is a 
     assert.throws(() => parseCutoutArgs(argv), (e) => e instanceof UsageError && (message instanceof RegExp ? message.test(e.message) : e.message === message), JSON.stringify(argv));
   }
   assert.throws(() => parseCutoutArgs(['a/shot.png', '--out', 'a']), /--out would overwrite the input/);
+});
+
+test('parseCutoutArgs refuses an --out that resolves to the input file itself, by identity and not by spelling', () => {
+  const base = mkdtempSync(path.join(tmpdir(), 'cutout-same-'));
+  try {
+    mkdirSync(path.join(base, 'in'));
+    mkdirSync(path.join(base, 'out'));
+    writeFileSync(path.join(base, 'in/shot.png'), 'x');
+    linkSync(path.join(base, 'in/shot.png'), path.join(base, 'out/shot.png')); // the same file under another path
+    assert.throws(() => parseCutoutArgs([path.join(base, 'in/shot.png'), '--out', path.join(base, 'out')]), /--out would overwrite the input/);
+    // an existing, different file of that name is a rerun's own earlier output: allowed
+    writeFileSync(path.join(base, 'out/other.png'), 'y');
+    writeFileSync(path.join(base, 'in/other.png'), 'z');
+    assert.doesNotThrow(() => parseCutoutArgs([path.join(base, 'in/other.png'), '--out', path.join(base, 'out')]));
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('frame extraction is bounded by the frame limit however long the file claims to be', () => {
+  const args = extractArgs('/clips/a.mp4', 12, '/cache/work/src/%06d.png');
+  const at = args.indexOf('-frames:v');
+  assert.ok(at > -1, args.join(' '));
+  assert.equal(args[at + 1], String(MAX_FRAMES));
 });
 
 test('fileKind: photos and clips by extension, anything else null', () => {

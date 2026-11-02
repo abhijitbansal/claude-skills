@@ -119,9 +119,10 @@ jobs:
         run: node --test "test/*.test.mjs"
 
   # WebGL transitions (gl-ripple, gl-cube), macOS half: manual runs only (gh workflow run test.yml). The Ubuntu half is the
-  # make-motion step of the node job above, whose npm test includes test/gl-transitions.test.mjs. Both print
-  # `webgl-spike: <platform> <sha>` and `gl-frame: <platform> <type> <sha>` (the same composed frame on both runners is the
-  # evidence that software WebGL is deterministic across them); compare them in the logs (gh run view <id> --log).
+  # make-motion step of the node job above, whose npm test includes test/gl-transitions.test.mjs. Both runners print
+  # `gl-frame: <platform> <type> <dir> <sha>` (the same composed frame on both is the evidence that software WebGL is
+  # deterministic across them); this job also prints `webgl-spike: <platform> <sha>`. Compare them in the logs
+  # (gh run view <id> --log); nothing asserts the equality.
   webgl-spike-macos:
     if: github.event_name == 'workflow_dispatch'
     runs-on: macos-latest

@@ -4,6 +4,50 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
+## [1.4.0] - 2026-11-02
+
+make-motion: cutouts of a person from a photo or clip, a `text-behind-subject` block (28 blocks in all) and two WebGL
+transitions, `gl-ripple` and `gl-cube`.
+
+### Behaviour changes to know about
+
+- **A cutout install and a voiceover install remove each other.** Both are on-demand `npm install … --no-save`, and npm
+  prunes whatever `--no-save` put there before. After `doctor --fix cutout`, run `doctor --fix kokoro` again if you want
+  a voiceover (and the other way round). `npm ci` removes both, as before.
+- **`scripts/audit-on-demand-deps.sh` now fails on a bad pin.** Its loop used to swallow a failed `npm install`; it now
+  audits `KOKORO_PIN` and `CUTOUT_PIN` and exits 1 if either does not install or has an advisory.
+- **Specs without a GL transition or a cutout render the same bytes as before.** Measured on one machine with
+  `renderHash` at `--fps 10 --size 320x180` and `SOURCE_DATE_EPOCH=1793318400`: `q3-revenue` `cb304e5d...` and
+  `ok-crossfade` `ac068343...`, unchanged by this release.
+
+### Added
+
+- **make-motion: cutouts.** `node scripts/cutout.mjs <photo.png|clip.mp4> [--out <dir>] [--fps n]` cuts the person out of
+  a photo (RGBA PNG) or a clip (VP9 WebM with alpha, no sound; at most 900 frames) with MODNet (Apache-2.0) on
+  onnxruntime-node 1.31.1 (MIT), locally. It is an on-demand install (`doctor --fix cutout`, about 300 MB, never part of
+  `npm ci`) plus a one-time 25 MB download of the weights from a commit-pinned Hugging Face URL, checked against a
+  SHA-256 before every use. The input is never overwritten. `doctor` gains a `cutout` requirement and `--for cutout`.
+- **make-motion: the `text-behind-subject` block.** A photo or clip, big text behind it and the cutout on top, in one
+  block (`src`, `cutout`, `text`, `fontSize`, `color`). The validator refuses a cutout that is its own `src`, a photo and
+  clip mismatch, a JPEG cutout and an MP4 cutout. New example and golden sheet; the eval fixtures carry a pre-cut pair, so
+  the eval installs nothing. The video reader now decodes VP9 alpha WebM (ffmpeg's native VP9 decoder drops the alpha;
+  these files go through `libvpx-vp9`, ordinary clips are unchanged).
+- **make-motion: `gl-ripple` and `gl-cube` transitions.** `{ "type": "gl-ripple" }` and `{ "type": "gl-cube",
+  "direction": "left|right|up|down" }`. Inside the window `render.mjs` captures the outgoing and incoming scenes
+  separately and a second, software-WebGL (swiftshader) browser blends them with a shader; the first frame of the window
+  is the outgoing scene and the first frame after it the incoming one, exactly. The live preview and `check.mjs` have no
+  compositor and show a crossfade (ripple) or a push (cube); `validate.mjs` prints a note saying so. **Evidence:** a
+  256 x 256 gradient-and-triangle spike hashed the same on macOS and Ubuntu runners (`3d6bb01b...`, CI run
+  `41499553141`), and the transitions render byte-identical twice and across `--workers 1` and `4` on one machine
+  (macOS); the per-frame `gl-frame:` hashes of the real transitions on the two runners are printed by the tests and were
+  not compared before this release. New example `references/examples/gl-transitions.json`.
+
+### Changed
+
+- **CI.** A dispatch-only macOS job (`webgl-spike-macos`) runs the spike and the GL transition tests; the Ubuntu job
+  installs make-explainer's dependencies before the make-motion step, so the two storyboard tests that use the real
+  make-explainer run there instead of failing.
+
 ## [1.3.0] - 2026-11-02
 
 make-motion: beat-anchored timing, loudness normalisation, colour grades, Lottie, offline maps, a bar chart race and

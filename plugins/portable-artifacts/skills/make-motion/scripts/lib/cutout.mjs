@@ -3,7 +3,7 @@
 // into <skill>/.cache/models/modnet/ and are checked against MODEL_SHA256 before every use. The image is decoded, shrunk,
 // enlarged and re-encoded on a Playwright page canvas (no sharp); only the matte comes from the model.
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -31,7 +31,7 @@ const MULTIPLE = 32; // the network wants sides that are a multiple of this
 const MAX_SIDE = 8192; // px; a bigger picture is refused rather than held in a canvas
 const MAX_FPS = 60;
 const DEFAULT_FPS_CAP = 30;
-const MAX_FRAMES = 900; // one run: 30 s at 30 fps
+export const MAX_FRAMES = 900; // one run: 30 s at 30 fps
 const DOWNLOAD_SLACK = 2; // a download this many times the expected size is refused
 const MIN_FPS = 1;
 const CACHE_VERSION = 1; // salted into every cutout cache key; bump it when the matte or the folder layout changes
@@ -61,6 +61,18 @@ function takeValue(argv, i, flag) {
   return value;
 }
 
+// The same file by identity, not by spelling: a case-insensitive disk (macOS, Windows) or a link gives one file two names.
+function isSameFile(a, b) {
+  if (a === b) return true;
+  try {
+    const x = statSync(a);
+    const y = statSync(b);
+    return x.ino === y.ino && x.dev === y.dev;
+  } catch {
+    return false; // one of them does not exist yet: they cannot be the same file
+  }
+}
+
 /** -> { input, kind, out, fps, output }: absolute paths; `fps` null when not given; `out` defaults to a cutout folder next to the input. */
 export function parseCutoutArgs(argv) {
   const inputs = [];
@@ -88,7 +100,7 @@ export function parseCutoutArgs(argv) {
   }
   const folder = out === null ? path.join(path.dirname(input), 'cutout') : path.resolve(out);
   const output = outputFile(input, folder, kind);
-  if (output === input) throw new UsageError(`--out would overwrite the input ${input}; choose another folder`);
+  if (isSameFile(output, input)) throw new UsageError(`--out would overwrite the input ${input}; choose another folder`);
   return { input, kind, out: folder, fps: rate, output };
 }
 
@@ -269,6 +281,11 @@ function run(ffmpeg, args, what) {
   }
 }
 
+/** The ffmpeg arguments that write the clip's frames at `fps`: never more than MAX_FRAMES, whatever duration the file claims. */
+export function extractArgs(input, fps, pattern) {
+  return ['-v', 'error', '-y', ...fileInput(input), '-vf', `fps=${fps}`, '-frames:v', String(MAX_FRAMES), pattern];
+}
+
 /**
  * Cuts the person out of every frame of the clip `input` at `fps` and encodes a VP9 alpha WebM at `output` (no sound: the
  * original clip carries it). The alpha frames are kept in .cache/cutout/<key>/ so a rerun of the same clip, rate and weights
@@ -286,7 +303,7 @@ export async function cutoutVideo({ session, ort, page, ffmpeg, info, input, out
     mkdirSync(path.join(work, 'src'), { recursive: true });
     mkdirSync(path.join(work, 'alpha'));
     try {
-      run(ffmpeg, ['-v', 'error', '-y', ...fileInput(input), '-vf', `fps=${fps}`, path.join(work, 'src', '%06d.png')], 'frame extraction');
+      run(ffmpeg, extractArgs(input, fps, path.join(work, 'src', '%06d.png')), 'frame extraction');
       const count = readdirSync(path.join(work, 'src')).filter((f) => /^\d{6}\.png$/.test(f)).length;
       if (count === 0) throw new Error(`ffmpeg decoded no frames from ${input}`);
       log(`cutout: cutting out ${count} frames at ${fps} fps`);
