@@ -49,31 +49,35 @@ It writes fixed JUnit artifacts only to Cartoon's injected disposable path.
 | no-counts | Generic fallback without a summary | 2 | Counts unavailable plus command failure |
 
 The replay tests also cover concurrent completions, stored history, stale reloads,
-and both 40- and 100-column displays. The compatibility check asserts whether
-Cartoon actually compressed or used its fallback; raw fixtures alone are not
+and both 40- and 100-column displays. A passing-count/nonzero-exit capture separately
+transitions through modeled matching, changed, and unknown source observations,
+without rerunning the command or persisting a matching label. The compatibility
+check asserts whether Cartoon actually compressed or used its fallback; raw fixtures alone are not
 evidence that the adapter format works.
 
 ## Reproduction And Limits
 
-The initial qualification uses Cartoon source
-[`f86c0554e1483d1981d4c631121d087c4339fa28`](https://github.com/abhijitbansal/cartoon/blob/f86c0554e1483d1981d4c631121d087c4339fa28/src/adapters/report.rs),
-built locally with its unchanged `Cargo.lock`, and Test Board based on
-[`b3c6ffc022f00d74c5c324e7712214af6d930d48`](https://github.com/abhijitbansal/claude-skills/blob/b3c6ffc022f00d74c5c324e7712214af6d930d48/plugins/test-board/hooks/parse.ts)
-plus this branch's parser fix. It found that the previous consumer accepted only
-the legacy inline summary, not the current nested object. Both formats now have
-regressions; malformed and conflicting reports must not fall through to passing
-raw counts. This branch does not include source-freshness PR #50.
+The current qualification uses Cartoon main at
+[`f61e9e212bd50f234c7f6010aa513ea836b0b889`](https://github.com/abhijitbansal/cartoon/tree/f61e9e212bd50f234c7f6010aa513ea836b0b889),
+built locally with its unchanged `Cargo.lock`, and Test Board main at
+[`43b07bde71d3c44e40b0f6ee591c8d4734cb773a`](https://github.com/abhijitbansal/claude-skills/tree/43b07bde71d3c44e40b0f6ee591c8d4734cb773a)
+plus this branch's parser fix. This includes #49's command outcomes and #50's
+source freshness. The prior consumer accepted only the legacy inline summary,
+not Cartoon's nested object; eleven existing parser regressions fail on main
+before the fix and pass afterward. Both formats have coverage; malformed and
+conflicting reports must not fall through to passing raw counts.
 
 The CLI hash is recorded per run because binaries differ by build and platform.
-The initial run was macOS arm64 with Claude Code 2.1.306. Cross-platform behavior
-and live host delivery require separate qualification.
+The 2026-11-02 qualification used macOS arm64, Claude Code 2.1.306, and binary
+SHA-256 `608410347f79b71dcbb9c281eedb4d3946badf49c8a1c45d5a8f98f91846bc43`.
+Cross-platform behavior and live host delivery require separate qualification.
 
-Verification on 2026-10-30: all eight producer scenarios matched their OS exits;
-157 Test Board tests (including nine replay tests), 86 Session Compass tests and
-10 Python runner guardrails passed. Plugin validators passed with existing icon
-warnings; shellcheck and whitespace checks passed. Adversarial self-review found
-and corrected a generic-heading false positive. No independent review, standalone
-TypeScript check, full repository test matrix or live UI qualification is claimed.
+Verification on 2026-11-02: all eight producer scenarios matched their OS exits;
+250 Test Board tests (including ten replay tests) and 86 Session Compass tests
+passed. The replay source observations are modeled collector responses, not real
+filesystem captures. Separately, 60 Python collector/shell tests and 10 runner
+guardrails passed. Both plugin validators passed with their existing icon warnings. No independent review, standalone TypeScript check, full
+repository test matrix or live UI qualification is claimed.
 
 The Bash envelope is modeled from the consumer's existing host contract: failed
 calls carry a first-line host exit code; successful calls provide no structured

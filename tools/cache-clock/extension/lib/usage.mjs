@@ -76,10 +76,11 @@ export function expiryOf(call) {
   return null;
 }
 
-/** "first" | "warm" | "cold-idle" (sent after expiry) | "cold-break" (prefix lost inside the ttl). */
+/** Compare consecutive conversation calls. A switch rewrite is not evidence of idle time. */
 export function classifyCall(prev, cur) {
   if (!prev) return "first";
   if (cur.readTokens >= COLD_READ_SHARE * prev.inputTokens) return "warm";
+  if (prev.model !== cur.model) return "cold-switch";
   const exp = expiryOf(prev);
   return exp !== null && cur.at > exp ? "cold-idle" : "cold-break";
 }
@@ -95,7 +96,7 @@ export function lostTokens(prev, cur) {
  * Lost tokens it wrote to cache cost write - read each; any sent uncached, input - read.
  */
 export function extraUsd(prev, cur) {
-  if (!cur.prices) return 0;
+  if (!cur.prices) return null;
   const lost = lostTokens(prev, cur);
   const written = Math.min(lost, cur.writeTokens);
   const { write, read, input } = cur.prices;

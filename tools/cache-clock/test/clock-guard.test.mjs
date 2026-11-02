@@ -74,15 +74,42 @@ test("the first call after a compaction is not tallied as a cold rewrite", () =>
   assert.equal(c.tally().extraUsd, 0);
 });
 
-test("a compaction resets every model's clock, not just the next one used", () => {
+test("a compaction resets the conversation; a later model switch compares the new context", () => {
   const c = createClock();
   feed(c, { at: T0, model: "gpt-6-luna", input: 100_000, read: 0, write: 100_000 });
   feed(c, { at: T0 + MIN, model: "claude-sonnet-5.5", input: 100_000, read: 0, write: 100_000 });
   c.invalidate();
   assert.equal(feed(c, { at: T0 + 2 * MIN, model: "claude-sonnet-5.5", input: 20_000, read: 0, write: 20_000 }).kind, "first");
-  assert.equal(feed(c, { at: T0 + 3 * MIN, model: "gpt-6-luna", input: 20_000, read: 0, write: 20_000 }).kind, "first");
+  assert.equal(feed(c, { at: T0 + 3 * MIN, model: "gpt-6-luna", input: 20_000, read: 0, write: 20_000 }).kind, "cold-switch");
   assert.equal(c.tally().coldBreak, 0);
   assert.equal(c.snapshot(T0 + 3 * MIN, "gpt-6-luna").state, "warm");
+});
+
+test("switch rewrites use the immediately preceding context and destination prices", () => {
+  const c = createClock();
+  feed(c, { at: T0, model: "gpt-6-luna", input: 100_000 });
+  const switched = feed(c, { at: T0 + MIN, model: "claude-sonnet-5.5", input: 101_000, read: 0, write: 101_000 });
+  assert.equal(switched.kind, "cold-switch");
+  assert.equal(switched.lostTokens, 100_000);
+  assert.ok(Math.abs(switched.extraUsd - 0.24) < 1e-9);
+  const back = feed(c, { at: T0 + 40 * MIN, model: "gpt-6-luna", input: 102_000, read: 0, write: 102_000 });
+  assert.equal(back.kind, "cold-switch");
+  assert.equal(c.tally().coldIdle, 0);
+  assert.equal(c.tally().coldSwitch, 2);
+});
+
+test("a switch with observed cache reads remains warm", () => {
+  const c = createClock();
+  feed(c, { at: T0, input: 100_000 });
+  assert.equal(feed(c, { at: T0 + MIN, model: "claude-sonnet-5.5", input: 101_000, read: 100_000 }).kind, "warm");
+});
+
+test("unpriced rewrites are counted without pretending they cost zero", () => {
+  const c = createClock();
+  feed(c, { at: T0, input: 100_000 });
+  const cold = feed(c, { at: T0 + 40 * MIN, input: 101_000, read: 0, prices: [] });
+  assert.equal(cold.extraUsd, null);
+  assert.equal(c.tally().unpricedRewrites, 1);
 });
 
 const cfg = { mode: "refuse", minUsd: 0.1 };

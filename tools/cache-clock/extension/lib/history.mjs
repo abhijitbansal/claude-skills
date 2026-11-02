@@ -14,7 +14,7 @@ export function parseSessionLog(text) {
   let badLines = 0;
   let lastAt = null;
   // Calls in different epochs are never compared: a compaction rewrote the context in between.
-  let epoch = 0;
+  const epochs = new Map();
   for (const line of String(text).split("\n")) {
     if (!line.trim()) continue;
     let event;
@@ -31,18 +31,19 @@ export function parseSessionLog(text) {
     const at = Date.parse(event.timestamp);
     if (Number.isFinite(at)) lastAt = Math.max(lastAt ?? at, at);
     if (event.type === "session.usage_checkpoint") checkpoint = event.data ?? null;
-    if (event.type === "session.compaction_complete" && event.data?.success !== false) epoch += 1;
+    const agentKey = event.agentId ?? "main";
+    if (event.type === "session.compaction_complete" && event.data?.success !== false) epochs.set(agentKey, (epochs.get(agentKey) ?? 0) + 1);
     if (event.type !== "session.usage_record") continue;
     const raw = event.data?.usage;
     const call = normalizeUsage(raw, event.timestamp);
     if (!call) continue;
-    calls.push({ agentKey: event.agentId ?? "main", call, epoch, nanoAiu: raw.copilotUsage?.totalNanoAiu ?? 0 });
+    calls.push({ agentKey, call, epoch: epochs.get(agentKey) ?? 0, nanoAiu: raw.copilotUsage?.totalNanoAiu ?? 0 });
   }
   return { calls, checkpoint, badLines, lastAt };
 }
 
 function emptyModel(call) {
-  return { model: call.model, displayName: call.displayName, calls: 0, coldIdle: 0, coldBreak: 0, lostTokens: 0, extraUsd: 0, spentUsd: 0, idleMinutes: [] };
+  return { model: call.model, displayName: call.displayName, calls: 0, coldIdle: 0, coldBreak: 0, coldSwitch: 0, lostTokens: 0, extraUsd: 0, unpricedRewrites: 0, spentUsd: 0, idleMinutes: [] };
 }
 
 /**
@@ -73,7 +74,7 @@ export function summarize(sessions, { since = 0, now = Date.now() } = {}) {
     surfaces[s.client ?? "unknown"] = (surfaces[s.client ?? "unknown"] ?? 0) + 1;
     const prevByKey = new Map();
     for (const { agentKey, call, epoch, nanoAiu } of s.calls) {
-      const key = `${agentKey}:${call.model}`;
+      const key = agentKey;
       const last = isMainInteraction(call) ? prevByKey.get(key) : undefined;
       const prev = last && last.epoch === epoch ? last.call : null;
       if (isMainInteraction(call)) prevByKey.set(key, { call, epoch });
@@ -87,10 +88,13 @@ export function summarize(sessions, { since = 0, now = Date.now() } = {}) {
       // Background calls (titles, summaries) cost money but keep their own cache.
       if (!isMainInteraction(call)) continue;
       const kind = classifyCall(prev, call);
-      if (kind !== "cold-idle" && kind !== "cold-break") continue;
+      if (!kind.startsWith("cold-")) continue;
       m.lostTokens += lostTokens(prev, call);
-      m.extraUsd += extraUsd(prev, call);
-      if (kind === "cold-break") m.coldBreak += 1;
+      const extra = extraUsd(prev, call);
+      m.extraUsd += extra ?? 0;
+      if (extra === null) m.unpricedRewrites += 1;
+      if (kind === "cold-switch") m.coldSwitch += 1;
+      else if (kind === "cold-break") m.coldBreak += 1;
       else {
         m.coldIdle += 1;
         m.idleMinutes.push(Math.round((call.at - prev.at) / 60_000));
@@ -100,6 +104,7 @@ export function summarize(sessions, { since = 0, now = Date.now() } = {}) {
 
   const list = [...models.values()].sort((a, b) => b.extraUsd - a.extraUsd);
   const extraUsdTotal = list.reduce((t, m) => t + m.extraUsd, 0);
+  const unpricedRewrites = list.reduce((t, m) => t + m.unpricedRewrites, 0);
   // A bounded window spreads over the whole window, not just the hours that had calls.
   const spanMs = firstAt === null ? 0 : Math.max(lastAt - firstAt, since > 0 ? now - since : 0);
   const days = firstAt === null ? 0 : Math.max(1, spanMs / DAY_MS);
@@ -109,8 +114,9 @@ export function summarize(sessions, { since = 0, now = Date.now() } = {}) {
     lastAt,
     models: list,
     extraUsd: extraUsdTotal,
+    unpricedRewrites,
     spentUsd: list.reduce((t, m) => t + m.spentUsd, 0),
-    perWeekUsd: days ? (extraUsdTotal / days) * 7 : 0,
+    perWeekUsd: unpricedRewrites ? null : days ? (extraUsdTotal / days) * 7 : 0,
     sessions: { withCalls, checkpointOnly, checkpointOnlyUsd },
     surfaces,
   };
@@ -124,13 +130,15 @@ export function formatReport(sum) {
   const span = sum.firstAt === null ? "no model calls" : `${new Date(sum.firstAt).toISOString().slice(0, 10)} to ${new Date(sum.lastAt).toISOString().slice(0, 10)}`;
   out.push(`cache-clock report · ${span} · ${sum.sessions.withCalls} sessions with per-call records`);
   out.push("");
-  out.push(`${pad("model", 22)}${lpad("calls", 7)}${lpad("cold after idle", 17)}${lpad("prefix breaks", 15)}${lpad("rewritten", 11)}${lpad("extra paid", 12)}${lpad("total spent", 13)}  idle before cold sends`);
+  out.push(`${pad("model", 22)}${lpad("calls", 7)}${lpad("cold after idle", 17)}${lpad("prefix breaks", 15)}${lpad("switch rewrites", 17)}${lpad("rewritten", 11)}${lpad("extra est.", 12)}${lpad("total spent", 13)}  idle before cold sends`);
   for (const m of sum.models) {
     const idle = m.idleMinutes.length ? m.idleMinutes.slice(0, 8).map((x) => `${x}m`).join(", ") + (m.idleMinutes.length > 8 ? ", …" : "") : "-";
-    out.push(`${pad(m.displayName.slice(0, 21), 22)}${lpad(m.calls, 7)}${lpad(m.coldIdle, 17)}${lpad(m.coldBreak, 15)}${lpad(tokens(m.lostTokens), 11)}${lpad(usd(m.extraUsd), 12)}${lpad(usd(m.spentUsd), 13)}  ${idle}`);
+    out.push(`${pad(m.displayName.slice(0, 21), 22)}${lpad(m.calls, 7)}${lpad(m.coldIdle, 17)}${lpad(m.coldBreak, 15)}${lpad(m.coldSwitch, 17)}${lpad(tokens(m.lostTokens), 11)}${lpad(usd(m.extraUsd) + (m.unpricedRewrites ? "*" : ""), 12)}${lpad(usd(m.spentUsd), 13)}  ${idle}`);
   }
   out.push("");
-  out.push(`extra paid for cold rewrites: ${usd(sum.extraUsd)} of ${usd(sum.spentUsd)} spent · about ${usd(sum.perWeekUsd)} per week at this rate`);
+  out.push(`estimated extra for cold rewrites: ${usd(sum.extraUsd)} of ${usd(sum.spentUsd)} spent` +
+    (sum.unpricedRewrites ? ` (priced subtotal only; ${sum.unpricedRewrites} rewrite(s) missing prices; * marks incomplete rows)` : ` · about ${usd(sum.perWeekUsd)} per week at this rate`));
+  out.push("Switch rewrites describe observed read loss, not proof the model switch caused it. Extra cost is estimated against a warm read, not measured savings.");
   if (sum.sessions.checkpointOnly) {
     const n = sum.sessions.checkpointOnly;
     out.push(`${n} ${n === 1 ? "session" : "sessions"} (${usd(sum.sessions.checkpointOnlyUsd)}) kept only totals, no per-call records; not in the table. These are whole-session totals, which may include spending before this window.`);
