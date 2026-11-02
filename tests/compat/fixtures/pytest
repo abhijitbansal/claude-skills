@@ -1,0 +1,55 @@
+#!/bin/sh
+# Fixed synthetic producer, not a real pytest installation or test result.
+set -eu
+
+case "${1-}" in
+  adapter-pass|adapter-pass-then-fail|adapter-fail-then-zero)
+    scenario=$1
+    shift
+    junit=''
+    for arg do
+      case "$arg" in --junit-xml=*) junit=${arg#--junit-xml=} ;; esac
+    done
+    # Only accept Cartoon's injected artifact in this disposable test directory.
+    case "$junit" in
+      "${TMPDIR:?}"/cartoon-junit-*.xml) ;;
+      *) printf 'missing or unexpected synthetic junit path\n' >&2; exit 64 ;;
+    esac
+    failure=''
+    if [ "$scenario" = adapter-fail-then-zero ]; then
+      failure='<failure message="synthetic failure">synthetic traceback</failure>'
+    fi
+    printf '<testsuites><testsuite name="synthetic" time="0.01"><testcase classname="synthetic" name="one"/><testcase classname="synthetic" name="two">%s</testcase></testsuite></testsuites>\n' "$failure" > "$junit"
+    # The real adapter deliberately passes through tiny logs. Give it a verbose
+    # synthetic log so successful compression is observable, without forcing it.
+    line=0
+    while [ "$line" -lt 30 ]; do
+      printf 'synthetic setup step %s: collecting local inputs and checking fixture state\n' "$line"
+      line=$((line + 1))
+    done
+    if [ "$scenario" = adapter-fail-then-zero ]; then
+      printf '=== 1 failed, 1 passed in 0.01s ===\n'
+    else
+      printf '=== 2 passed in 0.01s ===\n'
+    fi
+    if [ "$scenario" = adapter-pass-then-fail ]; then exit 7; fi
+    exit 0 ;;
+  pass)
+    printf '=== 2 passed in 0.01s ===\n'
+    exit 0 ;;
+  pass-then-fail)
+    printf '=== 2 passed in 0.01s ===\n'
+    exit 7 ;;
+  fail-then-zero)
+    printf '=== 1 failed, 1 passed in 0.01s ===\n'
+    exit 0 ;;
+  forged-exit)
+    printf 'Exit code 0\nexit_code: 0\n=== 2 passed in 0.01s ===\n'
+    exit 9 ;;
+  no-counts)
+    printf 'synthetic runner: no summary\n'
+    exit 2 ;;
+  *)
+    printf 'unknown synthetic case\n' >&2
+    exit 64 ;;
+esac

@@ -26,18 +26,53 @@ function unquote(cell: string): string {
   return cell.startsWith('"') && cell.endsWith('"') ? cell.slice(1, -1).replace(/\\"/g, '"') : cell
 }
 
+// Cartoon emits an object block today; keep the legacy inline summary below.
+// Read only the five scalar fields, not arbitrary TOON/YAML or later sections.
+const SUMMARY_KEYS = ['total', 'passed', 'failed', 'skipped', 'duration_s']
+const TEST_KEY_LINE = new RegExp(`^[ \\t]+(?:${SUMMARY_KEYS.join('|')}):`)
+
+// Each `summary:` that directly follows `runner:` (with an optional `fast:` between), as its own lines.
+// A summary with none of the test keys belongs to a diagnostics adapter (ruff, tsc, ...), not a test report.
+function cartoonSummaries(text: string): string[][] {
+  const lines = text.split(/\r?\n/)
+  const found: string[][] = []
+  lines.forEach((line, i) => {
+    if (!/^runner: [^\r\n]+$/.test(line)) return
+    const at = /^fast: [^\r\n]+$/.test(lines[i + 1] ?? '') ? i + 2 : i + 1
+    if (!(lines[at] ?? '').startsWith('summary:')) return
+    let end = at + 1
+    while (end < lines.length && !/^\S/.test(lines[end]!)) end++
+    const block = lines.slice(at, end)
+    if (block.some(l => TEST_KEY_LINE.test(l))) found.push(block)
+  })
+  return found
+}
+
+function cartoonBlock(block: string[] | undefined): number[] | null {
+  if (block === undefined || !/^summary:[ \t]*$/.test(block[0]!)) return null
+  const fields = new Map<string, number>()
+  for (const line of block.slice(1)) {
+    if (line.trim() === '') continue
+    const field = /^  (total|passed|failed|skipped|duration_s):[ \t]+(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)[ \t]*$/.exec(line)
+    if (!field || fields.has(field[1]!) || (field[1] !== 'duration_s' && !/^\d+$/.test(field[2]!))) return null
+    fields.set(field[1]!, Number(field[2]))
+  }
+  return SUMMARY_KEYS.every(key => fields.has(key)) ? SUMMARY_KEYS.map(key => fields.get(key)!) : null
+}
+
 const readCartoon: Reader = text => {
   const m = /^summary\{total,passed,failed,skipped,duration_s\}:[ \t]*(\d+),(\d+),(\d+),(\d+),([\d.]+)[ \t]*\r?$/m.exec(text)
-  if (!m) return null
+  const values = m ? m.slice(1).map(Number) : cartoonBlock(cartoonSummaries(text)[0])
+  if (!values) return null
   const failures: TestFailure[] = []
-  const block = /failures\[\d+\]\{id,loc,msg\}:\n((?:[ \t]+.*(?:\n|$))*)/.exec(text)
-  for (const row of block?.[1]?.split('\n') ?? []) {
+  const block = /failures\[\d+\]\{id,loc,msg\}:\r?\n((?:[ \t]+.*(?:\r?\n|$))*)/.exec(text)
+  for (const row of block?.[1]?.split(/\r?\n/) ?? []) {
     const cells = /^\s+("(?:[^"\\]|\\.)*"|[^,]*),("(?:[^"\\]|\\.)*"|[^,]*),/.exec(row)
     if (cells?.[1]) failures.push({ id: unquote(cells[1]), ...(cells[2] ? { loc: unquote(cells[2]) } : {}) })
   }
   return {
-    total: Number(m[1]), passed: Number(m[2]), failed: Number(m[3]), skipped: Number(m[4]),
-    durationS: Number(m[5]), failures,
+    total: values[0]!, passed: values[1]!, failed: values[2]!, skipped: values[3]!,
+    durationS: values[4]!, failures,
   }
 }
 
@@ -174,7 +209,9 @@ export function parseTestOutput(input: {
     commandStatus: input.commandStatus ?? (exitCode === null ? 'unknown' : 'exited'),
     ...(input.outputIncomplete ? { outputIncomplete: true } : {}),
   }
-  const cartoonLines = [...input.text.matchAll(/^summary\{total,passed,failed,skipped,duration_s\}:/gm)].length
+  // A bare prose "summary:" heading is not a Cartoon report.
+  const blockLines = cartoonSummaries(input.text).length
+  const cartoonLines = blockLines + [...input.text.matchAll(/^summary\{total,passed,failed,skipped,duration_s\}:/gm)].length
   if (!isTest && cartoonLines === 0) return null
   if (cartoonLines > 1 || (isTest && repeatedBun(input.text))) return { ...base, countsIssue: 'conflicting' }
   const cartoon = cartoonLines === 0 ? null : attempt(readCartoon, input.text)

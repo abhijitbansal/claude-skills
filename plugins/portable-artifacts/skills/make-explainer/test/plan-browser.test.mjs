@@ -1,12 +1,12 @@
 // Plan mode, the answer runtime (template/plan.js) in a real browser: choices, free text, comments, saved answers,
 // a changed plan, blocked storage, and the Copy / Download export of the plan-answers/1 file.
-import { test, after } from 'node:test';
+import { test, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { buildSpec, haveBrowser, openPage, closeSharedBrowser } from './helpers/browser.mjs';
+import { buildSpec, haveBrowser, openPage as openBrowserPage, closeSharedBrowser } from './helpers/browser.mjs';
 import { checkPage } from '../scripts/check.mjs';
 
 after(closeSharedBrowser);
@@ -43,6 +43,56 @@ const TEXT_SETTLE_MS = 400; // typing is saved 250 ms after the last key
 const settle = (page) => page.waitForTimeout(TEXT_SETTLE_MS);
 const said = (page, pattern) => page.waitForFunction((src) => new RegExp(src, 'i').test(document.querySelector('[data-plan-status]').textContent), pattern);
 const item = (id) => `[data-plan-item][data-id="${id}"]`;
+
+// Keep the reads made during startup, before a later getItem could hide a transient
+// storage failure. These tests use only synthetic answers; no reader data is logged.
+function tracePlanStorage() {
+  window.__planStorageTrace = [];
+  for (const method of ['getItem', 'setItem', 'removeItem']) {
+    const original = Storage.prototype[method];
+    Storage.prototype[method] = function (key, ...args) {
+      const record = { method, key };
+      try {
+        const result = original.call(this, key, ...args);
+        record.value = method === 'getItem' ? result : (args[0] ?? null);
+        return result;
+      } catch (error) {
+        record.error = `${error.name}: ${error.message}`;
+        throw error;
+      } finally {
+        if (key === 'pa-probe' || key.startsWith('pa-plan:')) window.__planStorageTrace.push(record);
+      }
+    };
+  }
+}
+const storageState = (page) => page.evaluate((key) => {
+  let stored;
+  try { stored = localStorage.getItem(key); } catch (error) { stored = `${error.name}: ${error.message}`; }
+  return { url: location.href, name: window.name, stored,
+    staleHidden: document.querySelector('[data-plan-stale]').hidden,
+    unsavedHidden: document.querySelector('[data-plan-unsaved]').hidden,
+    trace: window.__planStorageTrace };
+}, STORE);
+
+let openPages = [];
+async function openPage(...args) {
+  const opened = await openBrowserPage(...args);
+  // Register after opening so the existing seed/clipboard init scripts stay intact.
+  // The trace runs on later navigations, including the reload under investigation.
+  await opened.page.addInitScript(tracePlanStorage);
+  openPages.push(opened);
+  return opened;
+}
+afterEach(async (t) => {
+  for (const { page, context, problems } of openPages) {
+    // Successful tests close their contexts. Preserve evidence from any page left
+    // open by an assertion/locator failure before closing it for the next test.
+    if (page.isClosed()) continue;
+    try { t.diagnostic(JSON.stringify({ storage: await storageState(page), problems })); }
+    finally { await context.close(); }
+  }
+  openPages = [];
+});
 
 test('a non-recommended option exports isRecommended false, the recommended one true', async (t) => {
   if (await skipUnlessBrowser(t)) return;
@@ -129,9 +179,10 @@ test('choosing, typing and a verdict survive a reload under pa-plan:<key> as { h
   assert.equal(saved.hash, before.planHash);
   assert.deepEqual(saved.answers.storage, { choice: 'A save server', comment: 'Only if cheap' });
   assert.deepEqual(saved.answers.owner, { text: 'Dana' });
+  const beforeReload = await storageState(page);
   await page.reload();
   await page.waitForFunction(() => window.paReady === true);
-  assert.deepEqual(await exported(page), before);
+  assert.deepEqual(await exported(page), before, JSON.stringify({ beforeReload, afterReload: await storageState(page) }));
   assert.equal(await page.locator('input[name="plan-storage"]:checked').inputValue(), 'A save server');
   assert.equal(await page.locator(`${item('owner')} [data-answer]`).inputValue(), 'Dana');
   assert.equal(await page.locator('[data-reviewer]').inputValue(), 'Ada');
@@ -151,9 +202,11 @@ test('saved answers whose hash differs are not applied and not wiped; a notice s
   assert.match(await page.locator('[data-plan-stale]').textContent(), /plan changed/i);
   await settle(page);
   assert.equal(await stored(page), old, 'nothing is written until the reader changes something');
+  const beforeReload = await storageState(page);
   await page.reload();
   await page.waitForFunction(() => window.paReady === true);
-  assert.equal(await page.locator('[data-plan-stale]').isVisible(), true, 'still the old plan data, so the notice shows again');
+  assert.equal(await page.locator('[data-plan-stale]').isVisible(), true,
+    `still the old plan data, so the notice shows again: ${JSON.stringify({ beforeReload, afterReload: await storageState(page) })}`);
   assert.equal(await stored(page), old);
   assert.deepEqual(problems, []);
   await context.close();
