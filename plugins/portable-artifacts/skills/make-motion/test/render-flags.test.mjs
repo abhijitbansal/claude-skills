@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, chmodSync, readdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, chmodSync, readdirSync, cpSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -69,4 +69,46 @@ test('render: an interrupt while the cue folder exists removes it (exit 130, no 
   const { code, signal } = await closed;
   assert.deepEqual([code, signal], [130, null], 'the handler ran and exited 130');
   assert.deepEqual(readdirSync(scratch), [], 'the cue folder is gone');
+});
+
+test('render: an interrupt during browser launch waits for that browser to close', async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'rf-launch-'));
+  const skill = path.join(dir, 'skill');
+  cpSync(root, skill, { recursive: true, filter: (file) => !['node_modules', 'test'].includes(path.basename(file)) });
+  symlinkSync(path.join(root, 'node_modules'), path.join(skill, 'node_modules'), 'dir');
+  const ready = path.join(dir, 'launch-ready');
+  const closedFile = path.join(dir, 'browser-closed');
+  // A launch that has acquired resources but has not returned a browser yet.
+  writeFileSync(path.join(skill, 'scripts/lib/browser.mjs'), `
+import { writeFileSync } from 'node:fs';
+export async function launchBrowser() {
+  writeFileSync(${JSON.stringify(ready)}, '');
+  await new Promise(resolve => process.once('SIGINT', resolve));
+  return {
+    async close() { writeFileSync(${JSON.stringify(closedFile)}, ''); },
+    async newPage() { throw new Error('render continued after the interrupt'); },
+  };
+}
+export function guardNetwork() {}
+`);
+  const fake = path.join(dir, 'ffmpeg');
+  writeFileSync(fake, '#!/bin/sh\nexit 0\n');
+  chmodSync(fake, 0o755);
+  const spec = path.join(dir, 'm.json');
+  writeFileSync(spec, JSON.stringify({ size: [160, 90], scenes: [{ id: 's', duration: 1, elements: [] }] }));
+  const child = spawn(process.execPath, [path.join(skill, 'scripts/render.mjs'), spec, '--out', path.join(dir, 'o.mp4')],
+    { env: { ...process.env, FFMPEG_PATH: fake } });
+  t.after(() => {
+    if (child.exitCode === null) child.kill('SIGKILL');
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const closed = new Promise((resolve) => child.on('close', (code, signal) => resolve({ code, signal })));
+  const deadline = Date.now() + 10000;
+  while (!existsSync(ready) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.ok(existsSync(ready), 'browser launch started');
+  child.kill('SIGINT');
+  const { code, signal } = await closed;
+  assert.deepEqual([code, signal], [130, null]);
+  assert.ok(existsSync(closedFile), 'the browser acquired during launch was closed before exit');
+  assert.equal(existsSync(path.join(dir, 'o.mp4')), false);
 });

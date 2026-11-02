@@ -213,7 +213,8 @@ function reportLoudness(ffmpeg, file) {
 
 async function cleanup(state) {
   await state.encoder?.kill();
-  await state.browser?.close().catch(() => {});
+  const browser = state.browser ?? await state.browserLaunch?.catch(() => null);
+  await browser?.close().catch(() => {});
   if (state.partial) rmSync(state.partial, { force: true });
   if (state.cueDir) rmSync(state.cueDir, { recursive: true, force: true });
 }
@@ -228,7 +229,10 @@ function installSignalHandlers(state) {
 }
 
 async function openPage(p, server, state) {
-  state.browser = await launchBrowser();
+  if (state.exiting) return new Promise(() => {});
+  state.browserLaunch = launchBrowser();
+  state.browser = await state.browserLaunch;
+  if (state.exiting) return new Promise(() => {}); // cleanup waits for the launch and owns the exit
   const page = await state.browser.newPage({ viewport: { width: p.size[0], height: p.size[1] }, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => process.stderr.write(`page error: ${e.message}\n`));
   await guardNetwork(page, new URL(server.url).origin, (url) => process.stderr.write(`blocked network request: ${url}\n`));
@@ -241,7 +245,7 @@ async function openPage(p, server, state) {
 async function main() {
   // The handlers go in before planning: planning writes the cue folder, and an interrupt with no handler would kill the
   // process and leave it behind.
-  const state = { encoder: null, browser: null, partial: null, cueDir: null, exiting: false };
+  const state = { encoder: null, browser: null, browserLaunch: null, partial: null, cueDir: null, exiting: false };
   installSignalHandlers(state);
   const p = await plan(parseArgs(process.argv.slice(2)), state);
   if (!p) return 1;

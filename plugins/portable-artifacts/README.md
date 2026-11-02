@@ -194,6 +194,15 @@ the skill folder, so copy the folder whole), run `npm ci` inside it
 To build a dashboard, a diagram, an explainer page, a 3D scene or an animated video, read and follow skills/make-dashboard/SKILL.md, skills/make-diagram/SKILL.md, skills/make-explainer/SKILL.md, skills/make-motion/SKILL.md or skills/make-scene/SKILL.md.
 ```
 
+### Updating an existing install
+
+After updating the skill files, run `npm ci` inside each installed skill folder to refresh its dependencies from the
+new lockfile. `npm ci --omit=dev` is enough for make-dashboard, make-diagram, make-explainer and make-scene unless you
+use their browser checks. Updating or linking skill files alone does not refresh an existing `node_modules` folder.
+
+`npm ci` removes the optional kokoro install. If you use voiceover, run `node scripts/doctor.mjs --fix kokoro` from
+the make-motion folder afterward.
+
 ### Requirements
 
 Not sure what is missing? Run `node <skill-dir>/scripts/doctor.mjs --json` (it
