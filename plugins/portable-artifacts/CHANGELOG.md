@@ -14,6 +14,8 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 - Existing installs need a dependency refresh after updating the skill files: run `npm ci` inside each installed skill
   folder (`npm ci --omit=dev` is enough for make-dashboard, make-diagram, make-explainer and make-scene).
   This removes optional kokoro; if you use voiceover, run `node scripts/doctor.mjs --fix kokoro` from make-motion afterward.
+- Every skill's doctor flags an installed `fast-uri` that differs from its lockfile and offers `--fix node_modules`,
+  so updating skill files without refreshing old dependencies is detected during the normal doctor flow.
 
 ### Fixed
 

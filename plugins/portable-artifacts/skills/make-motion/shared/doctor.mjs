@@ -101,14 +101,33 @@ export function nodeVersion(min = 20) {
   };
 }
 
+// fast-uri had a security update in every skill. A linked/file-only update must
+// also offer npm ci when an existing install differs from the new lockfile.
+function staleFastUri(ctx) {
+  const P = pp(ctx);
+  let wanted;
+  try {
+    wanted = JSON.parse(ctx.readFile(P.join(ctx.skillDir, 'package-lock.json'))).packages?.['node_modules/fast-uri']?.version;
+  } catch {
+    return false;
+  }
+  if (typeof wanted !== 'string') return false;
+  try {
+    return JSON.parse(ctx.readFile(P.join(ctx.skillDir, 'node_modules/fast-uri/package.json'))).version !== wanted;
+  } catch {
+    return true;
+  }
+}
+
 export function nodeModules({ omitDev = true } = {}) {
   return {
     id: 'node_modules',
     rank: RANK.nodeModules,
-    why: "installs the skill's own npm packages",
+    why: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) && staleFastUri(ctx)
+      ? "refreshes fast-uri to match this skill's lockfile" : "installs the skill's own npm packages",
     required: true,
     size: '≈30–60 MB',
-    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')),
+    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) && !staleFastUri(ctx),
     fix: (ctx) => {
       const argv = ['npm', 'ci', ...(omitDev ? ['--omit=dev'] : []), '--prefix', ctx.skillDir];
       return { auto: [argv], manual: manualAll(render([argv], ctx.platform)) };
