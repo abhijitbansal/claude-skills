@@ -112,3 +112,38 @@ export function guardNetwork() {}
   assert.ok(existsSync(closedFile), 'the browser acquired during launch was closed before exit');
   assert.equal(existsSync(path.join(dir, 'o.mp4')), false);
 });
+
+// Real Chromium: Playwright installs its own SIGINT handler that can exit(130) while render.mjs still awaits the launch, so the
+// cue folder must be deleted before the browser is awaited. Needs the real browser; the fake-launch test above cannot see this.
+test('render: an interrupt with a real Chromium running leaves no cue folder, temp files or Chromium process', async (t) => {
+  try { await (await launchBrowser({ quiet: true })).close(); } catch { return t.skip('browser unavailable'); }
+  const dir = mkdtempSync(path.join(tmpdir(), 'rf-real-'));
+  const scratch = mkdtempSync(path.join(tmpdir(), 'rf-real-tmp-'));
+  const fake = path.join(dir, 'ffmpeg');
+  writeFileSync(fake, '#!/bin/sh\ncat > /dev/null\n');
+  chmodSync(fake, 0o755);
+  const spec = path.join(dir, 'm.json');
+  writeFileSync(spec, JSON.stringify({ size: [160, 90], scenes: [{ id: 's', duration: 1, elements: [] }], cues: [{ cue: 'pop', at: 0 }] }));
+  const child = spawn(process.execPath, [RENDER, spec, '--out', path.join(dir, 'o.mp4')], { env: { ...process.env, FFMPEG_PATH: fake, TMPDIR: scratch } });
+  t.after(() => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(scratch, { recursive: true, force: true });
+  });
+  let log = '';
+  for (const stream of [child.stdout, child.stderr]) stream.on('data', (d) => { log += d; });
+  const closed = new Promise((resolve) => child.on('close', (code, signal) => resolve({ code, signal })));
+  const chromiumFor = () => spawnSync('pgrep', ['-f', scratch], { encoding: 'utf8' }).stdout.trim();
+  // Playwright creates its profile folder in TMPDIR just before it spawns Chromium: the launch is still pending here.
+  const launching = () => readdirSync(scratch).some((f) => f.startsWith('playwright_chromiumdev_profile-'));
+  const deadline = Date.now() + 30000;
+  while (!launching() && child.exitCode === null && Date.now() < deadline) await new Promise((r) => { setTimeout(r, 1); });
+  assert.ok(launching(), `Chromium launch started in the private temp folder: ${log}`);
+  child.kill('SIGINT');
+  const { code, signal } = await closed;
+  assert.deepEqual([code, signal], [130, null]);
+  const gone = Date.now() + 10000;
+  while (chromiumFor() && Date.now() < gone) await new Promise((r) => { setTimeout(r, 50); });
+  assert.equal(chromiumFor(), '', 'no Chromium process still references the private temp folder');
+  assert.deepEqual(readdirSync(scratch), [], 'nothing left in the private temp folder');
+});

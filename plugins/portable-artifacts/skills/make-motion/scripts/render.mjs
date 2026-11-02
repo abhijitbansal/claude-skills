@@ -213,10 +213,11 @@ function reportLoudness(ffmpeg, file) {
 
 async function cleanup(state) {
   await state.encoder?.kill();
-  const browser = state.browser ?? await state.browserLaunch?.catch(() => null);
-  await browser?.close().catch(() => {});
+  // Delete first: Playwright's own SIGINT handler can exit the process while the browser launch is still awaited.
   if (state.partial) rmSync(state.partial, { force: true });
   if (state.cueDir) rmSync(state.cueDir, { recursive: true, force: true });
+  const browser = state.browser ?? await state.browserLaunch?.catch(() => null);
+  await browser?.close().catch(() => {});
 }
 
 function installSignalHandlers(state) {
