@@ -14,6 +14,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = path.join(root, 'scripts/storyboard.mjs');
 const REAL_EXPLAINER = path.resolve(root, '..', 'make-explainer');
 const REAL_VALIDATE = path.join(REAL_EXPLAINER, 'scripts/validate.mjs');
+// validate.mjs imports ajv from make-explainer's own node_modules: without them the check cannot run (CI installs them first).
+const REAL_SIBLING_SKIP = !existsSync(REAL_VALIDATE) ? 'make-explainer is not beside this skill'
+  : !existsSync(path.join(REAL_EXPLAINER, 'node_modules/ajv')) && 'make-explainer has no node_modules (run npm ci there)';
 const made = [];
 after(() => made.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
@@ -281,7 +284,7 @@ test('CLI exit 2 for a brief that is not JSON, exit 1 with the problems for one 
   assert.equal(existsSync(out), false);
 });
 
-test('a plan from a 30 s brief passes make-explainer validate.mjs with no warnings (real sibling)', { skip: !existsSync(REAL_VALIDATE) && 'make-explainer is not beside this skill' }, () => {
+test('a plan from a 30 s brief passes make-explainer validate.mjs with no warnings (real sibling)', { skip: REAL_SIBLING_SKIP }, () => {
   const base = tmp();
   const out = path.join(base, 'plan.json');
   const written = run(CLI, [writeBrief(base, LONG), '--out', out]);
@@ -294,7 +297,7 @@ test('a plan from a 30 s brief passes make-explainer validate.mjs with no warnin
   assert.deepEqual(report.warnings, []);
 });
 
-test('a plan from a brief with a named theme and long beats still validates (real sibling)', { skip: !existsSync(REAL_VALIDATE) && 'make-explainer is not beside this skill' }, () => {
+test('a plan from a brief with a named theme and long beats still validates (real sibling)', { skip: REAL_SIBLING_SKIP }, () => {
   const base = tmp();
   const out = path.join(base, 'plan.json');
   const brief = { title: 'Launch day demo', seconds: 40, theme: 'press', scenes: [scene('hook', 'A one-line hook that names the problem the customer has today and why it costs real money', 20), scene('proof', 'Two customers, one number each', 20)] };

@@ -89,6 +89,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
+      # make-motion's storyboard tests validate a plan with the real make-explainer, which needs its own dependencies
+      - name: make-explainer dependencies (for make-motion's storyboard tests)
+        working-directory: plugins/portable-artifacts/skills/make-explainer
+        run: npm ci
       # PA_REQUIRE_RENDER=1: a missing browser or ffmpeg fails the render tests instead of skipping them
       - name: make-motion
         working-directory: plugins/portable-artifacts/skills/make-motion
