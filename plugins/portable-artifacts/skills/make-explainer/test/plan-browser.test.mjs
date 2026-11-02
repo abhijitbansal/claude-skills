@@ -1,12 +1,12 @@
 // Plan mode, the answer runtime (template/plan.js) in a real browser: choices, free text, comments, saved answers,
 // a changed plan, blocked storage, and the Copy / Download export of the plan-answers/1 file.
-import { test, after } from 'node:test';
+import { test, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { buildSpec, haveBrowser, openPage, closeSharedBrowser } from './helpers/browser.mjs';
+import { buildSpec, haveBrowser, openPage as openBrowserPage, closeSharedBrowser } from './helpers/browser.mjs';
 import { checkPage } from '../scripts/check.mjs';
 
 after(closeSharedBrowser);
@@ -73,6 +73,26 @@ const storageState = (page) => page.evaluate((key) => {
     unsavedHidden: document.querySelector('[data-plan-unsaved]').hidden,
     trace: window.__planStorageTrace };
 }, STORE);
+
+let openPages = [];
+async function openPage(...args) {
+  const opened = await openBrowserPage(...args);
+  // Register after opening so the existing seed/clipboard init scripts stay intact.
+  // The trace runs on later navigations, including the reload under investigation.
+  await opened.page.addInitScript(tracePlanStorage);
+  openPages.push(opened);
+  return opened;
+}
+afterEach(async (t) => {
+  for (const { page, context, problems } of openPages) {
+    // Successful tests close their contexts. Preserve evidence from any page left
+    // open by an assertion/locator failure before closing it for the next test.
+    if (page.isClosed()) continue;
+    try { t.diagnostic(JSON.stringify({ storage: await storageState(page), problems })); }
+    finally { await context.close(); }
+  }
+  openPages = [];
+});
 
 test('a non-recommended option exports isRecommended false, the recommended one true', async (t) => {
   if (await skipUnlessBrowser(t)) return;
@@ -146,7 +166,7 @@ test('answers come out in page order: two decisions, then an approval', async (t
 
 test('choosing, typing and a verdict survive a reload under pa-plan:<key> as { hash, answers }', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const { page, problems, context } = await openPage(built().url, { init: tracePlanStorage });
+  const { page, problems, context } = await openPage(built().url);
   await pick(page, 'storage', 'A save server');
   await page.locator(`${item('storage')} [data-comment]`).fill('Only if cheap');
   await pick(page, 'budget', 'reject');
@@ -175,7 +195,7 @@ test('choosing, typing and a verdict survive a reload under pa-plan:<key> as { h
 test('saved answers whose hash differs are not applied and not wiped; a notice says the plan changed', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const old = JSON.stringify({ hash: 'old-hash', answers: { storage: { choice: 'A save server' } } });
-  const { page, problems, context } = await openPage(built().url, { seed: { [STORE]: old }, init: tracePlanStorage });
+  const { page, problems, context } = await openPage(built().url, { seed: { [STORE]: old } });
   assert.equal(await page.locator('input[name="plan-storage"]:checked').count(), 0);
   assert.equal((await exported(page)).answers[0].answered, false);
   assert.equal(await page.locator('[data-plan-stale]').isVisible(), true);
