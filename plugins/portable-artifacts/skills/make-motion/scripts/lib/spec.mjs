@@ -20,6 +20,8 @@ import { VIRAL_MODE, applyViral } from '../../template/viral.mjs';
 import { VAR_NAME, MAX_VARS, VAR_TYPES, declaresVars, findVarRefs, varValues, substituteVars } from '../../template/vars.mjs';
 import { checkCode } from './code-check.mjs';
 import { checkLottie } from './lottie-check.mjs';
+import { isAtlasName } from '../../template/maps.mjs';
+import { withAtlasFiles, unknownDatasetMessage } from './atlas-files.mjs';
 import { LOTTIE_SPEED } from '../../template/lottie-guard.mjs';
 import { resolveSpecBeats } from './beats-file.mjs';
 import { gridOf, frameCutoff } from '../../template/frames.mjs';
@@ -463,8 +465,8 @@ function checkChart(el, base, errors) {
   for (const at of urls) errors.push({ path: at, message: at.endsWith('.data.url') ? REMOTE_DATA : REMOTE_OTHER });
   if (urls.length) return;
   const named = vl.data?.name;
-  if (typeof named === 'string' && !Array.isArray(vl.datasets?.[named])) {
-    errors.push({ path: pathJoin(vlPath, 'data.name'), message: `dataset "${named}" not found in vegaLite.datasets` });
+  if (typeof named === 'string' && !Array.isArray(vl.datasets?.[named]) && !isAtlasName(named)) {
+    errors.push({ path: pathJoin(vlPath, 'data.name'), message: unknownDatasetMessage(named) });
     return;
   }
   if (typeof named !== 'string' && !Array.isArray(vl.data?.values)) {
@@ -472,7 +474,8 @@ function checkChart(el, base, errors) {
     return;
   }
   try {
-    compileVegaLite({ ...vl, width: el.width, height: el.height });
+    // A bundled atlas is compiled as the page compiles it: with the real file as the data (template/maps.mjs).
+    compileVegaLite({ ...withAtlasFiles(vl), width: el.width, height: el.height });
   } catch (e) {
     errors.push({ path: vlPath, message: `Vega-Lite compile error: ${String(e.message).split('\n')[0]}` });
   }

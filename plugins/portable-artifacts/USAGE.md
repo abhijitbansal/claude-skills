@@ -504,6 +504,18 @@ defaults, and its final report carries one line naming what it used:
 `intake: skipped (<reason>); values used: format 16:9, length 10 s, assets none, voiceover off, sound none, theme dusk, CTA none, captions off`
 (the values shown are the defaults; a value your prompt settled appears instead).
 
+**The storyboard.** For a clip over 20 s, after the intake round, the agent writes a short
+brief (the title, the length, and one line and one length per scene) and runs
+`storyboard.mjs brief.json --out plan.json`. That writes a make-explainer plan page: a
+summary, a timeline with one event per scene, the beats, a theme decision (`dusk`, `press` or
+`poster`, with a recommendation), an approval of the storyboard, a question for anything to
+change and a verdict. The agent builds the page and sends it to you; it reads your answers
+only through make-explainer's `answers.mjs`, then writes the spec from them. The step is
+skipped, with one line in the final report (`storyboard: skipped (<reason>)`), for a clip of
+20 s or less, when make-explainer is not installed beside make-motion, and under `claude -p`,
+`codex exec`, `copilot -p`, an eval, or any run that cannot pause for an answer (the agent
+passes `--non-interactive`). A skip is never an error: the clip is built directly.
+
 **Groups and blocks.** A `group` holds up to 40 child elements, up to three groups
 deep, and moves them as one. A `block` is a ready-made piece of a scene, written as one
 element with a few params: `title-card`, `lower-third`, `kpi-counter`, `step-flow`,

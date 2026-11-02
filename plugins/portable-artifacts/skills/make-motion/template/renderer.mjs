@@ -11,6 +11,7 @@ import { loadCaptionTracks, captionLayer, applyCaption, captionSample, captionFo
 import { codeHighlighter, styleCode, fillCode, setCodeTyping } from './code-view.mjs';
 import { DEFAULT_CODE_SIZE } from './code-theme.mjs';
 import { mountLottie, seekLottie, destroyLotties } from './lottie-view.mjs';
+import { atlasUrl, atlasesIn, withAtlases, themeColours } from './maps.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 import { bindWithNbsp } from '/shared/nowrap.mjs'; // served by server.mjs; the token regex lives only in shared/
 
@@ -178,8 +179,24 @@ function ringFilledPoints(root, ring) {
   }
 }
 
+// The pinned atlas files (template/maps.mjs) a chart names, fetched once per page whatever number of charts use them.
+const atlasFetches = new Map();
+function fetchAtlas(name) {
+  if (!atlasFetches.has(name)) {
+    const loaded = fetch(atlasUrl(name), { cache: 'no-store' }).then((response) => {
+      if (!response.ok) throw new Error(`map failed to load: ${name} (${response.status})`);
+      return response.json();
+    });
+    loaded.catch(() => atlasFetches.delete(name)); // a failed load is tried again by the next stage, not remembered
+    atlasFetches.set(name, loaded);
+  }
+  return atlasFetches.get(name);
+}
+
 async function renderChart(el, look) {
-  const vl = el.vegaLite;
+  const atlases = atlasesIn(el.vegaLite);
+  const topologies = Object.fromEntries(await Promise.all(atlases.map(async (name) => [name, await fetchAtlas(name)])));
+  const vl = themeColours(withAtlases(el.vegaLite, topologies), look.colors);
   const config = mergeConfig(look.vega, vl.config);
   const compiled = window.vegaLite.compile({
     ...vl, width: el.width, height: el.height, config, autosize: { type: 'fit', contains: 'padding' },

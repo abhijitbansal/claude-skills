@@ -44,6 +44,8 @@ import beforeAfterSwipe from './before-after-swipe.mjs';
 import codeTyping from './code-typing.mjs';
 import codeDiff from './code-diff.mjs';
 import terminalRun from './terminal-run.mjs';
+import mapHighlight from './map-highlight.mjs';
+import flowMap from './flow-map.mjs';
 
 export const BLOCKS = Object.freeze({
   'title-card': titleCard,
@@ -61,6 +63,8 @@ export const BLOCKS = Object.freeze({
   'code-typing': codeTyping,
   'code-diff': codeDiff,
   'terminal-run': terminalRun,
+  'map-highlight': mapHighlight,
+  'flow-map': flowMap,
 });
 export const BLOCK_NAMES = Object.freeze(Object.keys(BLOCKS));
 

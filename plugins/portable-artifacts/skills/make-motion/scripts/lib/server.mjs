@@ -20,6 +20,7 @@ import { blockAssetFiles, isBlock } from '../../template/blocks/index.mjs';
 import { CACHE_ROOT } from './video.mjs';
 import { substituteVars } from '../../template/vars.mjs';
 import { applyViral } from '../../template/viral.mjs';
+import { ATLASES } from '../../template/maps.mjs';
 import { declaresBeats, resolveSpecBeats } from './beats-file.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -41,7 +42,8 @@ const MIME = {
   '.srt': 'application/x-subrip; charset=utf-8', '.vtt': 'text/vtt; charset=utf-8',
 };
 
-// /vendor/<package>/<file>: each package's folder that the page imports from, and nothing above it; only .js and .mjs.
+// /vendor/<package>/<file>: each package's folder that the page imports from, and nothing above it; only .js and .mjs,
+// except the files a package's VENDOR_ONLY entry lists (the atlases' JSON).
 // shiki (code elements) is used as the fine-grained core, the JavaScript regex engine (no wasm) and the CODE_LANGS
 // grammars, with every package those import (template/index.html maps each bare specifier to one of these). The whole of
 // shiki/dist is reachable, so its theme modules, bundles and oniguruma engine module are served too, though the page
@@ -64,12 +66,19 @@ const VENDOR_ROOTS = Object.freeze(Object.assign(Object.create(null), {
   ...Object.fromEntries(['hast-util-to-html', 'hast-util-whitespace', 'property-information', 'stringify-entities', 'ccount', 'character-entities-html4',
     'character-entities-legacy', 'comma-separated-tokens', 'html-void-elements', 'space-separated-tokens', 'zwitch'].map((name) => [name, path.join(NODE_MODULES, name)])),
   'lottie-web': path.join(NODE_MODULES, 'lottie-web/build/player/esm'), // lottie elements; VENDOR_ONLY narrows it to one file
+  'world-atlas': path.join(NODE_MODULES, 'world-atlas'), // chart data { name: 'world-110m' } (template/maps.mjs); VENDOR_ONLY narrows both atlases
+  'us-atlas': path.join(NODE_MODULES, 'us-atlas'),       // to the data files the table names
 }));
 // A package whose folder also holds files the page must never load serves only the files listed here. lottie-web ships its
 // full players (they evaluate Lottie expressions with eval) beside the light one: the page imports the light SVG build
 // alone, which has no expression engine and no eval, so an expression could not run even if lottieProblems missed one.
+// The two atlas packages hold TopoJSON, not scripts: only the four files template/maps.mjs names are served (not the 10m
+// world, the land shapes, the Albers-projected US files, package.json or the README), as JSON.
+const atlasFiles = (pkg) => Object.freeze(Object.values(ATLASES).filter((atlas) => atlas.pkg === pkg).map((atlas) => atlas.file));
 const VENDOR_ONLY = Object.freeze(Object.assign(Object.create(null), {
   'lottie-web': Object.freeze(['lottie_light.min.js']),
+  'world-atlas': atlasFiles('world-atlas'),
+  'us-atlas': atlasFiles('us-atlas'),
 }));
 const VENDOR_ROUTE = /^\/vendor\/((?:@[^/]+\/)?[^/]+)\/(.*)$/; // a package name, scoped or not, then the file in its folder
 
@@ -239,7 +248,8 @@ function serveUnder(res, root, rel) {
 }
 
 // A library's JavaScript only (no package.json, no wasm), locked down like /assets: opened in a tab it does not run, and
-// the page's own imports are unaffected.
+// the page's own imports are unaffected. The exception is a package with a VENDOR_ONLY list (the atlases' JSON): it
+// serves exactly the files listed, whatever their type.
 const SCRIPT_FILE = /\.m?js$/;
 // `only`: the files of the package that may be served (VENDOR_ONLY), compared with the path after URL parsing has
 // normalised it (`./x` and `%2e/x` arrive as `x`) and before any percent-decoding, so an encoded name is not served.
@@ -247,7 +257,7 @@ function serveVendor(res, root, rel, only) {
   lockDown(res);
   if (only && !only.includes(rel)) return notFound(res);
   const file = resolveUrlPath(root, rel);
-  return file && SCRIPT_FILE.test(file) ? sendFile(res, file) : notFound(res);
+  return file && (only || SCRIPT_FILE.test(file)) ? sendFile(res, file) : notFound(res);
 }
 
 // The shared theme a spec names: its JSON for the colours, a stylesheet for the fonts.

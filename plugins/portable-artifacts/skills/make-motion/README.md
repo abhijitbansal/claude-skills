@@ -34,6 +34,10 @@ shell commands.
   `.beats.json`; a root `beats` names it, and a keyframe `t` or a cue, audio or captions `at` may be
   `"beat:<n>"`, resolved to seconds before anything else reads the spec (so a var can pick the beat).
   A track with no steady beat exits 1 instead of guessing, and `--bpm` or `--min-bpm`/`--max-bpm` fix a tempo it reads at half or double.
+- **Storyboard for clips over 20 s**: `storyboard.mjs brief.json --out plan.json` writes a make-explainer `plan` page
+  (one timeline event per scene, a theme decision, an approval and a question) that the user answers before the
+  spec is written. It needs make-explainer beside this skill; with a clip of 20 s or less, no make-explainer, or
+  `--non-interactive`, it prints `storyboard: skipped (<reason>)`, writes nothing and exits 0.
 - **Self-check for models**: `--contact-sheet` writes one tiled, timestamped PNG
   per scene, so a model that can read images can review its own work before
   rendering; `check.mjs` then flags text or counters outside the safe area, overlapping text,
@@ -45,7 +49,7 @@ shell commands.
   lines and ringed points. Shapes and text take **theme colour tokens**
   (`"fill": "surface"`, `"color": "accent"`) that follow the theme, rects can be
   `elevated` cards, and lines can have round caps and an arrow head.
-- **Blocks**: fifteen parameterised building blocks (`title-card`, `lower-third`, `kpi-counter`, `step-flow`, `quote-card`, `checklist`, `logo-outro`, `cta-close`, four for short-form video: `cta-soft`, `story-beats`, `listicle` and `before-after-swipe`, and three for code: `code-typing`, `code-diff` and `terminal-run`), each
+- **Blocks**: seventeen parameterised building blocks (`title-card`, `lower-third`, `kpi-counter`, `step-flow`, `quote-card`, `checklist`, `logo-outro`, `cta-close`, four for short-form video: `cta-soft`, `story-beats`, `listicle` and `before-after-swipe`, three for code: `code-typing`, `code-diff` and `terminal-run`, and two for maps: `map-highlight` and `flow-map`), each
   written as one `block` element with a few params (`"block": "lower-third", "params": { "name": "Ada" }`) and
   expanded into plain elements laid out for the canvas, coloured with theme tokens. `blocks.mjs list` and
   `blocks.mjs show <name>` print each block's params and an example; `references/blocks/` holds a contact sheet
@@ -65,6 +69,12 @@ shell commands.
   with lottie-web's light SVG build, which has no expression engine. The validator and the page both refuse remote
   images, web fonts, external segments, expressions and files too heavy to draw, so the file can never fetch or run
   anything or stall the render (which also bounds its wait for the page); frames are byte-identical at any `--workers`.
+- **Maps**: a chart's `vegaLite.data` can be `{ "name": "world-110m" }` (also `world-50m`, `us-states-10m`,
+  `us-counties-10m`): the bundled world-atlas and us-atlas TopoJSON, served from the local server, so a
+  `geoshape` chart works offline with no `datasets` entry. A mark's `fill` and `stroke` may be theme colour tokens.
+  The validator compiles the chart with the real file; an unknown name lists the bundled maps. The `map-highlight`
+  block lights named countries or US states in the accent colour, and `flow-map` draws great-circle arcs between
+  places one after another, each with a caption (`references/examples/world-map.json`, `references/blocks/`).
 - **Captions**: a `captions` track from an SRT, VTT or Whisper JSON file, or the voiceover's
   sentence timings, shown two to six words at a time in the caption zone in one of six styles
   (`plain`, `pill`, `karaoke`, `kinetic`, `boxed`, `typewriter`); `check.mjs` keeps other text out
@@ -155,7 +165,7 @@ builds with the defaults and its report says so.
 | `shape` | `shape` (`rect`/`ellipse`/`line`), `width`, `height`, `radius`, `fill`, `stroke`, `strokeWidth`, `elevated` (rect), `cap` and `arrow` (line) | + `draw` (0–1 stroke reveal) |
 | `image` | `src` (relative to the spec), `width`, `height`, `fit` | `opacity x y scale rotate` |
 | `video` | `src` (an mp4, mov, webm or m4v relative to the spec), `width`, `height`, `fit`, `trimStart`, `trimEnd`, `offset`, `mute`, `volume`; decoded once into a frame cache (`.cache/video`, cleared by `doctor.mjs --fix cache`) so every frame is exact; its sound joins the mix unless muted | `opacity x y scale rotate` |
-| `chart` | `vegaLite` with inline `data.values`, `width`, `height` | + `reveal` (0–1 left-to-right wipe) |
+| `chart` | `vegaLite` with inline `data.values` or a bundled map (`data: { "name": "world-110m" }`), `width`, `height` | + `reveal` (0–1 left-to-right wipe) |
 | `group` | `children` (1–40 elements, up to 3 groups deep), each placed relative to the group's centre | `opacity x y scale rotate`, applied to every child at once |
 | `code` | `code`, `lang` (`text`, `javascript`, `typescript`, `json`, `bash`, `python`, `diff`, `go`, `rust`, `swift`, `yaml`, `html`, `css`, `markdown`), `width`, `height`, `fontSize` (28), `highlight` (line numbers), `diff`, `typing`; highlighted offline with shiki (JavaScript regex engine, no wasm) in the theme's colour tokens, drawn as text, never markup | `opacity x y scale rotate` (+ `value`, the characters typed, with `typing`) |
 | `lottie` | `src` (a Lottie JSON file relative to the spec, at most 4 MiB), `width`, `height`, `offset` (scene s before it plays), `speed` (0.25–4); played with lottie-web's light SVG build (no expression engine); embedded PNG, JPEG or WebP images only, no remote assets, web fonts or expressions | `opacity x y scale rotate` |
@@ -188,7 +198,8 @@ examples in [`references/examples/`](references/examples/).
 | `blocks.mjs list` / `blocks.mjs show <name>` | One line per block with its params (optional ones marked `?`); or one block's params table (type, required, default, description), where it goes on each format, and a ready-to-paste element. An unknown name exits 2 with the closest one and the list | none |
 | `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` |
 | `beats.mjs <audio>` | Beat grid of an audio file (ffmpeg; the first five minutes) → `<stem>.beats.json` for a spec's root `beats`; prints the path and `<bpm> BPM, <n> beats`; exit 1 with `no steady beat found in <file> (confidence …; needs 0.5)` | `--out <file>.json`, `--min-confidence <0-1>`, `--bpm <n>` (force the tempo), `--min-bpm <n>` / `--max-bpm <n>` (narrow the search) |
-| `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. The MP4 timing is exact | `--open` |
+| `storyboard.mjs <brief.json>` | For a clip over 20 s: a make-explainer `plan` page spec from a brief `{ "title", "seconds", "scenes": [{ "id", "beat", "seconds" }], "theme"? }`; prints the plan path and `build: node …/make-explainer/scripts/build.mjs <plan>`. Skips with one stdout line `storyboard: skipped (not needed (12s is 20s or less))`, `(make-explainer is not installed beside make-motion (looked in <path>))` or `(no one to ask (non-interactive run))`, no file, exit 0. Exit 1: the brief breaks a rule; exit 2: usage or IO | `--out <plan.json>` (required), `--non-interactive` |
+| `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. Click an element to copy its spec path and id (`scenes[1].elements[3]  id=title`) with a 2 s toast. The MP4 timing is exact | `--open` |
 | `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks, `cues` or an unmuted `video` clip with sound, followed by one `audio: … LUFS integrated, true peak … dBTP` line) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--workers <n or auto>`, `--quality <draft or final>`, `--loudness <-30 to -5 LUFS, or off>`, `--true-peak <-3 to 0 dBTP>`, `--contact-sheet`, `--batch <rows.json>` (with an `--out` template holding `{index}` or a `{var}`) |
 | `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen; text whose colour has less than 4.5:1 (3:1 for large text) contrast against the pixels behind it, a text on screen for less than 0.75 × (0.5 + 0.3 × words) seconds (a last line under 2 s is only an `info:` note), more than 3 s in which nothing changes (not in the last 3 s, not for `"hold": true` elements) and text under 28 px at 1080 on the short side for 0.5 s or more (a contrast or size finding at one moment only is a warning); with `captions`, a text or counter held in the caption zone while a caption shows and a captions layer that leaves it (measured once per caption group). An element that has left the frame entirely is gone, not clipped. It also warns on stderr (never a failure) when the first scene shows nothing at t = 0. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
 | `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Lists the video frame cache once it passes 2 GB; `--fix cache` deletes it. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover>`, `--fix <id[,id]>` |
@@ -222,6 +233,7 @@ Node.js ≥ 20, ffmpeg (≥ 4.4 for audio tracks; ≥ 5.1 for the limiter stage 
 dependencies, pinned by the lockfile, are anime.js v4 (MIT), Playwright
 (Apache-2.0), Vega, Vega-Lite and vega-interpreter (BSD-3-Clause), Ajv (MIT),
 lottie-web 5.13.0 (MIT; the page loads only its light SVG build),
+world-atlas 2.0.2 and us-atlas 3.0.1 (ISC; Natural Earth and US Census TopoJSON; the page fetches only the four files it names),
 and the theme fonts in the synced `shared/fonts` (OFL-1.1). The `@fontsource/inter` and
 `@fontsource/jetbrains-mono` npm packages are still pinned but no longer read: the
 default look now comes from `dusk`, and the `press` theme gets JetBrains Mono from `shared/fonts`.
