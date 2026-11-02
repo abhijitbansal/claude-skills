@@ -257,13 +257,14 @@ test('every block at its viral place() keeps every part inside the platform safe
       const def = BLOCKS[name];
       const { x, y } = def.place(PHONE, '9:16', def.example.side, insets);
       const params = structuredClone(def.example);
-      for (const dotted of def.assets ?? []) { // an asset param, or a dotted path to a nested one (before.src), names logo.svg
+      (def.assets ?? []).forEach((dotted, i) => { // an asset param, or a dotted path to a nested one (before.src), names logo.svg (the second asset logo-2.svg: text-behind-subject refuses a cutout that is its src)
         const keys = dotted.split('.');
         const last = keys.pop();
-        keys.reduce((o, k) => o[k], params)[last] = 'logo.svg';
-      }
+        keys.reduce((o, k) => o[k], params)[last] = i === 0 ? 'logo.svg' : 'logo-2.svg';
+      });
       const motion = viral([scene('s', Math.max(6, def.minDuration?.(params) ?? 0), [{ id: 'b', type: 'block', block: name, x, y, params }])], { captions: [{ src: 'c.srt' }] });
-      const file = specFile(motion, { 'c.srt': srt, 'logo.svg': '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="#f2a65a"/></svg>' });
+      const logo = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="#f2a65a"/></svg>';
+      const file = specFile(motion, { 'c.srt': srt, 'logo.svg': logo, 'logo-2.svg': logo });
       assert.deepEqual(validateSpec(motion, { dir: path.dirname(file) }).errors, [], name);
       const srv = await startServer({ specPath: file, mode: 'render' });
       const page = await browser.newPage({ viewport: { width: PHONE[0], height: PHONE[1] }, deviceScaleFactor: 1 });

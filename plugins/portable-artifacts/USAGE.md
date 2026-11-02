@@ -58,6 +58,7 @@ node <skill-dir>/scripts/doctor.mjs --json                  # what is missing, w
 node <skill-dir>/scripts/doctor.mjs --json --for spec.json  # make-explainer, make-scene: also the sister skills the spec needs
 node <skill-dir>/scripts/doctor.mjs --json --for check      # make-diagram, make-explainer, make-motion, make-scene: Playwright and a browser
 node <skill-dir>/scripts/doctor.mjs --json --for voiceover  # make-motion: kokoro-js, before a voiceover
+node <skill-dir>/scripts/doctor.mjs --json --for cutout     # make-motion: onnxruntime-node, before cutout.mjs
 node <skill-dir>/scripts/doctor.mjs --fix node_modules      # install the named ids (comma-separated)
 ```
 
@@ -524,7 +525,9 @@ follow), `story-beats` (hook, problem, reveal, proof, call to action), `listicle
 numbered list), `before-after-swipe`, `code-typing`, `code-diff`, `terminal-run`,
 `map-highlight`, `flow-map`, `race` (a bar chart race over periods), `comparison-split`,
 `before-after` (two numbers), `notification-stack`, `chat-thread`, `timeline`,
-`testimonial`, `lower-third-tag`, `lower-third-social` and `lower-third-ticker`: 27 in all.
+`testimonial`, `lower-third-tag`, `lower-third-social`, `lower-third-ticker` and
+`text-behind-subject` (big text behind a person: needs a cutout of the photo or clip, which
+`cutout.mjs` makes locally after a one-time install the agent asks about): 28 in all.
 A block lays itself out for
 16:9 and 9:16, takes its colours from the theme and keeps clear of the caption zone.
 `node <skill-dir>/scripts/blocks.mjs list` lists them and `show <name>` prints a block's
@@ -809,6 +812,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `check: skipped (no browser: …)` from make-diagram, make-explainer or make-motion | Expected without Playwright or Chromium; the page is still built. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci` then `npx playwright install chromium` inside the skill folder |
 | `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |
 | `kokoro-js is not installed` | `cd <skill-dir> && npm install kokoro-js@1.2.1 --no-save` (voiceover only; run it inside the skill folder so the skill's `overrides` apply; `npm ci` removes it) |
+| `onnxruntime-node is not installed` | `cd <skill-dir> && npm install onnxruntime-node@1.31.1 --no-save` (cutouts only; run it inside the skill folder so the skill's `overrides` apply; `npm ci` removes it, and so does a kokoro install: rerun `doctor --fix cutout` or `--fix kokoro`) |
 | `audio[0].src: ffmpeg cannot decode …` | The file is not a valid audio file. Re-export it as mp3 or wav |
 | `ffmpeg not found` | macOS `brew install ffmpeg`, Windows `winget install Gyan.FFmpeg` (then a new terminal), Linux `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` |
 | `remote data is not allowed` / `not allowed — external URLs are never fetched` | Charts must carry their data inline (motion) or come from a SQL query (dashboard) |

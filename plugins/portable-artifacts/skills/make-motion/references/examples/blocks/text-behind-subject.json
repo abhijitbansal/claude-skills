@@ -1,0 +1,24 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "text-behind-subject",
+      "duration": 6,
+      "elements": [
+        {
+          "id": "subject",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "text-behind-subject",
+          "params": {
+            "src": "portrait.jpg",
+            "cutout": "portrait-cutout.png",
+            "text": "UNSTOPPABLE"
+          }
+        }
+      ]
+    }
+  ]
+}

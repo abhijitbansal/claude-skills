@@ -93,7 +93,23 @@ test('requirementsFor: rendering always needs ffmpeg and a required browser; ALL
   const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
   assert.deepEqual(idsOf(requirementsFor(undefined)), ['node', 'node_modules', 'ffmpeg', 'chromium', 'builder_agent']);
   assert.equal(requirementsFor(undefined)[3].required, true);
-  assert.deepEqual(idsOf(requirementsFor(ALL)), ['node', 'node_modules', 'ffmpeg', 'chromium', 'kokoro', 'builder_agent']);
+  assert.deepEqual(idsOf(requirementsFor(ALL)), ['node', 'node_modules', 'ffmpeg', 'chromium', 'kokoro', 'cutout', 'builder_agent']);
+});
+
+test('--for cutout asks for onnxruntime-node (optional, so exit 0), plain and the other targets do not; a fresh copy reports it missing', async () => {
+  const requirementsFor = await loadRequirements();
+  assert.deepEqual(idsOf(requirementsFor('cutout')), ['node', 'node_modules', 'ffmpeg', 'chromium', 'cutout', 'builder_agent'], 'a cutout decodes and encodes through the browser and ffmpeg');
+  assert.equal(requirementsFor('cutout').find((r) => r.id === 'cutout').required, false);
+  assert.equal(idsOf(requirementsFor(undefined)).includes('cutout'), false);
+  assert.equal(idsOf(requirementsFor('voiceover')).includes('cutout'), false);
+  const ids = (args) => JSON.parse(run(SKILL, ['--json', ...args]).stdout).missing.map((m) => m.id);
+  const hasOnnx = fs.existsSync(path.join(SKILL, 'node_modules/onnxruntime-node'));
+  assert.equal(ids(['--for', 'cutout']).includes('cutout'), !hasOnnx);
+  assert.equal(ids([]).includes('cutout'), false);
+  const fresh = JSON.parse(run(freshCopy(), ['--json', '--for', 'cutout']).stdout).missing.find((m) => m.id === 'cutout');
+  assert.ok(fresh, 'a copy with no node_modules reports cutout missing');
+  assert.match(fresh.fix.auto, /npm install onnxruntime-node@\d+\.\d+\.\d+ --no-save$/);
+  assert.match(fresh.why, /MODNet/);
 });
 
 test('install hints name the doctor with its real path and the missing item id', async () => {

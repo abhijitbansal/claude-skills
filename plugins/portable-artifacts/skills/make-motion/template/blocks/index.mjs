@@ -56,6 +56,7 @@ import testimonial from './testimonial.mjs';
 import lowerThirdTag from './lower-third-tag.mjs';
 import lowerThirdSocial from './lower-third-social.mjs';
 import lowerThirdTicker from './lower-third-ticker.mjs';
+import textBehindSubject from './text-behind-subject.mjs';
 
 export const BLOCKS = Object.freeze({
   'title-card': titleCard,
@@ -85,6 +86,7 @@ export const BLOCKS = Object.freeze({
   'lower-third-tag': lowerThirdTag,
   'lower-third-social': lowerThirdSocial,
   'lower-third-ticker': lowerThirdTicker,
+  'text-behind-subject': textBehindSubject,
 });
 export const BLOCK_NAMES = Object.freeze(Object.keys(BLOCKS));
 

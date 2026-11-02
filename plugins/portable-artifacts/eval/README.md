@@ -110,6 +110,7 @@ The benchmark prompts read files from `fixtures/data/`, which every run copies t
 | `clip.mp4` | 2 s, 320x180, SMPTE bars, silent (committed, a few KB) |
 | `music.wav` | 10 s mono 8 kHz click track at 120 BPM: a 20 ms 1 kHz burst every 0.5 s on silence, so beat detection has onsets |
 | `rows.json` | 3 rows of `{ "name", "city", "count" }` for the templated-batch prompts |
+| `portrait.jpg`, `portrait-cutout.png` | a drawn portrait (1280x720) and its cutout, an RGBA PNG made by make-motion's `cutout.mjs`; copies of `references/examples/blocks/portrait.jpg` and `portrait-cutout.png`. The `text-behind-subject` prompt names both, so the eval installs nothing |
 
 `music.wav` is `writeWav` from the make-motion test helpers with
 `{ seconds: 10, sampleRate: 8000, clickBpm: 120 }`, and `clip.mp4` is

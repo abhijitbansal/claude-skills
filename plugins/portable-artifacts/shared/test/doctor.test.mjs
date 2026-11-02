@@ -863,3 +863,55 @@ test("builderAgent: --fix with no host folder has no automatic fix and runs noth
   assert.match(res[0].manual, /install\.mjs copilot --agents-only/);
   assert.doesNotMatch(res[0].manual, /this skill's own writer/);
 });
+
+// --- cutout: onnxruntime-node for make-motion's cutout.mjs (installed on demand, like kokoro) ---
+
+test('CUTOUT_PIN is an exact onnxruntime-node version, and the cutout fix installs it from inside the skill folder (no --prefix)', async () => {
+  const { CUTOUT_PIN, cutout } = await import('../doctor.mjs');
+  assert.match(CUTOUT_PIN, /^onnxruntime-node@\d+\.\d+\.\d+$/);
+  const r = await diagnose([cutout()], ctx({ platform: 'linux' }));
+  assert.equal(r.missing[0].id, 'cutout');
+  assert.equal(r.missing[0].fix.auto, `cd /s/make-motion && npm install ${CUTOUT_PIN} --no-save`);
+  assert.doesNotMatch(r.missing[0].fix.manual.linux, /--prefix/);
+  assert.equal(r.missing[0].required, false, 'cutouts are opt-in');
+  assert.equal(r.ok, true);
+  assert.match(r.missing[0].size, /25 MB/, 'the why/size name the model download');
+});
+
+test('cutout is missing on a fresh copy and present once onnxruntime-node is installed', async () => {
+  const { cutout } = await import('../doctor.mjs');
+  assert.equal((await diagnose([cutout()], ctx())).missing.length, 1);
+  assert.deepEqual(await diagnose([cutout()], ctx({ exists: () => true })), { ok: true, missing: [] });
+});
+
+test('cutout installed before the overrides existed counts as missing until reinstalled, and node_modules stays green', async () => {
+  const files = {
+    '/s/make-motion/package.json': JSON.stringify({ overrides: { 'global-agent': '4.1.3', 'fast-uri': '3.1.9' } }),
+    '/s/make-motion/package-lock.json': LOCK,
+    '/s/make-motion/node_modules/global-agent/package.json': JSON.stringify({ version: '3.0.0' }),
+    '/s/make-motion/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.9' }),
+  };
+  const readFile = (p) => { if (!(p in files)) throw new Error('ENOENT'); return files[p]; };
+  const { cutout } = await import('../doctor.mjs');
+  const r = await diagnose([nodeModules({ omitDev: false }), cutout()], ctx({ exists: () => true, readFile }));
+  assert.deepEqual(r.missing.map((m) => m.id), ['cutout']);
+  assert.match(r.missing[0].why, /reinstall to get the patched global-agent pinned/);
+  files['/s/make-motion/node_modules/global-agent/package.json'] = JSON.stringify({ version: '4.1.3' });
+  assert.deepEqual(await diagnose([cutout()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
+});
+
+test('--fix cutout runs the pinned install in the skill folder, after node_modules and before nothing else it depends on', async () => {
+  const { CUTOUT_PIN, cutout } = await import('../doctor.mjs');
+  const ran = [];
+  const res = await runFixes(['cutout', 'node_modules'], [cutout(), nodeModules()], ctx({ platform: 'linux', exists: () => true }), (cmd, args, o) => { ran.push(`${cmd} ${args.join(' ')} @${o.cwd ?? ''}`); return { status: 0 }; });
+  assert.deepEqual(res.map((r) => r.id), ['node_modules', 'cutout']);
+  assert.deepEqual(ran, ['npm ci --omit=dev --prefix /s/make-motion @', `npm install ${CUTOUT_PIN} --no-save @/s/make-motion`]);
+});
+
+test('the node_modules reinstall note names a cutout install when the skill can restore it', async () => {
+  const stale = { '/s/x/package.json': JSON.stringify({ overrides: { 'fast-uri': '3.1.9' } }), '/s/x/package-lock.json': LOCK, '/s/x/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.8' }) };
+  const readFile = (p) => { if (!(p in stale)) throw new Error('ENOENT'); return stale[p]; };
+  const note = async (opts) => (await diagnose([nodeModules(opts)], ctx({ exists: () => true, readFile, skillDir: '/s/x' }))).missing[0].notes;
+  assert.match(await note({ omitDev: false, restore: ['kokoro', 'cutout'] }), /removes any voiceover install \(kokoro-js\) and any cutout install \(onnxruntime-node\); restore with --fix kokoro and --fix cutout$/);
+  assert.match(await note({ omitDev: false, restore: ['cutout'] }), /removes any cutout install \(onnxruntime-node\); restore with --fix cutout$/);
+});

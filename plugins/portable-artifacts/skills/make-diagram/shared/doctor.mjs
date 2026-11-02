@@ -11,6 +11,8 @@ import { parseCli, UsageError, exitUsage } from './cli.mjs';
 
 const REPO = 'abhijitbansal/claude-skills';
 export const KOKORO_PIN = 'kokoro-js@1.2.1';
+// make-motion's cutout.mjs runs MODNet on this (MIT); installed on demand like kokoro, never by `npm ci`.
+export const CUTOUT_PIN = 'onnxruntime-node@1.31.1';
 const SKILLS_CLI = 'skills@1.7.2';
 const USER_SCOPE_DIRS = ['.claude', '.agents', '.copilot', '.gemini'];
 const PROJECT_SCOPE_DIRS = [...USER_SCOPE_DIRS, '.github'];
@@ -86,7 +88,7 @@ export function render(steps, platform) {
 const isExec = (ctx, p) => (ctx.isExecutable ? ctx.isExecutable(p) : ctx.exists(p));
 
 // Fix order: lower rank first. Others (unknown ids) rank last, keeping list order.
-const RANK = { node: 0, nodeModules: 1, devDeps: 2, sister: 3, ffmpeg: 4, chromium: 5, kokoro: 6, other: 7 };
+const RANK = { node: 0, nodeModules: 1, devDeps: 2, sister: 3, ffmpeg: 4, chromium: 5, kokoro: 6, cutout: 7, other: 8 };
 
 export function nodeVersion(min = 20) {
   return {
@@ -102,9 +104,13 @@ export function nodeVersion(min = 20) {
 }
 
 // What `npm ci` removes from a node_modules that already exists, and the --fix ids that put it back.
-// restore: the --fix ids this skill has for that (dev_deps, kokoro); omitDev: the reinstall drops dev packages.
+// restore: the --fix ids this skill has for that (dev_deps, kokoro, cutout); omitDev: the reinstall drops dev packages.
 function reinstallNote({ omitDev, restore, dir }) {
-  const removes = [...(omitDev ? ['the dev packages'] : []), ...(restore.includes('kokoro') ? ['any voiceover install (kokoro-js)'] : [])];
+  const removes = [
+    ...(omitDev ? ['the dev packages'] : []),
+    ...(restore.includes('kokoro') ? ['any voiceover install (kokoro-js)'] : []),
+    ...(restore.includes('cutout') ? ['any cutout install (onnxruntime-node)'] : []),
+  ];
   if (removes.length === 0) return undefined;
   const ids = restore.map((id) => `--fix ${id}`);
   const back = ids.length > 0 ? `restore with ${ids.join(' and ')}` : `restore the dev packages with npm ci --prefix ${dir} (this skill's doctor has no --fix id for them)`;
@@ -390,6 +396,30 @@ export function kokoro() {
       // not to on macOS with npm 10.8.2; running from the folder works either way.
       const step = { argv: ['npm', 'install', KOKORO_PIN, '--no-save'], cwd: ctx.skillDir };
       return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 90 MB voice model downloads on first use; a later `--fix node_modules` (npm ci) removes kokoro again, so rerun `--fix kokoro`' };
+    },
+    needsSudo: () => false,
+  };
+}
+
+// make-motion's cutout.mjs: onnxruntime-node (the MODNet weights, about 25 MB, download on first use). `npm install … --no-save`
+// removes other packages that were added the same way (kokoro-js), so after a cutout install rerun `--fix kokoro` if you
+// need the voiceover. A pre-pin install counts as missing like kokoro's does (the 'extra' overrides: not in the lockfile).
+export function cutout() {
+  return {
+    id: 'cutout',
+    rank: RANK.cutout,
+    needsNodeModules: true,
+    why: (ctx) => {
+      const stale = staleOverrides(ctx, 'extra');
+      return stale.length > 0 ? `cuts a person out of a photo or clip (text-behind-subject) with MODNet; reinstall to get the patched ${stale.join(', ')} pinned in package.json "overrides"` : 'cuts a person out of a photo or clip (text-behind-subject) with MODNet, locally';
+    },
+    required: false,
+    size: '≈300 MB, plus a 25 MB model on first use',
+    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'onnxruntime-node')) && staleOverrides(ctx, 'extra').length === 0,
+    fix: (ctx) => {
+      // From inside the skill folder, like kokoro, so npm applies the skill's package.json "overrides".
+      const step = { argv: ['npm', 'install', CUTOUT_PIN, '--no-save'], cwd: ctx.skillDir };
+      return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 25 MB MODNet model downloads on first use; npm removes other --no-save installs (rerun `--fix kokoro` for the voiceover), and a later `--fix node_modules` (npm ci) removes this again, so rerun `--fix cutout`' };
     },
     needsSudo: () => false,
   };

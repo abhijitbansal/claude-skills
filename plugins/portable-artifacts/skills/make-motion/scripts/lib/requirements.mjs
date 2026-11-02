@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { ALL, nodeVersion, nodeModules, ffmpeg, browser, kokoro, builderAgent, render } from '../../shared/doctor.mjs';
+import { ALL, nodeVersion, nodeModules, ffmpeg, browser, kokoro, cutout, builderAgent, render } from '../../shared/doctor.mjs';
 
 export const CACHE_LIMIT_BYTES = 2 * 1024 ** 3;
 const GB = 1024 ** 3;
@@ -60,20 +60,21 @@ export function loudnessLimiter() {
   };
 }
 
-// Rendering always needs ffmpeg and a browser; kokoro only for a voiceover (or --fix, which may install any). beats.mjs
-// needs ffmpeg alone, so every target but `check` covers it (a spec that names a beats file needs nothing extra to check).
-// check.mjs needs only the browser (it captures no video), so `check` leaves ffmpeg and kokoro out. A spec with a video
+// Rendering always needs ffmpeg and a browser; kokoro only for a voiceover, onnxruntime-node (cutout) only for cutout.mjs (both
+// or --fix, which may install any). beats.mjs needs ffmpeg alone, so every target but `check` covers it (a spec that names a beats file needs nothing extra to check).
+// check.mjs needs only the browser (it captures no video), so `check` leaves ffmpeg, kokoro and cutout out. A spec with a video
 // element is the exception (check decodes its frames with ffmpeg); `--for <spec.json>` asks for ffmpeg.
-export const targets = ['check', 'voiceover'];
+export const targets = ['check', 'voiceover', 'cutout'];
 // Optional in every target: the cheap-model agent file the SKILL.md may hand the build to.
 export const requirementsFor = (target) => (target === 'check'
-  ? [nodeVersion(20), nodeModules({ omitDev: false, restore: ['kokoro'] }), browser({ required: true }), builderAgent()]
+  ? [nodeVersion(20), nodeModules({ omitDev: false, restore: ['kokoro', 'cutout'] }), browser({ required: true }), builderAgent()]
   : [
     nodeVersion(20),
-    nodeModules({ omitDev: false, restore: ['kokoro'] }),
+    nodeModules({ omitDev: false, restore: ['kokoro', 'cutout'] }),
     ffmpeg(),
     browser({ required: true }),
     ...(target === 'voiceover' || target === ALL ? [kokoro()] : []),
+    ...(target === 'cutout' || target === ALL ? [cutout()] : []),
     builderAgent(),
   ]);
 

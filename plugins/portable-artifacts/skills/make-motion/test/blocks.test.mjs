@@ -164,8 +164,8 @@ for (const name of names) {
 
 // ---- expansion ---------------------------------------------------------------------------------------------------------
 
-test('BLOCKS has 27 entries after Phase 3', () => {
-  assert.equal(BLOCK_NAMES.length, 27, BLOCK_NAMES.join(' '));
+test('BLOCKS has 28 entries after Phase 4', () => {
+  assert.equal(BLOCK_NAMES.length, 28, BLOCK_NAMES.join(' '));
 });
 
 test('expandBlocks leaves a spec without blocks deepEqual, and never mutates its input', () => {
@@ -434,7 +434,7 @@ const CAPTION_SECONDS = 6;
 // A temp folder holding the spec (and the captions file and logo it names): the spec file's path.
 function captionedSpec(motion) {
   const dir = mkdtempSync(path.join(tmpdir(), 'block-cc-'));
-  for (const file of ['swipe-before.png', 'swipe-after.png', 'avatar.svg']) copyFileSync(path.join(EXAMPLES, file), path.join(dir, file)); // before-after-swipe's example images, testimonial's avatar
+  for (const file of ['swipe-before.png', 'swipe-after.png', 'avatar.svg', 'portrait.jpg', 'portrait-cutout.png']) copyFileSync(path.join(EXAMPLES, file), path.join(dir, file)); // before-after-swipe's example images, testimonial's avatar, text-behind-subject's pair
   writeFileSync(path.join(dir, 'c.srt'), SRT);
   writeFileSync(path.join(dir, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="#f2a65a"/></svg>');
   const file = path.join(dir, 'm.json');

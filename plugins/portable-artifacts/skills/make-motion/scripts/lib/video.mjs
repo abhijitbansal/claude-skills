@@ -15,6 +15,9 @@ const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 export const CACHE_ROOT = path.join(SKILL_ROOT, '.cache/video'); // gitignored; doctor --fix cache clears it
 export { VIDEO_EXTENSIONS } from '../../template/media.mjs';
 const ALPHA_PIX_FMT = /^(yuva|rgba|argb|bgra|gbrap)/;
+// A VP9 stream with alpha says pix_fmt yuv420p and carries the alpha as side data (tag alpha_mode=1) that only libvpx decodes:
+// ffmpeg's own vp9 decoder drops it. cutout.mjs writes these.
+const VP9_ALPHA_DECODER = 'libvpx-vp9';
 const DONE = 'done.json';
 const CACHE_VERSION = 1; // salted into every cache key; bump it when the decode or the folder layout changes
 const MS = 1000;
@@ -32,8 +35,9 @@ const rate = (text) => {
 };
 
 /**
- * `{ duration, width, height, fps, hasAudio, hasAlpha }` of `file`'s first video stream, or `{ error }` when ffprobe
- * cannot read it or it has no video. `duration` is the video stream's (else the container's), rounded to ms.
+ * `{ duration, width, height, fps, hasAudio, hasAlpha, alphaDecoder? }` of `file`'s first video stream, or `{ error }` when
+ * ffprobe cannot read it or it has no video. `duration` is the video stream's (else the container's), rounded to ms.
+ * `alphaDecoder` is the ffmpeg decoder to name (`-c:v`) to read the alpha of a stream that needs one, else absent.
  */
 // ffprobe opens the clip through the file protocol only: no playlist renamed to .mp4 can make it fetch a URL.
 export const probeArgs = (file) => ['-v', 'error', ...PROTOCOL_WHITELIST, '-show_streams', '-show_format', '-of', 'json', file];
@@ -48,13 +52,15 @@ export function probeVideo(ffprobe, file) {
   if (!video) return { error: 'no video stream' };
   const duration = Number(video.duration ?? info.format?.duration);
   if (!Number.isFinite(duration) || duration <= 0) return { error: 'unknown duration' };
+  const vp9Alpha = video.codec_name === 'vp9' && video.tags?.alpha_mode === '1';
   return {
     duration: round3(duration),
     width: video.width,
     height: video.height,
     fps: rate(video.avg_frame_rate) || rate(video.r_frame_rate),
     hasAudio: streams.some((s) => s.codec_type === 'audio'),
-    hasAlpha: ALPHA_PIX_FMT.test(video.pix_fmt ?? ''),
+    hasAlpha: vp9Alpha || ALPHA_PIX_FMT.test(video.pix_fmt ?? ''),
+    ...(vp9Alpha ? { alphaDecoder: VP9_ALPHA_DECODER } : {}),
   };
 }
 
@@ -90,10 +96,10 @@ export function ffmpegVersion(ffmpeg) {
   return versions.get(ffmpeg);
 }
 
-export function decodeArgs({ file, trimStart, trimEnd, fps, width, height, fit, alpha, dir }) {
+export function decodeArgs({ file, trimStart, trimEnd, fps, width, height, fit, alpha, dir, decoder }) {
   const scale = FIT_SCALE[fit] ? `scale=${width}:${height}:force_original_aspect_ratio=${FIT_SCALE[fit]}` : `scale=${width}:${height}`;
   const output = alpha ? [path.join(dir, '%06d.png')] : ['-q:v', '1', path.join(dir, '%06d.jpg')];
-  return ['-v', 'error', '-y', '-ss', String(trimStart), '-to', String(trimEnd), ...fileInput(file), '-vf', `fps=${fps},${scale}`, ...output];
+  return ['-v', 'error', '-y', '-ss', String(trimStart), '-to', String(trimEnd), ...(decoder ? ['-c:v', decoder] : []), ...fileInput(file), '-vf', `fps=${fps},${scale}`, ...output];
 }
 
 const frameName = (n, ext) => `${String(n).padStart(6, '0')}.${ext}`;
@@ -193,10 +199,10 @@ export function prepareVideo(spec, dir, ffmpeg, ffprobe, fps) {
   return Object.fromEntries(videoElements(spec).map(({ el }) => {
     const { file, info, trimStart, trimEnd } = clipOf(el, dir, ffprobe);
     const opts = { trimStart, trimEnd, fps, width: Math.round(el.width), height: Math.round(el.height), fit: el.fit ?? 'contain', alpha: info.hasAlpha };
-    const key = frameCacheKey({ sha256: fileSha256(file), ffmpegVersion: ffmpegVersion(ffmpeg), ...opts });
+    const key = frameCacheKey({ sha256: fileSha256(file), ffmpegVersion: ffmpegVersion(ffmpeg), ...opts }); // the decoder follows from the file, which the key hashes
     const cacheDir = path.join(CACHE_ROOT, key);
     const ext = opts.alpha ? 'png' : 'jpg';
-    const count = readCache(cacheDir, ext)?.count ?? decodeFrames(ffmpeg, { file, dir: cacheDir, ...opts }).count;
+    const count = readCache(cacheDir, ext)?.count ?? decodeFrames(ffmpeg, { file, dir: cacheDir, ...opts, decoder: info.alphaDecoder }).count;
     return [el.id, { key, count, fps, ext }];
   }));
 }
