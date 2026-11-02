@@ -39,6 +39,10 @@ The repo-wide `adapters/install.sh codex|copilot` symlinks *every* skill in
 this repo, these five included. Only `install.mjs` also runs `npm ci`, supports
 project scope and writes the Gemini commands.
 
+After updating an existing install, refresh dependencies with `npm ci` inside each installed skill folder; updating
+the skill files alone leaves existing dependencies in place. See [Updating an existing install](README.md#updating-an-existing-install)
+for the smaller install option and restoring optional voiceover afterward.
+
 For **make-motion**, also run the one-time `npx playwright install chromium`
 inside the skill folder (about 150 MB), and make sure `ffmpeg` is on your
 `PATH`. Agents ask before downloading Chromium.

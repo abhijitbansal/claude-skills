@@ -101,17 +101,46 @@ export function nodeVersion(min = 20) {
   };
 }
 
+// fast-uri had a security update in every skill. A linked/file-only update must
+// also offer npm ci when an existing install differs from the new lockfile.
+function staleFastUri(ctx) {
+  const P = pp(ctx);
+  let wanted;
+  try {
+    wanted = JSON.parse(ctx.readFile(P.join(ctx.skillDir, 'package-lock.json'))).packages?.['node_modules/fast-uri']?.version;
+  } catch {
+    return false;
+  }
+  if (typeof wanted !== 'string') return false;
+  try {
+    return JSON.parse(ctx.readFile(P.join(ctx.skillDir, 'node_modules/fast-uri/package.json'))).version !== wanted;
+  } catch {
+    return true;
+  }
+}
+
 export function nodeModules({ omitDev = true } = {}) {
   return {
     id: 'node_modules',
     rank: RANK.nodeModules,
-    why: "installs the skill's own npm packages",
+    why: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) && staleFastUri(ctx)
+      ? "refreshes fast-uri to match this skill's lockfile" : "installs the skill's own npm packages",
     required: true,
     size: '≈30–60 MB',
-    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')),
+    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) && !staleFastUri(ctx),
     fix: (ctx) => {
-      const argv = ['npm', 'ci', ...(omitDev ? ['--omit=dev'] : []), '--prefix', ctx.skillDir];
-      return { auto: [argv], manual: manualAll(render([argv], ctx.platform)) };
+      const P = pp(ctx);
+      const installed = ctx.exists(P.join(ctx.skillDir, 'node_modules'));
+      const stale = installed && staleFastUri(ctx);
+      // A stale install that already has dev packages (a dev checkout or --link install) keeps them.
+      const keepDev = stale && ctx.exists(P.join(ctx.skillDir, 'node_modules', 'playwright'));
+      const argv = ['npm', 'ci', ...(omitDev && !keepDev ? ['--omit=dev'] : []), '--prefix', ctx.skillDir];
+      const fix = { auto: [argv], manual: manualAll(render([argv], ctx.platform)) };
+      if (stale) fix.stale = true;
+      if (stale && ctx.exists(P.join(ctx.skillDir, 'node_modules', 'kokoro-js'))) {
+        fix.notes = 'npm ci removes kokoro-js (the voiceover engine); rerun `--fix kokoro` afterwards';
+      }
+      return fix;
     },
     needsSudo: () => false,
   };
@@ -440,6 +469,7 @@ export async function diagnose(requirements, ctx) {
       needsSudo: r.needsSudo(ctx),
     };
     if (fix.notes) entry.notes = fix.notes;
+    if (fix.stale) entry.stale = true;
     if (fix.sudoHint) entry.sudoHint = fix.sudoHint;
     missing.push(entry);
   }
@@ -553,7 +583,7 @@ function describe(m, platform) {
   const cmd = m.fix.auto ?? m.fix.manual[platform] ?? m.fix.manual.linux;
   const sudo = m.needsSudo ? ' (needs sudo: run it yourself)' : '';
   const notes = m.notes ? ` Note: ${m.notes}.` : '';
-  return `missing (${m.required ? 'required' : 'optional'}): ${m.id} — ${m.why} (${m.size}). Run${platform === 'win32' ? ' (cmd.exe)' : ''}: ${cmd}${sudo}${notes}`;
+  return `${m.stale ? 'out of date' : 'missing'} (${m.required ? 'required' : 'optional'}): ${m.id} — ${m.why} (${m.size}). Run${platform === 'win32' ? ' (cmd.exe)' : ''}: ${cmd}${sudo}${notes}`;
 }
 
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];

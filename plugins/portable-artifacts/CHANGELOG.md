@@ -4,6 +4,24 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
+## [1.0.1] - 2026-11-02
+
+### Security
+
+- Update `fast-uri` from 3.1.8 to 3.1.9 in all five skill lockfiles, within Ajv's existing dependency range. This patches
+  URI parsing advisories, including [GHSA-w74x-v6f9-j3xg](https://github.com/advisories/GHSA-w74x-v6f9-j3xg).
+  The optional voiceover dependency audit uses the updated make-motion lockfile too.
+- Existing installs need a dependency refresh after updating the skill files: run `npm ci` inside each installed skill
+  folder (`npm ci --omit=dev` is enough for make-dashboard, make-diagram, make-explainer and make-scene).
+  This removes optional kokoro; if you use voiceover, run `node scripts/doctor.mjs --fix kokoro` from make-motion afterward.
+- Every skill's doctor flags an installed `fast-uri` that differs from its lockfile and offers `--fix node_modules`,
+  so updating skill files without refreshing old dependencies is detected during the normal doctor flow.
+
+### Fixed
+
+- make-motion now waits for an in-flight browser launch during interrupt cleanup, closes that browser, and avoids
+  opening a page after shutdown starts. Previously an interrupt during launch could leave Playwright artifacts behind.
+
 ## [1.0.0] - 2026-10-22
 
 Numbers that stay on one line, cheaper-model routing on GitHub Copilot and Codex, and a plan preset for make-explainer.

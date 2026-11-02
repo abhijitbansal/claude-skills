@@ -113,6 +113,52 @@ test('nodeModules: omitDev false drops --omit=dev; present dir is fine', async (
   assert.equal(c.ok, true);
 });
 
+test('nodeModules offers a locked dependency refresh for stale fast-uri in every skill', async () => {
+  for (const skill of ['make-dashboard', 'make-motion', 'make-diagram', 'make-scene', 'make-explainer']) {
+    const skillDir = `/s/${skill}`;
+    const files = {
+      [`${skillDir}/package-lock.json`]: JSON.stringify({ packages: { 'node_modules/fast-uri': { version: '3.1.9' } } }),
+      [`${skillDir}/node_modules/fast-uri/package.json`]: JSON.stringify({ version: '3.1.8' }),
+    };
+    const context = ctx({ skillDir, exists: (p) => !/\/node_modules\/(playwright|kokoro-js)$/.test(p), readFile: (p) => files[p] });
+    const requirement = nodeModules({ omitDev: skill !== 'make-motion' });
+    const stale = await diagnose([requirement], context);
+    assert.equal(stale.ok, false, skill);
+    assert.equal(stale.missing[0].id, 'node_modules');
+    assert.match(stale.missing[0].why, /fast-uri.*lockfile/);
+    assert.equal(stale.missing[0].fix.auto, `npm ci${skill === 'make-motion' ? '' : ' --omit=dev'} --prefix ${skillDir}`);
+    files[`${skillDir}/node_modules/fast-uri/package.json`] = JSON.stringify({ version: '3.1.9' });
+    assert.deepEqual(await diagnose([requirement], context), { ok: true, missing: [] });
+  }
+});
+
+test('nodeModules: a stale install that has playwright keeps dev packages; kokoro-js gets a removal note', async () => {
+  const files = {
+    '/s/make-diagram/package-lock.json': JSON.stringify({ packages: { 'node_modules/fast-uri': { version: '3.1.9' } } }),
+    '/s/make-diagram/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.8' }),
+  };
+  const withDev = ctx({ skillDir: '/s/make-diagram', exists: () => true, readFile: (p) => files[p] });
+  const dev = (await diagnose([nodeModules()], withDev)).missing[0];
+  assert.equal(dev.fix.auto, 'npm ci --prefix /s/make-diagram', 'no --omit=dev when playwright is installed');
+  assert.match(dev.notes, /removes kokoro-js.*--fix kokoro/);
+  assert.equal(dev.stale, true);
+  const slim = ctx({ skillDir: '/s/make-diagram', exists: (p) => !/\/node_modules\/(playwright|kokoro-js)$/.test(p), readFile: (p) => files[p] });
+  const prod = (await diagnose([nodeModules()], slim)).missing[0];
+  assert.equal(prod.fix.auto, 'npm ci --omit=dev --prefix /s/make-diagram');
+  assert.equal(prod.notes, undefined);
+  const stale = await runMain([], mainOpts({ requirementsFor: () => [nodeModules()] }), { ctx: withDev });
+  assert.match(stale.out, /out of date \(required\): node_modules/);
+  assert.doesNotMatch(stale.out, /missing \(required\)/);
+});
+
+test('nodeModules requires refresh when a locked fast-uri install is missing or unreadable', async () => {
+  for (const installed of [undefined, '{broken json']) {
+    const context = ctx({ exists: () => true, readFile: (p) => p.endsWith('package-lock.json')
+      ? JSON.stringify({ packages: { 'node_modules/fast-uri': { version: '3.1.9' } } }) : installed });
+    assert.equal((await diagnose([nodeModules()], context)).ok, false);
+  }
+});
+
 test('sister skill: present when sibling dir has SKILL.md; fix chains npm ci, project scope has no -g', async () => {
   const dir = '/p/.agents/skills/make-explainer';
   const base = { skillDir: dir, cwd: '/p', homedir: '/h' };
