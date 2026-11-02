@@ -4,7 +4,8 @@ import type { TestRun } from '../types'
 import { lineParts } from '../hooks/format'
 import { cases } from './cartoon-captures'
 
-// Copied into a disposable plugin's tests by run_cartoon.py. Real producer
+// Runs only after run_cartoon.py copies it next to cartoon-captures and ../types
+// in a disposable plugin; it does not run in place. Real producer
 // outputs are replayed; this models Bash's envelope, not a live host session.
 const ROOT = '/synthetic/cartoon-compat'
 const SNAPSHOT = {

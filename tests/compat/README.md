@@ -7,7 +7,7 @@ or a native MCP integration. No model calls are made.
 
 ## Run
 
-Prerequisites: Python 3.9+, a reviewed local Cartoon executable, and an installed
+Prerequisites: Python 3.9+, a reviewed local Cartoon executable (minimum version 0.7.0), and an installed
 Claude Code CLI supporting the offline `plugin test` command. Nothing is downloaded
 or installed by this script. Review/select the binary before computing its hash;
 a hash identifies bytes, not a trusted builder or approval authority.
@@ -68,16 +68,12 @@ before the fix and pass afterward. Both formats have coverage; malformed and
 conflicting reports must not fall through to passing raw counts.
 
 The CLI hash is recorded per run because binaries differ by build and platform.
-The 2026-11-02 qualification used macOS arm64, Claude Code 2.1.306, and binary
-SHA-256 `608410347f79b71dcbb9c281eedb4d3946badf49c8a1c45d5a8f98f91846bc43`.
 Cross-platform behavior and live host delivery require separate qualification.
 
-Verification on 2026-11-02: all eight producer scenarios matched their OS exits;
-250 Test Board tests (including ten replay tests) and 86 Session Compass tests
-passed. The replay source observations are modeled collector responses, not real
-filesystem captures. Separately, 60 Python collector/shell tests and 10 runner
-guardrails passed. Both plugin validators passed with their existing icon warnings. No independent review, standalone TypeScript check, full
-repository test matrix or live UI qualification is claimed.
+Each run's retained `plugin-tests.log` is the verification record; no pass counts
+are kept here because they go stale. The replay source observations are modeled collector
+responses, not real filesystem captures. No independent review, standalone TypeScript
+check, full repository test matrix or live UI qualification is claimed.
 
 The Bash envelope is modeled from the consumer's existing host contract: failed
 calls carry a first-line host exit code; successful calls provide no structured
