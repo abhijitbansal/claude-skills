@@ -101,7 +101,7 @@ Settings live in `~/.copilot/cache-clock/config.json` and apply to every session
 (`CACHE_CLOCK_HOME` moves that directory). The heads-up has its own switch: it keeps
 running under `guard off` until you set `headsup off`.
 
-The card, from a real resumed session:
+Historical card, captured before model-switch accounting was added:
 
 ```
 cache-clock · Claude Sonnet 5.5
@@ -116,24 +116,45 @@ cache-clock · Claude Sonnet 5.5
 
 - **The clock.** Every main-agent model call emits `assistant.usage` with
   `cacheReadTokens`, `cacheWriteTokens`, `cacheExpiresAt`, `cacheTtlSeconds` and
-  per-token prices. Cache Clock keeps the last call per model. Nothing is guessed: the
-  TTL, the expiry and the prices all come from Copilot.
-- **The guard.** `onUserPromptSubmitted` checks the last model's clock. If the cache has
+  per-token prices. Cache Clock keeps cache observations per model and the latest
+  conversation context separately. TTL, expiry and prices come from Copilot; context
+  size and possible rewrite cost are estimates, not cache-reuse guarantees.
+- **Selected model.** At startup, before a prompt, and on status, a bounded (250 ms)
+  `session.rpc.model.getCurrent()` lookup resolves the selection. Main-agent
+  `session.model_change` and `session.model_deselected` events keep it current between
+  lookups; a newer event wins over an older in-flight reply. Missing/failed lookups
+  keep the last known selection (only a reply or an event changes it), so a switch with
+  neither can leave a stale selection priced. Older hosts without the RPC can use
+  explicit selection from the session log's start/resume snapshots and model-change
+  events; usage alone is not treated as a selection.
+- **The guard.** `onUserPromptSubmitted` checks the selected model's clock. If the cache has
   expired and rewriting it would cost at least the threshold more than reading it, the
   hook asks with `session.ui.select` and waits for the answer. To stop the send it calls
   `session.abort()` without awaiting it (awaiting inside the hook deadlocks), so no model
   call happens. The episode is remembered per session in
-  `~/.copilot/cache-clock/refused.json` for a week, even across processes
+  `~/.copilot/cache-clock/refusals/<session-hash>.json` for a week, even across processes
   (`copilot --resume … -p`). Slash commands and `!` shell escapes are never guarded. A
   message queued while a turn is running only gets the note: stopping it then would
   cancel the running turn. After a compaction the next send is exempt, since the context
   was rewritten anyway.
+- **Model switches.** The destination model's previous clock cannot prove that it cached
+  the current conversation. The card says unknown; with destination prices previously
+  observed in this session, the guard asks about a *possible* rewrite of the latest
+  context. Without those prices it warns and allows the send, never borrows the old
+  model's price. A confirmation is rechecked before sending and held if the selection
+  changed. Concurrent prompts share one check/question. A turn that starts while the
+  question is open is not aborted by its answer.
 - **The heads-up.** One ephemeral line before expiry, only when a cold send's extra cost
   is at least the threshold and no turn is running. The lead is the smaller of your
   setting and a fifth of the TTL, so a 5-minute Claude cache warns 1 minute ahead, not
   right after every call.
 - **Resume.** `assistant.usage` is not replayed when you resume, so the extension seeds
   the clock from the session's own `~/.copilot/session-state/<id>/events.jsonl`.
+  An unfinished root turn (`assistant.turn_start` with no later `assistant.turn_end`
+  or `session.shutdown`) and the active/pending-work resume flags also restore the busy
+  state, so joining a session already running work does not let the guard abort it.
+  `session.idle` is never persisted, so the log alone ends a turn with `turn_end`. A cold
+  resume or a later root idle event clears historical busy state.
 
 ### What Copilot reported, measured on 11 October 2026
 
@@ -186,7 +207,19 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
 That is the test machine after this README's experiments: the Sonnet row is the
 refusal capture's resend, the Luna rows include the gap test.
 
-"Extra paid" is what each cold call cost above a warm read of the same tokens.
+The example above is a historical capture. Current reports label the counterfactual
+as **estimated extra**, add a **switch rewrites** column, and compare consecutive
+conversation calls within each agent rather than stitching together only same-model
+calls. Returning to a model after using another is not counted as idle time. A switch
+with sufficient observed cache reads still counts as warm. Successful compaction
+starts a new context; the first call after it is not a rewrite.
+
+Estimated extra compares rewritten tokens with a warm read at the destination call's
+reported prices; it is not measured savings or proof that a switch caused read loss.
+Missing prices are counted as `unpricedRewrites`, not zero-cost evidence. In JSON,
+`extraUsd` is the priced subtotal; `perWeekUsd` is null if any rewrite is unpriced.
+Text reports mark incomplete rows and omit the weekly extrapolation in that case.
+
 "Prefix breaks" are cold calls inside the reported TTL: something changed the prompt
 prefix (tools, instructions, model routing), or the provider served it cold early
 (eviction or a different backend), as in the Luna gap test above.
@@ -209,8 +242,10 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 - **Autopilot holds instead of asking.** VS Code's autopilot mode cancels extension
   questions (read from VS Code's code, not tested live); Cache Clock treats that as
   Don't send and says the send was held.
-- **The heads-up and the "sending cold" note reach only VS Code's log**, since VS Code
-  has no plain-message channel outside a question.
+- **The heads-up reaches only VS Code's log.** Cold-send and unknown-selection warnings
+  now use the existing error-level chat fallback so they are visible without another
+  question. Those warnings still allow the send; the box is not a refusal. This change
+  has synthetic regression coverage, not a new live VS Code capture.
 - **The report counts VS Code sessions as totals.** They land in the same
   `~/.copilot/session-state` directory (`client_name: vscode-agent-host`) but persist
   only `session.usage_checkpoint` totals, not per-call records. For per-turn cache hit
@@ -222,8 +257,17 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
   can only ping with `session.send`, which adds a user and an assistant turn to your
   conversation each time; the transcript-free fork lives on the server API, not the
   extension's session. Whether pings pay off depends on your own tax: run the report.
-- **Auto routes per prompt.** With `auto`, the next prompt may go to a different model
-  than the last. The guard prices the last model used.
+- **Auto routes per prompt.** Copilot reports each pick as `session.auto_mode_resolved`
+  (`chosenModel`). While the selection is `auto`, Cache Clock prices and guards the
+  next send as the last model Auto resolved to since you chose Auto, using that model's
+  observed prices; the next pick may differ. A pick made while a question is open does
+  not hold a "Send anyway". Before Auto has resolved a model, or when it resolved one
+  with no observed prices, the state is unknown: Cache Clock warns once each time you
+  choose Auto and does not hold the send. Provider/context-tier-qualified selections
+  also remain unpriced:
+  usage records do not bind prices to that selection identity. Changing provider or
+  context tier discards previous price estimates. Reports still group by model ID,
+  not provider, and cannot fully attribute provider/configuration changes.
 - **The estimate is approximate.** It is the last call's input plus its answer. The
   real resend adds your new message and anything Copilot attaches (44.4k actual vs
   37.2k estimated in the capture above). Pulling the other way, Copilot's shared system
@@ -233,12 +277,26 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 - **Early eviction is invisible to the guard.** It trusts Copilot's `cacheExpiresAt`.
   When a provider serves a cache cold sooner (Luna at 29 of 30 minutes, once), the send is
   billed cold and the guard stays quiet; the report counts it as a prefix break.
-- **Refusal memory is one shared file.** Two Copilot sessions refusing in the same instant
-  can overwrite each other's entry in `refused.json`; the losing session is asked again.
+- **Refusal memory is advisory.** Each session has its own atomically replaced file, so
+  concurrent sessions cannot erase each other's entries. Existing `refused.json` entries
+  are read only when no session file exists; migration never rewrites the shared file.
+  Entries expire after seven days (including legacy entries); expired/malformed new
+  entries never fall back to legacy state. Files are not automatically deleted. Two
+  processes writing the *same session* are last-rename-wins, not an exactly-once
+  guarantee. A write failure can cause another question on resume.
 - **VS Code depends on an experimental setting** (`chat.canvases.enabled`), which VS Code
   may rename or remove, and needs a copy in every repo (`--project`).
 - Claude was measured through `auto` only; the seat used for testing could not pick
   Claude models directly. Each boundary result above is a single run.
+- Model-selection handling is covered by synthetic tests against the public
+  [SDK v1.0.19 RPC contract](https://github.com/github/copilot-sdk/blob/f0b503aae1ba151d29d117088de4238d1983e33e/nodejs/src/generated/rpc.ts)
+  and [event definitions](https://github.com/github/copilot-sdk/blob/f0b503aae1ba151d29d117088de4238d1983e33e/nodejs/src/generated/session-events.ts),
+  not a new live CLI/VS Code verification. Selection checks are best-effort snapshots,
+  not atomic locks on routing. `session.error` and an abort request do not prove a turn
+  ended; while attached, only a main-session idle event clears the busy flag. A host
+  that omits it can leave the guard in warn-only behavior until a cold resume or
+  reattachment, where a recorded root `turn_end` or `session.shutdown` clears it.
+  Restoring busy state also depends on readable history; incomplete host history can miss work that predates attachment.
 
 ## Tests
 
@@ -252,4 +310,11 @@ without questions), the refuse-once fallback and resend, the non-awaited abort,
 sub-agent and background calls, compaction, heads-up timing, seeding from a session
 log, settings and help, the VS Code card, the report over fixture logs, and the
 installer (link, copy, piped download, failed download). They make no network calls.
-Live checks are recorded above.
+Regression coverage also includes selected-model lookups, missing prices, selection
+changes during confirmation, stale RPC replies, concurrent prompts, switch attribution
+across `--since`, agent-isolated compaction, and legacy refusal migration/expiry. A
+12-process test forces the old shared-file lost-update interleaving and verifies that
+session-isolated writes retain every entry. No paid model call is needed to run it.
+Start/resume selection snapshots, attachment during active/pending work, cold-resume
+busy-state reset, and VS Code warning visibility have dedicated regression tests.
+Historical live checks are recorded above; they do not validate the new transition paths.

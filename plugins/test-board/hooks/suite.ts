@@ -2,7 +2,11 @@ export const SUITE_LABEL_COLUMNS = 48
 
 const LEADING_CD = /^cd\s+(?:"([^"]+)"|'([^']+)'|(\S+))\s*(?:&&|;)\s*/
 const ENV_PREFIX = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s+)+/
-const CARTOON_C = /^cartoon\s+(?:--\S+\s+)*-c\s+(?:'([^']*)'|"([^"]*)")\s*$/
+// cartoon quotes a single quote inside its single-quoted `-c` word as the POSIX sequence '\'' (close, escaped quote, reopen).
+export const CARTOON_C = /^cartoon[ \t]+(?:--\S+[ \t]+)*-c[ \t]+(?:'((?:[^']|'\\'')*)'|"([^"]*)")[ \t]*$/
+/** The command text inside a `CARTOON_C` match, as the shell would hand it to cartoon. */
+export const cartoonInner = (wrapped: RegExpExecArray): string =>
+  wrapped[1] === undefined ? (wrapped[2] ?? '') : wrapped[1].replaceAll("'\\''", "'")
 const CARTOON_PREFIX = /^cartoon\s+(?:--tag\s+\S+\s+)?(?:--\s+)?/
 const CARTOON_UTILITY = /^cartoon\s+(?:logs|stats|adapters|doctor|ingest|help|version)\b/
 const TRAILING_PIPE = /\s*\|\s*(?:head|tail|grep|rg)\b.*$/
@@ -24,7 +28,7 @@ export function splitCommand(command: string): { cdDir?: string; normalized: str
   rest = rest.replace(ENV_PREFIX, '')
   const wrapped = CARTOON_C.exec(rest)
   if (wrapped) {
-    const inner = splitCommand(wrapped[1] ?? wrapped[2] ?? '')
+    const inner = splitCommand(cartoonInner(wrapped))
     const dir = joinDirs(cdDir, inner.cdDir)
     return dir === undefined ? { normalized: inner.normalized } : { cdDir: dir, normalized: inner.normalized }
   }

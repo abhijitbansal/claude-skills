@@ -9,7 +9,7 @@ export const BAND_TTL_MS = 60 * 60_000
 export type KeySize = { key: string; bytes: number }
 
 function toStored(run: TestRun): TestRun {
-  const { stale: _stale, ...rest } = run
+  const { stale: _stale, sourceCheck: _sourceCheck, ...rest } = run
   return { ...rest, failures: run.failures.slice(0, MAX_FAILURES) }
 }
 

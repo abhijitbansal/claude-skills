@@ -15,6 +15,10 @@ describe('splitCommand', () => {
   test('unwraps cartoon -c', () => {
     expect(splitCommand("cartoon -c 'bun test'").normalized).toBe('bun test')
   })
+  test("unwraps cartoon's own POSIX escape of a single quote inside -c", () => {
+    expect(splitCommand(String.raw`cartoon -c 'pytest -k '\''a and b'\'''`).normalized).toBe("pytest -k 'a and b'")
+    expect(splitCommand(String.raw`cartoon -c 'pytest -k "it'\''s" -q'`).normalized).toBe(`pytest -k "it's" -q`)
+  })
   test('unwraps cartoon --tag … --', () => {
     expect(splitCommand('cartoon --tag ios -- swift test').normalized).toBe('swift test')
   })

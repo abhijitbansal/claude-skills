@@ -80,30 +80,59 @@ jobs:
       - name: cross-host installer
         working-directory: plugins/portable-artifacts/bin
         run: node --test "test/*.test.mjs"
-      - name: make-dashboard
-        working-directory: plugins/portable-artifacts/skills/make-dashboard
-        run: npm ci && npx playwright install --with-deps chromium && npm test
-      - name: make-motion
-        working-directory: plugins/portable-artifacts/skills/make-motion
-        run: npm ci && npx playwright install --with-deps chromium && npm test
-      - name: make-diagram
-        working-directory: plugins/portable-artifacts/skills/make-diagram
-        run: npm ci && npx playwright install --with-deps chromium && npm test
-      # lift tests use make-diagram's and make-dashboard's node_modules, so this runs after both
-      - name: make-scene
-        working-directory: plugins/portable-artifacts/skills/make-scene
-        run: npm ci && npx playwright install --with-deps chromium && npm test
-      # make-explainer's scene test needs make-scene's node_modules, so it runs after make-scene
-      - name: make-explainer
-        working-directory: plugins/portable-artifacts/skills/make-explainer
-        run: npm ci && npx playwright install --with-deps chromium && npm test
-      # after the skills: the harness tests copy and run the skills, so their npm deps must be installed
-      - name: eval harness (fake host, no LLM)
-        working-directory: plugins/portable-artifacts/eval
-        run: node --test "test/**/*.test.mjs"
       - name: cache-clock (Copilot CLI extension, fake session)
         working-directory: tools/cache-clock
         run: node --test "test/*.test.mjs"
+
+  # One runner per skill (the two slowest split in two), instead of one runner
+  # running them back to back. Every job installs every skill's node_modules:
+  # make-scene's lift tests use make-diagram's and make-dashboard's, make-explainer
+  # uses make-scene's, and the eval harness copies and runs all of them. Those
+  # tests skip, not fail, when a sibling is missing, so a narrower install would
+  # pass with less coverage. All five pin the same Playwright, so one browser
+  # install covers them.
+  node-skills:
+    name: node (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: make-dashboard, dir: skills/make-dashboard }
+          - { name: make-motion, dir: skills/make-motion }
+          - { name: make-diagram, dir: skills/make-diagram }
+          - { name: make-scene 1/2, dir: skills/make-scene, shard: 1/2 }
+          - { name: make-scene 2/2, dir: skills/make-scene, shard: 2/2 }
+          - { name: make-explainer 1/2, dir: skills/make-explainer, shard: 1/2 }
+          - { name: make-explainer 2/2, dir: skills/make-explainer, shard: 2/2 }
+          - { name: 'eval harness (fake host, no LLM)', dir: eval }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: plugins/portable-artifacts/skills/*/package-lock.json
+      - name: install every skill's node_modules
+        working-directory: plugins/portable-artifacts/skills
+        run: for s in make-dashboard make-motion make-diagram make-scene make-explainer; do (cd "$s" && npm ci); done
+      - name: install chromium
+        working-directory: plugins/portable-artifacts/skills/make-dashboard
+        run: npx playwright install --with-deps chromium
+      # Same glob as each package.json "test" script. A shard flag passed through
+      # `npm test --` is silently ignored, so sharded runs call node directly.
+      - name: package.json test script is still the glob run below
+        working-directory: plugins/portable-artifacts/${{ matrix.dir }}
+        run: |
+          [ -f package.json ] || exit 0
+          want='node --test "test/**/*.test.mjs"'
+          got=$(node -p 'require("./package.json").scripts.test')
+          [ "$got" = "$want" ] || { echo "::error::scripts.test is '$got', CI runs '$want'; update test.yml"; exit 1; }
+      - name: test
+        working-directory: plugins/portable-artifacts/${{ matrix.dir }}
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: node --test ${SHARD:+--test-shard=$SHARD} "test/**/*.test.mjs"
 
   # A plugin's plugin.json `version` is the ONLY update trigger — Claude Code
   # skips a plugin whose version string is unchanged, even when its code moved.

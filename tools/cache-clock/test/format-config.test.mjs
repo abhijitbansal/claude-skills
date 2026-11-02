@@ -61,7 +61,7 @@ test("card covers state, context, prices, tally and guard", () => {
   assert.match(warmCard, /warm, 3m12s left \(ttl 5m00s\)/);
   assert.match(warmCard, /200\.0k tokens/);
   assert.match(warmCard, /warm \$0\.02 · cold \$0\.50 \(25× per token\)/);
-  assert.match(warmCard, /3 model calls · 1 cold after idle · 0 prefix breaks · \$0\.12 extra paid/);
+  assert.match(warmCard, /3 model calls · 1 cold after idle · 0 prefix breaks · 0 switch rewrites · \$0\.12 estimated extra/);
   assert.match(warmCard, /ask before a cold send above \$0\.10 · heads-up 5m before expiry/);
   assert.match(card(snap, tally, DEFAULTS), /cold for 2m10s/);
   assert.match(card({ ...snap, state: "unknown" }, tally, DEFAULTS), /unknown/);

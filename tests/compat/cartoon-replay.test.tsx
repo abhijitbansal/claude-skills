@@ -7,12 +7,16 @@ import { cases } from './cartoon-captures'
 // Copied into a disposable plugin's tests by run_cartoon.py. Real producer
 // outputs are replayed; this models Bash's envelope, not a live host session.
 const ROOT = '/synthetic/cartoon-compat'
+const SNAPSHOT = {
+  version: 1, scope: 'git-tracked+untracked-nonignored', status: 'available', root: ROOT,
+  head: 'a'.repeat(40), branch: 'refs/heads/main', digest: 'b'.repeat(64), files: 1, bytes: 8,
+}
 type Capture = typeof cases[number]
 
-function world(on: On) {
+function world(on: On, capture: () => unknown = () => SNAPSHOT) {
   const data = new Map<string, unknown>()
   const seen = new Map<string, unknown>()
-  mock.clock(on, { now: 1_000_000 })
+  const clock = mock.clock(on, { now: 1_000_000 })
   on('store.get', (_$, e) => ({ value: data.get(e.key) }))
   on('store.set', (_$, e) => { data.set(e.key, e.value); return { value: undefined } })
   on('store.keys', () => ({ value: [...data.keys()] }))
@@ -20,12 +24,15 @@ function world(on: On) {
   on('state.set', (_$, e, next) => { seen.set(e.key, e.value); return next(e) })
   on('session.cwd', () => ({ value: ROOT }))
   on('session.start', () => ({ cwd: ROOT }))
-  on('process.run', () => ({ value: { exitCode: 0, stdout: `${ROOT}\n`, stderr: '' } }))
+  on('process.run', (_$, e) => ({ value: {
+    exitCode: 0, stdout: e.argv[0] === 'git' ? `${ROOT}\n` : `${JSON.stringify(capture())}\n`, stderr: '',
+  } }))
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
     const { Box } = $.ui.resolve(e)
     return <Box />
   })
-  return { data, seen }
+  return { data, seen, clock }
 }
 
 function envelope(c: Capture) {
@@ -40,6 +47,11 @@ function envelope(c: Capture) {
 const latest = (seen: Map<string, unknown>) => (seen.get('latest') ?? []) as TestRun[]
 const props = (bodyColumns: number) => ({ hasSurvey: false, isWorking: false, maxRows: 12,
   bodyColumns, scroll: { bodyRows: 11 } }) as unknown as RenderPropsOf['AbovePrompt']
+
+async function refreshed(w: { clock: { advance(ms: number): Promise<void> } }) {
+  await w.clock.advance(5_000)
+  await new Promise<void>(resolve => setTimeout(resolve, 10))
+}
 
 for (const c of cases) {
   test(`real Cartoon capture: ${c.name} reaches history and display`, async ($, on) => {
@@ -80,6 +92,36 @@ for (const c of cases) {
     expect(latest(w.seen)[0]).toMatchObject({ ...c.expected, stale: true })
   })
 }
+
+test('real Cartoon counts and command failure survive matching, changed and unknown source checks', async ($, on) => {
+  const c = cases.find(c => c.name === 'adapter-pass-then-fail')!
+  let current: unknown = SNAPSHOT
+  const w = world(on, () => current)
+  let executions = 0
+  const answer = envelope(c)
+  on('tool.call', { tool: 'Bash' }, () => { executions += 1; return answer })
+  expect(await $.tool.call({ tool: 'Bash', command: c.command })).toEqual(answer)
+  await refreshed(w)
+
+  for (const status of ['matching', 'changed', 'unknown']) {
+    expect(latest(w.seen)[0]).toMatchObject({ ...c.expected, sourceCheck: { status } })
+    const stored = (w.data.get(`runs:${ROOT}::pytest adapter-pass-then-fail`) as TestRun[])[0]!
+    expect(stored).toMatchObject(c.expected)
+    expect(stored.sourceCheck).toBeUndefined()
+    for (const width of [40, 100]) {
+      const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal',
+        component: 'AbovePrompt', props: props(width) })
+      expect(await ui.find({ text: `exit ${c.exit}` })).toBeDefined()
+      expect(await ui.find({ text: new RegExp(`source ${status} at last check`) })).toBeDefined()
+    }
+    if (status === 'unknown') break
+    current = status === 'matching' ? { ...SNAPSHOT, digest: 'c'.repeat(64) }
+      : { version: 1, scope: SNAPSHOT.scope, status: 'unknown', reason: 'deadline' }
+    await $.prompt.submit({ text: 'check the observed source' } as never)
+    await refreshed(w)
+  }
+  expect(executions).toBe(1)
+})
 
 test('concurrent capture replays keep each command outcome attached to its own run', async ($, on) => {
   const w = world(on)

@@ -1,6 +1,7 @@
 // Settings shared by every session: guard mode, cost threshold, heads-up lead time.
 
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { MODES } from "./guard.mjs";
@@ -53,19 +54,39 @@ function readRefusals(dir) {
   }
 }
 
-export function loadRefusal(dir, sessionId) {
-  const entry = sessionId ? readRefusals(dir)[sessionId] : null;
-  return typeof entry?.key === "string" ? entry.key : null;
+const validSessionId = (id) => typeof id === "string" && id.length > 0;
+const refusalFile = (dir, id) => join(dir, "refusals", `${createHash("sha256").update(id).digest("hex")}.json`);
+
+function refusalKey(entry, now) {
+  return typeof entry?.key === "string" && entry.key.length > 0 && Number.isFinite(entry.at) &&
+    entry.at <= now && now - entry.at < REFUSAL_KEEP_MS ? entry.key : null;
+}
+
+export function loadRefusal(dir, sessionId, now = Date.now()) {
+  if (!validSessionId(sessionId)) return null;
+  try {
+    return refusalKey(JSON.parse(readFileSync(refusalFile(dir, sessionId), "utf8")), now);
+  } catch (err) {
+    // A corrupt or expired new entry must not resurrect a legacy refusal.
+    if (err.code !== "ENOENT") return null;
+  }
+  const legacy = readRefusals(dir);
+  return Object.hasOwn(legacy, sessionId) ? refusalKey(legacy[sessionId], now) : null;
 }
 
 export function saveRefusal(dir, sessionId, key, at) {
-  if (!sessionId) return;
-  const kept = Object.entries(readRefusals(dir)).filter(([, v]) => Number.isFinite(v?.at) && at - v.at < REFUSAL_KEEP_MS);
-  const next = { ...Object.fromEntries(kept), [sessionId]: { key, at } };
-  mkdirSync(dir, { recursive: true });
-  const tmp = join(dir, `${REFUSALS}.${process.pid}.tmp`);
-  writeFileSync(tmp, JSON.stringify(next) + "\n");
-  renameSync(tmp, join(dir, REFUSALS));
+  if (!validSessionId(sessionId) || !refusalKey({ key, at }, at)) return;
+  mkdirSync(join(dir, "refusals"), { recursive: true, mode: 0o700 });
+  const file = refusalFile(dir, sessionId);
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  // Different sessions never share a read/modify/write operation. Same-session
+  // writers are last-rename-wins; this is advisory memory, not a locking protocol.
+  try {
+    writeFileSync(tmp, JSON.stringify({ key, at }) + "\n", { flag: "wx", mode: 0o600 });
+    renameSync(tmp, file);
+  } finally {
+    rmSync(tmp, { force: true });
+  }
 }
 
 function amount(text) {
