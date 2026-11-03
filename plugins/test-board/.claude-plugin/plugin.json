@@ -1,6 +1,6 @@
 {
   "name": "test-board",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Band above the prompt with pass/fail/skip counts for every test run, compared with the previous run of the same suite in the same worktree",
   "author": {
     "name": "Abhijit Bansal",
