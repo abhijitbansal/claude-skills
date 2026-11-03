@@ -1,0 +1,141 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "background": "#0b0d12",
+  "scenes": [
+    {
+      "id": "world",
+      "duration": 5.5,
+      "elements": [
+        {
+          "id": "world-title",
+          "type": "text",
+          "text": "Shipping in 9 countries",
+          "x": 960,
+          "y": 112,
+          "fontSize": 72,
+          "fontWeight": 700,
+          "color": "#f4f6fb"
+        },
+        {
+          "id": "world-map",
+          "type": "chart",
+          "x": 960,
+          "y": 560,
+          "width": 1500,
+          "height": 750,
+          "vegaLite": {
+            "data": { "name": "world-110m" },
+            "projection": { "type": "equalEarth" },
+            "layer": [
+              { "mark": { "type": "geoshape", "fill": "surface", "stroke": "line", "strokeWidth": 0.8 } },
+              {
+                "transform": [{ "filter": { "field": "properties.name", "oneOf": ["United States of America", "Brazil", "United Kingdom", "Germany", "India", "Japan", "Australia", "South Africa", "Canada"] } }],
+                "mark": { "type": "geoshape", "fill": "accent", "stroke": "line", "strokeWidth": 0.8 }
+              }
+            ]
+          },
+          "keyframes": [
+            { "t": 0.4, "reveal": 0, "opacity": 0 },
+            { "t": 0.7, "opacity": 1 },
+            { "t": 2.6, "reveal": 1, "ease": "inOutCubic" }
+          ]
+        },
+        {
+          "id": "world-caption",
+          "type": "text",
+          "text": "Nine markets, one release train",
+          "x": 960,
+          "y": 990,
+          "fontSize": 44,
+          "fontWeight": 400,
+          "color": "#c9cfdd",
+          "keyframes": [
+            { "t": 3.2, "opacity": 0, "y": 1010 },
+            { "t": 3.9, "opacity": 1, "y": 990, "ease": "outCubic" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "states",
+      "duration": 5.5,
+      "elements": [
+        {
+          "id": "states-title",
+          "type": "text",
+          "text": "Orders by state",
+          "x": 960,
+          "y": 112,
+          "fontSize": 72,
+          "fontWeight": 700,
+          "color": "#f4f6fb"
+        },
+        {
+          "id": "states-map",
+          "type": "chart",
+          "x": 960,
+          "y": 560,
+          "width": 1440,
+          "height": 810,
+          "vegaLite": {
+            "data": { "name": "us-states-10m" },
+            "projection": { "type": "albersUsa" },
+            "layer": [
+              { "mark": { "type": "geoshape", "fill": "surface", "stroke": "line", "strokeWidth": 0.8 } },
+              {
+                "transform": [
+                  {
+                    "lookup": "properties.name",
+                    "from": {
+                      "data": {
+                        "values": [
+                          { "state": "Texas", "orders": 4100 },
+                          { "state": "California", "orders": 3800 },
+                          { "state": "Florida", "orders": 2600 },
+                          { "state": "New York", "orders": 2400 },
+                          { "state": "Illinois", "orders": 1700 },
+                          { "state": "Washington", "orders": 1500 },
+                          { "state": "Georgia", "orders": 1300 },
+                          { "state": "Colorado", "orders": 900 },
+                          { "state": "Ohio", "orders": 800 },
+                          { "state": "Arizona", "orders": 700 }
+                        ]
+                      },
+                      "key": "state",
+                      "fields": ["orders"]
+                    }
+                  },
+                  { "filter": "isValid(datum.orders)" }
+                ],
+                "mark": { "type": "geoshape", "stroke": "line", "strokeWidth": 0.8 },
+                "encoding": {
+                  "color": { "field": "orders", "type": "quantitative", "legend": null, "scale": { "range": ["#27407a", "#7fb0ff"] } }
+                }
+              }
+            ]
+          },
+          "keyframes": [
+            { "t": 0.4, "reveal": 0, "opacity": 0 },
+            { "t": 0.7, "opacity": 1 },
+            { "t": 2.6, "reveal": 1, "ease": "inOutCubic" }
+          ]
+        },
+        {
+          "id": "states-caption",
+          "type": "text",
+          "text": "Texas leads with 4,100 orders",
+          "x": 960,
+          "y": 990,
+          "fontSize": 44,
+          "fontWeight": 400,
+          "color": "#c9cfdd",
+          "keyframes": [
+            { "t": 3.2, "opacity": 0, "y": 1010 },
+            { "t": 3.9, "opacity": 1, "y": 990, "ease": "outCubic" }
+          ]
+        }
+      ]
+    }
+  ]
+}

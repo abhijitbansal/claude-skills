@@ -1,0 +1,23 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "terminal-run",
+      "duration": 4,
+      "elements": [
+        {
+          "id": "run",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "terminal-run",
+          "params": {
+            "command": "npm test",
+            "output": ["> node --test", "ok 1 - adds two numbers", "ok 2 - parses the config", "pass 2, fail 0"]
+          }
+        }
+      ]
+    }
+  ]
+}

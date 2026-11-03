@@ -1,6 +1,6 @@
 # Motion design for make-motion
 
-Rules of thumb for timing a clip so it reads well. They are guidance: `scripts/check.mjs` enforces only the safe area, overlapping text and empty scene endings (see the end of this page). Look at the contact sheets for everything else.
+Rules of thumb for timing a clip so it reads well. They are guidance: `scripts/check.mjs` enforces the safe area, overlapping text, empty scene endings and four audits (contrast, reading time, dead stretches, small text; see the end of this page). Look at the contact sheets for everything else.
 
 Timing numbers adapted from whaleyxbt/claude-motion, MIT.
 
@@ -38,7 +38,7 @@ Give the viewer time to read before anything else moves:
 - **Hold at least 1 s, plus 0.25 s for every word beyond three.** A six-word line needs about 1.75 s fully on screen.
 - **Hold the closing frame at least 2 s**: the last thing the viewer sees should stay put.
 
-Holds are not checked by `check.mjs`. Count them yourself from the keyframe times.
+`check.mjs` reports a dead stretch (nothing visible changing for more than 3 s, except in the last 3 s) and a text that leaves the screen sooner than its reading time. An element meant to sit still takes `"hold": true`. Count the closing hold yourself from the keyframe times.
 
 ## Layout and emphasis
 
@@ -49,8 +49,18 @@ Holds are not checked by `check.mjs`. Count them yourself from the keyframe time
 ## Scene changes
 
 - **A hard cut is the default.** Between related scenes (the same chart, the next step of a list) a hard cut reads as continuous; a `"transition": "crossfade"` (0.4 s, the new scene fading in over the previous one, which stays fully visible beneath) suits a change of subject. Set root `"transition": "crossfade"` to make it the default and put `"transition": "none"` on the scenes that should cut.
-- **Not on scene 1.** `fade` on the first scene makes frame 0, the video's thumbnail, blank; `crossfade` there is an error. `check.mjs` warns when scene 1 shows nothing at t = 0.
-- **Keep the outgoing text clear of the incoming text's position** (or end it with an `exit`): for the 0.4 s the old text is fully visible and the new text is fading in over it, and two lines in one spot read as a smear. `check.mjs` warns about it.
+- **Motion transitions are for a change of place or step.** `push` and `slide` suit a sequence (step 1 to step 2), `wipe` and `iris` a reveal, `zoom` a move closer, `blur` a soft change of subject; keep them 0.3–0.6 s and use one or two kinds per video, not one per scene.
+- **Not on scene 1.** `fade` on the first scene makes frame 0, the video's thumbnail, blank; `crossfade`, `push`, `slide`, `wipe`, `zoom`, `blur`, `iris`, `gl-ripple` and `gl-cube` there are errors. `check.mjs` warns when scene 1 shows nothing at t = 0.
+- **Keep the outgoing text clear of the incoming text's position** (or end it with an `exit`): during the window (0.4 s unless `duration` is set) both scenes are on screen. In a `crossfade` the old text is fully visible and the new text fades in over it; in `zoom` and `blur` the new scene fades in over the old one; in `wipe`, `slide` and `iris` in the new scene covers the old one from an edge or the centre, and in `iris` out the old scene closes to a circle over the new one; only `push` keeps them apart. Two lines in one spot read as a smear. `check.mjs` warns about it (not for a `push`). `gl-ripple` is a wave through both scenes (the same smear, so the same rule), `gl-cube` turns the old scene away on a box (the two are apart, like a push); use them once, for a hard change of subject, with 0.6–1 s.
+
+## Camera
+
+- **A slow push-in is the cheapest way to make a still scene feel alive**: `zoom` 1 to 1.05–1.15 over the whole scene with an `inOutQuad` ease. It also keeps `check.mjs` quiet about a dead stretch.
+- **Settle where the text is safe.** `check.mjs` judges text where the camera rests, so end a push at a zoom the text still fits at (a 1.2 zoom throws anything within 12% of the edge out of frame), or finish the move back at 1.
+- **Pan to a place, then stop.** Ease a `x` pan out (`outCubic`) so the camera lands on the card it is showing; pair a small `rotate` with it for a handheld feel and return it to 0.
+- **Shake is for a hit.** `amount` 6–14 px at `hz` 10–14 on the scene where something lands; more than that reads as a fault. A shake runs for the whole scene, so give the hit a short scene of its own. The same `seed` always shakes the same way.
+- **The background stays put.** The camera moves the elements over a still colour or art plate; that is what keeps a pan or a shake from ever showing the edge of the picture.
+- **One camera idea per scene.** A push-in with a pan and a roll at once reads as drift.
 
 ## Texture and typing
 
@@ -77,10 +87,15 @@ Cues (`"cues"` in the spec) are opt-in sound design for a clip that is meant to 
 
 ## What `check.mjs` checks
 
-Run `node <skill-dir>/scripts/check.mjs motion.json` after looking at the contact sheets. It reports only:
+Run `node <skill-dir>/scripts/check.mjs motion.json` after looking at the contact sheets. It reports:
 
 - visible text or a counter outside the safe area while it is not moving;
 - two visible texts or counters overlapping while neither is moving or fading;
 - a scene that ends with nothing on screen (a title leaving through an applied `exit: true` counts as intended).
 
-It also warns (exit stays 0) when the first scene shows nothing at t = 0. It does not check timing, holds, stagger, eases, colour or what happens at the start of later scenes, and, during a crossfade, only whether text of the two scenes overlaps at the window's midpoint (a warning).
+It also warns (exit stays 0) when the first scene shows nothing at t = 0. - a text whose colour does not reach WCAG AA contrast against the pixels behind it (the message names a theme token that passes);
+- a text that stays on screen less than 0.75 x (0.5 + 0.3 x words) seconds;
+- a dead stretch: nothing visible changing for more than 3 s, except in the last 3 s (`"hold": true` opts an element out);
+- text under 28 px at 1080 for half a second or more.
+
+It does not check stagger, eases or what happens at the start of later scenes, and, during a transition window, only whether text of the two scenes overlaps at the window's midpoint (a warning).

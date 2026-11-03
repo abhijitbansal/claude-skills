@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { launchBrowser } from '../scripts/lib/browser.mjs';
+import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER = path.join(root, 'scripts/render.mjs');
@@ -36,7 +36,7 @@ test('render: an unknown option exits 2', () => {
 });
 
 test('render: --model/--effort/--agent reach the ffmpeg metadata args', async (t) => {
-  try { await (await launchBrowser({ quiet: true })).close(); } catch { return t.skip('browser unavailable'); }
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined; // a fake ffmpeg stands in below, so only the browser is needed
   const dir = mkdtempSync(path.join(tmpdir(), 'rf-'));
   const log = path.join(dir, 'args.txt');
   const fake = path.join(dir, 'ffmpeg');

@@ -22,3 +22,5 @@ ffmpeg -y -ss 1.2 -i clip.mp4 -frames:v 1 clip-poster.png
 ```
 
 `pixel.png` is a one-pixel PNG, `chart/` is a dashboard and its CSV, both hand-written.
+
+`legacy-kpi-wide-wrap.html` is one KPI section and the CSS it needs, trimmed by hand from a dusk page built by portable-artifacts 0.8.0 on 2026-10-26; its values wrap only in a window wider than 1280 px, which the check must catch.

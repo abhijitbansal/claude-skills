@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { launchBrowser, haveBrowser, buildFile, buildSpec, exampleFile, scratchDir, EXAMPLES } from './helpers/browser.mjs';
+import { launchBrowser, haveBrowser, buildFile, buildSpec, exampleFile, scratchDir, servedUrl, closeSharedBrowser, EXAMPLES } from './helpers/browser.mjs';
 
 let browser;
-after(() => browser?.close());
+after(async () => { await browser?.close(); await closeSharedBrowser(); }); // the second stops the loopback server servedUrl starts
 
 const pages = {};
 const built = (name) => (pages[name] ??= buildFile(exampleFile(name), { name }));
@@ -213,7 +213,8 @@ test('copy: without a working clipboard the text is selected instead', async (t)
 
 test('theme: the toggle cycles Auto, Light, Dark, is remembered, and applies before first paint', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const { page, context } = await open(built('concept').url);
+  // Over http, not file://: the choice is read back after a reload, which file:// localStorage does not reliably allow (see servedUrl).
+  const { page, context } = await open(await servedUrl(built('concept').file));
   const toggle = page.locator('[data-theme-toggle]');
   assert.equal(await toggle.getAttribute('data-mode'), 'auto');
   await toggle.click();

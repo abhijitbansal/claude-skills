@@ -1,0 +1,32 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "before-after",
+      "duration": 5,
+      "elements": [
+        {
+          "id": "before",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "before-after",
+          "params": {
+            "headline": "One change to the build",
+            "before": {
+              "label": "Before",
+              "value": 94,
+              "suffix": "s"
+            },
+            "after": {
+              "label": "After",
+              "value": 12,
+              "suffix": "s"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

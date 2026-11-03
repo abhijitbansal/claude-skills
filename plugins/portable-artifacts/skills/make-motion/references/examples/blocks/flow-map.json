@@ -1,0 +1,27 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "flow-map",
+      "duration": 7,
+      "elements": [
+        {
+          "id": "routes",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "flow-map",
+          "params": {
+            "map": "world",
+            "flows": [
+              { "from": { "lon": -74, "lat": 40.7 }, "to": { "lon": -0.13, "lat": 51.5 }, "label": "New York to London" },
+              { "from": { "lon": -0.13, "lat": 51.5 }, "to": { "lon": 77.2, "lat": 28.6 }, "label": "London to Delhi" },
+              { "from": { "lon": 77.2, "lat": 28.6 }, "to": { "lon": 139.7, "lat": 35.7 }, "label": "Delhi to Tokyo" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

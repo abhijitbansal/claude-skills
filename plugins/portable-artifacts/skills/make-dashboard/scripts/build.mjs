@@ -8,6 +8,7 @@ import { buildDashboard } from './lib/pipeline.mjs';
 import { UsageError, parseCli, parseTimeout, exitUsage } from '../shared/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
 import { PROVENANCE_OPTIONS } from '../shared/provenance.mjs';
+import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const USAGE = 'node scripts/build.mjs <spec.json> [--out <dir>] [--json] [--allow-outside] [--timeout <seconds>] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>]';
@@ -25,6 +26,7 @@ const json = argv.includes('--json');
 let jsonMode = json;
 
 try {
+  warnIfStaleCopy();
   const { values, positionals } = parseCli(argv, OPTIONS, USAGE);
   jsonMode = values.json;
   if (positionals.length !== 1) throw new UsageError(`expected one spec file; usage: ${USAGE}`);

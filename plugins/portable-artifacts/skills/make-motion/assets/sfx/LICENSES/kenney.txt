@@ -1,0 +1,32 @@
+The twelve WAV files in assets/sfx/kenney/ are converted from sound effects by Kenney (https://kenney.nl):
+
+  Interface Sounds 1.0  https://kenney.nl/assets/interface-sounds
+  Impact Sounds 1.0     https://kenney.nl/assets/impact-sounds
+
+Both packs are released under Creative Commons Zero (CC0 1.0 Universal, public domain):
+https://creativecommons.org/publicdomain/zero/1.0/
+Each pack's own License.txt says: "This content is free to use in personal, educational and commercial projects.
+Support us by crediting Kenney or www.kenney.nl (this is not mandatory)". Thanks, Kenney.
+
+Source file for each alias (the name of the file in the pack's Audio folder):
+
+click.wav <- click_001.ogg (https://kenney.nl/assets/interface-sounds)
+tick.wav <- tick_001.ogg (https://kenney.nl/assets/interface-sounds)
+switch.wav <- switch_001.ogg (https://kenney.nl/assets/interface-sounds)
+select.wav <- select_001.ogg (https://kenney.nl/assets/interface-sounds)
+confirm.wav <- confirmation_001.ogg (https://kenney.nl/assets/interface-sounds)
+error.wav <- error_001.ogg (https://kenney.nl/assets/interface-sounds)
+open.wav <- open_001.ogg (https://kenney.nl/assets/interface-sounds)
+close.wav <- close_001.ogg (https://kenney.nl/assets/interface-sounds)
+pluck.wav <- pluck_001.ogg (https://kenney.nl/assets/interface-sounds)
+glass.wav <- glass_001.ogg (https://kenney.nl/assets/interface-sounds)
+thud.wav <- impactSoft_heavy_000.ogg (https://kenney.nl/assets/impact-sounds)
+metal.wav <- impactMetal_medium_000.ogg (https://kenney.nl/assets/impact-sounds)
+
+Conversion, once, per file (a stereo source is mixed down to mono; the sound is cut to at most 1.5 s; <gain> is
+0.5 divided by the peak of the 48 kHz mono result, so every file peaks at 0.5, which is -6 dBFS):
+
+  ffmpeg -i <source>.ogg -t 1.5 -ac 1 -ar 48000 -c:a pcm_f32le -bitexact <temp>.wav
+  ffmpeg -i <temp>.wav -af volume=volume=<gain>:precision=double -ac 1 -ar 48000 -sample_fmt s16 -c:a pcm_s16le -bitexact <alias>.wav
+
+Nothing is fetched at render time; the files ship with the skill.

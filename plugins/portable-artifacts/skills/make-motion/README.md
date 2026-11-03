@@ -17,22 +17,91 @@ shell commands.
 - **Deterministic**: every frame is captured after seeking the timeline to
   exactly `i / fps`, never in real time, so the same spec always gives the
   same video.
+- **Loudness target**: `render.mjs --loudness -16` (−30 to −5 LUFS; `--true-peak` −3 to 0, −1.5 by
+  default) normalises the mix after the encode with a two-pass `loudnorm`, byte-identical twice; a
+  spec's root `loudness` field is the target without a flag (viral mode sets −14 / −1), and
+  `--loudness off` renders the mix as mixed. A mix one gain cannot take (cues alone, or music
+  with a loudness range over 11 LU) gets a limiter stage first, so a viral clip lands on its
+  target too; that stage needs ffmpeg 5.1 or later, and an older one falls back to one gain with a note.
+- **Faster renders**: `--workers 4` (1-16, or `auto`) captures frames on several
+  pages of one browser and gives the same MP4 as `--workers 1`; `--quality draft`
+  renders half the size on each side with a faster encode, for a quick look.
+- **Variables and batch renders**: a root `vars` declares typed names (`string` or `number`, with a
+  `default`), and `{{name}}` in any string of the spec becomes the value. `--batch rows.json --out
+  "renders/{name}.mp4"` renders one MP4 per row of values, checks every row before the first frame, and
+  writes a `manifest.json` with each row's status and `sha256`.
+- **Beats**: `beats.mjs music.wav` finds the beat grid of a track (ffmpeg, own FFT, 60-200 BPM) and writes a
+  `.beats.json`; a root `beats` names it, and a keyframe `t` or a cue, audio or captions `at` may be
+  `"beat:<n>"`, resolved to seconds before anything else reads the spec (so a var can pick the beat).
+  A track with no steady beat exits 1 instead of guessing, and `--bpm` or `--min-bpm`/`--max-bpm` fix a tempo it reads at half or double.
+- **Storyboard for clips over 20 s**: `storyboard.mjs brief.json --out plan.json` writes a make-explainer `plan` page
+  (one timeline event per scene, a theme decision, an approval and a question) that the user answers before the
+  spec is written. It needs make-explainer beside this skill; with a clip of 20 s or less, no make-explainer, or
+  `--non-interactive`, it prints `storyboard: skipped (<reason>)`, writes nothing and exits 0.
 - **Self-check for models**: `--contact-sheet` writes one tiled, timestamped PNG
   per scene, so a model that can read images can review its own work before
-  rendering; `check.mjs` then flags text or counters outside the safe area, overlapping text
-  and a scene that ends with nothing visible, and warns (exit stays 0) when the first
+  rendering; `check.mjs` then flags text or counters outside the safe area, overlapping text,
+  a scene that ends with nothing visible, low text contrast, text that is not up long enough to read,
+  stretches where nothing changes (opt out with `"hold": true`) and text under 28 px, and warns (exit stays 0) when the first
   frame, the video's thumbnail, is blank.
 - **Polished by default**: charts draw with about five ticks per axis, no tick marks, no
   y-axis line and no vertical gridlines, bars with rounded ends and a gap, 4 px round
   lines and ringed points. Shapes and text take **theme colour tokens**
   (`"fill": "surface"`, `"color": "accent"`) that follow the theme, rects can be
   `elevated` cards, and lines can have round caps and an arrow head.
-- **Scene crossfade**: `"transition": "crossfade"` fades the new scene in over the
-  previous one (which stays fully visible beneath) over 0.4 s; a root `transition` sets the default.
-- **Procedural sound cues**: a `cues` array (`pop`, `click`, `whoosh`, `chime`, `impact`)
-  is synthesised locally with no files and no extra dependency, deterministically, and
-  mixed in; after any render with audio, `render.mjs` prints the integrated loudness and
-  true peak. Opt-in: no `cues`, no sound.
+- **Blocks**: twenty-eight parameterised building blocks (`title-card`, `lower-third`, `kpi-counter`, `step-flow`, `quote-card`, `checklist`, `logo-outro`, `cta-close`, four for short-form video: `cta-soft`, `story-beats`, `listicle` and `before-after-swipe`, three for code: `code-typing`, `code-diff` and `terminal-run`, two for maps: `map-highlight` and `flow-map`, and four for data and comparisons: `race` (a bar chart race), `comparison-split`, `before-after` (two numbers) and `notification-stack`, and six for people and messages: `chat-thread`, `timeline`, `testimonial` and the lower thirds `lower-third-tag`, `lower-third-social` and `lower-third-ticker`, and `text-behind-subject` (big text behind a person, from a photo or clip and its cutout: see Cutouts below)), each
+  written as one `block` element with a few params (`"block": "lower-third", "params": { "name": "Ada" }`) and
+  expanded into plain elements laid out for the canvas, coloured with theme tokens. `blocks.mjs list` and
+  `blocks.mjs show <name>` print each block's params and an example; `references/blocks/` holds a contact sheet
+  of each.
+- **Cutouts**: `node scripts/cutout.mjs photo.jpg` (or a clip) cuts the person out locally with MODNet (Apache-2.0)
+  on onnxruntime-node (MIT) and writes an RGBA PNG (a clip: a VP9 alpha WebM); pass the original as `src` and that file
+  as `cutout` of a `text-behind-subject` block. It needs `doctor --for cutout --fix cutout` (about 300 MB) and a one-time
+  25 MB model download; nothing else in the skill does, and a render never touches the network.
+- **Scene transitions**: `"transition": "crossfade"` fades the new scene in over the previous one (which
+  stays fully visible beneath) over 0.4 s; `push`, `slide`, `wipe`, `zoom`, `blur` and `iris` move, clip,
+  scale or blur it in, and `{ "type": "push", "direction": "up", "duration": 0.6 }` picks the edge and the
+  length; a root `transition` sets the default. `gl-ripple` and `gl-cube` are WebGL shaders (a wave through
+  both scenes; a box turning in perspective) drawn in a render with software WebGL, byte-identical at any
+  `--workers`; the preview and `check.mjs` show a crossfade and a push in their place.
+- **Scene camera**: a scene's `camera` keyframes `zoom` (0.5–3), a pan (`x`, `y` px) and a roll (`rotate`) of
+  every element in the scene about the canvas centre, and `shake` (`amount` px, `hz`, `seed`) adds a seeded
+  handheld jitter; the same spec always shakes the same way. The background, captions, grain and the vignette stay put.
+- **Colour grade**: `"grade": { "preset": "warm" | "cool" | "mono" | "film", "exposure", "contrast", "saturation" }`
+  on an image or a video: a preset look, then exposure in stops (−2 to 2), contrast (0.5–2) and saturation (0–2) on top, as
+  one SVG filter on the picture. It renders byte-identically (at any `--workers`) and `check.mjs` judges text over a graded
+  photo on the graded pixels.
+- **Lottie**: a `lottie` element plays a Lottie JSON file (`src`, `width`, `height`, optional `offset` and `speed`)
+  with lottie-web's light SVG build, which has no expression engine. The validator and the page both refuse remote
+  images, web fonts, external segments, expressions and files too heavy to draw, so the file can never fetch or run
+  anything or stall the render (which also bounds its wait for the page); frames are byte-identical at any `--workers`.
+- **Maps**: a chart's `vegaLite.data` can be `{ "name": "world-110m" }` (also `world-50m`, `us-states-10m`,
+  `us-counties-10m`): the bundled world-atlas and us-atlas TopoJSON, served from the local server, so a
+  `geoshape` chart works offline with no `datasets` entry. A mark's `fill` and `stroke` may be theme colour tokens.
+  The validator compiles the chart with the real file; an unknown name lists the bundled maps. The `map-highlight`
+  block lights named countries or US states in the accent colour, and `flow-map` draws great-circle arcs between
+  places one after another, each with a caption (`references/examples/world-map.json`, `references/blocks/`).
+- **Captions**: a `captions` track from an SRT, VTT or Whisper JSON file, or the voiceover's
+  sentence timings, shown two to six words at a time in the caption zone in one of six styles
+  (`plain`, `pill`, `karaoke`, `kinetic`, `boxed`, `typewriter`); `check.mjs` keeps other text out
+  of the zone.
+- **Procedural sound cues**: a `cues` array (`pop`, `click`, `whoosh`, `chime`, `impact`,
+  `riser`, `swoosh`, `typing`, `drop`, `ding`) is synthesised locally in layers (transient,
+  body, short reverb tail; stereo width above about 120 Hz on the noise sweeps) with no files and
+  no extra dependency, deterministically, and mixed in; a `typing` cue with `follow` clicks
+  along with a typing text; after any render with audio, `render.mjs` prints the integrated loudness and
+  true peak. Twelve recorded clicks and hits (Kenney, CC0, 48 kHz WAV, about 261 KB in all) are
+  bundled as `"cue": "kenney:<name>"` (click, tick, switch, select, confirm, error, open, close,
+  pluck, glass, thud, metal); they need no download and fetch nothing at render. Opt-in: no `cues`, no sound
+  (except in viral mode, below, which places cues unless the spec writes `cues`).
+- **Viral mode**: `"mode": "viral"` for Reels, TikTok and Shorts: 9:16 at 1080x1920, a
+  platform safe zone (top 290, bottom 675, left 120, right 195 px; `viral.safeZone` overrides it)
+  with captions lifted above the bottom band, the first scene's title on screen from frame 0 as the
+  hook, cues placed on cuts, entrances and counter landings, and a −14 LUFS / −1 dBTP loudness
+  target that `render.mjs` normalises the mix to (a two-pass `loudnorm`; `--loudness off` skips it) and reports against. `check.mjs` warns (never fails) on a hook outside 3–7
+  words, text under a platform band, more than 3 s with no change, audio without captions, a
+  non-9:16 canvas and, with `viral.loop`, an ending that does not match the start. The numbers are
+  tunable defaults from platform ad specs, not platform rules.
 - **Texture and typing**: an opt-in root `texture` adds a vignette and static film grain
   (measured cost below), and `"typing": true` types a line out at 0.035 s per character
   with a caret.
@@ -60,7 +129,7 @@ SKILL=path/to/make-motion
 cp $SKILL/references/examples/q3-revenue.json motion.json
 node $SKILL/scripts/validate.mjs motion.json              # `valid`, or path-precise errors
 node $SKILL/scripts/render.mjs motion.json --contact-sheet # out/contact/<scene>.png
-node $SKILL/scripts/check.mjs motion.json                 # safe area, overlaps, empty endings
+node $SKILL/scripts/check.mjs motion.json                 # safe area, overlaps, empty endings, contrast, reading time, dead stretches, small text
 node $SKILL/scripts/preview.mjs motion.json --open         # scrubber, play/pause, live reload
 node $SKILL/scripts/render.mjs motion.json                 # out/motion.mp4, 1920x1080 @ 30 fps
 ```
@@ -68,6 +137,13 @@ node $SKILL/scripts/render.mjs motion.json                 # out/motion.mp4, 192
 From an agent, just ask: *"Make an 8-second clip: Q3 revenue up 18%, then a
 bar chart of Q1–Q3."* In Claude Code or Copilot you can call `/make-motion …`,
 and in Codex `$make-motion …`.
+
+Before it writes the spec, the agent runs one intake round: one message of
+questions with the defaults already picked: format (1920x1080, or 1080x1920 for Reels, TikTok and
+Shorts), length, your own photos, logo, music or voice file, a voiceover,
+sound cues, theme and a closing line. Answer once, or say "defaults". Run
+non-interactively (`claude -p`, `codex exec`, `copilot -p`), it skips the round,
+builds with the defaults and its report says so.
 
 ## The spec
 
@@ -94,7 +170,12 @@ and in Codex `$make-motion …`.
 | `counter` | `from`, `to`, `decimals`, `prefix`, `suffix` + text styling | + `value` (with no `value` keyframes it counts from→to automatically) |
 | `shape` | `shape` (`rect`/`ellipse`/`line`), `width`, `height`, `radius`, `fill`, `stroke`, `strokeWidth`, `elevated` (rect), `cap` and `arrow` (line) | + `draw` (0–1 stroke reveal) |
 | `image` | `src` (relative to the spec), `width`, `height`, `fit` | `opacity x y scale rotate` |
-| `chart` | `vegaLite` with inline `data.values`, `width`, `height` | + `reveal` (0–1 left-to-right wipe) |
+| `video` | `src` (an mp4, mov, webm or m4v relative to the spec), `width`, `height`, `fit`, `trimStart`, `trimEnd`, `offset`, `mute`, `volume`; decoded once into a frame cache (`.cache/video`, cleared by `doctor.mjs --fix cache`) so every frame is exact; its sound joins the mix unless muted | `opacity x y scale rotate` |
+| `chart` | `vegaLite` with inline `data.values` or a bundled map (`data: { "name": "world-110m" }`), `width`, `height` | + `reveal` (0–1 left-to-right wipe) |
+| `group` | `children` (1–40 elements, up to 3 groups deep), each placed relative to the group's centre | `opacity x y scale rotate`, applied to every child at once |
+| `code` | `code`, `lang` (`text`, `javascript`, `typescript`, `json`, `bash`, `python`, `diff`, `go`, `rust`, `swift`, `yaml`, `html`, `css`, `markdown`), `width`, `height`, `fontSize` (28), `highlight` (line numbers), `diff`, `typing`; highlighted offline with shiki (JavaScript regex engine, no wasm) in the theme's colour tokens, drawn as text, never markup | `opacity x y scale rotate` (+ `value`, the characters typed, with `typing`) |
+| `lottie` | `src` (a Lottie JSON file relative to the spec, at most 4 MiB), `width`, `height`, `offset` (scene s before it plays), `speed` (0.25–4); played with lottie-web's light SVG build (no expression engine); embedded PNG, JPEG or WebP images only, no remote assets, web fonts or expressions | `opacity x y scale rotate` |
+| `block` | `block` (one of the 28 block names), `params` (that block's own fields); expands into a group of parts named `<id>/<part>`, so validator errors name `params.<field>` | `opacity x y scale rotate`, applied to the whole block |
 
 A scene's `background` is a CSS colour or `"art"`: the theme's seeded art,
 full-bleed behind the elements and seeded by the scene `id`. A shape `fill` or
@@ -102,31 +183,37 @@ full-bleed behind the elements and seeded by the scene `id`. A shape `fill` or
 `accentSoft`, `good`, `bad`, `warn`, `text`, `text2`, `text3`, `cat1`..`cat6`) instead of
 a colour; it resolves to the active theme's dark colour.
 
-Root-level options (all off unless set): `transition` (`none`, `fade` or `crossfade`, the
-default for every scene), `cues` (up to 30 sound cues, timed from the video or a scene
-start), `texture` (`vignette`, and `grain` from 0 to 0.15). Texture costs render time, measured
+Root-level options (all off unless set): `transition` (a name, `none`, `fade`, `crossfade`, `push`, `slide`, `wipe`, `zoom`, `blur`, `iris`, `gl-ripple` or `gl-cube`, or
+`{ type, direction?, duration? }`; the default for every scene), `cues` (up to 30 sound cues, timed from the video or a scene
+start), `captions` (up to 20 tracks, each an SRT, VTT or JSON file and a `style`), `texture` (`vignette`, and `grain` from 0 to 0.15). Texture costs render time, measured
 on 1920x1080 frames (seek plus PNG screenshot, headless Chromium, one Apple-silicon Mac): about
 17 to 33 ms per frame with none, 42 ms with the vignette, 100 ms with grain and 187 ms with both.
 
 Keyframes are `{ "t": seconds-in-scene, "ease": "outCubic", …props }`. Each
 property holds its value before its first keyframe, interpolates between
 keyframes using the later keyframe's ease, and holds after the last one.
-There are 28 anime.js eases, from `linear` to `inOutElastic`. The full reference
-is [`references/schema.md`](references/schema.md), and there are 4 complete
+There are 32 eases, from `linear` to `inOutElastic`. The full reference
+is [`references/schema.md`](references/schema.md), and there are 20 complete
 examples in [`references/examples/`](references/examples/).
 
 ## Scripts
 
 | Command | Does | Flags |
 |---|---|---|
-| `validate.mjs <spec>` | Schema plus cross-field checks (unique ids, keyframe times, per-type props, image and audio paths, audio scene/start/fade fits, chart compile, no remote URLs) | `--json` |
+| `validate.mjs <spec>` | Schema plus cross-field checks (unique ids, keyframe times, per-type props, image, video and audio paths, video trims against the clip length (needs ffprobe), audio scene/start/fade fits, captions files parsed (a cue out of order names its line), chart compile, no remote URLs) | `--json` |
+| `blocks.mjs list` / `blocks.mjs show <name>` | One line per block with its params (optional ones marked `?`); or one block's params table (type, required, default, description), where it goes on each format, and a ready-to-paste element. An unknown name exits 2 with the closest one and the list | none |
 | `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` |
-| `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. The MP4 timing is exact | `--open` |
-| `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks or `cues`, followed by one `audio: … LUFS integrated, true peak … dBTP` line) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--contact-sheet` |
-| `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen. An element that has left the frame entirely is gone, not clipped. It also warns on stderr (never a failure) when the first scene shows nothing at t = 0. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
-| `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover>`, `--fix <id[,id]>` |
+| `cutout.mjs <photo.png\|clip.mp4>` | Cuts the person out of a photo (`<stem>.png`, RGBA) or a clip (`<stem>.webm`, VP9 alpha) with MODNet, locally, for a `text-behind-subject` block (onnxruntime-node installed on demand, ~300 MB, plus a 25 MB model once; `doctor --fix cutout`) | `--out <dir>` (default a `cutout` folder beside the input), `--fps <1-60>` (clips) |
+| `beats.mjs <audio>` | Beat grid of an audio file (ffmpeg; the first five minutes) → `<stem>.beats.json` for a spec's root `beats`; prints the path and `<bpm> BPM, <n> beats`; exit 1 with `no steady beat found in <file> (confidence …; needs 0.5)` | `--out <file>.json`, `--min-confidence <0-1>`, `--bpm <n>` (force the tempo), `--min-bpm <n>` / `--max-bpm <n>` (narrow the search) |
+| `storyboard.mjs <brief.json>` | For a clip over 20 s: a make-explainer `plan` page spec from a brief `{ "title", "seconds", "scenes": [{ "id", "beat", "seconds" }], "theme"? }`; prints the plan path and `build: node …/make-explainer/scripts/build.mjs <plan>`. Skips with one stdout line `storyboard: skipped (not needed (12s is 20s or less))`, `(make-explainer is not installed beside make-motion (looked in <path>))` or `(no one to ask (non-interactive run))`, no file, exit 0. Exit 1: the brief breaks a rule; exit 2: usage or IO | `--out <plan.json>` (required), `--non-interactive` |
+| `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. Click an element to copy its spec path and id (`scenes[1].elements[3]  id=title`) with a 2 s toast. The MP4 timing is exact | `--open` |
+| `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks, `cues` or an unmuted `video` clip with sound, followed by one `audio: … LUFS integrated, true peak … dBTP` line) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--workers <n or auto>`, `--quality <draft or final>`, `--loudness <-30 to -5 LUFS, or off>`, `--true-peak <-3 to 0 dBTP>`, `--contact-sheet`, `--batch <rows.json>` (with an `--out` template holding `{index}` or a `{var}`) |
+| `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen; text whose colour has less than 4.5:1 (3:1 for large text) contrast against the pixels behind it, a text on screen for less than 0.75 × (0.5 + 0.3 × words) seconds (a last line under 2 s is only an `info:` note), more than 3 s in which nothing changes (not in the last 3 s, not for `"hold": true` elements) and text under 28 px at 1080 on the short side for 0.5 s or more (a contrast or size finding at one moment only is a warning); with `captions`, a text or counter held in the caption zone while a caption shows and a captions layer that leaves it (measured once per caption group). An element that has left the frame entirely is gone, not clipped. It also warns on stderr (never a failure) when the first scene shows nothing at t = 0. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
+| `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Lists the video frame cache once it passes 2 GB; `--fix cache` deletes it. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover\|cutout>`, `--fix <id[,id]>` |
 
-Limits: up to 50 scenes and 120 s in total, up to 20 audio tracks and 30 cues; fps is 24, 25, 30 or 60; each side
+Two renders of the same spec and media give identical frames and audio; the MP4 `comment` tag carries the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set.
+
+Limits: up to 50 scenes and 120 s in total, up to 20 audio tracks, 30 cues and 20 captions tracks; fps is 24, 25, 30 or 60; each side
 is 16–3840 px. Frame *i* samples `t = i / fps`, so put a final keyframe at
 least one frame before the scene ends.
 
@@ -138,8 +225,9 @@ then `PATH`, then an optional `ffmpeg-static` install. It is never bundled.
 ## Security
 
 - The preview server binds `127.0.0.1`, rejects non-local `Host` headers (DNS
-  rebinding) and serves only its own files plus the image files the spec
-  names. Image paths can't leave the spec's folder.
+  rebinding) and serves only its own files plus the image, video, audio and
+  captions files the spec names (and the frames decoded from those videos). Media
+  paths can't leave the spec's folder.
 - No network from specs: chart `url` keys and `url()` colours are rejected,
   the page runs under a CSP whose script hash covers only its own import
   map, and the renderer aborts any non-local request.
@@ -148,9 +236,11 @@ then `PATH`, then an optional `ffmpeg-static` install. It is never bundled.
 
 ## Requirements and licences
 
-Node.js ≥ 20, ffmpeg (≥ 4.4 for audio tracks), Chromium (one-time download) or Google Chrome. The
+Node.js ≥ 20, ffmpeg (≥ 4.4 for audio tracks; ≥ 5.1 for the limiter stage of `--loudness`, see `references/schema.md`), Chromium (one-time download) or Google Chrome. The
 dependencies, pinned by the lockfile, are anime.js v4 (MIT), Playwright
 (Apache-2.0), Vega, Vega-Lite and vega-interpreter (BSD-3-Clause), Ajv (MIT),
+lottie-web 5.13.0 (MIT; the page loads only its light SVG build),
+world-atlas 2.0.2 and us-atlas 3.0.1 (ISC; Natural Earth and US Census TopoJSON; the page fetches only the four files it names),
 and the theme fonts in the synced `shared/fonts` (OFL-1.1). The `@fontsource/inter` and
 `@fontsource/jetbrains-mono` npm packages are still pinned but no longer read: the
 default look now comes from `dusk`, and the `press` theme gets JetBrains Mono from `shared/fonts`.

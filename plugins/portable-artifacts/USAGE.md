@@ -58,6 +58,7 @@ node <skill-dir>/scripts/doctor.mjs --json                  # what is missing, w
 node <skill-dir>/scripts/doctor.mjs --json --for spec.json  # make-explainer, make-scene: also the sister skills the spec needs
 node <skill-dir>/scripts/doctor.mjs --json --for check      # make-diagram, make-explainer, make-motion, make-scene: Playwright and a browser
 node <skill-dir>/scripts/doctor.mjs --json --for voiceover  # make-motion: kokoro-js, before a voiceover
+node <skill-dir>/scripts/doctor.mjs --json --for cutout     # make-motion: onnxruntime-node, before cutout.mjs
 node <skill-dir>/scripts/doctor.mjs --fix node_modules      # install the named ids (comma-separated)
 ```
 
@@ -83,6 +84,8 @@ asks only for `chromium` (and no ffmpeg). make-explainer names the browser that 
 own `chromium`. `--fix` exits 1 when any requested id is refused, skipped,
 failed, still missing afterwards or installed elsewhere, optional ids included.
 On Windows the text output labels command lines `(cmd.exe)`.
+
+If a build prints `warning: this script runs from …, not the installed copy …`, it was started from an old folder under `~/.claude/plugins/cache/` while `~/.claude/plugins/installed_plugins.json` points at a newer one. Run `npm ci` in the installed skill folder it names (or its `doctor.mjs --fix node_modules`) and use that folder's scripts.
 
 ### Tested hosts
 
@@ -307,7 +310,7 @@ your project folder):
    `TODO:` text, filler phrases ("leverage", "seamless", "delve"), titles
    numbered like `01` or ending in `!`, and (for slides) a slide with more
    than 6 points, 8 table rows, 12 code lines or 80 words. Each line is a JSON
-   path, the problem and the fix; text over the soft caps only warns (exit 0): title 8 words, label 4 words, paragraph 3 sentences or 60 words, text section 120 words, card text 30 words, list item 20 words, page prose 900 words, `tldr` 3 points. Emoji are allowed; dense emoji only warn: a prose string with 3 or more at more than 1 per 40 characters, or a section title with more than 3. Each warning names the section; resolve them before building where you can.
+   path, the problem and the fix; text over the soft caps only warns (exit 0): title 8 words, label 4 words, paragraph 3 sentences or 60 words, text section 120 words, card text 30 words, list item 20 words, page prose 900 words (1,800 on a plan page), `tldr` 3 points. Emoji are allowed; dense emoji only warn: a prose string with 3 or more at more than 1 per 40 characters, or a section title with more than 3. Each warning names the section; resolve them before building where you can.
 5. `build.mjs explainer.json` writes one HTML file and prints its path. The
    default folder is `~/.agent/diagrams/` (set `PA_OUTPUT_DIR`, or pass
    `--out file.html` or `--out dir`). `--theme <name>` overrides the spec's
@@ -317,7 +320,7 @@ your project folder):
    `<name>.assets/` folder beside the page: keep them together.
    `--image-api <https-endpoint>` is an optional extra described
    [below](#optional-hero-image); without it the build never uses the network.
-6. Optionally runs `check.mjs <page>`, which opens the page at 1280 and 390 px and
+6. Optionally runs `check.mjs <page>`, which opens the page at 1280, 390 and 1800 px and
    fails on console errors or warnings, sideways scrolling, a deck that cannot
    reach its last slide with the arrow keys, or a diagram Present overlay that
    will not close on Esc. It needs Playwright and a browser (a full `npm ci` plus
@@ -329,19 +332,22 @@ your project folder):
 **Presets:** `recap` (tl;dr, numbers, how it works, files changed, timeline,
 risks), `checklist` (a group per area of changed files, a regression group, an
 intro and "If something fails"), `concept` (tl;dr, explanation, cards, steps),
-`slides` (a deck), `plan` (a decision-first plan the reviewer answers on the
-page, see below). **Sections** (24): `tldr`, `text`, `kpis`, `cards`,
-`table`, `risks`, `files`, `steps`, `timeline`, `compare`, `callout`, `code`,
+`slides` (a deck), `plan` (a plan that explains before it asks, which the
+reviewer answers on the page, see below). **Sections** (24): `tldr`, `text`,
+`kpis`, `cards`, `table`, `risks`, `files`, `steps`, `timeline`, `compare`, `callout`, `code`,
 `details`, `checklist`, `diagram`, `chart`, `motion`, `scene`, `image`, and
 for plans `decision`, `approval`, `question`, `review`, `verdict`.
 
 **Plan mode.** Ask for a plan, proposal or design to be reviewed and answered.
-`scaffold.mjs plan --title "…" --out plan.json` writes a decision-first
-starter: a summary, three numbers, a decision, an approval, a question,
-"review these first", goals, a diagram, phases and risks, and last the
-reviewer's overall verdict control; the agent replaces each
-`TODO:` and builds the page, which defaults to the `mono` theme (`--theme brief`
-for the executive look). The reviewer picks one option per decision, approves,
+`scaffold.mjs plan --title "…" --out plan.json` writes a starter that
+explains before it asks: a summary, three numbers, a card per workstream, goals,
+one workstream's tasks as steps (copy it once per workstream), a table of choices
+already made, a diagram, phases and risks, then a decision, an approval, a
+question, "review these first" and last the reviewer's overall verdict control.
+Validate warns when a decision, approval or question comes before any steps, cards,
+table, files or text section. A plan page may hold 1,800 words of prose, not 900.
+The agent replaces each `TODO:` and builds the page, which defaults to the `mono`
+theme (`--theme brief` for the executive look). The reviewer picks one option per decision, approves,
 asks for changes or rejects each approval, answers each question, gives an
 overall verdict and a name, then presses Copy answers or Download
 `plan-answers.json`, or Save as HTML. Answers are saved in the reviewer's browser, keyed by the
@@ -456,7 +462,7 @@ preset in `references/examples/`.
 
 **What the agent does:**
 
-1. Writes `motion.json` (scenes → elements → keyframes).
+1. Asks one intake round (see below), then writes `motion.json` (scenes → elements → keyframes).
 2. `validate.mjs motion.json` until it prints `valid`.
 3. `render.mjs motion.json --contact-sheet` writes `out/contact/<scene>.png`,
    one tiled, timestamped sheet per scene (up to 11 moments plus a phone-width copy). The agent looks at each one and fixes clipping,
@@ -465,18 +471,137 @@ preset in `references/examples/`.
    (60 px at 1080 on the short side) while they are not moving, overlapping text or counters
    and a scene that ends with nothing visible (it prints `check: skipped (no browser: …)` and exits 0
    without a browser). It also warns on stderr, without failing, when the first
-   frame (the video's thumbnail) is blank.
+   frame (the video's thumbnail) is blank. Four audits join it: contrast (WCAG AA against
+   the worst pixels behind a text), reading floor (a text stays on screen
+   0.75 x (0.5 + 0.3 x words) seconds), dead stretch (nothing may sit unchanged for more
+   than 3 s outside the final 3 s; `"hold": true` opts an element out) and text floor
+   (under 28 px at 1080 for 0.5 s or more).
 4. Offers `preview.mjs motion.json --open`, a local page with a scrubber,
    play/pause, scene markers and frame-by-frame arrow keys. It reloads
    whenever `motion.json` changes, and shows validation errors in the page.
 5. `render.mjs motion.json` writes `out/motion.mp4` (1920×1080, 30 fps,
    H.264, plus AAC audio when the spec has `audio` tracks or `cues`; with audio it
-   ends by printing `audio: <n> LUFS integrated, true peak <n> dBTP`).
+   ends by printing `audio: <n> LUFS integrated, true peak <n> dBTP`). Two renders of
+   the same spec and media give identical frames and audio; the MP4 `comment` tag carries
+   the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set.
 
 **Other sizes:** set `"size": [1080, 1080]` in the spec for a square social
 clip, or override at render time with `--size 1280x720 --fps 24`. If the
 aspect ratio differs from the spec, the frame is letterboxed in the spec's
-background colour.
+background colour. A root `"format"` (`16:9`, `9:16`, `1:1` or `4:5`) sets the size
+for you, plus a safe area and a caption zone (the lower part of the frame:
+from 78 % of the height down, 72 % for `9:16` and `4:5`); a `size` that disagrees with
+it is an error.
+
+**The intake round.** Before it writes a spec the agent asks once, in one message,
+listing each option with its default: format (`16:9`), length (about 10 s), assets
+(none), voiceover (off), sound (none), theme (the one the prompt suggests: `press` for
+dense docs and recaps, `poster` for launches and pitches, otherwise `dusk`), CTA (none) and
+captions (off). Answer
+all of it in one reply, or say "defaults". An option your prompt already settles
+("a 9:16 clip", "with a voiceover") is not asked again. A run that cannot pause for
+an answer (`claude -p`, `codex exec`, an eval) skips the round and builds with the
+defaults, and its final report carries one line naming what it used:
+`intake: skipped (<reason>); values used: format 16:9, length 10 s, assets none, voiceover off, sound none, theme dusk, CTA none, captions off, platform none`
+(the values shown are the defaults; a value your prompt settled appears instead).
+
+**The storyboard.** For a clip over 20 s, after the intake round, the agent writes a short
+brief (the title, the length, and one line and one length per scene) and runs
+`storyboard.mjs brief.json --out plan.json`. That writes a make-explainer plan page: a
+summary, a timeline with one event per scene, the beats, a theme decision (`dusk`, `press` or
+`poster`, with a recommendation), an approval of the storyboard, a question for anything to
+change and a verdict. The agent builds the page and sends it to you; it reads your answers
+only through make-explainer's `answers.mjs`, then writes the spec from them. The step is
+skipped, with one line in the final report (`storyboard: skipped (<reason>)`), for a clip of
+20 s or less, when make-explainer is not installed beside make-motion, and under `claude -p`,
+`codex exec`, `copilot -p`, an eval, or any run that cannot pause for an answer (the agent
+passes `--non-interactive`). A skip is never an error: the clip is built directly.
+
+**Groups and blocks.** A `group` holds up to 40 child elements, up to three groups
+deep, and moves them as one. A `block` is a ready-made piece of a scene, written as one
+element with a few params: `title-card`, `lower-third`, `kpi-counter`, `step-flow`,
+`quote-card`, `checklist`, `logo-outro`, `cta-close`, `cta-soft` (a soft ask: save, send,
+follow), `story-beats` (hook, problem, reveal, proof, call to action), `listicle` (a
+numbered list), `before-after-swipe`, `code-typing`, `code-diff`, `terminal-run`,
+`map-highlight`, `flow-map`, `race` (a bar chart race over periods), `comparison-split`,
+`before-after` (two numbers), `notification-stack`, `chat-thread`, `timeline`,
+`testimonial`, `lower-third-tag`, `lower-third-social`, `lower-third-ticker` and
+`text-behind-subject` (big text behind a person: needs a cutout of the photo or clip, which
+`cutout.mjs` makes locally after a one-time install the agent asks about): 28 in all.
+A block lays itself out for
+16:9 and 9:16, takes its colours from the theme and keeps clear of the caption zone.
+`node <skill-dir>/scripts/blocks.mjs list` lists them and `show <name>` prints a block's
+params and a ready element to paste.
+
+**Viral mode.** For Reels, TikTok and Shorts: `"mode": "viral"` (the agent writes it when
+you name a platform in the intake round). It sets 9:16 at 1080x1920, a platform safe zone
+(top 290, bottom 675, left 120, right 195 px), captions in a zone lifted above the bottom
+band, a first-scene title shown from frame 0 as the hook, cues placed for you (a `swoosh`
+on each cut, a `pop` on each entrance, a `ding` when a counter lands; write `"cues": []` for
+silence) and a -14 LUFS / -1 dBTP target that the render normalises the mix to (a two-pass
+`loudnorm`; `render.mjs --loudness off` turns it off). `check.mjs` adds warnings,
+never failures: a hook outside 3 to 7 words, text under a platform band, 3 s with no
+change, audio without captions. The safe-zone numbers are tunable defaults taken from
+the platforms' ad specs, and -14 LUFS is a common default that no platform publishes; none
+of this is a guarantee of reach. Start from `references/examples/viral-hook.json`.
+
+**Transitions and camera.** A scene's `transition` is a name or `{ "type", "direction",
+"duration" }`: `fade`, `crossfade`, `push`, `slide`, `wipe`, `zoom`, `blur` or `iris`
+(0.1 to 2 s, 0.4 s by default). A scene `camera` takes keyframed `zoom`, `x`, `y` and
+`rotate`, and a seeded `shake`; the same seed always shakes the same way. Examples:
+`references/examples/transitions.json` and `camera-push-in.json`. `gl-ripple` and `gl-cube`
+are two more transition names that a render draws with a WebGL shader in software (the same
+frames on every machine and at any `--workers`); the live preview and `check.mjs` show a
+crossfade and a push in their place, so judge the look from the render or `--contact-sheet`
+(`references/examples/gl-transitions.json`).
+
+**Beats and loudness.** `beats.mjs music.wav --out data/music.beats.json` finds the beat
+grid of a music file with a local detector (no network, no new dependency); name that file
+in the spec's root `beats` and any keyframe `t`, cue or audio `at`, or caption `at` can be
+`"beat:<n>"`. It was measured on synthetic audio only, not on real music; `--bpm` forces a
+tempo when the detector picks the wrong one. `render.mjs --loudness <lufs>` (-30 to -5) and
+`--true-peak <dbtp>` normalise the mix after the encode; without a target nothing changes.
+
+**Grade, Lottie and maps.** An `image` or `video` element takes `"grade"`: a preset (`warm`,
+`cool`, `mono`, `film`) and optional `exposure`, `contrast` and `saturation`. A `lottie`
+element plays a Lottie JSON file from the project folder offline; a file with remote assets
+or expressions is refused. A chart's `data` can be a named atlas (`world-110m`, `world-50m`,
+`us-states-10m`, `us-counties-10m`, bundled, offline), and the `map-highlight` and `flow-map`
+blocks use them.
+
+**Pick in the preview.** In the live preview, clicking an element copies its spec path and
+id (for example `scenes[1].elements[3]  id=title`) and shows a 2 s toast, so you can tell the
+agent exactly which element to change.
+
+**Code.** A `code` element shows highlighted code in 14 languages (highlighted offline
+with shiki), optionally typed out or as a diff; the `code-typing`, `code-diff` and
+`terminal-run` blocks wrap the common cases.
+
+**Faster renders.** `render.mjs --workers 4` (1 to 16, or `auto`) captures frames in
+parallel and gives the same MP4 as one worker. `--quality draft` renders half the size on
+each side with a faster encode, for a quick look. Measured on one Apple M4 Pro (14 logical
+cores) by timing the whole process of
+`env SOURCE_DATE_EPOCH=1793318400 node scripts/render.mjs test/fixtures/benchmark-30s.json --out <file>.mp4 --workers <n>`
+(paths inside `skills/make-motion/`), twice with each worker count: the 30 s, 1080p, 30 fps
+benchmark spec took 30.35 s and 30.53 s with one worker and 13.37 s and 13.57 s with four
+(a 2.28x speedup; all four files had the same SHA-256).
+
+**One video per row.** Declare `vars` in the spec, write `{{name}}` where a value goes, put
+the values in a JSON array of objects, and run
+`render.mjs motion.json --batch rows.json --out "renders/{name}.mp4"`. Every row is checked
+before anything renders; `renders/manifest.json` lists each row's status, file and SHA-256.
+A row that fails while rendering is marked `failed` and the others still render.
+
+**Footage.** A `video` element places an mp4, mov, webm or m4v clip from the project
+folder, with optional `trimStart`, `trimEnd`, `offset`, `mute` and `volume`. Its sound
+joins the mix unless muted. It needs ffmpeg and ffprobe, and the render stays offline.
+
+**Captions.** A root `captions` array adds on-screen words, 2 to 6 at a time, from an
+SRT, VTT or Whisper JSON file in the project folder, or from the sentence timings
+`voice.mjs` writes to `voice/<scene>.json`. Styles: `plain`, `pill`, `karaoke`, `kinetic`,
+`boxed` and `typewriter`. They sit in the caption zone; `check.mjs` reports other text
+held there while a caption shows. Word timing inside a voice sentence is estimated,
+so `karaoke` and `kinetic` follow the voice only roughly.
 
 **Charts in videos** are Vega-Lite specs with inline `data.values`. Animate
 `reveal` from 0 to 1 for a left-to-right wipe.
@@ -515,13 +640,16 @@ scene, and optional `duration`, `volume`, `fadeIn` and `fadeOut`. ffmpeg
 mixes the tracks into the MP4 as AAC stereo; the preview plays them in sync
 (approximately; `M` mutes) and the MP4 timing is exact. Music is always a
 file you supply. For narration the agent runs
-`voice.mjs "<text>" --out voice/<scene>.wav` (Kokoro, local, 28 voices,
+`voice.mjs --text-file voice/<scene>.txt --out voice/<scene>.wav` (a text file, not a quoted argument, because the shell expands `$` and backticks; Kokoro, local, 28 voices,
 `--voice af_heart` by default) after asking once to install `kokoro-js`
 (about 250 MB plus a 90 MB model downloaded a single time). Short UI sounds need no
-file: a root `cues` array (up to 30 of `pop`, `click`, `whoosh`, `chime`, `impact`, each
-with `at`, or `scene` plus `at`, and optional `volume`, `pan` and `note`) is synthesised at
+file: a root `cues` array (up to 30 of `pop`, `click`, `whoosh`, `chime`, `impact`, `riser`,
+`swoosh`, `typing`, `drop`, `ding`, each with `at`, or `scene` plus `at`, and optional `volume`,
+`pan` and `note`; a `typing` cue can instead name a text with `follow`) is synthesised at
 render time, the same bytes every time, and mixed in with any tracks; the preview does not
-play cues.
+play cues. Twelve recorded clicks and hits (Kenney, CC0) ship with the skill as
+`"cue": "kenney:<name>"`: `click`, `tick`, `switch`, `select`, `confirm`, `error`, `open`,
+`close`, `pluck`, `glass`, `thud` and `metal`.
 
 ## 6. 3D scenes with make-scene
 
@@ -688,6 +816,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `check: skipped (no browser: …)` from make-diagram, make-explainer or make-motion | Expected without Playwright or Chromium; the page is still built. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci` then `npx playwright install chromium` inside the skill folder |
 | `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |
 | `kokoro-js is not installed` | `cd <skill-dir> && npm install kokoro-js@1.2.1 --no-save` (voiceover only; run it inside the skill folder so the skill's `overrides` apply; `npm ci` removes it) |
+| `onnxruntime-node is not installed` | `cd <skill-dir> && npm install onnxruntime-node@1.31.1 --no-save` (cutouts only; run it inside the skill folder so the skill's `overrides` apply; `npm ci` removes it, so rerun `doctor --fix cutout`; a kokoro install keeps it) |
 | `audio[0].src: ffmpeg cannot decode …` | The file is not a valid audio file. Re-export it as mp3 or wav |
 | `ffmpeg not found` | macOS `brew install ffmpeg`, Windows `winget install Gyan.FFmpeg` (then a new terminal), Linux `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` |
 | `remote data is not allowed` / `not allowed — external URLs are never fetched` | Charts must carry their data inline (motion) or come from a SQL query (dashboard) |

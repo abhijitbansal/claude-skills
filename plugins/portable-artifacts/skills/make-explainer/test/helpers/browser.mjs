@@ -2,6 +2,7 @@
 // build a spec file to a page, and open it with the console watched.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -29,6 +30,39 @@ let scratch;
 export function scratchDir() {
   scratch ??= fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-ui-'));
   return scratch;
+}
+
+const MIME = { '.html': 'text/html; charset=utf-8', '.json': 'application/json', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+let server;
+let serverPort;
+/**
+ * The http://127.0.0.1 URL for a file under the scratch dir. Use it for tests that write localStorage and then reload
+ * or read it back: Chromium's file:// localStorage does not reliably survive a reload on a loaded machine (a write
+ * made in one document is sometimes not seen by the next; measured in .scratch/plan-flake), while an http origin does.
+ * One loopback server serves the whole scratch dir; closeSharedBrowser stops it.
+ */
+export async function servedUrl(file) {
+  const root = scratchDir();
+  if (!server) {
+    server = http.createServer((req, res) => {
+      const pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+      if (pathname === '/favicon.ico') { res.writeHead(204).end(); return; }
+      const target = path.resolve(root, `.${pathname}`);
+      if (!target.startsWith(root + path.sep) || !fs.existsSync(target) || !fs.statSync(target).isFile()) { res.writeHead(404).end('not found'); return; }
+      res.writeHead(200, { 'content-type': MIME[path.extname(target)] ?? 'application/octet-stream' });
+      res.end(fs.readFileSync(target));
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    serverPort = server.address().port;
+  }
+  const rel = path.relative(root, file);
+  assert.ok(!rel.startsWith('..') && !path.isAbsolute(rel), `${file} is outside the scratch dir`);
+  return `http://127.0.0.1:${serverPort}/${rel.split(path.sep).map(encodeURIComponent).join('/')}`;
+}
+
+/** openPage, but a file: URL under the scratch dir is opened over loopback http (see servedUrl). */
+export async function openServed(url, options) {
+  return openPage(url.startsWith('file:') ? await servedUrl(fileURLToPath(url)) : url, options);
 }
 
 /** Build a spec file to a page in the scratch dir; returns { file, url, html }. */
@@ -60,6 +94,8 @@ let shared;
 export async function closeSharedBrowser() {
   await shared?.close();
   shared = undefined;
+  await new Promise((resolve) => (server ? server.close(resolve) : resolve()));
+  server = undefined;
 }
 
 export async function openPage(url, { width = 1280, height = 900, colorScheme = 'light', reducedMotion = 'reduce', blockStorage = false, seed = {}, init, context: existing } = {}) {

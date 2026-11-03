@@ -280,12 +280,22 @@ export function checkSections(spec, errors) {
   }
 }
 
+// A plan explains what gets built before it asks anything: one of these must come before the first answerable item.
+const EXPLAINING_TYPES = new Set(['steps', 'cards', 'table', 'files', 'text']);
+
+function warnThinPlan(spec, warnings) {
+  const firstAsk = spec.sections.findIndex((s) => PLAN_ITEM_TYPES.has(s.type));
+  if (firstAsk === -1 || spec.sections.slice(0, firstAsk).some((s) => EXPLAINING_TYPES.has(s.type))) return;
+  warnings.push({ path: 'sections', message: 'a plan asks before it explains: add steps, cards, table, files or text sections that say what gets built before the first decision, approval or question' });
+}
+
 /** Advice that never blocks a build: -> [{ path, message }]. */
 export function warnSections(spec) {
   const warnings = [];
   if (spec.key === DRAFT_PLAN_KEY) {
     warnings.push({ path: 'key', message: `${q(DRAFT_PLAN_KEY)} is the scaffold's placeholder, shared by every untitled draft (their saved answers would collide); set it from the title, such as ${q(suggestedPlanKey(spec))}` });
   }
+  warnThinPlan(spec, warnings);
   spec.sections.forEach((s, i) => {
     const at = pathJoin('sections', i);
     if (s.type === 'checklist' && s.intro === undefined && spec.preset === 'checklist') {

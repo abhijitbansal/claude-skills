@@ -1,0 +1,28 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "chat-thread",
+      "duration": 7,
+      "elements": [
+        {
+          "id": "chat",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "chat-thread",
+          "params": {
+            "messages": [
+              { "from": "them", "text": "Did the release go out?" },
+              { "from": "me", "text": "Yes, 2.4 shipped an hour ago." },
+              { "from": "them", "text": "Great. Captions work offline now?" },
+              { "from": "me", "text": "They do, and so does the whole render." }
+            ],
+            "typingDots": true
+          }
+        }
+      ]
+    }
+  ]
+}

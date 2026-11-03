@@ -1,0 +1,24 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "code-typing",
+      "duration": 5,
+      "elements": [
+        {
+          "id": "editor",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "code-typing",
+          "params": {
+            "title": "Add two numbers",
+            "lang": "javascript",
+            "code": "export function add(a, b) {\n  // both are numbers\n  return a + b;\n}\n\nconst total = add(40, 2);"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -13,7 +13,7 @@ test('counting helpers', () => {
 });
 
 test('caps are the agreed values', () => {
-  assert.deepEqual(SOFT_CAPS, { titleWords: 8, labelWords: 4, paragraphWords: 60, paragraphSentences: 3, textSectionWords: 120, cardWords: 30, itemWords: 20, pageWords: 900, tldrPoints: 3 });
+  assert.deepEqual(SOFT_CAPS, { titleWords: 8, labelWords: 4, paragraphWords: 60, paragraphSentences: 3, textSectionWords: 120, cardWords: 30, itemWords: 20, pageWords: 900, planPageWords: 1800, tldrPoints: 3 });
 });
 
 test('title: 8 words silent, 9 warns', () => {
@@ -61,6 +61,19 @@ test('page over 900 words of prose warns once at the root', () => {
   const sections = Array.from({ length: 10 }, () => ({ type: 'text', title: 'T', text: `${w(55)}.\n\n${w(40)}.` }));
   assert.deepEqual(warnBudget(spec(sections)).filter((x) => x.path === '').length, 1);
   assert.deepEqual(warnBudget(spec(sections.slice(0, 9))).filter((x) => x.path === ''), []);
+});
+
+test('a plan page under 1,800 words gets no page-prose warning; a concept page over 900 still does', () => {
+  const sections = Array.from({ length: 15 }, () => ({ type: 'text', title: 'T', text: `${w(55)}.\n\n${w(40)}.` }));
+  assert.equal(sections.length * 95 > 900, true);
+  const rootWarnings = (s) => warnBudget(s).filter((x) => x.path === '');
+  assert.deepEqual(rootWarnings({ title: 'T', preset: 'plan', sections }), []);
+  assert.equal(rootWarnings({ title: 'T', preset: 'concept', sections }).length, 1);
+  assert.equal(rootWarnings({ title: 'T', sections }).length, 1);
+  const tooLong = Array.from({ length: 20 }, () => ({ type: 'text', title: 'T', text: `${w(55)}.\n\n${w(40)}.` }));
+  const over = rootWarnings({ title: 'T', preset: 'plan', sections: tooLong });
+  assert.equal(over.length, 1);
+  assert.match(over[0].message, /aim for 1800/);
 });
 
 test('code, tables and file lists are not prose', () => {

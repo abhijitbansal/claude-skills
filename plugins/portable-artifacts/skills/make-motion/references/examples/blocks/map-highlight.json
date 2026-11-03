@@ -1,0 +1,24 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "map-highlight",
+      "duration": 4,
+      "elements": [
+        {
+          "id": "markets",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "map-highlight",
+          "params": {
+            "map": "world",
+            "highlight": ["United States of America", "Brazil", "India", "Germany"],
+            "label": "Where the pilot runs"
+          }
+        }
+      ]
+    }
+  ]
+}

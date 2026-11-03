@@ -1,0 +1,34 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "theme": "dusk",
+  "generatedBy": { "model": "claude-sonnet-5-5", "agent": "Claude Code" },
+  "scenes": [
+    {
+      "id": "loud",
+      "duration": 7.5,
+      "elements": [
+        { "id": "cap", "type": "text", "font": "mono", "text": "New: --loudness <lufs> normalises the mix", "x": 960, "y": 90, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "card-before", "type": "shape", "shape": "rect", "x": 520, "y": 520, "width": 760, "height": 460, "fill": "surface", "stroke": "line", "elevated": true, "hold": true,
+          "keyframes": [{ "t": 0.2, "opacity": 0, "y": 560 }, { "t": 0.8, "opacity": 1, "y": 520, "ease": "enter" }] },
+        { "id": "lbl-before", "type": "text", "font": "mono", "text": "Before: --loudness off", "x": 520, "y": 380, "fontSize": 44, "fontWeight": 600, "color": "text2", "hold": true,
+          "keyframes": [{ "t": 0.2, "opacity": 0 }, { "t": 0.8, "opacity": 1, "ease": "enter" }] },
+        { "id": "num-before", "type": "text", "text": "-28.1 LUFS", "x": 520, "y": 520, "fontSize": 120, "fontWeight": 700, "hold": true,
+          "keyframes": [{ "t": 0.4, "opacity": 0, "y": 540 }, { "t": 1.0, "opacity": 1, "y": 520, "ease": "enter" }] },
+        { "id": "peak-before", "type": "text", "text": "true peak -14.9 dBTP", "x": 520, "y": 650, "fontSize": 44, "fontWeight": 500, "color": "text2", "hold": true,
+          "keyframes": [{ "t": 0.6, "opacity": 0 }, { "t": 1.2, "opacity": 1, "ease": "enter" }] },
+        { "id": "card-after", "type": "shape", "shape": "rect", "x": 1400, "y": 520, "width": 760, "height": 460, "fill": "surface", "stroke": "accent", "elevated": true, "hold": true,
+          "keyframes": [{ "t": 2.4, "opacity": 0, "y": 560 }, { "t": 3.0, "opacity": 1, "y": 520, "ease": "enter" }] },
+        { "id": "lbl-after", "type": "text", "font": "mono", "text": "After: --loudness -16", "x": 1400, "y": 380, "fontSize": 44, "fontWeight": 600, "color": "accent", "hold": true,
+          "keyframes": [{ "t": 2.4, "opacity": 0 }, { "t": 3.0, "opacity": 1, "ease": "enter" }] },
+        { "id": "num-after", "type": "text", "text": "-16.0 LUFS", "x": 1400, "y": 520, "fontSize": 120, "fontWeight": 700, "hold": true,
+          "keyframes": [{ "t": 2.6, "opacity": 0, "y": 540 }, { "t": 3.2, "opacity": 1, "y": 520, "ease": "enter" }] },
+        { "id": "peak-after", "type": "text", "text": "true peak -2.1 dBTP", "x": 1400, "y": 650, "fontSize": 44, "fontWeight": 500, "color": "text2", "hold": true,
+          "keyframes": [{ "t": 2.8, "opacity": 0 }, { "t": 3.4, "opacity": 1, "ease": "enter" }] },
+        { "id": "note", "type": "text", "text": "Integrated loudness and true peak, as printed by render.mjs for this clip's own audio", "x": 960, "y": 900, "fontSize": 36, "fontWeight": 400, "color": "text2", "hold": true,
+          "keyframes": [{ "t": 3.8, "opacity": 0 }, { "t": 4.4, "opacity": 1, "ease": "enter" }] }
+      ]
+    }
+  ],
+  "audio": [{ "src": "data/on-the-beat.wav", "volume": 0.5, "duration": 7.5 }]
+}

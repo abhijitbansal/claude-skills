@@ -122,6 +122,26 @@ test('/assets honours a byte Range request so the browser can seek audio', () =>
   assert.equal(page.headers['accept-ranges'], undefined, 'only /assets advertises byte ranges');
 }));
 
+const LOCKED_DOWN = { 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'" };
+
+test('every /assets response carries nosniff and a CSP of default-src none, so an opened .svg cannot run script', () => withServer(async (srv, f) => {
+  writeFileSync(path.join(f.dir, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+  writeFileSync(path.join(f.dir, 'r.wav'), '0123456789');
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('a'), audio: [{ src: 'r.wav' }] , scenes: [{ id: 's', duration: 1, elements: [
+    { id: 'im', type: 'image', src: 'logo.svg', x: 1, y: 1, width: 4, height: 4 }] }] }));
+  const responses = {
+    'whole svg': await get(srv.url, '/assets/logo.svg'),
+    'ranged wav (206)': await get(srv.url, '/assets/r.wav', { range: 'bytes=2-5' }),
+    'unsatisfiable range (416)': await get(srv.url, '/assets/r.wav', { range: 'bytes=50-60' }),
+    'unreferenced file (404)': await get(srv.url, '/assets/other.txt'),
+  };
+  assert.deepEqual(Object.values(responses).map((r) => r.status), [200, 206, 416, 404]);
+  for (const [what, r] of Object.entries(responses)) {
+    for (const [name, value] of Object.entries(LOCKED_DOWN)) assert.equal(r.headers[name], value, `${what}: ${name}`);
+  }
+  assert.equal((await get(srv.url, '/template/styles.css')).headers['content-security-policy'], undefined, 'the page assets keep their own policy');
+}));
+
 test('/assets maps every audio extension to an audio MIME', () => withServer(async (srv, f) => {
   const mimes = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', flac: 'audio/flac' };
   for (const ext of Object.keys(mimes)) writeFileSync(path.join(f.dir, `t.${ext}`), 'x');
@@ -181,8 +201,11 @@ test('/events emits spec-error with formatted errors when the changed spec is in
   const got = await sseUntil(srv, () => writeFileSync(f.specPath, JSON.stringify({ ...spec('x'), fsp: 30 })), /event: spec-error\ndata: .*\n\n/);
   const data = JSON.parse(/event: spec-error\ndata: (.*)\n/.exec(got)[1]);
   assert.deepEqual(data[0], { path: 'fsp', message: 'unknown property; did you mean "fps"?' });
-  const got2 = await sseUntil(srv, () => writeFileSync(f.specPath, '{not json'), /event: spec-error\ndata: .*\n\n/);
-  assert.match(JSON.parse(/event: spec-error\ndata: (.*)\n/.exec(got2)[1])[0].message, /not valid JSON/);
+  // Under load a late watch event from the first write can still deliver the `fsp` spec-error on this second
+  // connection, so wait for and read the invalid-JSON one, not merely the first spec-error.
+  const notJson = /event: spec-error\ndata: (\[\{"path":"\(root\)","message":"not valid JSON.*)\n\n/;
+  const got2 = await sseUntil(srv, () => writeFileSync(f.specPath, '{not json'), notJson);
+  assert.match(JSON.parse(notJson.exec(got2)[1])[0].message, /^not valid JSON: /);
 }));
 
 const openFds = () => readdirSync('/dev/fd').length;
@@ -301,6 +324,18 @@ test('/art/<scene>.svg draws the scene art: seeded by the scene id, in the spec 
   }
   writeFileSync(f.specPath, '{ not json');
   assert.equal((await get(srv.url, '/art/open.svg')).status, 404, 'an unreadable spec has no art');
+}));
+
+// Gate 2 fix M1: a viral spec that writes neither size nor format is 9:16 (applyViral), and its art is drawn at that size.
+test('/art draws a viral spec at its canvas: 1080x1920 by default, its written format or size otherwise', () => withServer(async (srv, f) => {
+  const viral = (extra = {}) => ({ mode: 'viral', ...extra, scenes: [{ id: 'hook', duration: 3, background: 'art', elements: [] }] });
+  const box = async () => /^<svg [^>]*viewBox="0 0 (\d+) (\d+)"/.exec((await get(srv.url, '/art/hook.svg')).body)?.slice(1).map(Number);
+  writeFileSync(f.specPath, JSON.stringify(viral()));
+  assert.deepEqual(await box(), [1080, 1920]);
+  writeFileSync(f.specPath, JSON.stringify(viral({ format: '1:1' })));
+  assert.deepEqual(await box(), [1080, 1080]);
+  writeFileSync(f.specPath, JSON.stringify(viral({ size: [720, 1280] })));
+  assert.deepEqual(await box(), [720, 1280]);
 }));
 
 test('/art follows the render --theme for a spec without one', async () => {

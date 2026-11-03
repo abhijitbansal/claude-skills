@@ -1,6 +1,6 @@
 // Voiceover synthesis with Kokoro (kokoro-js, Apache-2.0), run locally on the CPU.
 // kokoro-js is installed on demand (it pulls onnxruntime, ~250 MB), never by `npm ci`.
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UsageError } from './spec.mjs';
@@ -116,18 +116,39 @@ function kokoroSplitter(kokoro) {
   };
 }
 
-// Writes a 24 kHz mono wav and returns its duration in seconds. Each chunk is generated
-// on its own so nothing is truncated, then the chunks are joined.
-export async function synthesize(tts, kokoro, { text, voice, speed, out }) {
-  const { RawAudio } = await import('@huggingface/transformers');
-  const chunks = [];
+const roundMs = (seconds) => Math.round(seconds * 1000) / 1000;
+
+// Start and end second of every chunk. Computed from cumulative sample counts, so the
+// 3-decimal rounding never accumulates drift across a long narration.
+export function sentenceTimes(chunks, sampleRate) {
+  let samples = 0;
+  return chunks.map(({ text, samples: n }) => {
+    const start = roundMs(samples / sampleRate);
+    samples += n;
+    return { text, start, end: roundMs(samples / sampleRate) };
+  });
+}
+
+// The sentence-timing sidecar sits beside the wav: voice/intro.wav -> voice/intro.json.
+export function sidecarPath(out) {
+  return out.replace(/\.wav$/i, '.json');
+}
+
+// Writes a 24 kHz mono wav plus its sentence-timing sidecar, and returns the duration in
+// seconds and the timed sentences. Each chunk is generated on its own so nothing is
+// truncated, then the chunks are joined. `deps.RawAudio` lets tests skip the model stack.
+export async function synthesize(tts, kokoro, { text, voice, speed, out }, deps = {}) {
+  const RawAudio = deps.RawAudio ?? (await import('@huggingface/transformers')).RawAudio;
+  const spoken = [];
   for (const chunk of chunkText(text, kokoroSplitter(kokoro))) {
-    chunks.push((await tts.generate(chunk, { voice, speed })).audio);
+    spoken.push({ text: chunk, audio: (await tts.generate(chunk, { voice, speed })).audio });
   }
-  const total = chunks.reduce((n, c) => n + c.length, 0);
+  const total = spoken.reduce((n, c) => n + c.audio.length, 0);
   const joined = new Float32Array(total);
   let offset = 0;
-  for (const c of chunks) { joined.set(c, offset); offset += c.length; }
+  for (const c of spoken) { joined.set(c.audio, offset); offset += c.audio.length; }
   await new RawAudio(joined, SAMPLE_RATE).save(out);
-  return total / SAMPLE_RATE;
+  const sentences = sentenceTimes(spoken.map((c) => ({ text: c.text, samples: c.audio.length })), SAMPLE_RATE);
+  writeFileSync(sidecarPath(out), `${JSON.stringify({ sampleRate: SAMPLE_RATE, voice, sentences }, null, 2)}\n`);
+  return { seconds: total / SAMPLE_RATE, sentences };
 }

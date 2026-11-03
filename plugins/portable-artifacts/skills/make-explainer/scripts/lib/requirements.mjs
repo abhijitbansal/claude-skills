@@ -27,7 +27,7 @@ function specNeeds(specFile) {
 
 export const targets = ['check'];
 export function requirementsFor(target) {
-  const base = [nodeVersion(20), nodeModules()];
+  const base = [nodeVersion(20), nodeModules({ restore: ['dev_deps'] })];
   // Optional in every target: the cheap-model agent file the SKILL.md may hand the build to.
   const agent = builderAgent();
   // check.mjs needs playwright (a devDependency) and a browser.

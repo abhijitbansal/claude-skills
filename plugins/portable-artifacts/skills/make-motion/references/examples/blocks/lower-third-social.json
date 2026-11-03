@@ -1,0 +1,23 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "lower-third-social",
+      "duration": 4,
+      "elements": [
+        {
+          "id": "handle",
+          "type": "block",
+          "x": 100,
+          "y": 818,
+          "block": "lower-third-social",
+          "params": {
+            "handle": "@adalovelace",
+            "platform": "github"
+          }
+        }
+      ]
+    }
+  ]
+}

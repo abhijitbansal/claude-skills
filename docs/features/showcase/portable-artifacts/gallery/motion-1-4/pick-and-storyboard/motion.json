@@ -1,0 +1,50 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "theme": "dusk",
+  "generatedBy": { "model": "claude-sonnet-5-5", "agent": "Claude Code" },
+  "scenes": [
+    {
+      "id": "pick",
+      "duration": 3.5,
+      "elements": [
+        { "id": "pick-head", "type": "text", "text": "Click an element in the preview", "x": 960, "y": 150, "fontSize": 80, "fontWeight": 700, "hold": true },
+        { "id": "pick-frame", "type": "shape", "shape": "rect", "x": 960, "y": 540, "width": 1200, "height": 580, "fill": "surface", "stroke": "line", "elevated": true, "hold": true },
+        { "id": "pick-mock-title", "type": "text", "text": "Q3 revenue up 18%", "x": 960, "y": 440, "fontSize": 80, "fontWeight": 700, "hold": true },
+        { "id": "pick-mock-sub", "type": "text", "text": "mock preview of your video", "x": 960, "y": 540, "fontSize": 40, "fontWeight": 400, "color": "text2", "hold": true },
+        { "id": "pick-outline", "type": "shape", "shape": "rect", "x": 960, "y": 440, "width": 780, "height": 130, "fill": "transparent", "stroke": "accent", "strokeWidth": 6, "hold": true,
+          "keyframes": [{ "t": 1.2, "opacity": 0 }, { "t": 1.5, "opacity": 1 }] },
+        { "id": "pick-cursor", "type": "shape", "shape": "line", "arrow": "end", "cap": "round", "x": 1370, "y": 700, "width": 90, "rotate": 225, "stroke": "text", "strokeWidth": 10, "hold": true,
+          "keyframes": [{ "t": 0.2, "x": 1370, "y": 700, "opacity": 0 }, { "t": 0.5, "opacity": 1 }, { "t": 1.2, "x": 1300, "y": 495, "ease": "inOutCubic" }] },
+        { "id": "pick-toast", "type": "shape", "shape": "rect", "x": 960, "y": 705, "width": 1000, "height": 80, "fill": "#0b0d12", "stroke": "accent", "strokeWidth": 3, "hold": true,
+          "keyframes": [{ "t": 1.6, "opacity": 0, "y": 725 }, { "t": 2.0, "opacity": 1, "y": 705, "ease": "enter" }] },
+        { "id": "pick-toast-text", "type": "text", "font": "mono", "text": "copied scenes[1].elements[3] (id \"title\")", "x": 960, "y": 705, "fontSize": 36, "fontWeight": 500, "color": "accent", "hold": true,
+          "keyframes": [{ "t": 1.6, "opacity": 0, "y": 725 }, { "t": 2.0, "opacity": 1, "y": 705, "ease": "enter" }] },
+        { "id": "pick-note", "type": "text", "text": "Mock-up, not a screen recording. The toast wording is what the preview copies.", "x": 960, "y": 960, "fontSize": 34, "fontWeight": 400, "color": "text2", "hold": true }
+      ]
+    },
+    {
+      "id": "story",
+      "duration": 3.5,
+      "transition": "fade",
+      "elements": [
+        { "id": "story-head", "type": "text", "text": "Storyboard for clips over 20 s", "x": 960, "y": 150, "fontSize": 80, "fontWeight": 700, "hold": true },
+        { "id": "card-1", "type": "shape", "shape": "rect", "x": 480, "y": 540, "width": 400, "height": 360, "fill": "surface", "stroke": "line", "elevated": true, "hold": true,
+          "keyframes": [{ "t": 0.2, "opacity": 0, "y": 580 }, { "t": 0.7, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "card-1-text", "type": "text", "text": "Scene 1\nhook\n5 s", "x": 480, "y": 540, "fontSize": 48, "fontWeight": 600, "hold": true,
+          "keyframes": [{ "t": 0.2, "opacity": 0, "y": 580 }, { "t": 0.7, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "card-2", "type": "shape", "shape": "rect", "x": 960, "y": 540, "width": 400, "height": 360, "fill": "surface", "stroke": "line", "elevated": true, "hold": true,
+          "keyframes": [{ "t": 0.5, "opacity": 0, "y": 580 }, { "t": 1.0, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "card-2-text", "type": "text", "text": "Scene 2\ndemo\n10 s", "x": 960, "y": 540, "fontSize": 48, "fontWeight": 600, "hold": true,
+          "keyframes": [{ "t": 0.5, "opacity": 0, "y": 580 }, { "t": 1.0, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "card-3", "type": "shape", "shape": "rect", "x": 1440, "y": 540, "width": 400, "height": 360, "fill": "surface", "stroke": "line", "elevated": true, "hold": true,
+          "keyframes": [{ "t": 0.8, "opacity": 0, "y": 580 }, { "t": 1.3, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "card-3-text", "type": "text", "text": "Scene 3\ncall to action\n8 s", "x": 1440, "y": 540, "fontSize": 48, "fontWeight": 600, "hold": true,
+          "keyframes": [{ "t": 0.8, "opacity": 0, "y": 580 }, { "t": 1.3, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "story-total", "type": "text", "text": "Review the plan, then build", "x": 960, "y": 820, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true,
+          "keyframes": [{ "t": 1.6, "opacity": 0, "y": 840 }, { "t": 2.1, "opacity": 1, "y": 820, "ease": "enter" }] },
+        { "id": "story-note", "type": "text", "text": "Mock-up of the idea (brief.json, then storyboard.mjs), not the real review page.", "x": 960, "y": 960, "fontSize": 34, "fontWeight": 400, "color": "text2", "hold": true }
+      ]
+    }
+  ]
+}

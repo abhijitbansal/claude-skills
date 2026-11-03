@@ -60,11 +60,17 @@ test('an explicit right alignment also holds the cell on one line', () => {
   assert.match(html, /<td class="a-r nw">/);
 });
 
-test('a KPI value is printed as written, with its length for the CSS to size it by', () => {
-  const html = renderKpis({ items: [{ label: 'L', value: 'On track for Q4 launch' }, { label: 'N', value: 123456789 }, { label: 'S', value: '87%' }] });
-  assert.match(html, /<dd class="kpi-value" style="--n: 22">On track for Q4 launch<\/dd>/);
+test('a KPI section carries the length of its longest one-line value; short values carry none, wide and long values keep their own', () => {
+  const html = renderKpis({ items: [{ label: 'S', value: '87%' }, { label: 'M', value: '1,204 ms' }, { label: 'N', value: 123456789 }, { label: 'L', value: 'On track for Q4 launch' }] });
+  assert.match(html, /^<dl class="kpis" style="--n: 8">/);
+  assert.match(html, /<dd class="kpi-value">87%<\/dd>/);
+  assert.match(html, /<dd class="kpi-value">1,204 ms<\/dd>/);
   assert.match(html, /<dd class="kpi-value" style="--n: 11">123,456,789<\/dd>/);
-  assert.match(html, /<dd class="kpi-value" style="--n: 3">87%<\/dd>/);
+  assert.match(html, /<dd class="kpi-value" style="--n: 22">On track for Q4 launch<\/dd>/);
+});
+
+test('a section whose every value is wide or long carries no length of its own', () => {
+  assert.match(renderKpis({ items: [{ label: 'N', value: 123456789 }, { label: 'L', value: 'On track for Q4 launch' }] }), /^<dl class="kpis">\n/);
 });
 
 test('a value too long for a small tile takes a full-row tile; a short one does not', () => {

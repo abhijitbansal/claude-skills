@@ -1,0 +1,24 @@
+{
+  "mode": "viral",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "before-after-swipe",
+      "duration": 6,
+      "elements": [
+        { "id": "hook", "type": "text", "role": "title", "text": "Same clip, two different edits", "x": 502, "y": 400, "fontSize": 64, "fontWeight": 800, "maxWidth": 685 },
+        {
+          "id": "swipe",
+          "type": "block",
+          "x": 502,
+          "y": 880,
+          "block": "before-after-swipe",
+          "params": {
+            "before": { "src": "swipe-before.png", "label": "Before" },
+            "after": { "src": "swipe-after.png", "label": "After" }
+          }
+        }
+      ]
+    }
+  ]
+}

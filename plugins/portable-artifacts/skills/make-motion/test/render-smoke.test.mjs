@@ -1,16 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { mkdtempSync, mkdirSync, readdirSync, existsSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { findFfmpeg } from '../scripts/lib/ffmpeg.mjs';
 import { launchBrowser, guardNetwork } from '../scripts/lib/browser.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { writeWav } from './helpers/wav.mjs';
 import { sheetTimes } from '../scripts/lib/sheet.mjs';
+import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER = path.join(root, 'scripts/render.mjs');
@@ -18,15 +18,6 @@ const EXAMPLE = path.join(root, 'references/examples/q3-revenue.json');
 const BG = [11, 13, 18];
 const tmp = (p) => mkdtempSync(path.join(tmpdir(), p));
 
-async function haveBrowser() {
-  try { await (await launchBrowser({ quiet: true })).close(); return true; } catch { return false; }
-}
-async function haveFfmpeg() { try { return await findFfmpeg(); } catch { return null; } }
-function ffprobeFor(ff) {
-  const sibling = path.join(path.dirname(ff), 'ffprobe');
-  if (existsSync(sibling)) return sibling;
-  return spawnSync('ffprobe', ['-version'], { stdio: 'ignore' }).status === 0 ? 'ffprobe' : null;
-}
 
 // Share of pixels that differ from the background, decoded in the browser.
 async function nonBackgroundRatio(png) {
@@ -51,9 +42,9 @@ async function nonBackgroundRatio(png) {
 const render = (args, env = {}) => spawnSync(process.execPath, [RENDER, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
 
 test('render q3-revenue at 320x180 / 10 fps, probe it, and the frame is not blank', async (t) => {
-  const ff = await haveFfmpeg();
-  if (!ff || !(await haveBrowser())) return t.skip('browser or ffmpeg unavailable');
-  const probeBin = ffprobeFor(ff);
+  const tools = await requireRender(t, { need: ['browser', 'ffmpeg', 'ffprobe'] });
+  if (!tools) return undefined;
+  const { ffmpeg: ff, ffprobe: probeBin } = tools;
   const dir = tmp('rnd-');
   const out = path.join(dir, 'v.mp4');
   const r = render([EXAMPLE, '--out', out, '--fps', '10', '--size', '320x180']);
@@ -62,7 +53,6 @@ test('render q3-revenue at 320x180 / 10 fps, probe it, and the frame is not blan
   const frame = path.join(dir, 'f.png');
   assert.equal(spawnSync(ff, ['-y', '-ss', '8', '-i', out, '-frames:v', '1', frame]).status, 0);
   assert.ok(await nonBackgroundRatio(frame) > 0.01, 'frame at 8s is blank');
-  if (!probeBin) return t.diagnostic('ffprobe missing: skipped probe assertions');
   const probe = spawnSync(probeBin, ['-v', 'error', '-select_streams', 'v:0', '-show_entries',
     'stream=width,height,nb_frames:format=duration', '-of', 'json', out], { encoding: 'utf8' });
   const info = JSON.parse(probe.stdout);
@@ -95,8 +85,9 @@ function containerDuration(stderr) {
 }
 
 test('render with two audio tracks muxes one AAC stream and keeps the spec length', async (t) => {
-  const ff = await haveFfmpeg();
-  if (!ff || !(await haveBrowser())) return t.skip('browser or ffmpeg unavailable');
+  const tools = await requireRender(t);
+  if (!tools) return undefined;
+  const ff = tools.ffmpeg;
   const dir = tmp('aud-');
   writeWav(path.join(dir, 'music.wav'), { seconds: 3 });
   writeWav(path.join(dir, 'voice.wav'), { seconds: 1 });
@@ -119,8 +110,9 @@ const meanDb = (ff, file, filters) => {
 };
 
 test('a stereo track listed after a mono one keeps its channels and sample rate, and tracks start where the spec says', async (t) => {
-  const ff = await haveFfmpeg();
-  if (!ff || !(await haveBrowser())) return t.skip('browser or ffmpeg unavailable');
+  const tools = await requireRender(t);
+  if (!tools) return undefined;
+  const ff = tools.ffmpeg;
   const dir = tmp('mix-');
   writeWav(path.join(dir, 'voice.wav'), { seconds: 1, sampleRate: 24000 }); // what voice.mjs writes
   writeWav(path.join(dir, 'music.wav'), { seconds: 3, sampleRate: 44100, channels: 2, leftOnly: true });
@@ -140,8 +132,7 @@ test('a stereo track listed after a mono one keeps its channels and sample rate,
 });
 
 test('render fails before launching a browser when an audio file cannot be decoded', async (t) => {
-  const ff = await haveFfmpeg();
-  if (!ff) return t.skip('ffmpeg unavailable');
+  if (!(await requireRender(t, { need: ['ffmpeg'] }))) return undefined;
   const dir = tmp('badaud-');
   writeFileSync(path.join(dir, 'voice.wav'), 'not audio');
   const spec = { scenes: [{ id: 's', duration: 1, elements: [] }], audio: [{ src: 'voice.wav' }] };
@@ -154,7 +145,7 @@ test('render fails before launching a browser when an audio file cannot be decod
 });
 
 test('--contact-sheet ignores audio, even an undecodable file', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const dir = tmp('csaud-');
   writeFileSync(path.join(dir, 'voice.wav'), 'not audio');
   writeFileSync(path.join(dir, 'm.json'), JSON.stringify({ scenes: [{ id: 's', duration: 1, elements: [] }], audio: [{ src: 'voice.wav' }] }));
@@ -164,7 +155,7 @@ test('--contact-sheet ignores audio, even an undecodable file', async (t) => {
 });
 
 test('--contact-sheet writes one non-blank PNG per scene (no ffmpeg needed)', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const dir = tmp('cs-');
   const r = render([EXAMPLE, '--contact-sheet', '--out', dir, '--size', '480x270'], { PATH: '/nonexistent' });
   assert.equal(r.status, 0, r.stdout + r.stderr);
@@ -176,7 +167,7 @@ test('--contact-sheet writes one non-blank PNG per scene (no ffmpeg needed)', as
 const pngSize = (buf) => ({ w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) });
 
 test('--contact-sheet tiles a multi-keyframe scene: one tile per sheetTimes entry plus the 360 px phone tile', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const dir = tmp('cst-');
   const scene = { id: 'multi', duration: 2, elements: [
     { id: 'a', type: 'text', text: 'Hello', x: 240, y: 135, fontSize: 48, keyframes: [{ t: 0, opacity: 0 }, { t: 0.6, opacity: 1 }] },
@@ -193,7 +184,7 @@ test('--contact-sheet tiles a multi-keyframe scene: one tile per sheetTimes entr
 });
 
 test('--contact-sheet on a scene with more than 11 moments shows 11 frames and says so on stderr', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const dir = tmp('cap-');
   const keyframes = Array.from({ length: 24 }, (_, i) => ({ t: 0.3 * (i + 1), opacity: 1 }));
   writeFileSync(path.join(dir, 'm.json'), JSON.stringify({ size: [480, 270], scenes: [{ id: 'busy', duration: 10, elements: [
@@ -207,7 +198,7 @@ test('--contact-sheet on a scene with more than 11 moments shows 11 frames and s
 });
 
 test('the stamp exists only in contact mode: the real video path writes the frames a stamp-free page shows', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const dir = tmp('stamp-');
   const spec = { size: [320, 180], scenes: [{ id: 's', duration: 1, elements: [{ id: 'a', type: 'text', text: 'Hi', x: 160, y: 90, fontSize: 40,
     keyframes: [{ t: 0, opacity: 0 }, { t: 0.5, opacity: 1 }] }] }] };
@@ -245,7 +236,7 @@ test('the stamp exists only in contact mode: the real video path writes the fram
 });
 
 test('a scene with background "art" renders the theme art: not the flat scene, and the same bytes every time', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const dir = tmp('art-');
   const scene = (background) => ({ theme: 'poster', size: [480, 270], scenes: [{ id: 'cover', duration: 1, background,
     elements: [{ id: 'h', type: 'text', role: 'title', text: 'Art', x: 240, y: 135, fontSize: 64 }] }] });
@@ -266,7 +257,7 @@ test('a scene with background "art" renders the theme art: not the flat scene, a
 });
 
 test('ffmpeg dying early: clean non-zero exit, ffmpeg stderr shown, no partial file', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const dir = tmp('epipe-');
   const fake = path.join(dir, 'ffmpeg-fake');
   writeFileSync(fake, '#!/usr/bin/env node\nprocess.stderr.write("fake ffmpeg: boom\\n");process.stdin.destroy();process.exit(3);\n');
@@ -281,8 +272,7 @@ test('ffmpeg dying early: clean non-zero exit, ffmpeg stderr shown, no partial f
 });
 
 test('SIGTERM mid-render exits 143 and leaves no output', async (t) => {
-  const ff = await haveFfmpeg();
-  if (!ff || !(await haveBrowser())) return t.skip('browser or ffmpeg unavailable');
+  if (!(await requireRender(t))) return undefined;
   const dir = tmp('sig-');
   const out = path.join(dir, 'v.mp4');
   const child = spawn(process.execPath, [RENDER, EXAMPLE, '--out', out, '--fps', '60', '--size', '320x180'], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -315,7 +305,7 @@ test('usage errors exit 2 without launching anything', () => {
 });
 
 test('guardNetwork aborts non-local requests and reports them', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const other = http.createServer((_q, res) => { res.writeHead(200, { 'access-control-allow-origin': '*' }); res.end('hi'); });
   await new Promise((r) => other.listen(0, '127.0.0.1', r));
   const otherUrl = `http://127.0.0.1:${other.address().port}/x`;
@@ -342,7 +332,7 @@ test('guardNetwork aborts non-local requests and reports them', async (t) => {
 });
 
 test('renderer fails visibly (once) on an unknown element type', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const dir = tmp('bog-');
   writeFileSync(path.join(dir, 'm.json'), JSON.stringify({ scenes: [{ id: 's', duration: 1, elements: [{ id: 'b', type: 'bogus', x: 0, y: 0 }] }] }));
   const srv = await startServer({ specPath: path.join(dir, 'm.json'), mode: 'render' });

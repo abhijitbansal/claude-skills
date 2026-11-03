@@ -1,0 +1,127 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "race",
+      "duration": 7,
+      "elements": [
+        {
+          "id": "ranking",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "race",
+          "params": {
+            "title": "Streaming subscribers",
+            "suffix": "M",
+            "top": 4,
+            "periodSeconds": 1.5,
+            "rows": [
+              {
+                "period": "2021",
+                "name": "Nova",
+                "value": 38
+              },
+              {
+                "period": "2021",
+                "name": "Lumen",
+                "value": 31
+              },
+              {
+                "period": "2021",
+                "name": "Orbit",
+                "value": 22
+              },
+              {
+                "period": "2021",
+                "name": "Pixel",
+                "value": 12
+              },
+              {
+                "period": "2021",
+                "name": "Quill",
+                "value": 6
+              },
+              {
+                "period": "2022",
+                "name": "Nova",
+                "value": 49
+              },
+              {
+                "period": "2022",
+                "name": "Lumen",
+                "value": 43
+              },
+              {
+                "period": "2022",
+                "name": "Orbit",
+                "value": 31
+              },
+              {
+                "period": "2022",
+                "name": "Pixel",
+                "value": 24
+              },
+              {
+                "period": "2022",
+                "name": "Quill",
+                "value": 15
+              },
+              {
+                "period": "2023",
+                "name": "Nova",
+                "value": 58
+              },
+              {
+                "period": "2023",
+                "name": "Lumen",
+                "value": 56
+              },
+              {
+                "period": "2023",
+                "name": "Orbit",
+                "value": 47
+              },
+              {
+                "period": "2023",
+                "name": "Pixel",
+                "value": 41
+              },
+              {
+                "period": "2023",
+                "name": "Quill",
+                "value": 33
+              },
+              {
+                "period": "2024",
+                "name": "Nova",
+                "value": 63
+              },
+              {
+                "period": "2024",
+                "name": "Lumen",
+                "value": 71
+              },
+              {
+                "period": "2024",
+                "name": "Orbit",
+                "value": 66
+              },
+              {
+                "period": "2024",
+                "name": "Pixel",
+                "value": 58
+              },
+              {
+                "period": "2024",
+                "name": "Quill",
+                "value": 61
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

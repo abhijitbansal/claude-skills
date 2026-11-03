@@ -1,0 +1,51 @@
+{
+  "theme": "dusk",
+  "size": [1920, 1080],
+  "scenes": [
+    {
+      "id": "highlight",
+      "duration": 4,
+      "elements": [
+        { "id": "heading", "type": "text", "text": "One line does the work", "x": 960, "y": 200, "fontSize": 64, "fontWeight": 700 },
+        {
+          "id": "snippet",
+          "type": "code",
+          "x": 960,
+          "y": 580,
+          "width": 1040,
+          "fontSize": 32,
+          "lang": "javascript",
+          "highlight": [3],
+          "code": "export async function load(url) {\n  // one request, parsed as JSON\n  const res = await fetch(url);\n  if (!res.ok) throw new Error(`HTTP ${res.status}`);\n  return res.json();\n}",
+          "keyframes": [
+            { "t": 0, "y": 620 },
+            { "t": 1.2, "y": 580, "ease": "enter" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "diff",
+      "duration": 5,
+      "transition": "fade",
+      "elements": [
+        { "id": "heading-2", "type": "text", "text": "Then show the change", "x": 960, "y": 200, "fontSize": 64, "fontWeight": 700 },
+        {
+          "id": "change",
+          "type": "code",
+          "x": 960,
+          "y": 580,
+          "width": 800,
+          "fontSize": 32,
+          "lang": "python",
+          "diff": true,
+          "code": " def total(items):\n-    return sum(items)\n+    # skip the empty ones\n+    return sum(i for i in items if i)",
+          "keyframes": [
+            { "t": 0, "opacity": 0 },
+            { "t": 0.6, "opacity": 1, "ease": "enter" }
+          ]
+        }
+      ]
+    }
+  ]
+}

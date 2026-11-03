@@ -52,6 +52,36 @@ test('scaffold lists every preset it can build, plan included', () => {
   assert.deepEqual(PRESET_NAMES, ['recap', 'checklist', 'concept', 'slides', 'plan']);
 });
 
+// ---- a plan explains before it asks ------------------------------------------------------------------
+
+const THIN_PLAN_WARNING = 'a plan asks before it explains: add steps, cards, table, files or text sections that say what gets built before the first decision, approval or question';
+const thinWarnings = async (spec) => {
+  const r = await validateSpec(spec, { dir: FIXTURES });
+  assert.deepEqual(r.errors, []); // an invalid spec returns no warnings, which would pass these tests for the wrong reason
+  return r.warnings.filter((x) => x.path === 'sections');
+};
+const tldr = { type: 'tldr', text: 'The plan in one line.' };
+const steps = { type: 'steps', title: 'What gets built', items: [{ title: 'First', text: 'Do the first thing.' }, { title: 'Second', text: 'Do the second thing.' }] };
+
+test('warns when no detail section precedes the first answerable item', async () => {
+  const w = await thinWarnings(plan([tldr, decision(), verdict()]));
+  assert.deepEqual(w, [{ path: 'sections', message: THIN_PLAN_WARNING }]);
+});
+
+test('warns when the only detail section comes after the questions', async () => {
+  const w = await thinWarnings(plan([tldr, question(), steps, verdict()]));
+  assert.deepEqual(w, [{ path: 'sections', message: THIN_PLAN_WARNING }]);
+});
+
+test('no warning when a steps section precedes the first decision', async () => {
+  assert.deepEqual(await thinWarnings(plan([tldr, steps, decision(), verdict()])), []);
+});
+
+test('no warning on a page without answerable items', async () => {
+  const concept = { title: 'How it works', preset: 'concept', sections: [tldr, { type: 'text', title: 'Idea', text: 'A short idea.' }] };
+  assert.deepEqual(await thinWarnings(concept), []);
+});
+
 // ---- required fields ------------------------------------------------------------------------------
 
 test('decision, approval and question require an id', async () => {

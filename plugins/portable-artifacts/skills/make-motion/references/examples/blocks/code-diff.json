@@ -1,0 +1,25 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "code-diff",
+      "duration": 4,
+      "elements": [
+        {
+          "id": "change",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "code-diff",
+          "params": {
+            "title": "Retry the request once",
+            "lang": "javascript",
+            "before": "async function load(url) {\n  const res = await fetch(url);\n  return res.json();\n}",
+            "after": "async function load(url) {\n  let res = await fetch(url);\n  if (!res.ok) res = await fetch(url);\n  return res.json();\n}"
+          }
+        }
+      ]
+    }
+  ]
+}

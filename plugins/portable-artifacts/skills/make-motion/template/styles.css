@@ -19,14 +19,46 @@ body { font-family: var(--sans); color: var(--text); }
 body.preview #viewport { bottom: 108px; }
 #stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; }
 .scene { position: absolute; inset: 0; display: none; }
-.el { position: absolute; left: 0; top: 0; will-change: transform, opacity; }
+/* A scene with a `camera` holds its elements in a .camera node the size of the layer, posed about the canvas centre by
+   renderer.mjs. The layer clips what the zoom pushes out and keeps the background (a colour or the art plate), so zooming
+   out, panning, rolling or shaking never shows a gap. No will-change here: render mode must not get compositor layers (see body.live-layers). */
+.scene.has-camera { overflow: hidden; }
+.camera { position: absolute; inset: 0; transform-origin: 50% 50%; }
+.el { position: absolute; left: 0; top: 0; }
+/* Compositor layers only where playback is live: renderer.mjs sets body.live-layers only for an explicit preview page,
+   so a missing or unknown mode paints like render mode. In render mode (render.mjs and check.mjs seek, then screenshot)
+   a layer per element made captures depend on timing: a layer keeps the raster scale it was first drawn at (a title that
+   scales in came out in one of two rasterizations per browser launch), and a layer that jumps on screen from off canvas
+   could be captured before its tiles were drawn (an image caught "mid-swipe"). Dropping the layers is half the fix:
+   captures are byte-identical only together with the whole-tile raster flag in scripts/lib/browser.mjs
+   (test/determinism.test.mjs). */
+body.live-layers .el { will-change: transform, opacity; }
+/* A group is a zero-size node at its own centre: the centring translate(-50%, -50%) is then a no-op, and its children (.el
+   again, absolutely placed from that centre) move, fade, scale and rotate with it. */
+.el.group { width: 0; height: 0; }
 .el.text { font-family: var(--sans); white-space: pre-wrap; width: max-content; line-height: 1.15; letter-spacing: -0.01em; }
 .el.text.mono, .el.counter.mono { font-family: var(--mono); letter-spacing: 0; }
 .el.text.title { font-family: var(--display); line-height: 1.02; letter-spacing: -0.015em; }
 .el.counter { font-family: var(--sans); white-space: pre; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+/* A code element: one .line per line of code (template/code-view.mjs), wrapping at any character inside its width so
+   the box never grows sideways (blocks/layout.mjs codeRows counts rows the same way); an empty line keeps its row. A row's
+   padding (0.3em, CODE_ROW_PAD_EM) lets a highlight or diff tint reach past the glyphs. */
+.el.code { font-family: var(--mono); white-space: pre-wrap; word-break: break-all; line-height: 1.4; tab-size: 2; letter-spacing: 0; text-align: left; }
+.el.code .line { min-height: 1.4em; padding: 0 0.3em; border-radius: 0.2em; }
 .el svg { display: block; overflow: visible; }
-.el img { display: block; }
+.el img, .el video { display: block; }
 .el.chart svg { width: 100%; height: 100%; }
+/* Captions: one layer per track on the stage (template/caption-layer.mjs sets its centre, the zone's width as max-width,
+   the font size and weight and the text colour). A long group wraps, balanced, and an unbreakable word breaks anywhere,
+   so it never runs past the zone. A word is an inline-block so a kinetic word can scale. */
+.captions { position: absolute; width: max-content; transform: translate(-50%, -50%); font-family: var(--sans);
+  line-height: 1.2; letter-spacing: -0.01em; text-align: center; white-space: normal; overflow-wrap: anywhere;
+  text-wrap: balance; pointer-events: none; }
+.captions .word { display: inline-block; }
+.captions.style-plain, .captions.style-karaoke, .captions.style-kinetic, .captions.style-typewriter { text-shadow: 0 0.04em 0.25em var(--page); }
+.captions.style-pill { padding: 0.2em 0.75em; border-radius: 0.8em; }
+.captions.style-boxed { padding: 0.2em 0.5em; border-radius: 0.12em; }
+.captions.style-karaoke .word.on, .captions.style-kinetic .word.on { color: var(--accent); }
 /* A typing text's caret: an empty inline marker with a thin bar absolutely positioned on it. It has no width and no
    break opportunity, so the text wraps identically at every typed count. */
 .el .caret { position: relative; }
@@ -60,6 +92,13 @@ body.preview #ui { display: flex; position: absolute; left: 0; right: 0; bottom:
 #marks i { position: absolute; top: 0; height: 14px; border-left: 1px solid var(--line); padding-left: 4px;
   font: 11px/14px var(--mono); font-style: normal; color: var(--text3); white-space: nowrap; }
 #readout { font: 13px var(--mono); color: var(--text3); min-width: 140px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Pick toast: preview only (initPick in preview-ui.mjs builds it; the render page never has one). */
+#pick-toast { position: absolute; left: 50%; bottom: 124px; transform: translateX(-50%); max-width: 90%; padding: 8px 14px;
+  background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); border-radius: var(--ui-radius);
+  font: 13px/1.4 var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; z-index: 6; }
+#pick-toast[hidden] { display: none; }
+body.preview #stage .el[data-path] { cursor: pointer; }
 
 /* Provenance footer: preview only (the render captures the whole page), below the controls. */
 .pa-footer { display: none; }

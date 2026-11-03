@@ -1,0 +1,36 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "presets",
+      "duration": 4.5,
+      "elements": [
+        { "id": "presets-title", "type": "text", "text": "One photo, four grades", "x": 960, "y": 210, "fontSize": 80, "fontWeight": 700, "hold": true },
+        { "id": "tile-warm", "type": "image", "src": "photo.png", "x": 276, "y": 540, "width": 420, "height": 236, "fit": "cover", "grade": { "preset": "warm" }, "hold": true,
+          "keyframes": [{ "t": 0, "opacity": 0, "y": 580 }, { "t": 0.6, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "tile-cool", "type": "image", "src": "photo.png", "x": 732, "y": 540, "width": 420, "height": 236, "fit": "cover", "grade": { "preset": "cool" }, "hold": true,
+          "keyframes": [{ "t": 0.15, "opacity": 0, "y": 580 }, { "t": 0.75, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "tile-mono", "type": "image", "src": "photo.png", "x": 1188, "y": 540, "width": 420, "height": 236, "fit": "cover", "grade": { "preset": "mono" }, "hold": true,
+          "keyframes": [{ "t": 0.3, "opacity": 0, "y": 580 }, { "t": 0.9, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "tile-film", "type": "image", "src": "photo.png", "x": 1644, "y": 540, "width": 420, "height": 236, "fit": "cover", "grade": { "preset": "film" }, "hold": true,
+          "keyframes": [{ "t": 0.45, "opacity": 0, "y": 580 }, { "t": 1.05, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "label-warm", "type": "text", "text": "warm", "x": 276, "y": 720, "fontSize": 44, "fontWeight": 600, "hold": true },
+        { "id": "label-cool", "type": "text", "text": "cool", "x": 732, "y": 720, "fontSize": 44, "fontWeight": 600, "hold": true },
+        { "id": "label-mono", "type": "text", "text": "mono", "x": 1188, "y": 720, "fontSize": 44, "fontWeight": 600, "hold": true },
+        { "id": "label-film", "type": "text", "text": "film", "x": 1644, "y": 720, "fontSize": 44, "fontWeight": 600, "hold": true }
+      ]
+    },
+    {
+      "id": "tuned",
+      "duration": 4,
+      "transition": "fade",
+      "elements": [
+        { "id": "tuned-photo", "type": "image", "src": "photo.png", "x": 960, "y": 540, "width": 1920, "height": 1080, "fit": "cover", "hold": true,
+          "grade": { "preset": "film", "exposure": -0.3, "contrast": 1.1, "saturation": 1.2 } },
+        { "id": "tuned-caption", "type": "text", "text": "Exposure, contrast and saturation on top", "x": 960, "y": 930, "fontSize": 64, "fontWeight": 700, "hold": true,
+          "keyframes": [{ "t": 0.2, "opacity": 0, "y": 960 }, { "t": 0.9, "opacity": 1, "y": 930, "ease": "enter" }] }
+      ]
+    }
+  ]
+}

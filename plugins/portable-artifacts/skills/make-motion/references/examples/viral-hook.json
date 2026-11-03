@@ -1,0 +1,70 @@
+{
+  "mode": "viral",
+  "format": "9:16",
+  "size": [1080, 1920],
+  "fps": 30,
+  "captions": [{ "src": "viral-hook.srt", "style": "pill" }],
+  "scenes": [
+    {
+      "id": "hook",
+      "duration": 3.5,
+      "elements": [
+        {
+          "id": "kicker", "type": "text", "text": "Short-form tip", "x": 502, "y": 360, "fontSize": 44, "fontWeight": 700, "color": "accent",
+          "keyframes": [
+            { "t": 1.2, "opacity": 0, "y": 380 },
+            { "t": 1.6, "opacity": 1, "y": 360, "ease": "enter" }
+          ]
+        },
+        { "id": "headline", "type": "text", "role": "title", "text": "Hook them in three seconds", "x": 502, "y": 580, "fontSize": 96, "fontWeight": 800, "maxWidth": 700 }
+      ]
+    },
+    {
+      "id": "proof",
+      "duration": 5,
+      "elements": [
+        {
+          "id": "seconds", "type": "counter", "from": 0, "to": 3, "suffix": " s", "x": 502, "y": 500, "fontSize": 220, "fontWeight": 800,
+          "keyframes": [
+            { "t": 0.3, "value": 0 },
+            { "t": 1.8, "value": 3, "ease": "outCubic" }
+          ]
+        },
+        {
+          "id": "gives", "type": "text", "text": "is all a viewer gives you", "x": 502, "y": 740, "fontSize": 56, "fontWeight": 600, "maxWidth": 700,
+          "keyframes": [
+            { "t": 0.6, "opacity": 0, "y": 770 },
+            { "t": 1.1, "opacity": 1, "y": 740, "ease": "enter" }
+          ]
+        },
+        {
+          "id": "payoff", "type": "text", "text": "Lead with the payoff", "x": 502, "y": 890, "fontSize": 48, "fontWeight": 500, "color": "text2",
+          "keyframes": [
+            { "t": 3, "opacity": 0, "y": 910 },
+            { "t": 3.4, "opacity": 1, "y": 890, "ease": "enter" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "close",
+      "duration": 3.5,
+      "elements": [
+        {
+          "id": "save", "type": "text", "text": "Save this for your next edit", "x": 502, "y": 560, "fontSize": 72, "fontWeight": 700, "maxWidth": 700,
+          "keyframes": [
+            { "t": 0, "opacity": 0, "scale": 0.92 },
+            { "t": 0.4, "opacity": 1, "scale": 1, "ease": "enter" }
+          ]
+        },
+        {
+          "id": "follow", "type": "text", "text": "Follow for part 2", "x": 502, "y": 760, "fontSize": 48, "fontWeight": 600, "color": "accent",
+          "keyframes": [
+            { "t": 1.2, "opacity": 0, "y": 780 },
+            { "t": 1.6, "opacity": 1, "y": 760, "ease": "enter" }
+          ]
+        }
+      ]
+    }
+  ]
+}

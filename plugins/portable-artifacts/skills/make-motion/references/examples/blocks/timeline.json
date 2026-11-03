@@ -1,0 +1,27 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "timeline",
+      "duration": 6,
+      "elements": [
+        {
+          "id": "roadmap",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "timeline",
+          "params": {
+            "events": [
+              { "when": "2023", "what": "First prototype" },
+              { "when": "Q1 2024", "what": "Public beta" },
+              { "when": "Q3 2024", "what": "Version 1.0" },
+              { "when": "2025", "what": "Teams and sharing" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

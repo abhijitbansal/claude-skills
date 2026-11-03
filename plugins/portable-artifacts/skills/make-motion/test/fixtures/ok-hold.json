@@ -1,0 +1,13 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "title",
+      "duration": 10,
+      "elements": [
+        { "id": "headline", "type": "text", "role": "title", "text": "Built for focus", "x": 960, "y": 540, "fontSize": 120, "hold": true }
+      ]
+    }
+  ]
+}

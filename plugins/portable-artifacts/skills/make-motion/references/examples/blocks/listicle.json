@@ -1,0 +1,23 @@
+{
+  "mode": "viral",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "listicle",
+      "duration": 7,
+      "elements": [
+        {
+          "id": "tips",
+          "type": "block",
+          "x": 502,
+          "y": 644,
+          "block": "listicle",
+          "params": {
+            "title": "3 tricks for faster edits",
+            "items": ["Cut on the beat", "Keep captions short", "Hook in one second"]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -78,7 +78,8 @@ that bite hardest in this repo:
   the skill folder (`cd <skill-dir> && npm install …`), the form that applies
   `overrides` on every npm we tried (`--prefix` did too on npm 10.9 and 11.5;
   a report that it does not on npm 10.8.2 was never reproduced, so do not state
-  it as fact).
+  it as fact). In a guarded worktree (Shell rules below), run `npm --prefix
+  <absolute skill dir> install …` or a `.scratch/` script instead of `cd … &&`.
 - **Changing an install command or pin is a cross-surface edit.** The doctor
   fix (`shared/doctor.mjs`, synced into every skill with `node
   bin/sync-shared.mjs`), the runtime error hint (`doctor-hint.mjs`), README,
@@ -160,9 +161,19 @@ to edit when the lineup changes:
   — each pays its own context from zero. Anchor `file:line` in prompts, never
   re-paste repo code; continue a warm agent via `SendMessage` instead of
   respawning cold; iterate inside the ~5-minute prompt-cache TTL; prefer
-  Workflow **resume** over rerun (completed stages replay from cache).
+  Workflow **resume** over rerun (completed stages replay from cache). For a
+  large package (diff over ~40,000 chars or 1,000 lines) the review prompt
+  gives the diff path plus `git diff --stat` and says to read by `offset` and
+  `limit` or per file; small diffs may be read whole.
 - **Schema every data-returning dispatch** — parse-and-retry loops are pure
   token burn.
+- **Shell rules.** In Claude Code sessions with the worktree guard, follow,
+  and put in every dispatch prompt: one plain command per Bash call with
+  literal absolute paths; no `cd … &&`, pipes, `;`, shell variables, loops,
+  heredocs, or paths outside the worktree except the session scratchpad;
+  scripts via the Write tool under `.scratch/`; remove your own scratch dir
+  with one plain `rm -rf <literal absolute path>` when the guard allows it,
+  never a variable path; no foreground `sleep` (use Monitor).
 
 ---
 
@@ -177,9 +188,10 @@ CI is green and review passes.
 - **Reviewing or testing a PR: work on that PR's own branch.** Check it out
   (`gh pr checkout <n>`, or fetch `pull/<n>/head` and switch to it), test
   there, and put follow-up commits (learnings, fixes) on the same branch so
-  they ship with the PR. Do not create a new branch or push a new remote branch
-  for it unless asked; a side branch stacked on the PR splits one change across
-  two PRs. In a session worktree, push with
+  they ship with the PR. Push author rework (yours, or a reviewer's
+  follow-up) to the original PR branch, not a new branch unless asked; open a
+  superseding PR only when that branch cannot be pushed, and say why in the
+  new PR. In a session worktree, push with
   `git push origin HEAD:<pr-branch>` rather than inventing a branch name.
 - **Commits are task-level and atomic** — conventional format
   (`feat`/`fix`/`refactor`/`docs`/`test`/`chore`), one logical change, each
@@ -189,13 +201,17 @@ CI is green and review passes.
 - **Standing authorization to commit and push** at natural boundaries — no
   per-commit confirmation. Still pause and confirm before a **force-push**, a
   history rewrite of shared history, or pushing directly to a protected branch.
-- **Push feature branches** with `-u` once a unit of work is complete, then
-  open a PR. PR body: analyze the full commit history (`git diff main...HEAD`),
-  draft a comprehensive summary, include a test plan.
-- **Pre-review gates, in order:** relevant tests green locally → CI green on
-  the PR → reviewer pass (the automated `claude-code-review` workflow, or a
-  `/code-review` run on the diff) with no CRITICAL/HIGH unfixed → merge
-  (`--squash --delete-branch`). MEDIUM/LOW may defer as follow-up commits.
+- **Push feature branches** with `-u` once a unit of work is complete and has
+  had the pre-push review (gates below), then open a PR. PR body: analyze the
+  full commit history (`git diff main...HEAD`), draft a comprehensive summary,
+  include a test plan.
+- **Pre-review gates, in order:** relevant tests green locally → a
+  fresh-context reviewer (`/code-review` on the diff) **before the first
+  push** → CI green on the PR, whose automated `claude-code-review` workflow
+  also reviews → merge (`--squash --delete-branch`) with no CRITICAL/HIGH
+  unfixed from either review. Each code fix ships with a regression test that
+  failed first (docs and prose fixes are exempt). MEDIUM/LOW may defer as
+  follow-up commits.
 - **Site/inventory changes** that touch counts or the copy-button contract
   must pass the per-line-copy discipline in `CLAUDE.md`; verify rendered pages
   locally (Chrome MCP: navigate, inspect DOM, screenshot) before committing
@@ -205,11 +221,15 @@ CI is green and review passes.
 
 ## Commit / PR trailers
 
-End commit messages with:
+End commit messages with exactly this one trailer:
 
 ```
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
+
+No model-named `Co-Authored-By` or `Claude-Session:` line, even where the
+harness asks. Dispatch prompts here deny commit; the orchestrating session
+commits.
 
 End PR bodies with the Claude Code generation trailer. Follow the repo's
 existing PR style (see recent merged PRs for the house format).

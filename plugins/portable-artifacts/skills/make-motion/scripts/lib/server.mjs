@@ -1,6 +1,6 @@
 // Local-only HTTP server for preview and render. Binds 127.0.0.1, accepts only
 // local Host headers, serves the page template, vendored libraries from
-// node_modules, the live spec, and the image and audio files the spec names.
+// node_modules, the live spec, the image, video, lottie and audio files the spec names, and (render) the decoded video frames.
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { readFileSync, statSync, existsSync, createReadStream, watch } from 'node:fs';
@@ -14,6 +14,14 @@ import { faviconLink } from '../../shared/icons.mjs';
 import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
 import { themeData, themeCss, FONTS_DIR } from './theme.mjs';
 import { artSvg } from '../../shared/art.mjs';
+import { flattenElements } from '../../template/groups.mjs';
+import { FORMATS } from '../../template/formats.mjs';
+import { blockAssetFiles, isBlock } from '../../template/blocks/index.mjs';
+import { CACHE_ROOT } from './video.mjs';
+import { substituteVars } from '../../template/vars.mjs';
+import { applyViral } from '../../template/viral.mjs';
+import { ATLASES } from '../../template/maps.mjs';
+import { declaresBeats, resolveSpecBeats } from './beats-file.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NODE_MODULES = path.join(SKILL_ROOT, 'node_modules');
@@ -30,15 +38,49 @@ const MIME = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.txt': 'text/plain; charset=utf-8',
   '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.flac': 'audio/flac',
+  '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm', '.m4v': 'video/x-m4v',
+  '.srt': 'application/x-subrip; charset=utf-8', '.vtt': 'text/vtt; charset=utf-8',
 };
 
-const VENDOR_ROOTS = {
+// /vendor/<package>/<file>: each package's folder that the page imports from, and nothing above it; only .js and .mjs,
+// except the files a package's VENDOR_ONLY entry lists (the atlases' JSON).
+// shiki (code elements) is used as the fine-grained core, the JavaScript regex engine (no wasm) and the CODE_LANGS
+// grammars, with every package those import (template/index.html maps each bare specifier to one of these). The whole of
+// shiki/dist is reachable, so its theme modules, bundles and oniguruma engine module are served too, though the page
+// imports none of them; the oniguruma .wasm is refused by extension, and @shikijs/engine-oniguruma is not a root, so
+// those modules could not load their imports anyway.
+const VENDOR_ROOTS = Object.freeze(Object.assign(Object.create(null), {
   animejs: path.join(NODE_MODULES, 'animejs/dist/bundles'),
   vega: path.join(NODE_MODULES, 'vega/build'),
   'vega-lite': path.join(NODE_MODULES, 'vega-lite/build'),
   'vega-util': path.join(NODE_MODULES, 'vega-util/build'),
   'vega-interpreter': path.join(NODE_MODULES, 'vega-interpreter/build'),
-};
+  shiki: path.join(NODE_MODULES, 'shiki/dist'),
+  ...Object.fromEntries(['core', 'primitive', 'types', 'vscode-textmate', 'engine-javascript', 'langs'].map((name) => [`@shikijs/${name}`, path.join(NODE_MODULES, '@shikijs', name, 'dist')])),
+  'oniguruma-to-es': path.join(NODE_MODULES, 'oniguruma-to-es/dist/esm'),
+  'oniguruma-parser': path.join(NODE_MODULES, 'oniguruma-parser/dist'),
+  regex: path.join(NODE_MODULES, 'regex/src'),
+  'regex-recursion': path.join(NODE_MODULES, 'regex-recursion/src'),
+  'regex-utilities': path.join(NODE_MODULES, 'regex-utilities/src'),
+  // hast-util-to-html (imported by @shikijs/core) and its dependencies keep their modules at the package root.
+  ...Object.fromEntries(['hast-util-to-html', 'hast-util-whitespace', 'property-information', 'stringify-entities', 'ccount', 'character-entities-html4',
+    'character-entities-legacy', 'comma-separated-tokens', 'html-void-elements', 'space-separated-tokens', 'zwitch'].map((name) => [name, path.join(NODE_MODULES, name)])),
+  'lottie-web': path.join(NODE_MODULES, 'lottie-web/build/player/esm'), // lottie elements; VENDOR_ONLY narrows it to one file
+  'world-atlas': path.join(NODE_MODULES, 'world-atlas'), // chart data { name: 'world-110m' } (template/maps.mjs); VENDOR_ONLY narrows both atlases
+  'us-atlas': path.join(NODE_MODULES, 'us-atlas'),       // to the data files the table names
+}));
+// A package whose folder also holds files the page must never load serves only the files listed here. lottie-web ships its
+// full players (they evaluate Lottie expressions with eval) beside the light one: the page imports the light SVG build
+// alone, which has no expression engine and no eval, so an expression could not run even if lottieProblems missed one.
+// The two atlas packages hold TopoJSON, not scripts: only the four files template/maps.mjs names are served (not the 10m
+// world, the land shapes, the Albers-projected US files, package.json or the README), as JSON.
+const atlasFiles = (pkg) => Object.freeze(Object.values(ATLASES).filter((atlas) => atlas.pkg === pkg).map((atlas) => atlas.file));
+const VENDOR_ONLY = Object.freeze(Object.assign(Object.create(null), {
+  'lottie-web': Object.freeze(['lottie_light.min.js']),
+  'world-atlas': atlasFiles('world-atlas'),
+  'us-atlas': atlasFiles('us-atlas'),
+}));
+const VENDOR_ROUTE = /^\/vendor\/((?:@[^/]+\/)?[^/]+)\/(.*)$/; // a package name, scoped or not, then the file in its folder
 
 // Single byte range from a Range header against a file of `size` bytes; null when absent or malformed.
 function parseRange(header, size) {
@@ -98,8 +140,11 @@ export function themeOrDefault(name) {
   try { return loadTheme(name ?? MOTION_THEME); } catch { return loadTheme(MOTION_THEME); }
 }
 
+// The spec as the page draws it: the one the server was given (render --batch: a row's, already substituted), else the
+// file with its vars at their defaults (pipeline step 1), so an asset or scene id named by `{{name}}` is found.
 function readSpecFile(ctx) {
-  try { return JSON.parse(readFileSync(ctx.specFile, 'utf8')); } catch { return undefined; }
+  if (ctx.spec !== undefined) return ctx.spec;
+  try { return substituteVars(JSON.parse(readFileSync(ctx.specFile, 'utf8'))); } catch { return undefined; }
 }
 
 // Favicon, theme stylesheet and provenance footer for the current spec, read fresh. Only `generatedBy`
@@ -138,7 +183,9 @@ function serveArt(ctx, res, sceneId) {
   const spec = readSpecFile(ctx);
   const scene = Array.isArray(spec?.scenes) ? spec.scenes.find((s) => s?.id === sceneId && s.background === 'art') : undefined;
   if (!scene) return notFound(res);
-  const size = Array.isArray(spec.size) ? spec.size : DEFAULT_SIZE;
+  // Pipeline step 2 (applyViral) first: a viral spec that writes neither size nor format is 9:16, as the page draws it.
+  const sized = applyViral(spec);
+  const size = Array.isArray(sized.size) ? sized.size : (FORMATS[sized.format]?.size ?? DEFAULT_SIZE);
   const svg = artSvg({
     theme: themeOrDefault(spec.theme ?? ctx.theme).name, seed: scene.id,
     width: artSide(size[0], DEFAULT_SIZE[0]), height: artSide(size[1], DEFAULT_SIZE[1]), mode: 'dark',
@@ -146,27 +193,71 @@ function serveArt(ctx, res, sceneId) {
   return sendBody(res, MIME['.svg'], svg);
 }
 
-// Image and audio srcs named by the current spec; /assets serves nothing else.
-function referencedAssets(specFile) {
+// Image, video, lottie, audio and captions srcs named by the current spec (after its vars are substituted), and the files a
+// block's params name (logo-outro's `src`, which its expansion draws as an image); /assets serves nothing else.
+const MEDIA_ELEMENTS = new Set(['image', 'video', 'lottie']);
+const blockAssets = (el) => (isBlock(el) ? blockAssetFiles(el).map((file) => file.src) : []);
+
+/**
+ * The file srcs `spec` (substituted, not expanded) reads, as written: image, video and lottie elements, the files block params
+ * name, audio, captions and the beats file. Throws on a spec without a scenes array. render --batch refuses an output that is one of them.
+ */
+export function assetSrcs(spec) {
+  const elements = spec.scenes.flatMap((s) => flattenElements(s.elements)).map(({ el }) => el);
+  const images = [...elements.filter((el) => MEDIA_ELEMENTS.has(el.type)).map((el) => el.src), ...elements.flatMap(blockAssets)];
+  const beats = typeof spec.beats === 'string' ? [spec.beats] : []; // watched for a reload, guarded against an --out over it
+  return [...images, ...(spec.audio ?? []).map((a) => a.src), ...(spec.captions ?? []).map((c) => c.src), ...beats];
+}
+
+function referencedAssets(ctx) {
   try {
-    const spec = JSON.parse(readFileSync(specFile, 'utf8'));
-    const images = spec.scenes.flatMap((s) => s.elements).filter((e) => e.type === 'image').map((e) => e.src);
-    const audio = (spec.audio ?? []).map((a) => a.src);
-    return new Set([...images, ...audio].map((src) => path.posix.normalize(String(src))));
+    return new Set(assetSrcs(readSpecFile(ctx)).map((src) => path.posix.normalize(String(src))));
   } catch { return new Set(); }
 }
 
+// A user's file (or a decoded frame) opened directly in a tab must not run: no sniffing, and a policy that allows
+// nothing, so a referenced .svg or .html cannot execute script. Media elements ignore this policy, so the page is unaffected.
+// writeHead merges these with the headers each response sets, 404s and 416s included.
+function lockDown(res) {
+  res.setHeader('x-content-type-options', 'nosniff');
+  res.setHeader('content-security-policy', "default-src 'none'");
+}
+
 function serveAsset(ctx, req, res, rel) {
+  lockDown(res);
   let decoded;
   try { decoded = decodeURIComponent(rel); } catch { return notFound(res); }
-  if (!referencedAssets(ctx.specFile).has(path.posix.normalize(decoded))) return notFound(res);
+  if (!referencedAssets(ctx).has(path.posix.normalize(decoded))) return notFound(res);
   const { file } = resolveAsset(ctx.specDir, decoded);
   return file ? sendFile(res, file, req.headers.range ?? '') : notFound(res);
+}
+
+// /frames/<key>/<n>.<ext>: a decoded video frame, only for a key the render was given (render.mjs and check.mjs pass
+// prepareVideo's answer as `videoFrames`) and only in the format that key was decoded to.
+const FRAME_ROUTE = /^\/frames\/([0-9a-f]{64})\/(\d{6})\.(jpg|png)$/;
+function serveFrame(ctx, res, [, key, n, ext]) {
+  lockDown(res);
+  if (!Object.values(ctx.videoFrames).some((v) => v.key === key && v.ext === ext)) return notFound(res);
+  const { file } = resolveAsset(path.join(ctx.frameRoot, key), `${n}.${ext}`);
+  return file ? sendFile(res, file) : notFound(res);
 }
 
 function serveUnder(res, root, rel) {
   const file = resolveUrlPath(root, rel);
   return file ? sendFile(res, file) : notFound(res);
+}
+
+// A library's JavaScript only (no package.json, no wasm), locked down like /assets: opened in a tab it does not run, and
+// the page's own imports are unaffected. The exception is a package with a VENDOR_ONLY list (the atlases' JSON): it
+// serves exactly the files listed, whatever their type.
+const SCRIPT_FILE = /\.m?js$/;
+// `only`: the files of the package that may be served (VENDOR_ONLY), compared with the path after URL parsing has
+// normalised it (`./x` and `%2e/x` arrive as `x`) and before any percent-decoding, so an encoded name is not served.
+function serveVendor(res, root, rel, only) {
+  lockDown(res);
+  if (only && !only.includes(rel)) return notFound(res);
+  const file = resolveUrlPath(root, rel);
+  return file && (only || SCRIPT_FILE.test(file)) ? sendFile(res, file) : notFound(res);
 }
 
 // The shared theme a spec names: its JSON for the colours, a stylesheet for the fonts.
@@ -209,6 +300,9 @@ function route(ctx, req, res) {
     return res.end(indexHtml(ctx));
   }
   if (pathname === '/spec.json') return serveSpec(ctx, res);
+  if (pathname === '/frames.json') return sendBody(res, MIME['.json'], JSON.stringify(ctx.videoFrames));
+  const frameRoute = FRAME_ROUTE.exec(pathname);
+  if (frameRoute) return serveFrame(ctx, res, frameRoute);
   if (pathname === '/events') return serveEvents(ctx, req, res);
   if (pathname.startsWith('/template/')) return serveUnder(res, TEMPLATE_DIR, pathname.slice('/template/'.length));
   if (pathname === '/shared/nowrap.mjs') return existsSync(ctx.nowrapModule) ? sendFile(res, ctx.nowrapModule) : reply(res, 404, NOWRAP_MISSING);
@@ -218,14 +312,27 @@ function route(ctx, req, res) {
   if (artRoute) return serveArt(ctx, res, safeDecode(artRoute[1]));
   const themeRoute = /^\/theme\/([^/]+)\.(json|css)$/.exec(pathname);
   if (themeRoute) return serveTheme(res, safeDecode(themeRoute[1]), themeRoute[2]);
-  const vendor = /^\/vendor\/([^/]+)\/(.*)$/.exec(pathname);
-  if (vendor && VENDOR_ROOTS[vendor[1]]) return serveUnder(res, VENDOR_ROOTS[vendor[1]], vendor[2]);
+  const vendor = VENDOR_ROUTE.exec(pathname);
+  if (vendor && Object.hasOwn(VENDOR_ROOTS, vendor[1])) return serveVendor(res, VENDOR_ROOTS[vendor[1]], vendor[2], VENDOR_ONLY[vendor[1]]);
   return notFound(res);
 }
 
-// The spec as written; an embedding tool may give the server a theme for specs that name none.
+// A spec file that names a beats file is served resolved (pipeline step 1b): its vars substituted, then every "beat:<n>"
+// as seconds, so the page never meets a reference. Any other file is served as written, byte for byte. Throws when the
+// beats cannot be resolved (serveSpec answers 404; the preview's spec-error event carries the reasons).
+function beatsResolved(ctx, body) {
+  let spec;
+  try { spec = JSON.parse(body.toString('utf8')); } catch { return body; }
+  if (!declaresBeats(spec)) return body;
+  const { spec: resolved, errors } = resolveSpecBeats(substituteVars(spec), ctx.specDir);
+  if (errors) throw new Error(errors[0].message);
+  return Buffer.from(JSON.stringify(resolved));
+}
+
+// The spec as written, beats resolved (or the one the server was given, which render has already resolved); an
+// embedding tool may give the server a theme for specs that name none.
 function specBody(ctx) {
-  const body = readFileSync(ctx.specFile);
+  const body = ctx.spec === undefined ? beatsResolved(ctx, readFileSync(ctx.specFile)) : Buffer.from(JSON.stringify(ctx.spec));
   if (ctx.theme === undefined) return body;
   try {
     const spec = JSON.parse(body.toString('utf8'));
@@ -263,11 +370,11 @@ function broadcastSpecState(ctx) {
   for (const c of ctx.clients) c.write(message);
 }
 
-// The spec file, or any image/audio file it references (also in subfolders), triggers a reload.
+// The spec file, or any image, video, audio or captions file it references (also in subfolders), triggers a reload.
 function isWatched(ctx, name) {
   if (!name) return false;
   const rel = path.posix.normalize(String(name).replaceAll('\\', '/'));
-  return rel === path.basename(ctx.specFile) || referencedAssets(ctx.specFile).has(rel);
+  return rel === path.basename(ctx.specFile) || referencedAssets(ctx).has(rel);
 }
 
 function watchSpec(ctx) {
@@ -285,9 +392,14 @@ function watchSpec(ctx) {
 
 // `theme`: a shared theme name for specs that set none (render --theme).
 // `nowrapModule`: the file served as /shared/nowrap.mjs (tests point it at a missing file).
-export async function startServer({ specPath, mode = 'preview', theme, nowrapModule = NOWRAP_MODULE }) {
+// `videoFrames`: prepareVideo()'s `{ [elementId]: { key, count, fps, ext } }`, served as /frames.json; the frames
+// themselves come from `frameRoot`/<key>/. Preview passes none: it plays the clips themselves from /assets.
+// `mode` defaults to render, so a caller that forgets it gets deterministic captures; preview.mjs asks for 'preview'.
+// `spec`: a validated spec object served in place of the file (render --batch: one row's, its vars substituted and its
+// beats resolved); assets still resolve inside the folder of `specPath`.
+export async function startServer({ specPath, mode = 'render', theme, nowrapModule = NOWRAP_MODULE, videoFrames = {}, frameRoot = CACHE_ROOT, spec }) {
   const specFile = path.resolve(specPath);
-  const ctx = { specFile, theme, nowrapModule, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
+  const ctx = { specFile, spec, theme, nowrapModule, videoFrames, frameRoot, specDir: path.dirname(specFile), clients: new Set(), allowedHosts: new Set(), index: loadIndex(mode) };
   const watcher = watchSpec(ctx);
   const server = http.createServer((req, res) => handle(ctx, req, res));
   await new Promise((resolve, reject) => {

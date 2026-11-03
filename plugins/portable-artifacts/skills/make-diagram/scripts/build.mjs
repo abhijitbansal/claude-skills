@@ -15,6 +15,7 @@ import { themeFor } from './lib/theme.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
 import { PROVENANCE_OPTIONS, withGeneratedBy } from '../shared/provenance.mjs';
+import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
 import { exitInternal } from './lib/internal-error.mjs';
 
 const USAGE = 'node scripts/build.mjs <spec.diagram.json> [--out <file.html|dir>] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--json]';
@@ -50,6 +51,7 @@ export async function build(file, { out, theme, model, effort, agent, env = proc
 }
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  warnIfStaleCopy();
   const argv = process.argv.slice(2);
   let json = argv.includes('--json');
   try {

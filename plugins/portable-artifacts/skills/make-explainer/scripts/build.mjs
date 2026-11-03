@@ -19,6 +19,7 @@ import { specTheme } from './lib/default-theme.mjs';
 import { fetchHeroImage, heroPrompt, parseEndpoint, requireKey, ImageHookError, KEY_ENV } from './lib/image-hook.mjs';
 import { UsageError, parseCli } from '../shared/cli.mjs';
 import { PROVENANCE_OPTIONS, withGeneratedBy } from '../shared/provenance.mjs';
+import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
 
 const USAGE = 'node scripts/build.mjs <explainer.json> [--out <file.html|dir>] [--theme <name>] [--image-api <https-endpoint>] [--model <m>] [--effort <e>] [--agent <a>] [--json]';
 const OPTIONS = { out: { type: 'string' }, theme: { type: 'string' }, 'image-api': { type: 'string' }, json: { type: 'boolean' }, ...PROVENANCE_OPTIONS };
@@ -121,6 +122,7 @@ function printFailure(result, { json, label }) {
 }
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  warnIfStaleCopy();
   const argv = process.argv.slice(2);
   let json = argv.includes('--json');
   try {

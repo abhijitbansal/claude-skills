@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildSpec, buildFile, exampleFile, haveBrowser, openPage, closeSharedBrowser, scratchDir } from './helpers/browser.mjs';
+import { buildSpec, buildFile, exampleFile, haveBrowser, openPage, openServed, closeSharedBrowser, scratchDir } from './helpers/browser.mjs';
 import { itemId } from '../scripts/lib/render/checklist.mjs';
 
 after(closeSharedBrowser);
@@ -48,7 +48,7 @@ test('ticking updates the bar, the percentage, the group tallies and the progres
 
 test('ticks persist across a reload under pa-checklist:<key> as {id: true}', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const { page, context } = await openPage(page5().url);
+  const { page, context } = await openServed(page5().url);
   await tick(page, 'two');
   await tick(page, 'five');
   assert.deepEqual(JSON.parse(await stored(page)), { [itemId('Install', 'two')]: true, [itemId('Themes', 'five')]: true });
@@ -79,7 +79,7 @@ test('all done shows Complete with 100%, and one less takes it back', async (t) 
 test('reordering items and groups in the spec keeps every tick', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const a = page5();
-  const { page, context } = await openPage(a.url);
+  const { page, context } = await openServed(a.url);
   await tick(page, 'one');
   await tick(page, 'five');
   const b = buildSpec(spec([{ ...G2, items: [...G2.items].reverse() }, { ...G1, items: [...G1.items].reverse() }]));
@@ -94,7 +94,7 @@ test('reordering items and groups in the spec keeps every tick', async (t) => {
 test('editing one item resets only that item; renaming a group resets only that group', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const a = page5();
-  const { page, context } = await openPage(a.url);
+  const { page, context } = await openServed(a.url);
   for (const text of ['one', 'two', 'four']) await tick(page, text);
   const edited = buildSpec(spec([{ ...G1, items: [{ text: 'one' }, { text: 'two reworded' }, G1.items[2]] }, G2]));
   fs.copyFileSync(edited.file, a.file);
@@ -128,8 +128,8 @@ test('an id this page does not know is ignored in the tally but survives every w
 test('two pages on one key: both ticks survive, and each page follows the other through the storage event', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const url = page5().url;
-  const a = await openPage(url);
-  const b = await openPage(url, { context: a.context });
+  const a = await openServed(url);
+  const b = await openServed(url, { context: a.context });
   await tick(a.page, 'one');
   await b.page.waitForFunction(() => document.querySelector('[data-done]').textContent === '1');
   assert.deepEqual((await summary(b.page)).ticked, ['one'], 'B reflects A after the event');
@@ -150,8 +150,8 @@ test('two pages on one key: both ticks survive, and each page follows the other 
 test('a write from a page that never saw the other tab\'s tick still keeps it (merge, not replace)', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const url = page5().url;
-  const a = await openPage(url);
-  const b = await openPage(url, { context: a.context });
+  const a = await openServed(url);
+  const b = await openServed(url, { context: a.context });
   // B ignores the event, as a tab that was asleep would.
   await b.page.evaluate(() => { window.addEventListener('storage', (e) => e.stopImmediatePropagation(), true); });
   await tick(a.page, 'one');
@@ -207,7 +207,7 @@ test('garbage in storage reads as an empty checklist without errors', async (t) 
 
 test('reset: asks inline with the count, No keeps the ticks, Yes clears them and the storage key, no dialog', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const { page, problems, context } = await openPage(page5().url);
+  const { page, problems, context } = await openServed(page5().url);
   assert.equal(await page.locator('[data-reset]').getAttribute('aria-disabled'), 'true');
   await pressReset(page);
   assert.equal(await page.locator('[data-confirm]').isHidden(), true, 'nothing to reset yet');

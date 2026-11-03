@@ -1,0 +1,104 @@
+{
+  "mode": "viral",
+  "format": "9:16",
+  "fps": 30,
+  "theme": "dusk",
+  "generatedBy": { "model": "claude-sonnet-5-5", "agent": "Claude Code" },
+  "viral": { "loop": false },
+  "captions": [
+    { "src": "voice/s1.json", "style": "karaoke", "scene": "hook", "at": 0.3 },
+    { "src": "voice/s2.json", "style": "karaoke", "scene": "cutout", "at": 0.3 },
+    { "src": "voice/s3.json", "style": "karaoke", "scene": "race", "at": 0.3 },
+    { "src": "voice/s4.json", "style": "karaoke", "scene": "cube", "at": 0.3 },
+    { "src": "voice/s5.json", "style": "karaoke", "scene": "ripple", "at": 0.3 },
+    { "src": "voice/s6.json", "style": "karaoke", "scene": "more", "at": 0.4 },
+    { "src": "voice/s7.json", "style": "karaoke", "scene": "close", "at": 0.3 }
+  ],
+  "audio": [
+    { "src": "voice/s1.wav", "scene": "hook", "at": 0.3 },
+    { "src": "voice/s2.wav", "scene": "cutout", "at": 0.3 },
+    { "src": "voice/s3.wav", "scene": "race", "at": 0.3 },
+    { "src": "voice/s4.wav", "scene": "cube", "at": 0.3 },
+    { "src": "voice/s5.wav", "scene": "ripple", "at": 0.3 },
+    { "src": "voice/s6.wav", "scene": "more", "at": 0.4 },
+    { "src": "voice/s7.wav", "scene": "close", "at": 0.3 }
+  ],
+  "scenes": [
+    {
+      "id": "hook",
+      "duration": 4.9,
+      "elements": [
+        { "id": "hook-kicker", "type": "text", "text": "What's new in make-motion", "x": 502, "y": 380, "fontSize": 56, "fontWeight": 700, "color": "accent", "maxWidth": 765,
+          "keyframes": [{ "t": 0.4, "opacity": 0, "y": 400 }, { "t": 0.8, "opacity": 1, "y": 380, "ease": "enter" }] },
+        { "id": "hook-title", "type": "text", "role": "title", "text": "Videos from one JSON file", "x": 502, "y": 650, "fontSize": 124, "fontWeight": 800, "maxWidth": 765 },
+        { "id": "hook-sub", "type": "text", "text": "Here is the upgrade", "x": 502, "y": 910, "fontSize": 64, "fontWeight": 600, "color": "text2", "maxWidth": 765,
+          "keyframes": [{ "t": 2.6, "opacity": 0, "y": 930 }, { "t": 3.0, "opacity": 1, "y": 910, "ease": "enter" }] }
+      ]
+    },
+    {
+      "id": "cutout",
+      "duration": 4.4,
+      "transition": "push",
+      "elements": [
+        { "id": "cutout-block", "type": "block", "x": 503, "y": 644, "block": "text-behind-subject",
+          "params": { "src": "portrait-sq.jpg", "cutout": "portrait-sq-cutout.png", "text": "UNSTOPPABLE" } }
+      ]
+    },
+    {
+      "id": "race",
+      "duration": 5.2,
+      "transition": "push",
+      "elements": [
+        { "id": "race-block", "type": "block", "x": 503, "y": 644, "block": "race",
+          "params": {
+            "title": "Bar chart race (sample data)", "top": 3, "periodSeconds": 0.5,
+            "rows": [{"period":"W1","name":"Nova","value":40},{"period":"W1","name":"Lumen","value":30},{"period":"W1","name":"Orbit","value":20},{"period":"W2","name":"Nova","value":44},{"period":"W2","name":"Lumen","value":34},{"period":"W2","name":"Orbit","value":24},{"period":"W3","name":"Nova","value":48},{"period":"W3","name":"Lumen","value":38},{"period":"W3","name":"Orbit","value":28},{"period":"W4","name":"Nova","value":52},{"period":"W4","name":"Lumen","value":43},{"period":"W4","name":"Orbit","value":33},{"period":"W5","name":"Nova","value":56},{"period":"W5","name":"Lumen","value":48},{"period":"W5","name":"Orbit","value":38},{"period":"W6","name":"Nova","value":60},{"period":"W6","name":"Lumen","value":53},{"period":"W6","name":"Orbit","value":44},{"period":"W7","name":"Nova","value":64},{"period":"W7","name":"Lumen","value":58},{"period":"W7","name":"Orbit","value":52},{"period":"W8","name":"Nova","value":68},{"period":"W8","name":"Lumen","value":62},{"period":"W8","name":"Orbit","value":60},{"period":"W9","name":"Nova","value":72},{"period":"W9","name":"Lumen","value":66},{"period":"W9","name":"Orbit","value":69},{"period":"W10","name":"Nova","value":76},{"period":"W10","name":"Lumen","value":70},{"period":"W10","name":"Orbit","value":74}]
+          } }
+      ]
+    },
+    {
+      "id": "cube",
+      "duration": 3.2,
+      "background": "#14213d",
+      "transition": { "type": "gl-cube", "direction": "left", "duration": 0.7 },
+      "elements": [
+        { "id": "cube-title", "type": "text", "text": "Cube", "x": 502, "y": 580, "fontSize": 260, "fontWeight": 800,
+          "keyframes": [{ "t": 0.5, "opacity": 0, "scale": 0.9 }, { "t": 1.0, "opacity": 1, "scale": 1, "ease": "enter" }] },
+        { "id": "cube-sub", "type": "text", "text": "gl-cube transition", "x": 502, "y": 830, "fontSize": 72, "fontWeight": 600, "color": "accent", "maxWidth": 765,
+          "keyframes": [{ "t": 1.1, "opacity": 0, "y": 850 }, { "t": 1.6, "opacity": 1, "y": 830, "ease": "enter" }] }
+      ]
+    },
+    {
+      "id": "ripple",
+      "duration": 2.4,
+      "background": "#3d1f4a",
+      "transition": { "type": "gl-ripple", "duration": 0.7 },
+      "elements": [
+        { "id": "ripple-title", "type": "text", "text": "Ripple", "x": 502, "y": 580, "fontSize": 210, "fontWeight": 800,
+          "keyframes": [{ "t": 0.5, "opacity": 0, "scale": 0.9 }, { "t": 1.0, "opacity": 1, "scale": 1, "ease": "enter" }] },
+        { "id": "ripple-sub", "type": "text", "text": "gl-ripple transition", "x": 502, "y": 830, "fontSize": 72, "fontWeight": 600, "color": "accent", "maxWidth": 765,
+          "keyframes": [{ "t": 1.0, "opacity": 0, "y": 850 }, { "t": 1.5, "opacity": 1, "y": 830, "ease": "enter" }] }
+      ]
+    },
+    {
+      "id": "more",
+      "duration": 6,
+      "transition": "push",
+      "elements": [
+        { "id": "more-list", "type": "block", "x": 503, "y": 644, "block": "listicle",
+          "params": { "title": "Also new", "items": ["Cuts on the beat", "Maps and flows", "28 ready-made blocks"], "itemSeconds": 1.6 } }
+      ]
+    },
+    {
+      "id": "close",
+      "duration": 5.2,
+      "transition": "push",
+      "elements": [
+        { "id": "close-hook", "type": "text", "role": "title", "text": "Make yours", "x": 502, "y": 440, "fontSize": 130, "fontWeight": 800, "maxWidth": 765,
+          "keyframes": [{ "t": 0, "opacity": 0, "scale": 0.92 }, { "t": 0.5, "opacity": 1, "scale": 1, "ease": "enter" }] },
+        { "id": "close-ask", "type": "block", "x": 503, "y": 760, "block": "cta-soft",
+          "params": { "line": "One file makes one video", "actions": ["save", "follow"] } }
+      ]
+    }
+  ]
+}

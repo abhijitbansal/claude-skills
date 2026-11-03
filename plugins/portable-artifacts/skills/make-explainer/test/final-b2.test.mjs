@@ -161,7 +161,7 @@ test('check: a covered Present button is one clear line per viewport, not a cras
   const result = await checkPage(withExtra(diagramPage(), cover, 'covered'));
   assert.equal(result.status, 'failed');
   assert.ok(!result.problems.some((p) => /crashed/.test(p)), result.problems.join('\n'));
-  for (const label of ['1280px', '390px']) {
+  for (const label of ['1280px', '390px', '1800px']) {
     const lines = result.problems.filter((p) => p.startsWith(`${label}: `) && /Present button/.test(p));
     assert.equal(lines.length, 1, result.problems.join('\n'));
     assert.match(lines[0], /^\d+px: the Present button of diagram 1 is covered by another element$/);
@@ -176,7 +176,7 @@ test('check: a crash in one probe keeps the rest of that viewport and its counts
   const built = buildSpec({ title: 'Deck', mode: 'slides', sections: [topic(1), { type: 'diagram', title: 'Path', diagram: flow('Path') }] });
   const result = await checkPage(withExtra(built, '<script>document.querySelector(".deck-count").remove();</script>', 'crash'));
   assert.equal(result.status, 'failed');
-  for (const label of ['1280px', '390px']) {
+  for (const label of ['1280px', '390px', '1800px']) {
     assert.ok(result.problems.some((p) => p.startsWith(`${label}: deck check crashed: `)), result.problems.join('\n'));
   }
   assert.equal(result.presented, 1, 'the overlay probe still ran');
@@ -190,7 +190,8 @@ test('check: an unmounted diagram viewer is reported, and each dialog is paired 
   assert.equal(result.status, 'failed');
   assert.ok(result.problems.includes('1280px: the diagram 1 viewer did not mount (its Present button is hidden)'), result.problems.join('\n'));
   assert.ok(result.problems.includes('390px: the diagram 1 viewer did not mount (its Present button is hidden)'));
-  assert.equal(result.problems.length, 2, `diagram 2 presents fine: ${result.problems.join('\n')}`);
+  assert.ok(result.problems.includes('1800px: the diagram 1 viewer did not mount (its Present button is hidden)'));
+  assert.equal(result.problems.length, 3, `diagram 2 presents fine: ${result.problems.join('\n')}`);
   assert.equal(result.presented, 1);
 });
 

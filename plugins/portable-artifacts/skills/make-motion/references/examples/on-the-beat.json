@@ -1,0 +1,66 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "beats": "data/on-the-beat.beats.json",
+  "scenes": [
+    {
+      "id": "build",
+      "duration": 4,
+      "background": "art",
+      "elements": [
+        {
+          "id": "build-title", "type": "text", "text": "On the beat", "x": 960, "y": 300, "fontSize": 130, "fontWeight": 700,
+          "keyframes": [{ "t": "beat:0", "opacity": 0 }, { "t": "beat:1", "opacity": 1, "ease": "enter" }]
+        },
+        {
+          "id": "kick", "type": "text", "text": "kick", "x": 480, "y": 640, "fontSize": 80, "fontWeight": 600,
+          "keyframes": [{ "t": "beat:2", "opacity": 0 }, { "t": "beat:3", "opacity": 1, "ease": "enter" }]
+        },
+        {
+          "id": "snare", "type": "text", "text": "snare", "x": 960, "y": 640, "fontSize": 80, "fontWeight": 600,
+          "keyframes": [{ "t": "beat:4", "opacity": 0 }, { "t": "beat:5", "opacity": 1, "ease": "enter" }]
+        },
+        {
+          "id": "hat", "type": "text", "text": "hat", "x": 1440, "y": 640, "fontSize": 80, "fontWeight": 600,
+          "keyframes": [{ "t": "beat:6", "opacity": 0 }, { "t": "beat:7", "opacity": 1, "ease": "enter" }]
+        }
+      ]
+    },
+    {
+      "id": "pulse",
+      "duration": 4,
+      "camera": {
+        "keyframes": [{ "t": "beat:8", "zoom": 1 }, { "t": "beat:15", "zoom": 1.1, "ease": "inOutQuad" }]
+      },
+      "elements": [
+        {
+          "id": "dot", "type": "shape", "shape": "ellipse", "x": 960, "y": 440, "width": 240, "height": 240, "fill": "accent",
+          "keyframes": [
+            { "t": "beat:8", "scale": 1 },
+            { "t": "beat:9", "scale": 1.3, "ease": "outCubic" },
+            { "t": "beat:10", "scale": 1, "ease": "inCubic" },
+            { "t": "beat:11", "scale": 1.3, "ease": "outCubic" },
+            { "t": "beat:12", "scale": 1, "ease": "inCubic" },
+            { "t": "beat:13", "scale": 1.3, "ease": "outCubic" },
+            { "t": "beat:14", "scale": 1, "ease": "inCubic" },
+            { "t": "beat:15", "scale": 1.3, "ease": "outCubic" }
+          ]
+        },
+        {
+          "id": "pulse-label", "type": "text", "text": "one pulse per beat", "x": 960, "y": 800, "fontSize": 64, "fontWeight": 500,
+          "keyframes": [{ "t": "beat:8", "opacity": 0 }, { "t": "beat:9", "opacity": 1, "ease": "enter" }]
+        }
+      ]
+    }
+  ],
+  "audio": [{ "src": "data/on-the-beat.wav", "volume": 0.4 }],
+  "cues": [
+    { "cue": "pop", "at": "beat:2", "note": "C5", "volume": 0.6 },
+    { "cue": "pop", "at": "beat:4", "note": "E5", "volume": 0.6 },
+    { "cue": "pop", "at": "beat:6", "note": "G5", "volume": 0.6 },
+    { "cue": "ding", "scene": "pulse", "at": "beat:9", "volume": 0.5 },
+    { "cue": "ding", "scene": "pulse", "at": "beat:11", "volume": 0.5 },
+    { "cue": "ding", "scene": "pulse", "at": "beat:13", "volume": 0.5 },
+    { "cue": "chime", "scene": "pulse", "at": "beat:15", "volume": 0.6 }
+  ]
+}

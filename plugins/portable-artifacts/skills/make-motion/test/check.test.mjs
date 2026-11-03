@@ -5,8 +5,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { launchBrowser } from '../scripts/lib/browser.mjs';
+import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 import * as checkModule from '../scripts/check.mjs';
+import { loadSpec } from '../scripts/lib/spec.mjs';
+import { specHasVideo } from '../scripts/lib/video.mjs';
 
 const { safeMargin } = checkModule;
 
@@ -16,11 +18,9 @@ const FIXTURES = path.join(root, 'test/fixtures');
 const EXAMPLES = path.join(root, 'references/examples');
 const check = (args, env = {}) => spawnSync(process.execPath, [CHECK, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
 
-let browserPresent;
+// True when the test was skipped (no browser); throws under PA_REQUIRE_RENDER=1.
 async function skipUnlessBrowser(t) {
-  browserPresent ??= await launchBrowser({ quiet: true }).then((b) => b.close().then(() => true), () => false);
-  if (!browserPresent) t.skip('no browser (bundled Chromium or system Chrome)');
-  return !browserPresent;
+  return !(await requireRender(t, BROWSER_ONLY));
 }
 
 // A one-scene spec in a temp folder; `files` maps extra file names to their contents.
@@ -36,7 +36,9 @@ const lines = (stdout) => stdout.trim().split('\n');
 
 for (const name of readdirSync(EXAMPLES).filter((f) => f.endsWith('.json'))) {
   test(`every spec in references/examples passes with exit 0: ${name}`, async (t) => {
-    if (await skipUnlessBrowser(t)) return;
+    // A video example also needs ffmpeg and ffprobe: check.mjs decodes its frames for the render page.
+    const hasVideo = specHasVideo(loadSpec(path.join(EXAMPLES, name)).spec);
+    if (hasVideo ? !(await requireRender(t, { need: ['browser', 'ffmpeg', 'ffprobe'] })) : await skipUnlessBrowser(t)) return;
     const r = check([path.join(EXAMPLES, name)]);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.match(r.stdout, /^check: ok \(\d+ scenes?, \d+ moments\)\n$/);
@@ -110,11 +112,12 @@ test('safeMargin: 60 px at 1080 on the short side, on every side', () => {
 
 test('the safe area scales with the short side in the real page: 60 px at 1920x1080, 120 px at 3840x2160', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  // A 40 px line is 46 px tall (line-height 1.15), so y 103 puts its top 80 px from the frame edge.
-  const el = (x) => [{ id: 'note', type: 'text', text: 'Hi', x, y: 103, fontSize: 40 }];
+  // A 40 px line is 46 px tall (line-height 1.15), so y 103 puts its top 80 px from the frame edge. At 3840x2160 the same
+  // look is an 80 px line (40 px would be under the text floor there), 92 px tall, at y 126.
+  const el = (x, { y = 103, fontSize = 40 } = {}) => [{ id: 'note', type: 'text', text: 'Hi', x, y, fontSize }];
   const hd = check([specFile(el(960))]);
   assert.equal(hd.status, 0, hd.stdout + hd.stderr);
-  const uhd = check([specFile(el(1920), { size: [3840, 2160] })]);
+  const uhd = check([specFile(el(1920, { y: 126, fontSize: 80 }), { size: [3840, 2160] })]);
   assert.equal(uhd.status, 1, uhd.stdout + uhd.stderr);
   assert.deepEqual(lines(uhd.stdout), ['scenes[0].elements[0]: text "note" leaves the safe area (top) at 0.10s', 'check: 1 problem']);
 });
@@ -430,6 +433,15 @@ test('a typing text at zero characters (only its caret on screen) does not count
   assert.match(warningOf(r), /"cmd" starts empty \(a typing text types from no characters\)/);
   const shown = check([blankFrame({ elements: [word('cmd', { text: 'npm run build', typing: true }), word('lead')] })]);
   assert.equal(shown.stderr, '', 'another visible element keeps the frame from being blank');
+});
+
+// Gate 2 fix L13: the blank-thumbnail cause names a typing code element as code, not as a text.
+test('a typing code element at zero characters is named as code in the blank-frame warning', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const code = { id: 'snip', type: 'code', lang: 'bash', code: 'npm run build', typing: true, width: 800, x: 960, y: 540 };
+  const r = check([blankFrame({ elements: [code] })]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(warningOf(r), /"snip" starts empty \(a typing code element types from no characters\)/);
 });
 
 // ---- typing text (P4) ----------------------------------------------------------------------------

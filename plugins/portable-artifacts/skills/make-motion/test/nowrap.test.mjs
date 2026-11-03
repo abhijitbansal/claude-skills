@@ -6,9 +6,11 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
+import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { bindWithNbsp, findTokens } from '../shared/nowrap.mjs';
 import { nowrapProblems } from '../shared/nowrap-probe.mjs';
+import { substituteVars } from '../template/vars.mjs';
 import { main as checkMain, wrapProblems } from '../scripts/check.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -17,17 +19,15 @@ const SPEC_DIRS = [path.join(root, 'test/fixtures'), path.join(root, 'references
 const TOKEN_TEXT = 'Latency fell to 1,204 ms after the change';
 const MESSAGE = 'a number-plus-unit token wraps across lines';
 
-let browserPresent;
+// True when the test was skipped (no browser); throws under PA_REQUIRE_RENDER=1.
 async function skipUnlessBrowser(t) {
-  browserPresent ??= await launchBrowser({ quiet: true }).then((b) => b.close().then(() => true), () => false);
-  if (!browserPresent) t.skip('no browser (bundled Chromium or system Chrome)');
-  return !browserPresent;
+  return !(await requireRender(t, BROWSER_ONLY));
 }
 
-function specFile(elements, { size = [1920, 1080] } = {}) {
+function specFile(elements, { size = [1920, 1080], duration = 2 } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'motion-nowrap-'));
   const file = path.join(dir, 'motion.json');
-  writeFileSync(file, JSON.stringify({ size, fps: 30, scenes: [{ id: 's', duration: 2, elements }] }));
+  writeFileSync(file, JSON.stringify({ size, fps: 30, scenes: [{ id: 's', duration, elements }] }));
   return file;
 }
 
@@ -35,7 +35,7 @@ function specFile(elements, { size = [1920, 1080] } = {}) {
 const withTokenSpacesBound = (text) => findTokens(text).reduceRight(
   (acc, tok) => acc.slice(0, tok.start) + tok.text.replace(' ', '\u00a0') + acc.slice(tok.end), text);
 
-const narrowToken = () => specFile([{ id: 'latency', type: 'text', text: TOKEN_TEXT, x: 960, y: 540, fontSize: 120, maxWidth: 300 }]);
+const narrowToken = () => specFile([{ id: 'latency', type: 'text', text: TOKEN_TEXT, x: 960, y: 540, fontSize: 120, maxWidth: 300 }], { duration: 3 }); // 8 words: the reading floor wants 2.2 s
 
 test('check: a token in a narrow box is held on one line by the renderer, so check passes', async (t) => {
   if (await skipUnlessBrowser(t)) return;
@@ -119,7 +119,8 @@ test('rendered text element textContent: unchanged without a token; only the tok
   let tokenSpecs = 0;
   try {
     for (const file of files) {
-      const spec = JSON.parse(readFileSync(file, 'utf8'));
+      // The text as the page draws it: a spec's `{{name}}` vars at their defaults (a spec without vars is unchanged).
+      const spec = substituteVars(JSON.parse(readFileSync(file, 'utf8')));
       const texts = spec.scenes.flatMap((s) => s.elements).filter((e) => e.type === 'text');
       if (!texts.length) continue;
       const server = await startServer({ specPath: file, mode: 'render' });

@@ -1,0 +1,28 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "theme": "dusk",
+  "generatedBy": { "model": "claude-sonnet-5-5", "agent": "Claude Code" },
+  "scenes": [
+    {
+      "id": "verified",
+      "duration": 3.5,
+      "elements": [
+        { "id": "cap-verified", "type": "text", "text": "New: Lottie animations (type: lottie)", "x": 960, "y": 90, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "badge", "type": "lottie", "src": "data/badge.lottie.json", "x": 960, "y": 450, "width": 480, "height": 480, "offset": 0.2, "hold": true },
+        { "id": "title", "type": "text", "text": "Verified", "x": 960, "y": 820, "fontSize": 96, "fontWeight": 700, "hold": true,
+          "keyframes": [{ "t": 1.1, "opacity": 0, "y": 850 }, { "t": 1.7, "opacity": 1, "y": 820, "ease": "enter" }] }
+      ]
+    },
+    {
+      "id": "replay",
+      "duration": 3,
+      "transition": "fade",
+      "elements": [
+        { "id": "cap-replay", "type": "text", "text": "New: Lottie animations (type: lottie)", "x": 960, "y": 90, "fontSize": 52, "fontWeight": 600, "color": "accent", "hold": true },
+        { "id": "fast", "type": "lottie", "src": "data/badge.lottie.json", "x": 960, "y": 470, "width": 400, "height": 400, "speed": 2, "hold": true },
+        { "id": "caption", "type": "text", "text": "Twice the speed (speed: 2)", "x": 960, "y": 820, "fontSize": 72, "fontWeight": 600, "hold": true }
+      ]
+    }
+  ]
+}

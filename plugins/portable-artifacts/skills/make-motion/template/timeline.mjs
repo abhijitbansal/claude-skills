@@ -1,12 +1,16 @@
 // Pure, DOM-free: compiles a motion spec into one paused anime.js timeline that
 // animates a plain state object per element. Runs unchanged in Node and the browser.
+// The root `captions` tracks are not on it: nothing about them animates, and what a captions layer shows is a pure
+// function of the time (template/captions.mjs captionState, applied by the renderer on every seek).
 import { createTimeline, cubicBezier } from 'animejs';
-import { withDefaults, FADE_SECONDS, EASE_CURVES, TYPING_SECONDS_PER_CHAR, typingLength } from './defaults.mjs';
+import { withDefaults, EASE_CURVES, TYPING_SECONDS_PER_CHAR, typingLength, counterSeconds, isTyping, typedText } from './defaults.mjs';
+import { flattenElements } from './groups.mjs';
+import { normalizeTransition, comesInOver } from './transitions.mjs';
+import { CAMERA_PROPS, CAMERA_REST } from './camera.mjs';
 
 const MS = 1000;
 const MIN_SEGMENT_MS = 1;
-const COUNTER_MAX_SECONDS = 2;
-const COUNTER_SCENE_SHARE = 0.8;
+const TRANSITION_EASE = 'inOutCubic'; // the progress of push, slide, wipe, zoom, blur, iris, gl-ripple and gl-cube
 
 // The named eases as anime.js easing functions; every other name is one of anime's own (a string it resolves).
 const NAMED_EASES = Object.fromEntries(Object.entries(EASE_CURVES).map(([name, points]) => [name, cubicBezier(...points)]));
@@ -21,20 +25,19 @@ function track(keyframes, prop) {
 
 // A counter with no `value` keyframes counts from -> to at the start of its scene.
 function counterDefaultTrack(el, sceneDuration) {
-  const seconds = Math.min(COUNTER_MAX_SECONDS, COUNTER_SCENE_SHARE * sceneDuration);
-  return [{ t: 0, value: el.from ?? 0, ease: 'linear' }, { t: seconds, value: el.to, ease: 'outCubic' }];
+  return [{ t: 0, value: el.from ?? 0, ease: 'linear' }, { t: counterSeconds(sceneDuration), value: el.to, ease: 'outCubic' }];
 }
 
-// A `typing` text types its characters from the start of its scene at TYPING_SECONDS_PER_CHAR each.
+// A `typing` text or code types its characters from the start of its scene at TYPING_SECONDS_PER_CHAR each.
 function typingDefaultTrack(el) {
-  const chars = typingLength(el.text);
+  const chars = typingLength(typedText(el));
   return [{ t: 0, value: 0, ease: 'linear' }, { t: chars * TYPING_SECONDS_PER_CHAR, value: chars, ease: 'linear' }];
 }
 
 function elementTrack(el, prop, sceneDuration) {
   const points = track(el.keyframes, prop);
   if (prop === 'value' && el.type === 'counter' && !points.length) return counterDefaultTrack(el, sceneDuration);
-  if (prop === 'value' && el.type === 'text' && el.typing && !points.length) return typingDefaultTrack(el);
+  if (prop === 'value' && isTyping(el) && !points.length) return typingDefaultTrack(el);
   return points;
 }
 
@@ -58,26 +61,36 @@ export function buildTimeline(input) {
   const states = new Map();
   const sceneOf = new Map();
   const sceneStarts = [];
-  const crossfades = []; // {from, to, start, end}: scene `from` stays visible under scene `to` until `end` (seconds)
+  const overlaps = []; // {from, to, start, end, type}: scene `from` stays visible under scene `to` until `end` (seconds)
   let cursor = 0;
 
   spec.scenes.forEach((scene, si) => {
     const start = cursor;
     sceneStarts.push(start);
 
-    const blends = scene.transition === 'crossfade' && si > 0; // the first scene has nothing to fade out
-    const fadesIn = scene.transition === 'fade' || blends;
+    const transition = normalizeTransition(scene.transition);
+    const comesIn = si > 0 && comesInOver(transition.type); // the first scene has nothing to come in over
+    const fadesIn = transition.type === 'fade' || (comesIn && transition.type === 'crossfade');
+    const moves = comesIn && !fadesIn; // push, slide, wipe, zoom, blur, iris, gl-ripple, gl-cube: the renderer styles the layers from `p` (a GL window is composed from it)
     const sceneState = { opacity: fadesIn ? 0 : 1 };
+    if (moves) sceneState.p = 0;
     states.set(`scene:${scene.id}`, sceneState);
-    if (fadesIn) {
-      const duration = Math.min(FADE_SECONDS, scene.duration) * MS;
-      timeline.add(sceneState, { opacity: { from: 0, to: 1, duration }, composition: 'none' }, start * MS);
+    if (fadesIn || moves) {
+      const duration = Math.min(transition.duration, scene.duration) * MS;
+      if (fadesIn) timeline.add(sceneState, { opacity: { from: 0, to: 1, duration }, composition: 'none' }, start * MS);
+      else timeline.add(sceneState, { p: { from: 0, to: 1, duration, ease: easeOf(TRANSITION_EASE) }, composition: 'none' }, start * MS);
       // The previous scene is not faded: it stays at full opacity under the incoming one until the window ends, so
       // the stage colour never shows through (two layers fading together would dip towards it).
-      if (blends) crossfades.push({ from: si - 1, to: si, start, end: start + duration / MS });
+      if (comesIn) overlaps.push({ from: si - 1, to: si, start, end: start + duration / MS, type: transition.type });
     }
 
-    for (const el of scene.elements) {
+    if (scene.camera) { // the keyframed pose; the shake is added by the renderer, as a function of the time alone
+      const pose = { ...CAMERA_REST };
+      states.set(`camera:${scene.id}`, pose);
+      for (const prop of CAMERA_PROPS) addTrack(timeline, pose, prop, track(scene.camera.keyframes ?? [], prop), start);
+    }
+
+    for (const { el } of flattenElements(scene.elements)) { // a group's children are elements of the scene too
       sceneOf.set(el.id, si);
       const state = {
         x: el.x, y: el.y, opacity: el.opacity, scale: el.scale, rotate: el.rotate,
@@ -91,7 +104,9 @@ export function buildTimeline(input) {
     cursor += scene.duration;
   });
 
-  return { timeline, states, duration: cursor, sceneStarts, sceneOf, crossfades };
+  // `crossfades` is the crossfade windows alone, as they were before the other transitions (no `type`).
+  const crossfades = overlaps.filter((w) => w.type === 'crossfade').map(({ type, ...window }) => window);
+  return { timeline, states, duration: cursor, sceneStarts, sceneOf, overlaps, crossfades };
 }
 
 // Seek to `sec` seconds. Deterministic: same input time gives the same state.

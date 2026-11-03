@@ -1,0 +1,5 @@
+[
+  { "name": "Ada", "city": "London", "count": 12 },
+  { "name": "Grace", "city": "New York", "count": 27 },
+  { "name": "Linus", "city": "Helsinki", "count": 8 }
+]

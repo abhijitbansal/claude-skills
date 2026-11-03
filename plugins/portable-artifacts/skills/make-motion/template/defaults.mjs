@@ -1,18 +1,38 @@
 // Browser-safe (no Node imports): shared by spec validation, timeline and renderer.
-// No `background` default: the page fills it from the theme's page colour (see renderer fetchSpec).
-const DEFAULTS = Object.freeze({ size: [1920, 1080], fps: 30 });
-export const FADE_SECONDS = 0.4;
+import { childrenOf } from './groups.mjs';
+import { canvasSize } from './formats.mjs';
+import { expandBlocks } from './blocks/index.mjs';
+import { applyViral, autoCues, isViral, hookKeyframes, visibleAtStart } from './viral.mjs';
+import { TRANSITION_SECONDS, normalizeTransition, comesInOver } from './transitions.mjs';
+import { substituteVars } from './vars.mjs';
+
+// No `background` default: the page fills it from the theme's page colour (see renderer fetchSpec). The canvas size
+// default lives in formats.mjs (canvasSize).
+const DEFAULTS = Object.freeze({ fps: 30 });
+export const DEFAULT_FPS = DEFAULTS.fps;
+export const FADE_SECONDS = TRANSITION_SECONDS; // a fade or crossfade lasts this unless its `duration` says otherwise
 export const TYPING_SECONDS_PER_CHAR = 0.035;
 export const ARROW_HEAD_LENGTH = 3; // an arrow head is this many stroke widths long
 // What a shape draws with when its spec gives no size: one source for the page and the validator's line-length minimums.
 export const DEFAULT_SHAPE_SIZE = 100; // width and height
 export const DEFAULT_LINE_STROKE = 4;
+export const DEFAULT_CAPTION_STYLE = 'plain'; // a captions track's `style` when it names none (template/captions.mjs)
 
 // A `typing` text's characters as a reader counts them: grapheme clusters, so an emoji, a ZWJ sequence, a flag or a
 // letter with a combining accent is one character and is never typed in halves.
 const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' });
 export const graphemes = (text) => Array.from(GRAPHEMES.segment(text), (part) => part.segment);
 export const typingLength = (text) => graphemes(text).length;
+// A `typing` element (a text, or a code element) and the string it types.
+export const isTyping = (el) => el?.typing === true && (el.type === 'text' || el.type === 'code');
+export const typedText = (el) => (el.type === 'code' ? el.code : el.text);
+// The scene seconds `chars` characters need at the default pace and `fps`: typing must end a frame before the scene does.
+export const typingNeeds = (chars, fps) => chars * TYPING_SECONDS_PER_CHAR + 1 / fps;
+
+// A counter with no `value` keyframes counts from -> to from its scene start over this many seconds (timeline.mjs).
+const COUNTER_MAX_SECONDS = 2;
+const COUNTER_SCENE_SHARE = 0.8;
+export const counterSeconds = (sceneDuration) => Math.min(COUNTER_MAX_SECONDS, COUNTER_SCENE_SHARE * sceneDuration);
 
 // make-motion's default theme (scripts/lib/default-theme.mjs re-exports it). The shared
 // DEFAULT_THEME stays `paper` for make-dashboard.
@@ -120,36 +140,78 @@ export function presetKeyframes(name, el, sceneDuration, fps) {
 
 // `exits`: whether an `exit: true` title may leave (every scene but the spec's last). Returns the keyframes and
 // whether an exit was appended.
-function presetFor(el, theme, sceneDuration, fps, exits) {
+// `hook`: the title is viral mode's hook (scene 0, nothing around it hidden at t 0), so it enters with the hook entrance
+// (viral.mjs hookKeyframes) instead of the theme's, whatever the theme; its `exit` still takes the theme's exit.
+function presetFor(el, theme, sceneDuration, fps, exits, hook) {
   const name = TYPE_PRESETS[theme];
-  if (!name || el.type !== 'text' || el.role !== 'title' || el.keyframes !== undefined) return { keyframes: el.keyframes, exited: false };
-  const entrance = presetKeyframes(name, el, sceneDuration, fps);
+  if ((!name && !hook) || el.type !== 'text' || el.role !== 'title' || el.keyframes !== undefined) return { keyframes: el.keyframes, exited: false };
+  const entrance = hook ? hookKeyframes(el, sceneDuration, fps) : presetKeyframes(name, el, sceneDuration, fps);
+  if (!name) return { keyframes: entrance, exited: false };
   const exit = el.exit === true && exits ? exitKeyframes(name, el, sceneDuration, fps, entrance) : [];
   return { keyframes: [...entrance, ...exit], exited: exit.length > 0 };
 }
 
+// An element's own defaults, then its children's (a group's), at any depth. `hook`: titles here are viral mode's hook; a
+// group hidden at t 0 passes it on to no child, since a hook it hides could not be on screen at frame 0.
+function fillElement(el, theme, scene, fps, exits, hook = false) {
+  const preset = presetFor(el, theme, scene.duration, fps, exits, hook);
+  el.keyframes = preset.keyframes;
+  if (preset.exited) el.exitPreset = true; // check.mjs: this title leaves on purpose (it opted in with `exit`)
+  el.opacity ??= 1;
+  el.scale ??= 1;
+  el.rotate ??= 0;
+  el.draw = 1;
+  el.reveal = 1;
+  el.value = el.type === 'counter' ? (el.from ?? 0) : 0;
+  el.keyframes ??= [];
+  for (const child of childrenOf(el)) fillElement(child, theme, scene, fps, exits, hook && visibleAtStart(el));
+}
+
+// The root `format` sets the canvas size when the spec gives none (the validator refuses a `size` that disagrees);
+// with neither, the canvas is the default 1920x1080. `format` stays on the spec: the caption zone reads it.
+function applyFormat(out) {
+  out.size ??= [...canvasSize(out)];
+}
+
+// The steps that rewrite a spec, in their one fixed order, so every consumer (validator, renderer, timeline, check,
+// render) sees the same plain elements. This list is the only place the order is written; Tasks 16 and 11a slot their
+// steps into the numbered places and never reorder them.
+//   1 substituteVars  (vars.mjs) {{name}} becomes its default anywhere, block params and `mode` included (render --batch
+//                                substitutes each row's values first, so the spec reaching here has no `vars` left)
+//   1b resolveSpecBeats (scripts/lib/beats-file.mjs, Node only) `"beat:<n>"` in a keyframe `t` or an `at` becomes seconds
+//                                from the beats file named by the root `beats`. It cannot run here (it reads a file), so
+//                                every consumer calls it on the substituted spec before this one: validateSpec, render,
+//                                check and the preview server (which serves the spec resolved). The page never sees a
+//                                reference, and this list never needs to know of one.
+//   2 applyViral      (Task 11a) `mode: "viral"` defaults, so the `format` it sets reaches step 3
+//   3 expandBlocks               each `block` becomes a `group` of plain elements, laid out for canvasSize(spec): the
+//                                size step 4 will write, read before it is written
+//   4 applyFormat                `size` from `format`; then the theme presets fill in (fillElement), viral mode's hook
+//                                entrance in place of the theme's for the first scene's titles
+//   5 autoCues        (Task 11a) cues derived from the finished elements: it runs last, once every element's base
+//                                values and theme preset are filled in, because a preset's opacity-0 start is an entrance
+// Steps 1-3 change what the spec says, so the validator runs them too (expandSpec), after checking their inputs (block
+// params) and before its full check; steps 4-5 only fill in, and run in withDefaults alone.
+export function expandSpec(spec) {
+  // 1, 2, then 3: each pure (substituteVars and applyViral return a spec they do not change as it is; expandBlocks copies)
+  return expandBlocks(applyViral(substituteVars(spec)));
+}
+
 // Pure copy with every optional root and element base value filled in.
 export function withDefaults(spec) {
-  const out = structuredClone(spec);
-  out.size ??= [...DEFAULTS.size];
+  const out = expandSpec(spec); // steps 1-3 (a copy: spec is never mutated)
+  applyFormat(out); // 4: size and presets
   out.fps ??= DEFAULTS.fps;
   out.theme ??= MOTION_THEME;
   out.audio = (out.audio ?? []).map((track) => ({ at: 0, volume: 1, fadeIn: 0, fadeOut: 0, ...track }));
+  out.captions = (out.captions ?? []).map((track) => ({ at: 0, style: DEFAULT_CAPTION_STYLE, ...track }));
   const transition = out.transition ?? 'none';
   out.scenes.forEach((scene, si) => {
-    scene.transition ??= si === 0 && transition === 'crossfade' ? 'none' : transition; // the first scene has nothing to fade out
-    for (const el of scene.elements) {
-      const preset = presetFor(el, out.theme, scene.duration, out.fps, si < out.scenes.length - 1);
-      el.keyframes = preset.keyframes;
-      if (preset.exited) el.exitPreset = true; // check.mjs: this title leaves on purpose (it opted in with `exit`)
-      el.opacity ??= 1;
-      el.scale ??= 1;
-      el.rotate ??= 0;
-      el.draw = 1;
-      el.reveal = 1;
-      el.value = el.type === 'counter' ? (el.from ?? 0) : 0;
-      el.keyframes ??= [];
-    }
+    // the first scene has nothing to come in over; a root object is copied, not shared between scenes
+    scene.transition ??= si === 0 && comesInOver(normalizeTransition(transition).type) ? 'none' : (typeof transition === 'object' ? { ...transition } : transition);
+    const hook = si === 0 && isViral(out); // the first scene's titles are the hook
+    for (const el of scene.elements) fillElement(el, out.theme, scene, out.fps, si < out.scenes.length - 1, hook);
   });
+  if (isViral(out) && out.cues === undefined) out.cues = autoCues(out); // 5: a written `cues` (even []) wins
   return out;
 }

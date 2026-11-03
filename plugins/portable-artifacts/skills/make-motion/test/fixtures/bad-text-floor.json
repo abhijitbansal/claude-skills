@@ -1,0 +1,17 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "terms",
+      "duration": 3,
+      "elements": [
+        { "id": "headline", "type": "text", "text": "Quarterly numbers", "x": 960, "y": 400, "fontSize": 64 },
+        {
+          "id": "fine-print", "type": "text", "text": "Terms apply", "x": 960, "y": 900, "fontSize": 22,
+          "keyframes": [{ "t": 0.49, "opacity": 0 }, { "t": 0.5, "opacity": 1 }, { "t": 1.99, "opacity": 1 }, { "t": 2, "opacity": 0 }]
+        }
+      ]
+    }
+  ]
+}

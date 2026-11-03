@@ -1,0 +1,31 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "theme": "dusk",
+  "generatedBy": { "model": "claude-sonnet-5-5", "agent": "Claude Code" },
+  "scenes": [
+    {
+      "id": "behind",
+      "duration": 3.5,
+      "elements": [
+        {
+          "id": "subject", "type": "block", "x": 960, "y": 540, "block": "text-behind-subject",
+          "params": { "src": "portrait.jpg", "cutout": "portrait-cutout.png", "text": "UNSTOPPABLE" }
+        },
+        { "id": "cap-behind", "type": "text", "text": "New: text-behind-subject block (uses a pre-cut subject)", "x": 960, "y": 96, "fontSize": 48, "fontWeight": 600, "color": "accent", "hold": true }
+      ]
+    },
+    {
+      "id": "accent",
+      "duration": 3.5,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "subject-accent", "type": "block", "x": 960, "y": 540, "block": "text-behind-subject",
+          "params": { "src": "portrait.jpg", "cutout": "portrait-cutout.png", "text": "STAND OUT", "color": "accent" }
+        },
+        { "id": "cap-accent", "type": "text", "text": "New: text-behind-subject block (uses a pre-cut subject)", "x": 960, "y": 96, "fontSize": 48, "fontWeight": 600, "color": "accent", "hold": true }
+      ]
+    }
+  ]
+}

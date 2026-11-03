@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 jobs:
   test:
     strategy:
@@ -65,7 +66,8 @@ jobs:
         run: uv tool run pytest tools/second-wind/tests/ -q
 
   # portable-artifacts skills are self-contained Node packages (own lockfile).
-  # Render tests skip themselves when no browser/ffmpeg is present.
+  # Render tests skip themselves when no browser/ffmpeg is present, except in the make-motion step,
+  # where PA_REQUIRE_RENDER=1 turns a missing tool into a failure.
   node:
     runs-on: ubuntu-latest
     steps:
@@ -121,6 +123,10 @@ jobs:
         run: npx playwright install --with-deps chromium
       # Same glob as each package.json "test" script. A shard flag passed through
       # `npm test --` is silently ignored, so sharded runs call node directly.
+      # make-motion's render tests need ffmpeg; PA_REQUIRE_RENDER=1 (make-motion only) turns a missing browser or ffmpeg
+      # into a failure instead of a skip
+      - name: install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: package.json test script is still the glob run below
         working-directory: plugins/portable-artifacts/${{ matrix.dir }}
         run: |
@@ -132,7 +138,30 @@ jobs:
         working-directory: plugins/portable-artifacts/${{ matrix.dir }}
         env:
           SHARD: ${{ matrix.shard }}
+          PA_REQUIRE_RENDER: ${{ matrix.name == 'make-motion' && '1' || '' }}
         run: node --test ${SHARD:+--test-shard=$SHARD} "test/**/*.test.mjs"
+
+  # WebGL transitions (gl-ripple, gl-cube), macOS half: manual runs only (gh workflow run test.yml). The Ubuntu half is the
+  # make-motion step of the node job above, whose npm test includes test/gl-transitions.test.mjs. Both runners print
+  # `gl-frame: <platform> <type> <dir> <sha>` (the same composed frame on both is the evidence that software WebGL is
+  # deterministic across them); this job also prints `webgl-spike: <platform> <sha>`. Compare them in the logs
+  # (gh run view <id> --log); nothing asserts the equality.
+  webgl-spike-macos:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: install ffmpeg
+        run: brew install ffmpeg
+      - name: webgl spike and gl transitions
+        working-directory: plugins/portable-artifacts/skills/make-motion
+        env:
+          PA_WEBGL_SPIKE: '1'
+          PA_REQUIRE_RENDER: '1'
+        run: npm ci && npx playwright install chromium && node --test test/webgl-spike.test.mjs && node --test test/gl-transitions.test.mjs
 
   # A plugin's plugin.json `version` is the ONLY update trigger — Claude Code
   # skips a plugin whose version string is unchanged, even when its code moved.

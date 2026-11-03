@@ -9,15 +9,13 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
 import { startServer, themeOrDefault } from '../scripts/lib/server.mjs';
+import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER = path.join(root, 'scripts/render.mjs');
 const made = [];
 after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
 const tmp = (p) => { const d = mkdtempSync(path.join(tmpdir(), p)); made.push(d); return d; };
-async function haveBrowser() {
-  try { await (await launchBrowser({ quiet: true })).close(); return true; } catch { return false; }
-}
 
 // blueprint: Geist body and Geist Mono, neither of which the unthemed page uses.
 const BLUEPRINT = { page: '#0e1319', text: '#e8edf3', accent: '#6cb2e6' };
@@ -78,7 +76,7 @@ async function drawn(motion) {
 }
 
 test('themed: text, mono text, shape, chart and stage use the theme fonts and dark colours; its fonts really load', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const { look, problems, requests } = await drawn(spec({ theme: 'blueprint' }));
   assert.match(look.family, /^"?Geist"?, /); // the browser drops quotes around a one-word family
   assert.match(look.mono, /^"Geist Mono", /);
@@ -95,7 +93,7 @@ test('themed: text, mono text, shape, chart and stage use the theme fonts and da
 });
 
 test("themed: the spec's own colours and background still win", async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const { look } = await drawn(spec({ theme: 'blueprint', background: '#112233' }, { color: '#ff0000' }));
   assert.equal(look.stage, rgb('#112233'));
   assert.equal(look.color, 'rgb(255, 0, 0)');
@@ -103,7 +101,7 @@ test("themed: the spec's own colours and background still win", async (t) => {
 });
 
 test('unthemed: dusk fonts and dark colours, its stylesheet and display font on the page', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const { look, requests, problems } = await drawn(spec());
   assert.match(look.family, /^"Host Grotesk", /);
   assert.match(look.mono, /^"Commit Mono", /);
@@ -120,7 +118,7 @@ test('unthemed: dusk fonts and dark colours, its stylesheet and display font on 
 });
 
 test('role:title text draws with the theme display font: Funnel Display (dusk), Big Shoulders Display (poster)', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const titled = (extra) => spec(extra, { role: 'title' });
   const dusk = await drawn(titled({}));
   assert.match(dusk.look.title, /^"Funnel Display", /);
@@ -136,7 +134,7 @@ test('role:title text draws with the theme display font: Funnel Display (dusk), 
 });
 
 test('a scene with background "art" draws the theme art from the local server, not a flat colour', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const motion = spec({ theme: 'poster' });
   motion.scenes[0].background = 'art';
   const { look, requests, problems } = await drawn(motion);
@@ -147,7 +145,7 @@ test('a scene with background "art" draws the theme art from the local server, n
 });
 
 test('themed contact sheet: renders, differs from the unthemed one, and is not blank', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const dir = tmp('theme-cs-');
   const sheets = {};
   for (const name of ['themed', 'plain']) {
@@ -166,7 +164,7 @@ test('themed contact sheet: renders, differs from the unthemed one, and is not b
 // ---- fixed fonts: no synthetic bold -----------------------------------------------------------
 
 test('themed: a requested weight maps to the nearest weight the theme font ships, mono default included', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   // blueprint ships Geist 400 and 600, and Geist Mono 400 only.
   const weights = { sans: [[undefined, '600'], [800, '600'], [700, '600'], [300, '400'], [400, '400']], mono: [[undefined, '400'], [700, '400']] };
   for (const [font, cases] of Object.entries(weights)) {
@@ -180,7 +178,7 @@ test('themed: a requested weight maps to the nearest weight the theme font ships
 });
 
 test('unthemed: weights map to what dusk ships (Host Grotesk 400 and 700)', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const { look } = await drawn({ size: [64, 64], scenes: [{ id: 's', duration: 1, elements: [{ id: 'w', type: 'text', text: 'x', x: 10, y: 10, fontWeight: 800 }, { id: 'b', type: 'shape', shape: 'rect', x: 1, y: 1 }, { id: 'c', type: 'text', text: 'c', x: 1, y: 1, font: 'mono' }, { id: 'd', type: 'chart', x: 1, y: 1, width: 20, height: 20, vegaLite: { data: { values: [{ a: 'x', b: 2 }] }, mark: 'bar', encoding: { x: { field: 'a', type: 'nominal' }, y: { field: 'b', type: 'quantitative' } } } }] }] });
   assert.equal(look.firstWeight, '700');
   return undefined;
@@ -196,7 +194,7 @@ const sheetOf = (dir, name, motion, extra = []) => {
 };
 
 test('render --theme gives a spec without a theme that theme; a spec with its own keeps it', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const dir = tmp('theme-flag-');
   const plain = sheetOf(dir, 'plain', spec());
   const flagged = sheetOf(dir, 'flagged', spec(), ['--theme', 'blueprint']);

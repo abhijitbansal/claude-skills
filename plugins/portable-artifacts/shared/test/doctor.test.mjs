@@ -102,6 +102,79 @@ test('kokoro installed before the overrides existed counts as missing until rein
   assert.deepEqual(await diagnose([kokoro()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
 });
 
+// A lockfile whose tree holds fast-uri (via ajv) but not sharp or global-agent, which only a kokoro install brings.
+const LOCK = JSON.stringify({ packages: { '': {}, 'node_modules/ajv': {}, 'node_modules/fast-uri': {}, 'node_modules/@scope/pkg': {} } });
+
+test('node_modules installed before an overrides pin existed counts as missing until npm ci reruns', async () => {
+  const files = {
+    '/s/make-motion/package.json': JSON.stringify({ overrides: { 'fast-uri': '3.1.9', other: '^1.0.0' } }),
+    '/s/make-motion/package-lock.json': LOCK,
+    '/s/make-motion/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.8' }),
+  };
+  const readFile = (p) => {
+    if (!(p in files)) throw new Error('ENOENT');
+    return files[p];
+  };
+  const stale = await diagnose([nodeModules()], ctx({ exists: () => true, readFile }));
+  assert.equal(stale.ok, false, 'the stale install must go red, node_modules is a required requirement');
+  assert.equal(stale.missing[0].id, 'node_modules');
+  assert.match(stale.missing[0].why, /reinstall to get the patched fast-uri pinned in package\.json "overrides"/);
+  assert.equal(stale.missing[0].fix.auto, 'npm ci --omit=dev --prefix /s/make-motion');
+  files['/s/make-motion/node_modules/fast-uri/package.json'] = JSON.stringify({ version: '3.1.9' });
+  assert.deepEqual(await diagnose([nodeModules()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
+});
+
+test('make-motion: a stale sharp from an old kokoro install leaves node_modules ok and turns only kokoro red', async () => {
+  const files = {
+    '/s/make-motion/package.json': JSON.stringify({ overrides: { sharp: '0.35.5', 'global-agent': '4.1.3', 'fast-uri': '3.1.9' } }),
+    '/s/make-motion/package-lock.json': LOCK,
+    '/s/make-motion/node_modules/sharp/package.json': JSON.stringify({ version: '0.34.5' }),
+    '/s/make-motion/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.9' }),
+  };
+  const readFile = (p) => {
+    if (!(p in files)) throw new Error('ENOENT');
+    return files[p];
+  };
+  const r = await diagnose([nodeModules({ omitDev: false }), kokoro()], ctx({ exists: () => true, readFile }));
+  assert.deepEqual(r.missing.map((m) => m.id), ['kokoro']);
+  assert.equal(r.ok, true, 'kokoro is optional, so the required items stay green');
+  assert.match(r.missing[0].why, /reinstall to get the patched sharp pinned/);
+  assert.doesNotMatch(r.missing[0].why, /fast-uri/);
+});
+
+test('node_modules fix on an existing install says what npm ci removes and which --fix ids restore it', async () => {
+  const exists = () => true;
+  const dev = (await diagnose([nodeModules({ restore: ['dev_deps'] })], ctx({ exists, readFile: () => { throw new Error('x'); }, skillDir: '/s/x' })));
+  assert.deepEqual(dev, { ok: true, missing: [] });
+  const stale = { '/s/x/package.json': JSON.stringify({ overrides: { 'fast-uri': '3.1.9' } }), '/s/x/package-lock.json': LOCK, '/s/x/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.8' }) };
+  const readFile = (p) => { if (!(p in stale)) throw new Error('ENOENT'); return stale[p]; };
+  const note = async (opts, over = {}) => (await diagnose([nodeModules(opts)], ctx({ exists, readFile, skillDir: '/s/x', ...over }))).missing[0].notes;
+  assert.match(await note({ restore: ['dev_deps'] }), /removes the dev packages; restore with --fix dev_deps$/);
+  assert.match(await note({ omitDev: false, restore: ['kokoro'] }), /removes any voiceover install \(kokoro-js\); restore with --fix kokoro$/);
+  assert.doesNotMatch(await note({ omitDev: false, restore: ['kokoro'] }), /dev packages/);
+  assert.match(await note({}), /removes the dev packages; restore the dev packages with npm ci --prefix \/s\/x \(this skill's doctor has no --fix id/);
+  assert.equal(await note({ omitDev: false }), undefined, 'nothing removed, nothing to disclose');
+  assert.equal((await diagnose([nodeModules({ restore: ['dev_deps'] })], ctx({ exists: () => false, skillDir: '/s/x' }))).missing[0].notes, undefined, 'a first install removes nothing');
+});
+
+test('sister skill: a node_modules that predates a pin in the sister package.json counts as missing', async () => {
+  const dir = '/p/.agents/skills/make-diagram';
+  const files = {
+    [dir + '/package.json']: JSON.stringify({ overrides: { 'fast-uri': '3.1.9' } }),
+    [dir + '/package-lock.json']: LOCK,
+    [dir + '/node_modules/fast-uri/package.json']: JSON.stringify({ version: '3.1.8' }),
+  };
+  const readFile = (p) => { if (!(p in files)) throw new Error('ENOENT'); return files[p]; };
+  const base = { skillDir: '/p/.agents/skills/make-explainer', cwd: '/p', homedir: '/h', exists: () => true, readFile };
+  const stale = await diagnose([sisterSkill('make-diagram')], ctx(base));
+  assert.equal(stale.ok, false);
+  assert.match(stale.missing[0].why, /make-diagram is installed but its dependencies predate the patched fast-uri/);
+  assert.equal(stale.missing[0].fix.auto, 'npm ci --omit=dev --prefix ' + dir);
+  assert.match(stale.missing[0].notes, /removes its dev packages/);
+  files[dir + '/node_modules/fast-uri/package.json'] = JSON.stringify({ version: '3.1.9' });
+  assert.deepEqual(await diagnose([sisterSkill('make-diagram')], ctx(base)), { ok: true, missing: [] });
+});
+
 // --- additions beyond the brief ---
 
 test('nodeModules: omitDev false drops --omit=dev; present dir is fine', async () => {
@@ -789,4 +862,104 @@ test("builderAgent: --fix with no host folder has no automatic fix and runs noth
   assert.equal(res[0].refused, "no automatic fix");
   assert.match(res[0].manual, /install\.mjs copilot --agents-only/);
   assert.doesNotMatch(res[0].manual, /this skill's own writer/);
+});
+
+// --- cutout: onnxruntime-node for make-motion's cutout.mjs (installed on demand, like kokoro) ---
+
+test('CUTOUT_PIN is an exact onnxruntime-node version, and the cutout fix installs it from inside the skill folder (no --prefix)', async () => {
+  const { CUTOUT_PIN, cutout } = await import('../doctor.mjs');
+  assert.match(CUTOUT_PIN, /^onnxruntime-node@\d+\.\d+\.\d+$/);
+  const r = await diagnose([cutout()], ctx({ platform: 'linux' }));
+  assert.equal(r.missing[0].id, 'cutout');
+  assert.equal(r.missing[0].fix.auto, `cd /s/make-motion && npm install ${CUTOUT_PIN} --no-save`);
+  assert.doesNotMatch(r.missing[0].fix.manual.linux, /--prefix/);
+  assert.equal(r.missing[0].required, false, 'cutouts are opt-in');
+  assert.equal(r.ok, true);
+  assert.match(r.missing[0].size, /25 MB/, 'the why/size name the model download');
+});
+
+test('cutout is missing on a fresh copy and present once onnxruntime-node is installed', async () => {
+  const { cutout } = await import('../doctor.mjs');
+  assert.equal((await diagnose([cutout()], ctx())).missing.length, 1);
+  assert.deepEqual(await diagnose([cutout()], ctx({ exists: () => true })), { ok: true, missing: [] });
+});
+
+test('cutout installed before the overrides existed counts as missing until reinstalled, and node_modules stays green', async () => {
+  const files = {
+    '/s/make-motion/package.json': JSON.stringify({ overrides: { 'global-agent': '4.1.3', 'fast-uri': '3.1.9' } }),
+    '/s/make-motion/package-lock.json': LOCK,
+    '/s/make-motion/node_modules/global-agent/package.json': JSON.stringify({ version: '3.0.0' }),
+    '/s/make-motion/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.9' }),
+  };
+  const readFile = (p) => { if (!(p in files)) throw new Error('ENOENT'); return files[p]; };
+  const { cutout } = await import('../doctor.mjs');
+  const r = await diagnose([nodeModules({ omitDev: false }), cutout()], ctx({ exists: () => true, readFile }));
+  assert.deepEqual(r.missing.map((m) => m.id), ['cutout']);
+  assert.match(r.missing[0].why, /reinstall to get the patched global-agent pinned/);
+  files['/s/make-motion/node_modules/global-agent/package.json'] = JSON.stringify({ version: '4.1.3' });
+  assert.deepEqual(await diagnose([cutout()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
+});
+
+test('--fix cutout runs the pinned install in the skill folder, after node_modules and before nothing else it depends on', async () => {
+  const { CUTOUT_PIN, cutout } = await import('../doctor.mjs');
+  const ran = [];
+  const res = await runFixes(['cutout', 'node_modules'], [cutout(), nodeModules()], ctx({ platform: 'linux', exists: (p) => p.endsWith('/node_modules') }), (cmd, args, o) => { ran.push(`${cmd} ${args.join(' ')} @${o.cwd ?? ''}`); return { status: 0 }; });
+  assert.deepEqual(res.map((r) => r.id), ['node_modules', 'cutout']);
+  assert.deepEqual(ran, ['npm ci --omit=dev --prefix /s/make-motion @', `npm install ${CUTOUT_PIN} --no-save @/s/make-motion`]);
+});
+
+test('the node_modules reinstall note names a cutout install when the skill can restore it', async () => {
+  const stale = { '/s/x/package.json': JSON.stringify({ overrides: { 'fast-uri': '3.1.9' } }), '/s/x/package-lock.json': LOCK, '/s/x/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.8' }) };
+  const readFile = (p) => { if (!(p in stale)) throw new Error('ENOENT'); return stale[p]; };
+  const note = async (opts) => (await diagnose([nodeModules(opts)], ctx({ exists: () => true, readFile, skillDir: '/s/x' }))).missing[0].notes;
+  assert.match(await note({ omitDev: false, restore: ['kokoro', 'cutout'] }), /removes any voiceover install \(kokoro-js\) and any cutout install \(onnxruntime-node\); restore with --fix kokoro and --fix cutout$/);
+  assert.match(await note({ omitDev: false, restore: ['cutout'] }), /removes any cutout install \(onnxruntime-node\); restore with --fix cutout$/);
+});
+
+// --- on-demand installs keep each other: both are `npm install --no-save`, which prunes the other one ---
+
+const has = (...pkgs) => (p) => pkgs.some((k) => p.endsWith(`/node_modules/${k}`));
+
+test('installing the voiceover with a cutout install in place installs both pins in one command', async () => {
+  const { CUTOUT_PIN } = await import('../doctor.mjs');
+  const r = await diagnose([kokoro()], ctx({ platform: 'linux', exists: has('onnxruntime-node') }));
+  assert.equal(r.missing[0].fix.auto, `cd /s/make-motion && npm install kokoro-js@1.2.1 ${CUTOUT_PIN} --no-save`);
+});
+
+test('installing the cutout with a voiceover install in place installs both pins in one command', async () => {
+  const { CUTOUT_PIN, cutout } = await import('../doctor.mjs');
+  const r = await diagnose([cutout()], ctx({ platform: 'linux', exists: has('kokoro-js') }));
+  assert.equal(r.missing[0].fix.auto, `cd /s/make-motion && npm install kokoro-js@1.2.1 ${CUTOUT_PIN} --no-save`);
+});
+
+test('--fix kokoro,cutout in one run ends with both installed, in either order given', async () => {
+  const { cutout } = await import('../doctor.mjs');
+  const ran = [];
+  const installed = new Set();
+  const run = (cmd, args) => {
+    ran.push([cmd, ...args].join(' '));
+    for (const a of args) { if (a.startsWith('kokoro-js')) installed.add('kokoro-js'); if (a.startsWith('onnxruntime-node')) installed.add('onnxruntime-node'); }
+    return { status: 0 };
+  };
+  const c = ctx({ platform: 'linux', exists: (p) => [...installed].some((k) => p.endsWith(`/node_modules/${k}`)) });
+  // A real npm prune: an install that omits an installed package removes it.
+  const pruning = (cmd, args) => {
+    const keep = new Set(args.filter((a) => a.includes('@')).map((a) => a.split('@')[0]));
+    for (const k of [...installed]) if (!keep.has(k)) installed.delete(k);
+    return run(cmd, args);
+  };
+  const res = await runFixes(['cutout', 'kokoro'], [cutout(), kokoro()], c, pruning);
+  assert.deepEqual(res.map((r) => r.ok), [true, true]);
+  assert.deepEqual([...installed].sort(), ['kokoro-js', 'onnxruntime-node']);
+  assert.equal(ran.length, 2);
+});
+
+test('the on-demand install notes say the other install is kept, and that npm ci removes both', async () => {
+  const { cutout } = await import('../doctor.mjs');
+  for (const req of [kokoro(), cutout()]) {
+    const r = await diagnose([req], ctx());
+    assert.match(r.missing[0].notes, /keeps an installed (cutout|voiceover)/);
+    assert.match(r.missing[0].notes, /npm ci/);
+    assert.doesNotMatch(r.missing[0].notes, /removes other --no-save installs/);
+  }
 });

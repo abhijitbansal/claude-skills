@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTimeline, seekTo } from '../template/timeline.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
-import { haveBrowser, probed, framed, meanLuma } from './render-probe.mjs';
+import { probed, framed, meanLuma } from './render-probe.mjs';
+import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 
 const label = (id, extra = {}) => ({ id, type: 'text', text: id, x: 240, y: 135, fontSize: 40, ...extra });
 const spec = (extra = {}, elements = [label('a')]) => ({
@@ -45,7 +46,7 @@ const layers = () => {
 };
 
 test('vignette adds exactly one layer over the scenes, with the clear-centre gradient; none when off', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const on = await probed(spec({ texture: { vignette: true } }), layers);
   assert.equal(on.vignette, 1);
   assert.match(on.vignetteCss, /radial-gradient\(.*55%.*0\.55.*100%/);
@@ -58,7 +59,7 @@ test('vignette adds exactly one layer over the scenes, with the clear-centre gra
 });
 
 test('grain adds one static layer per scene, seeded from the scene id and nothing else', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed(spec({ texture: { grain: 0.1 } }), layers);
   assert.equal(found.grain, 2);
   assert.equal(found.vignette, 0);
@@ -71,7 +72,7 @@ test('grain adds one static layer per scene, seeded from the scene id and nothin
 });
 
 test('the same spec with grain and vignette renders byte-identical frames; the texture changes the frame', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const textured = spec({ texture: { vignette: true, grain: 0.1 } });
   const first = await framed(textured, 0.5);
   const second = await framed(textured, 0.5);
@@ -82,7 +83,7 @@ test('the same spec with grain and vignette renders byte-identical frames; the t
 });
 
 test('grain is luminance-neutral: the mean luma stays within a point of the grain-free frame at the strongest setting, while the pixels differ', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const bare = spec({}, []);
   const grainy = spec({ texture: { grain: 0.15 } }, []);
   const [plain, noisy] = [await framed(bare, 0.5), await framed(grainy, 0.5)];
@@ -98,7 +99,7 @@ test('grain is luminance-neutral: the mean luma stays within a point of the grai
 });
 
 test('grain across a crossfade does not wash the frame: mid-window luma stays at the grain-free value', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const scenes = [{ id: 'one', duration: 2, elements: [] }, { id: 'two', duration: 2, transition: 'crossfade', elements: [] }];
   const bare = { size: [160, 90], scenes };
   const grainy = { ...bare, texture: { grain: 0.15 } };
@@ -167,7 +168,7 @@ test('text without typing keeps value 0 and no track', () => {
 // ---- typing: drawn -----------------------------------------------------------------------------
 
 test('typing shows the first n characters with a caret after them, in a box that is always the full text', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed(spec({}, [label('a', { text: 'Hello world', typing: true })]), () => {
     const node = document.querySelector('[data-id="a"]');
     const at = (sec) => {
@@ -190,7 +191,7 @@ test('typing shows the first n characters with a caret after them, in a box that
 });
 
 test('text without typing is drawn as before: plain text content, no spans', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const found = await probed(spec(), () => {
     const node = document.querySelector('[data-id="a"]');
     return { text: node.textContent, spans: node.querySelectorAll('span').length };
@@ -200,7 +201,7 @@ test('text without typing is drawn as before: plain text content, no spans', asy
 });
 
 test('a wrapped typing text lays out identically at every typed count: same box height, same line for every character', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const wrapped = spec({}, [label('a', { text: 'Hello wonderful world', typing: true, maxWidth: 260, fontSize: 40 })]);
   const found = await probed(wrapped, () => {
     const node = document.querySelector('[data-id="a"]');
@@ -229,7 +230,7 @@ test('a wrapped typing text lays out identically at every typed count: same box 
 });
 
 test('typing never shows half a character: a ZWJ family and a decomposed accent appear whole', async (t) => {
-  if (!(await haveBrowser())) return t.skip('browser unavailable');
+  if (!(await requireRender(t, BROWSER_ONLY))) return undefined;
   const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}';
   const found = await probed(spec({}, [label('a', { text: `${family}e\u0301x`, typing: true })]), () => {
     const typedText = (n) => { window.__motion.seek(n * 0.035 + 0.001); return document.querySelector('[data-id="a"] .typed').textContent; };

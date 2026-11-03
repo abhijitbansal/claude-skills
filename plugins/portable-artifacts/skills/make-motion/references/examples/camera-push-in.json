@@ -1,0 +1,53 @@
+{
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "push-in",
+      "duration": 4,
+      "camera": {
+        "keyframes": [
+          { "t": 0, "zoom": 1 },
+          { "t": 4, "zoom": 1.15, "ease": "inOutQuad" }
+        ]
+      },
+      "elements": [
+        { "id": "push-title", "type": "text", "text": "A slow push-in", "x": 960, "y": 440, "fontSize": 120, "fontWeight": 700 },
+        { "id": "push-label", "type": "text", "text": "the camera eases from 1.0 to 1.15 zoom", "x": 960, "y": 600, "fontSize": 48, "fontWeight": 400 }
+      ]
+    },
+    {
+      "id": "pan-roll",
+      "duration": 4,
+      "camera": {
+        "keyframes": [
+          { "t": 0, "zoom": 1.1, "x": -250, "rotate": 4 },
+          { "t": 2.5, "zoom": 1, "x": 0, "rotate": 0, "ease": "outCubic" }
+        ]
+      },
+      "elements": [
+        { "id": "pan-title", "type": "text", "text": "Pan and roll", "x": 960, "y": 220, "fontSize": 80, "fontWeight": 700 },
+        { "id": "card-1", "type": "shape", "shape": "rect", "x": 480, "y": 600, "width": 360, "height": 200, "radius": 24, "fill": "surface" },
+        { "id": "card-1-label", "type": "text", "text": "Plan", "x": 480, "y": 600, "fontSize": 56, "fontWeight": 600 },
+        { "id": "card-2", "type": "shape", "shape": "rect", "x": 960, "y": 600, "width": 360, "height": 200, "radius": 24, "fill": "surface" },
+        { "id": "card-2-label", "type": "text", "text": "Build", "x": 960, "y": 600, "fontSize": 56, "fontWeight": 600 },
+        { "id": "card-3", "type": "shape", "shape": "rect", "x": 1440, "y": 600, "width": 360, "height": 200, "radius": 24, "fill": "surface" },
+        { "id": "card-3-label", "type": "text", "text": "Ship", "x": 1440, "y": 600, "fontSize": 56, "fontWeight": 600 }
+      ]
+    },
+    {
+      "id": "shake",
+      "duration": 2.5,
+      "camera": {
+        "keyframes": [
+          { "t": 0, "zoom": 1.12 },
+          { "t": 0.6, "zoom": 1, "ease": "outCubic" }
+        ],
+        "shake": { "amount": 14, "hz": 12, "seed": 7 }
+      },
+      "elements": [
+        { "id": "shake-title", "type": "text", "text": "Impact", "x": 960, "y": 540, "fontSize": 160, "fontWeight": 800 }
+      ]
+    }
+  ]
+}

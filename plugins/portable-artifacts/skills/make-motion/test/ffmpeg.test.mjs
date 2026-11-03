@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { encodeArgs, findFfmpeg, probeAudio, preflightArgs, probeGraph } from '../scripts/lib/ffmpeg.mjs';
 import { writeWav } from './helpers/wav.mjs';
+import { requireRender } from './helpers/render.mjs';
 
 test('encodeArgs shape', () => {
   assert.deepEqual(encodeArgs({ fps: 30, out: 'o.mp4' }), [
@@ -59,7 +60,7 @@ test('encodeArgs with an empty audio list is identical to no audio option', () =
 test('encodeArgs one track: no amix, mapped directly', () => {
   const audio = [{ file: '/a/v.wav', start: 0, end: 5, volume: 1, fadeIn: 0, fadeOut: 0 }];
   assert.deepEqual(encodeArgs({ fps: 10, out: 'o.mp4', audio, duration: 5 }), [
-    ...VIDEO_HEAD, '-i', '/a/v.wav',
+    ...VIDEO_HEAD, '-protocol_whitelist', 'file,pipe', '-i', '/a/v.wav',
     '-filter_complex', '[1:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=end=5,volume=1,adelay=0:all=1[a0]',
     '-map', '0:v', '-map', '[a0]', ...VIDEO_TAIL, ...AUDIO_OUT, '-t', '5', 'o.mp4']);
 });
@@ -70,7 +71,7 @@ test('encodeArgs two tracks with fades, delay and volume are mixed without norma
     { file: '/a/voice.wav', start: 1.5, end: 6, volume: 1, fadeIn: 0, fadeOut: 0.5 },
   ];
   assert.deepEqual(encodeArgs({ fps: 10, out: 'o.mp4', audio, duration: 6 }), [
-    ...VIDEO_HEAD, '-i', '/a/music.mp3', '-i', '/a/voice.wav',
+    ...VIDEO_HEAD, '-protocol_whitelist', 'file,pipe', '-i', '/a/music.mp3', '-protocol_whitelist', 'file,pipe', '-i', '/a/voice.wav',
     '-filter_complex',
     '[1:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=end=6,volume=0.4,afade=t=in:st=0:d=1,afade=t=out:st=4:d=2,adelay=0:all=1[a0];'
       + '[2:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=end=4.5,volume=1,afade=t=out:st=4:d=0.5,adelay=1500:all=1[a1];'
@@ -92,8 +93,9 @@ test('encodeArgs never uses -shortest', () => {
 });
 
 test('probeAudio accepts a decodable file', async (t) => {
-  const ff = await findFfmpeg().catch(() => null);
-  if (!ff) return t.skip('ffmpeg unavailable');
+  const tools = await requireRender(t, { need: ['ffmpeg'] });
+  if (!tools) return undefined;
+  const ff = tools.ffmpeg;
   const dir = mkdtempSync(path.join(tmpdir(), 'probe-'));
   const good = path.join(dir, 'good.wav');
   writeWav(good, { seconds: 0.5 });
@@ -102,8 +104,9 @@ test('probeAudio accepts a decodable file', async (t) => {
 });
 
 test('probeAudio returns the first stderr line for an undecodable file', async (t) => {
-  const ff = await findFfmpeg().catch(() => null);
-  if (!ff) return t.skip('ffmpeg unavailable');
+  const tools = await requireRender(t, { need: ['ffmpeg'] });
+  if (!tools) return undefined;
+  const ff = tools.ffmpeg;
   const dir = mkdtempSync(path.join(tmpdir(), 'probe-'));
   const bad = path.join(dir, 'bad.wav');
   writeFileSync(bad, 'this is not audio\n');
@@ -114,8 +117,9 @@ test('probeAudio returns the first stderr line for an undecodable file', async (
 });
 
 test('probeAudio rejects a file with no audio stream before any frame is captured', async (t) => {
-  const ff = await findFfmpeg().catch(() => null);
-  if (!ff) return t.skip('ffmpeg unavailable');
+  const tools = await requireRender(t, { need: ['ffmpeg'] });
+  if (!tools) return undefined;
+  const ff = tools.ffmpeg;
   const dir = mkdtempSync(path.join(tmpdir(), 'probe-'));
   const videoOnly = path.join(dir, 'novoice.m4a');
   const r = spawnSync(ff, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=16x16:d=0.2', '-c:v', 'libx264', '-f', 'mp4', videoOnly]);
@@ -145,13 +149,14 @@ test('preflightArgs runs the real mix graph against a lavfi video stand-in for a
   const full = encodeArgs({ fps: 10, out: 'o.mp4', audio, duration: 6 });
   const graph = full[full.indexOf('-filter_complex') + 1];
   assert.deepEqual(preflightArgs({ fps: 10, audio }), [
-    '-v', 'error', '-f', 'lavfi', '-i', 'color=s=16x16:r=10:d=0.1', '-i', '/a/music.mp3', '-i', '/a/voice.wav',
+    '-v', 'error', '-f', 'lavfi', '-i', 'color=s=16x16:r=10:d=0.1', '-protocol_whitelist', 'file,pipe', '-i', '/a/music.mp3', '-protocol_whitelist', 'file,pipe', '-i', '/a/voice.wav',
     '-filter_complex', graph, '-map', '0:v', '-map', '[aout]', '-t', '0.1', '-f', 'null', '-']);
 });
 
 test('probeGraph accepts a valid mix and reports the first stderr line for a bad one', async (t) => {
-  const ff = await findFfmpeg().catch(() => null);
-  if (!ff) return t.skip('ffmpeg unavailable');
+  const tools = await requireRender(t, { need: ['ffmpeg'] });
+  if (!tools) return undefined;
+  const ff = tools.ffmpeg;
   const dir = mkdtempSync(path.join(tmpdir(), 'graph-'));
   const a = path.join(dir, 'a.wav');
   writeWav(a, { seconds: 0.5 });

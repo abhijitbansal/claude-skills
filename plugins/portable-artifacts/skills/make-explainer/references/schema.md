@@ -40,7 +40,7 @@ Every section has `type` (required), an optional `id` (`^[a-z][a-z0-9-]*$`, uniq
 | `motion.video` | `.mp4`, at most 50 MB |
 | `diagram` file, `scene` file, `motion.spec` file | `.json`, at most 1 MB |
 | `scene` sections | at most 4 per page |
-| Text length | Soft caps, warnings only: title 8 words, label 4, paragraph 3 sentences or 60 words, text section 120, card text 30, list item 20, page prose 900, tldr 3 points |
+| Text length | Soft caps, warnings only: title 8 words, label 4, paragraph 3 sentences or 60 words, text section 120, card text 30, list item 20, page prose 900 (1,800 on a plan page), tldr 3 points |
 
 Slides mode adds a budget to each section (errors): at most 6 points (tldr points, `- ` list lines, items of list-like sections, compare points, checklist items), 8 table rows, 12 code lines and 80 words of prose (the title, the label and captions do not count).
 
@@ -102,7 +102,7 @@ The plan page's Save as HTML button downloads `<key>-answered.html`: the page wi
 | `answers.mjs <plan.json> <plan-answers.json \| saved-page.html> [--json]` | Checks a reviewer's exported answers against the plan and prints a summary; see "Plan answers" above. |
 | `validate.mjs <explainer.json> [--json]` | Schema, limits, prose lint, slide budget, file references and the embedded diagram, scene, chart and motion checks. |
 | `build.mjs <explainer.json> [--out <file.html\|dir>] [--theme <name>] [--image-api <https-endpoint>] [--model <m>] [--effort <e>] [--agent <a>] [--json]` | Validates, then writes the page. `--image-api` is optional and off by default: see "Hero image from an image API" below. |
-| `check.mjs <page.html> [--json]` | Optional headless check of a built page at 1280 and 390 px: console errors and warnings, sideways scrolling, elements wider than the page, content clipped sideways inside a slide, a deck's last slide reachable by arrow keys with the counter reading N / N, and each diagram's viewer mounting and its Present overlay opening and closing on Esc. Exit 0 ok or skipped (no browser), 1 problems, 2 usage. Needs Playwright and a browser (full `npm ci`); `PA_CHECK_TIMEOUT_MS` shortens the 60 s cap. |
+| `check.mjs <page.html> [--json]` | Optional headless check of a built page at 1280, 390 and 1800 px: console errors and warnings, sideways scrolling, elements wider than the page, content clipped sideways inside a slide, a deck's last slide reachable by arrow keys with the counter reading N / N, and each diagram's viewer mounting and its Present overlay opening and closing on Esc. Exit 0 ok or skipped (no browser), 1 problems, 2 usage. Needs Playwright and a browser (full `npm ci`); `PA_CHECK_TIMEOUT_MS` shortens the 60 s cap. |
 
 ## Hero image from an image API
 

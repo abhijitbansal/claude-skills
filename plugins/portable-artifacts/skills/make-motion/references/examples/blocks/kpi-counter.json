@@ -1,0 +1,24 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "kpi-counter",
+      "duration": 4,
+      "elements": [
+        {
+          "id": "kpi",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "kpi-counter",
+          "params": {
+            "label": "Monthly active users",
+            "to": 48200,
+            "delta": "+12% on last month"
+          }
+        }
+      ]
+    }
+  ]
+}

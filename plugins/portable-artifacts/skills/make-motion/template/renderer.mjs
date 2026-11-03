@@ -2,13 +2,28 @@
 // window.__motion for the preview UI and the Playwright frame loop.
 import { buildTimeline, seekTo } from './timeline.mjs';
 import { withDefaults, resolveColor, graphemes, typingLength, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE } from './defaults.mjs';
+import { layerStyles, layerUnder, normalizeTransition } from './transitions.mjs';
+import { isGlTransition } from './gl-transitions.mjs';
+import { cameraTransform } from './camera.mjs';
 import { resolveAudio } from './audio.mjs';
+import { flattenElements, isGroup } from './groups.mjs';
+import { gradeFilter, gradeId, GRADE_ELEMENT_TYPES } from './grade.mjs';
+import { loadCaptionTracks, captionLayer, applyCaption, captionSample, captionFontSize, captionMoments, CAPTION_WEIGHT } from './caption-layer.mjs';
+import { codeHighlighter, styleCode, fillCode, setCodeTyping } from './code-view.mjs';
+import { DEFAULT_CODE_SIZE } from './code-theme.mjs';
+import { mountLottie, seekLottie, destroyLotties } from './lottie-view.mjs';
+import { atlasUrl, atlasesIn, withAtlases, themeColours } from './maps.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 import { bindWithNbsp } from '/shared/nowrap.mjs'; // served by server.mjs; the token regex lives only in shared/
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const MODE = document.querySelector('meta[name="motion-mode"]')?.content ?? 'preview';
+const MODE_MARKER = document.querySelector('meta[name="motion-mode"]')?.content;
+const MODE = MODE_MARKER ?? 'preview';
+// Per-element compositor layers (styles.css body.live-layers) only when the page says preview outright: a missing or
+// unknown marker gets render-mode painting, which is what makes captures deterministic.
+const LIVE_LAYERS = MODE_MARKER === 'preview';
 const SCENE_END_EPSILON = 1e-9;
+const NO_LAYER_STYLES = Object.freeze({ opacity: null, transform: null, clipPath: null, filter: null }); // a scene layer outside any transition
 const ELEVATED_HIGHLIGHT = 'rgba(255,255,255,.06)'; // the 1 px inset edge of an `elevated` rect
 const ELEVATED_LIFT = 6; // percent of the text colour an elevated fill moves toward
 const ARROW_HALF_WIDTH = 1.5; // an arrow head reaches this many stroke widths either side of the line (it is ARROW_HEAD_LENGTH long)
@@ -165,8 +180,24 @@ function ringFilledPoints(root, ring) {
   }
 }
 
+// The pinned atlas files (template/maps.mjs) a chart names, fetched once per page whatever number of charts use them.
+const atlasFetches = new Map();
+function fetchAtlas(name) {
+  if (!atlasFetches.has(name)) {
+    const loaded = fetch(atlasUrl(name), { cache: 'no-store' }).then((response) => {
+      if (!response.ok) throw new Error(`map failed to load: ${name} (${response.status})`);
+      return response.json();
+    });
+    loaded.catch(() => atlasFetches.delete(name)); // a failed load is tried again by the next stage, not remembered
+    atlasFetches.set(name, loaded);
+  }
+  return atlasFetches.get(name);
+}
+
 async function renderChart(el, look) {
-  const vl = el.vegaLite;
+  const atlases = atlasesIn(el.vegaLite);
+  const topologies = Object.fromEntries(await Promise.all(atlases.map(async (name) => [name, await fetchAtlas(name)])));
+  const vl = themeColours(withAtlases(el.vegaLite, topologies), look.colors);
   const config = mergeConfig(look.vega, vl.config);
   const compiled = window.vegaLite.compile({
     ...vl, width: el.width, height: el.height, config, autosize: { type: 'fit', contains: 'padding' },
@@ -196,15 +227,60 @@ function typingParts(node, el) {
   return { chars, total: typingLength(el.text), typed, caret, rest };
 }
 
+// How many of `total` characters a typing `value` shows, and whether a complete line's blinking caret is on at `sec`.
+const typedCount = (value, total) => Math.min(total, Math.max(0, Math.floor(value + TYPING_EPSILON)));
+const blinkOn = (sec) => Math.floor(sec / CARET_BLINK_SECONDS) % 2 === 0;
+
 function setTyping({ chars, total, typed, caret, rest }, value, sec) {
-  const n = Math.min(total, Math.max(0, Math.floor(value + TYPING_EPSILON)));
+  const n = typedCount(value, total);
   typed.textContent = chars.slice(0, n).join('');
   rest.textContent = chars.slice(n).join('');
-  const blinkOn = Math.floor(sec / CARET_BLINK_SECONDS) % 2 === 0;
-  caret.style.visibility = n < total || blinkOn ? 'visible' : 'hidden';
+  caret.style.visibility = n < total || blinkOn(sec) ? 'visible' : 'hidden';
 }
 
-function buildElement(el, look) {
+// A `video` element. Render mode draws the clip's pre-decoded frames (render.mjs and check.mjs decode them before the
+// page loads and serve the list as /frames.json) through an <img>, so every frame is exact. Preview mode plays the clip
+// itself in a muted <video> and seeks it, which is approximate.
+const CLIP_SEEK_TOLERANCE = 0.04; // seconds a preview <video> may drift before it is seeked again
+const frameUrl = ({ key, ext }, index) => `/frames/${key}/${String(index + 1).padStart(6, '0')}.${ext}`; // ffmpeg numbers from 1
+
+function videoMedia(el, frames) {
+  const offset = el.offset ?? 0;
+  if (MODE !== 'render') {
+    const media = document.createElement('video');
+    Object.assign(media, { preload: 'auto', muted: true, playsInline: true, src: assetUrl(el.src) });
+    return { media, clip: { video: media, offset, trimStart: el.trimStart ?? 0, trimEnd: el.trimEnd } };
+  }
+  const media = document.createElement('img');
+  media.alt = '';
+  const entry = Object.hasOwn(frames, el.id) ? frames[el.id] : undefined; // an id is the user's: never a prototype member
+  // render.mjs and check.mjs always decode the frames first; a render page opened without them (a test reading text,
+  // say) keeps the element's box and draws nothing in it.
+  return { media, frame: entry && { ...entry, img: media, offset } };
+}
+
+// Render mode: show frame round((scene time - offset) x fps), held at the first frame before playback and at the last
+// after it. Resolves when the new frame is decoded; null when the frame is already shown. A decode that a newer seek
+// overtook is not an error.
+function showFrame(frame, sceneT) {
+  const index = Math.min(frame.count - 1, Math.max(0, Math.round((sceneT - frame.offset) * frame.fps)));
+  const src = frameUrl(frame, index);
+  if (frame.img.getAttribute('src') === src) return null;
+  frame.img.src = src;
+  return frame.img.decode().catch(() => {
+    if (frame.img.getAttribute('src') === src) throw new Error(`video frame failed to load: ${src}; the frame cache may be damaged: run node scripts/doctor.mjs --fix cache, then render again`);
+  });
+}
+
+// Preview mode: seek the clip to trimStart + (scene time - offset), held inside the trimmed range.
+function seekClip(clip, sceneT) {
+  const end = clip.trimEnd ?? clip.video.duration; // NaN until the clip's metadata has loaded
+  const at = clip.trimStart + Math.max(0, sceneT - clip.offset);
+  const target = Number.isFinite(end) ? Math.min(at, end) : at;
+  if (Math.abs(clip.video.currentTime - target) > CLIP_SEEK_TOLERANCE) clip.video.currentTime = target;
+}
+
+function buildElement(el, look, frames) {
   const node = document.createElement('div');
   node.className = `el ${el.type}`;
   node.dataset.id = el.id;
@@ -237,14 +313,82 @@ function buildElement(el, look) {
       part.img = img;
       break;
     }
+    case 'video': {
+      const { media, frame, clip } = videoMedia(el, frames);
+      media.style.width = px(el.width);
+      media.style.height = px(el.height);
+      media.style.objectFit = el.fit ?? 'contain';
+      node.append(media);
+      Object.assign(part, { frame, clip });
+      break;
+    }
     case 'chart':
       node.style.width = px(el.width);
       node.style.height = px(el.height);
       break;
+    case 'group': // styles.css makes it a zero-size node at its own centre; mountElements puts the children inside
+      break;
+    case 'code': // empty until its tokens are in (mountElements queues them; code-view.mjs fills the rows)
+      styleCode(node, el, look);
+      break;
+    case 'lottie': { // empty until its player is in (mountElements queues it; lottie-view.mjs fills the holder)
+      // Not the class "lottie": 100 ms after it loads, lottie-web scans the page for that class (and "bodymovin") and
+      // registers a second, empty player on each node it finds; whether the stage is in the page by then is a race.
+      node.className = 'el lottie-player';
+      node.style.width = px(el.width);
+      node.style.height = px(el.height);
+      part.lottieHolder = document.createElement('div');
+      part.lottieHolder.style.cssText = 'width:100%;height:100%';
+      node.append(part.lottieHolder);
+      break;
+    }
     default:
       throw new Error(`unknown element type "${el.type}" (element "${el.id}")`);
   }
   return part;
+}
+
+// Grades the picture of an image or video node: its filter is on the <img> or <video> itself, so the node keeps its own
+// transform and opacity, and the grade sits under both (the filter's markup is the stage's, see gradeDefs).
+function gradePicture(node, grade, grades) {
+  const id = gradeId(grades.length);
+  grades.push({ id, grade });
+  node.querySelector('img, video').style.filter = `url("#${id}")`;
+}
+
+// One <svg> holding the filter of every graded picture, laid on the stage but outside every element and scene node (a
+// renewal takes element nodes out of layout; this must stay put). It has a size of 0 and is not hidden: a filter in a
+// display:none svg may not be applied. Null when nothing is graded.
+function gradeDefs(grades) {
+  if (!grades.length) return null;
+  const svg = svgEl('svg', { width: 0, height: 0, 'aria-hidden': 'true' });
+  svg.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;pointer-events:none';
+  svg.innerHTML = `<defs>${grades.map(({ id, grade }) => gradeFilter(id, grade)).join('')}</defs>`; // parsed as SVG: its context is an <svg>
+  return svg;
+}
+
+// Builds the nodes of `elements` into `container`, each tagged with its spec path (`prefix` + index); a group's children
+// are built into the group's own node, so they move with it. Charts, images, video first frames, code tokens and lottie
+// players queue their loading in `pending`. `frames`: render mode's /frames.json, the decoded frames of each video element.
+// `highlight`: code-view.mjs codeHighlighter for this stage. `grades`: the stage's grade list; a graded picture takes the
+// next id from it (an element's own id is the user's text and is never used as one) and its filter is built from the list.
+// `lotties`: the stage's lottie players, destroyed when the stage is replaced.
+function mountElements(container, elements, prefix, ctx, parts, pending) {
+  const { look, frames, highlight, grades, lotties } = ctx;
+  elements.forEach((el, i) => {
+    const part = buildElement(el, look, frames);
+    if (el.grade && GRADE_ELEMENT_TYPES.includes(el.type)) gradePicture(part.node, el.grade, grades); // validation refuses a grade elsewhere
+    const at = `${prefix}[${i}]`;
+    part.node.dataset.path = at;
+    parts.push(part);
+    container.append(part.node);
+    if (el.type === 'chart') pending.push(renderChart(el, look).then((svg) => part.node.append(svg)));
+    if (el.type === 'code') pending.push(highlight(el).then((lines) => { part.codeTyping = fillCode(part.node, el, lines, look); }));
+    if (el.type === 'lottie') pending.push(mountLottie(part.lottieHolder, el, assetUrl(el.src), lotties).then((state) => { part.lottie = state; }));
+    if (part.img) pending.push(part.img.decode().catch(() => { throw new Error(`image failed to load: ${el.src}`); }));
+    if (part.frame) pending.push(showFrame(part.frame, 0));
+    if (isGroup(el)) mountElements(part.node, el.children, `${at}.children`, ctx, parts, pending);
+  });
 }
 
 // A scene with `background: "art"`: the theme's seeded art (drawn by the server, see /art/ in
@@ -300,7 +444,9 @@ async function grainLayer(scene, size, amount) {
   return img;
 }
 
-async function buildStage(spec, look) {
+// `captions`: loadCaptionTracks' tracks; each gets a layer over the scenes and under the grain and vignette. `lotties`: the
+// caller's list, which every lottie player joins as soon as it exists (the caller destroys them if the build fails).
+async function buildStage(spec, look, frames, captions, lotties) {
   const stage = document.createElement('div');
   stage.id = 'stage';
   stage.style.width = px(spec.size[0]);
@@ -309,8 +455,10 @@ async function buildStage(spec, look) {
   const scenes = [];
   const parts = [];
   const pending = [];
+  const grades = [];
   const grain = spec.texture?.grain ?? 0;
-  for (const scene of spec.scenes) {
+  const highlight = codeHighlighter(spec, look);
+  for (const [si, scene] of spec.scenes.entries()) {
     const layer = document.createElement('div');
     layer.className = 'scene';
     if (scene.background === 'art') {
@@ -319,24 +467,30 @@ async function buildStage(spec, look) {
       layer.append(art.holder);
       pending.push(art.loaded);
     } else if (scene.background) layer.style.background = scene.background;
-    for (const el of scene.elements) {
-      const part = buildElement(el, look);
-      parts.push(part);
-      layer.append(part.node);
-      if (el.type === 'chart') {
-        pending.push(renderChart(el, look).then((svg) => part.node.append(svg)));
-      }
-      if (part.img) pending.push(part.img.decode().catch(() => { throw new Error(`image failed to load: ${el.src}`); }));
+    // With a camera the elements live in a .camera node inside the layer: the layer keeps the background (a colour or the
+    // art plate: both are backdrop, so a pan, a roll, a shake or a zoom out never uncovers the stage) and the transition
+    // styles, the camera node the zoom, pan and roll.
+    const camera = scene.camera ? document.createElement('div') : null;
+    if (camera) {
+      camera.className = 'camera';
+      layer.classList.add('has-camera');
+      layer.append(camera);
     }
+    const host = camera ?? layer;
+    mountElements(host, scene.elements, `scenes[${si}].elements`, { look, frames, highlight, grades, lotties }, parts, pending);
     stage.append(layer);
-    const entry = { scene, layer, grain: null };
+    const entry = { scene, layer, camera, grain: null };
     if (grain > 0) pending.push(grainLayer(scene, spec.size, grain).then((img) => { entry.grain = img; }));
     scenes.push(entry);
   }
+  const captionLayers = captions.map((track) => captionLayer(track, spec, look));
+  stage.append(...captionLayers.map((layer) => layer.node));
   await Promise.all(pending);
+  const defs = gradeDefs(grades);
+  if (defs) stage.append(defs);
   for (const { grain: img } of scenes) if (img) stage.append(img); // over the scenes, under the vignette
   if (spec.texture?.vignette) stage.append(vignetteLayer());
-  return { stage, scenes, parts };
+  return { stage, scenes, parts, captions: captionLayers, lotties };
 }
 
 function collectStrings(node, out = []) {
@@ -345,25 +499,28 @@ function collectStrings(node, out = []) {
   return out;
 }
 
-// [css font shorthand, sample text] per use, so only the subsets the spec needs are fetched.
-function fontNeeds(spec, look) {
+// [css font shorthand, sample text] per use, so only the subsets the spec needs are fetched. `captions`: the tracks
+// loadCaptionTracks read, drawn in the body font.
+function fontNeeds(spec, look, captions) {
   const needs = [];
   const digits = '0123456789.,-+%$';
-  for (const el of spec.scenes.flatMap((s) => s.elements)) {
+  for (const { el } of spec.scenes.flatMap((s) => flattenElements(s.elements))) {
     const kind = fontKind(el);
     const face = `${look.weight(kind, el.fontWeight ?? 600)} ${el.fontSize ?? 48}px ${look.fonts[kind]}`;
     if (el.type === 'text') needs.push([face, el.text]);
+    if (el.type === 'code') needs.push([`${look.weight('mono', 400)} ${el.fontSize ?? DEFAULT_CODE_SIZE}px ${look.fonts.mono}`, el.code]);
     if (el.type === 'counter') needs.push([face, `${el.prefix ?? ''}${el.suffix ?? ''}${digits}`]);
     if (el.type === 'chart') {
       const sample = collectStrings(el.vegaLite).join(' ') + digits;
       for (const weight of new Set([400, 500, 600, 700].map((w) => look.weight('sans', w)))) needs.push([`${weight} 24px ${look.chartFace}`, sample]);
     }
   }
+  if (captions.length) needs.push([`${look.weight('sans', CAPTION_WEIGHT)} ${captionFontSize(spec.size)}px ${look.fonts.sans}`, captionSample(captions)]);
   return needs;
 }
 
-async function loadFonts(spec, look) {
-  await Promise.all(fontNeeds(spec, look).map(([font, text]) => document.fonts.load(font, text)));
+async function loadFonts(spec, look, captions) {
+  await Promise.all(fontNeeds(spec, look, captions).map(([font, text]) => document.fonts.load(font, text)));
   await document.fonts.ready;
 }
 
@@ -380,24 +537,107 @@ function revealMask(reveal) {
   return `linear-gradient(to right, #000 ${front - REVEAL_EDGE}%, transparent ${front}%)`;
 }
 
-function makeApply({ scenes, parts }, built) {
-  const { states, sceneStarts, crossfades } = built;
-  return (sec) => {
+// Whether a CSS colour is fully opaque (alpha 1), read by painting it into one canvas pixel; one that does not parse is
+// left black, so it reads as opaque. Cached per colour.
+const OPAQUE = new Map();
+let opaqueProbe = null;
+function isOpaqueColor(css) {
+  if (!OPAQUE.has(css)) {
+    opaqueProbe ??= Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true });
+    opaqueProbe.clearRect(0, 0, 1, 1);
+    opaqueProbe.fillStyle = '#000000';
+    opaqueProbe.fillStyle = css;
+    opaqueProbe.fillRect(0, 0, 1, 1);
+    OPAQUE.set(css, opaqueProbe.getImageData(0, 0, 1, 1).data[3] === 255);
+  }
+  return OPAQUE.get(css);
+}
+
+// `color` painted over `under` (a CSS background value), as one background value: an opaque colour needs nothing under
+// it; a see-through one is a one-colour gradient (an image layer) stacked on top.
+const paintOver = (color, under) => (isOpaqueColor(color) ? color : `linear-gradient(${color}, ${color}), ${under}`);
+
+// Chromium remembers what an element looked like, and the next frame can be drawn from that memory rather than from the
+// element: (1) once an element was drawn part-way transparent, its text is drawn up to one level per colour channel off, on
+// the glyph edges, from the same element drawn fresh; (2) a move of a few thousandths of a pixel (an ease settling on its
+// target, 470.009 px then 470 px) is not redrawn at all, so the new frame shows the old position. Either way a frame
+// reached by seeking straight to it differs from the same frame after a walk, so --workers, contact sheets and check.mjs
+// would not match the video. Taking the element out of layout and putting it back makes the next paint start from the
+// element itself (measured: no painted frame needed in between). So every element whose pose (transform or opacity) changed
+// in this seek is renewed; one that did not change is left as it is, drawn already from a renewed or a fresh start. The
+// element nodes (`parts`) and the scene cameras are the nodes measured to need it. Scene layers (transitions) and caption
+// pops were also measured, at 1080p and 30 fps where the steps are smallest, and match in every order without it; the typing
+// caret and captions change their text, which redraws them (test/seek-order.test.mjs: transitions.json, kinetic captions
+// over a slide). A node of another kind that starts to settle in sub-pixel steps would be added here. The renewal runs
+// only in a render (any page that does not say "preview" outright, like the live layers): a preview needs no exact bytes.
+function renewNodes(nodes) {
+  const shown = nodes.map((node) => node.style.display);
+  nodes.forEach((node) => { node.style.display = 'none'; });
+  document.body.getBoundingClientRect(); // layout runs here, so the nodes' layout objects are dropped
+  nodes.forEach((node, i) => { node.style.display = shown[i]; });
+}
+
+// Returns a function that poses the stage at `sec`; it resolves once every video frame it changed is decoded. It also
+// carries `gl()`: the GL transition window the last pose fell in, { type, direction, p }, else null. In a GL window the layers
+// are posed as the CSS transition that stands in for the shader (template/transitions.mjs layerStyles); a render that
+// composes the window itself (scripts/lib/gl-composite.mjs) asks for `isolate`, 'outgoing' or 'incoming', to see that layer
+// alone, opaque and unposed, and screenshots each. `isolate` does nothing outside a GL window.
+// `background`: the root colour, `themeBackground`: the theme's page colour, the base under a see-through root.
+function makeApply({ scenes, parts, captions }, built, { size, background, themeBackground }) {
+  const { states, sceneStarts, sceneOf, overlaps } = built;
+  const lastPose = new Map(); // part node -> the transform and opacity it was given last, to renew it when they change
+  const base = paintOver(background, themeBackground); // what the stage shows behind a scene with no background of its own
+  let glWindow = null;
+  const apply = (sec, isolate) => {
+    const decoding = [];
     const active = activeScene(sceneStarts, sec);
-    // During a crossfade the previous scene's layer stays up beneath the active one.
-    const outgoing = crossfades.find((c) => c.to === active && sec < c.end)?.from;
-    scenes.forEach(({ scene, layer, grain }, i) => {
-      layer.style.display = i === active || i === outgoing ? 'block' : 'none';
-      layer.style.opacity = String(states.get(`scene:${scene.id}`).opacity);
-      if (grain) {
-        grain.style.display = layer.style.display;
-        grain.style.opacity = layer.style.opacity;
+    // During a transition window the previous scene's layer stays up beneath (or beside) the active one.
+    const open = overlaps.find((c) => c.to === active && sec < c.end);
+    const outgoing = open?.from;
+    const transition = open ? scenes[active].scene.transition : null;
+    const styles = open ? layerStyles(transition, states.get(`scene:${scenes[active].scene.id}`).p ?? 0, size) : null;
+    const under = open ? layerUnder(transition) : null;
+    // A layer that comes in over another, or closes over it, must be opaque: with no `background` of its own it takes the
+    // root one, or the old scene would show through the whole window and drop out in one frame; a see-through one (alpha
+    // under 1) is painted over that base. A crossfade keeps its transparent layers (the old scene is meant to show
+    // through, and its bytes never changed).
+    const opaque = open !== undefined && open.type !== 'crossfade';
+    const glLook = open && isGlTransition(open.type) ? normalizeTransition(transition) : null;
+    glWindow = glLook && { type: glLook.type, direction: glLook.direction, p: states.get(`scene:${scenes[active].scene.id}`).p ?? 0 };
+    const alone = glWindow ? isolate : undefined; // the one layer to show, in a GL window asked to isolate one
+    let cameraMoved = false; // a camera that moved redraws everything under it, so those elements are renewed too
+    scenes.forEach(({ scene, layer, camera, grain }, i) => {
+      const role = i === active ? 'incoming' : i === outgoing ? 'outgoing' : null;
+      const shown = role && (alone === undefined || role === alone);
+      const look = (shown && alone === undefined && styles?.[role]) || NO_LAYER_STYLES;
+      layer.style.display = shown ? 'block' : 'none';
+      const own = scene.background && scene.background !== 'art' ? scene.background : ''; // an art plate fills its layer
+      layer.style.background = opaque && role && scene.background !== 'art' ? (own ? paintOver(own, base) : base) : own;
+      if (camera) {
+        const shot = cameraTransform(states.get(`camera:${scene.id}`), scene.camera.shake, Math.min(Math.max(0, sec - sceneStarts[i]), scene.duration));
+        camera.style.transform = shot;
+        if (lastPose.has(camera) && lastPose.get(camera) !== shot) cameraMoved = true;
+        lastPose.set(camera, shot);
+      }
+      layer.style.opacity = String(look.opacity ?? states.get(`scene:${scene.id}`).opacity);
+      layer.style.transform = look.transform ?? '';
+      layer.style.clipPath = look.clipPath ?? '';
+      layer.style.filter = look.filter ?? '';
+      layer.style.zIndex = role && role === under ? '-1' : ''; // an iris closing over the incoming scene draws it beneath
+      if (grain) { // a scene's grain moves, clips and fades with it
+        for (const prop of ['display', 'opacity', 'transform', 'clipPath', 'filter', 'zIndex']) grain.style[prop] = layer.style[prop];
       }
     });
-    for (const { node, el, drawNodes, arrowNode, roundCap, format, typing } of parts) {
+    const renew = [];
+    for (const { node, el, drawNodes, arrowNode, roundCap, format, typing, codeTyping, frame, clip, lottie } of parts) {
       const s = states.get(el.id);
-      node.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
-      node.style.opacity = String(s.opacity);
+      const transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
+      const opacity = String(s.opacity);
+      node.style.transform = transform;
+      node.style.opacity = opacity;
+      const pose = `${transform} ${opacity}`;
+      if (cameraMoved || (lastPose.has(node) && lastPose.get(node) !== pose)) renew.push(node);
+      lastPose.set(node, pose);
       for (const drawNode of drawNodes ?? []) drawNode.setAttribute('stroke-dashoffset', String(1 - s.draw));
       // A round cap draws a dot of the stroke's width the moment the dash has any length: keep the line hidden until
       // the drawn length is more than a cap radius, so the stroke grows from a stub instead of popping in as a dot. A
@@ -410,13 +650,32 @@ function makeApply({ scenes, parts }, built) {
       }
       if (format) node.textContent = format(s.value);
       if (typing) setTyping(typing, s.value, sec);
+      if (codeTyping) setCodeTyping(codeTyping, typedCount(s.value, codeTyping.total), blinkOn(sec));
+      if (frame || clip || lottie) {
+        // Scene time, held at the scene's last frame: during a crossfade the outgoing clip freezes there (its sound
+        // stops at the scene end too) instead of playing on under the incoming scene; a lottie holds there too.
+        const si = sceneOf.get(el.id);
+        const { duration } = scenes[si].scene;
+        const sceneT = sec - sceneStarts[si];
+        if (frame) decoding.push(showFrame(frame, Math.min(sceneT, duration - 1 / frame.fps)));
+        else if (clip) seekClip(clip, Math.min(sceneT, duration));
+        else {
+          // check.mjs reads data-frame: a lottie playing its own animation is change for the dead-stretch audit
+          try { node.dataset.frame = String(seekLottie(lottie, Math.min(sceneT, duration), el)); } catch (e) { decoding.push(Promise.reject(e)); }
+        }
+      }
     }
+    if (renew.length && !LIVE_LAYERS) renewNodes(renew); // not in a preview: it needs no byte-exact frames, and its elements are compositor layers (a <video> among them)
+    for (const layer of captions) applyCaption(layer, sec);
+    return Promise.all(decoding);
   };
+  return Object.assign(apply, { gl: () => glWindow });
 }
 
 const viewportEl = document.getElementById('viewport');
 const errorEl = document.getElementById('error');
 let currentStage = null;
+let currentLotties = [];
 
 function fitStage(size) {
   const k = Math.min(viewportEl.clientWidth / size[0], viewportEl.clientHeight / size[1]);
@@ -470,6 +729,14 @@ async function fetchSpec() {
   return { spec, look };
 }
 
+// Render mode: the decoded frames of each video element (render.mjs and check.mjs prepare them). Preview needs none.
+async function fetchFrames() {
+  if (MODE !== 'render') return {};
+  const response = await fetch('/frames.json', { cache: 'no-store' });
+  if (!response.ok) throw new Error(`failed to load the video frame list: HTTP ${response.status}`);
+  return response.json();
+}
+
 let currentAudio = null;
 
 // Preview only: one idle <audio> per track in a hidden holder outside the scaled stage.
@@ -511,15 +778,25 @@ function stampSheet(text) {
   el.textContent = text;
 }
 
-function makeMotion(spec, built, apply, audio) {
+// `captions`: the stage's captions layers; check.mjs measures each at captionMoments.
+function makeMotion(spec, built, apply, audio, captions) {
   return {
-    duration: built.duration, fps: spec.fps, size: spec.size, sceneStarts: built.sceneStarts, crossfades: built.crossfades,
-    sceneIds: spec.scenes.map((s) => s.id), audio,
-    seek(sec) {
+    duration: built.duration, fps: spec.fps, size: spec.size, sceneStarts: built.sceneStarts,
+    overlaps: built.overlaps, // every transition window, with its type
+    crossfades: built.crossfades, // the crossfade windows alone, as before (the same list buildTimeline returns under this name)
+    sceneIds: spec.scenes.map((s) => s.id), audio, captionMoments: captionMoments(captions, built.duration),
+    // Resolves once every video frame it shows is decoded; render.mjs awaits it per frame. It does not wait for a paint:
+    // captures are deterministic because render mode has no per-element layers (styles.css) and the browser rasters
+    // whole tiles (scripts/lib/browser.mjs).
+    // `layer` ('outgoing' or 'incoming'): inside a GL transition window, show that scene layer alone (makeApply).
+    seek(sec, layer) {
+      if (layer !== undefined && layer !== 'outgoing' && layer !== 'incoming') throw new Error(`seek: layer must be "outgoing" or "incoming" (got ${JSON.stringify(layer)})`);
       const t = Math.min(Math.max(0, sec), built.duration);
       seekTo(built.timeline, t);
-      apply(t);
+      return apply(t, layer);
     },
+    // The GL transition window the last seek fell in, { type, direction, p } (p: the eased progress), else null.
+    glState() { return apply.gl(); },
     // Contact-sheet mode only: render.mjs --contact-sheet calls this; a normal render or preview never does.
     stamp(text) { stampSheet(text); },
   };
@@ -531,17 +808,30 @@ let generation = 0;
 async function mount() {
   const mine = ++generation;
   const { spec, look } = await fetchSpec();
-  await loadFonts(spec, look);
-  const dom = await buildStage(spec, look);
-  if (mine !== generation) return null;
+  const captions = await loadCaptionTracks(spec, assetUrl);
+  await loadFonts(spec, look, captions);
+  const lotties = [];
+  let dom;
+  try {
+    dom = await buildStage(spec, look, await fetchFrames(), captions, lotties);
+  } catch (e) {
+    destroyLotties(lotties); // the players the failed build had started
+    throw e;
+  }
+  if (mine !== generation) {
+    destroyLotties(dom.lotties);
+    return null;
+  }
   const built = buildTimeline(spec);
-  const apply = makeApply(dom, built);
+  const apply = makeApply(dom, built, { size: spec.size, background: spec.background, themeBackground: look.background });
+  destroyLotties(currentLotties); // a preview reload: the old stage's players go with it
+  currentLotties = dom.lotties;
   currentStage?.remove();
   viewportEl.append(dom.stage);
   currentStage = dom.stage;
   if (MODE === 'render') document.documentElement.style.background = spec.background; // letterbox
   fitStage(spec.size);
-  const motion = makeMotion(spec, built, apply, replaceAudio(spec));
+  const motion = makeMotion(spec, built, apply, replaceAudio(spec), dom.captions);
   motion.seek(0);
   return motion;
 }
@@ -568,6 +858,7 @@ async function reload() {
 
 async function start() {
   document.body.classList.add(MODE);
+  if (LIVE_LAYERS) document.body.classList.add('live-layers');
   const motion = await mount();
   window.__motion = Object.assign(motion, { ready });
   window.__reload = reload;
