@@ -70,7 +70,7 @@
   <main id="main" class="doc-main">
 
     <section id="whats-new" class="doc-section">
-      <h2>What's new in 1.4.1</h2>
+      <h2>What's new in 1.1.0</h2>
       <p style="margin-bottom:12px">2 Nov 2026 · everything since 1.0.0 is in this one release, and it is almost all make-motion. The full list, including the behaviour changes to read before upgrading, is in the <a href="https://github.com/abhijitbansal/claude-skills/blob/main/plugins/portable-artifacts/CHANGELOG.md">changelog</a>.</p>
       <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin-bottom:20px">
         <div style="flex:0 0 auto;margin:0 auto">
@@ -99,7 +99,7 @@
         <div class="row"><span class="nm">Pick, storyboard, batch, speed</span><span class="dc">Click an element in the live preview to copy its spec path. For a clip over 20 s the agent can first send a make-explainer storyboard page for approval; it skips when no one can answer. <code>--batch rows.json</code> renders one MP4 per row, and <code>--workers 4</code> gives the same MP4 as one worker (measured on an Apple M4 Pro: 30.4 s with one worker, 13.4 s with four, on a 30 s 1080p spec).</span></div>
         <div class="row"><span class="nm">Doctor installs keep each other</span><span class="dc">The voiceover (kokoro-js) and cutout (onnxruntime-node) installs are both <code>npm install --no-save</code>, and npm prunes whatever an install leaves off its command line. <code>doctor --fix kokoro</code> and <code>--fix cutout</code> therefore name the pin of the one already installed too, so both stay. <code>npm ci</code> (<code>--fix node_modules</code>) still removes both; rerun the <code>--fix</code>.</span></div>
         <div class="row"><span class="nm">Plan mode and KPI polish</span><span class="dc">The make-explainer <code>plan</code> scaffold now opens with the summary and numbers, a card per workstream, goals, steps and a diagram, and only then the decisions and questions. One-line KPI values in a section share one size.</span></div>
-        <div class="row"><span class="nm">Read before upgrading from 1.0.0</span><span class="dc">Viral renders are normalised to the loudness target (1.0.0 only reported it). Render hashes changed on purpose (glyph edges only), the frame rule for typed-out text is stricter by up to half a frame, <code>/vendor/</code> responses gained <code>nosniff</code> and a CSP, and <code>startServer</code> now defaults to render mode. New pinned dependencies: shiki, lottie-web, world-atlas and us-atlas. Specs that use none of the new features render the same bytes as before.</span></div>
+        <div class="row"><span class="nm">Read before upgrading from 1.0.0</span><span class="dc">A viral render is normalised to the loudness target. Render hashes changed on purpose (glyph edges only), the frame rule for typed-out text is stricter by up to half a frame, <code>/vendor/</code> responses gained <code>nosniff</code> and a CSP, and <code>startServer</code> now defaults to render mode. New pinned dependencies: shiki, lottie-web, world-atlas and us-atlas. Specs that use none of the new features render the same bytes as before.</span></div>
       </div>
       <h2>What's new in 1.0.0</h2>
       <p style="margin-bottom:12px">22 Oct 2026 · numbers, cheaper models and plan mode. The full list, with the older releases, is in the <a href="https://github.com/abhijitbansal/claude-skills/blob/main/plugins/portable-artifacts/CHANGELOG.md">changelog</a>.</p>
@@ -1016,7 +1016,7 @@
           <p class="gal-lbl">What it shows</p>
           <p style="margin:0;font-size:14px;color:var(--text-dim)">The <code>text-behind-subject</code> block puts text between a photo and its cutout. <code>cutout.mjs</code> makes the cutout locally with MODNet; this clip used a cutout made earlier, so the render needed no install.</p>
           <p class="gal-lbl">Caveat</p>
-          <p style="margin:0;font-size:14px;color:var(--text-dim)">First use is an install of about 300 MB (an estimate) plus a 25 MB weights download, both asked about first. The doctor's cutout install keeps an installed voiceover (before 1.4.1 it removed it).</p>
+          <p style="margin:0;font-size:14px;color:var(--text-dim)">First use is an install of about 300 MB (an estimate) plus a 25 MB weights download, both asked about first. The doctor's cutout install keeps an installed voiceover.</p>
           <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/text-behind-subject/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/text-behind-subject/video.mp4" download>Download MP4 ↓</a></p>
         </div>
         <div class="gitem gal-card reveal" id="clip-gl-transitions"><h4>WebGL transitions: ripple and cube</h4><p class="gal-meta">make-motion · 1280×720 · 8 s</p>
