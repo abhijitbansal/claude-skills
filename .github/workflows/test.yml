@@ -127,6 +127,9 @@ jobs:
       # into a failure instead of a skip
       - name: install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Validate downloaded motion gallery sources
+        if: matrix.name == 'make-motion'
+        run: python3 scripts/build_motion_gallery.py --out "$RUNNER_TEMP/motion-gallery" --validate
       - name: package.json test script is still the glob run below
         working-directory: plugins/portable-artifacts/${{ matrix.dir }}
         run: |

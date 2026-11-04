@@ -908,6 +908,7 @@
       </div>
       <h3 class="gal-h3" id="gallery-motion-1-4">make-motion new features: clips, explainer and guide</h3>
       <p>Every new make-motion feature as its own clip, with the sentence you say, the command it runs, what it shows and what is not proven. These ten clips and the promo were rendered with the plugin's own scripts from JSON specs and plain Node, with no editor. They are dusk only. The sample numbers and names inside them are made up.</p>
+      <p><b>Make one your own.</b> Each of the ten feature clips has a <b>Download source ZIP</b> link below: the editable spec, every input file and a README with install, preview and render commands. Extract a pack, open its folder in your agent and ask it to render <code>motion.json</code>. The beat clips include their music and timing; the portrait includes its cutout, so no voice or cutout model is needed.</p>
       <div class="inv" style="margin:14px 0">
         <div class="row"><span class="nm">What we improved</span><span class="dc"><a href="showcase/portable-artifacts/gallery/motion-1-4/explainer/make-motion-whats-better.html" target="_blank" rel="noopener">Open the explainer ↗</a>: 40 sections and 12 videos, each improvement with how to use it, the numbers behind it and a caveat. It carries its own copy of the videos in a folder beside it, so keep them together if you download it.</span></div>
         <div class="row"><span class="nm">Complete guide</span><span class="dc">Written as if for a first release, in three pages: <a href="showcase/portable-artifacts/gallery/motion-1-4/guide/make-motion-1-start.html" target="_blank" rel="noopener">1 Start</a> (install, first video, the slash commands), <a href="showcase/portable-artifacts/gallery/motion-1-4/guide/make-motion-2-reference.html" target="_blank" rel="noopener">2 Reference</a> (every element, block, field and command) and <a href="showcase/portable-artifacts/gallery/motion-1-4/guide/make-motion-3-recipes.html" target="_blank" rel="noopener">3 Recipes</a> (finished videos you can ask for).</span></div>
@@ -933,7 +934,7 @@
           <p style="margin:0;font-size:14px;color:var(--text-dim)">The title, three words and a pulse enter on beats 0 to 15 through <code>&quot;beat:&lt;n&gt;&quot;</code> keyframes and cues, against the beat file <code>beats.mjs</code> wrote.</p>
           <p class="gal-lbl">Caveat</p>
           <p style="margin:0;font-size:14px;color:var(--text-dim)">The detector was measured on synthetic audio only, not on real music, and its tempo can read half or double what you hear (<code>--bpm</code> fixes it).</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/beats/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/beats/video.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/beats/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/beats/video.mp4" download>Download MP4 ↓</a><a href="showcase/portable-artifacts/gallery/motion-1-4/beats/source.zip" download="make-motion-beats-source.zip">Download source ZIP ↓</a></p>
         </div>
         <div class="gitem gal-card reveal" id="clip-loudness"><h4>Set the loudness</h4><p class="gal-meta">make-motion · 1280×720 · 7.5 s · the same audio rendered twice</p>
           <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/motion-1-4/loudness/poster.jpg"><source src="showcase/portable-artifacts/gallery/motion-1-4/loudness/video.mp4" type="video/mp4"></video>
@@ -945,7 +946,7 @@
           <p style="margin:0;font-size:14px;color:var(--text-dim)">Two cards with the numbers <code>render.mjs</code> printed for the same 7.5 s of audio: <code>--loudness off</code> gave -28.1 LUFS and -14.9 dBTP; <code>--loudness -16</code> gave -16.0 LUFS and -2.1 dBTP, reported on target. Viral specs now do this with no flag, at -14 LUFS.</p>
           <p class="gal-lbl">Caveat</p>
           <p style="margin:0;font-size:14px;color:var(--text-dim)">One synthetic loop. The limiter stage needs ffmpeg 5.1 or later.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/loudness/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/loudness/video.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/loudness/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/loudness/video.mp4" download>Download MP4 ↓</a><a href="showcase/portable-artifacts/gallery/motion-1-4/loudness/source.zip" download="make-motion-loudness-source.zip">Download source ZIP ↓</a></p>
         </div>
         <div class="gitem gal-card reveal" id="clip-grade"><h4>Colour grades on photos and clips</h4><p class="gal-meta">make-motion · 1280×720 · 8 s</p>
           <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/motion-1-4/grade/poster.jpg"><source src="showcase/portable-artifacts/gallery/motion-1-4/grade/video.mp4" type="video/mp4"></video>
@@ -957,7 +958,7 @@
           <p style="margin:0;font-size:14px;color:var(--text-dim)">An <code>image</code> or <code>video</code> <code>grade</code>: a preset (<code>warm</code>, <code>cool</code>, <code>mono</code>, <code>film</code>) plus <code>exposure</code>, <code>contrast</code> and <code>saturation</code>. It is one SVG filter, and <code>check.mjs</code> judges text contrast on the graded pixels.</p>
           <p class="gal-lbl">Caveat</p>
           <p style="margin:0;font-size:14px;color:var(--text-dim)">The grade is fixed for the whole clip and cannot be animated; any other element type refuses it.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/grade/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/grade/video.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/grade/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/grade/video.mp4" download>Download MP4 ↓</a><a href="showcase/portable-artifacts/gallery/motion-1-4/grade/source.zip" download="make-motion-grade-source.zip">Download source ZIP ↓</a></p>
         </div>
         <div class="gitem gal-card reveal" id="clip-lottie"><h4>Lottie animations inside a video</h4><p class="gal-meta">make-motion · 1280×720 · 6.5 s</p>
           <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/motion-1-4/lottie/poster.jpg"><source src="showcase/portable-artifacts/gallery/motion-1-4/lottie/video.mp4" type="video/mp4"></video>
@@ -969,7 +970,7 @@
           <p style="margin:0;font-size:14px;color:var(--text-dim)">A <code>lottie</code> element plays a Lottie file offline through lottie-web 5.13.0, frame by frame, so renders stay deterministic. This clip plays the repo's example badge once, then at <code>speed</code> 2.</p>
           <p class="gal-lbl">Caveat</p>
           <p style="margin:0;font-size:14px;color:var(--text-dim)">Remote assets, expressions and very heavy files are refused (the validator names the fix). Images inside the file must be embedded as PNG, JPEG or WebP data URLs.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/lottie/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/lottie/video.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/lottie/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/lottie/video.mp4" download>Download MP4 ↓</a><a href="showcase/portable-artifacts/gallery/motion-1-4/lottie/source.zip" download="make-motion-lottie-source.zip">Download source ZIP ↓</a></p>
         </div>
         <div class="gitem gal-card reveal" id="clip-maps"><h4>Offline maps: highlight and flow</h4><p class="gal-meta">make-motion · 1280×720 · 8 s · bundled world and US atlases</p>
           <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/motion-1-4/maps/poster.jpg"><source src="showcase/portable-artifacts/gallery/motion-1-4/maps/video.mp4" type="video/mp4"></video>
@@ -981,7 +982,7 @@
           <p style="margin:0;font-size:14px;color:var(--text-dim)">The <code>map-highlight</code> block lights four countries, then the <code>flow-map</code> block draws three labelled arcs. Both use the atlases bundled with the skill, so nothing is fetched.</p>
           <p class="gal-lbl">Caveat</p>
           <p style="margin:0;font-size:14px;color:var(--text-dim)">Names must match the atlas spelling (<code>United States of America</code>); a wrong name is an error that lists the valid ones. A <code>us</code> flow-map with an endpoint outside the US still shows its caption (open in the follow-up list).</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/maps/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/maps/video.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/maps/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/maps/video.mp4" download>Download MP4 ↓</a><a href="showcase/portable-artifacts/gallery/motion-1-4/maps/source.zip" download="make-motion-maps-source.zip">Download source ZIP ↓</a></p>
         </div>
         <div class="gitem gal-card reveal" id="clip-race"><h4>Bar chart race</h4><p class="gal-meta">make-motion · 1280×720 · 7 s · sample data</p>
           <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/motion-1-4/race/poster.jpg"><source src="showcase/portable-artifacts/gallery/motion-1-4/race/video.mp4" type="video/mp4"></video>
@@ -993,7 +994,7 @@
           <p style="margin:0;font-size:14px;color:var(--text-dim)">The <code>race</code> block ranks bars over periods and swaps their order smoothly. The four names and their numbers are made up and labelled "sample" on screen.</p>
           <p class="gal-lbl">Caveat</p>
           <p style="margin:0;font-size:14px;color:var(--text-dim)">The number of bars times periods has no cap yet, and large races were not measured in a browser.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/race/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/race/video.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/race/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/race/video.mp4" download>Download MP4 ↓</a><a href="showcase/portable-artifacts/gallery/motion-1-4/race/source.zip" download="make-motion-race-source.zip">Download source ZIP ↓</a></p>
         </div>
         <div class="gitem gal-card reveal" style="grid-column:1/-1" id="clip-blocks-tour"><h4>A tour of nine new blocks</h4><p class="gal-meta">make-motion · 1280×720 · 24 s · sample names and numbers</p>
           <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/motion-1-4/blocks-tour/poster.jpg"><source src="showcase/portable-artifacts/gallery/motion-1-4/blocks-tour/video.mp4" type="video/mp4"></video>
@@ -1005,7 +1006,7 @@
           <p style="margin:0;font-size:14px;color:var(--text-dim)"><code>comparison-split</code>, <code>before-after</code>, <code>notification-stack</code>, <code>chat-thread</code>, <code>timeline</code>, <code>testimonial</code> and three lower-third variants (<code>lower-third-tag</code>, <code>lower-third-social</code>, <code>lower-third-ticker</code>). <code>blocks.mjs list</code> prints every block.</p>
           <p class="gal-lbl">Caveat</p>
           <p style="margin:0;font-size:14px;color:var(--text-dim)">With a <code>notification-stack</code> <code>stagger</code> near 1.5 s the oldest card can start fading right after it enters. That is a listed follow-up, not fixed.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/blocks-tour/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/blocks-tour/video.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/blocks-tour/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/blocks-tour/video.mp4" download>Download MP4 ↓</a><a href="showcase/portable-artifacts/gallery/motion-1-4/blocks-tour/source.zip" download="make-motion-blocks-tour-source.zip">Download source ZIP ↓</a></p>
         </div>
         <div class="gitem gal-card reveal" id="clip-text-behind-subject"><h4>Text behind a person</h4><p class="gal-meta">make-motion · 1280×720 · 7 s · a pre-cut portrait</p>
           <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/motion-1-4/text-behind-subject/poster.jpg"><source src="showcase/portable-artifacts/gallery/motion-1-4/text-behind-subject/video.mp4" type="video/mp4"></video>
@@ -1017,7 +1018,7 @@
           <p style="margin:0;font-size:14px;color:var(--text-dim)">The <code>text-behind-subject</code> block puts text between a photo and its cutout. <code>cutout.mjs</code> makes the cutout locally with MODNet; this clip used a cutout made earlier, so the render needed no install.</p>
           <p class="gal-lbl">Caveat</p>
           <p style="margin:0;font-size:14px;color:var(--text-dim)">First use is an install of about 300 MB (an estimate) plus a 25 MB weights download, both asked about first. The doctor's cutout install keeps an installed voiceover.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/text-behind-subject/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/text-behind-subject/video.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/text-behind-subject/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/text-behind-subject/video.mp4" download>Download MP4 ↓</a><a href="showcase/portable-artifacts/gallery/motion-1-4/text-behind-subject/source.zip" download="make-motion-text-behind-subject-source.zip">Download source ZIP ↓</a></p>
         </div>
         <div class="gitem gal-card reveal" id="clip-gl-transitions"><h4>WebGL transitions: ripple and cube</h4><p class="gal-meta">make-motion · 1280×720 · 8 s</p>
           <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/motion-1-4/gl-transitions/poster.jpg"><source src="showcase/portable-artifacts/gallery/motion-1-4/gl-transitions/video.mp4" type="video/mp4"></video>
@@ -1029,7 +1030,7 @@
           <p style="margin:0;font-size:14px;color:var(--text-dim)"><code>gl-ripple</code> and <code>gl-cube</code> (from the left and from below) are drawn by a software-WebGL browser during render. Composed-frame hashes of the three matched on the Ubuntu runner, the macOS runner and a local Mac (CI run 41511417439).</p>
           <p class="gal-lbl">Caveat</p>
           <p style="margin:0;font-size:14px;color:var(--text-dim)">The live preview and <code>check.mjs</code> show a crossfade or a push, so judge the look from a render. MP4 files differ between platforms; compare frames.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/gl-transitions/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/gl-transitions/video.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/gl-transitions/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/gl-transitions/video.mp4" download>Download MP4 ↓</a><a href="showcase/portable-artifacts/gallery/motion-1-4/gl-transitions/source.zip" download="make-motion-gl-transitions-source.zip">Download source ZIP ↓</a></p>
         </div>
         <div class="gitem gal-card reveal" id="clip-pick-and-storyboard"><h4>Pick in preview, storyboard first</h4><p class="gal-meta">make-motion · 1280×720 · 7 s · a labelled mock-up, not a screen recording</p>
           <video class="gal-media" controls playsinline preload="metadata" poster="showcase/portable-artifacts/gallery/motion-1-4/pick-and-storyboard/poster.jpg"><source src="showcase/portable-artifacts/gallery/motion-1-4/pick-and-storyboard/video.mp4" type="video/mp4"></video>
@@ -1041,7 +1042,7 @@
           <p style="margin:0;font-size:14px;color:var(--text-dim)">Click an element in the live preview and its spec path and id are copied, ready to paste into the chat. For a clip over 20 s the agent can first send a make-explainer storyboard page for approval. The clip draws the pick toast and a three-card storyboard as a mock-up.</p>
           <p class="gal-lbl">Caveat</p>
           <p style="margin:0;font-size:14px;color:var(--text-dim)">This is a mock-up, not the real review page. The storyboard step is skipped, with <code>storyboard: skipped (&lt;reason&gt;)</code> and exit 0, for 20 s or less, without make-explainer beside make-motion, and under <code>--non-interactive</code>.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/pick-and-storyboard/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/pick-and-storyboard/video.mp4" download>Download MP4 ↓</a></p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/pick-and-storyboard/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/pick-and-storyboard/video.mp4" download>Download MP4 ↓</a><a href="showcase/portable-artifacts/gallery/motion-1-4/pick-and-storyboard/source.zip" download="make-motion-pick-and-storyboard-source.zip">Download source ZIP ↓</a></p>
         </div>
       </div>
       <h3 class="gal-h3">Plan mode</h3>
