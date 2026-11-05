@@ -25,6 +25,8 @@ ASSETS = {
     "text-behind-subject": {"portrait.jpg": "blocks/portrait.jpg",
                             "portrait-cutout.png": "blocks/portrait-cutout.png"},
 }
+# references/schema.md documents these as CC0; other inputs have no notice of their own.
+CC0_INPUTS = {"data/badge.lottie.json", "photo.png"}
 
 
 def references(value):
@@ -39,13 +41,32 @@ def references(value):
             yield from references(child)
 
 
+def contents_note(slug):
+    if not ASSETS[slug]:
+        return "This pack contains the published motion.json. The spec uses no local input files."
+    return ("This pack contains the published motion.json and every local input it uses: "
+            f"{', '.join(sorted(ASSETS[slug]))}.\nKeep the folder structure when extracting.")
+
+
+def license_note(slug):
+    cc0 = sorted(CC0_INPUTS & ASSETS[slug].keys())
+    if not cc0:
+        return "This pack uses the repository's MIT license (LICENSE)."
+    return f"{', '.join(cc0)} is CC0. The rest of this pack uses the repository's MIT license (LICENSE)."
+
+
 def readme(slug):
     render_flags = " --loudness -16" if slug == "loudness" else ""
+    keep_inputs = ("\n    Keep the included input files and resolve their paths relative to motion.json."
+                   if ASSETS[slug] else "")
+    cutout_note = "\nThe portrait is already cut out." if slug == "text-behind-subject" else ""
+    gl_note = ("\nGL transitions use the documented fallback in preview and WebGL in the rendered MP4."
+               if slug == "gl-transitions" else "")
     return f"""# make-motion: {slug}
 
-This pack contains the published motion.json and every local input it uses.
-Keep the folder structure when extracting. Edit motion.json to make it your own.
-The included assets and code use the repository's MIT license (LICENSE).
+{contents_note(slug)}
+Edit motion.json to make it your own.
+{license_note(slug)}
 
 Install make-motion in your agent from https://github.com/abhijitbansal/claude-skills:
 
@@ -53,8 +74,7 @@ Install make-motion in your agent from https://github.com/abhijitbansal/claude-s
 
 Open this extracted folder in your agent and ask:
 
-    Use make-motion to validate motion.json, preview it, then render video.mp4{render_flags}.
-    Keep the included input files and resolve their paths relative to motion.json.
+    Use make-motion to validate motion.json, preview it, then render video.mp4{render_flags}.{keep_inputs}
 
 Or run the commands below from this folder. Replace <skill-dir> with the installed
 make-motion directory (the folder containing SKILL.md and scripts/).
@@ -66,10 +86,8 @@ Use the current release; these examples require portable-artifacts 1.1.0 or newe
     node "<skill-dir>/scripts/render.mjs" motion.json --out video.mp4{render_flags}
 
 The doctor reports missing Node packages, Chromium and ffmpeg with install commands.
-After that one-time setup, these examples need no network, voice model or cutout model:
-the portrait is already cut out and the music and Lottie animation are included.
-The preview command runs until stopped; run the render command in a second terminal.
-GL transitions use the documented fallback in preview and WebGL in the rendered MP4.
+After that one-time setup, this example needs no network, voice model or cutout model.{cutout_note}
+The preview command runs until stopped; run the render command in a second terminal.{gl_note}
 The specs render at their own resolution; the gallery videos may use a smaller export.
 
 Gallery: https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery-motion-1-4

@@ -60,6 +60,35 @@ def test_source_download_contains_unchanged_spec_and_every_input(packs, slug):
             assert "--loudness -16" in readme
 
 
+@pytest.mark.parametrize("slug", EXAMPLES)
+def test_readme_only_describes_what_its_pack_contains(packs, slug):
+    with zipfile.ZipFile(packs / slug / "source.zip") as archive:
+        readme = archive.read("README.md").decode()
+        spec = archive.read("motion.json").decode()
+    inputs = list(references(json.loads(spec)))
+    for ref in inputs:
+        assert ref in readme, f"{slug}: README does not name {ref}"
+    assert ("Keep the included input files" in readme) == bool(inputs)
+    assert ("uses no local input files" in readme) == (not inputs)
+    assert ("already cut out" in readme) == (slug == "text-behind-subject")
+    assert ("GL transitions" in readme) == ('"gl-' in spec)
+
+
+@pytest.mark.parametrize("slug,cc0", [("grade", "photo.png"), ("lottie", "data/badge.lottie.json")])
+def test_readme_names_the_inputs_documented_as_cc0(packs, slug, cc0):
+    with zipfile.ZipFile(packs / slug / "source.zip") as archive:
+        readme = archive.read("README.md").decode()
+    assert f"{cc0} is CC0" in readme
+
+
+@pytest.mark.parametrize("slug", sorted(set(EXAMPLES) - {"grade", "lottie"}))
+def test_readme_claims_only_the_repository_license_elsewhere(packs, slug):
+    with zipfile.ZipFile(packs / slug / "source.zip") as archive:
+        readme = archive.read("README.md").decode()
+    assert "CC0" not in readme
+    assert "This pack uses the repository's MIT license (LICENSE)." in readme
+
+
 def test_gallery_download_links_cover_exactly_the_ten_technical_examples():
     from html.parser import HTMLParser
 
@@ -86,12 +115,23 @@ def test_archives_are_reproducible(packs, tmp_path):
         assert (packs / slug / "source.zip").read_bytes() == (again / slug / "source.zip").read_bytes()
 
 
-def test_missing_asset_is_an_error_instead_of_an_incomplete_download(tmp_path):
+@pytest.fixture
+def gallery():
     assert SCRIPT.is_file(), "gallery pack builder has not been implemented"
     module_spec = importlib.util.spec_from_file_location("motion_gallery", SCRIPT)
     module = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(module)
+    return module
+
+
+def test_missing_asset_is_an_error_instead_of_an_incomplete_download(gallery, tmp_path):
     assets = tmp_path / "examples"
     assets.mkdir()
-    with pytest.raises((FileNotFoundError, ValueError), match="badge.lottie.json"):
-        module.pack_example("lottie", tmp_path / "out", examples=assets)
+    with pytest.raises(FileNotFoundError, match="badge.lottie.json"):
+        gallery.pack_example("lottie", tmp_path / "out", examples=assets)
+
+
+def test_spec_input_left_out_of_the_pack_is_an_error(gallery, tmp_path, monkeypatch):
+    monkeypatch.setitem(gallery.ASSETS, "lottie", {})
+    with pytest.raises(ValueError, match="missing input data/badge.lottie.json"):
+        gallery.pack_example("lottie", tmp_path / "out")
