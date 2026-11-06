@@ -41,8 +41,9 @@ English toggle, and make-diagram gains `cloud:` icons. The site page for the plu
   root `sketch` field sets the hand (`tone`: `light`, `medium`, `tan`, `brown` or `dark`; `scale` 0.5 to 1.2), a `seed`
   and a `pace`. A drawn scene allows only `text`, `shape`, `icon`, `group` and the sketch blocks, and refuses charts,
   images, video, Lottie, code, counters, keyframes and camera moves; a viral spec takes no drawn scene. A frame depends on the time alone
-  (`test/sketch-render.test.mjs` seeks forward, straight to a frame and back and gets the same bytes); no test compares
-  drawn films across `--workers` values. `references/sketch.md` has the rules.
+  (`test/sketch-render.test.mjs` seeks forward, straight to a frame and back and gets the same bytes). Measured once, not
+  by a test: `sketch-mixed.json` at `--no-provenance --fps 10 --size 480x270` gives byte-identical MP4s with `--workers 1`
+  and `--workers 4` (`cmp`, 215 frames). `references/sketch.md` has the rules.
 - **make-motion: five sketch blocks.** `sketch-diagram`, `sketch-steps`, `sketch-list`, `sketch-compare` and
   `sketch-callout`, drawn only in a drawn scene. Together with the five product-screen blocks below, `blocks.mjs list`
   now prints 38 blocks (measured: `node plugins/portable-artifacts/skills/make-motion/scripts/blocks.mjs list`; 28 in
