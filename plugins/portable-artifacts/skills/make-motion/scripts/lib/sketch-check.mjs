@@ -4,7 +4,7 @@
 // (icon-names.mjs), which the page never loads.
 import { pathJoin } from '../../shared/errors.mjs';
 import { flattenElements } from '../../template/groups.mjs';
-import { BLOCKS, BLOCK_NAMES, blockDef, isBlock } from '../../template/blocks/index.mjs';
+import { BLOCKS, BLOCK_NAMES, blockDef, isBlock, paramOfPart } from '../../template/blocks/index.mjs';
 import { canvasSize } from '../../template/formats.mjs';
 import { VIRAL_MODE } from '../../template/viral.mjs';
 import { isSketchScene, specHasSketch, SCRIBBLE_FILL, HAND_SCALE_RANGE, PACE_RANGE, SENTENCE_REF } from '../../template/sketch/style.mjs';
@@ -121,6 +121,27 @@ function checkSketchElement(el, base, errors) {
   if (el.type === 'shape' && el.fill === SCRIBBLE_FILL && el.shape === 'line') {
     errors.push({ path: pathJoin(base, 'fill'), message: `"${SCRIBBLE_FILL}" hatches a rect or an ellipse; a line has no inside` });
   }
+}
+
+// The texts and icons a sketch block draws, checked as a text or icon of a sketch scene is (the same glyph and icon checks), at the
+// param that set them (`paramOf`, as typing errors are: params.nodes[1].label), else at the block's params. Run on the expanded spec
+// (`expanded`) once the block params have passed: a block's params are not elements until it expands.
+export function checkSketchBlocks(written, expanded, errors) {
+  written.scenes.forEach((scene, si) => {
+    if (!isSketchScene(written, scene)) return;
+    scene.elements.forEach((el, ei) => {
+      if (!isBlock(el) || blockDef(el.block)?.sketchOnly !== true) return;
+      const group = expanded.scenes[si].elements[ei];
+      const params = `scenes[${si}].elements[${ei}].params`;
+      for (const { el: part } of flattenElements(group.children ?? [], '')) {
+        const found = [];
+        if (part.type === 'text') checkGlyphs(part, '', found);
+        if (part.type === 'icon') checkIcon(part, '', found);
+        const param = paramOfPart(el.block, part.id.slice(el.id.length + 1));
+        for (const { message } of found) errors.push({ path: param ? pathJoin(params, param) : params, message });
+      }
+    });
+  });
 }
 
 const SECONDS_EPSILON = 1e-6;

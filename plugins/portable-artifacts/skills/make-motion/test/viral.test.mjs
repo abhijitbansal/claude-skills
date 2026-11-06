@@ -253,7 +253,8 @@ test('every block at its viral place() keeps every part inside the platform safe
   const srt = '1\n00:00:00,200 --> 00:00:05,800\nCaptions stay on screen the whole time\n';
   const browser = await launchBrowser({ quiet: true });
   try {
-    for (const name of BLOCK_NAMES) {
+    // A sketch block draws only in a hand-drawn scene, and a viral spec refuses those (sketch-check.mjs checkViralSide).
+    for (const name of BLOCK_NAMES.filter((n) => !BLOCKS[n].sketchOnly)) {
       const def = BLOCKS[name];
       const { x, y } = def.place(PHONE, '9:16', def.example.side, insets);
       const params = structuredClone(def.example);

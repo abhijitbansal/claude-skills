@@ -4,7 +4,7 @@ import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec } from '../scripts/lib/spec.mjs';
-import { checkSketch } from '../scripts/lib/sketch-check.mjs';
+import { checkSketch, SKETCH_BLOCK_NAMES } from '../scripts/lib/sketch-check.mjs';
 import { isSketchScene, specHasSketch, PALETTE, HAND_TONES } from '../template/sketch/style.mjs';
 import { specHasVideo } from '../scripts/lib/video.mjs';
 
@@ -67,11 +67,12 @@ test('a chart, image, video, lottie, code or counter in a sketch scene is an err
 test('a standard block in a sketch scene is an error that lists the sketch blocks', () => {
   const block = { id: 'b', type: 'block', block: 'title-card', x: 960, y: 540, params: { title: 'Hi' } };
   assert.deepEqual(errs(sketch([block])), [
-    `scenes[0].elements[0].block: title-card is not a sketch block; blocks a sketch scene takes: none yet; ${STANDARD_HINT}`,
+    `scenes[0].elements[0].block: title-card is not a sketch block; blocks a sketch scene takes: ${SKETCH_BLOCK_NAMES.join(', ')}; ${STANDARD_HINT}`,
   ]);
+  assert.deepEqual([...SKETCH_BLOCK_NAMES], ['sketch-diagram', 'sketch-steps', 'sketch-list', 'sketch-compare', 'sketch-callout']);
 });
 
-test('sketch-only blocks are told apart by the block list (test-local list: no sketch block exists yet)', () => {
+test('sketch-only blocks are told apart by the block list (test-local list: a name that is no block, such as sketch-fake)', () => {
   const written = (style) => ({ scenes: [scene([{ id: 'b', type: 'block', block: 'sketch-fake', x: 0, y: 0, params: {} }], { style })] });
   const run = (spec, sketchBlocks) => { const out = []; checkSketch(spec, out, { sketchBlocks }); return out.map((e) => `${e.path}: ${e.message}`); };
   assert.deepEqual(run(written('sketch'), ['sketch-fake']), []);
@@ -88,7 +89,7 @@ test('sketch-only blocks are told apart by the block list (test-local list: no s
 test('a standard block in a sketch scene is told it does not belong before its params are checked', () => {
   const block = { id: 'b', type: 'block', block: 'title-card', x: 960, y: 540, params: {} };
   const found = errs(sketch([block]));
-  assert.equal(found[0], `scenes[0].elements[0].block: title-card is not a sketch block; blocks a sketch scene takes: none yet; ${STANDARD_HINT}`);
+  assert.equal(found[0], `scenes[0].elements[0].block: title-card is not a sketch block; blocks a sketch scene takes: ${SKETCH_BLOCK_NAMES.join(', ')}; ${STANDARD_HINT}`);
   assert.ok(found.length > 1 && found.slice(1).every((e) => e.startsWith('scenes[0].elements[0].params')), found.join('\n'));
   const unknown = errs(sketch([{ ...block, block: 'no-such-block' }]));
   assert.equal(unknown.length, 1, unknown.join('\n'));

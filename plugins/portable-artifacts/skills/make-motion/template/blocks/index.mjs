@@ -5,6 +5,8 @@
 //   params    a JSON schema for `params` (additionalProperties false, strings and arrays capped; `default`s documented)
 //   describe  one line per param, for blocks.mjs show
 //   summary   one line on what the block is for
+//   sketchOnly (optional) true for a block that draws only in a hand-drawn scene (the sketch-* blocks): a standard scene refuses it
+//             and a sketch scene takes no other (scripts/lib/sketch-check.mjs); its parts are plain text, shape and icon elements
 //   example   example params
 //   place     (size, format[, side[, insets]]) -> { x, y }: where the block belongs on that canvas; `insets` are a viral
 //             spec's (viral.mjs viralInsets), which move it inside the platform safe zone and above the lifted captions
@@ -64,6 +66,11 @@ import formFields from './form-fields.mjs';
 import tabSwitch from './tab-switch.mjs';
 import buttonState from './button-state.mjs';
 import sidePanel from './side-panel.mjs';
+import sketchDiagram from './sketch-diagram.mjs';
+import sketchSteps from './sketch-steps.mjs';
+import sketchList from './sketch-list.mjs';
+import sketchCompare from './sketch-compare.mjs';
+import sketchCallout from './sketch-callout.mjs';
 
 export const BLOCKS = Object.freeze({
   'title-card': titleCard,
@@ -99,6 +106,11 @@ export const BLOCKS = Object.freeze({
   'tab-switch': tabSwitch,
   'button-state': buttonState,
   'side-panel': sidePanel,
+  'sketch-diagram': sketchDiagram,
+  'sketch-steps': sketchSteps,
+  'sketch-list': sketchList,
+  'sketch-compare': sketchCompare,
+  'sketch-callout': sketchCallout,
 });
 export const BLOCK_NAMES = Object.freeze(Object.keys(BLOCKS));
 

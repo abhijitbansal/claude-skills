@@ -1,0 +1,31 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "sketch-diagram",
+      "style": "sketch",
+      "duration": 9.5,
+      "elements": [
+        {
+          "id": "diagram",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "sketch-diagram",
+          "params": {
+            "nodes": [
+              { "id": "web", "label": "Browser", "icon": "monitor" },
+              { "id": "api", "label": "API", "icon": "server", "fill": true },
+              { "id": "db", "label": "Database", "icon": "database" }
+            ],
+            "edges": [
+              { "from": "web", "to": "api", "label": "https" },
+              { "from": "api", "to": "db", "label": "SQL" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

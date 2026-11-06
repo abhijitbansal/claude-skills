@@ -8,7 +8,7 @@ import metrics from '../template/sketch/caveat-metrics.mjs';
 import { PALETTE } from '../template/sketch/style.mjs';
 import { planScene } from '../template/sketch/plan.mjs';
 import * as planApi from '../template/sketch/plan.mjs';
-import { pointAt, unit } from '../template/sketch/geometry.mjs';
+import { pointAt, unit, wobble, bowedLine, makeRng, hashSeed } from '../template/sketch/geometry.mjs';
 import { HAND_EXIT, HAND_LEAD, travelSeconds } from '../template/sketch/timing.mjs';
 import { expandSpec, COLOR_TOKENS, DEFAULT_SHAPE_SIZE } from '../template/defaults.mjs'; // before layout.mjs: the two import each other, and defaults.mjs must load first
 import { unit as layoutUnit } from '../template/blocks/layout.mjs';
@@ -426,6 +426,15 @@ test('a line with `to` runs from x, y to `to`; width is not needed; without `to`
   const grouped = plan([{ id: 'g', type: 'group', x: 100, y: 100, children: [line('v', { x: 10, y: 10, to: { x: 10, y: 110 } })] }]);
   const gp = grouped.strokes[0].points;
   assert.ok(Math.abs(gp[0][0] - 110) < 12 && Math.abs(gp[0][1] - 110) < 6 && Math.abs(gp.at(-1)[1] - 210) < 6, '`to` is in the element\'s own frame');
+});
+
+test('a line without an arrow wobbles as the spike\'s underline (amp 3, wave 90); an arrow keeps its own (amp 1.3, wave 60)', () => {
+  const [from, to] = [[100, 300], [900, 300]];
+  const wobbled = (id, bow, shape) => wobble(bowedLine(from, to, bow), makeRng(hashSeed(1, id)), { ...shape, u: 1 });
+  const underline = plan([line('u', { x: 100, y: 300, to: { x: 900, y: 300 }, bow: -30 })]);
+  assert.deepEqual(underline.strokes[0].points, wobbled('u', -30, { amp: 3, wave: 90 }));
+  const arrow = plan([line('a', { x: 100, y: 300, to: { x: 900, y: 300 }, bow: -30, arrow: 'end' })]);
+  assert.deepEqual(arrow.strokes[0].points, wobbled('a', -30, { amp: 1.3, wave: 60 }));
 });
 
 test('a barb ends on the tip and starts behind it, along the line\'s end direction, whichever way the arrow goes', () => {

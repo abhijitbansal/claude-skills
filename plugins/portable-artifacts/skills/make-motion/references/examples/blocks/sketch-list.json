@@ -1,0 +1,28 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "sketch-list",
+      "style": "sketch",
+      "duration": 9,
+      "elements": [
+        {
+          "id": "list",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "sketch-list",
+          "params": {
+            "title": "Why draw by hand",
+            "items": [
+              { "text": "It holds attention", "icon": "eye" },
+              { "text": "Ideas build one at a time", "icon": "layers" },
+              { "text": "Anyone can follow it", "icon": "users" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

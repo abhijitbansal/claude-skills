@@ -20,9 +20,9 @@ const oneScene = (elements, extra = {}, duration = 6) => ({ ...extra, scenes: [{
 const errs = (motion) => validateSpec(motion, { dir: EXAMPLES }).errors.map((e) => `${e.path}: ${e.message}`);
 const partsOf = (spec) => flattenElements(spec.scenes[0].elements).map(({ el }) => el).filter((el) => el.type !== 'group');
 
-test('the block is registered, and the registry has 33 blocks', () => {
+test('the block is registered, and the registry has 38 blocks', () => {
   assert.ok(BLOCK_NAMES.includes(NAME));
-  assert.equal(BLOCK_NAMES.length, 33);
+  assert.equal(BLOCK_NAMES.length, 38);
   assert.deepEqual(BLOCKS[NAME].assets, ['src', 'cutout']);
 });
 

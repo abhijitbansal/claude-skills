@@ -19,7 +19,7 @@ import { BLOCKS, BLOCK_NAMES, isBlock, blockDef, blockAssetFiles, paramOfPart } 
 import { VIRAL_MODE, applyViral } from '../../template/viral.mjs';
 import { VAR_NAME, MAX_VARS, VAR_TYPES, declaresVars, findVarRefs, varValues, substituteVars } from '../../template/vars.mjs';
 import { STYLES, HAND_TONES, SCRIBBLE_FILL, isSketchScene } from '../../template/sketch/style.mjs';
-import { checkSketch, checkSketchDuration } from './sketch-check.mjs';
+import { checkSketch, checkSketchBlocks, checkSketchDuration } from './sketch-check.mjs';
 import { checkCode } from './code-check.mjs';
 import { checkLottie } from './lottie-check.mjs';
 import { isAtlasName } from '../../template/maps.mjs';
@@ -1064,6 +1064,7 @@ export function validateSpec(input, { dir = process.cwd(), values = {} } = {}) {
   const errors = [];
   checkViral(written, errors);
   errors.push(...sketchErrors);
+  checkSketchBlocks(written, spec, errors); // the texts and icons a sketch block's params draw: the block params have passed, so it has expanded
   checkIds(spec, errors);
   checkFormat(spec, errors);
   checkTheme(spec, errors);

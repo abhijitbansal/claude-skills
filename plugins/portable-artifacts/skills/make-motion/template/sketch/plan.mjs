@@ -21,6 +21,7 @@ const NESTED_DRAW_AT = 'drawAt on an element inside a group does not apply in a 
 // The spike's values, px at 1080 (multiplied by the canvas's unit when used). wobble: amp, wave, step (step defaults to 7).
 const BOX = { amp: 2.6, wave: 110, width: 5.5, over: 16 };
 const ARROW = { amp: 1.3, wave: 60, width: 5.5, head: 30, spread: 2.55, bow: 26, bowShare: 0.17, barb: { amp: 0.8, wave: 30 } };
+const MARK = { amp: 3, wave: 90 }; // a line without an arrow (an underline, a rule): the spike's underline wanders more than an arrow does
 const ICON = { amp: 1.1, wave: 45, step: 5, width: 4.5 };
 const FILL = { gap: 34, width: 20, opacity: 0.17, amp: 3, wave: 60, step: 12 };
 // Writing: the text shows through a mask the pen follows, zig-zagging over each glyph. Shares of the font size.
@@ -142,7 +143,7 @@ function planLine(el, at, style, run, path, rng) {
   const colour = colourOf(el.stroke);
   const arrow = el.arrow === 'end';
   const bow = Number.isFinite(el.bow) ? el.bow * u : arrow ? Math.min(ARROW.bow * u, ARROW.bowShare * length) : 0;
-  const points = wobble(bow ? bowedLine(from, to, bow) : [from, to], rng, { amp: ARROW.amp, wave: ARROW.wave, u });
+  const points = wobble(bow ? bowedLine(from, to, bow) : [from, to], rng, { ...(arrow ? ARROW : MARK), u });
   const drafts = [inkLine(points, path, stroke, colour, style.opacity)];
   if (arrow) {
     const tip = points.at(-1);
