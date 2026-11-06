@@ -147,6 +147,11 @@ A block is a ready-made piece of a scene. Write one `block` element and its `par
 | `tab-switch` | a tab row whose active tab changes, the old panel text fading out before the new one comes in | `tabs` (2 to 4 of `{ label, body }`; label up to 8, body up to 48), `switchAfter?` (seconds between switches, 1.5 to 15, default 2) |
 | `button-state` | a button changing its label or colour once | `from`, `to` (each `{ label, tone? }`; label up to 16, tone `accent`, `good` or `neutral`), `at?` (scene seconds, 1 to 50, default 2) |
 | `side-panel` | a docked panel of rows sliding in at the edge of a screen | `title` (up to 18), `rows` (2 to 5, each up to 18), `side?` (`left` or `right`, default right) |
+| `sketch-diagram` | a hand-drawn architecture: boxes with icons joined by labelled arrows (hand-drawn scenes only, see Hand-drawn style) | `nodes` (2 to 8 of `{ id, label, icon?, fill? }`), `edges` (0 to 12 of `{ from, to, label? }`), `layout?` (`row`, `column` or `grid`) |
+| `sketch-steps` | a hand-drawn process of numbered steps joined by arrows (hand-drawn scenes only) | `steps` (2 to 6, each up to 32 characters) |
+| `sketch-list` | a hand-drawn list with an optional heading (hand-drawn scenes only) | `title?` (up to 40), `items` (2 to 6 of `{ text, icon? }`) |
+| `sketch-compare` | two hand-drawn columns divided by a line (hand-drawn scenes only) | `left`, `right` (each `{ title (up to 24), points (1 to 5, each up to 28) }`) |
+| `sketch-callout` | one hand-drawn phrase with an underline or a circle round it (hand-drawn scenes only) | `text` (up to 40), `icon?`, `mark?` (`underline` or `circle`) |
 
 ```json
 { "id": "kpi", "type": "block", "x": 960, "y": 540, "block": "kpi-counter",

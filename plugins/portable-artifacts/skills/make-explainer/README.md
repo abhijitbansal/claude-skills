@@ -27,6 +27,12 @@ unless you opt in with `--image-api` (see below).
   takes a `label` of up to 4 words for the contents list; validation warns (never
   fails) over the soft caps: title 8 words, label 4, paragraph 3 sentences or 60
   words, text section 120, card text 30, list item 20, page prose 900 (1,800 on a plan page), tl;dr 3 points.
+- **Simple English**: a text section (`tldr`, `text`, `cards`, `risks`, `steps`, `timeline`, `compare`,
+  `callout`, `details` or `table`) can carry a `simple` field with the same prose in plainer words: one idea a
+  sentence, at most 20 words in steps and 25 elsewhere, active voice, no semicolons. A "Simple English" toggle
+  on the page swaps it in for the normal text; a field left out of `simple` keeps its normal text. Validation
+  warns, never fails, on a plain version that breaks those rules. `check.mjs` measures the page in both views.
+  The rules are in `references/simple-english.md`.
 - **A page worth opening**: themed (nine themes, light and dark; `dusk` by default, `mono` for a plan), a
   contents list from four sections up, copy buttons on code, print styles,
   reduced motion respected, no network at build or view time

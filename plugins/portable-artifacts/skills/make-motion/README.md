@@ -49,7 +49,7 @@ shell commands.
   lines and ringed points. Shapes and text take **theme colour tokens**
   (`"fill": "surface"`, `"color": "accent"`) that follow the theme, rects can be
   `elevated` cards, and lines can have round caps and an arrow head.
-- **Blocks**: twenty-eight parameterised building blocks (`title-card`, `lower-third`, `kpi-counter`, `step-flow`, `quote-card`, `checklist`, `logo-outro`, `cta-close`, four for short-form video: `cta-soft`, `story-beats`, `listicle` and `before-after-swipe`, three for code: `code-typing`, `code-diff` and `terminal-run`, two for maps: `map-highlight` and `flow-map`, and four for data and comparisons: `race` (a bar chart race), `comparison-split`, `before-after` (two numbers) and `notification-stack`, and six for people and messages: `chat-thread`, `timeline`, `testimonial` and the lower thirds `lower-third-tag`, `lower-third-social` and `lower-third-ticker`, and `text-behind-subject` (big text behind a person, from a photo or clip and its cutout: see Cutouts below)), each
+- **Blocks**: thirty-eight parameterised building blocks (`title-card`, `lower-third`, `kpi-counter`, `step-flow`, `quote-card`, `checklist`, `logo-outro`, `cta-close`, four for short-form video: `cta-soft`, `story-beats`, `listicle` and `before-after-swipe`, three for code: `code-typing`, `code-diff` and `terminal-run`, two for maps: `map-highlight` and `flow-map`, and four for data and comparisons: `race` (a bar chart race), `comparison-split`, `before-after` (two numbers) and `notification-stack`, and six for people and messages: `chat-thread`, `timeline`, `testimonial` and the lower thirds `lower-third-tag`, `lower-third-social` and `lower-third-ticker`, and `text-behind-subject` (big text behind a person, from a photo or clip and its cutout: see Cutouts below), five for product screens: `browser-window`, `form-fields`, `tab-switch`, `button-state` and `side-panel`, and five that a hand draws: `sketch-diagram`, `sketch-steps`, `sketch-list`, `sketch-compare` and `sketch-callout` (hand-drawn scenes only: see Hand-drawn style below)), each
   written as one `block` element with a few params (`"block": "lower-third", "params": { "name": "Ada" }`) and
   expanded into plain elements laid out for the canvas, coloured with theme tokens. `blocks.mjs list` and
   `blocks.mjs show <name>` print each block's params and an example; `references/blocks/` holds a contact sheet
@@ -58,6 +58,15 @@ shell commands.
   on onnxruntime-node (MIT) and writes an RGBA PNG (a clip: a VP9 alpha WebM); pass the original as `src` and that file
   as `cutout` of a `text-behind-subject` block. It needs `doctor --for cutout --fix cutout` (about 300 MB) and a one-time
   25 MB model download; nothing else in the skill does, and a render never touches the network.
+- **Hand-drawn style**: a scene with `"style": "sketch"` (or a root `style`, for the whole film) is drawn on a
+  white board by an illustrated hand holding a pencil, one stroke at a time: writing in a handwriting font
+  (Caveat, OFL-1.1), outlined boxes, lines and arrows, Lucide icons, scribble fills, or the five sketch blocks. The
+  agent writes elements and params, never stroke timing. A film can mix drawn and standard scenes; the `erase`
+  transition clears one drawn board for the next; five hand tones; with a voiceover each element is drawn in its own
+  sentence (`"drawAt": "sentence:<n>"` pins one); four starter films (`sketch-architecture.json`,
+  `sketch-concept.json`, `sketch-steps.json`, `sketch-mixed.json`). A drawn scene refuses what a pencil cannot draw
+  (charts, images, video, Lottie, code, counters, keyframes, camera), viral mode takes none, and the drawing decides
+  how long a scene lasts. No drawing sound in this release. See `references/sketch.md`.
 - **Scene transitions**: `"transition": "crossfade"` fades the new scene in over the previous one (which
   stays fully visible beneath) over 0.4 s; `push`, `slide`, `wipe`, `zoom`, `blur` and `iris` move, clip,
   scale or blur it in, and `{ "type": "push", "direction": "up", "duration": 0.6 }` picks the edge and the
@@ -141,7 +150,8 @@ and in Codex `$make-motion …`.
 Before it writes the spec, the agent runs one intake round: one message of
 questions with the defaults already picked: format (1920x1080, or 1080x1920 for Reels, TikTok and
 Shorts), length, your own photos, logo, music or voice file, a voiceover,
-sound cues, theme and a closing line. Answer once, or say "defaults". Run
+sound cues, theme, a closing line and the style (standard, hand-drawn or mixed; hand-drawn is
+off unless the prompt asks for a whiteboard or sketch look, and then it also asks for the hand's skin tone). Answer once, or say "defaults". Run
 non-interactively (`claude -p`, `codex exec`, `copilot -p`), it skips the round,
 builds with the defaults and its report says so.
 
@@ -166,7 +176,7 @@ builds with the defaults and its report says so.
 
 | Element `type` | Key fields | Animatable |
 |---|---|---|
-| `text` | `text`, `role` (`title`: display font, plus the theme's entrance when it has no `keyframes`), `fontSize`, `fontWeight`, `color`, `align`, `maxWidth`, `font` (`sans`/`mono`; mono wins over the title role), `typing` | `opacity x y scale rotate` (+ `value`, the characters typed, with `typing`) |
+| `text` | `text`, `role` (`title`: display font, plus the theme's entrance when it has no `keyframes`), `fontSize`, `fontWeight`, `color`, `align`, `anchor` (`left`, `center` or `right`: the edge that sits on `x`, so stacked lines share a left edge), `maxWidth`, `font` (`sans`/`mono`; mono wins over the title role), `typing` | `opacity x y scale rotate` (+ `value`, the characters typed, with `typing`) |
 | `counter` | `from`, `to`, `decimals`, `prefix`, `suffix` + text styling | + `value` (with no `value` keyframes it counts from→to automatically) |
 | `shape` | `shape` (`rect`/`ellipse`/`line`), `width`, `height`, `radius`, `fill`, `stroke`, `strokeWidth`, `elevated` (rect), `cap` and `arrow` (line) | + `draw` (0–1 stroke reveal) |
 | `image` | `src` (relative to the spec), `width`, `height`, `fit` | `opacity x y scale rotate` |
@@ -175,7 +185,7 @@ builds with the defaults and its report says so.
 | `group` | `children` (1–40 elements, up to 3 groups deep), each placed relative to the group's centre | `opacity x y scale rotate`, applied to every child at once |
 | `code` | `code`, `lang` (`text`, `javascript`, `typescript`, `json`, `bash`, `python`, `diff`, `go`, `rust`, `swift`, `yaml`, `html`, `css`, `markdown`), `width`, `height`, `fontSize` (28), `highlight` (line numbers), `diff`, `typing`; highlighted offline with shiki (JavaScript regex engine, no wasm) in the theme's colour tokens, drawn as text, never markup | `opacity x y scale rotate` (+ `value`, the characters typed, with `typing`) |
 | `lottie` | `src` (a Lottie JSON file relative to the spec, at most 4 MiB), `width`, `height`, `offset` (scene s before it plays), `speed` (0.25–4); played with lottie-web's light SVG build (no expression engine); embedded PNG, JPEG or WebP images only, no remote assets, web fonts or expressions | `opacity x y scale rotate` |
-| `block` | `block` (one of the 28 block names), `params` (that block's own fields); expands into a group of parts named `<id>/<part>`, so validator errors name `params.<field>` | `opacity x y scale rotate`, applied to the whole block |
+| `block` | `block` (one of the 38 block names), `params` (that block's own fields); expands into a group of parts named `<id>/<part>`, so validator errors name `params.<field>` | `opacity x y scale rotate`, applied to the whole block |
 
 A scene's `background` is a CSS colour or `"art"`: the theme's seeded art,
 full-bleed behind the elements and seeded by the scene `id`. A shape `fill` or
@@ -193,8 +203,10 @@ Keyframes are `{ "t": seconds-in-scene, "ease": "outCubic", …props }`. Each
 property holds its value before its first keyframe, interpolates between
 keyframes using the later keyframe's ease, and holds after the last one.
 There are 32 eases, from `linear` to `inOutElastic`. The full reference
-is [`references/schema.md`](references/schema.md), and there are 20 complete
-examples in [`references/examples/`](references/examples/).
+is [`references/schema.md`](references/schema.md), and there are 27 complete
+examples in [`references/examples/`](references/examples/). The hand-drawn style has
+its own page, [`references/sketch.md`](references/sketch.md), and
+[`references/motion-design.md`](references/motion-design.md) covers timing and when to choose a drawn scene.
 
 ## Scripts
 
@@ -202,12 +214,12 @@ examples in [`references/examples/`](references/examples/).
 |---|---|---|
 | `validate.mjs <spec>` | Schema plus cross-field checks (unique ids, keyframe times, per-type props, image, video and audio paths, video trims against the clip length (needs ffprobe), audio scene/start/fade fits, captions files parsed (a cue out of order names its line), chart compile, no remote URLs) | `--json` |
 | `blocks.mjs list` / `blocks.mjs show <name>` | One line per block with its params (optional ones marked `?`); or one block's params table (type, required, default, description), where it goes on each format, and a ready-to-paste element. An unknown name exits 2 with the closest one and the list | none |
-| `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` |
+| `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices`, `--phonemes` (one `<sentence><TAB><phonemes>` line per sentence after the usual three lines, to check how a word with two readings was said; the sidecar `.json` always carries `phonemes`) |
 | `cutout.mjs <photo.png\|clip.mp4>` | Cuts the person out of a photo (`<stem>.png`, RGBA) or a clip (`<stem>.webm`, VP9 alpha) with MODNet, locally, for a `text-behind-subject` block (onnxruntime-node installed on demand, ~300 MB, plus a 25 MB model once; `doctor --fix cutout`) | `--out <dir>` (default a `cutout` folder beside the input), `--fps <1-60>` (clips) |
 | `beats.mjs <audio>` | Beat grid of an audio file (ffmpeg; the first five minutes) → `<stem>.beats.json` for a spec's root `beats`; prints the path and `<bpm> BPM, <n> beats`; exit 1 with `no steady beat found in <file> (confidence …; needs 0.5)` | `--out <file>.json`, `--min-confidence <0-1>`, `--bpm <n>` (force the tempo), `--min-bpm <n>` / `--max-bpm <n>` (narrow the search) |
 | `storyboard.mjs <brief.json>` | For a clip over 20 s: a make-explainer `plan` page spec from a brief `{ "title", "seconds", "scenes": [{ "id", "beat", "seconds" }], "theme"? }`; prints the plan path and `build: node …/make-explainer/scripts/build.mjs <plan>`. Skips with one stdout line `storyboard: skipped (not needed (12s is 20s or less))`, `(make-explainer is not installed beside make-motion (looked in <path>))` or `(no one to ask (non-interactive run))`, no file, exit 0. Exit 1: the brief breaks a rule; exit 2: usage or IO | `--out <plan.json>` (required), `--non-interactive` |
 | `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. Click an element to copy its spec path and id (`scenes[1].elements[3]  id=title`) with a 2 s toast. The MP4 timing is exact | `--open` |
-| `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks, `cues` or an unmuted `video` clip with sound, followed by one `audio: … LUFS integrated, true peak … dBTP` line) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--workers <n or auto>`, `--quality <draft or final>`, `--loudness <-30 to -5 LUFS, or off>`, `--true-peak <-3 to 0 dBTP>`, `--contact-sheet`, `--batch <rows.json>` (with an `--out` template holding `{index}` or a `{var}`) |
+| `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks, `cues` or an unmuted `video` clip with sound, followed by one `audio: … LUFS integrated, true peak … dBTP` line) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported (`--no-provenance`, or a root `"provenance": false`, leaves both out and empties the preview footer; ffmpeg's own encoder tag stays). `--poster <seconds>` writes one frame instead of the MP4 (`out/poster.jpg`, or `--poster-out <file>.jpg\|.png`), with the captions layer hidden and everything else, grain and vignette included, as in the film; a time past the end exits 2 | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--workers <n or auto>`, `--quality <draft or final>`, `--loudness <-30 to -5 LUFS, or off>`, `--true-peak <-3 to 0 dBTP>`, `--no-provenance`, `--poster <seconds>` and `--poster-out <file>` (neither goes with `--batch` or `--contact-sheet`), `--contact-sheet`, `--batch <rows.json>` (with an `--out` template holding `{index}` or a `{var}`) |
 | `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen; text whose colour has less than 4.5:1 (3:1 for large text) contrast against the pixels behind it, a text on screen for less than 0.75 × (0.5 + 0.3 × words) seconds (a last line under 2 s is only an `info:` note), more than 3 s in which nothing changes (not in the last 3 s, not for `"hold": true` elements) and text under 28 px at 1080 on the short side for 0.5 s or more (a contrast or size finding at one moment only is a warning); with `captions`, a text or counter held in the caption zone while a caption shows and a captions layer that leaves it (measured once per caption group). An element that has left the frame entirely is gone, not clipped. It also warns on stderr (never a failure) when the first scene shows nothing at t = 0. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
 | `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Lists the video frame cache once it passes 2 GB; `--fix cache` deletes it. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover\|cutout>`, `--fix <id[,id]>` |
 
@@ -241,6 +253,6 @@ dependencies, pinned by the lockfile, are anime.js v4 (MIT), Playwright
 (Apache-2.0), Vega, Vega-Lite and vega-interpreter (BSD-3-Clause), Ajv (MIT),
 lottie-web 5.13.0 (MIT; the page loads only its light SVG build),
 world-atlas 2.0.2 and us-atlas 3.0.1 (ISC; Natural Earth and US Census TopoJSON; the page fetches only the four files it names),
-and the theme fonts in the synced `shared/fonts` (OFL-1.1). The `@fontsource/inter` and
+the theme fonts in the synced `shared/fonts` (OFL-1.1), and, for the hand-drawn style, Caveat 700 (OFL-1.1, from `@fontsource/caveat` 5.3.0) and the Lucide icons (ISC, with some MIT icons derived from Feather), vendored under `template/sketch/` with their licence texts in `template/sketch/LICENSES`. The `@fontsource/inter` and
 `@fontsource/jetbrains-mono` npm packages are still pinned but no longer read: the
 default look now comes from `dusk`, and the `press` theme gets JetBrains Mono from `shared/fonts`.

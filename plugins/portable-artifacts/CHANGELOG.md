@@ -4,6 +4,109 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
+## [1.2.0] - 2026-11-06
+
+make-motion draws by hand: a scene can be drawn on a white board by an illustrated hand, with sketch blocks, an `erase`
+transition, voice sync and four starter films. It also gets pronunciation checks, left-anchored text, five product-screen
+blocks, `render --poster` and `--no-provenance`, and loses its 120 s total length cap. make-explainer gains a Simple
+English toggle, and make-diagram gains `cloud:` icons. The site page for the plugin is simpler and shows two new films.
+
+### Behaviour changes to know about
+
+- **The 120 s total length cap is gone.** Before, `validate.mjs` refused a spec whose scenes added up to more than 120 s
+  (`scenes: total duration 150s exceeds the 120s limit`) and `storyboard.mjs` refused a brief over 120 s. Now a spec
+  has no total cap. Up to 50 scenes of up to 60 s each stay the limits, and render time grows with the length, so use
+  `--workers` and `--quality draft` for a long film. A spec that was refused for length before now validates.
+- **Built make-diagram pages carry a slightly different inlined script.** `template/panel.js` gains three lines that drop
+  the `id` attributes from the copy of a cloud icon the Explore panel makes, so a page keeps one gradient or mask of
+  each id. A diagram page rebuilt with 1.2.0 therefore differs from one built with 1.1.0 by that script, and a pipeline
+  that pins a page hash must re-pin it. I did not hash-compare rebuilt diagram pages for this entry.
+- **Specs that use none of the new make-motion features render the same bytes as before.** Measured with
+  `node .scratch/baseline-render.mjs .scratch/baseline/final.json` against a `base.json` taken on the 1.1.0 commit
+  (`--workers 1`, one MD5 of the MP4 stream per top-level example). Measured: the 20 examples that existed in 1.1.0 give
+  identical hashes (`diff base.json final.json` shows only the 7 added lines for the new examples).
+- **The `check.mjs` text-alignment warning is new.** It warns (stderr, never a failure, exit unchanged) when two
+  held texts that say `"anchor": "left"` or `"align": "left"` have left edges 1 to 12 px apart at 1080 on the short
+  side. A spec that was clean before can now print that warning.
+- **A root `captions` track shrinks every block's room, and this is now documented.** A block lays out above the
+  caption zone whenever the spec has any root `captions` track, even one that shows in a single scene (`map-highlight`
+  and the sketch blocks included). The rule is in `references/schema.md` and `references/sketch.md`.
+
+### Added
+
+- **make-motion: a hand-drawn style.** `"style": "sketch"` on a scene (or at the root, for every scene; a scene can write
+  `"style": "standard"` to opt out) has an illustrated hand holding a pencil draw the scene on a white board, one stroke
+  at a time: handwriting in Caveat 700 (OFL-1.1), outlined boxes, lines and arrows, scribble fills and line icons from
+  the Lucide set (ISC, with some MIT icons from Feather), vendored under `template/sketch/` with their licence texts. A
+  root `sketch` field sets the hand (`tone`: `light`, `medium`, `tan`, `brown` or `dark`; `scale` 0.5 to 1.2), a `seed`
+  and a `pace`. A drawn scene allows only `text`, `shape`, `icon`, `group` and the sketch blocks, and refuses charts,
+  images, video, Lottie, code, counters, keyframes and camera moves; a viral spec takes no drawn scene. A frame depends on the time alone
+  (`test/sketch-render.test.mjs` seeks forward, straight to a frame and back and gets the same bytes); no test compares
+  drawn films across `--workers` values. `references/sketch.md` has the rules.
+- **make-motion: five sketch blocks.** `sketch-diagram`, `sketch-steps`, `sketch-list`, `sketch-compare` and
+  `sketch-callout`, drawn only in a drawn scene. Together with the five product-screen blocks below, `blocks.mjs list`
+  now prints 38 blocks (measured: `node plugins/portable-artifacts/skills/make-motion/scripts/blocks.mjs list`; 28 in
+  1.1.0).
+- **make-motion: voice sync for drawn scenes.** With a voiceover on a drawn scene, elements are drawn during the
+  narration's sentences, one element for each sentence, and `"drawAt": "sentence:<n>"` pins one to a sentence. A drawing
+  that cannot fit its sentence at twice the normal pace is reported only by `check.mjs` (`overruns`), not by
+  `validate.mjs`, because a voiced scene follows its voice.
+- **make-motion: an `erase` transition.** The hand sweeps across and clears one drawn board for the next; it works only
+  between two drawn scenes. Any other transition into a drawn scene works too and delays the drawing until it ends.
+- **make-motion: the intake round offers the hand-drawn style** (off by default; a whiteboard, hand-drawn or sketch-look
+  prompt switches it on without asking) and asks the hand's skin tone. The skipped-intake report line gains
+  `style <name>, hand <tone or n/a>`. Plugin eval prompts gain one hand-drawn case (`item-hand-drawn` in
+  `eval/prompts/motion-items.json`, which now holds 47 prompts; `eval/prompts/motion.json` still holds 10).
+- **make-motion: four starter films.** `sketch-architecture.json`, `sketch-concept.json`, `sketch-steps.json` and
+  `sketch-mixed.json` in `references/examples/` (`test/sketch-examples.test.mjs` covers them); plus
+  `showcase-hand-drawn.json` and `showcase-features.json`, the two films on the site page.
+- **make-motion: pronunciation guidance and `voice.mjs --phonemes`.** `--phonemes` prints one
+  `<sentence><TAB><phonemes>` line per sentence after the usual three lines, so a word with two readings (résumé, lead,
+  read) can be checked without listening, and the sidecar `.json` now carries `phonemes` for every sentence (the
+  captions ignore it). The phonemes come from Kokoro's own `stream()`, so they match what is said.
+- **make-motion: text `anchor`.** `"anchor": "left" | "center" | "right"` (default `center`) puts a text's left edge,
+  centre or right edge on `x`; scale and rotate turn about that edge. Stacked lines of different lengths share a left
+  edge from one `x`. Text without `anchor` renders as before.
+- **make-motion: five product-screen blocks.** `browser-window`, `form-fields`, `tab-switch`, `button-state` and
+  `side-panel`. Blocks do not nest, so each stands alone and is placed by coordinates; `blocks.mjs show browser-window`
+  prints the content rectangle the others go inside. `tab-switch` and `button-state` fade the old text fully out before
+  the new text lands, so `check.mjs` finds no overlap. New example `references/examples/ui-form-fill.json`.
+- **make-motion: `render.mjs --poster <seconds>`.** Writes one frame to `out/poster.jpg` (or `--poster-out <file>.jpg`,
+  `.jpeg` or `.png`) without rendering the MP4, with the captions layer hidden and the block layout, grain and vignette
+  the film has. A time past the end exits 2. It does not go with `--out`, `--batch`, `--contact-sheet`, `--workers`,
+  `--loudness`, `--true-peak`, `--no-provenance`, `--model`, `--effort` or `--agent`.
+- **make-motion: `render.mjs --no-provenance`** (and a root `"provenance": false`) leaves the `comment` and `artist`
+  tags out of the MP4 and the line out of the preview footer. ffmpeg's own `encoder` tag stays, so the file is not free of
+  all metadata. It does not go with `--contact-sheet`.
+- **make-explainer: Simple English.** A text section (`tldr`, `text`, `cards`, `risks`, `steps`, `timeline`, `compare`,
+  `callout`, `details` or `table`) can carry a `simple` field with the same prose in plainer words, and a "Simple
+  English" toggle on the page swaps it in. `validate.mjs` warns, never fails, on a plain version that breaks the rules
+  in `references/simple-english.md`. `check.mjs` now measures the page in both views.
+- **make-diagram: cloud icons.** `cloud:<name>` icons from the CC0 SVG Logos pack (`@iconify-json/logos` 1.2.19): 60
+  AWS names and 4 Google Cloud names, drawn in their own colours, each passed through an SVG allow-list. Seven more
+  monochrome Google brand marks join the Simple Icons set, which now holds 133 (measured: the key count of
+  `icons/brands.json`). `node scripts/icons.mjs import <aws|gcp> <folder>` adds icons from a vendor's own download that
+  you unpack yourself after accepting the vendor's terms; imported icons live outside the repository. The logos remain
+  the trademarks of their owners; use of a mark here does not imply endorsement. The importer was tested only on fake
+  folders, not on a real vendor download.
+- **Site.** `docs/features/portable-artifacts.html` is simpler (films first, install and one-liners next, details
+  after) and shows two new films, a hand-drawn film and an all-features film. The Licences table in `README.md` gains
+  rows for the SVG Logos pack and Caveat.
+
+### Measured
+
+- **Cost of drawing:** 40.0 ms per frame, on one dense 1920x1080 hand-drawn scene (10 written lines, 6 boxes and 6
+  icons), with `--workers 1`, browser launch and encoding included (`780 frames in 31.2 s`). Command:
+  `node .scratch/measure-frame.mjs .scratch/sketch-dense-scene.json .scratch/sketch-dense-scene.mp4`. One run on one
+  Apple-silicon Mac; the helper scripts and the scene are in the gitignored `.scratch/` folder and are not committed. No plain-scene run was timed the same way, so there is no comparison figure.
+
+### Known gaps
+
+- No drawing sound in this release. A synthesised pencil sound was tried and removed; a recorded CC0 sample is the follow-up.
+- Sketch scenes are refused in viral specs.
+- The hand's look and motion in all four starter films, narration sync by ear, a mixed film's cuts and a poster from a
+  real film are checked by a person, not by a test (the branch's manual-test checklist lists them).
+
 ## [1.1.0] - 2026-11-02
 
 make-motion grows up: richer sound cues, an intake round, groups, video clips, formats, captions and 28 ready-made

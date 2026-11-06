@@ -51,6 +51,8 @@ The font has Latin letters only. A character it lacks is an error that names it.
 
 Run `node <skill-dir>/scripts/blocks.mjs show <name>` for the params of a block and the place to put it (`x 960, y 451` at 16:9). The drawing may sit lower, for example `y 540` under a title at `y 170`, if nothing overlaps.
 
+A root `captions` track takes room from every block, the sketch blocks included: they lay out above the caption zone. This holds for any root `captions` track, even one that shows in one scene only, so the drawn scenes of a film with captions on a single scene are laid out smaller too (`map-highlight` shrinks the same way). Leave `captions` out when a drawn board needs the full height.
+
 ## The look
 
 Board `#fdfcf8`, ink `#1d2330`, accent `#e8590c`, inside drawn scenes only. A colour that names a theme token is turned into one of these: `accent` is the accent, `surface` is the board, and every other token (`text`, `line`, `text2`, `good`, `cat1` and the rest) is the ink. A plain colour such as `#2b6cb0` is used as written. A scene `background` colour replaces the board (checked by rendering a drawn scene with `"background": "#cfe8ff"`: the board was that blue). `"background": "art"` is an error.
