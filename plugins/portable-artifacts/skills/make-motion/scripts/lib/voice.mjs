@@ -18,7 +18,7 @@ const MAX_SPEED = 2;
 const DTYPE = 'q8'; // ~90 MB download on first use
 const CLAUSE_BREAK = /(?<=[,;:—–])\s+/;
 
-export const USAGE = 'usage: node scripts/voice.mjs "<text>" | --text-file <file> --out <file.wav> [--voice af_heart] [--speed 1] | --list-voices';
+export const USAGE = 'usage: node scripts/voice.mjs "<text>" | --text-file <file> --out <file.wav> [--voice af_heart] [--speed 1] [--phonemes] | --list-voices';
 export const INSTALL_HINT = `kokoro-js is not installed. Run: ${npmInstallKokoro()}`
   + ' (about 250 MB; the voice model, about 90 MB, downloads once on first use; '
   + `doctor: ${doctorCommand('--for', 'voiceover')}, id kokoro)`;
@@ -38,12 +38,13 @@ function readTextFile(file) {
 }
 
 export function parseVoiceArgs(argv) {
-  const opts = { text: null, out: null, voice: DEFAULT_VOICE, speed: 1, listVoices: false };
+  const opts = { text: null, out: null, voice: DEFAULT_VOICE, speed: 1, listVoices: false, phonemes: false };
   const texts = [];
   let textFile = null;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--list-voices') opts.listVoices = true;
+    else if (a === '--phonemes') opts.phonemes = true;
     else if (a === '--text-file') textFile = takeValue(argv, i++, a);
     else if (a === '--out' || a === '--voice' || a === '--speed') opts[a.slice(2)] = takeValue(argv, i++, a);
     else if (a.startsWith('--')) throw new UsageError(`unknown option ${a}`);
@@ -106,15 +107,16 @@ export async function loadModel(kokoro) {
   return kokoro.KokoroTTS.from_pretrained(MODEL_ID, { dtype: DTYPE, device: 'cpu' });
 }
 
-// kokoro's sentence splitter as a plain function (its stream form never closes for a string input).
-function kokoroSplitter(kokoro) {
-  return (text) => {
-    const stream = new kokoro.TextSplitterStream();
-    stream.push(text);
-    stream.close();
-    return stream; // its sync iterator flushes and yields every sentence
-  };
+// A closed kokoro TextSplitterStream holding `text`. tts.stream() waits forever on an open one.
+function closedSplitter(kokoro, text) {
+  const stream = new kokoro.TextSplitterStream();
+  stream.push(text);
+  stream.close();
+  return stream; // its sync iterator flushes and yields every sentence
 }
+
+// kokoro's sentence splitter as a plain function (its stream form never closes for a string input).
+const kokoroSplitter = (kokoro) => (text) => closedSplitter(kokoro, text);
 
 const roundMs = (seconds) => Math.round(seconds * 1000) / 1000;
 
@@ -129,6 +131,13 @@ export function sentenceTimes(chunks, sampleRate) {
   });
 }
 
+// One "<sentence>\t<phonemes>\n" line per sentence, for --phonemes. Whitespace inside a field is
+// collapsed to one space so a tab or newline in the narration never breaks the two columns.
+export function phonemeLines(sentences) {
+  const field = (s) => s.replace(/\s+/g, ' ');
+  return sentences.map((s) => `${field(s.text)}\t${field(s.phonemes)}\n`).join('');
+}
+
 // The sentence-timing sidecar sits beside the wav: voice/intro.wav -> voice/intro.json.
 export function sidecarPath(out) {
   return out.replace(/\.wav$/i, '.json');
@@ -136,19 +145,27 @@ export function sidecarPath(out) {
 
 // Writes a 24 kHz mono wav plus its sentence-timing sidecar, and returns the duration in
 // seconds and the timed sentences. Each chunk is generated on its own so nothing is
-// truncated, then the chunks are joined. `deps.RawAudio` lets tests skip the model stack.
+// truncated, then the chunks are joined. Each chunk goes through tts.stream() so kokoro also
+// reports the phonemes it spoke; a chunk it splits further joins into one audio and one phoneme
+// string. `deps.RawAudio` lets tests skip the model stack.
 export async function synthesize(tts, kokoro, { text, voice, speed, out }, deps = {}) {
   const RawAudio = deps.RawAudio ?? (await import('@huggingface/transformers')).RawAudio;
   const spoken = [];
   for (const chunk of chunkText(text, kokoroSplitter(kokoro))) {
-    spoken.push({ text: chunk, audio: (await tts.generate(chunk, { voice, speed })).audio });
+    const parts = [];
+    for await (const part of tts.stream(closedSplitter(kokoro, chunk), { voice, speed })) parts.push(part);
+    const audio = new Float32Array(parts.reduce((n, p) => n + p.audio.audio.length, 0));
+    let at = 0;
+    for (const p of parts) { audio.set(p.audio.audio, at); at += p.audio.audio.length; }
+    spoken.push({ text: chunk, audio, phonemes: parts.map((p) => p.phonemes).join(' ') });
   }
   const total = spoken.reduce((n, c) => n + c.audio.length, 0);
   const joined = new Float32Array(total);
   let offset = 0;
   for (const c of spoken) { joined.set(c.audio, offset); offset += c.audio.length; }
   await new RawAudio(joined, SAMPLE_RATE).save(out);
-  const sentences = sentenceTimes(spoken.map((c) => ({ text: c.text, samples: c.audio.length })), SAMPLE_RATE);
+  const times = sentenceTimes(spoken.map((c) => ({ text: c.text, samples: c.audio.length })), SAMPLE_RATE);
+  const sentences = times.map((t, i) => ({ ...t, phonemes: spoken[i].phonemes }));
   writeFileSync(sidecarPath(out), `${JSON.stringify({ sampleRate: SAMPLE_RATE, voice, sentences }, null, 2)}\n`);
   return { seconds: total / SAMPLE_RATE, sentences };
 }

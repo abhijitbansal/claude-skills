@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  parseVoiceArgs, chunkText, sentenceTimes, sidecarPath, synthesize, DEFAULT_VOICE, MODEL_CACHE_DIR, MAX_CHUNK_CHARS,
+  parseVoiceArgs, chunkText, sentenceTimes, sidecarPath, synthesize, phonemeLines, DEFAULT_VOICE, MODEL_CACHE_DIR, MAX_CHUNK_CHARS,
 } from '../scripts/lib/voice.mjs';
 import { writeFileSync } from 'node:fs';
 
@@ -16,8 +16,19 @@ const run = (args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'u
 
 test('parseVoiceArgs: text plus --out, defaults for voice and speed', () => {
   assert.deepEqual(parseVoiceArgs(['Hello there', '--out', 'v.wav']), {
-    text: 'Hello there', out: 'v.wav', voice: DEFAULT_VOICE, speed: 1, listVoices: false,
+    text: 'Hello there', out: 'v.wav', voice: DEFAULT_VOICE, speed: 1, listVoices: false, phonemes: false,
   });
+});
+
+test('parseVoiceArgs: --phonemes sets the flag', () => {
+  assert.equal(parseVoiceArgs(['Hi', '--out', 'v.wav', '--phonemes']).phonemes, true);
+});
+
+test('voice CLI: --phonemes with an unknown extra flag exits 2 and lists the accepted flags', () => {
+  const r = run(['Hi', '--out', 'v.wav', '--phonemes', '--bogus']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /unknown option --bogus/);
+  assert.match(r.stderr, /usage: .*\[--phonemes\]/);
 });
 
 test('parseVoiceArgs: --voice and --speed are honoured', () => {
@@ -96,25 +107,68 @@ class StubRawAudio {
   constructor(audio, rate) { this.audio = audio; this.rate = rate; }
   async save(file) { writeFileSync(file, `wav:${this.audio.length}@${this.rate}`); }
 }
-const stubTts = (samplesPerChunk) => ({
-  generate: async (chunk) => ({ audio: new Float32Array(samplesPerChunk[chunk]) }),
+// stream() takes the closed splitter and yields one { text, phonemes, audio } per sentence it finds,
+// as kokoro-js does. `spec[chunk]` is a list of [phonemes, samples] results for that chunk.
+const stubTts = (spec) => ({
+  stream: async function* (splitter) {
+    for (const chunk of splitter) {
+      for (const [phonemes, samples] of spec[chunk]) {
+        yield { text: chunk, phonemes, audio: { audio: new Float32Array(samples) } };
+      }
+    }
+  },
 });
 
 test('synthesize: returns seconds and sentences, writes the wav and the timing sidecar', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'voice-'));
   const out = path.join(dir, 'intro.wav');
-  const tts = stubTts({ 'Hello there.': 24000, 'Second one.': 12000 });
+  const tts = stubTts({ 'Hello there.': [['həlˈoʊ ðˈɛɹ.', 24000]], 'Second one.': [['sˈɛkənd wˈʌn.', 12000]] });
   const result = await synthesize(
     tts, { TextSplitterStream: StubSplitterStream },
     { text: 'Hello there. Second one.', voice: 'af_heart', speed: 1, out },
     { RawAudio: StubRawAudio },
   );
-  const sentences = [{ text: 'Hello there.', start: 0, end: 1 }, { text: 'Second one.', start: 1, end: 1.5 }];
+  const sentences = [
+    { text: 'Hello there.', start: 0, end: 1, phonemes: 'həlˈoʊ ðˈɛɹ.' },
+    { text: 'Second one.', start: 1, end: 1.5, phonemes: 'sˈɛkənd wˈʌn.' },
+  ];
   assert.deepEqual(result, { seconds: 1.5, sentences });
   assert.equal(readFileSync(out, 'utf8'), 'wav:36000@24000');
   assert.deepEqual(JSON.parse(readFileSync(path.join(dir, 'intro.json'), 'utf8')), {
     sampleRate: 24000, voice: 'af_heart', sentences,
   });
+});
+
+test('synthesize: sidecar sentences carry phonemes', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'voice-'));
+  const out = path.join(dir, 'p.wav');
+  await synthesize(
+    stubTts({ 'Send your résumé.': [['sˈɛnd jʊɹ ɹˈɛzuːmˌeɪ.', 100]] }), { TextSplitterStream: StubSplitterStream },
+    { text: 'Send your résumé.', voice: 'af_heart', speed: 1, out }, { RawAudio: StubRawAudio },
+  );
+  const [first] = JSON.parse(readFileSync(path.join(dir, 'p.json'), 'utf8')).sentences;
+  assert.equal(first.phonemes, 'sˈɛnd jʊɹ ɹˈɛzuːmˌeɪ.');
+});
+
+test('synthesize: a chunk yielding two results joins audio and phonemes', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'voice-'));
+  const out = path.join(dir, 'two.wav');
+  const result = await synthesize(
+    stubTts({ 'One part. Two part.': [['wˈʌn pˈɑɹt.', 24000], ['tˈuː pˈɑɹt.', 12000]] }), { TextSplitterStream: class extends StubSplitterStream {
+      [Symbol.iterator]() { return [this.text][Symbol.iterator](); }
+    } },
+    { text: 'One part. Two part.', voice: 'af_heart', speed: 1, out }, { RawAudio: StubRawAudio },
+  );
+  assert.equal(readFileSync(out, 'utf8'), 'wav:36000@24000');
+  assert.deepEqual(result.sentences, [{ text: 'One part. Two part.', start: 0, end: 1.5, phonemes: 'wˈʌn pˈɑɹt. tˈuː pˈɑɹt.' }]);
+});
+
+test('phonemeLines: one tab-separated line per sentence, whitespace inside a field collapsed', () => {
+  assert.equal(
+    phonemeLines([{ text: 'Hello\tthere.', phonemes: 'həlˈoʊ\nðˈɛɹ.' }, { text: 'Bye.', phonemes: 'bˈaɪ.' }]),
+    'Hello there.\thəlˈoʊ ðˈɛɹ.\nBye.\tbˈaɪ.\n',
+  );
+  assert.equal(phonemeLines([]), '');
 });
 
 test('voice CLI: usage error exits 2 with the usage line', () => {
@@ -135,6 +189,31 @@ test('voice CLI: synthesises a short phrase to a 24 kHz wav (needs cached model 
   assert.equal(buf.subarray(0, 4).toString(), 'RIFF');
   assert.equal(buf.readUInt32LE(24), 24000, 'sample rate');
   assert.ok(buf.length > 24000, 'more than half a second of audio');
+});
+
+test('voice CLI: --phonemes prints one tab-separated line per sentence after the three contract lines (needs cached model + VOICE_TEST=1)', { skip: !haveModel() && 'model not cached or VOICE_TEST unset' }, () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'voice-'));
+  const out = path.join(dir, 'p.wav');
+  const r = run(['Send your résumé. I will resume later.', '--out', out, '--phonemes']);
+  assert.equal(r.status, 0, r.stderr);
+  const lines = r.stdout.trimEnd().split('\n');
+  assert.equal(lines.length, 5);
+  assert.equal(lines[0], out);
+  assert.match(lines[1], /^[\d.]+ s, af_heart$/);
+  assert.equal(lines[2], path.join(dir, 'p.json'));
+  assert.deepEqual(lines.slice(3).map((l) => l.split('\t')[0]), ['Send your résumé.', 'I will resume later.']);
+  const quiet = run(['Hi there.', '--out', path.join(dir, 'q.wav')]);
+  assert.equal(quiet.stdout.trimEnd().split('\n').length, 3, 'no phoneme lines without the flag');
+});
+
+test('the résumé spelling reads ɹˈɛzuːmˌeɪ (needs cached model + VOICE_TEST=1)', { skip: !haveModel() && 'model not cached or VOICE_TEST unset' }, () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'voice-'));
+  const out = path.join(dir, 'r.wav');
+  const r = run(['Send your résumé. I will resume later.', '--out', out]);
+  assert.equal(r.status, 0, r.stderr);
+  const [sendIt, resumeIt] = JSON.parse(readFileSync(path.join(dir, 'r.json'), 'utf8')).sentences;
+  assert.ok(sendIt.phonemes.includes('ɹˈɛzuːmˌeɪ'), sendIt.phonemes);
+  assert.ok(!resumeIt.phonemes.includes('ɹˈɛzuːmˌeɪ'), `resume must read differently: ${resumeIt.phonemes}`);
 });
 
 test('voice CLI: an unknown or prototype voice name exits 2 cleanly after the model loads (needs cached model + VOICE_TEST=1)', { skip: !haveModel() && 'model not cached or VOICE_TEST unset' }, () => {
