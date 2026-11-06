@@ -11,6 +11,8 @@ import { isSketchScene, specHasSketch, SCRIBBLE_FILL, HAND_SCALE_RANGE, PACE_RAN
 import caveat from '../../template/sketch/caveat-metrics.mjs';
 import lucide from '../../template/sketch/lucide.mjs';
 import { planScene } from '../../template/sketch/plan.mjs';
+import { planContext } from '../../template/sketch/plan-context.mjs';
+import { ERASE, normalizeTransition } from '../../template/transitions.mjs';
 import { isPoint } from '../../template/sketch/geometry.mjs';
 import { ICON_NAMES, suggestIcon } from './icon-names.mjs';
 
@@ -138,15 +140,14 @@ function durationPath(written, si, stroke) {
 
 /**
  * Pushes the plan's problems, and an error for each sketch scene shorter than its drawing needs at the natural pace: the
- * stroke plan's `needs`, in seconds, rounded up to a tenth. A scene with narration is exempt: its drawing follows the voice,
+ * stroke plan's `needs` (the transition into the scene included: nothing is drawn before it ends), in seconds, rounded up to a tenth. A scene with narration is exempt: its drawing follows the voice,
  * so one that does not fit is check.mjs's finding. `written`: the spec as written; `expanded`: the same after expandSpec (blocks are groups).
  */
 export function checkSketchDuration(written, expanded, errors) {
   const size = canvasSize(expanded);
-  const { seed, pace } = expanded.sketch ?? {};
   expanded.scenes.forEach((scene, si) => {
     if (!isSketchScene(expanded, scene)) return;
-    const plan = planScene(scene, { size, seed, pace, icons: lucide, sceneIndex: si, startAfter: 0 });
+    const plan = planScene(scene, planContext(expanded, scene, si, { size, icons: lucide })); // drawing starts after the transition into the scene
     errors.push(...plan.problems); // what the plan could not draw, such as a word wider than its text's maxWidth
     if (scene.narration || scene.duration + SECONDS_EPSILON >= plan.needs) return; // a voiced scene that cannot fit is check.mjs's finding (plan.overruns, unfinishedWriting)
     const needed = Math.ceil((plan.needs - SECONDS_EPSILON) * 10) / 10;
@@ -166,6 +167,21 @@ function checkViralSide(written, errors) {
   });
 }
 
+// `erase` clears one hand-drawn board for the next, so both scenes must be hand-drawn. A scene that takes it from the root
+// `transition` is reported at the root (once per scene, each message naming the scenes); the first scene has nothing to come in
+// over, which checkTransition (spec.mjs) says.
+function checkErase(written, errors) {
+  written.scenes.forEach((scene, si) => {
+    if (si === 0) return;
+    const own = scene.transition !== undefined;
+    if (normalizeTransition(own ? scene.transition : written.transition).type !== ERASE) return;
+    const standard = [written.scenes[si - 1], scene].filter((s) => !isSketchScene(written, s)).map((s) => `"${s.id}"`);
+    if (!standard.length) return;
+    const where = own ? '' : ' (the root transition)';
+    errors.push({ path: own ? `scenes[${si}].transition` : 'transition', message: `erase${where} clears a hand-drawn board for the next one, and ${standard.join(' and ')} ${standard.length > 1 ? 'are' : 'is'} not hand-drawn; use push or crossfade there, or ${SET_SKETCH}` });
+  });
+}
+
 // The schema types these; the ranges are checked here so that the message names both ends.
 function checkRanges(written, errors) {
   const range = (value, [low, high], at) => {
@@ -182,6 +198,7 @@ function checkRanges(written, errors) {
 export function checkSketch(written, errors, { sketchBlocks = SKETCH_BLOCK_NAMES } = {}) {
   checkViralSide(written, errors);
   checkRanges(written, errors);
+  checkErase(written, errors);
   written.scenes.forEach((scene, si) => {
     const base = `scenes[${si}]`;
     const sketch = isSketchScene(written, scene);

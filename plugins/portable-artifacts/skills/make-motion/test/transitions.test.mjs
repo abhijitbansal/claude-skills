@@ -7,9 +7,18 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { TRANSITIONS, normalizeTransition, layerStyles, layerUnder, directionsOf } from '../template/transitions.mjs';
+import { TRANSITIONS, SKETCH_TRANSITIONS, normalizeTransition, layerStyles, layerUnder, directionsOf, comesInOver, windowSeconds } from '../template/transitions.mjs';
+import { GL_TRANSITIONS } from '../template/gl-transitions.mjs';
 import { buildTimeline, seekTo } from '../template/timeline.mjs';
 import { validateSpec, withDefaults, loadSpec } from '../scripts/lib/spec.mjs';
+import { expandSpec } from '../template/defaults.mjs';
+import { planScene } from '../template/sketch/plan.mjs';
+import { planContext } from '../template/sketch/plan-context.mjs';
+import { handPose } from '../template/sketch/hand.mjs';
+import { HAND_LEAD, HAND_EXIT, handHome } from '../template/sketch/timing.mjs';
+import lucide from '../template/sketch/lucide.mjs';
+import { checkSketchDuration } from '../scripts/lib/sketch-check.mjs';
+import { sketchPlans } from '../scripts/check.mjs';
 import { changeGaps } from '../template/viral.mjs';
 import { probed, framed, meanLuma } from './render-probe.mjs';
 import { requireRender, assertRendersIdentically, renderHash, BROWSER_ONLY } from './helpers/render.mjs';
@@ -565,4 +574,243 @@ test('check: a text whose every shown moment is inside its scene\'s window gets 
   assert.equal(json.info.filter((i) => i.message.includes('not judged for contrast')).length, 1);
   assert.equal(json.info.find((i) => i.message.includes('not judged for contrast')).path, 'scenes[1].elements[0]');
   assert.doesNotMatch(check(pair(4)).stderr, /not judged for contrast/, 'a later moment is judged');
+});
+
+// ---- erase, and what every transition does to a hand-drawn scene (Task 13) -----------------------------------------------
+
+const BOARD_SIZE = [960, 540];
+const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} != ${b}`);
+const box = (id, extra = {}) => ({ id, type: 'shape', shape: 'rect', x: 480, y: 270, width: 200, height: 120, ...extra });
+const board = (id, extra = {}) => ({ id, duration: 4, style: 'sketch', elements: [box(`${id}-box`)], ...extra });
+const plain = (id, extra = {}) => ({ id, duration: 4, elements: [label(`${id}-text`, { x: 480, y: 270 })], ...extra });
+const film = (list, extra = {}) => ({ size: BOARD_SIZE, scenes: list, ...extra });
+const planFor = (spec, si) => {
+  const ready = withDefaults(spec);
+  return planScene(ready.scenes[si], planContext(ready, ready.scenes[si], si, { size: ready.size, icons: lucide }));
+};
+
+test('erase is not one of the nine frozen names; it is a transition of its own with a 0.8 s default, no direction, and it comes in over the previous scene', () => {
+  assert.ok(!TRANSITIONS.includes('erase'));
+  assert.deepEqual([...SKETCH_TRANSITIONS], ['erase']);
+  assert.deepEqual(normalizeTransition('erase'), { type: 'erase', direction: null, duration: 0.8 });
+  assert.deepEqual(normalizeTransition({ type: 'erase', duration: 1.5 }), { type: 'erase', direction: null, duration: 1.5 });
+  assert.deepEqual(normalizeTransition({ type: 'erase', duration: 9 }), { type: 'erase', direction: null, duration: 2 });
+  assert.equal(normalizeTransition('wipe').duration, 0.4, 'the other defaults are as they were');
+  assert.equal(comesInOver('erase'), true);
+  assert.equal(directionsOf('erase'), null);
+  assert.equal(windowSeconds({ transition: 'erase', duration: 3 }, 1), 0.8);
+  assert.equal(windowSeconds({ transition: 'erase', duration: 0.5 }, 1), 0.5, 'cut short to the scene');
+  assert.equal(windowSeconds({ transition: 'erase', duration: 3 }, 0), 0, 'a cut on the first scene');
+});
+
+test('erase wipes the next board in from the left edge: the clip of a left wipe, the outgoing board untouched', () => {
+  for (const p of [0, 0.25, 0.5, 1]) assert.deepEqual(styles('erase', p), styles({ type: 'wipe', direction: 'left' }, p), `at ${p}`);
+  assert.deepEqual(styles('erase', 0.5), { incoming: { ...none, clipPath: 'inset(0% 50% 0% 0%)' }, outgoing: none });
+  assert.equal(layerUnder('erase'), null);
+});
+
+test('the timeline gives erase a window of 0.8 s with the eased progress of a moving transition', () => {
+  const built = buildTimeline(film([board('a'), board('b', { transition: 'erase' })]));
+  assert.deepEqual(built.overlaps, [{ from: 0, to: 1, start: 4, end: 4.8, type: 'erase' }]);
+  assert.deepEqual(built.crossfades, []);
+});
+
+test('erase between two sketch scenes is valid; into or out of a standard scene, or on the first scene, is an error', () => {
+  const found = (list, extra) => errs(film(list, extra));
+  assert.deepEqual(found([board('a'), board('b', { transition: 'erase' })]), []);
+  assert.deepEqual(found([board('a'), board('b', { transition: { type: 'erase', duration: 1.2 } })]), []);
+  const into = found([board('a'), plain('b', { transition: 'erase' })]);
+  assert.equal(into.length, 1, into.join('\n'));
+  assert.match(into[0], /^scenes\[1\]\.transition: erase clears a hand-drawn board for the next one, and "b" is not hand-drawn; use push or crossfade there, or set "style": "sketch" on the scene, or at the root$/);
+  const out = found([plain('a'), board('b', { transition: 'erase' })]);
+  assert.equal(out.length, 1, out.join('\n'));
+  assert.match(out[0], /^scenes\[1\]\.transition: erase clears a hand-drawn board for the next one, and "a" is not hand-drawn; /);
+  const neither = found([plain('a'), plain('b', { transition: 'erase' })]);
+  assert.match(neither[0], /and "a" and "b" are not hand-drawn/);
+  const first = found([board('a', { transition: 'erase' }), board('b')]);
+  assert.deepEqual(first, ['scenes[0].transition: erase needs a previous scene to come in over; use "fade" or "none" on the first scene']);
+  assert.equal(found([board('a'), board('b', { transition: { type: 'erase', direction: 'left' } })]).join(), 'scenes[1].transition.direction: erase takes no direction; remove it');
+});
+
+test('a root erase applies to the scenes that set no transition: fine in an all-sketch film, reported at the root where a standard scene is on either side', () => {
+  assert.deepEqual(errs(film([board('a'), board('b'), board('c')], { transition: 'erase' })), []);
+  const mixed = errs(film([board('a'), plain('b'), board('c')], { transition: 'erase' }));
+  assert.equal(mixed.length, 2, mixed.join('\n'));
+  assert.match(mixed[0], /^transition: erase \(the root transition\) clears a hand-drawn board for the next one, and "b" is not hand-drawn;/);
+  assert.match(mixed[1], /^transition: erase \(the root transition\) clears .* and "b" is not hand-drawn;/);
+  assert.deepEqual(errs(film([board('a'), plain('b', { transition: 'push' }), board('c', { transition: 'push' })], { transition: 'erase' })), [], 'a scene with its own transition is not an erase');
+});
+
+test('drawing starts after the erase window: startAfter equals the window, and needs includes it', () => {
+  const spec = film([board('a'), board('b', { transition: 'erase' })]);
+  const ready = withDefaults(spec);
+  const context = planContext(ready, ready.scenes[1], 1, { size: BOARD_SIZE, icons: lucide });
+  assert.equal(context.startAfter, 0.8);
+  assert.equal(context.erase, true);
+  const swept = planFor(spec, 1);
+  const cut = planFor(film([board('a'), board('b')]), 1);
+  assert.equal(swept.sweep, 0.8);
+  assert.equal(cut.sweep, 0);
+  assert.ok(swept.strokes[0].t0 >= 0.8 + HAND_LEAD - 1e-9, `first stroke at ${swept.strokes[0].t0}`);
+  near(swept.needs - cut.needs, 0.8);
+  near(swept.needs, swept.drawEnd + HAND_EXIT);
+  const empty = planFor(film([board('a'), { id: 'b', duration: 4, style: 'sketch', transition: 'erase', elements: [] }]), 1);
+  assert.equal(empty.needs, 0.8, 'with nothing to draw the scene needs the sweep alone');
+});
+
+test('a scene shorter than the sweep and the drawing is a validation error with the seconds, and exactly that length passes', () => {
+  const need = planFor(film([board('a'), board('b', { transition: 'erase' })]), 1).needs;
+  const asked = Math.ceil(need * 10) / 10;
+  const run = (duration) => errs(film([board('a'), board('b', { duration, transition: 'erase' })]));
+  assert.deepEqual(run(asked), []);
+  assert.deepEqual(run(asked - 0.3), [`scenes[1]: this drawing needs a scene of at least ${asked}s`]);
+  const without = Math.ceil(planFor(film([board('a'), board('b')]), 1).needs * 10) / 10;
+  assert.equal(errs(film([board('a'), board('b', { duration: without })])).length, 0, 'guardrail: the same length with no sweep is enough, so the error above is the sweep');
+  assert.ok(asked - without >= 0.7, `the sweep is part of the length (${asked} against ${without})`);
+});
+
+// Every transition into a hand-drawn scene reserves its whole window before anything is drawn (a stroke drawn while the
+// picture is still coming in would be hidden). planContext is the one place that says so; the page, the length check and
+// check.mjs all plan a scene through it.
+test('startAfter is the window of whatever transition comes into the scene: all of them, capped to the scene, read from the root default too', () => {
+  const into = (transition, duration = 4) => {
+    const ready = withDefaults(film([board('a'), board('b', { duration, transition })]));
+    return planContext(ready, ready.scenes[1], 1, { size: BOARD_SIZE, icons: lucide }).startAfter;
+  };
+  for (const type of [...TRANSITIONS, ...SKETCH_TRANSITIONS, ...GL_TRANSITIONS]) {
+    near(into(type), type === 'none' ? 0 : normalizeTransition(type).duration, 1e-12);
+  }
+  near(into({ type: 'push', duration: 1.3 }), 1.3);
+  near(into('push', 0.3), 0.3);
+  const rooted = withDefaults(film([board('a'), board('b'), board('c', { transition: 'none' })], { transition: 'zoom' }));
+  assert.deepEqual(rooted.scenes.map((s, si) => planContext(rooted, s, si, { size: BOARD_SIZE, icons: lucide }).startAfter), [0, 0.4, 0]);
+  const unresolved = expandSpec(film([board('a'), board('b')], { transition: { type: 'push', duration: 0.7 } }));
+  assert.equal(planContext(unresolved, unresolved.scenes[1], 1, { size: BOARD_SIZE, icons: lucide }).startAfter, 0.7, 'a spec that has not been through withDefaults reads the same');
+  assert.equal(planContext(unresolved, unresolved.scenes[0], 0, { size: BOARD_SIZE, icons: lucide }).startAfter, 0, 'the first scene cuts');
+  const faded = withDefaults(film([board('a', { transition: 'fade' })]));
+  near(planContext(faded, faded.scenes[0], 0, { size: BOARD_SIZE, icons: lucide }).startAfter, 0.4, 1e-12);
+});
+
+test('the hand follows the sweep during the window and is off canvas afterwards until it enters to draw', () => {
+  const spec = film([board('a'), board('b', { transition: 'erase' })]);
+  const plan = planFor(spec, 1);
+  const [width, height] = BOARD_SIZE;
+  const home = handHome(plan.size, plan.unit);
+  const start = handPose(plan, 0);
+  assert.deepEqual([start.x, start.y, start.visible, start.lift], [0, height / 2, true, 0], 'it starts at the left edge');
+  const { timeline, states } = buildTimeline(spec);
+  for (const sec of [0.1, 0.25, 0.4, 0.55, 0.7, 0.79]) {
+    seekTo(timeline, 4 + sec);
+    const progress = states.get('scene:b').p; // the edge of the wipe
+    const pose = handPose(plan, sec);
+    assert.equal(pose.visible, true, `at ${sec}`);
+    near(pose.x / width, progress, 1e-3);
+    assert.equal(pose.y, height / 2);
+  }
+  assert.ok(handPose(plan, 0.79).x > 0.99 * width, 'it ends at the right edge, its body already off canvas');
+  const enter = plan.moves[0];
+  assert.equal(enter.kind, 'enter');
+  assert.ok(enter.t0 >= 0.8 + HAND_LEAD - 1e-9);
+  for (const sec of [0.8, 0.81, 1, (0.8 + enter.t0) / 2, enter.t0 - 1e-6]) {
+    assert.deepEqual(handPose(plan, sec), { x: home[0], y: home[1], lift: 0, visible: false }, `at ${sec}: home, off canvas`);
+  }
+  assert.equal(handPose(plan, enter.t1).visible, true, 'it comes in to draw');
+});
+
+test('push into a sketch scene shows no hand during the window; the incoming hand comes in after it', () => {
+  for (const transition of ['push', { type: 'slide', direction: 'up', duration: 1 }, 'fade', 'zoom', 'crossfade']) {
+    const plan = planFor(film([board('a'), board('b', { transition })]), 1);
+    const held = normalizeTransition(transition).duration;
+    assert.equal(plan.sweep, 0, JSON.stringify(transition));
+    for (let sec = 0; sec < held; sec += 0.05) assert.equal(handPose(plan, sec).visible, false, `${JSON.stringify(transition)} at ${sec}`);
+    assert.ok(plan.moves[0].t0 >= held + HAND_LEAD - 1e-9,`${JSON.stringify(transition)}: the hand enters after the window and the lead`);
+    assert.equal(handPose(plan, plan.moves[0].t1).visible, true);
+  }
+});
+
+test('the page, the length check and check.mjs plan a scene the same way: one startAfter for each transition, root default included', async () => {
+  const spec = film([board('a'), board('b'), board('c', { transition: 'erase' }), board('d', { transition: { type: 'iris', duration: 1 } }), board('e', { transition: 'none' })], { transition: 'push' });
+  const ready = withDefaults(spec);
+  const wanted = [[0, false], [0.4, false], [0.8, true], [1, false], [0, false]]; // the root push reaches b; c and d name theirs; e cuts
+  const fromCheck = await sketchPlans(ready);
+  wanted.forEach(([startAfter, erase], si) => {
+    const explicit = planScene(ready.scenes[si], { size: ready.size, icons: lucide, sceneIndex: si, startAfter, erase });
+    assert.deepEqual(fromCheck[si], explicit, `check.mjs, scene ${si}`);
+  });
+  // The length check reads the spec as expandSpec leaves it (the root transition not yet copied into the scenes).
+  const needs = (si) => Math.ceil((fromCheck[si].needs - 1e-6) * 10) / 10;
+  const tight = (si) => film(spec.scenes.map((s, i) => (i === si ? { ...s, duration: needs(si) - 0.2 } : s)), { transition: 'push' });
+  for (const si of [1, 2, 3]) {
+    const errors = [];
+    checkSketchDuration(tight(si), expandSpec(tight(si)), errors);
+    assert.deepEqual(errors.map((e) => `${e.path}: ${e.message}`), [`scenes[${si}]: this drawing needs a scene of at least ${needs(si)}s`], `scene ${si}`);
+  }
+  const bare = [];
+  checkSketchDuration(spec, expandSpec(spec), bare);
+  assert.deepEqual(bare, [], 'guardrail: the untouched film is fine, so the errors above come from the shortened scene');
+});
+
+test('a voiced scene behind a transition: check.mjs\'s plan reports the overrun the cut would not have, and none once the sentence is long enough', async () => {
+  const unvoiced = planFor(film([board('a'), board('b')]), 1);
+  const { t0, t1 } = unvoiced.strokes[0];
+  const voiced = (transition, end) => withDefaults(film([board('a'), board('b', { transition, narration: [{ start: 0, end }] })]));
+  const snug = t0 + 0.7 * (t1 - t0);
+  assert.equal((await sketchPlans(voiced('none', snug)))[1].overruns.length, 0, 'guardrail: the cut fits the sentence');
+  const held = (await sketchPlans(voiced('erase', snug)))[1];
+  assert.equal(held.overruns.length, 1);
+  assert.equal(held.overruns[0].path, 'scenes[1].elements[0]');
+  assert.ok(held.strokes[0].t0 >= 0.8 + HAND_LEAD - 1e-9);
+  assert.equal((await sketchPlans(voiced('erase', 6)))[1].overruns.length, 0, 'a longer sentence fits behind the sweep');
+});
+
+test('the page poses the hand from the same plan: hidden through a push window, riding the sweep of an erase, drawing after', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  const spec = film([board('a', { duration: 3 }), board('b', { duration: 3, transition: 'push' }), board('c', { duration: 3, transition: 'erase' })]);
+  const plans = await sketchPlans(withDefaults(spec));
+  const probes = [[1, 0.2], [1, 0.39], [1, 1.2], [2, 0.1], [2, 0.5], [2, 0.79], [2, 0.85], [2, 1.5]]; // [scene, seconds into it]
+  const looks = await probed(spec, `(async (probes) => {
+    const out = [];
+    for (const [si, sec] of probes) {
+      await window.__motion.seek(window.__motion.sceneStarts[si] + sec);
+      const hand = document.getElementById('sketch-hand');
+      out.push([getComputedStyle(hand).display !== 'none', hand.firstElementChild.getAttribute('transform')]);
+    }
+    return out;
+  })(${JSON.stringify(probes)})`);
+  probes.forEach(([si, sec], n) => {
+    const pose = handPose(plans[si], sec);
+    const [shown, transform] = looks[n];
+    assert.equal(shown, pose.visible, `scene ${si} at ${sec}: shown`);
+    if (!pose.visible) return;
+    const [x, y] = /translate\(([-\d.]+) ([-\d.]+)\)/.exec(transform).slice(1).map(Number);
+    const wantY = pose.y - pose.lift * 16 * plans[si].unit;
+    assert.ok(Math.abs(x - pose.x) <= 0.01 && Math.abs(y - wantY) <= 0.01, `scene ${si} at ${sec}: page ${x},${y}, plan ${pose.x},${wantY}`);
+  });
+  assert.equal(looks.slice(0, 2).every(([shown]) => !shown), true);
+  assert.equal(looks[3][0] && looks[4][0] && looks[5][0], true, 'the sweep shows the hand');
+});
+
+// A small canvas for the renders (the ones above use 960x540 so that the numbers are round).
+const tinyBoard = (id, extra = {}) => ({ id, duration: 3.5, style: 'sketch', elements: [box(`${id}-box`, { x: 160, y: 90, width: 80, height: 50 })], ...extra });
+const tinyPlain = (id, extra = {}) => ({ id, duration: 1.5, elements: [label(`${id}-text`, { x: 160, y: 90, fontSize: 28 })], ...extra });
+const tiny = (list) => ({ size: [320, 180], fps: 30, scenes: list });
+const writeTiny = (spec) => {
+  const file = path.join(mkdtempSync(path.join(tmpdir(), 'tr-sketch-')), 'm.json');
+  writeFileSync(file, JSON.stringify(spec));
+  return file;
+};
+
+test('every other existing transition works between a standard scene and a sketch scene, both ways, and the film renders the same bytes twice', async (t) => {
+  const spec = tiny([tinyPlain('a'), tinyBoard('b', { transition: 'fade' }), tinyPlain('c', { transition: 'push' }),
+    tinyBoard('d', { transition: 'crossfade' }), tinyPlain('e', { transition: { type: 'wipe', direction: 'up' } })]);
+  assert.deepEqual(errs(spec), []);
+  if (!(await requireRender(t))) return;
+  await assertRendersIdentically(t, writeTiny(spec), ['--fps', '10', '--size', '320x180']);
+});
+
+test('erase renders byte-identical twice', async (t) => {
+  const spec = tiny([tinyBoard('a'), tinyBoard('b', { transition: 'erase' })]);
+  assert.deepEqual(errs(spec), []);
+  if (!(await requireRender(t))) return;
+  await assertRendersIdentically(t, writeTiny(spec), ['--fps', '10', '--size', '320x180']);
 });

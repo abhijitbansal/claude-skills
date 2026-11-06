@@ -357,12 +357,11 @@ function buildElement(el, look, frames) {
 // The hand-drawn style's modules and icons, or null for a spec with no sketch scene, which never fetches them.
 async function loadSketch(spec) {
   if (!specHasSketch(spec)) return null;
-  const [{ planScene }, { unit }, view, hand, { default: icons }] = await Promise.all([
-    import('./sketch/plan.mjs'), import('./sketch/geometry.mjs'), import('./sketch/view.mjs'), import('./sketch/hand.mjs'), import('./sketch/lucide.mjs'),
+  const [{ planScene }, { planContext }, { unit }, view, hand, { default: icons }] = await Promise.all([
+    import('./sketch/plan.mjs'), import('./sketch/plan-context.mjs'), import('./sketch/geometry.mjs'), import('./sketch/view.mjs'), import('./sketch/hand.mjs'), import('./sketch/lucide.mjs'),
   ]);
-  const { seed, pace } = spec.sketch ?? {};
   const planOf = (scene, sceneIndex) => {
-    const plan = planScene(scene, { size: spec.size, seed, pace, icons, sceneIndex });
+    const plan = planScene(scene, planContext(spec, scene, sceneIndex, { size: spec.size, icons }));
     if (plan.problems.length) throw new Error(`${plan.problems[0].path}: ${plan.problems[0].message}`); // validation refuses these first
     return plan;
   };

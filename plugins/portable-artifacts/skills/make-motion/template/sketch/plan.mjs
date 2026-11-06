@@ -271,17 +271,20 @@ function overrunsOf(tooShort, tops) {
 /**
  * The stroke plan of `scene` (an expanded scene: blocks are groups). `ctx`: { size: [w, h], seed (the film's sketch.seed),
  * pace (sketch.pace), icons ({ name: polylines in a 24-unit box }), sceneIndex (paths read scenes[i].elements[k]),
- * startAfter (seconds a transition reserves before anything is drawn) }. A scene with `narration` ([{ start, end }] in scene
- * seconds, set from the voice sidecar by scripts/lib/sketch-voice.mjs) draws each top-level element during its sentences.
+ * startAfter (seconds a transition reserves before anything is drawn), erase (that transition is the erase sweep) }; planContext
+ * (plan-context.mjs) makes it from a spec. A scene with `narration` ([{ start, end }] in scene
+ * seconds, set from the voice sidecar by scripts/lib/sketch-voice.mjs) draws each top-level element during its sentences, none
+ * of them before startAfter plus the hand's lead.
  * -> { size, unit, strokes, elements: Map<path, { box (top left, canvas px), t0, t1, glyphs?, fontSize? }>, drawEnd, moves,
- * needs, problems, overruns }. `unit` is the canvas's px per px at 1080. `moves` is the hand's journey (timing.mjs schedule).
+ * needs, problems, overruns, sweep }. `unit` is the canvas's px per px at 1080. `moves` is the hand's journey (timing.mjs schedule).
+ * `sweep` is the seconds the hand sweeps across the board at the start of the scene (an erase), else 0.
  * `needs` is the scene length the drawing takes, the hand's way out included (startAfter alone when there is nothing to
  * draw). `overruns` are the elements whose sentences are too short for them at twice pace ([{ path, message }]; none
  * without narration).
  */
 export function planScene(scene, ctx) {
   if (!Array.isArray(ctx?.size)) throw new TypeError('planScene needs ctx.size, [width, height]');
-  const { size, seed = DEFAULT_SEED, pace = 1, icons, sceneIndex, startAfter = 0 } = ctx;
+  const { size, seed = DEFAULT_SEED, pace = 1, icons, sceneIndex, startAfter = 0, erase = false } = ctx;
   const voiced = Array.isArray(scene.narration) && scene.narration.length > 0;
   const run = { size, seed, icons, pace, voiced, u: unit(size), problems: [] };
   const prefix = Number.isInteger(sceneIndex) ? `scenes[${sceneIndex}].` : '';
@@ -301,7 +304,7 @@ export function planScene(scene, ctx) {
   const elements = new Map();
   const state = { last: startAfter };
   tops.forEach(({ node }) => finish(node, state, strokes, elements));
-  return { size, unit: run.u, strokes, elements, drawEnd, moves, needs: strokes.length ? drawEnd + HAND_EXIT : startAfter, problems: run.problems, overruns: overrunsOf(tooShort, tops) };
+  return { size, unit: run.u, strokes, elements, drawEnd, moves, needs: strokes.length ? drawEnd + HAND_EXIT : startAfter, problems: run.problems, overruns: overrunsOf(tooShort, tops), sweep: erase ? startAfter : 0 };
 }
 
 // The times of one item's strokes handed back to the leaves it was made of, in order.

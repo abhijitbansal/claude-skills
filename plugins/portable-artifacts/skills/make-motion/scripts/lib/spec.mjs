@@ -30,7 +30,7 @@ import { gridOf, frameCutoff } from '../../template/frames.mjs';
 import { CAMERA_PROPS, CAMERA_REST, MIN_ZOOM, MAX_ZOOM, MAX_SHAKE_AMOUNT, MAX_SHAKE_HZ, MAX_SHAKE_SEED } from '../../template/camera.mjs';
 import { GRADE_ELEMENT_TYPES, GRADE_PRESETS, EXPOSURE_RANGE, CONTRAST_RANGE, SATURATION_RANGE, isIdleGrade } from '../../template/grade.mjs';
 import { GL_TRANSITIONS } from '../../template/gl-transitions.mjs';
-import { TRANSITIONS, MIN_TRANSITION_SECONDS, MAX_TRANSITION_SECONDS, directionsOf, comesInOver, normalizeTransition } from '../../template/transitions.mjs';
+import { TRANSITIONS, SKETCH_TRANSITIONS, MIN_TRANSITION_SECONDS, MAX_TRANSITION_SECONDS, directionsOf, comesInOver, normalizeTransition } from '../../template/transitions.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
@@ -184,12 +184,12 @@ const transitionObject = {
   additionalProperties: false,
   required: ['type'],
   properties: {
-    type: { enum: [...TRANSITIONS, ...GL_TRANSITIONS] },
+    type: { enum: [...TRANSITIONS, ...GL_TRANSITIONS, ...SKETCH_TRANSITIONS] },
     direction: { type: 'string' },
     duration: { type: 'number', minimum: MIN_TRANSITION_SECONDS, maximum: MAX_TRANSITION_SECONDS },
   },
 };
-const transition = { if: { type: 'object' }, then: transitionObject, else: { enum: [...TRANSITIONS, ...GL_TRANSITIONS] } };
+const transition = { if: { type: 'object' }, then: transitionObject, else: { enum: [...TRANSITIONS, ...GL_TRANSITIONS, ...SKETCH_TRANSITIONS] } };
 // A scene camera: keyframes of zoom (0.5 to 3), pan x and y (px) and roll (deg), and a seeded shake. The order of the
 // keyframes and their times against the scene are checked by checkCamera.
 const cameraKeyframe = {

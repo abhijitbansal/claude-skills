@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { withDefaults } from '../template/defaults.mjs';
 import { planScene, pointAt } from '../template/sketch/plan.mjs';
+import { planContext } from '../template/sketch/plan-context.mjs';
 import { handPose, HAND_TONE_FILLS } from '../template/sketch/hand.mjs';
 import { handHome, HAND_EXIT } from '../template/sketch/timing.mjs';
 import { HAND_TONES, PALETTE } from '../template/sketch/style.mjs';
@@ -45,7 +46,7 @@ const ICON = { id: 'cog', type: 'icon', name: 'server', x: 760, y: 380, size: 90
 
 function planOf(motion, si = 0) {
   const spec = withDefaults(motion);
-  return planScene(spec.scenes[si], { size: spec.size, seed: spec.sketch?.seed, pace: spec.sketch?.pace, icons: lucide, sceneIndex: si });
+  return planScene(spec.scenes[si], planContext(spec, spec.scenes[si], si, { size: spec.size, icons: lucide })); // as the page plans it: drawing waits for the transition
 }
 
 // Opens `motion` on the page (the render page unless `mode` says otherwise) at its own size and runs `fn` with
@@ -405,8 +406,10 @@ test('a push carries one finished board out and the next in, with no hand left b
     };
     assert.equal(await handShown(2.99), false, 'the first scene\'s hand has left before the push starts');
     assert.equal(await handShown(sec), false, 'the next scene\'s hand has not come in yet');
-    // In the window (0.5 s) and after it, the one hand there is follows the incoming plan, so none stays where the old scene left it.
-    for (const at of [0.4, 0.49, 0.7]) {
+    // The window lasts 0.4 s and the hand shows none inside it (the drawing waits for the push); once it has come in, the one hand
+    // there is follows the incoming plan, so none stays where the old scene left it.
+    for (const at of [0.1, 0.39]) assert.equal(await handShown(3 + at), false, `no hand inside the window, at ${at}`);
+    for (const at of [0.7, 0.9, 1.2]) {
       const pose = handPose(incoming, at);
       assert.equal(pose.visible, true, `the incoming hand is due at ${at}`);
       const [x, y] = await tipAt(page, 3 + at);

@@ -614,3 +614,75 @@ test('a plan of a line with a malformed `to` reports a problem instead of throwi
     assert.ok(p.strokes.length >= 1 && Number.isFinite(p.needs));
   }
 });
+
+// ---- voiced scenes: pace, and a transition in front (Task 13; Task 12 left both uncovered) ---------------------------------
+
+// One rect (one stroke) over `narration` ([{ start, end }], scene seconds), at `pace`, `startAfter` seconds after the scene begins.
+const voicedRect = (narration, extra = {}) => plan([rect('r')], extra, { narration });
+const lasts = (p) => p.strokes[0].t1 - p.strokes[0].t0;
+const FIRST = plan([rect('r')]).strokes[0]; // unvoiced, at pace 1: where the pencil first touches down, and for how long
+const START = FIRST.t0;
+const LENGTH = FIRST.t1 - FIRST.t0;
+
+test('voiced, pace: a roomy window stretches the paced drawing to twice its length, a snug one fits it exactly, at any pace', () => {
+  for (const pace of [0.5, 1, 2]) {
+    const natural = LENGTH / pace;
+    near(lasts(plan([rect('r')], { pace })), natural);
+    near(lasts(voicedRect([{ start: 0, end: 30 }], { pace })), 2 * natural);
+    const snug = voicedRect([{ start: 0, end: START + 0.6 * natural }], { pace });
+    near(lasts(snug), 0.6 * natural);
+    assert.equal(snug.overruns.length, 0, `pace ${pace}`);
+  }
+});
+
+test('voiced, pace: what cannot fit "at twice the pace" is measured against the pace the film runs at', () => {
+  const during = (share) => [{ start: 0, end: START + share * LENGTH }]; // a sentence that lasts `share` drawings (at pace 1) after the pencil touches down
+  assert.equal(voicedRect(during(0.4), { pace: 1 }).overruns.length, 1, 'guardrail: at pace 1 a sentence of 0.4 drawings is too short');
+  const quick = voicedRect(during(0.4), { pace: 2 });
+  assert.equal(quick.overruns.length, 0, 'at pace 2 the same sentence is enough');
+  near(lasts(quick), 0.4 * LENGTH, 1e-9); // and the drawing fills it
+  assert.equal(voicedRect(during(0.7), { pace: 1 }).overruns.length, 0);
+  const slow = voicedRect(during(0.7), { pace: 0.5 });
+  assert.equal(slow.overruns.length, 1, 'at pace 0.5 a window that suited pace 1 is too short');
+  assert.match(slow.overruns[0].message, /^shape "r" cannot be drawn during the narration it is matched to, even at twice the pace: that lasts \d+(\.\d+)?s and the drawing needs \d+\.\ds;/);
+  near(lasts(slow), 0.5 * (LENGTH / 0.5), 1e-9); // drawn at the fastest it goes: half its paced length
+});
+
+test('voiced, startAfter: nothing is drawn before the transition is over and the hand has led in, though the sentence began earlier', () => {
+  const sentence = [{ start: 0, end: 3 }];
+  const held = voicedRect(sentence, { startAfter: 0.8 });
+  const cut = voicedRect(sentence);
+  assert.ok(held.strokes[0].t0 >= 0.8 + HAND_LEAD - 1e-9, `drawing starts at ${held.strokes[0].t0}`);
+  assert.ok(held.moves[0].t0 >= 0.8 + HAND_LEAD - 1e-9, 'and so does the hand');
+  assert.ok(held.strokes[0].t0 > cut.strokes[0].t0);
+  assert.equal(held.overruns.length, 0);
+  assert.ok(held.strokes[0].t1 <= 3 + 1e-9, 'it still ends with the sentence');
+  near(held.needs, held.drawEnd + HAND_EXIT);
+});
+
+test('voiced, startAfter: a later sentence still starts with its own sentence; only the one the transition overlaps is held back', () => {
+  const sentences = [{ start: 0, end: 2.5 }, { start: 2.5, end: 5 }];
+  const both = [rect('a', { x: 600 }), rect('b', { x: 1300 })];
+  const p = plan(both, { startAfter: 0.8 }, { narration: sentences });
+  const cut = plan(both, {}, { narration: sentences });
+  assert.ok(strokesOf(p, 'elements[0]')[0].t0 >= 1.05 - 1e-9, 'the first waits for the transition');
+  assert.ok(strokesOf(cut, 'elements[0]')[0].t0 < 1.05, 'guardrail: with no transition it does not');
+  near(strokesOf(cut, 'elements[1]')[0].t0, 2.5);
+  const second = strokesOf(p, 'elements[1]')[0].t0;
+  assert.ok(second >= 2.5 - 1e-9 && second <= 2.5 + 0.3, `the second starts with its sentence, or the hand's travel after it: ${second}`); // the first one ran on a little (it started later), so the hand has to travel
+  assert.equal(p.overruns.length, 0);
+});
+
+test('voiced, startAfter: a sentence that no longer fits once the transition has gone is an overrun naming the element, and the cut it replaces had none', () => {
+  const snug = [{ start: 0, end: START + 0.7 * LENGTH }];
+  assert.equal(voicedRect(snug).overruns.length, 0, 'guardrail: with no transition the sentence is enough');
+  const held = voicedRect(snug, { startAfter: 0.8 });
+  assert.equal(held.overruns.length, 1);
+  assert.equal(held.overruns[0].path, 'elements[0]');
+  assert.match(held.overruns[0].message, /^shape "r" cannot be drawn during the narration it is matched to, even at twice the pace: /);
+  assert.deepEqual(held.problems, [], 'check.mjs reports it; validation does not');
+  assert.ok(held.strokes[0].t0 >= 0.8 + HAND_LEAD - 1e-9, 'it is still drawn, after the transition');
+  const over = voicedRect([{ start: 0, end: 0.5 }], { startAfter: 0.8 }); // the sentence is over before the transition is
+  assert.equal(over.overruns.length, 1);
+  assert.ok(over.strokes[0].t0 >= 1.05 - 1e-9);
+});

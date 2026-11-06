@@ -68,7 +68,7 @@ import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
 import { isViral } from '../template/viral.mjs';
 import { substituteVars } from '../template/vars.mjs';
-import { TRANSITIONS, comesInOver, normalizeTransition, windowSeconds } from '../template/transitions.mjs';
+import { TRANSITIONS, SKETCH_TRANSITIONS, comesInOver, normalizeTransition, windowSeconds } from '../template/transitions.mjs';
 import { GL_TRANSITIONS } from '../template/gl-transitions.mjs';
 import { cameraTweens } from '../template/camera.mjs';
 import { specWarnings, hookWarnings, stillWarnings, gapWarnings, loopWarnings, frameDifference } from './lib/viral-checks.mjs';
@@ -78,6 +78,7 @@ import { specHasVideo, prepareVideo } from './lib/video.mjs';
 import { themeData } from './lib/theme.mjs';
 import { isSketchScene, specHasSketch } from '../template/sketch/style.mjs';
 import { planScene, colourOf, THEME_TOKENS } from '../template/sketch/plan.mjs';
+import { planContext } from '../template/sketch/plan-context.mjs';
 import {
   CHECKED_TYPES, NO_PASSING_COLOUR, tweenSpans, inTween, auditTimes, backdropColors, contrastFindings, unjudgedContrast, textFloorFindings, readingFloorFindings, deadStretchProblems, unfinishedWriting, neverDrawn, handStillLeaving,
 } from './lib/audits.mjs';
@@ -132,14 +133,13 @@ const spansOf = ({ chain, camera, writes }, props) => ({
   camera: cameraTweens(camera, props),
 });
 
-// The stroke plan of each scene drawn by hand (null for the others), made as the page makes it: the same planScene, seed, pace
-// and icons (template/renderer.mjs loadSketch), so the spans below are the page's. The icons are a megabyte, so a spec with no
-// hand-drawn scene never loads them.
-async function sketchPlans(spec) {
+// The stroke plan of each scene drawn by hand (null for the others), made as the page makes it: the same planScene, planContext
+// (seed, pace, the transition's startAfter) and icons (template/renderer.mjs loadSketch), so the spans below are the page's.
+// The icons are a megabyte, so a spec with no hand-drawn scene never loads them. `spec`: after withDefaults.
+export async function sketchPlans(spec) {
   if (!specHasSketch(spec)) return spec.scenes.map(() => null);
   const { default: icons } = await import('../template/sketch/lucide.mjs');
-  const { seed, pace } = spec.sketch ?? {};
-  return spec.scenes.map((scene, sceneIndex) => (isSketchScene(spec, scene) ? planScene(scene, { size: spec.size, seed, pace, icons, sceneIndex }) : null));
+  return spec.scenes.map((scene, sceneIndex) => (isSketchScene(spec, scene) ? planScene(scene, planContext(spec, scene, sceneIndex, { size: spec.size, icons })) : null));
 }
 
 // `items` with `writes: { t0, t1 }` (scene seconds) on each one the plan draws. The paths are the plan's: sceneItems and the plan
@@ -623,7 +623,7 @@ export function atBlockParts(written, spec, findings) {
 
 const NO_PASSING_IN_BLOCK = 'no theme colour passes over this background; change "theme" or the scene background';
 
-const TRANSITION_WINDOW = new RegExp(` during the (${[...TRANSITIONS, ...GL_TRANSITIONS].filter(comesInOver).join('|')}) at `);
+const TRANSITION_WINDOW = new RegExp(` during the (${[...TRANSITIONS, ...SKETCH_TRANSITIONS, ...GL_TRANSITIONS].filter(comesInOver).join('|')}) at `);
 
 // A finding about where a part sits or how large it is drawn: in a scene with a camera, its zoom or pan may be the cause.
 const PLACED = / leaves the safe area | overlaps | sits under the platform UI | is \d+px \(below /;

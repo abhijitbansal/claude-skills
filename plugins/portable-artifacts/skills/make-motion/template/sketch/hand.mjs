@@ -89,6 +89,13 @@ export function handSvg({ tone = DEFAULT_TONE, scale = DEFAULT_SCALE, unit }) {
 // ---- where it is ------------------------------------------------------------------------------------------------------------
 
 const ease = (t) => t * t * (3 - 2 * t);
+const inOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2); // the timeline's ease for a transition's progress (timeline.mjs), so the hand keeps up with the wipe
+
+// An erase: the pencil rides the front of the wipe (ERASE_EDGE is the left edge, so the front moves right) at mid height.
+function sweptPose(plan, sec) {
+  const [width, height] = plan.size;
+  return { x: width * inOutCubic(Math.min(1, Math.max(0, sec / plan.sweep))), y: height / 2, lift: 0, visible: true };
+}
 
 // The pencil on `stroke` at progress `p`: the stroke itself, or on writing the spike's smoothed path.
 function onStroke(plan, stroke, p) {
@@ -107,9 +114,12 @@ function onStroke(plan, stroke, p) {
 
 /**
  * Where the pencil's point is at `sec` (seconds in the scene) by `plan` (planScene's): `{ x, y, lift, visible }` in canvas px,
- * `lift` 0 to 1. Not visible, at home off the canvas, before the hand enters and from the moment it has left. Pure.
+ * `lift` 0 to 1. Not visible, at home off the canvas, before the hand enters and from the moment it has left. During an
+ * erase's sweep (`plan.sweep` seconds from the start of the scene) it is on the wipe's front instead; any other transition
+ * into the scene leaves it at home until the hand enters. Pure.
  */
 export function handPose(plan, sec) {
+  if (plan.sweep > 0 && sec >= 0 && sec < plan.sweep) return sweptPose(plan, sec);
   const { moves, strokes } = plan;
   if (!moves.length || sec < Math.min(moves[0].t0, strokes[0].t0) || sec >= moves.at(-1).t1) {
     const [x, y] = handHome(plan.size, plan.unit);
