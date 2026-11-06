@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// node scripts/voice.mjs "<text>" --out <file.wav> [--voice af_heart] [--speed 1]
-// node scripts/voice.mjs --text-file narration.txt --out <file.wav>   (no shell expansion of $ or backticks)
+// node scripts/voice.mjs "<text>" --out <file.wav> [--voice af_heart] [--speed 1] [--phonemes]
+// node scripts/voice.mjs --text-file narration.txt --out <file.wav> [--phonemes]   (no shell expansion of $ or backticks)
 // node scripts/voice.mjs --list-voices
 // Synthesises a voiceover clip locally with Kokoro; reference the wav from motion.json `audio[].src`.
 // Also writes <file>.json beside it with every sentence's start and end second (a captions `src`)

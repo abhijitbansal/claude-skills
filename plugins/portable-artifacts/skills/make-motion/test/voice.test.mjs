@@ -98,9 +98,9 @@ test('sidecarPath: swaps the .wav extension for .json', () => {
 
 // Stubs that stand in for kokoro-js and @huggingface/transformers so no model is needed.
 class StubSplitterStream {
-  constructor() { this.text = ''; }
+  constructor() { this.text = ''; this.closed = false; }
   push(t) { this.text += t; }
-  close() {}
+  close() { this.closed = true; }
   [Symbol.iterator]() { return this.text.split(/(?<=[.!?])\s+/)[Symbol.iterator](); }
 }
 class StubRawAudio {
@@ -109,8 +109,10 @@ class StubRawAudio {
 }
 // stream() takes the closed splitter and yields one { text, phonemes, audio } per sentence it finds,
 // as kokoro-js does. `spec[chunk]` is a list of [phonemes, samples] results for that chunk.
+// The real stream() waits forever on an open splitter, so the stub throws instead of hanging.
 const stubTts = (spec) => ({
   stream: async function* (splitter) {
+    if (!splitter.closed) throw new Error('stream() was given a splitter that is not closed: the real one would hang');
     for (const chunk of splitter) {
       for (const [phonemes, samples] of spec[chunk]) {
         yield { text: chunk, phonemes, audio: { audio: new Float32Array(samples) } };
