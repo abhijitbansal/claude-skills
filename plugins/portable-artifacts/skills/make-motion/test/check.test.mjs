@@ -10,6 +10,7 @@ import * as checkModule from '../scripts/check.mjs';
 import { loadSpec } from '../scripts/lib/spec.mjs';
 import { specHasVideo } from '../scripts/lib/video.mjs';
 import { planScene } from '../template/sketch/plan.mjs';
+import { isSketchScene } from '../template/sketch/style.mjs';
 import icons from '../template/sketch/lucide.mjs';
 import { contrastRatio } from '../shared/contrast.mjs';
 
@@ -37,17 +38,37 @@ function specFile(elements, { size = [1920, 1080], duration = 2, files = {} } = 
 
 const lines = (stdout) => stdout.trim().split('\n');
 
+// The one warning a shipped example may carry: a film that opens on a hand-drawn scene starts with a blank board on purpose
+// (the thumbnail comes from `--poster`). Any other opening, any other warning, still has to be silent.
+const BLANK_BOARD_WARNING = /^warning: scenes\[0\]: scene "[^"]+" shows nothing at 0\.00s: the first frame, the video's thumbnail, is blank; a hand-drawn scene starts as an empty board and is drawn on\. Take the thumbnail from a drawn moment with render\.mjs --poster <seconds>, or accept a blank thumbnail\n$/;
+function assertExampleStderr(spec, stderr) {
+  if (isSketchScene(spec, spec.scenes[0])) assert.match(stderr, BLANK_BOARD_WARNING, 'a drawn opening carries only the blank-board warning');
+  else assert.equal(stderr, '', 'a shipped example carries no warning, or the warning gets ignored');
+}
+
 for (const name of readdirSync(EXAMPLES).filter((f) => f.endsWith('.json'))) {
   test(`every spec in references/examples passes with exit 0: ${name}`, async (t) => {
     // A video example also needs ffmpeg and ffprobe: check.mjs decodes its frames for the render page.
-    const hasVideo = specHasVideo(loadSpec(path.join(EXAMPLES, name)).spec);
+    const { spec } = loadSpec(path.join(EXAMPLES, name));
+    const hasVideo = specHasVideo(spec);
     if (hasVideo ? !(await requireRender(t, { need: ['browser', 'ffmpeg', 'ffprobe'] })) : await skipUnlessBrowser(t)) return;
     const r = check([path.join(EXAMPLES, name)]);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.match(r.stdout, /^check: ok \(\d+ scenes?, \d+ moments\)\n$/);
-    assert.equal(r.stderr, '', 'a shipped example carries no warning, or the warning gets ignored');
+    assertExampleStderr(spec, r.stderr);
   });
 }
+
+test('guardrail: the examples exception covers only a drawn opening and only the blank-board warning', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const blank = { scenes: [{ id: 'late', duration: 2, elements: [{ id: 'a', type: 'text', text: 'Hi', x: 960, y: 540, fontSize: 64, keyframes: [{ t: 0, opacity: 0 }, { t: 0.5, opacity: 1 }] }] }] };
+  const standard = check([specFile(blank.scenes[0].elements, { duration: 2 })]);
+  assert.match(standard.stderr, /^warning: scenes\[0\]: scene "s" shows nothing at 0\.00s/, 'the standard blank opening does warn');
+  assert.throws(() => assertExampleStderr(blank, standard.stderr), 'a standard film may not carry it');
+  const drawn = check([BOARD_FIXTURE]);
+  assert.doesNotThrow(() => assertExampleStderr({ style: 'sketch', scenes: [{ id: 'board' }] }, drawn.stderr));
+  assert.throws(() => assertExampleStderr({ style: 'sketch', scenes: [{ id: 'board' }] }, `${drawn.stderr}warning: scenes[0]: something else\n`), 'a second warning is refused');
+});
 
 test('bad-safe-area: a title at y 10 on a 1080p canvas is outside the safe area once it has landed', async (t) => {
   if (await skipUnlessBrowser(t)) return;

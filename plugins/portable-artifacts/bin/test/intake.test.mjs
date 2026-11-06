@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CUE_NAMES } from '../../skills/make-motion/template/audio.mjs';
+import { HAND_TONES } from '../../skills/make-motion/template/sketch/style.mjs';
 
 const MOTION = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../skills/make-motion');
 const HEADING = 'Intake (one round)';
@@ -16,7 +17,7 @@ export function intakeSection(md) {
 }
 
 // One option per list line: a bold name, then text that must carry a default.
-const OPTIONS = ['platform', 'format', 'length', 'assets', 'voiceover', 'sound', 'theme', 'CTA'];
+const OPTIONS = ['platform', 'format', 'length', 'assets', 'voiceover', 'sound', 'theme', 'CTA', 'style', 'hand tone'];
 const VOICEOVER_DISCLOSURE = 'a one-time install of about 250 MB plus a 90 MB voice model';
 const TRIGGERS = ['`claude -p`', '`codex exec`', '`copilot -p`', 'the eval'];
 export const optionLine = (section, name) => section.split('\n').find((l) => l.includes(`**${name}**`));
@@ -28,7 +29,7 @@ export function problems(section) {
     if (!line) out.push(`no line for option ${name}`);
     else if (!/default/i.test(line)) out.push(`option ${name} names no default`);
   }
-  for (const phrase of [VOICEOVER_DISCLOSURE, ...TRIGGERS, 'any run that cannot pause for an answer', 'intake: skipped (', 'values used: format <format>']) {
+  for (const phrase of [VOICEOVER_DISCLOSURE, ...TRIGGERS, 'any run that cannot pause for an answer', 'intake: skipped (', 'values used: format <format>', 'platform <name or none>, style <name>, hand <tone or n/a>']) {
     if (!section.includes(phrase)) out.push(`missing "${phrase}"`);
   }
   const sound = optionLine(section, 'sound') ?? '';
@@ -62,6 +63,24 @@ test('the intake platform option names Reels, TikTok and Shorts and points at vi
   assert.ok(line.includes('"mode": "viral"'), 'says which field it sets');
   assert.ok(md.includes('\n## Viral mode\n'), 'the section it points at exists');
   assert.match(intakeSection(md), /platform <name or none>/, 'the fallback line reports it');
+});
+
+test('intake lists style with standard, hand-drawn and mixed, and hand tone', () => {
+  const section = intakeSection(read('SKILL.md'));
+  const style = optionLine(section, 'style');
+  for (const name of ['standard', 'hand-drawn', 'mixed']) assert.ok(style.includes(`\`${name}\``), `names ${name}`);
+  assert.match(style, /`standard` \(default\)/);
+  for (const word of ['whiteboard', 'hand-drawn', 'sketch', 'drawn by hand']) assert.ok(style.includes(word), `a prompt saying ${word} settles it`);
+  const tone = optionLine(section, 'hand tone');
+  for (const name of HAND_TONES) assert.ok(tone.includes(`\`${name}\``), `names tone ${name}`);
+  assert.match(tone, /`medium` \(default\)/);
+  assert.match(optionLine(section, 'length'), /no fixed default/, 'a drawn film gets a length from its content');
+});
+
+test('the skipped line carries style and hand, after platform', () => {
+  const section = intakeSection(read('SKILL.md'));
+  assert.match(section, /platform <name or none>, style <name>, hand <tone or n\/a>`/);
+  assert.match(section, /style standard, hand n\/a/, 'the nothing-settled line reports them too');
 });
 
 test('the intake lists only options make-motion can do today', () => {

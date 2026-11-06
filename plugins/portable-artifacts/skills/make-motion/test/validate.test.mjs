@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec, withDefaults, EASES, ANIMATABLE } from '../scripts/lib/spec.mjs';
 import { specHasVideo } from '../scripts/lib/video.mjs';
 import { findFfprobe } from '../scripts/lib/ffmpeg.mjs';
+import { specHasSketch } from '../template/sketch/style.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const exDir = path.join(root, 'references/examples');
@@ -34,7 +35,8 @@ test('every example is valid, <= 15 s', (t) => {
     assert.deepEqual(r.errors, [], f);
     assert.ok(r.ok);
     const total = withDefaults(spec).scenes.reduce((a, s) => a + s.duration, 0);
-    assert.ok(total <= 15, `${f} is ${total}s`);
+    // The 15 s guide is for standard clips: a hand-drawn film lasts as long as its drawing needs (SKILL.md, Hand-drawn style).
+    if (!specHasSketch(spec)) assert.ok(total <= 15, `${f} is ${total}s`);
   }
 });
 

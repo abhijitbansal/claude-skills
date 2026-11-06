@@ -1,0 +1,96 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "style": "sketch",
+  "sketch": {
+    "hand": {
+      "tone": "tan",
+      "scale": 1
+    },
+    "seed": 3
+  },
+  "scenes": [
+    {
+      "id": "why",
+      "duration": 9,
+      "elements": [
+        {
+          "id": "why-list",
+          "type": "block",
+          "x": 960,
+          "y": 480,
+          "block": "sketch-list",
+          "params": {
+            "title": "Why keep a cache",
+            "items": [
+              {
+                "text": "Slow work is done once",
+                "icon": "clock"
+              },
+              {
+                "text": "Answers wait close by",
+                "icon": "map-pin"
+              },
+              {
+                "text": "The next ask is instant",
+                "icon": "zap"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "idea",
+      "duration": 7,
+      "transition": {
+        "type": "push",
+        "direction": "left"
+      },
+      "elements": [
+        {
+          "id": "idea-title",
+          "type": "text",
+          "text": "The idea",
+          "x": 960,
+          "y": 200,
+          "fontSize": 110
+        },
+        {
+          "id": "idea-call",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "sketch-callout",
+          "params": {
+            "text": "Remember it once",
+            "icon": "brain",
+            "mark": "circle"
+          }
+        }
+      ]
+    },
+    {
+      "id": "close",
+      "duration": 5,
+      "transition": {
+        "type": "push",
+        "direction": "left"
+      },
+      "elements": [
+        {
+          "id": "close-call",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "sketch-callout",
+          "params": {
+            "text": "Then answer it fast",
+            "icon": "zap",
+            "mark": "underline"
+          }
+        }
+      ]
+    }
+  ]
+}

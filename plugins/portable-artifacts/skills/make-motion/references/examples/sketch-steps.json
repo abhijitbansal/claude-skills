@@ -1,0 +1,70 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "style": "sketch",
+  "sketch": {
+    "hand": {
+      "tone": "light",
+      "scale": 1
+    },
+    "seed": 5
+  },
+  "scenes": [
+    {
+      "id": "steps",
+      "duration": 11,
+      "elements": [
+        {
+          "id": "steps-title",
+          "type": "text",
+          "text": "Ship a change in four steps",
+          "x": 960,
+          "y": 170,
+          "fontSize": 100
+        },
+        {
+          "id": "steps-flow",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "sketch-steps",
+          "params": {
+            "steps": [
+              "Write code",
+              "Run tests",
+              "Get a review",
+              "Merge"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "tip",
+      "duration": 7,
+      "transition": "erase",
+      "elements": [
+        {
+          "id": "tip-title",
+          "type": "text",
+          "text": "Before you merge",
+          "x": 960,
+          "y": 200,
+          "fontSize": 110
+        },
+        {
+          "id": "tip-call",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "sketch-callout",
+          "params": {
+            "text": "Wait for the tests to go green",
+            "icon": "circle-check",
+            "mark": "underline"
+          }
+        }
+      ]
+    }
+  ]
+}
