@@ -172,7 +172,7 @@ Hand-drawn is a **scene style**, so a film can mix drawn and standard scenes. A 
 
 Any other type or block in a sketch scene is a validation error that lists what is allowed, and the message points to putting it in a standard scene. That covers `chart`, `image`, `video`, `lottie`, `code`, `counter` and the standard blocks. Sketch blocks in a standard scene are an error too.
 
-The drawing owns an element's appearance, so these are also validation errors in a sketch scene: element `keyframes`, `typing`, `role` and `exit`, and the scene's `camera`. A static `opacity`, `scale` or `rotate`, and `hold`, stay allowed.
+The drawing owns an element's appearance, so these are also validation errors in a sketch scene: element `keyframes`, `typing`, `role`, `exit`, `scale` and `rotate`, and the scene's `camera`. `scale` and `rotate` are refused because the hand follows world coordinates, so a transformed element would be drawn away from the pencil tip. A static `opacity` and `hold` stay allowed.
 
 ## Timing
 
@@ -235,7 +235,7 @@ The Lucide set (ISC) is vendored as one minified JSON file in the skill, with it
 
 ## Handwriting font
 
-Caveat 700, Latin subset (`@fontsource/caveat` 5.3.0, OFL-1.1). It ships **inside make-motion, not in `shared/fonts`**, because `sync-shared.mjs` copies shared fonts into all five skills and only this one uses it. Its licence, source and metrics sit beside it. The stylesheet (`scripts/lib/theme.mjs:31-46`) adds its `@font-face` only when a spec has a sketch scene, and the local server's allow-list serves the file. Because it reads small for its nominal size, sketch text defaults to larger sizes, and the 28 px text floor stays as it is.
+Caveat 700, Latin subset (`@fontsource/caveat` 5.3.0, OFL-1.1). It ships **inside make-motion, not in `shared/fonts`**, because `sync-shared.mjs` copies shared fonts into all five skills and only this one uses it. Its licence, source and metrics sit beside it under `template/sketch/`, which the server's `/template/` route already serves. The page adds its `@font-face` only when a spec has a sketch scene. Because it reads small for its nominal size, sketch text defaults to larger sizes, and the 28 px text floor stays as it is.
 
 ## Audits
 
