@@ -61,7 +61,7 @@ export const ANIMATABLE = {
 const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes', 'hold'];
 const TEXT_STYLE = ['fontSize', 'fontWeight', 'color', 'align', 'maxWidth', 'font'];
 const FIELDS = {
-  text: [...COMMON, 'text', 'role', 'exit', 'typing', ...TEXT_STYLE],
+  text: [...COMMON, 'text', 'role', 'exit', 'typing', 'anchor', ...TEXT_STYLE],
   counter: [...COMMON, 'from', 'to', 'decimals', 'prefix', 'suffix', ...TEXT_STYLE],
   shape: [...COMMON, 'shape', 'width', 'height', 'radius', 'fill', 'stroke', 'strokeWidth', 'elevated', 'cap', 'arrow'],
   image: [...COMMON, 'src', 'width', 'height', 'fit', 'grade'],
@@ -128,6 +128,7 @@ const element = {
     fontWeight: { enum: [400, 500, 600, 700, 800] },
     color,
     align: { enum: ['left', 'center', 'right'] },
+    anchor: { enum: ['left', 'center', 'right'] }, // a text only (checkFields): the edge of its box that sits on x
     maxWidth: { type: 'number', minimum: 1 },
     font: { enum: ['sans', 'mono'] },
     from: num, to: num,

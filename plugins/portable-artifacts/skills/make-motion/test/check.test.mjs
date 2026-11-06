@@ -460,3 +460,72 @@ test('a typing text wider than the safe area is flagged at once, not only when i
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /^scenes\[0\]\.elements\[0\]: text "line" leaves the safe area \(left, right\) at 0\.10s/m);
 });
+
+// ---- near-aligned left edges (a warning, never a failure) ----------------------------------------
+
+const EDGE_X = 200;
+const edgeSpec = (size, gap, { second = {}, anchor = 'left', both = {} } = {}) => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'motion-check-'));
+  const file = path.join(dir, 'motion.json');
+  const left = (id, x, y, extra = {}) => ({ id, type: 'text', text: id, ...(anchor && { anchor }), x, y, fontSize: 64, ...both, ...extra });
+  const elements = [left('first', EDGE_X, size[1] * 0.3), left('second', EDGE_X + gap, size[1] * 0.6, second)];
+  writeFileSync(file, JSON.stringify({ size, fps: 30, scenes: [{ id: 's', duration: 2, elements }] }));
+  return file;
+};
+const edgeWarnings = (file) => JSON.parse(check([file, '--json']).stdout).warnings ?? [];
+
+test('left edges 1 to 12 px apart at 1080 warn, naming both texts; 0 px and 13 px do not', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const gap of [1, 6, 12]) {
+    const r = check([edgeSpec([1920, 1080], gap)]);
+    assert.equal(r.status, 0, `a warning, not a failure: ${r.stdout}${r.stderr}`);
+    assert.match(r.stdout, /^check: ok \(1 scene, \d+ moments\)\n$/);
+    assert.equal(r.stderr, `warning: scenes[0].elements[1]: text "second" nearly lines up with "first": left edges differ by ${gap} px\n`);
+  }
+  for (const gap of [0, 13, 40]) assert.deepEqual(edgeWarnings(edgeSpec([1920, 1080], gap)), [], `${gap} px`);
+});
+
+test('stacked align-left lines with the default anchor warn when their left edges are 6 px apart', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  // The case the warning is for: "align": "left" states a left intent, but the centre anchor staggers the lines by their widths.
+  // Two lines of the same text 6 px apart in x have left edges 6 px apart. A short text keeps the centred box inside the safe area.
+  const stagger = edgeSpec([1920, 1080], 6, { anchor: null, both: { text: 'Same', align: 'left' } });
+  assert.deepEqual(edgeWarnings(stagger), [{ path: 'scenes[0].elements[1]', message: 'text "second" nearly lines up with "first": left edges differ by 6 px' }]);
+  assert.equal(check([stagger]).status, 0, 'a warning, not a failure');
+  assert.deepEqual(edgeWarnings(edgeSpec([1920, 1080], 6, { anchor: null, both: { text: 'Same', align: 'left' }, second: { align: 'center' } })), [], 'one line with no left intent is not compared');
+});
+
+test('only texts that state a left intent are compared: centred or unanchored lines never warn, however their edges fall', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  // Two lines of the same text 6 px apart in x have left edges 6 px apart, inside the window, and still do not warn.
+  for (const anchor of [null, 'center', 'right']) { // null: no anchor field (undefined would take edgeSpec's default)
+    assert.deepEqual(edgeWarnings(edgeSpec([1920, 1080], 6, { anchor, second: { text: 'first' } })), [], `anchor ${anchor}`);
+  }
+});
+
+test('the near-aligned warning leaves the problems list and the verdict alone (--json)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const near = JSON.parse(check([edgeSpec([1920, 1080], 5), '--json']).stdout);
+  const apart = JSON.parse(check([edgeSpec([1920, 1080], 40), '--json']).stdout);
+  assert.equal(near.ok, true);
+  assert.equal('errors' in near, false);
+  assert.deepEqual(near.warnings, [{ path: 'scenes[0].elements[1]', message: 'text "second" nearly lines up with "first": left edges differ by 5 px' }]);
+  const { warnings, ...rest } = near;
+  assert.deepEqual(rest, apart);
+});
+
+test('the near-aligned window scales with the short side: 6 px at 540, not 7', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  assert.equal(edgeWarnings(edgeSpec([960, 540], 6)).length, 1, '12 px at 1080 is 6 px at 540');
+  assert.deepEqual(edgeWarnings(edgeSpec([960, 540], 7)), []);
+  assert.equal(edgeWarnings(edgeSpec([3840, 2160], 24)).length, 1, '12 px at 1080 is 24 px at 2160');
+  assert.deepEqual(edgeWarnings(edgeSpec([3840, 2160], 26)), []);
+});
+
+test('a text that is moving is not compared: a slide through the window warns about nothing', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  // `second` slides from 40 px left of `first` to 19 px right of it over the whole scene. The sheet moment at 85 % (1.7 s)
+  // finds it 10 px right of `first`, inside the 1 to 12 px band but mid-slide; it ends 18 px away at the last frame.
+  const slide = { keyframes: [{ t: 0, x: EDGE_X - 40 }, { t: 2, x: EDGE_X + 19 }] };
+  assert.deepEqual(edgeWarnings(edgeSpec([1920, 1080], 0, { second: slide })), []);
+});

@@ -15,6 +15,9 @@
 // A `group` is not judged itself; each of its children is, at its nested path (scenes[0].elements[2].children[1]), and a
 // child counts as moving while any group around it moves.
 // A warning (never a failure; exit stays 0) when the first scene shows nothing at t = 0: stderr, or `warnings` in --json.
+// Also a warning: two texts of a scene that say `"anchor": "left"` or `"align": "left"`, on screen and not moving, whose left
+// edges differ by 1 to 12 px (at 1080 on the short side, scaled with it): `text "b" nearly lines up with "a": left edges differ
+// by 5 px` (nearEdgeWarnings). Parts of a block are not compared.
 // A scene is judged on its own layer, where it settles, so the outgoing scene of a transition (crossfade, push, slide,
 // wipe, zoom, blur or iris) is not part of the incoming scene's own checks, nor is the styling that carries it in (it is
 // lifted for every sample, so the samples inside the window, 0.1 to 2 s long, judge the scene where it settles). Instead
@@ -311,6 +314,35 @@ function overlapProblems(items, samples, size) {
   return problems;
 }
 
+// Two held texts whose left edges differ by NEAR_EDGE_MIN_PX to NEAR_EDGE_MAX_PX (at 1080 on the short side, scaled with it)
+// look misaligned rather than placed: a warning, once per pair, at the first moment both are held and on screen. 0 px is
+// aligned and anything wider reads as a different column. The gap is rounded to 0.1 px, as the message shows it. Only
+// texts that state a left intent are compared, `"anchor": "left"` or `"align": "left"`: a centred text's left edge follows
+// its width, so two centred lines land a few px apart by chance. Parts of a block are left out (`blocks`: the ids of the
+// scene's blocks): a block's layout is not the author's to fix.
+const NEAR_EDGE_MIN_PX = 1;
+const NEAR_EDGE_MAX_PX = 12;
+const NEAR_EDGE_REFERENCE_SHORT_SIDE = 1080;
+const statesLeftIntent = (el) => el.anchor === 'left' || el.align === 'left';
+function nearEdgeWarnings(items, samples, size, blocks) {
+  const scale = Math.min(...size) / NEAR_EDGE_REFERENCE_SHORT_SIDE;
+  const texts = items.map((item, j) => ({ ...item, j, spans: spansOf(item, GEOMETRY) }))
+    .filter(({ el, chain }) => el.type === 'text' && statesLeftIntent(el) && !blocks.has(chain[0].id));
+  const warnings = [];
+  for (const [b, second] of texts.entries()) {
+    for (const first of texts.slice(0, b)) {
+      for (const [n, { t, els }] of samples.entries()) {
+        if (!isHeld(first.spans, t, n, samples) || !isHeld(second.spans, t, n, samples) || !isShown(els[first.j], size) || !isShown(els[second.j], size)) continue;
+        const gap = Math.round(Math.abs(els[first.j].box.left - els[second.j].box.left) * 10) / 10;
+        if (gap < NEAR_EDGE_MIN_PX * scale || gap > NEAR_EDGE_MAX_PX * scale) continue;
+        warnings.push({ path: second.path, message: `text "${second.el.id}" nearly lines up with "${first.el.id}": left edges differ by ${gap} px` });
+        break;
+      }
+    }
+  }
+  return warnings;
+}
+
 // What an element looks like before its first keyframe: the first opacity keyframe's value (the preset a title gets is
 // one), else its own opacity; and whether a drawing or reveal property starts at 0.
 const startsInvisible = (el) => (el.keyframes.find((kf) => kf.opacity !== undefined)?.opacity ?? el.opacity) <= VISIBLE_OPACITY;
@@ -478,7 +510,7 @@ async function inspect(browser, spec, server, prepare, written) {
     const floor = textFloorFindings(items, own, scene.duration, spec.size);
     unjudged.push(...unjudgedContrast(items, samples));
     problems.push(...safeAreaProblems(items, samples, insets, spec.size), ...overlapProblems(items, samples, spec.size), ...emptyEndProblems(scene, i, items, samples, spec.size), ...wrapProblems(scene, i, samples), ...contrast.problems, ...floor.problems);
-    warnings.push(...contrast.warnings, ...floor.warnings);
+    warnings.push(...contrast.warnings, ...floor.warnings, ...nearEdgeWarnings(items, samples, spec.size, blocksOf[i]));
     if (zone) problems.push(...captionZoneProblems(items, samples, extra, zone, spec.size));
     if (platform) band.push(...bandWarnings(items, samples, platform, spec.viral.safeZone, spec.size));
   }

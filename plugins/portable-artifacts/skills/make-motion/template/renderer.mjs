@@ -105,7 +105,13 @@ const svgEl = (name, attrs = {}) => {
 };
 const assetUrl = (src) => `/assets/${src.split('/').map(encodeURIComponent).join('/')}`;
 
+// A text's `anchor`: the edge of its box that sits on x. The x translation that puts it there (centre: -50%) and the point
+// scale and rotate turn about, so a scaled left-anchored line grows rightwards from its left edge.
+const ANCHOR_SHIFT = { left: '0%', center: '-50%', right: '-100%' };
+const ANCHOR_ORIGIN = { left: 'left center', right: 'right center' };
+
 function textStyle(node, el, look) {
+  if (ANCHOR_ORIGIN[el.anchor]) node.style.transformOrigin = ANCHOR_ORIGIN[el.anchor];
   node.style.fontSize = px(el.fontSize ?? 48);
   node.style.fontWeight = String(look.weight(fontKind(el), el.fontWeight ?? 600));
   node.style.color = resolveColor(el.color, look.colors) ?? look.text;
@@ -631,7 +637,7 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
     const renew = [];
     for (const { node, el, drawNodes, arrowNode, roundCap, format, typing, codeTyping, frame, clip, lottie } of parts) {
       const s = states.get(el.id);
-      const transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
+      const transform = `translate(${s.x}px, ${s.y}px) translate(${ANCHOR_SHIFT[el.anchor] ?? ANCHOR_SHIFT.center}, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
       const opacity = String(s.opacity);
       node.style.transform = transform;
       node.style.opacity = opacity;
