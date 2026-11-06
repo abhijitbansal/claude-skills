@@ -2,7 +2,7 @@
   "format": "16:9",
   "fps": 30,
   "captions": [
-    { "src": "captioned-clip.srt", "style": "karaoke", "scene": "captions", "at": 0.5 }
+    { "src": "showcase-features.srt", "style": "karaoke", "scene": "captions", "at": 0.5 }
   ],
   "scenes": [
     {
@@ -112,6 +112,44 @@
       ]
     },
     {
+      "id": "race",
+      "duration": 6.5,
+      "transition": "fade",
+      "elements": [
+        { "id": "race-label", "type": "text", "text": "Block: race", "x": 960, "y": 120, "fontSize": 48, "color": "text2", "hold": true },
+        {
+          "id": "race-ranking",
+          "type": "block",
+          "x": 960,
+          "y": 500,
+          "block": "race",
+          "params": {
+            "title": "Sample data",
+            "top": 4,
+            "periodSeconds": 1.2,
+            "rows": [
+              { "period": "Q1", "name": "Alpha", "value": 40 },
+              { "period": "Q1", "name": "Beta", "value": 32 },
+              { "period": "Q1", "name": "Gamma", "value": 21 },
+              { "period": "Q1", "name": "Delta", "value": 12 },
+              { "period": "Q2", "name": "Alpha", "value": 44 },
+              { "period": "Q2", "name": "Beta", "value": 47 },
+              { "period": "Q2", "name": "Gamma", "value": 30 },
+              { "period": "Q2", "name": "Delta", "value": 18 },
+              { "period": "Q3", "name": "Alpha", "value": 46 },
+              { "period": "Q3", "name": "Beta", "value": 55 },
+              { "period": "Q3", "name": "Gamma", "value": 52 },
+              { "period": "Q3", "name": "Delta", "value": 27 },
+              { "period": "Q4", "name": "Alpha", "value": 49 },
+              { "period": "Q4", "name": "Beta", "value": 58 },
+              { "period": "Q4", "name": "Gamma", "value": 66 },
+              { "period": "Q4", "name": "Delta", "value": 41 }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "map",
       "duration": 5,
       "transition": "fade",
@@ -119,27 +157,11 @@
         { "id": "map-label", "type": "text", "text": "Map: five countries lit by name", "x": 960, "y": 120, "fontSize": 48, "color": "text2", "hold": true },
         {
           "id": "map-world",
-          "type": "chart",
+          "type": "block",
           "x": 960,
-          "y": 580,
-          "width": 1500,
-          "height": 750,
-          "vegaLite": {
-            "data": { "name": "world-110m" },
-            "projection": { "type": "equalEarth" },
-            "layer": [
-              { "mark": { "type": "geoshape", "fill": "surface", "stroke": "line", "strokeWidth": 0.8 } },
-              {
-                "transform": [{ "filter": { "field": "properties.name", "oneOf": ["Brazil", "India", "Japan", "Kenya", "Germany"] } }],
-                "mark": { "type": "geoshape", "fill": "accent", "stroke": "line", "strokeWidth": 0.8 }
-              }
-            ]
-          },
-          "keyframes": [
-            { "t": 0.4, "reveal": 0, "opacity": 0 },
-            { "t": 0.7, "opacity": 1 },
-            { "t": 2.6, "reveal": 1, "ease": "inOutCubic" }
-          ]
+          "y": 500,
+          "block": "map-highlight",
+          "params": { "map": "world", "highlight": ["Brazil", "India", "Japan", "Kenya", "Germany"] }
         }
       ]
     },
@@ -262,6 +284,15 @@
       ]
     },
     {
+      "id": "lottie",
+      "duration": 4,
+      "transition": "fade",
+      "elements": [
+        { "id": "lottie-label", "type": "text", "text": "Lottie: a bundled animation file", "x": 960, "y": 130, "fontSize": 64, "fontWeight": 700, "hold": true },
+        { "id": "lottie-badge", "type": "lottie", "src": "data/badge.lottie.json", "x": 960, "y": 560, "width": 480, "height": 480, "offset": 0.2, "hold": true }
+      ]
+    },
+    {
       "id": "camera-pan",
       "duration": 4,
       "transition": "fade",
@@ -298,36 +329,36 @@
     },
     {
       "id": "tr-push",
-      "duration": 1.6,
+      "duration": 2.2,
       "background": "#3d1f4a",
-      "transition": { "type": "push", "direction": "left" },
+      "transition": { "type": "push", "direction": "left", "duration": 0.6 },
       "elements": [
         { "id": "tr-push-label", "type": "text", "text": "Transition: push", "x": 960, "y": 380, "fontSize": 100, "fontWeight": 700 }
       ]
     },
     {
       "id": "tr-wipe",
-      "duration": 1.6,
+      "duration": 2.2,
       "background": "#4a1f2a",
-      "transition": { "type": "wipe", "direction": "right" },
+      "transition": { "type": "wipe", "direction": "right", "duration": 0.6 },
       "elements": [
         { "id": "tr-wipe-label", "type": "text", "text": "Transition: wipe", "x": 960, "y": 680, "fontSize": 100, "fontWeight": 700 }
       ]
     },
     {
       "id": "tr-zoom",
-      "duration": 1.6,
+      "duration": 2.2,
       "background": "#1f3d1f",
-      "transition": { "type": "zoom", "direction": "in" },
+      "transition": { "type": "zoom", "direction": "in", "duration": 0.6 },
       "elements": [
         { "id": "tr-zoom-label", "type": "text", "text": "Transition: zoom", "x": 960, "y": 380, "fontSize": 100, "fontWeight": 700 }
       ]
     },
     {
       "id": "tr-blur",
-      "duration": 1.6,
+      "duration": 2.2,
       "background": "#2a2a5c",
-      "transition": "blur",
+      "transition": { "type": "blur", "duration": 0.6 },
       "elements": [
         { "id": "tr-blur-label", "type": "text", "text": "Transition: blur", "x": 960, "y": 680, "fontSize": 100, "fontWeight": 700 }
       ]
