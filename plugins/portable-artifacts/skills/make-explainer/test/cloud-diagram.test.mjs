@@ -66,3 +66,31 @@ test('the built cloud-icon page passes check', async (t) => {
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.doesNotMatch(r.stdout, /skipped/, 'the check ran, it did not skip');
 });
+
+// ---- cards -------------------------------------------------------------------------------------
+
+const cards = (icons, title) => ({ type: 'cards', title, items: icons.map((icon, i) => ({ title: `Card ${i + 1}`, text: 'Words.', icon })) });
+
+test('a cards section draws a cloud: icon with its own fills, not as a Lucide stroke, and scopes its ids', async () => {
+  const spec = { title: 'Cards', sections: [cards(['cloud:aws-lambda', 'cloud:aws-lambda', 'lucide:server'], 'One'), cards(['cloud:aws-lambda', 'brand:postgresql'], 'Two')] };
+  assert.equal((await validateSpec(spec, { dir: ICON_DIR })).ok, true);
+  const { html } = await buildPage(spec, { dir: ICON_DIR });
+  const icons = [...html.matchAll(/<svg class="card-icon"[^>]*>/g)].map((m) => m[0]);
+  const cloudIcons = icons.filter((tag) => tag.includes('viewBox="0 0 256 256"'));
+  assert.equal(cloudIcons.length, 3);
+  for (const tag of cloudIcons) assert.doesNotMatch(tag, /stroke|fill=/, `a cloud icon carries no paint of its own on the svg: ${tag}`);
+  assert.ok(icons.some((tag) => /stroke="currentColor"/.test(tag)), 'a lucide icon is still stroked');
+  assert.ok(icons.some((tag) => /fill="currentColor"/.test(tag)), 'a brand icon is still filled');
+  const ids = idsOf(html);
+  assert.equal(new Set(ids).size, ids.length, `duplicate ids: ${ids.filter((x, i) => ids.indexOf(x) !== i)}`);
+  const refs = [...html.matchAll(/="url\(#([^)]*)\)"/g)].map((m) => m[1]);
+  assert.ok(refs.length >= 3);
+  for (const id of refs) assert.ok(ids.includes(id), `dangling url(#${id})`);
+  assert.ok(ids.some((id) => id.startsWith('ci_')), 'card icon ids carry the ci_ prefix');
+});
+
+test('a card with a missing cloud icon fails validation at the field, naming the import command', async () => {
+  const { errors } = await validateSpec({ title: 'Cards', sections: [cards(['cloud:aws-zzzz-unlisted-service'], 'One')] }, { dir: ICON_DIR });
+  assert.equal(errors[0].path, 'sections[0].items[0].icon');
+  assert.match(errors[0].message, /icons\.mjs import <aws\|gcp> <folder>/);
+});

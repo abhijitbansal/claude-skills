@@ -98,7 +98,11 @@ imported one, and a built page embeds the markup it uses. Every icon, bundled or
 imported, passes one allow-list (`scripts/lib/svg-safe.mjs`): no script, event
 handler, `foreignObject`, `<style>` or external reference gets through. The
 importer is tested on folders shaped like the documented layouts, not on real
-vendor downloads.
+vendor downloads. An import skips (and reports) a file over 256 KiB, a symlink, an
+unreadable file or folder, and anything past 32 MiB read in total; it exits
+non-zero when nothing could be imported. A damaged file in the import folder
+never affects the bundled icons: `search` and `list` warn on stderr, and only a
+name that exists in that file fails, with an error naming it.
 
 ## Security
 

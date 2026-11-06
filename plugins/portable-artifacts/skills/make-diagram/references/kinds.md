@@ -79,7 +79,7 @@ Message kinds: `sync` (solid, filled arrow), `async` (solid, open arrow), `reply
 node scripts/icons.mjs search database      # lucide:database, lucide:database-backup, ...
 node scripts/icons.mjs search postgres      # brand:postgresql
 node scripts/icons.mjs list brand           # every brand ref
-node scripts/icons.mjs list                 # both catalogs
+node scripts/icons.mjs list                 # all three catalogs (add lucide, brand or cloud for one)
 ```
 
 Refs are printed best match first, one per line. A search with no match prints nothing; use a kind's default icon then. An `icon` on a kind drawn as a bare shape (flow `start`, `end`, `decision`; state `start`, `end`, `choice`) is an error: `kind "decision" is drawn as a shape without an icon; remove icon or use kind "step"`.

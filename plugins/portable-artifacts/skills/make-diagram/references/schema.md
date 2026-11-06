@@ -44,7 +44,7 @@ Ids are lowercase letters, digits, `-` and `_`, starting with a letter (`^[a-z][
 | `icon` | `lucide:<name>`, `brand:<slug>` or `cloud:<name>` (AWS and Google Cloud services, drawn in their own colours; one the pack lacks can be imported with `node scripts/icons.mjs import <aws\|gcp> <folder>`); default is the kind's icon. Find one with `node scripts/icons.mjs search <word>`. Kinds drawn as bare shapes (flow `start`, `end`, `decision`; state `start`, `end`, `choice`) take no icon |
 | `group` | a group id |
 | `note` | up to 60 characters, one line, shown under the label |
-| `tone` | `neutral` (default) \| `accent` \| `good` \| `warn` \| `bad`; colours only the border and icon |
+| `tone` | `neutral` (default) \| `accent` \| `good` \| `warn` \| `bad`; colours only the border and the icon (not a `cloud:` icon, which keeps its own colours) |
 | `emoji` | exactly one emoji (a pictograph with its skin tone or joins, a flag, a keycap); drawn in the icon tile instead of the icon. Not on kinds drawn as bare shapes |
 | `detail` | up to 400 characters of plain text, shown in the Explore panel |
 

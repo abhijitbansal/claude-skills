@@ -442,7 +442,7 @@ test('CLI import reports what it added and skipped, and says who accepted the ve
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /added 2: aws-lambda, aws-simple-storage-service/);
   assert.match(r.stdout, /skipped 1/);
-  assert.match(r.stdout, /Res_Amazon-Simple-Storage-Service_Bucket_48\.svg/);
+  assert.match(r.stdout, /"\.\.\.[^"]*Bucket_48\.svg": not a service icon/, 'a file name is quoted and cut to 40 characters');
   assert.match(r.stdout, /bundled icons of the same name win: aws-lambda/);
   assert.match(r.stdout, /You are responsible for having accepted the vendor's terms/);
   assert.match(r.stdout, new RegExp(out.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));

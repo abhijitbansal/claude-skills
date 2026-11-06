@@ -3,18 +3,20 @@
 // from. No network, no prompt. Every file passes svg-safe.mjs; a symlink is never
 // followed; one unreadable or unsafe file is skipped and reported, never fatal.
 //
-//   importIcons(provider, folder, dir) -> { added: string[], skipped: [{ file, reason }] }
+//   importIcons(provider, folder, dir, { maxBytes }?) -> { added: string[], skipped: [{ file, reason }] }
 //
 // `dir` is where the catalog goes (icons.mjs iconDir()). Writes go to a temp file that is
-// moved into place, so a crash never leaves half a catalog.
+// moved into place, so a crash never leaves half a catalog. A name is "added" only if the
+// stored icon passes the same check icons.mjs runs when it loads it, so every added name resolves.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { sanitizeSvg, MAX_SVG_BYTES } from './svg-safe.mjs';
-import { forgetImported } from './icons.mjs';
+import { sanitizeSvg, roundTrip, MAX_SVG_BYTES } from './svg-safe.mjs';
+import { forgetImported, isCloudName } from './icons.mjs';
 
 const MAX_FILES = 20000;
 const MAX_DEPTH = 8;
-const NAME_MAX = 64;
+export const MAX_IMPORT_BYTES = 32 * 1024 * 1024; // all the .svg an import reads, in total
 
 export class ImportError extends Error {
   constructor(message) {
@@ -64,7 +66,15 @@ function collect(folder) {
   const files = [];
   const skipped = [];
   const visit = (dir, depth) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (e) {
+      if (depth === 0) throw new ImportError(`cannot read the folder ${JSON.stringify(folder)} (${e.code ?? 'error'})`);
+      skipped.push({ file: path.relative(folder, dir), reason: `cannot read folder (${e.code ?? 'error'})` });
+      return;
+    }
+    for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const full = path.join(dir, entry.name);
       const rel = path.relative(folder, full);
       if (entry.isSymbolicLink()) skipped.push({ file: rel, reason: 'symlink not followed' });
@@ -81,24 +91,37 @@ function collect(folder) {
   return { files, skipped };
 }
 
-function readSafe({ full, rel }) {
-  const size = fs.lstatSync(full).size;
-  if (size > MAX_SVG_BYTES) return { skipped: { file: rel, reason: 'file is over 256 KiB' } };
-  const result = sanitizeSvg(fs.readFileSync(full, 'utf8'));
-  return result.skipped === undefined ? { entry: result } : { skipped: { file: rel, reason: result.skipped } };
+// One file: { entry } when it passes the allow-list and comes back unchanged from a second pass (what a later
+// load of the catalog does), else { skipped }. Never throws: an unreadable file is a skip. `budget` caps the bytes read in all.
+function readSafe({ full, rel }, budget) {
+  const skip = (reason) => ({ skipped: { file: rel, reason } });
+  let text;
+  try {
+    const size = fs.lstatSync(full).size;
+    if (size > MAX_SVG_BYTES) return skip('file is over 256 KiB');
+    if (budget.used + size > budget.max) return skip(`import size limit (${Math.round(budget.max / 1024)} KiB) reached`);
+    budget.used += size;
+    text = fs.readFileSync(full, 'utf8');
+  } catch (e) {
+    return skip(`cannot read file (${e.code ?? 'error'})`);
+  }
+  const result = sanitizeSvg(text);
+  if (result.skipped !== undefined) return skip(result.skipped);
+  const stored = roundTrip({ viewBox: result.viewBox, markup: result.markup });
+  return stored === null ? skip('the cleaned icon does not pass a second check (too large or too deeply nested)') : { entry: stored };
 }
 
 // Highest size first, a plain file before a variant of it, then the path order.
 const byRank = (a, b) => b.size - a.size || a.variant - b.variant || (a.rel < b.rel ? -1 : 1);
 
-function pick(candidates, skipped) {
+function pick(candidates, skipped, budget) {
   const entries = {};
   const byName = new Map();
   for (const c of candidates) byName.set(c.name, [...(byName.get(c.name) ?? []), c]);
   for (const [name, group] of byName) {
     const ranked = [...group].sort(byRank);
     const winner = ranked.find((c) => {
-      const read = readSafe(c);
+      const read = readSafe(c, budget);
       if (read.skipped) skipped.push(read.skipped);
       else entries[name] = read.entry;
       return read.entry !== undefined;
@@ -111,14 +134,15 @@ function pick(candidates, skipped) {
   return entries;
 }
 
+// The temp file has a random name and is created exclusively ('wx'), so a planted file or symlink at a guessed path is never written through.
 function writeAtomically(file, text) {
-  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
+  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${crypto.randomBytes(8).toString('hex')}.tmp`);
   try {
-    fs.writeFileSync(tmp, text, { mode: 0o600 });
+    fs.writeFileSync(tmp, text, { mode: 0o600, flag: 'wx' });
     fs.renameSync(tmp, file);
   } catch (e) {
     fs.rmSync(tmp, { force: true });
-    throw new ImportError(`cannot write ${file}: ${e.message}`);
+    throw new ImportError(`cannot write ${JSON.stringify(file)} (${e.code ?? 'error'})`);
   }
 }
 
@@ -131,7 +155,11 @@ function readStored(file) {
 }
 
 function store(provider, dir, entries) {
-  fs.mkdirSync(dir, { recursive: true });
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (e) {
+    throw new ImportError(`cannot create the icon folder ${JSON.stringify(dir)} (${e.code ?? 'error'})`);
+  }
   const file = path.join(dir, `imported-${provider}.json`);
   const merged = { ...readStored(file), ...Object.fromEntries(Object.entries(entries).map(([n, e]) => [n, { viewBox: e.viewBox, markup: e.markup }])) };
   const body = Object.keys(merged).sort().map((k) => `${JSON.stringify(k)}:${JSON.stringify(merged[k])}`);
@@ -139,7 +167,7 @@ function store(provider, dir, entries) {
   forgetImported(dir);
 }
 
-export function importIcons(provider, folder, dir) {
+export function importIcons(provider, folder, dir, { maxBytes = MAX_IMPORT_BYTES } = {}) {
   if (!Object.hasOwn(PROVIDERS, provider)) {
     throw new ImportError(`unknown provider ${JSON.stringify(provider)}; accepted: ${providerNames().join(', ')}`);
   }
@@ -156,13 +184,13 @@ export function importIcons(provider, folder, dir) {
   for (const file of files) {
     const mapped = spec.nameOf(path.basename(file.full));
     if (mapped.reason) skipped.push({ file: file.rel, reason: mapped.reason });
-    else if (mapped.name.length > NAME_MAX) skipped.push({ file: file.rel, reason: `name is over ${NAME_MAX} characters` });
+    else if (!isCloudName(mapped.name)) skipped.push({ file: file.rel, reason: 'the icon name would be longer than 60 characters or hold a character other than a-z, 0-9 and "-"' });
     else candidates.push({ ...file, ...mapped });
   }
   if (candidates.length === 0) {
-    throw new ImportError(`no ${spec.label} icons found in ${folder} (${files.length} .svg file${files.length === 1 ? '' : 's'} seen); ${spec.layout}`);
+    throw new ImportError(`no ${spec.label} icons found in ${JSON.stringify(folder)} (${files.length} .svg file${files.length === 1 ? '' : 's'} seen); ${spec.layout}`);
   }
-  const entries = pick(candidates, skipped);
+  const entries = pick(candidates, skipped, { used: 0, max: maxBytes });
   if (Object.keys(entries).length > 0) store(provider, dir, entries);
   return { added: Object.keys(entries).sort(), skipped };
 }

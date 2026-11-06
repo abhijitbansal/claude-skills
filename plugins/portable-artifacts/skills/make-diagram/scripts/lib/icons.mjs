@@ -6,12 +6,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { didYouMean, levenshtein } from '../../shared/errors.mjs';
-import { sanitizeSvg } from './svg-safe.mjs';
+import { roundTrip } from './svg-safe.mjs';
+
+export { scopeIds } from './svg-safe.mjs';
 
 const VIEW_BOX = '0 0 24 24';
 const PREFIXES = ['lucide', 'brand', 'cloud'];
 const DEFAULT_SEARCH_LIMIT = 12;
-const CLOUD_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+// What the importer can write: a provider prefix and a lower-case slug.
+const CLOUD_NAME = /^(?:aws|google)-[a-z0-9][a-z0-9-]{0,56}$/;
+const MAX_CATALOG_BYTES = 64 * 1024 * 1024;
+
+/** Whether `name` is one a stored (imported) cloud icon may have. */
+export const isCloudName = (name) => typeof name === 'string' && CLOUD_NAME.test(name);
 const IMPORTED_FILE = /^imported-[a-z]+\.json$/;
 // Where a bare name like "lambda" might live in the cloud catalog.
 const CLOUD_GUESSES = ['aws-', 'google-cloud-', 'google-'];
@@ -72,9 +79,22 @@ const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 /** The folder imported cloud icons live in: $MAKE_DIAGRAM_ICON_DIR, else ~/.cache/portable-artifacts/make-diagram. */
 export function iconDir() {
   const override = process.env.MAKE_DIAGRAM_ICON_DIR;
-  if (override === undefined || override === '') return path.join(os.homedir(), '.cache', 'portable-artifacts', 'make-diagram');
-  if (override === '~' || override.startsWith('~/')) return path.join(os.homedir(), override.slice(1));
-  return path.resolve(override);
+  if (override === undefined || override === '') return path.join(homeDir(), '.cache', 'portable-artifacts', 'make-diagram');
+  const expanded = override === '~' || override.startsWith('~/') ? path.join(homeDir(), override.slice(1)) : override;
+  if (!path.isAbsolute(expanded)) throw new IconError(`MAKE_DIAGRAM_ICON_DIR must be an absolute path, got ${JSON.stringify(override.slice(0, 40))}`);
+  return path.resolve(expanded);
+}
+
+// The home folder, or an error that says how to avoid needing it: an empty HOME must never turn into a folder under the working directory.
+function homeDir() {
+  let home = '';
+  try {
+    home = os.homedir();
+  } catch {
+    home = '';
+  }
+  if (!home || !path.isAbsolute(home)) throw new IconError('cannot find your home folder to keep imported icons in; set MAKE_DIAGRAM_ICON_DIR to an absolute folder');
+  return home;
 }
 
 const importedCache = new Map();
@@ -84,22 +104,23 @@ export function forgetImported(dir = iconDir()) {
   importedCache.delete(dir);
 }
 
-// One stored entry passes only if the allow-list returns it unchanged: the folder is outside the repo, so it is checked again on every load.
-function trustedEntry(name, entry) {
-  if (!CLOUD_NAME.test(name) || typeof entry?.markup !== 'string' || typeof entry.viewBox !== 'string') return null;
-  const again = sanitizeSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${entry.viewBox.replace(/"/g, '')}">${entry.markup}</svg>`);
-  return again.skipped === undefined && again.markup === entry.markup && again.viewBox === entry.viewBox ? { viewBox: again.viewBox, markup: again.markup } : null;
-}
+// One stored entry passes only if its name is one the importer writes and the allow-list returns it unchanged
+// (svg-safe.mjs roundTrip): the folder is outside the repo, so every load checks it again.
+const trustedEntry = (name, entry) => (CLOUD_NAME.test(name) ? roundTrip(entry) : null);
 
 function readImportedFile(file) {
+  const damaged = (why) => new IconError(`cannot read imported cloud icons from ${file} (${why}); delete the file and import again with: ${IMPORT_COMMAND}`);
   let parsed;
   try {
+    if (fs.statSync(file).size > MAX_CATALOG_BYTES) throw new Error('the file is over 64 MiB, far more than an import writes');
     parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch (e) {
-    throw new IconError(`cannot read imported cloud icons from ${file} (${e.message}); delete the file and import again with: ${IMPORT_COMMAND}`);
+    throw damaged(String(e.message).slice(0, 80));
   }
+  const stored = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed.icons : undefined;
   const out = {};
-  for (const [name, entry] of Object.entries(parsed?.icons ?? {})) {
+  if (stored === null || typeof stored !== 'object' || Array.isArray(stored)) return out;
+  for (const [name, entry] of Object.entries(stored)) {
     const ok = trustedEntry(name, entry);
     if (ok) out[name] = ok;
   }
@@ -124,10 +145,34 @@ export function importedIcons(dir = iconDir()) {
 /** Names of the icons shipped in icons/cloud.json. */
 export const bundledCloudNames = () => Object.keys(load().cloud);
 
+const warned = new Set();
+
+// The imported icons for a listing or a search: a damaged file is a warning on stderr (once), and the bundled icons carry on.
+function importedOrWarn() {
+  try {
+    return importedIcons();
+  } catch (e) {
+    if (!(e instanceof IconError)) throw e;
+    if (!warned.has(e.message)) {
+      warned.add(e.message);
+      process.stderr.write(`warning: ${e.message}; carrying on with the bundled icons\n`);
+    }
+    return {};
+  }
+}
+
 // Bundled wins over imported for the same name, so a spec draws the same on every machine.
 function catalog(prefix) {
   const data = load();
-  return prefix === 'cloud' ? { ...importedIcons(), ...data.cloud } : data[prefix];
+  return prefix === 'cloud' ? { ...importedOrWarn(), ...data.cloud } : data[prefix];
+}
+
+// One cloud icon: the bundled catalog first. The imported file is read only on a miss, so a damaged one never touches a bundled icon.
+function cloudEntry(name) {
+  const bundled = load().cloud;
+  if (has(bundled, name)) return bundled[name];
+  const imported = importedIcons();
+  return has(imported, name) ? imported[name] : undefined;
 }
 
 function split(ref) {
@@ -174,12 +219,11 @@ export function iconSvg(ref) {
   }
   if (!PREFIXES.includes(prefix)) {
     const fixed = didYouMean(prefix, PREFIXES);
-    const hit = fixed && has(catalog(fixed), name) ? `${fixed}:${name}` : null;
+    const hit = fixed && hasIcon(`${fixed}:${name}`) ? `${fixed}:${name}` : null;
     const hint = hit ? `; did you mean ${JSON.stringify(hit)}?` : '';
     throw new IconError(`unknown icon set ${JSON.stringify(prefix)}; use lucide:<name> or brand:<slug>; or cloud:<name> for AWS and Google Cloud services${hint}`, hit);
   }
-  const cat = catalog(prefix);
-  const entry = has(cat, name) ? cat[name] : undefined;
+  const entry = prefix === 'cloud' ? cloudEntry(name) : (has(load()[prefix], name) ? load()[prefix][name] : undefined);
   if (entry === undefined) {
     const hit = suggestRef(prefix, name);
     throw new IconError(`unknown icon ${JSON.stringify(ref)}${unknownHint(prefix, hit)}`, hit);
@@ -189,9 +233,17 @@ export function iconSvg(ref) {
   return { kind: 'brand', markup: `<path d="${entry.path}"/>`, viewBox: VIEW_BOX };
 }
 
+// A predicate: never throws. A damaged imported file makes an imported-only name a "no" (iconSvg says why).
 export function hasIcon(ref) {
   const [prefix, name] = split(ref);
-  return PREFIXES.includes(prefix) && typeof name === 'string' && has(catalog(prefix), name);
+  if (!PREFIXES.includes(prefix) || typeof name !== 'string') return false;
+  if (prefix !== 'cloud') return has(load()[prefix], name);
+  try {
+    return cloudEntry(name) !== undefined;
+  } catch (e) {
+    if (e instanceof IconError) return false;
+    throw e;
+  }
 }
 
 // Every ref in one catalog, or all when `set` is omitted. Sorted by catalog order.

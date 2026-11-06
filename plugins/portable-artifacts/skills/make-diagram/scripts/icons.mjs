@@ -9,13 +9,21 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
-import { searchIcons, listIcons, iconDir, bundledCloudNames } from './lib/icons.mjs';
+import { searchIcons, listIcons, iconDir, bundledCloudNames, IconError } from './lib/icons.mjs';
 import { importIcons, providerNames, ImportError } from './lib/icon-import.mjs';
 
 const USAGE = 'icons.mjs search <word> | icons.mjs list [lucide|brand|cloud] | icons.mjs import <aws|gcp> <folder>';
 const SETS = ['lucide', 'brand', 'cloud'];
 const SKIPPED_SHOWN = 20;
+const NAME_SHOWN = 40;
+const REASON_SHOWN = 100;
 const TERMS = "You are responsible for having accepted the vendor's terms for these icons; this command does not download them or check the terms.";
+
+// Anything echoed from a folder the user unpacked is untrusted text: printable ASCII only, quoted, and short.
+const printable = (text) => String(text).replace(/[^\x20-\x7e]/g, '?');
+const reasonText = (text) => { const t = printable(text); return t.length > REASON_SHOWN ? `${t.slice(0, REASON_SHOWN)}...` : t; };
+const fileText = (file) => { const t = printable(file); return JSON.stringify(t.length > NAME_SHOWN ? `...${t.slice(-(NAME_SHOWN - 3))}` : t); };
+const skipLine = (s) => `${fileText(s.file)}: ${reasonText(s.reason)}`;
 
 function importLines(provider, folder) {
   const dir = iconDir();
@@ -27,14 +35,17 @@ function importLines(provider, folder) {
     throw e;
   }
   const { added, skipped } = result;
+  if (added.length === 0) {
+    throw new UsageError(`nothing was imported: ${skipped.length} file${skipped.length === 1 ? ' was' : 's were'} skipped${skipped.length ? ` (first: ${skipLine(skipped[0])})` : ''}`);
+  }
   const bundled = new Set(bundledCloudNames());
   const shadowed = added.filter((n) => bundled.has(n));
   const lines = [`added ${added.length}: ${added.join(', ')}`];
   if (shadowed.length) lines.push(`bundled icons of the same name win: ${shadowed.join(', ')}`);
   lines.push(`skipped ${skipped.length}${skipped.length ? ':' : ''}`);
-  for (const s of skipped.slice(0, SKIPPED_SHOWN)) lines.push(`  ${s.file}: ${s.reason}`);
+  for (const s of skipped.slice(0, SKIPPED_SHOWN)) lines.push(`  ${skipLine(s)}`);
   if (skipped.length > SKIPPED_SHOWN) lines.push(`  ... and ${skipped.length - SKIPPED_SHOWN} more`);
-  lines.push(`saved in ${dir}`, TERMS);
+  lines.push(`saved in ${JSON.stringify(dir)}`, TERMS);
   return lines;
 }
 
@@ -65,7 +76,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     const lines = run(process.argv.slice(2));
     if (lines.length) process.stdout.write(`${lines.join('\n')}\n`);
   } catch (e) {
-    if (!(e instanceof UsageError)) throw e;
+    if (!(e instanceof UsageError || e instanceof IconError)) throw e;
     exitUsage(e);
   }
 }

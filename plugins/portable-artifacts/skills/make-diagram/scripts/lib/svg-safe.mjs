@@ -5,7 +5,8 @@
 // whatever the tokenizer or a table does not recognise is a refusal with a reason,
 // and the icon is skipped. No dependency, no network, no DOM.
 //
-//   sanitizeSvg(text) -> { markup, viewBox } | { skipped: reason }
+//   sanitizeSvg(text) -> { markup, viewBox } | { skipped: reason }   (never throws)
+//   roundTrip(entry) -> entry | null   an icon as stored: kept only if sanitizing it again changes nothing
 //   scopeIds(markup, prefix) -> markup with every id (and each reference to one) prefixed
 //
 // `markup` is the content of the <svg> (no root element); `viewBox` is "minX minY w h".
@@ -13,18 +14,32 @@
 export const MAX_SVG_BYTES = 256 * 1024;
 const MAX_DEPTH = 16;
 const MAX_ELEMENTS = 4000;
-const MAX_DRAWN = 20000; // elements drawn once <use> targets are expanded
+const MAX_DRAWN = 20000; // elements drawn once <use> and the other references are expanded
+const MAX_REFERENCE_DEPTH = 100; // a chain of <use>, mask, clip-path and href references
 const MAX_ID_LENGTH = 64;
 const MAX_VIEWBOX = 100000;
+const MAX_REASON = 120;
+
+// A stored icon is the sanitized content of an <svg>, so wrapping it back adds one root attribute and may add one <g>
+// (root paint): the second pass gets that much room, and no more.
+const STRICT = { bytes: MAX_SVG_BYTES, depth: MAX_DEPTH, elements: MAX_ELEMENTS };
+const STORED = { bytes: MAX_SVG_BYTES + 1024, depth: MAX_DEPTH + 2, elements: MAX_ELEMENTS + 2 };
 
 class Refusal extends Error {}
-const refuse = (reason) => { throw new Refusal(reason); };
+// A reason may quote hostile input: only printable ASCII, and never long.
+const printable = (text) => String(text).replace(/[^\x20-\x7e]/g, '?');
+const refuse = (reason) => {
+  const text = printable(reason);
+  throw new Refusal(text.length > MAX_REASON ? `${text.slice(0, MAX_REASON)}...` : text);
+};
 
 // ---- tables -------------------------------------------------------------------------------
 
 const PAINT = ['fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-linecap', 'stroke-linejoin',
   'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset', 'opacity', 'clip-rule', 'clip-path', 'mask'];
 const SHAPE = ['id', 'transform', ...PAINT];
+// What a style="" attribute may set: the paint properties and the gradient stop ones, nothing about geometry or structure.
+const STYLE_PROPERTIES = new Set([...PAINT, 'stop-color', 'stop-opacity']);
 const GRADIENT = ['id', 'gradientUnits', 'gradientTransform', 'spreadMethod', 'href', 'xlink:href'];
 
 // element -> the attributes it may carry (`style` is converted to attributes first, so it is not listed).
@@ -97,6 +112,7 @@ const IS_HEX = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 const IS_COLOUR_FUNCTION = re(`(?:rgb|rgba|hsl|hsla)\\(\\s*${NUMBER}(?:deg)?%?(?:\\s*[,/\\s]\\s*${NUMBER}%?){2,3}\\s*\\)`);
 const IS_PATH_DATA = /^[MmZzLlHhVvCcSsQqTtAa0-9eE.,\s+-]+$/;
 const IS_ID = /^[A-Za-z_][A-Za-z0-9_.:-]*$/;
+const isId = (v) => v.length <= MAX_ID_LENGTH && IS_ID.test(v);
 const URL_REFERENCE = /^url\(\s*(['"]?)#([^'")\s]+)\1\s*\)$/i;
 const ANY_URL = /url\s*\(/i;
 const TRANSFORM_STEP = new RegExp(`\\s*(matrix|translate|scale|rotate|skewX|skewY)\\s*\\(\\s*(${NUMBER}(?:[\\s,]+${NUMBER})*)\\s*\\)\\s*,?`, 'y');
@@ -138,7 +154,7 @@ function reference(value, name, ctx) {
   const v = trimmed(value);
   const m = URL_REFERENCE.exec(v);
   if (!m) return ANY_URL.test(v) ? refuse(`external url() in ${name}`) : null;
-  if (!IS_ID.test(m[2])) refuse(`${name} references an invalid id`);
+  if (!isId(m[2])) refuse(`${name} references an invalid id`);
   ctx.refs.push(m[2]);
   return `url(#${m[2]})`;
 }
@@ -179,7 +195,7 @@ function localHref(value, name, ctx) {
   const v = trimmed(value);
   const m = /^#([^\s'"()]+)$/.exec(v);
   if (!m) return refuse(`external ${name}: only #id references inside the icon are allowed`);
-  if (!IS_ID.test(m[1])) refuse(`${name} references an invalid id`);
+  if (!isId(m[1])) refuse(`${name} references an invalid id`);
   ctx.refs.push(m[1]);
   return `#${m[1]}`;
 }
@@ -196,7 +212,7 @@ function viewBoxValue(value) {
 function checkValue(name, value, ctx) {
   if (name === 'id') {
     const v = value.trim();
-    if (!IS_ID.test(v) || v.length > MAX_ID_LENGTH) refuse(`id ${JSON.stringify(v.slice(0, 40))} is not a plain id`);
+    if (!isId(v)) refuse(`id ${JSON.stringify(v.slice(0, 40))} is not a plain id`);
     return v;
   }
   if (name === 'd') return IS_PATH_DATA.test(value) && value.trim() !== '' ? trimmed(value) : refuse('path data holds characters other than path commands and numbers');
@@ -270,7 +286,7 @@ function readTag(src, start) {
 }
 
 // Text -> element tree { name, attrs: Map, children, text: boolean }. Comments and the XML declaration are skipped.
-function parse(src) {
+function parse(src, limits) {
   const root = { name: '#document', attrs: new Map(), children: [] };
   const stack = [root];
   let at = 0;
@@ -316,8 +332,8 @@ function parse(src) {
       const { attrs, end, selfClosing } = readTag(src, at + 1 + name.length);
       const parent = stack[stack.length - 1];
       if (stack.length === 1 && seenRoot) refuse('more than one root element');
-      if (++elements > MAX_ELEMENTS) refuse('too many elements');
-      if (stack.length > MAX_DEPTH) refuse('nested too deeply');
+      if (++elements > limits.elements) refuse('too many elements');
+      if (stack.length > limits.depth) refuse('nested too deeply');
       const node = { name, attrs, children: [], dropped: parent.dropped || DROPPED_ELEMENTS.has(name) };
       parent.children.push(node);
       seenRoot = true;
@@ -361,6 +377,7 @@ function cleanAttributes(node, ctx) {
   }
   for (const [name, value] of style) {
     if (name === 'enable-background') continue;
+    if (!STYLE_PROPERTIES.has(name)) refuse(`style property ${name} is not a paint property`);
     // A style declaration beats the presentation attribute of the same name, as in CSS.
     out.set(name, checkAttribute(node.name, name, value, ctx));
   }
@@ -392,25 +409,44 @@ function clean(node, ctx) {
   return out;
 }
 
-// <use> may point at an element that holds another <use>; a loop or a deep chain would expand without bound.
+// The elements a node draws through: its children, then whatever it points at (a <use> or gradient href, a url(#id)
+// in fill, stroke, mask or clip-path). Every reference resolved already, so each id is in ctx.ids.
+function dependencies(node, ctx) {
+  const found = [...node.children];
+  for (const value of node.attrs.values()) {
+    const ids = value.startsWith('#') ? [value.slice(1)] : [...value.matchAll(/url\(#([^)]+)\)/g)].map((m) => m[1]);
+    for (const id of ids) if (ctx.ids.has(id)) found.push(ctx.ids.get(id));
+  }
+  return found;
+}
+
+// A reference may lead back to its own element, or fan out (a mask used twice by a mask used twice ...) so that
+// drawing it takes without bound. Count every element as many times as it is drawn; refuse a loop, a chain deeper
+// than MAX_REFERENCE_DEPTH and a total over MAX_DRAWN. Iterative: hostile nesting cannot overflow the stack.
 function checkExpansion(ctx, root) {
   const weights = new Map();
-  const visiting = new Set();
-  const weigh = (node) => {
-    if (weights.has(node)) return weights.get(node);
-    if (visiting.has(node)) return refuse('<use> refers back to itself');
-    visiting.add(node);
-    let w = 1 + node.children.reduce((sum, child) => sum + weigh(child), 0);
-    if (node.name === 'use') {
-      const target = ctx.ids.get(node.attrs.get('href')?.slice(1));
-      if (target) w += weigh(target);
-    }
-    visiting.delete(node);
-    weights.set(node, w);
-    if (w > MAX_DRAWN) refuse('too many drawn elements once <use> is expanded');
-    return w;
+  const open = new Set([root]);
+  const stack = [{ node: root, kids: dependencies(root, ctx), next: 0, weight: 1 }];
+  const add = (frame, amount) => {
+    frame.weight += amount;
+    if (frame.weight > MAX_DRAWN) refuse('too many drawn elements once references are expanded');
   };
-  weigh(root);
+  while (stack.length > 0) {
+    const frame = stack[stack.length - 1];
+    if (frame.next < frame.kids.length) {
+      const kid = frame.kids[frame.next++];
+      if (open.has(kid)) refuse('a reference leads back to its own element');
+      if (weights.has(kid)) { add(frame, weights.get(kid)); continue; }
+      if (stack.length > MAX_REFERENCE_DEPTH) refuse('references nested too deeply');
+      open.add(kid);
+      stack.push({ node: kid, kids: dependencies(kid, ctx), next: 0, weight: 1 });
+      continue;
+    }
+    stack.pop();
+    open.delete(frame.node);
+    weights.set(frame.node, frame.weight);
+    if (stack.length > 0) add(stack[stack.length - 1], frame.weight);
+  }
 }
 
 // ---- output -------------------------------------------------------------------------------
@@ -443,32 +479,54 @@ function rootGroup(node, ctx) {
   return attrs;
 }
 
-/**
- * Parse and re-serialise one SVG file. Returns { markup, viewBox } or { skipped: reason }.
- * Never throws for bad input.
- */
-export function sanitizeSvg(text) {
+function sanitize(text, limits) {
+  if (typeof text !== 'string') refuse('not text');
+  if (Buffer.byteLength(text) > limits.bytes) refuse('file is over 256 KiB');
+  const src = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(src)) refuse('control characters');
+  const root = parse(src, limits);
+  if (root.name !== 'svg') refuse('not an SVG file (root element is not <svg>)');
+  if (root.text) refuse('text inside <svg>');
+  const ctx = { ids: new Map(), refs: [], drawn: 0, insideDefs: false };
+  const viewBox = rootViewBox(root.attrs);
+  const wrapper = rootGroup(root, ctx);
+  const children = root.children.map((child) => clean(child, ctx)).filter(Boolean);
+  if (ctx.drawn === 0) refuse('nothing to draw');
+  for (const id of ctx.refs) if (!ctx.ids.has(id)) refuse(`reference to #${id}, which is not inside the icon`);
+  const top = { name: 'g', attrs: wrapper, children }; // the root's paint attributes count: they may hold a mask or a gradient
+  checkExpansion(ctx, top);
+  return { markup: wrapper.size > 0 ? serialize(top) : children.map(serialize).join(''), viewBox };
+}
+
+// Whatever goes wrong (a refusal, or a limit of the engine) is a skip with a reason: this is the guard at the door.
+function guarded(text, limits) {
   try {
-    if (typeof text !== 'string') refuse('not text');
-    if (Buffer.byteLength(text) > MAX_SVG_BYTES) refuse('file is over 256 KiB');
-    const src = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-    if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(src)) refuse('control characters');
-    const root = parse(src);
-    if (root.name !== 'svg') refuse('not an SVG file (root element is not <svg>)');
-    if (root.text) refuse('text inside <svg>');
-    const ctx = { ids: new Map(), refs: [], drawn: 0, insideDefs: false };
-    const viewBox = rootViewBox(root.attrs);
-    const wrapper = rootGroup(root, ctx);
-    const children = root.children.map((child) => clean(child, ctx)).filter(Boolean);
-    if (ctx.drawn === 0) refuse('nothing to draw');
-    for (const id of ctx.refs) if (!ctx.ids.has(id)) refuse(`reference to #${id}, which is not inside the icon`);
-    checkExpansion(ctx, { name: 'g', attrs: new Map(), children });
-    const markup = wrapper.size > 0 ? serialize({ name: 'g', attrs: wrapper, children }) : children.map(serialize).join('');
-    return { markup, viewBox };
+    return sanitize(text, limits);
   } catch (e) {
     if (e instanceof Refusal) return { skipped: e.message };
-    throw e;
+    return { skipped: `could not be checked safely (${e instanceof RangeError ? 'too complex' : 'unexpected input'})` };
   }
+}
+
+/**
+ * Parse and re-serialise one SVG file. Returns { markup, viewBox } or { skipped: reason }.
+ * Never throws, whatever the input.
+ */
+export const sanitizeSvg = (text) => guarded(text, STRICT);
+
+/**
+ * An icon as stored ({ viewBox, markup } and nothing else): returned as a fresh object when
+ * sanitizing it again gives back exactly the same markup and viewBox, else null. The importer
+ * runs it before it says "added", and icons.mjs runs it on every load of a stored catalog.
+ */
+export function roundTrip(entry) {
+  if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return null;
+  const keys = Object.keys(entry);
+  if (keys.length !== 2 || !keys.includes('markup') || !keys.includes('viewBox')) return null;
+  const { markup, viewBox } = entry;
+  if (typeof markup !== 'string' || typeof viewBox !== 'string' || /["<>&]/.test(viewBox)) return null;
+  const again = guarded(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}">${markup}</svg>`, STORED);
+  return again.skipped === undefined && again.markup === markup && again.viewBox === viewBox ? { viewBox, markup } : null;
 }
 
 // ---- id scoping ---------------------------------------------------------------------------
