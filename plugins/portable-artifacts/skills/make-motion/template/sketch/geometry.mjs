@@ -1,12 +1,14 @@
 // Browser-safe and DOM-free: the geometry of the hand-drawn style. Outlines are built as dense polylines (no path syntax, no
 // getPointAtLength), then `wobble` resamples them along their length and bends them with smooth noise, as the approved
-// spike (.scratch/sketch-spike/spike.html, `sample`) does. Every size below is in px at 1080 on the canvas's short side and
-// is multiplied by `u` (see `unit`) when it is used.
+// spike (.scratch/sketch-spike/spike.html, `sample`) does. The sizes of the look (TAPER, HATCH_INSET and the `amp`, `wave`,
+// `step` that callers pass) are px at 1080 on the canvas's short side and are multiplied by `u` (see `unit`) when used.
+// ELLIPSE_STEP, CORNER_STEPS and CURVE_STEPS only set how densely an outline is sampled before `wobble` resamples it: they
+// are canvas px and point counts, and are not scaled.
 const TAU = Math.PI * 2;
 const REFERENCE_SIDE = 1080;
 const CORNER_STEPS = 6; // points on a quarter-round corner of a box
-const ELLIPSE_STEP = 6; // px between the points of an ellipse before it is wobbled
-const CURVE_STEPS = 24;
+const ELLIPSE_STEP = 6; // canvas px between the points of an ellipse before it is wobbled
+const CURVE_STEPS = 24; // points on a bowed line before it is wobbled
 const TAPER = 30; // px over which the wobble grows from the end of a stroke to its full size
 const TAPER_FLOOR = 0.35; // a stroke's very end still wobbles by this share of the full size
 const SECOND_WAVE = 0.37; // the second, finer wave is this share of the first one's length
@@ -77,8 +79,10 @@ export function pointAt(stroke, progress) {
 /**
  * `points` resampled every `step` px along their length and displaced by smooth noise that grows from the ends: the spike's
  * `sample`. Draws four numbers from `rng` for the phases. `amp`, `wave` (the noise's length) and `step` are px at 1080.
+ * No points give no points.
  */
 export function wobble(input, rng, { amp, wave, step = 7, u }) {
+  if (input.length === 0) return [];
   const points = input.length < 2 ? [input[0], input[0]] : input;
   const { lengths, total } = measure(points);
   const [phaseA, phaseB, secondA, secondB] = [rng() * TAU, rng() * TAU, rng() * TAU, rng() * TAU];
@@ -112,9 +116,15 @@ function quad(p0, c, p1, steps) {
   return out;
 }
 
-/** A quadratic curve from `p0` to `p1` bowed by `bow` px at its middle (negative: upwards), as the spike's arrows. */
+/**
+ * A quadratic curve from `p0` to `p1` whose control point is `bow` px to the left of the way it runs (the left of a person
+ * walking from `p0` to `p1` on the screen: up for a line that runs rightwards; negative: right), as the spike's arrows.
+ */
 export function bowedLine(p0, p1, bow) {
-  const control = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2 + bow];
+  const [dx, dy] = [p1[0] - p0[0], p1[1] - p0[1]];
+  const len = Math.hypot(dx, dy);
+  const [nx, ny] = len > 0 ? [dy / len, -dx / len] : [0, 0];
+  const control = [(p0[0] + p1[0]) / 2 + nx * bow, (p0[1] + p1[1]) / 2 + ny * bow];
   return [p0, ...quad(p0, control, p1, CURVE_STEPS)];
 }
 

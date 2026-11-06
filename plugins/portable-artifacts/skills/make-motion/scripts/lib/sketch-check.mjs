@@ -20,6 +20,7 @@ const SET_SKETCH = 'set "style": "sketch" on the scene, or at the root';
 const STILL_VALID = 'opacity, hold, drawAt';
 const ICON_SEARCH = 'node scripts/sketch-icons.mjs search <word>';
 const DRAW_AT = /^sentence:\d+$/;
+const LINE_FIELDS = ['to', 'bow'];
 const ART_BACKGROUND = 'art'; // spec.mjs's ART_BACKGROUND (this module cannot import it: spec.mjs imports this one)
 const ICON_SET = new Set(ICON_NAMES);
 
@@ -46,7 +47,8 @@ const display = (ch) => (/[\p{C}\p{M}]/u.test(ch) ? `U+${ch.codePointAt(0).toStr
 
 function checkGlyphs(el, base, errors) {
   if (typeof el.text !== 'string') return; // a missing `text` is reported as required (checkFields)
-  const missing = [...new Set([...el.text].filter((ch) => ch !== '\n' && !Object.hasOwn(caveat.advance, ch)))];
+  const drawn = el.text.normalize('NFC'); // as the plan lays it out: a combining mark composes with its letter first
+  const missing = [...new Set([...drawn].filter((ch) => ch !== '\n' && !Object.hasOwn(caveat.advance, ch)))];
   if (!missing.length) return;
   const many = missing.length > 1;
   errors.push({ path: pathJoin(base, 'text'), message: `${missing.map((ch) => JSON.stringify(display(ch))).join(', ')} ${many ? 'are' : 'is'} not in the handwriting font; remove ${many ? 'them' : 'it'} or use a standard scene` });
@@ -66,6 +68,19 @@ function checkDrawAt(el, base, scene, sketch, errors) {
     errors.push({ path: at, message: 'drawAt must be a number of seconds (0 or more) or "sentence:<n>"' });
   }
 }
+
+// `to` and `bow` bend a line to wherever it runs: a line shape in a sketch scene only (a standard line is horizontal).
+function checkLineFields(el, base, sketch, errors) {
+  for (const key of LINE_FIELDS) {
+    if (el[key] === undefined || (key === 'to' && el.type === 'counter')) continue; // a counter's `to` is its end value
+    const at = pathJoin(base, key);
+    if (!sketch) errors.push({ path: at, message: `${key} is for sketch scenes (${SET_SKETCH}); a standard line is horizontal` });
+    else if (!(el.type === 'shape' && el.shape === 'line')) errors.push({ path: at, message: `${key} is only valid on a line shape` });
+    else if (key === 'to' && !isPoint(el.to)) errors.push({ path: at, message: 'to must be a point, { "x": number, "y": number }' });
+  }
+}
+
+const isPoint = (v) => v !== null && typeof v === 'object' && !Array.isArray(v) && Number.isFinite(v.x) && Number.isFinite(v.y);
 
 function checkIcon(el, base, errors) {
   if (typeof el.name !== 'string' || ICON_SET.has(el.name)) return;
@@ -119,8 +134,8 @@ function durationPath(written, si, stroke) {
 }
 
 /**
- * Pushes an error for each sketch scene shorter than its drawing needs at the natural pace: the stroke plan's `needs`, in
- * seconds, rounded up to a tenth. `written`: the spec as written; `expanded`: the same after expandSpec (blocks are groups).
+ * Pushes the plan's problems, and an error for each sketch scene shorter than its drawing needs at the natural pace: the
+ * stroke plan's `needs`, in seconds, rounded up to a tenth. `written`: the spec as written; `expanded`: the same after expandSpec (blocks are groups).
  */
 export function checkSketchDuration(written, expanded, errors) {
   const size = canvasSize(expanded);
@@ -128,6 +143,7 @@ export function checkSketchDuration(written, expanded, errors) {
   expanded.scenes.forEach((scene, si) => {
     if (!isSketchScene(expanded, scene)) return;
     const plan = planScene(scene, { size, seed, pace, icons: lucide, sceneIndex: si, startAfter: 0 });
+    errors.push(...plan.problems); // what the plan could not draw, such as a word wider than its text's maxWidth
     if (scene.duration + SECONDS_EPSILON >= plan.needs) return;
     const needed = Math.ceil((plan.needs - SECONDS_EPSILON) * 10) / 10;
     errors.push({ path: durationPath(written, si, plan.strokes.at(-1)), message: `this drawing needs a scene of at least ${needed}s` });
@@ -173,6 +189,7 @@ export function checkSketch(written, errors, { sketchBlocks = SKETCH_BLOCK_NAMES
     }
     for (const { el, path: at } of flattenElements(scene.elements, base)) {
       checkDrawAt(el, at, scene, sketch, errors);
+      checkLineFields(el, at, sketch, errors);
       if (el.type === 'icon') checkIcon(el, at, errors);
       if (!sketch && el.type === 'icon') errors.push({ path: pathJoin(at, 'type'), message: `icon is drawn only in a sketch scene; ${SET_SKETCH}` });
       if (el.type === 'block') checkBlockSide(el, at, sketch, sketchBlocks, errors);

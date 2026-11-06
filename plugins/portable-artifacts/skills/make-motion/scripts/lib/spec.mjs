@@ -77,9 +77,9 @@ const FIELDS = {
   // it stands, so it takes no scale, rotate or keyframes (checkFields says so, and checkKeyframes leaves it at that).
   icon: ['id', 'type', 'x', 'y', 'opacity', 'hold', 'drawAt', 'name', 'size', 'color'],
 };
-// `drawAt` is a sketch scene's start time for any element; it is not in a type's list (that would reach every "allowed:"
-// message), and checkSketch reports it where it does not belong.
-const SKETCH_FIELDS = ['drawAt'];
+// `drawAt` is a sketch scene's start time for any element; `to` and `bow` aim and bend a line in a sketch scene. None is in a
+// type's list (that would reach every "allowed:" message), and checkSketch reports each where it does not belong.
+const SKETCH_FIELDS = ['drawAt', 'to', 'bow'];
 const REQUIRED = {
   text: ['text'],
   counter: ['to'],
@@ -168,6 +168,8 @@ const element = {
     name: { type: 'string', minLength: 1 }, // an icon's Lucide name: checkSketch looks it up
     size: { type: 'number', minimum: 1 }, // an icon's box, in px
     drawAt: {}, // seconds, or "sentence:<n>": a sketch scene only; checkSketch checks the form (a union type would not format)
+    to: {}, // a counter's end value (a number), or a sketch line's far end { x, y }: checkSketch checks the form
+    bow: num, // how far a line's middle bends to its left, in px at 1080 (sketch only)
     // A group's children are elements again (groups nest; checkElement caps the depth with a message that names the limit).
     children: { type: 'array', minItems: 1, maxItems: MAX_GROUP_CHILDREN, items: { $ref: '#/definitions/element' } },
   },
@@ -634,7 +636,7 @@ function checkShapeStyle(el, base, errors) {
   for (const [key, shape] of Object.entries(SHAPE_ONLY)) {
     if (el[key] !== undefined && el[key] !== false && el.shape !== shape) errors.push({ path: pathJoin(base, key), message: `only valid on a ${shape} shape` });
   }
-  if (el.shape === 'line') checkLineLength(el, base, errors);
+  if (el.shape === 'line' && el.to === undefined) checkLineLength(el, base, errors); // a line aimed with `to` has no width
 }
 
 // An arrow head takes ARROW_HEAD_LENGTH stroke widths off the line and a round cap half a stroke width at each end: the

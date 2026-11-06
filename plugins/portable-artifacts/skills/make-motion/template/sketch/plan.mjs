@@ -14,7 +14,6 @@ const DEFAULT_SEED = 1;
 const DEFAULT_SHAPE_SIZE = 100; // a shape without width or height, as on a standard shape
 const DEFAULT_FONT_SIZE = 72; // px at 1080; a standard text defaults to 48, a handwriting reads smaller for its size
 const MAX_WIDTH_SHARE = 0.8; // of the canvas width: a text without maxWidth wraps here
-const LINE_HEIGHT = 1.15; // times the font size
 const BOX_RADIUS = 14; // px at 1080 on a box's corners (an element's own radius wins)
 const FIT_EPSILON = 1e-9;
 
@@ -26,9 +25,17 @@ const FILL = { gap: 34, width: 20, opacity: 0.17, amp: 3, wave: 60, step: 12 };
 // Writing: the text shows through a mask the pen follows, zig-zagging over each glyph. Shares of the font size.
 const WRITE = { width: 0.42, top: 0.62, bottom: 0.14, sweeps: 3 };
 
-const TOKEN_COLOURS = Object.freeze({ accent: PALETTE.accent, text: PALETTE.ink, line: PALETTE.ink });
-const colourOf = (value) => (value === undefined ? PALETTE.ink : (TOKEN_COLOURS[value] ?? value));
+// A sketch scene has one palette: the theme tokens of a standard scene (defaults.mjs COLOR_TOKENS, repeated here because that
+// file imports the blocks; a test fails if the lists drift) are accent, the board (surface) or ink. Anything else is a CSS colour.
+const THEME_TOKENS = Object.freeze(['surface', 'line', 'accent', 'accentSoft', 'good', 'bad', 'warn', 'text', 'text2', 'text3', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5', 'cat6']);
+function colourOf(value) {
+  if (value === undefined) return PALETTE.ink;
+  if (value === 'accent') return PALETTE.accent;
+  if (value === 'surface') return PALETTE.board;
+  return THEME_TOKENS.includes(value) ? PALETTE.ink : value;
+}
 const { unitsPerEm, ascent, descent, advance } = metrics;
+const LINE_EM = (ascent - descent) / unitsPerEm; // a line is as tall as the font's ascent plus its descent below the baseline (descent is negative)
 const widthOf = (str, fs, missing) => {
   let units = 0;
   for (const ch of str) {
@@ -40,13 +47,14 @@ const widthOf = (str, fs, missing) => {
 
 // ---- text ----------------------------------------------------------------------------------------------------------------
 
-// The lines of `par` at font size `fs`, wrapped at spaces so no line is wider than `maxWidth` unless one word is.
+// The lines of `par` at font size `fs`, wrapped at spaces and tabs (not at a no-break space) so no line is wider than
+// `maxWidth` unless one word is.
 function wrap(par, fs, maxWidth, missing) {
   const space = widthOf(' ', fs, missing);
   const lines = [];
   let line = '';
   let used = 0;
-  for (const word of par.split(/\s+/).filter(Boolean)) {
+  for (const word of par.split(/[ \t]+/).filter(Boolean)) {
     const w = widthOf(word, fs, missing);
     if (line === '') { line = word; used = w; }
     else if (used + space + w <= maxWidth + FIT_EPSILON) { line += ` ${word}`; used += space + w; }
@@ -57,7 +65,7 @@ function wrap(par, fs, maxWidth, missing) {
 }
 
 // The pen's path for one line: three sweeps up and down over each glyph, joined end to end (the spike's writeFont).
-function penPath(glyphs, fs, baseline, fontSize) {
+function penPath(glyphs, baseline, fontSize) {
   const [top, bottom] = [baseline - WRITE.top * fontSize, baseline + WRITE.bottom * fontSize];
   const points = [];
   for (const g of glyphs) {
@@ -76,7 +84,7 @@ function planText(el, at, style, run, path) {
   const lines = String(el.text ?? '').normalize('NFC').split('\n').flatMap((par) => wrap(par, fs, maxWidth, missing));
   const widths = lines.map((line) => widthOf(line, fs, missing));
   const width = Math.max(0, ...widths);
-  const height = lines.length * fs * LINE_HEIGHT;
+  const height = lines.length * fs * LINE_EM;
   const left = el.anchor === 'left' ? at[0] : el.anchor === 'right' ? at[0] - width : at[0] - width / 2;
   const box = { x: left, y: at[1] - height / 2, width, height };
   if (widths.some((w) => w > maxWidth + FIT_EPSILON)) run.problems.push({ path, message: `a word is wider than maxWidth ${maxWidth}; use a smaller fontSize or a larger maxWidth` });
@@ -86,35 +94,49 @@ function planText(el, at, style, run, path) {
   const glyphs = [];
   const drafts = [];
   lines.forEach((line, i) => {
-    const baseline = box.y + (i + 0.5) * fs * LINE_HEIGHT + toBaseline;
+    const baseline = box.y + (i + 0.5) * fs * LINE_EM + toBaseline;
     let pen = box.x + (width - widths[i]) * slack;
     const row = [];
     for (const ch of line) {
       const w = widthOf(ch, fs, new Set());
-      if (ch !== ' ' && !missing.has(ch)) row.push({ char: ch, x: pen, y: baseline, width: w });
+      if (!/\s/.test(ch) && !missing.has(ch)) row.push({ char: ch, x: pen, y: baseline, width: w });
       pen += w;
     }
     glyphs.push(...row.map(({ char, x, y }) => ({ char, x, y })));
-    if (row.length) drafts.push(draft(penPath(row, fs, baseline, fs), { path, kind: 'write', speed: 'line', chars: [...line].length, color: colourOf(el.color), width: WRITE.width * fs, opacity: style.opacity, layer: 'ink' }));
+    if (row.length) drafts.push(makeStroke(penPath(row, baseline, fs), { path, kind: 'write', chars: [...line].length, color: colourOf(el.color), width: WRITE.width * fs, opacity: style.opacity, layer: 'ink' }));
   });
   return { box, drafts, glyphs, fontSize: fs };
 }
 
 // ---- shapes and icons ---------------------------------------------------------------------------------------------------
 
-// A stroke before it is timed. `speed` says how fast the pencil moves (timing.mjs); `chars` counts a writing stroke's characters.
-const draft = (points, attrs) => makeStroke(points, attrs);
-const inkLine = (points, path, width, color, opacity, speed = 'line') => draft(points, { path, kind: 'line', speed, color, width, opacity, layer: 'ink' });
+// A stroke before it is timed. `speed` says how fast the pencil moves (timing.mjs); a writing stroke has `chars` instead.
+const inkLine = (points, path, width, color, opacity, speed = 'line') => makeStroke(points, { path, kind: 'line', speed, color, width, opacity, layer: 'ink' });
+
+// A line's two ends in canvas px: from x, y to `to` (in the element's own frame, so `origin` + to), else a horizontal line of
+// `width` centred on x, y.
+function lineEnds(el, at, origin) {
+  if (el.to !== undefined && el.to !== null) return [at, [origin[0] + el.to.x, origin[1] + el.to.y]];
+  const half = (el.width ?? DEFAULT_SHAPE_SIZE) / 2;
+  return [[at[0] - half, at[1]], [at[0] + half, at[1]]];
+}
+
+const boundsOf = (drafts, pad) => {
+  const pts = drafts.flatMap((d) => d.points);
+  const [xs, ys] = [pts.map((p) => p[0]), pts.map((p) => p[1])];
+  const [x0, y0] = [Math.min(...xs) - pad, Math.min(...ys) - pad];
+  return { x: x0, y: y0, width: Math.max(...xs) + pad - x0, height: Math.max(...ys) + pad - y0 };
+};
 
 function planLine(el, at, style, run, path, rng) {
   const { u } = run;
-  const width = el.width ?? DEFAULT_SHAPE_SIZE;
   const stroke = el.strokeWidth ?? ARROW.width * u;
-  const [from, to] = [[at[0] - width / 2, at[1]], [at[0] + width / 2, at[1]]];
+  const [from, to] = lineEnds(el, at, style.origin);
+  const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
   const colour = colourOf(el.stroke);
   const arrow = el.arrow === 'end';
-  const base = arrow ? bowedLine(from, to, -Math.min(ARROW.bow * u, ARROW.bowShare * width)) : [from, to];
-  const points = wobble(base, rng, { amp: ARROW.amp, wave: ARROW.wave, u });
+  const bow = Number.isFinite(el.bow) ? el.bow * u : arrow ? Math.min(ARROW.bow * u, ARROW.bowShare * length) : 0;
+  const points = wobble(bow ? bowedLine(from, to, bow) : [from, to], rng, { amp: ARROW.amp, wave: ARROW.wave, u });
   const drafts = [inkLine(points, path, stroke, colour, style.opacity)];
   if (arrow) {
     const tip = points.at(-1);
@@ -123,7 +145,7 @@ function planLine(el, at, style, run, path, rng) {
       drafts.push(inkLine(wobble(barb, rng, { ...ARROW.barb, u }), path, stroke, colour, style.opacity, 'head'));
     }
   }
-  return { box: { x: from[0], y: at[1] - stroke / 2, width, height: stroke }, drafts };
+  return { box: boundsOf(drafts, stroke / 2), drafts };
 }
 
 function planBox(el, at, style, run, path, rng) {
@@ -133,7 +155,8 @@ function planBox(el, at, style, run, path, rng) {
   const drafts = [];
   if (el.fill === SCRIBBLE_FILL) {
     const hatch = round ? ellipseHatch(at[0], at[1], w / 2, h / 2, FILL.gap * u, u) : boxHatch(at[0], at[1], w, h, FILL.gap * u, u);
-    drafts.push(draft(wobble(hatch, rng, { amp: FILL.amp, wave: FILL.wave, step: FILL.step, u }), { path, kind: 'fill', speed: 'fill', color: PALETTE.accent, width: FILL.width * u, opacity: FILL.opacity * style.opacity, layer: 'under' }));
+    const fillRng = makeRng(hashSeed(run.seed, `${el.id}#fill`)); // its own stream: a fill never moves the outline's wobble
+    if (hatch.length >= 2) drafts.push(makeStroke(wobble(hatch, fillRng, { amp: FILL.amp, wave: FILL.wave, step: FILL.step, u }), { path, kind: 'fill', speed: 'fill', color: PALETTE.accent, width: FILL.width * u, opacity: FILL.opacity * style.opacity, layer: 'under' }));
   }
   const stroke = el.strokeWidth ?? BOX.width * u;
   if (stroke > 0) {
@@ -178,7 +201,7 @@ const union = (boxes, fallback) => {
 // The tree of `el` with its drafts and boxes in canvas coordinates. `parent`: { at, opacity, drawAt } of the group around it.
 function collect(el, path, parent, run, leaves) {
   const at = [parent.at[0] + (el.x ?? 0), parent.at[1] + (el.y ?? 0)];
-  const style = { opacity: parent.opacity * (el.opacity ?? 1) };
+  const style = { opacity: parent.opacity * (el.opacity ?? 1), origin: parent.at }; // origin: the frame a line's `to` is in
   const drawAt = typeof el.drawAt === 'number' ? Math.max(el.drawAt, parent.drawAt ?? 0) : parent.drawAt; // a sentence window is not planned yet
   const node = { path, children: [], drafts: [], box: null, extra: {} };
   if (isGroup(el)) {
@@ -219,8 +242,9 @@ function finish(node, state, strokes, elements) {
  * The stroke plan of `scene` (an expanded scene: blocks are groups). `ctx`: { size: [w, h], seed (the film's sketch.seed),
  * pace (sketch.pace), icons ({ name: polylines in a 24-unit box }), sceneIndex (paths read scenes[i].elements[k]),
  * startAfter (seconds a transition reserves before anything is drawn) }.
- * -> { strokes, elements: Map<path, { box (top left, canvas px), t0, t1, glyphs?, fontSize? }>, drawEnd, needs, problems }.
- * `needs` is the scene length the drawing takes, the hand's way out included.
+ * -> { size, unit, strokes, elements: Map<path, { box (top left, canvas px), t0, t1, glyphs?, fontSize? }>, drawEnd, moves,
+ * needs, problems }. `unit` is the canvas's px per px at 1080. `moves` is the hand's journey (timing.mjs schedule). `needs` is the
+ * scene length the drawing takes, the hand's way out included (startAfter alone when there is nothing to draw).
  */
 export function planScene(scene, ctx) {
   if (!Array.isArray(ctx?.size)) throw new TypeError('planScene needs ctx.size, [width, height]');
@@ -230,11 +254,11 @@ export function planScene(scene, ctx) {
   const leaves = [];
   const root = { at: [0, 0], opacity: 1, drawAt: undefined };
   const nodes = (scene.elements ?? []).map((el, i) => collect(el, `${prefix}elements[${i}]`, root, run, leaves)).filter(Boolean);
-  const { times, drawEnd } = schedule(leaves.map(({ node, drawAt }) => ({ drawAt, strokes: node.drafts })), { size, u: run.u, pace, startAfter });
+  const { times, drawEnd, moves } = schedule(leaves.map(({ node, drawAt }) => ({ drawAt, strokes: node.drafts })), { size, u: run.u, pace, startAfter });
   leaves.forEach(({ node }, i) => { node.times = times[i]; });
   const strokes = [];
   const elements = new Map();
   const state = { last: startAfter };
   nodes.forEach((node) => finish(node, state, strokes, elements));
-  return { strokes, elements, drawEnd, needs: strokes.length ? drawEnd + HAND_EXIT : 0, problems: run.problems };
+  return { size, unit: run.u, strokes, elements, drawEnd, moves, needs: strokes.length ? drawEnd + HAND_EXIT : startAfter, problems: run.problems };
 }

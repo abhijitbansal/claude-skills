@@ -9,7 +9,7 @@ import { PALETTE } from '../template/sketch/style.mjs';
 import { planScene } from '../template/sketch/plan.mjs';
 import { pointAt, unit } from '../template/sketch/geometry.mjs';
 import { HAND_EXIT, HAND_LEAD, travelSeconds } from '../template/sketch/timing.mjs';
-import { expandSpec } from '../template/defaults.mjs'; // before layout.mjs: the two import each other, and defaults.mjs must load first
+import { expandSpec, COLOR_TOKENS, DEFAULT_SHAPE_SIZE } from '../template/defaults.mjs'; // before layout.mjs: the two import each other, and defaults.mjs must load first
 import { unit as layoutUnit } from '../template/blocks/layout.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
 import { checkSketchDuration } from '../scripts/lib/sketch-check.mjs';
@@ -24,6 +24,7 @@ const plan = (elements, extra, sceneExtra) => planScene(scene(elements, sceneExt
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) <= eps, `${a} != ${b}`);
 const strokesOf = (p, at) => p.strokes.filter((s) => s.path === at);
 const advance = (ch, fs) => (metrics.advance[ch] / metrics.unitsPerEm) * fs;
+const LINE_EM = (metrics.ascent - metrics.descent) / metrics.unitsPerEm; // descent is negative, as in the font's hhea table
 
 const BOARD = [
   text('title', { y: 170, fontSize: 110, text: 'How a request flows' }),
@@ -138,7 +139,7 @@ test('text wraps at maxWidth and stays inside its box', () => {
   const rows = [...new Set(el.glyphs.map((g) => g.y))];
   assert.ok(rows.length >= 3, `wrapped onto ${rows.length} lines`);
   assert.equal(p.strokes.length, rows.length, 'one writing stroke per line');
-  near(el.box.height, rows.length * 80 * 1.15);
+  near(el.box.height, rows.length * 80 * LINE_EM);
   for (const g of el.glyphs) {
     assert.ok(g.x >= el.box.x - 1e-9 && g.x + advance(g.char, 80) <= el.box.x + el.box.width + 1e-9, `${g.char} inside the box`);
   }
@@ -392,4 +393,182 @@ test('a plan of malformed input reports a problem instead of throwing', () => {
   assert.equal(p.problems.length, 2);
   assert.equal(p.strokes.length, 1);
   assert.ok(Number.isFinite(p.needs));
+});
+
+// ---- fix round 1 ----------------------------------------------------------------------------------------------------
+
+const line = (id, extra = {}) => ({ id, type: 'shape', shape: 'line', x: 400, y: 300, ...extra });
+const tipOf = (p) => p.strokes[0].points.at(-1);
+const barbsOf = (p) => p.strokes.slice(1);
+
+test('a scribble shape too small for a hatch is drawn without one, in the plan and in validateSpec', () => {
+  for (const el of [
+    { id: 'e', type: 'shape', shape: 'ellipse', x: 300, y: 300, width: 40, height: 30, fill: 'scribble' },
+    { id: 'r', type: 'shape', shape: 'rect', x: 300, y: 300, width: 20, height: 20, fill: 'scribble' },
+    { id: 'z', type: 'shape', shape: 'rect', x: 300, y: 300, width: 0, height: 0, fill: 'scribble' },
+  ]) {
+    const p = plan([el]);
+    assert.deepEqual(p.strokes.map((s) => s.kind), ['line'], el.id);
+    assert.deepEqual(p.problems, [], el.id);
+    assert.deepEqual(errorsOf(sketchSpec([el], 30)), [], el.id);
+  }
+});
+
+test('a line with `to` runs from x, y to `to`; width is not needed; without `to` it stays horizontal', () => {
+  const down = plan([line('v', { arrow: 'end', to: { x: 400, y: 600 } })]);
+  const [tx, ty] = tipOf(down);
+  assert.ok(Math.abs(tx - 400) < 12 && Math.abs(ty - 600) < 6, `tip ${tx},${ty}`);
+  const [sx, sy] = down.strokes[0].points[0];
+  assert.ok(Math.abs(sx - 400) < 12 && Math.abs(sy - 300) < 6, `start ${sx},${sy}`);
+  const flat = plan([line('h', { width: 200 })]);
+  assert.ok(flat.strokes[0].points.every(([, y]) => Math.abs(y - 300) < 5), 'horizontal as before');
+  const grouped = plan([{ id: 'g', type: 'group', x: 100, y: 100, children: [line('v', { x: 10, y: 10, to: { x: 10, y: 110 } })] }]);
+  const gp = grouped.strokes[0].points;
+  assert.ok(Math.abs(gp[0][0] - 110) < 12 && Math.abs(gp[0][1] - 110) < 6 && Math.abs(gp.at(-1)[1] - 210) < 6, '`to` is in the element\'s own frame');
+});
+
+test('a barb ends on the tip and starts behind it, along the line\'s end direction, whichever way the arrow goes', () => {
+  const cases = { down: { x: 400, y: 600 }, up: { x: 400, y: 0 }, left: { x: 100, y: 300 }, right: { x: 700, y: 300 }, diagonal: { x: 650, y: 550 } };
+  for (const [name, to] of Object.entries(cases)) {
+    const p = plan([line('a', { arrow: 'end', to })]);
+    assert.equal(p.strokes.length, 3, name);
+    const tip = tipOf(p);
+    const dir = [to.x - 400, to.y - 300].map((c) => c / Math.hypot(to.x - 400, to.y - 300));
+    for (const barb of barbsOf(p)) {
+      const [bx, by] = barb.points[0];
+      const back = (bx - tip[0]) * dir[0] + (by - tip[1]) * dir[1]; // negative: behind the tip
+      assert.ok(back < -10, `${name}: barb starts behind the tip (${back.toFixed(1)})`);
+      assert.ok(Math.hypot(barb.points.at(-1)[0] - tip[0], barb.points.at(-1)[1] - tip[1]) < 1, `${name}: ends on the tip`);
+    }
+  }
+});
+
+test('bow bends a line sideways (positive: to the left of the way it runs); a box includes the bow and the barbs', () => {
+  const straight = plan([line('s', { to: { x: 700, y: 300 }, bow: 0 })]);
+  assert.ok(straight.strokes[0].points.every(([, y]) => Math.abs(y - 300) < 5));
+  const left = plan([line('l', { to: { x: 700, y: 300 }, bow: 60 })]);
+  const right = plan([line('r', { to: { x: 700, y: 300 }, bow: -60 })]);
+  assert.ok(Math.min(...left.strokes[0].points.map((pt) => pt[1])) < 300 - 20, 'positive bow bends a rightward line upwards');
+  assert.ok(Math.max(...right.strokes[0].points.map((pt) => pt[1])) > 300 + 20);
+  const box = left.elements.get('elements[0]').box;
+  assert.ok(box.y <= Math.min(...left.strokes[0].points.map((pt) => pt[1])) + 1e-9, 'the box reaches the top of the bow');
+  const arrow = plan([line('a', { arrow: 'end', to: { x: 400, y: 600 } })]);
+  const ab = arrow.elements.get('elements[0]').box;
+  for (const s of arrow.strokes) for (const [x, y] of s.points) assert.ok(x >= ab.x - 1e-9 && x <= ab.x + ab.width + 1e-9 && y >= ab.y - 1e-9 && y <= ab.y + ab.height + 1e-9, 'every stroke point is inside the box');
+  assert.ok(ab.width > 20, 'the barbs widen a vertical arrow\'s box');
+});
+
+test('to and bow are for line shapes in sketch scenes; width is not needed with `to`', () => {
+  const to = { x: 400, y: 600 };
+  assert.deepEqual(errorsOf(sketchSpec([line('a', { arrow: 'end', to, bow: 20 })], 30)), []);
+  const standard = errorsOf({ scenes: [{ id: 's', duration: 5, elements: [line('a', { to })] }] });
+  assert.equal(standard.length, 1, standard.join('\n'));
+  assert.match(standard[0], /^scenes\[0\]\.elements\[0\]\.to: to is for sketch scenes/);
+  const bowOnly = errorsOf({ scenes: [{ id: 's', duration: 5, elements: [line('a', { bow: 5 })] }] });
+  assert.match(bowOnly[0], /^scenes\[0\]\.elements\[0\]\.bow: bow is for sketch scenes/);
+  const onRect = errorsOf(sketchSpec([rect('r', { to })], 30));
+  assert.deepEqual(onRect, ['scenes[0].elements[0].to: to is only valid on a line shape']);
+  const onText = errorsOf(sketchSpec([text('t', { bow: 3 })], 30));
+  assert.deepEqual(onText, ['scenes[0].elements[0].bow: bow is only valid on a line shape']);
+  assert.ok(errorsOf(sketchSpec([line('a', { to: { x: 1 } })], 30)).length > 0, 'to needs x and y');
+  assert.ok(errorsOf(sketchSpec([line('a', { to, bow: 'wide' })], 30)).length > 0, 'bow is a number');
+});
+
+test('text is checked as NFC: a letter that only exists decomposed is refused, one that composes into the font is not', () => {
+  const tilde = errorsOf(sketchSpec([text('t', { text: 'ṽ' })], 30)); // NFC "ṽ" (U+1E7D) is not in the font: it would vanish
+  assert.deepEqual(tilde, ['scenes[0].elements[0].text: "ṽ" is not in the handwriting font; remove it or use a standard scene']);
+  assert.deepEqual(errorsOf(sketchSpec([text('t', { text: 'Ångström' })], 30)), [], 'U+212B is NFC "Å", which the font has');
+  assert.deepEqual(errorsOf(sketchSpec([text('t', { text: 'Café' })], 30)), []);
+  const p = plan([text('t', { text: 'Å' })]);
+  assert.deepEqual(p.elements.get('elements[0]').glyphs.map((g) => g.char), ['Å']);
+});
+
+test('plan problems are validation errors at their paths: a word wider than maxWidth', () => {
+  const found = errorsOf(sketchSpec([text('t', { text: 'extraordinary', fontSize: 80, maxWidth: 100 })], 30));
+  assert.equal(found.length, 1, found.join('\n'));
+  assert.match(found[0], /^scenes\[0\]\.elements\[0\]: a word is wider than maxWidth 100; /);
+  const inGroup = errorsOf(sketchSpec([{ id: 'g', type: 'group', x: 0, y: 0, children: [text('t', { text: 'extraordinary', fontSize: 80, maxWidth: 100 })] }], 30));
+  assert.match(inGroup[0], /^scenes\[0\]\.elements\[0\]\.children\[0\]: a word is wider/);
+  assert.deepEqual(errorsOf(sketchSpec([text('t', { text: 'extraordinary', fontSize: 80, maxWidth: 900 })], 30)), []);
+});
+
+test('the plan carries size, unit and the hand\'s moves: enter, travel, exit', () => {
+  const p = plan(BOARD, { startAfter: 1 });
+  assert.deepEqual(p.size, SIZE);
+  assert.equal(p.unit, 1);
+  const kinds = p.moves.map((m) => m.kind);
+  assert.equal(kinds[0], 'enter');
+  assert.equal(kinds.at(-1), 'exit');
+  assert.ok(kinds.slice(1, -1).every((k) => k === 'travel'));
+  assert.ok(p.moves[0].t0 >= 1 + HAND_LEAD - 1e-9, 'the hand waits for startAfter and the lead');
+  assert.ok(p.moves[0].from[0] > SIZE[0] && p.moves[0].from[1] > SIZE[1], 'it enters from beyond the lower right');
+  near(p.moves[0].t1, p.strokes[0].t0);
+  p.moves.forEach((m, i) => {
+    assert.ok(m.t1 >= m.t0);
+    if (i > 0) assert.ok(m.t0 >= p.moves[i - 1].t1 - 1e-9, 'moves do not overlap');
+  });
+  const travel = p.moves.filter((m) => m.kind === 'travel');
+  for (const m of travel) assert.ok(p.strokes.some((s) => Math.abs(s.t0 - m.t1) < 1e-9 && s.points[0][0] === m.to[0]), 'a travel ends where a stroke starts, when it does');
+  const exit = p.moves.at(-1);
+  near(exit.t0, p.drawEnd);
+  near(exit.t1 - exit.t0, HAND_EXIT);
+  near(exit.t1, p.needs);
+  assert.deepEqual(exit.from, p.strokes.at(-1).points.at(-1));
+  assert.ok(exit.to[0] > SIZE[0] && exit.to[1] > SIZE[1], 'the hand is off canvas at a scene of exactly needs');
+  assert.deepEqual(plan([]).moves, []);
+  assert.equal(plan(BOARD, { size: [540, 960] }).unit, 0.5);
+});
+
+test('Stroke.color is final: accent is the accent, surface the board, every other theme token ink, CSS colours pass through', () => {
+  const colourOfRect = (stroke) => plan([rect('r', { stroke })]).strokes[0].color;
+  for (const token of COLOR_TOKENS) {
+    const want = token === 'accent' ? PALETTE.accent : token === 'surface' ? PALETTE.board : PALETTE.ink;
+    assert.equal(colourOfRect(token), want, token);
+  }
+  assert.equal(colourOfRect('#ff0000'), '#ff0000');
+  assert.equal(colourOfRect('rebeccapurple'), 'rebeccapurple');
+  assert.equal(plan([text('t', { color: 'text2' })]).strokes[0].color, PALETTE.ink);
+  assert.equal(plan([{ id: 'i', type: 'icon', name: 'server', size: 50, x: 0, y: 0, color: 'cat3' }]).strokes[0].color, PALETTE.ink);
+});
+
+test('needs includes startAfter even with nothing to draw', () => {
+  assert.equal(plan([], { startAfter: 1.5 }).needs, 1.5);
+  assert.equal(plan([text('t', { text: '' })], { startAfter: 2 }).needs, 2);
+  assert.equal(plan([]).needs, 0);
+});
+
+test('a text box is as tall as the font\'s ascent minus descent, per line', () => {
+  const one = plan([text('t', { text: 'hi', fontSize: 100 })]).elements.get('elements[0]').box;
+  near(one.height, 100 * LINE_EM);
+  assert.ok(LINE_EM > 1.2 && LINE_EM < 1.3);
+  const two = plan([text('t', { text: 'hi\nyo', fontSize: 100 })]).elements.get('elements[0]');
+  near(two.box.height, 200 * LINE_EM);
+  near(two.glyphs.find((g) => g.char === 'y').y - two.glyphs[0].y, 100 * LINE_EM);
+  assert.ok(two.glyphs[0].y > two.box.y && two.glyphs[0].y < two.box.y + 100 * LINE_EM, 'the baseline is inside its line');
+});
+
+test('adding a scribble fill does not change the outline\'s wobble', () => {
+  const plain = plan([rect('r')]).strokes[0];
+  const filled = plan([rect('r', { fill: 'scribble' })]);
+  assert.deepEqual(filled.strokes.find((s) => s.kind === 'line').points, plain.points);
+  const ellipse = (extra) => plan([{ id: 'e', type: 'shape', shape: 'ellipse', x: 600, y: 400, width: 300, height: 200, ...extra }]).strokes.find((s) => s.kind === 'line');
+  assert.deepEqual(ellipse({ fill: 'scribble' }).points, ellipse({}).points);
+});
+
+test('a no-break space is not a place to wrap and not a glyph', () => {
+  const p = plan([text('t', { text: 'one two three', fontSize: 100, maxWidth: 300 })]);
+  const el = p.elements.get('elements[0]');
+  const rows = [...new Set(el.glyphs.map((g) => g.y))];
+  assert.equal(rows.length, 2, 'wraps after "one two", not inside it');
+  assert.ok(!el.glyphs.some((g) => g.char === ' '));
+  const joined = plan([text('t', { text: 'one two', fontSize: 100, maxWidth: 200 })]);
+  assert.equal(joined.problems.length, 1, 'the two words are one word that is too wide');
+  assert.match(joined.problems[0].message, /wider than maxWidth/);
+});
+
+test('DEFAULT_SHAPE_SIZE does not drift from the standard shape\'s', () => {
+  const box = plan([{ id: 'r', type: 'shape', shape: 'rect', x: 300, y: 300 }]).elements.get('elements[0]').box;
+  assert.deepEqual([box.width, box.height], [DEFAULT_SHAPE_SIZE, DEFAULT_SHAPE_SIZE]);
+  const flat = plan([line('l')]).strokes[0].points;
+  assert.ok(Math.abs(flat.at(-1)[0] - flat[0][0] - DEFAULT_SHAPE_SIZE) < 8, 'a line without width or `to` is as long as the standard one');
 });

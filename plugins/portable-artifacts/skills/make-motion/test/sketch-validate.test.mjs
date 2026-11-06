@@ -239,8 +239,8 @@ test('drawAt is a number of seconds or "sentence:<n>"', () => {
   for (const bad of ['sentence:x', 'later', true, null]) {
     assert.deepEqual(errs(sketch([text({ drawAt: bad })])), [`scenes[0].elements[0].drawAt: ${want}`], JSON.stringify(bad));
   }
-  // 4.9 lies inside the scene, so drawAt accepts it; the drawing then cannot finish in 5s, which is the stroke plan's error (sketch-plan.test.mjs).
-  assert.deepEqual(errs(sketch([text({ drawAt: 4.9 })])).filter((e) => !e.includes('this drawing needs')), [], 'the scene lasts 5s');
+  // 4.9 lies inside the scene, so drawAt accepts it; the drawing then cannot finish in 5s, which is the stroke plan's own error.
+  assert.deepEqual(errs(sketch([text({ drawAt: 4.9 })])), ['scenes[0]: this drawing needs a scene of at least 5.7s'], 'the scene lasts 5s');
   for (const out of [-1, 5, 9]) {
     assert.deepEqual(errs(sketch([text({ drawAt: out })])), [
       `scenes[0].elements[0].drawAt: drawAt ${out} is outside scene "s", which lasts 5s; use 0 or more and less than 5, or "sentence:<n>"`,
