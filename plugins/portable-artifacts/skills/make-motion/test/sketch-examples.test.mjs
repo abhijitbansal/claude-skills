@@ -7,6 +7,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { requireRender, assertRendersIdentically } from './helpers/render.mjs';
+import { BLANK_BOARD_MESSAGE } from './helpers/blank-board.mjs';
 import { loadSpec, validateSpec } from '../scripts/lib/spec.mjs';
 import { isSketchScene } from '../template/sketch/style.mjs';
 
@@ -15,8 +16,6 @@ const CHECK = path.join(root, 'scripts/check.mjs');
 const EXAMPLES = path.join(root, 'references/examples');
 const FILMS = ['sketch-architecture', 'sketch-concept', 'sketch-steps', 'sketch-mixed'];
 const filmPath = (name) => path.join(EXAMPLES, `${name}.json`);
-// A film that opens on a sketch scene starts with a blank board on purpose, so check.mjs warns about the thumbnail once.
-const BLANK_BOARD = /^scene "[^"]+" shows nothing at 0\.00s: the first frame, the video's thumbnail, is blank; a hand-drawn scene starts as an empty board/;
 const SKILL_MD = readFileSync(path.join(root, 'SKILL.md'), 'utf8');
 
 test('each starter validates', () => {
@@ -46,7 +45,8 @@ test('each starter: check.mjs reports no problems, and only a sketch opening may
     const warnings = found.warnings ?? [];
     const opensDrawn = isSketchScene(spec, spec.scenes[0]);
     assert.equal(warnings.length, opensDrawn ? 1 : 0, `${name}: ${JSON.stringify(warnings)}`);
-    if (opensDrawn) assert.match(warnings[0].message, BLANK_BOARD, name);
+    // A film that opens on a drawn scene starts with a blank board on purpose, so check.mjs warns about the thumbnail once.
+    if (opensDrawn) assert.match(warnings[0].message, BLANK_BOARD_MESSAGE, name);
   }
 });
 
@@ -63,10 +63,24 @@ test('sketch-mixed has both standard and sketch scenes', () => {
   assert.equal(drawn[0], false, 'it opens on a standard scene, so its thumbnail is not blank');
 });
 
-test('sketch-architecture ends each drawn scene into the next with the erase transition', () => {
+// The scenes that come in over a drawn scene and are drawn themselves: [{ scene, type }] with the transition type they use.
+function drawnCuts(spec) {
+  return spec.scenes.flatMap((scene, i) => {
+    if (i === 0 || !isSketchScene(spec, scene) || !isSketchScene(spec, spec.scenes[i - 1])) return [];
+    const written = scene.transition ?? spec.transition;
+    return [{ scene: scene.id, type: typeof written === 'string' ? written : written?.type }];
+  });
+}
+
+test('sketch-architecture clears each drawn board for the next with the erase transition: every drawn-to-drawn cut', () => {
   const { spec } = loadSpec(filmPath('sketch-architecture'));
-  assert.ok(spec.scenes.length > 1, 'more than one scene');
-  assert.ok(spec.scenes.slice(1).some((scene) => scene.transition === 'erase'), 'uses erase');
+  const cuts = drawnCuts(spec);
+  assert.equal(cuts.length, spec.scenes.length - 1, 'every cut is between two drawn scenes');
+  assert.ok(cuts.length >= 2, 'more than one cut');
+  assert.deepEqual(cuts.map((cut) => cut.type), cuts.map(() => 'erase'), JSON.stringify(cuts));
+  // The guardrail: a cut that is not erase is seen.
+  const mutated = { ...spec, scenes: spec.scenes.map((scene, i) => (i === 1 ? { ...scene, transition: 'push' } : scene)) };
+  assert.notDeepEqual(drawnCuts(mutated).map((cut) => cut.type), cuts.map(() => 'erase'));
 });
 
 test('the description is one line and contains "hand-drawn"', () => {

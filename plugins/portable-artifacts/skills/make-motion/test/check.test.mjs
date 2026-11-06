@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
+import { BLANK_BOARD_STDERR } from './helpers/blank-board.mjs';
 import * as checkModule from '../scripts/check.mjs';
 import { loadSpec } from '../scripts/lib/spec.mjs';
 import { specHasVideo } from '../scripts/lib/video.mjs';
@@ -40,9 +41,8 @@ const lines = (stdout) => stdout.trim().split('\n');
 
 // The one warning a shipped example may carry: a film that opens on a hand-drawn scene starts with a blank board on purpose
 // (the thumbnail comes from `--poster`). Any other opening, any other warning, still has to be silent.
-const BLANK_BOARD_WARNING = /^warning: scenes\[0\]: scene "[^"]+" shows nothing at 0\.00s: the first frame, the video's thumbnail, is blank; a hand-drawn scene starts as an empty board and is drawn on\. Take the thumbnail from a drawn moment with render\.mjs --poster <seconds>, or accept a blank thumbnail\n$/;
 function assertExampleStderr(spec, stderr) {
-  if (isSketchScene(spec, spec.scenes[0])) assert.match(stderr, BLANK_BOARD_WARNING, 'a drawn opening carries only the blank-board warning');
+  if (isSketchScene(spec, spec.scenes[0])) assert.match(stderr, BLANK_BOARD_STDERR, 'a drawn opening carries only the blank-board warning');
   else assert.equal(stderr, '', 'a shipped example carries no warning, or the warning gets ignored');
 }
 

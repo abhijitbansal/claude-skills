@@ -8,6 +8,5 @@
   { "id": "roadmap-line", "prompt": "Make a 10-second roadmap animation: a horizontal line draws across the screen and four milestones (Alpha, Beta, GA, v2) pop in along it in order." },
   { "id": "quote-code", "prompt": "Make a two-scene, 9-second clip: scene one is a quote card 'Make it work, make it right, make it fast' with the attribution 'Kent Beck'; scene two shows the code line `npm run build` in a monospace font." },
   { "id": "square-social", "prompt": "Make a square 1080x1080 social clip with three scenes (about 3 seconds each): a hook headline, a key number counting up to 64%, and a call to action 'Read the report'." },
-  { "id": "edit-existing", "seed": "seeds/motion.json", "prompt": "Edit the existing motion.json: make the second scene twice as long and change the counter's target value to 25. Keep everything else unchanged." },
-  { "id": "hand-drawn", "prompt": "Make a hand-drawn whiteboard explainer of how a web request flows: a browser sends a request to an API, and the API asks a database. A hand draws each box and arrow one after another, with a short title above." }
+  { "id": "edit-existing", "seed": "seeds/motion.json", "prompt": "Edit the existing motion.json: make the second scene twice as long and change the counter's target value to 25. Keep everything else unchanged." }
 ]

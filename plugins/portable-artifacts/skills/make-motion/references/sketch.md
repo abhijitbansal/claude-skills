@@ -53,14 +53,14 @@ Run `node <skill-dir>/scripts/blocks.mjs show <name>` for the params of a block 
 
 ## The look
 
-Board `#fdfcf8`, ink `#1d2330`, accent `#e8590c`, inside drawn scenes only. The tokens `text`, `line`, `accent` and `surface` take these colours there. A scene `background` colour replaces the board.
+Board `#fdfcf8`, ink `#1d2330`, accent `#e8590c`, inside drawn scenes only. A colour that names a theme token is turned into one of these: `accent` is the accent, `surface` is the board, and every other token (`text`, `line`, `text2`, `good`, `cat1` and the rest) is the ink. A plain colour such as `#2b6cb0` is used as written. A scene `background` colour replaces the board (checked by rendering a drawn scene with `"background": "#cfe8ff"`: the board was that blue). `"background": "art"` is an error.
 
-Plain lines (an underline, a rule) wander by about 3 px at 1080. Arrows wander less, about 1.3 px, so they stay straight. Box outlines wander by about 2.6 px.
+How much a stroke wanders is its `amp` setting, in px at 1080 (it scales with the canvas): a plain line (an underline, a rule) has amp 3, a box outline 2.6, an arrow 1.3 (so it stays straighter), an icon 1.1. The wander grows from the ends of a stroke to its full size.
 
 ## Timing
 
 - Elements are drawn in document order, one after another. The hand travels between strokes. Put a title first.
-- Pace at 1080 on the short side: 2700 px per second for lines and 22 characters per second for writing, times `sketch.pace`.
+- Pace at 1080 on the short side, times `sketch.pace`: 2700 px per second for lines, 2000 px per second for icons, 9000 px per second for scribble fills, and 22 characters per second for writing.
 - `drawAt` (seconds inside the scene) starts an element later.
 - A scene needs at least the time its drawing takes plus the time the hand takes to leave (0.65 s). `validate.mjs` names it: `this drawing needs a scene of at least 14.2s`. Add about 2 s so the finished board can be read.
 - A transition into a scene delays its drawing until the transition ends. `erase` takes 0.8 s, any other 0.4 s unless you set `duration`. The needed time already includes this.

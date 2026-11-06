@@ -44,5 +44,6 @@
   { "id": "item-block-lower-third-tag", "prompt": "Make a 5-second clip that names a guest on screen in the bottom-left corner: 'Ada Lovelace', with a small 'GUEST SPEAKER' label sitting on top of the name." },
   { "id": "item-block-lower-third-social", "prompt": "Make a 5-second clip that shows a creator's GitHub account name, @adalovelace, in the bottom-left corner, with the platform named next to it." },
   { "id": "item-block-lower-third-ticker", "prompt": "Make a 7-second clip with a news ticker along the bottom of the frame, headlines scrolling by from right to left: 'Release 2.4 is out', 'Captions now render offline', 'Blocks reach 27'." },
-  { "id": "item-block-text-behind-subject", "prompt": "Make a 6-second clip that puts the word 'UNSTOPPABLE' in big letters behind the person in data/portrait.jpg, so the person stands in front of the word. The person is already cut out of the photo, in data/portrait-cutout.png." }
+  { "id": "item-block-text-behind-subject", "prompt": "Make a 6-second clip that puts the word 'UNSTOPPABLE' in big letters behind the person in data/portrait.jpg, so the person stands in front of the word. The person is already cut out of the photo, in data/portrait-cutout.png." },
+  { "id": "item-hand-drawn", "prompt": "Make a hand-drawn whiteboard explainer of how a web request flows: a browser sends a request to an API, and the API asks a database. A hand draws each box and arrow one after another, with a short title above." }
 ]

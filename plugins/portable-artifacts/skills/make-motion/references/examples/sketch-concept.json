@@ -12,7 +12,7 @@
   "scenes": [
     {
       "id": "why",
-      "duration": 9,
+      "duration": 11,
       "elements": [
         {
           "id": "why-list",
@@ -24,16 +24,16 @@
             "title": "Why keep a cache",
             "items": [
               {
-                "text": "Slow work is done once",
+                "text": "A database lookup takes about 50 ms",
                 "icon": "clock"
               },
               {
-                "text": "Answers wait close by",
-                "icon": "map-pin"
+                "text": "A cache lookup takes about 1 ms",
+                "icon": "zap"
               },
               {
-                "text": "The next ask is instant",
-                "icon": "zap"
+                "text": "Most requests ask for the same pages",
+                "icon": "repeat"
               }
             ]
           }
@@ -42,7 +42,7 @@
     },
     {
       "id": "idea",
-      "duration": 7,
+      "duration": 7.5,
       "transition": {
         "type": "push",
         "direction": "left"
@@ -63,8 +63,8 @@
           "y": 540,
           "block": "sketch-callout",
           "params": {
-            "text": "Remember it once",
-            "icon": "brain",
+            "text": "Save each answer the first time",
+            "icon": "save",
             "mark": "circle"
           }
         }
@@ -72,7 +72,7 @@
     },
     {
       "id": "close",
-      "duration": 5,
+      "duration": 7,
       "transition": {
         "type": "push",
         "direction": "left"
@@ -85,8 +85,8 @@
           "y": 540,
           "block": "sketch-callout",
           "params": {
-            "text": "Then answer it fast",
-            "icon": "zap",
+            "text": "A 90% hit rate skips 9 of 10 queries",
+            "icon": "database-zap",
             "mark": "underline"
           }
         }
