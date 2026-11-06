@@ -15,6 +15,7 @@ import { mountLottie, seekLottie, destroyLotties } from './lottie-view.mjs';
 import { atlasUrl, atlasesIn, withAtlases, themeColours } from './maps.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 import { bindWithNbsp } from '/shared/nowrap.mjs'; // served by server.mjs; the token regex lives only in shared/
+import { isSketchScene, specHasSketch } from './sketch/style.mjs'; // the rest of sketch/ loads only for a spec with such a scene (loadSketch)
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const MODE_MARKER = document.querySelector('meta[name="motion-mode"]')?.content;
@@ -354,6 +355,36 @@ function buildElement(el, look, frames) {
   return part;
 }
 
+// The hand-drawn style's modules and icons, or null for a spec with no sketch scene, which never fetches them.
+async function loadSketch(spec) {
+  if (!specHasSketch(spec)) return null;
+  const [{ planScene }, { unit }, view, hand, { default: icons }] = await Promise.all([
+    import('./sketch/plan.mjs'), import('./sketch/geometry.mjs'), import('./sketch/view.mjs'), import('./sketch/hand.mjs'), import('./sketch/lucide.mjs'),
+  ]);
+  const { seed, pace } = spec.sketch ?? {};
+  const planOf = (scene, sceneIndex) => {
+    const plan = planScene(scene, { size: spec.size, seed, pace, icons, sceneIndex });
+    if (plan.problems.length) throw new Error(`${plan.problems[0].path}: ${plan.problems[0].message}`); // validation refuses these first
+    return plan;
+  };
+  return { ...view, ...hand, planOf, handNode: () => hand.handSvg({ ...spec.sketch?.hand, unit: unit(spec.size) }) };
+}
+
+// A text, shape or icon of a sketch scene (`at`: its path in the plan), drawn from its plan. `drawing`: the scene's plan and
+// the sketch modules, with the canvas position and the opacity of the group around it. The node's place never changes, so it is
+// kept as `boxPose`: the plan's box in canvas px, relative to that group.
+function buildDrawn(el, at, { plan, sketch, origin, opacity }, look) {
+  const elementPlan = plan.elements.get(at);
+  if (!elementPlan) throw new Error(`element "${el.id}" (${el.type}) cannot be drawn in a sketch scene`);
+  const node = document.createElement('div');
+  node.className = `el ${el.type}`;
+  node.dataset.id = el.id;
+  const { box } = elementPlan;
+  const part = { node, el, inherited: opacity * el.opacity, boxPose: `translate(${box.x - origin[0]}px, ${box.y - origin[1]}px)` };
+  sketch.mountDrawn(part, el, elementPlan, plan.strokes.filter((stroke) => stroke.path === at), look);
+  return part;
+}
+
 // Grades the picture of an image or video node: its filter is on the <img> or <video> itself, so the node keeps its own
 // transform and opacity, and the grade sits under both (the filter's markup is the stage's, see gradeDefs).
 function gradePicture(node, grade, grades) {
@@ -378,13 +409,13 @@ function gradeDefs(grades) {
 // players queue their loading in `pending`. `frames`: render mode's /frames.json, the decoded frames of each video element.
 // `highlight`: code-view.mjs codeHighlighter for this stage. `grades`: the stage's grade list; a graded picture takes the
 // next id from it (an element's own id is the user's text and is never used as one) and its filter is built from the list.
-// `lotties`: the stage's lottie players, destroyed when the stage is replaced.
+// `lotties`: the stage's lottie players, destroyed when the stage is replaced. `drawing`: only in a sketch scene, see buildDrawn.
 function mountElements(container, elements, prefix, ctx, parts, pending) {
-  const { look, frames, highlight, grades, lotties } = ctx;
+  const { look, frames, highlight, grades, lotties, drawing } = ctx;
   elements.forEach((el, i) => {
-    const part = buildElement(el, look, frames);
-    if (el.grade && GRADE_ELEMENT_TYPES.includes(el.type)) gradePicture(part.node, el.grade, grades); // validation refuses a grade elsewhere
     const at = `${prefix}[${i}]`;
+    const part = drawing && !isGroup(el) ? buildDrawn(el, at, drawing, look) : buildElement(el, look, frames);
+    if (el.grade && GRADE_ELEMENT_TYPES.includes(el.type)) gradePicture(part.node, el.grade, grades); // validation refuses a grade elsewhere
     part.node.dataset.path = at;
     parts.push(part);
     container.append(part.node);
@@ -393,7 +424,10 @@ function mountElements(container, elements, prefix, ctx, parts, pending) {
     if (el.type === 'lottie') pending.push(mountLottie(part.lottieHolder, el, assetUrl(el.src), lotties).then((state) => { part.lottie = state; }));
     if (part.img) pending.push(part.img.decode().catch(() => { throw new Error(`image failed to load: ${el.src}`); }));
     if (part.frame) pending.push(showFrame(part.frame, 0));
-    if (isGroup(el)) mountElements(part.node, el.children, `${at}.children`, ctx, parts, pending);
+    if (isGroup(el)) {
+      const inner = drawing && { ...drawing, origin: [drawing.origin[0] + el.x, drawing.origin[1] + el.y], opacity: drawing.opacity * el.opacity };
+      mountElements(part.node, el.children, `${at}.children`, drawing ? { ...ctx, drawing: inner } : ctx, parts, pending);
+    }
   });
 }
 
@@ -452,7 +486,8 @@ async function grainLayer(scene, size, amount) {
 
 // `captions`: loadCaptionTracks' tracks; each gets a layer over the scenes and under the grain and vignette. `lotties`: the
 // caller's list, which every lottie player joins as soon as it exists (the caller destroys them if the build fails).
-async function buildStage(spec, look, frames, captions, lotties) {
+// `sketch`: loadSketch's modules, null with no sketch scene.
+async function buildStage(spec, look, frames, captions, lotties, sketch) {
   const stage = document.createElement('div');
   stage.id = 'stage';
   stage.style.width = px(spec.size[0]);
@@ -483,12 +518,19 @@ async function buildStage(spec, look, frames, captions, lotties) {
       layer.append(camera);
     }
     const host = camera ?? layer;
-    mountElements(host, scene.elements, `scenes[${si}].elements`, { look, frames, highlight, grades, lotties }, parts, pending);
+    const plan = sketch && isSketchScene(spec, scene) ? sketch.planOf(scene, si) : null;
+    if (plan) sketch.scopeLayer(layer);
+    const sceneCtx = plan
+      ? { look: sketch.sketchLook(look), frames, highlight, grades, lotties, drawing: { plan, sketch, origin: [0, 0], opacity: 1 } }
+      : { look, frames, highlight, grades, lotties };
+    mountElements(host, scene.elements, `scenes[${si}].elements`, sceneCtx, parts, pending);
     stage.append(layer);
-    const entry = { scene, layer, camera, grain: null };
+    const entry = { scene, layer, camera, grain: null, plan };
     if (grain > 0) pending.push(grainLayer(scene, spec.size, grain).then((img) => { entry.grain = img; }));
     scenes.push(entry);
   }
+  const hand = sketch ? sketch.handNode() : null;
+  if (hand) stage.append(hand); // above the scenes, below the captions
   const captionLayers = captions.map((track) => captionLayer(track, spec, look));
   stage.append(...captionLayers.map((layer) => layer.node));
   await Promise.all(pending);
@@ -496,7 +538,7 @@ async function buildStage(spec, look, frames, captions, lotties) {
   if (defs) stage.append(defs);
   for (const { grain: img } of scenes) if (img) stage.append(img); // over the scenes, under the vignette
   if (spec.texture?.vignette) stage.append(vignetteLayer());
-  return { stage, scenes, parts, captions: captionLayers, lotties };
+  return { stage, scenes, parts, captions: captionLayers, lotties, hand, sketch };
 }
 
 function collectStrings(node, out = []) {
@@ -510,7 +552,8 @@ function collectStrings(node, out = []) {
 function fontNeeds(spec, look, captions) {
   const needs = [];
   const digits = '0123456789.,-+%$';
-  for (const { el } of spec.scenes.flatMap((s) => flattenElements(s.elements))) {
+  const themed = spec.scenes.filter((scene) => !isSketchScene(spec, scene)); // a sketch scene writes in the handwriting font alone (loadFonts)
+  for (const { el } of themed.flatMap((s) => flattenElements(s.elements))) {
     const kind = fontKind(el);
     const face = `${look.weight(kind, el.fontWeight ?? 600)} ${el.fontSize ?? 48}px ${look.fonts[kind]}`;
     if (el.type === 'text') needs.push([face, el.text]);
@@ -525,8 +568,9 @@ function fontNeeds(spec, look, captions) {
   return needs;
 }
 
-async function loadFonts(spec, look, captions) {
+async function loadFonts(spec, look, captions, sketch) {
   await Promise.all(fontNeeds(spec, look, captions).map(([font, text]) => document.fonts.load(font, text)));
+  await sketch?.loadHandwriting();
   await document.fonts.ready;
 }
 
@@ -589,7 +633,7 @@ function renewNodes(nodes) {
 // composes the window itself (scripts/lib/gl-composite.mjs) asks for `isolate`, 'outgoing' or 'incoming', to see that layer
 // alone, opaque and unposed, and screenshots each. `isolate` does nothing outside a GL window.
 // `background`: the root colour, `themeBackground`: the theme's page colour, the base under a see-through root.
-function makeApply({ scenes, parts, captions }, built, { size, background, themeBackground }) {
+function makeApply({ scenes, parts, captions, hand, sketch }, built, { size, background, themeBackground }) {
   const { states, sceneStarts, sceneOf, overlaps } = built;
   const lastPose = new Map(); // part node -> the transform and opacity it was given last, to renew it when they change
   const base = paintOver(background, themeBackground); // what the stage shows behind a scene with no background of its own
@@ -635,15 +679,17 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
       }
     });
     const renew = [];
-    for (const { node, el, drawNodes, arrowNode, roundCap, format, typing, codeTyping, frame, clip, lottie } of parts) {
+    for (const part of parts) {
+      const { node, el, boxPose, drawing, drawNodes, arrowNode, roundCap, format, typing, codeTyping, frame, clip, lottie } = part;
       const s = states.get(el.id);
-      const transform = `translate(${s.x}px, ${s.y}px) translate(${ANCHOR_SHIFT[el.anchor] ?? ANCHOR_SHIFT.center}, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
+      const transform = boxPose ?? `translate(${s.x}px, ${s.y}px) translate(${ANCHOR_SHIFT[el.anchor] ?? ANCHOR_SHIFT.center}, -50%) scale(${s.scale}) rotate(${s.rotate}deg)`;
       const opacity = String(s.opacity);
       node.style.transform = transform;
       node.style.opacity = opacity;
       const pose = `${transform} ${opacity}`;
       if (cameraMoved || (lastPose.has(node) && lastPose.get(node) !== pose)) renew.push(node);
       lastPose.set(node, pose);
+      if (drawing) sketch.applyDrawn(part, sec - sceneStarts[sceneOf.get(el.id)]);
       for (const drawNode of drawNodes ?? []) drawNode.setAttribute('stroke-dashoffset', String(1 - s.draw));
       // A round cap draws a dot of the stroke's width the moment the dash has any length: keep the line hidden until
       // the drawn length is more than a cap radius, so the stroke grows from a stub instead of popping in as a dot. A
@@ -670,6 +716,12 @@ function makeApply({ scenes, parts, captions }, built, { size, background, theme
           try { node.dataset.frame = String(seekLottie(lottie, Math.min(sceneT, duration), el)); } catch (e) { decoding.push(Promise.reject(e)); }
         }
       }
+    }
+    if (hand) {
+      // Part of the incoming scene: in a GL window, the layer composed alone that holds it.
+      const pose = sketch.applyHand(hand, alone === 'outgoing' ? null : scenes[active].plan, sec - sceneStarts[active]);
+      if (lastPose.has(hand) && lastPose.get(hand) !== pose) renew.push(hand);
+      lastPose.set(hand, pose);
     }
     if (renew.length && !LIVE_LAYERS) renewNodes(renew); // not in a preview: it needs no byte-exact frames, and its elements are compositor layers (a <video> among them)
     for (const layer of captions) applyCaption(layer, sec);
@@ -815,11 +867,12 @@ async function mount() {
   const mine = ++generation;
   const { spec, look } = await fetchSpec();
   const captions = await loadCaptionTracks(spec, assetUrl);
-  await loadFonts(spec, look, captions);
+  const sketch = await loadSketch(spec);
+  await loadFonts(spec, look, captions, sketch);
   const lotties = [];
   let dom;
   try {
-    dom = await buildStage(spec, look, await fetchFrames(), captions, lotties);
+    dom = await buildStage(spec, look, await fetchFrames(), captions, lotties, sketch);
   } catch (e) {
     destroyLotties(lotties); // the players the failed build had started
     throw e;

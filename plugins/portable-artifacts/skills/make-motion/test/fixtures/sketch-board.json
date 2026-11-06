@@ -1,0 +1,20 @@
+{
+  "size": [1920, 1080],
+  "style": "sketch",
+  "sketch": { "seed": 7 },
+  "scenes": [
+    {
+      "id": "board",
+      "duration": 7,
+      "elements": [
+        { "id": "title", "type": "text", "text": "How a request flows", "x": 960, "y": 200, "fontSize": 124 },
+        { "id": "web", "type": "shape", "shape": "rect", "x": 500, "y": 600, "width": 370, "height": 300 },
+        { "id": "screen", "type": "icon", "name": "monitor", "x": 500, "y": 550, "size": 112 },
+        { "id": "web-label", "type": "text", "text": "Browser", "x": 500, "y": 700, "fontSize": 76 },
+        { "id": "call", "type": "shape", "shape": "line", "arrow": "end", "x": 710, "y": 600, "to": { "x": 1000, "y": 600 } },
+        { "id": "api", "type": "shape", "shape": "ellipse", "fill": "scribble", "x": 1300, "y": 600, "width": 500, "height": 300 },
+        { "id": "api-label", "type": "text", "text": "API", "x": 1300, "y": 600, "fontSize": 76 }
+      ]
+    }
+  ]
+}

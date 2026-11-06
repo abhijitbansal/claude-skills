@@ -28,7 +28,7 @@ const WRITE = { width: 0.42, top: 0.62, bottom: 0.14, sweeps: 3 };
 // A sketch scene has one palette: the theme tokens of a standard scene (defaults.mjs COLOR_TOKENS, repeated here because that
 // file imports the blocks; a test fails if the lists drift) are accent, the board (surface) or ink. Anything else is a CSS colour.
 export const THEME_TOKENS = Object.freeze(['surface', 'line', 'accent', 'accentSoft', 'good', 'bad', 'warn', 'text', 'text2', 'text3', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5', 'cat6']);
-function colourOf(value) {
+export function colourOf(value) {
   if (value === undefined) return PALETTE.ink;
   if (value === 'accent') return PALETTE.accent;
   if (value === 'surface') return PALETTE.board;

@@ -5,6 +5,7 @@ import { expandBlocks } from './blocks/index.mjs';
 import { applyViral, autoCues, isViral, hookKeyframes, visibleAtStart } from './viral.mjs';
 import { TRANSITION_SECONDS, normalizeTransition, comesInOver } from './transitions.mjs';
 import { substituteVars } from './vars.mjs';
+import { isSketchScene, PALETTE } from './sketch/style.mjs';
 
 // No `background` default: the page fills it from the theme's page colour (see renderer fetchSpec). The canvas size
 // default lives in formats.mjs (canvasSize).
@@ -209,6 +210,7 @@ export function withDefaults(spec) {
   out.scenes.forEach((scene, si) => {
     // the first scene has nothing to come in over; a root object is copied, not shared between scenes
     scene.transition ??= si === 0 && comesInOver(normalizeTransition(transition).type) ? 'none' : (typeof transition === 'object' ? { ...transition } : transition);
+    if (isSketchScene(out, scene)) scene.background ??= PALETTE.board; // a drawn scene's page, whatever the theme's is
     const hook = si === 0 && isViral(out); // the first scene's titles are the hook
     for (const el of scene.elements) fillElement(el, out.theme, scene, out.fps, si < out.scenes.length - 1, hook);
   });

@@ -14,6 +14,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const EXAMPLE = path.join(root, 'references/examples/q3-revenue.json');
 // Two images, one sliding in from off canvas, and a title that scales in: the moving parts a capture race shows on.
 const SWIPE = path.join(root, 'references/examples/blocks/before-after-swipe.json');
+const SKETCH = path.join(root, 'test/fixtures/sketch-board.json');
 const REPEATS = 3;
 const NEED_ALL = { need: ['browser', 'ffmpeg', 'ffprobe'] };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -73,6 +74,11 @@ test('compositor layers (will-change) only when the page is explicitly in previe
       assert.equal(await elementWillChange(browser, mode, opts), 'auto', `${label}: no per-element layers`);
     }
   } finally { await browser.close(); }
+});
+
+test('a sketch spec renders byte-identically twice', async (t) => {
+  if (!await requireRender(t)) return;
+  await assertRendersIdentically(t, SKETCH, ['--fps', '10', '--size', '480x270']);
 });
 
 test(`a contact sheet with a sliding image and a scaling title is byte-identical over ${REPEATS} renders`, async (t) => {
