@@ -4,10 +4,13 @@
 // (icon-names.mjs), which the page never loads.
 import { pathJoin } from '../../shared/errors.mjs';
 import { flattenElements } from '../../template/groups.mjs';
-import { BLOCKS, BLOCK_NAMES } from '../../template/blocks/index.mjs';
+import { BLOCKS, BLOCK_NAMES, blockDef, isBlock } from '../../template/blocks/index.mjs';
+import { canvasSize } from '../../template/formats.mjs';
 import { VIRAL_MODE } from '../../template/viral.mjs';
 import { isSketchScene, specHasSketch, SCRIBBLE_FILL, HAND_SCALE_RANGE, PACE_RANGE } from '../../template/sketch/style.mjs';
 import caveat from '../../template/sketch/caveat-metrics.mjs';
+import lucide from '../../template/sketch/lucide.mjs';
+import { planScene } from '../../template/sketch/plan.mjs';
 import { ICON_NAMES, suggestIcon } from './icon-names.mjs';
 
 const SKETCH_TYPES = ['text', 'shape', 'icon', 'group', 'block'];
@@ -98,6 +101,37 @@ function checkSketchElement(el, base, errors) {
   if (el.type === 'shape' && el.fill === SCRIBBLE_FILL && el.shape === 'line') {
     errors.push({ path: pathJoin(base, 'fill'), message: `"${SCRIBBLE_FILL}" hatches a rect or an ellipse; a line has no inside` });
   }
+}
+
+const SECONDS_EPSILON = 1e-6;
+const TOP_ELEMENT = /^scenes\[\d+\]\.elements\[(\d+)\]/;
+
+// Where a too-short scene is reported: under the first required param of the block that draws last (a diagram's `nodes`),
+// else at the scene. `written`: the scene as written; `stroke`: the last stroke of its plan.
+function durationPath(written, si, stroke) {
+  const base = `scenes[${si}]`;
+  const index = TOP_ELEMENT.exec(stroke?.path ?? '')?.[1];
+  const last = index === undefined ? undefined : written.scenes[si].elements[Number(index)];
+  if (!isBlock(last)) return base;
+  const params = `${base}.elements[${index}].params`;
+  const param = blockDef(last.block)?.params?.required?.[0];
+  return param ? pathJoin(params, param) : params;
+}
+
+/**
+ * Pushes an error for each sketch scene shorter than its drawing needs at the natural pace: the stroke plan's `needs`, in
+ * seconds, rounded up to a tenth. `written`: the spec as written; `expanded`: the same after expandSpec (blocks are groups).
+ */
+export function checkSketchDuration(written, expanded, errors) {
+  const size = canvasSize(expanded);
+  const { seed, pace } = expanded.sketch ?? {};
+  expanded.scenes.forEach((scene, si) => {
+    if (!isSketchScene(expanded, scene)) return;
+    const plan = planScene(scene, { size, seed, pace, icons: lucide, sceneIndex: si, startAfter: 0 });
+    if (scene.duration + SECONDS_EPSILON >= plan.needs) return;
+    const needed = Math.ceil((plan.needs - SECONDS_EPSILON) * 10) / 10;
+    errors.push({ path: durationPath(written, si, plan.strokes.at(-1)), message: `this drawing needs a scene of at least ${needed}s` });
+  });
 }
 
 // A hand-drawn scene has no place in a viral spec: it would be drawn at the wrong shape, over a captions zone. One error

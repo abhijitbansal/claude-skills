@@ -1,0 +1,395 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import lucide from '../template/sketch/lucide.mjs';
+import metrics from '../template/sketch/caveat-metrics.mjs';
+import { PALETTE } from '../template/sketch/style.mjs';
+import { planScene } from '../template/sketch/plan.mjs';
+import { pointAt, unit } from '../template/sketch/geometry.mjs';
+import { HAND_EXIT, HAND_LEAD, travelSeconds } from '../template/sketch/timing.mjs';
+import { expandSpec } from '../template/defaults.mjs'; // before layout.mjs: the two import each other, and defaults.mjs must load first
+import { unit as layoutUnit } from '../template/blocks/layout.mjs';
+import { validateSpec } from '../scripts/lib/spec.mjs';
+import { checkSketchDuration } from '../scripts/lib/sketch-check.mjs';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SIZE = [1920, 1080];
+const ctx = (extra = {}) => ({ size: SIZE, seed: 1, pace: 1, icons: lucide, startAfter: 0, ...extra });
+const text = (id, extra = {}) => ({ id, type: 'text', text: 'hello world', x: 960, y: 540, fontSize: 80, ...extra });
+const rect = (id, extra = {}) => ({ id, type: 'shape', shape: 'rect', x: 960, y: 540, width: 400, height: 240, ...extra });
+const scene = (elements, extra = {}) => ({ id: 's', duration: 30, style: 'sketch', elements, ...extra });
+const plan = (elements, extra, sceneExtra) => planScene(scene(elements, sceneExtra), ctx(extra));
+const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) <= eps, `${a} != ${b}`);
+const strokesOf = (p, at) => p.strokes.filter((s) => s.path === at);
+const advance = (ch, fs) => (metrics.advance[ch] / metrics.unitsPerEm) * fs;
+
+const BOARD = [
+  text('title', { y: 170, fontSize: 110, text: 'How a request flows' }),
+  rect('box', { x: 380, y: 560, width: 370, height: 300 }),
+  { id: 'ic', type: 'icon', name: 'monitor', size: 112, x: 380, y: 510 },
+  { id: 'arr', type: 'shape', shape: 'line', arrow: 'end', x: 668, y: 560, width: 155 },
+];
+
+test('the same scene and seed give the same plan, deepEqual; another seed gives another wobble', () => {
+  const a = plan(BOARD);
+  const b = plan(structuredClone(BOARD));
+  assert.deepEqual(a, b);
+  assert.deepEqual(JSON.parse(JSON.stringify(a.strokes)), a.strokes, 'plain numbers and strings: no NaN, no undefined');
+  const other = plan(BOARD, { seed: 2 });
+  assert.notDeepEqual(other.strokes[1].points, a.strokes[1].points);
+});
+
+test('inserting an element does not change another element\'s wobble', () => {
+  const before = plan(BOARD);
+  const after = plan([text('newcomer', { y: 40 }), ...BOARD]);
+  BOARD.forEach((el, i) => {
+    const was = strokesOf(before, `elements[${i}]`);
+    const now = strokesOf(after, `elements[${i + 1}]`);
+    assert.ok(was.length > 0, el.id);
+    assert.deepEqual(now.map((s) => s.points), was.map((s) => s.points), el.id);
+  });
+});
+
+test('elements draw in document order, with no overlap between strokes', () => {
+  const p = plan(BOARD);
+  p.strokes.forEach((s, i) => {
+    assert.ok(s.t1 > s.t0, `stroke ${i} lasts`);
+    if (i > 0) assert.ok(s.t0 >= p.strokes[i - 1].t1, `stroke ${i} starts after stroke ${i - 1} ends`);
+  });
+  const order = p.strokes.map((s) => Number(/elements\[(\d+)\]/.exec(s.path)[1]));
+  assert.deepEqual(order, [...order].sort((x, y) => x - y));
+  assert.deepEqual([...new Set(order)], [0, 1, 2, 3]);
+});
+
+test('pace 2 halves stroke durations; pace 0.5 doubles them', () => {
+  const one = plan(BOARD);
+  for (const [pace, factor] of [[2, 0.5], [0.5, 2]]) {
+    const other = plan(BOARD, { pace });
+    assert.equal(other.strokes.length, one.strokes.length);
+    one.strokes.forEach((s, i) => near((other.strokes[i].t1 - other.strokes[i].t0) / (s.t1 - s.t0), factor));
+  }
+});
+
+test('stroke speeds are the spike\'s: lines 2700 px/s, icons 2000, fills 9000, writing 22 characters/s', () => {
+  const lineStroke = plan([{ id: 'l', type: 'shape', shape: 'line', x: 960, y: 540, width: 1200 }]).strokes[0];
+  near(lineStroke.t1 - lineStroke.t0, lineStroke.total / 2700);
+  const icon = plan([{ id: 'i', type: 'icon', name: 'server', size: 400, x: 960, y: 540 }]).strokes[0];
+  near(icon.t1 - icon.t0, Math.max(0.06, icon.total / 2000));
+  const filled = plan([rect('r', { fill: 'scribble' })]).strokes;
+  const hatch = filled.find((s) => s.kind === 'fill');
+  near(hatch.t1 - hatch.t0, Math.max(0.08, hatch.total / 9000));
+  const written = plan([text('w', { text: 'eleven char' })]).strokes[0];
+  near(written.t1 - written.t0, 11 / 22);
+});
+
+test('the hand: it enters from the lower right, travel is min(0.3, 0.04 + dist/3600), and a stroke starts after it', () => {
+  near(travelSeconds([0, 0], [0, 0], 1), 0);
+  near(travelSeconds([0, 0], [3, 0], 1), 0, 1e-12);
+  near(travelSeconds([0, 0], [360, 0], 1), 0.14);
+  near(travelSeconds([0, 0], [3600, 0], 1), 0.3);
+  near(travelSeconds([0, 0], [360, 0], 0.5), 0.24, 1e-9); // distances shrink with the canvas, so travel stretches
+  const p = plan([rect('r')]);
+  assert.ok(p.strokes[0].t0 > HAND_LEAD, 'lead, then the hand comes in from off canvas');
+  near(p.strokes[0].t0, HAND_LEAD + 0.3);
+  const later = plan([rect('r')], { startAfter: 1.5 });
+  near(later.strokes[0].t0 - p.strokes[0].t0, 1.5);
+});
+
+test('needs equals drawEnd + HAND_EXIT; an empty scene needs nothing', () => {
+  const p = plan(BOARD);
+  assert.equal(HAND_EXIT, 0.65);
+  assert.equal(p.drawEnd, p.strokes.at(-1).t1);
+  near(p.needs, p.drawEnd + HAND_EXIT);
+  assert.deepEqual([plan([]).drawEnd, plan([]).needs], [0, 0]);
+});
+
+test('glyph x positions come from the metrics table: "AV" is the advance sum, with no kerning', () => {
+  const p = plan([text('t', { text: 'AV', fontSize: 100, anchor: 'left', x: 200 })]);
+  const { glyphs, fontSize } = p.elements.get('elements[0]');
+  assert.equal(fontSize, 100);
+  assert.deepEqual(glyphs.map((g) => g.char), ['A', 'V']);
+  near(glyphs[0].x, 200);
+  near(glyphs[1].x - glyphs[0].x, advance('A', 100));
+  const box = p.elements.get('elements[0]').box;
+  near(box.width, advance('A', 100) + advance('V', 100));
+  assert.equal(glyphs[0].y, glyphs[1].y);
+  const spaced = plan([text('t', { text: 'A V', fontSize: 100, anchor: 'left', x: 200 })]).elements.get('elements[0]');
+  assert.deepEqual(spaced.glyphs.map((g) => g.char), ['A', 'V'], 'a space moves the pen but is not a glyph to draw');
+  near(spaced.glyphs[1].x - 200, advance('A', 100) + advance(' ', 100));
+});
+
+test('text is centred on x, y by default; anchor left and right put the edge on x', () => {
+  const centre = plan([text('t', { text: 'AV', fontSize: 100 })]).elements.get('elements[0]').box;
+  near(centre.x + centre.width / 2, 960);
+  near(centre.y + centre.height / 2, 540);
+  const left = plan([text('t', { text: 'AV', fontSize: 100, anchor: 'left' })]).elements.get('elements[0]').box;
+  near(left.x, 960);
+  const right = plan([text('t', { text: 'AV', fontSize: 100, anchor: 'right' })]).elements.get('elements[0]').box;
+  near(right.x + right.width, 960);
+});
+
+test('text wraps at maxWidth and stays inside its box', () => {
+  const sentence = 'The quick brown fox jumps over the lazy dog and keeps running';
+  const p = plan([text('t', { text: sentence, fontSize: 80, maxWidth: 500 })]);
+  const el = p.elements.get('elements[0]');
+  assert.ok(el.box.width <= 500 + 1e-9, `box ${el.box.width}`);
+  const rows = [...new Set(el.glyphs.map((g) => g.y))];
+  assert.ok(rows.length >= 3, `wrapped onto ${rows.length} lines`);
+  assert.equal(p.strokes.length, rows.length, 'one writing stroke per line');
+  near(el.box.height, rows.length * 80 * 1.15);
+  for (const g of el.glyphs) {
+    assert.ok(g.x >= el.box.x - 1e-9 && g.x + advance(g.char, 80) <= el.box.x + el.box.width + 1e-9, `${g.char} inside the box`);
+  }
+  assert.deepEqual(p.problems, []);
+  for (const s of p.strokes) for (const [x, y] of s.points) assert.ok(x >= el.box.x - 1 && x <= el.box.x + el.box.width + 1 && y >= el.box.y && y <= el.box.y + el.box.height, 'the pen stays in the box');
+});
+
+test('the default maxWidth is 80% of the canvas width, from the metrics; a newline starts a line', () => {
+  const long = 'word '.repeat(60).trim();
+  const el = plan([text('t', { text: long, fontSize: 80 })]).elements.get('elements[0]');
+  assert.ok(el.box.width <= 0.8 * 1920 + 1e-9 && el.box.width > 0.6 * 1920, `box ${el.box.width}`);
+  const two = plan([text('t', { text: 'one\ntwo', fontSize: 80 })]).elements.get('elements[0]');
+  assert.equal(new Set(two.glyphs.map((g) => g.y)).size, 2);
+});
+
+test('a word wider than maxWidth is a problem that names the element; so is a character the font lacks', () => {
+  const wide = plan([text('t', { text: 'extraordinary', fontSize: 80, maxWidth: 100 })]);
+  assert.equal(wide.problems.length, 1);
+  assert.equal(wide.problems[0].path, 'elements[0]');
+  assert.match(wide.problems[0].message, /wider than maxWidth 100/);
+  const missing = plan([text('t', { text: 'go 🚀' })]);
+  assert.equal(missing.problems.length, 1);
+  assert.match(missing.problems[0].message, /🚀/);
+});
+
+test('"Café" with a combining accent lays out like "Café"', () => {
+  const composed = 'Café';
+  const decomposed = 'Café';
+  assert.notEqual(composed, decomposed);
+  const a = plan([text('t', { text: composed })]);
+  const b = plan([text('t', { text: decomposed })]);
+  assert.deepEqual(b, a);
+  assert.equal(a.elements.get('elements[0]').glyphs.length, 4);
+  assert.deepEqual(a.problems, []);
+});
+
+test('a group\'s children are planned in canvas coordinates, nested groups summed', () => {
+  const inner = { id: 'inner', type: 'group', x: 50, y: 20, children: [rect('r', { x: 10, y: 5, width: 100, height: 60 })] };
+  const outer = { id: 'outer', type: 'group', x: 500, y: 300, children: [inner] };
+  const p = plan([outer]);
+  const box = p.elements.get('elements[0].children[0].children[0]').box;
+  assert.deepEqual(box, { x: 560 - 50, y: 325 - 30, width: 100, height: 60 });
+  const all = p.elements.get('elements[0]').box;
+  assert.deepEqual(all, box, 'a group\'s box is its children\'s union');
+  const xs = p.strokes.map((s) => s.points.map((pt) => pt[0])).flat();
+  assert.ok(Math.min(...xs) > 490 && Math.max(...xs) < 640, 'the outline is drawn near x 560, not near 10');
+  assert.ok(p.strokes.every((s) => s.path === 'elements[0].children[0].children[0]'));
+});
+
+test('static opacity carries to strokes, groups multiply it', () => {
+  const g = { id: 'g', type: 'group', x: 0, y: 0, opacity: 0.5, children: [rect('r', { opacity: 0.4 }), text('t', { opacity: 1 })] };
+  const p = plan([g]);
+  assert.deepEqual([...new Set(p.strokes.map((s) => s.opacity))].sort(), [0.2, 0.5]);
+  assert.equal(plan([rect('r')]).strokes[0].opacity, 1);
+});
+
+test('drawAt delays an element; earlier ones are unaffected, later ones follow it', () => {
+  const base = plan([rect('a'), rect('b', { x: 400 }), rect('c', { x: 1500 })]);
+  const delayed = plan([rect('a'), rect('b', { x: 400, drawAt: 12 }), rect('c', { x: 1500 })]);
+  assert.deepEqual(strokesOf(delayed, 'elements[0]'), strokesOf(base, 'elements[0]'));
+  const b = strokesOf(delayed, 'elements[1]');
+  near(b[0].t0, 12);
+  assert.ok(strokesOf(delayed, 'elements[2]')[0].t0 >= b.at(-1).t1);
+  assert.deepEqual(b.map((s) => s.points), strokesOf(base, 'elements[1]').map((s) => s.points), 'only the times move');
+  const early = plan([rect('a'), rect('b', { x: 400, drawAt: 0.1 })]);
+  assert.deepEqual(early.strokes, plan([rect('a'), rect('b', { x: 400 })]).strokes, 'a drawAt already passed changes nothing');
+  const group = plan([{ id: 'g', type: 'group', x: 0, y: 0, drawAt: 9, children: [rect('a')] }]);
+  assert.ok(group.strokes[0].t0 >= 9, 'a group\'s drawAt delays its first child');
+  const words = plan([rect('a', { drawAt: 'sentence:1' })]);
+  assert.ok(words.strokes[0].t0 < 2, 'a sentence window is not planned yet: it draws at natural pace');
+});
+
+test('pointAt at 0 and 1 returns the first and last points; between, it follows the arc length', () => {
+  const s = plan([{ id: 'l', type: 'shape', shape: 'line', x: 960, y: 540, width: 1000 }]).strokes[0];
+  assert.deepEqual(pointAt(s, 0), s.points[0]);
+  assert.deepEqual(pointAt(s, 1), s.points.at(-1));
+  assert.deepEqual(pointAt(s, -3), s.points[0]);
+  assert.deepEqual(pointAt(s, 7), s.points.at(-1));
+  assert.equal(s.lengths.length, s.points.length);
+  assert.equal(s.lengths[0], 0);
+  near(s.lengths.at(-1), s.total);
+  const mid = pointAt(s, 0.5);
+  const k = s.lengths.findIndex((l) => l >= s.total / 2);
+  assert.ok(mid[0] >= s.points[k - 1][0] - 1e-9 && mid[0] <= s.points[k][0] + 1e-9);
+  const fresh = pointAt(s, 0);
+  fresh[0] = -999;
+  assert.notEqual(s.points[0][0], -999, 'a result is a copy');
+});
+
+test('a 1080x1920 canvas scales speeds and widths by the short side', () => {
+  const small = planScene(scene([rect('r', { x: 270, y: 480, width: 200, height: 120 })]), ctx({ size: [540, 960] }));
+  const big = planScene(scene([rect('r', { x: 540, y: 960, width: 400, height: 240 })]), ctx({ size: [1080, 1920] }));
+  const land = planScene(scene([rect('r', { x: 960, y: 540, width: 400, height: 240 })]), ctx({ size: [1920, 1080] }));
+  near(big.strokes[0].width, 5.5);
+  near(small.strokes[0].width, 2.75);
+  near(land.strokes[0].width, 5.5);
+  const dur = (p) => p.strokes[0].t1 - p.strokes[0].t0;
+  near(dur(big), dur(small), 1e-6);
+  near(big.strokes[0].total / small.strokes[0].total, 2, 0.02);
+  const w = (size) => planScene(scene([text('t', { fontSize: 100 * size[0] / 1080 })]), ctx({ size })).strokes[0].width;
+  near(w([1080, 1920]) / w([540, 960]), 2, 1e-9);
+});
+
+test('shape strokes: a box is ink at the spike\'s width, a scribble fill goes under it, a colour fill draws nothing', () => {
+  const p = plan([rect('r', { fill: 'scribble' })]);
+  assert.deepEqual(p.strokes.map((s) => [s.kind, s.layer]), [['fill', 'under'], ['line', 'ink']]);
+  const [fill, outline] = p.strokes;
+  assert.equal(fill.color, PALETTE.accent);
+  assert.equal(fill.width, 20);
+  assert.equal(fill.opacity, 0.17);
+  assert.equal(outline.color, PALETTE.ink);
+  assert.equal(outline.width, 5.5);
+  assert.ok(fill.t1 <= outline.t0, 'the hatch is drawn before its outline');
+  const plain = plan([rect('r', { fill: '#ff0000' })]);
+  assert.deepEqual(plain.strokes.map((s) => s.kind), ['line']);
+  const dim = plan([rect('r', { fill: 'scribble', opacity: 0.5 })]);
+  near(dim.strokes[0].opacity, 0.085);
+  const closes = outline.points;
+  assert.ok(Math.hypot(closes.at(-1)[0] - closes[0][0], closes.at(-1)[1] - closes[0][1]) > 8, 'the outline overshoots its start instead of closing exactly');
+});
+
+test('an ellipse is outlined and hatched inside itself; a stroke colour and width are the element\'s', () => {
+  const el = { id: 'e', type: 'shape', shape: 'ellipse', x: 600, y: 400, width: 300, height: 200, fill: 'scribble', stroke: 'accent', strokeWidth: 9 };
+  const p = plan([el]);
+  const [fill, outline] = p.strokes;
+  assert.equal(outline.color, PALETTE.accent);
+  assert.equal(outline.width, 9);
+  for (const [x, y] of fill.points) assert.ok(((x - 600) / 150) ** 2 + ((y - 400) / 100) ** 2 <= 1.05, 'hatch stays inside the ellipse');
+  const xs = outline.points.map((pt) => pt[0]);
+  assert.ok(Math.min(...xs) > 440 && Math.max(...xs) < 760);
+});
+
+test('a line with arrow "end" adds two head strokes at its end; cap changes nothing', () => {
+  const arrow = { id: 'a', type: 'shape', shape: 'line', arrow: 'end', x: 668, y: 560, width: 155 };
+  const p = plan([arrow]);
+  assert.equal(p.strokes.length, 3);
+  const [line, ...heads] = p.strokes;
+  const tip = line.points.at(-1);
+  for (const h of heads) assert.ok(Math.hypot(h.points.at(-1)[0] - tip[0], h.points.at(-1)[1] - tip[1]) < 1, 'a barb ends on the tip, give or take its own wobble');
+  assert.ok(heads.every((h) => h.total > 20 && h.total < 40 && h.width === 5.5));
+  assert.ok(tip[0] > 668 + 60 && tip[0] < 668 + 90, 'the tip is at the line\'s right end');
+  assert.deepEqual(plan([{ ...arrow, cap: 'round' }]), p);
+  assert.equal(plan([{ ...arrow, arrow: undefined }]).strokes.length, 1);
+});
+
+test('an icon draws one stroke per Lucide polyline, scaled to its size; an unknown icon is a problem', () => {
+  const p = plan([{ id: 'i', type: 'icon', name: 'monitor', size: 112, x: 380, y: 510, color: 'accent' }]);
+  assert.equal(p.strokes.length, lucide.monitor.length);
+  for (const s of p.strokes) {
+    assert.equal(s.width, 4.5);
+    assert.equal(s.color, PALETTE.accent);
+    for (const [x, y] of s.points) assert.ok(x > 380 - 56 - 8 && x < 380 + 56 + 8 && y > 510 - 56 - 8 && y < 510 + 56 + 8);
+  }
+  assert.deepEqual(p.elements.get('elements[0]').box, { x: 324, y: 454, width: 112, height: 112 });
+  const bad = plan([{ id: 'i', type: 'icon', name: 'no-such-icon', size: 112, x: 380, y: 510 }]);
+  assert.equal(bad.strokes.length, 0);
+  assert.equal(bad.problems.length, 1);
+  assert.match(bad.problems[0].message, /no-such-icon/);
+  assert.match(plan([{ id: 'i', type: 'icon', name: 'monitor', size: 10, x: 0, y: 0 }], { icons: undefined }).problems[0].message, /monitor/);
+});
+
+test('element plans carry their time window and paths use the scene index', () => {
+  const p = plan(BOARD, { sceneIndex: 3 });
+  assert.deepEqual([...p.elements.keys()], ['scenes[3].elements[0]', 'scenes[3].elements[1]', 'scenes[3].elements[2]', 'scenes[3].elements[3]']);
+  const first = p.elements.get('scenes[3].elements[0]');
+  near(first.t0, p.strokes[0].t0);
+  near(first.t1, p.strokes.filter((s) => s.path === 'scenes[3].elements[0]').at(-1).t1);
+  assert.ok(p.strokes.every((s) => s.path.startsWith('scenes[3].elements[')));
+  assert.equal(unit([1080, 1920]), layoutUnit([1080, 1920]));
+  assert.equal(unit([1920, 1080]), layoutUnit([1920, 1080]));
+});
+
+test('a type the pencil cannot draw is a problem, not a crash', () => {
+  const p = plan([{ id: 'c', type: 'counter', to: 5, x: 0, y: 0 }, rect('r')]);
+  assert.equal(p.problems.length, 1);
+  assert.match(p.problems[0].message, /counter/);
+  assert.equal(p.strokes.length, 1);
+  assert.throws(() => planScene(scene([]), { seed: 1 }), /ctx\.size/);
+});
+
+test('the plan modules are pure: no Node imports, no DOM, no Math.random', () => {
+  for (const file of ['geometry.mjs', 'plan.mjs', 'timing.mjs']) {
+    const source = readFileSync(path.join(root, 'template/sketch', file), 'utf8');
+    assert.ok(!/from\s+['"]node:/.test(source), `${file}: node: import`);
+    assert.ok(!/\b(document|window|getPointAtLength|getTotalLength|Math\.random|process\.)\b/.test(source.replace(/\/\/.*$/gm, '')), `${file}: DOM, Node or random`);
+    for (const [, spec] of source.matchAll(/from\s+['"]([^'"]+)['"]/g)) assert.ok(spec.startsWith('.'), `${file}: ${spec} is not a relative import`);
+    assert.ok(!/lucide\.mjs/.test(source.replace(/\/\/.*$/gm, '')), `${file}: icons come in through ctx.icons`);
+  }
+});
+
+test('expandSpec keeps a block\'s drawAt on its group, and a block without one gets none', () => {
+  const block = (extra) => ({ id: 'b', type: 'block', block: 'title-card', x: 960, y: 540, params: { title: 'Hi' }, ...extra });
+  const spec = (el) => ({ scenes: [{ id: 's', duration: 5, elements: [el] }] });
+  const withAt = expandSpec(spec(block({ drawAt: 2.5 }))).scenes[0].elements[0];
+  assert.equal(withAt.type, 'group');
+  assert.equal(withAt.drawAt, 2.5);
+  const without = expandSpec(spec(block({}))).scenes[0].elements[0];
+  assert.deepEqual(Object.keys(without), ['id', 'type', 'x', 'y', 'children']);
+  assert.equal(Object.hasOwn(without, 'drawAt'), false);
+});
+
+function sketchSpec(elements, duration, extra = {}) {
+  return { scenes: [{ id: 's', duration, style: 'sketch', elements }], ...extra };
+}
+const errorsOf = (spec) => validateSpec(spec, { dir: root }).errors.map((e) => `${e.path}: ${e.message}`);
+
+test('a scene shorter than the drawing needs is a validation error with the seconds', () => {
+  const elements = [text('a', { text: 'a line of handwriting that takes a while to write out' }), rect('b'), text('c', { y: 800, text: 'and one more' })];
+  const expanded = expandSpec(sketchSpec(elements, 30));
+  const { needs } = planScene(expanded.scenes[0], ctx({ size: [1920, 1080] }));
+  const asked = Math.ceil(needs * 10) / 10;
+  assert.ok(asked > 3 && asked < 29, `needs ${asked}`);
+  assert.deepEqual(errorsOf(sketchSpec(elements, 30)), []);
+  assert.deepEqual(errorsOf(sketchSpec(elements, asked)), [], 'a scene of exactly the stated length is enough');
+  assert.deepEqual(errorsOf(sketchSpec(elements, asked - 0.2)), [`scenes[0]: this drawing needs a scene of at least ${asked}s`]);
+});
+
+test('the required-duration error follows the spec\'s pace and seed settings, and a standard scene needs nothing', () => {
+  const elements = [text('a', { text: 'a line of handwriting that takes a while to write out' }), rect('b')];
+  const slow = errorsOf(sketchSpec(elements, 5, { sketch: { pace: 0.5 } }));
+  const fast = errorsOf(sketchSpec(elements, 5, { sketch: { pace: 2 } }));
+  assert.equal(slow.length, 1);
+  assert.deepEqual(fast, []);
+  const standard = { scenes: [{ id: 's', duration: 0.5, elements }] };
+  assert.deepEqual(errorsOf(standard), []);
+});
+
+test('when the last element is a block the error sits under its first required param; otherwise at the scene', () => {
+  // No sketch block exists yet, so a standard one stands in (validateSpec would refuse it first: this calls the check alone).
+  const block = { id: 'b', type: 'block', block: 'title-card', x: 960, y: 540, params: { title: 'A fairly long title for a card' } };
+  const run = (elements) => {
+    const written = sketchSpec(elements, 0.5);
+    const errors = [];
+    checkSketchDuration(written, expandSpec(written), errors);
+    return errors.map((e) => `${e.path}: ${e.message}`);
+  };
+  const [onBlock] = run([text('a'), block]);
+  assert.match(onBlock, /^scenes\[0\]\.elements\[1\]\.params\.title: this drawing needs a scene of at least \d+(\.\d)?s$/);
+  const [onText] = run([block, text('a')]);
+  assert.match(onText, /^scenes\[0\]: this drawing needs a scene of at least /);
+});
+
+test('a spec with other errors gets those alone: the length is checked once everything else is valid', () => {
+  const found = errorsOf(sketchSpec([text('a', { text: 'a line of handwriting that takes a while' }), { id: 'i', type: 'icon', name: 'sever', size: 80, x: 0, y: 0 }], 0.5));
+  assert.equal(found.length, 1, found.join('\n'));
+  assert.match(found[0], /unknown icon "sever"/);
+});
+
+test('a plan of malformed input reports a problem instead of throwing', () => {
+  const p = plan([{ id: 'i', type: 'icon', name: 'server', x: 10, y: 10 }, { id: 'r', type: 'shape', shape: 'rect', x: 'left', y: 10 }, rect('ok')]);
+  assert.equal(p.problems.length, 2);
+  assert.equal(p.strokes.length, 1);
+  assert.ok(Number.isFinite(p.needs));
+});

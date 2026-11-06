@@ -19,7 +19,7 @@ import { BLOCKS, BLOCK_NAMES, isBlock, blockDef, blockAssetFiles, paramOfPart } 
 import { VIRAL_MODE, applyViral } from '../../template/viral.mjs';
 import { VAR_NAME, MAX_VARS, VAR_TYPES, declaresVars, findVarRefs, varValues, substituteVars } from '../../template/vars.mjs';
 import { STYLES, HAND_TONES, SCRIBBLE_FILL, isSketchScene } from '../../template/sketch/style.mjs';
-import { checkSketch } from './sketch-check.mjs';
+import { checkSketch, checkSketchDuration } from './sketch-check.mjs';
 import { checkCode } from './code-check.mjs';
 import { checkLottie } from './lottie-check.mjs';
 import { isAtlasName } from '../../template/maps.mjs';
@@ -1062,5 +1062,8 @@ export function validateSpec(input, { dir = process.cwd(), values = {} } = {}) {
   checkAudio(spec, dir, errors);
   checkCues(spec, errors);
   checkCaptions(spec, dir, errors);
+  // The stroke plan's length (the page draws the same plan). Last, and only for a spec that is otherwise valid: the plan
+  // reads sizes, icons and times that the checks above have not yet vouched for.
+  if (errors.length === 0) checkSketchDuration(written, spec, errors);
   return { ok: errors.length === 0, errors: atBlocks(written, errors) };
 }
