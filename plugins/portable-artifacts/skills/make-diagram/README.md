@@ -82,9 +82,23 @@ Full field reference: [`references/schema.md`](references/schema.md). Kinds,
 shapes and icons: [`references/kinds.md`](references/kinds.md). Working
 examples of each type: [`references/examples/`](references/examples/).
 
-Icons are 306 general [Lucide](https://lucide.dev) icons and 126 software
+Icons are 306 general [Lucide](https://lucide.dev) icons and 133 software
 brand marks ([Simple Icons](https://simpleicons.org), CC0), drawn in one
 neutral colour. Find one with `node scripts/icons.mjs search <word>`.
+
+Cloud icons (`cloud:aws-lambda`, `cloud:google-cloud-run`) come from the CC0
+[SVG Logos](https://github.com/gilbarbara/logos) pack: 60 AWS names and 4
+Google Cloud names, drawn in their own colours (a `tone` does not tint them).
+Services the pack lacks can be imported from the vendor's own icon download,
+which you unpack yourself after accepting the vendor's terms:
+`node scripts/icons.mjs import <aws|gcp> <folder>`. Imported icons live outside
+the repo (`$MAKE_DIAGRAM_ICON_DIR`, default
+`~/.cache/portable-artifacts/make-diagram/`); a bundled name wins over an
+imported one, and a built page embeds the markup it uses. Every icon, bundled or
+imported, passes one allow-list (`scripts/lib/svg-safe.mjs`): no script, event
+handler, `foreignObject`, `<style>` or external reference gets through. The
+importer is tested on folders shaped like the documented layouts, not on real
+vendor downloads.
 
 ## Security
 

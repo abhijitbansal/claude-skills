@@ -73,7 +73,7 @@ Message kinds: `sync` (solid, filled arrow), `async` (solid, open arrow), `reply
 
 ## Icons
 
-`icon` is `lucide:<name>` (306 general icons) or `brand:<slug>` (126 software brands, CC0 marks). Brand marks are drawn monochrome in the text colour, never in brand colours. Names come from committed catalogs; an unknown name fails validation with a did-you-mean.
+`icon` is `lucide:<name>` (306 general icons), `brand:<slug>` (133 software brands, CC0 marks) or `cloud:<name>` (60 AWS and 4 Google Cloud services; `cloud:aws-lambda`, `cloud:google-cloud-run`). Brand marks are drawn monochrome in the text colour, never in brand colours; cloud icons keep their own colours and a `tone` does not tint them. Names come from committed catalogs; an unknown name fails validation with a did-you-mean.
 
 ```
 node scripts/icons.mjs search database      # lucide:database, lucide:database-backup, ...

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// Dev only. Regenerates icons/lucide.json and icons/brands.json from the pinned
-// devDependencies lucide-static and simple-icons. Run from skills/make-diagram
-// after `npm install`:
+// Dev only. Regenerates icons/lucide.json, icons/brands.json and icons/cloud.json from
+// the pinned devDependencies lucide-static, simple-icons and @iconify-json/logos. Run
+// from skills/make-diagram after `npm ci`:
 //   node scripts/dev/build-icons.mjs
-// Outputs are committed; nothing at run time needs either package.
+// Outputs are committed; nothing at run time needs any of the packages.
+//   - A cloud icon the allow-list (scripts/lib/svg-safe.mjs) refuses fails the run.
 //   - A curated Lucide name missing from the installed version fails the run
 //     (exit 1) and lists every missing name: Lucide renames icons across versions.
 //   - A curated Simple Icons slug missing upstream is reported and skipped
@@ -11,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sanitizeSvg } from '../lib/svg-safe.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -61,7 +63,18 @@ export const BRAND_SLUGS = words(`
   npm yarn pnpm eslint prettier jest vitest cypress
   wireguard openvpn tailscale minio traefikproxy
   google meta
+  googlebigtable googlecloudcomposer googlecloudspanner googlecontaineroptimizedos googledataflow googledataproc googlepubsub
 `);
+
+// Cloud icons come from the CC0 @iconify-json/logos pack: every AWS name except the retired or
+// duplicate ones, and the four Google Cloud names the pack has.
+export const CLOUD_PACK = '@iconify-json/logos';
+export const CLOUD_DROPPED = words('aws-elastic-cache aws-mobilehub aws-codestar aws-opsworks');
+// `aws` is the wordmark: dark navy lettering that vanishes on a dark card and is 3 px tall at the 18 px a node draws it (contact sheet, Task 21).
+export const CLOUD_UNREADABLE = words('aws');
+export const CLOUD_GOOGLE = words('google-cloud google-cloud-platform google-cloud-functions google-cloud-run');
+const CLOUD_LEFT_OUT = [...CLOUD_DROPPED, ...CLOUD_UNREADABLE];
+export const isCloudName = (name) => ((name === 'aws' || name.startsWith('aws-')) && !CLOUD_LEFT_OUT.includes(name)) || CLOUD_GOOGLE.includes(name);
 
 // Lucide ships only these geometric tags / attributes. Anything else is dropped,
 // so a hostile or surprising upstream release can never smuggle markup in.
@@ -170,10 +183,46 @@ function buildBrands() {
   for (const [slug, lic] of licensed) process.stdout.write(`skipped (licence ${lic}): ${slug}\n`);
 }
 
+// One Iconify entry ({ body, width?, height? } over the set's defaults) -> sanitizeSvg's result.
+export function iconifyEntry(entry, set) {
+  const width = entry.width ?? set.width;
+  const height = entry.height ?? set.height;
+  return sanitizeSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">${entry.body}</svg>`);
+}
+
+function buildCloud() {
+  const dir = path.join(ROOT, 'node_modules', CLOUD_PACK);
+  const pack = readJson(path.join(dir, 'package.json'));
+  const licence = readJson(path.join(dir, 'info.json')).license?.spdx;
+  if (licence !== 'CC0-1.0') {
+    process.stderr.write(`${CLOUD_PACK} ${pack.version} is licensed ${licence}, not CC0-1.0; THIRD_PARTY_NOTICES.md says it is CC0.\n`);
+    return false;
+  }
+  const set = readJson(path.join(dir, 'icons.json'));
+  const entries = {};
+  const unsafe = [];
+  const missing = CLOUD_GOOGLE.filter((n) => !(n in set.icons));
+  for (const name of Object.keys(set.icons).filter(isCloudName)) {
+    const result = iconifyEntry(set.icons[name], set);
+    if (result.skipped) unsafe.push(`${name} (${result.skipped})`);
+    else entries[name] = { viewBox: result.viewBox, markup: result.markup };
+  }
+  if (missing.length || unsafe.length) {
+    process.stderr.write(`${CLOUD_PACK} ${pack.version}: ${missing.length ? `missing ${missing.join(', ')}; ` : ''}${unsafe.length ? `refused by the allow-list: ${unsafe.join(', ')}` : ''}\n`);
+    return false;
+  }
+  const body = Object.keys(entries).sort().map((k) => `${JSON.stringify(k)}:${JSON.stringify(entries[k])}`);
+  fs.mkdirSync(path.join(ROOT, 'icons'), { recursive: true });
+  fs.writeFileSync(path.join(ROOT, 'icons/cloud.json'), `{"version":${JSON.stringify(pack.version)},"source":${JSON.stringify(CLOUD_PACK)},"icons":{\n${body.join(',\n')}\n}}\n`);
+  process.stdout.write(`${CLOUD_PACK} ${pack.version}: ${Object.keys(entries).length} cloud icons\n`);
+  return true;
+}
+
 function main() {
-  const ok = buildLucide();
+  const lucideOk = buildLucide();
   buildBrands();
-  if (!ok) process.exitCode = 1;
+  const cloudOk = buildCloud();
+  if (!lucideOk || !cloudOk) process.exitCode = 1;
 }
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main();

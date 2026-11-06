@@ -1,12 +1,22 @@
-// Icon lookup over the committed catalogs (icons/lucide.json, icons/brands.json).
-// Refs are "lucide:<name>" or "brand:<slug>". Pure data access: no network, no
+// Icon lookup over the committed catalogs (icons/lucide.json, icons/brands.json,
+// icons/cloud.json) and the cloud icons the user imported (icon-import.mjs). Refs are
+// "lucide:<name>", "brand:<slug>" or "cloud:<name>". Pure data access: no network, no
 // dev dependencies.
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { didYouMean, levenshtein } from '../../shared/errors.mjs';
+import { sanitizeSvg } from './svg-safe.mjs';
 
 const VIEW_BOX = '0 0 24 24';
-const PREFIXES = ['lucide', 'brand'];
+const PREFIXES = ['lucide', 'brand', 'cloud'];
 const DEFAULT_SEARCH_LIMIT = 12;
+const CLOUD_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const IMPORTED_FILE = /^imported-[a-z]+\.json$/;
+// Where a bare name like "lambda" might live in the cloud catalog.
+const CLOUD_GUESSES = ['aws-', 'google-cloud-', 'google-'];
+
+export const IMPORT_COMMAND = 'node scripts/icons.mjs import <aws|gcp> <folder>';
 
 export class IconError extends Error {
   constructor(message, suggestion = null) {
@@ -51,76 +61,161 @@ let catalogs = null;
 function load() {
   if (catalogs) return catalogs;
   const read = (name) => JSON.parse(fs.readFileSync(new URL(`../../icons/${name}.json`, import.meta.url), 'utf8'));
-  catalogs = { lucide: read('lucide').icons, brand: read('brands').icons };
+  catalogs = { lucide: read('lucide').icons, brand: read('brands').icons, cloud: read('cloud').icons };
   return catalogs;
 }
 
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+
+// ---- imported cloud icons ----------------------------------------------------------------
+
+/** The folder imported cloud icons live in: $MAKE_DIAGRAM_ICON_DIR, else ~/.cache/portable-artifacts/make-diagram. */
+export function iconDir() {
+  const override = process.env.MAKE_DIAGRAM_ICON_DIR;
+  if (override === undefined || override === '') return path.join(os.homedir(), '.cache', 'portable-artifacts', 'make-diagram');
+  if (override === '~' || override.startsWith('~/')) return path.join(os.homedir(), override.slice(1));
+  return path.resolve(override);
+}
+
+const importedCache = new Map();
+
+/** Forget what was read from `dir`; the importer calls it after writing there. */
+export function forgetImported(dir = iconDir()) {
+  importedCache.delete(dir);
+}
+
+// One stored entry passes only if the allow-list returns it unchanged: the folder is outside the repo, so it is checked again on every load.
+function trustedEntry(name, entry) {
+  if (!CLOUD_NAME.test(name) || typeof entry?.markup !== 'string' || typeof entry.viewBox !== 'string') return null;
+  const again = sanitizeSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${entry.viewBox.replace(/"/g, '')}">${entry.markup}</svg>`);
+  return again.skipped === undefined && again.markup === entry.markup && again.viewBox === entry.viewBox ? { viewBox: again.viewBox, markup: again.markup } : null;
+}
+
+function readImportedFile(file) {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    throw new IconError(`cannot read imported cloud icons from ${file} (${e.message}); delete the file and import again with: ${IMPORT_COMMAND}`);
+  }
+  const out = {};
+  for (const [name, entry] of Object.entries(parsed?.icons ?? {})) {
+    const ok = trustedEntry(name, entry);
+    if (ok) out[name] = ok;
+  }
+  return out;
+}
+
+/** Every imported cloud icon in `dir` as { name: { viewBox, markup } }. A missing folder holds none. */
+export function importedIcons(dir = iconDir()) {
+  if (importedCache.has(dir)) return importedCache.get(dir);
+  let files = [];
+  try {
+    files = fs.readdirSync(dir).filter((f) => IMPORTED_FILE.test(f)).sort();
+  } catch (e) {
+    if (e.code !== 'ENOENT' && e.code !== 'ENOTDIR') throw new IconError(`cannot read the imported cloud icon folder ${dir} (${e.message})`);
+  }
+  const merged = {};
+  for (const file of files) Object.assign(merged, readImportedFile(path.join(dir, file)));
+  importedCache.set(dir, merged);
+  return merged;
+}
+
+/** Names of the icons shipped in icons/cloud.json. */
+export const bundledCloudNames = () => Object.keys(load().cloud);
+
+// Bundled wins over imported for the same name, so a spec draws the same on every machine.
+function catalog(prefix) {
+  const data = load();
+  return prefix === 'cloud' ? { ...importedIcons(), ...data.cloud } : data[prefix];
+}
 
 function split(ref) {
   const i = typeof ref === 'string' ? ref.indexOf(':') : -1;
   return i < 0 ? [null, ref] : [ref.slice(0, i), ref.slice(i + 1)];
 }
 
-function suggestRef(prefix, name) {
-  const cat = load()[prefix];
-  const hit = didYouMean(name, Object.keys(cat));
-  return hit === null ? null : `${prefix}:${hit}`;
+// The closest name by edit distance alone. Cloud names share long prefixes ("aws-", "google-cloud-"),
+// so didYouMean's prefix rule would offer "aws" for any unknown "aws-..." name.
+function nearestName(name, names) {
+  const w = name.toLowerCase();
+  const limit = Math.max(2, Math.floor(w.length / 3));
+  const scored = names.map((n) => ({ n, d: levenshtein(w, n) })).filter((e) => e.d <= limit).sort((a, b) => a.d - b.d);
+  return scored.length ? scored[0].n : null;
 }
 
+function suggestRef(prefix, name) {
+  const cat = catalog(prefix);
+  const names = Object.keys(cat);
+  const guess = prefix === 'cloud' ? CLOUD_GUESSES.map((g) => `${g}${name}`).find((n) => has(cat, n)) : undefined;
+  const hit = guess ?? (prefix === 'cloud' ? nearestName(name, names) : didYouMean(name, names));
+  return hit === null || hit === undefined ? null : `${prefix}:${hit}`;
+}
+
+const unknownHint = (prefix, hit) => {
+  if (hit) return `; did you mean ${JSON.stringify(hit)}?`;
+  return prefix === 'cloud'
+    ? `; try: node scripts/icons.mjs search <word>. A service the pack lacks can be imported from the vendor's icon download: ${IMPORT_COMMAND}`
+    : '; try: node scripts/icons.mjs search <word>';
+};
+
 // Resolve a ref to drawable markup. `lucide` icons are stroked outlines, `brand`
-// icons are a single filled path; the renderer picks stroke vs fill by `kind`.
+// icons are a single filled path, `cloud` icons carry their own colours; the
+// renderer picks stroke vs fill vs neither by `kind`.
 export function iconSvg(ref) {
-  const data = load();
   if (typeof ref !== 'string' || ref === '') {
-    throw new IconError(`icon must be a string like "lucide:<name>" or "brand:<slug>", got ${JSON.stringify(ref)}`);
+    throw new IconError(`icon must be a string like "lucide:<name>", "brand:<slug>" or "cloud:<name>", got ${JSON.stringify(ref)}`);
   }
   const [prefix, name] = split(ref);
   if (prefix === null) {
-    const hit = suggestRef('lucide', name) ?? suggestRef('brand', name);
+    const hit = suggestRef('lucide', name) ?? suggestRef('brand', name) ?? suggestRef('cloud', name);
     const hint = hit ? `; did you mean ${JSON.stringify(hit)}?` : '';
-    throw new IconError(`icon ${JSON.stringify(ref)} needs a "lucide:" or "brand:" prefix${hint}`, hit);
+    throw new IconError(`icon ${JSON.stringify(ref)} needs a "lucide:" or "brand:" prefix (or "cloud:" for AWS and Google Cloud services)${hint}`, hit);
   }
   if (!PREFIXES.includes(prefix)) {
     const fixed = didYouMean(prefix, PREFIXES);
-    const hit = fixed && has(data[fixed], name) ? `${fixed}:${name}` : null;
+    const hit = fixed && has(catalog(fixed), name) ? `${fixed}:${name}` : null;
     const hint = hit ? `; did you mean ${JSON.stringify(hit)}?` : '';
-    throw new IconError(`unknown icon set ${JSON.stringify(prefix)}; use lucide:<name> or brand:<slug>${hint}`, hit);
+    throw new IconError(`unknown icon set ${JSON.stringify(prefix)}; use lucide:<name> or brand:<slug>; or cloud:<name> for AWS and Google Cloud services${hint}`, hit);
   }
-  const entry = has(data[prefix], name) ? data[prefix][name] : undefined;
+  const cat = catalog(prefix);
+  const entry = has(cat, name) ? cat[name] : undefined;
   if (entry === undefined) {
     const hit = suggestRef(prefix, name);
-    const hint = hit ? `; did you mean ${JSON.stringify(hit)}?` : '; try: node scripts/icons.mjs search <word>';
-    throw new IconError(`unknown icon ${JSON.stringify(ref)}${hint}`, hit);
+    throw new IconError(`unknown icon ${JSON.stringify(ref)}${unknownHint(prefix, hit)}`, hit);
   }
   if (prefix === 'lucide') return { kind: 'lucide', markup: entry, viewBox: VIEW_BOX };
+  if (prefix === 'cloud') return { kind: 'cloud', markup: entry.markup, viewBox: entry.viewBox };
   return { kind: 'brand', markup: `<path d="${entry.path}"/>`, viewBox: VIEW_BOX };
 }
 
 export function hasIcon(ref) {
   const [prefix, name] = split(ref);
-  const data = load();
-  return PREFIXES.includes(prefix) && typeof name === 'string' && has(data[prefix], name);
+  return PREFIXES.includes(prefix) && typeof name === 'string' && has(catalog(prefix), name);
 }
 
-// Every ref in one catalog, or both when `set` is omitted. Sorted by catalog order.
+// Every ref in one catalog, or all when `set` is omitted. Sorted by catalog order.
 export function listIcons(set) {
-  const data = load();
   const sets = set ? [set] : PREFIXES;
-  return sets.flatMap((p) => Object.keys(data[p]).map((n) => `${p}:${n}`));
+  return sets.flatMap((p) => Object.keys(catalog(p)).map((n) => `${p}:${n}`));
 }
 
-// Refs matching `word`, best first: exact, prefix, substring (name or brand
-// title), then near-miss typos. Stable: lucide before brand, then alphabetical.
+// What a name is also called: a brand's title, a cloud icon's name in words ("google cloud run"), plus the provider's short name.
+function titleOf(prefix, name, entry) {
+  if (prefix === 'brand') return entry.title.toLowerCase();
+  if (prefix !== 'cloud') return '';
+  return `${name.replace(/-/g, ' ')}${name.startsWith('google') ? ' gcp' : ''}`;
+}
+
+// Refs matching `word`, best first: exact, prefix, substring (name or title),
+// then near-miss typos. Stable: lucide, then brand, then cloud, alphabetical within each.
 export function searchIcons(word, limit = DEFAULT_SEARCH_LIMIT) {
   const w = String(word).trim().toLowerCase();
   if (w === '') return [];
-  const data = load();
-  const entries = PREFIXES.flatMap((p) => Object.keys(data[p]).map((name) => ({
-    ref: `${p}:${name}`,
-    name,
-    title: p === 'brand' ? data[p][name].title.toLowerCase() : '',
-  })));
+  const entries = PREFIXES.flatMap((p) => {
+    const cat = catalog(p);
+    return Object.keys(cat).map((name) => ({ ref: `${p}:${name}`, name, title: titleOf(p, name, cat[name]) }));
+  });
   const exact = [];
   const prefix = [];
   const substring = [];
