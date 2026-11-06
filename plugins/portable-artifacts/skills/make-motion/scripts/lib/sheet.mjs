@@ -24,12 +24,14 @@ const PNG_HEIGHT_OFFSET = 20;
 
 // Scene-local seconds, sorted. A time is kept only when it is at least 0.05 s after the previous kept time (so a
 // cluster is anchored on its first member, and the fixed 0.1 first look is never displaced), then the last frame is
-// forced in. `fps` caps every time at the scene's last frame, duration - 1/fps.
-export function sheetTimes(scene, fps = DEFAULT_FPS) {
+// forced in. `fps` caps every time at the scene's last frame, duration - 1/fps. `landings`: scene-local seconds at which
+// something other than a keyframe lands (the end of a written text in a hand-drawn scene), sampled a lag after, as a keyframe is.
+export function sheetTimes(scene, fps = DEFAULT_FPS, landings = []) {
   const last = Math.max(0, scene.duration - 1 / fps);
   const keyframes = [
     ...flattenElements(scene.elements).flatMap(({ el }) => (el.keyframes ?? []).map((kf) => kf.t + KEYFRAME_LAG)), // a group's keyframes move its children
     ...(scene.camera?.keyframes ?? []).map((kf) => kf.t + KEYFRAME_LAG), // so do the camera's
+    ...landings.map((t) => t + KEYFRAME_LAG),
   ];
   const raw = [FIRST_LOOK, ...keyframes, scene.duration * CONTACT_POINT, last]
     .map((t) => Math.min(Math.max(0, t), last))

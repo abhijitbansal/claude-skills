@@ -4,7 +4,8 @@
 //                  the backdrop), against the worst cell of the pixels behind it
 //   reading floor  a text stays on screen long enough to read (0.75 x (0.5 + 0.3 x words) s, short by no more than a step);
 //                  a last line under 2 s that clears that is only info
-//   dead stretch   more than 3 s in which nothing on screen changes (not in the final 3 s, not for `hold` elements)
+//   dead stretch   more than 3 s in which nothing on screen changes (not in the final 3 s, not for `hold` elements, not while a
+//                  hand-drawn scene's narration plays)
 //   text floor     rendered text under 28 px at 1080 on the short side, on screen for 0.5 s or more
 // Severity follows HyperFrames: a contrast or text-floor finding at a single sampled moment is a warning, a held one a
 // problem; reading floor and dead stretch are always problems.
@@ -16,10 +17,11 @@
 // item list, what check.mjs's `measure` read (`opacity`, `ownOpacity` without the scene's fade, `box`, `fontSize` rendered
 // px, `weight`, `color` #rrggbb, `alpha`, `sig` a string that changes when the element looks different) plus `shown`
 // (visible and on the canvas), `inks` (a code element: each token colour #rrggbb, judged for contrast in place of `color`)
-// and, in steps, `hold` (the element or a group around it says "hold": true) and `held` (its
-// size is not being tweened).
+// and, in steps, `hold` (the element or a group around it says "hold": true), `held` (its
+// size is not being tweened) and `writing` (a hand-drawn text the pencil has not finished: shown, but not yet read).
 import { contrastRatio, mixHex } from '../../shared/contrast.mjs';
 import { COLOR_TOKENS } from '../../template/defaults.mjs';
+import { isSketchScene } from '../../template/sketch/style.mjs';
 
 export const CHECKED_TYPES = Object.freeze(['text', 'counter', 'code']); // rendered text: the element types the audits judge
 export const AUDIT_STEP = 0.25; // seconds between the steps every scene is sampled at
@@ -167,7 +169,12 @@ export function unjudgedContrast(items, samples) {
  * background carries (it is part of what the viewer reads against) stays. -> string[][], null for a box wholly off the canvas.
  */
 export async function backdropColors(page, boxes, types = CHECKED_TYPES) {
-  const rules = types.map((type) => `.el.${type}, .el.${type} * { color: transparent !important; text-shadow: none !important; }`).join('\n');
+  const rules = [
+    ...types.map((type) => `.el.${type}, .el.${type} * { color: transparent !important; text-shadow: none !important; }`),
+    // A hand-drawn scene's pencil hand is no backdrop, and its written text is svg with a fill of its own, which `color` does not
+    // reach: both go, so the cells hold the board (and the hatch under a label) alone.
+    `#sketch-hand, ${types.map((type) => `.el.${type}[data-reveal] svg`).join(', ')} { display: none !important; }`,
+  ].join('\n');
   await page.evaluate((css) => {
     const style = document.createElement('style');
     style.id = 'audit-hide';
@@ -290,7 +297,7 @@ export async function readingFloorFindings(spec, itemsOf, steps, probe = null) {
     const isFinalScene = i === spec.scenes.length - 1;
     for (const [j, { el, path }] of itemsOf[i].entries()) {
       if (el.type !== 'text') continue;
-      const spans = runsOf(own.map((s) => s.els[j].shown)).map(([first, last]) => spanOf(own, first, last, scene.duration));
+      const spans = runsOf(own.map((s) => s.els[j].shown && !s.els[j].writing)).map(([first, last]) => spanOf(own, first, last, scene.duration)); // a text still being written is not read yet
       if (!spans.length) continue;
       const isShown = probe && ((local) => probe(i, j, local));
       const words = wordCount(el.text);
@@ -351,10 +358,14 @@ const signatureOf = (step) => `${step.els.map((m) => (m.shown ? m.sig : '-')).jo
  * still state to the last step that still shows it (to the cut when a scene change ends it, to the video's end when it
  * runs out). The last `tailExempt` seconds of the video are never part of a stretch. With `ignoreHold` a stretch in which
  * only `hold` elements are on screen is skipped; pass { tailExempt: 0, ignoreHold: false } to see every one.
+ * With `ignoreNarration` the time a hand-drawn scene's narration plays (`scene.narration`, [{ start, end }] in scene seconds)
+ * does not count: the viewer is listening to a finished board, so a stretch is reported only for the silent part of it, when
+ * that part alone is longer than DEAD_STRETCH_SECONDS. A scene without `narration`, or a standard scene, is judged whole.
  */
-export function stillStretches(spec, steps, { tailExempt = TAIL_EXEMPT_SECONDS, ignoreHold = true } = {}) {
+export function stillStretches(spec, steps, { tailExempt = TAIL_EXEMPT_SECONDS, ignoreHold = true, ignoreNarration = true } = {}) {
   const total = spec.scenes.reduce((n, scene) => n + scene.duration, 0);
   const sigs = steps.map(signatureOf);
+  const spoken = ignoreNarration ? narrationSpans(spec) : [];
   const found = [];
   let first = 0;
   for (let next = 1; next <= steps.length; next++) {
@@ -365,10 +376,37 @@ export function stillStretches(spec, steps, { tailExempt = TAIL_EXEMPT_SECONDS, 
     const to = Math.min(next === steps.length ? total : cut ? steps[next].t : steps[next - 1].t, total - tailExempt);
     const shown = run.flatMap((s) => s.els.filter((m) => m.shown));
     const onlyHeld = ignoreHold && shown.some((m) => m.hold) && shown.every((m) => m.hold);
-    if (to - from > DEAD_STRETCH_SECONDS + EPSILON && !onlyHeld) found.push({ from, to });
+    if (!onlyHeld) {
+      for (const part of silentParts(from, to, spoken)) if (part.to - part.from > DEAD_STRETCH_SECONDS + EPSILON) found.push(part);
+    }
     first = next;
   }
   return found;
+}
+
+// The video seconds a hand-drawn scene's narration plays in, as { from, to }. The `narration` field of a scene is internal: the
+// voice step puts it there (scene seconds), the author never writes it.
+function narrationSpans(spec) {
+  let start = 0;
+  return spec.scenes.flatMap((scene) => {
+    const offset = start;
+    start += scene.duration;
+    if (!isSketchScene(spec, scene) || !Array.isArray(scene.narration)) return [];
+    return scene.narration.map(({ start: from, end: to }) => ({ from: offset + from, to: offset + to }));
+  });
+}
+
+// What is left of [from, to] once the `spoken` spans are taken out, in order: [{ from, to }] itself when none overlaps it.
+function silentParts(from, to, spoken) {
+  const parts = [];
+  let cursor = from;
+  for (const span of [...spoken].sort((a, b) => a.from - b.from)) {
+    if (span.to <= cursor || span.from >= to) continue;
+    if (span.from > cursor) parts.push({ from: cursor, to: span.from });
+    cursor = Math.max(cursor, span.to);
+  }
+  if (to > cursor) parts.push({ from: cursor, to });
+  return parts;
 }
 
 // What to call an item in advice about `hold`: `shape "id"` reads as its kind (rect, ellipse, line), the rest as their
@@ -396,4 +434,21 @@ export function deadStretchProblems(spec, steps, itemsOf = [], blocksOf = []) {
     const advice = labels.length ? `add motion, or set "hold": true on ${named} if ${labels.length === 1 ? 'it is' : 'they are'} meant to sit still` : 'add motion';
     return { path: `scenes[${scene}]`, message: `nothing changes from ${seconds(from)} to ${seconds(to)} (${(to - from).toFixed(1)}s); ${advice}` };
   });
+}
+
+// ---- writing unfinished at the end of a scene ---------------------------------------------------------------------------
+
+/**
+ * A warning when the drawing of hand-drawn scene `scene` (number `index`) is still going when the scene ends: the pencil is
+ * cut off and the viewer sees half a word. `plan`: planScene's result for the scene, `items` the scene's items (sceneItems),
+ * which name what is unfinished. Validation refuses a scene shorter than its drawing needs, so this reaches only a drawing
+ * that moved after validation (a transition that reserves time before the first stroke, a sentence window set by the
+ * narration). -> [{ path, message }], empty when everything is drawn in time.
+ */
+export function unfinishedWriting(scene, index, plan, items) {
+  const late = items.filter(({ path }) => (plan.elements.get(path)?.t1 ?? 0) > scene.duration + EPSILON);
+  if (!late.length) return [];
+  const named = late.slice(0, MAX_NAMED).map(({ el }) => `${el.type} "${el.id}"`).join(', ') + (late.length > MAX_NAMED ? `, and ${late.length - MAX_NAMED} more` : '');
+  const needed = Math.ceil((plan.needs - EPSILON) * 10) / 10;
+  return [{ path: `scenes[${index}]`, message: `scene "${scene.id}" ends at ${seconds(scene.duration)} while ${named} ${late.length === 1 ? 'is' : 'are'} still being drawn; the drawing needs ${needed}s: lengthen the scene` }];
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -9,6 +9,9 @@ import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 import * as checkModule from '../scripts/check.mjs';
 import { loadSpec } from '../scripts/lib/spec.mjs';
 import { specHasVideo } from '../scripts/lib/video.mjs';
+import { planScene } from '../template/sketch/plan.mjs';
+import icons from '../template/sketch/lucide.mjs';
+import { contrastRatio } from '../shared/contrast.mjs';
 
 const { safeMargin } = checkModule;
 
@@ -528,4 +531,143 @@ test('a text that is moving is not compared: a slide through the window warns ab
   // finds it 10 px right of `first`, inside the 1 to 12 px band but mid-slide; it ends 18 px away at the last frame.
   const slide = { keyframes: [{ t: 0, x: EDGE_X - 40 }, { t: 2, x: EDGE_X + 19 }] };
   assert.deepEqual(edgeWarnings(edgeSpec([1920, 1080], 0, { second: slide })), []);
+});
+
+// ---- hand-drawn scenes ---------------------------------------------------------------------------------------------------
+// The audits judge a sketch scene from the same stroke plan as the page (planScene), so the tests ask the plan where a text
+// finishes and compare check's findings with it.
+
+const BOARD_SIZE = [1920, 1080];
+const BOARD_FIXTURE = path.join(FIXTURES, 'sketch-board.json');
+const READ_LAG = 0.1; // sheet.mjs: a landing is sampled this long after
+const HAND_EXIT = 0.65; // timing.mjs: the hand needs this long to leave once the last stroke is drawn
+const planOf = (elements, ctx = {}) => planScene({ id: 'board', elements }, { size: BOARD_SIZE, icons, sceneIndex: 0, ...ctx });
+const finishOf = (plan, index) => plan.elements.get(`scenes[0].elements[${index}]`).t1;
+// The shortest scene validation accepts for `elements` (the plan's `needs`, rounded up to a tenth), plus `extra` seconds.
+const fitting = (elements, extra = 0, ctx = {}) => Math.ceil((planOf(elements, ctx).needs - 1e-6) * 10) / 10 + extra;
+
+// A one-scene hand-drawn film in a temp folder. `spec` adds root fields (`sketch`), `scene` adds scene fields.
+function boardFile(elements, { extra = 0, spec = {}, scene = {}, duration = fitting(elements, extra, { pace: spec.sketch?.pace }) } = {}) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'motion-board-'));
+  const file = path.join(dir, 'motion.json');
+  writeFileSync(file, JSON.stringify({ size: BOARD_SIZE, fps: 30, style: 'sketch', ...spec, scenes: [{ id: 'board', duration, elements, ...scene }] }));
+  return file;
+}
+const verdict = (file) => JSON.parse(check([file, '--json']).stdout);
+const textAt = (id, text, x, y, over = {}) => ({ id, type: 'text', text, x, y, fontSize: 96, ...over });
+const secondsIn = (message) => Number(/ at (\d+\.\d\d)s/.exec(message)?.[1]);
+
+test('sketch: the hand over a text does not change the contrast finding', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  // #8a8a8a is 3.4:1 on the board (the 3:1 that large text needs) but 2.1:1 on the skin of the hand. "left" is written after
+  // "note" to its left, so 0.1 s after "note" is finished (when it is judged) the hand is travelling over it: measured without
+  // hiding the hand, the worst cell of "note" is 1.6:1.
+  const pair = (color) => [textAt('note', 'Hello there', 1100, 540, { fontSize: 120, color }), textAt('left', 'Then this', 300, 540)];
+  const found = verdict(boardFile(pair('#8a8a8a'), { extra: 2 }));
+  assert.equal(found.ok, true, JSON.stringify(found));
+  assert.deepEqual((found.warnings ?? []).filter((w) => /contrast/.test(w.message)), []);
+  // The audit still reads a sketch scene: the same text at 1.8:1 on the board is a problem, with the ratio the board gives.
+  const pale = verdict(boardFile(pair('#bbbbbb'), { extra: 2 }));
+  assert.equal(pale.ok, false);
+  assert.match(pale.errors[0].message, /^text "note" has 1\.8:1 contrast against its backdrop at \d+\.\d\ds; needs 3:1; nearest passing token: text$/);
+});
+
+test('sketch: the text being drawn is not part of its own backdrop: accent text passes on the board as large text', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  // Accent #e8590c on the board #fdfcf8 is 3.49:1: under the 4.5:1 of body text, over the 3:1 that large text needs. Caveat is
+  // always drawn at weight 700, so from 18.67 px (at 1080) it counts as large, and the text floor forbids anything under 28 px:
+  // every size a sketch scene may use passes. The ink of the text itself must not be read as backdrop, or the ratio falls to ~2.4.
+  const ratio = contrastRatio('#e8590c', '#fdfcf8');
+  assert.ok(ratio > 3.4 && ratio < 3.6, `the board accent is 3.5:1 by hand, got ${ratio}`);
+  const sizes = [28, 40, 96].map((fontSize, n) => textAt(`accent-${fontSize}`, `Accent ${fontSize}`, 960, 250 + 300 * n, { fontSize, color: 'accent' }));
+  const found = verdict(boardFile(sizes, { extra: 2 }));
+  assert.equal(found.ok, true, JSON.stringify(found));
+  assert.deepEqual((found.warnings ?? []).filter((w) => /contrast/.test(w.message)), []);
+});
+
+test('sketch: a label on a hatched box is judged against the hatch: ink passes, accent does not, and the advice names a board colour', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const box = (id, x) => ({ id, type: 'shape', shape: 'rect', fill: 'scribble', x, y: 400, width: 500, height: 300 });
+  const label = (id, x, color) => textAt(id, 'A label', x, 400, { fontSize: 76, color });
+  const found = verdict(boardFile([box('left', 500), label('ink-label', 500), box('right', 1400), label('accent-label', 1400, 'accent')], { extra: 2 }));
+  assert.equal(found.ok, false);
+  assert.equal(found.errors.length, 1, JSON.stringify(found.errors));
+  assert.equal(found.errors[0].path, 'scenes[0].elements[3]');
+  assert.match(found.errors[0].message, /^text "accent-label" has 2\.9:1 contrast against its backdrop at \d+\.\d\ds; needs 3:1; nearest passing token: text$/);
+});
+
+test('sketch: the hand passing over labels is not an overlap, two labels that overlap once written are, and not before they finish', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const clean = verdict(BOARD_FIXTURE);
+  assert.equal(clean.ok, true, JSON.stringify(clean)); // the hand sweeps over three labels and the title
+  // "b" is long and written slowly over "a"; "c" comes last, so the scene ends soon after it. The 85 % sheet moment falls while
+  // the pencil is still on "b", where it is on screen and its box already overlaps "a": that moment must not count.
+  const stacked = [textAt('a', 'First label', 960, 400), textAt('b', 'This second label is written slowly over the first one, taking a long while', 960, 440, { fontSize: 60 }), textAt('c', 'End', 300, 900)];
+  const slow = { sketch: { pace: 0.5 } };
+  const plan = planOf(stacked, { pace: 0.5 });
+  const [begin, finish] = [plan.elements.get('scenes[0].elements[1]').t0, finishOf(plan, 1)];
+  assert.ok(begin < 0.85 * fitting(stacked, 0, { pace: 0.5 }) && 0.85 * fitting(stacked, 0, { pace: 0.5 }) < finish, 'the 85 % moment is inside the writing of "b"');
+  const found = verdict(boardFile(stacked, { spec: slow }));
+  assert.equal(found.ok, false);
+  const overlap = found.errors.filter((e) => / overlaps /.test(e.message)); // "b" is also too short to read: that is another rule's finding
+  assert.equal(overlap.length, 1, JSON.stringify(found.errors));
+  assert.equal(overlap[0].path, 'scenes[0].elements[1]');
+  assert.match(overlap[0].message, /^text "b" overlaps text "a" at \d+\.\d\ds$/);
+  assert.equal(secondsIn(overlap[0].message), Number((finish + READ_LAG).toFixed(2)), `judged ${READ_LAG} s after b is written (${finish.toFixed(2)} s), not while the pencil is still on it`);
+});
+
+test('sketch: a text is read from the end of its writing: a last line written at the very end of the scene is too short, with time after it it is fine', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const line = [textAt('last', 'Five words to be read', 960, 540)]; // 5 words: 1.5 s to read (less one 0.25 s step)
+  const tight = verdict(boardFile(line));
+  assert.equal(tight.ok, false, JSON.stringify(tight));
+  assert.match(tight.errors[0].message, /^text "last" \(5 words\) shows for 0\.\d\ds; needs 1\.50s$/);
+  const shown = Number(/shows for (\d\.\d\d)s/.exec(tight.errors[0].message)[1]);
+  assert.ok(shown < HAND_EXIT + 0.2, `counted from the end of the writing (${shown} s), not from its start`);
+  const roomy = verdict(boardFile(line, { extra: 2 }));
+  assert.equal(roomy.ok, true, JSON.stringify(roomy));
+  // 1.2 s after the writing is within a step of the 1.25 s it needs, so the audit measures the edge on the page: the text must
+  // count as unread there while the pencil is on it, or the 1.2 s would read as a pass (it is on screen 1.75 s). The writing
+  // is started so as to end at 2.125 s, between two 0.25 s steps, which leaves the grid unable to decide.
+  const natural = planOf(line).elements.get('scenes[0].elements[0]');
+  const late = [{ ...line[0], drawAt: 2.125 - (natural.t1 - natural.t0) }];
+  assert.ok(Math.abs(finishOf(planOf(late), 0) - 2.125) < 1e-6, 'the writing ends at 2.125 s');
+  const close = verdict(boardFile(late, { duration: 3.325 }));
+  assert.equal(close.ok, false, JSON.stringify(close));
+  assert.match(close.errors[0].message, /^text "last" \(5 words\) shows for 1\.(19|20|21)s; needs 1\.50s$/);
+});
+
+test('sketch: a drawing in progress is change: no dead stretch across a drawing of more than 6 s', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const slow = [textAt('slow', 'This line is written slowly so the pencil stays busy a good while indeed', 960, 540, { fontSize: 60 })];
+  const spec = { sketch: { pace: 0.5 } };
+  const plan = planOf(slow, { pace: 0.5 });
+  const [t0, t1] = [plan.elements.get('scenes[0].elements[0]').t0, finishOf(plan, 0)];
+  assert.ok(t1 - t0 > 6, `the drawing takes ${t1 - t0} s`);
+  const found = verdict(boardFile(slow, { spec, extra: 3.7 })); // 14 words, read from the end of the writing: 3.5 s
+  assert.equal(found.ok, true, JSON.stringify(found));
+});
+
+test('sketch: a silent board that sits finished for more than 3 s is a dead stretch', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { scenes, ...rest } = JSON.parse(readFileSync(BOARD_FIXTURE, 'utf8'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'motion-board-'));
+  const file = path.join(dir, 'motion.json');
+  writeFileSync(file, JSON.stringify({ ...rest, scenes: [{ ...scenes[0], duration: 14 }] }));
+  const found = verdict(file);
+  assert.equal(found.ok, false);
+  assert.equal(found.errors.length, 1, JSON.stringify(found.errors));
+  assert.match(found.errors[0].message, /^nothing changes from 5\.00s to 11\.00s \(6\.0s\); add motion, or set "hold": true on /);
+});
+
+test('sketch: a blank first frame warns, names what makes it blank and suggests --poster', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const found = verdict(BOARD_FIXTURE);
+  assert.deepEqual(found.warnings, [{
+    path: 'scenes[0]',
+    message: 'scene "board" shows nothing at 0.00s: the first frame, the video\'s thumbnail, is blank; a hand-drawn scene starts as an empty board and is drawn on. Take the thumbnail from a drawn moment with render.mjs --poster <seconds>, or accept a blank thumbnail',
+  }]);
+  // A standard first scene keeps the wording it had.
+  const standard = verdict(specFile([{ id: 'late', type: 'text', text: 'Hi', x: 960, y: 540, fontSize: 64, keyframes: [{ t: 0, opacity: 0 }, { t: 0.5, opacity: 1 }] }]));
+  assert.match(standard.warnings[0].message, /has an opacity 0 first keyframe\. Show something at t = 0, or accept a blank thumbnail$/);
 });
