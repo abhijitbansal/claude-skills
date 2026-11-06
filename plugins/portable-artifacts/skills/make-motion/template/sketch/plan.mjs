@@ -6,7 +6,7 @@ import metrics from './caveat-metrics.mjs';
 import { PALETTE, SCRIBBLE_FILL } from './style.mjs';
 import { childrenOf, isGroup } from '../groups.mjs';
 import { unit, isPoint, hashSeed, makeRng, makeStroke, wobble, bowedLine, boxOutline, ellipseOutline, boxHatch, ellipseHatch, arrowBarbs } from './geometry.mjs';
-import { schedule, HAND_EXIT } from './timing.mjs';
+import { schedule, assignWindows, naturalSeconds, HAND_EXIT } from './timing.mjs';
 
 export { pointAt } from './geometry.mjs';
 
@@ -16,6 +16,7 @@ const DEFAULT_FONT_SIZE = 72; // px at 1080; a standard text defaults to 48, a h
 const MAX_WIDTH_SHARE = 0.8; // of the canvas width: a text without maxWidth wraps here
 const BOX_RADIUS = 14; // px at 1080 on a box's corners (an element's own radius wins)
 const FIT_EPSILON = 1e-9;
+const NESTED_DRAW_AT = 'drawAt on an element inside a group does not apply in a scene with narration (the group draws during one stretch of the narration and its parts share it); put drawAt on the group';
 
 // The spike's values, px at 1080 (multiplied by the canvas's unit when used). wobble: amp, wave, step (step defaults to 7).
 const BOX = { amp: 2.6, wave: 110, width: 5.5, over: 16 };
@@ -207,7 +208,8 @@ const union = (boxes, fallback) => {
 function collect(el, path, parent, run, leaves) {
   const at = [parent.at[0] + (el.x ?? 0), parent.at[1] + (el.y ?? 0)];
   const style = { opacity: parent.opacity * (el.opacity ?? 1), origin: parent.at }; // origin: the frame a line's `to` is in
-  const drawAt = typeof el.drawAt === 'number' ? Math.max(el.drawAt, parent.drawAt ?? 0) : parent.drawAt; // a sentence window is not planned yet
+  const drawAt = typeof el.drawAt === 'number' ? Math.max(el.drawAt, parent.drawAt ?? 0) : parent.drawAt; // a sentence pin ({ sentence }) is read from the top element (planWindows)
+  if (run.voiced && !parent.top && el.drawAt !== undefined) run.problems.push({ path, message: NESTED_DRAW_AT });
   const node = { path, children: [], drafts: [], box: null, extra: {} };
   if (isGroup(el)) {
     const down = { at, opacity: style.opacity, drawAt };
@@ -243,27 +245,70 @@ function finish(node, state, strokes, elements) {
   elements.set(node.path, { box: node.box, t0, t1, ...node.extra });
 }
 
+// The items a scene with narration schedules: one per top-level element (a group or a block draws all its parts in its one
+// window), each with the sentence window assignWindows gives it. `run`: { u, pace } as naturalSeconds reads them.
+function planWindows(tops, narration, run) {
+  const strokesOf = (top) => top.leaves.flatMap(({ node }) => node.drafts);
+  const weighed = tops.map((top) => {
+    const sentence = top.el.drawAt?.sentence;
+    return { weight: strokesOf(top).reduce((sum, draft) => sum + naturalSeconds(draft, run), 0), sentence: Number.isInteger(sentence) ? sentence : undefined };
+  });
+  const windows = assignWindows(weighed, narration);
+  return tops.map((top, i) => ({ drawAt: typeof top.el.drawAt === 'number' ? top.el.drawAt : undefined, slot: windows[i], strokes: strokesOf(top) }));
+}
+
+// What the schedule could not fit in a sentence window, as findings at the elements. A voiced scene that cannot fit its
+// drawing still renders and is reported by check.mjs, so these are not `problems` (which validation refuses and the page throws).
+function overrunsOf(fits, tops) {
+  return fits.map(({ item, needed, available }) => {
+    const { el, node } = tops[item];
+    const seconds = Math.ceil((needed - FIT_EPSILON) * 10) / 10;
+    const lasts = Math.round(available * 100) / 100;
+    return { path: node.path, message: `${el.type} "${el.id}" cannot be drawn during the narration it is matched to, even at twice the pace: that lasts ${lasts}s and the drawing needs ${seconds}s; use a longer sentence, share the sentences differently, or draw less` };
+  });
+}
+
 /**
  * The stroke plan of `scene` (an expanded scene: blocks are groups). `ctx`: { size: [w, h], seed (the film's sketch.seed),
  * pace (sketch.pace), icons ({ name: polylines in a 24-unit box }), sceneIndex (paths read scenes[i].elements[k]),
- * startAfter (seconds a transition reserves before anything is drawn) }.
+ * startAfter (seconds a transition reserves before anything is drawn) }. A scene with `narration` ([{ start, end }] in scene
+ * seconds, set from the voice sidecar by scripts/lib/sketch-voice.mjs) draws each top-level element during its sentences.
  * -> { size, unit, strokes, elements: Map<path, { box (top left, canvas px), t0, t1, glyphs?, fontSize? }>, drawEnd, moves,
- * needs, problems }. `unit` is the canvas's px per px at 1080. `moves` is the hand's journey (timing.mjs schedule). `needs` is the
- * scene length the drawing takes, the hand's way out included (startAfter alone when there is nothing to draw).
+ * needs, problems, overruns }. `unit` is the canvas's px per px at 1080. `moves` is the hand's journey (timing.mjs schedule).
+ * `needs` is the scene length the drawing takes, the hand's way out included (startAfter alone when there is nothing to
+ * draw). `overruns` are the elements whose sentences are too short for them at twice pace ([{ path, message }]; none
+ * without narration).
  */
 export function planScene(scene, ctx) {
   if (!Array.isArray(ctx?.size)) throw new TypeError('planScene needs ctx.size, [width, height]');
   const { size, seed = DEFAULT_SEED, pace = 1, icons, sceneIndex, startAfter = 0 } = ctx;
-  const run = { size, seed, icons, u: unit(size), problems: [] };
+  const voiced = Array.isArray(scene.narration) && scene.narration.length > 0;
+  const run = { size, seed, icons, pace, voiced, u: unit(size), problems: [] };
   const prefix = Number.isInteger(sceneIndex) ? `scenes[${sceneIndex}].` : '';
-  const leaves = [];
-  const root = { at: [0, 0], opacity: 1, drawAt: undefined };
-  const nodes = (scene.elements ?? []).map((el, i) => collect(el, `${prefix}elements[${i}]`, root, run, leaves)).filter(Boolean);
-  const { times, drawEnd, moves } = schedule(leaves.map(({ node, drawAt }) => ({ drawAt, strokes: node.drafts })), { size, u: run.u, pace, startAfter });
-  leaves.forEach(({ node }, i) => { node.times = times[i]; });
+  const root = { at: [0, 0], opacity: 1, drawAt: undefined, top: true };
+  const tops = [];
+  (scene.elements ?? []).forEach((el, i) => {
+    const leaves = [];
+    const node = collect(el, `${prefix}elements[${i}]`, root, run, leaves);
+    if (node) tops.push({ el, node, leaves });
+  });
+  const leaves = tops.flatMap((top) => top.leaves);
+  const items = voiced ? planWindows(tops, scene.narration, run) : leaves.map(({ node, drawAt }) => ({ drawAt, strokes: node.drafts }));
+  const { times, drawEnd, moves, fits } = schedule(items, { size, u: run.u, pace, startAfter });
+  if (voiced) tops.forEach((top, i) => takeTimes(top.leaves, times[i]));
+  else leaves.forEach(({ node }, i) => { node.times = times[i]; });
   const strokes = [];
   const elements = new Map();
   const state = { last: startAfter };
-  nodes.forEach((node) => finish(node, state, strokes, elements));
-  return { size, unit: run.u, strokes, elements, drawEnd, moves, needs: strokes.length ? drawEnd + HAND_EXIT : startAfter, problems: run.problems };
+  tops.forEach(({ node }) => finish(node, state, strokes, elements));
+  return { size, unit: run.u, strokes, elements, drawEnd, moves, needs: strokes.length ? drawEnd + HAND_EXIT : startAfter, problems: run.problems, overruns: overrunsOf(fits, tops) };
+}
+
+// The times of one item's strokes handed back to the leaves it was made of, in order.
+function takeTimes(leaves, times) {
+  let next = 0;
+  for (const { node } of leaves) {
+    node.times = times.slice(next, next + node.drafts.length);
+    next += node.drafts.length;
+  }
 }

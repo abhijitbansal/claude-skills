@@ -1,0 +1,11 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    { "text": "A request leaves your browser.", "start": 0, "end": 2, "phonemes": "" },
+    { "text": "It crosses the network to a server.", "start": 2, "end": 4.5, "phonemes": "" },
+    { "text": "The server asks the database.", "start": 4.5, "end": 6, "phonemes": "" },
+    { "text": "The database answers.", "start": 6, "end": 8.5, "phonemes": "" },
+    { "text": "And the page appears.", "start": 8.5, "end": 10, "phonemes": "" }
+  ]
+}

@@ -1036,6 +1036,12 @@ export function checkVars(written, values = {}) {
   return errors;
 }
 
+// `spec` without the `narration` the voice step put on its scenes (the same object when none has one).
+function withoutNarration(spec) {
+  if (!Array.isArray(spec.scenes) || !spec.scenes.some((scene) => isPlainObject(scene) && Object.hasOwn(scene, 'narration'))) return spec;
+  return { ...spec, scenes: spec.scenes.map((scene) => (isPlainObject(scene) ? Object.fromEntries(Object.entries(scene).filter(([key]) => key !== 'narration')) : scene)) };
+}
+
 // `values`: one batch row's var values (render --batch); without it each var takes its default. The spec is checked as
 // it renders: after its vars are substituted (step 1), its beats resolved (step 1b) and viral mode applied (step 2), so a
 // value that names a file outside the spec folder, or is no colour, fails at the field it lands in, exactly as if it had
@@ -1047,7 +1053,8 @@ export function validateSpec(input, { dir = process.cwd(), values = {} } = {}) {
   const beats = resolveSpecBeats(substituted, dir); // step 1b: "beat:<n>" becomes seconds; same structure again
   if (beats.errors) return { ok: false, errors: beats.errors };
   const written = beats.spec;
-  if (!schemaCheck(written)) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
+  // A scene's `narration` is internal (the voice step set it, or refused a written one): the schema does not list it as a field.
+  if (!schemaCheck(withoutNarration(written))) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
   const sketchErrors = [];
   checkSketch(written, sketchErrors); // before the block params, so a standard block in a sketch scene is told first it does not belong
   const blockErrors = [];

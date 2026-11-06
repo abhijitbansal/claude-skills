@@ -22,7 +22,9 @@
 // moving while the pencil is on it, so the rules judge it from the end of its writing (the sheet samples just after each text
 // ends), the reading floor counts from there, and drawing in progress is change for the dead-stretch audit. The pencil hand
 // (#sketch-hand) and the ink of the text being judged are left out of the contrast backdrop. Its first frame is always an
-// empty board: that warning names it and suggests --poster. A drawing still going at the scene's end is a warning.
+// empty board: that warning names it and suggests --poster. A drawing still going at the scene's end is a warning. A scene
+// with a voice track (its elements draw during the narration's sentences, see sketch-voice.mjs) is also a problem when an
+// element cannot be drawn in its sentences even at twice the pace (the plan's `overruns`: validation leaves that to this check).
 // A scene is judged on its own layer, where it settles, so the outgoing scene of a transition (crossfade, push, slide,
 // wipe, zoom, blur or iris) is not part of the incoming scene's own checks, nor is the styling that carries it in (it is
 // lifted for every sample, so the samples inside the window, 0.1 to 2 s long, judge the scene where it settles). Instead
@@ -559,6 +561,7 @@ async function inspect(browser, spec, server, prepare, written) {
     problems.push(...safeAreaProblems(items, samples, insets, spec.size), ...overlapProblems(items, samples, spec.size), ...emptyEndProblems(scene, i, items, samples, spec.size), ...wrapProblems(scene, i, samples), ...contrast.problems, ...floor.problems);
     warnings.push(...contrast.warnings, ...floor.warnings, ...nearEdgeWarnings(items, samples, spec.size, blocksOf[i]));
     if (plans[i]) warnings.push(...unfinishedWriting(scene, i, plans[i], items));
+    if (plans[i]) problems.push(...plans[i].overruns); // a voiced scene's drawing that cannot fit its sentences even at twice pace
     if (zone) problems.push(...captionZoneProblems(items, samples, extra, zone, spec.size));
     if (platform) band.push(...bandWarnings(items, samples, platform, spec.viral.safeZone, spec.size));
   }

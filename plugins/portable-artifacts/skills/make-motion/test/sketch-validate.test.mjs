@@ -234,7 +234,8 @@ test('sketch.hand.tone outside the five names, sketch.hand.scale outside 0.5 to 
 
 test('drawAt is a number of seconds or "sentence:<n>"', () => {
   assert.deepEqual(errs(sketch([text({ drawAt: 1.5 })])), []);
-  assert.deepEqual(errs(sketch([text({ drawAt: 'sentence:2' })])), []);
+  // A sentence needs narration to point into: with no voice track it is an error (the voice step's own tests: sketch-voice.test.mjs).
+  assert.deepEqual(errs(sketch([text({ drawAt: 'sentence:2' })])), ['scenes[0].elements[0].drawAt: drawAt "sentence:2" needs a voice track: an audio entry with "scene": "s" whose file has a voice sidecar beside it (node scripts/voice.mjs writes one next to the .wav)']);
   const want = 'drawAt must be a number of seconds (0 or more) or "sentence:<n>"';
   for (const bad of ['sentence:x', 'later', true, null]) {
     assert.deepEqual(errs(sketch([text({ drawAt: bad })])), [`scenes[0].elements[0].drawAt: ${want}`], JSON.stringify(bad));

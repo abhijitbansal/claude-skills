@@ -21,7 +21,8 @@ import { CACHE_ROOT } from './video.mjs';
 import { substituteVars } from '../../template/vars.mjs';
 import { applyViral } from '../../template/viral.mjs';
 import { ATLASES } from '../../template/maps.mjs';
-import { declaresBeats, resolveSpecBeats } from './beats-file.mjs';
+import { needsResolving, resolveSpecBeats } from './beats-file.mjs';
+import { voiceSidecars } from './sketch-voice.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NODE_MODULES = path.join(SKILL_ROOT, 'node_modules');
@@ -200,13 +201,14 @@ const blockAssets = (el) => (isBlock(el) ? blockAssetFiles(el).map((file) => fil
 
 /**
  * The file srcs `spec` (substituted, not expanded) reads, as written: image, video and lottie elements, the files block params
- * name, audio, captions and the beats file. Throws on a spec without a scenes array. render --batch refuses an output that is one of them.
+ * name, audio, captions, the beats file and the voice file beside each scene audio track. Throws on a spec without a scenes array.
+ * render --batch refuses an output that is one of them.
  */
 export function assetSrcs(spec) {
   const elements = spec.scenes.flatMap((s) => flattenElements(s.elements)).map(({ el }) => el);
   const images = [...elements.filter((el) => MEDIA_ELEMENTS.has(el.type)).map((el) => el.src), ...elements.flatMap(blockAssets)];
   const beats = typeof spec.beats === 'string' ? [spec.beats] : []; // watched for a reload, guarded against an --out over it
-  return [...images, ...(spec.audio ?? []).map((a) => a.src), ...(spec.captions ?? []).map((c) => c.src), ...beats];
+  return [...images, ...(spec.audio ?? []).map((a) => a.src), ...(spec.captions ?? []).map((c) => c.src), ...beats, ...voiceSidecars(spec)]; // a voice file the same way
 }
 
 function referencedAssets(ctx) {
@@ -317,13 +319,14 @@ function route(ctx, req, res) {
   return notFound(res);
 }
 
-// A spec file that names a beats file is served resolved (pipeline step 1b): its vars substituted, then every "beat:<n>"
-// as seconds, so the page never meets a reference. Any other file is served as written, byte for byte. Throws when the
-// beats cannot be resolved (serveSpec answers 404; the preview's spec-error event carries the reasons).
+// A spec file that names a beats file, or has a hand-drawn scene, is served resolved (pipeline step 1b): its vars
+// substituted, then every "beat:<n>" as seconds and each voiced scene given its narration, so the page never meets a
+// reference. Any other file is served as written, byte for byte. Throws when it cannot be resolved (serveSpec answers 404;
+// the preview's spec-error event carries the reasons).
 function beatsResolved(ctx, body) {
   let spec;
   try { spec = JSON.parse(body.toString('utf8')); } catch { return body; }
-  if (!declaresBeats(spec)) return body;
+  if (!needsResolving(spec)) return body;
   const { spec: resolved, errors } = resolveSpecBeats(substituteVars(spec), ctx.specDir);
   if (errors) throw new Error(errors[0].message);
   return Buffer.from(JSON.stringify(resolved));

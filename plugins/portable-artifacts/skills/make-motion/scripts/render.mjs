@@ -20,7 +20,7 @@ import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:
 import os from 'node:os';
 import path from 'node:path';
 import { loadSpec, validateSpec, checkVars, frameRateErrors, withDefaults, UsageError } from './lib/spec.mjs';
-import { declaresBeats, resolveSpecBeats } from './lib/beats-file.mjs';
+import { needsResolving, resolveSpecBeats } from './lib/beats-file.mjs';
 import { frameCount } from '../template/frames.mjs';
 import { printResult, didYouMean } from '../shared/errors.mjs';
 import { listThemes } from '../shared/theme.mjs';
@@ -231,9 +231,10 @@ async function plan(opts, state) {
     printResult({ ok: false, errors }, { label: opts.spec });
     return null;
   }
-  // A spec that names beats is drawn from the very spec that was just checked, not read again from the file (a beats file
-  // edited in between would resolve to times nobody validated); any other spec is served as the file, as ever.
-  return prepare(opts, { raw, loaded, dir, served: declaresBeats(loaded) ? served : undefined }, state);
+  // A spec that names beats, or has a hand-drawn scene (its voice file gives it narration), is drawn from the very spec that
+  // was just checked, not read again from the file (a beats or voice file edited in between would resolve to times nobody
+  // validated); any other spec is served as the file, as ever.
+  return prepare(opts, { raw, loaded, dir, served: needsResolving(loaded) ? served : undefined }, state);
 }
 
 // Every input of one render of `raw` (valid: plan and planBatch checked it). `served`: the spec the page draws in place

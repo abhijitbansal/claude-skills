@@ -55,6 +55,11 @@ function checkGlyphs(el, base, errors) {
   errors.push({ path: pathJoin(base, 'text'), message: `${missing.map((ch) => JSON.stringify(display(ch))).join(', ')} ${many ? 'are' : 'is'} not in the handwriting font; remove ${many ? 'them' : 'it'} or use a standard scene` });
 }
 
+// A "sentence:<n>" after the voice step: { sentence: n }, with a narration that has that sentence (resolveSketchVoice checked
+// it; a spec resolved some other way would not pass).
+const isSentenceRef = (drawAt, scene) => drawAt !== null && typeof drawAt === 'object' && Object.keys(drawAt).length === 1
+  && Number.isInteger(drawAt.sentence) && drawAt.sentence >= 0 && drawAt.sentence < (scene.narration?.length ?? 0);
+
 function checkDrawAt(el, base, scene, sketch, errors) {
   if (el.drawAt === undefined) return;
   const at = pathJoin(base, 'drawAt');
@@ -65,7 +70,7 @@ function checkDrawAt(el, base, scene, sketch, errors) {
     if (drawAt < 0 || drawAt >= scene.duration) {
       errors.push({ path: at, message: `drawAt ${drawAt} is outside scene "${scene.id}", which lasts ${scene.duration}s; use 0 or more and less than ${scene.duration}, or "sentence:<n>"` });
     }
-  } else if (!(typeof drawAt === 'string' && DRAW_AT.test(drawAt))) {
+  } else if (!(isSentenceRef(drawAt, scene) || (typeof drawAt === 'string' && DRAW_AT.test(drawAt)))) {
     errors.push({ path: at, message: 'drawAt must be a number of seconds (0 or more) or "sentence:<n>"' });
   }
 }
@@ -134,7 +139,8 @@ function durationPath(written, si, stroke) {
 
 /**
  * Pushes the plan's problems, and an error for each sketch scene shorter than its drawing needs at the natural pace: the
- * stroke plan's `needs`, in seconds, rounded up to a tenth. `written`: the spec as written; `expanded`: the same after expandSpec (blocks are groups).
+ * stroke plan's `needs`, in seconds, rounded up to a tenth. A scene with narration is exempt: its drawing follows the voice,
+ * so one that does not fit is check.mjs's finding. `written`: the spec as written; `expanded`: the same after expandSpec (blocks are groups).
  */
 export function checkSketchDuration(written, expanded, errors) {
   const size = canvasSize(expanded);
@@ -143,7 +149,7 @@ export function checkSketchDuration(written, expanded, errors) {
     if (!isSketchScene(expanded, scene)) return;
     const plan = planScene(scene, { size, seed, pace, icons: lucide, sceneIndex: si, startAfter: 0 });
     errors.push(...plan.problems); // what the plan could not draw, such as a word wider than its text's maxWidth
-    if (scene.duration + SECONDS_EPSILON >= plan.needs) return;
+    if (scene.narration || scene.duration + SECONDS_EPSILON >= plan.needs) return; // a voiced scene that cannot fit is check.mjs's finding (plan.overruns, unfinishedWriting)
     const needed = Math.ceil((plan.needs - SECONDS_EPSILON) * 10) / 10;
     errors.push({ path: durationPath(written, si, plan.strokes.at(-1)), message: `this drawing needs a scene of at least ${needed}s` });
   });
