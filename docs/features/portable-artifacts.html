@@ -46,7 +46,13 @@
 #films .gal-card{margin-top:18px}#films .gal-card+.gal-card{margin-top:36px}
 #films .film-sub{margin:10px 0 0;font-size:14px;color:var(--text-dim)}
 #quick-install .cl .ct{white-space:pre-wrap;overflow-wrap:anywhere}
-.toc .lbl.sub{margin:18px 0 8px}</style>
+.toc .lbl.sub{margin:18px 0 8px}
+.toc a.sub{padding:2px 0 2px 26px;font-size:12.5px}
+.toc{max-height:calc(100vh - 96px);overflow-y:auto}
+.gal-h3[id]{scroll-margin-top:190px}
+@media (max-width:760px){.gal-h3[id]{scroll-margin-top:104px}}
+#films .film-by-skill{margin-top:20px;font-size:14px;color:var(--text-dim)}
+#films .film-by-skill a{white-space:nowrap}</style>
 </head>
 <body class="accent-gold">
 <a class="skip" href="#main">Skip to content</a>
@@ -85,6 +91,11 @@
     <a href="#overview">Overview</a>
     <a href="#showcase">Real outputs</a>
     <a href="#gallery">Gallery</a>
+    <a class="sub" href="#gallery-dashboard">Dashboards</a>
+    <a class="sub" href="#gallery-motion">Motion</a>
+    <a class="sub" href="#gallery-explainer">Explainers</a>
+    <a class="sub" href="#gallery-diagram">Diagrams</a>
+    <a class="sub" href="#gallery-scene">3D scenes</a>
     <a href="#why">Problem &amp; why</a>
     <a href="#install">All the ways to install</a>
     <a href="#requirements">Requirements</a>
@@ -110,7 +121,12 @@
         <p class="film-sub">One short scene each for: title, counter, steps and checklist blocks; a line chart; a bar chart race; a map; typed, highlighted code; UI blocks (browser window, form fields, tab switch, button state, side panel); four colour grades on one photo; a Lottie animation; camera pan and shake; four transitions; a drawn scene; and karaoke captions from a local .srt file. A voice made locally with Kokoro narrates each scene; in the captions scene it reads the same lines the captions show. It is a tour, not every feature: no scene is about voiceover itself, and there is no music, sound cue, footage, cutout, viral mode or beat sync, and most of the 38 blocks are not shown.</p>
         <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-showcase/features/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-showcase/features/video.mp4" download>Download MP4 ↓</a></p>
       </div>
-      <p style="margin-top:16px;font-size:14px;color:var(--text-dim)">More outputs, each with the exact prompt that made it: <a href="#showcase">Real outputs</a> and the <a href="#gallery">Gallery</a>.</p>
+      <div class="gal-card" id="featured-diagram" style="max-width:420px;margin-top:36px">
+        <a href="showcase/portable-artifacts/gallery/cloud-architecture/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/cloud-architecture/{d}/index.html" target="_blank" rel="noopener" aria-label="Open the cloud architecture diagram full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/cloud-architecture/dusk/thumb.jpg" data-tpl-src="showcase/portable-artifacts/gallery/cloud-architecture/{d}/thumb.jpg" alt="An architecture diagram of an order moving from an AWS queue to a Google Cloud service, with each service drawn as its own cloud icon" loading="lazy" width="1280" height="720"></a>
+        <h4 style="margin:12px 0 2px">New: a diagram with cloud icons</h4><p class="gal-meta" style="margin-bottom:0!important">make-diagram · architecture · <span data-tname>dusk</span> theme</p>
+        <p class="film-sub">One order crossing from AWS to Google Cloud, with the AWS and Google Cloud service logos in their own colours. <a href="showcase/portable-artifacts/gallery/cloud-architecture/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/cloud-architecture/{d}/index.html" target="_blank" rel="noopener">Open the page ↗</a> or <a href="#gallery-diagram">see it with the other diagrams</a>.</p>
+      </div>
+      <p class="film-by-skill">Gallery by skill, each sample with its prompt or spec: <a href="#gallery-dashboard">Dashboards</a> · <a href="#gallery-motion">Motion</a> · <a href="#gallery-explainer">Explainers</a> · <a href="#gallery-diagram">Diagrams</a> · <a href="#gallery-scene">3D scenes</a>. See also <a href="#showcase">Real outputs</a>, with the exact prompts.</p>
     </section>
 
     <section id="quick-install" class="doc-section">
@@ -792,7 +808,7 @@
           <a href="showcase/portable-artifacts/gallery/explainer-page/poster/index.html" target="_blank" rel="noopener" aria-label="Open the poster explainer page"><img class="gal-media" src="showcase/portable-artifacts/gallery/explainer-page/poster/thumb.jpg" alt="The Portable Artifacts explainer page in the poster theme" loading="lazy" width="1280" height="720"></a>
           <p>Condensed capitals, acid lime and halftone art.</p></div>
       </div>
-      <h3 class="gal-h3">Dashboards</h3>
+      <h3 class="gal-h3" id="gallery-dashboard">Dashboards</h3>
       <div class="gal-grid">
         <div class="gitem gal-card reveal"><h4>Growth overview</h4><p class="gal-meta">make-dashboard</p>
           <a href="showcase/portable-artifacts/growth-dashboard.html" target="_blank" rel="noopener" aria-label="Open Growth overview full page"><img class="gal-media" src="img/portable-artifacts/growth-dashboard.jpg" alt="Growth overview dashboard generated by make-dashboard" loading="lazy" width="1100" height="1465"></a>
@@ -827,7 +843,7 @@
           <p class="gal-links"><a href="showcase/portable-artifacts/gallery/product-performance/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/product-performance/dashboard.json" target="_blank" rel="noopener">View spec</a></p>
         </div>
       </div>
-      <h3 class="gal-h3">Motion</h3>
+      <h3 class="gal-h3" id="gallery-motion">Motion</h3>
       <p style="margin:8px 0 0;font-size:14px;color:var(--text-dim)">Audio is opt-in. Each clip was first rendered silent from the prompt shown, then given the one-line follow-up under it. The agent wrote the narration, synthesised it locally with Kokoro and changed only the spec's <code>audio</code> field; the clips were later re-rendered in the new themes. Press play to hear it.</p>
       <div class="gal-grid">
         <div class="gitem gal-card reveal"><h4>From prompt to dashboard</h4><p class="gal-meta">make-motion · 1920×1080 · 15 s · Kokoro voiceover · <span data-tname>dusk</span> theme</p>
@@ -1019,21 +1035,7 @@
           <p class="gal-links"><a href="showcase/portable-artifacts/gallery/motion-1-4/pick-and-storyboard/motion.json" target="_blank" rel="noopener">View spec</a><a href="showcase/portable-artifacts/gallery/motion-1-4/pick-and-storyboard/video.mp4" download>Download MP4 ↓</a></p>
         </div>
       </div>
-      <h3 class="gal-h3">Plan mode</h3>
-      <p>The <code>plan</code> preset of make-explainer turns a proposal into a page a reviewer answers in the browser: one option per decision, approve or changes per item, free text and an overall verdict. Copy or Download hands back a <code>plan-answers.json</code> that the agent checks with <code>answers.mjs</code>. <b>Save as HTML</b>, a sticky button in the left menu, downloads the page itself with the answers inside, to keep, share or hand to the agent (<code>answers.mjs</code> reads it too). The same sample plan in its two themes; it is not switched by the theme bar above.</p>
-      <div class="gal-grid">
-        <div class="gitem gal-card reveal"><h4>Plan, techie</h4><p class="gal-meta">make-explainer · <code>--preset plan</code> · <code>--theme mono</code></p>
-          <a href="showcase/portable-artifacts/gallery/plan-page/index.html" target="_blank" rel="noopener" aria-label="Open the plan page in the mono theme"><img class="gal-media" src="showcase/portable-artifacts/gallery/plan-page/thumb.jpg" alt="A plan page in the mono theme: monospace headings, a summary and the numbers the plan rests on" loading="lazy" width="1280" height="720"></a>
-          <p>Monospace, cyan accent and blunt numbers, for a senior developer who wants the decisions and the evidence. Open it, pick an option, then use Save as HTML in the left menu, or Copy and Download in the Answers section.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/plan-page/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/plan-page/explainer.json" target="_blank" rel="noopener">View spec</a></p>
-        </div>
-        <div class="gitem gal-card reveal"><h4>Plan, executive</h4><p class="gal-meta">make-explainer · <code>--preset plan</code> · <code>--theme brief</code></p>
-          <a href="showcase/portable-artifacts/gallery/plan-page/brief/index.html" target="_blank" rel="noopener" aria-label="Open the plan page in the brief theme"><img class="gal-media" src="showcase/portable-artifacts/gallery/plan-page/brief/thumb.jpg" alt="The same plan page in the brief theme: serif headings on warm paper" loading="lazy" width="1280" height="720"></a>
-          <p>The same spec for an engineering manager: serif headings, warm paper and the decision and verdict up front.</p>
-          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/plan-page/brief/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/plan-page/explainer.json" target="_blank" rel="noopener">View spec</a></p>
-        </div>
-      </div>
-      <h3 class="gal-h3">Explainers and diagrams</h3>
+      <h3 class="gal-h3" id="gallery-explainer">Explainers</h3>
       <div class="gal-grid">
         <div class="gitem gal-card reveal"><h4>Portable Artifacts explainer</h4><p class="gal-meta">make-explainer · <span data-tname>dusk</span> theme · 5 embedded videos</p>
           <a href="showcase/portable-artifacts/gallery/explainer-page/index.html" data-tpl-href="showcase/portable-artifacts/gallery/explainer-page/{t}index.html" target="_blank" rel="noopener" aria-label="Open the Portable Artifacts explainer full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/explainer-page/thumb.jpg" data-tpl-src="showcase/portable-artifacts/gallery/explainer-page/{t}thumb.jpg" alt="The Portable Artifacts explainer page generated by make-explainer" loading="lazy" width="1280" height="720"></a>
@@ -1050,6 +1052,23 @@
           <p>A short concept explainer made with the skill itself: one-line numbers, cheap-model routing, plan mode and the docs, each with how it was built, plus the measured numbers and what is still unproven.</p>
           <p class="gal-links"><a href="showcase/portable-artifacts/gallery/features-explainer/index.html" data-tpl-href="showcase/portable-artifacts/gallery/features-explainer/{t}index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/features-explainer/explainer.json" target="_blank" rel="noopener">View spec</a></p>
         </div>
+      </div>
+      <h3 class="gal-h3">Plan mode</h3>
+      <p>The <code>plan</code> preset of make-explainer turns a proposal into a page a reviewer answers in the browser: one option per decision, approve or changes per item, free text and an overall verdict. Copy or Download hands back a <code>plan-answers.json</code> that the agent checks with <code>answers.mjs</code>. <b>Save as HTML</b>, a sticky button in the left menu, downloads the page itself with the answers inside, to keep, share or hand to the agent (<code>answers.mjs</code> reads it too). The same sample plan in its two themes; it is not switched by the theme bar above.</p>
+      <div class="gal-grid">
+        <div class="gitem gal-card reveal"><h4>Plan, techie</h4><p class="gal-meta">make-explainer · <code>--preset plan</code> · <code>--theme mono</code></p>
+          <a href="showcase/portable-artifacts/gallery/plan-page/index.html" target="_blank" rel="noopener" aria-label="Open the plan page in the mono theme"><img class="gal-media" src="showcase/portable-artifacts/gallery/plan-page/thumb.jpg" alt="A plan page in the mono theme: monospace headings, a summary and the numbers the plan rests on" loading="lazy" width="1280" height="720"></a>
+          <p>Monospace, cyan accent and blunt numbers, for a senior developer who wants the decisions and the evidence. Open it, pick an option, then use Save as HTML in the left menu, or Copy and Download in the Answers section.</p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/plan-page/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/plan-page/explainer.json" target="_blank" rel="noopener">View spec</a></p>
+        </div>
+        <div class="gitem gal-card reveal"><h4>Plan, executive</h4><p class="gal-meta">make-explainer · <code>--preset plan</code> · <code>--theme brief</code></p>
+          <a href="showcase/portable-artifacts/gallery/plan-page/brief/index.html" target="_blank" rel="noopener" aria-label="Open the plan page in the brief theme"><img class="gal-media" src="showcase/portable-artifacts/gallery/plan-page/brief/thumb.jpg" alt="The same plan page in the brief theme: serif headings on warm paper" loading="lazy" width="1280" height="720"></a>
+          <p>The same spec for an engineering manager: serif headings, warm paper and the decision and verdict up front.</p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/plan-page/brief/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/plan-page/explainer.json" target="_blank" rel="noopener">View spec</a></p>
+        </div>
+      </div>
+      <h3 class="gal-h3" id="gallery-diagram">Diagrams</h3>
+      <div class="gal-grid">
         <div class="gitem gal-card reveal"><h4>How a request becomes a finished page</h4><p class="gal-meta">make-diagram · architecture · <span data-tname>dusk</span> theme</p>
           <a href="showcase/portable-artifacts/gallery/pipeline-diagram/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/pipeline-diagram/{d}/index.html" target="_blank" rel="noopener" aria-label="Open the pipeline diagram full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/pipeline-diagram/dusk/thumb.jpg" data-tpl-src="showcase/portable-artifacts/gallery/pipeline-diagram/{d}/thumb.jpg" alt="An architecture diagram of the portable-artifacts pipeline generated by make-diagram" loading="lazy" width="1280" height="720"></a>
           <p>The pipeline from request to page, laid out by ELK. Play story (or <code>P</code>) opens beat 1; <code>Space</code> plays it, following a request hop by hop with a travelling dot and captions. Use Explore to click a node for what it sends and receives.</p>
@@ -1070,8 +1089,13 @@
           <p>A flowchart from the alert to the published postmortem. Its seven-beat story follows one real outage down the yes branch, so the no branch stays dimmed.</p>
           <p class="gal-links"><a href="showcase/portable-artifacts/gallery/incident-flow/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/incident-flow/{d}/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/incident-flow/diagram.json" target="_blank" rel="noopener">View spec</a></p>
         </div>
+        <div class="gitem gal-card reveal"><h4>Orders across two clouds</h4><p class="gal-meta">make-diagram · architecture · <code>cloud:</code> icons · <span data-tname>dusk</span> theme</p>
+          <a href="showcase/portable-artifacts/gallery/cloud-architecture/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/cloud-architecture/{d}/index.html" target="_blank" rel="noopener" aria-label="Open the Orders across two clouds diagram full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/cloud-architecture/dusk/thumb.jpg" data-tpl-src="showcase/portable-artifacts/gallery/cloud-architecture/{d}/thumb.jpg" alt="An architecture diagram of an order across AWS and Google Cloud, mid-story on the hop from the Invoice queue to the Invoice service, each drawn with its own cloud icon" loading="lazy" width="1280" height="720"></a>
+          <p>An order across AWS and Google Cloud, with each service drawn as its own logo through a <code>cloud:</code> ref: CloudFront, API Gateway, Lambda, DynamoDB and SQS on AWS, Cloud Run and Cloud Functions on Google Cloud. The first story places the order; the second, "Invoice it on Google Cloud", follows the one hop that crosses between the clouds. The bundled set holds 60 AWS names and 4 Google Cloud names, not every service.</p>
+          <p class="gal-links"><a href="showcase/portable-artifacts/gallery/cloud-architecture/dusk/index.html" data-tpl-href="showcase/portable-artifacts/gallery/cloud-architecture/{d}/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/cloud-architecture/diagram.json" target="_blank" rel="noopener">View spec</a></p>
+        </div>
       </div>
-      <h3 class="gal-h3">3D scenes</h3>
+      <h3 class="gal-h3" id="gallery-scene">3D scenes</h3>
       <div class="gal-grid">
         <div class="gitem gal-card reveal"><h4>Commits per folder as a city</h4><p class="gal-meta">make-scene · city · <span data-tname>dusk</span> theme</p>
           <a href="showcase/portable-artifacts/gallery/scene-city/dusk/index.html" target="_blank" rel="noopener" aria-label="Open the Commits per folder as a city full page"><img class="gal-media" src="showcase/portable-artifacts/gallery/scene-city/dusk/thumb.jpg" data-tpl-src="showcase/portable-artifacts/gallery/scene-city/{d}/thumb.jpg" alt="A 3D city of commit counts per folder and week, built by make-scene" loading="lazy" width="1280" height="720"></a>

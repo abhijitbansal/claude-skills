@@ -103,6 +103,10 @@ English toggle, and make-diagram gains `cloud:` icons. The site page for the plu
   `references/examples/`; the narrated specs are the gallery's `motion.json` files, with their `voice/` files beside
   them (the features film's `showcase-features.srt` there is retimed to the narration, same three lines). The
   Licences table in `README.md` gains rows for the SVG Logos pack and Caveat.
+- **Site: gallery by skill, and a cloud diagram.** The page's Gallery has one anchor per skill (`#gallery-dashboard`,
+  `#gallery-motion`, `#gallery-explainer`, `#gallery-diagram`, `#gallery-scene`), linked from the left menu and from a row
+  under the films, and shows a new `cloud-architecture` diagram that uses `cloud:` icons. "Explainers and diagrams" is
+  now two headings; `#gallery` and `#gallery-motion-1-4` still work.
 
 ### Measured
 

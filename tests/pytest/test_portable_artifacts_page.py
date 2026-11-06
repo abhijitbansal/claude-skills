@@ -135,6 +135,89 @@ def test_films_open_the_page_and_do_not_depend_on_scripts_or_gallery_css():
     assert ".gal-media{" not in _section(page, "gallery")
 
 
+GALLERY_DIR = "showcase/portable-artifacts/gallery"
+# Page order, which is also the order of both link lists.
+GALLERY_ANCHORS = (
+    "gallery-dashboard", "gallery-motion", "gallery-explainer", "gallery-diagram", "gallery-scene",
+)
+GALLERY_LABELS = ("Dashboards", "Motion", "Explainers", "Diagrams", "3D scenes")
+CLOUD_DIR = GALLERY_DIR + "/cloud-architecture"
+
+
+def _toc(page):
+    match = re.search(r'<aside class="toc"[^>]*>(.*?)</aside>', page, re.S)
+    return match.group(1) if match else ""
+
+
+def test_each_skill_has_one_gallery_anchor_on_its_own_heading():
+    page = _page()
+    gallery = _section(page, "gallery")
+    for anchor in GALLERY_ANCHORS:
+        assert page.count('id="%s"' % anchor) == 1, anchor
+        assert re.search(r'<h3 class="gal-h3" id="%s">' % anchor, gallery), anchor
+    assert [page.find("id=\"%s\"" % a) for a in GALLERY_ANCHORS] == sorted(
+        page.find("id=\"%s\"" % a) for a in GALLERY_ANCHORS
+    )
+    # the mixed heading is split: no heading names two skills
+    assert "Explainers and diagrams" not in page
+
+
+def test_old_gallery_anchors_still_resolve():
+    page = _page()
+    for anchor in ("gallery", "gallery-motion-1-4"):
+        assert page.count('id="%s"' % anchor) == 1, anchor
+    assert 'href="#gallery-motion-1-4"' in page  # the 1.1.0 what's-new link
+
+
+def test_left_menu_lists_the_gallery_anchors_under_gallery():
+    toc = _toc(_page())
+    links = re.findall(r'<a ([^>]*)>([^<]*)</a>', toc)
+    hrefs = [re.search(r'href="([^"]+)"', attrs).group(1) for attrs, _ in links]
+    assert "#gallery" in hrefs
+    start = hrefs.index("#gallery")
+    quick = links[start + 1:start + 1 + len(GALLERY_ANCHORS)]
+    assert [re.search(r'href="#([^"]+)"', a).group(1) for a, _ in quick] == list(GALLERY_ANCHORS)
+    assert [label for _, label in quick] == list(GALLERY_LABELS)
+    assert all('class="sub"' in attrs for attrs, _ in quick)
+    assert hrefs[start + 1 + len(GALLERY_ANCHORS)] == "#why"
+
+
+def test_top_section_has_one_gallery_by_skill_row_with_the_same_links():
+    block = _section(_page(), "films")
+    assert block.count("Gallery by skill") == 1
+    row = re.search(r'<p[^>]*>[^<]*Gallery by skill.*?</p>', block, re.S)
+    assert row, "no Gallery by skill row"
+    hrefs = re.findall(r'href="#([^"]+)"', row.group(0))
+    for anchor in GALLERY_ANCHORS:
+        assert anchor in hrefs, anchor
+    # replaces, not repeats, the old "More outputs" line
+    assert "More outputs" not in block
+    assert block.count('href="#gallery"') == 0
+
+
+def test_cloud_architecture_gallery_files_exist_and_are_linked_without_autoplay():
+    for name in ("diagram.json", "dusk/index.html", "dusk/thumb.jpg",
+                 "press/index.html", "press/thumb.jpg", "poster/index.html", "poster/thumb.jpg"):
+        assert (PAGE.parent / CLOUD_DIR / name).is_file(), name
+    page = _page()
+    # one card in the diagrams part, one smaller preview directly under the films
+    gallery = _section(page, "gallery")
+    diagrams = gallery[gallery.index('id="gallery-diagram"'):gallery.index('id="gallery-scene"')]
+    assert CLOUD_DIR + "/dusk/index.html" in diagrams
+    assert CLOUD_DIR + "/diagram.json" in diagrams
+    assert "cloud:" in diagrams
+    films = _section(page, "films")
+    assert CLOUD_DIR + "/dusk/thumb.jpg" in films
+    assert films.index('id="film-features"') < films.index(CLOUD_DIR + "/dusk/thumb.jpg")
+    assert len(re.findall(r"<video\b", films)) == len(FILMS)  # the preview is an image
+
+
+def test_plan_mode_follows_the_explainers_it_belongs_to():
+    page = _page()
+    plan = page.index('<h3 class="gal-h3">Plan mode</h3>')
+    assert page.index('id="gallery-explainer"') < plan < page.index('id="gallery-diagram"')
+
+
 def test_every_skill_has_one_line_that_links_to_existing_details():
     page = _page()
     block = _section(page, "skills")
