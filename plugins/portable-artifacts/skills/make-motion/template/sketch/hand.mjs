@@ -4,8 +4,8 @@
 import { pointAt } from './geometry.mjs';
 import { handHome } from './timing.mjs';
 import { PALETTE } from './style.mjs';
+import { svgEl } from './svg.mjs';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
 const HAND_BASE_SCALE = 0.4; // drawing units to px at hand.scale 1 on a 1080 canvas: 0.8 of the approved clip's 0.5
 const LIFT_PX = 16; // px at 1080 the hand rises at the top of a move
 const LIFT_DEGREES = 2; // and the degrees it tips back
@@ -27,14 +27,6 @@ export const HAND_TONE_FILLS = Object.freeze({
   brown: Object.freeze({ fill: '#a97249', shade: '#8c5b37' }),
   dark: Object.freeze({ fill: '#6f462b', shade: '#573520' }),
 });
-
-/** An SVG node with `attrs`, inside `parent` when one is given. */
-export function svgEl(name, attrs = {}, parent) {
-  const node = document.createElementNS(SVG_NS, name);
-  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
-  parent?.append(node);
-  return node;
-}
 
 // ---- the drawing -----------------------------------------------------------------------------------------------------------
 

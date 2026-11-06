@@ -8,16 +8,15 @@ import { cameraTransform } from './camera.mjs';
 import { resolveAudio } from './audio.mjs';
 import { flattenElements, isGroup } from './groups.mjs';
 import { gradeFilter, gradeId, GRADE_ELEMENT_TYPES } from './grade.mjs';
-import { loadCaptionTracks, captionLayer, applyCaption, captionSample, captionFontSize, captionMoments, CAPTION_WEIGHT } from './caption-layer.mjs';
+import { loadCaptionTracks, captionLayer, applyCaption, paintCaption, captionSample, captionFontSize, captionMoments, CAPTION_WEIGHT } from './caption-layer.mjs';
 import { codeHighlighter, styleCode, fillCode, setCodeTyping } from './code-view.mjs';
 import { DEFAULT_CODE_SIZE } from './code-theme.mjs';
 import { mountLottie, seekLottie, destroyLotties } from './lottie-view.mjs';
 import { atlasUrl, atlasesIn, withAtlases, themeColours } from './maps.mjs';
 import { expressionInterpreter } from 'vega-interpreter';
 import { bindWithNbsp } from '/shared/nowrap.mjs'; // served by server.mjs; the token regex lives only in shared/
-import { isSketchScene, specHasSketch } from './sketch/style.mjs'; // the rest of sketch/ loads only for a spec with such a scene (loadSketch)
+import { isSketchScene, specHasSketch, SVG_NS } from './sketch/style.mjs'; // the rest of sketch/ loads only for a spec with such a scene (loadSketch)
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
 const MODE_MARKER = document.querySelector('meta[name="motion-mode"]')?.content;
 const MODE = MODE_MARKER ?? 'preview';
 // Per-element compositor layers (styles.css body.live-layers) only when the page says preview outright: a missing or
@@ -538,7 +537,18 @@ async function buildStage(spec, look, frames, captions, lotties, sketch) {
   if (defs) stage.append(defs);
   for (const { grain: img } of scenes) if (img) stage.append(img); // over the scenes, under the vignette
   if (spec.texture?.vignette) stage.append(vignetteLayer());
-  return { stage, scenes, parts, captions: captionLayers, lotties, hand, sketch };
+  return { stage, scenes, parts, captions: captionLayers, lotties, hand, sketch, look };
+}
+
+// Captions sit on the stage, over whichever scene is showing: over a sketch scene they take the board's ink and tokens (its
+// page for the halo, its accent for the current word, its surface for a backdrop), over a standard scene the theme's again.
+function paintCaptionsFor(onBoard, captions, sketch, look) {
+  const paint = onBoard ? sketch.sketchLook(look) : look;
+  for (const { node, style } of captions) {
+    if (onBoard) sketch.scopeLayer(node);
+    else sketch.unscopeLayer(node);
+    paintCaption(node, style, paint);
+  }
 }
 
 function collectStrings(node, out = []) {
@@ -633,11 +643,12 @@ function renewNodes(nodes) {
 // composes the window itself (scripts/lib/gl-composite.mjs) asks for `isolate`, 'outgoing' or 'incoming', to see that layer
 // alone, opaque and unposed, and screenshots each. `isolate` does nothing outside a GL window.
 // `background`: the root colour, `themeBackground`: the theme's page colour, the base under a see-through root.
-function makeApply({ scenes, parts, captions, hand, sketch }, built, { size, background, themeBackground }) {
+function makeApply({ scenes, parts, captions, hand, sketch, look: themeLook }, built, { size, background, themeBackground }) {
   const { states, sceneStarts, sceneOf, overlaps } = built;
   const lastPose = new Map(); // part node -> the transform and opacity it was given last, to renew it when they change
   const base = paintOver(background, themeBackground); // what the stage shows behind a scene with no background of its own
   let glWindow = null;
+  let captionsOnBoard = false; // captions start in the theme's colours; only a spec with a sketch scene ever changes this
   const apply = (sec, isolate) => {
     const decoding = [];
     const active = activeScene(sceneStarts, sec);
@@ -722,6 +733,11 @@ function makeApply({ scenes, parts, captions, hand, sketch }, built, { size, bac
       const pose = sketch.applyHand(hand, alone === 'outgoing' ? null : scenes[active].plan, sec - sceneStarts[active]);
       if (lastPose.has(hand) && lastPose.get(hand) !== pose) renew.push(hand);
       lastPose.set(hand, pose);
+      const onBoard = scenes[active].plan !== null;
+      if (onBoard !== captionsOnBoard) {
+        captionsOnBoard = onBoard;
+        paintCaptionsFor(onBoard, captions, sketch, themeLook);
+      }
     }
     if (renew.length && !LIVE_LAYERS) renewNodes(renew); // not in a preview: it needs no byte-exact frames, and its elements are compositor layers (a <video> among them)
     for (const layer of captions) applyCaption(layer, sec);

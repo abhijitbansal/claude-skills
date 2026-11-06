@@ -16,7 +16,7 @@ import { HAND_TONES, PALETTE } from '../template/sketch/style.mjs';
 import lucide from '../template/sketch/lucide.mjs';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
-import { pixelsOf } from './render-probe.mjs';
+import { CAPTION_STYLES } from '../template/captions.mjs';
 import { requireRender, renderHash, BROWSER_ONLY } from './helpers/render.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -28,7 +28,12 @@ const TIP_TOLERANCE = 1; // px
 const BOX_TOLERANCE = 0.02; // px: CSS layout keeps sizes in 64ths of a pixel
 
 const made = [];
-after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
+let browserLaunch = null; // one browser for the whole file, a page per use: many short-lived browsers once wedged this machine's window server
+const sharedBrowser = () => (browserLaunch ??= launchBrowser({ quiet: true }));
+after(async () => {
+  if (browserLaunch) await (await browserLaunch).close();
+  for (const d of made) rmSync(d, { recursive: true, force: true });
+});
 const tmp = () => { const d = mkdtempSync(path.join(tmpdir(), 'sketch-render-')); made.push(d); return d; };
 
 const scene = (elements, extra = {}) => ({ id: 'draw', duration: 6, elements, ...extra });
@@ -50,10 +55,10 @@ async function onPage(motion, fn, { mode = 'render', files = {} } = {}) {
   for (const [name, body] of Object.entries(files)) writeFileSync(path.join(dir, name), body);
   writeFileSync(path.join(dir, 'm.json'), JSON.stringify(motion));
   const srv = await startServer({ specPath: path.join(dir, 'm.json'), mode });
-  const browser = await launchBrowser({ quiet: true });
+  const browser = await sharedBrowser();
+  const [width, height] = withDefaults(motion).size;
+  const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
   try {
-    const [width, height] = withDefaults(motion).size;
-    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
     const requests = [];
     const problems = [];
     page.on('request', (r) => requests.push(new URL(r.url()).pathname));
@@ -63,7 +68,7 @@ async function onPage(motion, fn, { mode = 'render', files = {} } = {}) {
     await page.waitForFunction(() => window.__motion);
     await page.evaluate(() => window.__motion.ready);
     return await fn({ page, requests, problems });
-  } finally { await browser.close(); await srv.close(); }
+  } finally { await page.close(); await srv.close(); }
 }
 
 const seek = (page, sec) => page.evaluate((s) => window.__motion.seek(s), sec);
@@ -92,6 +97,56 @@ const inkCount = (page, png, box, board = BOARD_RGB, distance = INK_DISTANCE) =>
   }
   return count;
 }, [`data:image/png;base64,${png.toString('base64')}`, box ?? null, board, distance]);
+
+// Of the pixels of `png` inside `box`: the one farthest from the colour `from`, how many differ from it at all (`touched`) and
+// how many differ strongly (`strong`). A caption with no visible halo or backdrop has few touched pixels beyond its strong ones.
+const regionStats = (page, png, box, from) => page.evaluate(async ([url, region, colour]) => {
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  const canvas = Object.assign(document.createElement('canvas'), { width: img.width, height: img.height });
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  const { data } = ctx.getImageData(Math.floor(region.x), Math.floor(region.y), Math.ceil(region.width), Math.ceil(region.height));
+  const out = { farthest: colour, touched: 0, strong: 0 };
+  let most = -1;
+  for (let i = 0; i < data.length; i += 4) {
+    const distance = Math.abs(data[i] - colour[0]) + Math.abs(data[i + 1] - colour[1]) + Math.abs(data[i + 2] - colour[2]);
+    if (distance > 3) out.touched++;
+    if (distance > 150) out.strong++;
+    if (distance > most) { most = distance; out.farthest = [data[i], data[i + 1], data[i + 2]]; }
+  }
+  return out;
+}, [`data:image/png;base64,${png.toString('base64')}`, box, from]);
+
+// The RGB of `png` at each [x, y], decoded on a page of the shared browser.
+async function pixelsAt(png, points) {
+  const browser = await sharedBrowser();
+  const page = await browser.newPage();
+  try {
+    return await page.evaluate(async ([url, spots]) => {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      const canvas = Object.assign(document.createElement('canvas'), { width: img.width, height: img.height });
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      return spots.map(([x, y]) => [...ctx.getImageData(x, y, 1, 1).data].slice(0, 3));
+    }, [`data:image/png;base64,${png.toString('base64')}`, points]);
+  } finally { await page.close(); }
+}
+
+const nearColour = (actual, expected, by = 12) => actual.every((v, i) => Math.abs(v - expected[i]) <= by);
+const luminance = (rgb) => {
+  const [r, g, b] = rgb.map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a, b) => (Math.max(luminance(a), luminance(b)) + 0.05) / (Math.min(luminance(a), luminance(b)) + 0.05);
+const captionBox = (page) => page.evaluate(() => {
+  const r = document.querySelector('.captions').getBoundingClientRect();
+  return { x: r.left, y: r.top, width: r.width, height: r.height };
+});
+const captionColour = (page) => page.evaluate(() => getComputedStyle(document.querySelector('.captions')).color);
 
 // Where the pencil's point is on the stage at `sec`, through every transform around it.
 const tipAt = (page, sec) => page.evaluate(async (s) => {
@@ -146,7 +201,8 @@ test('handPose: on writing the point is the smoothed path: the mean of 7 points 
 
 test('handPose: waiting for a drawAt, the hand holds where the last stroke ended; a plan with no strokes keeps it home', () => {
   const plan = planOf(film([scene([BOX, { ...ARROW, drawAt: 4 }])]));
-  const last = plan.strokes.find((s) => s.path.endsWith('[0]') && s.t1 < 4);
+  const last = plan.strokes.findLast((s) => s.t1 <= 3);
+  assert.ok(plan.strokes.some((s) => s.t0 >= 4), 'the arrow waits for its drawAt');
   const pose = handPose(plan, 3);
   assert.ok(plan.moves.every((m) => !(m.t0 <= 3 && 3 < m.t1)), 'no move at 3 s');
   assert.deepEqual([pose.x, pose.y], last.points.at(-1));
@@ -314,7 +370,7 @@ test('an opacity on an element and its group is painted once, and stays readable
   const motion = film([scene([{ id: 'grp', type: 'group', x: 300, y: 270, opacity: 0.5, children: [thick] }])]);
   await onPage(motion, async ({ page, problems }) => {
     const end = await frame(page, motion.scenes[0].duration - 0.01);
-    const [centre] = await pixelsOf(end, [[450, 270]]);
+    const [centre] = await pixelsAt(end, [[450, 270]]);
     const expected = BOARD_RGB.map((v, i) => v + ([29, 35, 48][i] - v) * 0.25);
     centre.forEach((v, i) => assert.ok(Math.abs(v - expected[i]) <= 2, `channel ${i}: ${v} is not ${expected[i]}`));
     const seen = await page.evaluate(() => {
@@ -340,11 +396,28 @@ test('the preview page draws a sketch scene too', async (t) => {
 test('a push carries one finished board out and the next in, with no hand left behind, and its frames are functions of the time', async (t) => {
   if (!await requireRender(t, BROWSER_ONLY)) return;
   const motion = film([scene([BOX], { id: 'one', duration: 3 }), scene([{ ...BOX, id: 'box2', y: 200 }], { id: 'two', duration: 3, transition: 'push' })]);
+  const incoming = planOf(motion, 1);
   const sec = 3 + 0.2;
   const straight = await onPage(motion, async ({ page, problems }) => {
+    const handShown = async (at) => {
+      await seek(page, at);
+      return page.evaluate(() => getComputedStyle(document.getElementById('sketch-hand')).display !== 'none');
+    };
+    assert.equal(await handShown(2.99), false, 'the first scene\'s hand has left before the push starts');
+    assert.equal(await handShown(sec), false, 'the next scene\'s hand has not come in yet');
+    // In the window (0.5 s) and after it, the one hand there is follows the incoming plan, so none stays where the old scene left it.
+    for (const at of [0.4, 0.49, 0.7]) {
+      const pose = handPose(incoming, at);
+      assert.equal(pose.visible, true, `the incoming hand is due at ${at}`);
+      const [x, y] = await tipAt(page, 3 + at);
+      const expectedY = pose.y - pose.lift * 16 * incoming.unit;
+      assert.ok(Math.hypot(x - pose.x, y - expectedY) <= TIP_TOLERANCE, `at ${at}: tip ${x},${y}, plan ${pose.x},${expectedY}`);
+    }
+    assert.equal(await handShown(3 + incoming.moves.at(-1).t1), false, 'it has left again by the end of the drawing');
+    const after = await frame(page, 3 + incoming.moves.at(-1).t1);
+    assert.ok(after.equals(await frame(page, 3 + incoming.moves.at(-1).t1, { hand: false })), 'no part of a hand in the frame after it has left');
     const png = await frame(page, sec);
     assert.deepEqual(problems, []);
-    assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('sketch-hand')).display), 'none', 'the next scene\'s hand has not come in yet');
     assert.ok(await inkCount(page, png) > 100, 'the outgoing board\'s drawing is on screen');
     return png;
   });
@@ -379,11 +452,14 @@ test('a frame is a function of the time alone: seeking straight to it, forward t
 
 test('the page loads lucide.mjs only when the spec has a sketch scene', async (t) => {
   if (!await requireRender(t, BROWSER_ONLY)) return;
-  const sketchOnly = /\/template\/sketch\/(lucide|view|hand|plan|geometry|timing)\.mjs$|caveat-700\.woff2$/;
+  const sketchOnly = /\/template\/sketch\/(lucide|view|hand|svg|plan|geometry|timing)\.mjs$|caveat-700\.woff2$/;
   const standard = { size: [320, 180], scenes: [{ id: 's', duration: 1, elements: [{ id: 'a', type: 'text', text: 'Hi', x: 160, y: 90 }] }] };
-  const plain = await onPage(standard, ({ requests, page }) => page.evaluate(() => document.getElementById('sketch-hand')).then((hand) => ({ requests, hand })));
+  const plain = await onPage(standard, async ({ requests, page }) => ({
+    requests,
+    nodes: await page.evaluate(() => [document.getElementById('sketch-hand') !== null, document.getElementById('sketch-font') !== null]),
+  }));
   assert.deepEqual(plain.requests.filter((p) => sketchOnly.test(p)), []);
-  assert.equal(plain.hand, null);
+  assert.deepEqual(plain.nodes, [false, false], 'a standard page has no hand and no handwriting font rule');
   const drawn = await onPage(film([scene([TEXT, ICON])]), ({ requests, problems }) => ({ requests, problems }));
   assert.ok(drawn.requests.includes('/template/sketch/lucide.mjs'));
   assert.ok(drawn.requests.includes('/template/sketch/caveat-700.woff2'));
@@ -405,6 +481,61 @@ test('a sketch scene overrides the CSS tokens and the look on its own layer only
   });
 });
 
+// ---- captions over a board ------------------------------------------------------------------------------------------------
+
+const CAPTION_SRT = '1\n00:00:00,000 --> 00:00:06,000\nHello there friend\n';
+const INK_RGB = [29, 35, 48];
+const DUSK_TEXT = 'rgb(247, 235, 224)';
+const DUSK_TEXT_RGB = [247, 235, 224];
+const DUSK_PAGE_RGB = [23, 16, 42];
+const MIN_CAPTION_CONTRAST = 4.5;
+const ACCENT_COLOUR = 'rgb(232, 89, 12)';
+const MAX_HALO_SHARE = 1.4; // touched pixels per strong one: measured 1.19 at most for the glyphs' soft edges alone, 1.73 with the theme's dark halo
+
+for (const style of CAPTION_STYLES) {
+  test(`a ${style} caption on a sketch board reads in ink under a dark theme, with no dark halo or backdrop`, async (t) => {
+    if (!await requireRender(t, BROWSER_ONLY)) return;
+    const motion = film([scene([{ ...TEXT, y: 80 }])], { theme: 'dusk', captions: [{ src: 'c.srt', style }] });
+    await onPage(motion, async ({ page, problems }) => {
+      const png = await frame(page, 5.9);
+      const stats = await regionStats(page, png, await captionBox(page), BOARD_RGB);
+      assert.ok(stats.strong > 100, `${style}: the caption was drawn (${stats.strong} pixels)`);
+      if (['karaoke', 'kinetic'].includes(style)) {
+        assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.captions .word.on')).color), ACCENT_COLOUR, 'the current word is in the board\'s accent');
+      }
+      assert.ok(nearColour(stats.farthest, INK_RGB), `${style}: its darkest pixel is the ink, got ${stats.farthest}`);
+      assert.ok(contrast(stats.farthest, BOARD_RGB) >= MIN_CAPTION_CONTRAST, `${style}: contrast ${contrast(stats.farthest, BOARD_RGB)}`);
+      assert.ok(stats.touched / stats.strong < MAX_HALO_SHARE, `${style}: ${stats.touched} touched for ${stats.strong} strong pixels`);
+      assert.deepEqual(problems, []);
+    }, { files: { 'c.srt': CAPTION_SRT } });
+  });
+}
+
+for (const style of ['plain', 'pill']) {
+  test(`a ${style} caption across a mixed film keeps the theme's colours in the standard scenes and takes the board's in the sketch one`, async (t) => {
+    if (!await requireRender(t, BROWSER_ONLY)) return;
+    const part = (id, extra) => ({ id, duration: 2, elements: [], ...extra });
+    const motion = film([part('a', { style: 'standard' }), part('b'), part('c', { style: 'standard' })], { theme: 'dusk', captions: [{ src: 'c.srt', style }] });
+    await onPage(motion, async ({ page, problems }) => {
+      const first = await frame(page, 1);
+      assert.equal(await captionColour(page), DUSK_TEXT);
+      const box = await captionBox(page);
+      const themed = await regionStats(page, first, box, DUSK_PAGE_RGB);
+      assert.ok(nearColour(themed.farthest, DUSK_TEXT_RGB), `standard scene: its brightest pixel is the theme's text, got ${themed.farthest}`);
+      const drawn = await frame(page, 3);
+      assert.equal(await captionColour(page), `rgb(${INK_RGB.join(', ')})`);
+      const board = await regionStats(page, drawn, box, BOARD_RGB);
+      assert.ok(nearColour(board.farthest, INK_RGB), `sketch scene: its darkest pixel is the ink, got ${board.farthest}`);
+      const later = await frame(page, 5);
+      assert.equal(await captionColour(page), DUSK_TEXT);
+      const back = await regionStats(page, later, box, DUSK_PAGE_RGB);
+      assert.ok(nearColour(back.farthest, DUSK_TEXT_RGB), `the standard scene after it: got ${back.farthest}`);
+      assert.ok((await frame(page, 1)).equals(first), 'back in the first scene, the same bytes as the first time');
+      assert.deepEqual(problems, []);
+    }, { files: { 'c.srt': CAPTION_SRT } });
+  });
+}
+
 // Review Focus 3.
 test('with --theme poster a mixed film\'s standard scene uses poster and its sketch scene keeps #fdfcf8', async (t) => {
   if (!await requireRender(t, BROWSER_ONLY)) return;
@@ -418,7 +549,7 @@ test('with --theme poster a mixed film\'s standard scene uses poster and its ske
     const png = path.join(dir, `at-${sec}.png`);
     const r = spawnSync(process.execPath, [RENDER, spec, '--theme', 'poster', '--poster', String(sec), '--poster-out', png], { encoding: 'utf8' });
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    return (await pixelsOf(readFileSync(png), [[5, 5]]))[0];
+    return (await pixelsAt(readFileSync(png), [[5, 5]]))[0];
   };
   assert.deepEqual(await corner(0.5), POSTER_PAGE_RGB);
   assert.deepEqual(await corner(2.5), BOARD_RGB);

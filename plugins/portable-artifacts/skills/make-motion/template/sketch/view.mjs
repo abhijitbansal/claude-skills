@@ -2,7 +2,7 @@
 // far along each stroke is at the time it is given, so a frame depends on that time alone. No path is measured in the page.
 import { PALETTE } from './style.mjs';
 import { THEME_TOKENS, colourOf } from './plan.mjs';
-import { svgEl } from './hand.mjs';
+import { svgEl } from './svg.mjs';
 
 const WRITING_FONT = 'Caveat';
 const WRITING_WEIGHT = 700;
@@ -38,10 +38,16 @@ export function sketchLook(look) {
   return { ...look, colors, text: PALETTE.ink, shape: PALETTE.accent, background: PALETTE.board };
 }
 
-/** Turns the theme's CSS tokens to the board's palette on a sketch scene's own layer. */
+/** Turns the theme's CSS tokens to the board's palette on a node: a sketch scene's own layer, or a caption over one. */
 export function scopeLayer(layer) {
   layer.style.setProperty('--page', PALETTE.board);
   for (const token of THEME_TOKENS) layer.style.setProperty(`--${token}`, colourOf(token));
+}
+
+/** Undoes `scopeLayer`, so the node reads the theme's tokens again. */
+export function unscopeLayer(layer) {
+  layer.style.removeProperty('--page');
+  for (const token of THEME_TOKENS) layer.style.removeProperty(`--${token}`);
 }
 
 // ---- one stroke: hidden, being drawn, or done ---------------------------------------------------------------------------------

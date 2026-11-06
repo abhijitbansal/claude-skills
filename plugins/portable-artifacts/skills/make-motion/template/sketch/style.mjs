@@ -1,6 +1,8 @@
 // Browser-safe (no imports): the hand-drawn style's names, ranges and palette. A scene is hand-drawn when its own `style`
 // says so, else when the root `style` does; the page loads the rest of template/sketch/ only when a spec has such a scene.
 
+export const SVG_NS = 'http://www.w3.org/2000/svg'; // here because the renderer already loads this file for every spec
+
 export const STYLES = Object.freeze(['standard', 'sketch']);
 const SKETCH = 'sketch';
 
