@@ -33,8 +33,10 @@ def _section(page, section_id):
     return match.group(1) if match else ""
 
 
-def _position(page, section_id):
-    return page.find('<section id="%s"' % section_id)
+def _position(page, element_id):
+    """Offset of the element (any tag) that carries this id, or -1."""
+    match = re.search(r'<[a-z0-9]+ id="%s"' % re.escape(element_id), page)
+    return match.start() if match else -1
 
 
 def test_portable_artifacts_page_order():
@@ -59,10 +61,13 @@ def test_quick_install_copy_buttons_hold_one_command_without_comment():
         assert command == command.strip() and command
     # one button per visible command line, as the CLAUDE.md contract says
     assert block.count('<div class="cl">') == len(buttons)
-    # nothing invented: each command is also in the full install details
+    # nothing invented, nothing repeated: known command forms only, and the
+    # install details keep just the variants
+    known = ("/plugin marketplace add ", "/plugin install ", "npx skills add ")
     details_install = _section(_page(), "install")
     for raw in buttons:
-        assert 'data-copy="%s"' % raw in details_install, raw
+        assert html.unescape(raw).startswith(known), raw
+        assert 'data-copy="%s"' % raw not in details_install, "repeated: " + raw
 
 
 def test_both_films_are_referenced_with_poster_and_exist():
@@ -79,6 +84,25 @@ def test_both_films_are_referenced_with_poster_and_exist():
     for tag in videos:
         assert "controls" in tag and 'preload="none"' in tag, tag
         assert "autoplay" not in tag, tag
+        assert 'aria-label="' in tag, tag
+
+
+def test_films_open_the_page_and_do_not_depend_on_scripts_or_gallery_css():
+    page = _page()
+    main_start = page.index('<main id="main"')
+    first_section = re.search(r"<section\b[^>]*id=\"([^\"]+)\"", page[main_start:]).group(1)
+    assert first_section == "films"
+    # no stat band between the hero and the films
+    films_at = _position(page, "films")
+    assert "statband" not in page[:films_at]
+    # film cards are visible with JS off: no .reveal on them
+    cards = re.findall(r'<div class="[^"]*"\s+id="film-[^"]+"', page)
+    assert len(cards) == len(FILMS)
+    assert all("reveal" not in card for card in cards), cards
+    # the .gal-* rules that style them live in <head>, not inside the gallery
+    head = page[: page.index("</head>")]
+    assert ".gal-media{" in head and ".gal-card{" in head
+    assert ".gal-media{" not in _section(page, "gallery")
 
 
 def test_every_skill_has_one_line_that_links_to_existing_details():
