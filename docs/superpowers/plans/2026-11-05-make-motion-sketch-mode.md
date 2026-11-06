@@ -461,12 +461,104 @@ Values, all at 1080 on the short side and scaled by `unit(size)`, come from the 
 
 ---
 
-## Finish
+## Part D: Simple English in make-explainer
 
-### Task 16: Cross-surface docs, release, and proof
+`<ex>` below means `plugins/portable-artifacts/skills/make-explainer`.
+
+### Task 16: `simple` field and lint
 
 **Files:**
-- Modify: `plugins/portable-artifacts/.claude-plugin/plugin.json` (1.2.0), `plugins/portable-artifacts/CHANGELOG.md`, `README.md`, `USAGE.md`, `<skill>/README.md`, `<skill>/references/schema.md`, `<skill>/references/motion-design.md`, `docs/features/portable-artifacts.html`, `docs/skills-catalog.md`, `docs/catalog.html`
+- Create: `<ex>/scripts/lib/simple.mjs`, `<ex>/references/simple-english.md`
+- Modify: `<ex>/scripts/lib/schema.mjs:67`, `<ex>/scripts/lib/spec.mjs` (validate walk)
+- Test: new `<ex>/test/simple.test.mjs`
+
+**Interfaces:**
+- Produces, from `simple.mjs`: `SIMPLE_SECTIONS` (the eligible type names from the spec's Part D); `lintSimple(section, path): Array<{ path, message }>`; `withSimple(section): section`, a pure copy with `simple`'s fields merged over the section's, lists matched by position; `hasSimple(spec): boolean`.
+
+- [ ] **Step 1: Write failing tests:**
+  - `simple on an eligible section is valid`; `simple on a decision is an error listing the eligible types`; `an unknown field inside simple is an error`.
+  - `withSimple merges by field, and a list by position; a field left out keeps normal text`; `the input is not changed`.
+  - `a 26-word sentence warns in text, a 21-word sentence warns in steps, and 20 and 25 do not`.
+  - `7 sentences in a paragraph warn`; `a semicolon warns`; `"in order to" warns and names "to"`; `"was deployed" warns as likely passive`.
+  - `words inside backticks are ignored by every rule`.
+  - `a step opening with "The" warns; one opening with "Run" does not`.
+  - `a page with some simple text warns on an eligible section with none; a page with none gives no such warning`.
+  - `simple text does not count toward page word budgets`.
+  - `an existing example spec validates with no new warnings`.
+- [ ] **Step 2: Run them.** Expected: FAIL.
+- [ ] **Step 3: Implement.** Reuse `lintBanned` from `<ex>/scripts/lib/lint.mjs` on simple text as well. Write `references/simple-english.md` in our own words, including: "Based on ideas from ASD-STE100. This is not a compliant document, and it does not check the standard's approved dictionary." Nothing is copied from the standard.
+- [ ] **Step 4: Run them, plus `lint.test.mjs`, `spec.test.mjs`.** Expected: PASS.
+- [ ] **Step 5: Commit** `feat(make-explainer): simple text field and lint`.
+
+### Task 17: Render and toggle
+
+**Files:**
+- Modify: `<ex>/scripts/lib/page.mjs:95,137,150,243,270`, `<ex>/template/page.html`, `<ex>/template/slides.html`, `<ex>/template/runtime.js`, `<ex>/template/slides.js`, `<ex>/template/base.css`, `<ex>/SKILL.md`, `<ex>/references/schema.md`, `<ex>/references/sections.md`, `<ex>/scripts/scaffold.mjs` only if a preset needs a `simple` starter
+- Test: new `<ex>/test/simple-browser.test.mjs`, `<ex>/test/golden.test.mjs` stays unedited
+
+**Interfaces:**
+- Consumes: `withSimple`, `hasSimple`, `SIMPLE_SECTIONS`.
+- Produces: inside a section with `simple`, the body renders twice as `<div data-text="normal">` and `<div data-text="simple" hidden>`; a toggle button `data-simple-toggle` in the page chrome beside the theme toggle; the choice in `localStorage` under `pa-simple`, wrapped in try/catch as the theme toggle's is.
+
+- [ ] **Step 1: Write failing tests:**
+  - `a spec with no simple builds byte-identical to before`: the golden tests pass with no baseline edits.
+  - `the page opens with normal text and the toggle reads Simple English`.
+  - `clicking shows simple text and hides normal text; clicking again restores it`.
+  - `the choice survives a reload`; `a blocked localStorage does not throw`.
+  - `no toggle appears on a page with no simple text`.
+  - `a field left out of simple shows its normal text in the simple view`.
+  - `contents links and section ids are the same in both views, and no id is duplicated`: assert unique ids in the DOM.
+  - `a deck switches text on the current slide, and slide count is unchanged`.
+  - `a plan page: an answer given before toggling is still there after, and export is unchanged`.
+  - `print and no-JS show normal text only`: emulate print media; load with JavaScript disabled.
+  - `the toggle is keyboard-reachable with aria-pressed`.
+- [ ] **Step 2: Run them.** Expected: FAIL.
+- [ ] **Step 3: Implement.** Section titles inside the body may switch; contents labels do not. Run `check.mjs` on a built page.
+- [ ] **Step 4: Update `SKILL.md`.** Add a Writing rule: write `simple` for every eligible section, with the rules from `references/simple-english.md` in brief: one idea a sentence, 20 words in steps and 25 elsewhere, active voice, one term for one thing, common words, no semicolons. Keep code, numbers and names exact. Add `simple` to the example. Say it costs more words, and leave it out if the prompt asks for a quick page. Keep the `description` on one line.
+- [ ] **Step 5: Build `<ex>/references/examples/` recap and deck specs with `simple`, view both views' screenshots, and read them.**
+- [ ] **Step 6: Run the full explainer suite.** `node --test "plugins/portable-artifacts/skills/make-explainer/test/**/*.test.mjs"`. Expected: PASS.
+- [ ] **Step 7: Commit** `feat(make-explainer): Simple English toggle`.
+
+---
+
+## Part E: site and showcase
+
+### Task 18: Showcase films
+
+**Files:**
+- Create: `<skill>/references/examples/showcase-hand-drawn.json`, `<skill>/references/examples/showcase-features.json`
+- Create: their MP4s and posters under `docs/features/showcase/portable-artifacts/` (check `scripts/build_motion_gallery.py` and `tests/pytest/test_motion_gallery.py` for the gallery's layout and how films are registered, and follow them)
+
+- [ ] **Step 1: Write the hand-drawn film.** About 45 s, silent, drawn from start to finish: what make-motion's hand-drawn style is, using its own blocks, one `erase` and one `push`.
+- [ ] **Step 2: Write the feature film.** Mixed: scenes showing blocks, a chart, a map, code, a transition, a camera move, captions from a local file, the UI blocks and a drawn scene. Use only bundled data. Every on-screen claim must be something the film shows.
+- [ ] **Step 3: Validate and `check.mjs` both.** Expected: no problems.
+- [ ] **Step 4: Render both with `--no-provenance`, and write posters with `--poster`. Keep each MP4 under 15 MB.** View contact sheets and extracted frames by reading them.
+- [ ] **Step 5: Run `python3 -m pytest tests/pytest/test_motion_gallery.py`.** Expected: PASS.
+- [ ] **Step 6: Commit** `docs(portable-artifacts): showcase films`.
+
+### Task 19: Simplify the site page
+
+Before any edit, load the `design-router` skill: this is a design task. The page must keep its existing look and theme; this is a reorder and simplify.
+
+**Files:**
+- Modify: `docs/features/portable-artifacts.html`; `site/` and `docs/` pages that link to or repeat it, only where counts or claims went stale
+- Test: `tests/pytest/` tests that cover this page; add one if none pins the order
+
+- [ ] **Step 1: Write a failing test** in `tests/pytest/`: `test_portable_artifacts_page_order`: the page's main sections appear in this order: showcase, install, one-liners, details. Every `data-copy` in the install section holds one command with no `#` comment. Both new films are referenced, and the files exist.
+- [ ] **Step 2: Run it.** Expected: FAIL.
+- [ ] **Step 3: Restructure.** Order: showcase up top with the two new films; a quick install block using the `.code.cmds` per-line copy contract in `CLAUDE.md`; one line per skill (five skills), each linking to its details; then the existing detail content. Cut only repeated text. Add Simple English, hand-drawn and UI blocks to the relevant details.
+- [ ] **Step 4: Open it locally through a browser tool, take screenshots at phone and desktop width, read them, and fix what is off.** Check the videos have posters and that copy buttons copy one command.
+- [ ] **Step 5: Run `python3 -m pytest tests/pytest`.** Expected: PASS.
+- [ ] **Step 6: Commit** `docs(portable-artifacts): simplify the site page`.
+
+---
+
+## Finish
+
+### Task 20: Cross-surface docs, release, and proof
+
+**Files:**
+- Modify: `plugins/portable-artifacts/.claude-plugin/plugin.json` (1.2.0), `plugins/portable-artifacts/CHANGELOG.md`, `README.md`, `USAGE.md`, `<skill>/README.md`, `<skill>/references/schema.md` (including the UI block table), `<skill>/references/motion-design.md`, `<ex>/README.md`, `docs/skills-catalog.md`, `docs/catalog.html`, `docs/architecture.md`, `site/` where stale
 - Generated: `.scratch/` test checklist
 
 - [ ] **Step 1: Sweep the block count.** Search `28` near "block" across the plugin and `docs/`, and change to 38. Check `python3 scripts/sweep_counts.py --check`. No skill was added, so skill counts should not move.

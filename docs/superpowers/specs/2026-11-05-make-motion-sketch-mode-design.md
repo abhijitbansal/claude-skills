@@ -280,6 +280,45 @@ Each change is shown catching a bad spec first.
 
 ---
 
+# Part D: Simple English in make-explainer
+
+**Why.** The owner wants explainers that anyone can follow, taking the best parts of ASD-STE100, with a toggle at the top that switches the page's text.
+
+**The owner decided:** the agent writes both versions and a script checks the simple one. The page opens in normal text. The toggle is named "Simple English" and the page remembers the choice. It ships in this PR.
+
+- The name avoids claiming compliance. We use parts of the standard's writing rules and do not check its approved dictionary, which belongs to ASD. Docs say "based on ideas from ASD-STE100; not a compliant document". No text from the standard or its dictionary is copied; the rules and word swaps are written in our own words.
+- **Spec:** an eligible section may carry `simple`, an object with the same prose fields as the section, replacing them in the simple view. A field left out shows its normal text. List fields match by position.
+- **Eligible sections:** `tldr`, `text`, `cards`, `risks`, `steps`, `timeline`, `compare`, `callout`, `details`, `table`. On other sections `simple` is a validation error that lists these.
+- **Not changed by the toggle:** code, commands, file paths, numbers and data, and interactive or embedded sections (`checklist`, `decision`, `approval`, `question`, `review`, `verdict`, `diagram`, `chart`, `scene`, `motion`, `image`, `code`, `files`, `kpis`). A plan's answers are never affected.
+- **Modes:** recap, concept, plan, checklist and slides all work, through their eligible sections.
+- **Page:** the toggle appears only when the page has simple text. Without JavaScript and in print, the normal text shows. Contents labels and section ids do not change, so links keep working.
+- **Lint rules, as validate warnings on `simple` text only**, ignoring `code`: at most 20 words a sentence in `steps`, 25 elsewhere; at most 6 sentences a paragraph; one item of likely passive voice flagged per sentence; no semicolons; a short word-swap list ("in order to" to "to", "utilize" to "use", "prior to" to "before"); a step starts with a verb, checked only against a list of common non-verb openers.
+- `simple` is optional in the schema, so older specs build unchanged, and pages without it render byte-identically. If a page has some simple text, an eligible section with none gets a warning. The skill tells the agent to write it for every eligible section.
+- `simple` text does not count toward the page's word budgets, since a reader sees only one version.
+
+**Done when** a recap and a deck each switch text with the toggle, the choice survives a reload, a plan page's answers are unaffected, and a page with no `simple` is byte-identical to today's.
+
+---
+
+# Part E: site and showcase
+
+**Why.** The owner wants the portable-artifacts site page simplified, and to show the new work.
+
+**The owner decided the order of `docs/features/portable-artifacts.html`:**
+
+1. Showcase up top.
+2. Quick, copy-pastable installation.
+3. One line for each skill.
+4. Then the details.
+
+- Commands follow the per-line copy-button contract in `CLAUDE.md`.
+- Existing detail content stays reachable below; it moves, and only repeated text is cut.
+- **Two new showcase films, rendered with the skill itself and shown up top:** a hand-drawn film, and a film that shows make-motion's features. The feature film uses a representative of each major feature family: blocks, charts, maps, code, transitions, camera, captions, and the new UI blocks. Features needing a user's files (cutouts, footage, voice) may be left out or use bundled fixtures, and the film must not claim more than it shows.
+- Films are silent unless a voiceover is already available. Each has a poster from `--poster`.
+- Site changes stay local to the repo. Nothing is deployed.
+
+---
+
 ## Cross-surface updates
 
 - Plugin version 1.2.0 and `CHANGELOG.md`.
