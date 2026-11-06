@@ -62,9 +62,31 @@ const cell = { type: ['string', 'number'] };
 // A number or non-blank text (the pattern applies to strings only).
 const metric = { type: ['string', 'number'], pattern: NON_SPACE };
 
+// The prose fields a section's `simple` object may carry (simple.mjs): the same names as on the section, all
+// optional, lists matched to the section's by position. An eligible type's key here is its name in SIMPLE_SECTIONS.
+const SIMPLE_FIELDS = {
+  tldr: { text, points: list(text) },
+  text: { text },
+  cards: { items: items({ title: text, text }, []) },
+  risks: { items: items({ risk: text, mitigation: text }, []) },
+  steps: { items: items({ title: text, text }, []) },
+  timeline: { items: items({ title: text, text }, []) },
+  compare: { columns: items({ title: text, points: list(text) }, []), verdict: text },
+  callout: { text },
+  details: { summary: text, text },
+  table: { caption: text, columns: list(text), rows: list(list(cell)) },
+};
+export const SIMPLE_SECTIONS = Object.freeze(Object.keys(SIMPLE_FIELDS));
+
+// Any type may carry the key so that spec.mjs can say which types may use it (an ineligible type's `simple` must
+// be an object here, and is then refused by simple.mjs with the list of eligible types).
+function simpleSchema(type) {
+  return Object.hasOwn(SIMPLE_FIELDS, type) ? object([], { title: text, ...SIMPLE_FIELDS[type] }) : { type: 'object' };
+}
+
 // A section schema: every section has a type and may have an id, a title and a label (a short name for the contents list).
 function section(type, required, props) {
-  return object(['type', ...required], { type: { const: type }, id: text, title: text, label: text, ...props });
+  return object(['type', ...required], { type: { const: type }, id: text, title: text, label: text, ...props, simple: simpleSchema(type) });
 }
 
 export const SECTION_SCHEMAS = {

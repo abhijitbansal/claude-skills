@@ -30,7 +30,7 @@ const NO_TITLE_CAP = new Set(['diagram', 'chart', 'motion', 'scene']);
 const SECTION_CAP_TYPES = new Set(['text', 'details', 'callout']);
 const CARD_TYPES = new Set(['cards', 'steps']);
 const LIST_KEYS = new Set(['points', 'items', 'risk', 'mitigation']);
-const ABBREVIATION = /\b(?:Mr|Mrs|Ms|Dr|Jr|Sr|St|vs|approx)\.|\b[A-Z]\.(?=\s+[A-Z][a-z])|\b(?:[A-Za-z]\.){2,}|\betc\.(?=\s+[a-z])/g;
+export const ABBREVIATION = /\b(?:Mr|Mrs|Ms|Dr|Jr|Sr|St|vs|approx)\.|\b[A-Z]\.(?=\s+[A-Z][a-z])|\b(?:[A-Za-z]\.){2,}|\betc\.(?=\s+[a-z])/g;
 
 // Emoji are allowed; these keep a page from turning into confetti. Warn when emoji exceed 1 in
 // EMOJI_DENSITY_CHARS characters of a prose string (and the string has at least MIN_EMOJI_FOR_DENSITY, so a
@@ -60,7 +60,7 @@ export function sentences(s) {
 
 // A blank line separates paragraphs; "- " lines are each their own list item.
 // Each block carries `name`: "paragraph 2 of 3" or "list item 1 of 2" (numbered apart; plain when only one).
-function blocks(text) {
+export function blocks(text) {
   const raw = text.split(/\n\s*\n/).flatMap((block) => {
     const lines = block.split('\n').filter((l) => l.trim() !== '');
     return lines.length > 0 && lines.every((l) => l.trimStart().startsWith('- '))
@@ -103,6 +103,10 @@ function proseStrings(section, at) {
 }
 
 const warn = (path, message) => ({ path, message });
+
+// A section's `simple` text is the reader's other version of its text (simple.mjs lints it by its own rules), not
+// extra text: none of these caps counts it.
+const withoutSimple = (section) => Object.fromEntries(Object.entries(section).filter(([key]) => key !== 'simple'));
 
 // Titles at any depth (section, card, step, compare column ...) and the section label.
 function titleWarnings(section, at) {
@@ -198,7 +202,8 @@ function titleStrings(section, at) {
 /** Emoji-density warnings for a parsed spec -> [{ path, message }]. Never an error. Code spans and URLs are not counted. */
 export function emojiDensityWarnings(spec) {
   const out = [];
-  (spec.sections ?? []).forEach((section, i) => {
+  (spec.sections ?? []).forEach((full, i) => {
+    const section = withoutSimple(full);
     const at = pathJoin('sections', i);
     for (const t of titleStrings(section, at)) {
       const n = countEmoji(t.text);
@@ -221,7 +226,7 @@ export function warnBudget(spec) {
   const out = [];
   let page = 0;
   (spec.sections ?? []).forEach((section, i) => {
-    const r = sectionWarnings(section, i);
+    const r = sectionWarnings(withoutSimple(section), i);
     out.push(...r.out);
     page += r.wordCount;
   });

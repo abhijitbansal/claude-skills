@@ -13,6 +13,7 @@ import { lintText, lintPlaceholders } from './lint.mjs';
 import { warnBudget } from './budget.mjs';
 import { slideBudget } from './slides.mjs';
 import { checksFor } from './checks.mjs';
+import { simpleErrors, simpleWarnings } from './simple.mjs';
 
 export { UsageError, JsonSyntaxError };
 
@@ -79,8 +80,8 @@ function schemaErrors(spec) {
   return formatAjvErrors(raw.map(wordSchemaError));
 }
 
-// A table section's cells (sections[i].rows...): the one place the banned-phrase rule does not apply.
-const TABLE_CELL = /^sections\[(\d+)\]\.rows(?:\[|$)/;
+// A table section's cells (sections[i].rows..., or its simple.rows...): the one place the banned-phrase rule does not apply.
+const TABLE_CELL = /^sections\[(\d+)\]\.(?:simple\.)?rows(?:\[|$)/;
 const isTableCell = (spec, at) => {
   const m = TABLE_CELL.exec(at);
   return m !== null && spec.sections?.[Number(m[1])]?.type === 'table';
@@ -131,8 +132,9 @@ export async function validateSpec(spec, { dir = process.cwd() } = {}) {
   checkSections(spec, errors);
   const lint = lintSpec(spec);
   errors.push(...lint.errors);
+  errors.push(...simpleErrors(spec));
   if (spec.mode === 'slides' || spec.preset === 'slides') errors.push(...slideBudget(spec));
   const registry = await registryResults(spec, dir);
   errors.push(...registry.errors);
-  return { ok: errors.length === 0, errors, warnings: [...warnBudget(spec), ...warnSections(spec), ...registry.warnings] };
+  return { ok: errors.length === 0, errors, warnings: [...warnBudget(spec), ...warnSections(spec), ...simpleWarnings(spec), ...registry.warnings] };
 }

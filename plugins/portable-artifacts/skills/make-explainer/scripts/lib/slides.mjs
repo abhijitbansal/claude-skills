@@ -34,8 +34,11 @@ export function pointCount(s) {
 
 function wordCount(s, path) {
   if (s.type === 'table') return 0;
+  const simple = pathJoin(path, 'simple');
+  // A slide shows one version of its text, so `simple` text is not counted on top of the normal text.
   return sum(collectStrings(s, path)
     .filter((x) => x.prose && x.path !== pathJoin(path, 'title') && x.path !== pathJoin(path, 'label') && x.key !== 'caption')
+    .filter((x) => !x.path.startsWith(`${simple}.`))
     .map((x) => words(x.text)));
 }
 
