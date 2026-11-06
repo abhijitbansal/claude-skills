@@ -18,7 +18,7 @@ import { doctorCommand } from './doctor-hint.mjs';
 import { BLOCKS, BLOCK_NAMES, isBlock, blockDef, blockAssetFiles, paramOfPart } from '../../template/blocks/index.mjs';
 import { VIRAL_MODE, applyViral } from '../../template/viral.mjs';
 import { VAR_NAME, MAX_VARS, VAR_TYPES, declaresVars, findVarRefs, varValues, substituteVars } from '../../template/vars.mjs';
-import { STYLES, HAND_TONES, HAND_SCALE_RANGE, PACE_RANGE, SCRIBBLE_FILL, isSketchScene } from '../../template/sketch/style.mjs';
+import { STYLES, HAND_TONES, SCRIBBLE_FILL, isSketchScene } from '../../template/sketch/style.mjs';
 import { checkSketch } from './sketch-check.mjs';
 import { checkCode } from './code-check.mjs';
 import { checkLottie } from './lottie-check.mjs';
@@ -58,7 +58,6 @@ export const ANIMATABLE = {
   block: [...POSE], // a block's pose and keyframes become its group's
   code: [...POSE], // and `value` when it types, as a text does
   lottie: [...POSE], // its own animation plays from `offset` at `speed`; keyframes move the element
-  icon: [...POSE], // drawn in sketch scenes only, where checkSketch refuses keyframes; listed so a stray one is reported, not a crash
 };
 
 const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes', 'hold'];
@@ -74,7 +73,9 @@ const FIELDS = {
   block: [...COMMON, 'block', 'params'],
   code: [...COMMON, 'code', 'lang', 'width', 'height', 'fontSize', 'highlight', 'diff', 'typing'],
   lottie: [...COMMON, 'src', 'width', 'height', 'offset', 'speed'],
-  icon: [...COMMON, 'name', 'size', 'color'], // a Lucide line icon, sketch scenes only (checkSketch)
+  // A Lucide line icon, in sketch scenes only (checkSketch). It has no pose of its own beyond opacity: the hand draws it where
+  // it stands, so it takes no scale, rotate or keyframes (checkFields says so, and checkKeyframes leaves it at that).
+  icon: ['id', 'type', 'x', 'y', 'opacity', 'hold', 'drawAt', 'name', 'size', 'color'],
 };
 // `drawAt` is a sketch scene's start time for any element; it is not in a type's list (that would reach every "allowed:"
 // message), and checkSketch reports it where it does not belong.
@@ -271,6 +272,7 @@ const viral = {
   },
 };
 // The hand-drawn style's film-wide settings (template/sketch/style.mjs): the hand, the wobble seed and the drawing pace.
+// `scale` and `pace` are ranges (HAND_SCALE_RANGE, PACE_RANGE) that checkSketch enforces, so its message names both ends.
 const sketchSettings = {
   type: 'object',
   additionalProperties: false,
@@ -280,11 +282,11 @@ const sketchSettings = {
       additionalProperties: false,
       properties: {
         tone: { enum: [...HAND_TONES] },
-        scale: { type: 'number', minimum: HAND_SCALE_RANGE[0], maximum: HAND_SCALE_RANGE[1] },
+        scale: { type: 'number' },
       },
     },
     seed: { type: 'integer' },
-    pace: { type: 'number', minimum: PACE_RANGE[0], maximum: PACE_RANGE[1] },
+    pace: { type: 'number' },
   },
 };
 // A loudness target for the mix: render.mjs reports the measured level against it.
@@ -399,6 +401,7 @@ function checkKeyframeTime(keyframes, i, at, sceneDuration, errors) {
 }
 
 function checkKeyframes(el, base, sceneDuration, errors) {
+  if (!FIELDS[el.type].includes('keyframes')) return; // a type with none (icon): checkFields has refused the field
   const typed = el.type === 'text' || el.type === 'code';
   const allowed = typed && el.typing ? [...ANIMATABLE[el.type], 'value'] : ANIMATABLE[el.type]; // a typing text's or code's `value` is its character count
   const typingHint = typed && !el.typing ? ' (value needs "typing": true)' : '';
@@ -1035,13 +1038,15 @@ export function validateSpec(input, { dir = process.cwd(), values = {} } = {}) {
   if (beats.errors) return { ok: false, errors: beats.errors };
   const written = beats.spec;
   if (!schemaCheck(written)) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
+  const sketchErrors = [];
+  checkSketch(written, sketchErrors); // before the block params, so a standard block in a sketch scene is told first it does not belong
   const blockErrors = [];
   checkBlocks(applyViral(written), dir, blockErrors); // step 2, then the block params step 3 expands
-  if (blockErrors.length) return { ok: false, errors: blockErrors };
+  if (blockErrors.length) return { ok: false, errors: [...sketchErrors, ...blockErrors] };
   const spec = expandSpec(written); // pipeline steps 1-3 (template/defaults.mjs); the checks below see plain elements
   const errors = [];
   checkViral(written, errors);
-  checkSketch(written, errors);
+  errors.push(...sketchErrors);
   checkIds(spec, errors);
   checkFormat(spec, errors);
   checkTheme(spec, errors);

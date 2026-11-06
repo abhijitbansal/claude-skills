@@ -1,13 +1,14 @@
-// What the hand-drawn style refuses, on the spec as written (validateSpec calls checkSketch after the schema and the block
-// params pass): elements the pencil cannot draw, fields the drawing owns, characters Caveat lacks, unknown icons, and
-// sketch scenes in a viral spec. Node only: the icon names come from template/sketch/lucide.mjs, which the page never loads.
-import { pathJoin, didYouMean } from '../../shared/errors.mjs';
+// What the hand-drawn style refuses, on the spec as written (validateSpec calls checkSketch once the schema passes, before
+// the block params): elements the pencil cannot draw, fields the drawing owns, characters Caveat lacks, unknown icons,
+// numbers out of range and sketch scenes in a viral spec. Node only: the icon names come from the whole Lucide set
+// (icon-names.mjs), which the page never loads.
+import { pathJoin } from '../../shared/errors.mjs';
 import { flattenElements } from '../../template/groups.mjs';
 import { BLOCKS, BLOCK_NAMES } from '../../template/blocks/index.mjs';
 import { VIRAL_MODE } from '../../template/viral.mjs';
-import { isSketchScene, SCRIBBLE_FILL } from '../../template/sketch/style.mjs';
+import { isSketchScene, specHasSketch, SCRIBBLE_FILL, HAND_SCALE_RANGE, PACE_RANGE } from '../../template/sketch/style.mjs';
 import caveat from '../../template/sketch/caveat-metrics.mjs';
-import lucide from '../../template/sketch/lucide.mjs';
+import { ICON_NAMES, suggestIcon } from './icon-names.mjs';
 
 const SKETCH_TYPES = ['text', 'shape', 'icon', 'group', 'block'];
 const SKETCH_ALLOWED = `allowed: ${SKETCH_TYPES.join(', ').replace(/block$/, 'block (sketch blocks only)')}`;
@@ -16,20 +17,27 @@ const SET_SKETCH = 'set "style": "sketch" on the scene, or at the root';
 const STILL_VALID = 'opacity, hold, drawAt';
 const ICON_SEARCH = 'node scripts/sketch-icons.mjs search <word>';
 const DRAW_AT = /^sentence:\d+$/;
+const ART_BACKGROUND = 'art'; // spec.mjs's ART_BACKGROUND (this module cannot import it: spec.mjs imports this one)
+const ICON_SET = new Set(ICON_NAMES);
 
 const DRAWING_OWNS = 'the drawing decides how an element appears';
+const FOLLOWS_WORLD = 'the hand follows world coordinates, so a %s element would be drawn away from the pencil tip';
+// A field a sketch scene refuses, on the element types that take it: a type that does not take the field gets the plain
+// "not valid on <type>" error from checkFields alone, never a second, conflicting one from here.
+const MOVABLE = ['text', 'shape', 'group', 'block'];
 const REFUSED = {
-  keyframes: DRAWING_OWNS,
-  typing: DRAWING_OWNS,
-  role: DRAWING_OWNS,
-  exit: DRAWING_OWNS,
-  scale: 'the hand follows world coordinates, so a scaled element would be drawn away from the pencil tip',
-  rotate: 'the hand follows world coordinates, so a rotated element would be drawn away from the pencil tip',
+  keyframes: { types: MOVABLE, reason: DRAWING_OWNS },
+  scale: { types: MOVABLE, reason: FOLLOWS_WORLD.replace('%s', 'scaled') },
+  rotate: { types: MOVABLE, reason: FOLLOWS_WORLD.replace('%s', 'rotated') },
+  typing: { types: ['text'], reason: DRAWING_OWNS },
+  role: { types: ['text'], reason: DRAWING_OWNS },
+  exit: { types: ['text'], reason: DRAWING_OWNS },
+  font: { types: ['text'], reason: 'handwriting has one face' },
+  fontWeight: { types: ['text'], reason: 'handwriting has one face' },
 };
 
 /** The names of the blocks that draw only in a sketch scene (their definitions say `sketchOnly: true`). */
 export const SKETCH_BLOCK_NAMES = Object.freeze(BLOCK_NAMES.filter((name) => BLOCKS[name].sketchOnly === true));
-const ICON_NAMES = Object.keys(lucide);
 
 const display = (ch) => (/[\p{C}\p{M}]/u.test(ch) ? `U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}` : ch);
 
@@ -41,27 +49,34 @@ function checkGlyphs(el, base, errors) {
   errors.push({ path: pathJoin(base, 'text'), message: `${missing.map((ch) => JSON.stringify(display(ch))).join(', ')} ${many ? 'are' : 'is'} not in the handwriting font; remove ${many ? 'them' : 'it'} or use a standard scene` });
 }
 
-function checkDrawAt(el, base, sketch, errors) {
+function checkDrawAt(el, base, scene, sketch, errors) {
   if (el.drawAt === undefined) return;
   const at = pathJoin(base, 'drawAt');
+  const { drawAt } = el;
   if (!sketch) {
     errors.push({ path: at, message: `drawAt is for sketch scenes (${SET_SKETCH}); a standard scene starts elements with keyframes` });
-  } else if (!((typeof el.drawAt === 'number' && el.drawAt >= 0) || (typeof el.drawAt === 'string' && DRAW_AT.test(el.drawAt)))) {
+  } else if (typeof drawAt === 'number') {
+    if (drawAt < 0 || drawAt >= scene.duration) {
+      errors.push({ path: at, message: `drawAt ${drawAt} is outside scene "${scene.id}", which lasts ${scene.duration}s; use 0 or more and less than ${scene.duration}, or "sentence:<n>"` });
+    }
+  } else if (!(typeof drawAt === 'string' && DRAW_AT.test(drawAt))) {
     errors.push({ path: at, message: 'drawAt must be a number of seconds (0 or more) or "sentence:<n>"' });
   }
 }
 
 function checkIcon(el, base, errors) {
-  if (typeof el.name !== 'string' || Object.hasOwn(lucide, el.name)) return;
-  const near = didYouMean(el.name, ICON_NAMES);
+  if (typeof el.name !== 'string' || ICON_SET.has(el.name)) return;
+  const near = suggestIcon(el.name);
   const message = near ? `unknown icon ${JSON.stringify(el.name)}; did you mean ${JSON.stringify(near)}? (find names: ${ICON_SEARCH})` : `unknown icon ${JSON.stringify(el.name)}; find names: ${ICON_SEARCH}`;
   errors.push({ path: pathJoin(base, 'name'), message });
 }
 
-// A block on the wrong side: a sketch block in a standard scene, or a standard block in a sketch scene.
+// A block on the wrong side: a sketch block in a standard scene, or a standard block in a sketch scene. A name that is no
+// block at all is left to checkBlocks, which names the blocks that exist.
 function checkBlockSide(el, base, sketch, sketchBlocks, errors) {
   if (typeof el.block !== 'string') return;
   const isSketchBlock = sketchBlocks.includes(el.block);
+  if (!isSketchBlock && !BLOCK_NAMES.includes(el.block)) return;
   if (sketch && !isSketchBlock) {
     errors.push({ path: pathJoin(base, 'block'), message: `${el.block} is not a sketch block; blocks a sketch scene takes: ${sketchBlocks.join(', ') || 'none yet'}; ${STANDARD_HINT}` });
   } else if (!sketch && isSketchBlock) {
@@ -74,8 +89,10 @@ function checkSketchElement(el, base, errors) {
     errors.push({ path: pathJoin(base, 'type'), message: `${el.type} is not drawn in a sketch scene; ${SKETCH_ALLOWED}; ${STANDARD_HINT}` });
     return;
   }
-  for (const [key, reason] of Object.entries(REFUSED)) {
-    if (el[key] !== undefined) errors.push({ path: pathJoin(base, key), message: `${key} is not allowed in a sketch scene (${reason}); still valid: ${STILL_VALID}; ${STANDARD_HINT}` });
+  for (const [key, { types, reason }] of Object.entries(REFUSED)) {
+    if (types.includes(el.type) && el[key] !== undefined) {
+      errors.push({ path: pathJoin(base, key), message: `${key} is not allowed in a sketch scene (${reason}); still valid: ${STILL_VALID}; ${STANDARD_HINT}` });
+    }
   }
   if (el.type === 'text') checkGlyphs(el, base, errors);
   if (el.type === 'shape' && el.fill === SCRIBBLE_FILL && el.shape === 'line') {
@@ -84,14 +101,24 @@ function checkSketchElement(el, base, errors) {
 }
 
 // A hand-drawn scene has no place in a viral spec: it would be drawn at the wrong shape, over a captions zone. One error
-// at the root `style`, and one at each scene that names its own.
+// at the root `style` when a scene takes it from there, and one at each scene that names its own. A root `style` that no
+// scene uses (each says "standard") draws nothing and is left alone.
 function checkViralSide(written, errors) {
-  if (written.mode !== VIRAL_MODE) return;
+  if (written.mode !== VIRAL_MODE || !specHasSketch(written)) return;
   const message = `a hand-drawn scene is not available in viral mode; use "style": "standard", or drop "mode": "${VIRAL_MODE}"`;
-  if (written.style === 'sketch') errors.push({ path: 'style', message });
+  if (written.style === 'sketch' && written.scenes.some((scene) => scene.style === undefined)) errors.push({ path: 'style', message });
   written.scenes.forEach((scene, si) => {
     if (scene.style === 'sketch') errors.push({ path: `scenes[${si}].style`, message });
   });
+}
+
+// The schema types these; the ranges are checked here so that the message names both ends.
+function checkRanges(written, errors) {
+  const range = (value, [low, high], at) => {
+    if (value !== undefined && !(value >= low && value <= high)) errors.push({ path: at, message: `must be from ${low} to ${high} (got ${value})` });
+  };
+  range(written.sketch?.hand?.scale, HAND_SCALE_RANGE, 'sketch.hand.scale');
+  range(written.sketch?.pace, PACE_RANGE, 'sketch.pace');
 }
 
 /**
@@ -100,14 +127,18 @@ function checkViralSide(written, errors) {
  */
 export function checkSketch(written, errors, { sketchBlocks = SKETCH_BLOCK_NAMES } = {}) {
   checkViralSide(written, errors);
+  checkRanges(written, errors);
   written.scenes.forEach((scene, si) => {
     const base = `scenes[${si}]`;
     const sketch = isSketchScene(written, scene);
     if (sketch && scene.camera !== undefined) {
       errors.push({ path: pathJoin(base, 'camera'), message: `camera is not allowed in a sketch scene (the board does not move); ${STANDARD_HINT}` });
     }
+    if (sketch && scene.background === ART_BACKGROUND) {
+      errors.push({ path: pathJoin(base, 'background'), message: `"${ART_BACKGROUND}" is not allowed in a sketch scene (the board is its background); use a colour, or ${STANDARD_HINT}` });
+    }
     for (const { el, path: at } of flattenElements(scene.elements, base)) {
-      checkDrawAt(el, at, sketch, errors);
+      checkDrawAt(el, at, scene, sketch, errors);
       if (el.type === 'icon') checkIcon(el, at, errors);
       if (!sketch && el.type === 'icon') errors.push({ path: pathJoin(at, 'type'), message: `icon is drawn only in a sketch scene; ${SET_SKETCH}` });
       if (el.type === 'block') checkBlockSide(el, at, sketch, sketchBlocks, errors);

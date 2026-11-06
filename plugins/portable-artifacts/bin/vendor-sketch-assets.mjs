@@ -36,12 +36,16 @@ const SAMPLE_STEP = 0.1; // units between samples along a shape, before simplify
 const SAMPLE_INSET = 0.001; // a subpath's first and last sample sit this far inside it: a boundary belongs to both neighbours
 const ICON_TOLERANCE = 0.05; // Douglas-Peucker, in units of the 24-unit box
 const CLOSED_GAP = 0.01; // ends this close are one point: the shape is closed
+const DOT_LENGTH = 0.01; // a zero-length shape becomes a polyline this long (the length lucide gives its own dots)
 const BATCH = 100; // icons per browser round trip
 const DECIMALS = 100; // coordinates keep two decimals
 
 // Runs in the page. For each icon, each of its SVG shapes becomes one sampled polyline per subpath: a path's `M`/`m`
 // commands split it, and subpath k covers the arc lengths between the totals of the paths cut before k and before k+1.
-function flattenInPage({ icons, step, inset }) {
+// A shape with no length (a `<line>` from a point to itself: the dots of a divide sign) is a dot: a polyline of `dot` units.
+// Returns { [icon]: { lines, expected } }; `expected` is how many drawn shapes and subpaths the icon has, so the caller
+// can refuse an icon that lost one (assertNoDroppedShapes).
+function flattenInPage({ icons, step, inset, dot }) {
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
   document.body.append(svg);
@@ -57,15 +61,20 @@ function flattenInPage({ icons, step, inset }) {
     probe.remove();
     return total;
   };
+  // A subpath of only a move draws nothing; one with any drawing command or a second coordinate pair is a drawn shape.
+  const draws = (segment) => /[lLhHvVcCsSqQtTaAzZ]/.test(segment) || (segment.slice(1).match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? []).length > 2;
   const rangesOf = (tag, attrs, el) => {
     const total = el.getTotalLength();
     if (tag !== 'path') return [[0, total]];
-    const cuts = [...attrs.d.matchAll(/[Mm]/g)].map((m) => m.index).slice(1);
-    const bounds = [0, ...cuts.map((at) => totalOf(attrs.d.slice(0, at))), total];
-    return bounds.slice(1).map((hi, k) => [bounds[k], hi]);
+    const starts = [...attrs.d.matchAll(/[Mm]/g)].map((m) => m.index);
+    const bounds = [0, ...starts.slice(1).map((at) => totalOf(attrs.d.slice(0, at))), total];
+    return bounds.slice(1).flatMap((hi, k) => (draws(attrs.d.slice(starts[k], starts[k + 1])) ? [[bounds[k], hi]] : []));
   };
   const sample = (el, [lo, hi]) => {
-    if (hi - lo <= 2 * inset) return null;
+    if (hi - lo <= 2 * inset) {
+      const p = el.getPointAtLength(lo);
+      return [[p.x, p.y], [p.x + dot, p.y]];
+    }
     const n = Math.max(1, Math.ceil((hi - lo) / step));
     const points = [];
     for (let i = 0; i <= n; i += 1) {
@@ -77,12 +86,16 @@ function flattenInPage({ icons, step, inset }) {
   };
   const out = {};
   for (const [name, nodes] of Object.entries(icons)) {
-    out[name] = nodes.flatMap(([tag, attrs]) => {
+    let expected = 0;
+    const lines = nodes.flatMap(([tag, attrs]) => {
       const el = shape(tag, attrs);
-      const lines = rangesOf(tag, attrs, el).map((range) => sample(el, range)).filter(Boolean);
+      const ranges = rangesOf(tag, attrs, el);
+      expected += ranges.length;
+      const sampled = ranges.map((range) => sample(el, range));
       el.remove();
-      return lines;
+      return sampled;
     });
+    out[name] = { lines, expected };
   }
   svg.remove();
   return out;
@@ -98,7 +111,7 @@ function distanceToSegment(p, a, b) {
 }
 
 // Douglas-Peucker, iterative.
-export function simplify(points, tolerance) {
+function simplify(points, tolerance) {
   const last = points.length - 1;
   const keep = new Uint8Array(points.length);
   keep[0] = 1;
@@ -166,6 +179,17 @@ function writeMetrics(python) {
   }
 }
 
+/**
+ * Refuses an icon that lost a shape on the way: every source shape needs at least one polyline, and the polylines must be as
+ * many as the drawn shapes and subpaths the page counted. `flat`: { [icon]: { lines, expected } }; `nodes`: icon-nodes.json.
+ */
+export function assertNoDroppedShapes(flat, nodes) {
+  const lost = Object.entries(flat).filter(([name, { lines, expected }]) => lines.length !== expected || lines.length < nodes[name].length);
+  if (!lost.length) return;
+  const detail = lost.slice(0, 10).map(([name, { lines, expected }]) => `${name} (${lines.length} polylines, ${nodes[name].length} shapes, ${expected} expected)`).join(', ');
+  throw new Error(`${lost.length} icon(s) lost a shape while flattening: ${detail}`);
+}
+
 async function launch(chromium) {
   try {
     return await chromium.launch();
@@ -179,21 +203,22 @@ async function writeIcons(sources, lucide) {
   const { chromium } = createRequire(path.join(sources, 'package.json'))('playwright');
   const nodes = JSON.parse(fs.readFileSync(path.join(lucide, 'icon-nodes.json'), 'utf8'));
   const names = Object.keys(nodes).sort();
-  const icons = {};
+  const flat = {};
   const browser = await launch(chromium);
   try {
     const page = await browser.newPage();
     for (let i = 0; i < names.length; i += BATCH) {
       const batch = Object.fromEntries(names.slice(i, i + BATCH).map((name) => [name, nodes[name]]));
-      const flat = await page.evaluate(flattenInPage, { icons: batch, step: SAMPLE_STEP, inset: SAMPLE_INSET });
-      for (const [name, lines] of Object.entries(flat)) icons[name] = lines.map(tidy);
+      Object.assign(flat, await page.evaluate(flattenInPage, { icons: batch, step: SAMPLE_STEP, inset: SAMPLE_INSET, dot: DOT_LENGTH }));
     }
   } finally {
     await browser.close();
   }
+  assertNoDroppedShapes(flat, nodes);
+  const icons = Object.fromEntries(Object.entries(flat).map(([name, { lines }]) => [name, lines.map(tidy)]));
   fs.writeFileSync(path.join(OUT, 'lucide.mjs'), [
     '// Generated by bin/vendor-sketch-assets.mjs from lucide-static (ISC, see LICENSES). Do not edit.',
-    '// { [icon name]: Array<Array<[x, y]>> }: polylines in the 24-unit box. Load with a dynamic import.',
+    '// { [icon name]: Array<Array<[x, y]>> }: polylines in the 24-unit box. Node may import it statically; the page must load it dynamically.',
     `export default ${JSON.stringify(icons)};`,
     '',
   ].join('\n'));

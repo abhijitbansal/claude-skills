@@ -78,9 +78,21 @@ test('sketch-only blocks are told apart by the block list (test-local list: no s
   assert.deepEqual(run(written('standard'), ['sketch-fake']), [
     'scenes[0].elements[0].block: sketch-fake is a sketch block; it draws only in a sketch scene (set "style": "sketch" on the scene, or at the root)',
   ]);
-  assert.deepEqual(run(written('sketch'), ['sketch-other', 'sketch-more']), [
-    `scenes[0].elements[0].block: sketch-fake is not a sketch block; blocks a sketch scene takes: sketch-other, sketch-more; ${STANDARD_HINT}`,
+  const standardBlock = { scenes: [scene([{ id: 'b', type: 'block', block: 'title-card', x: 0, y: 0, params: {} }], { style: 'sketch' })] };
+  assert.deepEqual(run(standardBlock, ['sketch-other', 'sketch-more']), [
+    `scenes[0].elements[0].block: title-card is not a sketch block; blocks a sketch scene takes: sketch-other, sketch-more; ${STANDARD_HINT}`,
   ]);
+  assert.deepEqual(run(written('sketch'), ['sketch-other']), [], 'a name that is no block at all is left to the block check, which lists the blocks');
+});
+
+test('a standard block in a sketch scene is told it does not belong before its params are checked', () => {
+  const block = { id: 'b', type: 'block', block: 'title-card', x: 960, y: 540, params: {} };
+  const found = errs(sketch([block]));
+  assert.equal(found[0], `scenes[0].elements[0].block: title-card is not a sketch block; blocks a sketch scene takes: none yet; ${STANDARD_HINT}`);
+  assert.ok(found.length > 1 && found.slice(1).every((e) => e.startsWith('scenes[0].elements[0].params')), found.join('\n'));
+  const unknown = errs(sketch([{ ...block, block: 'no-such-block' }]));
+  assert.equal(unknown.length, 1, unknown.join('\n'));
+  assert.match(unknown[0], /^scenes\[0\]\.elements\[0\]\.block: unknown block "no-such-block"/);
 });
 
 const REFUSED = {
@@ -159,7 +171,41 @@ test('icon: size and name are required; the name must exist, with a did-you-mean
   assert.deepEqual(errs(sketch([icon({ name: 'qqqqqqqqqq', size: 80 })])), [
     'scenes[0].elements[0].name: unknown icon "qqqqqqqqqq"; find names: node scripts/sketch-icons.mjs search <word>',
   ]);
-  assert.ok(errs(sketch([icon({ name: 'server', size: 80, keyframes: [{ t: 0, opacity: 0 }] })])).some((e) => e.startsWith('scenes[0].elements[0].keyframes: ')), 'an icon with keyframes is refused, not a crash');
+  const ALLOWED = 'id, type, x, y, opacity, hold, drawAt, name, size, color';
+  for (const [key, value] of [['keyframes', [{ t: 0, opacity: 0 }]], ['scale', 2], ['rotate', 5], ['typing', true]]) {
+    assert.deepEqual(errs(sketch([icon({ name: 'server', size: 80, [key]: value })])), [`scenes[0].elements[0].${key}: not valid on icon; allowed: ${ALLOWED}`], key);
+  }
+  assert.deepEqual(errs(sketch([icon({ name: 'server', size: 80, opacity: 0.5, hold: true, drawAt: 1 })])), []);
+});
+
+test('an old or plain icon name suggests the name the set has now', () => {
+  const icon = (name) => ({ id: 'i', type: 'icon', x: 0, y: 0, size: 80, name });
+  assert.deepEqual(errs(sketch([icon('home')])), ['scenes[0].elements[0].name: unknown icon "home"; did you mean "house"? (find names: node scripts/sketch-icons.mjs search <word>)']);
+  assert.ok(errs(sketch([icon('bar-chart')]))[0].includes('did you mean "chart-column"?'));
+  assert.ok(errs(sketch([icon('Alert-Triangle')]))[0].includes('did you mean "triangle-exclamation-point"?'));
+  assert.deepEqual(errs(sketch([icon('house'), icon('chart-column')].map((el, i) => ({ ...el, id: `i${i}` })))), []);
+});
+
+test('a refused field is reported once, by the check that knows the type: typing on an icon, role on a shape', () => {
+  const shape = { id: 'r', type: 'shape', shape: 'rect', x: 0, y: 0, width: 100, height: 50, role: 'title' };
+  assert.deepEqual(errs(sketch([shape])).filter((e) => e.startsWith('scenes[0].elements[0].role: ')).length, 1);
+  assert.ok(errs(sketch([shape]))[0].startsWith('scenes[0].elements[0].role: not valid on shape; allowed: '));
+  const icon = { id: 'i', type: 'icon', name: 'server', size: 80, x: 0, y: 0, typing: true };
+  assert.equal(errs(sketch([icon])).length, 1);
+});
+
+test('a scene "art" background and a text font or fontWeight are refused in a sketch scene', () => {
+  assert.deepEqual(errs(sketch([text()], { background: 'art' })), [
+    `scenes[0].background: "art" is not allowed in a sketch scene (the board is its background); use a colour, or ${STANDARD_HINT}`,
+  ]);
+  assert.deepEqual(errs(sketch([text()], { background: '#ffeecc' })), [], 'a colour still overrides the board');
+  assert.deepEqual(errs(standard([text()], { background: 'art' })), [], 'a standard scene keeps its art');
+  for (const [key, value] of [['font', 'mono'], ['fontWeight', 700]]) {
+    const found = errs(sketch([text({ [key]: value })]));
+    assert.equal(found.length, 1, found.join('\n'));
+    assert.equal(found[0], `scenes[0].elements[0].${key}: ${key} is not allowed in a sketch scene (handwriting has one face); still valid: opacity, hold, drawAt; ${STANDARD_HINT}`);
+    assert.deepEqual(errs(standard([text({ [key]: value })])), []);
+  }
 });
 
 test('a sketch scene in a viral spec is an error', () => {
@@ -167,6 +213,9 @@ test('a sketch scene in a viral spec is an error', () => {
   assert.deepEqual(errs({ ...viral, ...sketch([text()]) }), ['scenes[0].style: a hand-drawn scene is not available in viral mode; use "style": "standard", or drop "mode": "viral"']);
   assert.deepEqual(errs({ ...viral, style: 'sketch', ...standard([text()]) }), ['style: a hand-drawn scene is not available in viral mode; use "style": "standard", or drop "mode": "viral"']);
   assert.deepEqual(errs({ ...viral, ...standard([text()], { style: 'standard' }) }), []);
+  assert.deepEqual(errs({ ...viral, style: 'sketch', ...standard([text()], { style: 'standard' }) }), [], 'a root style that no scene takes draws nothing');
+  const mixed = errs({ ...viral, style: 'sketch', scenes: [scene([text()], { id: 'a', style: 'standard' }), scene([text({ id: 'u' })], { id: 'b' })] });
+  assert.deepEqual(mixed, ['style: a hand-drawn scene is not available in viral mode; use "style": "standard", or drop "mode": "viral"']);
 });
 
 test('sketch.hand.tone outside the five names, sketch.hand.scale outside 0.5 to 1.2, sketch.pace outside 0.5 to 2 are errors', () => {
@@ -174,10 +223,11 @@ test('sketch.hand.tone outside the five names, sketch.hand.scale outside 0.5 to 
   assert.deepEqual(errs(ok), []);
   assert.deepEqual(errs({ sketch: { hand: { tone: 'pink' } }, ...sketch([text()]) }), ['sketch.hand.tone: must be one of "light", "medium", "tan", "brown", "dark"']);
   assert.deepEqual(errs({ sketch: { hand: { tone: 'dar' } }, ...sketch([text()]) }), ['sketch.hand.tone: must be one of "light", "medium", "tan", "brown", "dark"; did you mean "dark"?']);
-  assert.deepEqual(errs({ sketch: { hand: { scale: 0.4 } }, ...sketch([text()]) }), ['sketch.hand.scale: must be >= 0.5']);
-  assert.deepEqual(errs({ sketch: { hand: { scale: 1.3 } }, ...sketch([text()]) }), ['sketch.hand.scale: must be <= 1.2']);
-  assert.deepEqual(errs({ sketch: { pace: 0.4 }, ...sketch([text()]) }), ['sketch.pace: must be >= 0.5']);
-  assert.deepEqual(errs({ sketch: { pace: 2.1 }, ...sketch([text()]) }), ['sketch.pace: must be <= 2']);
+  assert.deepEqual(errs({ sketch: { hand: { scale: 0.4 } }, ...sketch([text()]) }), ['sketch.hand.scale: must be from 0.5 to 1.2 (got 0.4)']);
+  assert.deepEqual(errs({ sketch: { hand: { scale: 1.3 } }, ...sketch([text()]) }), ['sketch.hand.scale: must be from 0.5 to 1.2 (got 1.3)']);
+  assert.deepEqual(errs({ sketch: { pace: 0.4 }, ...sketch([text()]) }), ['sketch.pace: must be from 0.5 to 2 (got 0.4)']);
+  assert.deepEqual(errs({ sketch: { pace: 2.1 }, ...sketch([text()]) }), ['sketch.pace: must be from 0.5 to 2 (got 2.1)']);
+  assert.deepEqual(errs({ sketch: { hand: { scale: 'big' } }, ...sketch([text()]) }), ['sketch.hand.scale: must be number']);
   assert.deepEqual(errs({ sketch: { seed: 1.5 }, ...sketch([text()]) }), ['sketch.seed: must be integer']);
   assert.deepEqual(errs({ sketch: { hand: { tone: 'tan' }, paces: 1 }, ...sketch([text()]) }), ['sketch.paces: unknown property; did you mean "pace"?']);
 });
@@ -186,8 +236,14 @@ test('drawAt is a number of seconds or "sentence:<n>"', () => {
   assert.deepEqual(errs(sketch([text({ drawAt: 1.5 })])), []);
   assert.deepEqual(errs(sketch([text({ drawAt: 'sentence:2' })])), []);
   const want = 'drawAt must be a number of seconds (0 or more) or "sentence:<n>"';
-  for (const bad of [-1, 'sentence:x', 'later', true, null]) {
+  for (const bad of ['sentence:x', 'later', true, null]) {
     assert.deepEqual(errs(sketch([text({ drawAt: bad })])), [`scenes[0].elements[0].drawAt: ${want}`], JSON.stringify(bad));
+  }
+  assert.deepEqual(errs(sketch([text({ drawAt: 4.9 })])), [], 'the scene lasts 5s');
+  for (const out of [-1, 5, 9]) {
+    assert.deepEqual(errs(sketch([text({ drawAt: out })])), [
+      `scenes[0].elements[0].drawAt: drawAt ${out} is outside scene "s", which lasts 5s; use 0 or more and less than 5, or "sentence:<n>"`,
+    ], String(out));
   }
 });
 

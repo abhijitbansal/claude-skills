@@ -5,20 +5,22 @@
 // exit 0 ok, 2 usage (an unknown command or flag names the accepted ones)
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import lucide from '../template/sketch/lucide.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { didYouMean } from '../shared/errors.mjs';
+import { ICON_NAMES as NAMES, ICON_ALIASES } from './lib/icon-names.mjs';
 
 const USAGE = 'node scripts/sketch-icons.mjs search <word> | list';
 const COMMANDS = ['search', 'list'];
 const MAX_RESULTS = 50;
-const NAMES = Object.keys(lucide).sort();
 
-// Exact match, then names that start with the word, then the rest in alphabetical order.
+// The word's alias (an old name for an icon the set renamed) first, then the exact match, then names that start with the
+// word, then the rest in alphabetical order.
 function search(word) {
   const w = word.toLowerCase();
+  const alias = Object.hasOwn(ICON_ALIASES, w) ? [ICON_ALIASES[w]] : [];
   const rank = (name) => (name === w ? 0 : name.startsWith(w) ? 1 : 2);
-  return NAMES.filter((name) => name.includes(w)).sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : 1));
+  const found = NAMES.filter((name) => name.includes(w)).sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : 1));
+  return [...new Set([...alias, ...found])];
 }
 
 function searchOutput(word) {
@@ -46,6 +48,7 @@ export function main(argv) {
       return 0;
     }
     if (word === undefined || rest.length) throw new UsageError(`search takes one word; usage: ${USAGE}`);
+    if (word.trim() === '') throw new UsageError(`search takes a word that is not empty; usage: ${USAGE}`);
     process.stdout.write(searchOutput(word));
     return 0;
   } catch (e) {

@@ -15,6 +15,10 @@ once per file, in order, when title-casing is wrong (e.g. "JetBrains Mono").
 Shape matches the existing entries: hhea ascender/descender/lineGap, unitsPerEm,
 `advance` keyed by codepoint for U+0020-007E and U+00A0-00FF that the font has,
 and `fallback` = mean advance of the ASCII letters, rounded to 2 decimals.
+
+`--every-glyph` widens `advance` to every printable codepoint the font maps (not U+0000-001F or U+007F-009F), for a
+subset font whose repertoire is not Latin-1: bin/vendor-sketch-assets.mjs uses it on Caveat's Latin subset, which holds
+curly quotes, dashes, the euro and the trademark sign. Without it, only U+0020-007E and U+00A0-00FF are written.
 """
 import argparse
 import json
