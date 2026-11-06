@@ -8,6 +8,8 @@
 //   example   example params
 //   place     (size, format[, side[, insets]]) -> { x, y }: where the block belongs on that canvas; `insets` are a viral
 //             spec's (viral.mjs viralInsets), which move it inside the platform safe zone and above the lifted captions
+//   contentRect (optional) (size, format) -> { x, y, width, height }: the area, at the block's place, that other blocks are placed
+//             inside (browser-window); x, y its centre; blocks.mjs show prints it
 //   assets    (optional) params that name a file next to the spec (checked like an image src, served like one): each a
 //             key of `params`, or a dotted path to a nested one (`before.src`); see blockAssetFiles
 //   validate  (optional) (params, { sceneDuration, fps, durations?, index? }) -> [{ path, message }]: what the schema cannot say, run on
@@ -57,6 +59,11 @@ import lowerThirdTag from './lower-third-tag.mjs';
 import lowerThirdSocial from './lower-third-social.mjs';
 import lowerThirdTicker from './lower-third-ticker.mjs';
 import textBehindSubject from './text-behind-subject.mjs';
+import browserWindow from './browser-window.mjs';
+import formFields from './form-fields.mjs';
+import tabSwitch from './tab-switch.mjs';
+import buttonState from './button-state.mjs';
+import sidePanel from './side-panel.mjs';
 
 export const BLOCKS = Object.freeze({
   'title-card': titleCard,
@@ -87,6 +94,11 @@ export const BLOCKS = Object.freeze({
   'lower-third-social': lowerThirdSocial,
   'lower-third-ticker': lowerThirdTicker,
   'text-behind-subject': textBehindSubject,
+  'browser-window': browserWindow,
+  'form-fields': formFields,
+  'tab-switch': tabSwitch,
+  'button-state': buttonState,
+  'side-panel': sidePanel,
 });
 export const BLOCK_NAMES = Object.freeze(Object.keys(BLOCKS));
 

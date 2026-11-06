@@ -1,0 +1,66 @@
+{
+  "format": "16:9",
+  "size": [1920, 1080],
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "sign-up",
+      "duration": 8,
+      "elements": [
+        {
+          "id": "caption",
+          "type": "text",
+          "text": "A form fills itself in, then the account is created",
+          "x": 960,
+          "y": 940,
+          "fontSize": 40,
+          "color": "text2",
+          "hold": true
+        },
+        {
+          "id": "browser",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "browser-window",
+          "params": { "url": "app.example.com/sign-up", "title": "Create account" }
+        },
+        {
+          "id": "form",
+          "type": "block",
+          "x": 680,
+          "y": 470,
+          "block": "form-fields",
+          "params": {
+            "fields": [
+              { "label": "Name", "value": "Ada Lovelace" },
+              { "label": "Email", "value": "ada@example.com" },
+              { "label": "Role", "value": "Engineer" }
+            ],
+            "typing": true
+          }
+        },
+        {
+          "id": "submit",
+          "type": "block",
+          "x": 680,
+          "y": 765,
+          "block": "button-state",
+          "params": {
+            "from": { "label": "Create account" },
+            "to": { "label": "Account created", "tone": "good" },
+            "at": 5
+          }
+        },
+        {
+          "id": "progress",
+          "type": "block",
+          "x": 1460,
+          "y": 531,
+          "block": "side-panel",
+          "params": { "title": "Progress", "rows": ["Name added", "Email checked", "Role chosen"] }
+        }
+      ]
+    }
+  ]
+}

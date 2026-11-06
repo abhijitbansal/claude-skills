@@ -1,0 +1,24 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "browser-window",
+      "duration": 4,
+      "elements": [
+        {
+          "id": "browser",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "browser-window",
+          "params": {
+            "url": "app.example.com/settings",
+            "title": "Settings",
+            "image": "swipe-after.png"
+          }
+        }
+      ]
+    }
+  ]
+}

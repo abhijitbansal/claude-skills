@@ -164,8 +164,8 @@ for (const name of names) {
 
 // ---- expansion ---------------------------------------------------------------------------------------------------------
 
-test('BLOCKS has 28 entries after Phase 4', () => {
-  assert.equal(BLOCK_NAMES.length, 28, BLOCK_NAMES.join(' '));
+test('BLOCKS has 33 entries after the UI mockup blocks', () => {
+  assert.equal(BLOCK_NAMES.length, 33, BLOCK_NAMES.join(' '));
 });
 
 test('expandBlocks leaves a spec without blocks deepEqual, and never mutates its input', () => {

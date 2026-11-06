@@ -1,0 +1,23 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "button-state",
+      "duration": 5,
+      "elements": [
+        {
+          "id": "button",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "button-state",
+          "params": {
+            "from": { "label": "Save changes" },
+            "to": { "label": "Saved", "tone": "good" }
+          }
+        }
+      ]
+    }
+  ]
+}

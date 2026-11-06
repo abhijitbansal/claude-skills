@@ -37,6 +37,13 @@ function placeLine(def, side) {
   return [...FORMAT_NAMES.map((format) => `${format} ${at(def.place(FORMATS[format].size, format, side))}`), `viral ${VIRAL_FORMAT} ${viral}`].join('; ');
 }
 
+// A block that has a content area other blocks sit in (browser-window): that area at the block's place on each format,
+// centre x y then its size, so a form-fields or side-panel can be placed inside it.
+function contentLine(def) {
+  const at = ({ x, y, width, height }) => `x ${Math.round(x)} y ${Math.round(y)} width ${Math.round(width)} height ${Math.round(height)}`;
+  return `content rectangle (centre x y, then size; the block at its place): ${FORMAT_NAMES.map((format) => `${format} ${at(def.contentRect(FORMATS[format].size, format))}`).join('; ')}`;
+}
+
 function table(rows) {
   const widths = rows[0].map((_, c) => Math.max(...rows.map((row) => row[c].length)));
   return rows.map((row) => row.map((cell, c) => (c === row.length - 1 ? cell : cell.padEnd(widths[c] + COLUMN_GAP))).join('')).join('\n');
@@ -63,6 +70,7 @@ function show(name) {
     '',
     `place (x, y): ${placeLine(def)}`,
     ...otherSides.map((value) => `place with "side": ${JSON.stringify(value)} (x, y): ${placeLine(def, value)}`),
+    ...(def.contentRect ? [contentLine(def)] : []),
     '',
     'example element (1920x1080):',
     JSON.stringify(element, null, 2),
