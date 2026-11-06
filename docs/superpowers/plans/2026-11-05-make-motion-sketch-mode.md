@@ -521,6 +521,41 @@ Values, all at 1080 on the short side and scaled by `unit(size)`, come from the 
 
 ---
 
+## Part F: cloud icons in make-diagram
+
+`<dg>` below means `plugins/portable-artifacts/skills/make-diagram`. Added by the owner on 2026-11-06. Runs after Task 18 and before Task 19, so the site and docs cover it.
+
+### Task 21: Cloud icon catalog and import
+
+**Files:**
+- Create: `<dg>/icons/cloud.json` (generated), `<dg>/scripts/lib/svg-safe.mjs`, `<dg>/scripts/lib/icon-import.mjs`, `<dg>/references/examples/cloud-architecture.diagram.json`, fixtures under `<dg>/test/fixtures/cloud-import/`
+- Modify: `<dg>/scripts/dev/build-icons.mjs`, `<dg>/package.json` and `package-lock.json` (dev dependency `@iconify-json/logos` pinned to 1.2.19), `<dg>/scripts/lib/icons.mjs`, `<dg>/scripts/icons.mjs`, `<dg>/scripts/lib/svg.mjs` (line 31), `<dg>/SKILL.md`, `<dg>/README.md`, `<dg>/references/schema.md`, `<dg>/THIRD_PARTY_NOTICES.md`
+- Test: `<dg>/test/icons.test.mjs`, new `<dg>/test/cloud-icons.test.mjs`
+
+**Interfaces:**
+- Consumes: `iconSvg(ref)` returning `{ kind, markup, viewBox }`.
+- Produces: `iconSvg('cloud:<name>')` returning `{ kind: 'cloud', markup, viewBox }`; `sanitizeSvg(text): { markup, viewBox } | { skipped: reason }`; `importIcons(provider, folder, dir): { added: string[], skipped: Array<{ file, reason }> }`; the prefix `cloud` in `PREFIXES` and in `icons.mjs list`.
+
+- [ ] **Step 1: Write failing tests:**
+  - `cloud:aws-lambda and cloud:google-cloud-run resolve`; `search lambda, search "cloud run" and search gcp find them`.
+  - `an unknown cloud icon suggests a near name, and names the import command when nothing is near`.
+  - `the catalog holds no dropped name`: `aws-elastic-cache`, `aws-mobilehub`, `aws-codestar`, `aws-opsworks`.
+  - `sanitizeSvg refuses script, event handlers, foreignObject, style, external href and external url()`, one hostile input each; `every shipped cloud icon passes sanitizeSvg unchanged in meaning`.
+  - `two drawn copies of a gradient icon on one page have no duplicate ids`; `tone does not tint a cloud icon`; `the viewBox keeps the icon's proportions`.
+  - `import on a fake AWS layout adds names like aws-lambda and picks the largest size`; `import on a fake Google layout adds names like google-cloud-run`; `a folder with no icons is an error naming the provider's expected layout`; `an unknown provider lists aws and gcp`; `a symlink is not followed`; `a file over 256 KiB is skipped and reported`; `an unsafe file is skipped and reported`.
+  - `a bundled name wins over an imported one`; `an imported-only icon resolves, and a built page embeds its markup and reads no file at view time`; `a spec naming a missing imported icon fails validation naming the import command`.
+  - `existing fixtures build byte-identical`: the golden tests pass with no baseline edits.
+  - `a make-explainer page embedding a cloud-icon diagram builds and passes check`.
+- [ ] **Step 2: Run them.** Expected: FAIL.
+- [ ] **Step 3: Implement.** One allow-list in `svg-safe.mjs`, used by the build and the import. `svg.mjs` draws `kind: 'cloud'` with its own fills, and scopes ids per drawn icon. `MAKE_DIAGRAM_ICON_DIR` overrides the default import folder `~/.cache/portable-artifacts/make-diagram/`. Writes go to a temp path and move into place. Check every consumer the `icon` grep lists: `viewer.mjs`, `panel.js`, `transport.js`, `parts.mjs`, both layouts.
+- [ ] **Step 4: Generate the catalog.** `npm ci` in `<dg>`, then `node scripts/dev/build-icons.mjs`. The Lucide and brand catalogs change only by any added Google Cloud marks.
+- [ ] **Step 5: Look at it.** Render a contact sheet of every cloud icon on light and dark cards, and build the example. Read them. An icon that cannot be read on a dark card gets a fix, or is dropped and named in the report.
+- [ ] **Step 6: Update the docs.** `SKILL.md` step 2 says when to use `cloud:` and how to import, literal for a cheap model. Keep the `description` on one line. Add the notice and its trademark line.
+- [ ] **Step 7: Run the make-diagram suite and `node --test "plugins/portable-artifacts/bin/test/*.test.mjs"`.** Expected: PASS.
+- [ ] **Step 8: Commit** `feat(make-diagram): cloud icon catalog and import`.
+
+---
+
 ## Part E: site and showcase
 
 ### Task 18: Showcase films
@@ -563,7 +598,7 @@ Before any edit, load the `design-router` skill: this is a design task. The page
 
 - [ ] **Step 1: Sweep the block count.** Search `28` near "block" across the plugin and `docs/`, and change to 38. Check `python3 scripts/sweep_counts.py --check`. No skill was added, so skill counts should not move.
 - [ ] **Step 2: Write the CHANGELOG entry,** under 1.2.0, with a "Behaviour changes" note that the 120 s cap is gone. State measured figures with their commands.
-- [ ] **Step 3: Run the full suites.** `node --test "plugins/portable-artifacts/skills/make-motion/test/**/*.test.mjs"`, `node --test "plugins/portable-artifacts/bin/test/*.test.mjs"`, `python3 -m pytest tests/pytest`, `bats tests/bats`. Expected: all pass. Report exact counts.
+- [ ] **Step 3: Run the full suites.** `node --test "plugins/portable-artifacts/skills/make-motion/test/**/*.test.mjs"`, the make-explainer and make-diagram suites, the plugin's prompt-folder tests, `node --test "plugins/portable-artifacts/bin/test/*.test.mjs"`, `python3 -m pytest tests/pytest`, `bats tests/bats`. Expected: all pass. Report exact counts.
 - [ ] **Step 4: Compare hashes.** Run `node .scratch/baseline-render.mjs .scratch/baseline/final.json`, then diff against `base.json`. Expected: identical for every original example. Any difference blocks the PR.
 - [ ] **Step 5: Check every Part A "done when"** from the spec with a command and its output, for the PR body.
 - [ ] **Step 6: Fresh-context review before the first push.** Run `/code-review` on the diff, per `AGENTS.md`. Fix CRITICAL and HIGH with a regression test that failed first.
