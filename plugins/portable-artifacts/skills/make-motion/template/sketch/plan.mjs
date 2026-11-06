@@ -5,7 +5,7 @@
 import metrics from './caveat-metrics.mjs';
 import { PALETTE, SCRIBBLE_FILL } from './style.mjs';
 import { childrenOf, isGroup } from '../groups.mjs';
-import { unit, hashSeed, makeRng, makeStroke, wobble, bowedLine, boxOutline, ellipseOutline, boxHatch, ellipseHatch, arrowBarbs } from './geometry.mjs';
+import { unit, isPoint, hashSeed, makeRng, makeStroke, wobble, bowedLine, boxOutline, ellipseOutline, boxHatch, ellipseHatch, arrowBarbs } from './geometry.mjs';
 import { schedule, HAND_EXIT } from './timing.mjs';
 
 export { pointAt } from './geometry.mjs';
@@ -27,7 +27,7 @@ const WRITE = { width: 0.42, top: 0.62, bottom: 0.14, sweeps: 3 };
 
 // A sketch scene has one palette: the theme tokens of a standard scene (defaults.mjs COLOR_TOKENS, repeated here because that
 // file imports the blocks; a test fails if the lists drift) are accent, the board (surface) or ink. Anything else is a CSS colour.
-const THEME_TOKENS = Object.freeze(['surface', 'line', 'accent', 'accentSoft', 'good', 'bad', 'warn', 'text', 'text2', 'text3', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5', 'cat6']);
+export const THEME_TOKENS = Object.freeze(['surface', 'line', 'accent', 'accentSoft', 'good', 'bad', 'warn', 'text', 'text2', 'text3', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5', 'cat6']);
 function colourOf(value) {
   if (value === undefined) return PALETTE.ink;
   if (value === 'accent') return PALETTE.accent;
@@ -114,9 +114,9 @@ function planText(el, at, style, run, path) {
 const inkLine = (points, path, width, color, opacity, speed = 'line') => makeStroke(points, { path, kind: 'line', speed, color, width, opacity, layer: 'ink' });
 
 // A line's two ends in canvas px: from x, y to `to` (in the element's own frame, so `origin` + to), else a horizontal line of
-// `width` centred on x, y.
+// `width` centred on x, y. null when `to` is there but is not a point.
 function lineEnds(el, at, origin) {
-  if (el.to !== undefined && el.to !== null) return [at, [origin[0] + el.to.x, origin[1] + el.to.y]];
+  if (el.to !== undefined) return isPoint(el.to) ? [at, [origin[0] + el.to.x, origin[1] + el.to.y]] : null;
   const half = (el.width ?? DEFAULT_SHAPE_SIZE) / 2;
   return [[at[0] - half, at[1]], [at[0] + half, at[1]]];
 }
@@ -131,7 +131,12 @@ const boundsOf = (drafts, pad) => {
 function planLine(el, at, style, run, path, rng) {
   const { u } = run;
   const stroke = el.strokeWidth ?? ARROW.width * u;
-  const [from, to] = lineEnds(el, at, style.origin);
+  const ends = lineEnds(el, at, style.origin);
+  if (!ends) {
+    run.problems.push({ path, message: 'to must be a point, { "x": number, "y": number }' });
+    return { box: { x: at[0], y: at[1], width: 0, height: 0 }, drafts: [] };
+  }
+  const [from, to] = ends;
   const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
   const colour = colourOf(el.stroke);
   const arrow = el.arrow === 'end';

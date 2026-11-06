@@ -43,6 +43,9 @@ export function makeRng(seed) {
 
 // ---- polylines and strokes ---------------------------------------------------------------------------------------------
 
+/** True for `{ x, y }` with finite numbers: what a line's `to` must be. */
+export const isPoint = (v) => v !== null && typeof v === 'object' && !Array.isArray(v) && Number.isFinite(v.x) && Number.isFinite(v.y);
+
 /** The running length at each point of `points` (the first is 0) and the total. */
 export function measure(points) {
   const lengths = [0];

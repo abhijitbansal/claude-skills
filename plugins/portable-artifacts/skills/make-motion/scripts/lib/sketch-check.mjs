@@ -11,6 +11,7 @@ import { isSketchScene, specHasSketch, SCRIBBLE_FILL, HAND_SCALE_RANGE, PACE_RAN
 import caveat from '../../template/sketch/caveat-metrics.mjs';
 import lucide from '../../template/sketch/lucide.mjs';
 import { planScene } from '../../template/sketch/plan.mjs';
+import { isPoint } from '../../template/sketch/geometry.mjs';
 import { ICON_NAMES, suggestIcon } from './icon-names.mjs';
 
 const SKETCH_TYPES = ['text', 'shape', 'icon', 'group', 'block'];
@@ -79,8 +80,6 @@ function checkLineFields(el, base, sketch, errors) {
     else if (key === 'to' && !isPoint(el.to)) errors.push({ path: at, message: 'to must be a point, { "x": number, "y": number }' });
   }
 }
-
-const isPoint = (v) => v !== null && typeof v === 'object' && !Array.isArray(v) && Number.isFinite(v.x) && Number.isFinite(v.y);
 
 function checkIcon(el, base, errors) {
   if (typeof el.name !== 'string' || ICON_SET.has(el.name)) return;

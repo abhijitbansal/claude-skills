@@ -7,6 +7,7 @@ import lucide from '../template/sketch/lucide.mjs';
 import metrics from '../template/sketch/caveat-metrics.mjs';
 import { PALETTE } from '../template/sketch/style.mjs';
 import { planScene } from '../template/sketch/plan.mjs';
+import * as planApi from '../template/sketch/plan.mjs';
 import { pointAt, unit } from '../template/sketch/geometry.mjs';
 import { HAND_EXIT, HAND_LEAD, travelSeconds } from '../template/sketch/timing.mjs';
 import { expandSpec, COLOR_TOKENS, DEFAULT_SHAPE_SIZE } from '../template/defaults.mjs'; // before layout.mjs: the two import each other, and defaults.mjs must load first
@@ -571,4 +572,45 @@ test('DEFAULT_SHAPE_SIZE does not drift from the standard shape\'s', () => {
   assert.deepEqual([box.width, box.height], [DEFAULT_SHAPE_SIZE, DEFAULT_SHAPE_SIZE]);
   const flat = plan([line('l')]).strokes[0].points;
   assert.ok(Math.abs(flat.at(-1)[0] - flat[0][0] - DEFAULT_SHAPE_SIZE) < 8, 'a line without width or `to` is as long as the standard one');
+});
+
+// ---- fix round 2 ----------------------------------------------------------------------------------------------------
+
+test('THEME_TOKENS is exactly COLOR_TOKENS: an entry missing from either list fails', () => {
+  assert.deepEqual([...(planApi.THEME_TOKENS ?? [])].sort(), [...COLOR_TOKENS].sort());
+});
+
+test('a counter\'s `to` is still a number: a string, an object and null are errors, as before sketch mode', () => {
+  const counter = (to) => ({ scenes: [{ id: 's', duration: 5, elements: [{ id: 'c', type: 'counter', x: 960, y: 540, to }] }] });
+  for (const bad of ['abc', { x: 1, y: 2 }, null, [1], true]) {
+    const found = errorsOf(counter(bad));
+    assert.ok(found.length > 0, `to ${JSON.stringify(bad)} must be an error`);
+    assert.ok(found.every((e) => e.startsWith('scenes[0].elements[0].to: ')), found.join('\n'));
+    assert.ok(found.some((e) => e.endsWith('must be number')), `${JSON.stringify(bad)}: ${found.join(' | ')}`);
+  }
+  assert.deepEqual(errorsOf(counter(100)), []);
+  assert.deepEqual(errorsOf(counter(0)), []);
+  const withVar = { vars: { count: { type: 'number', default: 100 } }, ...counter('{{count}}') };
+  assert.deepEqual(errorsOf(withVar), [], 'a number var substitutes before the schema runs');
+});
+
+test('a line\'s `to` is a point: a standard line with one is an error, and so is a sketch line with a number or a string', () => {
+  const standard = errorsOf({ scenes: [{ id: 's', duration: 5, elements: [line('a', { to: { x: 1, y: 2 } })] }] });
+  assert.equal(standard.length, 1, standard.join('\n'));
+  assert.match(standard[0], /^scenes\[0\]\.elements\[0\]\.to: to is for sketch scenes/);
+  for (const bad of ['abc', 5, {}, { x: 'a', y: 1 }, [1, 2], null]) {
+    const found = errorsOf(sketchSpec([line('a', { to: bad })], 30));
+    assert.ok(found.length > 0 && found.every((e) => e.startsWith('scenes[0].elements[0].to: ')), `${JSON.stringify(bad)}: ${found.join(' | ')}`);
+  }
+});
+
+test('a plan of a line with a malformed `to` reports a problem instead of throwing', () => {
+  for (const bad of ['abc', 5, {}, { x: 'a', y: 1 }, [1, 2], null, { x: NaN, y: 1 }]) {
+    const p = plan([line('a', { to: bad, arrow: 'end' }), rect('ok')]);
+    assert.equal(p.problems.length, 1, JSON.stringify(bad));
+    assert.equal(p.problems[0].path, 'elements[0]');
+    assert.match(p.problems[0].message, /\bto\b/);
+    assert.deepEqual(p.strokes.map((s) => s.path), ['elements[1]', 'elements[1]'].slice(0, p.strokes.length), 'only the rect is drawn');
+    assert.ok(p.strokes.length >= 1 && Number.isFinite(p.needs));
+  }
 });

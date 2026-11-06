@@ -140,7 +140,7 @@ const element = {
     anchor: { enum: ['left', 'center', 'right'] }, // a text only (checkFields): the edge of its box that sits on x
     maxWidth: { type: 'number', minimum: 1 },
     font: { enum: ['sans', 'mono'] },
-    from: num, to: num,
+    from: num,
     decimals: { type: 'integer', minimum: 0, maximum: 6 },
     prefix: { type: 'string' }, suffix: { type: 'string' },
     shape: { enum: ['rect', 'ellipse', 'line'] },
@@ -168,7 +168,9 @@ const element = {
     name: { type: 'string', minLength: 1 }, // an icon's Lucide name: checkSketch looks it up
     size: { type: 'number', minimum: 1 }, // an icon's box, in px
     drawAt: {}, // seconds, or "sentence:<n>": a sketch scene only; checkSketch checks the form (a union type would not format)
-    to: {}, // a counter's end value (a number), or a sketch line's far end { x, y }: checkSketch checks the form
+    // A counter's end value (a number, checked by checkCounterTo with the schema's old message) or a sketch line's far end { x, y }
+    // (checkSketch). Open here because an anyOf of the two would report a counter's bad value twice ("must be number", "must be object").
+    to: {},
     bow: num, // how far a line's middle bends to its left, in px at 1080 (sketch only)
     // A group's children are elements again (groups nest; checkElement caps the depth with a message that names the limit).
     children: { type: 'array', minItems: 1, maxItems: MAX_GROUP_CHILDREN, items: { $ref: '#/definitions/element' } },
@@ -778,6 +780,11 @@ function checkFields(el, base, errors) {
   }
 }
 
+// A counter's `to` is a number, as when the schema said so itself (`to` is open in the schema, for a sketch line's point).
+function checkCounterTo(el, base, errors) {
+  if (el.type === 'counter' && el.to !== undefined && !Number.isFinite(el.to)) errors.push({ path: pathJoin(base, 'to'), message: 'must be number' });
+}
+
 // A grade must change something: a preset, or a number away from its default.
 function checkGrade(el, base, errors) {
   if (!GRADE_ELEMENT_TYPES.includes(el.type) || !isPlainObject(el.grade) || !isIdleGrade(el.grade)) return;
@@ -787,6 +794,7 @@ function checkGrade(el, base, errors) {
 // `depth`: how many groups enclose `el` (0 at the top level of a scene).
 function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS, depth = 0) {
   checkFields(el, base, errors);
+  checkCounterTo(el, base, errors);
   checkKeyframes(el, base, scene.duration, errors);
   if (el.type === 'text') checkRole(el, base, errors);
   checkTyping(el, typingPath(el, base, null), scene, fps, errors);
