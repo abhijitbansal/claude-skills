@@ -4,15 +4,18 @@ import { renderMarkdown } from '../markdown.mjs';
 const COLUMNS = [2, 3, 4];
 
 // A cloud icon keeps its own colours, so its svg carries no paint of its own; a pack icon that paints in
-// currentColor gets this fixed grey, as in make-diagram (tone and theme never tint a cloud icon).
+// currentColor gets this fixed grey, as in make-diagram (tone and theme never tint a cloud icon). `.card-icon` sets
+// `color` to the accent and a CSS rule beats a presentation attribute, so the grey is pinned on a nested <svg>,
+// which fills the outer one (100% of its viewBox) and has no class of its own.
 const CLOUD_CURRENT_COLOUR = '#6b7280';
 
 // A cloud icon's gradient and mask ids are short; each drawn card icon gets its own prefix ("ci_" apart from section ids),
 // numbered in render order, so two cards (or the normal and simple copies of one) never share an id.
 function cloudIcon({ markup, viewBox }, icons, ctx) {
   const n = (ctx.cloudIcons = (ctx.cloudIcons ?? 0) + 1);
-  const pin = markup.includes('currentColor') ? ` color="${CLOUD_CURRENT_COLOUR}"` : '';
-  return `<svg class="card-icon" viewBox="${esc(viewBox)}" width="22" height="22"${pin} aria-hidden="true" focusable="false">${icons.scopeIds(markup, `ci_${n}`)}</svg>`;
+  const scoped = icons.scopeIds(markup, `ci_${n}`);
+  const body = markup.includes('currentColor') ? `<svg width="100%" height="100%" color="${CLOUD_CURRENT_COLOUR}">${scoped}</svg>` : scoped;
+  return `<svg class="card-icon" viewBox="${esc(viewBox)}" width="22" height="22" aria-hidden="true" focusable="false">${body}</svg>`;
 }
 
 // ctx.icons is make-diagram's icon module, loaded by buildPage only when a card has an icon.

@@ -498,15 +498,15 @@ const edgeSpec = (size, gap, { second = {}, anchor = 'left', both = {} } = {}) =
 };
 const edgeWarnings = (file) => JSON.parse(check([file, '--json']).stdout).warnings ?? [];
 
-test('left edges 1 to 12 px apart at 1080 warn, naming both texts; 0 px and 13 px do not', async (t) => {
+test('left edges more than 0.5 px and at most 12 px apart at 1080 warn, naming both texts; 0, 0.5 and 13 px do not', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  for (const gap of [1, 6, 12]) {
+  for (const gap of [0.6, 1, 6, 12]) {
     const r = check([edgeSpec([1920, 1080], gap)]);
     assert.equal(r.status, 0, `a warning, not a failure: ${r.stdout}${r.stderr}`);
     assert.match(r.stdout, /^check: ok \(1 scene, \d+ moments\)\n$/);
     assert.equal(r.stderr, `warning: scenes[0].elements[1]: text "second" nearly lines up with "first": left edges differ by ${gap} px\n`);
   }
-  for (const gap of [0, 13, 40]) assert.deepEqual(edgeWarnings(edgeSpec([1920, 1080], gap)), [], `${gap} px`);
+  for (const gap of [0, 0.5, 13, 40]) assert.deepEqual(edgeWarnings(edgeSpec([1920, 1080], gap)), [], `${gap} px`);
 });
 
 test('stacked align-left lines with the default anchor warn when their left edges are 6 px apart', async (t) => {
@@ -549,7 +549,7 @@ test('the near-aligned window scales with the short side: 6 px at 540, not 7', a
 test('a text that is moving is not compared: a slide through the window warns about nothing', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   // `second` slides from 40 px left of `first` to 19 px right of it over the whole scene. The sheet moment at 85 % (1.7 s)
-  // finds it 10 px right of `first`, inside the 1 to 12 px band but mid-slide; it ends 18 px away at the last frame.
+  // finds it 10 px right of `first`, inside the 0.5 to 12 px band but mid-slide; it ends 18 px away at the last frame.
   const slide = { keyframes: [{ t: 0, x: EDGE_X - 40 }, { t: 2, x: EDGE_X + 19 }] };
   assert.deepEqual(edgeWarnings(edgeSpec([1920, 1080], 0, { second: slide })), []);
 });

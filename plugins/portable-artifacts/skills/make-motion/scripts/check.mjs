@@ -16,7 +16,7 @@
 // child counts as moving while any group around it moves.
 // A warning (never a failure; exit stays 0) when the first scene shows nothing at t = 0: stderr, or `warnings` in --json.
 // Also a warning: two texts of a scene that say `"anchor": "left"` or `"align": "left"`, on screen and not moving, whose left
-// edges differ by 1 to 12 px (at 1080 on the short side, scaled with it): `text "b" nearly lines up with "a": left edges differ
+// edges differ by more than 0.5 and up to 12 px (at 1080 on the short side, scaled with it): `text "b" nearly lines up with "a": left edges differ
 // by 5 px` (nearEdgeWarnings). Parts of a block are not compared.
 // A hand-drawn (sketch) scene is judged from the stroke plan the page draws from (sketchPlans, planScene): a drawn element is
 // moving while the pencil is on it, so the rules judge it from the end of its writing (the sheet samples just after each text
@@ -350,13 +350,13 @@ function overlapProblems(items, samples, size) {
   return problems;
 }
 
-// Two held texts whose left edges differ by NEAR_EDGE_MIN_PX to NEAR_EDGE_MAX_PX (at 1080 on the short side, scaled with it)
-// look misaligned rather than placed: a warning, once per pair, at the first moment both are held and on screen. 0 px is
-// aligned and anything wider reads as a different column. The gap is rounded to 0.1 px, as the message shows it. Only
+// Two held texts whose left edges differ by more than NEAR_EDGE_MIN_PX and at most NEAR_EDGE_MAX_PX (at 1080 on the short side,
+// scaled with it) look misaligned rather than placed: a warning, once per pair, at the first moment both are held and on
+// screen. Half a pixel or less is aligned and anything wider reads as a different column. The gap is rounded to 0.1 px, as the message shows it. Only
 // texts that state a left intent are compared, `"anchor": "left"` or `"align": "left"`: a centred text's left edge follows
 // its width, so two centred lines land a few px apart by chance. Parts of a block are left out (`blocks`: the ids of the
 // scene's blocks): a block's layout is not the author's to fix.
-const NEAR_EDGE_MIN_PX = 1;
+const NEAR_EDGE_MIN_PX = 0.5;
 const NEAR_EDGE_MAX_PX = 12;
 const NEAR_EDGE_REFERENCE_SHORT_SIDE = 1080;
 const statesLeftIntent = (el) => el.anchor === 'left' || el.align === 'left';
@@ -370,7 +370,7 @@ function nearEdgeWarnings(items, samples, size, blocks) {
       for (const [n, { t, els }] of samples.entries()) {
         if (!isHeld(first.spans, t, n, samples) || !isHeld(second.spans, t, n, samples) || !isShown(els[first.j], size) || !isShown(els[second.j], size)) continue;
         const gap = Math.round(Math.abs(els[first.j].box.left - els[second.j].box.left) * 10) / 10;
-        if (gap < NEAR_EDGE_MIN_PX * scale || gap > NEAR_EDGE_MAX_PX * scale) continue;
+        if (gap <= NEAR_EDGE_MIN_PX * scale || gap > NEAR_EDGE_MAX_PX * scale) continue;
         warnings.push({ path: second.path, message: `text "${second.el.id}" nearly lines up with "${first.el.id}": left edges differ by ${gap} px` });
         break;
       }

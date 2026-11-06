@@ -25,8 +25,11 @@ English toggle, and make-diagram gains `cloud:` icons. The site page for the plu
   `node .scratch/baseline-render.mjs .scratch/baseline/final.json` against a `base.json` taken on the 1.1.0 commit
   (`--workers 1`, one MD5 of the MP4 stream per top-level example). Measured: the 20 examples that existed in 1.1.0 give
   identical hashes (`diff base.json final.json` shows only the 7 added lines for the new examples).
+- **Every narration chunk now goes through `tts.stream()`.** `voice.mjs` takes the phonemes from Kokoro's own `stream()`,
+  so all narration is made that way now. The audio for the same text can therefore differ from 1.1.0's. I did not
+  measure the difference.
 - **The `check.mjs` text-alignment warning is new.** It warns (stderr, never a failure, exit unchanged) when two
-  held texts that say `"anchor": "left"` or `"align": "left"` have left edges 1 to 12 px apart at 1080 on the short
+  held texts that say `"anchor": "left"` or `"align": "left"` have left edges more than 0.5 and up to 12 px apart at 1080 on the short
   side. A spec that was clean before can now print that warning.
 - **A root `captions` track shrinks every block's room, and this is now documented.** A block lays out above the
   caption zone whenever the spec has any root `captions` track, even one that shows in a single scene (`map-highlight`
@@ -43,7 +46,8 @@ English toggle, and make-diagram gains `cloud:` icons. The site page for the plu
   images, video, Lottie, code, counters, keyframes and camera moves; a viral spec takes no drawn scene. A frame depends on the time alone
   (`test/sketch-render.test.mjs` seeks forward, straight to a frame and back and gets the same bytes). Measured once, not
   by a test: `sketch-mixed.json` at `--no-provenance --fps 10 --size 480x270` gives byte-identical MP4s with `--workers 1`
-  and `--workers 4` (`cmp`, 215 frames). `references/sketch.md` has the rules.
+  and `--workers 4` (`cmp`, 215 frames). A second film, `sketch-architecture.json` (which uses `erase`), was also
+  byte-identical (`cmp`, 295 frames, same flags). `references/sketch.md` has the rules.
 - **make-motion: five sketch blocks.** `sketch-diagram`, `sketch-steps`, `sketch-list`, `sketch-compare` and
   `sketch-callout`, drawn only in a drawn scene. Together with the five product-screen blocks below, `blocks.mjs list`
   now prints 38 blocks (measured: `node plugins/portable-artifacts/skills/make-motion/scripts/blocks.mjs list`; 28 in

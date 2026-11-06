@@ -89,6 +89,23 @@ test('a cards section draws a cloud: icon with its own fills, not as a Lucide st
   assert.ok(ids.some((id) => id.startsWith('ci_')), 'card icon ids carry the ci_ prefix');
 });
 
+test('an imported cloud icon that paints in currentColor keeps its grey on a card: the accent rule on .card-icon cannot reach it', async () => {
+  // .card-icon sets `color` to the accent, and a CSS rule beats a presentation attribute, so the pin sits on a nested <svg>.
+  const source = fs.mkdtempSync(path.join(ICON_DIR, 'mono-'));
+  fs.mkdirSync(path.join(source, 'Arch_A/64'), { recursive: true });
+  fs.writeFileSync(path.join(source, 'Arch_A/64/Arch_Amazon-Mono_64.svg'), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0z" fill="currentColor"/></svg>');
+  const { importIcons } = await import('../../make-diagram/scripts/lib/icon-import.mjs');
+  importIcons('aws', source, ICON_DIR);
+  const spec = { title: 'Mono', sections: [cards(['cloud:aws-mono', 'cloud:aws-lambda'], 'One')] };
+  assert.equal((await validateSpec(spec, { dir: ICON_DIR })).ok, true);
+  const { html } = await buildPage(spec, { dir: ICON_DIR });
+  const [mono, lambda] = [...html.matchAll(/(<svg class="card-icon"[^>]*>)(<svg[^>]*>)?/g)].map((m) => ({ outer: m[1], nested: m[2] }));
+  assert.doesNotMatch(mono.outer, /color=/, 'the svg that carries the class takes the accent, so the grey is not set on it');
+  assert.match(mono.nested, /color="#6b7280"/, 'a nested svg pins the grey');
+  assert.doesNotMatch(lambda.outer, /color=/);
+  assert.equal(lambda.nested, undefined, 'an icon with its own colours has no pin and no nesting');
+});
+
 test('a card with a missing cloud icon fails validation at the field, naming the import command', async () => {
   const { errors } = await validateSpec({ title: 'Cards', sections: [cards(['cloud:aws-zzzz-unlisted-service'], 'One')] }, { dir: ICON_DIR });
   assert.equal(errors[0].path, 'sections[0].items[0].icon');

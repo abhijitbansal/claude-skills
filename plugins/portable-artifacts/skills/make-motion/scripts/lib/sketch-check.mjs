@@ -76,13 +76,17 @@ function checkDrawAt(el, base, scene, sketch, errors) {
   }
 }
 
-// `to` and `bow` bend a line to wherever it runs: a line shape in a sketch scene only (a standard line is horizontal).
-function checkLineFields(el, base, sketch, errors) {
+// `to` and `bow` bend a line to wherever it runs: a line shape in a sketch scene only (a standard line is horizontal). On any
+// other standard element they are strays like any other: "not valid on <type>; allowed: ..." (`allowedOn(type)`: the fields
+// the type takes, which only the spec module knows).
+function checkLineFields(el, base, sketch, errors, allowedOn) {
   for (const key of LINE_FIELDS) {
     if (el[key] === undefined || (key === 'to' && el.type === 'counter')) continue; // a counter's `to` is its end value
     const at = pathJoin(base, key);
-    if (!sketch) errors.push({ path: at, message: `${key} is for sketch scenes (${SET_SKETCH}); a standard line is horizontal` });
-    else if (!(el.type === 'shape' && el.shape === 'line')) errors.push({ path: at, message: `${key} is only valid on a line shape` });
+    const isLine = el.type === 'shape' && el.shape === 'line';
+    if (!sketch && !isLine) errors.push({ path: at, message: `not valid on ${el.type}; allowed: ${allowedOn(el.type).join(', ')}` });
+    else if (!sketch) errors.push({ path: at, message: `${key} is for sketch scenes (${SET_SKETCH}); a standard line is horizontal` });
+    else if (!isLine) errors.push({ path: at, message: `${key} is only valid on a line shape` });
     else if (key === 'to' && !isPoint(el.to)) errors.push({ path: at, message: 'to must be a point, { "x": number, "y": number }' });
   }
 }
@@ -120,6 +124,10 @@ function checkSketchElement(el, base, errors) {
   if (el.type === 'text') checkGlyphs(el, base, errors);
   if (el.type === 'shape' && el.fill === SCRIBBLE_FILL && el.shape === 'line') {
     errors.push({ path: pathJoin(base, 'fill'), message: `"${SCRIBBLE_FILL}" hatches a rect or an ellipse; a line has no inside` });
+  }
+  // The hand outlines a box and hatches it, so a colour fill would be dropped without a word.
+  if (el.type === 'shape' && el.shape !== 'line' && el.fill !== undefined && el.fill !== SCRIBBLE_FILL) {
+    errors.push({ path: pathJoin(base, 'fill'), message: `a drawn shape takes no colour fill; use "fill": "${SCRIBBLE_FILL}" to hatch it` });
   }
 }
 
@@ -225,8 +233,9 @@ function checkRanges(written, errors) {
 /**
  * Pushes the hand-drawn style's refusals for `written` (the spec as written, schema-valid) onto `errors`.
  * `sketchBlocks`: the block names that draw only in a sketch scene (SKETCH_BLOCK_NAMES; a test can pass its own list).
+ * `allowedOn(type)`: the field names an element of that type takes (validateSpec passes the spec module's list).
  */
-export function checkSketch(written, errors, { sketchBlocks = SKETCH_BLOCK_NAMES } = {}) {
+export function checkSketch(written, errors, { sketchBlocks = SKETCH_BLOCK_NAMES, allowedOn = () => [] } = {}) {
   checkViralSide(written, errors);
   checkRanges(written, errors);
   checkErase(written, errors);
@@ -241,7 +250,7 @@ export function checkSketch(written, errors, { sketchBlocks = SKETCH_BLOCK_NAMES
     }
     for (const { el, path: at } of flattenElements(scene.elements, base)) {
       checkDrawAt(el, at, scene, sketch, errors);
-      checkLineFields(el, at, sketch, errors);
+      checkLineFields(el, at, sketch, errors, allowedOn);
       if (el.type === 'icon') checkIcon(el, at, errors);
       if (!sketch && el.type === 'icon') errors.push({ path: pathJoin(at, 'type'), message: `icon is drawn only in a sketch scene; ${SET_SKETCH}` });
       if (el.type === 'block') checkBlockSide(el, at, sketch, sketchBlocks, errors);

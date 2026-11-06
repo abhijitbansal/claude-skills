@@ -14,6 +14,9 @@ export const MAX_SENTENCES = 2000;
 export const MAX_SENTENCE_SECONDS = 86400; // a day: no time in a voice file is beyond it
 const SECONDS_DECIMALS = 1e4;
 const NOT_FOUND = /^file not found/;
+// Ends the errors that say the file is no voice file at all (not JSON, not an object, no sentences list). Any .json beside a
+// scene-bound .wav is read as its voice sidecar, so a stray one (a Whisper transcript) lands here and must be told why.
+const NOT_VOICE_FILE = " That file sits beside the audio track, so it was read as the track's voice sidecar. If it is not one, rename or move it, or write the voice file with voice.mjs.";
 
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isNumber = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -23,9 +26,9 @@ const shown = (v) => (typeof v === 'number' && !Number.isFinite(v) ? String(v) :
 // The first problem with the parsed contents of sidecar `name`, as a message that names it, or null. The file is untrusted
 // content: every sentence needs finite seconds with start <= end, and the starts must not go backwards.
 function problemWith(data, name) {
-  if (!isPlain(data)) return `${name}: must be an object like { "sentences": [{ "start": 0, "end": 2.1 }] }`;
+  if (!isPlain(data)) return `${name}: must be an object like { "sentences": [{ "start": 0, "end": 2.1 }] }.${NOT_VOICE_FILE}`;
   const { sentences } = data;
-  if (!Array.isArray(sentences)) return `${name}: "sentences" must be an array like [{ "start": 0, "end": 2.1 }]`;
+  if (!Array.isArray(sentences)) return `${name}: "sentences" must be an array like [{ "start": 0, "end": 2.1 }].${NOT_VOICE_FILE}`;
   if (sentences.length === 0) return `${name}: "sentences" has no sentences; the voice file says nothing`;
   if (sentences.length > MAX_SENTENCES) return `${name}: "sentences" lists ${sentences.length} sentences; at most ${MAX_SENTENCES}`;
   for (const [i, s] of sentences.entries()) {
@@ -60,7 +63,7 @@ function readSentences({ name, file, error }) {
   try {
     data = JSON.parse(readFileSync(file, 'utf8'));
   } catch (e) {
-    return { error: `${name} is not valid JSON: ${e.message}` };
+    return { error: `${name} is not valid JSON: ${e.message}.${NOT_VOICE_FILE}` };
   }
   const problem = problemWith(data, name);
   return problem ? { error: problem } : { sentences: data.sentences };

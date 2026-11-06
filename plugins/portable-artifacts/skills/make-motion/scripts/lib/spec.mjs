@@ -1056,7 +1056,7 @@ export function validateSpec(input, { dir = process.cwd(), values = {} } = {}) {
   // A scene's `narration` is internal (the voice step set it, or refused a written one): the schema does not list it as a field.
   if (!schemaCheck(withoutNarration(written))) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
   const sketchErrors = [];
-  checkSketch(written, sketchErrors); // before the block params, so a standard block in a sketch scene is told first it does not belong
+  checkSketch(written, sketchErrors, { allowedOn: (type) => FIELDS[type] }); // before the block params, so a standard block in a sketch scene is told first it does not belong
   const blockErrors = [];
   checkBlocks(applyViral(written), dir, blockErrors); // step 2, then the block params step 3 expands
   if (blockErrors.length) return { ok: false, errors: [...sketchErrors, ...blockErrors] };

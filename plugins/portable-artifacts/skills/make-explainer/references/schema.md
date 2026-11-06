@@ -91,7 +91,7 @@ The plan page's Copy answers button copies, and Download saves as `plan-answers.
 }
 ```
 
-- `planKey` is the root `key`; `planHash` is the first 12 hex characters of a SHA-256 over the plan's `title` and `sections` (changing the subtitle, meta, theme or preset does not change it). `verdict` is `approve`, `approve-with-changes`, `not-yet` or `null`.
+- `planKey` is the root `key`; `planHash` is the first 12 hex characters of a SHA-256 over the plan's `title` and `sections` (changing the subtitle, meta, theme, preset or any section's `simple` text does not change it). `verdict` is `approve`, `approve-with-changes`, `not-yet` or `null`.
 - One row per decision, approval and question, in page order. `choice` is the option label (decision) or `approve`, `changes`, `reject` (approval). An unanswered item carries its `default` (`choice` for a decision, `text` for a question) and `answered: false`.
 - Bounds: at most 200 rows; `id` 80 characters, `choice`, `planKey` and `planHash` 500, `question` 2000, `text`, `comment` and `reviewer` 20000. Unknown fields are errors.
 

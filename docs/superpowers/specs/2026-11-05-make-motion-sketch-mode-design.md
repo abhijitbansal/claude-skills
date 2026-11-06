@@ -345,13 +345,13 @@ Each change is shown catching a bad spec first.
 
 **Safety.** Every SVG, bundled or imported, passes one allow-list. Scripts, event handlers, `foreignObject`, `<style>`, external `href` and external `url()` never get through. Gradient and mask ids are scoped per drawn icon, so two icons on a page cannot clash.
 
-**Anti-goals.** No official vendor icon file is committed. Existing diagrams build byte-identical. `lucide:` and `brand:` refs do not change. Icons are not cropped, flipped or distorted.
+**Anti-goals.** No official vendor icon file is committed. Existing diagrams build with identical SVG output and CSS; a built page differs from before by a small script in the Explore panel (three lines in `template/panel.js` that drop `id` attributes from a copied cloud icon), so the page as a whole is not byte-identical. `lucide:` and `brand:` refs do not change. Icons are not cropped, flipped or distorted.
 
 **Known limit.** Official zips sit behind vendor terms the agent cannot accept, so the importer is tested on fake folders shaped like the documented layouts. Running real zips is a manual-checklist item.
 
 **Notices.** `THIRD_PARTY_NOTICES.md` gains the pack and says the marks remain their owners' trademarks and imply no endorsement. This is not legal advice, and the PR body names the licence decision.
 
-**My calls, for the owner to check:** bundled wins over imported for the same name, so a spec draws the same on every machine; imported icons live under `~/.cache/portable-artifacts/make-diagram/`, overridable by `MAKE_DIAGRAM_ICON_DIR` for tests; AWS names for retired or duplicate entries are dropped (`aws-elastic-cache`, `aws-mobilehub`, `aws-codestar`, `aws-opsworks`); any Google Cloud marks in the pinned `simple-icons` are added as monochrome `brand:` icons.
+**My calls, for the owner to check:** bundled wins over imported for the same name, so a spec draws the same on every machine; imported icons live under `~/.cache/portable-artifacts/make-diagram/`, overridable by `MAKE_DIAGRAM_ICON_DIR` for tests; AWS names for retired or duplicate entries are dropped (`aws-elastic-cache`, `aws-mobilehub`, `aws-codestar`, `aws-opsworks`), and the `aws` wordmark is dropped too (dark navy lettering that vanishes on a dark card and is 3 px tall at node size), so 65 names less 5 leaves 60 AWS icons shipped; any Google Cloud marks in the pinned `simple-icons` are added as monochrome `brand:` icons.
 
 ---
 

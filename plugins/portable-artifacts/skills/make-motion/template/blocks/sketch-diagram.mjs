@@ -243,7 +243,7 @@ export default Object.freeze({
   describe: {
     nodes: '2 to 8 boxes in order: { id (up to 24 characters, what edges name), label (up to 24), icon? (a Lucide name; node scripts/sketch-icons.mjs search <word>), fill? (true hatches the box in the accent colour) }',
     edges: 'arrows between nodes: { from, to (node ids), label? (up to 16 characters) }; up to 12, and none is allowed; the same edge twice is an error, the way back is another edge. An arrow across other boxes arches round them',
-    layout: 'row, column or grid; default row on a wide canvas, column on a tall one. One that does not fit is drawn smaller, then as a grid, then as a column',
+    layout: 'row, column or grid; default row on a wide canvas, column on a tall one. The layout asked for is kept only while it fits: it is drawn smaller first, and if it still does not fit the block switches to a grid, then a column, with no warning, so a row of many or long-labelled boxes can come out as a grid; for that many boxes, ask for grid or column',
   },
   example: {
     nodes: [{ id: 'web', label: 'Browser', icon: 'monitor' }, { id: 'api', label: 'API', icon: 'server', fill: true }, { id: 'db', label: 'Database', icon: 'database' }],

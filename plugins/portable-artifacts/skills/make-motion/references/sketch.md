@@ -38,7 +38,7 @@ Copy one of these from `references/examples/` and change the words. Each one val
 | element | what it does |
 |---|---|
 | `text` | Written in a handwriting font, left to right. Default `fontSize` 72 (at 1080), larger than standard text because handwriting reads small. It wraps at 80% of the width. `maxWidth` and `align` work. |
-| `shape` | `rect` and `ellipse` are outlined by the hand. `"fill": "scribble"` hatches them in the accent colour. `line` has `to` (`{ "x", "y" }`) and `bow` to bend it. `"arrow": "end"` adds a head. |
+| `shape` | `rect` and `ellipse` are outlined by the hand. `"fill": "scribble"` hatches them in the accent colour. Any other `fill` is an error, because the hand draws no solid fill. `line` has `to` (`{ "x", "y" }`) and `bow` to bend it. `"arrow": "end"` adds a head. |
 | `icon` | A line icon, drawn stroke by stroke. Fields: `name`, `size`, `color`. |
 | `group` | Its children are drawn in order. |
 | `block` | The sketch blocks only: `sketch-diagram`, `sketch-steps`, `sketch-list`, `sketch-compare`, `sketch-callout`. |
@@ -77,6 +77,8 @@ A drawn scene whose voice track has a sidecar draws its elements during the sent
 2. `node <skill-dir>/scripts/voice.mjs --text-file voice/<scene-id>.txt --out voice/<scene-id>.wav --phonemes` writes the wav and `voice/<scene-id>.json` (sentence times). Check the phonemes as in `SKILL.md` Workflow step 2.
 3. Add the track: `{ "src": "voice/<scene-id>.wav", "scene": "<scene-id>", "at": 1 }`. `at` is scene seconds. Start it after the transition into the scene ends. The scene must last past the end of the narration.
 4. Never write `narration` in a scene. It is resolved from the sidecar. A written one is an error.
+
+Any `.json` with the same name as a scene-bound `.wav` and beside it is read as that track's voice sidecar. A file that is not one (say a Whisper transcript saved as `voice/intro.json`) is an error at `audio[i].src` that says so. Rename or move that file, or make the voice file with `voice.mjs`.
 
 Rules:
 

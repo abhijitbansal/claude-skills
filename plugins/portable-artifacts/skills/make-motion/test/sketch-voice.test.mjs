@@ -414,13 +414,22 @@ test('a block keeps its sentence pin on its group', () => {
 
 const SIDECAR = 'voice/intro.json';
 const sidecarErrors = (raw) => errorsOf(resolveSketchVoice(film(FOUR_RECTS), project({ raw })));
+const GUIDE = ' That file sits beside the audio track, so it was read as the track\'s voice sidecar. If it is not one, rename or move it, or write the voice file with voice.mjs.';
 
 test('a sidecar that is not usable is an error at the audio src, naming the file', () => {
-  assert.deepEqual(sidecarErrors('{ nope'), [`audio[0].src: ${SIDECAR} is not valid JSON: ${(() => { try { JSON.parse('{ nope'); } catch (e) { return e.message; } })()}`]);
-  assert.deepEqual(sidecarErrors('[]'), [`audio[0].src: ${SIDECAR}: must be an object like { "sentences": [{ "start": 0, "end": 2.1 }] }`]);
-  assert.deepEqual(sidecarErrors('{}'), [`audio[0].src: ${SIDECAR}: "sentences" must be an array like [{ "start": 0, "end": 2.1 }]`]);
+  assert.deepEqual(sidecarErrors('{ nope'), [`audio[0].src: ${SIDECAR} is not valid JSON: ${(() => { try { JSON.parse('{ nope'); } catch (e) { return e.message; } })()}.${GUIDE}`]);
+  assert.deepEqual(sidecarErrors('[]'), [`audio[0].src: ${SIDECAR}: must be an object like { "sentences": [{ "start": 0, "end": 2.1 }] }.${GUIDE}`]);
+  assert.deepEqual(sidecarErrors('{}'), [`audio[0].src: ${SIDECAR}: "sentences" must be an array like [{ "start": 0, "end": 2.1 }].${GUIDE}`]);
   assert.deepEqual(sidecarErrors('{"sentences":[]}'), [`audio[0].src: ${SIDECAR}: "sentences" has no sentences; the voice file says nothing`]);
   assert.deepEqual(sidecarErrors('{"sentences":[5]}'), [`audio[0].src: ${SIDECAR}: sentences[0] must be an object like { "start": 0, "end": 2.1 }`]);
+});
+
+test('a .json beside the track that is not a voice file (a Whisper transcript) says why it was read and how to get out', () => {
+  const whisper = JSON.stringify({ text: ' Hello there.', segments: [{ id: 0, start: 0, end: 2.1, text: ' Hello there.' }], language: 'en' });
+  assert.deepEqual(sidecarErrors(whisper), [`audio[0].src: ${SIDECAR}: "sentences" must be an array like [{ "start": 0, "end": 2.1 }].${GUIDE}`]);
+  assert.deepEqual(sidecarErrors('[]'), [`audio[0].src: ${SIDECAR}: must be an object like { "sentences": [{ "start": 0, "end": 2.1 }] }.${GUIDE}`]);
+  assert.match(sidecarErrors('{ nope')[0], /\. That file sits beside the audio track, so it was read as the track's voice sidecar\./);
+  assert.doesNotMatch(sidecarErrors('{"sentences":[{"start":3,"end":2}]}')[0], /sits beside/, 'a real voice file with a bad time gets no such hint');
 });
 
 test('sidecar times must be finite numbers with start <= end, in order', () => {

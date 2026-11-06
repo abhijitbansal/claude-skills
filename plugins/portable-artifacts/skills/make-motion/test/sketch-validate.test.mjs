@@ -154,6 +154,30 @@ test('icon, drawAt and a scribble fill belong to sketch scenes; a standard scene
   assert.ok(refused[0].startsWith('scenes[0].elements[0].fill: must be a CSS colour') && refused[0].includes('"scribble" is only valid as the fill of a shape in a sketch scene'), refused[0]);
 });
 
+test('to and bow on a standard element that is not a line say "not valid on <type>", as any other stray field; a line still hears about sketch scenes', () => {
+  const [onText] = errs(standard([text({ bow: 3 })]));
+  assert.match(onText, /^scenes\[0\]\.elements\[0\]\.bow: not valid on text; allowed: id, type, x, y, opacity, scale, rotate, keyframes, hold, text, /);
+  assert.doesNotMatch(onText, /horizontal|sketch/);
+  const rect = { id: 'r', type: 'shape', shape: 'rect', x: 0, y: 0, width: 200, height: 100, to: { x: 1, y: 2 } };
+  assert.match(errs(standard([rect]))[0], /^scenes\[0\]\.elements\[0\]\.to: not valid on shape; allowed: id, type, x, y, /);
+  const line = { id: 'l', type: 'shape', shape: 'line', x: 0, y: 0, width: 200, bow: 5 };
+  assert.equal(errs(standard([line]))[0], 'scenes[0].elements[0].bow: bow is for sketch scenes (set "style": "sketch" on the scene, or at the root); a standard line is horizontal');
+});
+
+test('a colour fill on a rect or an ellipse in a sketch scene is an error at .fill (it would draw nothing); a standard scene keeps it', () => {
+  const shape = (kind, fill) => ({ id: 'r', type: 'shape', shape: kind, x: 0, y: 0, width: 200, height: 100, fill });
+  const message = 'scenes[0].elements[0].fill: a drawn shape takes no colour fill; use "fill": "scribble" to hatch it';
+  for (const kind of ['rect', 'ellipse']) {
+    assert.deepEqual(errs(sketch([shape(kind, '#ff0000')])), [message], kind);
+    assert.deepEqual(errs(sketch([shape(kind, 'surface')])), [message], `${kind} with a theme token`);
+    assert.deepEqual(errs(sketch([shape(kind, 'scribble')])), [], kind);
+    assert.deepEqual(errs(sketch([shape(kind, undefined)])), [], `${kind} with no fill`);
+    assert.deepEqual(errs(standard([shape(kind, '#ff0000')])), [], `${kind} in a standard scene`);
+  }
+  const nested = { id: 'g', type: 'group', x: 0, y: 0, children: [shape('rect', '#ff0000')] };
+  assert.deepEqual(errs(sketch([nested])), ['scenes[0].elements[0].children[0].fill: a drawn shape takes no colour fill; use "fill": "scribble" to hatch it']);
+});
+
 test('scribble is a shape fill only: not a text colour, not a line fill', () => {
   const colour = errs(sketch([text({ color: 'scribble' })]));
   assert.ok(colour.some((e) => e.startsWith('scenes[0].elements[0].color: must be a CSS colour')), colour.join('\n'));
