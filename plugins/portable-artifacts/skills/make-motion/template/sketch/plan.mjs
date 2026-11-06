@@ -259,8 +259,8 @@ function planWindows(tops, narration, run) {
 
 // What the schedule could not fit in a sentence window, as findings at the elements. A voiced scene that cannot fit its
 // drawing still renders and is reported by check.mjs, so these are not `problems` (which validation refuses and the page throws).
-function overrunsOf(fits, tops) {
-  return fits.map(({ item, needed, available }) => {
+function overrunsOf(tooShort, tops) {
+  return tooShort.map(({ item, needed, available }) => {
     const { el, node } = tops[item];
     const seconds = Math.ceil((needed - FIT_EPSILON) * 10) / 10;
     const lasts = Math.round(available * 100) / 100;
@@ -294,14 +294,14 @@ export function planScene(scene, ctx) {
   });
   const leaves = tops.flatMap((top) => top.leaves);
   const items = voiced ? planWindows(tops, scene.narration, run) : leaves.map(({ node, drawAt }) => ({ drawAt, strokes: node.drafts }));
-  const { times, drawEnd, moves, fits } = schedule(items, { size, u: run.u, pace, startAfter });
+  const { times, drawEnd, moves, tooShort } = schedule(items, { size, u: run.u, pace, startAfter });
   if (voiced) tops.forEach((top, i) => takeTimes(top.leaves, times[i]));
   else leaves.forEach(({ node }, i) => { node.times = times[i]; });
   const strokes = [];
   const elements = new Map();
   const state = { last: startAfter };
   tops.forEach(({ node }) => finish(node, state, strokes, elements));
-  return { size, unit: run.u, strokes, elements, drawEnd, moves, needs: strokes.length ? drawEnd + HAND_EXIT : startAfter, problems: run.problems, overruns: overrunsOf(fits, tops) };
+  return { size, unit: run.u, strokes, elements, drawEnd, moves, needs: strokes.length ? drawEnd + HAND_EXIT : startAfter, problems: run.problems, overruns: overrunsOf(tooShort, tops) };
 }
 
 // The times of one item's strokes handed back to the leaves it was made of, in order.

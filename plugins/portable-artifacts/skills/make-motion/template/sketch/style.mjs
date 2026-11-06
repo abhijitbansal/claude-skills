@@ -12,6 +12,10 @@ export const PALETTE = Object.freeze({ board: '#fdfcf8', ink: '#1d2330', accent:
 // A shape's `fill` that hatches it with the accent colour instead of naming a colour; only a rect or an ellipse in a sketch scene.
 export const SCRIBBLE_FILL = 'scribble';
 
+// An element's `drawAt` that pins it to a narration sentence: "sentence:<n>", n counted from 0. One pattern for the voice step
+// (which turns it into { sentence: n }) and for validation, so no number of digits slips past one of them.
+export const SENTENCE_REF = /^sentence:(\d+)$/;
+
 export const HAND_TONES = Object.freeze(['light', 'medium', 'tan', 'brown', 'dark']);
 export const HAND_SCALE_RANGE = Object.freeze([0.5, 1.2]);
 export const PACE_RANGE = Object.freeze([0.5, 2]);

@@ -12,11 +12,16 @@ import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 import { writeWav } from './helpers/wav.mjs';
 import lucide from '../template/sketch/lucide.mjs';
 import { planScene } from '../template/sketch/plan.mjs';
-import { assignWindows } from '../template/sketch/timing.mjs';
+import { assignWindows, schedule } from '../template/sketch/timing.mjs';
 import { expandSpec } from '../template/defaults.mjs'; // before layout.mjs: the two import each other, and defaults.mjs must load first
 import { validateSpec } from '../scripts/lib/spec.mjs';
+import { checkSketch } from '../scripts/lib/sketch-check.mjs';
 import { resolveSpecBeats, needsResolving } from '../scripts/lib/beats-file.mjs';
-import { resolveSketchVoice, voiceSidecars, MAX_SIDECAR_BYTES } from '../scripts/lib/sketch-voice.mjs';
+import { resolveSketchVoice, voiceSidecars, MAX_SIDECAR_BYTES, MAX_SENTENCE_SECONDS } from '../scripts/lib/sketch-voice.mjs';
+import { SENTENCE_REF } from '../template/sketch/style.mjs';
+import { substituteVars } from '../template/vars.mjs';
+import { sidecarPath as leafSidecarPath } from '../scripts/lib/voice-sidecar.mjs';
+import { sidecarPath } from '../scripts/lib/voice.mjs';
 import { assetSrcs, startServer } from '../scripts/lib/server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -78,18 +83,49 @@ test('with more elements than sentences they share the narration too', () => {
   assert.deepEqual(assignWindows([{ weight: 0 }, { weight: 0 }], FOUR).map(({ start, end }) => [start, end]), [[0, 5], [5, 10]], 'no weight at all: equal shares');
 });
 
+// A real block (title-card: kicker, title, rule, subtitle) as the plan sees it: expanded to a group of four parts. No block in this
+// checkout is sketch-only yet, so these tests plan the expansion directly (validation of one: the block-side test below).
+const card = (extra = {}) => ({ id: 'card', type: 'block', block: 'title-card', x: 960, y: 400, params: { title: 'Hi', subtitle: 'and more', kicker: 'First' }, ...extra });
+const planExpanded = (elements, narration, ctx = {}) => planScene(expandSpec({ size: SIZE, style: 'sketch', scenes: [{ id: 's', duration: 30, ...(narration ? { narration } : {}), elements }] }).scenes[0], { size: SIZE, icons: lucide, sceneIndex: 0, ...ctx });
+const partsOf = (p, k) => [...p.elements.keys()].filter((key) => key.startsWith(`scenes[0].elements[${k}].children[`)).map((key) => p.elements.get(key));
+
 test('a block counts as one element and its parts share its window', () => {
-  const group = { id: 'g', type: 'group', x: 0, y: 0, children: [label('one', 400, 300), label('two', 400, 500), label('three', 400, 700)] };
-  const natural = plan([group, rect('after', 1500)]);
+  const natural = planExpanded([card(), rect('after', 1500)]);
   const [t0, t1] = [at(natural, 0).t0, at(natural, 0).t1];
+  assert.equal(partsOf(natural, 0).length, 4, 'title-card expands to kicker, title, rule and subtitle');
+  // Two elements (the block and the box) and two sentences: the block is item 0, whatever its four parts. Its window is exactly
+  // 1.5 times its natural length, so the four parts together fill it (and start where the block does).
   const narration = [{ start: 0, end: t0 + 1.5 * (t1 - t0) }, { start: t0 + 1.5 * (t1 - t0), end: 12 }];
-  const p = plan([group, rect('after', 1500)], narration);
-  const part = (m) => p.elements.get(`scenes[0].elements[0].children[${m}]`);
-  near(part(0).t0, t0); // the parts start with the group's window...
-  near(part(2).t1, narration[0].end); // ...and the three of them fill it together
-  assert.ok(part(0).t1 <= part(1).t0 + EPS && part(1).t1 <= part(2).t0 + EPS, 'one after another inside it');
-  assert.ok(at(p, 1).t0 >= narration[1].start - EPS, 'the next element takes the next sentence');
-  assert.equal(assignWindows([{ weight: 3 }, { weight: 1 }], FOUR).length, 2, 'a block is one item: two items, not four parts');
+  const p = planExpanded([card(), rect('after', 1500)], narration);
+  const parts = partsOf(p, 0);
+  assert.equal(parts.length, 4);
+  near(parts[0].t0, t0);
+  near(Math.max(...parts.map((part) => part.t1)), narration[0].end);
+  parts.slice(1).forEach((part, m) => assert.ok(part.t0 >= parts[m].t1 - EPS, `part ${m + 1} follows part ${m}`));
+  assert.ok(at(p, 1).t0 >= narration[1].start - EPS, 'the next element takes the next sentence: the four parts did not use four');
+  assert.equal(p.overruns.length, 0);
+  // with four sentences and the block plus three boxes, element k still gets sentence k: parts do not count as elements
+  const four = planExpanded([card(), rect('b', 500), rect('c', 900), rect('d', 1300)], FOUR);
+  FOUR.forEach(({ start, end }, k) => assert.ok(at(four, k).t0 >= start - EPS && at(four, k).t1 <= end + EPS, `element ${k} is in sentence ${k}`));
+});
+
+test('a real block with drawAt "sentence:1" keeps its pin through validation and draws in that sentence', () => {
+  const dir = project();
+  const written = film([rect('a', 300, { y: 300 }), card({ drawAt: 'sentence:1' }), rect('c', 1500, { y: 300, drawAt: 'sentence:2' })]);
+  // No sketch-only block exists yet, so validateSpec's one finding is the block-side refusal: nothing about drawAt or the block's fields.
+  const found = validated(written, dir);
+  assert.equal(found.length, 1, found.join('\n'));
+  assert.match(found[0], /^scenes\[0\]\.elements\[1\]\.block: title-card is not a sketch block/);
+  const { spec } = resolveSpecBeats(written, dir);
+  assert.deepEqual(spec.scenes[0].elements[1].drawAt, { sentence: 1 });
+  const refused = [];
+  checkSketch(spec, refused, { sketchBlocks: ['title-card'] }); // as if title-card were sketch-only: the block takes the pin
+  assert.deepEqual(refused, []);
+  const p = planExpanded(spec.scenes[0].elements, spec.scenes[0].narration);
+  const parts = partsOf(p, 1);
+  assert.equal(parts.length, 4);
+  assert.ok(Math.min(...parts.map((part) => part.t0)) >= FIVE[1].start - EPS && Math.max(...parts.map((part) => part.t1)) <= FIVE[1].end + EPS, 'all four parts draw inside sentence 1 (2 to 4.5 s)');
+  assert.equal(p.overruns.length, 0);
 });
 
 test('a pinned element splits runs: earlier elements use sentences before it, later ones after it', () => {
@@ -113,6 +149,38 @@ test('a pinned element splits runs: earlier elements use sentences before it, la
   const crowded = plan([rect('a', 300), rect('b', 700, { drawAt: { sentence: 0 } })], FIVE);
   assert.equal(crowded.overruns.length, 1, 'the element with no sentence cannot be drawn');
   assert.equal(crowded.overruns[0].path, 'scenes[0].elements[0]');
+});
+
+test('equal consecutive pins share that sentence\'s span as one run: [2,2], [null,2,2,null]', () => {
+  const pins = (list) => list.map((sentence) => ({ weight: 1, ...(sentence === null ? {} : { sentence }) }));
+  const spans = (list) => assignWindows(pins(list), FIVE).map(({ start, end }) => [start, end]);
+  // [2,2]: both items go on from sentence 2 together (3 sentences, 2 items, shared by weight); neither is left without a slot
+  const twice = spans([2, 2]);
+  near(twice[0][0], 4.5);
+  near(twice[0][1], 7.25);
+  near(twice[1][0], 7.25);
+  near(twice[1][1], 10);
+  assert.ok(twice.every(([start, end]) => end > start), 'no empty slot');
+  // [null,2,2,null]: item 0 takes sentences 0-1, then the three others take sentences 2, 3 and 4 one each
+  assert.deepEqual(spans([null, 2, 2, null]), [[0, 4.5], [4.5, 6], [6, 8.5], [8.5, 10]]);
+  assert.deepEqual(assignWindows(pins([null, 2, 2, null]), FIVE).map((w) => w.pinned), [false, true, true, false]);
+  // through the plan: no overrun, nothing is drawn out of its sentences
+  const p = plan(FOUR_RECTS.map((el, k) => (k === 1 || k === 2 ? { ...el, drawAt: { sentence: 2 } } : el)), FIVE);
+  assert.equal(p.overruns.length, 0);
+  assert.ok(at(p, 1).t0 >= 4.5 - EPS && at(p, 2).t0 >= 6 - EPS && at(p, 3).t0 >= 8.5 - EPS);
+});
+
+test('schedule reports an item whose slot is too short even at twice pace in tooShort, with the seconds', () => {
+  const draft = { points: [[100, 100], [900, 100]], kind: 'line', speed: 'line', total: 800 };
+  const item = (slot) => ({ strokes: [draft], slot });
+  const base = { size: SIZE, u: 1, pace: 1 };
+  assert.deepEqual(schedule([item({ start: 0, end: 20 })], base).tooShort, []);
+  const short = schedule([item({ start: 0, end: 0.5 })], base);
+  assert.equal(short.tooShort.length, 1);
+  assert.equal(short.tooShort[0].item, 0);
+  near(short.tooShort[0].available, 0.5);
+  assert.ok(short.tooShort[0].needed > 0.5, 'needs more than it has');
+  assert.equal(Object.hasOwn(short, 'fits'), false, 'the old name is gone');
 });
 
 test('a drawing stretches to fill its window, to half pace at most, then the hand leaves and the board holds', () => {
@@ -250,6 +318,35 @@ test('sentence:9 past the end is an error naming the count; sentence:<n> with no
   ]);
 });
 
+test('a huge sentence number is the past-the-end error, whatever its digits, in the resolver and in validateSpec', () => {
+  const dir = project();
+  for (const ref of ['sentence:1234567', `sentence:${'9'.repeat(400)}`]) {
+    const written = film([rect('a', 300, { drawAt: ref })]);
+    const [error] = errorsOf(resolveSketchVoice(written, dir));
+    assert.ok(error.length < 160, 'a long number is shortened in the message');
+    assert.match(error, /does not exist; the narration of scene "s" has 5 sentences \(0 to 4\)$/);
+    assert.match(validated(written, dir)[0], /does not exist; the narration of scene "s" has 5 sentences \(0 to 4\)$/);
+  }
+  // the one pattern: what checkSketch reads as a sentence reference is what the voice step reads
+  assert.equal(SENTENCE_REF.source, '^sentence:(\\d+)$');
+  const unvoiced = project({ sidecar: null });
+  assert.match(validated(film([rect('a', 300, { drawAt: 'sentence:1234567' })]), unvoiced)[0], /needs a voice track/);
+});
+
+test('pins must not decrease: sentence 3 then sentence 1 is an error at the later drawAt naming both pins', () => {
+  const dir = project();
+  const out = film([rect('a', 300, { drawAt: 'sentence:3' }), rect('b', 700), rect('c', 1100, { drawAt: 'sentence:1' })]);
+  assert.deepEqual(errorsOf(resolveSketchVoice(out, dir)), [
+    'scenes[0].elements[2].drawAt: sentence:1 comes before sentence:3, pinned on scenes[0].elements[0]; pin the elements in the order of the narration',
+  ]);
+  assert.deepEqual(validated(out, dir), ['scenes[0].elements[2].drawAt: sentence:1 comes before sentence:3, pinned on scenes[0].elements[0]; pin the elements in the order of the narration']);
+  // equal and increasing pins are fine
+  assert.deepEqual(errorsOf(resolveSketchVoice(film([rect('a', 300, { drawAt: 'sentence:2' }), rect('b', 700, { drawAt: 'sentence:2' }), rect('c', 1100, { drawAt: 'sentence:4' })]), dir)), []);
+  // only top-level elements are ordered against each other
+  const nested = film([rect('a', 300, { drawAt: 'sentence:3' }), { id: 'g', type: 'group', x: 0, y: 0, children: [label('t', 400, 300, { drawAt: 'sentence:1' })] }]);
+  assert.deepEqual(errorsOf(resolveSketchVoice(nested, dir)), []);
+});
+
 test('sentence:<n> becomes { sentence: n }, on a nested element too, and resolving a resolved spec changes nothing', () => {
   const dir = project();
   const written = film([rect('a', 300, { drawAt: 'sentence:2' }), { id: 'g', type: 'group', x: 0, y: 0, children: [label('t', 400, 300, { drawAt: 'sentence:1' })] }]);
@@ -336,6 +433,26 @@ test('sidecar times must be finite numbers with start <= end, in order', () => {
   assert.deepEqual(sidecarErrors('{"sentences":[{"start":0,"end":1e999}]}'), [`audio[0].src: ${SIDECAR}: sentences[0].end is Infinity; it must be a number of seconds`]);
 });
 
+test('every sidecar time is capped at MAX_SENTENCE_SECONDS (86400): beyond it is an error at the audio src', () => {
+  assert.equal(MAX_SENTENCE_SECONDS, 86400);
+  assert.deepEqual(sidecarErrors('{"sentences":[{"start":0,"end":1e305}]}'), [`audio[0].src: ${SIDECAR}: sentences[0].end is 1e+305; a voice file may say 86400 seconds at most`]);
+  assert.deepEqual(sidecarErrors('{"sentences":[{"start":86401,"end":86402}]}'), [`audio[0].src: ${SIDECAR}: sentences[0].start is 86401; a voice file may say 86400 seconds at most`]);
+  assert.deepEqual(sidecarErrors('{"sentences":[{"start":0,"end":86400.5}]}').length, 1);
+  assert.deepEqual(sidecarErrors('{"sentences":[{"start":0,"end":86400}]}'), [], 'the cap itself is allowed');
+  assert.match(validated(film(FOUR_RECTS), project({ raw: '{"sentences":[{"start":0,"end":1e305}]}' }))[0], /^audio\[0\]\.src: voice\/intro\.json: sentences\[0\]\.end is 1e\+305/);
+});
+
+test('sidecarPath lives in a leaf module with no imports; voice.mjs still exports it', () => {
+  assert.equal(sidecarPath, leafSidecarPath);
+  assert.equal(leafSidecarPath('voice/intro.wav'), 'voice/intro.json');
+  assert.equal(leafSidecarPath('voice/intro.mp3'), 'voice/intro.mp3');
+  const source = readFileSync(path.join(root, 'scripts/lib/voice-sidecar.mjs'), 'utf8');
+  assert.deepEqual([...source.matchAll(/^import\b/gm)], [], 'a leaf: it imports nothing, so no cycle can pass through it');
+  const voice = readFileSync(path.join(root, 'scripts/lib/sketch-voice.mjs'), 'utf8');
+  assert.match(voice, /from '\.\/voice-sidecar\.mjs'/);
+  assert.doesNotMatch(voice, /from '\.\/voice\.mjs'/, 'the voice step no longer imports the model module');
+});
+
 test('a sidecar over the size limit, and a symbolic link out of the folder, are refused', () => {
   const big = sidecarErrors(`{"sentences":[{"start":0,"end":1}],"pad":"${'x'.repeat(MAX_SIDECAR_BYTES)}"}`);
   assert.match(big[0], /^audio\[0\]\.src: voice\/intro\.json is \d+ bytes; a voice file is at most 1048576 bytes$/);
@@ -416,11 +533,51 @@ test('the preview server watches the voice file as it does the beats file: it is
   } finally { await server.close(); }
 });
 
+const LOOK = { look: { type: 'string', default: 'sketch' } };
+
+test('needsResolving is asked after the vars are substituted: a style that is a var counts', () => {
+  const driven = film(FOUR_RECTS, { spec: { style: '{{look}}', vars: LOOK } });
+  assert.equal(needsResolving(driven), false, 'as written the style is no sketch');
+  assert.equal(needsResolving(substituteVars(driven)), true);
+  const perScene = film(FOUR_RECTS, { spec: { style: 'standard', vars: LOOK }, scene: { style: '{{look}}' } });
+  assert.equal(needsResolving(substituteVars(perScene)), true);
+  const plain = { vars: { look: { type: 'string', default: 'standard' } }, scenes: [{ id: 's', duration: 1, style: '{{look}}', elements: [] }] };
+  assert.equal(needsResolving(substituteVars(plain)), false);
+});
+
+test('the preview server resolves a spec whose style is a var; one with no sketch scene is still served byte for byte', async () => {
+  const dir = project();
+  const pinned = [rect('a', 300), rect('b', 700, { drawAt: 'sentence:3' })];
+  const variants = [film(pinned, { spec: { style: '{{look}}', vars: LOOK } }), film(pinned, { spec: { style: 'standard', vars: LOOK }, scene: { style: '{{look}}' } })];
+  assert.deepEqual(validated(variants[0], dir), [], 'validateSpec already substitutes, so it passes');
+  for (const spec of variants) {
+    const server = await startServer({ specPath: writeFilm(dir, spec), mode: 'preview' });
+    try {
+      const served = await (await fetch(new URL('/spec.json', server.url))).json();
+      assert.deepEqual(served.scenes[0].narration, FIVE);
+      assert.deepEqual(served.scenes[0].elements[1].drawAt, { sentence: 3 });
+    } finally { await server.close(); }
+  }
+  const plainPath = writeFilm(dir, { vars: { look: { type: 'string', default: 'standard' } }, scenes: [{ id: 's', duration: 1, style: '{{look}}', elements: [label('t', 960)] }] }, 'plain-vars.json');
+  const plain = await startServer({ specPath: plainPath, mode: 'preview' });
+  try {
+    assert.equal(await (await fetch(new URL('/spec.json', plain.url))).text(), readFileSync(plainPath, 'utf8'));
+  } finally { await plain.close(); }
+});
+
 test('render: a voiced spec with no root beats is drawn from the resolved spec (the poster differs from the one drawn without the voice)', async (t) => {
   if (!(await requireRender(t, BROWSER_ONLY))) return;
+  await posterDiffers({ size: [640, 360] }, 'the narration reached the page: the pinned box is not drawn yet at 4 s');
+});
+
+test('render: the same when the style is a var (the single render resolves after substitution)', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  await posterDiffers({ size: [640, 360], style: '{{look}}', vars: LOOK }, 'the narration reached the page through a var style');
+});
+
+async function posterDiffers(small, message) {
   // Element "b" is pinned to sentence 3 (6 s). At 4 s a render that heard the narration has not started it; one that did not
   // has drawn it long ago (the pin would be ignored). So the posters differ only if the resolved spec reached the page.
-  const small = { size: [640, 360] };
   const elements = (pin) => [rect('a', 160, { y: 180, width: 120, height: 80 }), rect('b', 480, { y: 180, width: 120, height: 80, ...(pin ? { drawAt: 'sentence:3' } : {}) })];
   const voiced = project();
   const unvoiced = project({ sidecar: null });
@@ -431,8 +588,8 @@ test('render: a voiced spec with no root beats is drawn from the resolved spec (
     assert.equal(r.status, 0, r.stdout + r.stderr);
     return readFileSync(png);
   });
-  assert.ok(!posters[0].equals(posters[1]), 'the narration reached the page: the pinned box is not drawn yet at 4 s');
-});
+  assert.ok(!posters[0].equals(posters[1]), message);
+}
 
 // ---- check.mjs ---------------------------------------------------------------------------------------------------------------
 
@@ -455,6 +612,44 @@ test('check: writing still going at the scene\'s end in a voiced scene reaches u
   const silent = project({ sidecar: null });
   const quiet = verdict(writeFilm(silent, film([textLine('late')], { at: 5, duration: 6 })));
   assert.deepEqual((quiet.warnings ?? []).filter((w) => /still being drawn/.test(w.message)), []);
+});
+
+test('check: a voiced element that starts at or after the scene\'s end is a problem, not an unfinished-writing warning', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  // The track starts at 5 s of a 6 s scene. "a" takes sentences 0 and 1 (from 5 s, stretched: still going when the scene ends);
+  // "b" is pinned to sentence 2 (9.5 s): the scene is over long before it would be drawn.
+  const dir = project();
+  const elements = [textLine('a', 300), textLine('b', 700, { drawAt: 'sentence:2' })];
+  const found = verdict(writeFilm(dir, film(elements, { at: 5, duration: 6 })));
+  const problem = (found.errors ?? []).find((e) => /never seen/.test(e.message));
+  assert.ok(problem, JSON.stringify(found));
+  assert.equal(problem.path, 'scenes[0].elements[1]');
+  assert.match(problem.message, /^text "b" starts drawing at 9\.50s, after scene "s" ends at 6\.00s; it is never seen: /);
+  const warned = (found.warnings ?? []).filter((w) => /still being drawn/.test(w.message));
+  assert.equal(warned.length, 1, JSON.stringify(found.warnings));
+  assert.ok(warned[0].message.includes('text "a"') && !warned[0].message.includes('"b"'), warned[0].message);
+  // the control: a scene long enough for it
+  const roomy = verdict(writeFilm(project(), film(elements, { at: 5, duration: 15 })));
+  assert.deepEqual((roomy.errors ?? []).filter((e) => /never seen/.test(e.message)), []);
+});
+
+test('check: a voiced scene that ends while the hand is still leaving warns; with room for the hand it does not', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  // One sentence of the length that makes the writing end exactly when it does; the scene is as long as the sentence, so the drawing
+  // ends at the scene's end and the 0.65 s the hand needs to leave the board is cut off.
+  const words = 'This is a long line of handwriting, written slowly to the voice, that goes on for quite a while before it ends';
+  const line = textLine('line', 540, { text: words, fontSize: 60, maxWidth: 1700 });
+  const { t0, t1 } = at(plan([line]), 0);
+  const end = t0 + 1.5 * (t1 - t0);
+  const sidecar = JSON.stringify({ sentences: [{ start: 0, end }] });
+  const tight = verdict(writeFilm(project({ raw: sidecar }), film([line], { duration: end })));
+  const warning = (tight.warnings ?? []).find((w) => /hand is still leaving/.test(w.message));
+  assert.ok(warning, JSON.stringify(tight));
+  assert.equal(warning.path, 'scenes[0]');
+  assert.match(warning.message, /^scene "s" ends at \d+\.\d\ds while the hand is still leaving the board: the drawing ends at \d+\.\d\ds and the hand needs 0\.65s more; lengthen the scene to at least \d+\.\ds, or end the narration sooner$/);
+  assert.equal((tight.warnings ?? []).filter((w) => /still being drawn/.test(w.message)).length, 0, 'the writing itself is finished: this is the only warning about the ending');
+  const roomy = verdict(writeFilm(project({ raw: sidecar }), film([line], { duration: end + 1 })));
+  assert.deepEqual((roomy.warnings ?? []).filter((w) => /hand is still leaving/.test(w.message)), [], 'the control: a scene a second longer');
 });
 
 test('check: a voiced drawing that cannot fit its sentence at twice pace is a problem naming the element and the seconds', async (t) => {

@@ -234,7 +234,7 @@ async function plan(opts, state) {
   // A spec that names beats, or has a hand-drawn scene (its voice file gives it narration), is drawn from the very spec that
   // was just checked, not read again from the file (a beats or voice file edited in between would resolve to times nobody
   // validated); any other spec is served as the file, as ever.
-  return prepare(opts, { raw, loaded, dir, served: needsResolving(loaded) ? served : undefined }, state);
+  return prepare(opts, { raw, loaded, dir, served: needsResolving(substituteVars(loaded)) ? served : undefined }, state);
 }
 
 // Every input of one render of `raw` (valid: plan and planBatch checked it). `served`: the spec the page draws in place

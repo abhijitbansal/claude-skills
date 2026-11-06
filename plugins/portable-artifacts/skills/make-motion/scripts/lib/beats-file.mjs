@@ -62,7 +62,8 @@ export function readBeatsFile(src, dir) {
 /**
  * Whether serving or rendering `spec` means resolving it first (resolveSpecBeats changes it): it names a beats file, or it has
  * a hand-drawn scene, whose voice file (beside its audio track, with no root `beats` needed) gives it `narration`. Read
- * from the spec as written; any other spec is served as the file, byte for byte.
+ * from the spec after its vars are substituted (a style or a beats name may be a var), so callers pass substituteVars(spec);
+ * any other spec is served as the file, byte for byte.
  */
 export const needsResolving = (spec) => declaresBeats(spec) || specHasSketch(spec);
 

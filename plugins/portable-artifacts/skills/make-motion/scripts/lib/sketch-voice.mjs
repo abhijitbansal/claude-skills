@@ -5,13 +5,13 @@
 // (beats-file.mjs), the one entry validateSpec, render, check and the preview server share. Node only (it reads files).
 import { readFileSync, statSync } from 'node:fs';
 import { pathJoin } from '../../shared/errors.mjs';
-import { isSketchScene } from '../../template/sketch/style.mjs';
+import { isSketchScene, SENTENCE_REF } from '../../template/sketch/style.mjs';
 import { resolveSpecPath } from './paths.mjs';
-import { sidecarPath } from './voice.mjs'; // voice.mjs loads kokoro only inside a function, so importing it costs nothing
+import { sidecarPath } from './voice-sidecar.mjs'; // a leaf: not voice.mjs, which would pull the spec module and the model code in
 
 export const MAX_SIDECAR_BYTES = 1024 * 1024;
 export const MAX_SENTENCES = 2000;
-const SENTENCE_REF = /^sentence:(\d{1,6})$/;
+export const MAX_SENTENCE_SECONDS = 86400; // a day: no time in a voice file is beyond it
 const SECONDS_DECIMALS = 1e4;
 const NOT_FOUND = /^file not found/;
 
@@ -33,6 +33,9 @@ function problemWith(data, name) {
     if (!isPlain(s)) return `${at} must be an object like { "start": 0, "end": 2.1 }`;
     if (!isNumber(s.start) || s.start < 0) return `${at}.start is ${shown(s.start)}; it must be a number of seconds, 0 or more`;
     if (!isNumber(s.end)) return `${at}.end is ${shown(s.end)}; it must be a number of seconds`;
+    for (const key of ['start', 'end']) {
+      if (s[key] > MAX_SENTENCE_SECONDS) return `${at}.${key} is ${s[key]}; a voice file may say ${MAX_SENTENCE_SECONDS} seconds at most`;
+    }
     if (s.start > s.end) return `${at} ends (${s.end}) before it starts (${s.start})`;
     if (i > 0 && s.start < sentences[i - 1].start) return `${at}.start (${s.start}) comes before sentences[${i - 1}].start (${sentences[i - 1].start}); list the sentences in order`;
   }
@@ -98,7 +101,10 @@ export function voiceSidecars(spec) {
   return tracks.filter((t) => isPlain(t) && t.scene !== undefined && typeof t.src === 'string' && sidecarPath(t.src) !== t.src).map((t) => sidecarPath(t.src));
 }
 
-// The sentence `drawAt` points at, as a number, or undefined when it is no sentence reference.
+const SHOWN_DIGITS = 12;
+
+// The sentence `drawAt` points at, as a number (Infinity for digits beyond a double, which is past any narration), or
+// undefined when it is no sentence reference.
 function sentenceOf(drawAt) {
   if (typeof drawAt === 'string') {
     const match = SENTENCE_REF.exec(drawAt);
@@ -106,6 +112,12 @@ function sentenceOf(drawAt) {
   }
   return isPlain(drawAt) && Object.keys(drawAt).length === 1 && Number.isInteger(drawAt.sentence) && drawAt.sentence >= 0 ? drawAt.sentence : undefined;
 }
+
+// "sentence:<n>" for the messages, a number of any length cut short.
+const refName = (drawAt) => {
+  const n = typeof drawAt === 'string' ? SENTENCE_REF.exec(drawAt)[1] : String(drawAt.sentence);
+  return `sentence:${n.length > SHOWN_DIGITS ? `${n.slice(0, SHOWN_DIGITS)}...` : n}`;
+};
 
 const NEEDS_VOICE = (scene) => `needs a voice track: an audio entry with "scene": "${scene}" whose file has a voice sidecar beside it (node scripts/voice.mjs writes one next to the .wav)`;
 
@@ -119,9 +131,9 @@ function resolveElements(list, at, scene, narration, errors) {
     const sentence = sentenceOf(el.drawAt);
     let out = el;
     if (sentence !== undefined && !narration) {
-      errors.push({ path: pathJoin(here, 'drawAt'), message: `drawAt ${JSON.stringify(el.drawAt)} ${NEEDS_VOICE(scene.id)}` });
+      errors.push({ path: pathJoin(here, 'drawAt'), message: `drawAt "${refName(el.drawAt)}" ${NEEDS_VOICE(scene.id)}` });
     } else if (sentence !== undefined && sentence >= narration.length) {
-      errors.push({ path: pathJoin(here, 'drawAt'), message: `sentence:${sentence} does not exist; the narration of scene "${scene.id}" has ${narration.length} sentence${narration.length === 1 ? '' : 's'} (0 to ${narration.length - 1})` });
+      errors.push({ path: pathJoin(here, 'drawAt'), message: `${refName(el.drawAt)} does not exist; the narration of scene "${scene.id}" has ${narration.length} sentence${narration.length === 1 ? '' : 's'} (0 to ${narration.length - 1})` });
     } else if (typeof el.drawAt === 'string' && sentence !== undefined) {
       out = { ...el, drawAt: { sentence } };
     }
@@ -129,6 +141,23 @@ function resolveElements(list, at, scene, narration, errors) {
     return children === el.children ? out : { ...out, children };
   });
   return next.some((el, i) => el !== list[i]) ? next : list;
+}
+
+// The top-level elements are matched to the sentences in order, so their pins must not go backwards: an error at the drawAt
+// that does, naming both pins. Equal pins are fine (those elements share that sentence onward). A reference already refused
+// (no narration, past its end) is left to resolveElements.
+function checkPinOrder(elements, at, narration, errors) {
+  let last = null;
+  (Array.isArray(elements) ? elements : []).forEach((el, i) => {
+    const sentence = isPlain(el) ? sentenceOf(el.drawAt) : undefined;
+    if (sentence === undefined || !narration || sentence >= narration.length) return;
+    const here = pathJoin(at, i);
+    if (last && sentence < last.sentence) {
+      errors.push({ path: pathJoin(here, 'drawAt'), message: `${refName(el.drawAt)} comes before sentence:${last.sentence}, pinned on ${last.path}; pin the elements in the order of the narration` });
+      return;
+    }
+    last = { sentence, path: here };
+  });
 }
 
 const sameNarration = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -146,6 +175,7 @@ function resolveScene(spec, scene, si, dir, errors) {
   }
   const sketch = isSketchScene(spec, scene);
   const elements = sketch ? resolveElements(scene.elements, pathJoin(base, 'elements'), scene, narration, errors) : scene.elements;
+  if (sketch) checkPinOrder(scene.elements, pathJoin(base, 'elements'), narration, errors);
   const withNarration = narration && !Object.hasOwn(scene, 'narration') ? { ...scene, narration } : scene;
   return elements === scene.elements ? withNarration : { ...withNarration, elements };
 }

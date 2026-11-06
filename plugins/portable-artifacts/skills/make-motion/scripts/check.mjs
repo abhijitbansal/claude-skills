@@ -79,7 +79,7 @@ import { themeData } from './lib/theme.mjs';
 import { isSketchScene, specHasSketch } from '../template/sketch/style.mjs';
 import { planScene, colourOf, THEME_TOKENS } from '../template/sketch/plan.mjs';
 import {
-  CHECKED_TYPES, NO_PASSING_COLOUR, tweenSpans, inTween, auditTimes, backdropColors, contrastFindings, unjudgedContrast, textFloorFindings, readingFloorFindings, deadStretchProblems, unfinishedWriting,
+  CHECKED_TYPES, NO_PASSING_COLOUR, tweenSpans, inTween, auditTimes, backdropColors, contrastFindings, unjudgedContrast, textFloorFindings, readingFloorFindings, deadStretchProblems, unfinishedWriting, neverDrawn, handStillLeaving,
 } from './lib/audits.mjs';
 
 const USAGE = 'node scripts/check.mjs <motion.json> [--json] [--theme <name>]';
@@ -560,8 +560,13 @@ async function inspect(browser, spec, server, prepare, written) {
     unjudged.push(...unjudgedContrast(items, samples));
     problems.push(...safeAreaProblems(items, samples, insets, spec.size), ...overlapProblems(items, samples, spec.size), ...emptyEndProblems(scene, i, items, samples, spec.size), ...wrapProblems(scene, i, samples), ...contrast.problems, ...floor.problems);
     warnings.push(...contrast.warnings, ...floor.warnings, ...nearEdgeWarnings(items, samples, spec.size, blocksOf[i]));
-    if (plans[i]) warnings.push(...unfinishedWriting(scene, i, plans[i], items));
-    if (plans[i]) problems.push(...plans[i].overruns); // a voiced scene's drawing that cannot fit its sentences even at twice pace
+    if (plans[i]) {
+      const unfinished = unfinishedWriting(scene, i, plans[i], items);
+      const never = neverDrawn(scene, i, plans[i], items); // starts at or after the scene's end: a problem, not "still being drawn"
+      warnings.push(...unfinished);
+      problems.push(...never, ...plans[i].overruns); // overruns: a voiced scene's drawing that cannot fit its sentences even at twice pace
+      if (!unfinished.length && !never.length) warnings.push(...handStillLeaving(scene, i, plans[i]));
+    }
     if (zone) problems.push(...captionZoneProblems(items, samples, extra, zone, spec.size));
     if (platform) band.push(...bandWarnings(items, samples, platform, spec.viral.safeZone, spec.size));
   }

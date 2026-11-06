@@ -7,7 +7,7 @@ import { flattenElements } from '../../template/groups.mjs';
 import { BLOCKS, BLOCK_NAMES, blockDef, isBlock } from '../../template/blocks/index.mjs';
 import { canvasSize } from '../../template/formats.mjs';
 import { VIRAL_MODE } from '../../template/viral.mjs';
-import { isSketchScene, specHasSketch, SCRIBBLE_FILL, HAND_SCALE_RANGE, PACE_RANGE } from '../../template/sketch/style.mjs';
+import { isSketchScene, specHasSketch, SCRIBBLE_FILL, HAND_SCALE_RANGE, PACE_RANGE, SENTENCE_REF } from '../../template/sketch/style.mjs';
 import caveat from '../../template/sketch/caveat-metrics.mjs';
 import lucide from '../../template/sketch/lucide.mjs';
 import { planScene } from '../../template/sketch/plan.mjs';
@@ -20,7 +20,6 @@ const STANDARD_HINT = 'put it in a standard scene (omit "style" on the scene, or
 const SET_SKETCH = 'set "style": "sketch" on the scene, or at the root';
 const STILL_VALID = 'opacity, hold, drawAt';
 const ICON_SEARCH = 'node scripts/sketch-icons.mjs search <word>';
-const DRAW_AT = /^sentence:\d+$/;
 const LINE_FIELDS = ['to', 'bow'];
 const ART_BACKGROUND = 'art'; // spec.mjs's ART_BACKGROUND (this module cannot import it: spec.mjs imports this one)
 const ICON_SET = new Set(ICON_NAMES);
@@ -70,7 +69,7 @@ function checkDrawAt(el, base, scene, sketch, errors) {
     if (drawAt < 0 || drawAt >= scene.duration) {
       errors.push({ path: at, message: `drawAt ${drawAt} is outside scene "${scene.id}", which lasts ${scene.duration}s; use 0 or more and less than ${scene.duration}, or "sentence:<n>"` });
     }
-  } else if (!(isSentenceRef(drawAt, scene) || (typeof drawAt === 'string' && DRAW_AT.test(drawAt)))) {
+  } else if (!(isSentenceRef(drawAt, scene) || (typeof drawAt === 'string' && SENTENCE_REF.test(drawAt)))) {
     errors.push({ path: at, message: 'drawAt must be a number of seconds (0 or more) or "sentence:<n>"' });
   }
 }

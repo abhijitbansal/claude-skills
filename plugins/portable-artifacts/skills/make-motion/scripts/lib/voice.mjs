@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UsageError } from './spec.mjs';
 import { doctorCommand, npmInstallKokoro } from './doctor-hint.mjs';
+import { sidecarPath } from './voice-sidecar.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const MODEL_CACHE_DIR = path.join(SKILL_ROOT, '.cache', 'models');
@@ -138,10 +139,9 @@ export function phonemeLines(sentences) {
   return sentences.map((s) => `${field(s.text)}\t${field(s.phonemes)}\n`).join('');
 }
 
-// The sentence-timing sidecar sits beside the wav: voice/intro.wav -> voice/intro.json.
-export function sidecarPath(out) {
-  return out.replace(/\.wav$/i, '.json');
-}
+// The sentence-timing sidecar sits beside the wav: voice/intro.wav -> voice/intro.json (voice-sidecar.mjs, a leaf the voice
+// step imports without loading this module).
+export { sidecarPath };
 
 // Writes a 24 kHz mono wav plus its sentence-timing sidecar, and returns the duration in
 // seconds and the timed sentences. Each chunk is generated on its own so nothing is

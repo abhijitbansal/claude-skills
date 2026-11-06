@@ -326,8 +326,9 @@ function route(ctx, req, res) {
 function beatsResolved(ctx, body) {
   let spec;
   try { spec = JSON.parse(body.toString('utf8')); } catch { return body; }
-  if (!needsResolving(spec)) return body;
-  const { spec: resolved, errors } = resolveSpecBeats(substituteVars(spec), ctx.specDir);
+  const substituted = substituteVars(spec); // asked after the vars: a style or a beats name may be one
+  if (!needsResolving(substituted)) return body;
+  const { spec: resolved, errors } = resolveSpecBeats(substituted, ctx.specDir);
   if (errors) throw new Error(errors[0].message);
   return Buffer.from(JSON.stringify(resolved));
 }

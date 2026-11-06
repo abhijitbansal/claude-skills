@@ -49,7 +49,7 @@ export function naturalSeconds(stroke, { u, pace }) {
  * the natural pace; sentence: the 0-based sentence it is pinned to), `narration` is `[{ start, end }]` in scene seconds.
  * -> [{ start, end, pinned }] one per item. An item without a pin goes with the sentences in order; a pinned one starts a new
  * run at its sentence, so earlier items use only the sentences before it and it and the items after it use the sentences from
- * its own on (until the next pin). A run with as many items as sentences gives item k sentence k; with any other count its
+ * its own on (until the next pin); consecutive pins to the same sentence open one run. A run with as many items as sentences gives item k sentence k; with any other count its
  * items share the run's whole narration in proportion to their weights. A run left with no sentence (a pin that comes before
  * where the items ahead of it must end) gives its items an empty span at the pin, which the schedule then reports as one
  * that cannot be met.
@@ -57,14 +57,17 @@ export function naturalSeconds(stroke, { u, pace }) {
 export function assignWindows(items, narration) {
   const runs = [];
   items.forEach((item, index) => {
-    if (Number.isInteger(item.sentence) || !runs.length) runs.push({ from: item.sentence ?? 0, members: [] });
+    const pin = Number.isInteger(item.sentence);
+    const last = runs.at(-1);
+    // A pin opens a run, unless the run open already began at that very sentence: equal consecutive pins share it.
+    if (!last || (pin && !(last.pinned && last.from === item.sentence))) runs.push({ from: pin ? item.sentence : 0, pinned: pin, members: [] });
     runs.at(-1).members.push(index);
   });
   const windows = new Array(items.length);
   runs.forEach((run, r) => {
     const to = r + 1 < runs.length ? runs[r + 1].from : narration.length;
     const spans = spansOf(run.members.map((i) => items[i].weight), narration, run.from, to);
-    run.members.forEach((i, j) => { windows[i] = { ...spans[j], pinned: j === 0 && Number.isInteger(items[i].sentence) }; });
+    run.members.forEach((i, j) => { windows[i] = { ...spans[j], pinned: Number.isInteger(items[i].sentence) }; });
   });
   return windows;
 }
@@ -93,8 +96,8 @@ function spansOf(weights, narration, from, to) {
  * if it would start sooner, and so does the first of one with a `slot` (its sentence span, { start, end } in scene seconds, see assignWindows)
  * for the slot's start. The strokes of an item with a slot last STRETCH_MAX times their natural length at most, so as to
  * end when the slot does, and at least SQUEEZE_MIN times it, so a slot too short for them at twice pace is not met: the
- * item is reported in `fits`. -> { times: [[{ t0, t1 }, ...], ...] one list per item, drawEnd, moves, fits } (drawEnd is 0 with no
- * strokes). `fits` is `[{ item, needed, available }]`, one per item whose slot is too short even at twice pace: `needed` is
+ * item is reported in `tooShort`. -> { times: [[{ t0, t1 }, ...], ...] one list per item, drawEnd, moves, tooShort } (drawEnd is 0 with no
+ * strokes). `tooShort` is `[{ item, needed, available }]`, one per item whose slot is too short even at twice pace: `needed` is
  * the seconds the slot would have to last from its start, `available` the seconds it lasts. `moves` is where the hand goes
  * between the strokes, as `{ kind, t0, t1, from, to }`: the first is the `enter` from
  * home to the first stroke, each later one a `travel` (none when the hand has not far to go), and the last the `exit`, which
@@ -107,10 +110,10 @@ export function schedule(items, { size, u, pace, startAfter = 0, secondsOf = nat
   let hand = home;
   let drawEnd = 0;
   const moves = [];
-  const fits = [];
+  const tooShort = [];
   const times = items.map((item, index) => {
     const stretch = item.slot ? fitWindow(item, { hand, cursor, u, pace, secondsOf, floor: item.drawAt }) : null;
-    if (stretch && stretch.overrun) fits.push({ item: index, ...stretch.overrun });
+    if (stretch && stretch.overrun) tooShort.push({ item: index, ...stretch.overrun });
     return item.strokes.map((stroke, i) => {
       const first = stroke.points[0];
       const travel = travelSeconds(hand, first, u);
@@ -126,7 +129,7 @@ export function schedule(items, { size, u, pace, startAfter = 0, secondsOf = nat
     });
   });
   if (moves.length || drawEnd > 0) moves.push({ kind: 'exit', t0: drawEnd, t1: drawEnd + HAND_EXIT, from: [...hand], to: [...home] });
-  return { times, drawEnd, moves, fits };
+  return { times, drawEnd, moves, tooShort };
 }
 
 // How much longer (STRETCH_MAX at most) or shorter (SQUEEZE_MIN at least) than its natural length each stroke of `item` lasts

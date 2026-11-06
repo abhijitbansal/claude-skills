@@ -22,6 +22,7 @@
 import { contrastRatio, mixHex } from '../../shared/contrast.mjs';
 import { COLOR_TOKENS } from '../../template/defaults.mjs';
 import { isSketchScene } from '../../template/sketch/style.mjs';
+import { HAND_EXIT } from '../../template/sketch/timing.mjs';
 
 export const CHECKED_TYPES = Object.freeze(['text', 'counter', 'code']); // rendered text: the element types the audits judge
 export const AUDIT_STEP = 0.25; // seconds between the steps every scene is sampled at
@@ -446,9 +447,36 @@ export function deadStretchProblems(spec, steps, itemsOf = [], blocksOf = []) {
  * narration). -> [{ path, message }], empty when everything is drawn in time.
  */
 export function unfinishedWriting(scene, index, plan, items) {
-  const late = items.filter(({ path }) => (plan.elements.get(path)?.t1 ?? 0) > scene.duration + EPSILON);
+  const late = items.filter(({ path }) => {
+    const drawn = plan.elements.get(path);
+    return drawn && drawn.t1 > scene.duration + EPSILON && drawn.t0 < scene.duration - EPSILON; // begun, and not done
+  });
   if (!late.length) return [];
   const named = late.slice(0, MAX_NAMED).map(({ el }) => `${el.type} "${el.id}"`).join(', ') + (late.length > MAX_NAMED ? `, and ${late.length - MAX_NAMED} more` : '');
   const needed = Math.ceil((plan.needs - EPSILON) * 10) / 10;
   return [{ path: `scenes[${index}]`, message: `scene "${scene.id}" ends at ${seconds(scene.duration)} while ${named} ${late.length === 1 ? 'is' : 'are'} still being drawn; the drawing needs ${needed}s: lengthen the scene` }];
+}
+
+/**
+ * Problems for the elements of hand-drawn scene `scene` (number `index`) that start drawing at or after the scene's end, so the
+ * viewer never sees them: an element pinned to a sentence the scene is over before, or a voice track that starts late.
+ * `plan`, `items` as for unfinishedWriting. -> [{ path, message }], one per element.
+ */
+export function neverDrawn(scene, index, plan, items) {
+  return items.flatMap(({ el, path }) => {
+    const drawn = plan.elements.get(path);
+    if (!drawn || !(drawn.t1 > drawn.t0) || drawn.t0 < scene.duration - EPSILON) return [];
+    return [{ path, message: `${el.type} "${el.id}" starts drawing at ${seconds(drawn.t0)}, after scene "${scene.id}" ends at ${seconds(scene.duration)}; it is never seen: lengthen the scene, or pin it to an earlier sentence` }];
+  });
+}
+
+/**
+ * A warning when hand-drawn scene `scene` has narration and ends before the hand has left the board: the last stroke is done
+ * (or the writing would be reported by unfinishedWriting) but the HAND_EXIT the hand needs to move away is cut off, so a hand
+ * is frozen on the last frame. Without narration validation guarantees the room. -> [{ path, message }], empty when it leaves in time.
+ */
+export function handStillLeaving(scene, index, plan) {
+  if (!Array.isArray(scene.narration) || !scene.narration.length || plan.needs <= scene.duration + EPSILON) return [];
+  const needed = Math.ceil((plan.needs - EPSILON) * 10) / 10;
+  return [{ path: `scenes[${index}]`, message: `scene "${scene.id}" ends at ${seconds(scene.duration)} while the hand is still leaving the board: the drawing ends at ${seconds(plan.drawEnd)} and the hand needs ${HAND_EXIT}s more; lengthen the scene to at least ${needed}s, or end the narration sooner` }];
 }
