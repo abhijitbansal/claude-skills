@@ -213,7 +213,7 @@ examples in [`references/examples/`](references/examples/).
 
 Two renders of the same spec and media give identical frames and audio; the MP4 `comment` tag carries the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set.
 
-Limits: up to 50 scenes and 120 s in total, up to 20 audio tracks, 30 cues and 20 captions tracks; fps is 24, 25, 30 or 60; each side
+Limits: up to 50 scenes (no cap on the total length, but render time grows with it: use `--workers` and `--quality draft`), up to 20 audio tracks, 30 cues and 20 captions tracks; fps is 24, 25, 30 or 60; each side
 is 16–3840 px. Frame *i* samples `t = i / fps`, so put a final keyframe at
 least one frame before the scene ends.
 

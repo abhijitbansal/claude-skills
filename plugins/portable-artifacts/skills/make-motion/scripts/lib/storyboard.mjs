@@ -13,7 +13,6 @@ const MAX_SCENE_ID = 40;
 const MAX_SCENES = 50; // the motion spec's own scene limit
 const MIN_SCENE_SECONDS = 0.2;
 const MAX_SCENE_SECONDS = 60;
-const MAX_CLIP_SECONDS = 120;
 const SUM_TOLERANCE = 0.01;
 const MAX_KEY = 80;
 const FALLBACK_KEY = 'storyboard';
@@ -83,8 +82,8 @@ export function checkBrief(brief) {
   }
   if (!isText(brief.title) || brief.title.length > MAX_TITLE) errors.push(`brief.title: must be 1 to ${MAX_TITLE} characters saying what the clip is about`);
   const total = brief.seconds;
-  const totalOk = typeof total === 'number' && Number.isFinite(total) && total > 0 && total <= MAX_CLIP_SECONDS;
-  if (!totalOk) errors.push(`brief.seconds: must be a number above 0 and up to ${MAX_CLIP_SECONDS}, the clip's length (got ${q(total)})`);
+  const totalOk = typeof total === 'number' && Number.isFinite(total) && total > 0;
+  if (!totalOk) errors.push(`brief.seconds: must be a number above 0, the clip's length (got ${q(total)})`);
   if (!Array.isArray(brief.scenes) || brief.scenes.length < 1 || brief.scenes.length > MAX_SCENES) {
     errors.push(`brief.scenes: must be a list of 1 to ${MAX_SCENES} scenes`);
   } else {

@@ -101,9 +101,9 @@ test('field not valid for type / missing required for type', () => {
   assert.ok(errs(s2).includes('scenes[0].elements[0].text: required for type text'));
 });
 
-test('total duration over 120 s rejected', () => {
-  const s = { scenes: [60, 60, 1].map((d, i) => ({ id: `s${i}`, duration: d, elements: [] })) };
-  assert.ok(errs(s).includes('scenes: total duration 121s exceeds the 120s limit'));
+test('total duration over 120 s is valid', () => {
+  const s = { scenes: [50, 50, 50].map((d, i) => ({ id: `s${i}`, duration: d, elements: [] })) };
+  assert.deepEqual(errs(s), []);
 });
 
 test('image src must exist relative to spec dir', () => {

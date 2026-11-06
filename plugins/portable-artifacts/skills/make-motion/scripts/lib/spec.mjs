@@ -37,7 +37,6 @@ import { expandSpec, EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, ARROW_H
 
 export class UsageError extends Error {}
 
-const MAX_TOTAL_SECONDS = 120;
 // A code element's `code`: room for the largest code-diff expansion (about 8,000 characters with its markers and line
 // breaks), and still far more than a canvas shows above the text floor.
 const MAX_CODE_CHARACTERS = 10000;
@@ -1015,10 +1014,6 @@ export function validateSpec(input, { dir = process.cwd(), values = {} } = {}) {
     checkCamera(scene, `scenes[${si}]`, errors);
     scene.elements.forEach((el, ei) => checkElement(el, `scenes[${si}].elements[${ei}]`, scene, dir, errors, spec.fps));
   });
-  const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
-  if (total > MAX_TOTAL_SECONDS) {
-    errors.push({ path: 'scenes', message: `total duration ${total}s exceeds the ${MAX_TOTAL_SECONDS}s limit` });
-  }
   checkVideos(spec, dir, errors);
   checkAudio(spec, dir, errors);
   checkCues(spec, errors);
