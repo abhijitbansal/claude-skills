@@ -212,6 +212,30 @@ def test_cloud_architecture_gallery_files_exist_and_are_linked_without_autoplay(
     assert len(re.findall(r"<video\b", films)) == len(FILMS)  # the preview is an image
 
 
+# Every make-explainer page in the gallery that has a source spec, in each theme copy.
+SIMPLE_EXPLAINERS = (
+    "explainer-page/index.html", "explainer-page/press/index.html", "explainer-page/poster/index.html",
+    "explainer-deck/index.html", "explainer-deck-press/index.html", "explainer-deck-poster/index.html",
+    "features-explainer/index.html", "features-explainer/press/index.html",
+    "features-explainer/poster/index.html",
+    "plan-page/index.html", "plan-page/brief/index.html",
+)
+
+
+def test_each_rebuilt_gallery_explainer_has_the_simple_english_toggle():
+    for name in SIMPLE_EXPLAINERS:
+        built = PAGE.parent / GALLERY_DIR / name
+        assert built.is_file(), name
+        assert "data-simple-toggle" in built.read_text(encoding="utf-8"), name
+
+
+def test_explainers_heading_says_the_pages_have_a_simple_english_toggle():
+    page = _page()
+    start = page.index('id="gallery-explainer"')
+    note = page[start:page.index('<div class="gal-grid">', start)]
+    assert "Simple English" in note, note
+
+
 def test_plan_mode_follows_the_explainers_it_belongs_to():
     page = _page()
     plan = page.index('<h3 class="gal-h3">Plan mode</h3>')

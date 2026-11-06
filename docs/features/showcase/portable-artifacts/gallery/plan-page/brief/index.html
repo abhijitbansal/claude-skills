@@ -160,8 +160,11 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 .kpi { display: flex; flex-direction: column; container-type: inline-size; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; min-width: 0; }
 .kpi dt { color: var(--text-2); font-size: var(--fs-sm); }
 .kpi dd { margin: 0; }
-/* the whole value is one line ("87%", "1,204 ms"). --n (its character count, set by the renderer) gives the
-   size at which it just fills the tile: --kpi-fit = 100cqi / (n * 0.7em per character), never below --fs-md.
+/* the whole value is one line ("87%", "1,204 ms"). --n (a character count, set by the renderer on the section:
+   the longest of its one-line values, so they share one size; a wide or long value sets its own on the value)
+   gives the size at which it just fills the tile: --kpi-fit = 100cqi / (n * 0.7em per character), never below
+   --fs-md. cqi is each tile's own width, so sizes agree across a whole section only while its tracks are equal
+   (no .kpi-wide); in the wrapping rows below they agree within a row.
    The base size is the cap; flavors cap at their own size with the same --kpi-fit. --n counts code points, so
    wide glyphs (CJK, emoji, capitals) can run wider than the 0.7em assumption; scripts/check.mjs reports any
    value that still spills. A value longer than the renderer's limit gets a wide tile (.kpi-wide).
@@ -814,6 +817,132 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 }
 </style>
 
+<style>
+/* Simple English: shipped only on a page that has simple text. A section with `simple` holds its body twice, as
+   div[data-text="normal"] and div[data-text="simple"] (hidden); a heading whose text differs holds two spans the same
+   way. The root attribute data-simple="on" is set before first paint, so a reader who chose simple text never sees
+   the normal text flash. */
+html[data-simple="on"] [data-text="normal"] { display: none; }
+html[data-simple="on"] div[data-text="simple"] { display: block; }
+html[data-simple="on"] span[data-text="simple"] { display: inline; }
+
+/* The toggle is a theme-toggle pill (same surface, line and text tokens, same flavor treatment) that carries a word.
+   Off is a hollow dot and on is a filled one, so the state does not rest on colour. */
+.simple-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px; font: inherit; font-size: var(--fs-sm); font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer; }
+.simple-dot { flex: none; width: 10px; height: 10px; box-sizing: border-box; border: 2px solid currentColor; border-radius: 50%; }
+/* The root attribute is there at first paint, before the script has set aria-pressed, so the look follows both. */
+html[data-simple="on"] .simple-toggle, .simple-toggle[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
+html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-dot { background: currentColor; }
+.mast-text .simple-toggle { margin-top: 16px; }
+/* The deck bar has to hold Outline, the theme toggle, this pill and the counter on one row at 320 px. */
+@media (max-width: 380px) {
+  .deck-controls { gap: 6px; }
+  .deck-controls .simple-toggle { gap: 6px; padding: 0 10px; font-size: var(--fs-xs); }
+}
+
+/* Print shows the normal text only; so does a page with no script (the simple copies carry the hidden attribute). */
+@media print {
+  div[data-text="normal"] { display: block !important; }
+  span[data-text="normal"] { display: inline !important; }
+  [data-text="simple"] { display: none !important; }
+}
+</style>
+<script>
+// Simple English toggle. Shipped in the page head, only on a page that has simple text.
+// A section with `simple` holds its body twice: data-text="normal" and data-text="simple" (hidden). This script
+// reads the saved choice before first paint (no flash), then keeps the two copies and the button in step. Without
+// script the normal text shows. Storage can be missing or refuse writes; the toggle still works for this visit then.
+(function () {
+  if (window.__paSimple) return;
+  window.__paSimple = true;
+  var KEY = 'pa-simple';
+  var root = document.documentElement;
+
+  function saved() {
+    try { return window.localStorage.getItem(KEY) === 'on'; } catch (e) { return false; }
+  }
+  function save(on) {
+    try { window.localStorage.setItem(KEY, on ? 'on' : 'off'); } catch (e) { /* the choice lasts for this visit */ }
+  }
+  function isOn() { return root.getAttribute('data-simple') === 'on'; }
+
+  // A slide is named after its heading (aria-label); data-simple-label is the name for the simple view.
+  function rename(on) {
+    var slides = document.querySelectorAll('[data-simple-label]');
+    for (var i = 0; i < slides.length; i++) {
+      if (!slides[i].hasAttribute('data-normal-label')) slides[i].setAttribute('data-normal-label', slides[i].getAttribute('aria-label'));
+      slides[i].setAttribute('aria-label', slides[i].getAttribute(on ? 'data-simple-label' : 'data-normal-label'));
+    }
+  }
+
+  function paint(on) {
+    var normal = document.querySelectorAll('[data-text="normal"]');
+    var simple = document.querySelectorAll('[data-text="simple"]');
+    var buttons = document.querySelectorAll('[data-simple-toggle]');
+    var i;
+    for (i = 0; i < normal.length; i++) normal[i].hidden = on;
+    for (i = 0; i < simple.length; i++) simple[i].hidden = !on;
+    for (i = 0; i < buttons.length; i++) {
+      buttons[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      buttons[i].setAttribute('title', on ? 'Simple English is on. Switch back to the normal text' : 'Show the simple English text');
+    }
+    rename(on);
+  }
+
+  // A details block the reader opened stays open in the other copy: the two copies match by position.
+  function carryOpen(on) {
+    var normal = document.querySelectorAll('div[data-text="normal"]');
+    for (var i = 0; i < normal.length; i++) {
+      var twin = normal[i].nextElementSibling;
+      if (!twin || twin.getAttribute('data-text') !== 'simple') continue;
+      var from = (on ? normal[i] : twin).querySelectorAll('details');
+      var to = (on ? twin : normal[i]).querySelectorAll('details');
+      for (var j = 0; j < from.length && j < to.length; j++) to[j].open = from[j].open;
+    }
+  }
+
+  function apply(on) {
+    carryOpen(on);
+    if (on) root.setAttribute('data-simple', 'on'); else root.removeAttribute('data-simple');
+    paint(on);
+  }
+
+  // A plan page's Save as HTML serialises a deep clone of the root (plan.js). That copy must not keep this reader's
+  // view, or with script off it would open on simple text: the clone is put back to a fresh page's state here, so
+  // plan.js (inlined in every plan page, simple text or not) needs no change.
+  function freshCopy(copy) {
+    copy.removeAttribute('data-simple');
+    [].forEach.call(copy.querySelectorAll('[data-text="normal"]'), function (el) { el.hidden = false; });
+    [].forEach.call(copy.querySelectorAll('[data-text="simple"]'), function (el) { el.hidden = true; });
+    [].forEach.call(copy.querySelectorAll('[data-simple-toggle]'), function (el) {
+      el.setAttribute('aria-pressed', 'false');
+      el.removeAttribute('title');
+    });
+    [].forEach.call(copy.querySelectorAll('[data-simple-label]'), function (el) {
+      if (el.hasAttribute('data-normal-label')) el.setAttribute('aria-label', el.getAttribute('data-normal-label'));
+      el.removeAttribute('data-normal-label');
+    });
+  }
+  var cloneRoot = root.cloneNode;
+  root.cloneNode = function (deep) {
+    var copy = cloneRoot.call(this, deep);
+    if (deep) freshCopy(copy);
+    return copy;
+  };
+
+  // A saved copy of the page may carry the last reader's state; the stored choice (off when none) wins.
+  if (saved()) root.setAttribute('data-simple', 'on'); else root.removeAttribute('data-simple');
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest('[data-simple-toggle]');
+    if (!b) return;
+    var on = !isOn();
+    save(on);
+    apply(on);
+  });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { paint(isOn()); });
+  else paint(isOn());
+})();
+</script>
 </head>
 <body class="has-toc">
 <a class="skip" href="#content">Skip to content</a>
@@ -825,7 +954,7 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 <div class="m-date"><dt>Date</dt><dd>2026-10-21</dd></div>
 <div class="m-repo"><dt>Repo</dt><dd>claude-skills</dd></div>
 <div class="m-status"><dt>Status</dt><dd>Needs your decision</dd></div>
-</dl>
+</dl><button type="button" class="theme-toggle simple-toggle" data-simple-toggle aria-pressed="false"><span class="simple-dot" aria-hidden="true"></span>Simple English</button>
 </div>
 <button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><span class="pa-ti pa-ti-auto"><svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor"/></svg></span><span class="pa-ti pa-ti-light"><svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></span><span class="pa-ti pa-ti-dark"><svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></span></button>
 <script>
@@ -864,8 +993,8 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 </script>
 <div class="hero-tldr tone-warn" id="built-three-calls-and-two-approvals-left" role="region" aria-labelledby="built-three-calls-and-two-approvals-left-title">
 <p class="sec-eyebrow pa-label">Summary</p>
-<h2 class="hero-tldr-title sr-only" id="built-three-calls-and-two-approvals-left-title">Built; three calls and two approvals left</h2>
-<div class="tldr tone-warn">
+<h2 class="hero-tldr-title sr-only" id="built-three-calls-and-two-approvals-left-title"><span data-text="normal">Built; three calls and two approvals left</span><span data-text="simple" hidden>We built it. Three calls and two approvals remain.</span></h2>
+<div data-text="normal"><div class="tldr tone-warn">
 <p class="tldr-tone"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Caution</span></span></p>
 <p class="lead">All three workstreams are built. Codex is untested and plan mode is in review; the calls below decide what the PR promises.</p>
 <ul class="points">
@@ -873,7 +1002,16 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 <li>Copilot CLI ran the agent file&#39;s model in 19 of 19 logged runs.</li>
 <li>Codex is untested; Claude Code was not measured.</li>
 </ul>
-</div>
+</div></div>
+<div data-text="simple" hidden><div class="tldr tone-warn">
+<p class="tldr-tone"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Caution</span></span></p>
+<p class="lead">We built all three workstreams. We have not tested Codex. Plan mode is in review. The calls below decide what the PR promises.</p>
+<ul class="points">
+<li>A browser check fails when a number splits from its unit.</li>
+<li>Copilot CLI ran the agent file&#39;s model in 19 of 19 logged runs.</li>
+<li>We have not tested Codex. We did not measure Claude Code.</li>
+</ul>
+</div></div>
 </div>
 </header>
 <div class="layout">
@@ -908,10 +1046,10 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 <section class="sec sec-kpis sec-alt" id="one-pr-one-cost-sample-one-untested-host" aria-labelledby="one-pr-one-cost-sample-one-untested-host-title">
 <p class="sec-eyebrow pa-label">Numbers</p>
 <h2 class="sec-title" id="one-pr-one-cost-sample-one-untested-host-title">One PR, one cost sample, one untested host<a class="anchor" href="#one-pr-one-cost-sample-one-untested-host" aria-label="Link to this section: One PR, one cost sample, one untested host">#</a></h2>
-<dl class="kpis">
-<div class="kpi tone-neutral"><dt>Ships as</dt><dd class="kpi-value" style="--n: 4">1 PR</dd><dd class="kpi-note">one branch, three workstreams</dd></div>
-<div class="kpi tone-neutral"><dt>Cost</dt><dd class="kpi-value" style="--n: 5">$0.19</dd><dd class="kpi-note">one trial; the hand-off failed and the main model finished</dd></div>
-<div class="kpi tone-warn"><dt>Risk</dt><dd class="kpi-value" style="--n: 6">Medium</dd><dd class="kpi-delta"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Caution</span></span></dd><dd class="kpi-note">Codex files ship untested</dd></div>
+<dl class="kpis" style="--n: 6">
+<div class="kpi tone-neutral"><dt>Ships as</dt><dd class="kpi-value">1 PR</dd><dd class="kpi-note">one branch, three workstreams</dd></div>
+<div class="kpi tone-neutral"><dt>Cost</dt><dd class="kpi-value">$0.19</dd><dd class="kpi-note">one trial; the hand-off failed and the main model finished</dd></div>
+<div class="kpi tone-warn"><dt>Risk</dt><dd class="kpi-value">Medium</dd><dd class="kpi-delta"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Caution</span></span></dd><dd class="kpi-note">Codex files ship untested</dd></div>
 </dl>
 </section>
 <section class="sec sec-decision" id="routing" aria-labelledby="routing-title">
@@ -1077,8 +1215,8 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 </section>
 <section class="sec sec-text" id="three-goals-and-what-the-pr-leaves-alone" aria-labelledby="three-goals-and-what-the-pr-leaves-alone-title">
 <p class="sec-eyebrow pa-label">Scope</p>
-<h2 class="sec-title" id="three-goals-and-what-the-pr-leaves-alone-title">Three goals, and what the PR leaves alone<a class="anchor" href="#three-goals-and-what-the-pr-leaves-alone" aria-label="Link to this section: Three goals, and what the PR leaves alone">#</a></h2>
-<div class="prose">
+<h2 class="sec-title" id="three-goals-and-what-the-pr-leaves-alone-title"><span data-text="normal">Three goals, and what the PR leaves alone</span><span data-text="simple" hidden>Three goals, and what the PR does not touch</span><a class="anchor" href="#three-goals-and-what-the-pr-leaves-alone" aria-label="Link to this section: Three goals, and what the PR leaves alone">#</a></h2>
+<div data-text="normal"><div class="prose">
 <p>Goals:</p>
 <ul>
 <li>No number, percentage or number-plus-unit token splits across two lines.</li>
@@ -1091,7 +1229,21 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 <li>Guaranteeing the hand-off: no host lets a skill force another agent.</li>
 <li>A save server or any new npm dependency.</li>
 </ul>
-</div>
+</div></div>
+<div data-text="simple" hidden><div class="prose">
+<p>Goals:</p>
+<ul>
+<li>No number, percentage or number-plus-unit token splits across two lines.</li>
+<li>Render skills can run on a cheap model in Copilot and Codex, not only in Claude Code.</li>
+<li>A plan page that a reviewer answers in place. The agent can check the answers.</li>
+</ul>
+<p>Non-goals:</p>
+<ul>
+<li>Reflowing ordinary prose or changing stored spec text.</li>
+<li>Guaranteeing the hand-off. No host lets a skill force another agent.</li>
+<li>A save server or any new npm dependency.</li>
+</ul>
+</div></div>
 </section>
 <section class="sec sec-diagram" id="out-as-a-page-back-as-a-file" aria-labelledby="out-as-a-page-back-as-a-file-title">
 <p class="sec-eyebrow pa-label">Answer loop</p>
@@ -1146,8 +1298,8 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 </section>
 <section class="sec sec-steps" id="two-phases-done-plan-mode-in-review" aria-labelledby="two-phases-done-plan-mode-in-review-title">
 <p class="sec-eyebrow pa-label">Phases</p>
-<h2 class="sec-title" id="two-phases-done-plan-mode-in-review-title">Two phases done, plan mode in review<a class="anchor" href="#two-phases-done-plan-mode-in-review" aria-label="Link to this section: Two phases done, plan mode in review">#</a></h2>
-<ol class="steps">
+<h2 class="sec-title" id="two-phases-done-plan-mode-in-review-title"><span data-text="normal">Two phases done, plan mode in review</span><span data-text="simple" hidden>We finished two phases. Plan mode is in review.</span><a class="anchor" href="#two-phases-done-plan-mode-in-review" aria-label="Link to this section: Two phases done, plan mode in review">#</a></h2>
+<div data-text="normal"><ol class="steps">
 <li class="step">
 <div class="step-head"><strong class="step-title">Numbers stay on one line</strong><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg><span>Done</span></span></div>
 <p>CSS and a build step bind tokens; check.mjs fails on a split token or a spilled KPI.</p>
@@ -1160,12 +1312,26 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 <div class="step-head"><strong class="step-title">Plan mode</strong><span class="chip tone-accent"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none"/></svg><span>In progress</span></span></div>
 <p>Five section types, two themes, the answer runtime, answers.mjs and this example.</p>
 </li>
-</ol>
+</ol></div>
+<div data-text="simple" hidden><ol class="steps">
+<li class="step">
+<div class="step-head"><strong class="step-title">Numbers stay on one line</strong><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg><span>Done</span></span></div>
+<p>CSS and a build step keep each number token together. check.mjs fails on a split token or a spilled KPI.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Cheap model outside Claude Code</strong><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg><span>Done</span></span></div>
+<p>This phase adds agent files for Copilot and Codex, an installer, a doctor check and the hand-off line. We have not tested Codex.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Plan mode</strong><span class="chip tone-accent"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none"/></svg><span>In progress</span></span></div>
+<p>This phase adds five section types, two themes, the answer runtime, answers.mjs and this example.</p>
+</li>
+</ol></div>
 </section>
 <section class="sec sec-details" id="four-risks-each-with-a-guard" aria-labelledby="four-risks-each-with-a-guard-title">
 <p class="sec-eyebrow pa-label">Risks</p>
-<h2 class="sec-title" id="four-risks-each-with-a-guard-title">Four risks, each with a guard<a class="anchor" href="#four-risks-each-with-a-guard" aria-label="Link to this section: Four risks, each with a guard">#</a></h2>
-<details class="det">
+<h2 class="sec-title" id="four-risks-each-with-a-guard-title"><span data-text="normal">Four risks, each with a guard</span><span data-text="simple" hidden>Four risks, and a guard for each</span><a class="anchor" href="#four-risks-each-with-a-guard" aria-label="Link to this section: Four risks, each with a guard">#</a></h2>
+<div data-text="normal"><details class="det">
 <summary>What could still go wrong</summary>
 <div class="det-body prose">
 <ul>
@@ -1175,7 +1341,18 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 <li><strong>Hostile reviewer text.</strong> The summary quotes it as data under its own heading and escapes hidden characters.</li>
 </ul>
 </div>
-</details>
+</details></div>
+<div data-text="simple" hidden><details class="det">
+<summary>What could still go wrong</summary>
+<div class="det-body prose">
+<ul>
+<li><strong>The hand-off agent fails.</strong> One Copilot trial gave the agent no file access. The main agent finished the work itself.</li>
+<li><strong>Codex rejects the agent file.</strong> The file ships untested, and the docs say so.</li>
+<li><strong>Stale answers.</strong> If you edit a plan after you export it, its hash changes. Then answers.mjs refuses the file.</li>
+<li><strong>Hostile reviewer text.</strong> The summary quotes it as data under its own heading. It also escapes hidden characters.</li>
+</ul>
+</div>
+</details></div>
 </section>
 <section class="sec sec-verdict" id="verdict" aria-labelledby="verdict-title">
 <p class="sec-eyebrow pa-label">Your verdict</p>
@@ -2288,6 +2465,9 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
           s.setAttribute('aria-hidden', 'true');
           var copy = icon.cloneNode(true);
           copy.removeAttribute('transform');
+          // A cloud icon carries gradient and mask ids; the copy drops them (its url(#id) still finds the originals) so the page keeps one of each.
+          var withId = copy.querySelectorAll('[id]');
+          for (var i = 0; i < withId.length; i++) withId[i].removeAttribute('id');
           s.appendChild(copy);
           glyph.appendChild(s);
         }

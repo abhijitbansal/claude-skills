@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-flavor="dusk">
+<html lang="en" data-flavor="dusk" data-theme-name="dusk">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;unsafe-inline&#39;; style-src &#39;unsafe-inline&#39;; img-src data: blob:; font-src data:; media-src &#39;self&#39; file: blob:">
@@ -159,10 +159,30 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 /* kpis */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); align-items: start; gap: 12px; margin: 0; }
 /* the value leads each tile (visual order only), so values line up however long the labels are */
-.kpi { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; min-width: 0; }
+/* the tile is a size container so the value can be sized from the tile's width (cqi) and never spills */
+.kpi { display: flex; flex-direction: column; container-type: inline-size; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; min-width: 0; }
 .kpi dt { color: var(--text-2); font-size: var(--fs-sm); }
 .kpi dd { margin: 0; }
-.kpi-value { order: -1; margin-bottom: 6px; font: 600 var(--fs-xl)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+/* the whole value is one line ("87%", "1,204 ms"). --n (a character count, set by the renderer on the section:
+   the longest of its one-line values, so they share one size; a wide or long value sets its own on the value)
+   gives the size at which it just fills the tile: --kpi-fit = 100cqi / (n * 0.7em per character), never below
+   --fs-md. cqi is each tile's own width, so sizes agree across a whole section only while its tracks are equal
+   (no .kpi-wide); in the wrapping rows below they agree within a row.
+   The base size is the cap; flavors cap at their own size with the same --kpi-fit. --n counts code points, so
+   wide glyphs (CJK, emoji, capitals) can run wider than the 0.7em assumption; scripts/check.mjs reports any
+   value that still spills. A value longer than the renderer's limit gets a wide tile (.kpi-wide).
+   Alone in the grid a wide tile takes the full row. A section that holds one switches from the equal-track
+   grid to wrapping flex rows whose tiles grow to fill the row, so a wide tile never leaves a hole beside
+   short ones; the grid-column rule is the fallback where :has() is missing. */
+.kpi-wide { grid-column: 1 / -1; }
+.kpis:has(.kpi-wide) { display: flex; flex-wrap: wrap; }
+.kpis:has(.kpi-wide) > .kpi { flex: 1 1 9.5rem; }
+.kpis:has(.kpi-wide) > .kpi-wide { flex: 2 1 17rem; }
+/* A value too long for even the narrowest wide tile at --fs-md (.kpi-long, KPI_LONG_CHARS in
+   scripts/lib/render/kpis.mjs) cannot be one line: it wraps inside its tile at the same size, and may break
+   anywhere (an unbroken string, a long identifier), instead of widening the tile and the page. */
+.kpi-long .kpi-value { white-space: normal; overflow-wrap: anywhere; }
+.kpi-value { --kpi-fit: max(var(--fs-md), calc(100cqi / (var(--n, 8) * 0.7))); order: -1; margin-bottom: 6px; font: 600 var(--fs-xl)/var(--lh-head) var(--font-display); font-size: min(var(--fs-xl), var(--kpi-fit)); letter-spacing: var(--track-display); font-variant-numeric: tabular-nums; white-space: nowrap; overflow-wrap: break-word; }
 .kpi-delta { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--tc, var(--text-2)); }
 .kpi-note { margin-top: 6px; color: var(--text-3); font-size: var(--fs-xs); }
 
@@ -192,6 +212,7 @@ tbody tr:last-child > * { border-bottom: 0; }
 thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); color: var(--text-3); font-weight: 600; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
 tbody th { font-weight: 600; }
 .a-r { text-align: right; }
+.nw { white-space: nowrap; }
 .a-c { text-align: center; }
 @media (max-width: 640px) {
   .risks { max-height: none; overflow: visible; border: 0; background: none; }
@@ -273,9 +294,9 @@ tbody th { font-weight: 600; }
 .cl-context { margin: 0 0 20px; max-width: none; }
 .cl-bar { position: sticky; top: 0; z-index: 3; margin: 0 0 18px; padding: 10px 0 12px; background: var(--page); border-bottom: 1px solid var(--line); }
 .cl-bar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-height: 30px; }
-.cl-count { font-size: var(--fs-base); font-variant-numeric: tabular-nums; }
+.cl-count { font-size: var(--fs-base); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cl-count strong { font-weight: 600; }
-.cl-pct { color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.cl-pct { color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cl-reset { margin-left: auto; }
 .cl-reset[aria-disabled="true"] { opacity: 0.55; cursor: default; }
 .cl-reset[aria-disabled="true"]:hover { color: var(--text-2); }
@@ -289,7 +310,7 @@ tbody th { font-weight: 600; }
 .cl-group { margin: 0 0 16px; padding: 12px 16px 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .cl-group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
 .cl-group-head h3 { margin: 0; font-size: var(--fs-base); font-weight: 600; overflow-wrap: anywhere; }
-.cl-tally { flex: none; color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.cl-tally { flex: none; color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .is-complete .cl-tally { color: var(--good); font-weight: 600; }
 .cl-items { list-style: none; margin: 0; padding: 0; }
 .cl-item + .cl-item { border-top: 1px solid var(--line); }
@@ -531,8 +552,9 @@ tbody th { font-weight: 600; }
   gap: 10px 16px;
   align-items: start;
 }
-/* The slot is the card. Narrower than the diagram at its floor scale, it scrolls sideways inside itself. */
-.dg-slot { grid-column: 1 / -1; grid-row: 1; width: min(100%, var(--dg-card)); margin-inline: auto; overflow-x: auto; overflow-y: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+/* The slot is the card. Narrower than the diagram at its floor scale, it scrolls sideways inside itself. Its 1px
+   border sits outside the card width (box-sizing is border-box), so a diagram at its floor scale fits exactly. */
+.dg-slot { grid-column: 1 / -1; grid-row: 1; width: min(100%, calc(var(--dg-card) + 2px)); margin-inline: auto; overflow-x: auto; overflow-y: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
 .sec-alt .dg-slot { background: var(--page); }
 .dg-stage { position: relative; width: max(100%, var(--dg-floor-w)); aspect-ratio: var(--dg-pw) / var(--dg-ph); overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: pan-x pan-y pinch-zoom; }
 .dg-stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -554,6 +576,18 @@ tbody th { font-weight: 600; }
 
 /* the overlay's chrome: the same hooks as make-diagram's own page, styled here under .dg-overlay */
 .dg-top .btn, .dg-transport .btn { padding: 4px 14px; font-size: var(--fs-sm); }
+/* the play button is an icon (a 40 px hit area); its svg paints in currentColor */
+.dg-transport .dg-play { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; padding: 0; }
+.dg-play .pa-playicon { display: inline-flex; }
+.dg-play .pa-playicon svg { display: block; }
+/* the hold ring (make-diagram's transport.js): decorative and absolutely placed, so it never moves a control; Next reserves a slot on its right, in Play it circles the icon */
+.dg-transport [data-pa-next] { position: relative; padding-right: 32px; }
+.dg-transport .pa-ring { position: absolute; width: 14px; height: 14px; pointer-events: none; }
+.dg-transport [data-pa-next] > .pa-ring { right: 10px; top: 50%; margin-top: -7px; }
+.dg-transport .dg-play > .pa-ring { inset: 2px; width: auto; height: auto; }
+.dg-transport .pa-ring svg { display: block; width: 100%; height: 100%; }
+.dg-transport .pa-ring-track { opacity: .25; }
+.dg-transport .pa-ring-arc { stroke: var(--accent); }
 .dg-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .dg-modes { display: inline-flex; gap: 4px; }
 .dg-overlay .btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
@@ -720,8 +754,8 @@ html[data-flavor] .theme-toggle { background: var(--surface); }
   html[data-flavor] .hero > .theme-toggle { grid-column: 3; grid-row: 1; }
 }
 
-/* cards sit above the film grain (z 60) so their text reads at its token ratio; the verdict card: a solid fill drawn on a pseudo-element, so the text never moves (dusk tilts only the fill) */
-html[data-flavor] .hero-tldr { grid-column: 1 / -1; position: relative; z-index: 61; isolation: isolate; margin: var(--sp-7) 0 0; max-width: none; padding: var(--sp-6) var(--sp-6); background: none; border: 0; border-radius: 0; color: var(--card-fg); }
+/* the verdict card: a solid fill drawn on a pseudo-element, so the text never moves (dusk tilts only the fill) */
+html[data-flavor] .hero-tldr { grid-column: 1 / -1; position: relative; isolation: isolate; margin: var(--sp-7) 0 0; max-width: none; padding: var(--sp-6) var(--sp-6); background: none; border: 0; border-radius: 0; color: var(--card-fg); }
 html[data-flavor] .hero-tldr::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--card-bg); border-radius: var(--r-card); }
 :root[data-flavor="dusk"] .hero-tldr::before { border-radius: var(--r-card) var(--r-card) var(--r-card) 4px; transform: rotate(-1.1deg); box-shadow: 8px 10px 0 var(--text); }
 :root[data-flavor="press"] .hero-tldr::before { box-shadow: 6px 6px 0 var(--accent); }
@@ -744,8 +778,8 @@ html[data-flavor] .hero-tldr .points { padding-left: 1.1em; }
 html[data-flavor] .layout { padding-top: var(--sp-6); }
 html[data-flavor] .sections { counter-reset: sec; }
 html[data-flavor] .sec { position: relative; isolation: isolate; }
-/* a section's own stacking context would pin its step markers under the grain; lift the sections that have them */
-html[data-flavor] .sec:has(.step) { z-index: 61; }
+/* isolation would trap make-scene's full-screen fallback (.sc-fill, fixed) under the later sections: the section carrying it rejoins the page's stack, on top */
+html[data-flavor] .sec:has(.pa-scene.sc-fill) { isolation: auto; z-index: 2147483000; }
 html[data-flavor] .sec:has(> .sec-title) { counter-increment: sec; }
 html[data-flavor] .sec + .sec { margin-top: var(--sp-8); }
 html[data-flavor] .sec-title { max-width: 22em; font-size: clamp(28px, 1.2vw + 20px, 40px); line-height: 1.02; font-weight: var(--head-weight); letter-spacing: var(--head-track); text-transform: var(--head-case); }
@@ -785,8 +819,8 @@ html[data-flavor] .sec:has(> .sec-title)::before { content: counter(sec, decimal
 html[data-flavor] .kpis { gap: var(--sp-5); grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
 :root[data-flavor="dusk"] .kpis { gap: var(--sp-3); }
 html[data-flavor] .kpi { background: none; border: 0; border-top: var(--rule-w) solid var(--text); border-radius: 0; padding: var(--sp-3) 0 0; }
-html[data-flavor] .kpi-value { margin-bottom: var(--sp-2); font-size: clamp(2.6rem, 1.6rem + 2.2vw, 4rem); line-height: 0.92; font-weight: var(--head-weight); letter-spacing: -0.04em; }
-:root[data-flavor="poster"] .kpi-value { letter-spacing: 0; font-size: clamp(3rem, 2rem + 2.6vw, 4.8rem); }
+html[data-flavor] .kpi-value { margin-bottom: var(--sp-2); font-size: min(clamp(2.6rem, 1.6rem + 2.2vw, 4rem), var(--kpi-fit)); line-height: 0.92; font-weight: var(--head-weight); letter-spacing: -0.04em; }
+:root[data-flavor="poster"] .kpi-value { letter-spacing: 0; font-size: min(clamp(3rem, 2rem + 2.6vw, 4.8rem), var(--kpi-fit)); }
 html[data-flavor] .kpi:first-child .kpi-value { color: var(--accent); }
 html[data-flavor] .kpi dt { font-family: var(--mono); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.08em; }
 :root[data-flavor="dusk"] .kpi { border: 0; border-radius: var(--r-card); padding: var(--sp-5); background: var(--surface); }
@@ -817,7 +851,7 @@ html[data-flavor] .verdict { margin-top: var(--sp-5); }
 
 /* ---- steps and timeline ----------------------------------------------------------------------------- */
 html[data-flavor] .step { padding-left: 56px; padding-bottom: var(--sp-5); }
-html[data-flavor] .step::before { z-index: 61; width: 38px; height: 38px; border: 0; font-family: var(--font-display); font-weight: var(--head-weight); font-size: var(--fs-md); background: var(--card-bg); color: var(--card-fg); }
+html[data-flavor] .step::before { width: 38px; height: 38px; border: 0; font-family: var(--font-display); font-weight: var(--head-weight); font-size: var(--fs-md); background: var(--card-bg); color: var(--card-fg); }
 :root[data-flavor="dusk"] .step::before { border-radius: 50% 50% 50% 6px; }
 :root[data-flavor="press"] .step::before { background: none; color: var(--accent); font-size: var(--fs-xl); border-radius: 0; place-items: start; }
 :root[data-flavor="poster"] .step::before { border-radius: 0; }
@@ -919,6 +953,132 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
   html[data-flavor] .sec:has(> .sec-title)::before { -webkit-text-stroke: 0; color: var(--text-3); }
 }
 </style>
+<style>
+/* Simple English: shipped only on a page that has simple text. A section with `simple` holds its body twice, as
+   div[data-text="normal"] and div[data-text="simple"] (hidden); a heading whose text differs holds two spans the same
+   way. The root attribute data-simple="on" is set before first paint, so a reader who chose simple text never sees
+   the normal text flash. */
+html[data-simple="on"] [data-text="normal"] { display: none; }
+html[data-simple="on"] div[data-text="simple"] { display: block; }
+html[data-simple="on"] span[data-text="simple"] { display: inline; }
+
+/* The toggle is a theme-toggle pill (same surface, line and text tokens, same flavor treatment) that carries a word.
+   Off is a hollow dot and on is a filled one, so the state does not rest on colour. */
+.simple-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px; font: inherit; font-size: var(--fs-sm); font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer; }
+.simple-dot { flex: none; width: 10px; height: 10px; box-sizing: border-box; border: 2px solid currentColor; border-radius: 50%; }
+/* The root attribute is there at first paint, before the script has set aria-pressed, so the look follows both. */
+html[data-simple="on"] .simple-toggle, .simple-toggle[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
+html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-dot { background: currentColor; }
+.mast-text .simple-toggle { margin-top: 16px; }
+/* The deck bar has to hold Outline, the theme toggle, this pill and the counter on one row at 320 px. */
+@media (max-width: 380px) {
+  .deck-controls { gap: 6px; }
+  .deck-controls .simple-toggle { gap: 6px; padding: 0 10px; font-size: var(--fs-xs); }
+}
+
+/* Print shows the normal text only; so does a page with no script (the simple copies carry the hidden attribute). */
+@media print {
+  div[data-text="normal"] { display: block !important; }
+  span[data-text="normal"] { display: inline !important; }
+  [data-text="simple"] { display: none !important; }
+}
+</style>
+<script>
+// Simple English toggle. Shipped in the page head, only on a page that has simple text.
+// A section with `simple` holds its body twice: data-text="normal" and data-text="simple" (hidden). This script
+// reads the saved choice before first paint (no flash), then keeps the two copies and the button in step. Without
+// script the normal text shows. Storage can be missing or refuse writes; the toggle still works for this visit then.
+(function () {
+  if (window.__paSimple) return;
+  window.__paSimple = true;
+  var KEY = 'pa-simple';
+  var root = document.documentElement;
+
+  function saved() {
+    try { return window.localStorage.getItem(KEY) === 'on'; } catch (e) { return false; }
+  }
+  function save(on) {
+    try { window.localStorage.setItem(KEY, on ? 'on' : 'off'); } catch (e) { /* the choice lasts for this visit */ }
+  }
+  function isOn() { return root.getAttribute('data-simple') === 'on'; }
+
+  // A slide is named after its heading (aria-label); data-simple-label is the name for the simple view.
+  function rename(on) {
+    var slides = document.querySelectorAll('[data-simple-label]');
+    for (var i = 0; i < slides.length; i++) {
+      if (!slides[i].hasAttribute('data-normal-label')) slides[i].setAttribute('data-normal-label', slides[i].getAttribute('aria-label'));
+      slides[i].setAttribute('aria-label', slides[i].getAttribute(on ? 'data-simple-label' : 'data-normal-label'));
+    }
+  }
+
+  function paint(on) {
+    var normal = document.querySelectorAll('[data-text="normal"]');
+    var simple = document.querySelectorAll('[data-text="simple"]');
+    var buttons = document.querySelectorAll('[data-simple-toggle]');
+    var i;
+    for (i = 0; i < normal.length; i++) normal[i].hidden = on;
+    for (i = 0; i < simple.length; i++) simple[i].hidden = !on;
+    for (i = 0; i < buttons.length; i++) {
+      buttons[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      buttons[i].setAttribute('title', on ? 'Simple English is on. Switch back to the normal text' : 'Show the simple English text');
+    }
+    rename(on);
+  }
+
+  // A details block the reader opened stays open in the other copy: the two copies match by position.
+  function carryOpen(on) {
+    var normal = document.querySelectorAll('div[data-text="normal"]');
+    for (var i = 0; i < normal.length; i++) {
+      var twin = normal[i].nextElementSibling;
+      if (!twin || twin.getAttribute('data-text') !== 'simple') continue;
+      var from = (on ? normal[i] : twin).querySelectorAll('details');
+      var to = (on ? twin : normal[i]).querySelectorAll('details');
+      for (var j = 0; j < from.length && j < to.length; j++) to[j].open = from[j].open;
+    }
+  }
+
+  function apply(on) {
+    carryOpen(on);
+    if (on) root.setAttribute('data-simple', 'on'); else root.removeAttribute('data-simple');
+    paint(on);
+  }
+
+  // A plan page's Save as HTML serialises a deep clone of the root (plan.js). That copy must not keep this reader's
+  // view, or with script off it would open on simple text: the clone is put back to a fresh page's state here, so
+  // plan.js (inlined in every plan page, simple text or not) needs no change.
+  function freshCopy(copy) {
+    copy.removeAttribute('data-simple');
+    [].forEach.call(copy.querySelectorAll('[data-text="normal"]'), function (el) { el.hidden = false; });
+    [].forEach.call(copy.querySelectorAll('[data-text="simple"]'), function (el) { el.hidden = true; });
+    [].forEach.call(copy.querySelectorAll('[data-simple-toggle]'), function (el) {
+      el.setAttribute('aria-pressed', 'false');
+      el.removeAttribute('title');
+    });
+    [].forEach.call(copy.querySelectorAll('[data-simple-label]'), function (el) {
+      if (el.hasAttribute('data-normal-label')) el.setAttribute('aria-label', el.getAttribute('data-normal-label'));
+      el.removeAttribute('data-normal-label');
+    });
+  }
+  var cloneRoot = root.cloneNode;
+  root.cloneNode = function (deep) {
+    var copy = cloneRoot.call(this, deep);
+    if (deep) freshCopy(copy);
+    return copy;
+  };
+
+  // A saved copy of the page may carry the last reader's state; the stored choice (off when none) wins.
+  if (saved()) root.setAttribute('data-simple', 'on'); else root.removeAttribute('data-simple');
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest('[data-simple-toggle]');
+    if (!b) return;
+    var on = !isOn();
+    save(on);
+    apply(on);
+  });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { paint(isOn()); });
+  else paint(isOn());
+})();
+</script>
 </head>
 <body class="has-toc">
 <a class="skip" href="#content">Skip to content</a>
@@ -930,7 +1090,7 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="m-branch"><dt>Branch</dt><dd>feat/visual-artifacts</dd></div>
 <div class="m-repo"><dt>Repo</dt><dd>claude-skills</dd></div>
 <div class="m-status"><dt>Status</dt><dd>PR #38</dd></div>
-</dl>
+</dl><button type="button" class="theme-toggle simple-toggle" data-simple-toggle aria-pressed="false"><span class="simple-dot" aria-hidden="true"></span>Simple English</button>
 </div>
 <button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><span class="pa-ti pa-ti-auto"><svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor"/></svg></span><span class="pa-ti pa-ti-light"><svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></span><span class="pa-ti pa-ti-dark"><svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></span></button>
 <script>
@@ -969,15 +1129,23 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 </script>
 <div class="hero-art" aria-hidden="true"><svg class="art-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false" data-art="dusk" style="isolation:isolate"><defs><linearGradient id="a1qmtfa5-sky" x1="0" y1="0" x2=".35" y2="1"><stop offset="0" stop-color="#fbeee2"/><stop offset="1" stop-color="#fdd6ba"/></linearGradient><radialGradient id="a1qmtfa5-h0"><stop offset="0" stop-color="#17a487" stop-opacity="0.36"/><stop offset=".55" stop-color="#17a487" stop-opacity="0.16"/><stop offset="1" stop-color="#17a487" stop-opacity="0"/></radialGradient><radialGradient id="a1qmtfa5-h1"><stop offset="0" stop-color="#d6407f" stop-opacity="0.36"/><stop offset=".55" stop-color="#d6407f" stop-opacity="0.16"/><stop offset="1" stop-color="#d6407f" stop-opacity="0"/></radialGradient><radialGradient id="a1qmtfa5-h2"><stop offset="0" stop-color="#ffb88a" stop-opacity="0.44"/><stop offset=".55" stop-color="#ffb88a" stop-opacity="0.2"/><stop offset="1" stop-color="#ffb88a" stop-opacity="0"/></radialGradient><linearGradient id="a1qmtfa5-o0" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e8553a"/><stop offset="1" stop-color="#fde0c8"/></linearGradient><linearGradient id="a1qmtfa5-o1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e8553a"/><stop offset="1" stop-color="#fde0c8"/></linearGradient><linearGradient id="a1qmtfa5-o2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d6407f"/><stop offset="1" stop-color="#e0a100"/></linearGradient><linearGradient id="a1qmtfa5-o3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb88a"/><stop offset="1" stop-color="#8a4fc0"/></linearGradient><filter id="a1qmtfa5-grain" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="791" stitchTiles="stitch"/><feColorMatrix values="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1"/></filter></defs><rect width="1280" height="720" fill="url(#a1qmtfa5-sky)"/><ellipse cx="825" cy="249" rx="737" ry="531" fill="url(#a1qmtfa5-h0)"/><ellipse cx="85" cy="277" rx="526" ry="375" fill="url(#a1qmtfa5-h1)"/><ellipse cx="520" cy="276" rx="473" ry="420" fill="url(#a1qmtfa5-h2)"/><circle cx="851" cy="381" r="257" fill="url(#a1qmtfa5-o0)" opacity="1"/><circle cx="1178" cy="561" r="114" fill="url(#a1qmtfa5-o1)" opacity=".85" style="mix-blend-mode:multiply"/><circle cx="603" cy="62" r="76" fill="url(#a1qmtfa5-o2)" opacity=".85" style="mix-blend-mode:multiply"/><circle cx="1350" cy="272" r="107" fill="url(#a1qmtfa5-o3)" opacity=".85" style="mix-blend-mode:multiply"/><circle cx="1047" cy="495" r="291" fill="none" stroke="#2b1936" stroke-width="1.5" opacity=".35"/><circle cx="811" cy="243" r="284" fill="none" stroke="#2b1936" stroke-width="1.5" opacity=".35"/><rect width="1280" height="720" filter="url(#a1qmtfa5-grain)" opacity="0.35" style="mix-blend-mode:soft-light"/></svg><svg class="art-dark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false" data-art="dusk" style="isolation:isolate"><defs><linearGradient id="a4vdut7-sky" x1="0" y1="0" x2=".35" y2="1"><stop offset="0" stop-color="#17102a"/><stop offset="1" stop-color="#3e2356"/></linearGradient><radialGradient id="a4vdut7-h0"><stop offset="0" stop-color="#7fe6c6" stop-opacity="0.36"/><stop offset=".55" stop-color="#7fe6c6" stop-opacity="0.16"/><stop offset="1" stop-color="#7fe6c6" stop-opacity="0"/></radialGradient><radialGradient id="a4vdut7-h1"><stop offset="0" stop-color="#f56fa0" stop-opacity="0.36"/><stop offset=".55" stop-color="#f56fa0" stop-opacity="0.16"/><stop offset="1" stop-color="#f56fa0" stop-opacity="0"/></radialGradient><radialGradient id="a4vdut7-h2"><stop offset="0" stop-color="#ff9f78" stop-opacity="0.44"/><stop offset=".55" stop-color="#ff9f78" stop-opacity="0.2"/><stop offset="1" stop-color="#ff9f78" stop-opacity="0"/></radialGradient><linearGradient id="a4vdut7-o0" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7f61"/><stop offset="1" stop-color="#ffc79c"/></linearGradient><linearGradient id="a4vdut7-o1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7f61"/><stop offset="1" stop-color="#ffc79c"/></linearGradient><linearGradient id="a4vdut7-o2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f56fa0"/><stop offset="1" stop-color="#ffc857"/></linearGradient><linearGradient id="a4vdut7-o3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9f78"/><stop offset="1" stop-color="#c08ae8"/></linearGradient><filter id="a4vdut7-grain" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="791" stitchTiles="stitch"/><feColorMatrix values="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1"/></filter></defs><rect width="1280" height="720" fill="url(#a4vdut7-sky)"/><ellipse cx="825" cy="249" rx="737" ry="531" fill="url(#a4vdut7-h0)"/><ellipse cx="85" cy="277" rx="526" ry="375" fill="url(#a4vdut7-h1)"/><ellipse cx="520" cy="276" rx="473" ry="420" fill="url(#a4vdut7-h2)"/><circle cx="851" cy="381" r="257" fill="url(#a4vdut7-o0)" opacity="1"/><circle cx="1178" cy="561" r="114" fill="url(#a4vdut7-o1)" opacity=".85" style="mix-blend-mode:screen"/><circle cx="603" cy="62" r="76" fill="url(#a4vdut7-o2)" opacity=".85" style="mix-blend-mode:screen"/><circle cx="1350" cy="272" r="107" fill="url(#a4vdut7-o3)" opacity=".85" style="mix-blend-mode:screen"/><circle cx="1047" cy="495" r="291" fill="none" stroke="#f7ebe0" stroke-width="1.5" opacity=".35"/><circle cx="811" cy="243" r="284" fill="none" stroke="#f7ebe0" stroke-width="1.5" opacity=".35"/><rect width="1280" height="720" filter="url(#a4vdut7-grain)" opacity="0.5" style="mix-blend-mode:soft-light"/></svg></div><div class="hero-tldr" id="one-json-file-becomes-a-page-or-video" role="region" aria-labelledby="one-json-file-becomes-a-page-or-video-title">
 <p class="sec-eyebrow pa-label">At a glance</p>
-<h2 class="hero-tldr-title sr-only" id="one-json-file-becomes-a-page-or-video-title">One JSON file becomes a page or video</h2>
-<div class="tldr tone-neutral">
+<h2 class="hero-tldr-title sr-only" id="one-json-file-becomes-a-page-or-video-title"><span data-text="normal">One JSON file becomes a page or video</span><span data-text="simple" hidden>One JSON file turns into a page or a video</span></h2>
+<div data-text="normal"><div class="tldr tone-neutral">
 <p class="lead">This branch adds four agent skills that build offline dashboards, diagrams, explainer pages and short videos. The model writes only a small JSON file, and scripts validate, lay out and render it.</p>
 <ul class="points">
 <li>make-dashboard v2 builds live, offline dashboards from local data files.</li>
 <li>make-diagram, make-explainer and make-motion add diagrams, pages and videos from JSON.</li>
 <li>Every page makes no network requests and carries a strict Content Security Policy.</li>
 </ul>
-</div>
+</div></div>
+<div data-text="simple" hidden><div class="tldr tone-neutral">
+<p class="lead">This branch adds four agent skills. They build offline dashboards, diagrams, explainer pages and short videos. The model writes only a small JSON file. Scripts check it, lay it out and render it.</p>
+<ul class="points">
+<li>make-dashboard v2 builds live, offline dashboards from local data files.</li>
+<li>make-diagram, make-explainer and make-motion build diagrams, pages and videos from JSON.</li>
+<li>No page makes a network request. Every page has a strict Content Security Policy.</li>
+</ul>
+</div></div>
 </div>
 </header>
 <div class="layout">
@@ -1007,7 +1175,7 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <section class="sec sec-kpis sec-alt" id="haiku-built-all-30-eval-prompts" aria-labelledby="haiku-built-all-30-eval-prompts-title">
 <p class="sec-eyebrow pa-label">Eval results</p>
 <h2 class="sec-title" id="haiku-built-all-30-eval-prompts-title">Haiku built all 30 eval prompts<a class="anchor" href="#haiku-built-all-30-eval-prompts" aria-label="Link to this section: Haiku built all 30 eval prompts">#</a></h2>
-<dl class="kpis">
+<dl class="kpis" style="--n: 8">
 <div class="kpi tone-neutral"><dt>Haiku valid builds</dt><dd class="kpi-value">30 of 30</dd><dd class="kpi-note">14 dashboard, 8 diagram and 8 explainer runs</dd></div>
 <div class="kpi tone-neutral"><dt>make-explainer tests</dt><dd class="kpi-value">593</dd><dd class="kpi-note">Measured on the branch head with node --test</dd></div>
 <div class="kpi tone-neutral"><dt>Skills shipped</dt><dd class="kpi-value">4</dd><dd class="kpi-note">make-dashboard v2, make-diagram, make-explainer and make-motion</dd></div>
@@ -1016,8 +1184,8 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 </section>
 <section class="sec sec-cards" id="four-skills-share-one-json-to-page-loop" aria-labelledby="four-skills-share-one-json-to-page-loop-title">
 <p class="sec-eyebrow pa-label">Four skills</p>
-<h2 class="sec-title" id="four-skills-share-one-json-to-page-loop-title">Four skills share one JSON-to-page loop<a class="anchor" href="#four-skills-share-one-json-to-page-loop" aria-label="Link to this section: Four skills share one JSON-to-page loop">#</a></h2>
-<ul class="cards cols-2">
+<h2 class="sec-title" id="four-skills-share-one-json-to-page-loop-title"><span data-text="normal">Four skills share one JSON-to-page loop</span><span data-text="simple" hidden>Four skills use one loop from JSON to page</span><a class="anchor" href="#four-skills-share-one-json-to-page-loop" aria-label="Link to this section: Four skills share one JSON-to-page loop">#</a></h2>
+<div data-text="normal"><ul class="cards cols-2">
 <li class="card tone-neutral">
 <div class="card-head"><svg class="card-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 16h8"/><path d="M7 11h12"/><path d="M7 6h3"/></svg><h3>make-dashboard v2</h3></div>
 <p>Builds one offline dashboard from CSV, Parquet, JSON, DuckDB or SQLite files. Its charts sort, compare and export, and the page reloads when the spec changes.</p>
@@ -1034,14 +1202,32 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="card-head"><svg class="card-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg><h3>make-motion</h3></div>
 <p>Renders a short MP4 video from a JSON list of scenes. Text, shapes, counters and transitions are all set in the file.</p>
 </li>
-</ul>
+</ul></div>
+<div data-text="simple" hidden><ul class="cards cols-2">
+<li class="card tone-neutral">
+<div class="card-head"><svg class="card-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 16h8"/><path d="M7 11h12"/><path d="M7 6h3"/></svg><h3>make-dashboard v2</h3></div>
+<p>Builds one offline dashboard from CSV, Parquet, JSON, DuckDB or SQLite files. Its charts sort, compare and export. The page reloads when the spec changes.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><svg class="card-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 6a9 9 0 0 0-9 9V3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/></svg><h3>make-diagram</h3></div>
+<p>Draws architecture, flow, sequence and state diagrams from a small JSON topology. The build works out the layout, so the model never writes coordinates.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><svg class="card-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg><h3>make-explainer</h3></div>
+<p>Builds one themed page or slide deck from typed sections. It can embed diagrams, charts and videos that the other skills make.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><svg class="card-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg><h3>make-motion</h3></div>
+<p>Renders a short MP4 video from a JSON list of scenes. The file sets the text, shapes, counters and transitions.</p>
+</li>
+</ul></div>
 </section>
 <section class="sec sec-diagram sec-alt" id="a-request-passes-validate-and-build" aria-labelledby="a-request-passes-validate-and-build-title">
 <p class="sec-eyebrow pa-label">Request flow</p>
 <h2 class="sec-title" id="a-request-passes-validate-and-build-title">A request passes validate and build<a class="anchor" href="#a-request-passes-validate-and-build" aria-label="Link to this section: A request passes validate and build">#</a></h2>
 <figure class="dg" data-diagram style="--dg-w: 748; --dg-h: 952">
 <div class="dg-slot" data-dg-slot data-dg-label="Diagram: From request to page">
-<div class="dg-stage" data-dg-stage><svg xmlns="http://www.w3.org/2000/svg" class="pa-diagram pa-type-flow" viewBox="0 0 748 952" role="graphics-document" aria-labelledby="dg_3-title dg_3-desc"><title id="dg_3-title">From request to page</title><desc id="dg_3-desc">flow diagram with 9 nodes and 11 edges.</desc><defs><marker id="dg_3-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-fill" d="M0 0.5L8 4L0 7.5Z"/></marker><marker id="dg_3-arrow-open" viewBox="0 0 8 8" refX="7.4" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-open" d="M0.8 0.8L7.4 4L0.8 7.2"/></marker></defs><g class="pa-edge pa-edge-solid" data-id="edge-0" data-from="req" data-to="agent" data-family="bare"><path class="pa-wire" d="M162.5 94L162.5 166" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-1" data-from="agent" data-to="spec" data-family="service"><path class="pa-wire" d="M162.5 220L162.5 292" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-2" data-from="spec" data-to="val" data-family="service"><path class="pa-wire" d="M194.2 346L194.2 456Q194.2 462 188.2 462L184.2 462Q178.2 462 178.2 468L178.2 510" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-3" data-from="val" data-to="spec" data-family="service"><path class="pa-wire" d="M130.8 510L130.8 346" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-4" data-from="val" data-to="build" data-family="service"><path class="pa-wire" d="M154.5 564L154.5 636" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-5" data-from="build" data-to="dash" data-family="service"><path class="pa-wire" d="M185 690L185 708Q185 714 191 714L606 714Q612 714 612 720L612 762" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-6" data-from="build" data-to="diag" data-family="service"><path class="pa-wire" d="M154.5 690L154.5 718Q154.5 724 160.5 724L356 724Q362 724 362 730L362 762" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-7" data-from="build" data-to="mot" data-family="service"><path class="pa-wire" d="M124 690L124 762" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-8" data-from="dash" data-to="page" data-family="service"><path class="pa-wire" d="M612 816L612 834Q612 840 606 840L409 840Q403 840 403 846L403 888" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-9" data-from="diag" data-to="page" data-family="service"><path class="pa-wire" d="M362 816L362 888" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-10" data-from="mot" data-to="page" data-family="service"><path class="pa-wire" d="M124 816L124 834Q124 840 130 840L315 840Q321 840 321 846L321 888" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-node pa-kind-start pa-family-bare pa-tone-neutral" data-id="req" tabindex="0" role="graphics-symbol" aria-label="Your request: start"><path class="pa-shape pa-shape-stadium" d="M118.5 54L206.5 54A20 20 0 0 1 206.5 94L118.5 94A20 20 0 0 1 118.5 54Z"/><text class="pa-label" text-anchor="middle"><tspan x="162.5" y="78.9">Your request</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="agent" tabindex="0" role="graphics-symbol" aria-label="Claude Haiku agent: step"><path class="pa-shape pa-shape-rect" d="M68.5 166L256.5 166A2 2 0 0 1 258.5 168L258.5 218A2 2 0 0 1 256.5 220L68.5 220A2 2 0 0 1 66.5 218L66.5 168A2 2 0 0 1 68.5 166Z"/><rect class="pa-tile" x="80.86" y="179" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(85.86 184) scale(0.75)"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></g><text class="pa-type" text-anchor="middle"><tspan x="181.5" y="186.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="181.5" y="205.55">Claude Haiku agent</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="spec" tabindex="0" role="graphics-symbol" aria-label="explainer.json spec: step"><path class="pa-shape pa-shape-rect" d="M69.5 292L255.5 292A2 2 0 0 1 257.5 294L257.5 344A2 2 0 0 1 255.5 346L69.5 346A2 2 0 0 1 67.5 344L67.5 294A2 2 0 0 1 69.5 292Z"/><rect class="pa-tile" x="81.96" y="305" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(86.96 310) scale(0.75)"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 12.5 8 15l2 2.5"/><path d="m14 12.5 2 2.5-2 2.5"/></g><text class="pa-type" text-anchor="middle"><tspan x="181.5" y="312.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="181.5" y="331.55">explainer.json spec</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="val" tabindex="0" role="graphics-symbol" aria-label="validate.mjs: step"><path class="pa-shape pa-shape-rect" d="M85.5 510L223.5 510A2 2 0 0 1 225.5 512L225.5 562A2 2 0 0 1 223.5 564L85.5 564A2 2 0 0 1 83.5 562L83.5 512A2 2 0 0 1 85.5 510Z"/><rect class="pa-tile" x="97.53" y="523" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(102.53 528) scale(0.75)"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></g><text class="pa-type" text-anchor="middle"><tspan x="173.5" y="530.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="173.5" y="549.55">validate.mjs</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="build" tabindex="0" role="graphics-symbol" aria-label="build.mjs: step"><path class="pa-shape pa-shape-rect" d="M95.5 636L213.5 636A2 2 0 0 1 215.5 638L215.5 688A2 2 0 0 1 213.5 690L95.5 690A2 2 0 0 1 93.5 688L93.5 638A2 2 0 0 1 95.5 636Z"/><rect class="pa-tile" x="107.56" y="649" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(112.56 654) scale(0.75)"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><polyline points="3.29 7 12 12 20.71 7"/><path d="m7.5 4.27 9 5.15"/></g><text class="pa-type" text-anchor="middle"><tspan x="173.5" y="656.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="173.5" y="675.55">build.mjs</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="mot" tabindex="0" role="graphics-symbol" aria-label="make-motion videos: step"><path class="pa-shape pa-shape-rect" d="M26 762L222 762A2 2 0 0 1 224 764L224 814A2 2 0 0 1 222 816L26 816A2 2 0 0 1 24 814L24 764A2 2 0 0 1 26 762Z"/><rect class="pa-tile" x="38.37" y="775" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(43.37 780) scale(0.75)"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></g><text class="pa-type" text-anchor="middle"><tspan x="143" y="782.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="143" y="801.55">make-motion videos</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="diag" tabindex="0" role="graphics-symbol" aria-label="make-diagram figures: step"><path class="pa-shape pa-shape-rect" d="M258 762L466 762A2 2 0 0 1 468 764L468 814A2 2 0 0 1 466 816L258 816A2 2 0 0 1 256 814L256 764A2 2 0 0 1 258 762Z"/><rect class="pa-tile" x="270.91" y="775" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(275.91 780) scale(0.75)"><path d="M15 6a9 9 0 0 0-9 9V3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/></g><text class="pa-type" text-anchor="middle"><tspan x="381" y="782.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="381" y="801.55">make-diagram figures</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="dash" tabindex="0" role="graphics-symbol" aria-label="make-dashboard charts: step"><path class="pa-shape pa-shape-rect" d="M502 762L722 762A2 2 0 0 1 724 764L724 814A2 2 0 0 1 722 816L502 816A2 2 0 0 1 500 814L500 764A2 2 0 0 1 502 762Z"/><rect class="pa-tile" x="514.75" y="775" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(519.75 780) scale(0.75)"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 16h8"/><path d="M7 11h12"/><path d="M7 6h3"/></g><text class="pa-type" text-anchor="middle"><tspan x="631" y="782.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="631" y="801.55">make-dashboard charts</tspan></text></g><g class="pa-node pa-kind-end pa-family-bare pa-tone-neutral" data-id="page" tabindex="0" role="graphics-symbol" aria-label="Offline HTML page: end"><path class="pa-shape pa-shape-stadium" d="M300 888L424 888A20 20 0 0 1 424 928L300 928A20 20 0 0 1 300 888Z"/><text class="pa-label" text-anchor="middle"><tspan x="362" y="912.9">Offline HTML page</tspan></text></g><g class="pa-edge-label" data-edge="edge-3"><rect class="pa-edge-plate" x="36.8" y="418" width="88" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="80.8" y="432.2">fix and rerun</tspan></text></g><g class="pa-legend" aria-hidden="true"><rect class="pa-swatch pa-family-bare" x="479" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="497" y="37.85">1 start</tspan></text><rect class="pa-swatch pa-family-service" x="547.1" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="565.1" y="37.85">7 step</tspan></text><rect class="pa-swatch pa-family-bare" x="613.7" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="631.7" y="37.85">1 end</tspan></text><g class="pa-legend-sample pa-edge-solid"><path class="pa-wire" d="M677.2 34L701.2 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="707.2" y="37.85">call</tspan></text></g></svg></div>
+<div class="dg-stage" data-dg-stage><svg xmlns="http://www.w3.org/2000/svg" class="pa-diagram pa-type-flow" viewBox="0 0 748 952" role="graphics-document" aria-labelledby="dg_3-title dg_3-desc"><title id="dg_3-title">From request to page</title><desc id="dg_3-desc">flow diagram with 9 nodes and 11 edges.</desc><defs><marker id="dg_3-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-fill" d="M0 0.5L8 4L0 7.5Z"/></marker><marker id="dg_3-arrow-open" viewBox="0 0 8 8" refX="7.4" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-open" d="M0.8 0.8L7.4 4L0.8 7.2"/></marker></defs><g class="pa-edge pa-edge-solid" data-id="edge-0" data-from="req" data-to="agent" data-family="bare"><path class="pa-wire" d="M162.5 94L162.5 166" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-1" data-from="agent" data-to="spec" data-family="service"><path class="pa-wire" d="M162.5 220L162.5 292" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-2" data-from="spec" data-to="val" data-family="service"><path class="pa-wire" d="M194.2 346C194.2 462 178.2 462 178.2 510" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-3" data-from="val" data-to="spec" data-family="service"><path class="pa-wire" d="M130.8 510L130.8 346" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-4" data-from="val" data-to="build" data-family="service"><path class="pa-wire" d="M154.5 564L154.5 636" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-5" data-from="build" data-to="dash" data-family="service"><path class="pa-wire" d="M185 690C185 714 612 714 612 762" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-6" data-from="build" data-to="diag" data-family="service"><path class="pa-wire" d="M154.5 690C154.5 724 362 724 362 762" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-7" data-from="build" data-to="mot" data-family="service"><path class="pa-wire" d="M124 690L124 762" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-8" data-from="dash" data-to="page" data-family="service"><path class="pa-wire" d="M612 816C612 840 403 840 403 888" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-9" data-from="diag" data-to="page" data-family="service"><path class="pa-wire" d="M362 816L362 888" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-10" data-from="mot" data-to="page" data-family="service"><path class="pa-wire" d="M124 816C124 840 321 840 321 888" fill="none" marker-end="url(#dg_3-arrow)"/></g><g class="pa-node pa-kind-start pa-family-bare pa-tone-neutral" data-id="req" tabindex="0" role="graphics-symbol" aria-label="Your request: start"><path class="pa-shape pa-shape-stadium" d="M118.5 54L206.5 54A20 20 0 0 1 206.5 94L118.5 94A20 20 0 0 1 118.5 54Z"/><text class="pa-label" text-anchor="middle"><tspan x="162.5" y="78.9">Your request</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="agent" tabindex="0" role="graphics-symbol" aria-label="Claude Haiku agent: step"><path class="pa-shape pa-shape-rect" d="M68.5 166L256.5 166A2 2 0 0 1 258.5 168L258.5 218A2 2 0 0 1 256.5 220L68.5 220A2 2 0 0 1 66.5 218L66.5 168A2 2 0 0 1 68.5 166Z"/><rect class="pa-tile" x="80.86" y="179" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(85.86 184) scale(0.75)"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></g><text class="pa-type" text-anchor="middle"><tspan x="181.5" y="186.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="181.5" y="205.55">Claude Haiku agent</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="spec" tabindex="0" role="graphics-symbol" aria-label="explainer.json spec: step"><path class="pa-shape pa-shape-rect" d="M69.5 292L255.5 292A2 2 0 0 1 257.5 294L257.5 344A2 2 0 0 1 255.5 346L69.5 346A2 2 0 0 1 67.5 344L67.5 294A2 2 0 0 1 69.5 292Z"/><rect class="pa-tile" x="81.96" y="305" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(86.96 310) scale(0.75)"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 12.5 8 15l2 2.5"/><path d="m14 12.5 2 2.5-2 2.5"/></g><text class="pa-type" text-anchor="middle"><tspan x="181.5" y="312.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="181.5" y="331.55">explainer.json spec</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="val" tabindex="0" role="graphics-symbol" aria-label="validate.mjs: step"><path class="pa-shape pa-shape-rect" d="M85.5 510L223.5 510A2 2 0 0 1 225.5 512L225.5 562A2 2 0 0 1 223.5 564L85.5 564A2 2 0 0 1 83.5 562L83.5 512A2 2 0 0 1 85.5 510Z"/><rect class="pa-tile" x="97.53" y="523" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(102.53 528) scale(0.75)"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></g><text class="pa-type" text-anchor="middle"><tspan x="173.5" y="530.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="173.5" y="549.55">validate.mjs</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="build" tabindex="0" role="graphics-symbol" aria-label="build.mjs: step"><path class="pa-shape pa-shape-rect" d="M95.5 636L213.5 636A2 2 0 0 1 215.5 638L215.5 688A2 2 0 0 1 213.5 690L95.5 690A2 2 0 0 1 93.5 688L93.5 638A2 2 0 0 1 95.5 636Z"/><rect class="pa-tile" x="107.56" y="649" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(112.56 654) scale(0.75)"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><polyline points="3.29 7 12 12 20.71 7"/><path d="m7.5 4.27 9 5.15"/></g><text class="pa-type" text-anchor="middle"><tspan x="173.5" y="656.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="173.5" y="675.55">build.mjs</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="mot" tabindex="0" role="graphics-symbol" aria-label="make-motion videos: step"><path class="pa-shape pa-shape-rect" d="M26 762L222 762A2 2 0 0 1 224 764L224 814A2 2 0 0 1 222 816L26 816A2 2 0 0 1 24 814L24 764A2 2 0 0 1 26 762Z"/><rect class="pa-tile" x="38.37" y="775" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(43.37 780) scale(0.75)"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></g><text class="pa-type" text-anchor="middle"><tspan x="143" y="782.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="143" y="801.55">make-motion videos</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="diag" tabindex="0" role="graphics-symbol" aria-label="make-diagram figures: step"><path class="pa-shape pa-shape-rect" d="M258 762L466 762A2 2 0 0 1 468 764L468 814A2 2 0 0 1 466 816L258 816A2 2 0 0 1 256 814L256 764A2 2 0 0 1 258 762Z"/><rect class="pa-tile" x="270.91" y="775" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(275.91 780) scale(0.75)"><path d="M15 6a9 9 0 0 0-9 9V3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/></g><text class="pa-type" text-anchor="middle"><tspan x="381" y="782.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="381" y="801.55">make-diagram figures</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="dash" tabindex="0" role="graphics-symbol" aria-label="make-dashboard charts: step"><path class="pa-shape pa-shape-rect" d="M502 762L722 762A2 2 0 0 1 724 764L724 814A2 2 0 0 1 722 816L502 816A2 2 0 0 1 500 814L500 764A2 2 0 0 1 502 762Z"/><rect class="pa-tile" x="514.75" y="775" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(519.75 780) scale(0.75)"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 16h8"/><path d="M7 11h12"/><path d="M7 6h3"/></g><text class="pa-type" text-anchor="middle"><tspan x="631" y="782.19">STEP</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="631" y="801.55">make-dashboard charts</tspan></text></g><g class="pa-node pa-kind-end pa-family-bare pa-tone-neutral" data-id="page" tabindex="0" role="graphics-symbol" aria-label="Offline HTML page: end"><path class="pa-shape pa-shape-stadium" d="M300 888L424 888A20 20 0 0 1 424 928L300 928A20 20 0 0 1 300 888Z"/><text class="pa-label" text-anchor="middle"><tspan x="362" y="912.9">Offline HTML page</tspan></text></g><g class="pa-edge-label" data-edge="edge-3"><rect class="pa-edge-plate" x="86.8" y="418" width="88" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="130.8" y="432.2">fix and rerun</tspan></text></g><g class="pa-legend" aria-hidden="true"><rect class="pa-swatch pa-family-bare" x="479" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="497" y="37.85">1 start</tspan></text><rect class="pa-swatch pa-family-service" x="547.1" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="565.1" y="37.85">7 step</tspan></text><rect class="pa-swatch pa-family-bare" x="613.7" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="631.7" y="37.85">1 end</tspan></text><g class="pa-legend-sample pa-edge-solid"><path class="pa-wire" d="M677.2 34L701.2 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="707.2" y="37.85">call</tspan></text></g></svg></div>
 </div>
 <button type="button" class="btn dg-present" data-dg-present aria-haspopup="dialog" aria-label="Present diagram: From request to page">Present</button>
 <dialog class="dg-overlay" data-dg-dialog aria-label="Diagram presentation: From request to page">
@@ -1071,7 +1257,7 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="dg-transport" role="group" aria-label="Transport">
 <button type="button" class="btn" data-pa-prev-chapter title="Previous chapter">Prev chapter</button>
 <button type="button" class="btn" data-pa-prev title="Previous beat (Left)">Prev</button>
-<button type="button" class="btn" data-pa-play title="Play or pause (Space)">Play</button>
+<button type="button" class="btn dg-play" data-pa-play aria-label="Play" title="Play or pause (Space)"><span class="pa-playicon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path d="M7 4.5v15l13-7.5z"/></svg></span></button>
 <button type="button" class="btn" data-pa-next title="Next beat (Right)">Next</button>
 <button type="button" class="btn" data-pa-next-chapter title="Next chapter">Next chapter</button>
 <input type="range" class="dg-scrub" data-pa-scrub min="0" max="0" step="1" value="0" aria-label="Beat" list="dg_3-ticks">
@@ -1089,8 +1275,8 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 </section>
 <section class="sec sec-steps" id="install-once-then-ask-in-plain-words" aria-labelledby="install-once-then-ask-in-plain-words-title">
 <p class="sec-eyebrow pa-label">Getting started</p>
-<h2 class="sec-title" id="install-once-then-ask-in-plain-words-title">Install once, then ask in plain words<a class="anchor" href="#install-once-then-ask-in-plain-words" aria-label="Link to this section: Install once, then ask in plain words">#</a></h2>
-<ol class="steps">
+<h2 class="sec-title" id="install-once-then-ask-in-plain-words-title"><span data-text="normal">Install once, then ask in plain words</span><span data-text="simple" hidden>Install once. Then ask in plain words.</span><a class="anchor" href="#install-once-then-ask-in-plain-words" aria-label="Link to this section: Install once, then ask in plain words">#</a></h2>
+<div data-text="normal"><ol class="steps">
 <li class="step">
 <div class="step-head"><strong class="step-title">Install the skills</strong></div>
 <p>Run one of the install commands in the next section. The skills are added to your agent.</p>
@@ -1111,7 +1297,29 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="step-head"><strong class="step-title">Check the page (optional)</strong></div>
 <p>Run check.mjs on the page. It looks for console errors and sideways scrolling at desktop and phone width.</p>
 </li>
-</ol>
+</ol></div>
+<div data-text="simple" hidden><ol class="steps">
+<li class="step">
+<div class="step-head"><strong class="step-title">Install the skills</strong></div>
+<p>Run one of the install commands in the next section. This adds the skills to your agent.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Ask for a page</strong></div>
+<p>Say what you want to explain in plain words. Or call the skill with a slash command.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Validate the JSON</strong></div>
+<p>The skill runs validate.mjs. Each problem prints a JSON path, the problem and the fix. The agent reruns it until the output says valid.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Build the page</strong></div>
+<p>The skill runs build.mjs. It writes one offline HTML page and prints its path. Open that file in any browser.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Check the page (optional)</strong></div>
+<p>Run check.mjs on the page. It looks for console errors and sideways scrolling. It tests desktop width and phone width.</p>
+</li>
+</ol></div>
 </section>
 <section class="sec sec-code" id="two-install-routes-cover-claude-code-and" aria-labelledby="two-install-routes-cover-claude-code-and-title">
 <p class="sec-eyebrow pa-label">Install</p>
@@ -1128,8 +1336,8 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
 </section>
 <section class="sec sec-table" id="four-slash-commands-each-produce-a-diffe" aria-labelledby="four-slash-commands-each-produce-a-diffe-title">
 <p class="sec-eyebrow pa-label">Commands</p>
-<h2 class="sec-title" id="four-slash-commands-each-produce-a-diffe-title">Four slash commands each produce a different page<a class="anchor" href="#four-slash-commands-each-produce-a-diffe" aria-label="Link to this section: Four slash commands each produce a different page">#</a></h2>
-<div class="tablewrap" role="region" aria-label="Each request is one sentence. The skill fills in its own JSON file and builds the output." tabindex="0">
+<h2 class="sec-title" id="four-slash-commands-each-produce-a-diffe-title"><span data-text="normal">Four slash commands each produce a different page</span><span data-text="simple" hidden>Each of four slash commands makes a different page</span><a class="anchor" href="#four-slash-commands-each-produce-a-diffe" aria-label="Link to this section: Four slash commands each produce a different page">#</a></h2>
+<div data-text="normal"><div class="tablewrap" role="region" aria-label="Each request is one sentence. The skill fills in its own JSON file and builds the output." tabindex="0">
 <table><caption>Each request is one sentence. The skill fills in its own JSON file and builds the output.</caption>
 <thead><tr><th scope="col" class="a-l">Request</th><th scope="col" class="a-l">What it produces</th></tr></thead>
 <tbody>
@@ -1139,7 +1347,18 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
 <tr><th scope="row" class="a-l">/make-motion a 6 second title card that counts up to 18</th><td class="a-l">One short MP4 video with a title card that counts up to 18.</td></tr>
 </tbody>
 </table>
-</div>
+</div></div>
+<div data-text="simple" hidden><div class="tablewrap" role="region" aria-label="Each request is one sentence. The skill writes its own JSON file and builds the output." tabindex="0">
+<table><caption>Each request is one sentence. The skill writes its own JSON file and builds the output.</caption>
+<thead><tr><th scope="col" class="a-l">Request</th><th scope="col" class="a-l">What it produces</th></tr></thead>
+<tbody>
+<tr><th scope="row" class="a-l">/make-explainer recap of this branch with a test checklist</th><td class="a-l">One offline page that recaps the branch and lists the manual tests.</td></tr>
+<tr><th scope="row" class="a-l">/make-diagram architecture of the checkout service with its database and queue</th><td class="a-l">One offline diagram of the services, with icons and zoom.</td></tr>
+<tr><th scope="row" class="a-l">/make-dashboard revenue by region and monthly trend from data/sales.csv</th><td class="a-l">One offline dashboard built from the CSV file, with sortable tables and export.</td></tr>
+<tr><th scope="row" class="a-l">/make-motion a 6 second title card that counts up to 18</th><td class="a-l">One short MP4 video with a title card that counts up to 18.</td></tr>
+</tbody>
+</table>
+</div></div>
 </section>
 <section class="sec sec-chart" id="haiku-and-sonnet-pass-30-gemma4-passes-1" aria-labelledby="haiku-and-sonnet-pass-30-gemma4-passes-1-title">
 <p class="sec-eyebrow pa-label">Eval pass rates</p>
@@ -1195,7 +1414,7 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
 </section>
 <section class="sec sec-motion" id="s-10-second-launch-clip-up-to-3x-faster" aria-labelledby="s-10-second-launch-clip-up-to-3x-faster-title">
 <p class="sec-eyebrow pa-label">Launch clip</p>
-<h2 class="sec-title" id="s-10-second-launch-clip-up-to-3x-faster-title">10 second launch clip: up to 3x faster<a class="anchor" href="#s-10-second-launch-clip-up-to-3x-faster" aria-label="Link to this section: 10 second launch clip: up to 3x faster">#</a></h2>
+<h2 class="sec-title" id="s-10-second-launch-clip-up-to-3x-faster-title">10 second launch clip: up to <span class="nw">3x</span> faster<a class="anchor" href="#s-10-second-launch-clip-up-to-3x-faster" aria-label="Link to this section: 10 second launch clip: up to 3x faster">#</a></h2>
 <figure class="mo">
 <video controls preload="metadata" playsinline poster="data:image/jpeg;base64,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" src="index.assets/s-10-second-launch-clip-up-to-3x-faster.mp4" aria-label="10 second launch clip: up to 3x faster">
 <p>Your browser cannot play this video. <a href="index.assets/s-10-second-launch-clip-up-to-3x-faster.mp4">Download the video</a>.</p>
@@ -1223,13 +1442,13 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
 <p>Your browser cannot play this video. <a href="index.assets/a-square-1080x1080-clip-shows-quarterly.mp4">Download the video</a>.</p>
 </video>
 <img class="mo-still" src="data:image/jpeg;base64,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" alt="">
-<figcaption>A revenue counter to $42.1M and a bar chart of signups by quarter, sized for social feeds. Voiceover by Kokoro.</figcaption>
+<figcaption>A revenue counter to <span class="nw">$42.1M</span> and a bar chart of signups by quarter, sized for social feeds. Voiceover by Kokoro.</figcaption>
 </figure>
 </section>
 <section class="sec sec-compare sec-alt" id="spec-driven-pages-cost-less-and-stay-con" aria-labelledby="spec-driven-pages-cost-less-and-stay-con-title">
 <p class="sec-eyebrow pa-label">Versus hand-written</p>
-<h2 class="sec-title" id="spec-driven-pages-cost-less-and-stay-con-title">Spec-driven pages cost less and stay consistent<a class="anchor" href="#spec-driven-pages-cost-less-and-stay-con" aria-label="Link to this section: Spec-driven pages cost less and stay consistent">#</a></h2>
-<div class="compare cols-2">
+<h2 class="sec-title" id="spec-driven-pages-cost-less-and-stay-con-title"><span data-text="normal">Spec-driven pages cost less and stay consistent</span><span data-text="simple" hidden>Pages built from a spec cost less and stay the same</span><a class="anchor" href="#spec-driven-pages-cost-less-and-stay-con" aria-label="Link to this section: Spec-driven pages cost less and stay consistent">#</a></h2>
+<div data-text="normal"><div class="compare cols-2">
 <div class="cmp-col tone-warn">
 <h3>Hand-written AI pages</h3><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Caution</span></span>
 <ul>
@@ -1247,12 +1466,31 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
 </ul>
 </div>
 </div>
-<p class="verdict"><strong>Verdict.</strong> A spec keeps the cost low and the output the same from run to run.</p>
+<p class="verdict"><strong>Verdict.</strong> A spec keeps the cost low and the output the same from run to run.</p></div>
+<div data-text="simple" hidden><div class="compare cols-2">
+<div class="cmp-col tone-warn">
+<h3>Hand-written AI pages</h3><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Caution</span></span>
+<ul>
+<li>The model writes the HTML, CSS and script for every page. This costs more output.</li>
+<li>Each run can give a different look. The look is often the generic look of an AI page.</li>
+<li>A small change can harm the rest of the page.</li>
+</ul>
+</div>
+<div class="cmp-col tone-good">
+<h3>Spec-driven pages</h3><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span>
+<ul>
+<li>The model writes only JSON. So the cheapest model passes the eval gates.</li>
+<li>The same spec always gives the same page. A change means editing one field.</li>
+<li>Validation names the JSON path and the fix. So the agent fixes most errors in one or two runs.</li>
+</ul>
+</div>
+</div>
+<p class="verdict"><strong>Verdict.</strong> A spec keeps the cost low. The output stays the same from run to run.</p></div>
 </section>
 <section class="sec sec-risks" id="five-known-limits-each-have-a-clear-work" aria-labelledby="five-known-limits-each-have-a-clear-work-title">
 <p class="sec-eyebrow pa-label">Known limits</p>
-<h2 class="sec-title" id="five-known-limits-each-have-a-clear-work-title">Five known limits each have a clear workaround<a class="anchor" href="#five-known-limits-each-have-a-clear-work" aria-label="Link to this section: Five known limits each have a clear workaround">#</a></h2>
-<div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
+<h2 class="sec-title" id="five-known-limits-each-have-a-clear-work-title"><span data-text="normal">Five known limits each have a clear workaround</span><span data-text="simple" hidden>Five known limits each have a workaround</span><a class="anchor" href="#five-known-limits-each-have-a-clear-work" aria-label="Link to this section: Five known limits each have a clear workaround">#</a></h2>
+<div data-text="normal"><div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
 <table>
 <thead><tr><th scope="col">Severity</th><th scope="col">Risk</th><th scope="col">Mitigation</th></tr></thead>
 <tbody>
@@ -1283,13 +1521,49 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
 </tr>
 </tbody>
 </table>
-</div>
+</div></div>
+<div data-text="simple" hidden><div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
+<table>
+<thead><tr><th scope="col">Severity</th><th scope="col">Risk</th><th scope="col">Mitigation</th></tr></thead>
+<tbody>
+<tr>
+<td data-label="Severity"><span class="chip tone-low"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>Low</span></span></td>
+<td data-label="Risk">An interactive chart needs a make-dashboard spec. Inline rows give a static chart only.</td>
+<td data-label="Mitigation">Use a make-dashboard spec when the reader needs the interactive views.</td>
+</tr>
+<tr>
+<td data-label="Severity"><span class="chip tone-medium"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg><span>Medium</span></span></td>
+<td data-label="Risk">Explainer charts refuse Postgres and MySQL sources. This way, builds never reach the network.</td>
+<td data-label="Mitigation">Export the data to CSV or Parquet first.</td>
+</tr>
+<tr>
+<td data-label="Severity"><span class="chip tone-low"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>Low</span></span></td>
+<td data-label="Risk">In a slide deck, browser find (Ctrl-F) searches only the current slide.</td>
+<td data-label="Mitigation">Use page mode when the reader needs to search the whole text.</td>
+</tr>
+<tr>
+<td data-label="Severity"><span class="chip tone-low"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>Low</span></span></td>
+<td data-label="Risk">Each static chart ships four drawings. This adds weight to long pages.</td>
+<td data-label="Mitigation">Keep long pages to a few charts.</td>
+</tr>
+<tr>
+<td data-label="Severity"><span class="chip tone-medium"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg><span>Medium</span></span></td>
+<td data-label="Risk">We did not run the evals for make-motion again on this branch. So make-motion has no pinned model.</td>
+<td data-label="Mitigation">Check each video by hand before sharing it.</td>
+</tr>
+</tbody>
+</table>
+</div></div>
 </section>
 <section class="sec sec-callout" id="ci-is-green-eval-gated-skills-pass-with">
-<aside class="callout tone-good">
+<div data-text="normal"><aside class="callout tone-good">
 <p class="callout-head"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good news</span></span><strong class="callout-title">CI is green; eval-gated skills pass with Haiku</strong></p>
 <p>CI on PR #38 passes 5 of 5 checks. make-dashboard v2, make-diagram and make-explainer each passed their Haiku eval gate. make-motion has no eval gate yet.</p>
-</aside>
+</aside></div>
+<div data-text="simple" hidden><aside class="callout tone-good">
+<p class="callout-head"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good news</span></span><strong class="callout-title">CI is green, and the eval-gated skills pass with Haiku</strong></p>
+<p>CI on PR #38 passes 5 of 5 checks. Each of make-dashboard v2, make-diagram and make-explainer passed its Haiku eval gate. make-motion has no eval gate yet.</p>
+</aside></div>
 </section>
 </main>
 </div>
@@ -1987,6 +2261,9 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
           s.setAttribute('aria-hidden', 'true');
           var copy = icon.cloneNode(true);
           copy.removeAttribute('transform');
+          // A cloud icon carries gradient and mask ids; the copy drops them (its url(#id) still finds the originals) so the page keeps one of each.
+          var withId = copy.querySelectorAll('[id]');
+          for (var i = 0; i < withId.length; i++) withId[i].removeAttribute('id');
           s.appendChild(copy);
           glyph.appendChild(s);
         }
@@ -2117,7 +2394,7 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
 // edge and lights the edge; a focus beat fits and lights its ids (a group
 // lights its members); everything else dims. A step beat (from the older
 // steps[] form) reveals what it shows and hides the rest, as before, with no
-// dimming. Playing runs each beat as glide (600 ms for a story beat, the
+// dimming. Playing runs each beat as glide (450 ms for a story beat, the
 // camera's own glide for a step beat), then (a hop, motion allowed) the dot,
 // then a hold, and moves on; every duration divides by the speed; reduced
 // motion drops the dot and the glide. Registered as PADiagram.story and
@@ -2130,11 +2407,11 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
 
-  var GLIDE_MS = 600; // the camera's glide to a story (hop or focus) beat
-  var DOT_MS = 1200; // the dot along a hop's edge
-  var HOLD_MS = 2500; // then the caption holds...
-  var HOLD_PER_CHAR_MS = 40; // ...longer for a longer caption...
-  var HOLD_MAX_MS = 6000; // ...up to this
+  var GLIDE_MS = 450; // the camera's glide to a story (hop or focus) beat
+  var DOT_MS = 900; // the dot along a hop's edge
+  var HOLD_MS = 1800; // then the caption holds...
+  var HOLD_PER_CHAR_MS = 30; // ...longer for a longer caption...
+  var HOLD_MAX_MS = 4500; // ...up to this
   var SPEEDS = [0.5, 1, 1.5, 2];
   var DOT_RADIUS = 5;
 
@@ -2315,7 +2592,14 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
     var seenNow = null; // what the current step beat reveals, for reframe
     var run = 0; // bumps on every goTo, pause and exit, so a stale timer or frame does nothing
     var timer = 0;
+    var inHold = false; // a hold reported to hooks.onHold and not yet ended
+    function endHold() {
+      if (!inHold) return;
+      inHold = false;
+      if (hooks.onHoldEnd) hooks.onHoldEnd();
+    }
     function cancelRun() {
+      endHold();
       run += 1;
       if (timer) global.clearTimeout(timer);
       timer = 0;
@@ -2346,12 +2630,17 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
       camera.unfit();
       camera.moveTo(targetOf(beat, seen), { ms: glide });
       var hold = function () {
-        later(token, holdMs(beat), function () {
+        if (token !== run) return; // a dot frame that outlived its run
+        var ms = holdMs(beat);
+        later(token, ms, function () {
+          endHold();
           if (!playing) return;
           if (stepIndex < beats.length - 1) goTo(stepIndex + 1);
           else if (loop) goTo(0);
           else pause();
         });
+        // only a hold armed while playing is reported: one armed while paused never moves on
+        if (playing) { inHold = true; if (hooks.onHold) hooks.onHold(ms); }
       };
       later(token, instant ? 0 : glide, function () {
         if (beat.kind === 'hop' && !instant) travel(beat, DOT_MS / speed, hold); else hold();
@@ -2469,12 +2758,30 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
 // jump), data-pa-scrub (an <input type="range"> with aria-valuetext
 // "Beat n of N") and data-pa-ticks (its <datalist>), data-pa-prev,
 // data-pa-next, data-pa-prev-chapter, data-pa-next-chapter, data-pa-exit,
-// data-pa-play (its label reads Play or Pause),
+// data-pa-play (an icon button: aria-label reads Play or Pause, and its
+// span.pa-playicon holds the svg paint() swaps),
 // data-pa-speed (0.5× ... 2×), data-pa-loop (aria-pressed). Text goes in as
-// textContent, never markup.
+// textContent, never markup (the play icon and ring svgs are the constant exceptions).
+//
+// The returned object also has hold(ms) and holdEnd(), which the story's
+// onHold / onHoldEnd hooks call: a span.pa-ring (aria-hidden) fills over ms inside
+// the control that fires next, Next, or Play on the last beat with loop on, and
+// is absent on the last beat with loop off. paint() re-places a running ring but
+// never restarts it.
 (function (global) {
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
+
+  // The play button's icon: a triangle while paused, two bars while playing.
+  // Both use currentColor, so every theme and the light/dark toggle recolor them.
+  var PLAY_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><path d="M7 4.5v15l13-7.5z"/></svg>';
+  var PAUSE_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" focusable="false"><rect x="6" y="4.5" width="4.2" height="15" rx="1"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1"/></svg>';
+
+  // The hold ring: a track and an arc of pathLength 100; the arc's dash offset
+  // runs 100 (empty) to 0 (full). The arc colour and the ring's size come from CSS.
+  var RING_SVG = '<svg viewBox="0 0 24 24" focusable="false"><circle class="pa-ring-track" cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3"/><circle class="pa-ring-arc" cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" transform="rotate(-90 12 12)"/></svg>';
+  var RING_EMPTY = 100;
+  var RING_STATIC = 50; // reduced motion: half filled, a cue that the story moves on, no motion
 
   var pad2 = function (n) { return (n < 10 ? '0' : '') + n; };
 
@@ -2538,6 +2845,69 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
       button.disabled = off;
     }
 
+    // The icon span ships in the page's markup; one is added if an embedder left it out.
+    function paintPlay(button, playing) {
+      var icon = button.querySelector('.pa-playicon');
+      if (!icon) {
+        icon = doc.createElement('span');
+        icon.className = 'pa-playicon';
+        icon.setAttribute('aria-hidden', 'true');
+        button.appendChild(icon);
+      }
+      icon.innerHTML = playing ? PAUSE_SVG : PLAY_SVG;
+      button.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    }
+
+    // ---- the hold ring ------------------------------------------------------------------
+    var ring = null;
+    var arc = null;
+    var ringAnimation = null;
+    var holding = false; // between hold() and holdEnd(): paint() may place the ring only then
+    var reducedMotion = function () {
+      return !!(global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    };
+    // Where the ring belongs: the control that fires next. Nothing follows the last beat unless it loops.
+    function ringTarget() {
+      if (story.index() < story.count() - 1) return part('data-pa-next');
+      return story.loop() ? part('data-pa-play') : null;
+    }
+    // Moves a ring that is running; leaves it be when the target did not change.
+    function placeRing() {
+      if (!ring || !holding) return;
+      var to = ringTarget();
+      if (to === ring.parentNode) return;
+      if (ring.parentNode) ring.parentNode.removeChild(ring);
+      if (to) to.appendChild(ring);
+    }
+    // Ends the animation and takes the ring away. It runs while the story still reports
+    // playing (the hook fires inside cancelRun), so it never repaints: onStep does that.
+    function holdEnd() {
+      if (ringAnimation) ringAnimation.cancel();
+      ringAnimation = null;
+      holding = false;
+      if (ring && ring.parentNode) ring.parentNode.removeChild(ring);
+    }
+    function hold(ms) {
+      holdEnd();
+      if (!(ms > 0)) return;
+      if (!ring) {
+        ring = doc.createElement('span');
+        ring.className = 'pa-ring';
+        ring.setAttribute('aria-hidden', 'true');
+        ring.innerHTML = RING_SVG;
+        arc = ring.querySelector('.pa-ring-arc');
+      }
+      if (!arc) return;
+      holding = true;
+      if (reducedMotion() || !arc.animate) {
+        arc.setAttribute('stroke-dashoffset', String(RING_STATIC));
+      } else {
+        arc.setAttribute('stroke-dashoffset', String(RING_EMPTY));
+        ringAnimation = arc.animate([{ strokeDashoffset: RING_EMPTY }, { strokeDashoffset: 0 }], { duration: ms, easing: 'linear', fill: 'forwards' });
+      }
+      placeRing();
+    }
+
     function paint() {
       var presenting = story.isPresenting();
       if (caption) caption.hidden = !presenting;
@@ -2554,7 +2924,7 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
       disable(part('data-pa-prev'), i === 0);
       disable(part('data-pa-next'), i === n - 1);
       var play = part('data-pa-play');
-      if (play) play.textContent = story.isPlaying() ? 'Pause' : 'Play';
+      if (play) paintPlay(play, story.isPlaying());
       var speed = part('data-pa-speed');
       if (speed) {
         speed.textContent = story.speed() + '×';
@@ -2568,6 +2938,7 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
       }
       mark(beatChips, beatRow, i);
       mark(chapterChips, chaptersEl, story.chapter());
+      placeRing();
     }
     function wire(name, fn) {
       var b = part(name);
@@ -2591,7 +2962,7 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
       });
     }
     paint();
-    return { paint: paint };
+    return { paint: paint, hold: hold, holdEnd: holdEnd };
   };
 })(window);
 
@@ -2731,10 +3102,15 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
     var camera = PADiagram.camera(stage, svg, data, { onApply: emit });
     var trace = PADiagram.trace(svg, data, els, { isOff: function () { return story.isPresenting(); } });
     // Entering Play drops the selection and the route (the panel hides with them); each beat repaints the chrome.
-    var story = PADiagram.story(stage, svg, data, els, camera, { onStep: function () {
-      if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
-      transport.paint(); trace.refresh(); panel.paint(); emit();
-    } });
+    var story = PADiagram.story(stage, svg, data, els, camera, {
+      onStep: function () {
+        if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
+        transport.paint(); trace.refresh(); panel.paint(); emit();
+      },
+      // the transport shows the hold as a progress ring
+      onHold: function (ms) { transport.hold(ms); },
+      onHoldEnd: function () { transport.holdEnd(); },
+    });
     var transport = PADiagram.transport({ caption: options.caption || null, chapters: options.chapters || null }, data, story);
     var panel = PADiagram.panel({ panel: options.panel || null, tip: options.tip || null, found: options.found || null }, data, els, trace, {
       isOff: function () { return story.isPresenting(); },
@@ -2935,7 +3311,6 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs codex</code></pre>
     stage.addEventListener('dblclick', function () { if (!story.isPresenting()) camera.fit(); });
     stage.addEventListener('wheel', function (e) {
       e.preventDefault();
-      story.pause();
       var r = stage.getBoundingClientRect();
       var dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
       camera.zoomAt(Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);

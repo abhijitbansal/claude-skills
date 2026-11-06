@@ -163,8 +163,11 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 .kpi { display: flex; flex-direction: column; container-type: inline-size; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; min-width: 0; }
 .kpi dt { color: var(--text-2); font-size: var(--fs-sm); }
 .kpi dd { margin: 0; }
-/* the whole value is one line ("87%", "1,204 ms"). --n (its character count, set by the renderer) gives the
-   size at which it just fills the tile: --kpi-fit = 100cqi / (n * 0.7em per character), never below --fs-md.
+/* the whole value is one line ("87%", "1,204 ms"). --n (a character count, set by the renderer on the section:
+   the longest of its one-line values, so they share one size; a wide or long value sets its own on the value)
+   gives the size at which it just fills the tile: --kpi-fit = 100cqi / (n * 0.7em per character), never below
+   --fs-md. cqi is each tile's own width, so sizes agree across a whole section only while its tracks are equal
+   (no .kpi-wide); in the wrapping rows below they agree within a row.
    The base size is the cap; flavors cap at their own size with the same --kpi-fit. --n counts code points, so
    wide glyphs (CJK, emoji, capitals) can run wider than the 0.7em assumption; scripts/check.mjs reports any
    value that still spills. A value longer than the renderer's limit gets a wide tile (.kpi-wide).
@@ -662,6 +665,132 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
   html[data-flavor] .sec:has(> .sec-title)::before { -webkit-text-stroke: 0; color: var(--text-3); }
 }
 </style>
+<style>
+/* Simple English: shipped only on a page that has simple text. A section with `simple` holds its body twice, as
+   div[data-text="normal"] and div[data-text="simple"] (hidden); a heading whose text differs holds two spans the same
+   way. The root attribute data-simple="on" is set before first paint, so a reader who chose simple text never sees
+   the normal text flash. */
+html[data-simple="on"] [data-text="normal"] { display: none; }
+html[data-simple="on"] div[data-text="simple"] { display: block; }
+html[data-simple="on"] span[data-text="simple"] { display: inline; }
+
+/* The toggle is a theme-toggle pill (same surface, line and text tokens, same flavor treatment) that carries a word.
+   Off is a hollow dot and on is a filled one, so the state does not rest on colour. */
+.simple-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px; font: inherit; font-size: var(--fs-sm); font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer; }
+.simple-dot { flex: none; width: 10px; height: 10px; box-sizing: border-box; border: 2px solid currentColor; border-radius: 50%; }
+/* The root attribute is there at first paint, before the script has set aria-pressed, so the look follows both. */
+html[data-simple="on"] .simple-toggle, .simple-toggle[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
+html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-dot { background: currentColor; }
+.mast-text .simple-toggle { margin-top: 16px; }
+/* The deck bar has to hold Outline, the theme toggle, this pill and the counter on one row at 320 px. */
+@media (max-width: 380px) {
+  .deck-controls { gap: 6px; }
+  .deck-controls .simple-toggle { gap: 6px; padding: 0 10px; font-size: var(--fs-xs); }
+}
+
+/* Print shows the normal text only; so does a page with no script (the simple copies carry the hidden attribute). */
+@media print {
+  div[data-text="normal"] { display: block !important; }
+  span[data-text="normal"] { display: inline !important; }
+  [data-text="simple"] { display: none !important; }
+}
+</style>
+<script>
+// Simple English toggle. Shipped in the page head, only on a page that has simple text.
+// A section with `simple` holds its body twice: data-text="normal" and data-text="simple" (hidden). This script
+// reads the saved choice before first paint (no flash), then keeps the two copies and the button in step. Without
+// script the normal text shows. Storage can be missing or refuse writes; the toggle still works for this visit then.
+(function () {
+  if (window.__paSimple) return;
+  window.__paSimple = true;
+  var KEY = 'pa-simple';
+  var root = document.documentElement;
+
+  function saved() {
+    try { return window.localStorage.getItem(KEY) === 'on'; } catch (e) { return false; }
+  }
+  function save(on) {
+    try { window.localStorage.setItem(KEY, on ? 'on' : 'off'); } catch (e) { /* the choice lasts for this visit */ }
+  }
+  function isOn() { return root.getAttribute('data-simple') === 'on'; }
+
+  // A slide is named after its heading (aria-label); data-simple-label is the name for the simple view.
+  function rename(on) {
+    var slides = document.querySelectorAll('[data-simple-label]');
+    for (var i = 0; i < slides.length; i++) {
+      if (!slides[i].hasAttribute('data-normal-label')) slides[i].setAttribute('data-normal-label', slides[i].getAttribute('aria-label'));
+      slides[i].setAttribute('aria-label', slides[i].getAttribute(on ? 'data-simple-label' : 'data-normal-label'));
+    }
+  }
+
+  function paint(on) {
+    var normal = document.querySelectorAll('[data-text="normal"]');
+    var simple = document.querySelectorAll('[data-text="simple"]');
+    var buttons = document.querySelectorAll('[data-simple-toggle]');
+    var i;
+    for (i = 0; i < normal.length; i++) normal[i].hidden = on;
+    for (i = 0; i < simple.length; i++) simple[i].hidden = !on;
+    for (i = 0; i < buttons.length; i++) {
+      buttons[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      buttons[i].setAttribute('title', on ? 'Simple English is on. Switch back to the normal text' : 'Show the simple English text');
+    }
+    rename(on);
+  }
+
+  // A details block the reader opened stays open in the other copy: the two copies match by position.
+  function carryOpen(on) {
+    var normal = document.querySelectorAll('div[data-text="normal"]');
+    for (var i = 0; i < normal.length; i++) {
+      var twin = normal[i].nextElementSibling;
+      if (!twin || twin.getAttribute('data-text') !== 'simple') continue;
+      var from = (on ? normal[i] : twin).querySelectorAll('details');
+      var to = (on ? twin : normal[i]).querySelectorAll('details');
+      for (var j = 0; j < from.length && j < to.length; j++) to[j].open = from[j].open;
+    }
+  }
+
+  function apply(on) {
+    carryOpen(on);
+    if (on) root.setAttribute('data-simple', 'on'); else root.removeAttribute('data-simple');
+    paint(on);
+  }
+
+  // A plan page's Save as HTML serialises a deep clone of the root (plan.js). That copy must not keep this reader's
+  // view, or with script off it would open on simple text: the clone is put back to a fresh page's state here, so
+  // plan.js (inlined in every plan page, simple text or not) needs no change.
+  function freshCopy(copy) {
+    copy.removeAttribute('data-simple');
+    [].forEach.call(copy.querySelectorAll('[data-text="normal"]'), function (el) { el.hidden = false; });
+    [].forEach.call(copy.querySelectorAll('[data-text="simple"]'), function (el) { el.hidden = true; });
+    [].forEach.call(copy.querySelectorAll('[data-simple-toggle]'), function (el) {
+      el.setAttribute('aria-pressed', 'false');
+      el.removeAttribute('title');
+    });
+    [].forEach.call(copy.querySelectorAll('[data-simple-label]'), function (el) {
+      if (el.hasAttribute('data-normal-label')) el.setAttribute('aria-label', el.getAttribute('data-normal-label'));
+      el.removeAttribute('data-normal-label');
+    });
+  }
+  var cloneRoot = root.cloneNode;
+  root.cloneNode = function (deep) {
+    var copy = cloneRoot.call(this, deep);
+    if (deep) freshCopy(copy);
+    return copy;
+  };
+
+  // A saved copy of the page may carry the last reader's state; the stored choice (off when none) wins.
+  if (saved()) root.setAttribute('data-simple', 'on'); else root.removeAttribute('data-simple');
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest('[data-simple-toggle]');
+    if (!b) return;
+    var on = !isOn();
+    save(on);
+    apply(on);
+  });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { paint(isOn()); });
+  else paint(isOn());
+})();
+</script>
 </head>
 <body class="has-toc">
 <a class="skip" href="#content">Skip to content</a>
@@ -669,7 +798,7 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="mast-text">
 <h1>What portable-artifacts 1.0.0 adds</h1>
 <p class="subtitle">Four changes: what each does, how it was built, and what is still unproven</p>
-
+<button type="button" class="theme-toggle simple-toggle" data-simple-toggle aria-pressed="false"><span class="simple-dot" aria-hidden="true"></span>Simple English</button>
 </div>
 <button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><span class="pa-ti pa-ti-auto"><svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor"/></svg></span><span class="pa-ti pa-ti-light"><svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></span><span class="pa-ti pa-ti-dark"><svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></span></button>
 <script>
@@ -708,8 +837,8 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 </script>
 <div class="hero-art" aria-hidden="true"><svg class="art-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false" data-art="dusk" style="isolation:isolate"><defs><linearGradient id="ap2wlqp-sky" x1="0" y1="0" x2=".35" y2="1"><stop offset="0" stop-color="#fbeee2"/><stop offset="1" stop-color="#f8baa3"/></linearGradient><radialGradient id="ap2wlqp-sun"><stop offset="0" stop-color="#e0a100" stop-opacity="0.95"/><stop offset=".55" stop-color="#e0a100" stop-opacity="0.43"/><stop offset="1" stop-color="#e0a100" stop-opacity="0"/></radialGradient><filter id="ap2wlqp-grain" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="4361" stitchTiles="stitch"/><feColorMatrix values="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1"/></filter></defs><rect width="1280" height="720" fill="url(#ap2wlqp-sky)"/><circle cx="498" cy="254" r="396" fill="url(#ap2wlqp-sun)"/><path d="M0 720L0 313L11 315L21 318L32 319L43 321L53 322L64 323L75 323L85 323L96 322L107 322L117 321L128 319L139 318L149 317L160 315L171 314L181 313L192 312L203 312L213 311L224 311L235 311L245 310L256 310L267 310L277 310L288 310L299 310L309 309L320 309L331 308L341 306L352 305L363 303L373 300L384 298L395 295L405 293L416 290L427 287L437 285L448 283L459 281L469 279L480 278L491 277L501 277L512 278L523 278L533 280L544 281L555 283L565 286L576 288L587 291L597 293L608 296L619 298L629 300L640 302L651 304L661 305L672 307L683 307L693 308L704 308L715 309L725 309L736 309L747 309L757 309L768 309L779 310L789 310L800 311L811 312L821 313L832 315L843 316L853 318L864 319L875 320L885 322L896 323L907 324L917 324L928 324L939 324L949 323L960 321L971 320L981 318L992 315L1003 312L1013 309L1024 306L1035 303L1045 300L1056 297L1067 294L1077 291L1088 289L1099 287L1109 286L1120 285L1131 284L1141 284L1152 284L1163 285L1173 285L1184 286L1195 287L1205 288L1216 289L1227 290L1237 291L1248 291L1259 292L1269 292L1280 292L1280 720Z" fill="#ffb88a" opacity="0.7"/><path d="M0 720L0 332L11 330L21 329L32 329L43 331L53 334L64 339L75 345L85 352L96 360L107 368L117 377L128 385L139 392L149 398L160 403L171 407L181 410L192 411L203 410L213 409L224 406L235 403L245 400L256 396L267 393L277 391L288 389L299 387L309 387L320 388L331 389L341 391L352 394L363 396L373 399L384 401L395 402L405 402L416 401L427 399L437 395L448 391L459 385L469 378L480 370L491 362L501 354L512 347L523 340L533 334L544 329L555 326L565 325L576 325L587 326L597 329L608 334L619 339L629 344L640 350L651 356L661 362L672 367L683 371L693 374L704 376L715 377L725 377L736 376L747 375L757 374L768 372L779 371L789 370L800 371L811 372L821 374L832 377L843 382L853 387L864 392L875 398L885 405L896 410L907 416L917 420L928 423L939 425L949 425L960 423L971 420L981 415L992 409L1003 403L1013 395L1024 387L1035 379L1045 372L1056 365L1067 359L1077 354L1088 351L1099 349L1109 348L1120 348L1131 349L1141 351L1152 354L1163 356L1173 358L1184 360L1195 362L1205 362L1216 361L1227 360L1237 358L1248 355L1259 352L1269 348L1280 344L1280 720Z" fill="#f58564" opacity="0.76"/><path d="M0 720L0 437L11 441L21 446L32 450L43 454L53 458L64 462L75 466L85 470L96 473L107 476L117 478L128 480L139 482L149 483L160 484L171 485L181 485L192 484L203 483L213 482L224 480L235 478L245 476L256 474L267 471L277 468L288 465L299 462L309 459L320 456L331 453L341 449L352 446L363 444L373 441L384 438L395 436L405 433L416 431L427 429L437 428L448 426L459 425L469 423L480 422L491 422L501 421L512 420L523 420L533 420L544 419L555 419L565 419L576 420L587 420L597 421L608 421L619 422L629 423L640 424L651 426L661 427L672 429L683 431L693 433L704 435L715 438L725 440L736 443L747 446L757 449L768 452L779 455L789 458L800 462L811 465L821 468L832 471L843 473L853 476L864 478L875 480L885 482L896 483L907 484L917 485L928 485L939 484L949 484L960 482L971 481L981 479L992 476L1003 473L1013 470L1024 467L1035 463L1045 459L1056 455L1067 451L1077 446L1088 442L1099 438L1109 434L1120 430L1131 426L1141 423L1152 420L1163 417L1173 414L1184 413L1195 411L1205 410L1216 409L1227 409L1237 409L1248 409L1259 410L1269 412L1280 413L1280 720Z" fill="#e0566b" opacity="0.82"/><path d="M0 720L0 520L11 521L21 523L32 526L43 529L53 532L64 536L75 538L85 540L96 540L107 538L117 535L128 531L139 525L149 519L160 512L171 505L181 499L192 494L203 491L213 488L224 488L235 489L245 491L256 494L267 498L277 501L288 505L299 508L309 509L320 510L331 509L341 506L352 502L363 498L373 492L384 487L395 482L405 477L416 474L427 472L437 472L448 474L459 477L469 481L480 486L491 492L501 497L512 502L523 507L533 510L544 512L555 512L565 511L576 509L587 506L597 502L608 498L619 495L629 493L640 491L651 492L661 493L672 497L683 501L693 507L704 514L715 520L725 527L736 533L747 538L757 541L768 543L779 544L789 543L800 540L811 537L821 534L832 530L843 527L853 525L864 523L875 524L885 525L896 528L907 533L917 538L928 544L939 549L949 555L960 559L971 562L981 564L992 564L1003 563L1013 560L1024 556L1035 551L1045 546L1056 540L1067 536L1077 532L1088 529L1099 528L1109 528L1120 530L1131 533L1141 536L1152 540L1163 544L1173 547L1184 550L1195 551L1205 550L1216 548L1227 545L1237 540L1248 534L1259 528L1269 521L1280 514L1280 720Z" fill="#d6407f" opacity="0.88"/><path d="M0 720L0 576L11 583L21 591L32 599L43 606L53 612L64 617L75 620L85 621L96 621L107 620L117 617L128 614L139 609L149 605L160 602L171 599L181 597L192 596L203 597L213 600L224 603L235 607L245 612L256 617L267 622L277 626L288 629L299 631L309 630L320 629L331 625L341 620L352 614L363 606L373 599L384 591L395 584L405 577L416 572L427 569L437 566L448 566L459 567L469 569L480 572L491 576L501 579L512 583L523 585L533 587L544 587L555 586L565 583L576 580L587 575L597 569L608 564L619 558L629 553L640 550L651 547L661 546L672 547L683 550L693 554L704 560L715 567L725 574L736 582L747 589L757 595L768 600L779 604L789 607L800 608L811 607L821 605L832 603L843 599L853 596L864 593L875 590L885 589L896 589L907 590L917 593L928 597L939 602L949 608L960 614L971 621L981 626L992 631L1003 634L1013 636L1024 636L1035 634L1045 631L1056 626L1067 620L1077 613L1088 606L1099 600L1109 593L1120 588L1131 584L1141 581L1152 580L1163 580L1173 582L1184 585L1195 588L1205 591L1216 594L1227 596L1237 598L1248 598L1259 597L1269 594L1280 589L1280 720Z" fill="#b94c86" opacity="0.94"/><path d="M0 720L0 653L11 658L21 664L32 669L43 674L53 679L64 683L75 688L85 691L96 695L107 697L117 699L128 701L139 702L149 702L160 702L171 701L181 700L192 698L203 695L213 693L224 690L235 687L245 684L256 681L267 678L277 675L288 673L299 670L309 668L320 666L331 665L341 663L352 662L363 662L373 661L384 661L395 661L405 661L416 661L427 661L437 661L448 661L459 660L469 660L480 659L491 658L501 656L512 655L523 653L533 651L544 648L555 646L565 643L576 640L587 637L597 635L608 632L619 630L629 628L640 626L651 625L661 624L672 624L683 625L693 626L704 628L715 630L725 633L736 636L747 640L757 644L768 649L779 654L789 659L800 664L811 669L821 675L832 679L843 684L853 688L864 692L875 696L885 698L896 701L907 702L917 703L928 703L939 703L949 702L960 701L971 699L981 697L992 694L1003 691L1013 688L1024 685L1035 681L1045 678L1056 675L1067 672L1077 669L1088 667L1099 665L1109 663L1120 661L1131 660L1141 659L1152 659L1163 658L1173 658L1184 658L1195 658L1205 658L1216 658L1227 658L1237 658L1248 657L1259 657L1269 656L1280 655L1280 720Z" fill="#fbeee2" opacity="1"/><rect width="1280" height="720" filter="url(#ap2wlqp-grain)" opacity="0.35" style="mix-blend-mode:soft-light"/></svg><svg class="art-dark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false" data-art="dusk" style="isolation:isolate"><defs><linearGradient id="abdgtqv-sky" x1="0" y1="0" x2=".35" y2="1"><stop offset="0" stop-color="#17102a"/><stop offset="1" stop-color="#833d4a"/></linearGradient><radialGradient id="abdgtqv-sun"><stop offset="0" stop-color="#ffc79c" stop-opacity="0.95"/><stop offset=".55" stop-color="#ffc79c" stop-opacity="0.43"/><stop offset="1" stop-color="#ffc79c" stop-opacity="0"/></radialGradient><filter id="abdgtqv-grain" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="4361" stitchTiles="stitch"/><feColorMatrix values="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1"/></filter></defs><rect width="1280" height="720" fill="url(#abdgtqv-sky)"/><circle cx="498" cy="254" r="396" fill="url(#abdgtqv-sun)"/><path d="M0 720L0 313L11 315L21 318L32 319L43 321L53 322L64 323L75 323L85 323L96 322L107 322L117 321L128 319L139 318L149 317L160 315L171 314L181 313L192 312L203 312L213 311L224 311L235 311L245 310L256 310L267 310L277 310L288 310L299 310L309 309L320 309L331 308L341 306L352 305L363 303L373 300L384 298L395 295L405 293L416 290L427 287L437 285L448 283L459 281L469 279L480 278L491 277L501 277L512 278L523 278L533 280L544 281L555 283L565 286L576 288L587 291L597 293L608 296L619 298L629 300L640 302L651 304L661 305L672 307L683 307L693 308L704 308L715 309L725 309L736 309L747 309L757 309L768 309L779 310L789 310L800 311L811 312L821 313L832 315L843 316L853 318L864 319L875 320L885 322L896 323L907 324L917 324L928 324L939 324L949 323L960 321L971 320L981 318L992 315L1003 312L1013 309L1024 306L1035 303L1045 300L1056 297L1067 294L1077 291L1088 289L1099 287L1109 286L1120 285L1131 284L1141 284L1152 284L1163 285L1173 285L1184 286L1195 287L1205 288L1216 289L1227 290L1237 291L1248 291L1259 292L1269 292L1280 292L1280 720Z" fill="#ff9f78" opacity="0.7"/><path d="M0 720L0 332L11 330L21 329L32 329L43 331L53 334L64 339L75 345L85 352L96 360L107 368L117 377L128 385L139 392L149 398L160 403L171 407L181 410L192 411L203 410L213 409L224 406L235 403L245 400L256 396L267 393L277 391L288 389L299 387L309 387L320 388L331 389L341 391L352 394L363 396L373 399L384 401L395 402L405 402L416 401L427 399L437 395L448 391L459 385L469 378L480 370L491 362L501 354L512 347L523 340L533 334L544 329L555 326L565 325L576 325L587 326L597 329L608 334L619 339L629 344L640 350L651 356L661 362L672 367L683 371L693 374L704 376L715 377L725 377L736 376L747 375L757 374L768 372L779 371L789 370L800 371L811 372L821 374L832 377L843 382L853 387L864 392L875 398L885 405L896 410L907 416L917 420L928 423L939 425L949 425L960 423L971 420L981 415L992 409L1003 403L1013 395L1024 387L1035 379L1045 372L1056 365L1067 359L1077 354L1088 351L1099 349L1109 348L1120 348L1131 349L1141 351L1152 354L1163 356L1173 358L1184 360L1195 362L1205 362L1216 361L1227 360L1237 358L1248 355L1259 352L1269 348L1280 344L1280 720Z" fill="#ee6a6a" opacity="0.76"/><path d="M0 720L0 437L11 441L21 446L32 450L43 454L53 458L64 462L75 466L85 470L96 473L107 476L117 478L128 480L139 482L149 483L160 484L171 485L181 485L192 484L203 483L213 482L224 480L235 478L245 476L256 474L267 471L277 468L288 465L299 462L309 459L320 456L331 453L341 449L352 446L363 444L373 441L384 438L395 436L405 433L416 431L427 429L437 428L448 426L459 425L469 423L480 422L491 422L501 421L512 420L523 420L533 420L544 419L555 419L565 419L576 420L587 420L597 421L608 421L619 422L629 423L640 424L651 426L661 427L672 429L683 431L693 433L704 435L715 438L725 440L736 443L747 446L757 449L768 452L779 455L789 458L800 462L811 465L821 468L832 471L843 473L853 476L864 478L875 480L885 482L896 483L907 484L917 485L928 485L939 484L949 484L960 482L971 481L981 479L992 476L1003 473L1013 470L1024 467L1035 463L1045 459L1056 455L1067 451L1077 446L1088 442L1099 438L1109 434L1120 430L1131 426L1141 423L1152 420L1163 417L1173 414L1184 413L1195 411L1205 410L1216 409L1227 409L1237 409L1248 409L1259 410L1269 412L1280 413L1280 720Z" fill="#b94c86" opacity="0.82"/><path d="M0 720L0 520L11 521L21 523L32 526L43 529L53 532L64 536L75 538L85 540L96 540L107 538L117 535L128 531L139 525L149 519L160 512L171 505L181 499L192 494L203 491L213 488L224 488L235 489L245 491L256 494L267 498L277 501L288 505L299 508L309 509L320 510L331 509L341 506L352 502L363 498L373 492L384 487L395 482L405 477L416 474L427 472L437 472L448 474L459 477L469 481L480 486L491 492L501 497L512 502L523 507L533 510L544 512L555 512L565 511L576 509L587 506L597 502L608 498L619 495L629 493L640 491L651 492L661 493L672 497L683 501L693 507L704 514L715 520L725 527L736 533L747 538L757 541L768 543L779 544L789 543L800 540L811 537L821 534L832 530L843 527L853 525L864 523L875 524L885 525L896 528L907 533L917 538L928 544L939 549L949 555L960 559L971 562L981 564L992 564L1003 563L1013 560L1024 556L1035 551L1045 546L1056 540L1067 536L1077 532L1088 529L1099 528L1109 528L1120 530L1131 533L1141 536L1152 540L1163 544L1173 547L1184 550L1195 551L1205 550L1216 548L1227 545L1237 540L1248 534L1259 528L1269 521L1280 514L1280 720Z" fill="#f56fa0" opacity="0.88"/><path d="M0 720L0 576L11 583L21 591L32 599L43 606L53 612L64 617L75 620L85 621L96 621L107 620L117 617L128 614L139 609L149 605L160 602L171 599L181 597L192 596L203 597L213 600L224 603L235 607L245 612L256 617L267 622L277 626L288 629L299 631L309 630L320 629L331 625L341 620L352 614L363 606L373 599L384 591L395 584L405 577L416 572L427 569L437 566L448 566L459 567L469 569L480 572L491 576L501 579L512 583L523 585L533 587L544 587L555 586L565 583L576 580L587 575L597 569L608 564L619 558L629 553L640 550L651 547L661 546L672 547L683 550L693 554L704 560L715 567L725 574L736 582L747 589L757 595L768 600L779 604L789 607L800 608L811 607L821 605L832 603L843 599L853 596L864 593L875 590L885 589L896 589L907 590L917 593L928 597L939 602L949 608L960 614L971 621L981 626L992 631L1003 634L1013 636L1024 636L1035 634L1045 631L1056 626L1067 620L1077 613L1088 606L1099 600L1109 593L1120 588L1131 584L1141 581L1152 580L1163 580L1173 582L1184 585L1195 588L1205 591L1216 594L1227 596L1237 598L1248 598L1259 597L1269 594L1280 589L1280 720Z" fill="#6d3a8c" opacity="0.94"/><path d="M0 720L0 653L11 658L21 664L32 669L43 674L53 679L64 683L75 688L85 691L96 695L107 697L117 699L128 701L139 702L149 702L160 702L171 701L181 700L192 698L203 695L213 693L224 690L235 687L245 684L256 681L267 678L277 675L288 673L299 670L309 668L320 666L331 665L341 663L352 662L363 662L373 661L384 661L395 661L405 661L416 661L427 661L437 661L448 661L459 660L469 660L480 659L491 658L501 656L512 655L523 653L533 651L544 648L555 646L565 643L576 640L587 637L597 635L608 632L619 630L629 628L640 626L651 625L661 624L672 624L683 625L693 626L704 628L715 630L725 633L736 636L747 640L757 644L768 649L779 654L789 659L800 664L811 669L821 675L832 679L843 684L853 688L864 692L875 696L885 698L896 701L907 702L917 703L928 703L939 703L949 702L960 701L971 699L981 697L992 694L1003 691L1013 688L1024 685L1035 681L1045 678L1056 675L1067 672L1077 669L1088 667L1099 665L1109 663L1120 661L1131 660L1141 659L1152 659L1163 658L1173 658L1184 658L1195 658L1205 658L1216 658L1227 658L1237 658L1248 657L1259 657L1269 656L1280 655L1280 720Z" fill="#17102a" opacity="1"/><rect width="1280" height="720" filter="url(#abdgtqv-grain)" opacity="0.5" style="mix-blend-mode:soft-light"/></svg></div><div class="hero-tldr tone-good" id="numbers-hold-builds-cost-less-plans-get" role="region" aria-labelledby="numbers-hold-builds-cost-less-plans-get-title">
 <p class="sec-eyebrow pa-label">The verdict</p>
-<h2 class="hero-tldr-title sr-only" id="numbers-hold-builds-cost-less-plans-get-title">Numbers hold, builds cost less, plans get answers</h2>
-<div class="tldr tone-good">
+<h2 class="hero-tldr-title sr-only" id="numbers-hold-builds-cost-less-plans-get-title"><span data-text="normal">Numbers hold, builds cost less, plans get answers</span><span data-text="simple" hidden>Numbers stay put, builds cost less, plans get answers</span></h2>
+<div data-text="normal"><div class="tldr tone-good">
 <p class="tldr-tone"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span></p>
 <p class="lead">This release adds one-line numbers, cheap-model routing, a plan mode and the docs for all three.</p>
 <ul class="points">
@@ -717,7 +846,16 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <li>Copilot CLI ran Haiku 5.5 in 19 of 19 measured runs.</li>
 <li>Codex and VS Code Copilot Chat are untested.</li>
 </ul>
-</div>
+</div></div>
+<div data-text="simple" hidden><div class="tldr tone-good">
+<p class="tldr-tone"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span></p>
+<p class="lead">This release adds three things: numbers that stay on one line, routing to a cheap model and a plan mode. It also adds docs for all three.</p>
+<ul class="points">
+<li>Every test suite passed before the release.</li>
+<li>Copilot CLI ran Haiku 5.5 in 19 of 19 measured runs.</li>
+<li>We have not tested Codex or VS Code Copilot Chat.</li>
+</ul>
+</div></div>
 </div>
 </header>
 <div class="layout">
@@ -740,19 +878,19 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <section class="sec sec-kpis sec-alt" id="what-the-branch-measured" aria-labelledby="what-the-branch-measured-title">
 <p class="sec-eyebrow pa-label">Numbers</p>
 <h2 class="sec-title" id="what-the-branch-measured-title">What the branch measured<a class="anchor" href="#what-the-branch-measured" aria-label="Link to this section: What the branch measured">#</a></h2>
-<dl class="kpis">
-<div class="kpi tone-neutral"><dt>Plan tasks done</dt><dd class="kpi-value" style="--n: 2">16</dd></div>
-<div class="kpi tone-neutral"><dt>Smoke runs passed</dt><dd class="kpi-value" style="--n: 6">9 of 9</dd></div>
-<div class="kpi tone-neutral"><dt>Motion gate</dt><dd class="kpi-value" style="--n: 8">10 of 10</dd></div>
-<div class="kpi tone-neutral"><dt>Runs on Haiku 5.5</dt><dd class="kpi-value" style="--n: 8">19 of 19</dd></div>
-<div class="kpi tone-neutral"><dt>Themes now</dt><dd class="kpi-value" style="--n: 1">9</dd></div>
-<div class="kpi tone-neutral"><dt>Plugin version</dt><dd class="kpi-value" style="--n: 5">1.0.0</dd></div>
+<dl class="kpis" style="--n: 8">
+<div class="kpi tone-neutral"><dt>Plan tasks done</dt><dd class="kpi-value">16</dd></div>
+<div class="kpi tone-neutral"><dt>Smoke runs passed</dt><dd class="kpi-value">9 of 9</dd></div>
+<div class="kpi tone-neutral"><dt>Motion gate</dt><dd class="kpi-value">10 of 10</dd></div>
+<div class="kpi tone-neutral"><dt>Runs on Haiku 5.5</dt><dd class="kpi-value">19 of 19</dd></div>
+<div class="kpi tone-neutral"><dt>Themes now</dt><dd class="kpi-value">9</dd></div>
+<div class="kpi tone-neutral"><dt>Plugin version</dt><dd class="kpi-value">1.0.0</dd></div>
 </dl>
 </section>
 <section class="sec sec-cards" id="four-features-one-branch" aria-labelledby="four-features-one-branch-title">
 <p class="sec-eyebrow pa-label">Features</p>
-<h2 class="sec-title" id="four-features-one-branch-title">Four features, one branch<a class="anchor" href="#four-features-one-branch" aria-label="Link to this section: Four features, one branch">#</a></h2>
-<ul class="cards cols-2">
+<h2 class="sec-title" id="four-features-one-branch-title"><span data-text="normal">Four features, one branch</span><span data-text="simple" hidden>This branch holds four features</span><a class="anchor" href="#four-features-one-branch" aria-label="Link to this section: Four features, one branch">#</a></h2>
+<div data-text="normal"><ul class="cards cols-2">
 <li class="card tone-neutral">
 <div class="card-head"><h3>A. Numbers on one line</h3></div>
 <p>A number and its unit such as <span class="nw">42%</span> or <span class="nw">1,204 ms</span> no longer split across lines in explainers, decks, dashboards and motion.</p>
@@ -769,20 +907,42 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="card-head"><h3>D. Docs and release</h3></div>
 <p>READMEs, feature pages and counts updated; plugin version raised from 0.8.1 to 1.0.0 for the CI guard.</p>
 </li>
-</ul>
+</ul></div>
+<div data-text="simple" hidden><ul class="cards cols-2">
+<li class="card tone-neutral">
+<div class="card-head"><h3>A. Numbers on one line</h3></div>
+<p>A number and its unit, such as <span class="nw">42%</span> or <span class="nw">1,204 ms</span>, now stay on one line. This works in explainers, decks, dashboards and motion.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>B. Cheap-model routing</h3></div>
+<p>A skill hands the build to an artifact-builder agent. On Copilot and Codex, that agent runs a cheaper model.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>C. Plan mode</h3></div>
+<p>make-explainer has a plan preset. Reviewers answer decisions in the page. They return a JSON file to the agent.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>D. Docs and release</h3></div>
+<p>We updated the READMEs, feature pages and counts. We raised the plugin version from 0.8.1 to 1.0.0 for the CI guard.</p>
+</li>
+</ul></div>
 </section>
 <section class="sec sec-text" id="a-one-token-finder-many-renderers" aria-labelledby="a-one-token-finder-many-renderers-title">
 <p class="sec-eyebrow pa-label">A: how</p>
 <h2 class="sec-title" id="a-one-token-finder-many-renderers-title">A: one token finder, many renderers<a class="anchor" href="#a-one-token-finder-many-renderers" aria-label="Link to this section: A: one token finder, many renderers">#</a></h2>
-<div class="prose">
+<div data-text="normal"><div class="prose">
 <p><code>shared/nowrap.mjs</code> finds number-plus-unit tokens and skips <code>code</code>, <code>pre</code>, <code>kbd</code> and <code>samp</code>. The explainer wraps each hit in a <code>nowrap</code> span; motion binds the gap with a non-breaking space through an exact-match server route.</p>
 <p>KPI tiles size their font by value length with container-query units. Long values wrap inside the tile instead of spilling. <code>check.mjs</code> measures a real browser and fails on a split or an overflow.</p>
-</div>
+</div></div>
+<div data-text="simple" hidden><div class="prose">
+<p><code>shared/nowrap.mjs</code> finds number-plus-unit tokens. It skips <code>code</code>, <code>pre</code>, <code>kbd</code> and <code>samp</code>. The explainer wraps each hit in a <code>nowrap</code> span. Motion joins the gap with a non-breaking space. It does this through an exact-match server route.</p>
+<p>KPI tiles set their font size from the length of the value. They use container-query units. Long values wrap inside the tile instead of spilling out. <code>check.mjs</code> measures a real browser. It fails on a split or an overflow.</p>
+</div></div>
 </section>
 <section class="sec sec-steps" id="b-how-the-cheap-model-is-picked" aria-labelledby="b-how-the-cheap-model-is-picked-title">
 <p class="sec-eyebrow pa-label">B: how</p>
-<h2 class="sec-title" id="b-how-the-cheap-model-is-picked-title">B: how the cheap model is picked<a class="anchor" href="#b-how-the-cheap-model-is-picked" aria-label="Link to this section: B: how the cheap model is picked">#</a></h2>
-<ol class="steps">
+<h2 class="sec-title" id="b-how-the-cheap-model-is-picked-title"><span data-text="normal">B: how the cheap model is picked</span><span data-text="simple" hidden>B: how we pick the cheap model</span><a class="anchor" href="#b-how-the-cheap-model-is-picked" aria-label="Link to this section: B: how the cheap model is picked">#</a></h2>
+<div data-text="normal"><ol class="steps">
 <li class="step">
 <div class="step-head"><strong class="step-title">Generate agent files</strong></div>
 <p><code>bin/agents.mjs</code> writes an artifact-builder agent: Haiku 5.5 with GPT-5.4 nano as fallback on Copilot, <code>gpt-6-luna</code> on Codex, low effort.</p>
@@ -799,12 +959,30 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="step-head"><strong class="step-title">Measure it</strong></div>
 <p><code>eval/run-eval.mjs --agent</code> ran 9 smoke runs and the 10-prompt motion gate. Copilot logs confirmed Haiku in every run.</p>
 </li>
-</ol>
+</ol></div>
+<div data-text="simple" hidden><ol class="steps">
+<li class="step">
+<div class="step-head"><strong class="step-title">Generate agent files</strong></div>
+<p><code>bin/agents.mjs</code> writes an artifact-builder agent. On Copilot it uses Haiku 5.5, with GPT-5.4 nano as fallback. On Codex it uses <code>gpt-6-luna</code>. Effort is low for both.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Install them</strong></div>
+<p><code>bin/install.mjs</code> writes the files to the user-level agent folders. <code>--project</code> and <code>--agents-only</code> narrow that. After <code>npx skills add</code>, <code>doctor.mjs --fix builder_agent</code> writes the same files.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Tell the skill to hand off</strong></div>
+<p>All five SKILL.md files have a Cheaper model block. The block has a loop guard. The guard stops the sub-agent from delegating again.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Measure it</strong></div>
+<p><code>eval/run-eval.mjs --agent</code> ran 9 smoke runs and the 10-prompt motion gate. Copilot logs confirmed Haiku in every run.</p>
+</li>
+</ol></div>
 </section>
 <section class="sec sec-cards sec-alt" id="c-plan-mode-has-four-moving-parts" aria-labelledby="c-plan-mode-has-four-moving-parts-title">
 <p class="sec-eyebrow pa-label">C: how</p>
 <h2 class="sec-title" id="c-plan-mode-has-four-moving-parts-title">C: plan mode has four moving parts<a class="anchor" href="#c-plan-mode-has-four-moving-parts" aria-label="Link to this section: C: plan mode has four moving parts">#</a></h2>
-<ul class="cards cols-2">
+<div data-text="normal"><ul class="cards cols-2">
 <li class="card tone-neutral">
 <div class="card-head"><h3>Plan preset and sections</h3></div>
 <p>Five new section types: decision, approval, question, verdict and review, laid out decision-first with the verdict last.</p>
@@ -821,18 +999,40 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="card-head"><h3>Answer checker</h3></div>
 <p><code>answers.mjs</code> validates the answers file, or a saved page, against a closed schema and quotes reviewer text only as data, never as instructions.</p>
 </li>
-</ul>
+</ul></div>
+<div data-text="simple" hidden><ul class="cards cols-2">
+<li class="card tone-neutral">
+<div class="card-head"><h3>Plan preset and sections</h3></div>
+<p>There are five new section types: decision, approval, question, verdict and review. The page puts decisions first and the verdict last.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>Two themes</h3></div>
+<p><code>mono</code> has a technical look and a cyan accent. <code>brief</code> has an executive look. The explainer now has 9 themes.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>Page runtime</h3></div>
+<p><code>plan.js</code> keeps answers in the browser. It offers Copy and Download (<code>plan-answers.json</code>). It also offers Save as HTML, a sticky button that saves the page with the answers inside.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>Answer checker</h3></div>
+<p><code>answers.mjs</code> checks the answers file, or a saved page, against a closed schema. It quotes reviewer text only as data. It never treats that text as instructions.</p>
+</li>
+</ul></div>
 </section>
 <section class="sec sec-callout" id="what-is-still-unproven">
-<aside class="callout tone-warn">
+<div data-text="normal"><aside class="callout tone-warn">
 <p class="callout-head"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Warning</span></span><strong class="callout-title">What is still unproven</strong></p>
 <p>Codex has no account here, so its agent file was written from docs only. The one hand-off trial reached Haiku, but the sub-agent was denied file access and the main model finished the work. Smoke and motion run costs were not measured.</p>
-</aside>
+</aside></div>
+<div data-text="simple" hidden><aside class="callout tone-warn">
+<p class="callout-head"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Warning</span></span><strong class="callout-title">What we have not proven yet</strong></p>
+<p>We have no Codex account here. So we wrote its agent file from the docs only. We ran one hand-off trial. It reached Haiku, but the sub-agent got no file access. The main model finished the work. We did not measure the cost of the smoke and motion runs.</p>
+</aside></div>
 </section>
 <section class="sec sec-risks" id="known-gaps-left-open" aria-labelledby="known-gaps-left-open-title">
 <p class="sec-eyebrow pa-label">Gaps</p>
-<h2 class="sec-title" id="known-gaps-left-open-title">Known gaps left open<a class="anchor" href="#known-gaps-left-open" aria-label="Link to this section: Known gaps left open">#</a></h2>
-<div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
+<h2 class="sec-title" id="known-gaps-left-open-title"><span data-text="normal">Known gaps left open</span><span data-text="simple" hidden>Gaps we have not closed</span><a class="anchor" href="#known-gaps-left-open" aria-label="Link to this section: Known gaps left open">#</a></h2>
+<div data-text="normal"><div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
 <table>
 <thead><tr><th scope="col">Severity</th><th scope="col">Risk</th><th scope="col">Mitigation</th></tr></thead>
 <tbody>
@@ -858,12 +1058,39 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 </tr>
 </tbody>
 </table>
-</div>
+</div></div>
+<div data-text="simple" hidden><div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
+<table>
+<thead><tr><th scope="col">Severity</th><th scope="col">Risk</th><th scope="col">Mitigation</th></tr></thead>
+<tbody>
+<tr>
+<td data-label="Severity"><span class="chip tone-low"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>Low</span></span></td>
+<td data-label="Risk">A KPI value under 16 characters can still spill its tile if it has wide glyphs (W, M, CJK).</td>
+<td data-label="Mitigation">check.mjs reports it.</td>
+</tr>
+<tr>
+<td data-label="Severity"><span class="chip tone-low"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>Low</span></span></td>
+<td data-label="Risk">The stale-answers notice stays visible after the first new answer.</td>
+<td data-label="Mitigation">We parked this for a follow-up.</td>
+</tr>
+<tr>
+<td data-label="Severity"><span class="chip tone-low"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>Low</span></span></td>
+<td data-label="Risk">On every explainer page, <code>--force</code> in inline code breaks after the hyphen.</td>
+<td data-label="Mitigation">We parked this for a follow-up.</td>
+</tr>
+<tr>
+<td data-label="Severity"><span class="chip tone-low"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>Low</span></span></td>
+<td data-label="Risk">The search terms in docs/catalog.html miss the new features.</td>
+<td data-label="Mitigation">We parked this for a follow-up.</td>
+</tr>
+</tbody>
+</table>
+</div></div>
 </section>
 <section class="sec sec-steps" id="how-the-release-was-built" aria-labelledby="how-the-release-was-built-title">
 <p class="sec-eyebrow pa-label">Process</p>
-<h2 class="sec-title" id="how-the-release-was-built-title">How the release was built<a class="anchor" href="#how-the-release-was-built" aria-label="Link to this section: How the release was built">#</a></h2>
-<ol class="steps">
+<h2 class="sec-title" id="how-the-release-was-built-title"><span data-text="normal">How the release was built</span><span data-text="simple" hidden>How we built the release</span><a class="anchor" href="#how-the-release-was-built" aria-label="Link to this section: How the release was built">#</a></h2>
+<div data-text="normal"><ol class="steps">
 <li class="step">
 <div class="step-head"><strong class="step-title">Spec and plan</strong></div>
 <p>A design spec and a 16-task plan were written and committed under <code>docs/superpowers/</code>.</p>
@@ -876,7 +1103,21 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="step-head"><strong class="step-title">Whole-change review</strong></div>
 <p>The strongest model reviewed the whole change, one fix wave followed, and a scoped re-review came back clean.</p>
 </li>
-</ol>
+</ol></div>
+<div data-text="simple" hidden><ol class="steps">
+<li class="step">
+<div class="step-head"><strong class="step-title">Spec and plan</strong></div>
+<p>We wrote a design spec and a 16-task plan. We committed both under <code>docs/superpowers/</code>.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">One agent per task</strong></div>
+<p>Each task went to a fresh implementer. A spec review and a quality review followed. Then came fix rounds. The controller made every commit.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Whole-change review</strong></div>
+<p>The strongest model reviewed the whole change. One fix wave followed. A scoped re-review then came back clean.</p>
+</li>
+</ol></div>
 </section>
 </main>
 </div>

@@ -163,8 +163,11 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 .kpi { display: flex; flex-direction: column; container-type: inline-size; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; min-width: 0; }
 .kpi dt { color: var(--text-2); font-size: var(--fs-sm); }
 .kpi dd { margin: 0; }
-/* the whole value is one line ("87%", "1,204 ms"). --n (its character count, set by the renderer) gives the
-   size at which it just fills the tile: --kpi-fit = 100cqi / (n * 0.7em per character), never below --fs-md.
+/* the whole value is one line ("87%", "1,204 ms"). --n (a character count, set by the renderer on the section:
+   the longest of its one-line values, so they share one size; a wide or long value sets its own on the value)
+   gives the size at which it just fills the tile: --kpi-fit = 100cqi / (n * 0.7em per character), never below
+   --fs-md. cqi is each tile's own width, so sizes agree across a whole section only while its tracks are equal
+   (no .kpi-wide); in the wrapping rows below they agree within a row.
    The base size is the cap; flavors cap at their own size with the same --kpi-fit. --n counts code points, so
    wide glyphs (CJK, emoji, capitals) can run wider than the 0.7em assumption; scripts/check.mjs reports any
    value that still spills. A value longer than the renderer's limit gets a wide tile (.kpi-wide).
@@ -662,6 +665,132 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
   html[data-flavor] .sec:has(> .sec-title)::before { -webkit-text-stroke: 0; color: var(--text-3); }
 }
 </style>
+<style>
+/* Simple English: shipped only on a page that has simple text. A section with `simple` holds its body twice, as
+   div[data-text="normal"] and div[data-text="simple"] (hidden); a heading whose text differs holds two spans the same
+   way. The root attribute data-simple="on" is set before first paint, so a reader who chose simple text never sees
+   the normal text flash. */
+html[data-simple="on"] [data-text="normal"] { display: none; }
+html[data-simple="on"] div[data-text="simple"] { display: block; }
+html[data-simple="on"] span[data-text="simple"] { display: inline; }
+
+/* The toggle is a theme-toggle pill (same surface, line and text tokens, same flavor treatment) that carries a word.
+   Off is a hollow dot and on is a filled one, so the state does not rest on colour. */
+.simple-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px; font: inherit; font-size: var(--fs-sm); font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer; }
+.simple-dot { flex: none; width: 10px; height: 10px; box-sizing: border-box; border: 2px solid currentColor; border-radius: 50%; }
+/* The root attribute is there at first paint, before the script has set aria-pressed, so the look follows both. */
+html[data-simple="on"] .simple-toggle, .simple-toggle[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
+html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-dot { background: currentColor; }
+.mast-text .simple-toggle { margin-top: 16px; }
+/* The deck bar has to hold Outline, the theme toggle, this pill and the counter on one row at 320 px. */
+@media (max-width: 380px) {
+  .deck-controls { gap: 6px; }
+  .deck-controls .simple-toggle { gap: 6px; padding: 0 10px; font-size: var(--fs-xs); }
+}
+
+/* Print shows the normal text only; so does a page with no script (the simple copies carry the hidden attribute). */
+@media print {
+  div[data-text="normal"] { display: block !important; }
+  span[data-text="normal"] { display: inline !important; }
+  [data-text="simple"] { display: none !important; }
+}
+</style>
+<script>
+// Simple English toggle. Shipped in the page head, only on a page that has simple text.
+// A section with `simple` holds its body twice: data-text="normal" and data-text="simple" (hidden). This script
+// reads the saved choice before first paint (no flash), then keeps the two copies and the button in step. Without
+// script the normal text shows. Storage can be missing or refuse writes; the toggle still works for this visit then.
+(function () {
+  if (window.__paSimple) return;
+  window.__paSimple = true;
+  var KEY = 'pa-simple';
+  var root = document.documentElement;
+
+  function saved() {
+    try { return window.localStorage.getItem(KEY) === 'on'; } catch (e) { return false; }
+  }
+  function save(on) {
+    try { window.localStorage.setItem(KEY, on ? 'on' : 'off'); } catch (e) { /* the choice lasts for this visit */ }
+  }
+  function isOn() { return root.getAttribute('data-simple') === 'on'; }
+
+  // A slide is named after its heading (aria-label); data-simple-label is the name for the simple view.
+  function rename(on) {
+    var slides = document.querySelectorAll('[data-simple-label]');
+    for (var i = 0; i < slides.length; i++) {
+      if (!slides[i].hasAttribute('data-normal-label')) slides[i].setAttribute('data-normal-label', slides[i].getAttribute('aria-label'));
+      slides[i].setAttribute('aria-label', slides[i].getAttribute(on ? 'data-simple-label' : 'data-normal-label'));
+    }
+  }
+
+  function paint(on) {
+    var normal = document.querySelectorAll('[data-text="normal"]');
+    var simple = document.querySelectorAll('[data-text="simple"]');
+    var buttons = document.querySelectorAll('[data-simple-toggle]');
+    var i;
+    for (i = 0; i < normal.length; i++) normal[i].hidden = on;
+    for (i = 0; i < simple.length; i++) simple[i].hidden = !on;
+    for (i = 0; i < buttons.length; i++) {
+      buttons[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      buttons[i].setAttribute('title', on ? 'Simple English is on. Switch back to the normal text' : 'Show the simple English text');
+    }
+    rename(on);
+  }
+
+  // A details block the reader opened stays open in the other copy: the two copies match by position.
+  function carryOpen(on) {
+    var normal = document.querySelectorAll('div[data-text="normal"]');
+    for (var i = 0; i < normal.length; i++) {
+      var twin = normal[i].nextElementSibling;
+      if (!twin || twin.getAttribute('data-text') !== 'simple') continue;
+      var from = (on ? normal[i] : twin).querySelectorAll('details');
+      var to = (on ? twin : normal[i]).querySelectorAll('details');
+      for (var j = 0; j < from.length && j < to.length; j++) to[j].open = from[j].open;
+    }
+  }
+
+  function apply(on) {
+    carryOpen(on);
+    if (on) root.setAttribute('data-simple', 'on'); else root.removeAttribute('data-simple');
+    paint(on);
+  }
+
+  // A plan page's Save as HTML serialises a deep clone of the root (plan.js). That copy must not keep this reader's
+  // view, or with script off it would open on simple text: the clone is put back to a fresh page's state here, so
+  // plan.js (inlined in every plan page, simple text or not) needs no change.
+  function freshCopy(copy) {
+    copy.removeAttribute('data-simple');
+    [].forEach.call(copy.querySelectorAll('[data-text="normal"]'), function (el) { el.hidden = false; });
+    [].forEach.call(copy.querySelectorAll('[data-text="simple"]'), function (el) { el.hidden = true; });
+    [].forEach.call(copy.querySelectorAll('[data-simple-toggle]'), function (el) {
+      el.setAttribute('aria-pressed', 'false');
+      el.removeAttribute('title');
+    });
+    [].forEach.call(copy.querySelectorAll('[data-simple-label]'), function (el) {
+      if (el.hasAttribute('data-normal-label')) el.setAttribute('aria-label', el.getAttribute('data-normal-label'));
+      el.removeAttribute('data-normal-label');
+    });
+  }
+  var cloneRoot = root.cloneNode;
+  root.cloneNode = function (deep) {
+    var copy = cloneRoot.call(this, deep);
+    if (deep) freshCopy(copy);
+    return copy;
+  };
+
+  // A saved copy of the page may carry the last reader's state; the stored choice (off when none) wins.
+  if (saved()) root.setAttribute('data-simple', 'on'); else root.removeAttribute('data-simple');
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest('[data-simple-toggle]');
+    if (!b) return;
+    var on = !isOn();
+    save(on);
+    apply(on);
+  });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { paint(isOn()); });
+  else paint(isOn());
+})();
+</script>
 </head>
 <body class="has-toc">
 <a class="skip" href="#content">Skip to content</a>
@@ -669,7 +798,7 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="mast-text">
 <h1>What portable-artifacts 1.0.0 adds</h1>
 <p class="subtitle">Four changes: what each does, how it was built, and what is still unproven</p>
-
+<button type="button" class="theme-toggle simple-toggle" data-simple-toggle aria-pressed="false"><span class="simple-dot" aria-hidden="true"></span>Simple English</button>
 </div>
 <button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><span class="pa-ti pa-ti-auto"><svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor"/></svg></span><span class="pa-ti pa-ti-light"><svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></span><span class="pa-ti pa-ti-dark"><svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></span></button>
 <script>
@@ -708,8 +837,8 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 </script>
 <div class="hero-art" aria-hidden="true"><svg class="art-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false" data-art="press" style="isolation:isolate"><defs><filter id="a9at7pr-grain" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="4361" stitchTiles="stitch"/><feColorMatrix values="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1"/></filter></defs><rect width="1280" height="720" fill="#f1ece1"/><path d="M358 260Q350 288 340 310Q329 331 320 350Q310 370 295 387Q279 404 258 417Q237 429 211 438Q185 446 155 443Q126 439 105 417Q85 395 76 368Q68 341 63 315Q59 288 65 262Q71 237 92 221Q114 205 135 199Q157 192 174 178Q190 163 216 146Q241 129 273 128Q305 128 329 149Q353 170 360 201Q366 232 358 260Z" fill="#d99a1e" opacity=".9" style="mix-blend-mode:multiply"/><path d="M346 496Q350 526 351 559Q352 591 349 630Q346 670 318 697Q290 725 248 717Q207 708 178 690Q150 671 123 667Q96 662 67 652Q37 642 20 615Q4 589 -5 557Q-15 526 -19 490Q-23 454 -6 422Q12 389 45 375Q79 361 112 357Q145 353 175 354Q205 354 234 364Q263 374 287 393Q311 412 327 439Q342 465 346 496Z" fill="#2f5f8a" opacity=".9" style="mix-blend-mode:multiply"/><g fill="none" opacity="0.75"><path d="M1092 324Q1092 328 1091 332Q1090 336 1087 339Q1084 342 1081 344Q1078 346 1076 349Q1074 351 1072 354Q1069 357 1066 360Q1063 363 1059 363Q1055 364 1051 363Q1047 362 1044 360Q1041 358 1037 357Q1033 355 1029 354Q1024 353 1020 350Q1016 347 1014 342Q1012 338 1013 333Q1013 328 1016 324Q1018 319 1021 316Q1023 313 1026 310Q1029 307 1033 306Q1037 305 1040 304Q1044 304 1047 303Q1049 303 1052 301Q1055 299 1059 296Q1063 293 1068 291Q1074 289 1079 291Q1084 292 1087 296Q1090 300 1091 305Q1092 310 1093 315Q1093 319 1092 324Z" stroke="#17140f" stroke-width="1.2"/><path d="M1130 319Q1129 328 1127 336Q1125 344 1119 350Q1114 356 1108 360Q1101 365 1097 370Q1092 375 1088 381Q1084 387 1077 392Q1071 397 1063 398Q1055 400 1047 398Q1040 396 1033 392Q1026 389 1018 386Q1011 383 1002 380Q994 377 985 371Q977 366 972 357Q968 348 970 338Q972 328 977 319Q982 311 987 304Q992 297 998 292Q1003 287 1011 284Q1018 281 1025 281Q1032 280 1038 279Q1044 278 1049 274Q1055 269 1063 264Q1071 258 1082 255Q1092 251 1102 254Q1112 256 1119 264Q1125 272 1127 282Q1130 292 1130 301Q1130 311 1130 319Z" stroke="#17140f" stroke-width="1.2"/><path d="M1167 315Q1166 328 1163 340Q1160 352 1151 361Q1143 370 1134 377Q1124 383 1118 391Q1111 398 1105 407Q1098 417 1088 424Q1079 432 1067 434Q1055 435 1044 432Q1032 429 1021 425Q1011 420 1000 415Q989 411 976 406Q963 401 950 393Q937 385 931 371Q924 358 927 343Q930 328 938 315Q945 303 953 292Q960 282 969 274Q977 266 988 262Q999 258 1010 257Q1021 257 1030 255Q1038 253 1047 246Q1055 240 1067 231Q1079 223 1095 218Q1110 213 1126 217Q1141 220 1151 232Q1161 244 1164 259Q1167 274 1167 288Q1167 302 1167 315Z" stroke="#17140f" stroke-width="1.2"/><path d="M1204 311Q1204 328 1199 344Q1195 360 1184 372Q1172 384 1160 393Q1147 401 1138 411Q1130 421 1121 434Q1113 447 1100 457Q1087 466 1071 468Q1055 471 1040 467Q1024 463 1010 457Q996 451 982 445Q967 438 950 432Q933 425 916 414Q898 404 889 386Q880 368 884 348Q888 328 899 311Q909 295 919 281Q928 267 940 256Q951 245 966 240Q981 235 995 234Q1010 234 1021 231Q1032 228 1044 219Q1055 210 1071 199Q1087 188 1108 182Q1128 176 1149 180Q1170 184 1183 200Q1196 215 1200 236Q1204 256 1204 275Q1204 294 1204 311Z" stroke="#a62a16" stroke-width="2.6"/><path d="M1240 307Q1241 328 1236 348Q1231 368 1216 383Q1201 398 1185 409Q1169 419 1159 432Q1148 445 1138 461Q1127 478 1111 489Q1095 501 1075 503Q1055 506 1036 501Q1017 497 999 490Q981 482 963 474Q945 466 924 458Q903 449 881 436Q859 422 847 400Q836 378 841 353Q847 328 860 307Q873 286 885 269Q897 252 910 237Q924 223 943 217Q962 211 980 211Q999 211 1013 207Q1027 203 1041 191Q1055 180 1075 166Q1095 153 1121 145Q1147 138 1172 143Q1198 148 1215 167Q1232 187 1237 212Q1241 238 1241 262Q1240 286 1240 307Z" stroke="#17140f" stroke-width="1.2"/><path d="M1277 303Q1278 328 1272 352Q1267 376 1249 394Q1231 412 1211 424Q1191 437 1179 452Q1167 468 1154 488Q1142 508 1122 522Q1103 536 1079 538Q1055 540 1032 536Q1009 531 987 523Q966 514 944 504Q923 493 898 483Q873 473 846 457Q820 441 805 415Q791 388 798 358Q805 328 821 303Q838 278 851 257Q865 236 881 219Q897 202 920 195Q943 188 966 188Q988 189 1005 183Q1021 178 1038 164Q1055 149 1079 133Q1103 118 1134 109Q1164 101 1196 107Q1227 112 1248 135Q1269 158 1273 189Q1278 220 1277 249Q1276 277 1277 303Z" stroke="#17140f" stroke-width="1.2"/><path d="M1313 299Q1315 328 1309 356Q1303 384 1281 405Q1260 426 1237 440Q1213 454 1199 473Q1186 491 1171 515Q1157 539 1134 555Q1110 570 1083 572Q1055 575 1028 570Q1001 565 976 555Q950 546 926 533Q901 521 872 509Q844 497 812 478Q780 460 763 429Q746 398 755 363Q763 328 783 299Q802 270 818 246Q833 221 852 201Q870 180 897 172Q925 164 951 165Q977 166 996 160Q1015 153 1035 136Q1055 118 1083 101Q1111 83 1147 73Q1182 64 1219 70Q1256 76 1280 103Q1305 129 1310 166Q1316 202 1314 236Q1312 269 1313 299Z" stroke="#17140f" stroke-width="1.2"/><path d="M1350 295Q1352 328 1346 360Q1339 393 1314 417Q1289 440 1262 456Q1235 471 1220 493Q1204 515 1188 543Q1172 570 1145 588Q1118 605 1087 607Q1055 609 1024 604Q993 599 964 588Q935 578 907 563Q879 549 847 534Q814 520 778 500Q741 479 721 444Q701 409 711 368Q722 328 744 295Q767 262 784 234Q802 206 822 182Q843 158 874 150Q906 141 936 143Q967 144 988 136Q1010 128 1032 108Q1055 87 1087 67Q1119 48 1159 38Q1200 27 1242 34Q1284 41 1313 70Q1341 100 1347 142Q1353 185 1350 223Q1348 261 1350 295Z" stroke="#a62a16" stroke-width="2.6"/><path d="M1386 291Q1389 328 1383 365Q1376 401 1347 428Q1318 455 1287 472Q1257 489 1240 513Q1223 538 1205 570Q1187 602 1157 621Q1126 639 1091 641Q1055 643 1020 638Q986 633 952 622Q919 610 888 593Q857 576 821 560Q785 543 744 521Q702 498 679 459Q655 419 668 374Q680 328 706 291Q733 254 751 222Q770 191 792 163Q815 136 851 127Q888 118 922 120Q956 122 980 113Q1004 103 1030 80Q1055 56 1091 34Q1127 13 1172 2Q1217 -9 1265 -2Q1313 5 1346 37Q1378 70 1384 118Q1390 167 1386 210Q1383 253 1386 291Z" stroke="#17140f" stroke-width="1.2"/><path d="M1422 287Q1426 328 1420 369Q1413 410 1380 439Q1347 469 1313 487Q1278 506 1260 533Q1241 561 1222 598Q1202 634 1168 654Q1134 674 1095 675Q1055 676 1017 671Q978 667 941 655Q903 643 869 624Q835 604 796 585Q756 566 709 542Q663 517 636 473Q609 430 624 379Q638 328 668 287Q698 246 718 211Q738 175 763 145Q787 114 828 104Q869 94 907 98Q946 101 972 90Q998 78 1027 51Q1055 24 1095 1Q1135 -22 1185 -34Q1235 -45 1288 -38Q1342 -31 1378 5Q1415 41 1421 95Q1427 149 1422 197Q1418 245 1422 287Z" stroke="#17140f" stroke-width="1.2"/></g><g fill="#17140f" opacity=".7"><circle cx="1249" cy="462" r="2.8"/><circle cx="646" cy="194" r="2.9"/><circle cx="603" cy="261" r="3"/><circle cx="776" cy="600" r="4.2"/><circle cx="364" cy="459" r="3.3"/><circle cx="495" cy="390" r="4.5"/><circle cx="425" cy="11" r="1.2"/><circle cx="1213" cy="580" r="4.3"/><circle cx="1202" cy="339" r="2.4"/><circle cx="581" cy="687" r="4.6"/><circle cx="1071" cy="190" r="2.6"/><circle cx="656" cy="659" r="3.1"/><circle cx="1140" cy="633" r="4.2"/><circle cx="1193" cy="606" r="4.5"/><circle cx="73" cy="462" r="4.5"/><circle cx="906" cy="703" r="2.6"/><circle cx="1204" cy="474" r="1.7"/><circle cx="151" cy="508" r="4.5"/><circle cx="178" cy="411" r="2.6"/><circle cx="149" cy="719" r="4.4"/><circle cx="414" cy="343" r="1.8"/><circle cx="756" cy="716" r="1.6"/><circle cx="274" cy="99" r="3.9"/><circle cx="1100" cy="99" r="4"/><circle cx="762" cy="180" r="2.2"/><circle cx="748" cy="610" r="2.6"/><circle cx="128" cy="20" r="2.8"/><circle cx="680" cy="517" r="1.7"/><circle cx="62" cy="134" r="2.4"/><circle cx="181" cy="574" r="2.3"/><circle cx="3" cy="373" r="4.4"/><circle cx="18" cy="685" r="2.6"/><circle cx="366" cy="311" r="3.3"/><circle cx="1088" cy="409" r="1.7"/><circle cx="482" cy="64" r="1.3"/><circle cx="773" cy="405" r="3"/><circle cx="810" cy="630" r="4"/><circle cx="1162" cy="322" r="4.4"/><circle cx="975" cy="55" r="1.2"/><circle cx="657" cy="98" r="4.5"/><circle cx="610" cy="220" r="2.8"/><circle cx="624" cy="518" r="4.2"/><circle cx="176" cy="90" r="2.6"/><circle cx="1090" cy="708" r="1.9"/><circle cx="364" cy="289" r="3.1"/><circle cx="575" cy="688" r="4.1"/><circle cx="803" cy="300" r="4.5"/><circle cx="112" cy="87" r="3"/><circle cx="640" cy="447" r="1.9"/><circle cx="401" cy="111" r="2.1"/><circle cx="549" cy="534" r="3.5"/><circle cx="617" cy="430" r="1.5"/><circle cx="1188" cy="88" r="1.7"/><circle cx="617" cy="573" r="3"/><circle cx="342" cy="705" r="1.3"/><circle cx="422" cy="503" r="3.3"/><circle cx="1097" cy="589" r="4.3"/><circle cx="984" cy="307" r="3.2"/><circle cx="176" cy="84" r="2.6"/><circle cx="998" cy="713" r="2.8"/><circle cx="102" cy="519" r="4.4"/><circle cx="373" cy="109" r="1.6"/><circle cx="256" cy="410" r="4.2"/><circle cx="527" cy="569" r="1.5"/><circle cx="283" cy="640" r="1.7"/><circle cx="783" cy="697" r="1.2"/><circle cx="100" cy="76" r="4.4"/><circle cx="638" cy="203" r="3"/><circle cx="1104" cy="96" r="2.4"/><circle cx="1223" cy="203" r="3.3"/></g><g fill="none" stroke="#d99a1e" stroke-linecap="round" style="mix-blend-mode:multiply" opacity=".9"><path d="M-1 -10h.1M25 5h.1M10 30h.1M-5 56h.1M65 -6h.1M50 20h.1M35 45h.1M21 71h.1M6 96h.1M-9 122h.1M91 9h.1M76 34h.1M61 60h.1M46 86h.1M32 111h.1M17 137h.1M2 163h.1M131 -2h.1M116 23h.1M102 49h.1M87 75h.1M72 100h.1M57 126h.1M42 152h.1M172 -13h.1M157 13h.1M142 38h.1M127 64h.1M112 90h.1M197 2h.1M182 27h.1M168 53h.1M153 79h.1M238 -9h.1M223 17h.1M208 42h.1M193 68h.1M263 6h.1M249 31h.1M234 57h.1M219 83h.1M289 21h.1M274 46h.1M259 72h.1M315 35h.1M300 61h.1M285 87h.1M340 50h.1M325 76h.1M311 101h.1M366 65h.1M351 91h.1M406 54h.1M392 80h.1M377 105h.1M432 69h.1M417 95h.1M402 120h.1M458 84h.1M443 109h.1M428 135h.1M483 99h.1M468 124h.1M454 150h.1M509 113h.1M494 139h.1M479 165h.1M535 128h.1M520 154h.1M505 179h.1M490 205h.1M545 169h.1M531 194h.1M516 220h.1M571 183h.1M556 209h.1M541 235h.1M527 260h.1M582 224h.1M567 250h.1M552 275h.1M537 301h.1M523 326h.1M607 239h.1M593 264h.1M578 290h.1M563 316h.1M548 341h.1M533 367h.1M618 279h.1M604 305h.1M589 330h.1M574 356h.1M559 382h.1M544 407h.1M644 294h.1M629 320h.1M614 345h.1M600 371h.1M585 396h.1M570 422h.1M655 334h.1M640 360h.1M625 386h.1M610 411h.1M596 437h.1M581 463h.1M666 375h.1M651 400h.1M636 426h.1M621 452h.1M606 477h.1M592 503h.1M691 390h.1M676 415h.1M662 441h.1M647 467h.1M632 492h.1M617 518h.1M602 543h.1M588 569h.1M702 430h.1M687 456h.1M673 481h.1M658 507h.1M643 533h.1M628 558h.1M613 584h.1M598 610h.1M584 635h.1M698 496h.1M683 522h.1M669 547h.1M654 573h.1M639 599h.1M624 624h.1M609 650h.1M595 676h.1M580 701h.1M565 727h.1M679 588h.1M665 613h.1M650 639h.1M635 665h.1M620 690h.1M605 716h.1M675 654h.1M661 680h.1M646 705h.1M631 731h.1M671 720h.1" stroke-width="4.2"/><path d="M-13 188h.1M28 177h.1M13 203h.1M-2 229h.1M98 115h.1M83 141h.1M68 166h.1M53 192h.1M38 218h.1M24 243h.1M138 104h.1M123 130h.1M108 156h.1M94 181h.1M79 207h.1M64 233h.1M178 94h.1M164 119h.1M149 145h.1M134 170h.1M119 196h.1M104 222h.1M204 108h.1M189 134h.1M175 160h.1M160 185h.1M145 211h.1M245 98h.1M230 123h.1M215 149h.1M200 174h.1M185 200h.1M270 112h.1M255 138h.1M241 164h.1M226 189h.1M296 127h.1M281 153h.1M266 178h.1M336 116h.1M321 142h.1M307 168h.1M362 131h.1M347 157h.1M332 182h.1M388 146h.1M373 172h.1M413 161h.1M398 186h.1M439 175h.1M424 201h.1M409 227h.1M464 190h.1M450 216h.1M435 242h.1M420 267h.1M405 293h.1M390 318h.1M475 231h.1M461 256h.1M446 282h.1M431 308h.1M416 333h.1M401 359h.1M387 385h.1M501 246h.1M486 271h.1M471 297h.1M457 322h.1M442 348h.1M427 374h.1M412 399h.1M397 425h.1M512 286h.1M497 312h.1M482 337h.1M467 363h.1M453 389h.1M438 414h.1M423 440h.1M508 352h.1M493 378h.1M478 403h.1M463 429h.1M449 455h.1M519 393h.1M504 418h.1M489 444h.1M474 469h.1M530 433h.1M515 459h.1M500 484h.1M485 510h.1M555 448h.1M540 473h.1M526 499h.1M511 525h.1M566 488h.1M551 514h.1M536 539h.1M522 565h.1M577 529h.1M562 554h.1M547 580h.1M532 606h.1M518 631h.1M473 708h.1M458 734h.1M573 595h.1M558 620h.1M543 646h.1M528 672h.1M514 697h.1M499 723h.1M569 661h.1M554 686h.1M539 712h.1" stroke-width="8.5"/><path d="M9 269h.1M-6 295h.1M49 258h.1M34 284h.1M90 247h.1M75 273h.1M130 237h.1M115 262h.1M101 288h.1M171 226h.1M156 251h.1M141 277h.1M211 215h.1M196 241h.1M181 266h.1M4 574h.1M-11 599h.1M251 204h.1M237 230h.1M222 255h.1M29 589h.1M15 614h.1M0 640h.1M292 193h.1M277 219h.1M262 244h.1M247 270h.1M55 603h.1M40 629h.1M25 655h.1M11 680h.1M-4 706h.1M318 208h.1M303 234h.1M288 259h.1M273 285h.1M81 618h.1M66 644h.1M51 670h.1M36 695h.1M21 721h.1M358 197h.1M343 223h.1M328 248h.1M314 274h.1M299 300h.1M284 325h.1M92 659h.1M77 684h.1M62 710h.1M384 212h.1M369 238h.1M354 263h.1M339 289h.1M324 315h.1M310 340h.1M295 366h.1M394 252h.1M380 278h.1M365 304h.1M350 329h.1M335 355h.1M320 381h.1M306 406h.1M376 344h.1M361 370h.1M346 395h.1M331 421h.1M372 410h.1M357 436h.1M342 461h.1M383 451h.1M368 476h.1M408 465h.1M393 491h.1M434 480h.1M419 506h.1M459 495h.1M445 521h.1M326 726h.1M470 536h.1M455 561h.1M367 715h.1M496 550h.1M481 576h.1M466 602h.1M452 627h.1M437 653h.1M422 679h.1M407 704h.1M392 730h.1M507 591h.1M492 616h.1M477 642h.1M462 668h.1M448 693h.1M433 719h.1M503 657h.1M488 682h.1" stroke-width="12.7"/><path d="M20 309h.1M5 335h.1M-10 361h.1M60 299h.1M45 324h.1M86 313h.1M126 303h.1M-7 533h.1M167 292h.1M152 317h.1M19 548h.1M207 281h.1M192 307h.1M177 332h.1M44 563h.1M233 296h.1M218 321h.1M203 347h.1M70 578h.1M258 311h.1M244 336h.1M229 362h.1M95 593h.1M269 351h.1M254 377h.1M121 607h.1M106 633h.1M280 391h.1M265 417h.1M147 622h.1M132 648h.1M117 673h.1M102 699h.1M88 725h.1M291 432h.1M276 458h.1M172 637h.1M158 663h.1M143 688h.1M128 714h.1M316 447h.1M302 472h.1M198 652h.1M183 677h.1M168 703h.1M154 729h.1M327 487h.1M312 513h.1M224 667h.1M209 692h.1M194 718h.1M353 502h.1M338 528h.1M249 681h.1M235 707h.1M220 733h.1M379 517h.1M364 542h.1M290 671h.1M275 696h.1M260 722h.1M404 532h.1M389 557h.1M330 660h.1M315 685h.1M301 711h.1M430 546h.1M415 572h.1M400 598h.1M385 623h.1M371 649h.1M356 675h.1M341 700h.1M441 587h.1M426 612h.1M411 638h.1M396 664h.1M381 689h.1" stroke-width="16.9"/><path d="M30 350h.1M16 376h.1M1 401h.1M-14 427h.1M71 339h.1M56 365h.1M41 390h.1M12 442h.1M-3 467h.1M111 328h.1M97 354h.1M23 482h.1M8 508h.1M137 343h.1M122 369h.1M48 497h.1M33 523h.1M163 358h.1M74 512h.1M59 537h.1M188 373h.1M99 527h.1M85 552h.1M214 387h.1M199 413h.1M125 541h.1M110 567h.1M240 402h.1M225 428h.1M210 454h.1M151 556h.1M136 582h.1M250 443h.1M236 468h.1M221 494h.1M176 571h.1M162 597h.1M261 483h.1M246 509h.1M232 534h.1M217 560h.1M202 586h.1M187 611h.1M287 498h.1M272 524h.1M257 549h.1M242 575h.1M228 601h.1M213 626h.1M298 538h.1M283 564h.1M268 590h.1M253 615h.1M238 641h.1M323 553h.1M309 579h.1M294 604h.1M279 630h.1M264 656h.1M349 568h.1M334 594h.1M319 619h.1M305 645h.1M375 583h.1M360 608h.1M345 634h.1" stroke-width="21.1"/><path d="M26 416h.1M82 380h.1M67 405h.1M52 431h.1M37 456h.1M107 394h.1M93 420h.1M78 446h.1M63 471h.1M148 384h.1M133 409h.1M118 435h.1M103 460h.1M89 486h.1M173 398h.1M159 424h.1M144 450h.1M129 475h.1M114 501h.1M184 439h.1M169 464h.1M155 490h.1M140 516h.1M195 479h.1M180 505h.1M166 530h.1M206 520h.1M191 545h.1" stroke-width="25.4"/></g><rect width="1280" height="720" filter="url(#a9at7pr-grain)" opacity="0.15" style="mix-blend-mode:soft-light"/></svg><svg class="art-dark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false" data-art="press" style="isolation:isolate"><defs><filter id="a14exh1x-grain" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="4361" stitchTiles="stitch"/><feColorMatrix values="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1"/></filter></defs><rect width="1280" height="720" fill="#13100c"/><path d="M358 260Q350 288 340 310Q329 331 320 350Q310 370 295 387Q279 404 258 417Q237 429 211 438Q185 446 155 443Q126 439 105 417Q85 395 76 368Q68 341 63 315Q59 288 65 262Q71 237 92 221Q114 205 135 199Q157 192 174 178Q190 163 216 146Q241 129 273 128Q305 128 329 149Q353 170 360 201Q366 232 358 260Z" fill="#e3ac45" opacity=".9" style="mix-blend-mode:screen"/><path d="M346 496Q350 526 351 559Q352 591 349 630Q346 670 318 697Q290 725 248 717Q207 708 178 690Q150 671 123 667Q96 662 67 652Q37 642 20 615Q4 589 -5 557Q-15 526 -19 490Q-23 454 -6 422Q12 389 45 375Q79 361 112 357Q145 353 175 354Q205 354 234 364Q263 374 287 393Q311 412 327 439Q342 465 346 496Z" fill="#7fb0e0" opacity=".9" style="mix-blend-mode:screen"/><g fill="none" opacity="0.75"><path d="M1092 324Q1092 328 1091 332Q1090 336 1087 339Q1084 342 1081 344Q1078 346 1076 349Q1074 351 1072 354Q1069 357 1066 360Q1063 363 1059 363Q1055 364 1051 363Q1047 362 1044 360Q1041 358 1037 357Q1033 355 1029 354Q1024 353 1020 350Q1016 347 1014 342Q1012 338 1013 333Q1013 328 1016 324Q1018 319 1021 316Q1023 313 1026 310Q1029 307 1033 306Q1037 305 1040 304Q1044 304 1047 303Q1049 303 1052 301Q1055 299 1059 296Q1063 293 1068 291Q1074 289 1079 291Q1084 292 1087 296Q1090 300 1091 305Q1092 310 1093 315Q1093 319 1092 324Z" stroke="#efe7d6" stroke-width="1.2"/><path d="M1130 319Q1129 328 1127 336Q1125 344 1119 350Q1114 356 1108 360Q1101 365 1097 370Q1092 375 1088 381Q1084 387 1077 392Q1071 397 1063 398Q1055 400 1047 398Q1040 396 1033 392Q1026 389 1018 386Q1011 383 1002 380Q994 377 985 371Q977 366 972 357Q968 348 970 338Q972 328 977 319Q982 311 987 304Q992 297 998 292Q1003 287 1011 284Q1018 281 1025 281Q1032 280 1038 279Q1044 278 1049 274Q1055 269 1063 264Q1071 258 1082 255Q1092 251 1102 254Q1112 256 1119 264Q1125 272 1127 282Q1130 292 1130 301Q1130 311 1130 319Z" stroke="#efe7d6" stroke-width="1.2"/><path d="M1167 315Q1166 328 1163 340Q1160 352 1151 361Q1143 370 1134 377Q1124 383 1118 391Q1111 398 1105 407Q1098 417 1088 424Q1079 432 1067 434Q1055 435 1044 432Q1032 429 1021 425Q1011 420 1000 415Q989 411 976 406Q963 401 950 393Q937 385 931 371Q924 358 927 343Q930 328 938 315Q945 303 953 292Q960 282 969 274Q977 266 988 262Q999 258 1010 257Q1021 257 1030 255Q1038 253 1047 246Q1055 240 1067 231Q1079 223 1095 218Q1110 213 1126 217Q1141 220 1151 232Q1161 244 1164 259Q1167 274 1167 288Q1167 302 1167 315Z" stroke="#efe7d6" stroke-width="1.2"/><path d="M1204 311Q1204 328 1199 344Q1195 360 1184 372Q1172 384 1160 393Q1147 401 1138 411Q1130 421 1121 434Q1113 447 1100 457Q1087 466 1071 468Q1055 471 1040 467Q1024 463 1010 457Q996 451 982 445Q967 438 950 432Q933 425 916 414Q898 404 889 386Q880 368 884 348Q888 328 899 311Q909 295 919 281Q928 267 940 256Q951 245 966 240Q981 235 995 234Q1010 234 1021 231Q1032 228 1044 219Q1055 210 1071 199Q1087 188 1108 182Q1128 176 1149 180Q1170 184 1183 200Q1196 215 1200 236Q1204 256 1204 275Q1204 294 1204 311Z" stroke="#ff7350" stroke-width="2.6"/><path d="M1240 307Q1241 328 1236 348Q1231 368 1216 383Q1201 398 1185 409Q1169 419 1159 432Q1148 445 1138 461Q1127 478 1111 489Q1095 501 1075 503Q1055 506 1036 501Q1017 497 999 490Q981 482 963 474Q945 466 924 458Q903 449 881 436Q859 422 847 400Q836 378 841 353Q847 328 860 307Q873 286 885 269Q897 252 910 237Q924 223 943 217Q962 211 980 211Q999 211 1013 207Q1027 203 1041 191Q1055 180 1075 166Q1095 153 1121 145Q1147 138 1172 143Q1198 148 1215 167Q1232 187 1237 212Q1241 238 1241 262Q1240 286 1240 307Z" stroke="#efe7d6" stroke-width="1.2"/><path d="M1277 303Q1278 328 1272 352Q1267 376 1249 394Q1231 412 1211 424Q1191 437 1179 452Q1167 468 1154 488Q1142 508 1122 522Q1103 536 1079 538Q1055 540 1032 536Q1009 531 987 523Q966 514 944 504Q923 493 898 483Q873 473 846 457Q820 441 805 415Q791 388 798 358Q805 328 821 303Q838 278 851 257Q865 236 881 219Q897 202 920 195Q943 188 966 188Q988 189 1005 183Q1021 178 1038 164Q1055 149 1079 133Q1103 118 1134 109Q1164 101 1196 107Q1227 112 1248 135Q1269 158 1273 189Q1278 220 1277 249Q1276 277 1277 303Z" stroke="#efe7d6" stroke-width="1.2"/><path d="M1313 299Q1315 328 1309 356Q1303 384 1281 405Q1260 426 1237 440Q1213 454 1199 473Q1186 491 1171 515Q1157 539 1134 555Q1110 570 1083 572Q1055 575 1028 570Q1001 565 976 555Q950 546 926 533Q901 521 872 509Q844 497 812 478Q780 460 763 429Q746 398 755 363Q763 328 783 299Q802 270 818 246Q833 221 852 201Q870 180 897 172Q925 164 951 165Q977 166 996 160Q1015 153 1035 136Q1055 118 1083 101Q1111 83 1147 73Q1182 64 1219 70Q1256 76 1280 103Q1305 129 1310 166Q1316 202 1314 236Q1312 269 1313 299Z" stroke="#efe7d6" stroke-width="1.2"/><path d="M1350 295Q1352 328 1346 360Q1339 393 1314 417Q1289 440 1262 456Q1235 471 1220 493Q1204 515 1188 543Q1172 570 1145 588Q1118 605 1087 607Q1055 609 1024 604Q993 599 964 588Q935 578 907 563Q879 549 847 534Q814 520 778 500Q741 479 721 444Q701 409 711 368Q722 328 744 295Q767 262 784 234Q802 206 822 182Q843 158 874 150Q906 141 936 143Q967 144 988 136Q1010 128 1032 108Q1055 87 1087 67Q1119 48 1159 38Q1200 27 1242 34Q1284 41 1313 70Q1341 100 1347 142Q1353 185 1350 223Q1348 261 1350 295Z" stroke="#ff7350" stroke-width="2.6"/><path d="M1386 291Q1389 328 1383 365Q1376 401 1347 428Q1318 455 1287 472Q1257 489 1240 513Q1223 538 1205 570Q1187 602 1157 621Q1126 639 1091 641Q1055 643 1020 638Q986 633 952 622Q919 610 888 593Q857 576 821 560Q785 543 744 521Q702 498 679 459Q655 419 668 374Q680 328 706 291Q733 254 751 222Q770 191 792 163Q815 136 851 127Q888 118 922 120Q956 122 980 113Q1004 103 1030 80Q1055 56 1091 34Q1127 13 1172 2Q1217 -9 1265 -2Q1313 5 1346 37Q1378 70 1384 118Q1390 167 1386 210Q1383 253 1386 291Z" stroke="#efe7d6" stroke-width="1.2"/><path d="M1422 287Q1426 328 1420 369Q1413 410 1380 439Q1347 469 1313 487Q1278 506 1260 533Q1241 561 1222 598Q1202 634 1168 654Q1134 674 1095 675Q1055 676 1017 671Q978 667 941 655Q903 643 869 624Q835 604 796 585Q756 566 709 542Q663 517 636 473Q609 430 624 379Q638 328 668 287Q698 246 718 211Q738 175 763 145Q787 114 828 104Q869 94 907 98Q946 101 972 90Q998 78 1027 51Q1055 24 1095 1Q1135 -22 1185 -34Q1235 -45 1288 -38Q1342 -31 1378 5Q1415 41 1421 95Q1427 149 1422 197Q1418 245 1422 287Z" stroke="#efe7d6" stroke-width="1.2"/></g><g fill="#efe7d6" opacity=".7"><circle cx="1249" cy="462" r="2.8"/><circle cx="646" cy="194" r="2.9"/><circle cx="603" cy="261" r="3"/><circle cx="776" cy="600" r="4.2"/><circle cx="364" cy="459" r="3.3"/><circle cx="495" cy="390" r="4.5"/><circle cx="425" cy="11" r="1.2"/><circle cx="1213" cy="580" r="4.3"/><circle cx="1202" cy="339" r="2.4"/><circle cx="581" cy="687" r="4.6"/><circle cx="1071" cy="190" r="2.6"/><circle cx="656" cy="659" r="3.1"/><circle cx="1140" cy="633" r="4.2"/><circle cx="1193" cy="606" r="4.5"/><circle cx="73" cy="462" r="4.5"/><circle cx="906" cy="703" r="2.6"/><circle cx="1204" cy="474" r="1.7"/><circle cx="151" cy="508" r="4.5"/><circle cx="178" cy="411" r="2.6"/><circle cx="149" cy="719" r="4.4"/><circle cx="414" cy="343" r="1.8"/><circle cx="756" cy="716" r="1.6"/><circle cx="274" cy="99" r="3.9"/><circle cx="1100" cy="99" r="4"/><circle cx="762" cy="180" r="2.2"/><circle cx="748" cy="610" r="2.6"/><circle cx="128" cy="20" r="2.8"/><circle cx="680" cy="517" r="1.7"/><circle cx="62" cy="134" r="2.4"/><circle cx="181" cy="574" r="2.3"/><circle cx="3" cy="373" r="4.4"/><circle cx="18" cy="685" r="2.6"/><circle cx="366" cy="311" r="3.3"/><circle cx="1088" cy="409" r="1.7"/><circle cx="482" cy="64" r="1.3"/><circle cx="773" cy="405" r="3"/><circle cx="810" cy="630" r="4"/><circle cx="1162" cy="322" r="4.4"/><circle cx="975" cy="55" r="1.2"/><circle cx="657" cy="98" r="4.5"/><circle cx="610" cy="220" r="2.8"/><circle cx="624" cy="518" r="4.2"/><circle cx="176" cy="90" r="2.6"/><circle cx="1090" cy="708" r="1.9"/><circle cx="364" cy="289" r="3.1"/><circle cx="575" cy="688" r="4.1"/><circle cx="803" cy="300" r="4.5"/><circle cx="112" cy="87" r="3"/><circle cx="640" cy="447" r="1.9"/><circle cx="401" cy="111" r="2.1"/><circle cx="549" cy="534" r="3.5"/><circle cx="617" cy="430" r="1.5"/><circle cx="1188" cy="88" r="1.7"/><circle cx="617" cy="573" r="3"/><circle cx="342" cy="705" r="1.3"/><circle cx="422" cy="503" r="3.3"/><circle cx="1097" cy="589" r="4.3"/><circle cx="984" cy="307" r="3.2"/><circle cx="176" cy="84" r="2.6"/><circle cx="998" cy="713" r="2.8"/><circle cx="102" cy="519" r="4.4"/><circle cx="373" cy="109" r="1.6"/><circle cx="256" cy="410" r="4.2"/><circle cx="527" cy="569" r="1.5"/><circle cx="283" cy="640" r="1.7"/><circle cx="783" cy="697" r="1.2"/><circle cx="100" cy="76" r="4.4"/><circle cx="638" cy="203" r="3"/><circle cx="1104" cy="96" r="2.4"/><circle cx="1223" cy="203" r="3.3"/></g><g fill="none" stroke="#e3ac45" stroke-linecap="round" style="mix-blend-mode:screen" opacity=".9"><path d="M-1 -10h.1M25 5h.1M10 30h.1M-5 56h.1M65 -6h.1M50 20h.1M35 45h.1M21 71h.1M6 96h.1M-9 122h.1M91 9h.1M76 34h.1M61 60h.1M46 86h.1M32 111h.1M17 137h.1M2 163h.1M131 -2h.1M116 23h.1M102 49h.1M87 75h.1M72 100h.1M57 126h.1M42 152h.1M172 -13h.1M157 13h.1M142 38h.1M127 64h.1M112 90h.1M197 2h.1M182 27h.1M168 53h.1M153 79h.1M238 -9h.1M223 17h.1M208 42h.1M193 68h.1M263 6h.1M249 31h.1M234 57h.1M219 83h.1M289 21h.1M274 46h.1M259 72h.1M315 35h.1M300 61h.1M285 87h.1M340 50h.1M325 76h.1M311 101h.1M366 65h.1M351 91h.1M406 54h.1M392 80h.1M377 105h.1M432 69h.1M417 95h.1M402 120h.1M458 84h.1M443 109h.1M428 135h.1M483 99h.1M468 124h.1M454 150h.1M509 113h.1M494 139h.1M479 165h.1M535 128h.1M520 154h.1M505 179h.1M490 205h.1M545 169h.1M531 194h.1M516 220h.1M571 183h.1M556 209h.1M541 235h.1M527 260h.1M582 224h.1M567 250h.1M552 275h.1M537 301h.1M523 326h.1M607 239h.1M593 264h.1M578 290h.1M563 316h.1M548 341h.1M533 367h.1M618 279h.1M604 305h.1M589 330h.1M574 356h.1M559 382h.1M544 407h.1M644 294h.1M629 320h.1M614 345h.1M600 371h.1M585 396h.1M570 422h.1M655 334h.1M640 360h.1M625 386h.1M610 411h.1M596 437h.1M581 463h.1M666 375h.1M651 400h.1M636 426h.1M621 452h.1M606 477h.1M592 503h.1M691 390h.1M676 415h.1M662 441h.1M647 467h.1M632 492h.1M617 518h.1M602 543h.1M588 569h.1M702 430h.1M687 456h.1M673 481h.1M658 507h.1M643 533h.1M628 558h.1M613 584h.1M598 610h.1M584 635h.1M698 496h.1M683 522h.1M669 547h.1M654 573h.1M639 599h.1M624 624h.1M609 650h.1M595 676h.1M580 701h.1M565 727h.1M679 588h.1M665 613h.1M650 639h.1M635 665h.1M620 690h.1M605 716h.1M675 654h.1M661 680h.1M646 705h.1M631 731h.1M671 720h.1" stroke-width="4.2"/><path d="M-13 188h.1M28 177h.1M13 203h.1M-2 229h.1M98 115h.1M83 141h.1M68 166h.1M53 192h.1M38 218h.1M24 243h.1M138 104h.1M123 130h.1M108 156h.1M94 181h.1M79 207h.1M64 233h.1M178 94h.1M164 119h.1M149 145h.1M134 170h.1M119 196h.1M104 222h.1M204 108h.1M189 134h.1M175 160h.1M160 185h.1M145 211h.1M245 98h.1M230 123h.1M215 149h.1M200 174h.1M185 200h.1M270 112h.1M255 138h.1M241 164h.1M226 189h.1M296 127h.1M281 153h.1M266 178h.1M336 116h.1M321 142h.1M307 168h.1M362 131h.1M347 157h.1M332 182h.1M388 146h.1M373 172h.1M413 161h.1M398 186h.1M439 175h.1M424 201h.1M409 227h.1M464 190h.1M450 216h.1M435 242h.1M420 267h.1M405 293h.1M390 318h.1M475 231h.1M461 256h.1M446 282h.1M431 308h.1M416 333h.1M401 359h.1M387 385h.1M501 246h.1M486 271h.1M471 297h.1M457 322h.1M442 348h.1M427 374h.1M412 399h.1M397 425h.1M512 286h.1M497 312h.1M482 337h.1M467 363h.1M453 389h.1M438 414h.1M423 440h.1M508 352h.1M493 378h.1M478 403h.1M463 429h.1M449 455h.1M519 393h.1M504 418h.1M489 444h.1M474 469h.1M530 433h.1M515 459h.1M500 484h.1M485 510h.1M555 448h.1M540 473h.1M526 499h.1M511 525h.1M566 488h.1M551 514h.1M536 539h.1M522 565h.1M577 529h.1M562 554h.1M547 580h.1M532 606h.1M518 631h.1M473 708h.1M458 734h.1M573 595h.1M558 620h.1M543 646h.1M528 672h.1M514 697h.1M499 723h.1M569 661h.1M554 686h.1M539 712h.1" stroke-width="8.5"/><path d="M9 269h.1M-6 295h.1M49 258h.1M34 284h.1M90 247h.1M75 273h.1M130 237h.1M115 262h.1M101 288h.1M171 226h.1M156 251h.1M141 277h.1M211 215h.1M196 241h.1M181 266h.1M4 574h.1M-11 599h.1M251 204h.1M237 230h.1M222 255h.1M29 589h.1M15 614h.1M0 640h.1M292 193h.1M277 219h.1M262 244h.1M247 270h.1M55 603h.1M40 629h.1M25 655h.1M11 680h.1M-4 706h.1M318 208h.1M303 234h.1M288 259h.1M273 285h.1M81 618h.1M66 644h.1M51 670h.1M36 695h.1M21 721h.1M358 197h.1M343 223h.1M328 248h.1M314 274h.1M299 300h.1M284 325h.1M92 659h.1M77 684h.1M62 710h.1M384 212h.1M369 238h.1M354 263h.1M339 289h.1M324 315h.1M310 340h.1M295 366h.1M394 252h.1M380 278h.1M365 304h.1M350 329h.1M335 355h.1M320 381h.1M306 406h.1M376 344h.1M361 370h.1M346 395h.1M331 421h.1M372 410h.1M357 436h.1M342 461h.1M383 451h.1M368 476h.1M408 465h.1M393 491h.1M434 480h.1M419 506h.1M459 495h.1M445 521h.1M326 726h.1M470 536h.1M455 561h.1M367 715h.1M496 550h.1M481 576h.1M466 602h.1M452 627h.1M437 653h.1M422 679h.1M407 704h.1M392 730h.1M507 591h.1M492 616h.1M477 642h.1M462 668h.1M448 693h.1M433 719h.1M503 657h.1M488 682h.1" stroke-width="12.7"/><path d="M20 309h.1M5 335h.1M-10 361h.1M60 299h.1M45 324h.1M86 313h.1M126 303h.1M-7 533h.1M167 292h.1M152 317h.1M19 548h.1M207 281h.1M192 307h.1M177 332h.1M44 563h.1M233 296h.1M218 321h.1M203 347h.1M70 578h.1M258 311h.1M244 336h.1M229 362h.1M95 593h.1M269 351h.1M254 377h.1M121 607h.1M106 633h.1M280 391h.1M265 417h.1M147 622h.1M132 648h.1M117 673h.1M102 699h.1M88 725h.1M291 432h.1M276 458h.1M172 637h.1M158 663h.1M143 688h.1M128 714h.1M316 447h.1M302 472h.1M198 652h.1M183 677h.1M168 703h.1M154 729h.1M327 487h.1M312 513h.1M224 667h.1M209 692h.1M194 718h.1M353 502h.1M338 528h.1M249 681h.1M235 707h.1M220 733h.1M379 517h.1M364 542h.1M290 671h.1M275 696h.1M260 722h.1M404 532h.1M389 557h.1M330 660h.1M315 685h.1M301 711h.1M430 546h.1M415 572h.1M400 598h.1M385 623h.1M371 649h.1M356 675h.1M341 700h.1M441 587h.1M426 612h.1M411 638h.1M396 664h.1M381 689h.1" stroke-width="16.9"/><path d="M30 350h.1M16 376h.1M1 401h.1M-14 427h.1M71 339h.1M56 365h.1M41 390h.1M12 442h.1M-3 467h.1M111 328h.1M97 354h.1M23 482h.1M8 508h.1M137 343h.1M122 369h.1M48 497h.1M33 523h.1M163 358h.1M74 512h.1M59 537h.1M188 373h.1M99 527h.1M85 552h.1M214 387h.1M199 413h.1M125 541h.1M110 567h.1M240 402h.1M225 428h.1M210 454h.1M151 556h.1M136 582h.1M250 443h.1M236 468h.1M221 494h.1M176 571h.1M162 597h.1M261 483h.1M246 509h.1M232 534h.1M217 560h.1M202 586h.1M187 611h.1M287 498h.1M272 524h.1M257 549h.1M242 575h.1M228 601h.1M213 626h.1M298 538h.1M283 564h.1M268 590h.1M253 615h.1M238 641h.1M323 553h.1M309 579h.1M294 604h.1M279 630h.1M264 656h.1M349 568h.1M334 594h.1M319 619h.1M305 645h.1M375 583h.1M360 608h.1M345 634h.1" stroke-width="21.1"/><path d="M26 416h.1M82 380h.1M67 405h.1M52 431h.1M37 456h.1M107 394h.1M93 420h.1M78 446h.1M63 471h.1M148 384h.1M133 409h.1M118 435h.1M103 460h.1M89 486h.1M173 398h.1M159 424h.1M144 450h.1M129 475h.1M114 501h.1M184 439h.1M169 464h.1M155 490h.1M140 516h.1M195 479h.1M180 505h.1M166 530h.1M206 520h.1M191 545h.1" stroke-width="25.4"/></g><rect width="1280" height="720" filter="url(#a14exh1x-grain)" opacity="0.22" style="mix-blend-mode:soft-light"/></svg></div><div class="hero-tldr tone-good" id="numbers-hold-builds-cost-less-plans-get" role="region" aria-labelledby="numbers-hold-builds-cost-less-plans-get-title">
 <p class="sec-eyebrow pa-label">The verdict</p>
-<h2 class="hero-tldr-title sr-only" id="numbers-hold-builds-cost-less-plans-get-title">Numbers hold, builds cost less, plans get answers</h2>
-<div class="tldr tone-good">
+<h2 class="hero-tldr-title sr-only" id="numbers-hold-builds-cost-less-plans-get-title"><span data-text="normal">Numbers hold, builds cost less, plans get answers</span><span data-text="simple" hidden>Numbers stay put, builds cost less, plans get answers</span></h2>
+<div data-text="normal"><div class="tldr tone-good">
 <p class="tldr-tone"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span></p>
 <p class="lead">This release adds one-line numbers, cheap-model routing, a plan mode and the docs for all three.</p>
 <ul class="points">
@@ -717,7 +846,16 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <li>Copilot CLI ran Haiku 5.5 in 19 of 19 measured runs.</li>
 <li>Codex and VS Code Copilot Chat are untested.</li>
 </ul>
-</div>
+</div></div>
+<div data-text="simple" hidden><div class="tldr tone-good">
+<p class="tldr-tone"><span class="chip tone-good"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8"/><path d="M5.4 8.2l1.9 1.9 3.4-3.7"/></svg><span>Good</span></span></p>
+<p class="lead">This release adds three things: numbers that stay on one line, routing to a cheap model and a plan mode. It also adds docs for all three.</p>
+<ul class="points">
+<li>Every test suite passed before the release.</li>
+<li>Copilot CLI ran Haiku 5.5 in 19 of 19 measured runs.</li>
+<li>We have not tested Codex or VS Code Copilot Chat.</li>
+</ul>
+</div></div>
 </div>
 </header>
 <div class="layout">
@@ -740,19 +878,19 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <section class="sec sec-kpis sec-alt" id="what-the-branch-measured" aria-labelledby="what-the-branch-measured-title">
 <p class="sec-eyebrow pa-label">Numbers</p>
 <h2 class="sec-title" id="what-the-branch-measured-title">What the branch measured<a class="anchor" href="#what-the-branch-measured" aria-label="Link to this section: What the branch measured">#</a></h2>
-<dl class="kpis">
-<div class="kpi tone-neutral"><dt>Plan tasks done</dt><dd class="kpi-value" style="--n: 2">16</dd></div>
-<div class="kpi tone-neutral"><dt>Smoke runs passed</dt><dd class="kpi-value" style="--n: 6">9 of 9</dd></div>
-<div class="kpi tone-neutral"><dt>Motion gate</dt><dd class="kpi-value" style="--n: 8">10 of 10</dd></div>
-<div class="kpi tone-neutral"><dt>Runs on Haiku 5.5</dt><dd class="kpi-value" style="--n: 8">19 of 19</dd></div>
-<div class="kpi tone-neutral"><dt>Themes now</dt><dd class="kpi-value" style="--n: 1">9</dd></div>
-<div class="kpi tone-neutral"><dt>Plugin version</dt><dd class="kpi-value" style="--n: 5">1.0.0</dd></div>
+<dl class="kpis" style="--n: 8">
+<div class="kpi tone-neutral"><dt>Plan tasks done</dt><dd class="kpi-value">16</dd></div>
+<div class="kpi tone-neutral"><dt>Smoke runs passed</dt><dd class="kpi-value">9 of 9</dd></div>
+<div class="kpi tone-neutral"><dt>Motion gate</dt><dd class="kpi-value">10 of 10</dd></div>
+<div class="kpi tone-neutral"><dt>Runs on Haiku 5.5</dt><dd class="kpi-value">19 of 19</dd></div>
+<div class="kpi tone-neutral"><dt>Themes now</dt><dd class="kpi-value">9</dd></div>
+<div class="kpi tone-neutral"><dt>Plugin version</dt><dd class="kpi-value">1.0.0</dd></div>
 </dl>
 </section>
 <section class="sec sec-cards" id="four-features-one-branch" aria-labelledby="four-features-one-branch-title">
 <p class="sec-eyebrow pa-label">Features</p>
-<h2 class="sec-title" id="four-features-one-branch-title">Four features, one branch<a class="anchor" href="#four-features-one-branch" aria-label="Link to this section: Four features, one branch">#</a></h2>
-<ul class="cards cols-2">
+<h2 class="sec-title" id="four-features-one-branch-title"><span data-text="normal">Four features, one branch</span><span data-text="simple" hidden>This branch holds four features</span><a class="anchor" href="#four-features-one-branch" aria-label="Link to this section: Four features, one branch">#</a></h2>
+<div data-text="normal"><ul class="cards cols-2">
 <li class="card tone-neutral">
 <div class="card-head"><h3>A. Numbers on one line</h3></div>
 <p>A number and its unit such as <span class="nw">42%</span> or <span class="nw">1,204 ms</span> no longer split across lines in explainers, decks, dashboards and motion.</p>
@@ -769,20 +907,42 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="card-head"><h3>D. Docs and release</h3></div>
 <p>READMEs, feature pages and counts updated; plugin version raised from 0.8.1 to 1.0.0 for the CI guard.</p>
 </li>
-</ul>
+</ul></div>
+<div data-text="simple" hidden><ul class="cards cols-2">
+<li class="card tone-neutral">
+<div class="card-head"><h3>A. Numbers on one line</h3></div>
+<p>A number and its unit, such as <span class="nw">42%</span> or <span class="nw">1,204 ms</span>, now stay on one line. This works in explainers, decks, dashboards and motion.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>B. Cheap-model routing</h3></div>
+<p>A skill hands the build to an artifact-builder agent. On Copilot and Codex, that agent runs a cheaper model.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>C. Plan mode</h3></div>
+<p>make-explainer has a plan preset. Reviewers answer decisions in the page. They return a JSON file to the agent.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>D. Docs and release</h3></div>
+<p>We updated the READMEs, feature pages and counts. We raised the plugin version from 0.8.1 to 1.0.0 for the CI guard.</p>
+</li>
+</ul></div>
 </section>
 <section class="sec sec-text" id="a-one-token-finder-many-renderers" aria-labelledby="a-one-token-finder-many-renderers-title">
 <p class="sec-eyebrow pa-label">A: how</p>
 <h2 class="sec-title" id="a-one-token-finder-many-renderers-title">A: one token finder, many renderers<a class="anchor" href="#a-one-token-finder-many-renderers" aria-label="Link to this section: A: one token finder, many renderers">#</a></h2>
-<div class="prose">
+<div data-text="normal"><div class="prose">
 <p><code>shared/nowrap.mjs</code> finds number-plus-unit tokens and skips <code>code</code>, <code>pre</code>, <code>kbd</code> and <code>samp</code>. The explainer wraps each hit in a <code>nowrap</code> span; motion binds the gap with a non-breaking space through an exact-match server route.</p>
 <p>KPI tiles size their font by value length with container-query units. Long values wrap inside the tile instead of spilling. <code>check.mjs</code> measures a real browser and fails on a split or an overflow.</p>
-</div>
+</div></div>
+<div data-text="simple" hidden><div class="prose">
+<p><code>shared/nowrap.mjs</code> finds number-plus-unit tokens. It skips <code>code</code>, <code>pre</code>, <code>kbd</code> and <code>samp</code>. The explainer wraps each hit in a <code>nowrap</code> span. Motion joins the gap with a non-breaking space. It does this through an exact-match server route.</p>
+<p>KPI tiles set their font size from the length of the value. They use container-query units. Long values wrap inside the tile instead of spilling out. <code>check.mjs</code> measures a real browser. It fails on a split or an overflow.</p>
+</div></div>
 </section>
 <section class="sec sec-steps" id="b-how-the-cheap-model-is-picked" aria-labelledby="b-how-the-cheap-model-is-picked-title">
 <p class="sec-eyebrow pa-label">B: how</p>
-<h2 class="sec-title" id="b-how-the-cheap-model-is-picked-title">B: how the cheap model is picked<a class="anchor" href="#b-how-the-cheap-model-is-picked" aria-label="Link to this section: B: how the cheap model is picked">#</a></h2>
-<ol class="steps">
+<h2 class="sec-title" id="b-how-the-cheap-model-is-picked-title"><span data-text="normal">B: how the cheap model is picked</span><span data-text="simple" hidden>B: how we pick the cheap model</span><a class="anchor" href="#b-how-the-cheap-model-is-picked" aria-label="Link to this section: B: how the cheap model is picked">#</a></h2>
+<div data-text="normal"><ol class="steps">
 <li class="step">
 <div class="step-head"><strong class="step-title">Generate agent files</strong></div>
 <p><code>bin/agents.mjs</code> writes an artifact-builder agent: Haiku 5.5 with GPT-5.4 nano as fallback on Copilot, <code>gpt-6-luna</code> on Codex, low effort.</p>
@@ -799,12 +959,30 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="step-head"><strong class="step-title">Measure it</strong></div>
 <p><code>eval/run-eval.mjs --agent</code> ran 9 smoke runs and the 10-prompt motion gate. Copilot logs confirmed Haiku in every run.</p>
 </li>
-</ol>
+</ol></div>
+<div data-text="simple" hidden><ol class="steps">
+<li class="step">
+<div class="step-head"><strong class="step-title">Generate agent files</strong></div>
+<p><code>bin/agents.mjs</code> writes an artifact-builder agent. On Copilot it uses Haiku 5.5, with GPT-5.4 nano as fallback. On Codex it uses <code>gpt-6-luna</code>. Effort is low for both.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Install them</strong></div>
+<p><code>bin/install.mjs</code> writes the files to the user-level agent folders. <code>--project</code> and <code>--agents-only</code> narrow that. After <code>npx skills add</code>, <code>doctor.mjs --fix builder_agent</code> writes the same files.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Tell the skill to hand off</strong></div>
+<p>All five SKILL.md files have a Cheaper model block. The block has a loop guard. The guard stops the sub-agent from delegating again.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Measure it</strong></div>
+<p><code>eval/run-eval.mjs --agent</code> ran 9 smoke runs and the 10-prompt motion gate. Copilot logs confirmed Haiku in every run.</p>
+</li>
+</ol></div>
 </section>
 <section class="sec sec-cards sec-alt" id="c-plan-mode-has-four-moving-parts" aria-labelledby="c-plan-mode-has-four-moving-parts-title">
 <p class="sec-eyebrow pa-label">C: how</p>
 <h2 class="sec-title" id="c-plan-mode-has-four-moving-parts-title">C: plan mode has four moving parts<a class="anchor" href="#c-plan-mode-has-four-moving-parts" aria-label="Link to this section: C: plan mode has four moving parts">#</a></h2>
-<ul class="cards cols-2">
+<div data-text="normal"><ul class="cards cols-2">
 <li class="card tone-neutral">
 <div class="card-head"><h3>Plan preset and sections</h3></div>
 <p>Five new section types: decision, approval, question, verdict and review, laid out decision-first with the verdict last.</p>
@@ -821,18 +999,40 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="card-head"><h3>Answer checker</h3></div>
 <p><code>answers.mjs</code> validates the answers file, or a saved page, against a closed schema and quotes reviewer text only as data, never as instructions.</p>
 </li>
-</ul>
+</ul></div>
+<div data-text="simple" hidden><ul class="cards cols-2">
+<li class="card tone-neutral">
+<div class="card-head"><h3>Plan preset and sections</h3></div>
+<p>There are five new section types: decision, approval, question, verdict and review. The page puts decisions first and the verdict last.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>Two themes</h3></div>
+<p><code>mono</code> has a technical look and a cyan accent. <code>brief</code> has an executive look. The explainer now has 9 themes.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>Page runtime</h3></div>
+<p><code>plan.js</code> keeps answers in the browser. It offers Copy and Download (<code>plan-answers.json</code>). It also offers Save as HTML, a sticky button that saves the page with the answers inside.</p>
+</li>
+<li class="card tone-neutral">
+<div class="card-head"><h3>Answer checker</h3></div>
+<p><code>answers.mjs</code> checks the answers file, or a saved page, against a closed schema. It quotes reviewer text only as data. It never treats that text as instructions.</p>
+</li>
+</ul></div>
 </section>
 <section class="sec sec-callout" id="what-is-still-unproven">
-<aside class="callout tone-warn">
+<div data-text="normal"><aside class="callout tone-warn">
 <p class="callout-head"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Warning</span></span><strong class="callout-title">What is still unproven</strong></p>
 <p>Codex has no account here, so its agent file was written from docs only. The one hand-off trial reached Haiku, but the sub-agent was denied file access and the main model finished the work. Smoke and motion run costs were not measured.</p>
-</aside>
+</aside></div>
+<div data-text="simple" hidden><aside class="callout tone-warn">
+<p class="callout-head"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Warning</span></span><strong class="callout-title">What we have not proven yet</strong></p>
+<p>We have no Codex account here. So we wrote its agent file from the docs only. We ran one hand-off trial. It reached Haiku, but the sub-agent got no file access. The main model finished the work. We did not measure the cost of the smoke and motion runs.</p>
+</aside></div>
 </section>
 <section class="sec sec-risks" id="known-gaps-left-open" aria-labelledby="known-gaps-left-open-title">
 <p class="sec-eyebrow pa-label">Gaps</p>
-<h2 class="sec-title" id="known-gaps-left-open-title">Known gaps left open<a class="anchor" href="#known-gaps-left-open" aria-label="Link to this section: Known gaps left open">#</a></h2>
-<div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
+<h2 class="sec-title" id="known-gaps-left-open-title"><span data-text="normal">Known gaps left open</span><span data-text="simple" hidden>Gaps we have not closed</span><a class="anchor" href="#known-gaps-left-open" aria-label="Link to this section: Known gaps left open">#</a></h2>
+<div data-text="normal"><div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
 <table>
 <thead><tr><th scope="col">Severity</th><th scope="col">Risk</th><th scope="col">Mitigation</th></tr></thead>
 <tbody>
@@ -858,12 +1058,39 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 </tr>
 </tbody>
 </table>
-</div>
+</div></div>
+<div data-text="simple" hidden><div class="tablewrap risks" role="region" aria-label="Risks" tabindex="0">
+<table>
+<thead><tr><th scope="col">Severity</th><th scope="col">Risk</th><th scope="col">Mitigation</th></tr></thead>
+<tbody>
+<tr>
+<td data-label="Severity"><span class="chip tone-low"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>Low</span></span></td>
+<td data-label="Risk">A KPI value under 16 characters can still spill its tile if it has wide glyphs (W, M, CJK).</td>
+<td data-label="Mitigation">check.mjs reports it.</td>
+</tr>
+<tr>
+<td data-label="Severity"><span class="chip tone-low"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>Low</span></span></td>
+<td data-label="Risk">The stale-answers notice stays visible after the first new answer.</td>
+<td data-label="Mitigation">We parked this for a follow-up.</td>
+</tr>
+<tr>
+<td data-label="Severity"><span class="chip tone-low"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>Low</span></span></td>
+<td data-label="Risk">On every explainer page, <code>--force</code> in inline code breaks after the hyphen.</td>
+<td data-label="Mitigation">We parked this for a follow-up.</td>
+</tr>
+<tr>
+<td data-label="Severity"><span class="chip tone-low"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5"/></svg><span>Low</span></span></td>
+<td data-label="Risk">The search terms in docs/catalog.html miss the new features.</td>
+<td data-label="Mitigation">We parked this for a follow-up.</td>
+</tr>
+</tbody>
+</table>
+</div></div>
 </section>
 <section class="sec sec-steps" id="how-the-release-was-built" aria-labelledby="how-the-release-was-built-title">
 <p class="sec-eyebrow pa-label">Process</p>
-<h2 class="sec-title" id="how-the-release-was-built-title">How the release was built<a class="anchor" href="#how-the-release-was-built" aria-label="Link to this section: How the release was built">#</a></h2>
-<ol class="steps">
+<h2 class="sec-title" id="how-the-release-was-built-title"><span data-text="normal">How the release was built</span><span data-text="simple" hidden>How we built the release</span><a class="anchor" href="#how-the-release-was-built" aria-label="Link to this section: How the release was built">#</a></h2>
+<div data-text="normal"><ol class="steps">
 <li class="step">
 <div class="step-head"><strong class="step-title">Spec and plan</strong></div>
 <p>A design spec and a 16-task plan were written and committed under <code>docs/superpowers/</code>.</p>
@@ -876,7 +1103,21 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <div class="step-head"><strong class="step-title">Whole-change review</strong></div>
 <p>The strongest model reviewed the whole change, one fix wave followed, and a scoped re-review came back clean.</p>
 </li>
-</ol>
+</ol></div>
+<div data-text="simple" hidden><ol class="steps">
+<li class="step">
+<div class="step-head"><strong class="step-title">Spec and plan</strong></div>
+<p>We wrote a design spec and a 16-task plan. We committed both under <code>docs/superpowers/</code>.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">One agent per task</strong></div>
+<p>Each task went to a fresh implementer. A spec review and a quality review followed. Then came fix rounds. The controller made every commit.</p>
+</li>
+<li class="step">
+<div class="step-head"><strong class="step-title">Whole-change review</strong></div>
+<p>The strongest model reviewed the whole change. One fix wave followed. A scoped re-review then came back clean.</p>
+</li>
+</ol></div>
 </section>
 </main>
 </div>
