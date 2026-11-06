@@ -10,7 +10,9 @@ import { SLIDE_LIMITS } from './schema.mjs';
 import { collectStrings } from './walk.mjs';
 import { words } from './budget.mjs';
 import { toggleIcons } from '../../shared/theme-toggle.mjs';
-import { esc, inline, headingInline, plain } from './render/ui.mjs';
+import { esc, inline, plain } from './render/ui.mjs';
+import { withSimple } from './simple.mjs';
+import { dualText, titleHtml, simpleToggle } from './simple-view.mjs';
 
 const listLines = (text) => (text ?? '').split('\n').filter((l) => l.trimStart().startsWith('- ')).length;
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
@@ -79,11 +81,14 @@ export const slideTitle = (section) => (section.title === undefined ? typeLabel(
 
 // A section's own id is a deep link (#<id>), kept in data-sid: the element id stays slide-N.
 // `art` is a decorative full-bleed drawing (flavored decks, first and last slide only), '' for none.
-function slide(n, total, title, classes, inner, sid, footer = '', art = '') {
+// `simpleTitle` is the slide's title in the simple view when it differs: it becomes data-simple-label, the slide's
+// name while the toggle is on.
+function slide(n, total, title, classes, inner, sid, footer = '', art = '', simpleTitle = undefined) {
   const link = sid === undefined ? '' : ` data-sid="${esc(sid)}"`;
+  const simpleName = simpleTitle === undefined ? '' : ` data-simple-label="Slide ${n} of ${total}: ${simpleTitle}"`;
   const cls = art ? `${classes} slide-has-art` : classes;
   const layer = art ? `\n<div class="slide-art" aria-hidden="true">${art}</div>` : '';
-  return `<section class="slide ${cls}" id="slide-${n}"${link} tabindex="-1" aria-label="Slide ${n} of ${total}: ${title}">${layer}
+  return `<section class="slide ${cls}" id="slide-${n}"${link}${simpleName} tabindex="-1" aria-label="Slide ${n} of ${total}: ${title}">${layer}
 <div class="slide-inner">
 ${inner}
 </div>${footer}
@@ -95,11 +100,15 @@ function cover(spec, total, metaHtml, art) {
   return slide(1, total, plain(spec.title), 'slide-cover', `<h1>${inline(spec.title)}</h1>${subtitle}${metaHtml ? `\n${metaHtml}` : ''}`, undefined, '', art);
 }
 
-function sectionSlide({ section, body, ownHeading }, n, total, footer = '', art = '') {
+// `simpleBody` is the body of the section's simple view (withSimple), present only for a section with simple text.
+function sectionSlide({ section, body, simpleBody, ownHeading }, n, total, footer = '', art = '') {
+  const view = simpleBody === undefined ? null : withSimple(section);
   const hasHeading = section.title !== undefined && !ownHeading;
   const eyebrow = hasHeading && section.label !== undefined ? `<p class="slide-eyebrow pa-label">${plain(section.label)}</p>\n` : '';
-  const heading = hasHeading ? `${eyebrow}<h2 class="slide-title" id="slide-${n}-title">${headingInline(section.title)}</h2>\n` : '';
-  return slide(n, total, slideTitle(section), `slide-${section.type}`, `${heading}${body}`, section.id, footer, art);
+  const heading = hasHeading ? `${eyebrow}<h2 class="slide-title" id="slide-${n}-title">${titleHtml(section, view)}</h2>\n` : '';
+  const text = view === null ? body : dualText(body, simpleBody);
+  const simpleTitle = hasHeading && view !== null && view.title !== undefined && view.title !== section.title ? slideTitle(view) : undefined;
+  return slide(n, total, slideTitle(section), `slide-${section.type}`, `${heading}${text}`, section.id, footer, art, simpleTitle);
 }
 
 function outline(titles, sids) {
@@ -112,12 +121,12 @@ ${items.join('\n')}
 </dialog>`;
 }
 
-function chrome(total) {
+function chrome(total, withToggle) {
   return `<div class="deck-bar">
 <div class="deck-progress" role="progressbar" aria-label="Slide progress" aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="1" aria-valuetext="Slide 1 of ${total}"><span data-progress></span></div>
 <div class="deck-controls">
 <button type="button" class="btn" data-outline-open aria-haspopup="dialog" aria-keyshortcuts="O">Outline <span class="key" aria-hidden="true">O</span></button>
-<button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light">${toggleIcons()}</button>
+<button type="button" class="theme-toggle" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light">${toggleIcons()}</button>${withToggle ? `\n${simpleToggle()}` : ''}
 <span class="deck-count" aria-hidden="true"><span data-count>1</span> / ${total}</span>
 </div>
 <div class="sr-only" role="status" data-live></div>
@@ -142,6 +151,6 @@ export function renderDeck({ spec, rendered, metaHtml, slug, footerHtml = '', ar
   return `<main id="content" class="deck" data-deck data-slug="${esc(slug)}" data-total="${total}" data-current="1">
 ${slides.join('\n')}
 </main>
-${chrome(total)}
+${chrome(total, rendered.some((r) => r.simpleBody !== undefined))}
 ${outline(titles, sids)}`;
 }

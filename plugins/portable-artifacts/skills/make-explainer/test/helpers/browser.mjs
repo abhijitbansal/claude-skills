@@ -98,9 +98,9 @@ export async function closeSharedBrowser() {
   server = undefined;
 }
 
-export async function openPage(url, { width = 1280, height = 900, colorScheme = 'light', reducedMotion = 'reduce', blockStorage = false, seed = {}, init, context: existing } = {}) {
+export async function openPage(url, { width = 1280, height = 900, colorScheme = 'light', reducedMotion = 'reduce', blockStorage = false, seed = {}, init, javaScript = true, context: existing } = {}) {
   shared ??= await launchBrowser();
-  const context = existing ?? await shared.newContext({ viewport: { width, height }, colorScheme, reducedMotion });
+  const context = existing ?? await shared.newContext({ viewport: { width, height }, colorScheme, reducedMotion, javaScriptEnabled: javaScript });
   const page = await context.newPage();
   const problems = [];
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') problems.push(m.text()); });
@@ -123,7 +123,7 @@ export async function openPage(url, { width = 1280, height = 900, colorScheme = 
     }, seed);
   }
   await page.goto(url);
-  await page.waitForFunction(() => window.paReady === true, null, { timeout: 15000 });
+  if (javaScript) await page.waitForFunction(() => window.paReady === true, null, { timeout: 15000 });
   return { page, problems, context };
 }
 

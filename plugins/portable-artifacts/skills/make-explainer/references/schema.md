@@ -50,6 +50,12 @@ Markdown-lite in every prose field: paragraphs split by a blank line, `**bold**`
 
 Validate also fails on a `TODO:` or lorem ipsum anywhere, on headings ending in `!`, and on section titles numbered like `01` (a leading zero digit; "3 files changed" is fine).
 
+## Simple English
+
+Ten section types may carry `simple`: `tldr`, `text`, `cards`, `risks`, `steps`, `timeline`, `compare`, `callout`, `details`, `table`. It is an object with the section's own prose fields (and `title`), all optional, replacing them in the Simple English view. A field left out shows its normal text; list fields match by position, and a simple list longer than the normal one is an error. `simple` on any other type is an error that lists these ten. Checks, rules and the examples: [simple-english.md](simple-english.md).
+
+A page with simple text gets a Simple English toggle. The page opens in normal text; the choice is saved in `localStorage` under `pa-simple`. Print and a page with no script show normal text. `id`, `label` and the contents list never change, so links keep working, and `simple.title` only swaps the heading text inside the section (a section with no `title` shows none). `simple` text does not count toward the word budgets. A page with no `simple` is built exactly as before. Working files: `examples/recap-simple.explainer.json` and `examples/slides-simple.explainer.json`.
+
 ## File references
 
 `diagram`, `scene`, `chart.dashboard`, `motion.video`, `motion.spec`, `motion.poster` and `image.src` are paths relative to the `explainer.json` folder. Absolute paths, `..`, symlinks and missing files are errors that name the fix. Charts read local files only.

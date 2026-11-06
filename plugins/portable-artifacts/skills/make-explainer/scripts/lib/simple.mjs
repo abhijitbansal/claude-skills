@@ -21,10 +21,10 @@ const isEligible = (section) => SIMPLE_SECTIONS.includes(section?.type);
 // ---- merging ------------------------------------------------------------
 
 // `over` laid on `base`: an object field by field, a list by position, anything else replaced. A part `over`
-// leaves out keeps `base`'s. An `over` list entry past the end of `base`'s list has nothing to match (simpleErrors
-// reports it) and is dropped. Always builds new values.
+// leaves out (absent or null) keeps `base`'s. An `over` list entry past the end of `base`'s list has nothing to
+// match (simpleErrors reports it) and is dropped. Always builds new values.
 function overlay(base, over) {
-  if (over === undefined) return structuredClone(base);
+  if (over === undefined || over === null) return structuredClone(base);
   if (Array.isArray(base) && Array.isArray(over)) return base.map((b, i) => overlay(b, over[i]));
   if (isObject(base) && isObject(over)) {
     const merged = Object.fromEntries(Object.entries(base).map(([key, value]) => [key, overlay(value, over[key])]));
@@ -37,7 +37,7 @@ function overlay(base, over) {
 /** The section as the simple view shows it: `simple`'s fields over the section's, without the `simple` key. A pure copy. */
 export function withSimple(section) {
   const { simple, ...normal } = section;
-  return simple === undefined ? structuredClone(normal) : overlay(normal, simple);
+  return overlay(normal, simple);
 }
 
 const hasText = (value) => {
@@ -46,7 +46,8 @@ const hasText = (value) => {
   return isObject(value) && Object.values(value).some(hasText);
 };
 
-const hasSimpleText = (section) => isEligible(section) && hasText(section.simple);
+/** True when this one section carries simple text that the page can show (an eligible type with a non-empty `simple`). */
+export const hasSimpleText = (section) => isEligible(section) && hasText(section.simple);
 
 /** True when any section of the spec carries simple text (the page shows its toggle then). */
 export const hasSimple = (spec) => (spec?.sections ?? []).some(hasSimpleText);
@@ -107,7 +108,7 @@ const SWAPS = [
 
 // "was deployed", "are not shown", "is quickly built": a form of "be" and a past participle. Likely, not certain,
 // so the few common words that end in "ed" without being a participle are skipped.
-const IRREGULAR_PARTICIPLES = 'made|done|given|shown|seen|taken|written|built|sent|kept|held|found|known|chosen|broken|begun|driven|lost|left|put|set';
+const IRREGULAR_PARTICIPLES = 'made|done|given|shown|seen|taken|written|built|sent|kept|held|found|known|chosen|broken|begun|driven|lost|left|put|set|used';
 const NOT_PARTICIPLES = 'indeed|speed|need|hundred|exceed|proceed|succeed';
 const PASSIVE = new RegExp(
   `\\b(?:is|are|was|were|be|been|being)(?:\\s+not)?\\s+(?:\\w+ly\\s+)?(?:(?!(?:${NOT_PARTICIPLES})\\b)\\w{3,}ed|${IRREGULAR_PARTICIPLES})\\b`,

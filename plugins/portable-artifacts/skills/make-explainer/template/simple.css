@@ -1,0 +1,22 @@
+/* Simple English: shipped only on a page that has simple text. A section with `simple` holds its body twice, as
+   div[data-text="normal"] and div[data-text="simple"] (hidden); a heading whose text differs holds two spans the same
+   way. The root attribute data-simple="on" is set before first paint, so a reader who chose simple text never sees
+   the normal text flash. */
+html[data-simple="on"] [data-text="normal"] { display: none; }
+html[data-simple="on"] div[data-text="simple"] { display: block; }
+html[data-simple="on"] span[data-text="simple"] { display: inline; }
+
+/* The toggle is a theme-toggle pill (same surface, line and text tokens, same flavor treatment) that carries a word.
+   Off is a hollow dot and on is a filled one, so the state does not rest on colour. */
+.simple-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px; font: inherit; font-size: var(--fs-sm); font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer; }
+.simple-dot { flex: none; width: 10px; height: 10px; box-sizing: border-box; border: 2px solid currentColor; border-radius: 50%; }
+.simple-toggle[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
+.simple-toggle[aria-pressed="true"] .simple-dot { background: currentColor; }
+.mast-text .simple-toggle { margin-top: 16px; }
+
+/* Print shows the normal text only; so does a page with no script (the simple copies carry the hidden attribute). */
+@media print {
+  div[data-text="normal"] { display: block !important; }
+  span[data-text="normal"] { display: inline !important; }
+  [data-text="simple"] { display: none !important; }
+}

@@ -144,6 +144,12 @@ test('withSimple reaches lists inside lists and fills a field the normal section
   assert.deepEqual(withSimple(table).rows, [['x!', 1], ['y', 2]]);
 });
 
+test('a null in simple is a field left out: it keeps the normal text', () => {
+  const section = { type: 'cards', title: 'Why', items: [{ title: 'One', text: 'First.' }, { title: 'Two', text: 'Second.' }], simple: { title: null, items: [null, { text: null, title: 'Dos' }] } };
+  assert.deepEqual(withSimple(section), { type: 'cards', title: 'Why', items: [{ title: 'One', text: 'First.' }, { title: 'Dos', text: 'Second.' }] });
+  assert.deepEqual(withSimple({ type: 'text', text: 'Body.', simple: null }), { type: 'text', text: 'Body.' });
+});
+
 test('withSimple on a section without simple is an equal copy', () => {
   const section = { type: 'text', text: 'Body.' };
   const out = withSimple(section);
@@ -228,6 +234,14 @@ test('"was deployed" warns as likely passive, once per sentence', () => {
   assert.deepEqual(lintText('The sky is red.'), []);
 });
 
+test('"It is used." warns as likely passive; "The sky was blue." does not', () => {
+  const warned = lintText('It is used.');
+  assert.equal(warned.length, 1);
+  assert.match(warned[0].message, /passive.*"is used"/);
+  assert.deepEqual(lintText('The sky was blue.'), []);
+  assert.deepEqual(lintText('The team used the cache.'), []);
+});
+
 test('words inside backticks are ignored by every rule', () => {
   assert.deepEqual(lintText('Run `in order to; was deployed utilize prior to` now.'), []);
   const longCode = `\`${Array(40).fill('word').join(' ')}\``;
@@ -279,7 +293,7 @@ test('a long simple title is exempt from the title word cap', async () => {
 
 // ---- existing specs ---------------------------------------------------
 
-test('an existing example spec validates with no new warnings', async () => {
+test('an existing example spec validates with no new warnings; only the -simple examples carry simple text', async () => {
   const names = fs.readdirSync(EXAMPLES).filter((n) => n.endsWith('.explainer.json'));
   assert.ok(names.length >= 5);
   for (const name of names) {
@@ -287,6 +301,6 @@ test('an existing example spec validates with no new warnings', async () => {
     const r = await validate(spec, dir);
     assert.equal(r.ok, true, name);
     assert.deepEqual(r.warnings.filter((w) => /simple/i.test(w.message)), [], name);
-    assert.equal(hasSimple(spec), false, name);
+    assert.equal(hasSimple(spec), name.endsWith('-simple.explainer.json'), name);
   }
 });
