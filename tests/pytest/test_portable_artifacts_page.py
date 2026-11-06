@@ -6,7 +6,11 @@ copy-button contract in CLAUDE.md.
 """
 import html
 import re
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PAGE = ROOT / "docs" / "features" / "portable-artifacts.html"
@@ -85,6 +89,32 @@ def test_both_films_are_referenced_with_poster_and_exist():
         assert "controls" in tag and 'preload="none"' in tag, tag
         assert "autoplay" not in tag, tag
         assert 'aria-label="' in tag, tag
+
+
+def test_films_page_no_longer_says_the_films_are_silent():
+    block = _section(_page(), "films").lower()
+    assert "silent" not in block
+    assert "no sound" not in block
+    assert "neither has sound" not in block
+    metas = re.findall(r'<p class="gal-meta"[^>]*>([^<]*)</p>', block)
+    assert len(metas) == len(FILMS), metas
+    assert all("voiceover" in meta for meta in metas), metas
+    # still true: no music or sound cues, said plainly in the tour's caption
+    assert "no music" in block
+
+
+def test_both_films_have_an_audio_stream():
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe is None:
+        pytest.skip("ffprobe is not on PATH")
+    for film in FILMS:
+        video = PAGE.parent / FILM_DIR / film / "video.mp4"
+        out = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "a", "-show_entries",
+             "stream=codec_name", "-of", "csv=p=0", str(video)],
+            capture_output=True, text=True, check=True,
+        ).stdout.split()
+        assert out, "no audio stream in " + str(video)
 
 
 def test_films_open_the_page_and_do_not_depend_on_scripts_or_gallery_css():

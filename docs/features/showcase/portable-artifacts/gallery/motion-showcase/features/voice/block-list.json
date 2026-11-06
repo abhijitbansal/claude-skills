@@ -1,0 +1,12 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "A checklist block ticks items off one by one.",
+      "start": 0,
+      "end": 3.325,
+      "phonemes": "ɐ tʃˈɛklɪst blˈɑːk tˈɪks ˈaɪɾəmz ˈɔf wˈʌn baɪ wˌʌn."
+    }
+  ]
+}

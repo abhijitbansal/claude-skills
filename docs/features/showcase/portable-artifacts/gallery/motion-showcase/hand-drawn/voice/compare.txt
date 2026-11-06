@@ -1,0 +1,1 @@
+There are two kinds of scene. A standard scene has charts, photos, keyframed motion and ready-made blocks. A drawn scene has text, shapes and icons, drawn in order, with no keyframes.

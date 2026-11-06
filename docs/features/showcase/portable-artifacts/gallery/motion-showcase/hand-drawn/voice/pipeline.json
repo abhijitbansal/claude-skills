@@ -1,0 +1,24 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "Next, how a file becomes a video.",
+      "start": 0,
+      "end": 2.775,
+      "phonemes": "nˈɛkst, hˌaʊ ɐ fˈaɪl bɪkˌʌmz ɐ vˈɪdɪoʊ."
+    },
+    {
+      "text": "The spec file is loaded in a browser.",
+      "start": 2.775,
+      "end": 5.55,
+      "phonemes": "ðə spˈɛk fˈaɪl ɪz lˈoʊdᵻd ɪn ɐ bɹˈaʊzɚ."
+    },
+    {
+      "text": "Then it is encoded as an MP4.",
+      "start": 5.55,
+      "end": 8.55,
+      "phonemes": "ðˈɛn ɪɾ ɪz ɛŋkˈoʊdᵻd æz ɐn ˌɛmpˈiː fˈoːɹ."
+    }
+  ]
+}

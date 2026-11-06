@@ -1,0 +1,18 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "UI blocks mock up a product screen.",
+      "start": 0,
+      "end": 2.875,
+      "phonemes": "jˌuːˈaɪ blˈɑːks mˈɑːk ˌʌp ɐ pɹˈɑːdʌkt skɹˈiːn."
+    },
+    {
+      "text": "A form types itself in, and then a button changes.",
+      "start": 2.875,
+      "end": 6.55,
+      "phonemes": "ɐ fˈɔːɹm tˈaɪps ɪtsˈɛlf ˈɪn, ænd ðˈɛn ɐ bˈʌʔn̩ tʃˈeɪndʒᵻz."
+    }
+  ]
+}

@@ -12,7 +12,7 @@
   "scenes": [
     {
       "id": "hand",
-      "duration": 5.3,
+      "duration": 7,
       "elements": [
         {
           "id": "title-hand",
@@ -38,7 +38,7 @@
     },
     {
       "id": "parts",
-      "duration": 8.5,
+      "duration": 9.8,
       "transition": "push",
       "elements": [
         {
@@ -68,7 +68,7 @@
     },
     {
       "id": "pipeline",
-      "duration": 11.7,
+      "duration": 11.1,
       "transition": "erase",
       "elements": [
         {
@@ -82,6 +82,7 @@
         {
           "id": "diagram-pipeline",
           "type": "block",
+          "drawAt": "sentence:1",
           "x": 960,
           "y": 540,
           "block": "sketch-diagram",
@@ -101,7 +102,7 @@
     },
     {
       "id": "steps",
-      "duration": 10.1,
+      "duration": 8.8,
       "transition": "fade",
       "elements": [
         {
@@ -115,6 +116,7 @@
         {
           "id": "steps-steps",
           "type": "block",
+          "drawAt": "sentence:1",
           "x": 960,
           "y": 540,
           "block": "sketch-steps",
@@ -126,7 +128,7 @@
     },
     {
       "id": "compare",
-      "duration": 11.7,
+      "duration": 15.5,
       "transition": "fade",
       "elements": [
         {
@@ -140,6 +142,7 @@
         {
           "id": "compare-compare",
           "type": "block",
+          "drawAt": "sentence:1",
           "x": 960,
           "y": 560,
           "block": "sketch-compare",
@@ -156,5 +159,12 @@
         }
       ]
     }
+  ],
+  "audio": [
+    { "src": "voice/hand.wav", "scene": "hand", "at": 0.4 },
+    { "src": "voice/parts.wav", "scene": "parts", "at": 0.6 },
+    { "src": "voice/pipeline.wav", "scene": "pipeline", "at": 1.0 },
+    { "src": "voice/steps.wav", "scene": "steps", "at": 0.6 },
+    { "src": "voice/compare.wav", "scene": "compare", "at": 0.6 }
   ]
 }

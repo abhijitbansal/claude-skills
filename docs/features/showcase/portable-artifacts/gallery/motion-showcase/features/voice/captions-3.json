@@ -1,0 +1,12 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "Karaoke style marks the current word.",
+      "start": 0,
+      "end": 2.875,
+      "phonemes": "kˌæɹɪˈoʊki stˈaɪl mˈɑːɹks ðə kˈɜːɹənt wˈɜːd."
+    }
+  ]
+}

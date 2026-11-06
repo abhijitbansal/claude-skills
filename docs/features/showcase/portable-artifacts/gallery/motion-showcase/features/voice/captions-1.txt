@@ -1,0 +1,1 @@
+This text is read from an SRT file.

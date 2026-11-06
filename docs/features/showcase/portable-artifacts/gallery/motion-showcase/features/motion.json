@@ -4,6 +4,28 @@
   "captions": [
     { "src": "showcase-features.srt", "style": "karaoke", "scene": "captions", "at": 0.5 }
   ],
+  "audio": [
+    { "src": "voice/open.wav", "scene": "open", "at": 0.3 },
+    { "src": "voice/block-kpi.wav", "scene": "block-kpi", "at": 0.5 },
+    { "src": "voice/block-flow.wav", "scene": "block-flow", "at": 0.5 },
+    { "src": "voice/block-list.wav", "scene": "block-list", "at": 0.5 },
+    { "src": "voice/chart.wav", "scene": "chart", "at": 0.5 },
+    { "src": "voice/race.wav", "scene": "race", "at": 0.5 },
+    { "src": "voice/map.wav", "scene": "map", "at": 0.5 },
+    { "src": "voice/code.wav", "scene": "code", "at": 0.5 },
+    { "src": "voice/ui-form.wav", "scene": "ui-form", "at": 0.5 },
+    { "src": "voice/ui-tabs.wav", "scene": "ui-tabs", "at": 0.5 },
+    { "src": "voice/grade.wav", "scene": "grade", "at": 0.5 },
+    { "src": "voice/lottie.wav", "scene": "lottie", "at": 0.5 },
+    { "src": "voice/camera-pan.wav", "scene": "camera-pan", "at": 0.5 },
+    { "src": "voice/camera-shake.wav", "scene": "camera-shake", "at": 0.5 },
+    { "src": "voice/transitions.wav", "scene": "tr-push", "at": 0.7 },
+    { "src": "voice/drawn.wav", "scene": "drawn", "at": 0.5 },
+    { "src": "voice/captions-1.wav", "scene": "captions", "at": 0.5 },
+    { "src": "voice/captions-2.wav", "scene": "captions", "at": 3.85 },
+    { "src": "voice/captions-3.wav", "scene": "captions", "at": 6.8 },
+    { "src": "voice/close.wav", "scene": "close", "at": 0.5 }
+  ],
   "scenes": [
     {
       "id": "open",
@@ -26,7 +48,7 @@
     },
     {
       "id": "block-kpi",
-      "duration": 4,
+      "duration": 4.3,
       "transition": "fade",
       "elements": [
         { "id": "block-kpi-label", "type": "text", "text": "Block: kpi-counter", "x": 960, "y": 120, "fontSize": 48, "color": "text2", "hold": true },
@@ -42,7 +64,7 @@
     },
     {
       "id": "block-flow",
-      "duration": 4,
+      "duration": 4.5,
       "transition": "fade",
       "elements": [
         { "id": "block-flow-label", "type": "text", "text": "Block: step-flow", "x": 960, "y": 120, "fontSize": 48, "color": "text2", "hold": true },
@@ -265,7 +287,7 @@
     },
     {
       "id": "grade",
-      "duration": 4.5,
+      "duration": 5.8,
       "transition": "fade",
       "elements": [
         { "id": "grade-label", "type": "text", "text": "Grade: four presets on one photo", "x": 960, "y": 170, "fontSize": 64, "fontWeight": 700, "hold": true },
@@ -285,7 +307,7 @@
     },
     {
       "id": "lottie",
-      "duration": 4,
+      "duration": 4.7,
       "transition": "fade",
       "elements": [
         { "id": "lottie-label", "type": "text", "text": "Lottie: a bundled animation file", "x": 960, "y": 130, "fontSize": 64, "fontWeight": 700, "hold": true },
@@ -314,7 +336,7 @@
     },
     {
       "id": "camera-shake",
-      "duration": 2.5,
+      "duration": 2.9,
       "transition": "fade",
       "camera": {
         "keyframes": [
@@ -329,7 +351,7 @@
     },
     {
       "id": "tr-push",
-      "duration": 2.2,
+      "duration": 2.6,
       "background": "#3d1f4a",
       "transition": { "type": "push", "direction": "left", "duration": 0.6 },
       "elements": [
@@ -338,7 +360,7 @@
     },
     {
       "id": "tr-wipe",
-      "duration": 2.2,
+      "duration": 2.6,
       "background": "#4a1f2a",
       "transition": { "type": "wipe", "direction": "right", "duration": 0.6 },
       "elements": [
@@ -347,7 +369,7 @@
     },
     {
       "id": "tr-zoom",
-      "duration": 2.2,
+      "duration": 2.6,
       "background": "#1f3d1f",
       "transition": { "type": "zoom", "direction": "in", "duration": 0.6 },
       "elements": [
@@ -356,7 +378,7 @@
     },
     {
       "id": "tr-blur",
-      "duration": 2.2,
+      "duration": 2.6,
       "background": "#2a2a5c",
       "transition": { "type": "blur", "duration": 0.6 },
       "elements": [
@@ -366,7 +388,7 @@
     {
       "id": "drawn",
       "style": "sketch",
-      "duration": 6.5,
+      "duration": 7,
       "transition": { "type": "push", "direction": "up" },
       "elements": [
         { "id": "drawn-title", "type": "text", "text": "A drawn scene", "x": 960, "y": 200, "fontSize": 120 },
@@ -382,7 +404,7 @@
     },
     {
       "id": "captions",
-      "duration": 7.6,
+      "duration": 10.6,
       "transition": "fade",
       "elements": [
         { "id": "captions-label", "type": "text", "text": "Captions: from a local .srt file", "x": 960, "y": 200, "fontSize": 72, "fontWeight": 700, "hold": true },
@@ -391,7 +413,7 @@
     },
     {
       "id": "close",
-      "duration": 4.5,
+      "duration": 6.2,
       "transition": "fade",
       "elements": [
         {

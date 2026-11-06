@@ -1,0 +1,12 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "A counter block counts up to a sample figure.",
+      "start": 0,
+      "end": 3.2,
+      "phonemes": "ɐ kˈaʊntɚ blˈɑːk kˈaʊnts ˌʌp tʊ ɐ sˈæmpəl fˈɪɡjɚ."
+    }
+  ]
+}

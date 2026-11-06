@@ -1,0 +1,12 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "A steps block lays out a process in four steps.",
+      "start": 0,
+      "end": 3.425,
+      "phonemes": "ɐ stˈɛps blˈɑːk lˈeɪz ˈaʊt ɐ pɹˈɑːsɛs ɪn fˈoːɹ stˈɛps."
+    }
+  ]
+}

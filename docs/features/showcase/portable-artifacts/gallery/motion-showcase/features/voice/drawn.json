@@ -1,0 +1,18 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "This is a drawn scene.",
+      "start": 0,
+      "end": 1.925,
+      "phonemes": "ðɪs ɪz ɐ dɹˈɔːn sˈiːn."
+    },
+    {
+      "text": "A hand draws this board, one stroke at a time.",
+      "start": 1.925,
+      "end": 5.2,
+      "phonemes": "ɐ hˈænd dɹˈɔːz ðɪs bˈoːɹd, wˈʌn stɹˈoʊk æɾə tˈaɪm."
+    }
+  ]
+}

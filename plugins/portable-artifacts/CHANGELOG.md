@@ -64,7 +64,8 @@ English toggle, and make-diagram gains `cloud:` icons. The site page for the plu
   `eval/prompts/motion-items.json`, which now holds 47 prompts; `eval/prompts/motion.json` still holds 10).
 - **make-motion: four starter films.** `sketch-architecture.json`, `sketch-concept.json`, `sketch-steps.json` and
   `sketch-mixed.json` in `references/examples/` (`test/sketch-examples.test.mjs` covers them); plus
-  `showcase-hand-drawn.json` and `showcase-features.json`, the two films on the site page.
+  `showcase-hand-drawn.json` and `showcase-features.json`, the silent specs of the two films on the site page (the page
+  shows the narrated versions).
 - **make-motion: pronunciation guidance and `voice.mjs --phonemes`.** `--phonemes` prints one
   `<sentence><TAB><phonemes>` line per sentence after the usual three lines, so a word with two readings (résumé, lead,
   read) can be checked without listening, and the sidecar `.json` now carries `phonemes` for every sentence (the
@@ -95,8 +96,13 @@ English toggle, and make-diagram gains `cloud:` icons. The site page for the plu
   the trademarks of their owners; use of a mark here does not imply endorsement. The importer was tested only on fake
   folders, not on a real vendor download.
 - **Site.** `docs/features/portable-artifacts.html` is simpler (films first, install and one-liners next, details
-  after) and shows two new films, a hand-drawn film and an all-features film. The Licences table in `README.md` gains
-  rows for the SVG Logos pack and Caveat.
+  after) and shows two new films, a hand-drawn film and an all-features film, both with a voiceover (a local Kokoro
+  voice, `af_heart`; no music, no sound cues, no drawing sound). Measured with `ffprobe` and `ls -l`: the hand-drawn
+  film is 52.2 s, 3,219,681 bytes; the features film is 106.9 s, 4,335,486 bytes; both are 1920x1080 at 30 fps with
+  one stereo AAC track at 48 kHz, rendered with `--no-provenance --loudness -16`. The silent specs stay in
+  `references/examples/`; the narrated specs are the gallery's `motion.json` files, with their `voice/` files beside
+  them (the features film's `showcase-features.srt` there is retimed to the narration, same three lines). The
+  Licences table in `README.md` gains rows for the SVG Logos pack and Caveat.
 
 ### Measured
 

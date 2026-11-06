@@ -1,0 +1,1 @@
+Each scene is written in motion.json. Validate, then render.

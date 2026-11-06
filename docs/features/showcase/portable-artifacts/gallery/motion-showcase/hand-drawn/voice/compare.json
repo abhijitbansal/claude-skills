@@ -1,0 +1,24 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "There are two kinds of scene.",
+      "start": 0,
+      "end": 1.975,
+      "phonemes": "ðɛɹˌɑːɹ tˈuː kˈaɪndz ʌv sˈiːn."
+    },
+    {
+      "text": "A standard scene has charts, photos, keyframed motion and ready-made blocks.",
+      "start": 1.975,
+      "end": 7.275,
+      "phonemes": "ɐ stˈændɚd sˈiːn hɐz tʃˈɑːɹts, fˈoʊɾoʊz, kˈiːfɹeɪmd mˈoʊʃən ænd ɹˈɛdimˌeɪd blˈɑːks."
+    },
+    {
+      "text": "A drawn scene has text, shapes and icons, drawn in order, with no keyframes.",
+      "start": 7.275,
+      "end": 12.675,
+      "phonemes": "ɐ dɹˈɔːn sˈiːn hɐz tˈɛkst, ʃˈeɪps ænd ˈaɪkɑːnz, dɹˈɔːn ɪn ˈɔːɹdɚ, wɪð nˈoʊ kˈiːfɹeɪmz."
+    }
+  ]
+}

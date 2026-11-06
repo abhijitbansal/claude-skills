@@ -1,0 +1,12 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "The camera pans across three cards and settles.",
+      "start": 0,
+      "end": 3.05,
+      "phonemes": "ðə kˈæmɹə pˈænz əkɹˌɑːs θɹˈiː kˈɑːɹdz ænd sˈɛɾəlz."
+    }
+  ]
+}

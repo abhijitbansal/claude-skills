@@ -1,0 +1,18 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "This whole film is drawn by a hand.",
+      "start": 0,
+      "end": 2.6,
+      "phonemes": "ðɪs hˈoʊl fˈɪlm ɪz dɹˈɔːn baɪ ɐ hˈænd."
+    },
+    {
+      "text": "It draws one stroke at a time.",
+      "start": 2.6,
+      "end": 4.95,
+      "phonemes": "ɪt dɹˈɔːz wˈʌn stɹˈoʊk æɾə tˈaɪm."
+    }
+  ]
+}
