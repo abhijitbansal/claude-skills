@@ -7,6 +7,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 import { writeWav } from './helpers/wav.mjs';
+import { startServer } from '../scripts/lib/server.mjs';
+import { launchBrowser } from '../scripts/lib/browser.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER = path.join(root, 'scripts/render.mjs');
@@ -139,4 +141,144 @@ test('render: a misspelt --no-provenance suggests the real flag', () => {
   const r = run(['--no-provenence']);
   assert.equal(r.status, 2);
   assert.match(r.stderr, /did you mean --no-provenance\?/);
+});
+
+// ---- --poster ----------------------------------------------------------------------------------------------------------
+
+const POSTER_SRT = '1\n00:00:00,000 --> 00:00:07,000\nHello poster world\n';
+const POSTER_AT = 5; // frame 120 at 24 fps, once all three items are on screen
+const PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+// A listicle low on the canvas: with captions its room is the band above the caption zone, so a captioned spec lays it out
+// smaller than the same spec without them. The poster must keep that layout and still leave the captions out.
+const posterSpec = (extra = {}) => ({
+  size: [640, 360], fps: 24, captions: [{ src: 'c.srt' }],
+  scenes: [{ id: 's', duration: 7, elements: [{ id: 'b', type: 'block', x: 320, y: 230, block: 'listicle', params: { title: 'Three tricks for faster edits', items: ['Cut on the beat', 'Keep captions short', 'Hook in one second'] } }] }],
+  ...extra,
+});
+
+function posterFile(motion = posterSpec()) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'rf-poster-'));
+  writeFileSync(path.join(dir, 'c.srt'), POSTER_SRT);
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify(motion));
+  return { dir, spec: path.join(dir, 'm.json'), png: path.join(dir, 'p.png') };
+}
+
+const renderPoster = (f, args = ['--poster', String(POSTER_AT), '--poster-out', f.png]) => spawnSync(process.execPath, [RENDER, f.spec, ...args], { encoding: 'utf8' });
+
+// The film's frame at `sec`, drawn the way render.mjs draws it (same viewport, same launch arguments), with the captions layer hidden.
+async function frameWithoutCaptions(specPath, size, sec) {
+  const server = await startServer({ specPath, mode: 'render' });
+  const browser = await launchBrowser({ quiet: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: size[0], height: size[1] }, deviceScaleFactor: 1 });
+    await page.goto(server.url);
+    await page.waitForFunction(() => window.__motion, null, { timeout: 0 });
+    await page.evaluate(() => window.__motion.ready);
+    await page.evaluate((s) => window.__motion.seek(s), sec);
+    await page.evaluate(() => { for (const n of document.querySelectorAll('#stage > .captions')) n.style.visibility = 'hidden'; });
+    return await page.screenshot({ type: 'png' });
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}
+
+test('render: poster equals the film\'s frame with the captions layer hidden', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  const f = posterFile();
+  const r = renderPoster(f);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(r.stdout.split('\n').includes(f.png), `the path is printed: ${r.stdout}`);
+  const expected = await frameWithoutCaptions(f.spec, [640, 360], POSTER_AT);
+  assert.ok(readFileSync(f.png).equals(expected), 'the poster is the hidden-captions frame, byte for byte');
+});
+
+test('render: poster keeps the captioned block layout', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  const withCaptions = posterFile();
+  const { captions, ...bare } = posterSpec();
+  const without = posterFile(bare);
+  assert.equal(renderPoster(withCaptions).status, 0);
+  assert.equal(renderPoster(without).status, 0);
+  assert.ok(!readFileSync(withCaptions.png).equals(readFileSync(without.png)), 'the block is laid out above the caption zone only when the spec has captions');
+});
+
+test('render: poster keeps grain and vignette', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  const plain = posterFile();
+  const vignetteOnly = posterFile(posterSpec({ texture: { vignette: true } }));
+  const grainOnly = posterFile(posterSpec({ texture: { grain: 0.15 } }));
+  for (const f of [plain, vignetteOnly, grainOnly]) assert.equal(renderPoster(f).status, 0);
+  assert.ok(!readFileSync(vignetteOnly.png).equals(readFileSync(plain.png)), 'vignette alone changes the poster');
+  assert.ok(!readFileSync(grainOnly.png).equals(readFileSync(plain.png)), 'grain alone changes the poster');
+});
+
+test('render: --poster alone writes <spec dir>/out/poster.jpg (a JPEG) and no MP4', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  const f = posterFile();
+  const r = renderPoster(f, ['--poster', '1']);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.deepEqual(readdirSync(path.join(f.dir, 'out')), ['poster.jpg'], 'writes no MP4');
+  const jpg = readFileSync(path.join(f.dir, 'out', 'poster.jpg'));
+  assert.deepEqual([...jpg.subarray(0, 3)], [0xff, 0xd8, 0xff], 'JPEG signature');
+  assert.ok(r.stdout.split('\n').includes(path.join(f.dir, 'out', 'poster.jpg')), r.stdout);
+});
+
+test('render: a poster inside a GL transition window is the composed frame, as a PNG or a JPEG', async (t) => {
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  const scenes = [{ id: 'a', duration: 2, background: '#cc0000', elements: [] }, { id: 'b', duration: 2, background: '#0000cc', transition: { type: 'gl-ripple', duration: 1 }, elements: [] }];
+  const f = posterFile({ size: [160, 90], fps: 24, scenes }); // scene b starts at 2 s; the window is 2-3 s
+  const png = renderPoster(f, ['--poster', '2.5', '--poster-out', f.png]);
+  assert.equal(png.status, 0, png.stdout + png.stderr);
+  assert.deepEqual([...readFileSync(f.png).subarray(1, 4)], [0x50, 0x4e, 0x47], 'PNG signature');
+  const jpg = path.join(f.dir, 'p.jpg');
+  const r = renderPoster(f, ['--poster', '2.5', '--poster-out', jpg]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.deepEqual([...readFileSync(jpg).subarray(0, 3)], [0xff, 0xd8, 0xff], 'JPEG signature');
+  const plain = path.join(f.dir, 'plain.png');
+  assert.equal(renderPoster(f, ['--poster', '0.5', '--poster-out', plain]).status, 0);
+  assert.ok(!readFileSync(plain).equals(readFileSync(f.png)), 'the window frame is not the outgoing scene');
+});
+
+test('render: --poster past the end is a usage error', () => {
+  const f = posterFile();
+  const r = renderPoster(f, ['--poster', '40']);
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /--poster 40: past the end \(the video is 7 s\)/);
+  assert.deepEqual(readdirSync(f.dir).sort(), ['c.srt', 'm.json'], 'nothing written');
+});
+
+test('render: poster flag combinations that cannot work are usage errors (exit 2) and write nothing', () => {
+  const f = posterFile();
+  const cases = [
+    [['--poster-out', f.png], /--poster-out needs --poster/],
+    [['--poster', '1', '--batch', path.join(f.dir, 'rows.json')], /--batch does not apply to --poster/],
+    [['--poster', '1', '--contact-sheet'], /--contact-sheet does not apply to --poster/],
+    [['--poster', '1', '--poster-out', path.join(f.dir, 'p.gif')], /--poster-out must end in \.jpg, \.jpeg or \.png/],
+    [['--poster', '1', '--poster-out', path.join(f.dir, 'p')], /--poster-out must end in \.jpg, \.jpeg or \.png/],
+    [['--poster', '1', '--out', path.join(f.dir, 'o.mp4')], /--out does not apply to --poster/],
+    [['--poster', '1', '--workers', '2'], /--workers does not apply to --poster/],
+    [['--poster', '1', '--loudness', '-14'], /--loudness does not apply to --poster/],
+    [['--poster', '1', '--true-peak', '-1'], /--true-peak does not apply to --poster/],
+    [['--poster', '1', '--no-provenance'], /--no-provenance does not apply to --poster/],
+    [['--poster', 'soon'], /--poster must be a number of seconds/],
+    [['--poster', '-1'], /--poster must be a number of seconds/],
+  ];
+  for (const [args, message] of cases) {
+    const r = renderPoster(f, args);
+    assert.equal(r.status, 2, `${args.join(' ')}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stderr, message, args.join(' '));
+  }
+  assert.deepEqual(readdirSync(f.dir).sort(), ['c.srt', 'm.json'], 'nothing written');
+});
+
+test('render: --poster-out may not overwrite an image the spec reads', () => {
+  const motion = posterSpec();
+  motion.scenes[0].elements.push({ id: 'img', type: 'image', src: 'pic.png', x: 100, y: 100, width: 40, height: 40 });
+  const f = posterFile(motion);
+  writeFileSync(path.join(f.dir, 'pic.png'), PIXEL_PNG);
+  const r = renderPoster(f, ['--poster', '1', '--poster-out', path.join(f.dir, 'pic.png')]);
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /--poster-out: pic\.png is a file this render reads/);
+  assert.deepEqual(readFileSync(path.join(f.dir, 'pic.png')), PIXEL_PNG, 'the image is untouched');
 });

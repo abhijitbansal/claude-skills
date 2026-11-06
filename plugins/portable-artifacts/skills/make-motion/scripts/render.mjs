@@ -10,6 +10,8 @@
 // --model/--effort/--agent override the spec's generatedBy; they are stamped into the MP4 comment/artist tags.
 // --no-provenance (or a root `"provenance": false`) leaves those two tags out; ffmpeg's own encoder tag stays.
 // With --contact-sheet, --out is a directory; one tiled, timestamped PNG per scene goes to <out>/contact/<scene-id>.png.
+// --poster <seconds> [--poster-out <file>.jpg|.jpeg|.png]: one still of the film's frame at that time, captions hidden (grain and
+// vignette stay), no MP4; default <spec dir>/out/poster.jpg. Not with --out, --batch, --contact-sheet, --workers or the audio flags.
 // --batch rows.json --out "renders/{name}.mp4": one MP4 per row of var values ({index} or a {var} in the file name), every
 // row checked before the first frame, then rendered in turn; manifest.json beside them records each row's result.
 import { spawn } from 'node:child_process';
@@ -48,8 +50,10 @@ const FRAME_DIR_RETRIES = 5;
 const FRAME_DIR_RETRY_MS = 100;
 const EXIT_SIGINT = 130;
 const EXIT_SIGTERM = 143;
-const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--workers n|auto] [--quality draft|final] [--loudness <lufs>|off] [--true-peak <dbtp>] [--no-provenance] [--contact-sheet] [--batch <rows.json> --out "<dir>/{index}.mp4"]';
-const VALUE_FLAGS = ['--out', '--fps', '--size', '--theme', '--model', '--effort', '--agent', '--workers', '--quality', '--loudness', '--true-peak', '--batch'];
+const POSTER_EXTENSIONS = ['.jpg', '.jpeg', '.png'];
+const POSTER_JPEG_QUALITY = 92;
+const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--workers n|auto] [--quality draft|final] [--loudness <lufs>|off] [--true-peak <dbtp>] [--no-provenance] [--contact-sheet] [--poster <seconds> [--poster-out <file>.jpg|.png]] [--batch <rows.json> --out "<dir>/{index}.mp4"]';
+const VALUE_FLAGS = ['--out', '--fps', '--size', '--theme', '--model', '--effort', '--agent', '--workers', '--quality', '--loudness', '--true-peak', '--batch', '--poster', '--poster-out'];
 const FLAGS = [...VALUE_FLAGS, '--contact-sheet', '--no-provenance'];
 
 function takeValue(argv, i, flag) {
@@ -97,10 +101,39 @@ function parseArgs(argv) {
   if (opts.size !== undefined) opts.size = parseSize(opts.size);
   if (opts.theme !== undefined) checkTheme(opts.theme);
   if (opts.contact && opts.noProvenance) throw new UsageError('--no-provenance does not apply to --contact-sheet (a sheet is PNG files, with no tags to remove); leave it out');
+  checkPoster(opts);
   checkCapture(opts);
   checkLoudness(opts);
   checkBatch(opts);
   return opts;
+}
+
+// --poster <seconds> [--poster-out <file>]: one still frame, no MP4. Runs on the raw flag values, before the other checks
+// normalise them. A flag a poster would ignore is a usage error, as it is for a contact sheet. Sets opts.poster (a number)
+// and opts.posterOut.
+function checkPoster(opts) {
+  const out = opts['poster-out'];
+  delete opts['poster-out'];
+  if (opts.poster === undefined) {
+    if (out !== undefined) throw new UsageError('--poster-out needs --poster <seconds>; add --poster, or leave --poster-out out');
+    return;
+  }
+  const ignored = [
+    ['--batch', opts.batch !== undefined, 'a batch writes one MP4 per row'],
+    ['--contact-sheet', opts.contact, 'a sheet is many frames'],
+    ['--out', opts.out !== undefined, 'a poster writes no MP4; --poster-out names the file'],
+    ['--workers', opts.workers !== undefined, 'it captures one frame on one page'],
+    ['--loudness', opts.loudness !== undefined, 'a poster has no audio'],
+    ['--true-peak', opts['true-peak'] !== undefined, 'a poster has no audio'],
+    ['--no-provenance', opts.noProvenance, 'a poster has no tags to remove'],
+  ];
+  const [flag, , why] = ignored.find(([, given]) => given) ?? [];
+  if (flag) throw new UsageError(`${flag} does not apply to --poster (${why}); leave it out`);
+  if (!/^\d+(\.\d+)?$/.test(opts.poster)) throw new UsageError(`--poster must be a number of seconds, 0 or more (got ${JSON.stringify(opts.poster)})`);
+  opts.poster = Number(opts.poster);
+  if (out === undefined) return;
+  if (!POSTER_EXTENSIONS.includes(path.extname(out).toLowerCase())) throw new UsageError(`--poster-out must end in ${POSTER_EXTENSIONS.slice(0, -1).join(', ')} or ${POSTER_EXTENSIONS.at(-1)} (got ${JSON.stringify(path.basename(out))})`);
+  opts.posterOut = out;
 }
 
 // --batch writes one MP4 per row, so --out must name each row's file; the template's names are checked against the spec's
@@ -208,34 +241,40 @@ async function prepare(opts, { raw, loaded, dir, served, out, partial }, state) 
   const fps = opts.fps ?? spec.fps;
   const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
   const frames = frameCount(total, fps); // template/frames.mjs: the grid every cut-off check judges against
-  if (!opts.contact && frames < 1) throw new UsageError(`spec is too short for ${fps} fps: no frames to render`);
+  const poster = opts.poster !== undefined;
+  const still = opts.contact || poster; // a contact sheet or a poster: PNG/JPEG files from one page, no encode and no audio
+  if (!still && frames < 1) throw new UsageError(`spec is too short for ${fps} fps: no frames to render`);
+  const posterFrame = Math.round((opts.poster ?? 0) * fps);
+  if (poster && posterFrame >= frames) throw new UsageError(`--poster ${opts.poster}: past the end (the video is ${+total.toFixed(3)} s)`);
   const name = path.basename(specPath, path.extname(specPath));
-  const defaultOut = opts.contact ? path.join(dir, 'out') : path.join(dir, 'out', `${name}.mp4`);
-  // A single MP4 render (a batch checked its rows in planBatch) never replaces a file it reads: the spec, or a clip,
+  const defaultOut = opts.contact ? path.join(dir, 'out') : path.join(dir, 'out', poster ? 'poster.jpg' : `${name}.mp4`);
+  const outFlag = poster ? '--poster-out' : '--out';
+  const requested = poster ? opts.posterOut : opts.out;
+  // A single MP4 or poster render (a batch checked its rows in planBatch) never replaces a file it reads: the spec, or a clip,
   // image, sound or captions file it names. Exit 2 before anything is written.
   if (out === undefined && !opts.contact) {
-    const output = path.resolve(opts.out ?? defaultOut);
+    const output = path.resolve(requested ?? defaultOut);
     const inputs = [{ file: specPath, what: 'the spec' }, ...assetSrcs(raw).map((src) => ({ file: path.resolve(dir, String(src)), what: src }))];
-    const [clash] = inputClashes([{ index: 0, out: output }], inputs, { reader: 'this render', fix: 'choose another --out' });
-    if (clash) throw new UsageError(`--out: ${clash.message}`);
+    const [clash] = inputClashes([{ index: 0, out: output }], inputs, { reader: 'this render', fix: `choose another ${outFlag}` });
+    if (clash) throw new UsageError(`${outFlag}: ${clash.message}`);
   }
-  // Video elements need ffmpeg to decode their frames, contact sheets included.
+  // Video elements need ffmpeg to decode their frames, contact sheets and posters included.
   const hasVideo = specHasVideo(spec);
-  const ffmpeg = opts.contact && !hasVideo ? null : await findFfmpeg();
+  const ffmpeg = still && !hasVideo ? null : await findFfmpeg();
   const ffprobe = hasVideo ? findFfprobe({ ffmpeg }) : null;
   const quality = opts.quality ?? 'final';
   const size = opts.size ?? spec.size;
   const loudness = loudnessFor(opts, spec);
   return {
-    theme: opts.theme, themeName: substituteVars(loaded).theme ?? opts.theme ?? MOTION_THEME, spec, served, specPath, fps, frames, total, contact: opts.contact, quality,
+    theme: opts.theme, themeName: substituteVars(loaded).theme ?? opts.theme ?? MOTION_THEME, spec, served, specPath, fps, frames, total, contact: opts.contact, poster: poster ? posterFrame : undefined, quality,
     // A draft page is half the size: the stage scales to fit it exactly as it does for --size, so captions, the safe area and fonts shrink with it.
     size: quality === 'draft' ? draftSize(size) : size,
     workers: opts.workers,
     loudness: loudness.target, loudnessReport: loudness.report, loudnessFlagged: loudness.flagged, loudnessOff: loudness.off,
-    out: out ?? path.resolve(opts.out ?? defaultOut), partial, ffmpeg,
+    out: out ?? path.resolve(requested ?? defaultOut), partial, ffmpeg,
     metadata: opts.noProvenance || spec.provenance === false ? {} : { comment: provenanceText('make-motion', spec.generatedBy, buildDate()), artist: spec.generatedBy?.model },
     videoFrames: hasVideo ? prepareVideo(spec, dir, ffmpeg, ffprobe, fps) : {},
-    ...(opts.contact ? { audio: [] } : planAudio(spec, dir, ffmpeg, ffprobe, fps, total, state)),
+    ...(still ? { audio: [] } : planAudio(spec, dir, ffmpeg, ffprobe, fps, total, state)),
   };
 }
 
@@ -305,10 +344,47 @@ async function renderContactSheets(page, p, info, browser, compositor) {
   process.stdout.write(`${outDir}\n${p.spec.scenes.length} contact sheet(s)\n`);
 }
 
+// A PNG frame as a JPEG, drawn through a canvas of the page (a frame composed by the GL compositor is only ever a PNG).
+async function jpegOf(page, png) {
+  const base64 = await page.evaluate(async ([data, quality]) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${data}`;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+    return canvas.toDataURL('image/jpeg', quality).split(',')[1];
+  }, [png.toString('base64'), POSTER_JPEG_QUALITY / 100]);
+  return Buffer.from(base64, 'base64');
+}
+
+// --poster: the film's frame p.poster, as render draws it (the block layout the captions made room for, grain and vignette
+// stay), with the captions layer hidden. Hiding is `visibility`, which a seek never resets (a captions layer toggles only
+// `display`). PNG or JPEG by the file's extension.
+async function renderPoster(page, p, compositor) {
+  const type = path.extname(p.out).toLowerCase() === '.png' ? 'png' : 'jpeg';
+  const sec = p.poster / p.fps;
+  const hideCaptions = () => page.evaluate(() => { for (const layer of document.querySelectorAll('#stage > .captions')) layer.style.visibility = 'hidden'; });
+  let image;
+  if (compositor) { // a frame inside a GL transition window is composed from two screenshots (takeFrame)
+    await hideCaptions();
+    const png = await takeFrame({ page, compositor, k: 0 }, sec);
+    image = type === 'png' ? png : await jpegOf(page, png);
+  } else {
+    await page.evaluate((s) => window.__motion.seek(s), sec);
+    await hideCaptions();
+    image =await page.screenshot(type === 'png' ? { type } : { type, quality: POSTER_JPEG_QUALITY });
+  }
+  mkdirSync(path.dirname(p.out), { recursive: true });
+  writeFileSync(p.out, image);
+  process.stdout.write(`${p.out}\nposter: frame ${p.poster} @ ${p.fps} fps, ${p.size.join('x')}\n`);
+}
+
 // Before any browser is launched: the temp files of this render must have names the file system takes (255 bytes). The
 // normalised copy's is nine bytes longer than the encode's (a batch checked both in planBatch). A usage error (exit 2).
 function checkTempNames(p) {
-  if (p.contact) return;
+  if (p.contact || p.poster !== undefined) return;
   const partial = p.partial ?? partialPath(p.out);
   const names = [partial, ...(p.loudness && p.audio.length ? [normalizedPath(partial)] : [])];
   for (const name of names) {
@@ -449,7 +525,8 @@ async function openPages(p, server, state, count) {
 // One planned render (plan or prepare): the server, the pages, the frames. Throws on failure; cleans up either way.
 async function runRender(p, state) {
   process.stdout.write(`theme: ${p.themeName}\n`);
-  const pageCount = p.contact ? 1 : Math.min(p.workers, p.frames); // no page without a frame to take
+  const poster = p.poster !== undefined;
+  const pageCount = p.contact || poster ? 1 : Math.min(p.workers, p.frames); // no page without a frame to take
   if (p.quality === 'draft') process.stderr.write(`quality: draft (${p.size.join('x')})\n`);
   if (pageCount > 1) process.stderr.write(`workers: ${pageCount}\n`);
   let server;
@@ -463,7 +540,9 @@ async function runRender(p, state) {
     // A GL transition (gl-ripple, gl-cube) is composed by a second browser with software WebGL, launched on the first frame
     // that needs it; a spec with none never creates it.
     if (usesGl(p.spec)) state.compositor = createCompositor({ size: p.size });
-    await (p.contact ? renderContactSheets(pages[0], p, info, state.browser, state.compositor) : renderVideo(pages, p, state));
+    if (p.contact) await renderContactSheets(pages[0], p, info, state.browser, state.compositor);
+    else if (poster) await renderPoster(pages[0], p, state.compositor);
+    else await renderVideo(pages, p, state);
   } catch (e) {
     if (state.exiting) await new Promise(() => {}); // the signal handler owns the exit
     throw e;
