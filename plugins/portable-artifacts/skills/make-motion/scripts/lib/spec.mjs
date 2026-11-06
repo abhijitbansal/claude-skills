@@ -18,6 +18,8 @@ import { doctorCommand } from './doctor-hint.mjs';
 import { BLOCKS, BLOCK_NAMES, isBlock, blockDef, blockAssetFiles, paramOfPart } from '../../template/blocks/index.mjs';
 import { VIRAL_MODE, applyViral } from '../../template/viral.mjs';
 import { VAR_NAME, MAX_VARS, VAR_TYPES, declaresVars, findVarRefs, varValues, substituteVars } from '../../template/vars.mjs';
+import { STYLES, HAND_TONES, HAND_SCALE_RANGE, PACE_RANGE, SCRIBBLE_FILL, isSketchScene } from '../../template/sketch/style.mjs';
+import { checkSketch } from './sketch-check.mjs';
 import { checkCode } from './code-check.mjs';
 import { checkLottie } from './lottie-check.mjs';
 import { isAtlasName } from '../../template/maps.mjs';
@@ -56,6 +58,7 @@ export const ANIMATABLE = {
   block: [...POSE], // a block's pose and keyframes become its group's
   code: [...POSE], // and `value` when it types, as a text does
   lottie: [...POSE], // its own animation plays from `offset` at `speed`; keyframes move the element
+  icon: [...POSE], // drawn in sketch scenes only, where checkSketch refuses keyframes; listed so a stray one is reported, not a crash
 };
 
 const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes', 'hold'];
@@ -71,7 +74,11 @@ const FIELDS = {
   block: [...COMMON, 'block', 'params'],
   code: [...COMMON, 'code', 'lang', 'width', 'height', 'fontSize', 'highlight', 'diff', 'typing'],
   lottie: [...COMMON, 'src', 'width', 'height', 'offset', 'speed'],
+  icon: [...COMMON, 'name', 'size', 'color'], // a Lucide line icon, sketch scenes only (checkSketch)
 };
+// `drawAt` is a sketch scene's start time for any element; it is not in a type's list (that would reach every "allowed:"
+// message), and checkSketch reports it where it does not belong.
+const SKETCH_FIELDS = ['drawAt'];
 const REQUIRED = {
   text: ['text'],
   counter: ['to'],
@@ -83,6 +90,7 @@ const REQUIRED = {
   block: ['block', 'params'],
   code: ['code', 'lang', 'width'],
   lottie: ['src', 'width', 'height'],
+  icon: ['name', 'size'],
 };
 
 const num = { type: 'number' };
@@ -156,6 +164,9 @@ const element = {
     lang: { type: 'string', minLength: 1 }, // one of CODE_LANGS (checkCode names the closest)
     highlight: { type: 'array', items: { type: 'integer', minimum: 1 } }, // 1-based line numbers, checked against the code by checkCode
     diff: { type: 'boolean' },
+    name: { type: 'string', minLength: 1 }, // an icon's Lucide name: checkSketch looks it up
+    size: { type: 'number', minimum: 1 }, // an icon's box, in px
+    drawAt: {}, // seconds, or "sentence:<n>": a sketch scene only; checkSketch checks the form (a union type would not format)
     // A group's children are elements again (groups nest; checkElement caps the depth with a message that names the limit).
     children: { type: 'array', minItems: 1, maxItems: MAX_GROUP_CHILDREN, items: { $ref: '#/definitions/element' } },
   },
@@ -259,6 +270,23 @@ const viral = {
     loop: { type: 'boolean' },
   },
 };
+// The hand-drawn style's film-wide settings (template/sketch/style.mjs): the hand, the wobble seed and the drawing pace.
+const sketchSettings = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    hand: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        tone: { enum: [...HAND_TONES] },
+        scale: { type: 'number', minimum: HAND_SCALE_RANGE[0], maximum: HAND_SCALE_RANGE[1] },
+      },
+    },
+    seed: { type: 'integer' },
+    pace: { type: 'number', minimum: PACE_RANGE[0], maximum: PACE_RANGE[1] },
+  },
+};
 // A loudness target for the mix: render.mjs reports the measured level against it.
 const loudness = {
   type: 'object',
@@ -285,6 +313,8 @@ export const SCHEMA = {
     theme: { type: 'string', minLength: 1 },
     transition,
     texture,
+    style: { enum: [...STYLES] }, // the default for every scene; a scene's own wins (template/sketch/style.mjs)
+    sketch: sketchSettings,
     generatedBy: GENERATED_BY_SCHEMA,
     provenance: { type: 'boolean' }, // false: no comment/artist tags in the MP4, no footer in the preview
     mode: { enum: [VIRAL_MODE] },
@@ -302,6 +332,7 @@ export const SCHEMA = {
           id: { type: 'string', minLength: 1 },
           duration: { type: 'number', minimum: 0.2, maximum: 60 },
           background: color,
+          style: { enum: [...STYLES] },
           transition,
           camera,
           elements: { type: 'array', items: { $ref: '#/definitions/element' } },
@@ -426,8 +457,9 @@ const COLOUR_MESSAGE = 'must be a CSS colour (hex, rgb(), rgba(), hsl(), hsla() 
 function checkColor(obj, key, base, errors, { tokens = false } = {}) {
   if (obj[key] === undefined || isCssColor(obj[key]) || (tokens && COLOR_TOKENS.includes(obj[key]))) return;
   const art = obj[key] === ART_BACKGROUND ? `; "${ART_BACKGROUND}" is only valid as a scene background` : '';
+  const scribble = obj[key] === SCRIBBLE_FILL ? `; "${SCRIBBLE_FILL}" is only valid as the fill of a shape in a sketch scene` : '';
   const token = tokens ? ` or a theme token: ${COLOR_TOKENS.join(', ')}` : '';
-  errors.push({ path: pathJoin(base, key), message: COLOUR_MESSAGE + token + art });
+  errors.push({ path: pathJoin(base, key), message: COLOUR_MESSAGE + token + art + scribble });
 }
 
 // A scene background is a colour or "art": the theme's seeded art, drawn full-bleed behind the elements.
@@ -670,10 +702,11 @@ function checkTyping(el, at, scene, fps, errors) {
   errors.push({ path: at, message: `typing ${chars} characters takes ${takes.toFixed(2)}s but scene "${scene.id}" lasts ${scene.duration}s (it must finish a frame before the scene ends at ${fps} fps); shorten the ${el.type} or lengthen the scene to at least ${fix}s` });
 }
 
-// The scenes of `spec`, each with every scene's length and its own place (what the frame-grid checks need).
+// The scenes of `spec`, each with every scene's length and its own place (what the frame-grid checks need), and whether it
+// is hand-drawn (`sketch`: its own `style` or the root's).
 const withGrid = (spec) => {
   const durations = spec.scenes.map((s) => s.duration);
-  return spec.scenes.map((scene, index) => ({ ...scene, durations, index }));
+  return spec.scenes.map((scene, index) => ({ ...scene, durations, index, sketch: isSketchScene(spec, scene) }));
 };
 
 const TOP_ELEMENT = /^scenes\[\d+\]\.elements\[(\d+)\]/; // the scene-level element a path is in (a block's group, for a part)
@@ -731,7 +764,7 @@ function checkGroup(el, base, scene, dir, errors, fps, depth) {
 function checkFields(el, base, errors) {
   const fields = FIELDS[el.type];
   for (const key of Object.keys(el)) {
-    if (fields.includes(key)) continue;
+    if (fields.includes(key) || SKETCH_FIELDS.includes(key)) continue;
     const message = key === 'grade' ? `only valid on ${GRADE_ELEMENT_TYPES.join(' or ')} elements` : `not valid on ${el.type}; allowed: ${fields.join(', ')}`;
     errors.push({ path: pathJoin(base, key), message });
   }
@@ -754,7 +787,10 @@ function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS, d
   checkTyping(el, typingPath(el, base, null), scene, fps, errors);
   if (el.type === 'code') checkCode(el, base, errors);
   checkGrade(el, base, errors);
-  for (const key of ['color', 'fill', 'stroke']) checkColor(el, key, base, errors, { tokens: true });
+  for (const key of ['color', 'fill', 'stroke']) {
+    if (key === 'fill' && scene.sketch && el.type === 'shape' && el.fill === SCRIBBLE_FILL) continue; // a hatch, not a colour
+    checkColor(el, key, base, errors, { tokens: true });
+  }
   if (el.type === 'shape') checkShapeStyle(el, base, errors);
   if (el.type === 'image' && typeof el.src === 'string') checkAssetPath(el.src, pathJoin(base, 'src'), dir, errors);
   if (el.type === 'chart' && el.vegaLite) checkChart(el, base, errors);
@@ -1005,6 +1041,7 @@ export function validateSpec(input, { dir = process.cwd(), values = {} } = {}) {
   const spec = expandSpec(written); // pipeline steps 1-3 (template/defaults.mjs); the checks below see plain elements
   const errors = [];
   checkViral(written, errors);
+  checkSketch(written, errors);
   checkIds(spec, errors);
   checkFormat(spec, errors);
   checkTheme(spec, errors);

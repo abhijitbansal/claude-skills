@@ -35,10 +35,15 @@ def key_for(path: Path) -> str:
     return f"{m.group(1).replace('-', ' ').title()}|{m.group(2)}"
 
 
-def entry(path: Path) -> dict:
+def is_printable(c: int) -> bool:
+    return c >= 0x20 and not 0x7F <= c <= 0x9F
+
+
+def entry(path: Path, every_glyph: bool = False) -> dict:
     font = TTFont(path)
     cmap, hmtx, hhea = font.getBestCmap(), font["hmtx"], font["hhea"]
-    adv = {c: hmtx[cmap[c]][0] for c in CODEPOINTS if c in cmap}
+    codepoints = [c for c in sorted(cmap) if is_printable(c)] if every_glyph else CODEPOINTS
+    adv = {c: hmtx[cmap[c]][0] for c in codepoints if c in cmap}
     mean = round(sum(adv[c] for c in LETTERS) / len(LETTERS), 2)
     return {
         "advance": {str(c): adv[c] for c in sorted(adv)},
@@ -55,13 +60,14 @@ def main() -> None:
     ap.add_argument("fonts", nargs="+", type=Path)
     ap.add_argument("--merge", type=Path, required=True, help="metrics.json to update in place")
     ap.add_argument("--name", action="append", default=[], help='explicit "<Family>|<weight>" key, once per font')
+    ap.add_argument("--every-glyph", action="store_true", help="advance for every printable codepoint the font maps, not just U+0020-007E and U+00A0-00FF (a subset font's whole repertoire)")
     args = ap.parse_args()
     if args.name and len(args.name) != len(args.fonts):
         sys.exit("--name must be given once per font file")
     data = json.loads(args.merge.read_text())
     for i, path in enumerate(args.fonts):
         key = args.name[i] if args.name else key_for(path)
-        data[key] = entry(path)
+        data[key] = entry(path, args.every_glyph)
         print(f"{key}: {len(data[key]['advance'])} codepoints", file=sys.stderr)
     args.merge.write_text(json.dumps(dict(sorted(data.items())), indent=2, ensure_ascii=False) + "\n")
 
