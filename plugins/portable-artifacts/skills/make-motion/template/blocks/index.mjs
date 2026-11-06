@@ -19,8 +19,9 @@
 //             of some length also exports `minDuration(params)` in seconds (at the default fps), which validate reads
 //   hook      (optional) the parts (names without `<blockId>/`) that are on screen from frame 0, with viral.mjs's hook
 //             entrance, when the block opens a viral spec (scene 0): the words a viewer should read first
-//   paramOf   (optional) part -> the param that sets that part's text (`label-2` -> `steps[1]`), for check.mjs hints;
-//             without it a part named like a param (`name`, `title`) points at that param (see paramOfPart)
+//   paramOf   (optional) part -> the param that sets that part's text or icon (`label-2` -> `steps[1]`, `icon-1` ->
+//             `nodes[0].icon`), for check.mjs hints and for where a sketch block's glyph and icon errors are reported
+//             (scripts/lib/sketch-check.mjs checkSketchBlocks); without it a part named like a param (`name`, `title`) points at that param (see paramOfPart)
 //   expand    (el, ctx: { theme, sceneDuration, fps, size, format, captions, insets, durations, index }) -> group; never
 //             throws on params its schema accepts. `captions` is whether the spec has a captions track (blocks that stack
 //             keep above it); `insets` the viral safe zone, null for a spec that is not viral (layout.mjs freeBand and

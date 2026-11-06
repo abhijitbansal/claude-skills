@@ -11,7 +11,7 @@ import { unit, freeBand, roomAt, contentWidth, rectPart } from './layout.mjs';
 const { unitsPerEm, ascent, descent, advance } = metrics;
 const FIT_EPSILON = 1e-9; // plan.mjs's wrap uses the same tolerance
 const DRAW_MARGIN = 14; // px at 1080 kept free around what a block draws: the pen is 5.5 wide and the wobble moves it a few px
-const UNDERLINE = { width: 9, bow: 30, bowShare: 0.044 }; // the spike's underline: a 9 px accent stroke sagging 31 px over 700
+export const UNDERLINE = { width: 9, bow: 30, bowShare: 0.044 }; // the spike's underline: a 9 px accent stroke sagging 31 px over 700
 
 export const LINE_EM = (ascent - descent) / unitsPerEm; // a line is as tall as the font's ascent plus its descent
 const px = (n) => Math.round(n);

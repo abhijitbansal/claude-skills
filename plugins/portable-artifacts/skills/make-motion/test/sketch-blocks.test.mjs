@@ -168,6 +168,36 @@ test('an edge across the nodes between arches clear of them', () => {
   }
 });
 
+// The pairs of drawn texts whose boxes overlap, as check.mjs judges (OVERLAP_TOLERANCE_PX: a thinner intersection is a shared edge),
+// as "<part>~<part>" with the size of the overlap.
+const OVERLAP_TOLERANCE_PX = 2;
+function textOverlaps(motion) {
+  const { plan, expanded } = planOf(motion);
+  const kids = expanded.scenes[0].elements[0].children;
+  const texts = kids.flatMap((el, k) => (el.type === 'text' ? [{ id: el.id.slice(el.id.indexOf('/') + 1), box: plan.elements.get(`scenes[0].elements[0].children[${k}]`).box }] : []));
+  const found = [];
+  texts.forEach((a, i) => texts.slice(i + 1).forEach((b) => {
+    const [w, h] = [Math.min(a.box.x + a.box.width, b.box.x + b.box.width) - Math.max(a.box.x, b.box.x), Math.min(a.box.y + a.box.height, b.box.y + b.box.height) - Math.max(a.box.y, b.box.y)];
+    if (w > OVERLAP_TOLERANCE_PX && h > OVERLAP_TOLERANCE_PX) found.push(`${a.id}~${b.id} ${Math.round(w)}x${Math.round(h)}`);
+  }));
+  return found;
+}
+
+test('no two texts of a diagram overlap: an edge label keeps off the node labels and the other edge labels', () => {
+  const nodes = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6'].map((id, i) => ({ id, label: ['Browser', 'Gateway', 'Auth', 'Cache', 'Queue', 'Worker'][i], icon: 'server' }));
+  const oneDiagonal = sketchSpec([block('sketch-diagram', { nodes, edges: [{ from: 'n1', to: 'n4', label: 'miss' }], layout: 'grid' })]);
+  assert.deepEqual(textOverlaps(oneDiagonal), [], 'a 6-node grid with one diagonal labelled edge');
+  const chained = sketchSpec([block('sketch-diagram', { nodes, edges: nodes.slice(1).map((n, i) => ({ from: nodes[i].id, to: n.id, label: 'step' })).concat([{ from: 'n6', to: 'n1', label: 'report back' }, { from: 'n2', to: 'n5', label: 'skip' }]) })]);
+  assert.deepEqual(textOverlaps(chained), [], 'a chain with a way back and a skip');
+  for (const format of ['16:9', '9:16']) {
+    for (const [variant, params] of Object.entries(sketchExtremes('sketch-diagram')).filter(([key]) => key !== 'small')) {
+      const size = FORMATS[format].size;
+      const { x, y } = BLOCKS['sketch-diagram'].place(size, format);
+      assert.deepEqual(textOverlaps(sketchSpec([block('sketch-diagram', params, { x, y })], { format })), [], `longest params (${variant}) at ${format}`);
+    }
+  }
+});
+
 test('the layout: row on a wide canvas, column on a tall one, the one asked for, and a row that does not fit becomes a grid', () => {
   const boxesOf = (motion) => childrenOf(motion).filter((el) => /^b\/box-/.test(el.id));
   const rowOf = (boxes) => new Set(boxes.map((el) => el.y)).size;
@@ -224,6 +254,11 @@ test('a duplicate node id is an error at the second one; an edge from a node to 
   assert.doesNotThrow(() => planOf(clash), 'expansion lays out even duplicate ids');
 });
 
+test('a duplicate edge is an error at the second one; the way back between two nodes is another edge and stays valid', () => {
+  assert.deepEqual(errs(sketchSpec([block('sketch-diagram', { nodes: [web, api], edges: [{ from: 'web', to: 'api' }, { from: 'api', to: 'web' }, { from: 'web', to: 'api', label: 'again' }] })])), [`${AT}.edges[2]: duplicate of edges[0]`]);
+  assert.deepEqual(errs(sketchSpec([block('sketch-diagram', { nodes: [web, api], edges: [{ from: 'web', to: 'api', label: 'go' }, { from: 'api', to: 'web', label: 'back' }] })])), []);
+});
+
 test('params the schema refuses are reported at params.<field>, for every sketch block', () => {
   assert.deepEqual(errs(sketchSpec([block('sketch-diagram', { nodes: [web], edges: [] })])), [`${AT}.nodes: must NOT have fewer than 2 items`]);
   assert.deepEqual(errs(sketchSpec([block('sketch-diagram', { nodes: [{ id: 'a', label: 'x'.repeat(25) }, web], edges: [] })])), [`${AT}.nodes[0].label: must NOT have more than 24 characters`]);
@@ -264,6 +299,10 @@ test('an icon name that is not in the set is an error at that param, with a did-
 test('a sketch block in a standard scene is refused with the fix; a standard block in a sketch scene lists the sketch blocks', () => {
   const standard = { scenes: [{ id: 's', duration: 6, elements: [block('sketch-callout', { text: 'Hi' })] }] };
   assert.deepEqual(errs(standard), ['scenes[0].elements[0].block: sketch-callout is a sketch block; it draws only in a sketch scene (set "style": "sketch" on the scene, or at the root)']);
+  // A filled node and an icon are scribble and icon parts: in a standard scene they would each be refused again, in words about parts
+  // the author never wrote. The block error alone is reported.
+  const filled = { scenes: [{ id: 's', duration: 6, elements: [block('sketch-diagram', { nodes: [{ id: 'a', label: 'A', icon: 'server', fill: true }, web], edges: [{ from: 'a', to: 'web', label: 'go' }] })] }] };
+  assert.deepEqual(errs(filled), ['scenes[0].elements[0].block: sketch-diagram is a sketch block; it draws only in a sketch scene (set "style": "sketch" on the scene, or at the root)']);
   const root = { style: 'sketch', scenes: [{ id: 's', duration: 6, elements: [block('sketch-callout', { text: 'Hi' })] }] };
   assert.deepEqual(errs(root), [], 'the root style counts');
   const wrong = errs(sketchSpec([block('title-card', { title: 'Hi' })]));
@@ -356,9 +395,11 @@ test('at its place() every block, at the longest and smallest params, plans with
           const box = plan.elements.get('scenes[0].elements[0]').box;
           if (TOO_MUCH_FOR_THE_CANVAS.has(`${name} ${format}`) && variant !== 'small' && variant !== 'example') {
             // Eight 24-character labels, eleven 16-character edge labels and a text floor of 40 px do not fit a square 1080 canvas
-            // inside the safe area: the drawing stays on the canvas and check.mjs names the text that leaves the safe area (as for
-            // blocks.test.mjs's 1:1 checklist of long items).
-            assert.ok(box.x >= 0 && box.x + box.width <= size[0] && box.y >= 0 && box.y + box.height <= size[1], `${where}: ${JSON.stringify(box)} leaves the canvas`);
+            // inside the safe area across: the drawing stays on the canvas, still keeps to the room down (below the safe top, above
+            // the caption floor), and check.mjs names the text that leaves the safe area (the next test, as for blocks.test.mjs's
+            // 1:1 checklist of long items).
+            assert.ok(box.x >= 0 && box.x + box.width <= size[0], `${where}: ${JSON.stringify(box)} leaves the canvas`);
+            assert.ok(box.y >= m - 0.5 && box.y + box.height <= floor + 0.5, `${where}: ${JSON.stringify(box)} leaves the room down (${m}..${floor})`);
             continue;
           }
           assert.ok(box.x >= m - 0.5 && box.x + box.width <= size[0] - m + 0.5, `${where}: ${JSON.stringify(box)} leaves the safe area across`);
@@ -367,6 +408,19 @@ test('at its place() every block, at the longest and smallest params, plans with
       }
     }
   }
+});
+
+test('what a block cannot fit is named by check.mjs: the longest diagram on 1:1 leaves the safe area, and check says which param to shorten', async (t) => {
+  assert.ok(TOO_MUCH_FOR_THE_CANVAS.has('sketch-diagram 1:1'));
+  if (!(await requireRender(t, BROWSER_ONLY))) return;
+  const [x, y] = [540, 451];
+  const film = (duration) => ({ format: '1:1', fps: 30, scenes: [{ id: 's', style: 'sketch', duration, elements: [block('sketch-diagram', longestParams('sketch-diagram'), { x, y })] }] });
+  const file = path.join(mkdtempSync(path.join(tmpdir(), 'sketch-1x1-')), 'm.json');
+  writeFileSync(file, JSON.stringify(film(Math.ceil(planOf(film(SCENE_SECONDS)).plan.needs) + 1)));
+  const r = spawnSync(process.execPath, [CHECK, file], { encoding: 'utf8' });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /leaves the safe area \((left|right|top|bottom)[^)]*\) at [\d.]+s \(block "sketch-diagram", part "(label|edge)-\d+"\); (shorten|move) /, r.stdout);
+  assert.match(r.stdout, /params\.(nodes|edges)\[\d+\]/, 'it names the param to change');
 });
 
 test('the longest params of every block need a scene no longer than the longest scene allows', () => {
@@ -386,10 +440,12 @@ test('the callout\'s underline is the spike\'s: a 9 px accent stroke with a bow,
   assert.equal(underline.shape, 'line');
   assert.equal(underline.stroke, 'accent');
   assert.equal(underline.strokeWidth, 9);
+  const icon = kids.find((el) => el.id === 'b/icon');
+  assert.ok(underline.x > icon.x + icon.size / 2, 'the underline starts clear of the icon: it runs under the phrase only');
   assert.ok(underline.bow < 0, 'it sags a little, as the spike\'s');
   assert.ok(kids.indexOf(underline) === kids.length - 1, 'the mark comes last');
   const text = kids.find((el) => el.id === 'b/text');
-  assert.ok(underline.y > text.y, 'under the phrase');
+  assert.ok(underline.y > text.y && underline.x < text.x && underline.to.x > text.x, 'under the phrase');
   const circled = childrenOf(sketchSpec([block('sketch-callout', { text: 'Only the API talks to the database', mark: 'circle' })]));
   const oval = circled.find((el) => el.id === 'b/mark');
   assert.deepEqual([oval.shape, oval.stroke], ['ellipse', 'accent']);
@@ -397,12 +453,21 @@ test('the callout\'s underline is the spike\'s: a 9 px accent stroke with a bow,
   assert.ok(oval.width > phrase.maxWidth * 0.5 && oval.height > phrase.fontSize, 'round the phrase');
 });
 
-test('no label sits inside a scribble fill in the accent colour: ink on the hatch', () => {
+test('no label is accent-coloured, and a label inside a scribble fill is ink on the hatch (12.82:1; accent on it is 2.92:1), at the example, longest and smallest params', () => {
   for (const name of SKETCH_NAMES) {
-    for (const el of partsOf(exampleOf(name))) {
-      if (el.type === 'text') assert.notEqual(el.color, 'accent', `${name}: ${el.id} is an accent label`);
+    for (const [variant, params] of Object.entries(sketchExtremes(name))) {
+      const parts = partsOf(sketchSpec([block(name, params)]));
+      const hatched = parts.filter((el) => el.type === 'shape' && el.fill === 'scribble');
+      if (variant === 'example' && name === 'sketch-diagram') assert.ok(hatched.length > 0, 'the example has a filled node');
+      for (const el of parts.filter((part) => part.type === 'text')) {
+        assert.notEqual(el.color, 'accent', `${name} ${variant}: ${el.id} is an accent label`);
+        const inside = hatched.filter((box) => Math.abs(el.x - box.x) <= box.width / 2 && Math.abs(el.y - box.y) <= box.height / 2);
+        for (const box of inside) assert.ok(el.color === undefined || el.color === 'text', `${name} ${variant}: ${el.id} sits in the hatch of ${box.id} in ${el.color}`);
+      }
     }
   }
+  const [labelsInHatch] = [partsOf(exampleOf('sketch-diagram')).filter((el) => el.type === 'text' && /label-2/.test(el.id))];
+  assert.equal(labelsInHatch.length, 1, 'the filled node of the example has its label: the check above looked at it');
 });
 
 test('sketch-compare: two titled columns side by side on a wide canvas, stacked on a tall one, each point after its title', () => {
@@ -414,6 +479,33 @@ test('sketch-compare: two titled columns side by side on a wide canvas, stacked 
   assert.ok(tall('left-title').y < tall('right-title').y && Math.abs(tall('left-title').x - tall('right-title').x) < 1, 'stacked');
   const ids = childrenOf(sketchSpec([block('sketch-compare', params)])).map(idOf);
   assert.ok(ids.indexOf('left-title') < ids.indexOf('left-1') && ids.indexOf('left-1') < ids.indexOf('right-title'), 'the left column, then the right');
+});
+
+test('sketch-steps: every arrow is at least 1.5 arrow heads long, at every format and step count, in a row and in a column', () => {
+  const ARROW_HEAD = 30; // px at 1080: the plan's arrow head
+  for (const format of FORMAT_NAMES) {
+    for (const count of [2, 4, 6]) {
+      const size = FORMATS[format].size;
+      const { x, y } = BLOCKS['sketch-steps'].place(size, format);
+      const steps = Array.from({ length: count }, (_, i) => ['Write the spec', 'Validate', 'Preview the film', 'Render', 'Check it', 'Share it'][i]);
+      const kids = childrenOf(sketchSpec([block('sketch-steps', { steps }, { x, y })], { format }));
+      const arrows = kids.filter((el) => /^b\/arrow-/.test(el.id));
+      assert.equal(arrows.length, count - 1);
+      for (const arrow of arrows) {
+        const length = Math.hypot(arrow.to.x - arrow.x, arrow.to.y - arrow.y);
+        assert.ok(length >= 1.5 * ARROW_HEAD * unit(size) - 1, `${format}, ${count} steps: ${arrow.id} is ${length.toFixed(1)} px, its head ${ARROW_HEAD * unit(size)}`);
+      }
+      assert.deepEqual(planOf(sketchSpec([block('sketch-steps', { steps }, { x, y })], { format })).plan.problems, []);
+    }
+  }
+});
+
+test('sketch-steps: each step is drawn box, circle, number, label, then the arrow to the next', () => {
+  const ids = childrenOf(sketchSpec([block('sketch-steps', { steps: ['One', 'Two', 'Three'] })])).map(idOf);
+  assert.deepEqual(ids, ['box-1', 'circle-1', 'num-1', 'label-1', 'arrow-1', 'box-2', 'circle-2', 'num-2', 'label-2', 'arrow-2', 'box-3', 'circle-3', 'num-3', 'label-3']);
+  const { plan } = planOf(sketchSpec([block('sketch-steps', { steps: ['One', 'Two', 'Three'] })]));
+  const t0 = (k) => Math.min(...plan.strokes.filter((s) => s.path === `scenes[0].elements[0].children[${k}]`).map((s) => s.t0));
+  ids.slice(1).forEach((_, k) => assert.ok(t0(k + 1) >= t0(k) - 1e-9, `${ids[k + 1]} is drawn after ${ids[k]}`));
 });
 
 test('sketch-list: the title first, then each row\'s icon before its text', () => {

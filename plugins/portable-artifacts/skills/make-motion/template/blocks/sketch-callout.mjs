@@ -1,6 +1,6 @@
 // sketch-callout: one phrase with an optional icon beside it, then an accent underline or a circle drawn round it, in that order.
 import { abovePlace, blockGroup } from './layout.mjs';
-import { fitLabel, fitted, labelPart, ovalPart, iconPart, underlinePart, sketchRoom, pickLayout } from './sketch-layout.mjs';
+import { fitLabel, fitted, labelPart, ovalPart, iconPart, underlinePart, sketchRoom, pickLayout, UNDERLINE } from './sketch-layout.mjs';
 
 const params = {
   type: 'object',
@@ -33,8 +33,8 @@ function measure(data, size, room) {
   const maxWidth = circle ? room.width / OVAL - 2 * RING_PAD.x * u - iconCol : room.width - iconCol - 2 * UNDERLINE_REACH * u;
   const fit = fitLabel(data.text, { sizes: [fs], maxWidth, maxLines: LINES });
   const [rowW, rowH] = [iconCol + fit.width, Math.max(icon, fit.height)];
-  const stroke = Math.max(1, Math.round((circle ? RING_WIDTH : 9) * u));
-  const [width, height] = circle ? [(rowW + 2 * RING_PAD.x * u) * OVAL, (rowH + 2 * RING_PAD.y * u) * OVAL] : [rowW + 2 * UNDERLINE_REACH * u, rowH + UNDERLINE_DROP * u + stroke];
+  const stroke = Math.max(1, Math.round((circle ? RING_WIDTH : UNDERLINE.width) * u));
+  const [width, height] = circle ? [(rowW + 2 * RING_PAD.x * u) * OVAL, (rowH + 2 * RING_PAD.y * u) * OVAL] : [Math.max(rowW, fit.width + 2 * UNDERLINE_REACH * u), rowH + UNDERLINE_DROP * u + stroke];
   return { u, circle, icon, iconCol, fit, rowW, rowH, stroke, width, height, overflow: Math.max(width / room.width, height / room.height) + (fitted(data.text, fit, maxWidth, LINES) ? 0 : 1) };
 }
 
@@ -50,7 +50,10 @@ function expand(el, ctx) {
   if (data.icon) parts.push(iconPart(id('icon'), data.icon, left + icon / 2, rowY, icon));
   parts.push(labelPart(id('text'), data.text, fit, left + iconCol + fit.width / 2, rowY));
   if (circle) parts.push(ovalPart(id('mark'), 0, 0, width, height, { stroke: 'accent', strokeWidth: layout.stroke }));
-  else parts.push(underlinePart(id('mark'), left - UNDERLINE_REACH * u, -left + UNDERLINE_REACH * u, rowY + rowH / 2 + UNDERLINE_DROP * u, u));
+  else {
+    const textLeft = left + iconCol; // the underline runs under the phrase, not under the icon beside it
+    parts.push(underlinePart(id('mark'), textLeft - UNDERLINE_REACH * u, textLeft + fit.width + UNDERLINE_REACH * u, rowY + fit.height / 2 + UNDERLINE_DROP * u, u));
+  }
   return blockGroup(el, parts);
 }
 

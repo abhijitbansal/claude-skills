@@ -144,6 +144,16 @@ export function checkSketchBlocks(written, expanded, errors) {
   });
 }
 
+/**
+ * A test of an error path: true inside the expansion of a sketch block that stands in a standard scene. checkSketch has already said
+ * that block does not belong there; what its parts would say about a scribble fill or an icon in a standard scene is the same fault
+ * again, in words about parts the author never wrote. validateSpec drops those.
+ */
+export function inMisplacedBlock(written) {
+  const prefixes = written.scenes.flatMap((scene, si) => (isSketchScene(written, scene) ? [] : scene.elements.flatMap((el, ei) => (isBlock(el) && blockDef(el.block)?.sketchOnly === true ? [`scenes[${si}].elements[${ei}].children[`] : []))));
+  return (at) => prefixes.some((prefix) => at.startsWith(prefix));
+}
+
 const SECONDS_EPSILON = 1e-6;
 const TOP_ELEMENT = /^scenes\[\d+\]\.elements\[(\d+)\]/;
 

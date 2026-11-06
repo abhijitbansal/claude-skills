@@ -30,7 +30,7 @@ const CLI = path.join(root, 'scripts/blocks.mjs');
 const EXAMPLES = path.join(root, 'references/examples/blocks');
 const GOLDEN = path.join(root, 'references/blocks');
 const names = Object.keys(BLOCKS);
-const TOKENS = ['surface', 'line', 'accent', 'text', 'text2', 'good', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5', 'cat6', SCRIBBLE_FILL]; // cat1..cat6: race's bars; scribble: the sketch blocks' hatch
+const TOKENS = ['surface', 'line', 'accent', 'text', 'text2', 'good', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5', 'cat6']; // cat1..cat6: race's bars
 const EPSILON = 1e-9;
 
 const block = (name, params, extra = {}) => ({ id: 'b', type: 'block', x: 960, y: 540, block: name, params, ...extra });
@@ -159,7 +159,9 @@ for (const name of names) {
     const parts = partsOf(expandBlocks(oneScene([block(name, BLOCKS[name].example)], styled(name), Math.max(6, needsSeconds(name, BLOCKS[name].example)))));
     for (const el of parts) {
       for (const key of ['color', 'fill', 'stroke']) {
-        if (el[key] !== undefined) assert.ok(TOKENS.includes(el[key]), `${el.id}.${key} is ${el[key]}, not a theme token`);
+        if (el[key] === undefined) continue;
+        const hatch = key === 'fill' && el[key] === SCRIBBLE_FILL && BLOCKS[name].sketchOnly; // only a sketch block hatches a box
+        assert.ok(TOKENS.includes(el[key]) || hatch, `${el.id}.${key} is ${el[key]}, not a theme token`);
       }
     }
     // A sketch block has no entrances: the hand draws each part (a sketch scene refuses keyframes; test/sketch-blocks.test.mjs).

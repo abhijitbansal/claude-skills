@@ -83,8 +83,9 @@ test('with more elements than sentences they share the narration too', () => {
   assert.deepEqual(assignWindows([{ weight: 0 }, { weight: 0 }], FOUR).map(({ start, end }) => [start, end]), [[0, 5], [5, 10]], 'no weight at all: equal shares');
 });
 
-// A real block (title-card: kicker, title, rule, subtitle) as the plan sees it: expanded to a group of four parts. No block in this
-// checkout is sketch-only yet, so these tests plan the expansion directly (validation of one: the block-side test below).
+// A real block (title-card: kicker, title, rule, subtitle) as the plan sees it: expanded to a group of four parts. title-card is a
+// standard block, so these tests plan its expansion directly; a real sketch block with a pin is validated and planned in
+// sketch-blocks.test.mjs.
 const card = (extra = {}) => ({ id: 'card', type: 'block', block: 'title-card', x: 960, y: 400, params: { title: 'Hi', subtitle: 'and more', kicker: 'First' }, ...extra });
 const planExpanded = (elements, narration, ctx = {}) => planScene(expandSpec({ size: SIZE, style: 'sketch', scenes: [{ id: 's', duration: 30, ...(narration ? { narration } : {}), elements }] }).scenes[0], { size: SIZE, icons: lucide, sceneIndex: 0, ...ctx });
 const partsOf = (p, k) => [...p.elements.keys()].filter((key) => key.startsWith(`scenes[0].elements[${k}].children[`)).map((key) => p.elements.get(key));
@@ -112,7 +113,7 @@ test('a block counts as one element and its parts share its window', () => {
 test('a real block with drawAt "sentence:1" keeps its pin through validation and draws in that sentence', () => {
   const dir = project();
   const written = film([rect('a', 300, { y: 300 }), card({ drawAt: 'sentence:1' }), rect('c', 1500, { y: 300, drawAt: 'sentence:2' })]);
-  // No sketch-only block exists yet, so validateSpec's one finding is the block-side refusal: nothing about drawAt or the block's fields.
+  // title-card is not a sketch block, so validateSpec's one finding is the block-side refusal: nothing about drawAt or the block's fields.
   const found = validated(written, dir);
   assert.equal(found.length, 1, found.join('\n'));
   assert.match(found[0], /^scenes\[0\]\.elements\[1\]\.block: title-card is not a sketch block/);

@@ -46,6 +46,8 @@ const EDGE_PAD = 10; // between an arrow and its label
 const LABEL_MARGIN = 18; // between a label over an arrow and the boxes either side of it
 const EDGE_WRAP_SHARE = 1.15; // an edge label wraps at this share of the gap between boxes
 const EDGE_WRAP_BESIDE = 420; // px at 1080: ... or at this, beside a column's arrow
+const LABEL_CLEARANCE = 2; // between an edge label and any box or text it keeps off
+const LABEL_ALONG = [0.5, 0.36, 0.64, 0.24, 0.76, 0.14, 0.86]; // where along its arrow a label may sit, in order of preference
 const OBSTACLE_PAD = 8; // an arrow keeps this far from a box it is not joined to
 const ARROW_BOW = 26; // px at 1080: the spike's slight bow of an arrow, and at most this share of its length (the same numbers as the plan's
 const ARROW_BOW_SHARE = 0.17; // default, written out here because the label is placed from the bow, so every arrow says its own)
@@ -136,14 +138,14 @@ function boundary(centre, half, target, gap) {
 
 const quadAt = (p0, c, p1, t) => [0, 1].map((a) => (1 - t) ** 2 * p0[a] + 2 * (1 - t) * t * c[a] + t * t * p1[a]);
 
-// The centre of an arrow's label: on the side the arrow bows to, beyond the bend (above a rightward arrow, to the right of a
-// downward one), `fit` the label's fitted text.
-function labelCentre(p0, p1, bow, fit, u) {
+// The centre of an arrow's label, `along` (0 to 1) the way from its tail: on the side the arrow bows to, beyond the bend (above a
+// rightward arrow, to the right of a downward one); `fit` the label's fitted text.
+function labelCentre(p0, p1, bow, fit, u, along = 0.5) {
   const length = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
   const side = bow < 0 ? -1 : 1;
   const [nx, ny] = [((p1[1] - p0[1]) / length) * side, (-(p1[0] - p0[0]) / length) * side];
-  const reach = Math.abs(bow) / 2 + EDGE_PAD * u + (Math.abs(nx) * fit.width + Math.abs(ny) * fit.height) / 2;
-  return [(p0[0] + p1[0]) / 2 + nx * reach, (p0[1] + p1[1]) / 2 + ny * reach];
+  const reach = 2 * along * (1 - along) * Math.abs(bow) + EDGE_PAD * u + (Math.abs(nx) * fit.width + Math.abs(ny) * fit.height) / 2;
+  return [p0[0] + (p1[0] - p0[0]) * along + nx * reach, p0[1] + (p1[1] - p0[1]) * along + ny * reach];
 }
 
 // The ways an arrow from the box at ca to the one at cb may run, best first: straight from box edge to box edge, bowed one way or
@@ -168,36 +170,49 @@ function routesOf(ca, cb, layout) {
   return routes;
 }
 
-// The first route that crosses no box it is not joined to and keeps the arrow and its label (`fit`, or null) in the room; else the
-// first that stays in the room; else the plain one.
-function chooseRoute(ca, cb, obstacles, layout, room, fit) {
+// The first way of drawing the arrow (a route, with its label `along` it) that crosses no box it is not joined to, keeps the arrow and
+// its label (`fit`, or null) in the room and puts the label on nothing in `taken` (the boxes, the node labels' boxes and the edge
+// labels placed so far: { x, y, w, h } by centre); failing that the first in the room that keeps the label free, then the first that crosses nothing in the room, then the first in the room.
+function chooseRoute(ca, cb, obstacles, layout, room, fit, taken) {
   const pad = OBSTACLE_PAD * layout.u;
   const controlOf = ({ p0, p1, bow }) => {
     const length = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
     return [(p0[0] + p1[0]) / 2 + ((p1[1] - p0[1]) / length) * bow, (p0[1] + p1[1]) / 2 - ((p1[0] - p0[0]) / length) * bow];
   };
-  const clear = (route) => CURVE_SAMPLES.every((t) => {
+  const clear = ({ route }) => CURVE_SAMPLES.every((t) => {
     const [x, y] = quadAt(route.p0, controlOf(route), route.p1, t);
     return obstacles.every(([cx, cy]) => Math.abs(x - cx) > layout.boxW / 2 + pad || Math.abs(y - cy) > layout.boxH / 2 + pad);
   });
   const within = ([x, y], [halfW, halfH]) => Math.abs(x) + halfW <= room.width / 2 && Math.abs(y) + halfH <= room.height / 2;
-  const roomy = (route) => within(quadAt(route.p0, controlOf(route), route.p1, 0.5), [0, 0])
-    && (!fit || within(labelCentre(route.p0, route.p1, route.bow, fit, layout.u), [fit.width / 2, fit.height / 2]));
-  const routes = routesOf(ca, cb, layout);
-  return routes.find((route) => clear(route) && roomy(route)) ?? routes.find(roomy) ?? routes[0];
+  const labelAt = ({ route, along }) => labelCentre(route.p0, route.p1, route.bow, fit, layout.u, along);
+  const roomy = (way) => within(quadAt(way.route.p0, controlOf(way.route), way.route.p1, 0.5), [0, 0]) && (!fit || within(labelAt(way), [fit.width / 2, fit.height / 2]));
+  const gap = LABEL_CLEARANCE * layout.u;
+  const free = (way) => {
+    if (!fit) return true;
+    const [lx, ly] = labelAt(way);
+    return taken.every((r) => Math.abs(lx - r.x) >= (fit.width + r.w) / 2 + gap || Math.abs(ly - r.y) >= (fit.height + r.h) / 2 + gap);
+  };
+  const ways = routesOf(ca, cb, layout).flatMap((route) => (fit ? LABEL_ALONG : [0.5]).map((along) => ({ route, along })));
+  const first = (...tests) => ways.find((way) => tests.every((test) => test(way)));
+  const way = first(clear, roomy, free) ?? first(roomy, free) ?? first(clear, roomy) ?? first(roomy) ?? first(free) ?? ways[0];
+  return { ...way.route, along: way.along, centre: fit ? labelAt(way) : null };
 }
 
-// The arrow of `edge` and its label, or [] for an edge that names no node, or the same node twice (validate reports both).
-function edgeParts(edge, j, layout, centres, ids, room, id) {
+// The arrow of `edge` and its label, or [] for an edge that names no node, or the same node twice (validate reports both). The label's
+// box goes into `taken`, so the edges after it keep clear of it.
+function edgeParts(edge, j, layout, centres, ids, room, taken, id) {
   const [a, b] = [ids.get(edge.from), ids.get(edge.to)];
   if (a === undefined || b === undefined || a === b) return [];
   const { u } = layout;
   const fits = layout.edgeFits[j];
   const level = Math.abs(centres[b][0] - centres[a][0]) >= Math.abs(centres[b][1] - centres[a][1]);
   const fit = fits && (level ? fits.across : fits.beside); // a level arrow's label sits above it, a steep one's beside it
-  const { p0, p1, bow } = chooseRoute(centres[a], centres[b], centres.filter((_, n) => n !== a && n !== b), layout, room, fit);
+  const { p0, p1, bow, centre } = chooseRoute(centres[a], centres[b], centres.filter((_, n) => n !== a && n !== b), layout, room, fit, taken);
   const parts = [linePart(id(`arrow-${j + 1}`), p0, p1, { arrow: 'end', bow: bow / u })];
-  if (fit) parts.push(labelPart(id(`edge-${j + 1}`), edge.label, fit, ...labelCentre(p0, p1, bow, fit, u)));
+  if (fit) {
+    parts.push(labelPart(id(`edge-${j + 1}`), edge.label, fit, ...centre));
+    taken.push({ x: centre[0], y: centre[1], w: fit.width, h: fit.height });
+  }
   return parts;
 }
 
@@ -216,7 +231,8 @@ function expand(el, ctx) {
     const [a, b] = [ids.get(edge.from), ids.get(edge.to)];
     if (a !== undefined && b !== undefined) after[b === a + 1 ? a : Math.max(a, b)].push(j);
   });
-  const parts = nodes.flatMap((node, i) => [...nodeParts(node, i, layout, centres[i], id), ...after[i].flatMap((j) => edgeParts(edges[j], j, layout, centres, ids, room, id))]);
+  const taken = centres.map(([x, y]) => ({ x, y, w: layout.boxW, h: layout.boxH })); // what an edge label keeps off: the boxes (with their texts), then the labels placed
+  const parts = nodes.flatMap((node, i) => [...nodeParts(node, i, layout, centres[i], id), ...after[i].flatMap((j) => edgeParts(edges[j], j, layout, centres, ids, room, taken, id))]);
   return blockGroup(el, parts);
 }
 
@@ -226,7 +242,7 @@ export default Object.freeze({
   params,
   describe: {
     nodes: '2 to 8 boxes in order: { id (up to 24 characters, what edges name), label (up to 24), icon? (a Lucide name; node scripts/sketch-icons.mjs search <word>), fill? (true hatches the box in the accent colour) }',
-    edges: 'arrows between nodes: { from, to (node ids), label? (up to 16 characters) }; up to 12, and none is allowed. An arrow across other boxes arches over them',
+    edges: 'arrows between nodes: { from, to (node ids), label? (up to 16 characters) }; up to 12, and none is allowed; the same edge twice is an error, the way back is another edge. An arrow across other boxes arches round them',
     layout: 'row, column or grid; default row on a wide canvas, column on a tall one. One that does not fit is drawn smaller, then as a grid, then as a column',
   },
   example: {
@@ -249,7 +265,11 @@ export default Object.freeze({
       else first.set(node.id, i);
     });
     const known = [...first.keys()].join(', ');
+    const seen = new Map(); // an edge said twice would be drawn twice, over itself; the way back (to, from) is another edge
     blockParams.edges.forEach((edge, i) => {
+      const pair = JSON.stringify([edge.from, edge.to]);
+      if (seen.has(pair)) errors.push({ path: `edges[${i}]`, message: `duplicate of edges[${seen.get(pair)}]` });
+      else seen.set(pair, i);
       for (const key of ['from', 'to']) {
         if (!first.has(edge[key])) errors.push({ path: `edges[${i}].${key}`, message: `unknown node ${JSON.stringify(edge[key])}; nodes: ${known}` });
       }

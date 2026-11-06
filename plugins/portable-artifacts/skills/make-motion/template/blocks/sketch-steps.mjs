@@ -18,17 +18,20 @@ const COLUMN_MIN = 520; // ... and this wide at least
 const NUMERAL = 52; // px at 1080: the number in the circle (at least the text floor)
 const NUMBER_GAP = 12; // between the circle and the label in a row's box
 const INLINE_GAP = 20; // between the circle and the label in a column's box
-const ARROW_GAP = 14; // between a box and its arrow
+const ARROW_GAP = 8; // between a box and its arrow
+const ARROW_HEAD = 30; // px at 1080: the plan's arrow head (plan.mjs ARROW.head)
+const MIN_ARROW = 1.5 * ARROW_HEAD; // an arrow is at least this long (a head and a half), so it reads as a shaft with a head, not a head alone
 // Sizes, roomiest first, px at 1080. `lines`: how many lines a label may wrap onto in a row (a column's take two).
 const TIERS = [
+  { label: 80, circle: 90, padX: 34, padY: 32, boxMax: 420, gap: 140, lines: 3 },
   { label: 64, circle: 76, padX: 28, padY: 26, boxMax: 360, gap: 110, lines: 3 },
   { label: 56, circle: 70, padX: 24, padY: 22, boxMax: 310, gap: 96, lines: 3 },
   { label: 48, circle: 64, padX: 20, padY: 18, boxMax: 270, gap: 84, lines: 3 },
   { label: 44, circle: 60, padX: 16, padY: 14, boxMax: 240, gap: 72, lines: 4 },
-  { label: 40, circle: 58, padX: 14, padY: 10, boxMax: 210, gap: 64, lines: 4 },
+  { label: 40, circle: 50, padX: 14, padY: 6, boxMax: 210, gap: 64, lines: 4 },
 ];
 const COLUMN_LINES = 2;
-const COLUMN_GAP_SHARE = 0.55; // a column's arrows are this share of a row's long
+const COLUMN_GAP_SHARE = 0.9; // a column's arrows are this share of a row's long
 
 function measure(steps, mode, tier, room) {
   const { u } = room;
@@ -37,7 +40,7 @@ function measure(steps, mode, tier, room) {
   const fs = Math.max(1, Math.round(tier.label * u));
   const circle = Math.max(1, Math.round(tier.circle * u));
   const [padX, padY] = [tier.padX * u, tier.padY * u];
-  const gap = (row ? tier.gap : tier.gap * COLUMN_GAP_SHARE) * u;
+  const gap = Math.max(row ? tier.gap : tier.gap * COLUMN_GAP_SHARE, MIN_ARROW + 2 * ARROW_GAP) * u; // the gap holds the arrow and its two clearances; height and width count it
   const lines = row ? tier.lines : COLUMN_LINES;
   // A column's boxes are as wide as the longest label needs (between COLUMN_MIN and COLUMN_WIDTH), a row's fill the room.
   const natural = 2 * padX + circle + INLINE_GAP * u + Math.max(...steps.map((step) => textWidth(step, fs)));
