@@ -224,20 +224,50 @@ test('render: --poster alone writes <spec dir>/out/poster.jpg (a JPEG) and no MP
   assert.ok(r.stdout.split('\n').includes(path.join(f.dir, 'out', 'poster.jpg')), r.stdout);
 });
 
-test('render: a poster inside a GL transition window is the composed frame, as a PNG or a JPEG', async (t) => {
+// Size and centre pixel of an image file, as a browser decodes it: proof that the bytes are a real picture.
+async function decodeInBrowser(file, mime) {
+  const browser = await launchBrowser({ quiet: true });
+  try {
+    const page = await browser.newPage();
+    return await page.evaluate(async ([data, type]) => {
+      const img = new Image();
+      img.src = `data:${type};base64,${data}`;
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      return { width: img.width, height: img.height, centre: [...ctx.getImageData(Math.floor(img.width / 2), Math.floor(img.height / 2), 1, 1).data] };
+    }, [readFileSync(file).toString('base64'), mime]);
+  } finally {
+    await browser.close();
+  }
+}
+
+test('render: a poster inside a GL transition window is the composed frame without captions, as a PNG or a decodable JPEG', async (t) => {
   if (!(await requireRender(t, BROWSER_ONLY))) return;
   const scenes = [{ id: 'a', duration: 2, background: '#cc0000', elements: [] }, { id: 'b', duration: 2, background: '#0000cc', transition: { type: 'gl-ripple', duration: 1 }, elements: [] }];
-  const f = posterFile({ size: [160, 90], fps: 24, scenes }); // scene b starts at 2 s; the window is 2-3 s
-  const png = renderPoster(f, ['--poster', '2.5', '--poster-out', f.png]);
+  const base = { size: [320, 180], fps: 24, scenes }; // scene b starts at 2 s; the window is 2-3 s
+  const withCaptions = posterFile({ ...base, captions: [{ src: 'c.srt' }] });
+  writeFileSync(path.join(withCaptions.dir, 'c.srt'), '1\n00:00:00,000 --> 00:00:04,000\nHello poster world\n'); // the video is 4 s
+  const without = posterFile(base);
+  const png = renderPoster(withCaptions, ['--poster', '2.5', '--poster-out', withCaptions.png]);
   assert.equal(png.status, 0, png.stdout + png.stderr);
-  assert.deepEqual([...readFileSync(f.png).subarray(1, 4)], [0x50, 0x4e, 0x47], 'PNG signature');
-  const jpg = path.join(f.dir, 'p.jpg');
-  const r = renderPoster(f, ['--poster', '2.5', '--poster-out', jpg]);
+  assert.equal(renderPoster(without, ['--poster', '2.5', '--poster-out', without.png]).status, 0);
+  assert.deepEqual([...readFileSync(withCaptions.png).subarray(1, 4)], [0x50, 0x4e, 0x47], 'PNG signature');
+  assert.ok(readFileSync(withCaptions.png).equals(readFileSync(without.png)), 'a captioned spec gives the poster of the same spec without captions: none are drawn in the window');
+  const plain = path.join(withCaptions.dir, 'plain.png');
+  assert.equal(renderPoster(withCaptions, ['--poster', '0.5', '--poster-out', plain]).status, 0);
+  assert.ok(!readFileSync(plain).equals(readFileSync(withCaptions.png)), 'the window frame is not the outgoing scene');
+  const jpg = path.join(withCaptions.dir, 'p.jpg');
+  const r = renderPoster(withCaptions, ['--poster', '2.5', '--poster-out', jpg]);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.deepEqual([...readFileSync(jpg).subarray(0, 3)], [0xff, 0xd8, 0xff], 'JPEG signature');
-  const plain = path.join(f.dir, 'plain.png');
-  assert.equal(renderPoster(f, ['--poster', '0.5', '--poster-out', plain]).status, 0);
-  assert.ok(!readFileSync(plain).equals(readFileSync(f.png)), 'the window frame is not the outgoing scene');
+  const decodedJpg = await decodeInBrowser(jpg, 'image/jpeg');
+  const decodedPng = await decodeInBrowser(withCaptions.png, 'image/png');
+  assert.deepEqual([decodedJpg.width, decodedJpg.height], [320, 180], 'the JPEG decodes at the video size');
+  decodedJpg.centre.forEach((channel, i) => assert.ok(Math.abs(channel - decodedPng.centre[i]) <= 16, `the JPEG centre pixel ${decodedJpg.centre} is the PNG's ${decodedPng.centre}`));
 });
 
 test('render: --poster past the end is a usage error', () => {
@@ -246,6 +276,16 @@ test('render: --poster past the end is a usage error', () => {
   assert.equal(r.status, 2, r.stdout + r.stderr);
   assert.match(r.stderr, /--poster 40: past the end \(the video is 7 s\)/);
   assert.deepEqual(readdirSync(f.dir).sort(), ['c.srt', 'm.json'], 'nothing written');
+});
+
+test('render: --poster just under the length rounds onto a frame that does not exist, and the message says which frames do', () => {
+  const f = posterFile();
+  const r = renderPoster(f, ['--poster', '6.99']); // 6.99 x 24 rounds to frame 168 of 168 (frames 0-167)
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /--poster 6\.99: past the end \(the video is 7 s, 168 frames, last frame 167\)/);
+  const exact = renderPoster(f, ['--poster', '7']);
+  assert.equal(exact.status, 2);
+  assert.match(exact.stderr, /--poster 7: past the end \(the video is 7 s\)\n$/, 'at the length itself the note is the plain one');
 });
 
 test('render: poster flag combinations that cannot work are usage errors (exit 2) and write nothing', () => {
@@ -261,6 +301,9 @@ test('render: poster flag combinations that cannot work are usage errors (exit 2
     [['--poster', '1', '--loudness', '-14'], /--loudness does not apply to --poster/],
     [['--poster', '1', '--true-peak', '-1'], /--true-peak does not apply to --poster/],
     [['--poster', '1', '--no-provenance'], /--no-provenance does not apply to --poster/],
+    [['--poster', '1', '--model', 'Claude'], /--model does not apply to --poster/],
+    [['--poster', '1', '--effort', 'high'], /--effort does not apply to --poster/],
+    [['--poster', '1', '--agent', 'Claude Code'], /--agent does not apply to --poster/],
     [['--poster', 'soon'], /--poster must be a number of seconds/],
     [['--poster', '-1'], /--poster must be a number of seconds/],
   ];

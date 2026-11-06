@@ -11,7 +11,8 @@
 // --no-provenance (or a root `"provenance": false`) leaves those two tags out; ffmpeg's own encoder tag stays.
 // With --contact-sheet, --out is a directory; one tiled, timestamped PNG per scene goes to <out>/contact/<scene-id>.png.
 // --poster <seconds> [--poster-out <file>.jpg|.jpeg|.png]: one still of the film's frame at that time, captions hidden (grain and
-// vignette stay), no MP4; default <spec dir>/out/poster.jpg. Not with --out, --batch, --contact-sheet, --workers or the audio flags.
+// vignette stay), no MP4; default <spec dir>/out/poster.jpg. Not with --out, --batch, --contact-sheet, --workers, the audio
+// flags or the tag flags (--no-provenance, --model, --effort, --agent).
 // --batch rows.json --out "renders/{name}.mp4": one MP4 per row of var values ({index} or a {var} in the file name), every
 // row checked before the first frame, then rendered in turn; manifest.json beside them records each row's result.
 import { spawn } from 'node:child_process';
@@ -52,7 +53,7 @@ const EXIT_SIGINT = 130;
 const EXIT_SIGTERM = 143;
 const POSTER_EXTENSIONS = ['.jpg', '.jpeg', '.png'];
 const POSTER_JPEG_QUALITY = 92;
-const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--workers n|auto] [--quality draft|final] [--loudness <lufs>|off] [--true-peak <dbtp>] [--no-provenance] [--contact-sheet] [--poster <seconds> [--poster-out <file>.jpg|.png]] [--batch <rows.json> --out "<dir>/{index}.mp4"]';
+const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--workers n|auto] [--quality draft|final] [--loudness <lufs>|off] [--true-peak <dbtp>] [--no-provenance] [--contact-sheet] [--poster <seconds> [--poster-out <file>.jpg|.jpeg|.png]] [--batch <rows.json> --out "<dir>/{index}.mp4"]';
 const VALUE_FLAGS = ['--out', '--fps', '--size', '--theme', '--model', '--effort', '--agent', '--workers', '--quality', '--loudness', '--true-peak', '--batch', '--poster', '--poster-out'];
 const FLAGS = [...VALUE_FLAGS, '--contact-sheet', '--no-provenance'];
 
@@ -126,6 +127,9 @@ function checkPoster(opts) {
     ['--loudness', opts.loudness !== undefined, 'a poster has no audio'],
     ['--true-peak', opts['true-peak'] !== undefined, 'a poster has no audio'],
     ['--no-provenance', opts.noProvenance, 'a poster has no tags to remove'],
+    ['--model', opts.model !== undefined, 'a poster has no tags to stamp'],
+    ['--effort', opts.effort !== undefined, 'a poster has no tags to stamp'],
+    ['--agent', opts.agent !== undefined, 'a poster has no tags to stamp'],
   ];
   const [flag, , why] = ignored.find(([, given]) => given) ?? [];
   if (flag) throw new UsageError(`${flag} does not apply to --poster (${why}); leave it out`);
@@ -245,7 +249,11 @@ async function prepare(opts, { raw, loaded, dir, served, out, partial }, state) 
   const still = opts.contact || poster; // a contact sheet or a poster: PNG/JPEG files from one page, no encode and no audio
   if (!still && frames < 1) throw new UsageError(`spec is too short for ${fps} fps: no frames to render`);
   const posterFrame = Math.round((opts.poster ?? 0) * fps);
-  if (poster && posterFrame >= frames) throw new UsageError(`--poster ${opts.poster}: past the end (the video is ${+total.toFixed(3)} s)`);
+  if (poster && posterFrame >= frames) {
+    // A time just under the length rounds onto a frame that does not exist: say which frames do.
+    const frameNote = opts.poster < total ? `, ${frames} frames, last frame ${frames - 1}` : '';
+    throw new UsageError(`--poster ${opts.poster}: past the end (the video is ${+total.toFixed(3)} s${frameNote})`);
+  }
   const name = path.basename(specPath, path.extname(specPath));
   const defaultOut = opts.contact ? path.join(dir, 'out') : path.join(dir, 'out', poster ? 'poster.jpg' : `${name}.mp4`);
   const outFlag = poster ? '--poster-out' : '--out';
@@ -374,7 +382,7 @@ async function renderPoster(page, p, compositor) {
   } else {
     await page.evaluate((s) => window.__motion.seek(s), sec);
     await hideCaptions();
-    image =await page.screenshot(type === 'png' ? { type } : { type, quality: POSTER_JPEG_QUALITY });
+    image = await page.screenshot(type === 'png' ? { type } : { type, quality: POSTER_JPEG_QUALITY });
   }
   mkdirSync(path.dirname(p.out), { recursive: true });
   writeFileSync(p.out, image);
