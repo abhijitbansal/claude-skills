@@ -8,6 +8,7 @@
 // encode. Without a flag a spec's root `loudness` (viral mode sets -14 / -1) is the target; off disables it.
 // Both notes (`workers: N`, `quality: draft (WxH)`) go to stderr; stdout is the same either way.
 // --model/--effort/--agent override the spec's generatedBy; they are stamped into the MP4 comment/artist tags.
+// --no-provenance (or a root `"provenance": false`) leaves those two tags out; ffmpeg's own encoder tag stays.
 // With --contact-sheet, --out is a directory; one tiled, timestamped PNG per scene goes to <out>/contact/<scene-id>.png.
 // --batch rows.json --out "renders/{name}.mp4": one MP4 per row of var values ({index} or a {var} in the file name), every
 // row checked before the first frame, then rendered in turn; manifest.json beside them records each row's result.
@@ -47,9 +48,9 @@ const FRAME_DIR_RETRIES = 5;
 const FRAME_DIR_RETRY_MS = 100;
 const EXIT_SIGINT = 130;
 const EXIT_SIGTERM = 143;
-const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--workers n|auto] [--quality draft|final] [--loudness <lufs>|off] [--true-peak <dbtp>] [--contact-sheet] [--batch <rows.json> --out "<dir>/{index}.mp4"]';
+const USAGE = 'usage: node scripts/render.mjs <motion.json> [--out <file>] [--fps n] [--size WxH] [--theme <name>] [--model <m>] [--effort <e>] [--agent <a>] [--workers n|auto] [--quality draft|final] [--loudness <lufs>|off] [--true-peak <dbtp>] [--no-provenance] [--contact-sheet] [--batch <rows.json> --out "<dir>/{index}.mp4"]';
 const VALUE_FLAGS = ['--out', '--fps', '--size', '--theme', '--model', '--effort', '--agent', '--workers', '--quality', '--loudness', '--true-peak', '--batch'];
-const FLAGS = [...VALUE_FLAGS, '--contact-sheet'];
+const FLAGS = [...VALUE_FLAGS, '--contact-sheet', '--no-provenance'];
 
 function takeValue(argv, i, flag) {
   const value = argv[i + 1];
@@ -79,6 +80,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--contact-sheet') opts.contact = true;
+    else if (a === '--no-provenance') opts.noProvenance = true;
     else if (VALUE_FLAGS.includes(a)) opts[a.slice(2)] = takeValue(argv, i++, a);
     else if (a.startsWith('--')) {
       const near = didYouMean(a, FLAGS);
@@ -94,6 +96,7 @@ function parseArgs(argv) {
   }
   if (opts.size !== undefined) opts.size = parseSize(opts.size);
   if (opts.theme !== undefined) checkTheme(opts.theme);
+  if (opts.contact && opts.noProvenance) throw new UsageError('--no-provenance does not apply to --contact-sheet (a sheet is PNG files, with no tags to remove); leave it out');
   checkCapture(opts);
   checkLoudness(opts);
   checkBatch(opts);
@@ -230,7 +233,7 @@ async function prepare(opts, { raw, loaded, dir, served, out, partial }, state) 
     workers: opts.workers,
     loudness: loudness.target, loudnessReport: loudness.report, loudnessFlagged: loudness.flagged, loudnessOff: loudness.off,
     out: out ?? path.resolve(opts.out ?? defaultOut), partial, ffmpeg,
-    metadata: { comment: provenanceText('make-motion', spec.generatedBy, buildDate()), artist: spec.generatedBy?.model },
+    metadata: opts.noProvenance || spec.provenance === false ? {} : { comment: provenanceText('make-motion', spec.generatedBy, buildDate()), artist: spec.generatedBy?.model },
     videoFrames: hasVideo ? prepareVideo(spec, dir, ffmpeg, ffprobe, fps) : {},
     ...(opts.contact ? { audio: [] } : planAudio(spec, dir, ffmpeg, ffprobe, fps, total, state)),
   };

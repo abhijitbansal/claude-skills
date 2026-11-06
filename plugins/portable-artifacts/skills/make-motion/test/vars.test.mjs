@@ -262,7 +262,7 @@ test('batch: --batch needs an --out template, never with --contact-sheet; an unk
   assert.match(unknown.stderr, /--out: unknown placeholder \{nam\}; did you mean \{name\}\? \(accepted: \{index\}, \{name\}\)/);
   const flag = render(dir, ['--batchh', rows]);
   assert.equal(flag.status, 2);
-  assert.match(flag.stderr, /unknown option --batchh; did you mean --batch\? \(accepted: --out, .*--batch, --contact-sheet\)/);
+  assert.match(flag.stderr, /unknown option --batchh; did you mean --batch\? \(accepted: --out, .*--batch, --contact-sheet, --no-provenance\)/);
   assert.deepEqual(readdirSync(dir).sort(), ['m.json', 'rows.json']);
 });
 

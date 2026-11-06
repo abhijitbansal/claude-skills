@@ -284,6 +284,12 @@ test('generatedBy: model/effort/agent strings pass; hostile, long or unknown val
   assert.notDeepEqual(errs({ ...good(), generatedBy: 'x' }), []);
 });
 
+test('provenance: a boolean passes; anything else fails', () => {
+  assert.deepEqual(errs({ ...good(), provenance: false }), []);
+  assert.deepEqual(errs({ ...good(), provenance: true }), []);
+  assert.notDeepEqual(errs({ ...good(), provenance: 'no' }), []);
+});
+
 test('named eases enter, exit, move and land validate; a near miss gets a did-you-mean', () => {
   for (const ease of ['enter', 'exit', 'move', 'land']) {
     const s = good(); s.scenes[0].elements[0].keyframes[1].ease = ease;

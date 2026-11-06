@@ -159,7 +159,7 @@ function pageChrome(ctx) {
     favicon: faviconLink('make-motion', theme),
     themeCss: `<link id="theme-css" rel="stylesheet" href="/theme/${encodeURIComponent(theme.name)}.css">`,
     generator: generatorMeta('make-motion', gen),
-    provenance: provenanceHtml('make-motion', gen, buildDate()),
+    provenance: spec?.provenance === false ? '' : provenanceHtml('make-motion', gen, buildDate()), // "provenance": false: an empty footer
   };
 }
 

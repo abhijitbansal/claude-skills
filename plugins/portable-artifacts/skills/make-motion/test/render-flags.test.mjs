@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
+import { writeWav } from './helpers/wav.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER = path.join(root, 'scripts/render.mjs');
@@ -69,4 +70,73 @@ test('render: an interrupt while the cue folder exists removes it (exit 130, no 
   const { code, signal } = await closed;
   assert.deepEqual([code, signal], [130, null], 'the handler ran and exited 130');
   assert.deepEqual(readdirSync(scratch), [], 'the cue folder is gone');
+});
+
+// ---- --no-provenance ---------------------------------------------------------------------------------------------------
+
+const GEN = { model: 'Claude Opus 5.5', agent: 'Claude Code' };
+const tinySpec = (extra = {}) => ({ size: [160, 90], fps: 24, generatedBy: GEN, scenes: [{ id: 's', duration: 1, elements: [{ id: 't', type: 'text', text: 'Hi', x: 80, y: 45, fontSize: 20 }] }], ...extra });
+
+function tinyFile(motion, withTone = false) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'rf-np-'));
+  if (withTone) writeWav(path.join(dir, 'tone.wav'), { seconds: 1 });
+  writeFileSync(path.join(dir, 'm.json'), JSON.stringify(motion));
+  return { dir, spec: path.join(dir, 'm.json'), out: path.join(dir, 'o.mp4') };
+}
+
+// The container tags of an MP4 as { tag: value }; ffprobe sits beside the ffmpeg render.mjs finds.
+function tags(ffprobe, file) {
+  const r = spawnSync(ffprobe, ['-v', 'error', '-show_entries', 'format_tags', '-of', 'json', file], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  return JSON.parse(r.stdout).format.tags ?? {};
+}
+
+const renderTiny = (f, args) => spawnSync(process.execPath, [RENDER, f.spec, '--out', f.out, ...args], { encoding: 'utf8' });
+
+test('render: by default both authoring tags are written (guards the base behaviour)', async (t) => {
+  const tools = await requireRender(t, { need: ['browser', 'ffmpeg', 'ffprobe'] });
+  if (!tools) return;
+  const f = tinyFile(tinySpec());
+  const r = renderTiny(f, []);
+  assert.equal(r.status, 0, r.stderr);
+  const got = tags(tools.ffprobe, f.out);
+  assert.match(got.comment, /^make-motion · Claude Opus 5\.5 · /);
+  assert.equal(got.artist, 'Claude Opus 5.5');
+});
+
+test('render: --no-provenance removes the comment and artist tags', async (t) => {
+  const tools = await requireRender(t, { need: ['browser', 'ffmpeg', 'ffprobe'] });
+  if (!tools) return;
+  const f = tinyFile(tinySpec());
+  const r = renderTiny(f, ['--no-provenance']);
+  assert.equal(r.status, 0, r.stderr);
+  const got = tags(tools.ffprobe, f.out);
+  assert.equal(got.comment, undefined, JSON.stringify(got));
+  assert.equal(got.artist, undefined, JSON.stringify(got));
+});
+
+test('render: root "provenance": false does the same, through the loudness path', async (t) => {
+  const tools = await requireRender(t, { need: ['browser', 'ffmpeg', 'ffprobe'] });
+  if (!tools) return;
+  const f = tinyFile(tinySpec({ provenance: false, audio: [{ src: 'tone.wav' }] }), true);
+  const r = renderTiny(f, ['--loudness', '-14']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^loudness: target -14 LUFS/m, 'the second pass ran');
+  const got = tags(tools.ffprobe, f.out);
+  assert.equal(got.comment, undefined, JSON.stringify(got));
+  assert.equal(got.artist, undefined, JSON.stringify(got));
+});
+
+test('render: --no-provenance with --contact-sheet is a usage error (exit 2) and writes nothing', () => {
+  const f = tinyFile(tinySpec());
+  const r = spawnSync(process.execPath, [RENDER, f.spec, '--contact-sheet', '--no-provenance', '--out', path.join(f.dir, 'sheets')], { encoding: 'utf8' });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stdout + r.stderr, /--no-provenance does not apply to --contact-sheet/);
+  assert.deepEqual(readdirSync(f.dir), ['m.json']);
+});
+
+test('render: a misspelt --no-provenance suggests the real flag', () => {
+  const r = run(['--no-provenence']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /did you mean --no-provenance\?/);
 });

@@ -285,6 +285,7 @@ export const SCHEMA = {
     transition,
     texture,
     generatedBy: GENERATED_BY_SCHEMA,
+    provenance: { type: 'boolean' }, // false: no comment/artist tags in the MP4, no footer in the preview
     mode: { enum: [VIRAL_MODE] },
     viral,
     loudness,
